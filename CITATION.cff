@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "groundfield: Numerische Feldberechnung von Erdungsanlagen"
+abstract: >-
+  Open-source Python package for the numerical field analysis of networked
+  grounding systems. Provides layered-soil models, arbitrary electrode
+  geometries, conductor coupling and a bridge to groundinsight via reduced
+  rho-f impedance models for use in reduced network simulations.
+type: software
+authors:
+  - family-names: Ehlert
+    given-names: Christian
+    email: christian.ehlert@mailbox.org
+    affiliation: Avacon Netz GmbH
+version: "0.1.0"
+license: MIT
+repository-code: "https://github.com/Ce1ectric/groundfield"
+url: "https://ce1ectric.github.io/groundfield/"
+keywords:
+  - grounding-system
+  - earth-potential-rise
+  - field-computation
+  - pde
+  - method-of-moments
+  - layered-soil
+  - power-systems
+  - python
