@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "groundfield: Numerische Feldberechnung von Erdungsanlagen"
+title: "groundfield: Numerical field computation for grounding systems"
 abstract: >-
   Open-source Python package for the numerical field analysis of networked
   grounding systems. Provides layered-soil models, arbitrary electrode

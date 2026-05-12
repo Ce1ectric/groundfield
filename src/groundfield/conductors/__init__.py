@@ -1,33 +1,33 @@
-"""Leiter, PEN und Kabelschirme.
+"""Conductors, PEN, and cable shields.
 
-Hier werden alle stromführenden Elemente oberhalb und innerhalb des
-Erdreichs modelliert, die nicht selbst Erder sind aber dennoch zur
-Stromverteilung beitragen:
+Subpackage for all current-carrying elements above and inside the soil
+that are not electrodes themselves but still take part in the current
+distribution:
 
-- Freileitungen (Phase + Erdseil)
-- Kabel (Phase + Schirm, konzentrisch oder drei-adrig)
-- PEN-Leiter im Niederspannungsnetz
-- Hilfselektroden bei Erdungsmessungen
+- overhead lines (phase conductor, earth wire),
+- cables (phase + shield, concentric or three-core),
+- PEN conductors in TN low-voltage networks,
+- auxiliary electrodes for grounding measurements.
 
 Contents
 --------
-Line
-    Freileitungsabschnitt mit Koordinaten und Leitertyp.
-Cable
-    Kabelabschnitt mit Phasen- und Schirmstruktur.
-PENConductor
-    PEN-Leiter im TN-Netz mit zugeordneten Erdungsknoten.
-ConductorLibrary
-    Bibliothek von Leitertypen (Querschnitt, Material, Frequenzbereich).
+Conductor
+    Single conductor segment with end-point coordinates and a type tag
+    (``"pen"``, ``"cable_shield"``, ``"bare_copper"``, ``"overhead"``,
+    ``"generic"``).
+ConductorType
+    Literal union of the supported type tags.
 
 Notes
 -----
-Die Carson-Korrekturen für den Erdrückstrompfad werden hier nicht
-ausgerechnet; sie fließen über ``groundfield.coupling`` ein. Dadurch bleibt
-das Conductor-Modell rein geometrisch/materialbasiert und lässt sich mit
-unterschiedlichen Rückleiter-Modellen kombinieren.
+Carson corrections for the earth-return path are not computed here;
+they enter via :mod:`groundfield.coupling`. This keeps the conductor
+model purely geometric and material-based, so it can be combined with
+different earth-return models.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from groundfield.conductors.conductor import Conductor, ConductorType
+
+__all__ = ["Conductor", "ConductorType"]

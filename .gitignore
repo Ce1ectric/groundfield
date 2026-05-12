@@ -140,6 +140,9 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# jupyter notebooks for testing
+notebooks/
+
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -184,3 +187,10 @@ notebooks/*.json
 # Third-party license report (generated on release)
 THIRD_PARTY_NOTICES.md
 THIRD_PARTY_LICENSES_RAW.txt
+
+# Graphify knowledge-graph cache
+#  Produced locally by `graphify extract` / `graphify update` for AI
+#  coding-assistant queries. Regenerated on demand and depends on the
+#  chosen LLM backend / model, so it must not be committed. See
+#  docs/graphify.md for the workflow.
+graphify-out/

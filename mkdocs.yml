@@ -1,5 +1,5 @@
 site_name: groundfield
-site_description: Numerische Feldberechnung von Erdungsanlagen.
+site_description: Numerical field computation for grounding systems.
 site_url: https://ce1ectric.github.io/groundfield/
 repo_url: https://github.com/Ce1ectric/groundfield
 repo_name: Ce1ectric/groundfield
@@ -8,7 +8,7 @@ copyright: Copyright &copy; 2026 Christian Ehlert
 
 theme:
   name: material
-  language: de
+  language: en
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -16,14 +16,14 @@ theme:
       accent: indigo
       toggle:
         icon: material/brightness-7
-        name: Zu dunklem Modus wechseln
+        name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: teal
       accent: indigo
       toggle:
         icon: material/brightness-4
-        name: Zu hellem Modus wechseln
+        name: Switch to light mode
   features:
     - navigation.instant
     - navigation.tabs
@@ -96,18 +96,52 @@ extra:
       link: https://github.com/Ce1ectric/groundfield
 
 nav:
-  - Start: index.md
+  - Home: index.md
   - Installation: installation.md
-  - Schnelleinstieg: quickstart.md
-  - Konzepte: concepts.md
-  - Beispiele:
-      - Überblick: examples/index.md
-  - API-Referenz:
-      - Überblick: api/index.md
+  - Quickstart: quickstart.md
+  - Concepts: concepts.md
+  - Performance: performance.md
+  - Examples:
+      - Overview: examples/index.md
+      - "01 — First solve (single rod)": examples/01_first_solve.md
+      - "02 — Substation vs. Dwight 1936": examples/02_substation_dwight.md
+      - "03 — TN-Ortsnetz generator basics": examples/03_tn_network_basics.md
+      - "04 — Galvanic measurement (Analysis 1)": examples/04_grounding_measurement.md
+      - "05 — Inductive coupling (Analysis 2)": examples/05_inductive_coupling.md
+      - "06 — Parameter sweep over soil": examples/06_parameter_sweep_soil.md
+      - "07 — Monte Carlo with joblib": examples/07_monte_carlo.md
+      - "08 — Pipeline to groundinsight": examples/08_pipeline_groundinsight.md
+  - Engine theory:
+      - Overview: engines/index.md
+      - "image — homogeneous": engines/image.md
+      - "image_2layer — Tagg / Sunde": engines/image_2layer.md
+      - "image_nlayer — dispatcher": engines/image_nlayer.md
+      - "cim — Complex Image Method": engines/cim.md
+      - "mom — Galerkin MoM": engines/mom.md
+      - "mom_sommerfeld — direct quadrature": engines/mom_sommerfeld.md
+      - "bem — collocation BEM": engines/bem.md
+      - "fem — axisymmetric FEM": engines/fem.md
+  - API reference:
+      - Overview: api/index.md
       - Soil: api/soil.md
       - Geometry: api/geometry.md
       - Conductors: api/conductors.md
       - Solver: api/solver.md
       - Coupling: api/coupling.md
       - Postprocess: api/postprocess.md
+      - Diagnostics: api/diagnostics.md
       - IO: api/io.md
+      - Generators: api/generators.md
+  - Architecture decisions:
+      - "ADR-0001 — 2-layer method": adr/0001-two-layer-method.md
+      - "ADR-0002 — Engine family": adr/0002-engine-family.md
+      - "ADR-0003 — Distributed conductor": adr/0003-distributed-conductor-model.md
+      - "ADR-0004 — Inductive coupling": adr/0004-inductive-coupling.md
+      - "ADR-0005 — Carson earth-return": adr/0005-carson-earth-return.md
+      - "ADR-0006 — Sommerfeld earth-return": adr/0006-sommerfeld-earth-return.md
+      - "ADR-0007 — Cross-layer electrodes": adr/0007-cross-layer-electrodes.md
+      - "ADR-0008 — groundinsight bridge": adr/0008-groundinsight-bridge.md
+      - "ADR-0009 — World generators": adr/0009-world-generators.md
+      - "ADR-0010 — Tier-0 performance": adr/0010-tier0-performance.md
+  - Tooling:
+      - "Knowledge graph (graphify)": graphify.md

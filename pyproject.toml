@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "groundfield"
 version = "0.1.0"
-description = "Numerische Feldberechnung von Erdungsanlagen (PDE-/Feldmodell, Kopplung zu groundinsight)"
+description = "Numerical field computation for grounding systems (PDE / field model, coupling to groundinsight)"
 authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
 license = "MIT"
 repository = "https://github.com/Ce1ectric/groundfield"
@@ -20,12 +20,28 @@ scipy = "^1.14.1"
 matplotlib = "^3.9.2"
 polars = "^1.5.0"
 sympy = "^1.13.2"
+pandas = "^3.0.2"
+# Optional: bridge to the sister project ``groundinsight``. When this
+# extra is installed, ``groundfield.io.groundinsight.to_bustype`` /
+# ``save_bustype_to_db`` can return a live ``BusType`` instance and
+# write into the ``groundinsight`` SQLite store. The JSON export path
+# (``save_bustype_json`` / ``load_bustype_json``) does not require
+# this extra. See ADR-0008.
+groundinsight = { version = ">=0.3", optional = true }
+
+[tool.poetry.extras]
+groundinsight = ["groundinsight"]
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
 pytest = "^8.3.2"
 pytest-cov = "^5.0.0"
 black = "^24.8.0"
+# ``groundinsight`` is pulled into the dev group so the bridge tests
+# in ``tests/test_io_groundinsight.py`` can run end-to-end against
+# the consumer's real Pydantic + SymPy parser. Keeps the runtime
+# dependency optional (see ``[tool.poetry.extras]``).
+groundinsight = ">=0.3"
 
 [tool.poetry.group.docs]
 optional = true

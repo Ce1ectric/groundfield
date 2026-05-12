@@ -1,33 +1,49 @@
-"""Numerischer Feldlöser.
+"""Numerical field solver.
 
-Dieses Subpackage bildet den rechnerischen Kern von ``groundfield``. Die
-Leitgröße ist das komplexe Potential ``phi(r, f)`` im Erdreich und auf den
-Leiterflächen, ausgewertet per Frequenz im Phasor-Bereich. Als
-Lösungsansatz ist die Momentenmethode (MoM) mit Bildladungen im
-geschichteten Halbraum vorgesehen; ein alternatives FEM-Backend über
-``scikit-fem`` oder ``fenics`` kann später angebunden werden.
+This subpackage forms the computational core of ``groundfield``. The
+key quantity is the complex potential ``phi(r, f)`` in the soil and on
+the conductor surfaces, evaluated per frequency in the phasor domain.
+The default solution method for homogeneous soil is the closed-form
+image-charge sum; for layered soil the Tagg/Sunde image series. A
+Method-of-Moments backend with the layered Green's function and a
+finite-element backend (``scikit-fem``) are reserved.
 
 Contents
 --------
-FieldStudy
-    Obere API: bündelt Bodenmodell, Geometrie, Leiter und Frequenzliste,
-    orchestriert den Aufbau der Systemmatrix und den Solve-Schritt.
-SystemMatrix
-    Assemblierung der Admittanzmatrix / MoM-Matrix pro Frequenz.
-Solver
-    Dünnbesetzte LU-Zerlegung und iterative Verfahren (GMRES) für große
-    Geometrien.
+Engine
+    Top-level configuration of the numerical kernel: backend choice,
+    frequency list, mesh resolution, tolerances. ``solve(world)`` runs
+    the simulation.
 Backend
-    Abstraktion für austauschbare numerische Backends (MoM, FEM).
+    Literal type listing the available backends
+    (``"image"``, ``"image_2layer"``, ``"mom"``, ``"fem"``).
+FieldResult, PointSource
+    Result objects.
+solve_image, solve_image_2layer
+    Backend entry points (usually called via ``Engine.solve``).
 
-Leitprinzip
------------
-Das PDE- bzw. Feldmodell ist Referenz, nicht Endprodukt. Der Löser muss
-so instrumentiert sein, dass aus jeder Lösung die für ``groundinsight``
-benötigten Reduktions-Größen (Eingangsimpedanz, Transferimpedanzen,
-``rho-f``-Kurve) extrahierbar sind.
+Guiding principle
+-----------------
+The PDE / field model is a reference, not the end product. Every
+solution must expose the quantities required by ``groundinsight``
+(input impedance, transfer impedances, ``rho-f`` curve) for the
+reduction step.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from groundfield.solver.engine import Backend, Engine
+from groundfield.solver.image import solve_image
+from groundfield.solver.image_2layer import solve_image_2layer
+from groundfield.solver.mom import solve_mom
+from groundfield.solver.result import FieldResult, PointSource
+
+__all__ = [
+    "Engine",
+    "Backend",
+    "FieldResult",
+    "PointSource",
+    "solve_image",
+    "solve_image_2layer",
+    "solve_mom",
+]

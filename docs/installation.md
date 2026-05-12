@@ -1,9 +1,9 @@
 # Installation
 
-`groundfield` benötigt **Python 3.12 oder neuer** und wird mit
-[Poetry](https://python-poetry.org/) verwaltet.
+`groundfield` requires **Python 3.12 or newer** and uses
+[Poetry](https://python-poetry.org/) for dependency management.
 
-## Aus dem Git-Checkout
+## From the Git checkout
 
 ```bash
 git clone https://github.com/Ce1ectric/groundfield.git
@@ -11,12 +11,12 @@ cd groundfield
 poetry install
 ```
 
-Dev-Abhängigkeiten (pytest, black, ipykernel) kommen aus der Gruppe
-`dev` und werden per Default mit installiert.
+Dev dependencies (pytest, black, ipykernel) live in the ``dev`` group
+and are installed by default.
 
-## Dokumentations-Gruppe
+## Documentation group
 
-Für das lokale Bauen der Dokumentation:
+To build the documentation locally:
 
 ```bash
 poetry install --with docs
@@ -25,17 +25,17 @@ poetry run mkdocs serve
 
 ## PyPI
 
-Sobald die erste Version freigegeben ist:
+Once the first release is published:
 
 ```bash
 pip install groundfield
 ```
 
-## Integration in die Softwarefamilie
+## Integration with the sister projects
 
-`groundfield` arbeitet eng mit `groundinsight` und `groundmeas`
-zusammen. Wenn diese in derselben Poetry-Umgebung liegen sollen, kann
-sie im Monorepo-Stil als Pfad-Abhängigkeit eingetragen werden:
+`groundfield` is designed to work alongside `groundinsight` and
+`groundmeas`. When the three projects share a Poetry environment they
+can be wired up as path dependencies:
 
 ```toml
 [tool.poetry.dependencies]
@@ -43,5 +43,5 @@ groundinsight = { path = "../groundinsight", develop = true }
 groundmeas = { path = "../groundmeas", develop = true }
 ```
 
-Dieser Schritt ist optional und wird üblicherweise nur für
-integrations-nahe Entwicklung genutzt.
+This step is optional and is usually only relevant for
+integration-heavy development.

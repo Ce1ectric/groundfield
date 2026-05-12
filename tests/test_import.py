@@ -1,9 +1,9 @@
-"""Smoke-Test für das frisch angelegte Paket.
+"""Smoke test for the freshly created package.
 
-Der Test stellt sicher, dass ``groundfield`` importierbar ist und die
-Versionszeichenkette dem in ``pyproject.toml`` hinterlegten Wert
-entspricht. Er existiert, damit das CI-Pipeline-Gerüst vom ersten
-Commit an etwas Grünes vorzeigen kann.
+This test ensures that ``groundfield`` is importable and that the
+version string matches the SemVer core stored in ``pyproject.toml``.
+It exists so the CI pipeline scaffold has something green to show
+from the first commit.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import groundfield
 
 
 def test_package_version_is_semver() -> None:
-    """``groundfield.__version__`` muss einem SemVer-Kern genügen."""
+    """``groundfield.__version__`` must satisfy a SemVer core."""
     assert re.match(
         r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$",
         groundfield.__version__,
@@ -22,7 +22,7 @@ def test_package_version_is_semver() -> None:
 
 
 def test_subpackages_are_importable() -> None:
-    """Alle angelegten Subpackages müssen per Import auffindbar sein."""
+    """All declared subpackages must be importable."""
     import importlib
 
     for name in (

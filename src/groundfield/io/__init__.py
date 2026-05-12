@@ -1,24 +1,67 @@
-"""Datei-I/O und Export an die Schwesterprojekte.
+"""File I/O and export to the sister projects.
 
-Dieses Subpackage bildet die Schnittstelle von ``groundfield`` zur
-übrigen Softwarefamilie:
+This subpackage forms the interface between ``groundfield`` and the
+rest of the software family:
 
-* ``io.groundinsight``: Export eines reduzierten ``rho-f``-Modells
-  (Zweipol-Impedanz bzw. Mehrtor als Funktion von Bodenparameter und
-  Frequenz) in die von ``groundinsight`` erwarteten Impedanzformeln.
-* ``io.json``: Ein- und Auslesen einer gesamten ``FieldStudy`` als
-  JSON-Beschreibung für Reproduzierbarkeit und Regressionstests.
-* ``io.vtk``: Export von 3D-Feldverläufen nach VTK/ParaView.
-* ``io.csv``: Schlanker Export von Pfad- und Punktergebnissen.
+* ``io.groundinsight``: export of a reduced ``rho-f`` model
+  (``RhoFStandardFit`` or ``VectorFitResult``) into the
+  ``groundinsight`` ``BusType`` schema. Two equally supported
+  transports — JSON file (neutral, schema-versioned) and a live
+  Python ``BusType`` instance via lazy import. See
+  ``docs/adr/0008-groundinsight-bridge.md``.
+* ``io.json``: serialise and deserialise a complete ``FieldStudy`` to
+  / from JSON for reproducibility and regression tests. *Reserved.*
+* ``io.vtk``: export of 3-D field results to VTK / ParaView.
+  *Reserved.*
+* ``io.csv``: lightweight export of path and point results.
+  *Reserved.*
 
-Leitprinzip
------------
-Der Export an ``groundinsight`` ist der Dreh- und Angelpunkt der
-Dissertation: aus dem PDE-/Feldmodell entsteht das für Planung und
-Typisierung taugliche reduzierte Ersatzmodell. Dieses Modul stellt den
-entsprechenden Brücken-Kopf bereit.
+Guiding principle
+-----------------
+The export to ``groundinsight`` is the linchpin of the dissertation
+pipeline: the PDE / field model produces the reduced equivalent
+model used for planning and type studies. ``io.groundinsight``
+provides the bridge.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from groundfield.io.csv import (
+    save_cluster_impedances_csv,
+    save_electrode_table_csv,
+    save_potential_path_csv,
+)
+from groundfield.io.groundinsight import (
+    BusTypeSpec,
+    SCHEMA_NAME,
+    SCHEMA_VERSION,
+    evaluate_spec,
+    fit_quality_summary,
+    load_bustype_json,
+    save_bustype_json,
+    save_bustype_to_db,
+    to_bustype,
+    to_bustype_dict,
+)
+from groundfield.io.vtk import (
+    export_field_vtk,
+    export_geometry_vtk,
+)
+
+__all__ = [
+    "BusTypeSpec",
+    "SCHEMA_NAME",
+    "SCHEMA_VERSION",
+    "to_bustype_dict",
+    "to_bustype",
+    "save_bustype_json",
+    "load_bustype_json",
+    "save_bustype_to_db",
+    "evaluate_spec",
+    "fit_quality_summary",
+    "save_potential_path_csv",
+    "save_electrode_table_csv",
+    "save_cluster_impedances_csv",
+    "export_geometry_vtk",
+    "export_field_vtk",
+]

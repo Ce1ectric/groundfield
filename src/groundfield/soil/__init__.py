@@ -1,31 +1,47 @@
-"""Bodenmodelle für ``groundfield``.
+"""Soil models for ``groundfield``.
 
-Dieses Subpackage beschreibt das Ausbreitungsmedium Erdreich. Unterstützt
-werden homogene, geschichtete (zwei- und mehrschichtige) sowie
-frequenzabhängige Bodenmodelle im Sinne von Visacro/Alipio. Die Modelle
-liefern die für den Feldlöser benötigten effektiven elektromagnetischen
-Parameter ``rho(f)``, ``eps_r(f)`` und die zugehörigen Green'schen
-Funktionen bzw. Spiegelladungskoeffizienten.
+This subpackage describes the propagation medium "soil". Supported
+models include homogeneous, layered (two- and multi-layer) and
+frequency-dependent variants in the spirit of Visacro / Alipio. The
+models supply the effective electromagnetic parameters
+$\\rho(f)$, $\\varepsilon_r(f)$ required by the field
+solver, together with the corresponding Green's functions or
+image-charge coefficients.
 
 Contents
 --------
 HomogeneousSoil
-    Homogenes Erdreich mit konstantem spezifischem Widerstand.
+    Uniform half-space with a single resistivity.
 TwoLayerSoil
-    Zwei-Schicht-Modell (Oberschicht/Unterschicht) mit Schichtdicke.
+    Upper layer of finite thickness over a semi-infinite lower layer.
 MultiLayerSoil
-    Mehrschicht-Modell mit beliebig vielen horizontalen Schichten.
-FrequencyDependentSoil
-    Frequenzabhängiges Modell nach Visacro/Alipio.
+    Generic multi-layer model with arbitrarily many horizontal layers.
+SoilLayer
+    Single layer used by ``MultiLayerSoil``.
+SoilModel
+    Discriminated union of all supported soil types.
 
 Notes
 -----
-Für Arbeitspaket 1 der Dissertation ist zunächst das Zwei-Schicht-Modell
-maßgeblich (Parameterraum: variierende Widerstände und Schichtdicken).
-Die übrigen Klassen sind als Stubs vorgesehen und werden sukzessive
-implementiert.
+For work package 1 the two-layer model is the primary case (parameter
+space: varying resistivities and layer thicknesses). The other classes
+are extension points for later work.
 """
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from groundfield.soil.models import (
+    HomogeneousSoil,
+    MultiLayerSoil,
+    SoilLayer,
+    SoilModel,
+    TwoLayerSoil,
+)
+
+__all__ = [
+    "HomogeneousSoil",
+    "TwoLayerSoil",
+    "MultiLayerSoil",
+    "SoilLayer",
+    "SoilModel",
+]

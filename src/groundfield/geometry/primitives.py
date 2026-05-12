@@ -1,9 +1,9 @@
-"""Geometrische Grundformen für Erdungsanlagen.
+"""Geometric primitives for grounding systems.
 
-Jede Grundform stellt eine Fabrikfunktion bereit, die eine Liste von
-``Segment`` zurückgibt. Dadurch lassen sich komplexe Erder (Fundament-
-erder + Ringleiter + Tiefenerder) als Summe einfacher Grundformen
-zusammensetzen.
+Each primitive provides a factory function that returns a list of
+``Segment`` objects. Complex earth electrodes (foundation electrode +
+ring conductor + driven rod) are then assembled as the union of
+several primitives.
 """
 
 from __future__ import annotations

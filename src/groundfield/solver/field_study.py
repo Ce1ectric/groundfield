@@ -1,22 +1,24 @@
-"""Oberste Koordinationsklasse ``FieldStudy``.
+"""Top-level coordination class ``FieldStudy`` (placeholder).
 
-Eine ``FieldStudy`` bündelt alle Eingangsdaten zu einem Rechenlauf:
+A ``FieldStudy`` would bundle all inputs of a simulation run:
 
-* das Bodenmodell (``groundfield.soil``),
-* die Geometrie der Erdungsanlage (``groundfield.geometry``),
-* optionale Leiter (``groundfield.conductors``),
-* die Frequenzliste,
-* die Randbedingungen (Einspeisung, Hilfselektrode, Erdschluss).
+* the soil model (``groundfield.soil``),
+* the grounding-system geometry (``groundfield.geometry``),
+* optional conductors (``groundfield.conductors``),
+* the frequency list,
+* the boundary conditions (feed-in, auxiliary electrode, fault).
 
-Nach ``solve()`` stehen die Ergebnisse als ``FieldResult`` bereit und
-können über ``groundfield.postprocess`` und ``groundfield.io`` weiter
-verarbeitet werden.
+After ``solve()`` the results are available as a ``FieldResult`` and
+can be further processed via ``groundfield.postprocess`` and
+``groundfield.io``.
 
-Todo
-----
-* Konstruktor mit Pydantic-Validierung.
-* ``solve(backend="mom" | "fem")`` mit Fortschrittsanzeige und Caching.
-* Einheitliches Ergebnisobjekt ``FieldResult``.
+Notes
+-----
+The current preferred entry point is the lightweight pair ``World`` +
+``Engine`` (see :mod:`groundfield.world` and
+:mod:`groundfield.solver.engine`). The ``FieldStudy`` class is kept
+as a placeholder for a possible future high-level wrapper that
+combines both objects.
 """
 
 from __future__ import annotations
