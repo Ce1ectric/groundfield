@@ -1,0 +1,3549 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Numerical field computation for grounding systems.">
+      
+      
+      
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/api/diagnostics/">
+      
+      
+        <link rel="prev" href="../postprocess/">
+      
+      
+        <link rel="next" href="../io/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Diagnostics - groundfield</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#diagnostics" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="groundfield" class="md-header__button md-logo" aria-label="groundfield" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            groundfield
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Diagnostics
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Ce1ectric/groundfield" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundfield
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quickstart
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../concepts/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Concepts
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../performance/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Performance
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../engines/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Engine theory
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  API reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../adr/0001-two-layer-method/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture decisions
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../graphify/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tooling
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="groundfield" class="md-nav__button md-logo" aria-label="groundfield" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    groundfield
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Ce1ectric/groundfield" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Ce1ectric/groundfield
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../examples/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/01_first_solve/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    01 — First solve (single rod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/02_substation_dwight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    02 — Substation vs. Dwight 1936
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/03_tn_network_basics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    03 — TN-Ortsnetz generator basics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/04_grounding_measurement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    04 — Galvanic measurement (Analysis 1)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/05_inductive_coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    05 — Inductive coupling (Analysis 2)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/06_parameter_sweep_soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    06 — Parameter sweep over soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/07_monte_carlo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    07 — Monte Carlo with joblib
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/08_pipeline_groundinsight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    08 — Pipeline to groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../engines/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine theory
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Engine theory
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/image/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image — homogeneous
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/image_2layer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image_2layer — Tagg / Sunde
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/image_nlayer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    image_nlayer — dispatcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/cim/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cim — Complex Image Method
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/mom/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mom — Galerkin MoM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/mom_sommerfeld/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    mom_sommerfeld — direct quadrature
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/bem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    bem — collocation BEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../engines/fem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fem — axisymmetric FEM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Soil
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conductors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coupling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../postprocess/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Postprocess
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-pre-solve-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why pre-solve diagnostics?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-full-pre-flight-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example — full pre-flight check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#expected_segments-exactness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expected_segments — exactness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check_segment_resolution-heuristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_segment_resolution — heuristics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundfield.diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        diagnostics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="diagnostics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.check_segment_resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_segment_resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.expected_segments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expected_segments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.world_statistics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        world_statistics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    IO
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../generators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-two-layer-method/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0001 — 2-layer method
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-engine-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0002 — Engine family
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0003-distributed-conductor-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0003 — Distributed conductor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0004-inductive-coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0004 — Inductive coupling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0005-carson-earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0005 — Carson earth-return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0006-sommerfeld-earth-return/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0006 — Sommerfeld earth-return
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0007-cross-layer-electrodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0007 — Cross-layer electrodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0008-groundinsight-bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0008 — groundinsight bridge
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0009-world-generators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0009 — World generators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0010-tier0-performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0010 — Tier-0 performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tooling
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tooling
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphify/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Knowledge graph (graphify)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-pre-solve-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why pre-solve diagnostics?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-full-pre-flight-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example — full pre-flight check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#expected_segments-exactness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expected_segments — exactness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check_segment_resolution-heuristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_segment_resolution — heuristics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundfield.diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        diagnostics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="diagnostics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.check_segment_resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_segment_resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.expected_segments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expected_segments
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.world_statistics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        world_statistics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="diagnostics">Diagnostics<a class="headerlink" href="#diagnostics" title="Permanent link">&para;</a></h1>
+<p>The :mod:<code>groundfield.diagnostics</code> module provides <strong>pre-solve</strong>
+structural diagnostics for a :class:<code>World</code>. It is the AP1
+counterpart to :mod:<code>groundfield.validation</code> (which is the
+<strong>post-solve</strong> cross-engine consistency check).</p>
+<h2 id="why-pre-solve-diagnostics">Why pre-solve diagnostics?<a class="headerlink" href="#why-pre-solve-diagnostics" title="Permanent link">&para;</a></h2>
+<p>For an AP1-grade TN-Ortsnetz with several hundred electrodes a
+mistake in the geometry — an electrode placed at the wrong
+coordinate, a missing conductor, or a segmentation budget that
+silently triples the wall-clock time — should be caught <strong>before</strong>
+kicking off a multi-minute solver run. The three helpers below
+each address one common failure mode:</p>
+<table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>What it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>world_statistics</code></td>
+<td>"How big is this thing? Counts per kind, total wire length, footprint."</td>
+</tr>
+<tr>
+<td><code>expected_segments</code></td>
+<td>"How many point-source segments will the discretiser produce?"</td>
+</tr>
+<tr>
+<td><code>check_segment_resolution</code></td>
+<td>"Will the resolution be good enough? Will memory / time blow up?"</td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-full-pre-flight-check">Example — full pre-flight check<a class="headerlink" href="#example-full-pre-flight-check" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.generators</span><span class="w"> </span><span class="kn">import</span> <span class="n">TnNetworkGenerator</span><span class="p">,</span> <span class="n">TnNetworkConfig</span><span class="p">,</span> <span class="n">PenConfig</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">TnNetworkConfig</span><span class="p">(</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">soil</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">HomogeneousSoilSpec</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">100.0</span><span class="p">),</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">building_counts</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;residential&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">},</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">pen</span><span class="o">=</span><span class="n">PenConfig</span><span class="p">(</span><span class="n">segment_length_m</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">world</span> <span class="o">=</span> <span class="n">TnNetworkGenerator</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># 1. Structural snapshot (machine-readable; pretty-print as needed).</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">stats</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">world_statistics</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;electrodes:  </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;n_electrodes&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">  &quot;</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>      <span class="sa">f</span><span class="s2">&quot;by kind: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;n_electrodes_by_kind&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;footprint:   </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;footprint_area_m2&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> m^2&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;wire length: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;total_electrode_wire_length_m&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> m  &quot;</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>      <span class="sa">f</span><span class="s2">&quot;(electrodes) + &quot;</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>      <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;total_conductor_length_m&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> m (conductors)&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="c1"># 2. Segmentation budget.</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="n">budget</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;predicted total segments: </span><span class="si">{</span><span class="n">budget</span><span class="p">[</span><span class="s1">&#39;total&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">  &quot;</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>      <span class="sa">f</span><span class="s2">&quot;(electrodes </span><span class="si">{</span><span class="n">budget</span><span class="p">[</span><span class="s1">&#39;electrode_total&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, &quot;</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>      <span class="sa">f</span><span class="s2">&quot;conductors </span><span class="si">{</span><span class="n">budget</span><span class="p">[</span><span class="s1">&#39;conductor_total&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="c1"># 3. Quality-of-discretisation warnings (empty list = all good).</span>
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">gf</span><span class="o">.</span><span class="n">check_segment_resolution</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">):</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  WARN: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="expected_segments-exactness"><code>expected_segments</code> — exactness<a class="headerlink" href="#expected_segments-exactness" title="Permanent link">&para;</a></h2>
+<p>The prediction is <strong>bit-exact</strong> for the image-family backends —
+<code>image</code>, <code>image_2layer</code>, <code>image_nlayer</code>, <code>mom</code>,
+<code>mom_sommerfeld</code>, <code>cim</code> and <code>bem</code>. It mirrors
+:mod:<code>groundfield.solver.image</code>'s discretiser conventions:</p>
+<ul>
+<li>rod: <span class="arithmatex">\(n = \max(1, \lceil L / \Delta s \rceil)\)</span></li>
+<li>ring: <span class="arithmatex">\(n = \max(8, \lceil 2 \pi r / \Delta s \rceil)\)</span></li>
+<li>strip: <span class="arithmatex">\(n = \max(1, \lceil L / \Delta s \rceil)\)</span></li>
+<li>mesh / grid_mesh: per-wire
+  <span class="arithmatex">\(n = \max(1, \lceil d_\text{axis} / \Delta s \rceil)\)</span>,
+  summed over both wire directions</li>
+<li>distributed conductor: <span class="arithmatex">\(n = \lceil L / \Delta s_c \rceil\)</span>
+  with $\Delta s_c = $ <code>conductor.discretize_segment_length</code></li>
+</ul>
+<p>The FEM backend (:mod:<code>groundfield.solver.fem</code>) uses an
+axisymmetric volume mesh that is not parameterised by
+<code>segment_length</code>; the prediction is <strong>not informative</strong> for
+FEM.</p>
+<h2 id="check_segment_resolution-heuristics"><code>check_segment_resolution</code> — heuristics<a class="headerlink" href="#check_segment_resolution-heuristics" title="Permanent link">&para;</a></h2>
+<p>Three categories of warning are surfaced:</p>
+<ul>
+<li><strong>Thin-wire ratio</strong> <span class="arithmatex">\(\Delta s / r_\text{wire} \ge 5\)</span> on every
+  electrode and on every distributed conductor. Below this, the
+  thin-wire average-potential self-action becomes biased.</li>
+<li><strong>Electrode smaller than one segment</strong> — the smallest geometric
+  dimension of an electrode (rod length, ring perimeter, strip
+  length, mesh wire length) must be at least one
+  <code>segment_length</code>; otherwise the discretiser falls back to
+  its lower floor.</li>
+<li><strong>Total segment-count budget</strong> at a soft threshold (5 000
+  segments — solve time runs from seconds to minutes) and a
+  hard threshold (20 000 segments — the dense-system <span class="arithmatex">\(O(N^2)\)</span>
+  memory and <span class="arithmatex">\(O(N^3)\)</span> solve scaling becomes painful).</li>
+</ul>
+<p>The function never raises — use the returned list to inform the
+user. An empty list means <em>no concerns detected</em>.</p>
+<h2 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="groundfield.diagnostics" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">diagnostics</span>
+
+
+<a href="#groundfield.diagnostics" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Pre-solve world diagnostics — counts, mesh budget, resolution checks.</p>
+<p>This module collects <strong>structural</strong> diagnostics that work directly
+on a :class:<code>~groundfield.world.World</code> (and optionally an
+:class:<code>~groundfield.solver.engine.Engine</code>), without invoking the
+solver. It is the AP1 counterpart to
+:mod:<code>groundfield.validation</code> (which is a <em>post-solve</em> cross-engine
+check):</p>
+<ul>
+<li>:func:<code>world_statistics</code> — aggregate counts and lengths,
+  bounding box, footprint area, conductor-length statistics.</li>
+<li>:func:<code>expected_segments</code> — predicts the number of point-source
+  segments that the image-family discretiser will produce per
+  electrode kind, plus a total. Useful for budgeting wall-clock
+  cost before kicking off a 200-EFH run.</li>
+<li>:func:<code>check_segment_resolution</code> — heuristic warnings about
+  the discretisation quality (thin-wire ratio, electrode size
+  vs. segment length, segment-count budget). Returns a list of
+  human-readable strings, empty when everything looks healthy.</li>
+</ul>
+
+
+<details class="validity-envelope" open>
+  <summary>Validity envelope</summary>
+  <ul>
+<li>The segment counts in :func:<code>expected_segments</code> mirror the
+  conventions of :mod:<code>groundfield.solver.image</code> (the image-family
+  discretiser used by the <code>image</code>, <code>image_2layer</code>,
+  <code>image_nlayer</code>, <code>mom</code>, <code>mom_sommerfeld</code>, <code>cim</code> and
+  <code>bem</code> backends). FEM does not use this discretiser; for FEM
+  the segment count is not predictive of cost.</li>
+<li>Wire-length / segment computations follow the <em>physical</em>
+  geometry. Sub-segment overheads from cluster-bonding, KCL
+  pseudo-nodes and lumped-conductor branches are not
+  double-counted.</li>
+</ul>
+</details>
+
+<details class="references" open>
+  <summary>References</summary>
+  <ul>
+<li>ADR-0003 (<code>docs/adr/0003-distributed-conductor-model.md</code>) —
+  distributed-conductor topology used by :func:<code>expected_segments</code>
+  for conductors with finite <code>discretize_segment_length</code>.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundfield.diagnostics.check_segment_resolution" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">check_segment_resolution</span>
+
+
+<a href="#groundfield.diagnostics.check_segment_resolution" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">check_segment_resolution</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Heuristic discretisation-quality check.</p>
+<p>Inspects the world / engine pair for common AP1 modelling
+pitfalls and returns one human-readable string per finding.
+The empty list means <em>no concerns detected</em>. Categories:</p>
+<ol>
+<li><strong>Thin-wire ratio.</strong> Each electrode must satisfy
+   <code>segment_length &gt;= 5 * wire_radius</code> so that the
+   thin-wire average-potential self-action remains valid.</li>
+<li><strong>Electrode smaller than one segment.</strong> An electrode whose
+   <em>smallest geometric dimension</em> is below <code>segment_length</code>
+   is either degenerately discretised (1 segment) or, for
+   rings, falls back to the discretiser's <code>max(8, ...)</code> floor
+   — in either case the user probably wants a finer
+   <code>segment_length</code>.</li>
+<li><strong>Distributed-conductor ratio.</strong> A finite
+   <code>discretize_segment_length</code> must also stay above
+   <code>5 * conductor.wire_radius</code>.</li>
+<li><strong>Total segment budget.</strong> Warns when the predicted total
+   crosses :data:<code>_BUDGET_WARN_THRESHOLD</code> and again at
+   :data:<code>_BUDGET_HARD_THRESHOLD</code>.</li>
+</ol>
+<p>The function never raises — it only reports. Use the returned
+list to inform the user before kicking off a long solve.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>world</code>
+            </td>
+            <td>
+                  <code>&#39;World&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World to inspect.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>engine</code>
+            </td>
+            <td>
+                  <code>&#39;Engine&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Engine carrying <code>segment_length</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Zero or more diagnostic strings. The list is sorted by
+severity (budget warnings last, electrode-specific
+warnings first).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>src/groundfield/diagnostics.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-375">375</a></span>
+<span class="normal"><a href="#__codelineno-0-376">376</a></span>
+<span class="normal"><a href="#__codelineno-0-377">377</a></span>
+<span class="normal"><a href="#__codelineno-0-378">378</a></span>
+<span class="normal"><a href="#__codelineno-0-379">379</a></span>
+<span class="normal"><a href="#__codelineno-0-380">380</a></span>
+<span class="normal"><a href="#__codelineno-0-381">381</a></span>
+<span class="normal"><a href="#__codelineno-0-382">382</a></span>
+<span class="normal"><a href="#__codelineno-0-383">383</a></span>
+<span class="normal"><a href="#__codelineno-0-384">384</a></span>
+<span class="normal"><a href="#__codelineno-0-385">385</a></span>
+<span class="normal"><a href="#__codelineno-0-386">386</a></span>
+<span class="normal"><a href="#__codelineno-0-387">387</a></span>
+<span class="normal"><a href="#__codelineno-0-388">388</a></span>
+<span class="normal"><a href="#__codelineno-0-389">389</a></span>
+<span class="normal"><a href="#__codelineno-0-390">390</a></span>
+<span class="normal"><a href="#__codelineno-0-391">391</a></span>
+<span class="normal"><a href="#__codelineno-0-392">392</a></span>
+<span class="normal"><a href="#__codelineno-0-393">393</a></span>
+<span class="normal"><a href="#__codelineno-0-394">394</a></span>
+<span class="normal"><a href="#__codelineno-0-395">395</a></span>
+<span class="normal"><a href="#__codelineno-0-396">396</a></span>
+<span class="normal"><a href="#__codelineno-0-397">397</a></span>
+<span class="normal"><a href="#__codelineno-0-398">398</a></span>
+<span class="normal"><a href="#__codelineno-0-399">399</a></span>
+<span class="normal"><a href="#__codelineno-0-400">400</a></span>
+<span class="normal"><a href="#__codelineno-0-401">401</a></span>
+<span class="normal"><a href="#__codelineno-0-402">402</a></span>
+<span class="normal"><a href="#__codelineno-0-403">403</a></span>
+<span class="normal"><a href="#__codelineno-0-404">404</a></span>
+<span class="normal"><a href="#__codelineno-0-405">405</a></span>
+<span class="normal"><a href="#__codelineno-0-406">406</a></span>
+<span class="normal"><a href="#__codelineno-0-407">407</a></span>
+<span class="normal"><a href="#__codelineno-0-408">408</a></span>
+<span class="normal"><a href="#__codelineno-0-409">409</a></span>
+<span class="normal"><a href="#__codelineno-0-410">410</a></span>
+<span class="normal"><a href="#__codelineno-0-411">411</a></span>
+<span class="normal"><a href="#__codelineno-0-412">412</a></span>
+<span class="normal"><a href="#__codelineno-0-413">413</a></span>
+<span class="normal"><a href="#__codelineno-0-414">414</a></span>
+<span class="normal"><a href="#__codelineno-0-415">415</a></span>
+<span class="normal"><a href="#__codelineno-0-416">416</a></span>
+<span class="normal"><a href="#__codelineno-0-417">417</a></span>
+<span class="normal"><a href="#__codelineno-0-418">418</a></span>
+<span class="normal"><a href="#__codelineno-0-419">419</a></span>
+<span class="normal"><a href="#__codelineno-0-420">420</a></span>
+<span class="normal"><a href="#__codelineno-0-421">421</a></span>
+<span class="normal"><a href="#__codelineno-0-422">422</a></span>
+<span class="normal"><a href="#__codelineno-0-423">423</a></span>
+<span class="normal"><a href="#__codelineno-0-424">424</a></span>
+<span class="normal"><a href="#__codelineno-0-425">425</a></span>
+<span class="normal"><a href="#__codelineno-0-426">426</a></span>
+<span class="normal"><a href="#__codelineno-0-427">427</a></span>
+<span class="normal"><a href="#__codelineno-0-428">428</a></span>
+<span class="normal"><a href="#__codelineno-0-429">429</a></span>
+<span class="normal"><a href="#__codelineno-0-430">430</a></span>
+<span class="normal"><a href="#__codelineno-0-431">431</a></span>
+<span class="normal"><a href="#__codelineno-0-432">432</a></span>
+<span class="normal"><a href="#__codelineno-0-433">433</a></span>
+<span class="normal"><a href="#__codelineno-0-434">434</a></span>
+<span class="normal"><a href="#__codelineno-0-435">435</a></span>
+<span class="normal"><a href="#__codelineno-0-436">436</a></span>
+<span class="normal"><a href="#__codelineno-0-437">437</a></span>
+<span class="normal"><a href="#__codelineno-0-438">438</a></span>
+<span class="normal"><a href="#__codelineno-0-439">439</a></span>
+<span class="normal"><a href="#__codelineno-0-440">440</a></span>
+<span class="normal"><a href="#__codelineno-0-441">441</a></span>
+<span class="normal"><a href="#__codelineno-0-442">442</a></span>
+<span class="normal"><a href="#__codelineno-0-443">443</a></span>
+<span class="normal"><a href="#__codelineno-0-444">444</a></span>
+<span class="normal"><a href="#__codelineno-0-445">445</a></span>
+<span class="normal"><a href="#__codelineno-0-446">446</a></span>
+<span class="normal"><a href="#__codelineno-0-447">447</a></span>
+<span class="normal"><a href="#__codelineno-0-448">448</a></span>
+<span class="normal"><a href="#__codelineno-0-449">449</a></span>
+<span class="normal"><a href="#__codelineno-0-450">450</a></span>
+<span class="normal"><a href="#__codelineno-0-451">451</a></span>
+<span class="normal"><a href="#__codelineno-0-452">452</a></span>
+<span class="normal"><a href="#__codelineno-0-453">453</a></span>
+<span class="normal"><a href="#__codelineno-0-454">454</a></span>
+<span class="normal"><a href="#__codelineno-0-455">455</a></span>
+<span class="normal"><a href="#__codelineno-0-456">456</a></span>
+<span class="normal"><a href="#__codelineno-0-457">457</a></span>
+<span class="normal"><a href="#__codelineno-0-458">458</a></span>
+<span class="normal"><a href="#__codelineno-0-459">459</a></span>
+<span class="normal"><a href="#__codelineno-0-460">460</a></span>
+<span class="normal"><a href="#__codelineno-0-461">461</a></span>
+<span class="normal"><a href="#__codelineno-0-462">462</a></span>
+<span class="normal"><a href="#__codelineno-0-463">463</a></span>
+<span class="normal"><a href="#__codelineno-0-464">464</a></span>
+<span class="normal"><a href="#__codelineno-0-465">465</a></span>
+<span class="normal"><a href="#__codelineno-0-466">466</a></span>
+<span class="normal"><a href="#__codelineno-0-467">467</a></span>
+<span class="normal"><a href="#__codelineno-0-468">468</a></span>
+<span class="normal"><a href="#__codelineno-0-469">469</a></span>
+<span class="normal"><a href="#__codelineno-0-470">470</a></span>
+<span class="normal"><a href="#__codelineno-0-471">471</a></span>
+<span class="normal"><a href="#__codelineno-0-472">472</a></span>
+<span class="normal"><a href="#__codelineno-0-473">473</a></span>
+<span class="normal"><a href="#__codelineno-0-474">474</a></span>
+<span class="normal"><a href="#__codelineno-0-475">475</a></span>
+<span class="normal"><a href="#__codelineno-0-476">476</a></span>
+<span class="normal"><a href="#__codelineno-0-477">477</a></span>
+<span class="normal"><a href="#__codelineno-0-478">478</a></span>
+<span class="normal"><a href="#__codelineno-0-479">479</a></span>
+<span class="normal"><a href="#__codelineno-0-480">480</a></span>
+<span class="normal"><a href="#__codelineno-0-481">481</a></span>
+<span class="normal"><a href="#__codelineno-0-482">482</a></span>
+<span class="normal"><a href="#__codelineno-0-483">483</a></span>
+<span class="normal"><a href="#__codelineno-0-484">484</a></span>
+<span class="normal"><a href="#__codelineno-0-485">485</a></span>
+<span class="normal"><a href="#__codelineno-0-486">486</a></span>
+<span class="normal"><a href="#__codelineno-0-487">487</a></span>
+<span class="normal"><a href="#__codelineno-0-488">488</a></span>
+<span class="normal"><a href="#__codelineno-0-489">489</a></span>
+<span class="normal"><a href="#__codelineno-0-490">490</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-375" name="__codelineno-0-375"></a><span class="k">def</span><span class="w"> </span><span class="nf">check_segment_resolution</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<a id="__codelineno-0-376" name="__codelineno-0-376"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Heuristic discretisation-quality check.</span>
+<a id="__codelineno-0-377" name="__codelineno-0-377"></a>
+<a id="__codelineno-0-378" name="__codelineno-0-378"></a><span class="sd">    Inspects the world / engine pair for common AP1 modelling</span>
+<a id="__codelineno-0-379" name="__codelineno-0-379"></a><span class="sd">    pitfalls and returns one human-readable string per finding.</span>
+<a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="sd">    The empty list means *no concerns detected*. Categories:</span>
+<a id="__codelineno-0-381" name="__codelineno-0-381"></a>
+<a id="__codelineno-0-382" name="__codelineno-0-382"></a><span class="sd">    1. **Thin-wire ratio.** Each electrode must satisfy</span>
+<a id="__codelineno-0-383" name="__codelineno-0-383"></a><span class="sd">       ``segment_length &gt;= 5 * wire_radius`` so that the</span>
+<a id="__codelineno-0-384" name="__codelineno-0-384"></a><span class="sd">       thin-wire average-potential self-action remains valid.</span>
+<a id="__codelineno-0-385" name="__codelineno-0-385"></a><span class="sd">    2. **Electrode smaller than one segment.** An electrode whose</span>
+<a id="__codelineno-0-386" name="__codelineno-0-386"></a><span class="sd">       *smallest geometric dimension* is below ``segment_length``</span>
+<a id="__codelineno-0-387" name="__codelineno-0-387"></a><span class="sd">       is either degenerately discretised (1 segment) or, for</span>
+<a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="sd">       rings, falls back to the discretiser&#39;s ``max(8, ...)`` floor</span>
+<a id="__codelineno-0-389" name="__codelineno-0-389"></a><span class="sd">       — in either case the user probably wants a finer</span>
+<a id="__codelineno-0-390" name="__codelineno-0-390"></a><span class="sd">       ``segment_length``.</span>
+<a id="__codelineno-0-391" name="__codelineno-0-391"></a><span class="sd">    3. **Distributed-conductor ratio.** A finite</span>
+<a id="__codelineno-0-392" name="__codelineno-0-392"></a><span class="sd">       ``discretize_segment_length`` must also stay above</span>
+<a id="__codelineno-0-393" name="__codelineno-0-393"></a><span class="sd">       ``5 * conductor.wire_radius``.</span>
+<a id="__codelineno-0-394" name="__codelineno-0-394"></a><span class="sd">    4. **Total segment budget.** Warns when the predicted total</span>
+<a id="__codelineno-0-395" name="__codelineno-0-395"></a><span class="sd">       crosses :data:`_BUDGET_WARN_THRESHOLD` and again at</span>
+<a id="__codelineno-0-396" name="__codelineno-0-396"></a><span class="sd">       :data:`_BUDGET_HARD_THRESHOLD`.</span>
+<a id="__codelineno-0-397" name="__codelineno-0-397"></a>
+<a id="__codelineno-0-398" name="__codelineno-0-398"></a><span class="sd">    The function never raises — it only reports. Use the returned</span>
+<a id="__codelineno-0-399" name="__codelineno-0-399"></a><span class="sd">    list to inform the user before kicking off a long solve.</span>
+<a id="__codelineno-0-400" name="__codelineno-0-400"></a>
+<a id="__codelineno-0-401" name="__codelineno-0-401"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-402" name="__codelineno-0-402"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-403" name="__codelineno-0-403"></a><span class="sd">    world</span>
+<a id="__codelineno-0-404" name="__codelineno-0-404"></a><span class="sd">        World to inspect.</span>
+<a id="__codelineno-0-405" name="__codelineno-0-405"></a><span class="sd">    engine</span>
+<a id="__codelineno-0-406" name="__codelineno-0-406"></a><span class="sd">        Engine carrying ``segment_length``.</span>
+<a id="__codelineno-0-407" name="__codelineno-0-407"></a>
+<a id="__codelineno-0-408" name="__codelineno-0-408"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-409" name="__codelineno-0-409"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="sd">    list[str]</span>
+<a id="__codelineno-0-411" name="__codelineno-0-411"></a><span class="sd">        Zero or more diagnostic strings. The list is sorted by</span>
+<a id="__codelineno-0-412" name="__codelineno-0-412"></a><span class="sd">        severity (budget warnings last, electrode-specific</span>
+<a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="sd">        warnings first).</span>
+<a id="__codelineno-0-414" name="__codelineno-0-414"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-415" name="__codelineno-0-415"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.geometry.electrodes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-0-416" name="__codelineno-0-416"></a>        <span class="n">GridMeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-417" name="__codelineno-0-417"></a>        <span class="n">MeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-418" name="__codelineno-0-418"></a>        <span class="n">RingElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-419" name="__codelineno-0-419"></a>        <span class="n">RodElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-420" name="__codelineno-0-420"></a>        <span class="n">StripElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-421" name="__codelineno-0-421"></a>    <span class="p">)</span>
+<a id="__codelineno-0-422" name="__codelineno-0-422"></a>
+<a id="__codelineno-0-423" name="__codelineno-0-423"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="p">)</span>
+<a id="__codelineno-0-424" name="__codelineno-0-424"></a>    <span class="n">msgs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-425" name="__codelineno-0-425"></a>
+<a id="__codelineno-0-426" name="__codelineno-0-426"></a>    <span class="c1"># 1 + 2: per-electrode checks</span>
+<a id="__codelineno-0-427" name="__codelineno-0-427"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-428" name="__codelineno-0-428"></a>        <span class="n">ratio</span> <span class="o">=</span> <span class="n">ds</span> <span class="o">/</span> <span class="n">e</span><span class="o">.</span><span class="n">wire_radius</span>
+<a id="__codelineno-0-429" name="__codelineno-0-429"></a>        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;</span> <span class="n">_MIN_THINWIRE_RATIO</span><span class="p">:</span>
+<a id="__codelineno-0-430" name="__codelineno-0-430"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-431" name="__codelineno-0-431"></a>                <span class="sa">f</span><span class="s2">&quot;thin-wire: electrode &#39;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has &quot;</span>
+<a id="__codelineno-0-432" name="__codelineno-0-432"></a>                <span class="sa">f</span><span class="s2">&quot;segment_length / wire_radius = </span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> &quot;</span>
+<a id="__codelineno-0-433" name="__codelineno-0-433"></a>                <span class="sa">f</span><span class="s2">&quot;(&lt; </span><span class="si">{</span><span class="n">_MIN_THINWIRE_RATIO</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">); &quot;</span>
+<a id="__codelineno-0-434" name="__codelineno-0-434"></a>                <span class="sa">f</span><span class="s2">&quot;the thin-wire self-action assumption may bias the result.&quot;</span>
+<a id="__codelineno-0-435" name="__codelineno-0-435"></a>            <span class="p">)</span>
+<a id="__codelineno-0-436" name="__codelineno-0-436"></a>
+<a id="__codelineno-0-437" name="__codelineno-0-437"></a>        <span class="c1"># Smallest characteristic geometric dimension.</span>
+<a id="__codelineno-0-438" name="__codelineno-0-438"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">RodElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-439" name="__codelineno-0-439"></a>            <span class="n">char</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">length</span>
+<a id="__codelineno-0-440" name="__codelineno-0-440"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">RingElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-441" name="__codelineno-0-441"></a>            <span class="n">char</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">e</span><span class="o">.</span><span class="n">radius</span>
+<a id="__codelineno-0-442" name="__codelineno-0-442"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">StripElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-443" name="__codelineno-0-443"></a>            <span class="n">char</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">length</span>
+<a id="__codelineno-0-444" name="__codelineno-0-444"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">GridMeshElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-445" name="__codelineno-0-445"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">n_x</span><span class="p">),</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">n_y</span><span class="p">))</span>
+<a id="__codelineno-0-446" name="__codelineno-0-446"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">MeshElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-447" name="__codelineno-0-447"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">spacing</span><span class="p">)</span>
+<a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="k">else</span><span class="p">:</span>  <span class="c1"># pragma: no cover - defensive</span>
+<a id="__codelineno-0-449" name="__codelineno-0-449"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-450" name="__codelineno-0-450"></a>
+<a id="__codelineno-0-451" name="__codelineno-0-451"></a>        <span class="k">if</span> <span class="n">char</span> <span class="o">&lt;</span> <span class="n">ds</span><span class="p">:</span>
+<a id="__codelineno-0-452" name="__codelineno-0-452"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-453" name="__codelineno-0-453"></a>                <span class="sa">f</span><span class="s2">&quot;resolution: electrode &#39;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has its &quot;</span>
+<a id="__codelineno-0-454" name="__codelineno-0-454"></a>                <span class="sa">f</span><span class="s2">&quot;smallest dimension </span><span class="si">{</span><span class="n">char</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m below the engine&#39;s &quot;</span>
+<a id="__codelineno-0-455" name="__codelineno-0-455"></a>                <span class="sa">f</span><span class="s2">&quot;segment_length </span><span class="si">{</span><span class="n">ds</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m — the discretiser will fall &quot;</span>
+<a id="__codelineno-0-456" name="__codelineno-0-456"></a>                <span class="sa">f</span><span class="s2">&quot;back to its lower floor and the result will be coarse.&quot;</span>
+<a id="__codelineno-0-457" name="__codelineno-0-457"></a>            <span class="p">)</span>
+<a id="__codelineno-0-458" name="__codelineno-0-458"></a>
+<a id="__codelineno-0-459" name="__codelineno-0-459"></a>    <span class="c1"># 3: distributed-conductor wire / segment ratio</span>
+<a id="__codelineno-0-460" name="__codelineno-0-460"></a>    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">:</span>
+<a id="__codelineno-0-461" name="__codelineno-0-461"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
+<a id="__codelineno-0-462" name="__codelineno-0-462"></a>            <span class="k">continue</span>
+<a id="__codelineno-0-463" name="__codelineno-0-463"></a>        <span class="n">ratio</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">discretize_segment_length</span><span class="p">)</span> <span class="o">/</span> <span class="n">c</span><span class="o">.</span><span class="n">wire_radius</span>
+<a id="__codelineno-0-464" name="__codelineno-0-464"></a>        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;</span> <span class="n">_MIN_THINWIRE_RATIO</span><span class="p">:</span>
+<a id="__codelineno-0-465" name="__codelineno-0-465"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-466" name="__codelineno-0-466"></a>                <span class="sa">f</span><span class="s2">&quot;thin-wire: distributed conductor &#39;</span><span class="si">{</span><span class="n">c</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; has &quot;</span>
+<a id="__codelineno-0-467" name="__codelineno-0-467"></a>                <span class="sa">f</span><span class="s2">&quot;discretize_segment_length / wire_radius = </span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> &quot;</span>
+<a id="__codelineno-0-468" name="__codelineno-0-468"></a>                <span class="sa">f</span><span class="s2">&quot;(&lt; </span><span class="si">{</span><span class="n">_MIN_THINWIRE_RATIO</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">); the longitudinal &quot;</span>
+<a id="__codelineno-0-469" name="__codelineno-0-469"></a>                <span class="sa">f</span><span class="s2">&quot;self-inductance may be biased.&quot;</span>
+<a id="__codelineno-0-470" name="__codelineno-0-470"></a>            <span class="p">)</span>
+<a id="__codelineno-0-471" name="__codelineno-0-471"></a>
+<a id="__codelineno-0-472" name="__codelineno-0-472"></a>    <span class="c1"># 4: total segment-count budget</span>
+<a id="__codelineno-0-473" name="__codelineno-0-473"></a>    <span class="n">est</span> <span class="o">=</span> <span class="n">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
+<a id="__codelineno-0-474" name="__codelineno-0-474"></a>    <span class="n">n_total</span> <span class="o">=</span> <span class="n">est</span><span class="p">[</span><span class="s2">&quot;total&quot;</span><span class="p">]</span>
+<a id="__codelineno-0-475" name="__codelineno-0-475"></a>    <span class="k">if</span> <span class="n">n_total</span> <span class="o">&gt;=</span> <span class="n">_BUDGET_HARD_THRESHOLD</span><span class="p">:</span>
+<a id="__codelineno-0-476" name="__codelineno-0-476"></a>        <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-477" name="__codelineno-0-477"></a>            <span class="sa">f</span><span class="s2">&quot;budget: predicted total segment count </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2"> exceeds &quot;</span>
+<a id="__codelineno-0-478" name="__codelineno-0-478"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_BUDGET_HARD_THRESHOLD</span><span class="si">}</span><span class="s2"> — expect a heavy memory and &quot;</span>
+<a id="__codelineno-0-479" name="__codelineno-0-479"></a>            <span class="sa">f</span><span class="s2">&quot;solve-time cost (dense system: O(N²) memory, O(N³) solve). &quot;</span>
+<a id="__codelineno-0-480" name="__codelineno-0-480"></a>            <span class="sa">f</span><span class="s2">&quot;Consider using a coarser segment_length or a sparser &quot;</span>
+<a id="__codelineno-0-481" name="__codelineno-0-481"></a>            <span class="sa">f</span><span class="s2">&quot;distributed-conductor discretisation.&quot;</span>
+<a id="__codelineno-0-482" name="__codelineno-0-482"></a>        <span class="p">)</span>
+<a id="__codelineno-0-483" name="__codelineno-0-483"></a>    <span class="k">elif</span> <span class="n">n_total</span> <span class="o">&gt;=</span> <span class="n">_BUDGET_WARN_THRESHOLD</span><span class="p">:</span>
+<a id="__codelineno-0-484" name="__codelineno-0-484"></a>        <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-485" name="__codelineno-0-485"></a>            <span class="sa">f</span><span class="s2">&quot;budget: predicted total segment count </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2"> exceeds &quot;</span>
+<a id="__codelineno-0-486" name="__codelineno-0-486"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_BUDGET_WARN_THRESHOLD</span><span class="si">}</span><span class="s2"> — solve time may run from &quot;</span>
+<a id="__codelineno-0-487" name="__codelineno-0-487"></a>            <span class="sa">f</span><span class="s2">&quot;seconds to minutes on a typical laptop.&quot;</span>
+<a id="__codelineno-0-488" name="__codelineno-0-488"></a>        <span class="p">)</span>
+<a id="__codelineno-0-489" name="__codelineno-0-489"></a>
+<a id="__codelineno-0-490" name="__codelineno-0-490"></a>    <span class="k">return</span> <span class="n">msgs</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundfield.diagnostics.expected_segments" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">expected_segments</span>
+
+
+<a href="#groundfield.diagnostics.expected_segments" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">expected_segments</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Predict the number of point-source segments after discretisation.</p>
+<p>Mirrors the image-family discretiser
+(:mod:<code>groundfield.solver.image</code>) so the prediction is
+<em>exact</em> for the <code>image</code> / <code>image_2layer</code> / <code>image_nlayer</code>
+/ <code>mom</code> / <code>mom_sommerfeld</code> / <code>cim</code> / <code>bem</code> backends.
+The FEM backend (:mod:<code>groundfield.solver.fem</code>) uses an
+axisymmetric volume mesh that is unrelated to <code>segment_length</code>;
+for FEM this prediction is not informative.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>world</code>
+            </td>
+            <td>
+                  <code>&#39;World&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World to inspect.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>engine</code>
+            </td>
+            <td>
+                  <code>&#39;Engine&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Engine carrying <code>segment_length</code> (in metres).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Keys:</p>
+<ul>
+<li><code>per_electrode</code>: <code>dict[name, int]</code> with the segment
+  count of every named electrode,</li>
+<li><code>per_kind</code>: <code>dict[kind, int]</code> aggregated counts per
+  electrode kind,</li>
+<li><code>electrode_total</code> (int),</li>
+<li><code>per_conductor</code>: <code>dict[name, int]</code> (only listed for
+  distributed conductors; lumped conductors contribute 0
+  and are omitted),</li>
+<li><code>conductor_total</code> (int),</li>
+<li><code>total</code> (int) — sum of electrode and conductor segments.</li>
+</ul>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>engine.segment_length</code> is not strictly positive.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>src/groundfield/diagnostics.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-274">274</a></span>
+<span class="normal"><a href="#__codelineno-0-275">275</a></span>
+<span class="normal"><a href="#__codelineno-0-276">276</a></span>
+<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+<span class="normal"><a href="#__codelineno-0-278">278</a></span>
+<span class="normal"><a href="#__codelineno-0-279">279</a></span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span>
+<span class="normal"><a href="#__codelineno-0-290">290</a></span>
+<span class="normal"><a href="#__codelineno-0-291">291</a></span>
+<span class="normal"><a href="#__codelineno-0-292">292</a></span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span>
+<span class="normal"><a href="#__codelineno-0-295">295</a></span>
+<span class="normal"><a href="#__codelineno-0-296">296</a></span>
+<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+<span class="normal"><a href="#__codelineno-0-298">298</a></span>
+<span class="normal"><a href="#__codelineno-0-299">299</a></span>
+<span class="normal"><a href="#__codelineno-0-300">300</a></span>
+<span class="normal"><a href="#__codelineno-0-301">301</a></span>
+<span class="normal"><a href="#__codelineno-0-302">302</a></span>
+<span class="normal"><a href="#__codelineno-0-303">303</a></span>
+<span class="normal"><a href="#__codelineno-0-304">304</a></span>
+<span class="normal"><a href="#__codelineno-0-305">305</a></span>
+<span class="normal"><a href="#__codelineno-0-306">306</a></span>
+<span class="normal"><a href="#__codelineno-0-307">307</a></span>
+<span class="normal"><a href="#__codelineno-0-308">308</a></span>
+<span class="normal"><a href="#__codelineno-0-309">309</a></span>
+<span class="normal"><a href="#__codelineno-0-310">310</a></span>
+<span class="normal"><a href="#__codelineno-0-311">311</a></span>
+<span class="normal"><a href="#__codelineno-0-312">312</a></span>
+<span class="normal"><a href="#__codelineno-0-313">313</a></span>
+<span class="normal"><a href="#__codelineno-0-314">314</a></span>
+<span class="normal"><a href="#__codelineno-0-315">315</a></span>
+<span class="normal"><a href="#__codelineno-0-316">316</a></span>
+<span class="normal"><a href="#__codelineno-0-317">317</a></span>
+<span class="normal"><a href="#__codelineno-0-318">318</a></span>
+<span class="normal"><a href="#__codelineno-0-319">319</a></span>
+<span class="normal"><a href="#__codelineno-0-320">320</a></span>
+<span class="normal"><a href="#__codelineno-0-321">321</a></span>
+<span class="normal"><a href="#__codelineno-0-322">322</a></span>
+<span class="normal"><a href="#__codelineno-0-323">323</a></span>
+<span class="normal"><a href="#__codelineno-0-324">324</a></span>
+<span class="normal"><a href="#__codelineno-0-325">325</a></span>
+<span class="normal"><a href="#__codelineno-0-326">326</a></span>
+<span class="normal"><a href="#__codelineno-0-327">327</a></span>
+<span class="normal"><a href="#__codelineno-0-328">328</a></span>
+<span class="normal"><a href="#__codelineno-0-329">329</a></span>
+<span class="normal"><a href="#__codelineno-0-330">330</a></span>
+<span class="normal"><a href="#__codelineno-0-331">331</a></span>
+<span class="normal"><a href="#__codelineno-0-332">332</a></span>
+<span class="normal"><a href="#__codelineno-0-333">333</a></span>
+<span class="normal"><a href="#__codelineno-0-334">334</a></span>
+<span class="normal"><a href="#__codelineno-0-335">335</a></span>
+<span class="normal"><a href="#__codelineno-0-336">336</a></span>
+<span class="normal"><a href="#__codelineno-0-337">337</a></span>
+<span class="normal"><a href="#__codelineno-0-338">338</a></span>
+<span class="normal"><a href="#__codelineno-0-339">339</a></span>
+<span class="normal"><a href="#__codelineno-0-340">340</a></span>
+<span class="normal"><a href="#__codelineno-0-341">341</a></span>
+<span class="normal"><a href="#__codelineno-0-342">342</a></span>
+<span class="normal"><a href="#__codelineno-0-343">343</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-274" name="__codelineno-0-274"></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Predict the number of point-source segments after discretisation.</span>
+<a id="__codelineno-0-276" name="__codelineno-0-276"></a>
+<a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="sd">    Mirrors the image-family discretiser</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a><span class="sd">    (:mod:`groundfield.solver.image`) so the prediction is</span>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a><span class="sd">    *exact* for the ``image`` / ``image_2layer`` / ``image_nlayer``</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">    / ``mom`` / ``mom_sommerfeld`` / ``cim`` / ``bem`` backends.</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a><span class="sd">    The FEM backend (:mod:`groundfield.solver.fem`) uses an</span>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    axisymmetric volume mesh that is unrelated to ``segment_length``;</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    for FEM this prediction is not informative.</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">    world</span>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">        World to inspect.</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">    engine</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">        Engine carrying ``segment_length`` (in metres).</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a><span class="sd">    dict</span>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a><span class="sd">        Keys:</span>
+<a id="__codelineno-0-296" name="__codelineno-0-296"></a>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a><span class="sd">        * ``per_electrode``: ``dict[name, int]`` with the segment</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">          count of every named electrode,</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a><span class="sd">        * ``per_kind``: ``dict[kind, int]`` aggregated counts per</span>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">          electrode kind,</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">        * ``electrode_total`` (int),</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">        * ``per_conductor``: ``dict[name, int]`` (only listed for</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a><span class="sd">          distributed conductors; lumped conductors contribute 0</span>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">          and are omitted),</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">        * ``conductor_total`` (int),</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a><span class="sd">        * ``total`` (int) — sum of electrode and conductor segments.</span>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a><span class="sd">    Raises</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="sd">    ------</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a><span class="sd">    ValueError</span>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="sd">        If ``engine.segment_length`` is not strictly positive.</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="p">)</span>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span> <span class="ow">or</span> <span class="n">ds</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>            <span class="sa">f</span><span class="s2">&quot;engine.segment_length must be &gt; 0, got </span><span class="si">{</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a>        <span class="p">)</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>    <span class="n">per_electrode</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>    <span class="n">per_kind</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>    <span class="n">e_total</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-323" name="__codelineno-0-323"></a>        <span class="n">n</span> <span class="o">=</span> <span class="n">_electrode_segment_count</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">ds</span><span class="p">)</span>
+<a id="__codelineno-0-324" name="__codelineno-0-324"></a>        <span class="n">per_electrode</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>        <span class="n">per_kind</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="p">]</span> <span class="o">+=</span> <span class="n">n</span>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a>        <span class="n">e_total</span> <span class="o">+=</span> <span class="n">n</span>
+<a id="__codelineno-0-327" name="__codelineno-0-327"></a>
+<a id="__codelineno-0-328" name="__codelineno-0-328"></a>    <span class="n">per_conductor</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-329" name="__codelineno-0-329"></a>    <span class="n">c_total</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-0-330" name="__codelineno-0-330"></a>    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">:</span>
+<a id="__codelineno-0-331" name="__codelineno-0-331"></a>        <span class="n">n</span> <span class="o">=</span> <span class="n">_conductor_segment_count</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<a id="__codelineno-0-332" name="__codelineno-0-332"></a>        <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-0-333" name="__codelineno-0-333"></a>            <span class="n">per_conductor</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
+<a id="__codelineno-0-334" name="__codelineno-0-334"></a>        <span class="n">c_total</span> <span class="o">+=</span> <span class="n">n</span>
+<a id="__codelineno-0-335" name="__codelineno-0-335"></a>
+<a id="__codelineno-0-336" name="__codelineno-0-336"></a>    <span class="k">return</span> <span class="p">{</span>
+<a id="__codelineno-0-337" name="__codelineno-0-337"></a>        <span class="s2">&quot;per_electrode&quot;</span><span class="p">:</span> <span class="n">per_electrode</span><span class="p">,</span>
+<a id="__codelineno-0-338" name="__codelineno-0-338"></a>        <span class="s2">&quot;per_kind&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">per_kind</span><span class="p">),</span>
+<a id="__codelineno-0-339" name="__codelineno-0-339"></a>        <span class="s2">&quot;electrode_total&quot;</span><span class="p">:</span> <span class="n">e_total</span><span class="p">,</span>
+<a id="__codelineno-0-340" name="__codelineno-0-340"></a>        <span class="s2">&quot;per_conductor&quot;</span><span class="p">:</span> <span class="n">per_conductor</span><span class="p">,</span>
+<a id="__codelineno-0-341" name="__codelineno-0-341"></a>        <span class="s2">&quot;conductor_total&quot;</span><span class="p">:</span> <span class="n">c_total</span><span class="p">,</span>
+<a id="__codelineno-0-342" name="__codelineno-0-342"></a>        <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="n">e_total</span> <span class="o">+</span> <span class="n">c_total</span><span class="p">,</span>
+<a id="__codelineno-0-343" name="__codelineno-0-343"></a>    <span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundfield.diagnostics.world_statistics" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">world_statistics</span>
+
+
+<a href="#groundfield.diagnostics.world_statistics" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">world_statistics</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s1">&#39;World&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return a structural snapshot of a world.</p>
+<p>Aggregates counts, lengths and the bounding box; complements
+:meth:<code>World.summary</code> (one-line text) with a richer
+machine-readable dictionary that scales to AP1-grade networks.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>world</code>
+            </td>
+            <td>
+                  <code>&#39;World&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World to inspect.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Keys:</p>
+<ul>
+<li><code>n_electrodes</code> (int),</li>
+<li><code>n_electrodes_by_kind</code> (<code>dict[str, int]</code>: rod / ring
+  / strip / mesh / grid_mesh),</li>
+<li><code>n_conductors</code> (int),</li>
+<li><code>n_conductors_by_type</code> (<code>dict[str, int]</code>),</li>
+<li><code>n_distributed_conductors</code> / <code>n_lumped_conductors</code>,</li>
+<li><code>n_galvanic_conductors</code> / <code>n_isolated_conductors</code>,</li>
+<li><code>n_sources</code> (int),</li>
+<li><code>total_electrode_wire_length_m</code> (float),</li>
+<li><code>total_conductor_length_m</code> (float),</li>
+<li><code>conductor_length_stats</code>: <code>{min, median, max, mean}</code>
+  in metres (empty dict when no conductors),</li>
+<li><code>bounds_3d</code>: <code>(x_min, x_max, y_min, y_max, z_min,
+  z_max)</code> in metres,</li>
+<li><code>footprint_xy</code>: <code>(x_min, x_max, y_min, y_max)</code>,</li>
+<li><code>footprint_area_m2</code> (float),</li>
+<li><code>depth_range_m</code>: <code>(z_min, z_max)</code>,</li>
+<li><code>has_layered_soil</code> (bool — diagnostic flag set when
+  the soil model is :class:<code>TwoLayerSoil</code> or
+  :class:<code>MultiLayerSoil</code>).</li>
+</ul>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>src/groundfield/diagnostics.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-166">166</a></span>
+<span class="normal"><a href="#__codelineno-0-167">167</a></span>
+<span class="normal"><a href="#__codelineno-0-168">168</a></span>
+<span class="normal"><a href="#__codelineno-0-169">169</a></span>
+<span class="normal"><a href="#__codelineno-0-170">170</a></span>
+<span class="normal"><a href="#__codelineno-0-171">171</a></span>
+<span class="normal"><a href="#__codelineno-0-172">172</a></span>
+<span class="normal"><a href="#__codelineno-0-173">173</a></span>
+<span class="normal"><a href="#__codelineno-0-174">174</a></span>
+<span class="normal"><a href="#__codelineno-0-175">175</a></span>
+<span class="normal"><a href="#__codelineno-0-176">176</a></span>
+<span class="normal"><a href="#__codelineno-0-177">177</a></span>
+<span class="normal"><a href="#__codelineno-0-178">178</a></span>
+<span class="normal"><a href="#__codelineno-0-179">179</a></span>
+<span class="normal"><a href="#__codelineno-0-180">180</a></span>
+<span class="normal"><a href="#__codelineno-0-181">181</a></span>
+<span class="normal"><a href="#__codelineno-0-182">182</a></span>
+<span class="normal"><a href="#__codelineno-0-183">183</a></span>
+<span class="normal"><a href="#__codelineno-0-184">184</a></span>
+<span class="normal"><a href="#__codelineno-0-185">185</a></span>
+<span class="normal"><a href="#__codelineno-0-186">186</a></span>
+<span class="normal"><a href="#__codelineno-0-187">187</a></span>
+<span class="normal"><a href="#__codelineno-0-188">188</a></span>
+<span class="normal"><a href="#__codelineno-0-189">189</a></span>
+<span class="normal"><a href="#__codelineno-0-190">190</a></span>
+<span class="normal"><a href="#__codelineno-0-191">191</a></span>
+<span class="normal"><a href="#__codelineno-0-192">192</a></span>
+<span class="normal"><a href="#__codelineno-0-193">193</a></span>
+<span class="normal"><a href="#__codelineno-0-194">194</a></span>
+<span class="normal"><a href="#__codelineno-0-195">195</a></span>
+<span class="normal"><a href="#__codelineno-0-196">196</a></span>
+<span class="normal"><a href="#__codelineno-0-197">197</a></span>
+<span class="normal"><a href="#__codelineno-0-198">198</a></span>
+<span class="normal"><a href="#__codelineno-0-199">199</a></span>
+<span class="normal"><a href="#__codelineno-0-200">200</a></span>
+<span class="normal"><a href="#__codelineno-0-201">201</a></span>
+<span class="normal"><a href="#__codelineno-0-202">202</a></span>
+<span class="normal"><a href="#__codelineno-0-203">203</a></span>
+<span class="normal"><a href="#__codelineno-0-204">204</a></span>
+<span class="normal"><a href="#__codelineno-0-205">205</a></span>
+<span class="normal"><a href="#__codelineno-0-206">206</a></span>
+<span class="normal"><a href="#__codelineno-0-207">207</a></span>
+<span class="normal"><a href="#__codelineno-0-208">208</a></span>
+<span class="normal"><a href="#__codelineno-0-209">209</a></span>
+<span class="normal"><a href="#__codelineno-0-210">210</a></span>
+<span class="normal"><a href="#__codelineno-0-211">211</a></span>
+<span class="normal"><a href="#__codelineno-0-212">212</a></span>
+<span class="normal"><a href="#__codelineno-0-213">213</a></span>
+<span class="normal"><a href="#__codelineno-0-214">214</a></span>
+<span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span>
+<span class="normal"><a href="#__codelineno-0-222">222</a></span>
+<span class="normal"><a href="#__codelineno-0-223">223</a></span>
+<span class="normal"><a href="#__codelineno-0-224">224</a></span>
+<span class="normal"><a href="#__codelineno-0-225">225</a></span>
+<span class="normal"><a href="#__codelineno-0-226">226</a></span>
+<span class="normal"><a href="#__codelineno-0-227">227</a></span>
+<span class="normal"><a href="#__codelineno-0-228">228</a></span>
+<span class="normal"><a href="#__codelineno-0-229">229</a></span>
+<span class="normal"><a href="#__codelineno-0-230">230</a></span>
+<span class="normal"><a href="#__codelineno-0-231">231</a></span>
+<span class="normal"><a href="#__codelineno-0-232">232</a></span>
+<span class="normal"><a href="#__codelineno-0-233">233</a></span>
+<span class="normal"><a href="#__codelineno-0-234">234</a></span>
+<span class="normal"><a href="#__codelineno-0-235">235</a></span>
+<span class="normal"><a href="#__codelineno-0-236">236</a></span>
+<span class="normal"><a href="#__codelineno-0-237">237</a></span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span>
+<span class="normal"><a href="#__codelineno-0-246">246</a></span>
+<span class="normal"><a href="#__codelineno-0-247">247</a></span>
+<span class="normal"><a href="#__codelineno-0-248">248</a></span>
+<span class="normal"><a href="#__codelineno-0-249">249</a></span>
+<span class="normal"><a href="#__codelineno-0-250">250</a></span>
+<span class="normal"><a href="#__codelineno-0-251">251</a></span>
+<span class="normal"><a href="#__codelineno-0-252">252</a></span>
+<span class="normal"><a href="#__codelineno-0-253">253</a></span>
+<span class="normal"><a href="#__codelineno-0-254">254</a></span>
+<span class="normal"><a href="#__codelineno-0-255">255</a></span>
+<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+<span class="normal"><a href="#__codelineno-0-257">257</a></span>
+<span class="normal"><a href="#__codelineno-0-258">258</a></span>
+<span class="normal"><a href="#__codelineno-0-259">259</a></span>
+<span class="normal"><a href="#__codelineno-0-260">260</a></span>
+<span class="normal"><a href="#__codelineno-0-261">261</a></span>
+<span class="normal"><a href="#__codelineno-0-262">262</a></span>
+<span class="normal"><a href="#__codelineno-0-263">263</a></span>
+<span class="normal"><a href="#__codelineno-0-264">264</a></span>
+<span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-166" name="__codelineno-0-166"></a><span class="k">def</span><span class="w"> </span><span class="nf">world_statistics</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<a id="__codelineno-0-167" name="__codelineno-0-167"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a structural snapshot of a world.</span>
+<a id="__codelineno-0-168" name="__codelineno-0-168"></a>
+<a id="__codelineno-0-169" name="__codelineno-0-169"></a><span class="sd">    Aggregates counts, lengths and the bounding box; complements</span>
+<a id="__codelineno-0-170" name="__codelineno-0-170"></a><span class="sd">    :meth:`World.summary` (one-line text) with a richer</span>
+<a id="__codelineno-0-171" name="__codelineno-0-171"></a><span class="sd">    machine-readable dictionary that scales to AP1-grade networks.</span>
+<a id="__codelineno-0-172" name="__codelineno-0-172"></a>
+<a id="__codelineno-0-173" name="__codelineno-0-173"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-174" name="__codelineno-0-174"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-175" name="__codelineno-0-175"></a><span class="sd">    world</span>
+<a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="sd">        World to inspect.</span>
+<a id="__codelineno-0-177" name="__codelineno-0-177"></a>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-179" name="__codelineno-0-179"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-180" name="__codelineno-0-180"></a><span class="sd">    dict</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="sd">        Keys:</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">        * ``n_electrodes`` (int),</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">        * ``n_electrodes_by_kind`` (``dict[str, int]``: rod / ring</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a><span class="sd">          / strip / mesh / grid_mesh),</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a><span class="sd">        * ``n_conductors`` (int),</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a><span class="sd">        * ``n_conductors_by_type`` (``dict[str, int]``),</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="sd">        * ``n_distributed_conductors`` / ``n_lumped_conductors``,</span>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a><span class="sd">        * ``n_galvanic_conductors`` / ``n_isolated_conductors``,</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">        * ``n_sources`` (int),</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">        * ``total_electrode_wire_length_m`` (float),</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">        * ``total_conductor_length_m`` (float),</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">        * ``conductor_length_stats``: ``{min, median, max, mean}``</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">          in metres (empty dict when no conductors),</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">        * ``bounds_3d``: ``(x_min, x_max, y_min, y_max, z_min,</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">          z_max)`` in metres,</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">        * ``footprint_xy``: ``(x_min, x_max, y_min, y_max)``,</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">        * ``footprint_area_m2`` (float),</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">        * ``depth_range_m``: ``(z_min, z_max)``,</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">        * ``has_layered_soil`` (bool — diagnostic flag set when</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">          the soil model is :class:`TwoLayerSoil` or</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">          :class:`MultiLayerSoil`).</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.geometry.electrodes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a>        <span class="n">GridMeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a>        <span class="n">MeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>        <span class="n">RingElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a>        <span class="n">RodElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a>        <span class="n">StripElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="p">)</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.postprocess.geometry_plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">world_bounds_3d</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.soil.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiLayerSoil</span><span class="p">,</span> <span class="n">TwoLayerSoil</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="n">kind_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a>        <span class="n">RodElectrode</span><span class="p">:</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>        <span class="n">RingElectrode</span><span class="p">:</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>        <span class="n">StripElectrode</span><span class="p">:</span> <span class="s2">&quot;strip&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>        <span class="n">MeshElectrode</span><span class="p">:</span> <span class="s2">&quot;mesh&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>        <span class="n">GridMeshElectrode</span><span class="p">:</span> <span class="s2">&quot;grid_mesh&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>    <span class="p">}</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="n">by_kind</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="n">total_e_wire</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>        <span class="n">by_kind</span><span class="p">[</span><span class="n">kind_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)]</span> <span class="o">+=</span> <span class="mi">1</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>        <span class="n">total_e_wire</span> <span class="o">+=</span> <span class="n">_electrode_wire_length</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="n">by_type</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">conductor_type</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>    <span class="n">n_distributed</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">)</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>    <span class="n">n_galvanic</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">coupling_to_soil</span> <span class="o">==</span> <span class="s2">&quot;galvanic&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>    <span class="n">cond_lengths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">length</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">]</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>    <span class="n">total_c_length</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">))</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="k">if</span> <span class="n">cond_lengths</span><span class="p">:</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>        <span class="n">cond_stats</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a>            <span class="s2">&quot;min&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a>            <span class="s2">&quot;median&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">median</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>            <span class="s2">&quot;max&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a>            <span class="s2">&quot;mean&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a>        <span class="p">}</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>        <span class="n">cond_stats</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a>    <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">,</span> <span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span> <span class="o">=</span> <span class="n">world_bounds_3d</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a>    <span class="n">footprint</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a>    <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_max</span> <span class="o">-</span> <span class="n">x_min</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y_max</span> <span class="o">-</span> <span class="n">y_min</span><span class="p">)</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a>    <span class="n">has_layered</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">,</span> <span class="p">(</span><span class="n">TwoLayerSoil</span><span class="p">,</span> <span class="n">MultiLayerSoil</span><span class="p">))</span>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a>    <span class="k">return</span> <span class="p">{</span>
+<a id="__codelineno-0-249" name="__codelineno-0-249"></a>        <span class="s2">&quot;n_electrodes&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">),</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a>        <span class="s2">&quot;n_electrodes_by_kind&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">by_kind</span><span class="p">),</span>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a>        <span class="s2">&quot;n_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">),</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a>        <span class="s2">&quot;n_conductors_by_type&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">by_type</span><span class="p">),</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a>        <span class="s2">&quot;n_distributed_conductors&quot;</span><span class="p">:</span> <span class="n">n_distributed</span><span class="p">,</span>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a>        <span class="s2">&quot;n_lumped_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_distributed</span><span class="p">,</span>
+<a id="__codelineno-0-255" name="__codelineno-0-255"></a>        <span class="s2">&quot;n_galvanic_conductors&quot;</span><span class="p">:</span> <span class="n">n_galvanic</span><span class="p">,</span>
+<a id="__codelineno-0-256" name="__codelineno-0-256"></a>        <span class="s2">&quot;n_isolated_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_galvanic</span><span class="p">,</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>        <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">sources</span><span class="p">),</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>        <span class="s2">&quot;total_electrode_wire_length_m&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">total_e_wire</span><span class="p">),</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a>        <span class="s2">&quot;total_conductor_length_m&quot;</span><span class="p">:</span> <span class="n">total_c_length</span><span class="p">,</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a>        <span class="s2">&quot;conductor_length_stats&quot;</span><span class="p">:</span> <span class="n">cond_stats</span><span class="p">,</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a>        <span class="s2">&quot;bounds_3d&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">,</span> <span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span><span class="p">),</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="s2">&quot;footprint_xy&quot;</span><span class="p">:</span> <span class="n">footprint</span><span class="p">,</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a>        <span class="s2">&quot;footprint_area_m2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">area</span><span class="p">),</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a>        <span class="s2">&quot;depth_range_m&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span><span class="p">),</span>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a>        <span class="s2">&quot;has_layered_soil&quot;</span><span class="p">:</span> <span class="n">has_layered</span><span class="p">,</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a>    <span class="p">}</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Christian Ehlert
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/Ce1ectric/groundfield" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "toc.follow", "search.highlight", "search.share"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
