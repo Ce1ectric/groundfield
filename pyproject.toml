@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "groundfield"
-version = "0.1.0"
+version = "0.2.0"
 description = "Numerical field computation for grounding systems (PDE / field model, coupling to groundinsight)"
 authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
 license = "MIT"
