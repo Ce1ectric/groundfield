@@ -30,6 +30,12 @@ _No changes yet._
 
 ---
 
+## [0.4.0] — 2026-05-12
+
+_Housekeeping release; no user-visible changes._
+
+---
+
 ## [0.2.0] — 2026-05-12
 
 ### Fixed
@@ -2075,6 +2081,7 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.4.0
 [0.2.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.1.0
