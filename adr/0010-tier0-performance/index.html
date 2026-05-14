@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2340,7 +2340,7 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
@@ -2357,7 +2357,7 @@ substantially:</p>
 <ul>
 <li><strong>0a — LU caching across frequencies.</strong> Today the solver
   rebuilds the dense reaction matrix and re-factorises per
-  frequency. For the AP1 production path
+  frequency. For the default path
   (<code>earth_inductive_model="perfect_mirror"</code>, no
   per-conductor <code>inductance_model</code>) the matrix is identical
   across frequencies; the solve currently does <span class="arithmatex">\(n_\text{freq}\)</span>
@@ -2420,9 +2420,9 @@ internally rebuilds + factorises <code>A</code>. Implementing 0a
 requires hoisting that build out of the per-call API to a
 "prepare once, solve many" interface — touching seven backends
 plus the engine dispatch. Estimated effort: 3–5 days plus
-regression-test maintenance. The win on the AP1 production path
+regression-test maintenance. The win on the default path
 (galvanic + multi-frequency) is exactly <code>len(frequencies)</code>;
-typical AP1 sweeps use 1 frequency, so the practical
+typical sweeps use 1 frequency, so the practical
 improvement is small unless the user explicitly runs a
 multi-frequency study without inductive coupling. Listed
 explicitly in this ADR to make the plan reviewable; will be
@@ -2449,12 +2449,12 @@ deliverable.</p>
 <li><strong>Bit-exact regression</strong> against the legacy loop on every
    geometric class used by the existing test suite — single
    rod, ring, strip, mesh, multi-electrode network with
-   bonding straps, AP1 reference networks. Tolerance:
+   bonding straps, reference networks. Tolerance:
    <span class="arithmatex">\(10^{-12}\)</span> relative on every matrix entry.</li>
 <li><strong>Numerical stability</strong> at extreme aspect ratios — very long
    thin PEN runs, very short bonding straps, near-parallel
    geometries.</li>
-<li><strong>Performance</strong> — measured speed-up on a representative AP1
+<li><strong>Performance</strong> — measured speed-up on a representative typical
    network with <span class="arithmatex">\(M \in [100, 5\,000]\)</span>, plotted in
    <code>notebooks/22_tier0_performance.ipynb</code>.</li>
 </ol>
@@ -2462,7 +2462,7 @@ deliverable.</p>
 <ol>
 <li>Bit-exact regression on every multi-frequency test
    (<code>tests/test_*</code> that use <code>frequencies=[...]</code>).</li>
-<li>End-to-end frequency-sweep speed-up on the AP1 reference
+<li>End-to-end frequency-sweep speed-up on the reference
    network.</li>
 </ol>
 <h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
@@ -2568,8 +2568,6 @@ deliverable.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

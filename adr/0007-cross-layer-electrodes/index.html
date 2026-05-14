@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2496,11 +2496,11 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
-<td><code>groundfield</code>, work package 1 of the dissertation</td>
+<td><code>groundfield</code></td>
 </tr>
 </tbody>
 </table>
@@ -2518,7 +2518,7 @@ both assume <strong>source and observer in the same upper layer</strong>. The
 mathematical Green's function for two-layer earth supports
 arbitrary layer combinations, the implementation just hasn't been
 extended yet.</p>
-<p>For the AP1 dissertation work this is a <strong>blocking limitation</strong>.
+<p>For typical applications this is a <strong>blocking limitation</strong>.
 Realistic geometries that we <em>must</em> be able to compute include:</p>
 <ul>
 <li><strong>Driven rods (Tiefenerder)</strong> of 1.5–3 m length at house
@@ -2533,7 +2533,7 @@ Realistic geometries that we <em>must</em> be able to compute include:</p>
 <p>Without cross-layer support the user has to either truncate the
 geometry artificially (wrong physics) or thicken the upper layer
 beyond physical reality (wrong soil model). Neither option is
-acceptable for AP1.</p>
+acceptable for typical cases.</p>
 <h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
 <h3 id="physical-model">Physical model<a class="headerlink" href="#physical-model" title="Permanent link">&para;</a></h3>
 <p>For a 2-layer earth (upper layer <span class="arithmatex">\(\rho_1\)</span> thick <span class="arithmatex">\(h_1\)</span>, lower
@@ -2590,7 +2590,7 @@ the <span class="arithmatex">\(uu\)</span> series; the <span class="arithmatex">
 <span class="arithmatex">\((1 + K)\)</span> and progressively deeper "transmitted-then-reflected"
 images. Both are derivable in closed form (Sunde 1968, eqs.
 3.32–3.34) and will replace the slower spectral-quadrature path
-in <code>_layered_green_kernel</code> for AP1 worlds with many cross-layer
+in <code>_layered_green_kernel</code> for typical worlds with many cross-layer
 segments.</p>
 <p><strong>Speedup target</strong>: Phase A's geometric Sommerfeld quadrature is
 <span class="arithmatex">\(\mathcal{O}(N_\lambda)\)</span> per pair (≈ 128 spectral evaluations
@@ -2620,11 +2620,11 @@ as a sanity check.</p>
 </ol>
 <p><strong>Status</strong>: deferred to a focused follow-up where the
 derivation can be cross-checked against Sunde 1968 and Tagg 1964
-worked examples. For AP1-grade single-frequency runs at <span class="arithmatex">\(\lesssim
+worked examples. For production-grade single-frequency runs at <span class="arithmatex">\(\lesssim
 500\)</span> segments, the Phase A path is acceptable (a few seconds per
 solve); Phase B becomes essential for the <strong>parameter-sweep
-phase</strong> of AP1 (5/10/30/80/200 EFH × multiple soil models ×
-multiple frequencies).</p>
+phase</strong> of large parameter studies (many EFH counts × multiple soil
+models × multiple frequencies).</p>
 <h4 id="phase-c-n-ge-3-layers-deferred">Phase C — <code>n \ge 3</code> layers (deferred)<a class="headerlink" href="#phase-c-n-ge-3-layers-deferred" title="Permanent link">&para;</a></h4>
 <p>The <code>MultiLayerSoil</code> case generalises the 2-layer image series
 to a recursive Tagg-Sunde stack with reflection coefficients
@@ -2665,7 +2665,7 @@ straightforward extension once Phase A is stable.</p>
 <li><strong>Cross-engine consistency</strong> at 50 Hz: image_2layer,
    mom_sommerfeld, cim, bem agree on the cluster impedance of a
    rod-through-interface within 5 %.</li>
-<li><strong>AP1 driven rod</strong>: 3-m rod, <span class="arithmatex">\(h_1 = 1\)</span> m, <span class="arithmatex">\(\rho_1 = 300\)</span>,
+<li><strong>driven rod</strong>: 3-m rod, <span class="arithmatex">\(h_1 = 1\)</span> m, <span class="arithmatex">\(\rho_1 = 300\)</span>,
    <span class="arithmatex">\(\rho_2 = 50\,\Omega\,\mathrm{m}\)</span> — sanity check on the
    cluster impedance against the Dwight 1936 formula adapted
    for 2-layer (Dwight + correction factor).</li>
@@ -2677,7 +2677,7 @@ straightforward extension once Phase A is stable.</p>
 <h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
 <h3 id="positive">Positive<a class="headerlink" href="#positive" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>AP1-realistic geometries run.</strong> Driven rods, foundation
+<li><strong>realistic geometries run.</strong> Driven rods, foundation
   electrodes, deep meshes — all supported on every layered
   backend.</li>
 <li>The Sommerfeld kernel in <code>mom_sommerfeld</code> becomes more
@@ -2691,14 +2691,14 @@ straightforward extension once Phase A is stable.</p>
 <h3 id="negative">Negative<a class="headerlink" href="#negative" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Phase A's spectral-quadrature path for cross-layer pairs is
-  slower than the closed-form image series. For AP1 worlds with
+  slower than the closed-form image series. For typical worlds with
   ≲ 1000 segments and a single-frequency or short-frequency
   sweep this is acceptable; for very large worlds Phase B is
   the optimisation lever.</li>
 <li>Discretiser splits add segments at layer interfaces; the total
   segment count grows by ~<span class="arithmatex">\(O(n_\text{cross})\)</span> where
   <span class="arithmatex">\(n_\text{cross}\)</span> is the number of conductors crossing
-  interfaces. For AP1 this is small.</li>
+  interfaces. For typical this is small.</li>
 </ul>
 <h3 id="neutral">Neutral<a class="headerlink" href="#neutral" title="Permanent link">&para;</a></h3>
 <ul>
@@ -2800,8 +2800,6 @@ straightforward extension once Phase A is stable.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

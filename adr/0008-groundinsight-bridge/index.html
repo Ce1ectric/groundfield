@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2362,7 +2362,7 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
@@ -2373,7 +2373,7 @@
 <h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
 <p><code>groundfield</code> is the field-grade reference. <code>groundinsight</code> is the
 reduced equivalent network model that runs the actual planning and
-fault-current studies. The dissertation pipeline</p>
+fault-current studies. The reduction pipeline</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>PDE / field model  →  reduced rho-f model  →  measurement-anchored
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                                              network model
 </code></pre></div>
@@ -2384,7 +2384,7 @@ in two flavours:</p>
 <li><code>groundfield.postprocess.vector_fitting</code> — a Gustavsen/Semlyen
   rational fit <span class="arithmatex">\(Z(s)\)</span> in the Laplace variable <span class="arithmatex">\(s = j\,2\pi f\)</span> at
   <strong>fixed soil</strong> (output of one parametric run).</li>
-<li><code>groundfield.postprocess.rho_f_standard</code> — the dissertation's
+<li><code>groundfield.postprocess.rho_f_standard</code> — the
   physically-motivated 5-coefficient form
   <span class="arithmatex">\(Z(\rho, f) = k_1\rho + (k_2 + j k_3)f + (k_4 + j k_5)f\rho\)</span>
   fitted across a soil-resistivity sweep.</li>
@@ -2531,8 +2531,8 @@ return <code>BusType</code> instances or talk to the database, so</p>
   produced the underlying physics.</li>
 <li>Vector fitting: Gustavsen &amp; Semlyen, <em>IEEE T-PWRD</em> 14(3),
   1052–1061 (1999).</li>
-<li>Standard <code>rho-f</code> form: dissertation concept document
-  (<code>0_forschungsfragen/main.tex</code>, kapitel 06).</li>
+<li>Standard <code>rho-f</code> form: defined in
+  :mod:<code>groundfield.postprocess.rho_f_standard</code>.</li>
 <li><code>groundinsight.models.core_models.BusType</code> — consumer of the
   exported formula.</li>
 </ul>
@@ -2617,8 +2617,6 @@ return <code>BusType</code> instances or talk to the database, so</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

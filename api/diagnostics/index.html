@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -1631,6 +1631,39 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.HARD_LIMIT" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HARD_LIMIT
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.MIN_THINWIRE_RATIO" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MIN_THINWIRE_RATIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.SOFT_LIMIT" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SOFT_LIMIT
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#groundfield.diagnostics.check_segment_resolution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2286,6 +2319,39 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.HARD_LIMIT" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HARD_LIMIT
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.MIN_THINWIRE_RATIO" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MIN_THINWIRE_RATIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.diagnostics.SOFT_LIMIT" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SOFT_LIMIT
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#groundfield.diagnostics.check_segment_resolution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2345,11 +2411,11 @@
 
 <h1 id="diagnostics">Diagnostics<a class="headerlink" href="#diagnostics" title="Permanent link">&para;</a></h1>
 <p>The :mod:<code>groundfield.diagnostics</code> module provides <strong>pre-solve</strong>
-structural diagnostics for a :class:<code>World</code>. It is the AP1
+structural diagnostics for a :class:<code>World</code>. It is the typical
 counterpart to :mod:<code>groundfield.validation</code> (which is the
 <strong>post-solve</strong> cross-engine consistency check).</p>
 <h2 id="why-pre-solve-diagnostics">Why pre-solve diagnostics?<a class="headerlink" href="#why-pre-solve-diagnostics" title="Permanent link">&para;</a></h2>
-<p>For an AP1-grade TN-Ortsnetz with several hundred electrodes a
+<p>For an production-grade TN-Ortsnetz with several hundred electrodes a
 mistake in the geometry — an electrode placed at the wrong
 coordinate, a missing conductor, or a segmentation budget that
 silently triples the wall-clock time — should be caught <strong>before</strong>
@@ -2464,7 +2530,7 @@ user. An empty list means <em>no concerns detected</em>.</p>
 <p>This module collects <strong>structural</strong> diagnostics that work directly
 on a :class:<code>~groundfield.world.World</code> (and optionally an
 :class:<code>~groundfield.solver.engine.Engine</code>), without invoking the
-solver. It is the AP1 counterpart to
+solver. It is the typical counterpart to
 :mod:<code>groundfield.validation</code> (which is a <em>post-solve</em> cross-engine
 check):</p>
 <ul>
@@ -2520,6 +2586,88 @@ check):</p>
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="groundfield.diagnostics.HARD_LIMIT" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">HARD_LIMIT</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#groundfield.diagnostics.HARD_LIMIT" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">HARD_LIMIT</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20000</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Total segment count above which the budget warning becomes urgent.</p>
+<p>Promoted from the private <code>_BUDGET_HARD_THRESHOLD</code> in the fifth
+2026-05-13 audit pass.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="groundfield.diagnostics.MIN_THINWIRE_RATIO" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">MIN_THINWIRE_RATIO</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#groundfield.diagnostics.MIN_THINWIRE_RATIO" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">MIN_THINWIRE_RATIO</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Minimum recommended ratio of segment_length to wire_radius.</p>
+<p>Below this, the thin-wire approximation that underpins the
+average-potential method becomes increasingly biased: the
+self-action integral is computed under the assumption
+<code>segment_length &gt;&gt; wire_radius</code>.</p>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="groundfield.diagnostics.SOFT_LIMIT" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">SOFT_LIMIT</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#groundfield.diagnostics.SOFT_LIMIT" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">SOFT_LIMIT</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5000</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Total segment count above which the user should be aware of cost.</p>
+<p>The dense Z-matrix scales as :math:<code>O(N^2)</code> in memory and the
+solve as :math:<code>O(N^3)</code> for the LU + multi-port factorisation, so
+~ 5 000 segments is roughly where solve time becomes minutes
+rather than seconds on a typical laptop. Promoted from the
+private <code>_BUDGET_WARN_THRESHOLD</code> in the fifth 2026-05-13 audit
+pass so tests and notebooks have a stable handle for the
+"soft warning" threshold.</p>
+    </div>
+
+</div>
+
 
 
 <div class="doc doc-object doc-function">
@@ -2538,13 +2686,13 @@ check):</p>
     <div class="doc doc-contents ">
 
         <p>Heuristic discretisation-quality check.</p>
-<p>Inspects the world / engine pair for common AP1 modelling
+<p>Inspects the world / engine pair for common typical modelling
 pitfalls and returns one human-readable string per finding.
 The empty list means <em>no concerns detected</em>. Categories:</p>
 <ol>
 <li><strong>Thin-wire ratio.</strong> Each electrode must satisfy
-   <code>segment_length &gt;= 5 * wire_radius</code> so that the
-   thin-wire average-potential self-action remains valid.</li>
+   <code>segment_length &gt;= MIN_THINWIRE_RATIO * wire_radius</code> so that
+   the thin-wire average-potential self-action remains valid.</li>
 <li><strong>Electrode smaller than one segment.</strong> An electrode whose
    <em>smallest geometric dimension</em> is below <code>segment_length</code>
    is either degenerately discretised (1 segment) or, for
@@ -2553,10 +2701,9 @@ The empty list means <em>no concerns detected</em>. Categories:</p>
    <code>segment_length</code>.</li>
 <li><strong>Distributed-conductor ratio.</strong> A finite
    <code>discretize_segment_length</code> must also stay above
-   <code>5 * conductor.wire_radius</code>.</li>
+   <code>MIN_THINWIRE_RATIO * conductor.wire_radius</code>.</li>
 <li><strong>Total segment budget.</strong> Warns when the predicted total
-   crosses :data:<code>_BUDGET_WARN_THRESHOLD</code> and again at
-   :data:<code>_BUDGET_HARD_THRESHOLD</code>.</li>
+   crosses :data:<code>SOFT_LIMIT</code> and again at :data:<code>HARD_LIMIT</code>.</li>
 </ol>
 <p>The function never raises — it only reports. Use the returned
 list to inform the user before kicking off a long solve.</p>
@@ -2635,27 +2782,7 @@ warnings first).</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundfield/diagnostics.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-375">375</a></span>
-<span class="normal"><a href="#__codelineno-0-376">376</a></span>
-<span class="normal"><a href="#__codelineno-0-377">377</a></span>
-<span class="normal"><a href="#__codelineno-0-378">378</a></span>
-<span class="normal"><a href="#__codelineno-0-379">379</a></span>
-<span class="normal"><a href="#__codelineno-0-380">380</a></span>
-<span class="normal"><a href="#__codelineno-0-381">381</a></span>
-<span class="normal"><a href="#__codelineno-0-382">382</a></span>
-<span class="normal"><a href="#__codelineno-0-383">383</a></span>
-<span class="normal"><a href="#__codelineno-0-384">384</a></span>
-<span class="normal"><a href="#__codelineno-0-385">385</a></span>
-<span class="normal"><a href="#__codelineno-0-386">386</a></span>
-<span class="normal"><a href="#__codelineno-0-387">387</a></span>
-<span class="normal"><a href="#__codelineno-0-388">388</a></span>
-<span class="normal"><a href="#__codelineno-0-389">389</a></span>
-<span class="normal"><a href="#__codelineno-0-390">390</a></span>
-<span class="normal"><a href="#__codelineno-0-391">391</a></span>
-<span class="normal"><a href="#__codelineno-0-392">392</a></span>
-<span class="normal"><a href="#__codelineno-0-393">393</a></span>
-<span class="normal"><a href="#__codelineno-0-394">394</a></span>
-<span class="normal"><a href="#__codelineno-0-395">395</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-395">395</a></span>
 <span class="normal"><a href="#__codelineno-0-396">396</a></span>
 <span class="normal"><a href="#__codelineno-0-397">397</a></span>
 <span class="normal"><a href="#__codelineno-0-398">398</a></span>
@@ -2750,122 +2877,140 @@ warnings first).</p>
 <span class="normal"><a href="#__codelineno-0-487">487</a></span>
 <span class="normal"><a href="#__codelineno-0-488">488</a></span>
 <span class="normal"><a href="#__codelineno-0-489">489</a></span>
-<span class="normal"><a href="#__codelineno-0-490">490</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-375" name="__codelineno-0-375"></a><span class="k">def</span><span class="w"> </span><span class="nf">check_segment_resolution</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<a id="__codelineno-0-376" name="__codelineno-0-376"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Heuristic discretisation-quality check.</span>
-<a id="__codelineno-0-377" name="__codelineno-0-377"></a>
-<a id="__codelineno-0-378" name="__codelineno-0-378"></a><span class="sd">    Inspects the world / engine pair for common AP1 modelling</span>
-<a id="__codelineno-0-379" name="__codelineno-0-379"></a><span class="sd">    pitfalls and returns one human-readable string per finding.</span>
-<a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="sd">    The empty list means *no concerns detected*. Categories:</span>
-<a id="__codelineno-0-381" name="__codelineno-0-381"></a>
-<a id="__codelineno-0-382" name="__codelineno-0-382"></a><span class="sd">    1. **Thin-wire ratio.** Each electrode must satisfy</span>
-<a id="__codelineno-0-383" name="__codelineno-0-383"></a><span class="sd">       ``segment_length &gt;= 5 * wire_radius`` so that the</span>
-<a id="__codelineno-0-384" name="__codelineno-0-384"></a><span class="sd">       thin-wire average-potential self-action remains valid.</span>
-<a id="__codelineno-0-385" name="__codelineno-0-385"></a><span class="sd">    2. **Electrode smaller than one segment.** An electrode whose</span>
-<a id="__codelineno-0-386" name="__codelineno-0-386"></a><span class="sd">       *smallest geometric dimension* is below ``segment_length``</span>
-<a id="__codelineno-0-387" name="__codelineno-0-387"></a><span class="sd">       is either degenerately discretised (1 segment) or, for</span>
-<a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="sd">       rings, falls back to the discretiser&#39;s ``max(8, ...)`` floor</span>
-<a id="__codelineno-0-389" name="__codelineno-0-389"></a><span class="sd">       — in either case the user probably wants a finer</span>
-<a id="__codelineno-0-390" name="__codelineno-0-390"></a><span class="sd">       ``segment_length``.</span>
-<a id="__codelineno-0-391" name="__codelineno-0-391"></a><span class="sd">    3. **Distributed-conductor ratio.** A finite</span>
-<a id="__codelineno-0-392" name="__codelineno-0-392"></a><span class="sd">       ``discretize_segment_length`` must also stay above</span>
-<a id="__codelineno-0-393" name="__codelineno-0-393"></a><span class="sd">       ``5 * conductor.wire_radius``.</span>
-<a id="__codelineno-0-394" name="__codelineno-0-394"></a><span class="sd">    4. **Total segment budget.** Warns when the predicted total</span>
-<a id="__codelineno-0-395" name="__codelineno-0-395"></a><span class="sd">       crosses :data:`_BUDGET_WARN_THRESHOLD` and again at</span>
-<a id="__codelineno-0-396" name="__codelineno-0-396"></a><span class="sd">       :data:`_BUDGET_HARD_THRESHOLD`.</span>
+<span class="normal"><a href="#__codelineno-0-490">490</a></span>
+<span class="normal"><a href="#__codelineno-0-491">491</a></span>
+<span class="normal"><a href="#__codelineno-0-492">492</a></span>
+<span class="normal"><a href="#__codelineno-0-493">493</a></span>
+<span class="normal"><a href="#__codelineno-0-494">494</a></span>
+<span class="normal"><a href="#__codelineno-0-495">495</a></span>
+<span class="normal"><a href="#__codelineno-0-496">496</a></span>
+<span class="normal"><a href="#__codelineno-0-497">497</a></span>
+<span class="normal"><a href="#__codelineno-0-498">498</a></span>
+<span class="normal"><a href="#__codelineno-0-499">499</a></span>
+<span class="normal"><a href="#__codelineno-0-500">500</a></span>
+<span class="normal"><a href="#__codelineno-0-501">501</a></span>
+<span class="normal"><a href="#__codelineno-0-502">502</a></span>
+<span class="normal"><a href="#__codelineno-0-503">503</a></span>
+<span class="normal"><a href="#__codelineno-0-504">504</a></span>
+<span class="normal"><a href="#__codelineno-0-505">505</a></span>
+<span class="normal"><a href="#__codelineno-0-506">506</a></span>
+<span class="normal"><a href="#__codelineno-0-507">507</a></span>
+<span class="normal"><a href="#__codelineno-0-508">508</a></span>
+<span class="normal"><a href="#__codelineno-0-509">509</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-395" name="__codelineno-0-395"></a><span class="k">def</span><span class="w"> </span><span class="nf">check_segment_resolution</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<a id="__codelineno-0-396" name="__codelineno-0-396"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Heuristic discretisation-quality check.</span>
 <a id="__codelineno-0-397" name="__codelineno-0-397"></a>
-<a id="__codelineno-0-398" name="__codelineno-0-398"></a><span class="sd">    The function never raises — it only reports. Use the returned</span>
-<a id="__codelineno-0-399" name="__codelineno-0-399"></a><span class="sd">    list to inform the user before kicking off a long solve.</span>
-<a id="__codelineno-0-400" name="__codelineno-0-400"></a>
-<a id="__codelineno-0-401" name="__codelineno-0-401"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-402" name="__codelineno-0-402"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-403" name="__codelineno-0-403"></a><span class="sd">    world</span>
-<a id="__codelineno-0-404" name="__codelineno-0-404"></a><span class="sd">        World to inspect.</span>
-<a id="__codelineno-0-405" name="__codelineno-0-405"></a><span class="sd">    engine</span>
-<a id="__codelineno-0-406" name="__codelineno-0-406"></a><span class="sd">        Engine carrying ``segment_length``.</span>
-<a id="__codelineno-0-407" name="__codelineno-0-407"></a>
-<a id="__codelineno-0-408" name="__codelineno-0-408"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-409" name="__codelineno-0-409"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="sd">    list[str]</span>
-<a id="__codelineno-0-411" name="__codelineno-0-411"></a><span class="sd">        Zero or more diagnostic strings. The list is sorted by</span>
-<a id="__codelineno-0-412" name="__codelineno-0-412"></a><span class="sd">        severity (budget warnings last, electrode-specific</span>
-<a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="sd">        warnings first).</span>
-<a id="__codelineno-0-414" name="__codelineno-0-414"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-415" name="__codelineno-0-415"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.geometry.electrodes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-0-416" name="__codelineno-0-416"></a>        <span class="n">GridMeshElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-417" name="__codelineno-0-417"></a>        <span class="n">MeshElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-418" name="__codelineno-0-418"></a>        <span class="n">RingElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-419" name="__codelineno-0-419"></a>        <span class="n">RodElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-420" name="__codelineno-0-420"></a>        <span class="n">StripElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-421" name="__codelineno-0-421"></a>    <span class="p">)</span>
-<a id="__codelineno-0-422" name="__codelineno-0-422"></a>
-<a id="__codelineno-0-423" name="__codelineno-0-423"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="p">)</span>
-<a id="__codelineno-0-424" name="__codelineno-0-424"></a>    <span class="n">msgs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-<a id="__codelineno-0-425" name="__codelineno-0-425"></a>
-<a id="__codelineno-0-426" name="__codelineno-0-426"></a>    <span class="c1"># 1 + 2: per-electrode checks</span>
-<a id="__codelineno-0-427" name="__codelineno-0-427"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
-<a id="__codelineno-0-428" name="__codelineno-0-428"></a>        <span class="n">ratio</span> <span class="o">=</span> <span class="n">ds</span> <span class="o">/</span> <span class="n">e</span><span class="o">.</span><span class="n">wire_radius</span>
-<a id="__codelineno-0-429" name="__codelineno-0-429"></a>        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;</span> <span class="n">_MIN_THINWIRE_RATIO</span><span class="p">:</span>
-<a id="__codelineno-0-430" name="__codelineno-0-430"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-431" name="__codelineno-0-431"></a>                <span class="sa">f</span><span class="s2">&quot;thin-wire: electrode &#39;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has &quot;</span>
-<a id="__codelineno-0-432" name="__codelineno-0-432"></a>                <span class="sa">f</span><span class="s2">&quot;segment_length / wire_radius = </span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> &quot;</span>
-<a id="__codelineno-0-433" name="__codelineno-0-433"></a>                <span class="sa">f</span><span class="s2">&quot;(&lt; </span><span class="si">{</span><span class="n">_MIN_THINWIRE_RATIO</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">); &quot;</span>
-<a id="__codelineno-0-434" name="__codelineno-0-434"></a>                <span class="sa">f</span><span class="s2">&quot;the thin-wire self-action assumption may bias the result.&quot;</span>
-<a id="__codelineno-0-435" name="__codelineno-0-435"></a>            <span class="p">)</span>
-<a id="__codelineno-0-436" name="__codelineno-0-436"></a>
-<a id="__codelineno-0-437" name="__codelineno-0-437"></a>        <span class="c1"># Smallest characteristic geometric dimension.</span>
-<a id="__codelineno-0-438" name="__codelineno-0-438"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">RodElectrode</span><span class="p">):</span>
-<a id="__codelineno-0-439" name="__codelineno-0-439"></a>            <span class="n">char</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">length</span>
-<a id="__codelineno-0-440" name="__codelineno-0-440"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">RingElectrode</span><span class="p">):</span>
-<a id="__codelineno-0-441" name="__codelineno-0-441"></a>            <span class="n">char</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">e</span><span class="o">.</span><span class="n">radius</span>
-<a id="__codelineno-0-442" name="__codelineno-0-442"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">StripElectrode</span><span class="p">):</span>
-<a id="__codelineno-0-443" name="__codelineno-0-443"></a>            <span class="n">char</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">length</span>
-<a id="__codelineno-0-444" name="__codelineno-0-444"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">GridMeshElectrode</span><span class="p">):</span>
-<a id="__codelineno-0-445" name="__codelineno-0-445"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">n_x</span><span class="p">),</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">n_y</span><span class="p">))</span>
-<a id="__codelineno-0-446" name="__codelineno-0-446"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">MeshElectrode</span><span class="p">):</span>
-<a id="__codelineno-0-447" name="__codelineno-0-447"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">spacing</span><span class="p">)</span>
-<a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="k">else</span><span class="p">:</span>  <span class="c1"># pragma: no cover - defensive</span>
-<a id="__codelineno-0-449" name="__codelineno-0-449"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-450" name="__codelineno-0-450"></a>
-<a id="__codelineno-0-451" name="__codelineno-0-451"></a>        <span class="k">if</span> <span class="n">char</span> <span class="o">&lt;</span> <span class="n">ds</span><span class="p">:</span>
-<a id="__codelineno-0-452" name="__codelineno-0-452"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-453" name="__codelineno-0-453"></a>                <span class="sa">f</span><span class="s2">&quot;resolution: electrode &#39;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has its &quot;</span>
-<a id="__codelineno-0-454" name="__codelineno-0-454"></a>                <span class="sa">f</span><span class="s2">&quot;smallest dimension </span><span class="si">{</span><span class="n">char</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m below the engine&#39;s &quot;</span>
-<a id="__codelineno-0-455" name="__codelineno-0-455"></a>                <span class="sa">f</span><span class="s2">&quot;segment_length </span><span class="si">{</span><span class="n">ds</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m — the discretiser will fall &quot;</span>
-<a id="__codelineno-0-456" name="__codelineno-0-456"></a>                <span class="sa">f</span><span class="s2">&quot;back to its lower floor and the result will be coarse.&quot;</span>
-<a id="__codelineno-0-457" name="__codelineno-0-457"></a>            <span class="p">)</span>
-<a id="__codelineno-0-458" name="__codelineno-0-458"></a>
-<a id="__codelineno-0-459" name="__codelineno-0-459"></a>    <span class="c1"># 3: distributed-conductor wire / segment ratio</span>
-<a id="__codelineno-0-460" name="__codelineno-0-460"></a>    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">:</span>
-<a id="__codelineno-0-461" name="__codelineno-0-461"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
-<a id="__codelineno-0-462" name="__codelineno-0-462"></a>            <span class="k">continue</span>
-<a id="__codelineno-0-463" name="__codelineno-0-463"></a>        <span class="n">ratio</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">discretize_segment_length</span><span class="p">)</span> <span class="o">/</span> <span class="n">c</span><span class="o">.</span><span class="n">wire_radius</span>
-<a id="__codelineno-0-464" name="__codelineno-0-464"></a>        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;</span> <span class="n">_MIN_THINWIRE_RATIO</span><span class="p">:</span>
-<a id="__codelineno-0-465" name="__codelineno-0-465"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-466" name="__codelineno-0-466"></a>                <span class="sa">f</span><span class="s2">&quot;thin-wire: distributed conductor &#39;</span><span class="si">{</span><span class="n">c</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; has &quot;</span>
-<a id="__codelineno-0-467" name="__codelineno-0-467"></a>                <span class="sa">f</span><span class="s2">&quot;discretize_segment_length / wire_radius = </span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> &quot;</span>
-<a id="__codelineno-0-468" name="__codelineno-0-468"></a>                <span class="sa">f</span><span class="s2">&quot;(&lt; </span><span class="si">{</span><span class="n">_MIN_THINWIRE_RATIO</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">); the longitudinal &quot;</span>
-<a id="__codelineno-0-469" name="__codelineno-0-469"></a>                <span class="sa">f</span><span class="s2">&quot;self-inductance may be biased.&quot;</span>
-<a id="__codelineno-0-470" name="__codelineno-0-470"></a>            <span class="p">)</span>
-<a id="__codelineno-0-471" name="__codelineno-0-471"></a>
-<a id="__codelineno-0-472" name="__codelineno-0-472"></a>    <span class="c1"># 4: total segment-count budget</span>
-<a id="__codelineno-0-473" name="__codelineno-0-473"></a>    <span class="n">est</span> <span class="o">=</span> <span class="n">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
-<a id="__codelineno-0-474" name="__codelineno-0-474"></a>    <span class="n">n_total</span> <span class="o">=</span> <span class="n">est</span><span class="p">[</span><span class="s2">&quot;total&quot;</span><span class="p">]</span>
-<a id="__codelineno-0-475" name="__codelineno-0-475"></a>    <span class="k">if</span> <span class="n">n_total</span> <span class="o">&gt;=</span> <span class="n">_BUDGET_HARD_THRESHOLD</span><span class="p">:</span>
-<a id="__codelineno-0-476" name="__codelineno-0-476"></a>        <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-477" name="__codelineno-0-477"></a>            <span class="sa">f</span><span class="s2">&quot;budget: predicted total segment count </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2"> exceeds &quot;</span>
-<a id="__codelineno-0-478" name="__codelineno-0-478"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_BUDGET_HARD_THRESHOLD</span><span class="si">}</span><span class="s2"> — expect a heavy memory and &quot;</span>
-<a id="__codelineno-0-479" name="__codelineno-0-479"></a>            <span class="sa">f</span><span class="s2">&quot;solve-time cost (dense system: O(N²) memory, O(N³) solve). &quot;</span>
-<a id="__codelineno-0-480" name="__codelineno-0-480"></a>            <span class="sa">f</span><span class="s2">&quot;Consider using a coarser segment_length or a sparser &quot;</span>
-<a id="__codelineno-0-481" name="__codelineno-0-481"></a>            <span class="sa">f</span><span class="s2">&quot;distributed-conductor discretisation.&quot;</span>
-<a id="__codelineno-0-482" name="__codelineno-0-482"></a>        <span class="p">)</span>
-<a id="__codelineno-0-483" name="__codelineno-0-483"></a>    <span class="k">elif</span> <span class="n">n_total</span> <span class="o">&gt;=</span> <span class="n">_BUDGET_WARN_THRESHOLD</span><span class="p">:</span>
-<a id="__codelineno-0-484" name="__codelineno-0-484"></a>        <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-485" name="__codelineno-0-485"></a>            <span class="sa">f</span><span class="s2">&quot;budget: predicted total segment count </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2"> exceeds &quot;</span>
-<a id="__codelineno-0-486" name="__codelineno-0-486"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_BUDGET_WARN_THRESHOLD</span><span class="si">}</span><span class="s2"> — solve time may run from &quot;</span>
-<a id="__codelineno-0-487" name="__codelineno-0-487"></a>            <span class="sa">f</span><span class="s2">&quot;seconds to minutes on a typical laptop.&quot;</span>
-<a id="__codelineno-0-488" name="__codelineno-0-488"></a>        <span class="p">)</span>
-<a id="__codelineno-0-489" name="__codelineno-0-489"></a>
-<a id="__codelineno-0-490" name="__codelineno-0-490"></a>    <span class="k">return</span> <span class="n">msgs</span>
+<a id="__codelineno-0-398" name="__codelineno-0-398"></a><span class="sd">    Inspects the world / engine pair for common typical modelling</span>
+<a id="__codelineno-0-399" name="__codelineno-0-399"></a><span class="sd">    pitfalls and returns one human-readable string per finding.</span>
+<a id="__codelineno-0-400" name="__codelineno-0-400"></a><span class="sd">    The empty list means *no concerns detected*. Categories:</span>
+<a id="__codelineno-0-401" name="__codelineno-0-401"></a>
+<a id="__codelineno-0-402" name="__codelineno-0-402"></a><span class="sd">    1. **Thin-wire ratio.** Each electrode must satisfy</span>
+<a id="__codelineno-0-403" name="__codelineno-0-403"></a><span class="sd">       ``segment_length &gt;= MIN_THINWIRE_RATIO * wire_radius`` so that</span>
+<a id="__codelineno-0-404" name="__codelineno-0-404"></a><span class="sd">       the thin-wire average-potential self-action remains valid.</span>
+<a id="__codelineno-0-405" name="__codelineno-0-405"></a><span class="sd">    2. **Electrode smaller than one segment.** An electrode whose</span>
+<a id="__codelineno-0-406" name="__codelineno-0-406"></a><span class="sd">       *smallest geometric dimension* is below ``segment_length``</span>
+<a id="__codelineno-0-407" name="__codelineno-0-407"></a><span class="sd">       is either degenerately discretised (1 segment) or, for</span>
+<a id="__codelineno-0-408" name="__codelineno-0-408"></a><span class="sd">       rings, falls back to the discretiser&#39;s ``max(8, ...)`` floor</span>
+<a id="__codelineno-0-409" name="__codelineno-0-409"></a><span class="sd">       — in either case the user probably wants a finer</span>
+<a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="sd">       ``segment_length``.</span>
+<a id="__codelineno-0-411" name="__codelineno-0-411"></a><span class="sd">    3. **Distributed-conductor ratio.** A finite</span>
+<a id="__codelineno-0-412" name="__codelineno-0-412"></a><span class="sd">       ``discretize_segment_length`` must also stay above</span>
+<a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="sd">       ``MIN_THINWIRE_RATIO * conductor.wire_radius``.</span>
+<a id="__codelineno-0-414" name="__codelineno-0-414"></a><span class="sd">    4. **Total segment budget.** Warns when the predicted total</span>
+<a id="__codelineno-0-415" name="__codelineno-0-415"></a><span class="sd">       crosses :data:`SOFT_LIMIT` and again at :data:`HARD_LIMIT`.</span>
+<a id="__codelineno-0-416" name="__codelineno-0-416"></a>
+<a id="__codelineno-0-417" name="__codelineno-0-417"></a><span class="sd">    The function never raises — it only reports. Use the returned</span>
+<a id="__codelineno-0-418" name="__codelineno-0-418"></a><span class="sd">    list to inform the user before kicking off a long solve.</span>
+<a id="__codelineno-0-419" name="__codelineno-0-419"></a>
+<a id="__codelineno-0-420" name="__codelineno-0-420"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-421" name="__codelineno-0-421"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-422" name="__codelineno-0-422"></a><span class="sd">    world</span>
+<a id="__codelineno-0-423" name="__codelineno-0-423"></a><span class="sd">        World to inspect.</span>
+<a id="__codelineno-0-424" name="__codelineno-0-424"></a><span class="sd">    engine</span>
+<a id="__codelineno-0-425" name="__codelineno-0-425"></a><span class="sd">        Engine carrying ``segment_length``.</span>
+<a id="__codelineno-0-426" name="__codelineno-0-426"></a>
+<a id="__codelineno-0-427" name="__codelineno-0-427"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-428" name="__codelineno-0-428"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-429" name="__codelineno-0-429"></a><span class="sd">    list[str]</span>
+<a id="__codelineno-0-430" name="__codelineno-0-430"></a><span class="sd">        Zero or more diagnostic strings. The list is sorted by</span>
+<a id="__codelineno-0-431" name="__codelineno-0-431"></a><span class="sd">        severity (budget warnings last, electrode-specific</span>
+<a id="__codelineno-0-432" name="__codelineno-0-432"></a><span class="sd">        warnings first).</span>
+<a id="__codelineno-0-433" name="__codelineno-0-433"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-434" name="__codelineno-0-434"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.geometry.electrodes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-0-435" name="__codelineno-0-435"></a>        <span class="n">GridMeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-436" name="__codelineno-0-436"></a>        <span class="n">MeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-437" name="__codelineno-0-437"></a>        <span class="n">RingElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-438" name="__codelineno-0-438"></a>        <span class="n">RodElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-439" name="__codelineno-0-439"></a>        <span class="n">StripElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-440" name="__codelineno-0-440"></a>    <span class="p">)</span>
+<a id="__codelineno-0-441" name="__codelineno-0-441"></a>
+<a id="__codelineno-0-442" name="__codelineno-0-442"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="p">)</span>
+<a id="__codelineno-0-443" name="__codelineno-0-443"></a>    <span class="n">msgs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-444" name="__codelineno-0-444"></a>
+<a id="__codelineno-0-445" name="__codelineno-0-445"></a>    <span class="c1"># 1 + 2: per-electrode checks</span>
+<a id="__codelineno-0-446" name="__codelineno-0-446"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-447" name="__codelineno-0-447"></a>        <span class="n">ratio</span> <span class="o">=</span> <span class="n">ds</span> <span class="o">/</span> <span class="n">e</span><span class="o">.</span><span class="n">wire_radius</span>
+<a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;</span> <span class="n">_MIN_THINWIRE_RATIO</span><span class="p">:</span>
+<a id="__codelineno-0-449" name="__codelineno-0-449"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-450" name="__codelineno-0-450"></a>                <span class="sa">f</span><span class="s2">&quot;thin-wire: electrode &#39;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has &quot;</span>
+<a id="__codelineno-0-451" name="__codelineno-0-451"></a>                <span class="sa">f</span><span class="s2">&quot;segment_length / wire_radius = </span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> &quot;</span>
+<a id="__codelineno-0-452" name="__codelineno-0-452"></a>                <span class="sa">f</span><span class="s2">&quot;(&lt; </span><span class="si">{</span><span class="n">_MIN_THINWIRE_RATIO</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">); &quot;</span>
+<a id="__codelineno-0-453" name="__codelineno-0-453"></a>                <span class="sa">f</span><span class="s2">&quot;the thin-wire self-action assumption may bias the result.&quot;</span>
+<a id="__codelineno-0-454" name="__codelineno-0-454"></a>            <span class="p">)</span>
+<a id="__codelineno-0-455" name="__codelineno-0-455"></a>
+<a id="__codelineno-0-456" name="__codelineno-0-456"></a>        <span class="c1"># Smallest characteristic geometric dimension.</span>
+<a id="__codelineno-0-457" name="__codelineno-0-457"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">RodElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-458" name="__codelineno-0-458"></a>            <span class="n">char</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">length</span>
+<a id="__codelineno-0-459" name="__codelineno-0-459"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">RingElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-460" name="__codelineno-0-460"></a>            <span class="n">char</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">e</span><span class="o">.</span><span class="n">radius</span>
+<a id="__codelineno-0-461" name="__codelineno-0-461"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">StripElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-462" name="__codelineno-0-462"></a>            <span class="n">char</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">length</span>
+<a id="__codelineno-0-463" name="__codelineno-0-463"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">GridMeshElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-464" name="__codelineno-0-464"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">n_x</span><span class="p">),</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">n_y</span><span class="p">))</span>
+<a id="__codelineno-0-465" name="__codelineno-0-465"></a>        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">MeshElectrode</span><span class="p">):</span>
+<a id="__codelineno-0-466" name="__codelineno-0-466"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">size</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">spacing</span><span class="p">)</span>
+<a id="__codelineno-0-467" name="__codelineno-0-467"></a>        <span class="k">else</span><span class="p">:</span>  <span class="c1"># pragma: no cover - defensive</span>
+<a id="__codelineno-0-468" name="__codelineno-0-468"></a>            <span class="n">char</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-469" name="__codelineno-0-469"></a>
+<a id="__codelineno-0-470" name="__codelineno-0-470"></a>        <span class="k">if</span> <span class="n">char</span> <span class="o">&lt;</span> <span class="n">ds</span><span class="p">:</span>
+<a id="__codelineno-0-471" name="__codelineno-0-471"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-472" name="__codelineno-0-472"></a>                <span class="sa">f</span><span class="s2">&quot;resolution: electrode &#39;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="si">}</span><span class="s2">) has its &quot;</span>
+<a id="__codelineno-0-473" name="__codelineno-0-473"></a>                <span class="sa">f</span><span class="s2">&quot;smallest dimension </span><span class="si">{</span><span class="n">char</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m below the engine&#39;s &quot;</span>
+<a id="__codelineno-0-474" name="__codelineno-0-474"></a>                <span class="sa">f</span><span class="s2">&quot;segment_length </span><span class="si">{</span><span class="n">ds</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> m — the discretiser will fall &quot;</span>
+<a id="__codelineno-0-475" name="__codelineno-0-475"></a>                <span class="sa">f</span><span class="s2">&quot;back to its lower floor and the result will be coarse.&quot;</span>
+<a id="__codelineno-0-476" name="__codelineno-0-476"></a>            <span class="p">)</span>
+<a id="__codelineno-0-477" name="__codelineno-0-477"></a>
+<a id="__codelineno-0-478" name="__codelineno-0-478"></a>    <span class="c1"># 3: distributed-conductor wire / segment ratio</span>
+<a id="__codelineno-0-479" name="__codelineno-0-479"></a>    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">:</span>
+<a id="__codelineno-0-480" name="__codelineno-0-480"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">:</span>
+<a id="__codelineno-0-481" name="__codelineno-0-481"></a>            <span class="k">continue</span>
+<a id="__codelineno-0-482" name="__codelineno-0-482"></a>        <span class="n">ratio</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">discretize_segment_length</span><span class="p">)</span> <span class="o">/</span> <span class="n">c</span><span class="o">.</span><span class="n">wire_radius</span>
+<a id="__codelineno-0-483" name="__codelineno-0-483"></a>        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;</span> <span class="n">_MIN_THINWIRE_RATIO</span><span class="p">:</span>
+<a id="__codelineno-0-484" name="__codelineno-0-484"></a>            <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-485" name="__codelineno-0-485"></a>                <span class="sa">f</span><span class="s2">&quot;thin-wire: distributed conductor &#39;</span><span class="si">{</span><span class="n">c</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; has &quot;</span>
+<a id="__codelineno-0-486" name="__codelineno-0-486"></a>                <span class="sa">f</span><span class="s2">&quot;discretize_segment_length / wire_radius = </span><span class="si">{</span><span class="n">ratio</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> &quot;</span>
+<a id="__codelineno-0-487" name="__codelineno-0-487"></a>                <span class="sa">f</span><span class="s2">&quot;(&lt; </span><span class="si">{</span><span class="n">_MIN_THINWIRE_RATIO</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">); the longitudinal &quot;</span>
+<a id="__codelineno-0-488" name="__codelineno-0-488"></a>                <span class="sa">f</span><span class="s2">&quot;self-inductance may be biased.&quot;</span>
+<a id="__codelineno-0-489" name="__codelineno-0-489"></a>            <span class="p">)</span>
+<a id="__codelineno-0-490" name="__codelineno-0-490"></a>
+<a id="__codelineno-0-491" name="__codelineno-0-491"></a>    <span class="c1"># 4: total segment-count budget</span>
+<a id="__codelineno-0-492" name="__codelineno-0-492"></a>    <span class="n">est</span> <span class="o">=</span> <span class="n">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
+<a id="__codelineno-0-493" name="__codelineno-0-493"></a>    <span class="n">n_total</span> <span class="o">=</span> <span class="n">est</span><span class="p">[</span><span class="s2">&quot;total&quot;</span><span class="p">]</span>
+<a id="__codelineno-0-494" name="__codelineno-0-494"></a>    <span class="k">if</span> <span class="n">n_total</span> <span class="o">&gt;=</span> <span class="n">_BUDGET_HARD_THRESHOLD</span><span class="p">:</span>
+<a id="__codelineno-0-495" name="__codelineno-0-495"></a>        <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-496" name="__codelineno-0-496"></a>            <span class="sa">f</span><span class="s2">&quot;budget: predicted total segment count </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2"> exceeds &quot;</span>
+<a id="__codelineno-0-497" name="__codelineno-0-497"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_BUDGET_HARD_THRESHOLD</span><span class="si">}</span><span class="s2"> — expect a heavy memory and &quot;</span>
+<a id="__codelineno-0-498" name="__codelineno-0-498"></a>            <span class="sa">f</span><span class="s2">&quot;solve-time cost (dense system: O(N²) memory, O(N³) solve). &quot;</span>
+<a id="__codelineno-0-499" name="__codelineno-0-499"></a>            <span class="sa">f</span><span class="s2">&quot;Consider using a coarser segment_length or a sparser &quot;</span>
+<a id="__codelineno-0-500" name="__codelineno-0-500"></a>            <span class="sa">f</span><span class="s2">&quot;distributed-conductor discretisation.&quot;</span>
+<a id="__codelineno-0-501" name="__codelineno-0-501"></a>        <span class="p">)</span>
+<a id="__codelineno-0-502" name="__codelineno-0-502"></a>    <span class="k">elif</span> <span class="n">n_total</span> <span class="o">&gt;=</span> <span class="n">_BUDGET_WARN_THRESHOLD</span><span class="p">:</span>
+<a id="__codelineno-0-503" name="__codelineno-0-503"></a>        <span class="n">msgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-504" name="__codelineno-0-504"></a>            <span class="sa">f</span><span class="s2">&quot;budget: predicted total segment count </span><span class="si">{</span><span class="n">n_total</span><span class="si">}</span><span class="s2"> exceeds &quot;</span>
+<a id="__codelineno-0-505" name="__codelineno-0-505"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_BUDGET_WARN_THRESHOLD</span><span class="si">}</span><span class="s2"> — solve time may run from &quot;</span>
+<a id="__codelineno-0-506" name="__codelineno-0-506"></a>            <span class="sa">f</span><span class="s2">&quot;seconds to minutes on a typical laptop.&quot;</span>
+<a id="__codelineno-0-507" name="__codelineno-0-507"></a>        <span class="p">)</span>
+<a id="__codelineno-0-508" name="__codelineno-0-508"></a>
+<a id="__codelineno-0-509" name="__codelineno-0-509"></a>    <span class="k">return</span> <span class="n">msgs</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -3003,10 +3148,7 @@ for FEM this prediction is not informative.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundfield/diagnostics.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-274">274</a></span>
-<span class="normal"><a href="#__codelineno-0-275">275</a></span>
-<span class="normal"><a href="#__codelineno-0-276">276</a></span>
-<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-277">277</a></span>
 <span class="normal"><a href="#__codelineno-0-278">278</a></span>
 <span class="normal"><a href="#__codelineno-0-279">279</a></span>
 <span class="normal"><a href="#__codelineno-0-280">280</a></span>
@@ -3072,76 +3214,79 @@ for FEM this prediction is not informative.</p>
 <span class="normal"><a href="#__codelineno-0-340">340</a></span>
 <span class="normal"><a href="#__codelineno-0-341">341</a></span>
 <span class="normal"><a href="#__codelineno-0-342">342</a></span>
-<span class="normal"><a href="#__codelineno-0-343">343</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-274" name="__codelineno-0-274"></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-0-275" name="__codelineno-0-275"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Predict the number of point-source segments after discretisation.</span>
-<a id="__codelineno-0-276" name="__codelineno-0-276"></a>
-<a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="sd">    Mirrors the image-family discretiser</span>
-<a id="__codelineno-0-278" name="__codelineno-0-278"></a><span class="sd">    (:mod:`groundfield.solver.image`) so the prediction is</span>
-<a id="__codelineno-0-279" name="__codelineno-0-279"></a><span class="sd">    *exact* for the ``image`` / ``image_2layer`` / ``image_nlayer``</span>
-<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">    / ``mom`` / ``mom_sommerfeld`` / ``cim`` / ``bem`` backends.</span>
-<a id="__codelineno-0-281" name="__codelineno-0-281"></a><span class="sd">    The FEM backend (:mod:`groundfield.solver.fem`) uses an</span>
-<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    axisymmetric volume mesh that is unrelated to ``segment_length``;</span>
-<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    for FEM this prediction is not informative.</span>
-<a id="__codelineno-0-284" name="__codelineno-0-284"></a>
-<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-286" name="__codelineno-0-286"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">    world</span>
-<a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">        World to inspect.</span>
-<a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">    engine</span>
-<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">        Engine carrying ``segment_length`` (in metres).</span>
-<a id="__codelineno-0-291" name="__codelineno-0-291"></a>
-<a id="__codelineno-0-292" name="__codelineno-0-292"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-293" name="__codelineno-0-293"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-294" name="__codelineno-0-294"></a><span class="sd">    dict</span>
-<a id="__codelineno-0-295" name="__codelineno-0-295"></a><span class="sd">        Keys:</span>
-<a id="__codelineno-0-296" name="__codelineno-0-296"></a>
-<a id="__codelineno-0-297" name="__codelineno-0-297"></a><span class="sd">        * ``per_electrode``: ``dict[name, int]`` with the segment</span>
-<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">          count of every named electrode,</span>
-<a id="__codelineno-0-299" name="__codelineno-0-299"></a><span class="sd">        * ``per_kind``: ``dict[kind, int]`` aggregated counts per</span>
-<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">          electrode kind,</span>
-<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">        * ``electrode_total`` (int),</span>
-<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">        * ``per_conductor``: ``dict[name, int]`` (only listed for</span>
-<a id="__codelineno-0-303" name="__codelineno-0-303"></a><span class="sd">          distributed conductors; lumped conductors contribute 0</span>
-<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">          and are omitted),</span>
-<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">        * ``conductor_total`` (int),</span>
-<a id="__codelineno-0-306" name="__codelineno-0-306"></a><span class="sd">        * ``total`` (int) — sum of electrode and conductor segments.</span>
-<a id="__codelineno-0-307" name="__codelineno-0-307"></a>
-<a id="__codelineno-0-308" name="__codelineno-0-308"></a><span class="sd">    Raises</span>
-<a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="sd">    ------</span>
-<a id="__codelineno-0-310" name="__codelineno-0-310"></a><span class="sd">    ValueError</span>
-<a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="sd">        If ``engine.segment_length`` is not strictly positive.</span>
-<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-313" name="__codelineno-0-313"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="p">)</span>
-<a id="__codelineno-0-314" name="__codelineno-0-314"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span> <span class="ow">or</span> <span class="n">ds</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-<a id="__codelineno-0-315" name="__codelineno-0-315"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<a id="__codelineno-0-316" name="__codelineno-0-316"></a>            <span class="sa">f</span><span class="s2">&quot;engine.segment_length must be &gt; 0, got </span><span class="si">{</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="si">!r}</span><span class="s2">.&quot;</span>
-<a id="__codelineno-0-317" name="__codelineno-0-317"></a>        <span class="p">)</span>
-<a id="__codelineno-0-318" name="__codelineno-0-318"></a>
-<a id="__codelineno-0-319" name="__codelineno-0-319"></a>    <span class="n">per_electrode</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-320" name="__codelineno-0-320"></a>    <span class="n">per_kind</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
-<a id="__codelineno-0-321" name="__codelineno-0-321"></a>    <span class="n">e_total</span> <span class="o">=</span> <span class="mi">0</span>
-<a id="__codelineno-0-322" name="__codelineno-0-322"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
-<a id="__codelineno-0-323" name="__codelineno-0-323"></a>        <span class="n">n</span> <span class="o">=</span> <span class="n">_electrode_segment_count</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">ds</span><span class="p">)</span>
-<a id="__codelineno-0-324" name="__codelineno-0-324"></a>        <span class="n">per_electrode</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
-<a id="__codelineno-0-325" name="__codelineno-0-325"></a>        <span class="n">per_kind</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="p">]</span> <span class="o">+=</span> <span class="n">n</span>
-<a id="__codelineno-0-326" name="__codelineno-0-326"></a>        <span class="n">e_total</span> <span class="o">+=</span> <span class="n">n</span>
-<a id="__codelineno-0-327" name="__codelineno-0-327"></a>
-<a id="__codelineno-0-328" name="__codelineno-0-328"></a>    <span class="n">per_conductor</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-329" name="__codelineno-0-329"></a>    <span class="n">c_total</span> <span class="o">=</span> <span class="mi">0</span>
-<a id="__codelineno-0-330" name="__codelineno-0-330"></a>    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">:</span>
-<a id="__codelineno-0-331" name="__codelineno-0-331"></a>        <span class="n">n</span> <span class="o">=</span> <span class="n">_conductor_segment_count</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
-<a id="__codelineno-0-332" name="__codelineno-0-332"></a>        <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-<a id="__codelineno-0-333" name="__codelineno-0-333"></a>            <span class="n">per_conductor</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
-<a id="__codelineno-0-334" name="__codelineno-0-334"></a>        <span class="n">c_total</span> <span class="o">+=</span> <span class="n">n</span>
-<a id="__codelineno-0-335" name="__codelineno-0-335"></a>
-<a id="__codelineno-0-336" name="__codelineno-0-336"></a>    <span class="k">return</span> <span class="p">{</span>
-<a id="__codelineno-0-337" name="__codelineno-0-337"></a>        <span class="s2">&quot;per_electrode&quot;</span><span class="p">:</span> <span class="n">per_electrode</span><span class="p">,</span>
-<a id="__codelineno-0-338" name="__codelineno-0-338"></a>        <span class="s2">&quot;per_kind&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">per_kind</span><span class="p">),</span>
-<a id="__codelineno-0-339" name="__codelineno-0-339"></a>        <span class="s2">&quot;electrode_total&quot;</span><span class="p">:</span> <span class="n">e_total</span><span class="p">,</span>
-<a id="__codelineno-0-340" name="__codelineno-0-340"></a>        <span class="s2">&quot;per_conductor&quot;</span><span class="p">:</span> <span class="n">per_conductor</span><span class="p">,</span>
-<a id="__codelineno-0-341" name="__codelineno-0-341"></a>        <span class="s2">&quot;conductor_total&quot;</span><span class="p">:</span> <span class="n">c_total</span><span class="p">,</span>
-<a id="__codelineno-0-342" name="__codelineno-0-342"></a>        <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="n">e_total</span> <span class="o">+</span> <span class="n">c_total</span><span class="p">,</span>
-<a id="__codelineno-0-343" name="__codelineno-0-343"></a>    <span class="p">}</span>
+<span class="normal"><a href="#__codelineno-0-343">343</a></span>
+<span class="normal"><a href="#__codelineno-0-344">344</a></span>
+<span class="normal"><a href="#__codelineno-0-345">345</a></span>
+<span class="normal"><a href="#__codelineno-0-346">346</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="k">def</span><span class="w"> </span><span class="nf">expected_segments</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Predict the number of point-source segments after discretisation.</span>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">    Mirrors the image-family discretiser</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a><span class="sd">    (:mod:`groundfield.solver.image`) so the prediction is</span>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    *exact* for the ``image`` / ``image_2layer`` / ``image_nlayer``</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    / ``mom`` / ``mom_sommerfeld`` / ``cim`` / ``bem`` backends.</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a><span class="sd">    The FEM backend (:mod:`groundfield.solver.fem`) uses an</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    axisymmetric volume mesh that is unrelated to ``segment_length``;</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a><span class="sd">    for FEM this prediction is not informative.</span>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">    world</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a><span class="sd">        World to inspect.</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a><span class="sd">    engine</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a><span class="sd">        Engine carrying ``segment_length`` (in metres).</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-296" name="__codelineno-0-296"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a><span class="sd">    dict</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">        Keys:</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">        * ``per_electrode``: ``dict[name, int]`` with the segment</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">          count of every named electrode,</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">        * ``per_kind``: ``dict[kind, int]`` aggregated counts per</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a><span class="sd">          electrode kind,</span>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">        * ``electrode_total`` (int),</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">        * ``per_conductor``: ``dict[name, int]`` (only listed for</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a><span class="sd">          distributed conductors; lumped conductors contribute 0</span>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a><span class="sd">          and are omitted),</span>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a><span class="sd">        * ``conductor_total`` (int),</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="sd">        * ``total`` (int) — sum of electrode and conductor segments.</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="sd">    Raises</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="sd">    ------</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a><span class="sd">    ValueError</span>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a><span class="sd">        If ``engine.segment_length`` is not strictly positive.</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="p">)</span>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span> <span class="ow">or</span> <span class="n">ds</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>            <span class="sa">f</span><span class="s2">&quot;engine.segment_length must be &gt; 0, got </span><span class="si">{</span><span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>        <span class="p">)</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>    <span class="n">per_electrode</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-323" name="__codelineno-0-323"></a>    <span class="n">per_kind</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+<a id="__codelineno-0-324" name="__codelineno-0-324"></a>    <span class="n">e_total</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a>        <span class="n">n</span> <span class="o">=</span> <span class="n">_electrode_segment_count</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">ds</span><span class="p">)</span>
+<a id="__codelineno-0-327" name="__codelineno-0-327"></a>        <span class="n">per_electrode</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
+<a id="__codelineno-0-328" name="__codelineno-0-328"></a>        <span class="n">per_kind</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">kind</span><span class="p">]</span> <span class="o">+=</span> <span class="n">n</span>
+<a id="__codelineno-0-329" name="__codelineno-0-329"></a>        <span class="n">e_total</span> <span class="o">+=</span> <span class="n">n</span>
+<a id="__codelineno-0-330" name="__codelineno-0-330"></a>
+<a id="__codelineno-0-331" name="__codelineno-0-331"></a>    <span class="n">per_conductor</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-332" name="__codelineno-0-332"></a>    <span class="n">c_total</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-0-333" name="__codelineno-0-333"></a>    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">:</span>
+<a id="__codelineno-0-334" name="__codelineno-0-334"></a>        <span class="n">n</span> <span class="o">=</span> <span class="n">_conductor_segment_count</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+<a id="__codelineno-0-335" name="__codelineno-0-335"></a>        <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-0-336" name="__codelineno-0-336"></a>            <span class="n">per_conductor</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">n</span>
+<a id="__codelineno-0-337" name="__codelineno-0-337"></a>        <span class="n">c_total</span> <span class="o">+=</span> <span class="n">n</span>
+<a id="__codelineno-0-338" name="__codelineno-0-338"></a>
+<a id="__codelineno-0-339" name="__codelineno-0-339"></a>    <span class="k">return</span> <span class="p">{</span>
+<a id="__codelineno-0-340" name="__codelineno-0-340"></a>        <span class="s2">&quot;per_electrode&quot;</span><span class="p">:</span> <span class="n">per_electrode</span><span class="p">,</span>
+<a id="__codelineno-0-341" name="__codelineno-0-341"></a>        <span class="s2">&quot;per_kind&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">per_kind</span><span class="p">),</span>
+<a id="__codelineno-0-342" name="__codelineno-0-342"></a>        <span class="s2">&quot;electrode_total&quot;</span><span class="p">:</span> <span class="n">e_total</span><span class="p">,</span>
+<a id="__codelineno-0-343" name="__codelineno-0-343"></a>        <span class="s2">&quot;per_conductor&quot;</span><span class="p">:</span> <span class="n">per_conductor</span><span class="p">,</span>
+<a id="__codelineno-0-344" name="__codelineno-0-344"></a>        <span class="s2">&quot;conductor_total&quot;</span><span class="p">:</span> <span class="n">c_total</span><span class="p">,</span>
+<a id="__codelineno-0-345" name="__codelineno-0-345"></a>        <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="n">e_total</span> <span class="o">+</span> <span class="n">c_total</span><span class="p">,</span>
+<a id="__codelineno-0-346" name="__codelineno-0-346"></a>    <span class="p">}</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -3164,7 +3309,7 @@ for FEM this prediction is not informative.</p>
         <p>Return a structural snapshot of a world.</p>
 <p>Aggregates counts, lengths and the bounding box; complements
 :meth:<code>World.summary</code> (one-line text) with a richer
-machine-readable dictionary that scales to AP1-grade networks.</p>
+machine-readable dictionary that scales to production-grade networks.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3244,10 +3389,7 @@ machine-readable dictionary that scales to AP1-grade networks.</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundfield/diagnostics.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-166">166</a></span>
-<span class="normal"><a href="#__codelineno-0-167">167</a></span>
-<span class="normal"><a href="#__codelineno-0-168">168</a></span>
-<span class="normal"><a href="#__codelineno-0-169">169</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-169">169</a></span>
 <span class="normal"><a href="#__codelineno-0-170">170</a></span>
 <span class="normal"><a href="#__codelineno-0-171">171</a></span>
 <span class="normal"><a href="#__codelineno-0-172">172</a></span>
@@ -3344,107 +3486,110 @@ machine-readable dictionary that scales to AP1-grade networks.</p>
 <span class="normal"><a href="#__codelineno-0-263">263</a></span>
 <span class="normal"><a href="#__codelineno-0-264">264</a></span>
 <span class="normal"><a href="#__codelineno-0-265">265</a></span>
-<span class="normal"><a href="#__codelineno-0-266">266</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-166" name="__codelineno-0-166"></a><span class="k">def</span><span class="w"> </span><span class="nf">world_statistics</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-0-167" name="__codelineno-0-167"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a structural snapshot of a world.</span>
-<a id="__codelineno-0-168" name="__codelineno-0-168"></a>
-<a id="__codelineno-0-169" name="__codelineno-0-169"></a><span class="sd">    Aggregates counts, lengths and the bounding box; complements</span>
-<a id="__codelineno-0-170" name="__codelineno-0-170"></a><span class="sd">    :meth:`World.summary` (one-line text) with a richer</span>
-<a id="__codelineno-0-171" name="__codelineno-0-171"></a><span class="sd">    machine-readable dictionary that scales to AP1-grade networks.</span>
-<a id="__codelineno-0-172" name="__codelineno-0-172"></a>
-<a id="__codelineno-0-173" name="__codelineno-0-173"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-174" name="__codelineno-0-174"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-175" name="__codelineno-0-175"></a><span class="sd">    world</span>
-<a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="sd">        World to inspect.</span>
-<a id="__codelineno-0-177" name="__codelineno-0-177"></a>
-<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-179" name="__codelineno-0-179"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-180" name="__codelineno-0-180"></a><span class="sd">    dict</span>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="sd">        Keys:</span>
-<a id="__codelineno-0-182" name="__codelineno-0-182"></a>
-<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">        * ``n_electrodes`` (int),</span>
-<a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">        * ``n_electrodes_by_kind`` (``dict[str, int]``: rod / ring</span>
-<a id="__codelineno-0-185" name="__codelineno-0-185"></a><span class="sd">          / strip / mesh / grid_mesh),</span>
-<a id="__codelineno-0-186" name="__codelineno-0-186"></a><span class="sd">        * ``n_conductors`` (int),</span>
-<a id="__codelineno-0-187" name="__codelineno-0-187"></a><span class="sd">        * ``n_conductors_by_type`` (``dict[str, int]``),</span>
-<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="sd">        * ``n_distributed_conductors`` / ``n_lumped_conductors``,</span>
-<a id="__codelineno-0-189" name="__codelineno-0-189"></a><span class="sd">        * ``n_galvanic_conductors`` / ``n_isolated_conductors``,</span>
-<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">        * ``n_sources`` (int),</span>
-<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">        * ``total_electrode_wire_length_m`` (float),</span>
-<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">        * ``total_conductor_length_m`` (float),</span>
-<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">        * ``conductor_length_stats``: ``{min, median, max, mean}``</span>
-<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">          in metres (empty dict when no conductors),</span>
-<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">        * ``bounds_3d``: ``(x_min, x_max, y_min, y_max, z_min,</span>
-<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">          z_max)`` in metres,</span>
-<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">        * ``footprint_xy``: ``(x_min, x_max, y_min, y_max)``,</span>
-<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">        * ``footprint_area_m2`` (float),</span>
-<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">        * ``depth_range_m``: ``(z_min, z_max)``,</span>
-<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">        * ``has_layered_soil`` (bool — diagnostic flag set when</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">          the soil model is :class:`TwoLayerSoil` or</span>
-<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">          :class:`MultiLayerSoil`).</span>
-<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.geometry.electrodes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-0-205" name="__codelineno-0-205"></a>        <span class="n">GridMeshElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-206" name="__codelineno-0-206"></a>        <span class="n">MeshElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-207" name="__codelineno-0-207"></a>        <span class="n">RingElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-208" name="__codelineno-0-208"></a>        <span class="n">RodElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-209" name="__codelineno-0-209"></a>        <span class="n">StripElectrode</span><span class="p">,</span>
-<a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="p">)</span>
-<a id="__codelineno-0-211" name="__codelineno-0-211"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.postprocess.geometry_plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">world_bounds_3d</span>
-<a id="__codelineno-0-212" name="__codelineno-0-212"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.soil.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiLayerSoil</span><span class="p">,</span> <span class="n">TwoLayerSoil</span>
-<a id="__codelineno-0-213" name="__codelineno-0-213"></a>
-<a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="n">kind_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-215" name="__codelineno-0-215"></a>        <span class="n">RodElectrode</span><span class="p">:</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-216" name="__codelineno-0-216"></a>        <span class="n">RingElectrode</span><span class="p">:</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-217" name="__codelineno-0-217"></a>        <span class="n">StripElectrode</span><span class="p">:</span> <span class="s2">&quot;strip&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-218" name="__codelineno-0-218"></a>        <span class="n">MeshElectrode</span><span class="p">:</span> <span class="s2">&quot;mesh&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-219" name="__codelineno-0-219"></a>        <span class="n">GridMeshElectrode</span><span class="p">:</span> <span class="s2">&quot;grid_mesh&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a>    <span class="p">}</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="n">by_kind</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
-<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="n">total_e_wire</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-0-223" name="__codelineno-0-223"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
-<a id="__codelineno-0-224" name="__codelineno-0-224"></a>        <span class="n">by_kind</span><span class="p">[</span><span class="n">kind_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)]</span> <span class="o">+=</span> <span class="mi">1</span>
-<a id="__codelineno-0-225" name="__codelineno-0-225"></a>        <span class="n">total_e_wire</span> <span class="o">+=</span> <span class="n">_electrode_wire_length</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-<a id="__codelineno-0-226" name="__codelineno-0-226"></a>
-<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="n">by_type</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">conductor_type</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span>
-<a id="__codelineno-0-228" name="__codelineno-0-228"></a>    <span class="n">n_distributed</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">)</span>
-<a id="__codelineno-0-229" name="__codelineno-0-229"></a>    <span class="n">n_galvanic</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">coupling_to_soil</span> <span class="o">==</span> <span class="s2">&quot;galvanic&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-230" name="__codelineno-0-230"></a>    <span class="n">cond_lengths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">length</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">]</span>
-<a id="__codelineno-0-231" name="__codelineno-0-231"></a>    <span class="n">total_c_length</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">))</span>
-<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="k">if</span> <span class="n">cond_lengths</span><span class="p">:</span>
-<a id="__codelineno-0-233" name="__codelineno-0-233"></a>        <span class="n">cond_stats</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-234" name="__codelineno-0-234"></a>            <span class="s2">&quot;min&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
-<a id="__codelineno-0-235" name="__codelineno-0-235"></a>            <span class="s2">&quot;median&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">median</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
-<a id="__codelineno-0-236" name="__codelineno-0-236"></a>            <span class="s2">&quot;max&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
-<a id="__codelineno-0-237" name="__codelineno-0-237"></a>            <span class="s2">&quot;mean&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
-<a id="__codelineno-0-238" name="__codelineno-0-238"></a>        <span class="p">}</span>
-<a id="__codelineno-0-239" name="__codelineno-0-239"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-0-240" name="__codelineno-0-240"></a>        <span class="n">cond_stats</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-241" name="__codelineno-0-241"></a>
-<a id="__codelineno-0-242" name="__codelineno-0-242"></a>    <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">,</span> <span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span> <span class="o">=</span> <span class="n">world_bounds_3d</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
-<a id="__codelineno-0-243" name="__codelineno-0-243"></a>    <span class="n">footprint</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
-<a id="__codelineno-0-244" name="__codelineno-0-244"></a>    <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_max</span> <span class="o">-</span> <span class="n">x_min</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y_max</span> <span class="o">-</span> <span class="n">y_min</span><span class="p">)</span>
-<a id="__codelineno-0-245" name="__codelineno-0-245"></a>
-<a id="__codelineno-0-246" name="__codelineno-0-246"></a>    <span class="n">has_layered</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">,</span> <span class="p">(</span><span class="n">TwoLayerSoil</span><span class="p">,</span> <span class="n">MultiLayerSoil</span><span class="p">))</span>
-<a id="__codelineno-0-247" name="__codelineno-0-247"></a>
-<a id="__codelineno-0-248" name="__codelineno-0-248"></a>    <span class="k">return</span> <span class="p">{</span>
-<a id="__codelineno-0-249" name="__codelineno-0-249"></a>        <span class="s2">&quot;n_electrodes&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">),</span>
-<a id="__codelineno-0-250" name="__codelineno-0-250"></a>        <span class="s2">&quot;n_electrodes_by_kind&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">by_kind</span><span class="p">),</span>
-<a id="__codelineno-0-251" name="__codelineno-0-251"></a>        <span class="s2">&quot;n_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">),</span>
-<a id="__codelineno-0-252" name="__codelineno-0-252"></a>        <span class="s2">&quot;n_conductors_by_type&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">by_type</span><span class="p">),</span>
-<a id="__codelineno-0-253" name="__codelineno-0-253"></a>        <span class="s2">&quot;n_distributed_conductors&quot;</span><span class="p">:</span> <span class="n">n_distributed</span><span class="p">,</span>
-<a id="__codelineno-0-254" name="__codelineno-0-254"></a>        <span class="s2">&quot;n_lumped_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_distributed</span><span class="p">,</span>
-<a id="__codelineno-0-255" name="__codelineno-0-255"></a>        <span class="s2">&quot;n_galvanic_conductors&quot;</span><span class="p">:</span> <span class="n">n_galvanic</span><span class="p">,</span>
-<a id="__codelineno-0-256" name="__codelineno-0-256"></a>        <span class="s2">&quot;n_isolated_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_galvanic</span><span class="p">,</span>
-<a id="__codelineno-0-257" name="__codelineno-0-257"></a>        <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">sources</span><span class="p">),</span>
-<a id="__codelineno-0-258" name="__codelineno-0-258"></a>        <span class="s2">&quot;total_electrode_wire_length_m&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">total_e_wire</span><span class="p">),</span>
-<a id="__codelineno-0-259" name="__codelineno-0-259"></a>        <span class="s2">&quot;total_conductor_length_m&quot;</span><span class="p">:</span> <span class="n">total_c_length</span><span class="p">,</span>
-<a id="__codelineno-0-260" name="__codelineno-0-260"></a>        <span class="s2">&quot;conductor_length_stats&quot;</span><span class="p">:</span> <span class="n">cond_stats</span><span class="p">,</span>
-<a id="__codelineno-0-261" name="__codelineno-0-261"></a>        <span class="s2">&quot;bounds_3d&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">,</span> <span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span><span class="p">),</span>
-<a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="s2">&quot;footprint_xy&quot;</span><span class="p">:</span> <span class="n">footprint</span><span class="p">,</span>
-<a id="__codelineno-0-263" name="__codelineno-0-263"></a>        <span class="s2">&quot;footprint_area_m2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">area</span><span class="p">),</span>
-<a id="__codelineno-0-264" name="__codelineno-0-264"></a>        <span class="s2">&quot;depth_range_m&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span><span class="p">),</span>
-<a id="__codelineno-0-265" name="__codelineno-0-265"></a>        <span class="s2">&quot;has_layered_soil&quot;</span><span class="p">:</span> <span class="n">has_layered</span><span class="p">,</span>
-<a id="__codelineno-0-266" name="__codelineno-0-266"></a>    <span class="p">}</span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span>
+<span class="normal"><a href="#__codelineno-0-269">269</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-169" name="__codelineno-0-169"></a><span class="k">def</span><span class="w"> </span><span class="nf">world_statistics</span><span class="p">(</span><span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<a id="__codelineno-0-170" name="__codelineno-0-170"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a structural snapshot of a world.</span>
+<a id="__codelineno-0-171" name="__codelineno-0-171"></a>
+<a id="__codelineno-0-172" name="__codelineno-0-172"></a><span class="sd">    Aggregates counts, lengths and the bounding box; complements</span>
+<a id="__codelineno-0-173" name="__codelineno-0-173"></a><span class="sd">    :meth:`World.summary` (one-line text) with a richer</span>
+<a id="__codelineno-0-174" name="__codelineno-0-174"></a><span class="sd">    machine-readable dictionary that scales to production-grade networks.</span>
+<a id="__codelineno-0-175" name="__codelineno-0-175"></a>
+<a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-177" name="__codelineno-0-177"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    world</span>
+<a id="__codelineno-0-179" name="__codelineno-0-179"></a><span class="sd">        World to inspect.</span>
+<a id="__codelineno-0-180" name="__codelineno-0-180"></a>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">    dict</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">        Keys:</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a><span class="sd">        * ``n_electrodes`` (int),</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a><span class="sd">        * ``n_electrodes_by_kind`` (``dict[str, int]``: rod / ring</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="sd">          / strip / mesh / grid_mesh),</span>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a><span class="sd">        * ``n_conductors`` (int),</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">        * ``n_conductors_by_type`` (``dict[str, int]``),</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">        * ``n_distributed_conductors`` / ``n_lumped_conductors``,</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">        * ``n_galvanic_conductors`` / ``n_isolated_conductors``,</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">        * ``n_sources`` (int),</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">        * ``total_electrode_wire_length_m`` (float),</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">        * ``total_conductor_length_m`` (float),</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">        * ``conductor_length_stats``: ``{min, median, max, mean}``</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">          in metres (empty dict when no conductors),</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">        * ``bounds_3d``: ``(x_min, x_max, y_min, y_max, z_min,</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">          z_max)`` in metres,</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">        * ``footprint_xy``: ``(x_min, x_max, y_min, y_max)``,</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">        * ``footprint_area_m2`` (float),</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">        * ``depth_range_m``: ``(z_min, z_max)``,</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">        * ``has_layered_soil`` (bool — diagnostic flag set when</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="sd">          the soil model is :class:`TwoLayerSoil` or</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="sd">          :class:`MultiLayerSoil`).</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.geometry.electrodes</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a>        <span class="n">GridMeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a>        <span class="n">MeshElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a>        <span class="n">RingElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>        <span class="n">RodElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="n">StripElectrode</span><span class="p">,</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="p">)</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.postprocess.geometry_plot</span><span class="w"> </span><span class="kn">import</span> <span class="n">world_bounds_3d</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.soil.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiLayerSoil</span><span class="p">,</span> <span class="n">TwoLayerSoil</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>    <span class="n">kind_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>        <span class="n">RodElectrode</span><span class="p">:</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>        <span class="n">RingElectrode</span><span class="p">:</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>        <span class="n">StripElectrode</span><span class="p">:</span> <span class="s2">&quot;strip&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>        <span class="n">MeshElectrode</span><span class="p">:</span> <span class="s2">&quot;mesh&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>        <span class="n">GridMeshElectrode</span><span class="p">:</span> <span class="s2">&quot;grid_mesh&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>    <span class="p">}</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>    <span class="n">by_kind</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>    <span class="n">total_e_wire</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>        <span class="n">by_kind</span><span class="p">[</span><span class="n">kind_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="s2">&quot;unknown&quot;</span><span class="p">)]</span> <span class="o">+=</span> <span class="mi">1</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>        <span class="n">total_e_wire</span> <span class="o">+=</span> <span class="n">_electrode_wire_length</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>    <span class="n">by_type</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">conductor_type</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>    <span class="n">n_distributed</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">is_distributed</span><span class="p">)</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="n">n_galvanic</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">coupling_to_soil</span> <span class="o">==</span> <span class="s2">&quot;galvanic&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>    <span class="n">cond_lengths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">length</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">]</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a>    <span class="n">total_c_length</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">))</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a>    <span class="k">if</span> <span class="n">cond_lengths</span><span class="p">:</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>        <span class="n">cond_stats</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a>            <span class="s2">&quot;min&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a>            <span class="s2">&quot;median&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">median</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>            <span class="s2">&quot;max&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>            <span class="s2">&quot;mean&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">cond_lengths</span><span class="p">)),</span>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a>        <span class="p">}</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a>        <span class="n">cond_stats</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a>    <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">,</span> <span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span> <span class="o">=</span> <span class="n">world_bounds_3d</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a>    <span class="n">footprint</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a>    <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_max</span> <span class="o">-</span> <span class="n">x_min</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y_max</span> <span class="o">-</span> <span class="n">y_min</span><span class="p">)</span>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a>
+<a id="__codelineno-0-249" name="__codelineno-0-249"></a>    <span class="n">has_layered</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">,</span> <span class="p">(</span><span class="n">TwoLayerSoil</span><span class="p">,</span> <span class="n">MultiLayerSoil</span><span class="p">))</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a>    <span class="k">return</span> <span class="p">{</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a>        <span class="s2">&quot;n_electrodes&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">),</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a>        <span class="s2">&quot;n_electrodes_by_kind&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">by_kind</span><span class="p">),</span>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a>        <span class="s2">&quot;n_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">),</span>
+<a id="__codelineno-0-255" name="__codelineno-0-255"></a>        <span class="s2">&quot;n_conductors_by_type&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">by_type</span><span class="p">),</span>
+<a id="__codelineno-0-256" name="__codelineno-0-256"></a>        <span class="s2">&quot;n_distributed_conductors&quot;</span><span class="p">:</span> <span class="n">n_distributed</span><span class="p">,</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>        <span class="s2">&quot;n_lumped_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_distributed</span><span class="p">,</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>        <span class="s2">&quot;n_galvanic_conductors&quot;</span><span class="p">:</span> <span class="n">n_galvanic</span><span class="p">,</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a>        <span class="s2">&quot;n_isolated_conductors&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_galvanic</span><span class="p">,</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a>        <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">sources</span><span class="p">),</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a>        <span class="s2">&quot;total_electrode_wire_length_m&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">total_e_wire</span><span class="p">),</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="s2">&quot;total_conductor_length_m&quot;</span><span class="p">:</span> <span class="n">total_c_length</span><span class="p">,</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a>        <span class="s2">&quot;conductor_length_stats&quot;</span><span class="p">:</span> <span class="n">cond_stats</span><span class="p">,</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a>        <span class="s2">&quot;bounds_3d&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">,</span> <span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span><span class="p">),</span>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a>        <span class="s2">&quot;footprint_xy&quot;</span><span class="p">:</span> <span class="n">footprint</span><span class="p">,</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a>        <span class="s2">&quot;footprint_area_m2&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">area</span><span class="p">),</span>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a>        <span class="s2">&quot;depth_range_m&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">z_min</span><span class="p">,</span> <span class="n">z_max</span><span class="p">),</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a>        <span class="s2">&quot;has_layered_soil&quot;</span><span class="p">:</span> <span class="n">has_layered</span><span class="p">,</span>
+<a id="__codelineno-0-269" name="__codelineno-0-269"></a>    <span class="p">}</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -3539,8 +3684,6 @@ machine-readable dictionary that scales to AP1-grade networks.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

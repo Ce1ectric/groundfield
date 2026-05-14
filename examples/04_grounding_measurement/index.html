@@ -27,7 +27,7 @@
     
     
       
-        <title>04 — Galvanic measurement (Analysis 1) - groundfield</title>
+        <title>04 — Galvanic measurement - groundfield</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#example-04-ap1-analysis-1-galvanic-grounding-measurement" class="md-skip">
+        <a href="#example-04-galvanic-grounding-measurement-fall-of-potential" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              04 — Galvanic measurement (Analysis 1)
+              04 — Galvanic measurement
             
           </span>
         </div>
@@ -806,7 +806,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -824,7 +824,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -938,7 +938,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2265,9 +2265,9 @@
   
 
 
-<h1 id="example-04-ap1-analysis-1-galvanic-grounding-measurement">Example 04 — AP1 Analysis 1: galvanic grounding measurement<a class="headerlink" href="#example-04-ap1-analysis-1-galvanic-grounding-measurement" title="Permanent link">&para;</a></h1>
-<p>This is the <strong>fall-of-potential</strong> measurement of the AP1 work
-package, <strong>without</strong> modelling the metallic measurement leads —
+<h1 id="example-04-galvanic-grounding-measurement-fall-of-potential">Example 04 — Galvanic grounding measurement (fall-of-potential)<a class="headerlink" href="#example-04-galvanic-grounding-measurement-fall-of-potential" title="Permanent link">&para;</a></h1>
+<p>This is the textbook <strong>fall-of-potential</strong> measurement,
+<strong>without</strong> modelling the metallic measurement leads —
 i.e. only the galvanic (DC-like) effects. We add an <strong>auxiliary
 current electrode</strong> (Hilfserder) that closes the current loop and
 a <strong>voltage probe</strong> (Spannungssonde) where we read off the
@@ -2315,7 +2315,7 @@ the probe sits relative to the auxiliary electrode.</p>
 <a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>        <span class="n">measurement</span><span class="o">=</span><span class="n">MeasurementSetupConfig</span><span class="p">(</span>
 <a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>            <span class="n">injection</span><span class="o">=</span><span class="n">MeasurementInjectionConfig</span><span class="p">(</span>
 <a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>                <span class="n">position_xy</span><span class="o">=</span><span class="p">(</span><span class="mf">200.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>     <span class="c1"># Hilfserder</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>                <span class="c1"># No metallic feed_lead — galvanic only (Analysis 1).</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>                <span class="c1"># No metallic feed_lead — galvanic only.</span>
 <a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>            <span class="p">),</span>
 <a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>            <span class="n">probe</span><span class="o">=</span><span class="n">MeasurementProbeConfig</span><span class="p">(</span>
 <a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>                <span class="n">position_xy</span><span class="o">=</span><span class="p">(</span><span class="n">probe_x</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>    <span class="c1"># Spannungssonde</span>
@@ -2373,7 +2373,7 @@ the probe sits relative to the auxiliary electrode.</p>
 <a id="__codelineno-0-84" name="__codelineno-0-84" href="#__codelineno-0-84"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;apparent grounding impedance in Ω&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-85" name="__codelineno-0-85" href="#__codelineno-0-85"></a><span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
 <a id="__codelineno-0-86" name="__codelineno-0-86" href="#__codelineno-0-86"></a><span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
-<a id="__codelineno-0-87" name="__codelineno-0-87" href="#__codelineno-0-87"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;AP1 Analysis 1 — fall-of-potential curve, aux at 200 m&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-87" name="__codelineno-0-87" href="#__codelineno-0-87"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Fall-of-potential curve, aux at 200 m&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-88" name="__codelineno-0-88" href="#__codelineno-0-88"></a><span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
 <a id="__codelineno-0-89" name="__codelineno-0-89" href="#__codelineno-0-89"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 <a id="__codelineno-0-90" name="__codelineno-0-90" href="#__codelineno-0-90"></a>
@@ -2414,8 +2414,7 @@ impedance.</p>
   through the aux instead of through remote earth.</li>
 <li><strong><code>feed_lead=None</code> and <code>lead=None</code></strong> mean <em>no metallic
   measurement leads</em>. The current path is purely through the
-  soil, which is the textbook <strong>galvanic</strong> measurement (AP1
-  Analysis 1).</li>
+  soil, which is the textbook <strong>galvanic</strong> measurement.</li>
 <li>The measured "apparent impedance" is computed as the potential
   difference between the substation anchor and the probe anchor,
   divided by the source current — exactly what the measurement
@@ -2529,8 +2528,6 @@ point.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

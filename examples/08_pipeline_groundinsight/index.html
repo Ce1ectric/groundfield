@@ -797,7 +797,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -825,7 +825,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2293,12 +2293,12 @@ produces a <strong>reduced equivalent model</strong> that drops straight into
 <code>groundinsight</code> for downstream fault-current and reduction-factor
 analyses. This is the bridge described in
 <a href="../../adr/0008-groundinsight-bridge/">ADR-0008</a> and demonstrated
-on a small AP1 case.</p>
+on a small default case.</p>
 <h2 id="what-youll-see">What you'll see<a class="headerlink" href="#what-youll-see" title="Permanent link">&para;</a></h2>
 <ul>
 <li>How to run a parametric soil sweep that produces a
   <span class="arithmatex">\((rho, f, Z)\)</span> sample table.</li>
-<li>How <code>RhoFStandardFit</code> fits the dissertation's
+<li>How <code>RhoFStandardFit</code> fits the
   five-coefficient form
   <span class="arithmatex">\(Z(\rho, f) = k_1 \rho + (k_2 + j k_3) f + (k_4 + j k_5) f \rho\)</span>.</li>
 <li>How <code>to_bustype(fit, ...)</code> produces a live
@@ -2331,7 +2331,7 @@ on a small AP1 case.</p>
 <a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="p">)</span>
 <a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>
 <a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="c1"># 1. A small AP1 network — substation + 5 EFH residential houses.</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="c1"># 1. A small typical network — substation + 5 EFH residential houses.</span>
 <a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="k">def</span><span class="w"> </span><span class="nf">make_world</span><span class="p">(</span><span class="n">rho_1</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gf</span><span class="o">.</span><span class="n">World</span><span class="p">:</span>
 <a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="n">cfg</span> <span class="o">=</span> <span class="n">TnNetworkConfig</span><span class="p">(</span>
 <a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>        <span class="n">building_counts</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;residential&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">},</span>
@@ -2381,8 +2381,8 @@ on a small AP1 case.</p>
 <a id="__codelineno-1-68" name="__codelineno-1-68" href="#__codelineno-1-68"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">=== Export to groundinsight ===&quot;</span><span class="p">)</span>
 <a id="__codelineno-1-69" name="__codelineno-1-69" href="#__codelineno-1-69"></a><span class="n">bustype</span> <span class="o">=</span> <span class="n">to_bustype</span><span class="p">(</span>
 <a id="__codelineno-1-70" name="__codelineno-1-70" href="#__codelineno-1-70"></a>    <span class="n">fit</span><span class="p">,</span>
-<a id="__codelineno-1-71" name="__codelineno-1-71" href="#__codelineno-1-71"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;AP1_substation_5EFH&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-72" name="__codelineno-1-72" href="#__codelineno-1-72"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;AP1 reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-71" name="__codelineno-1-71" href="#__codelineno-1-71"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;substation_5EFH&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-72" name="__codelineno-1-72" href="#__codelineno-1-72"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m&quot;</span><span class="p">,</span>
 <a id="__codelineno-1-73" name="__codelineno-1-73" href="#__codelineno-1-73"></a>    <span class="n">system_type</span><span class="o">=</span><span class="s2">&quot;LV&quot;</span><span class="p">,</span>
 <a id="__codelineno-1-74" name="__codelineno-1-74" href="#__codelineno-1-74"></a>    <span class="n">voltage_level</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
 <a id="__codelineno-1-75" name="__codelineno-1-75" href="#__codelineno-1-75"></a><span class="p">)</span>
@@ -2391,11 +2391,11 @@ on a small AP1 case.</p>
 <a id="__codelineno-1-78" name="__codelineno-1-78" href="#__codelineno-1-78"></a>
 <a id="__codelineno-1-79" name="__codelineno-1-79" href="#__codelineno-1-79"></a>
 <a id="__codelineno-1-80" name="__codelineno-1-80" href="#__codelineno-1-80"></a><span class="c1"># 5. Persistent JSON record (no groundinsight required to read it)</span>
-<a id="__codelineno-1-81" name="__codelineno-1-81" href="#__codelineno-1-81"></a><span class="n">json_path</span> <span class="o">=</span> <span class="s2">&quot;ap1_substation_5EFH.bustype.json&quot;</span>
+<a id="__codelineno-1-81" name="__codelineno-1-81" href="#__codelineno-1-81"></a><span class="n">json_path</span> <span class="o">=</span> <span class="s2">&quot;substation_5EFH.bustype.json&quot;</span>
 <a id="__codelineno-1-82" name="__codelineno-1-82" href="#__codelineno-1-82"></a><span class="n">save_bustype_json</span><span class="p">(</span>
 <a id="__codelineno-1-83" name="__codelineno-1-83" href="#__codelineno-1-83"></a>    <span class="n">fit</span><span class="p">,</span> <span class="n">json_path</span><span class="p">,</span>
-<a id="__codelineno-1-84" name="__codelineno-1-84" href="#__codelineno-1-84"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;AP1_substation_5EFH&quot;</span><span class="p">,</span>
-<a id="__codelineno-1-85" name="__codelineno-1-85" href="#__codelineno-1-85"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;AP1 reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-84" name="__codelineno-1-84" href="#__codelineno-1-84"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;substation_5EFH&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-85" name="__codelineno-1-85" href="#__codelineno-1-85"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m&quot;</span><span class="p">,</span>
 <a id="__codelineno-1-86" name="__codelineno-1-86" href="#__codelineno-1-86"></a>    <span class="n">system_type</span><span class="o">=</span><span class="s2">&quot;LV&quot;</span><span class="p">,</span> <span class="n">voltage_level</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
 <a id="__codelineno-1-87" name="__codelineno-1-87" href="#__codelineno-1-87"></a>    <span class="n">electrode_name</span><span class="o">=</span><span class="s2">&quot;trafo_ring_0&quot;</span><span class="p">,</span>
 <a id="__codelineno-1-88" name="__codelineno-1-88" href="#__codelineno-1-88"></a>    <span class="n">soil_summary</span><span class="o">=</span><span class="s2">&quot;TwoLayerSoil(rho_1 sweep [50,100,300,1000], rho_2=50, h_1=5)&quot;</span><span class="p">,</span>
@@ -2461,7 +2461,7 @@ on a small AP1 case.</p>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>rms_rel    = 0.32%
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
 <a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>=== Export to groundinsight ===
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>BusType: BusType(name=AP1_substation_5EFH, system_type=LV, voltage_level=0.4)
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>BusType: BusType(name=substation_5EFH, system_type=LV, voltage_level=0.4)
 <a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>formula: 0.10023*rho + 1.5912e-4*f + 7.421e-7*f*rho + 2.103e-7*j*f*rho
 <a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
 <a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>=== Round-trip verification ===
@@ -2479,8 +2479,8 @@ is essentially lossless.</p>
 <p>The exported <code>BusType</code> plugs straight into a
 <code>groundinsight.Network</code>. The full fault-current calculation looks
 like (see <code>groundinsight</code> docs for details):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">gi</span><span class="o">.</span><span class="n">start_dbsession</span><span class="p">(</span><span class="s2">&quot;ap1_grounding.db&quot;</span><span class="p">)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;AP1_test&quot;</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="n">FREQS</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">gi</span><span class="o">.</span><span class="n">start_dbsession</span><span class="p">(</span><span class="s2">&quot;grounding.db&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">net</span> <span class="o">=</span> <span class="n">gi</span><span class="o">.</span><span class="n">create_network</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="n">FREQS</span><span class="p">)</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">gi</span><span class="o">.</span><span class="n">create_bus</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;substation&quot;</span><span class="p">,</span> <span class="n">network</span><span class="o">=</span><span class="n">net</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">bustype</span><span class="p">,</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>              <span class="n">specific_earth_resistance</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># ... add more buses, branches, faults, sources ...</span>
@@ -2495,10 +2495,10 @@ taken minutes per cluster. The substation impedance carried into
 <code>groundinsight</code> via the <code>BusType</code> is the <em>exact</em> impedance from
 the field study — no manual transcription, no version drift.</p>
 <h2 id="when-the-standard-form-is-not-enough">When the standard form is not enough<a class="headerlink" href="#when-the-standard-form-is-not-enough" title="Permanent link">&para;</a></h2>
-<p><code>RhoFStandardFit</code> assumes the AP1-typical leading-order
+<p><code>RhoFStandardFit</code> assumes the typical leading-order
 behaviour (linear in <span class="arithmatex">\(\rho\)</span>, linear in <span class="arithmatex">\(f\)</span>, plus the Carson
 cross-term). For wider frequency bands, transient analyses, or
-non-AP1 geometries where the impedance has clear resonance peaks,
+non-typical geometries where the impedance has clear resonance peaks,
 use the <strong>Vector Fitting</strong> family instead:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.postprocess.vector_fitting</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">rho_f_from_field_result</span><span class="p">,</span>
@@ -2515,7 +2515,7 @@ use the <strong>Vector Fitting</strong> family instead:</p>
 <a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="c1"># Export the same way; ``rho_at_fit_Ohm_m`` is the soil it was fit at</span>
 <a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="n">bustype_vf</span> <span class="o">=</span> <span class="n">to_bustype</span><span class="p">(</span>
 <a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="n">vf</span><span class="p">,</span>
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;AP1_substation_5EFH_vector_fit&quot;</span><span class="p">,</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;substation_5EFH_vector_fit&quot;</span><span class="p">,</span>
 <a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Vector fit at ρ_1 = 100 Ω·m&quot;</span><span class="p">,</span>
 <a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    <span class="n">system_type</span><span class="o">=</span><span class="s2">&quot;LV&quot;</span><span class="p">,</span> <span class="n">voltage_level</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
 <a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    <span class="n">rho_at_fit</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
@@ -2531,7 +2531,7 @@ pole rational expression in <code>f</code> (after the symbolic substitution
   a single <code>groundinsight</code> study to obtain confidence bands on
   the fault current.</li>
 <li>Persist a "library of BusTypes" to a single SQLite database
-  via <code>gi.start_dbsession("ap1_library.db")</code> plus
+  via <code>gi.start_dbsession("bustype_library.db")</code> plus
   <code>save_bustype_to_db(...)</code>. Subsequent studies pick them up
   with <code>gi.load_bustype(...)</code> — no recomputation.</li>
 <li>Iterate the loop with the Vector Fitting variant for
@@ -2619,8 +2619,6 @@ pole rational expression in <code>f</code> (after the symbolic substitution
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

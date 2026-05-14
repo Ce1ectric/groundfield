@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2484,11 +2484,11 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
-<td><code>groundfield</code>, work package 1 of the dissertation</td>
+<td><code>groundfield</code></td>
 </tr>
 </tbody>
 </table>
@@ -2504,9 +2504,9 @@ Z_\text{long}^{(k)} \;=\; R^{(k)} \;+\; j\omega\, L^{(k)}.
 <span class="arithmatex">\(L^{(k)} = 0\)</span> the system is real and frequency-independent, and the
 <code>engine.frequencies</code> list returns the same DC solution for every
 entry. This is fine for DC-near grounding-impedance studies but
-<strong>not</strong> for the AP1 question on <strong>inductive coupling between the
-measurement lead and the current injection</strong> — the very effect that
-forced the distributed-conductor refactor in the first place.</p>
+<strong>not</strong> for analysing <strong>inductive coupling between the measurement
+lead and the current injection</strong> — the very effect that forced the
+distributed-conductor refactor in the first place.</p>
 <p>This ADR settles how the inductive part is added on top of the
 distributed model.</p>
 <h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
@@ -2540,7 +2540,7 @@ L_\text{self} \;\approx\; \frac{\mu_0\,\ell}{2\pi}
 \]</div>
 <p>with <span class="arithmatex">\(a\)</span> the wire radius. This formula is bounded between
 <span class="arithmatex">\(\ell/a &gt; 10\)</span> (thin-wire regime), which holds comfortably for the
-AP1 cable runs (<span class="arithmatex">\(\ell\)</span> ≈ 1–5 m, <span class="arithmatex">\(a\)</span> ≈ 4 mm).</p>
+typical cable runs (<span class="arithmatex">\(\ell\)</span> ≈ 1–5 m, <span class="arithmatex">\(a\)</span> ≈ 4 mm).</p>
 <h3 id="earth-return-ideal-earth">Earth return ("ideal earth")<a class="headerlink" href="#earth-return-ideal-earth" title="Permanent link">&para;</a></h3>
 <p>In this ADR the earth is treated as a <strong>perfect mirror</strong> for the
 magnetic field (<span class="arithmatex">\(\sigma_\text{earth} \to \infty\)</span>): the image of a
@@ -2622,10 +2622,10 @@ bit-exact and at the same cost.</p>
 <p>The thin-wire self-inductance assumes a <strong>bare</strong> conductor. For a
 cable with a conductor inside an outer sheath the relevant
 self-inductance is geometrically smaller; this distinction matters
-for shielded MV cables but not for the bare-copper / PEN AP1 study.
+for shielded MV cables but not for the bare-copper / PEN typical study.
 We keep the model simple: <code>inductance_model == "neumann"</code> always
 uses the bare-conductor self formula; refinements come with the
-cable-shield work later in the dissertation.</p>
+cable-shield work later.</p>
 <h2 id="validation">Validation<a class="headerlink" href="#validation" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Single isolated segment</strong> — the segment's self-L matches the
@@ -2651,10 +2651,10 @@ cable-shield work later in the dissertation.</p>
 <h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
 <h3 id="positive">Positive<a class="headerlink" href="#positive" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Closes the AP1 question on inductive coupling between the
-  measurement lead and the current injection. The model is now
-  physically complete for <span class="arithmatex">\(f &lt; 1\,\mathrm{kHz}\)</span> except for the
-  Carson earth-return correction.</li>
+<li>Covers inductive coupling between the measurement lead and the
+  current injection. The model is now physically complete for
+  <span class="arithmatex">\(f &lt; 1\,\mathrm{kHz}\)</span> except for the Carson earth-return
+  correction.</li>
 <li>The Neumann integral is <strong>geometric only</strong> — it works on top of
   any of the existing electric Green's-function backends without
   duplicating their kernel logic.</li>
@@ -2667,7 +2667,7 @@ cable-shield work later in the dissertation.</p>
 <li>The system becomes complex when the inductive model is enabled,
   doubling the per-frequency LU factorisation cost. A frequency
   sweep with <span class="arithmatex">\(N_f\)</span> frequencies costs <span class="arithmatex">\(N_f\)</span> complex solves (vs. one
-  real solve in the resistive-only case). For a typical AP1 sweep
+  real solve in the resistive-only case). For a typical sweep
   (<span class="arithmatex">\(N_f \le 20\)</span>, <span class="arithmatex">\(N \le 5\,000\)</span> segments) this is still well
   inside the 32-GB / 12-core workstation budget.</li>
 <li>The mutual-inductance matrix is dense and symmetric; the same
@@ -2775,8 +2775,6 @@ cable-shield work later in the dissertation.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

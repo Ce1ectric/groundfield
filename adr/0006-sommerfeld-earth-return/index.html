@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -1937,10 +1937,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#pillar-b-layered-earth-same-adr-planned-for-the-ap1-sweep" class="md-nav__link">
+  <a href="#pillar-b-layered-earth-same-adr-planned-for-the-typical-sweep" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pillar B — Layered earth (same ADR, planned for the AP1 sweep)
+        Pillar B — Layered earth (same ADR, planned for the typical sweep)
       
     </span>
   </a>
@@ -2376,10 +2376,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#pillar-b-layered-earth-same-adr-planned-for-the-ap1-sweep" class="md-nav__link">
+  <a href="#pillar-b-layered-earth-same-adr-planned-for-the-typical-sweep" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Pillar B — Layered earth (same ADR, planned for the AP1 sweep)
+        Pillar B — Layered earth (same ADR, planned for the typical sweep)
       
     </span>
   </a>
@@ -2540,11 +2540,11 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
-<td><code>groundfield</code>, work package 1 of the dissertation</td>
+<td><code>groundfield</code></td>
 </tr>
 </tbody>
 </table>
@@ -2559,22 +2559,22 @@
 This is the standard <strong>transmission-line modelling</strong> convention used
 in EMTP/PSCAD/ATP. It is exact for <strong>infinite parallel wires over a
 homogeneous earth</strong>, but it has two structural limitations that
-matter for the AP1 dissertation work:</p>
+matter for typical applications:</p>
 <ol>
 <li><strong>Short conductors / arbitrary geometry.</strong> Carson's per-meter
    formula assumes translation invariance along the wire axis. For
    wires whose length is comparable to the earth skin depth
    <span class="arithmatex">\(\delta\)</span>, or for non-parallel / 3-D arrangements, the per-meter
-   closed form does not capture end effects. The AP1 frequency
+   closed form does not capture end effects. The typical frequency
    range (<span class="arithmatex">\(f \le 1\,\mathrm{kHz}\)</span>) and soil resistivities
    (<span class="arithmatex">\(\rho_e \in [50, 5000]\,\Omega\,\mathrm{m}\)</span>) yield
    <span class="arithmatex">\(\delta \in [350\,\mathrm{m}, 35\,\mathrm{km}]\)</span> — comparable to
-   or larger than typical TN-Ortsnetz distances. Many electrodes
+   or larger than typical TN low-voltage distances. Many electrodes
    and short connection wires therefore live in the regime
    <span class="arithmatex">\(L \lesssim \delta\)</span> where Carson is the wrong asymptote.</li>
 <li><strong>Layered earth.</strong> Carson's series is rigorously derived for a
    homogeneous half-space. Layered configurations
-   (<span class="arithmatex">\(\rho_1, \rho_2, h_1\)</span>) appear in every AP1 study, and ADR-0005
+   (<span class="arithmatex">\(\rho_1, \rho_2, h_1\)</span>) appear in every typical study, and ADR-0005
    handles them only with a <code>UserWarning</code> and the upper-layer
    <span class="arithmatex">\(\rho_1\)</span> — a documented approximation, not a model.</li>
 </ol>
@@ -2583,7 +2583,7 @@ earth-return inductive coupling: the vector-potential Green's
 function with the σ- (and layer-) dependent earth correction is
 integrated over the actual segment-pair geometry. ADR-0005's Carson
 series then becomes a <strong>fast asymptotic option</strong>, and ADR-0006
-becomes the <strong>default for AP1-relevant studies</strong> where the
+becomes the <strong>default for relevant studies</strong> where the
 asymptotic assumptions break down.</p>
 <h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
 <h3 id="physical-model">Physical model<a class="headerlink" href="#physical-model" title="Permanent link">&para;</a></h3>
@@ -2645,7 +2645,7 @@ dl_i\,dl_j .
 <tr>
 <td>Layered earth</td>
 <td><span class="arithmatex">\(G_\text{mag}\)</span> uses the <strong>layered</strong> reflection coefficient <span class="arithmatex">\(\Gamma_\text{mag}^{(n)}(\lambda)\)</span></td>
-<td>AP1 layered studies</td>
+<td>layered-earth studies</td>
 </tr>
 </tbody>
 </table>
@@ -2667,7 +2667,7 @@ online.</p>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">complex</span><span class="p">:</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;G_mag(r, r&#39;) - 1/R, the σ-dependent earth correction.&quot;&quot;&quot;</span>
 </code></pre></div>
-<h4 id="pillar-b-layered-earth-same-adr-planned-for-the-ap1-sweep">Pillar B — Layered earth (same ADR, planned for the AP1 sweep)<a class="headerlink" href="#pillar-b-layered-earth-same-adr-planned-for-the-ap1-sweep" title="Permanent link">&para;</a></h4>
+<h4 id="pillar-b-layered-earth-same-adr-planned-for-the-typical-sweep">Pillar B — Layered earth (same ADR, planned for the typical sweep)<a class="headerlink" href="#pillar-b-layered-earth-same-adr-planned-for-the-typical-sweep" title="Permanent link">&para;</a></h4>
 <p>For an <code>n</code>-layer earth, the reflection coefficient is built from
 the recursive Tagg/Sunde-style formula</p>
 <div class="arithmatex">\[
@@ -2697,8 +2697,8 @@ only the reflection coefficient differs.</p>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="p">]</span>
 </code></pre></div>
 <p>Default remains <code>"perfect_mirror"</code> — every existing notebook and
-test continues to produce its current bit-exact result. AP1
-notebooks opt into <code>"sommerfeld"</code> for the dissertation-grade
+test continues to produce its current bit-exact result. typical
+notebooks opt into <code>"sommerfeld"</code> for the production-grade
 runs; <code>"carson_series"</code> is preserved as the cheap asymptotic
 diagnostic and is documented as such.</p>
 <h3 id="numerics-sommerfeld-quadrature">Numerics — Sommerfeld quadrature<a class="headerlink" href="#numerics-sommerfeld-quadrature" title="Permanent link">&para;</a></h3>
@@ -2724,7 +2724,7 @@ segment-pair. The total cost is</p>
 T_{Sommerfeld} \;=\; \mathcal{O}\bigl(N_f \cdot M^2 \cdot N_\lambda\bigr)
 \]</div>
 <p>evaluations of <span class="arithmatex">\(J_0\)</span> per outer node, fully vectorised through
-<code>numpy</code>. For AP1 (<span class="arithmatex">\(M \le 5000\)</span>, <span class="arithmatex">\(N_\lambda \le 200\)</span>, <span class="arithmatex">\(N_f \le 20\)</span>)
+<code>numpy</code>. For typical (<span class="arithmatex">\(M \le 5000\)</span>, <span class="arithmatex">\(N_\lambda \le 200\)</span>, <span class="arithmatex">\(N_f \le 20\)</span>)
 this is ≲ 5 minutes total — tolerable for the planned parameter
 sweeps.</p>
 <h3 id="mom_sommerfeld-reuse"><code>mom_sommerfeld</code> reuse<a class="headerlink" href="#mom_sommerfeld-reuse" title="Permanent link">&para;</a></h3>
@@ -2775,7 +2775,7 @@ module.</p>
 <h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
 <h3 id="positive">Positive<a class="headerlink" href="#positive" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>AP1 dissertation work runs on a physically rigorous model.</strong>
+<li><strong>Reference computations run on a physically rigorous model.</strong>
   Layered earth, short wires, non-parallel geometries — all are
   treated correctly within the same numerical machinery.</li>
 <li>The Carson series stays available as a cheap asymptotic
@@ -2793,7 +2793,7 @@ module.</p>
 <h3 id="negative">Negative<a class="headerlink" href="#negative" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Computational cost grows by <span class="arithmatex">\(\mathcal{O}(N_\lambda)\)</span> per
-  segment-pair per frequency. Modest for AP1 (5 min sweep) but
+  segment-pair per frequency. Modest for typical cases (5 min sweep) but
   substantial for very large worlds (&gt;10 000 segments). For those
   cases the asymptotic Carson model remains available as the
   fallback.</li>
@@ -2908,8 +2908,6 @@ module.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

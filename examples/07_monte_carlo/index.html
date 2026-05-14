@@ -797,7 +797,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -825,7 +825,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -967,10 +967,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-to-read-this-for-the-dissertation" class="md-nav__link">
+  <a href="#how-to-read-the-iqr" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How to read this for the dissertation
+        How to read the IQR
       
     </span>
   </a>
@@ -2263,10 +2263,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-to-read-this-for-the-dissertation" class="md-nav__link">
+  <a href="#how-to-read-the-iqr" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How to read this for the dissertation
+        How to read the IQR
       
     </span>
   </a>
@@ -2366,7 +2366,7 @@
 
 
 <h1 id="example-07-monte-carlo-sweep-with-joblib">Example 07 — Monte-Carlo sweep with <code>joblib</code><a class="headerlink" href="#example-07-monte-carlo-sweep-with-joblib" title="Permanent link">&para;</a></h1>
-<p>The full AP1 study has thousands of configurations. The
+<p>A full study easily has thousands of configurations. The
 deterministic sweep of example 06 is fine for a few dozen
 solves; for thousands you want <strong>parallel execution</strong> and
 <strong>stochastic distributions</strong> on the parameters that you don't
@@ -2385,11 +2385,11 @@ substation impedance.</p>
   resistivity.</li>
 </ul>
 <h2 id="code">Code<a class="headerlink" href="#code" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">&quot;&quot;&quot;ap1_monte_carlo.py — runnable as a script.</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="sd">&quot;&quot;&quot;monte_carlo_sweep.py — runnable as a script.</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">   Usage:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="sd">       python ap1_monte_carlo.py</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="sd">   It writes ap1_mc.parquet next to the script.</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="sd">       python monte_carlo_sweep.py</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="sd">   It writes monte_carlo.parquet next to the script.</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="sd">&quot;&quot;&quot;</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
@@ -2441,7 +2441,7 @@ substation impedance.</p>
 <a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>            <span class="n">rho_2</span><span class="o">=</span><span class="n">LogNormal</span><span class="o">.</span><span class="n">from_moments</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">15.0</span><span class="p">),</span>
 <a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>            <span class="n">h_1</span><span class="o">=</span><span class="n">Discrete</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">,</span> <span class="mf">30.0</span><span class="p">]),</span>
 <a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>        <span class="p">),</span>
-<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>        <span class="n">pen</span><span class="o">=</span><span class="n">PenConfig</span><span class="p">(</span><span class="n">inductance_model</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>  <span class="c1"># AP1 production default</span>
+<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>        <span class="n">pen</span><span class="o">=</span><span class="n">PenConfig</span><span class="p">(</span><span class="n">inductance_model</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>  <span class="c1"># default</span>
 <a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a>    <span class="p">)</span>
 <a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a>
 <a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>
@@ -2484,7 +2484,7 @@ substation impedance.</p>
 <a id="__codelineno-0-97" name="__codelineno-0-97" href="#__codelineno-0-97"></a>
 <a id="__codelineno-0-98" name="__codelineno-0-98" href="#__codelineno-0-98"></a>
 <a id="__codelineno-0-99" name="__codelineno-0-99" href="#__codelineno-0-99"></a><span class="n">RHO_1_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mf">30.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">200.0</span><span class="p">,</span> <span class="mf">500.0</span><span class="p">,</span> <span class="mf">1000.0</span><span class="p">]</span>
-<a id="__codelineno-0-100" name="__codelineno-0-100" href="#__codelineno-0-100"></a><span class="n">N_EFH_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">30</span><span class="p">]</span>            <span class="c1"># extend to [5, 10, 30, 80, 200] for full AP1</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100" href="#__codelineno-0-100"></a><span class="n">N_EFH_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">30</span><span class="p">]</span>            <span class="c1"># extend to [5, 10, 30, 80, 200] for a full study</span>
 <a id="__codelineno-0-101" name="__codelineno-0-101" href="#__codelineno-0-101"></a><span class="n">N_REALISATIONS</span> <span class="o">=</span> <span class="mi">30</span>               <span class="c1"># K — try 10 first to confirm timing</span>
 <a id="__codelineno-0-102" name="__codelineno-0-102" href="#__codelineno-0-102"></a>
 <a id="__codelineno-0-103" name="__codelineno-0-103" href="#__codelineno-0-103"></a><span class="n">jobs</span> <span class="o">=</span> <span class="p">[</span>
@@ -2521,8 +2521,8 @@ substation impedance.</p>
 <a id="__codelineno-0-134" name="__codelineno-0-134" href="#__codelineno-0-134"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total wall-clock: </span><span class="si">{</span><span class="n">t_total</span><span class="o">/</span><span class="mi">60</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> min&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-135" name="__codelineno-0-135" href="#__codelineno-0-135"></a>
 <a id="__codelineno-0-136" name="__codelineno-0-136" href="#__codelineno-0-136"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
-<a id="__codelineno-0-137" name="__codelineno-0-137" href="#__codelineno-0-137"></a><span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;ap1_mc.parquet&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-138" name="__codelineno-0-138" href="#__codelineno-0-138"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Saved </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows to ap1_mc.parquet&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-137" name="__codelineno-0-137" href="#__codelineno-0-137"></a><span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;monte_carlo.parquet&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-138" name="__codelineno-0-138" href="#__codelineno-0-138"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Saved </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows to monte_carlo.parquet&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-139" name="__codelineno-0-139" href="#__codelineno-0-139"></a>
 <a id="__codelineno-0-140" name="__codelineno-0-140" href="#__codelineno-0-140"></a>
 <a id="__codelineno-0-141" name="__codelineno-0-141" href="#__codelineno-0-141"></a><span class="c1"># ---------------------------------------------------------------------</span>
@@ -2530,7 +2530,7 @@ substation impedance.</p>
 <a id="__codelineno-0-143" name="__codelineno-0-143" href="#__codelineno-0-143"></a><span class="c1"># ---------------------------------------------------------------------</span>
 <a id="__codelineno-0-144" name="__codelineno-0-144" href="#__codelineno-0-144"></a>
 <a id="__codelineno-0-145" name="__codelineno-0-145" href="#__codelineno-0-145"></a>
-<a id="__codelineno-0-146" name="__codelineno-0-146" href="#__codelineno-0-146"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;ap1_mc.parquet&quot;</span><span class="p">)</span>  <span class="c1"># works as a re-entry point too</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146" href="#__codelineno-0-146"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;monte_carlo.parquet&quot;</span><span class="p">)</span>  <span class="c1"># works as a re-entry point too</span>
 <a id="__codelineno-0-147" name="__codelineno-0-147" href="#__codelineno-0-147"></a>
 <a id="__codelineno-0-148" name="__codelineno-0-148" href="#__codelineno-0-148"></a><span class="n">agg</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s2">&quot;rho_1&quot;</span><span class="p">,</span> <span class="s2">&quot;n_efh&quot;</span><span class="p">])[</span><span class="s2">&quot;Z_abs&quot;</span><span class="p">]</span>
 <a id="__codelineno-0-149" name="__codelineno-0-149" href="#__codelineno-0-149"></a>         <span class="o">.</span><span class="n">agg</span><span class="p">([</span><span class="s2">&quot;median&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">quantile</span><span class="p">(</span><span class="mf">0.25</span><span class="p">),</span>
@@ -2547,7 +2547,7 @@ substation impedance.</p>
 <a id="__codelineno-0-160" name="__codelineno-0-160" href="#__codelineno-0-160"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_xscale</span><span class="p">(</span><span class="s2">&quot;log&quot;</span><span class="p">);</span> <span class="n">ax</span><span class="o">.</span><span class="n">set_yscale</span><span class="p">(</span><span class="s2">&quot;log&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-161" name="__codelineno-0-161" href="#__codelineno-0-161"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;ρ_1 / Ω·m&quot;</span><span class="p">);</span> <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;|Z(50 Hz)| / Ω&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-162" name="__codelineno-0-162" href="#__codelineno-0-162"></a><span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s2">&quot;both&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">);</span> <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
-<a id="__codelineno-0-163" name="__codelineno-0-163" href="#__codelineno-0-163"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AP1 Monte Carlo — median and IQR (</span><span class="si">{</span><span class="n">N_REALISATIONS</span><span class="si">}</span><span class="s2"> draws each)&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-163" name="__codelineno-0-163" href="#__codelineno-0-163"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Monte Carlo — median and IQR (</span><span class="si">{</span><span class="n">N_REALISATIONS</span><span class="si">}</span><span class="s2"> draws each)&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-164" name="__codelineno-0-164" href="#__codelineno-0-164"></a><span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
 <a id="__codelineno-0-165" name="__codelineno-0-165" href="#__codelineno-0-165"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </code></pre></div>
@@ -2562,12 +2562,12 @@ substation impedance.</p>
 <li><strong>The lower curve sits below the upper curve</strong> — adding houses
   drops the cluster impedance via parallel grounding.</li>
 </ul>
-<h2 id="how-to-read-this-for-the-dissertation">How to read this for the dissertation<a class="headerlink" href="#how-to-read-this-for-the-dissertation" title="Permanent link">&para;</a></h2>
+<h2 id="how-to-read-the-iqr">How to read the IQR<a class="headerlink" href="#how-to-read-the-iqr" title="Permanent link">&para;</a></h2>
 <p>The IQR widths quantify the <strong>uncertainty band</strong> on the
 substation impedance for a given number of buildings and a given
 upper-layer resistivity, taking realistic ranges of
 <span class="arithmatex">\(\rho_2\)</span> and <span class="arithmatex">\(h_1\)</span> into account. That is exactly the band you
-need for the AP1 reduction-factor and reliability statements.</p>
+need for reduction-factor and reliability statements.</p>
 <h2 id="tips-and-pitfalls">Tips and pitfalls<a class="headerlink" href="#tips-and-pitfalls" title="Permanent link">&para;</a></h2>
 <h3 id="reproducibility">Reproducibility<a class="headerlink" href="#reproducibility" title="Permanent link">&para;</a></h3>
 <p>Each call to <code>solve_one(rho_1, n_efh, seed)</code> builds the world
@@ -2575,7 +2575,7 @@ deterministically from <code>seed</code> — the same <code>(rho_1, n_efh, seed)
 triple always gives the same result. To resume a stopped run,
 load the existing Parquet, find which <code>(rho_1, n_efh, seed)</code>
 triples are missing, and re-run only those:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">df_done</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;ap1_mc.parquet&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">df_done</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="s2">&quot;monte_carlo.parquet&quot;</span><span class="p">)</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">done</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_done</span><span class="p">[[</span><span class="s2">&quot;rho_1&quot;</span><span class="p">,</span> <span class="s2">&quot;n_efh&quot;</span><span class="p">,</span> <span class="s2">&quot;seed&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">itertuples</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">remaining</span> <span class="o">=</span> <span class="p">[</span><span class="n">job</span> <span class="k">for</span> <span class="n">job</span> <span class="ow">in</span> <span class="n">jobs</span> <span class="k">if</span> <span class="n">job</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">done</span><span class="p">]</span>
 </code></pre></div>
@@ -2600,14 +2600,14 @@ wall-clocks.</p>
 <h2 id="try-this-next">Try this next<a class="headerlink" href="#try-this-next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Extend <code>N_EFH_GRID</code> to <code>[5, 10, 30, 80, 200]</code> and increase
-  <code>N_REALISATIONS</code> to 50. This is the AP1 production sweep.
+  <code>N_REALISATIONS</code> to 50. This is the default sweep.
   Plan for an overnight run on 12 cores for the first three
   cells; the 200-EFH cell is the multi-day case (see the
   <a href="../../performance/">performance guide</a> for projections).</li>
 <li>Combine the Monte Carlo with the measurement setup of
   example 05 — you'll then have a Monte-Carlo distribution of
   the <em>measurement error</em> under realistic measurement
-  conditions, which is the AP1 Analysis-2 deliverable.</li>
+  conditions.</li>
 <li>Continue with example 08 to see how the same pipeline feeds
   back into <code>groundinsight</code> for fault-current studies.</li>
 </ul>
@@ -2692,8 +2692,6 @@ wall-clocks.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

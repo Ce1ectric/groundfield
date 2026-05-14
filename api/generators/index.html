@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -3451,10 +3451,10 @@
 <p>The <code>generators</code> subpackage is the <strong>factory layer</strong> that converts
 high-level parameter sets into a fully populated
 :class:<code>groundfield.World</code>. It is the bridge between <em>parameter
-studies</em> (AP1, future Monte-Carlo runs) and the <em>physics layer</em>
+studies</em> (typical, future Monte-Carlo runs) and the <em>physics layer</em>
 (soil, electrodes, conductors, solver).</p>
 <h2 id="mathematical-physical-context">Mathematical / physical context<a class="headerlink" href="#mathematical-physical-context" title="Permanent link">&para;</a></h2>
-<p>For AP1 the relevant physics is</p>
+<p>For typical the relevant physics is</p>
 <div class="arithmatex">\[
 \nabla \cdot \big( \sigma(z) \, \nabla \Phi \big) \;=\; 0
 \quad \text{in } \mathbb{R}^3 \setminus \text{electrodes},
@@ -3465,10 +3465,8 @@ on top via Carson (ADR-0005) or Sommerfeld (ADR-0006). The role
 of a generator is purely topological: it produces a concrete
 electrode-and-conductor layout the solver can integrate over. No
 physics happens in this subpackage.</p>
-<p>The AP1 parameter axes that map directly onto
-:class:<code>TnNetworkConfig</code> fields are documented in
-<code>999_projektmanagement/arbeitspakete/AP1_tn_ortsnetz.md</code> and
-re-stated here for convenience. <code>TnNetworkConfig</code> has been
+<p>The typical parameter axes that map directly onto
+:class:<code>TnNetworkConfig</code> fields are summarised below. <code>TnNetworkConfig</code> has been
 refactored onto a composable spec layer (ADR-0009 v2); building
 mixes are now declared via <code>building_types</code> (a catalog of
 :class:<code>BuildingTypeSpec</code>) and <code>building_counts</code> (per-type
@@ -3478,7 +3476,7 @@ quantities), and every grounding system is built from a list of
 <thead>
 <tr>
 <th>Axis</th>
-<th>AP1 grid</th>
+<th>default grid</th>
 <th>Config field</th>
 </tr>
 </thead>
@@ -3543,7 +3541,7 @@ Constant). <code>cfg.sample(rng)</code> resolves every distribution
 reproducibly given a fixed seed.</p>
 <h2 id="validity-envelope">Validity envelope<a class="headerlink" href="#validity-envelope" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Frequency: <span class="arithmatex">\(f \le 1\,\mathrm{kHz}\)</span> (AP1 quasi-static).</li>
+<li>Frequency: <span class="arithmatex">\(f \le 1\,\mathrm{kHz}\)</span> (quasi-static).</li>
 <li>Soil: linear, isotropic, layered. Saturation / ionisation are
   not modelled.</li>
 <li>Topology of :class:<code>TnNetworkGenerator</code>: radial-with-trunk
@@ -3597,7 +3595,7 @@ result. With the same seed and the same library version the
 <tr>
 <th>Class</th>
 <th>Backend</th>
-<th>Typical AP1 use</th>
+<th>Typical use</th>
 </tr>
 </thead>
 <tbody>
@@ -3624,7 +3622,7 @@ result. With the same seed and the same library version the
 <tr>
 <td><code>Weibull(shape, scale)</code></td>
 <td>numpy</td>
-<td>wear / lifetime (later AP3)</td>
+<td>wear / lifetime</td>
 </tr>
 <tr>
 <td><code>Discrete(values, weights?)</code></td>
@@ -3701,11 +3699,11 @@ seed alongside the simulation output to guarantee reproducibility.</p>
 
     <div class="doc doc-contents first">
 
-        <p><code>World</code> generators for AP1 (and future) reference networks.</p>
+        <p><code>World</code> generators for reference networks.</p>
 <p>This subpackage hosts the <strong>factory layer</strong> that turns high-level
-parameter sets — for example the AP1 axes "5/10/30/80/200 EFH on a
-two-layer soil" — into a fully populated :class:<code>groundfield.World</code>
-that the solver can consume.</p>
+parameter sets — for example "N single-family houses on a two-layer
+soil" — into a fully populated :class:<code>groundfield.World</code> that the
+solver can consume.</p>
 <p>The framework is organised in five composable spec layers:</p>
 <ul>
 <li>:mod:<code>~groundfield.generators.distributions</code> — Constant, Uniform,
@@ -3727,7 +3725,7 @@ that the solver can consume.</p>
 </ul>
 <p>The first concrete generator,
 :class:<code>~groundfield.generators.tn_network.TnNetworkGenerator</code>,
-composes all of the above into an AP1-style TN low-voltage network.</p>
+composes all of the above into a TN low-voltage network.</p>
 <p>See <code>docs/adr/0009-world-generators.md</code> for the design rationale
 and the validation programme.</p>
 
@@ -4058,7 +4056,7 @@ biases the choice; uniform if omitted.</p>
 
 
         <p>Discrete numerical distribution over a finite value set.</p>
-<p>Mirrors AP1 parameter axes such as
+<p>Mirrors typical parameter axes such as
 <span class="arithmatex">\(n_\text{EFH} \in \{5, 10, 30, 80, 200\}\)</span>. <code>weights</code> may be
 supplied to bias the choice; if omitted the values are sampled
 uniformly.</p>
@@ -5186,13 +5184,12 @@ measurement against a neighbouring substation, point <code>grounding</code>
 at :func:<code>neighbour_substation_grounding</code>.</p>
 <p><code>feed_lead</code> is the metallic <em>Stromeinspeiseleitung</em> between
 the substation cluster and the aux electrode. <code>None</code> (default)
-means <em>galvanic-only</em> AP1 Analysis 1: the source's
-<code>return_to</code> is set to the aux electrode but no metallic wire
-closes the loop — the return current flows entirely through the
-soil. Setting <code>feed_lead</code> to an :class:<code>MeasurementLeadConfig</code>
-(often via :func:<code>overhead_lead</code> or :func:<code>buried_lead</code>) adds
-the physical wire and enables inductive coupling for AP1
-Analysis 2.</p>
+means <em>galvanic-only</em>: the source's <code>return_to</code> is set to the
+aux electrode but no metallic wire closes the loop — the return
+current flows entirely through the soil. Setting <code>feed_lead</code>
+to a :class:<code>MeasurementLeadConfig</code> (often via
+:func:<code>overhead_lead</code> or :func:<code>buried_lead</code>) adds the physical
+wire and enables the inductive coupling.</p>
 
 
 
@@ -5240,10 +5237,10 @@ Analysis 2.</p>
 <p>A measurement lead is a finite-impedance :class:<code>Conductor</code> that
 connects two anchor electrodes (typically the substation cluster
 and the auxiliary or probe cluster). Two routing variants are
-common in AP1 studies and selectable via :attr:<code>depth_m</code>:</p>
+common in typical studies and selectable via :attr:<code>depth_m</code>:</p>
 <ul>
 <li><code>depth_m = 0.0</code> — overhead at the surface. The classical
-  AP1 case for the Stromeinspeiseleitung of a
+  default case for the Stromeinspeiseleitung of a
   fall-of-potential measurement.</li>
 <li><code>depth_m &gt; 0.0</code> (e.g. 0.6 m) — buried cable. Used when the
   study models a permanently installed measurement infrastructure
@@ -5255,7 +5252,7 @@ common in AP1 studies and selectable via :attr:<code>depth_m</code>:</p>
 match a bare overhead measurement wire that does not leak
 current to the soil along its length but does generate a magnetic
 field that couples to every parallel conductor — exactly the
-inductive-coupling problem of AP1 Analysis 2.</p>
+inductive-coupling problem.</p>
 
 
 
@@ -5351,7 +5348,7 @@ galvanic-only; setting it enables inductive coupling.</p>
               Bases: <code><a class="autorefs autorefs-internal" title="groundfield.generators.base.GeneratorConfig" href="#groundfield.generators.GeneratorConfig">GeneratorConfig</a></code></p>
 
 
-        <p>Earth-resistance measurement setup (AP1 Analysis 1 + 2).</p>
+        <p>Earth-resistance measurement setup.</p>
 <p>When <code>TnNetworkConfig.measurement</code> is set, the generator:</p>
 <ol>
 <li>builds the auxiliary electrode at
@@ -5370,8 +5367,8 @@ galvanic-only; setting it enables inductive coupling.</p>
    physically returns through the auxiliary electrode (and,
    if the metallic feed lead is present, mostly through it).</li>
 </ol>
-<p>The default factory leaves both leads as <code>None</code> (Analysis 1,
-galvanic-only). For Analysis 2 set, e.g.,</p>
+<p>The default factory leaves both leads as <code>None</code> (galvanic
+only). To enable inductive coupling, set, e.g.,</p>
 <blockquote>
 <blockquote>
 <blockquote>
@@ -5967,7 +5964,7 @@ catalog (residential, small/medium/large industry).</p>
               Bases: <code><a class="autorefs autorefs-internal" title="groundfield.generators.base.WorldGenerator" href="#groundfield.generators.WorldGenerator">WorldGenerator</a>[<a class="autorefs autorefs-internal" title="groundfield.generators.tn_network.TnNetworkConfig" href="#groundfield.generators.TnNetworkConfig">TnNetworkConfig</a>]</code></p>
 
 
-        <p>Generator for AP1 TN low-voltage distribution network reference worlds.</p>
+        <p>Generator for TN low-voltage distribution network reference worlds.</p>
 <p>See the module docstring for the full pipeline. In one
 sentence: build soil → build substation grounding → place
 buildings (one per type-and-count) → build per-building
@@ -6043,7 +6040,7 @@ grounding → place cable cabinets → build per-KVS grounding
               Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
 
 
-        <p>Two-layer model — the AP1 default.</p>
+        <p>Two-layer model — the default.</p>
 <p>Upper layer of resistivity <span class="arithmatex">\(\rho_1\)</span> and thickness <span class="arithmatex">\(h_1\)</span> over a
 semi-infinite lower layer of resistivity <span class="arithmatex">\(\rho_2\)</span>.</p>
 
@@ -6583,7 +6580,7 @@ the result for reproducibility.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Return a sensible AP1 starting catalog of four building types.</p>
+        <p>Return a sensible starting catalog of four building types.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -6696,7 +6693,7 @@ running serious studies.</p>
 <span class="normal"><a href="#__codelineno-0-177">177</a></span>
 <span class="normal"><a href="#__codelineno-0-178">178</a></span>
 <span class="normal"><a href="#__codelineno-0-179">179</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-97" name="__codelineno-0-97"></a><span class="k">def</span><span class="w"> </span><span class="nf">default_building_catalog</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">BuildingTypeSpec</span><span class="p">]:</span>
-<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a sensible AP1 starting catalog of four building types.</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a sensible starting catalog of four building types.</span>
 <a id="__codelineno-0-99" name="__codelineno-0-99"></a>
 <a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">    Returns</span>
 <a id="__codelineno-0-101" name="__codelineno-0-101"></a><span class="sd">    -------</span>
@@ -7555,8 +7552,6 @@ from the +x axis.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

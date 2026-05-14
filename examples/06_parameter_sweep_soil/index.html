@@ -797,7 +797,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -825,7 +825,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2268,7 +2268,7 @@
 <h1 id="example-06-deterministic-parameter-sweep-over-rho_1">Example 06 — Deterministic parameter sweep over <span class="arithmatex">\(\rho_1\)</span><a class="headerlink" href="#example-06-deterministic-parameter-sweep-over-rho_1" title="Permanent link">&para;</a></h1>
 <p>The first parameter sweep. We hold the network and the
 measurement setup fixed, sweep the upper-layer soil resistivity
-<span class="arithmatex">\(\rho_1\)</span> over the AP1 grid, and observe how the cluster
+<span class="arithmatex">\(\rho_1\)</span> over the default grid, and observe how the cluster
 impedance scales. This example is the bridge to the Monte-Carlo
 sweep in example 07.</p>
 <h2 id="what-youll-see">What you'll see<a class="headerlink" href="#what-youll-see" title="Permanent link">&para;</a></h2>
@@ -2319,7 +2319,7 @@ sweep in example 07.</p>
 <a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    <span class="p">}</span>
 <a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>
 <a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>
-<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="c1"># AP1 ρ_1 grid</span>
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="c1"># Example ρ_1 grid</span>
 <a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="n">RHO_1_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mf">30.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">200.0</span><span class="p">,</span> <span class="mf">500.0</span><span class="p">,</span> <span class="mf">1000.0</span><span class="p">]</span>
 <a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a><span class="n">rows</span> <span class="o">=</span> <span class="p">[</span><span class="n">solve_one</span><span class="p">(</span><span class="n">rho_1</span><span class="p">)</span> <span class="k">for</span> <span class="n">rho_1</span> <span class="ow">in</span> <span class="n">RHO_1_GRID</span><span class="p">]</span>
 <a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
@@ -2340,8 +2340,8 @@ sweep in example 07.</p>
 <a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 <a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a>
 <a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a><span class="c1"># --- save the table for later analysis (e.g. publication tables) ---</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a><span class="n">df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;ap1_rho1_sweep.csv&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Saved to ap1_rho1_sweep.csv&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a><span class="n">df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;rho1_sweep.csv&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Saved to rho1_sweep.csv&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="expected-output">Expected output<a class="headerlink" href="#expected-output" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>   rho_1   Z_abs  Z_real  Z_arg_deg
@@ -2362,7 +2362,7 @@ return current.</p>
 <p>The same loop works for any single-axis sweep. Replace
 <code>rho_1=rho_1</code> with <code>rho_2=...</code> or <code>h_1=...</code> to sweep the
 other soil parameters; replace <code>building_counts={"residential":
-30}</code> with the AP1 grid <code>[5, 10, 30, 80, 200]</code>. Outer-product
+30}</code> with the default grid <code>[5, 10, 30, 80, 200]</code>. Outer-product
 two axes:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
@@ -2492,8 +2492,6 @@ execution is a one-line change — that's example 07.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

@@ -679,10 +679,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#work-package-1" class="md-nav__link">
+  <a href="#typical-questions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Work package 1
+        Typical questions
       
     </span>
   </a>
@@ -905,7 +905,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -933,7 +933,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2230,10 +2230,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#work-package-1" class="md-nav__link">
+  <a href="#typical-questions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Work package 1
+        Typical questions
       
     </span>
   </a>
@@ -2396,9 +2396,9 @@ mutual.</p>
 <span class="arithmatex">\(\delta(\omega) = \sqrt{2/(\omega\mu_0\sigma_\text{earth})}
 \approx 503\sqrt{\rho_\text{earth}/f}\,\mathrm{m}\)</span>, exposed at every
 solved frequency through <code>FieldResult.metadata["penetration_depth"]</code>.
-For AP1 frequencies (≤ 1 kHz) and resistivities (50–5000 Ω·m) the
+For the quasi-static frequencies (≤ 1 kHz) and resistivities (50–5000 Ω·m) the
 skin depth ranges from ≈ 350 m to ≈ 35 km — comparable to or larger
-than typical TN-Ortsnetz distances, which is exactly why Carson
+than typical TN low-voltage distances, which is exactly why Carson
 matters.</p>
 <h2 id="the-rho-f-model">The <code>rho-f</code> model<a class="headerlink" href="#the-rho-f-model" title="Permanent link">&para;</a></h2>
 <p>The objective of a field computation in <code>groundfield</code> is not only a
@@ -2412,11 +2412,10 @@ Z(\rho, f) = R_{0}(\rho) + X(\rho, f)
 collects the frequency-dependent reactive contributions. The
 coefficients are fitted against the field solution and end up as
 <code>BusType.impedance_formula</code> in <code>groundinsight</code>.</p>
-<h2 id="work-package-1">Work package 1<a class="headerlink" href="#work-package-1" title="Permanent link">&para;</a></h2>
-<p><code>groundfield</code> is the primary tool for <strong>work package 1</strong>, which
-investigates TN distribution networks with substation, house
-connections, and cable cabinets in layered soil. The core questions
-are:</p>
+<h2 id="typical-questions">Typical questions<a class="headerlink" href="#typical-questions" title="Permanent link">&para;</a></h2>
+<p><code>groundfield</code> is built around investigations of TN distribution
+networks with substation, house connections, and cable cabinets in
+layered soil. The core questions are:</p>
 <ol>
 <li>How strongly does a remote current injection influence the
    grounding-measurement result?</li>
@@ -2425,8 +2424,8 @@ are:</p>
 <li>Can robust statements be derived for typical distribution-network
    configurations?</li>
 </ol>
-<p>These questions form the first building block of the dissertation;
-<code>groundfield</code> provides the required numerical basis.</p>
+<p><code>groundfield</code> provides the numerical basis for answering these
+questions.</p>
 
 
 
@@ -2508,8 +2507,6 @@ are:</p>
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

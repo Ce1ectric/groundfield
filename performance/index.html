@@ -673,10 +673,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#wall-clock-estimates-for-ap1-study-sizes" class="md-nav__link">
+  <a href="#wall-clock-estimates-for-typical-study-sizes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Wall-clock estimates for AP1 study sizes
+        Wall-clock estimates for typical study sizes
       
     </span>
   </a>
@@ -955,7 +955,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -983,7 +983,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2247,10 +2247,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#wall-clock-estimates-for-ap1-study-sizes" class="md-nav__link">
+  <a href="#wall-clock-estimates-for-typical-study-sizes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Wall-clock estimates for AP1 study sizes
+        Wall-clock estimates for typical study sizes
       
     </span>
   </a>
@@ -2364,16 +2364,16 @@
 <p>This page collects the empirical performance characteristics of
 the <code>image_2layer</code> solver pipeline (with optional Carson /
 Sommerfeld earth-return correction and Neumann mutual inductance)
-and gives concrete recommendations for AP1-style studies and
+and gives concrete recommendations for parameter studies and
 Monte-Carlo sweeps. The numbers come from
 <a href="https://github.com/Ce1ectric/groundfield/blob/main/notebooks/21_performance_tuning.ipynb"><code>notebooks/21_performance_tuning.ipynb</code></a>
 on a typical laptop and are reproducible end-to-end.</p>
 <h2 id="tldr">TL;DR<a class="headerlink" href="#tldr" title="Permanent link">&para;</a></h2>
-<p>For AP1 work-package 1, the three configuration choices that
+<p>For a typical study, the three configuration choices that
 dominate wall-clock time are:</p>
 <ol>
 <li><strong><code>earth_inductive_model="carson_series"</code> instead of <code>"sommerfeld"</code>.</strong>
-   On the AP1 frequency band (<span class="arithmatex">\(f \le 1\,\mathrm{kHz}\)</span>) and with
+   On the quasi-static frequency band (<span class="arithmatex">\(f \le 1\,\mathrm{kHz}\)</span>) and with
    long parallel measurement / PEN structures both models give
    identical impedances; Carson is up to <strong>~1200×</strong> faster. Use
    <code>"sommerfeld"</code> only for spot-checks where the parallel-wires
@@ -2387,7 +2387,7 @@ dominate wall-clock time are:</p>
    study induced effects on the PEN.</strong> PEN-Neumann adds ~1 % to
    <span class="arithmatex">\(|Z|\)</span> at 50 Hz for a 3× cost. Switch it on only when the
    inductive coupling between the PEN trunk and the measurement
-   leads is the actual research question (AP1 Analysis 2).</li>
+   leads is the question under study.</li>
 </ol>
 <p>Every other knob is secondary.</p>
 <h2 id="empirical-characteristics">Empirical characteristics<a class="headerlink" href="#empirical-characteristics" title="Permanent link">&para;</a></h2>
@@ -2467,7 +2467,7 @@ core. Three runs are taken, the median reported.</p>
 each frequency adds roughly the cost of one matrix rebuild plus
 the LU solve; the per-frequency overhead scales with the active
 inductance model.</p>
-<h2 id="wall-clock-estimates-for-ap1-study-sizes">Wall-clock estimates for AP1 study sizes<a class="headerlink" href="#wall-clock-estimates-for-ap1-study-sizes" title="Permanent link">&para;</a></h2>
+<h2 id="wall-clock-estimates-for-typical-study-sizes">Wall-clock estimates for typical study sizes<a class="headerlink" href="#wall-clock-estimates-for-typical-study-sizes" title="Permanent link">&para;</a></h2>
 <p>Assuming converged settings (<code>segment_length=1.0 m</code>, Carson,
 PEN-Neumann off, leads-Neumann on):</p>
 <table>
@@ -2512,14 +2512,14 @@ overhead) is close to <span class="arithmatex">\(O(N^{2.3})\)</span>, consistent
 <span class="arithmatex">\(O(N^2)\)</span> matrix build plus an <span class="arithmatex">\(O(N^3)\)</span> LU step that grows from
 sub-dominant at small <span class="arithmatex">\(N\)</span> to dominant near <span class="arithmatex">\(N \sim 5\,000\)</span>.</p>
 <h2 id="monte-carlo-strategy">Monte-Carlo strategy<a class="headerlink" href="#monte-carlo-strategy" title="Permanent link">&para;</a></h2>
-<p>For AP1 work-package 1 the parameter axes alone produce
+<p>For a typical large study the parameter axes alone produce
 <span class="arithmatex">\(5 \times 4 \times 4 \times 5 \times 3 \times 3 = 3\,600\)</span>
 deterministic configurations. With <span class="arithmatex">\(K\)</span> stochastic realisations
 per configuration (typical <span class="arithmatex">\(K = 20\)</span>–<span class="arithmatex">\(100\)</span>) you reach <span class="arithmatex">\(10^4\)</span> to
 <span class="arithmatex">\(10^5\)</span> solves. That is too much for a single core but very
 tractable with parallelisation.</p>
 <h3 id="recommended-pattern">Recommended pattern<a class="headerlink" href="#recommended-pattern" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># studies/ap1_sweep.py</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># studies/parameter_sweep.py</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">joblib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parallel</span><span class="p">,</span> <span class="n">delayed</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
@@ -2578,7 +2578,7 @@ tractable with parallelisation.</p>
 <a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>
 <a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a><span class="c1"># Parameter grid + Monte-Carlo realisations per cell</span>
 <a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a><span class="n">RHO_1_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mf">30.0</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">,</span> <span class="mf">200.0</span><span class="p">,</span> <span class="mf">500.0</span><span class="p">,</span> <span class="mf">1000.0</span><span class="p">]</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a><span class="n">N_EFH_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">30</span><span class="p">]</span>   <span class="c1"># add 80, 200 for the full AP1 set</span>
+<a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a><span class="n">N_EFH_GRID</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">30</span><span class="p">]</span>   <span class="c1"># add 80, 200 for the full default set</span>
 <a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="n">N_REALISATIONS</span> <span class="o">=</span> <span class="mi">20</span>
 <a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a>
 <a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="n">jobs</span> <span class="o">=</span> <span class="p">[</span>
@@ -2595,7 +2595,7 @@ tractable with parallelisation.</p>
 <a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a>
 <a id="__codelineno-0-75" name="__codelineno-0-75" href="#__codelineno-0-75"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 <a id="__codelineno-0-76" name="__codelineno-0-76" href="#__codelineno-0-76"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
-<a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a><span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;ap1_sweep.parquet&quot;</span><span class="p">)</span>  <span class="c1"># cheap binary; survives kernel restarts</span>
+<a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a><span class="n">df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">&quot;parameter_sweep.parquet&quot;</span><span class="p">)</span>  <span class="c1"># cheap binary; survives kernel restarts</span>
 </code></pre></div>
 <h3 id="throughput-estimate">Throughput estimate<a class="headerlink" href="#throughput-estimate" title="Permanent link">&para;</a></h3>
 <p>On a 12-core laptop with the recommended settings:</p>
@@ -2604,7 +2604,7 @@ tractable with parallelisation.</p>
 <tr>
 <th>Per-solve cost</th>
 <th>Per-cell M-C cost (K=20)</th>
-<th>Full AP1 grid M-C</th>
+<th>Full default grid M-C</th>
 </tr>
 </thead>
 <tbody>
@@ -2625,7 +2625,7 @@ tractable with parallelisation.</p>
 </tr>
 </tbody>
 </table>
-<p>Overnight or weekend runs cover the full AP1 axis comfortably for
+<p>Overnight or weekend runs cover the full parameter axis comfortably for
 sizes ≤ 80 EFH. The 200-EFH × full Monte-Carlo case is the one
 that motivates the ACA roadmap below.</p>
 <h3 id="tips-for-keeping-monte-carlo-robust">Tips for keeping Monte Carlo robust<a class="headerlink" href="#tips-for-keeping-monte-carlo-robust" title="Permanent link">&para;</a></h3>
@@ -2643,7 +2643,7 @@ that motivates the ACA roadmap below.</p>
    lives.</li>
 <li><strong>Run a 100-element pilot Monte Carlo first</strong> at a single
    <code>(n_efh, ρ_1)</code> cell. Quantile bands stabilise around K ≈ 20–30
-   for the AP1-typical Lognormal soil; full <span class="arithmatex">\(K = 100\)</span> is rarely
+   for the typical Lognormal soil; full <span class="arithmatex">\(K = 100\)</span> is rarely
    needed.</li>
 </ol>
 <h3 id="what-does-not-work-today">What does <em>not</em> work today<a class="headerlink" href="#what-does-not-work-today" title="Permanent link">&para;</a></h3>
@@ -2679,10 +2679,8 @@ this regime:</p>
 </ol>
 <p>Together, these would push 200-EFH × full Monte Carlo from
 ~weeks to ~hours on the same hardware. They are deferred
-because the current AP1 study scope (≤ 80 EFH single shot,
-≤ 30 EFH × Monte Carlo) is well within the dense-solver regime
-and the algorithmic work would consume time better spent on the
-research questions of the dissertation.</p>
+because the current typical study scope (≤ 80 EFH single shot,
+≤ 30 EFH × Monte Carlo) is well within the dense-solver regime.</p>
 <h2 id="reproducing-these-numbers-yourself">Reproducing these numbers yourself<a class="headerlink" href="#reproducing-these-numbers-yourself" title="Permanent link">&para;</a></h2>
 <p><code>notebooks/21_performance_tuning.ipynb</code> runs the exact
 benchmarks. The <code>PRESET = 'fast'</code> mode finishes in well under
@@ -2769,8 +2767,6 @@ change to spot regressions early.</p>
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

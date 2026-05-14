@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -1209,6 +1209,56 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundfield.solver.image_nlayer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        image_nlayer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="image_nlayer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.solver.image_nlayer.solve_image_nlayer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        solve_image_nlayer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2279,6 +2329,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundfield.solver.image_nlayer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        image_nlayer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="image_nlayer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.solver.image_nlayer.solve_image_nlayer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        solve_image_nlayer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#related-material" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2334,7 +2434,7 @@ domain. Stefanescu / Sunde (1968, ch. 3.5) describe a doubly-nested
 expansion that recovers a real-image series, but its
 implementation is fragile for hard contrasts: the convergence
 factor at every interface is <span class="arithmatex">\(|K_i|\)</span>, and the doubly-nested loop
-has to converge in <em>every</em> nested level. For practical AP1
+has to converge in <em>every</em> nested level. For practical typical
 contrasts this works only with non-trivial Aitken / Pade
 acceleration on top.</p>
 <p><code>image_nlayer</code> is the <strong>dispatcher</strong> that ties the closed-form
@@ -2379,7 +2479,7 @@ selection. The original delegate is preserved in
 <ol>
 <li>
 <p><strong>Convergence sensitivity.</strong> The doubly-nested Stefanescu series
-   converges as <span class="arithmatex">\(\prod_i |K_i \Gamma_{i+1}|^{n_i}\)</span>. For typical AP1
+   converges as <span class="arithmatex">\(\prod_i |K_i \Gamma_{i+1}|^{n_i}\)</span>. For typical
    parameters with <span class="arithmatex">\(|K_i| \approx 0.5\)</span>–<span class="arithmatex">\(0.9\)</span>, the series can take
    <span class="arithmatex">\(\gtrsim 10^4\)</span> terms in the worst-case nested combinations.
    Without Aitken / Pade acceleration the engine would routinely
@@ -2390,7 +2490,7 @@ selection. The original delegate is preserved in
    solves the same problem with <span class="arithmatex">\(\sim 8\)</span> complex exponentials and
    gives a closed-form spatial Green's function for <em>any</em> <span class="arithmatex">\(n\)</span>. The
    per-evaluation cost is independent of the layer count, and the
-   matrix-pencil fit is numerically robust for the AP1 contrast
+   matrix-pencil fit is numerically robust for the typical contrast
    range.</p>
 </li>
 <li>
@@ -2403,8 +2503,8 @@ selection. The original delegate is preserved in
    diverges.</p>
 </li>
 </ol>
-<p>The trade-off is documented in ADR-0002 and revisited every time
-the dissertation work-package scope expands.</p>
+<p>The trade-off is documented in ADR-0002 and revisited every time the
+supported use-case scope expands.</p>
 <h2 id="notebook-ergonomics">Notebook ergonomics<a class="headerlink" href="#notebook-ergonomics" title="Permanent link">&para;</a></h2>
 <p><code>Engine.solve</code> automatically forwards <code>backend="image"</code> to:</p>
 <ul>
@@ -2503,9 +2603,490 @@ delegate engines carry their own references on
 <li><strong>ADR-0002</strong> — the in-repo justification of the dispatcher
   design.</li>
 </ul>
-<h2 id="related-material">Related material<a class="headerlink" href="#related-material" title="Permanent link">&para;</a></h2>
+<h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># 2-layer soil — dispatcher delegates to image_2layer.</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">soil</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TwoLayerSoil</span><span class="p">(</span><span class="n">rho_1</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">rho_2</span><span class="o">=</span><span class="mf">500.0</span><span class="p">,</span> <span class="n">h_1</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">soil</span><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;g1&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                    <span class="n">position</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">length</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">attached_to</span><span class="o">=</span><span class="s2">&quot;g1&quot;</span><span class="p">,</span> <span class="n">magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image_nlayer&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>                          <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>                          <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">result</span> <span class="o">=</span> <span class="n">world</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;g1&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dispatched_to&quot;</span><span class="p">])</span>  <span class="c1"># &#39;image_2layer&#39;</span>
+</code></pre></div>
+<h2 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="groundfield.solver.image_nlayer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">image_nlayer</span>
+
+
+<a href="#groundfield.solver.image_nlayer" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Image-charge backend dispatcher for n-layer soil (<code>image_nlayer</code>).</p>
+
+
+<details class="mathematical-/-physical-model" open>
+  <summary>Mathematical / physical model</summary>
+  <p>The image-charge family of grounding solvers represents the layered
+half-space Green's function as a (truncated) sum of point sources at
+mirrored positions in the soil. This sum is <strong>closed-form</strong> for two
+regimes:</p>
 <ul>
-<li>API reference: <code>groundfield.solver.image_nlayer</code>.</li>
+<li><strong>n = 1 (homogeneous soil).</strong> A single source plus its air-mirror
+  at <span class="arithmatex">\(z = -z_s\)</span> reproduces the Neumann boundary at <span class="arithmatex">\(z = 0\)</span>
+  exactly. This is the classical <code>image</code> backend.</li>
+<li>
+<p><strong>n = 2 (two-layer soil).</strong> The recursive reflection
+  <span class="arithmatex">\(\Gamma_1(\lambda) \equiv K_1\)</span> is constant in
+  <span class="arithmatex">\(\lambda\)</span>, and the geometric expansion of the multiple
+  reflection between the air boundary and the layer interface gives
+  the <strong>Tagg / Sunde series</strong>
+  $$
+  \varphi(s, z) \;=\; \frac{\rho_1\, I}{4\pi}\,
+  \sum_{n=0}^{\infty} K_1^{n}\,
+  \Bigl(\tfrac{1}{r_n^{++}} + \tfrac{1}{r_n^{+-}}</p>
+<ul>
+<li>\tfrac{1}{r_n^{-+}} + \tfrac{1}{r_n^{--}}\Bigr).
+  $$
+For <span class="arithmatex">\(n \ge 3\)</span> the upward reflection <span class="arithmatex">\(\Gamma_1(\lambda)\)</span>
+becomes a non-trivial function of <span class="arithmatex">\(\lambda\)</span> (see
+:func:<code>groundfield.solver._layered.reflection_gamma</code>). Expanding it
+as a closed-form <em>real</em> image-charge series exists in principle
+(Stefanescu / Sunde 1968, ch. 3.5) but the implementation is fragile
+for hard contrasts because of the doubly-nested geometric expansion.
+Within the <code>groundfield</code> engine family this regime is therefore
+covered by</li>
+</ul>
+</li>
+<li>
+<p><code>cim</code> — Complex Image Method (closed form, complex images).</p>
+</li>
+<li><code>mom_sommerfeld</code> — direct numerical Sommerfeld quadrature
+  (reference engine).</li>
+<li><code>bem</code> — boundary-element collocation with CIM kernel.</li>
+</ul>
+</details>
+
+<details class="dispatch-behaviour" open>
+  <summary>Dispatch behaviour</summary>
+  <p><code>solve_image_nlayer</code> is a small wrapper that recognises the layer
+count and forwards the call to the matching closed-form backend:</p>
+<p>=========  ===============  ===========================
+n_layers   actual backend   note
+=========  ===============  ===========================
+1          <code>image</code>        homogeneous case
+2          <code>image_2layer</code> Tagg / Sunde geometric series
+≥ 3        — (raises)       use <code>cim</code> / <code>mom_sommerfeld</code> / <code>bem</code>
+=========  ===============  ===========================</p>
+<p>The backend tag of the returned :class:<code>FieldResult</code> is rewritten to
+<code>"image_nlayer"</code> so that comparisons across engines see a single
+identifier per backend selection.</p>
+</details>
+
+<details class="validity" open>
+  <summary>Validity</summary>
+  <ul>
+<li>Quasi-static, <span class="arithmatex">\(f &lt; 1\,\mathrm{kHz}\)</span>.</li>
+<li>All electrodes must lie inside the upper layer.</li>
+</ul>
+</details>
+
+<details class="references" open>
+  <summary>References</summary>
+  <ul>
+<li>Sunde 1968, ch. 3.5; Tagg 1964, ch. 5.</li>
+<li>Stefanescu, S. &amp; Schlumberger, C. (1930).</li>
+<li>Dawalibi, F. P. &amp; Barbeito, N. (1991).</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+  <div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundfield.solver.image_nlayer.solve_image_nlayer" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">solve_image_nlayer</span>
+
+
+<a href="#groundfield.solver.image_nlayer.solve_image_nlayer" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve_image_nlayer</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">max_terms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-06</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldResult</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Image-charge dispatcher for n-layer soil.</p>
+<p>Routes to <code>image</code> for <code>n = 1</code> and to <code>image_2layer</code> for
+<code>n = 2</code>. For <code>n \ge 3</code> raises a clear :class:<code>ValueError</code>
+pointing the caller to the engines that actually support that
+regime.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>world</code>
+            </td>
+            <td>
+                  <code>&#39;World&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World whose soil is any layered soil model.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>engine</code>
+            </td>
+            <td>
+                  <code>&#39;Engine&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Engine configuration; <code>engine.segment_length</code> controls the
+discretisation.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_terms</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Forwarded to :func:<code>solve_image_2layer</code> for <code>n = 2</code>;
+ignored otherwise.</p>
+              </div>
+            </td>
+            <td>
+                  <code>200</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tol</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Forwarded to :func:<code>solve_image_2layer</code> for <code>n = 2</code>;
+ignored otherwise.</p>
+              </div>
+            </td>
+            <td>
+                  <code>200</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="groundfield.solver.result.FieldResult" href="../../api/solver/#groundfield.solver.FieldResult">FieldResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>backend</code> is rewritten to <code>"image_nlayer"</code> so that
+cross-engine reports use one unified label.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>src/groundfield/solver/image_nlayer.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-91"> 91</a></span>
+<span class="normal"><a href="#__codelineno-0-92"> 92</a></span>
+<span class="normal"><a href="#__codelineno-0-93"> 93</a></span>
+<span class="normal"><a href="#__codelineno-0-94"> 94</a></span>
+<span class="normal"><a href="#__codelineno-0-95"> 95</a></span>
+<span class="normal"><a href="#__codelineno-0-96"> 96</a></span>
+<span class="normal"><a href="#__codelineno-0-97"> 97</a></span>
+<span class="normal"><a href="#__codelineno-0-98"> 98</a></span>
+<span class="normal"><a href="#__codelineno-0-99"> 99</a></span>
+<span class="normal"><a href="#__codelineno-0-100">100</a></span>
+<span class="normal"><a href="#__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span>
+<span class="normal"><a href="#__codelineno-0-110">110</a></span>
+<span class="normal"><a href="#__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#__codelineno-0-113">113</a></span>
+<span class="normal"><a href="#__codelineno-0-114">114</a></span>
+<span class="normal"><a href="#__codelineno-0-115">115</a></span>
+<span class="normal"><a href="#__codelineno-0-116">116</a></span>
+<span class="normal"><a href="#__codelineno-0-117">117</a></span>
+<span class="normal"><a href="#__codelineno-0-118">118</a></span>
+<span class="normal"><a href="#__codelineno-0-119">119</a></span>
+<span class="normal"><a href="#__codelineno-0-120">120</a></span>
+<span class="normal"><a href="#__codelineno-0-121">121</a></span>
+<span class="normal"><a href="#__codelineno-0-122">122</a></span>
+<span class="normal"><a href="#__codelineno-0-123">123</a></span>
+<span class="normal"><a href="#__codelineno-0-124">124</a></span>
+<span class="normal"><a href="#__codelineno-0-125">125</a></span>
+<span class="normal"><a href="#__codelineno-0-126">126</a></span>
+<span class="normal"><a href="#__codelineno-0-127">127</a></span>
+<span class="normal"><a href="#__codelineno-0-128">128</a></span>
+<span class="normal"><a href="#__codelineno-0-129">129</a></span>
+<span class="normal"><a href="#__codelineno-0-130">130</a></span>
+<span class="normal"><a href="#__codelineno-0-131">131</a></span>
+<span class="normal"><a href="#__codelineno-0-132">132</a></span>
+<span class="normal"><a href="#__codelineno-0-133">133</a></span>
+<span class="normal"><a href="#__codelineno-0-134">134</a></span>
+<span class="normal"><a href="#__codelineno-0-135">135</a></span>
+<span class="normal"><a href="#__codelineno-0-136">136</a></span>
+<span class="normal"><a href="#__codelineno-0-137">137</a></span>
+<span class="normal"><a href="#__codelineno-0-138">138</a></span>
+<span class="normal"><a href="#__codelineno-0-139">139</a></span>
+<span class="normal"><a href="#__codelineno-0-140">140</a></span>
+<span class="normal"><a href="#__codelineno-0-141">141</a></span>
+<span class="normal"><a href="#__codelineno-0-142">142</a></span>
+<span class="normal"><a href="#__codelineno-0-143">143</a></span>
+<span class="normal"><a href="#__codelineno-0-144">144</a></span>
+<span class="normal"><a href="#__codelineno-0-145">145</a></span>
+<span class="normal"><a href="#__codelineno-0-146">146</a></span>
+<span class="normal"><a href="#__codelineno-0-147">147</a></span>
+<span class="normal"><a href="#__codelineno-0-148">148</a></span>
+<span class="normal"><a href="#__codelineno-0-149">149</a></span>
+<span class="normal"><a href="#__codelineno-0-150">150</a></span>
+<span class="normal"><a href="#__codelineno-0-151">151</a></span>
+<span class="normal"><a href="#__codelineno-0-152">152</a></span>
+<span class="normal"><a href="#__codelineno-0-153">153</a></span>
+<span class="normal"><a href="#__codelineno-0-154">154</a></span>
+<span class="normal"><a href="#__codelineno-0-155">155</a></span>
+<span class="normal"><a href="#__codelineno-0-156">156</a></span>
+<span class="normal"><a href="#__codelineno-0-157">157</a></span>
+<span class="normal"><a href="#__codelineno-0-158">158</a></span>
+<span class="normal"><a href="#__codelineno-0-159">159</a></span>
+<span class="normal"><a href="#__codelineno-0-160">160</a></span>
+<span class="normal"><a href="#__codelineno-0-161">161</a></span>
+<span class="normal"><a href="#__codelineno-0-162">162</a></span>
+<span class="normal"><a href="#__codelineno-0-163">163</a></span>
+<span class="normal"><a href="#__codelineno-0-164">164</a></span>
+<span class="normal"><a href="#__codelineno-0-165">165</a></span>
+<span class="normal"><a href="#__codelineno-0-166">166</a></span>
+<span class="normal"><a href="#__codelineno-0-167">167</a></span>
+<span class="normal"><a href="#__codelineno-0-168">168</a></span>
+<span class="normal"><a href="#__codelineno-0-169">169</a></span>
+<span class="normal"><a href="#__codelineno-0-170">170</a></span>
+<span class="normal"><a href="#__codelineno-0-171">171</a></span>
+<span class="normal"><a href="#__codelineno-0-172">172</a></span>
+<span class="normal"><a href="#__codelineno-0-173">173</a></span>
+<span class="normal"><a href="#__codelineno-0-174">174</a></span>
+<span class="normal"><a href="#__codelineno-0-175">175</a></span>
+<span class="normal"><a href="#__codelineno-0-176">176</a></span>
+<span class="normal"><a href="#__codelineno-0-177">177</a></span>
+<span class="normal"><a href="#__codelineno-0-178">178</a></span>
+<span class="normal"><a href="#__codelineno-0-179">179</a></span>
+<span class="normal"><a href="#__codelineno-0-180">180</a></span>
+<span class="normal"><a href="#__codelineno-0-181">181</a></span>
+<span class="normal"><a href="#__codelineno-0-182">182</a></span>
+<span class="normal"><a href="#__codelineno-0-183">183</a></span>
+<span class="normal"><a href="#__codelineno-0-184">184</a></span>
+<span class="normal"><a href="#__codelineno-0-185">185</a></span>
+<span class="normal"><a href="#__codelineno-0-186">186</a></span>
+<span class="normal"><a href="#__codelineno-0-187">187</a></span>
+<span class="normal"><a href="#__codelineno-0-188">188</a></span>
+<span class="normal"><a href="#__codelineno-0-189">189</a></span>
+<span class="normal"><a href="#__codelineno-0-190">190</a></span>
+<span class="normal"><a href="#__codelineno-0-191">191</a></span>
+<span class="normal"><a href="#__codelineno-0-192">192</a></span>
+<span class="normal"><a href="#__codelineno-0-193">193</a></span>
+<span class="normal"><a href="#__codelineno-0-194">194</a></span>
+<span class="normal"><a href="#__codelineno-0-195">195</a></span>
+<span class="normal"><a href="#__codelineno-0-196">196</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-91" name="__codelineno-0-91"></a><span class="k">def</span><span class="w"> </span><span class="nf">solve_image_nlayer</span><span class="p">(</span>
+<a id="__codelineno-0-92" name="__codelineno-0-92"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-93" name="__codelineno-0-93"></a>    <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-94" name="__codelineno-0-94"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-95" name="__codelineno-0-95"></a>    <span class="n">max_terms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-0-96" name="__codelineno-0-96"></a>    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
+<a id="__codelineno-0-97" name="__codelineno-0-97"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldResult</span><span class="p">:</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Image-charge dispatcher for n-layer soil.</span>
+<a id="__codelineno-0-99" name="__codelineno-0-99"></a>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">    Routes to ``image`` for ``n = 1`` and to ``image_2layer`` for</span>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a><span class="sd">    ``n = 2``. For ``n \\ge 3`` raises a clear :class:`ValueError`</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a><span class="sd">    pointing the caller to the engines that actually support that</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a><span class="sd">    regime.</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a><span class="sd">    world</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a><span class="sd">        World whose soil is any layered soil model.</span>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a><span class="sd">    engine</span>
+<a id="__codelineno-0-110" name="__codelineno-0-110"></a><span class="sd">        Engine configuration; ``engine.segment_length`` controls the</span>
+<a id="__codelineno-0-111" name="__codelineno-0-111"></a><span class="sd">        discretisation.</span>
+<a id="__codelineno-0-112" name="__codelineno-0-112"></a><span class="sd">    max_terms, tol</span>
+<a id="__codelineno-0-113" name="__codelineno-0-113"></a><span class="sd">        Forwarded to :func:`solve_image_2layer` for ``n = 2``;</span>
+<a id="__codelineno-0-114" name="__codelineno-0-114"></a><span class="sd">        ignored otherwise.</span>
+<a id="__codelineno-0-115" name="__codelineno-0-115"></a>
+<a id="__codelineno-0-116" name="__codelineno-0-116"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-117" name="__codelineno-0-117"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a><span class="sd">    FieldResult</span>
+<a id="__codelineno-0-119" name="__codelineno-0-119"></a><span class="sd">        ``backend`` is rewritten to ``&quot;image_nlayer&quot;`` so that</span>
+<a id="__codelineno-0-120" name="__codelineno-0-120"></a><span class="sd">        cross-engine reports use one unified label.</span>
+<a id="__codelineno-0-121" name="__codelineno-0-121"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-122" name="__codelineno-0-122"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">,</span> <span class="p">(</span><span class="n">HomogeneousSoil</span><span class="p">,</span> <span class="n">TwoLayerSoil</span><span class="p">,</span> <span class="n">MultiLayerSoil</span><span class="p">)):</span>
+<a id="__codelineno-0-123" name="__codelineno-0-123"></a>        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+<a id="__codelineno-0-124" name="__codelineno-0-124"></a>            <span class="s2">&quot;Backend &#39;image_nlayer&#39; supports HomogeneousSoil, &quot;</span>
+<a id="__codelineno-0-125" name="__codelineno-0-125"></a>            <span class="s2">&quot;TwoLayerSoil, and MultiLayerSoil. &quot;</span>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a>            <span class="sa">f</span><span class="s2">&quot;Got: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+<a id="__codelineno-0-127" name="__codelineno-0-127"></a>        <span class="p">)</span>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;World contains no electrodes.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-130" name="__codelineno-0-130"></a>
+<a id="__codelineno-0-131" name="__codelineno-0-131"></a>    <span class="n">stack</span> <span class="o">=</span> <span class="n">as_layer_stack</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">)</span>
+<a id="__codelineno-0-132" name="__codelineno-0-132"></a>    <span class="n">n</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">n_layers</span>
+<a id="__codelineno-0-133" name="__codelineno-0-133"></a>    <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;image_nlayer: dispatching for n_layers=</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+<a id="__codelineno-0-134" name="__codelineno-0-134"></a>
+<a id="__codelineno-0-135" name="__codelineno-0-135"></a>    <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+<a id="__codelineno-0-136" name="__codelineno-0-136"></a>        <span class="c1"># Forward to the homogeneous backend; HomogeneousSoil is the</span>
+<a id="__codelineno-0-137" name="__codelineno-0-137"></a>        <span class="c1"># only soil it accepts. If the user supplied a degenerate</span>
+<a id="__codelineno-0-138" name="__codelineno-0-138"></a>        <span class="c1"># MultiLayerSoil with one layer, build an equivalent</span>
+<a id="__codelineno-0-139" name="__codelineno-0-139"></a>        <span class="c1"># HomogeneousSoil on the fly.</span>
+<a id="__codelineno-0-140" name="__codelineno-0-140"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">,</span> <span class="n">HomogeneousSoil</span><span class="p">):</span>
+<a id="__codelineno-0-141" name="__codelineno-0-141"></a>            <span class="n">res</span> <span class="o">=</span> <span class="n">solve_image</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
+<a id="__codelineno-0-142" name="__codelineno-0-142"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-143" name="__codelineno-0-143"></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.world</span><span class="w"> </span><span class="kn">import</span> <span class="n">World</span>
+<a id="__codelineno-0-144" name="__codelineno-0-144"></a>
+<a id="__codelineno-0-145" name="__codelineno-0-145"></a>            <span class="n">tmp</span> <span class="o">=</span> <span class="n">World</span><span class="p">(</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146"></a>                <span class="n">name</span><span class="o">=</span><span class="n">world</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a>                <span class="n">soil</span><span class="o">=</span><span class="n">HomogeneousSoil</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">rhos</span><span class="p">[</span><span class="mi">0</span><span class="p">])),</span>
+<a id="__codelineno-0-148" name="__codelineno-0-148"></a>                <span class="n">electrodes</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">),</span>
+<a id="__codelineno-0-149" name="__codelineno-0-149"></a>                <span class="n">conductors</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">),</span>
+<a id="__codelineno-0-150" name="__codelineno-0-150"></a>                <span class="n">sources</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">sources</span><span class="p">),</span>
+<a id="__codelineno-0-151" name="__codelineno-0-151"></a>                <span class="n">boundary</span><span class="o">=</span><span class="n">world</span><span class="o">.</span><span class="n">boundary</span><span class="p">,</span>
+<a id="__codelineno-0-152" name="__codelineno-0-152"></a>            <span class="p">)</span>
+<a id="__codelineno-0-153" name="__codelineno-0-153"></a>            <span class="n">res</span> <span class="o">=</span> <span class="n">solve_image</span><span class="p">(</span><span class="n">tmp</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
+<a id="__codelineno-0-154" name="__codelineno-0-154"></a>    <span class="k">elif</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+<a id="__codelineno-0-155" name="__codelineno-0-155"></a>        <span class="c1"># Forward to the closed-form Tagg/Sunde series.</span>
+<a id="__codelineno-0-156" name="__codelineno-0-156"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">soil</span><span class="p">,</span> <span class="n">TwoLayerSoil</span><span class="p">):</span>
+<a id="__codelineno-0-157" name="__codelineno-0-157"></a>            <span class="n">res</span> <span class="o">=</span> <span class="n">solve_image_2layer</span><span class="p">(</span>
+<a id="__codelineno-0-158" name="__codelineno-0-158"></a>                <span class="n">world</span><span class="p">,</span> <span class="n">engine</span><span class="p">,</span> <span class="n">max_terms</span><span class="o">=</span><span class="n">max_terms</span><span class="p">,</span> <span class="n">tol</span><span class="o">=</span><span class="n">tol</span>
+<a id="__codelineno-0-159" name="__codelineno-0-159"></a>            <span class="p">)</span>
+<a id="__codelineno-0-160" name="__codelineno-0-160"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-161" name="__codelineno-0-161"></a>            <span class="c1"># MultiLayerSoil with exactly two layers: cast to TwoLayerSoil.</span>
+<a id="__codelineno-0-162" name="__codelineno-0-162"></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.world</span><span class="w"> </span><span class="kn">import</span> <span class="n">World</span>
+<a id="__codelineno-0-163" name="__codelineno-0-163"></a>
+<a id="__codelineno-0-164" name="__codelineno-0-164"></a>            <span class="n">two</span> <span class="o">=</span> <span class="n">TwoLayerSoil</span><span class="p">(</span>
+<a id="__codelineno-0-165" name="__codelineno-0-165"></a>                <span class="n">rho_1</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">rhos</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+<a id="__codelineno-0-166" name="__codelineno-0-166"></a>                <span class="n">rho_2</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">rhos</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+<a id="__codelineno-0-167" name="__codelineno-0-167"></a>                <span class="n">h_1</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">h</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+<a id="__codelineno-0-168" name="__codelineno-0-168"></a>            <span class="p">)</span>
+<a id="__codelineno-0-169" name="__codelineno-0-169"></a>            <span class="n">tmp</span> <span class="o">=</span> <span class="n">World</span><span class="p">(</span>
+<a id="__codelineno-0-170" name="__codelineno-0-170"></a>                <span class="n">name</span><span class="o">=</span><span class="n">world</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+<a id="__codelineno-0-171" name="__codelineno-0-171"></a>                <span class="n">soil</span><span class="o">=</span><span class="n">two</span><span class="p">,</span>
+<a id="__codelineno-0-172" name="__codelineno-0-172"></a>                <span class="n">electrodes</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">),</span>
+<a id="__codelineno-0-173" name="__codelineno-0-173"></a>                <span class="n">conductors</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">),</span>
+<a id="__codelineno-0-174" name="__codelineno-0-174"></a>                <span class="n">sources</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">sources</span><span class="p">),</span>
+<a id="__codelineno-0-175" name="__codelineno-0-175"></a>                <span class="n">boundary</span><span class="o">=</span><span class="n">world</span><span class="o">.</span><span class="n">boundary</span><span class="p">,</span>
+<a id="__codelineno-0-176" name="__codelineno-0-176"></a>            <span class="p">)</span>
+<a id="__codelineno-0-177" name="__codelineno-0-177"></a>            <span class="n">res</span> <span class="o">=</span> <span class="n">solve_image_2layer</span><span class="p">(</span>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a>                <span class="n">tmp</span><span class="p">,</span> <span class="n">engine</span><span class="p">,</span> <span class="n">max_terms</span><span class="o">=</span><span class="n">max_terms</span><span class="p">,</span> <span class="n">tol</span><span class="o">=</span><span class="n">tol</span>
+<a id="__codelineno-0-179" name="__codelineno-0-179"></a>            <span class="p">)</span>
+<a id="__codelineno-0-180" name="__codelineno-0-180"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a>            <span class="sa">f</span><span class="s2">&quot;image_nlayer: layer count </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> ≥ 3 is not supported by &quot;</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a>            <span class="s2">&quot;the real image-charge series (Γ_1(λ) is no longer &quot;</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a>            <span class="s2">&quot;constant in λ). Use one of the engines designed for &quot;</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>            <span class="s2">&quot;this regime: &#39;cim&#39; (complex images), &#39;mom_sommerfeld&#39; &quot;</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a>            <span class="s2">&quot;(direct Sommerfeld quadrature), or &#39;bem&#39;.&quot;</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a>        <span class="p">)</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a>    <span class="c1"># Rewrite backend tag so that cross-engine reports use the unified label.</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a>    <span class="n">res</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a>        <span class="n">update</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a>            <span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;image_nlayer&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a>            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">**</span><span class="n">res</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="s2">&quot;n_layers&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="s2">&quot;dispatched_to&quot;</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">backend</span><span class="p">},</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a>        <span class="p">}</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a>    <span class="p">)</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a>    <span class="k">return</span> <span class="n">res</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="related-material">Related material<a class="headerlink" href="#related-material" title="Permanent link">&para;</a></h2>
+<ul>
 <li>ADR-0002 — engine selection heuristic.</li>
 <li>Notebook <code>04_image_nlayer.ipynb</code> — exercises the dispatch table
   including the deliberate <code>ValueError</code> for <span class="arithmatex">\(n = 3\)</span> stacks.</li>
@@ -2591,8 +3172,6 @@ delegate engines carry their own references on
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

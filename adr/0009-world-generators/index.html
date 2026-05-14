@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2384,14 +2384,18 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
-<td><code>groundfield.generators</code> (new subpackage); AP1 parameter</td>
+<td><code>groundfield.generators</code> (new subpackage); parameter</td>
 </tr>
 <tr>
-<td>studies; foundation for the <code>ParameterSweep</code> API</td>
+<td>sweep / Monte Carlo studies; foundation for the</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ParameterSweep</code> API</td>
 <td></td>
 </tr>
 </tbody>
@@ -2402,14 +2406,13 @@ image_nlayer / cim / mom / mom_sommerfeld / bem / fem,
 inductive coupling, Carson, Sommerfeld, cross-layer, distributed
 conductors) and a closed bridge to <code>groundinsight</code> via the <code>rho-f</code>
 fit and the <code>BusType</code> exporter (ADR-0008). What is missing is the
-<strong>factory layer</strong> that converts AP1-style parameters
-(see <em>AP1_tn_ortsnetz.md</em> — number of single-family houses
-<span class="arithmatex">\(n_\text{EFH} \in \{5, 10, 30, 80, 200\}\)</span>, small/medium commercial
+<strong>factory layer</strong> that converts high-level parameters (number of
+single-family houses <span class="arithmatex">\(n_\text{EFH}\)</span>, small/medium commercial
 buildings, cable-cabinet quota, two-layer soil with
 <span class="arithmatex">\(\rho_1, \rho_2, h_1\)</span>) into a fully populated <code>World</code>. Without it
 each parameter combination is hand-coded; with it the same
-combination is one line and the parameter sweep across the AP1
-table is a straightforward outer loop.</p>
+combination is one line and a parameter sweep across the table is
+a straightforward outer loop.</p>
 <p>The user request additionally asks for two non-negotiable features:</p>
 <ol>
 <li><strong>Multiple generators</strong> are anticipated (TN-Ortsnetz first, but
@@ -2445,7 +2448,7 @@ stochastic fields via <code>cfg.sample(rng)</code>, and constructs the <code>Wor
 <li>Sweeps and CLI tools talk to the abstract <code>WorldGenerator</code>
   interface; no per-generator dispatch.</li>
 <li>Persisting a config is a one-liner; the resulting JSON is the
-  <em>experimental record</em> of an AP1 run.</li>
+  <em>experimental record</em> of a single run.</li>
 </ul>
 <h3 id="stochastic-parameters-distribution-pydantic-classes">Stochastic parameters: <code>Distribution</code> Pydantic classes<a class="headerlink" href="#stochastic-parameters-distribution-pydantic-classes" title="Permanent link">&para;</a></h3>
 <p>Every numerical field of a <code>GeneratorConfig</code> is typed as a discriminated
@@ -2488,7 +2491,7 @@ the seven first-class distributions:</p>
 <tr>
 <td><code>Discrete(values, weights?)</code></td>
 <td><code>rng.choice</code></td>
-<td>AP1 grid <code>n_efh ∈ {5,10,30,80,200}</code></td>
+<td>default grid <code>n_efh ∈ {5,10,30,80,200}</code></td>
 </tr>
 <tr>
 <td><code>Categorical(values, weights?)</code></td>
@@ -2588,14 +2591,14 @@ union <code>SoilSpec</code> with three members: <code>HomogeneousSoilSpec</code>
 <code>TwoLayerSoilSpec</code>, <code>MultiLayerSoilSpec</code>. Each carries the same
 fields as the underlying :class:<code>SoilModel</code> but allows
 distributions; the method <code>to_soil(rng)</code> returns a fully numeric
-:class:<code>SoilModel</code>. AP1's two-layer is the default.</p>
+:class:<code>SoilModel</code>. A two-layer soil is the default.</p>
 <p><strong>5. <code>building.BuildingTypeSpec</code> — building type definition.</strong>
 Bundles a <code>name</code>, a <code>GroundingSystemSpec</code>, and an optional
 <code>plot_size_m</code>. Multiple types coexist in
 <code>TnNetworkConfig.building_types</code>; the count per type is set via
 <code>TnNetworkConfig.building_counts: dict[name, int | Distribution]</code>.
 The default catalog returned by <code>default_building_catalog()</code>
-ships AP1-typical entries for <code>residential</code>, <code>small_industry</code>,
+ships typical entries for <code>residential</code>, <code>small_industry</code>,
 <code>medium_industry</code>, and <code>large_industry</code>.</p>
 <h3 id="topology-medium-detail-tnnetworkgenerator-v2">Topology: medium detail (<code>TnNetworkGenerator</code> v2)<a class="headerlink" href="#topology-medium-detail-tnnetworkgenerator-v2" title="Permanent link">&para;</a></h3>
 <p>The generator composes the five spec layers into:</p>
@@ -2618,7 +2621,7 @@ ships AP1-typical entries for <code>residential</code>, <code>small_industry</co
   ADR-0004.</li>
 <li>A current source attached to the substation cluster.</li>
 </ul>
-<p>This level of detail captures every AP1 question (remote-injection
+<p>This level of detail captures every research question (remote-injection
 influence, inductive coupling between measurement leads and PEN/MV
 shield, Carson relevance below 1 kHz, soil-layering monotonicity).
 Higher fidelity (real street polygons, plot-level layouts,
@@ -2671,8 +2674,11 @@ that will read from open building-map data.</p>
 </ul>
 <h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
 <ul>
-<li>AP1 work-package definition: <code>999_projektmanagement/arbeitspakete/AP1_tn_ortsnetz.md</code>.</li>
+<li>
+<ul>
 <li>ADR-0003 — distributed conductors (PEN trunk leans on this).</li>
+</ul>
+</li>
 <li>ADR-0008 — <code>BusType</code> export (downstream consumer of generator
   outputs after a <code>rho-f</code> fit).</li>
 <li>Vector fitting &amp; rho-f standard form — what we eventually run
@@ -2759,8 +2765,6 @@ that will read from open building-map data.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       

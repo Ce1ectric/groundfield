@@ -792,7 +792,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement (Analysis 1)
+    04 — Galvanic measurement
   
 
     
@@ -820,7 +820,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling (Analysis 2)
+    05 — Inductive coupling
   
 
     
@@ -2418,11 +2418,11 @@
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
-<td>Christian Ehlert</td>
+<td>Project maintainers</td>
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
-<td><code>groundfield</code>, work package 1 of the dissertation</td>
+<td><code>groundfield</code></td>
 </tr>
 </tbody>
 </table>
@@ -2434,8 +2434,8 @@ nodal-analysis system. That model is sufficient when the conductor
 is <em>short</em> compared to its electrical size — for a few-metre run
 between two rod electrodes the lumped approximation matches the
 distributed solution to within a fraction of a percent.</p>
-<p>For work package 1 (TN distribution network) several questions
-<strong>fall outside that regime</strong>:</p>
+<p>For TN distribution networks several questions <strong>fall outside
+that regime</strong>:</p>
 <ol>
 <li><strong>PEN-strand spanning the village.</strong> A 100 – 200 m PEN section
    between the transformer station and the cable cabinets does not
@@ -2453,13 +2453,13 @@ distributed solution to within a fraction of a percent.</p>
    shield itself is a distributed earth conductor whose leakage and
    longitudinal current are coupled through Carson-type effects
    below 1 kHz.</li>
-<li><strong>Inductive coupling between conductor sections.</strong> The AP1
-   research question on the <em>coupling between the measurement lead
-   and the current injection</em> requires the geometry of the leads to
-   be resolved spatially — Neumann integrals are point-pair
-   integrals; lumped branches do not capture them.</li>
+<li><strong>Inductive coupling between conductor sections.</strong> Analysing the
+   <em>coupling between the measurement lead and the current injection</em>
+   requires the geometry of the leads to be resolved spatially —
+   Neumann integrals are point-pair integrals; lumped branches do
+   not capture them.</li>
 </ol>
-<p>The lumped model is therefore insufficient for AP1 in its current
+<p>The lumped model is therefore insufficient for typical cases in its current
 form. ADR-0003 settles <strong>how to extend</strong> the conductor stack so
 that it remains compatible with the eight existing backends, the
 finite-impedance branches added in the previous step, and the
@@ -2579,7 +2579,7 @@ those rules.</p>
 end), the corresponding endpoint becomes a <strong>floating node</strong>: it
 participates in the linear system but has no external source, no
 leakage, and no constraint other than KCL. This case will be useful
-for future work on partial measurement-lead geometries; for AP1 the
+for future work on partial measurement-lead geometries; for typical cases the
 ends are always anchored to electrodes.</p>
 <h3 id="implementation-strategy">Implementation strategy<a class="headerlink" href="#implementation-strategy" title="Permanent link">&para;</a></h3>
 <ol>
@@ -2637,7 +2637,7 @@ ends are always anchored to electrodes.</p>
   the conductor has segments, Neumann integrals between segment
   pairs become a straightforward addition to the longitudinal
   impedance.</li>
-<li>Enables AP1 questions that the lumped model cannot answer:
+<li>Enables research questions that the lumped model cannot answer:
   PEN-strand voltage drop with intermediate leakage, bare-copper
   conductor as a distributed earth element, partial-shield current
   redistribution.</li>
@@ -2648,7 +2648,7 @@ ends are always anchored to electrodes.</p>
 </ul>
 <h3 id="negative">Negative<a class="headerlink" href="#negative" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Larger linear system. For an AP1 world with ~100 rods and
+<li>Larger linear system. For an a typical world with ~100 rods and
   ~150 m of PEN at <span class="arithmatex">\(\Delta s = 1\,\mathrm{m}\)</span>, the additional
   conductor segments push the segment count from ~1 500
   (electrodes only) towards ~3 000. The dense <span class="arithmatex">\(O(N^2)\)</span> memory
@@ -2767,8 +2767,6 @@ ends are always anchored to electrodes.</p>
       <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="../../javascripts/mathjax.js"></script>
-      
-        <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
