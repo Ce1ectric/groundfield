@@ -1,4 +1,4 @@
-"""Measurement-setup specifications for AP1 grounding-resistance studies.
+"""Measurement-setup specifications for grounding-resistance studies.
 
 A :class:`MeasurementSetupConfig` adds the *measurement
 infrastructure* of a fall-of-potential (or 4-wire) grounding-
@@ -23,9 +23,9 @@ resistance measurement to a generator-built world:
   double-line integral (ADR-0004) plus the chosen earth-return
   correction (Carson / Sommerfeld, ADR-0005 / ADR-0006).
 
-This is the configuration layer needed for **AP1 Analysis 1**
+This is the configuration layer needed for **the galvanic fall-of-potential analysis**
 (reference grounding measurement; vary aux electrode position) and
-**AP1 Analysis 2** (inductive coupling between feed line and
+**the inductive-coupling analysis** (inductive coupling between feed line and
 parallel measurement / PEN / cable shield).
 
 Mathematical / physical content
@@ -46,18 +46,18 @@ added on top via the engine's ``earth_inductive_model``.
 
 Validity envelope
 -----------------
-* Frequency: $f \\le 1\\,\\mathrm{kHz}$ (AP1 quasi-static).
+* Frequency: $f \\le 1\\,\\mathrm{kHz}$ (quasi-static).
 * Lead routing: each lead is modelled as a *single straight wire*
   between its two end-points (substation anchor ↔ aux/probe
   anchor). For a richer routing (multiple bends, parallel-then-
   diverging), assemble several short leads manually after
-  ``build()``. The straight-line model is adequate for the AP1
+  ``build()``. The straight-line model is adequate for the typical
   questions ("how strong is the inductive coupling between the
   feed lead and the parallel measurement lead?").
 * The leads' depth is the wire's $z$-coordinate at both ends; the
   wire interpolates linearly (so a 200 m long lead from
   ``z = 0`` to ``z = 0.6 m`` is in fact a slight diagonal — for
-  AP1 distances this is below the geometry resolution).
+  typical distances this is below the geometry resolution).
 """
 
 from __future__ import annotations
@@ -94,10 +94,10 @@ class MeasurementLeadConfig(GeneratorConfig):
     A measurement lead is a finite-impedance :class:`Conductor` that
     connects two anchor electrodes (typically the substation cluster
     and the auxiliary or probe cluster). Two routing variants are
-    common in AP1 studies and selectable via :attr:`depth_m`:
+    common in typical studies and selectable via :attr:`depth_m`:
 
     * ``depth_m = 0.0`` — overhead at the surface. The classical
-      AP1 case for the Stromeinspeiseleitung of a
+      default case for the Stromeinspeiseleitung of a
       fall-of-potential measurement.
     * ``depth_m > 0.0`` (e.g. 0.6 m) — buried cable. Used when the
       study models a permanently installed measurement infrastructure
@@ -109,7 +109,7 @@ class MeasurementLeadConfig(GeneratorConfig):
     match a bare overhead measurement wire that does not leak
     current to the soil along its length but does generate a magnetic
     field that couples to every parallel conductor — exactly the
-    inductive-coupling problem of AP1 Analysis 2.
+    inductive-coupling problem of the inductive-coupling analysis.
     """
 
     depth_m: Union[float, AnyDistribution] = Field(
@@ -149,7 +149,7 @@ class MeasurementLeadConfig(GeneratorConfig):
         description=(
             "ADR-0004 inductance model: 'neumann' enables mutual "
             "inductance to every other conductor in the world. "
-            "Set to ``None`` for galvanic-only studies (AP1 "
+            "Set to ``None`` for galvanic-only studies (typical "
             "Analysis 1) — that disables every inductive effect."
         ),
     )
@@ -253,13 +253,13 @@ class MeasurementInjectionConfig(GeneratorConfig):
 
     ``feed_lead`` is the metallic *Stromeinspeiseleitung* between
     the substation cluster and the aux electrode. ``None`` (default)
-    means *galvanic-only* AP1 Analysis 1: the source's
+    means *galvanic-only* the galvanic fall-of-potential analysis: the source's
     ``return_to`` is set to the aux electrode but no metallic wire
     closes the loop — the return current flows entirely through the
     soil. Setting ``feed_lead`` to an :class:`MeasurementLeadConfig`
     (often via :func:`overhead_lead` or :func:`buried_lead`) adds
-    the physical wire and enables inductive coupling for AP1
-    Analysis 2.
+    the physical wire and enables inductive coupling for the
+    inductive-coupling analysis.
     """
 
     position_xy: tuple[float, float] = Field(
@@ -318,7 +318,7 @@ class MeasurementProbeConfig(GeneratorConfig):
 
 
 class MeasurementSetupConfig(GeneratorConfig):
-    """Earth-resistance measurement setup (AP1 Analysis 1 + 2).
+    """Earth-resistance measurement setup (the galvanic fall-of-potential analysis + 2).
 
     When ``TnNetworkConfig.measurement`` is set, the generator:
 

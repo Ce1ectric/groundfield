@@ -85,7 +85,7 @@ makes the integrand non-oscillatory along the contour. The current
 implementation uses the simpler real-axis adaptive quadrature.
 Pragmatic justification:
 
-- For $s \lesssim 100\,\text{m}$ (the AP1 range) the real-axis
+- For $s \lesssim 100\,\text{m}$ (the typical range) the real-axis
   adaptive rule converges in 200–400 kernel evaluations per pair,
   which is acceptable for the engine's role as cross-check
   reference.
@@ -94,7 +94,7 @@ Pragmatic justification:
   significantly larger.
 - The cross-validation tests show that the real-axis rule already
   agrees with the closed-form engines to better than 1 % across
-  the AP1 contrast range.
+  the typical contrast range.
 
 The module's docstring still cites Zou et al. as the reference for
 the *idea*; switching to a complex contour is a documented future

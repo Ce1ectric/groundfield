@@ -7,7 +7,7 @@ format (``.vtk``), keeping the dependency surface zero — no
 * :func:`export_geometry_vtk` — POLYDATA with the electrode
   wires (rod, ring, strip, mesh, grid_mesh) and the conductor
   line segments. Useful for "drag the world into ParaView and
-  rotate it" inspections of large AP1 networks.
+  rotate it" inspections of large typical networks.
 * :func:`export_field_vtk` — STRUCTURED_POINTS with the soil
   surface (or any horizontal slice) sampled on a regular
   ``(N_x, N_y)`` grid. The potential is exported as a single
@@ -21,7 +21,7 @@ reader since the 90s opens it, the on-disk layout is plain text
 (diff-able, version-controllable), and the writer is ~30 lines
 of pure-Python without any external library. For large research
 runs prefer ``pyvista`` once you need binary I/O and unstructured
-grids; for AP1-grade networks at notebook scale this format is
+grids; for production-grade networks at notebook scale this format is
 fast enough.
 
 References
@@ -228,7 +228,7 @@ def export_field_vtk(
     writes a ``DATASET STRUCTURED_POINTS`` (a.k.a. uniform grid)
     with a single scalar field ``potential_re``. The imaginary
     part is included as a second scalar ``potential_im`` for
-    above-DC AP1 studies.
+    above-DC typical studies.
 
     Parameters
     ----------

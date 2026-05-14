@@ -27,7 +27,7 @@ domain. Stefanescu / Sunde (1968, ch. 3.5) describe a doubly-nested
 expansion that recovers a real-image series, but its
 implementation is fragile for hard contrasts: the convergence
 factor at every interface is $|K_i|$, and the doubly-nested loop
-has to converge in *every* nested level. For practical AP1
+has to converge in *every* nested level. For practical typical
 contrasts this works only with non-trivial Aitken / Pade
 acceleration on top.
 
@@ -56,7 +56,7 @@ selection. The original delegate is preserved in
 Three reasons, each independently sufficient:
 
 1. **Convergence sensitivity.** The doubly-nested Stefanescu series
-   converges as $\prod_i |K_i \Gamma_{i+1}|^{n_i}$. For typical AP1
+   converges as $\prod_i |K_i \Gamma_{i+1}|^{n_i}$. For typical
    parameters with $|K_i| \approx 0.5$–$0.9$, the series can take
    $\gtrsim 10^4$ terms in the worst-case nested combinations.
    Without Aitken / Pade acceleration the engine would routinely
@@ -66,7 +66,7 @@ Three reasons, each independently sufficient:
    solves the same problem with $\sim 8$ complex exponentials and
    gives a closed-form spatial Green's function for *any* $n$. The
    per-evaluation cost is independent of the layer count, and the
-   matrix-pencil fit is numerically robust for the AP1 contrast
+   matrix-pencil fit is numerically robust for the typical contrast
    range.
 
 3. **Cross-validation strength.** `mom_sommerfeld` provides the
@@ -77,8 +77,8 @@ Three reasons, each independently sufficient:
    the cross-validation matrix would have to discount when it
    diverges.
 
-The trade-off is documented in ADR-0002 and revisited every time
-the dissertation work-package scope expands.
+The trade-off is documented in ADR-0002 and revisited every time the
+supported use-case scope expands.
 
 ## Notebook ergonomics
 

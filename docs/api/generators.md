@@ -3,12 +3,12 @@
 The ``generators`` subpackage is the **factory layer** that converts
 high-level parameter sets into a fully populated
 :class:`groundfield.World`. It is the bridge between *parameter
-studies* (AP1, future Monte-Carlo runs) and the *physics layer*
+studies* (typical, future Monte-Carlo runs) and the *physics layer*
 (soil, electrodes, conductors, solver).
 
 ## Mathematical / physical context
 
-For AP1 the relevant physics is
+For typical the relevant physics is
 
 $$
 \nabla \cdot \big( \sigma(z) \, \nabla \Phi \big) \;=\; 0
@@ -22,17 +22,15 @@ of a generator is purely topological: it produces a concrete
 electrode-and-conductor layout the solver can integrate over. No
 physics happens in this subpackage.
 
-The AP1 parameter axes that map directly onto
-:class:`TnNetworkConfig` fields are documented in
-``999_projektmanagement/arbeitspakete/AP1_tn_ortsnetz.md`` and
-re-stated here for convenience. ``TnNetworkConfig`` has been
+The typical parameter axes that map directly onto
+:class:`TnNetworkConfig` fields are summarised below. ``TnNetworkConfig`` has been
 refactored onto a composable spec layer (ADR-0009 v2); building
 mixes are now declared via ``building_types`` (a catalog of
 :class:`BuildingTypeSpec`) and ``building_counts`` (per-type
 quantities), and every grounding system is built from a list of
 :class:`ElectrodeSpec` entries:
 
-| Axis | AP1 grid | Config field |
+| Axis | default grid | Config field |
 |------|----------|--------------|
 | Single-family houses $n_\text{EFH}$ | 5, 10, 30, 80, 200 | ``building_counts["residential"]`` |
 | Small commercial buildings | 0, 1, 5, 10 | ``building_counts["small_industry"]`` |
@@ -61,7 +59,7 @@ reproducibly given a fixed seed.
 
 ## Validity envelope
 
-* Frequency: $f \le 1\,\mathrm{kHz}$ (AP1 quasi-static).
+* Frequency: $f \le 1\,\mathrm{kHz}$ (quasi-static).
 * Soil: linear, isotropic, layered. Saturation / ionisation are
   not modelled.
 * Topology of :class:`TnNetworkGenerator`: radial-with-trunk
@@ -116,13 +114,13 @@ Lazy vs. up-front resolution
 
 ## Distribution catalogue
 
-| Class | Backend | Typical AP1 use |
+| Class | Backend | Typical use |
 |-------|---------|-----------------|
 | ``Constant`` | trivial | placeholder |
 | ``Uniform(low, high)`` | numpy | bounded continuous parameters |
 | ``Normal(mean, std, truncate_low?, truncate_high?)`` | rejection sampling | engineering tolerances |
 | ``LogNormal(mu, sigma)`` (or ``LogNormal.from_moments``) | numpy | resistivities, sizes |
-| ``Weibull(shape, scale)`` | numpy | wear / lifetime (later AP3) |
+| ``Weibull(shape, scale)`` | numpy | wear / lifetime |
 | ``Discrete(values, weights?)`` | numpy choice | ``n_efh ∈ {5,10,30,80,200}`` |
 | ``Categorical(values, weights?)`` | numpy choice | electrode-kind mix per house |
 

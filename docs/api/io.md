@@ -8,7 +8,7 @@ file, a sister-project Pydantic model).
 
 ## Mathematical and physical context
 
-The dissertation pipeline reads
+The reduction pipeline reads
 
 $$
 \text{PDE / field model} \;\longrightarrow\; \text{reduced } \rho\text{-}f \text{ model}
@@ -24,7 +24,7 @@ string in the two free symbols ``f`` (frequency in Hz) and ``rho``
 ``io.groundinsight`` produces exactly that string from either of the
 two ``rho-f`` fits supported by ``groundfield``:
 
-- **Standard form** (``RhoFStandardFit``) — the dissertation's
+- **Standard form** (``RhoFStandardFit``) — the
   five-coefficient ansatz
 
   $$
@@ -50,7 +50,7 @@ two ``rho-f`` fits supported by ``groundfield``:
 ## Validity
 
 - **Frequency range** $f \le 1\,\mathrm{kHz}$ — both fit families
-  inherit the dissertation's quasi-static assumption. The exported
+  inherit the quasi-static assumption. The exported
   ``BusType`` is meaningful only inside this band; ``groundinsight``
   evaluates the formula for whatever frequencies are stored on its
   ``Network``, so the user is responsible for staying within the band.
@@ -83,7 +83,7 @@ Three convenience writers that turn a :class:`FieldResult`
 (and optionally its companion :class:`World`) into
 machine-readable, tool-agnostic CSV files. They wrap the existing
 ``postprocess`` helpers — no new science here, just a clean
-disk format for sharing AP1 results across notebooks,
+disk format for sharing typical results across notebooks,
 spreadsheets, and downstream pipelines.
 
 ```python
@@ -130,7 +130,7 @@ gf.export_field_vtk(
 The geometry export carries an integer `role` cell-data scalar
 (0 = electrode, 1 = conductor) so colour-by-role works in
 ParaView without further configuration. The field export
-includes `potential_re` and `potential_im` so above-DC AP1
+includes `potential_re` and `potential_im` so above-DC typical
 studies remain visible.
 
 ### API reference — VTK
@@ -158,7 +158,7 @@ save_bustype_json(
     fit,
     path="bus_type_substation.json",
     name="SubstationBus",
-    description="Substation grounding grid (vector-fitted, AP1 ref).",
+    description="Substation grounding grid (vector-fitted, typical ref).",
     system_type="Substation",
     voltage_level=20,
 )
@@ -177,26 +177,45 @@ from groundfield.io.groundinsight import to_bustype, save_bustype_to_db
 bus_type = to_bustype(
     fit,
     name="SubstationBus",
-    description="Substation grounding grid (vector-fitted, AP1 ref).",
+    description="Substation grounding grid (vector-fitted, typical ref).",
     system_type="Substation",
     voltage_level=20,
 )
 # bus_type is a live groundinsight.models.core_models.BusType instance
 # and can be wired straight into a Network:
 import groundinsight as gi
-net = gi.create_network(name="AP1", frequencies=[50.0, 250.0])
+net = gi.create_network(name="reference", frequencies=[50.0, 250.0])
 gi.create_bus(name="bus_substation", type=bus_type, network=net,
               specific_earth_resistance=100.0)
 
 # Or persist to the groundinsight SQLite database in one call:
-save_bustype_to_db(fit, db_path="ap1.db",
+save_bustype_to_db(fit, db_path="grounding.db",
                    name="SubstationBus", system_type="Substation",
                    voltage_level=20)
 ```
 
 `evaluate_spec(spec, frequencies, rho)` re-evaluates an exported
 formula at arbitrary $(f, \rho)$ points without round-tripping through
-``groundinsight``.
+``groundinsight``. Since the v0.5.0 audit-pass-4 closure, both
+`evaluate_spec` and the companion diagnostics helper
+`fit_quality_summary(spec)` are reachable directly as
+`groundfield.evaluate_spec` / `groundfield.fit_quality_summary`
+(top-level re-exports, listed in `groundfield.__all__`).
+
+## CSV writer column-name convention
+
+The three CSV writers in `groundfield.io.csv` use a single naming
+convention: every complex quantity is written as the
+`<symbol>_re` / `<symbol>_im` / `abs_<symbol>` triple, where the
+symbol is the physical letter of the quantity (`phi` for potentials,
+`I` for currents, `Z` for impedances). The magnitude columns
+therefore *differ* between writers by design — `abs_phi` for the
+potential path, `abs_I` for the electrode table, `abs_Z` for the
+cluster table — and merging two tables on the magnitude column
+requires an explicit rename. The frozen column tuples
+`POTENTIAL_PATH_COLUMNS`, `ELECTRODE_TABLE_REQUIRED_COLUMNS` and
+`CLUSTER_IMPEDANCE_REQUIRED_COLUMNS` expose the schema for
+regression testing.
 
 ## API reference
 

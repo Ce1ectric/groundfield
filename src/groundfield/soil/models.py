@@ -8,8 +8,7 @@ data exposed here.
 
 Notes
 -----
-In the frequency range below 1 kHz (work package 1 of the
-dissertation) the quasi-static soil models implemented here are
+In the frequency range below 1 kHz  the quasi-static soil models implemented here are
 sufficient. Frequency-dependent extensions (Visacro, Alipio, Messier)
 will be added later as specialised subclasses without breaking this
 interface.

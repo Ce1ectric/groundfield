@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-04 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
@@ -22,7 +22,7 @@ ADR-0003 deferred $L^{(k)}$ to a follow-up step. With
 $L^{(k)} = 0$ the system is real and frequency-independent, and the
 ``engine.frequencies`` list returns the same DC solution for every
 entry. This is fine for DC-near grounding-impedance studies but
-**not** for the AP1 question on **inductive coupling between the
+**not** for the research question on **inductive coupling between the
 measurement lead and the current injection** — the very effect that
 forced the distributed-conductor refactor in the first place.
 
@@ -68,7 +68,7 @@ $$
 
 with $a$ the wire radius. This formula is bounded between
 $\ell/a > 10$ (thin-wire regime), which holds comfortably for the
-AP1 cable runs ($\ell$ ≈ 1–5 m, $a$ ≈ 4 mm).
+typical cable runs ($\ell$ ≈ 1–5 m, $a$ ≈ 4 mm).
 
 ### Earth return ("ideal earth")
 
@@ -165,10 +165,10 @@ bit-exact and at the same cost.
 The thin-wire self-inductance assumes a **bare** conductor. For a
 cable with a conductor inside an outer sheath the relevant
 self-inductance is geometrically smaller; this distinction matters
-for shielded MV cables but not for the bare-copper / PEN AP1 study.
+for shielded MV cables but not for the bare-copper / PEN typical study.
 We keep the model simple: `inductance_model == "neumann"` always
 uses the bare-conductor self formula; refinements come with the
-cable-shield work later in the dissertation.
+cable-shield work later in this software.
 
 ## Validation
 
@@ -196,7 +196,7 @@ cable-shield work later in the dissertation.
 
 ### Positive
 
-- Closes the AP1 question on inductive coupling between the
+- Closes the research question on inductive coupling between the
   measurement lead and the current injection. The model is now
   physically complete for $f < 1\,\mathrm{kHz}$ except for the
   Carson earth-return correction.
@@ -212,7 +212,7 @@ cable-shield work later in the dissertation.
 - The system becomes complex when the inductive model is enabled,
   doubling the per-frequency LU factorisation cost. A frequency
   sweep with $N_f$ frequencies costs $N_f$ complex solves (vs. one
-  real solve in the resistive-only case). For a typical AP1 sweep
+  real solve in the resistive-only case). For a typical sweep
   ($N_f \le 20$, $N \le 5\,000$ segments) this is still well
   inside the 32-GB / 12-core workstation budget.
 - The mutual-inductance matrix is dense and symmetric; the same

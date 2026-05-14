@@ -87,7 +87,11 @@ plugins:
 
 extra_javascript:
   - javascripts/mathjax.js
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  # The previously-referenced ES6 polyfill CDN was removed
+  # (fourth 2026-05-12 audit pass): the domain is no longer
+  # trusted (CDN ownership change in early 2024 led to malicious
+  # payloads). Modern MathJax 3 / tex-mml-chtml does not require
+  # an ES6 polyfill for any browser the docs target.
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 extra:

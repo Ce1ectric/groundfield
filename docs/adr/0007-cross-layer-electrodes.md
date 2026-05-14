@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-07 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
@@ -26,7 +26,7 @@ mathematical Green's function for two-layer earth supports
 arbitrary layer combinations, the implementation just hasn't been
 extended yet.
 
-For the AP1 dissertation work this is a **blocking limitation**.
+For typical applications this is a **blocking limitation**.
 Realistic geometries that we *must* be able to compute include:
 
 - **Driven rods (Tiefenerder)** of 1.5–3 m length at house
@@ -41,7 +41,7 @@ Realistic geometries that we *must* be able to compute include:
 Without cross-layer support the user has to either truncate the
 geometry artificially (wrong physics) or thicken the upper layer
 beyond physical reality (wrong soil model). Neither option is
-acceptable for AP1.
+acceptable for typical cases.
 
 ## Decision
 
@@ -107,7 +107,7 @@ the $uu$ series; the $ul$ case carries a transmission factor
 $(1 + K)$ and progressively deeper "transmitted-then-reflected"
 images. Both are derivable in closed form (Sunde 1968, eqs.
 3.32–3.34) and will replace the slower spectral-quadrature path
-in `_layered_green_kernel` for AP1 worlds with many cross-layer
+in `_layered_green_kernel` for typical worlds with many cross-layer
 segments.
 
 **Speedup target**: Phase A's geometric Sommerfeld quadrature is
@@ -140,11 +140,11 @@ as a sanity check.
 
 **Status**: deferred to a focused follow-up where the
 derivation can be cross-checked against Sunde 1968 and Tagg 1964
-worked examples. For AP1-grade single-frequency runs at $\lesssim
+worked examples. For production-grade single-frequency runs at $\lesssim
 500$ segments, the Phase A path is acceptable (a few seconds per
 solve); Phase B becomes essential for the **parameter-sweep
-phase** of AP1 (5/10/30/80/200 EFH × multiple soil models ×
-multiple frequencies).
+phase** of large parameter studies (many EFH counts × multiple soil
+models × multiple frequencies).
 
 #### Phase C — `n \ge 3` layers (deferred)
 
@@ -189,7 +189,7 @@ straightforward extension once Phase A is stable.
 5. **Cross-engine consistency** at 50 Hz: image_2layer,
    mom_sommerfeld, cim, bem agree on the cluster impedance of a
    rod-through-interface within 5 %.
-6. **AP1 driven rod**: 3-m rod, $h_1 = 1$ m, $\rho_1 = 300$,
+6. **driven rod**: 3-m rod, $h_1 = 1$ m, $\rho_1 = 300$,
    $\rho_2 = 50\,\Omega\,\mathrm{m}$ — sanity check on the
    cluster impedance against the Dwight 1936 formula adapted
    for 2-layer (Dwight + correction factor).
@@ -202,7 +202,7 @@ straightforward extension once Phase A is stable.
 
 ### Positive
 
-- **AP1-realistic geometries run.** Driven rods, foundation
+- **realistic geometries run.** Driven rods, foundation
   electrodes, deep meshes — all supported on every layered
   backend.
 - The Sommerfeld kernel in `mom_sommerfeld` becomes more
@@ -216,14 +216,14 @@ straightforward extension once Phase A is stable.
 ### Negative
 
 - Phase A's spectral-quadrature path for cross-layer pairs is
-  slower than the closed-form image series. For AP1 worlds with
+  slower than the closed-form image series. For typical worlds with
   ≲ 1000 segments and a single-frequency or short-frequency
   sweep this is acceptable; for very large worlds Phase B is
   the optimisation lever.
 - Discretiser splits add segments at layer interfaces; the total
   segment count grows by ~$O(n_\text{cross})$ where
   $n_\text{cross}$ is the number of conductors crossing
-  interfaces. For AP1 this is small.
+  interfaces. For typical this is small.
 
 ### Neutral
 

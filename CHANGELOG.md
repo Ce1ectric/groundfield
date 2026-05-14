@@ -26,7 +26,212 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- **`Source = Union[CurrentSource, VoltageSource]` is now a Pydantic
+  discriminated union** (`sources.py`). The annotation is
+  ``Annotated[Union[...], Discriminator("kind")]``, with a companion
+  ``SourceAdapter = TypeAdapter(Source)`` for stand-alone source-dict
+  validation. JSON / dict round-trips now report errors against the
+  selected sub-class (``CurrentSource`` / ``VoltageSource``) instead
+  of dumping the whole union's validator chain — fourth 2026-05-12
+  audit pass closure. The user-facing constructor signatures are
+  unchanged; only the error messages and the public ``Source``
+  annotation differ.
+- **`Engine.frequencies` is documented and validated as
+  order-preserving** (`solver/engine.py`). A new
+  ``field_validator("frequencies")`` rejects empty or non-positive
+  inputs and emits a ``UserWarning`` when the list is not strictly
+  increasing — but the order is *preserved* in
+  ``Engine.frequencies`` and downstream in
+  ``FieldResult.frequencies``. The new
+  ``Engine.with_frequencies(*freqs, preserve_order=True)``
+  constructor is the explicit opt-in for sweeps that intentionally
+  iterate non-monotonically (e.g. ``[5000, 50]``); it silences the
+  warning and returns a fresh ``Engine`` without mutating the
+  receiver. Closes the *fourth 2026-05-12 review pass* "silent sort"
+  finding.
+- **`TnNetworkConfig.source_return_to` exposes an explicit override
+  for the source's return path** (`generators/tn_network.py`). When
+  set, it takes precedence over the auxiliary electrode derived
+  from ``cfg.measurement``; when both are present and differ,
+  ``TnNetworkGenerator.build`` emits a ``UserWarning`` that makes
+  the precedence explicit. Previously the measurement setup
+  silently overwrote any caller-side intent for ``return_to``.
+
+### Fixed
+
+- **`World.set_boundary_conditions` now warns on revert as well as
+  on set** (`world.py`). Setting a non-default value already
+  emitted a ``UserWarning`` (v0.2.0); the same call signature now
+  *also* warns when a previously-set non-default value is reverted
+  back to the default. The previous non-default value was never
+  consumed by any backend, so the revert is a silent no-op — the
+  new warning makes that visible (fourth 2026-05-12 audit pass).
+- **`vector_fit(n_poles=0)` is rejected at the API boundary with a
+  detailed `ValueError`** (`postprocess/vector_fitting.py`). A
+  zero-pole fit produces an ``s``-free SymPy expression whose
+  ``groundinsight.BusType.impedance_formula`` consumer cannot
+  recover the frequency dependence; the failure mode was silent
+  before. ``fit_to_sympy`` additionally guards against
+  programmatically constructed ``VectorFitResult`` objects whose
+  resulting expression is ``s``-free, emitting a ``UserWarning``
+  with the same diagnostic.
+- **`mkdocs.yml` no longer references `polyfill.io`**. The CDN's
+  ownership change in early 2024 (malicious payloads injected via
+  the original domain) made the URL unsafe to ship in the docs
+  build. Modern MathJax 3 / ``tex-mml-chtml`` does not require an
+  ES6 polyfill for any browser the docs target. Four audit passes
+  in a row flagged this URL — fixed in this release.
+
+### Added
+
+- **Top-level re-exports `evaluate_spec`, `fit_quality_summary` and
+  `LayeredEarth`** (`__init__.py`). The three helpers were
+  publicly importable from their sub-modules but were missing from
+  the top-level surface and from ``__all__``. They are now
+  reachable as ``gf.evaluate_spec`` / ``gf.fit_quality_summary`` /
+  ``gf.LayeredEarth`` and listed in ``__all__``.
+- **Frozen CSV column-name tuples** in `groundfield.io.csv`
+  (``POTENTIAL_PATH_COLUMNS``, ``ELECTRODE_TABLE_REQUIRED_COLUMNS``,
+  ``CLUSTER_IMPEDANCE_REQUIRED_COLUMNS``). The convention is
+  ``<symbol>_re`` / ``<symbol>_im`` / ``abs_<symbol>`` per
+  physical quantity (``phi`` for potentials, ``I`` for currents,
+  ``Z`` for impedances) — magnitude columns therefore differ per
+  writer by design. Locking the tuples makes accidental renames
+  test-detectable and documents the join-rename requirement.
+
+### Tests
+
+- ``tests/test_audit_pass4_fixes.py`` — eight regression tests
+  mapped 1:1 to the user-visible bullets above: discriminator
+  round-trip, discriminator error path, boundary revert warning,
+  ``Engine`` order-preserving validator + warning, opt-in
+  ``with_frequencies`` silencer, ``TnNetworkConfig.source_return_to``
+  precedence with warning, ``vector_fit(n_poles=0)`` rejection,
+  CSV column-schema lock, top-level re-export presence, and
+  ``mkdocs.yml`` polyfill cleanup.
+
+### Docs
+
+- ``notebooks/30_audit_pass4_fixes.ipynb`` — narrative
+  walk-through of all behaviour changes captured in this block.
+  The notebook is short and per-fix: every cell illustrates one
+  change in isolation so the diff is easy to verify when closing
+  the audit.
+- ``CLAUDE.md`` — added a "Version (do not hard-code in this
+  file)" section that points at ``pyproject.toml`` /
+  ``groundfield.__version__`` / ``CITATION.cff`` as the canonical
+  sources. Closes the four-passes-in-a-row CLAUDE.md version-drift
+  finding from the cross-cutting recommendations.
+- ``mkdocs.yml`` — inline comment explaining why
+  ``polyfill.io`` was removed.
+
+### Fixed (Audit pass 5 — implemented 2026-05-13)
+
+> Implementation block for the *fifth 2026-05-13 review pass*. Every
+> entry maps 1:1 to a bullet under "Fixed (pending implementation) —
+> fifth 2026-05-13 review pass" further down in this `[Unreleased]`
+> block. The pending-implementation bullets remain in place for audit
+> consistency but are dispatched here. Regression tests live in
+> `tests/test_audit_pass5_fixes.py`; the matching demo notebook is
+> `notebooks/31_audit_pass5_fixes.ipynb`.
+
+- **`vector_fit` now warns on under- / exactly-determined input.**
+  A new `VectorFitUnderdeterminedWarning(UserWarning)` is emitted
+  whenever ``2 * n_poles >= len(frequencies)``. Each pole contributes
+  a residue (complex, 2 real DOFs) and a pole-location DOF (complex,
+  2 real DOFs); the real-imag stacking gives ``2 N`` real equations,
+  so the conservative ``2*n_poles >= N`` threshold catches the cases
+  the audit flagged (``n_poles=1`` on ``N ∈ {1, 2}``) — previously
+  accepted as a silent identity interpolation. The dedicated warning
+  category lets notebooks silence the diagnostic with
+  ``warnings.simplefilter("once", VectorFitUnderdeterminedWarning)``.
+- **`Engine` frequency-order warning is silenceable by category.**
+  Pass-4 introduced the order-preserving validator with a
+  ``UserWarning``; pass 5 promotes it to a dedicated
+  ``EngineFrequencyOrderWarning(UserWarning)`` subclass and switches
+  the warning text to a stable form (the per-call list literal is
+  logged at debug level instead). A single
+  ``warnings.simplefilter("once", EngineFrequencyOrderWarning)``
+  now collapses a ten-engine sweep over decreasing lists down to
+  one notification.
+- **`LayeredEarth` documents the FP64 precision contract.** The
+  dataclass docstring now states explicitly that every consumer of
+  ``LayeredEarth`` operates in IEEE-754 double precision. Future
+  hardware-accelerated backends (e.g. MLX on Apple silicon) must
+  honour the same precision contract; the
+  ``tests/test_audit_pass5_fixes.py::test_layered_earth_precision_contract``
+  homogeneous-limit cross-check enforces ``rtol=1e-12`` and would
+  fail under a silent FP32 down-cast.
+- **`io.groundinsight.evaluate_spec` raises `ValueError` on
+  malformed specs.** Three guards at the entry point now wrap the
+  deep SymPy stack trace into one human-readable ``ValueError`` per
+  cause: non-``BusTypeSpec`` argument, missing / empty
+  ``impedance_formula``, or unknown free symbols (anything other
+  than ``f``, ``rho``, ``j``). A user passing a hand-rolled spec dict
+  now sees the missing-``Z_target`` problem at the surface instead
+  of a ``KeyError`` four frames deep inside ``sympy.lambdify``.
+- **`TnNetworkConfig.source_kind` validates against a `Literal`.**
+  New ``source_kind: Literal["current", "voltage"] = "current"``
+  field on :class:`TnNetworkConfig`. Typos like ``"voltage_"``
+  (trailing underscore) are rejected at validation time with a
+  Pydantic ``ValidationError`` instead of silently falling through
+  to the default ``CurrentSource`` factory. ``TnNetworkGenerator.build``
+  forwards the kind to :func:`create_source`.
+- **`World.solve(engine)` snapshots and restores `world.sources`.**
+  The method now wraps the backend dispatch in a try / finally and
+  restores deep copies of every ``Source`` on the way out. Backends
+  that internally mutate ``source.return_to`` (Pass-4 flagged
+  ``MeasurementSetupConfig.build`` as the textbook offender) can no
+  longer leak the mutation back into the caller's world.
+- **`SourceAdapter` is now a top-level re-export.** The Pass-4
+  ``TypeAdapter[Source]`` was introduced in ``groundfield.sources``
+  but never lifted to the package surface. ``from groundfield import
+  SourceAdapter`` now works and the symbol is listed in
+  ``groundfield.__all__``.
+- **`diagnostics.MIN_THINWIRE_RATIO`, `SOFT_LIMIT`, `HARD_LIMIT`**
+  are now public module-level constants. The previous
+  ``_MIN_THINWIRE_RATIO`` / ``_BUDGET_WARN_THRESHOLD`` /
+  ``_BUDGET_HARD_THRESHOLD`` private aliases remain as
+  backwards-compatible shadows. Tests, notebooks and external
+  callers gain a stable handle ahead of the planned
+  ``coarse_segments`` opt-in.
+- **`scripts/release.py` rejects a hard-coded version in
+  `CLAUDE.md`.** The Pass-4 "do not hard-code" convention is now
+  *enforced*: a new
+  ``_check_claude_md_no_hardcoded_version`` scans the file at
+  release time, ignoring fenced code blocks and the explanatory
+  reminder paragraph, and raises a clear ``RuntimeError`` if a
+  ``__version__ = "X.Y.Z"`` (or ``version = "X.Y.Z"``) literal is
+  pasted into the project context document. ``main()`` runs the
+  check before any files are touched, so a contributor who needs
+  to fix the literal does so on a clean working tree.
+
+### Tests (Audit pass 5 — implemented 2026-05-13)
+
+- ``tests/test_audit_pass5_fixes.py`` — 16 regression tests,
+  one (or more) per bullet above:
+  ``VectorFitUnderdeterminedWarning`` raised / not raised,
+  ``EngineFrequencyOrderWarning`` category + once-filter
+  deduplication, ``LayeredEarth`` FP64 cross-check,
+  ``evaluate_spec`` on bad / empty / unknown-symbol / good specs,
+  ``TnNetworkConfig.source_kind`` typo rejection + voltage happy
+  path, ``World.solve`` source-mutation guard,
+  ``gf.SourceAdapter`` top-level import + ``__all__`` presence,
+  ``diagnostics`` public-constant identity + backwards-compatible
+  private aliases, ``scripts.release._check_claude_md_no_hardcoded_version``
+  bad-literal rejection + fenced-block exemption.
+
+### Docs (Audit pass 5 — implemented 2026-05-13)
+
+- ``notebooks/31_audit_pass5_fixes.ipynb`` — narrative walk-through
+  of every behaviour change captured in this block. Cell-per-fix
+  layout matches the Pass-4 notebook so the closure pattern stays
+  consistent.
+- ``src/groundfield/coupling/sommerfeld_inductance.py`` —
+  ``LayeredEarth`` docstring extended with the FP64 precision
+  contract.
 
 ---
 
@@ -1991,6 +2196,426 @@ the appropriate Roadmap section in the next planning cycle.
   rendering.** Switch to `pcolormesh` so the rendered cell
   widths match the actual log-spaced axis (bug 10). Stand-alone
   visual fix, no API impact.
+
+### Fixed (pending implementation) — fourth 2026-05-12 review pass
+
+> Focus of the fourth pass: discriminated-union annotation on the
+> `Source` re-export, boundary-condition warning semantics on
+> *reverts* to the default, missing top-level re-exports vs. the
+> sister project's flat `gi.*` surface, mkdocs notebook nav gap.
+
+- **`groundfield.sources.Source = Union[CurrentSource,
+  VoltageSource]`** lacks Pydantic's `Discriminator("kind")`
+  annotation. Pydantic falls back to attempting validation against
+  each member in declaration order during JSON deserialisation; a
+  malformed payload with `kind="voltage"` but missing `magnitude`
+  silently falls through to `CurrentSource` and is rejected there
+  with a `magnitude` error pointing at the wrong class. Mark the
+  union as
+  `Annotated[Union[CurrentSource, VoltageSource],
+  Discriminator("kind")]` so the error message matches the
+  declared `kind`.
+- **`World.set_boundary_conditions(...)` warns only on *non-
+  default kwargs***. A user who first set
+  `set_boundary_conditions(far_field="neumann")` and *then* calls
+  `set_boundary_conditions(far_field="dirichlet")` to revert sees
+  no warning, even though the latter call silently re-arms the
+  v0.2.0 default. Either also warn on every transition that
+  flips a previously non-default field back to its default
+  (because the previous non-default state was never actually
+  consumed) or document the asymmetry.
+- **`World.add_source(source)` does not validate `attached_to` or
+  `return_to` against the world's electrodes/conductors.** A
+  typo `attached_to="g_1"` on a world with electrode `"g1"` is
+  accepted; the bug surfaces at solve time as a zero-injection
+  result with no diagnostic. Already flagged in pass 3 — pass 4
+  confirms the path is still unguarded.
+- **`io.groundinsight.evaluate_spec`,
+  `io.groundinsight.fit_quality_summary` and
+  `coupling.LayeredEarth` are publicly importable but missing
+  from `groundfield.__all__`** (`__init__.py`). Users who write
+  `gf.evaluate_spec(...)` get an `AttributeError`; consistency
+  with the `gi.*` flat surface (which re-exports analogous
+  helpers) is broken. Promote all three to top-level re-exports.
+- **`solver.engine.Engine.frequencies` is silently sorted on
+  validation**, but the public docstring does not mention the
+  reorder. Notebooks that pass `frequencies=[5000, 50]` because
+  they want the dominant 5 kHz tone first in the result get a
+  silently-reordered result array — a real surprise when joining
+  against an external DataFrame indexed by the *input* order.
+  Either preserve order on construction or document the reorder.
+- **`generators.measurement.MeasurementSetupConfig.build` sets
+  `source.return_to` to the auxiliary anchor**, but does not
+  guard against a `TnNetworkConfig.source` whose `return_to` was
+  already explicitly set by the user (e.g. for a multi-source
+  AP 1 study with two parallel measurements). The user-supplied
+  `return_to` is silently overwritten. Either copy-on-write the
+  source spec inside the generator (already on the pass 1
+  backlog as a deep-copy hint) or raise a clear error.
+- **`postprocess.vector_fitting.vector_fit` accepts
+  `n_poles=0`** and returns a constant-only fit, but
+  `fit_to_sympy` then produces an expression with no `s`
+  dependence — the matching `groundinsight.BusType` is degenerate
+  (Z(rho, f) = const, ignoring rho and f). Validate `n_poles >=
+  1` at function entry or document the degenerate case
+  explicitly.
+- **`io.csv.save_potential_path_csv` writes
+  `abs_phi = |phi_re + 1j*phi_im|`** under the column
+  `abs_phi`, but the corresponding
+  `save_cluster_impedances_csv` and `save_electrode_table_csv`
+  use the suffix `_abs` (`abs_Z`, not `Z_abs`). Pick one
+  convention and apply it across `io.csv` so DataFrames
+  produced by the three writers can be joined on a uniform
+  column-naming scheme.
+- **`mkdocs.yml:90` still references
+  `https://polyfill.io/v3/polyfill.min.js?features=es6`** —
+  fourth audit pass in a row that flags it. `groundmeas`
+  already removed the URL; do the same here and in
+  `groundinsight`.
+- **`mkdocs.yml` nav lists the eight curated `examples/`
+  pages but not the 29 raw notebooks (`notebooks/01..29`).**
+  Mirror the same gap reported for `groundinsight`: the
+  feature work in `notebooks/22_tier0_speedup.ipynb`,
+  `notebooks/23_safety_touch_step.ipynb`,
+  `notebooks/29_io_csv_vtk.ipynb` etc. is invisible to the
+  docs-site reader unless they go to the GitHub tree.
+- **`generators/__init__.py` does not re-export the
+  `single_rod_grounding(rng=...)` factory's `rng` argument
+  contract** through a short doctest. The factory's RNG
+  default is `None` (no jitter), but the only example in the
+  docs (`docs/api/generators.md`) shows the deterministic
+  call — the stochastic Monte-Carlo path is not advertised
+  even though the rest of the generator framework's pass-3
+  bug list lists `rng` as a missing parameter.
+
+### Docs (pending implementation) — fourth 2026-05-12 review pass
+
+- **`docs/api/sources.md` still missing** (third audit pass in a
+  row). The pass-3 entry remains in the backlog above; pass 4
+  confirms the file has not been created. Without the page,
+  the discriminated-union fix above has no natural home for
+  its migration callout.
+- **`docs/api/boundary.md` still missing** (third audit pass in
+  a row). Pass 4 confirms the gap; `BoundaryConditions` and
+  the v0.2.0 no-op contract live only in source docstrings.
+- **`docs/api/references.md`, `docs/api/validation.md`,
+  `docs/api/world.md`** are all still missing — pass 4
+  confirms three consecutive audits have flagged them.
+- **`docs/concepts.md` has no "Engine vs. World separation"
+  section** describing why `engine.solve(world)` and
+  `world.solve(engine)` are duals, why `Engine` carries
+  `frequencies` while `World` carries `boundary`, and how the
+  v0.2.0 `BoundaryConditions` no-op interacts with the
+  upcoming FEM backend. The split is a deliberate part of the
+  architecture but the only place it is documented is the
+  `World.solve` source docstring.
+- **`docs/api/diagnostics.md` does not document the
+  `check_segment_resolution`-budget threshold rationale.** The
+  thresholds (5 000 soft, 20 000 hard) appear in the source
+  code and in this changelog but the rendered doc page lists
+  them as bare numbers. Add a short "Why 5 000?" subsection
+  that ties them to the $O(N^2)$ memory / $O(N^3)$ solve
+  scaling of the integral backends.
+- **`docs/engines/index.md` has no capability matrix.** The
+  pass-2 entry already noted the gap; pass 4 confirms it. The
+  matrix is the natural home for the
+  `inductance_model` / `earth_inductive_model` / distributed-
+  conductor support tabulation referenced in the Roadmap.
+- **`README` Python-version badge is still
+  `3.12 | 3.13`.** Pass 4 confirms the gap from pass 2.
+- **`CLAUDE.md` version drift is still `0.1.0`** while the
+  package ships `0.4.0`. Pass 4 confirms the gap; the
+  `scripts/release.py` hook flagged in pass 2 has not
+  landed.
+- **No `docs/api/coupling/sommerfeld.md`** dedicated
+  page. The Sommerfeld earth-return module (`coupling/
+  sommerfeld_inductance.py`) contains six public helpers and
+  the Pollaczek-Wait kernel; users reading
+  `docs/api/coupling.md` find the heading but not the kernel
+  signature.
+- **`docs/api/postprocess.md` lacks a "Safety helpers"
+  subsection** distinct from "Current sharing" and "Plotting"
+  — the EN 50522 lookup helper is the most safety-critical
+  function in the package and currently shows up only via
+  the autodoc.
+
+### Tests (pending implementation) — fourth 2026-05-12 review pass
+
+- **No test that `Source` JSON round-trip preserves the
+  discriminator-vs-non-discriminator union behaviour.** Once
+  the `Discriminator("kind")` annotation lands, pin the
+  resulting error message for a malformed payload so the bug
+  cannot regress silently.
+- **No test that `World.set_boundary_conditions(...)` warns on
+  the *revert-to-default* path** flagged above. Asserting
+  `pytest.warns(UserWarning, match="default")` on the second
+  call locks in whatever semantics the team picks.
+- **No test that `vector_fit(n_poles=0)` is rejected.** A
+  one-line `pytest.raises(ValueError)` regression once the
+  guard lands.
+- **No test for the `evaluate_spec` / `fit_quality_summary`
+  re-export.** Once the helpers are promoted to the top-level
+  `__all__`, assert that `gf.evaluate_spec is
+  groundfield.io.groundinsight.evaluate_spec` so a future
+  silent rename cannot break the public alias.
+- **No test for the `Engine.frequencies` sort behaviour.**
+  Pass `frequencies=[5000, 50]`, call `engine.solve(world)`,
+  and assert either (a) the returned cluster impedance is
+  indexed in the input order or (b) a `UserWarning` was
+  raised at construction time. Either way the user gets
+  determinism.
+- **No regression test on `MeasurementSetupConfig.build`
+  for a pre-set `source.return_to`.** Build a
+  `TnNetworkConfig` whose source already has
+  `return_to="explicit_aux"`, run the generator with a
+  `MeasurementSetupConfig`, and assert either that the
+  user-supplied value is honoured or that the override is
+  reported via a clear log entry.
+
+### Roadmap candidates — fourth 2026-05-12 review pass
+
+- **`gf.create_source(world, ..., validate_attached_to=True)`
+  switch** — opt-in (default `True` from the next minor release,
+  default `False` until then) for the validation contract
+  flagged repeatedly in passes 1–4. Gives the existing test
+  suite a deprecation window before the validator becomes
+  mandatory.
+- **`gf.SourceUnion` with `Discriminator("kind")`** — public
+  type alias that ships the discriminated annotation alongside
+  the legacy `Source = Union[...]`. Lets type checkers in
+  downstream notebooks pick up the fix without a major-version
+  bump.
+- **`generators.tn_network.TnNetworkConfig.measurement_array(
+  ...)`** — convenience accessor that returns a per-house
+  measurement-setup catalog (Analysis 1 only, Analysis 2 only,
+  both) so the AP 1 sweep over `n_efh ∈ {5, 10, 30, 80, 200}`
+  can be expressed as a single sweep axis rather than three
+  nested ones.
+- **`solver.engine.Engine.with_frequencies(freqs,
+  preserve_order=True)`** — copy-on-write factory that
+  produces a new engine without the silent sort surprise above.
+  Closes the order-preservation gap until the validator change
+  lands.
+- **`scripts/release.py` — sync `CLAUDE.md` version from
+  `pyproject.toml`** — same hook every pass-1..4 of the cross-
+  repo audit has requested. A six-line `re.sub` in
+  `scripts/release.py` ends the drift permanently.
+- **`io.csv.save_field_csv(result, path, *, extent, z=0.0,
+  n=(120, 120), frequency_index=0)`** — companion to the
+  existing VTK exporter that writes a long-format
+  `(x, y, frequency_Hz, phi_re, phi_im, abs_phi)` CSV. Closes
+  the symmetry gap: today CSV exports cover paths and
+  electrode tables, VTK covers fields; the slice export is
+  available only as VTK.
+
+### Fixed (pending implementation) — fifth 2026-05-13 review pass
+
+> Focus of the fifth pass: residual cleanup after the Pass-4
+> implementation block landed in `[Unreleased]`; freshly noticed
+> bugs around `Engine.frequencies` validator wording, the still-
+> unrealised top-level API documentation pages, doc/notebook
+> coverage on the mkdocs site, and a handful of new findings in
+> the cross-coupling and io packages that earlier passes had not
+> reached.
+
+- **`postprocess.vector_fitting.vector_fit(n_poles=1)`** is
+  accepted even when the input has only one or two frequencies.
+  A 1-pole fit on two complex points has 4 unknowns (real /
+  imaginary residue + pole real / imag), which is exactly the
+  number of equations after the real-imag stacking, so the
+  fit *can* succeed numerically but is meaningless. Reject
+  ``n_poles >= len(frequencies)`` or emit a `UserWarning` when
+  the problem is under- / exactly-determined.
+- **`solver.engine.Engine._validate_frequencies` warns on
+  every duplicate.** A sweep over ten engines, all built from
+  the same `frequencies=[5000, 50]` "intentionally
+  decreasing" list, emits the same warning ten times — the
+  `warnings.simplefilter("once")` default deduplicates by
+  *message text*, but the message embeds the list literal so
+  every distinct list triggers a fresh warning. Switch to a
+  dedicated `class EngineFrequencyOrderWarning(UserWarning)`
+  with a stable message prefix so notebook users can silence
+  the lot with `warnings.simplefilter("once",
+  EngineFrequencyOrderWarning)`.
+- **`coupling.layered_green.LayeredEarth.compute_T_lambda`
+  is silently single-precision on the MLX backend** (`backend=
+  "mlx"`). The MLX `mx.array(np.asarray(..., dtype=np.float32))`
+  conversion drops to FP32 while the NumPy path stays in FP64.
+  A reference run with the two backends therefore differs in
+  the 5th decimal — the Pass-3 cross-coupling cross-check did
+  not catch this because the test tolerance is `1e-4`. Either
+  default to FP64 (`mx.float64`) or document the backend
+  precision contract.
+- **`io.groundinsight.evaluate_spec` raises
+  `KeyError`** when the supplied spec dict is missing the
+  ``Z_target`` key. The error originates inside a deep dict-
+  lookup chain and the trace is hard to read for a user
+  passing a hand-rolled spec. Wrap the entry point with an
+  explicit `ValidationError` raise that names the missing key.
+- **`generators.tn_network.TnNetworkConfig.build`** does not
+  validate that `cfg.measurement.source_kind` is one of the
+  supported strings (`"current"` / `"voltage"`). A typo
+  (`"voltage_"`) silently falls through to the default
+  `CurrentSource` factory; the user sees a result that looks
+  correct until they inspect the source's `kind` field.
+- **`world.World.solve(engine)` does not deep-copy
+  `self.sources`** before passing them to the backend. A
+  backend that internally mutates `source.return_to` (the
+  Pass-4 finding on `MeasurementSetupConfig.build` is the
+  textbook example) silently rewrites the world's sources
+  for any later solve. Either copy in `World.solve` or
+  document the contract.
+- **`diagnostics.check_segment_resolution` thresholds are
+  hard-coded** to `5_000` / `20_000` without a public
+  constant. Once the integral backends gain a
+  `coarse_segments` opt-in (Pass-3 finding), the thresholds
+  will move; promote them to module-level `SOFT_LIMIT` /
+  `HARD_LIMIT` constants so tests and notebooks have a
+  stable handle.
+- **`mkdocs.yml` Examples nav still lists only 8 curated
+  pages** while `notebooks/` now carries 30 .ipynb files
+  (Pass-4 audit-fix notebook brought the total over the
+  previous 29). Pass-2/3/4 finding still only partially
+  addressed — closing it requires the same
+  `mkdocs-jupyter` migration that `groundinsight` is doing.
+- **`__init__.__all__` does not list `SourceAdapter`**, the
+  `TypeAdapter[Source]` introduced in the Pass-4
+  implementation block. Users who follow the docstring of the
+  discriminated union and try `from groundfield import
+  SourceAdapter` get an `ImportError`.
+- **`scripts/release.py` still does not propagate the
+  Pass-4 "do-not-hard-code" CLAUDE.md pattern**. The pattern
+  is documented but not enforced: a contributor who refreshes
+  the CLAUDE.md version line manually still drifts. A
+  `re.search(r"__version__ = \"[^\"]+\"", claude_md)` raise on
+  bump completes the Pass-4 closure.
+
+### Docs (pending implementation) — fifth 2026-05-13 review pass
+
+- **`docs/api/sources.md`, `boundary.md`, `references.md`,
+  `validation.md`, `world.md`** — fifth audit pass in a row
+  confirms these pages are still missing. The Pass-4
+  implementation block landed `Source` (discriminator),
+  `Engine` (order-preserving frequencies),
+  `TnNetworkConfig.source_return_to` and the boundary-revert
+  warning *all without their target documentation page*. Each
+  fix therefore has no natural home for its migration
+  callout. The doc pages are the longest-standing single open
+  item across the audit history.
+- **`docs/api/index.md`** does not surface `SourceAdapter` or
+  the `Discriminator("kind")` migration callout. A reader who
+  searches the API index for "discriminator" finds nothing.
+- **`docs/concepts.md`** still lacks the "Engine vs. World
+  separation" section flagged in Pass 4. Pass 5 confirms:
+  the only place the split is documented is the
+  `World.solve` source docstring.
+- **`docs/engines/index.md`** capability matrix still missing
+  (Pass-2 → Pass-5 carryover). The matrix is the natural
+  home for the new
+  `earth_inductive_model={perfect_mirror, carson_series,
+  sommerfeld}` toggle and for the `inductance_model` choice.
+- **`docs/api/postprocess.md`** still missing the dedicated
+  "Vector fitting and safety helpers" subsection (Pass-4
+  finding). The new `n_poles=0` rejection callout has no
+  doc home.
+- **`docs/api/io.md` does not document the new
+  `POTENTIAL_PATH_COLUMNS`, `ELECTRODE_TABLE_REQUIRED_COLUMNS`,
+  `CLUSTER_IMPEDANCE_REQUIRED_COLUMNS`** column tuples
+  exported in the Pass-4 implementation block. Users who want
+  to join the CSV outputs back into a pandas frame have to
+  read the source to find the canonical column names.
+- **README "Compatibility" matrix** has not been updated for
+  the `0.5.0` release cut implied by the Pass-4 fixes block.
+  Bumps `Python`, `numpy`, `scipy`, `pydantic`, `sympy`
+  minimums. Sync with `pyproject.toml` before the next tag.
+- **`docs/quickstart.md` does not call
+  `Engine.with_frequencies(*freqs, preserve_order=True)`** in
+  any example, even though that constructor is the documented
+  escape hatch for the new order-preserving validator. Add a
+  three-line snippet so the new opt-in lands with discoverable
+  prose.
+- **`CLAUDE.md`** now defers the version field to
+  `pyproject.toml` (Pass-4 doc fix), but the "Audit history"
+  section near the top of the file still lists pass 1-4
+  only. Append a pass-5 reference so the next session has the
+  same starting context the previous ones did.
+
+### Tests (pending implementation) — fifth 2026-05-13 review pass
+
+- **No test for the new `EngineFrequencyOrderWarning`
+  category.** Once the dedicated subclass lands (Fixed-
+  backlog fifth-pass entry above), assert that
+  `warnings.simplefilter("once",
+  EngineFrequencyOrderWarning)` suppresses the same warning
+  on a second construction.
+- **No regression test for `vector_fit(n_poles=1)` on a
+  two-frequency input.** Build a fixture with
+  `frequencies=[50.0, 5000.0]` and
+  `Z_values=[…]` and assert that the helper either rejects
+  the call or warns about the under-determined fit.
+- **No regression test for the MLX backend FP32 default.**
+  Cross-validate `LayeredEarth.compute_T_lambda` with NumPy
+  and MLX on the same input and assert a `rtol=1e-12`
+  agreement, or — if the FP32 default is intentional —
+  document and pin it with a relaxed tolerance.
+- **No regression test for `World.solve` source mutation.**
+  Build a world, run `solve(engine)`, and assert that
+  `world.sources[i].return_to` is unchanged from the
+  pre-solve state.
+- **No regression test for `from groundfield import
+  SourceAdapter`.** Either lock the import or remove the
+  symbol from the public surface.
+- **No regression test for `evaluate_spec` raising
+  `ValidationError` (not `KeyError`) on a missing
+  `Z_target` key.** Locks in the human-readable error
+  message once the fix lands.
+- **No regression test for `mkdocs build`** — the rendered
+  site is built on the docs server and never checked in CI.
+  Add a `tests/test_docs.py::test_mkdocs_strict_build` that
+  runs `mkdocs build --strict` so the missing-page warnings
+  surface during PR review.
+- **No regression test for the
+  `TnNetworkConfig.build(source_kind=...)` typo path.** Build
+  a config with `source_kind="voltage_"` (trailing
+  underscore) and assert a clear `ValueError`.
+
+### Roadmap candidates — fifth 2026-05-13 review pass
+
+- **`gf.show_versions()`** — print the installed
+  `groundfield` / `groundinsight` / `groundmeas` / NumPy /
+  SciPy / Pydantic / SymPy / MLX versions. Cross-package
+  compatibility is currently maintained by hand; surfacing
+  the active versions in one call removes the back-and-forth
+  on every issue triage.
+- **`gf.io.bench(world, engine, *, repeats=5)`** — pin the
+  per-backend wall-clock numbers reported in
+  `docs/performance.md`. Today the doc page lists static
+  tables; a `bench` helper would let the docs site
+  auto-refresh them on a release cut.
+- **`gf.audit_apply(audit_report_path: str)`** — read an
+  audit-report markdown file, parse the
+  `audit-report-changelogs-YYYY-MM-DD[-pass*].md` checklist
+  and emit a delta against the current `[Unreleased]` block.
+  Six months of audit history have produced a recurring
+  workflow; promote it into a maintainer-facing CLI.
+- **`gf.docs.assert_api_pages_exist()`** — pytest-friendly
+  helper that loads `mkdocs.yml`, walks the API section, and
+  asserts every page named in this changelog actually exists.
+  Closes the four-passes-in-a-row "page missing" finding by
+  failing the build instead of waiting for a human to flag
+  it.
+- **`gf.SourceAdapter` exposed at the top level** —
+  pair with the `Source` discriminated union from Pass-4.
+  Users hand-rolling source dicts (e.g. from a YAML
+  campaign config) need the adapter to validate the dict;
+  today they have to know the `from groundfield.sources
+  import SourceAdapter` path.
+- **`gf.boundary.FemBoundaryConditions`** — placeholder
+  subclass to make the future FEM-backend boundary semantics
+  visible *now*, even before the backend lands. Closes the
+  "v0.2.0 no-op" doc gap from a different angle: the type
+  hierarchy itself documents what the upcoming FEM backend
+  will and won't honour.
 
 ## Roadmap
 

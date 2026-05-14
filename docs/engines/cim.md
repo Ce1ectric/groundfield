@@ -102,7 +102,7 @@ with bounds expressed as multiples of $1 / h_{\min}$:
 
 This is a single-segment fit. Dan et al. 2021 propose a
 *segmented-sampling* variant in which the $\lambda$-axis is split
-into pieces and a separate fit is run on each. For the AP1
+into pieces and a separate fit is run on each. For the typical
 contrast and layer-count range a single-segment fit with $P = 8$
 is sufficient (sub-percent residual); the segmented variant becomes
 attractive when $n \gtrsim 5$ or contrasts are extreme.
@@ -148,7 +148,7 @@ same multi-port system as in [`image`](image.md).
 ## Convergence and cost
 
 - **Fit accuracy.** With $P = 8$ on a 64-sample grid, the
-  $\Gamma_1$ residual stays below $10^{-3}$ for AP1 contrasts. The
+  $\Gamma_1$ residual stays below $10^{-3}$ for typical contrasts. The
   cluster-impedance error in the final result is typically smaller
   than the fit residual by an order of magnitude (the spatial
   integration averages out the spectral residual).

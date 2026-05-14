@@ -1,7 +1,7 @@
-# Example 04 — AP1 Analysis 1: galvanic grounding measurement
+# Example 04 — Galvanic grounding measurement (fall-of-potential)
 
-This is the **fall-of-potential** measurement of the AP1 work
-package, **without** modelling the metallic measurement leads —
+This is the textbook **fall-of-potential** measurement,
+**without** modelling the metallic measurement leads —
 i.e. only the galvanic (DC-like) effects. We add an **auxiliary
 current electrode** (Hilfserder) that closes the current loop and
 a **voltage probe** (Spannungssonde) where we read off the
@@ -52,7 +52,7 @@ def make_cfg(probe_x: float) -> TnNetworkConfig:
         measurement=MeasurementSetupConfig(
             injection=MeasurementInjectionConfig(
                 position_xy=(200.0, 0.0),     # Hilfserder
-                # No metallic feed_lead — galvanic only (Analysis 1).
+                # No metallic feed_lead — galvanic only.
             ),
             probe=MeasurementProbeConfig(
                 position_xy=(probe_x, 0.0),    # Spannungssonde
@@ -110,7 +110,7 @@ ax.set_xlabel("probe distance from substation in m")
 ax.set_ylabel("apparent grounding impedance in Ω")
 ax.grid(True, alpha=0.3)
 ax.legend()
-ax.set_title("AP1 Analysis 1 — fall-of-potential curve, aux at 200 m")
+ax.set_title("Fall-of-potential curve, aux at 200 m")
 fig.tight_layout()
 plt.show()
 
@@ -157,8 +157,7 @@ error = +0.10 %
   through the aux instead of through remote earth.
 * **`feed_lead=None` and `lead=None`** mean *no metallic
   measurement leads*. The current path is purely through the
-  soil, which is the textbook **galvanic** measurement (AP1
-  Analysis 1).
+  soil, which is the textbook **galvanic** measurement.
 * The measured "apparent impedance" is computed as the potential
   difference between the substation anchor and the probe anchor,
   divided by the source current — exactly what the measurement

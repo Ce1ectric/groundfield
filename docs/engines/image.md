@@ -14,7 +14,7 @@ For frequencies $f < 1\,\text{kHz}$ the displacement-current term
 is negligible — the relaxation time of moist soil
 ($\tau = \varepsilon/\sigma$) is on the order of 100 ns, well below
 the millisecond regime. The static potential field is therefore
-representative of the entire AP1 frequency window.
+representative of the entire quasi-static frequency window.
 
 ## Governing equation: image-charge solution
 
@@ -121,7 +121,7 @@ wrapper around this evaluation.
   $< 1\,\%$ at sub-centimetre segment lengths and short rods.
 - **Computational cost.** $O(N^2)$ matrix build for the cluster
   reaction matrix; $O(K^3)$ for the constraint solve, where $K$ is
-  the cluster count (typically 1–3). For AP1 geometries with
+  the cluster count (typically 1–3). For typical geometries with
   $N \le 10^3$, the homogeneous engine completes in milliseconds.
 - **Numerical singularity.** Distances below `_MIN_DISTANCE = 1 mm`
   are clamped at the floor to keep the kernel finite during plot

@@ -6,8 +6,8 @@ v1; further strategies (random scatter with Poisson-disk sampling,
 sub-cluster placement, OSM ingest) are deferred to follow-up
 generators.
 
-* :class:`ManhattanGridPlacement` — regular street-raster layout
-  used by AP1: ``n_per_row`` columns, $\\lceil n / n_\\text{per\\_row}
+* :class:`ManhattanGridPlacement` — regular street-raster layout:
+  ``n_per_row`` columns, $\\lceil n / n_\\text{per\\_row}
   \\rceil$ rows centred on a configurable point. Optional
   ``jitter_m`` adds a uniform offset per site so the grid is not
   pixel-perfect.

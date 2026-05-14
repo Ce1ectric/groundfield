@@ -24,7 +24,7 @@ once:
 
 Validity envelope
 -----------------
-* Frequency: dissertation envelope :math:`f \\le 1\\,\\mathrm{kHz}`.
+* Frequency: quasi-static envelope :math:`f \\le 1\\,\\mathrm{kHz}`.
 * Backends: any image-family solver (image / image_2layer /
   image_nlayer / mom / mom_sommerfeld / cim / bem). FEM is
   supported but its mesh is generated independently — the

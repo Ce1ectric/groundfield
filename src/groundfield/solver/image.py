@@ -695,7 +695,7 @@ def _build_distributed_topology(
         if not getattr(c, "is_distributed", False):
             continue
         if c.start_electrode is None or c.end_electrode is None:
-            # Floating endpoints — defer until the AP1 measurement-lead
+            # Floating endpoints — defer until the measurement-lead
             # work; for now the discretiser would still work, but the
             # solver needs an extra cluster row, which we leave out
             # of the first distributed-conductor release.

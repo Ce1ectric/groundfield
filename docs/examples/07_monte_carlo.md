@@ -1,6 +1,6 @@
 # Example 07 — Monte-Carlo sweep with `joblib`
 
-The full AP1 study has thousands of configurations. The
+A full study easily has thousands of configurations. The
 deterministic sweep of example 06 is fine for a few dozen
 solves; for thousands you want **parallel execution** and
 **stochastic distributions** on the parameters that you don't
@@ -22,11 +22,11 @@ substation impedance.
 ## Code
 
 ```python
-"""ap1_monte_carlo.py — runnable as a script.
+"""monte_carlo_sweep.py — runnable as a script.
 
    Usage:
-       python ap1_monte_carlo.py
-   It writes ap1_mc.parquet next to the script.
+       python monte_carlo_sweep.py
+   It writes monte_carlo.parquet next to the script.
 """
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def make_cfg(rho_1: float, n_efh: int) -> TnNetworkConfig:
             rho_2=LogNormal.from_moments(mean=50.0, std=15.0),
             h_1=Discrete(values=[5.0, 10.0, 30.0]),
         ),
-        pen=PenConfig(inductance_model=None),  # AP1 production default
+        pen=PenConfig(inductance_model=None),  # default
     )
 
 
@@ -121,7 +121,7 @@ def solve_one(rho_1: float, n_efh: int, seed: int) -> dict:
 
 
 RHO_1_GRID = [30.0, 100.0, 200.0, 500.0, 1000.0]
-N_EFH_GRID = [10, 30]            # extend to [5, 10, 30, 80, 200] for full AP1
+N_EFH_GRID = [10, 30]            # extend to [5, 10, 30, 80, 200] for a full study
 N_REALISATIONS = 30               # K — try 10 first to confirm timing
 
 jobs = [
@@ -158,8 +158,8 @@ t_total = time.perf_counter() - t0
 print(f"Total wall-clock: {t_total/60:.1f} min")
 
 df = pd.DataFrame(results)
-df.to_parquet("ap1_mc.parquet")
-print(f"Saved {len(df)} rows to ap1_mc.parquet")
+df.to_parquet("monte_carlo.parquet")
+print(f"Saved {len(df)} rows to monte_carlo.parquet")
 
 
 # ---------------------------------------------------------------------
@@ -167,7 +167,7 @@ print(f"Saved {len(df)} rows to ap1_mc.parquet")
 # ---------------------------------------------------------------------
 
 
-df = pd.read_parquet("ap1_mc.parquet")  # works as a re-entry point too
+df = pd.read_parquet("monte_carlo.parquet")  # works as a re-entry point too
 
 agg = (df.groupby(["rho_1", "n_efh"])["Z_abs"]
          .agg(["median", lambda s: s.quantile(0.25),
@@ -184,7 +184,7 @@ for n_efh, sub in agg.groupby("n_efh"):
 ax.set_xscale("log"); ax.set_yscale("log")
 ax.set_xlabel("ρ_1 / Ω·m"); ax.set_ylabel("|Z(50 Hz)| / Ω")
 ax.grid(True, which="both", alpha=0.3); ax.legend()
-ax.set_title(f"AP1 Monte Carlo — median and IQR ({N_REALISATIONS} draws each)")
+ax.set_title(f"Monte Carlo — median and IQR ({N_REALISATIONS} draws each)")
 fig.tight_layout()
 plt.show()
 ```
@@ -200,13 +200,13 @@ plt.show()
 * **The lower curve sits below the upper curve** — adding houses
   drops the cluster impedance via parallel grounding.
 
-## How to read this for the dissertation
+## How to read the IQR
 
 The IQR widths quantify the **uncertainty band** on the
 substation impedance for a given number of buildings and a given
 upper-layer resistivity, taking realistic ranges of
 $\rho_2$ and $h_1$ into account. That is exactly the band you
-need for the AP1 reduction-factor and reliability statements.
+need for reduction-factor and reliability statements.
 
 ## Tips and pitfalls
 
@@ -219,7 +219,7 @@ load the existing Parquet, find which `(rho_1, n_efh, seed)`
 triples are missing, and re-run only those:
 
 ```python
-df_done = pd.read_parquet("ap1_mc.parquet")
+df_done = pd.read_parquet("monte_carlo.parquet")
 done = set(df_done[["rho_1", "n_efh", "seed"]].itertuples(index=False, name=None))
 remaining = [job for job in jobs if job not in done]
 ```
@@ -251,13 +251,13 @@ wall-clocks.
 ## Try this next
 
 * Extend `N_EFH_GRID` to `[5, 10, 30, 80, 200]` and increase
-  `N_REALISATIONS` to 50. This is the AP1 production sweep.
+  `N_REALISATIONS` to 50. This is the default sweep.
   Plan for an overnight run on 12 cores for the first three
   cells; the 200-EFH cell is the multi-day case (see the
   [performance guide](../performance.md) for projections).
 * Combine the Monte Carlo with the measurement setup of
   example 05 — you'll then have a Monte-Carlo distribution of
   the *measurement error* under realistic measurement
-  conditions, which is the AP1 Analysis-2 deliverable.
+  conditions.
 * Continue with example 08 to see how the same pipeline feeds
   back into `groundinsight` for fault-current studies.

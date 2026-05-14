@@ -2,14 +2,14 @@
 
 ## Physical context
 
-The 2-layer model is the canonical AP1 soil description: a finite
+The 2-layer model is the canonical typical layered-soil description: a finite
 upper layer of thickness $h_1$ and resistivity $\rho_1$ over a
 semi-infinite lower layer of resistivity $\rho_2$. It is the
 simplest soil that captures the dominant first-order effect of
 heterogeneity — a frozen, weathered, or saturated surface layer
 above a different sub-stratum — without introducing the
-identification problem that more layers create. The Avacon /
-dissertation parameter sweep covers $\rho_1 \in [50, 1000]\,\Omega\, \text{m}$, $\rho_2 \in [10, 5000]\,\Omega\,\text{m}$, $h_1 \in [0.5, 5]\,\text{m}$.
+identification problem that more layers create. The  /
+research parameter sweep covers $\rho_1 \in [50, 1000]\,\Omega\, \text{m}$, $\rho_2 \in [10, 5000]\,\Omega\,\text{m}$, $h_1 \in [0.5, 5]\,\text{m}$.
 
 The single design degree of freedom that controls the layered
 behaviour is the **interface reflection coefficient**
@@ -139,7 +139,7 @@ positions $\pm 2 n h_1 \pm z_s$ are derived assuming the source is
   - $|K_1| = 0.9$ → 131 terms.
   - $|K_1| = 0.95$ → 270 terms (above the default `max_terms`).
 - **Per-segment cost.** $O(N^2 \cdot M)$ kernel evaluations with $M$
-  the truncated series length. For AP1 with $N \le 1000$ and
+  the truncated series length. For typical cases with $N \le 1000$ and
   $M \le 200$ the engine still runs in seconds.
 - **Reduction to homogeneous.** At $K_1 = 0$ the engine collapses
   to the homogeneous backend bit-exactly — the only series term

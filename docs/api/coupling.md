@@ -82,7 +82,7 @@ three numerical regimes:
   `backend="mom_sommerfeld"`, which uses the full Pollaczek
   kernel.
 - **Frequency** — derived for $\omega \ll 1 / \mu_0\sigma$; for
-  AP1 (sub-kHz, $\rho_\text{earth} \in [50, 5000]\,\Omega\,\mathrm{m}$)
+  typical (sub-kHz, $\rho_\text{earth} \in [50, 5000]\,\Omega\,\mathrm{m}$)
   the assumption is comfortably satisfied.
 - **Geometry** — Carson's derivation assumes parallel wires above
   a plane homogeneous half-space. Non-parallel segment pairs are
@@ -116,7 +116,7 @@ approximation** (Pollaczek/Wait kernel).
 
 | Problem class | Recommended option |
 |---|---|
-| AP1 dissertation work, layered earth, mixed wire lengths | `"sommerfeld"` |
+| Reference computations, layered earth, mixed wire lengths | `"sommerfeld"` |
 | Long parallel PEN over homogeneous earth, fast scoping | `"carson_series"` |
 | Pure DC studies, perfect-mirror reference | `"perfect_mirror"` |
 

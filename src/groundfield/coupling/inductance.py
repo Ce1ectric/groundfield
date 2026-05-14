@@ -91,7 +91,7 @@ def thin_wire_self_inductance(
         Wire radius $a$ in metres.
     include_internal
         ``True`` (default) — add the internal-field contribution
-        $\\mu_0 \\ell / (8\\pi)$. Appropriate for AP1's
+        $\\mu_0 \\ell / (8\\pi)$. Appropriate for the
         $f < 1\\,\\mathrm{kHz}$ regime with mostly uniform
         current distribution. Set ``False`` for the pure
         external-field thin-wire formula.
@@ -156,7 +156,7 @@ def parallel_segments_mutual(length: float, distance: float) -> float:
 
 # 16-point Gauss–Legendre nodes and weights on [-1, 1].
 #
-# Chosen empirically: across the AP1-relevant geometry range
+# Chosen empirically: across the relevant geometry range
 # (sub-segment lengths 0.5–5 m, segment-pair distances 0.1–10 m,
 # i.e. ℓ/d ≲ 10), 16-point Gauss–Legendre keeps the Neumann
 # integral within ≲ 0.05 % of the closed-form parallel-segments
@@ -192,7 +192,7 @@ def _parallel_filaments_mutual(
     constant perpendicular distance between the two parallel axes.
 
     Cheap, exact (no quadrature error), and the typical case in
-    AP1 — every PEN strand and every pair of consecutive
+    typical — every PEN strand and every pair of consecutive
     sub-segments along the same conductor falls into it.
     """
     da = p2_a - p1_a
@@ -255,12 +255,12 @@ def neumann_mutual(
     1. If the two segments are **parallel** (or anti-parallel) within
        ``parallel_tol``, the closed-form Grover expression in
        :func:`_parallel_filaments_mutual` is used — exact, no
-       quadrature error. This fast path covers the bulk of the AP1
+       quadrature error. This fast path covers the bulk of the typical
        inductance assembly (parallel PEN strands, consecutive
        sub-segments along the same conductor).
     2. Otherwise the Neumann double integral is evaluated by 16×16
        Gauss–Legendre quadrature. Empirically accurate to ≲ 0.05 %
-       across the AP1 geometry range; see ADR-0004 for the
+       across the typical geometry range; see ADR-0004 for the
        calibration data.
 
     The kernel $1/r$ is clamped at ``min_distance`` to suppress the
@@ -557,7 +557,7 @@ def build_inductance_matrix(
     Vectorised implementation per ADR-0010 Tier 0b. Reproduces
     :func:`_build_inductance_matrix_loop` bit-exactly to floating-
     point precision but evaluates the off-diagonal entries one row
-    at a time in batched NumPy calls — typical AP1 networks
+    at a time in batched NumPy calls — typical networks
     (~1000 segments) speed up by 1–2 orders of magnitude.
 
     Parameters
@@ -728,7 +728,7 @@ def build_carson_correction_matrix(
     In ``groundfield`` the $z$-axis points *into* the soil. A wire
     above ground has $z < 0$ and ``height = -z > 0``. A wire just
     below the surface has $z > 0$ and we use ``height = z`` as the
-    Sunde-equivalent depth (Carson's $h$). For the AP1 PEN cable at
+    Sunde-equivalent depth (Carson's $h$). For the PEN cable at
     $z = 0.6\\,\\mathrm{m}$ this produces the textbook
     "1 m below surface" Carson result.
 

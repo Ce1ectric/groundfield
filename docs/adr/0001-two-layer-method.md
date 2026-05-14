@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-04-30 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
@@ -14,16 +14,16 @@ and validated against Dwight 1936 (< 10 % deviation across rod, rod
 pair, ring electrode; a systematic 4–5 % from the midpoint
 point-source approximation, decreasing with finer `segment_length`).
 
-The next step is the **2-layer model**, which is central to **AP1**:
+The next step is the **2-layer model**, which is central to **typical**:
 a variable upper layer ($\rho_1$, $h_1$) over a semi-infinite lower
-layer ($\rho_2$). Parameter sweep as defined in the dissertation
+layer ($\rho_2$). Parameter sweep as defined in this software
 proposal.
 
 Project requirements:
 
 - **Frequency range** $f < 1\,\text{kHz}$ → quasi-static; a real
   Green's function suffices.
-- **Geometry coverage** at AP1 level: rod, ring, mesh / foundation
+- **Geometry coverage**: rod, ring, mesh / foundation
   electrode, horizontal connection conductor, auxiliary electrodes —
   i.e. everything the `image` backend already discretises.
 - **Self-validation must be possible**: engine A vs. engine B on the
@@ -79,7 +79,7 @@ recursive mirroring at the soil surface and the layer interface.
 
 - Closed form, **no** numerical quadrature error.
 - Implementation is a small extension of the existing kernel.
-- Practically free to evaluate during AP1 parameter sweeps.
+- Practically free to evaluate during typical parameter sweeps.
 
 **Cons:**
 
@@ -160,7 +160,7 @@ fit to exact Sommerfeld values.
 **Cons:**
 
 - Approximation character; fit quality varies with geometry.
-- Adds non-trivial complexity (Prony) without a clear win for AP1 —
+- Adds non-trivial complexity (Prony) without a clear win for typical cases —
   Tagg / Sunde is enough for two layers, and beyond two layers
   Sommerfeld is the more robust choice anyway.
 
@@ -183,7 +183,7 @@ networks.
 
 **Cons:**
 
-- Overkill for AP1; only justified once heterogeneity varies in space
+- Overkill for typical cases; only justified once heterogeneity varies in space
   in a way that layered models cannot capture.
 - The artificial truncation boundary introduces its own errors that
   are hard to separate from the actual model.
@@ -225,7 +225,7 @@ C and D would be additional engines that we may add later if needed
 
 - **Self-validation**: any world can be solved with both engines and
   compared automatically.
-- **AP1 parameter sweeps** run on the fast engine A; spot checks run
+- **typical parameter sweeps** run on the fast engine A; spot checks run
   on engine B as a safety verification.
 - **Frequency-dependent soil models** (Visacro, Alipio) can later be
   bolted onto the Sommerfeld engine directly.
@@ -241,7 +241,7 @@ C and D would be additional engines that we may add later if needed
 
 ### What we may revisit later
 
-- **Convergence limit of Tagg / Sunde** at $|K| \to 1$: should AP1
+- **Convergence limit of Tagg / Sunde** at $|K| \to 1$: should typical
   ever hit such soil contrasts and the series become unstable, we
   switch to Sommerfeld. The engine logic does this automatically
   (series-truncation control with fallback warning).

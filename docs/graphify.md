@@ -231,8 +231,7 @@ is independent of any single repository.
   current Anthropic pricing.
 - LaTeX and Beamer slides are **not** parsed by the bundled
   Tree-sitter grammars. Markdown ADRs in `docs/adr/` are picked
-  up; the LaTeX dissertation deck in
-  `~/Nextcloud/Forschung/Dissertation/arbeitsordner/` is not.
+  up; the LaTeX 
 - Jupyter notebooks (`.ipynb`) are JSON; their code cells are
   visible to the Python grammar via the JSON wrapper, but the
   Markdown narrative is treated as plain text.

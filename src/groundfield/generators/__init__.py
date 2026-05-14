@@ -1,9 +1,9 @@
-"""``World`` generators for AP1 (and future) reference networks.
+"""``World`` generators for reference networks.
 
 This subpackage hosts the **factory layer** that turns high-level
-parameter sets — for example the AP1 axes "5/10/30/80/200 EFH on a
-two-layer soil" — into a fully populated :class:`groundfield.World`
-that the solver can consume.
+parameter sets — for example "N single-family houses on a two-layer
+soil" — into a fully populated :class:`groundfield.World` that the
+solver can consume.
 
 The framework is organised in five composable spec layers:
 
@@ -26,7 +26,7 @@ The framework is organised in five composable spec layers:
 
 The first concrete generator,
 :class:`~groundfield.generators.tn_network.TnNetworkGenerator`,
-composes all of the above into an AP1-style TN low-voltage network.
+composes all of the above into a TN low-voltage network.
 
 See ``docs/adr/0009-world-generators.md`` for the design rationale
 and the validation programme.
@@ -118,7 +118,7 @@ __all__ = [
     "rod_circle",
     # Grounding system
     "GroundingSystemSpec",
-    # Measurement setup (AP1 Analysis 1 + 2)
+    # Measurement setup (the galvanic fall-of-potential analysis + 2)
     "MeasurementSetupConfig",
     "MeasurementInjectionConfig",
     "MeasurementProbeConfig",

@@ -104,9 +104,9 @@ The natural diagnostic for this block is the soil skin depth
 $\delta(\omega) = \sqrt{2/(\omega\mu_0\sigma_\text{earth})}
 \approx 503\sqrt{\rho_\text{earth}/f}\,\mathrm{m}$, exposed at every
 solved frequency through `FieldResult.metadata["penetration_depth"]`.
-For AP1 frequencies (≤ 1 kHz) and resistivities (50–5000 Ω·m) the
+For the quasi-static frequencies (≤ 1 kHz) and resistivities (50–5000 Ω·m) the
 skin depth ranges from ≈ 350 m to ≈ 35 km — comparable to or larger
-than typical TN-Ortsnetz distances, which is exactly why Carson
+than typical TN low-voltage distances, which is exactly why Carson
 matters.
 
 ## The `rho-f` model
@@ -125,12 +125,11 @@ collects the frequency-dependent reactive contributions. The
 coefficients are fitted against the field solution and end up as
 `BusType.impedance_formula` in `groundinsight`.
 
-## Work package 1
+## Typical questions
 
-`groundfield` is the primary tool for **work package 1**, which
-investigates TN distribution networks with substation, house
-connections, and cable cabinets in layered soil. The core questions
-are:
+`groundfield` is built around investigations of TN distribution
+networks with substation, house connections, and cable cabinets in
+layered soil. The core questions are:
 
 1. How strongly does a remote current injection influence the
    grounding-measurement result?
@@ -139,5 +138,5 @@ are:
 3. Can robust statements be derived for typical distribution-network
    configurations?
 
-These questions form the first building block of the dissertation;
-`groundfield` provides the required numerical basis.
+`groundfield` provides the numerical basis for answering these
+questions.

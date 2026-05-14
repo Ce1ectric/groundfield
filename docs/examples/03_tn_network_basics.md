@@ -1,6 +1,6 @@
 # Example 03 — TN-Ortsnetz generator basics
 
-The previous examples built worlds by hand. For AP1 you'll
+The previous examples built worlds by hand. For typical you'll
 typically have a substation, dozens of houses, several cable
 cabinets and a PEN backbone connecting all of them — that's
 where `TnNetworkGenerator` comes in. One config object, one
@@ -35,7 +35,7 @@ cfg = TnNetworkConfig(
         spacing_x_m=20.0, spacing_y_m=25.0, n_per_row=6,
     ),
     building_counts={"residential": 30},
-    # Two-layer soil — AP1 default
+    # Two-layer soil — default
     soil=TwoLayerSoilSpec(rho_1=100.0, rho_2=50.0, h_1=5.0),
 )
 
@@ -48,7 +48,7 @@ print(f"electrodes: {len(world.electrodes):3d}    "
       f"sources: {len(world.sources)}")
 
 # 3. Solve. Use ``image_2layer`` since the soil has two layers; pass
-#    ``segment_length=1.0`` for AP1-grade convergence (see performance
+#    ``segment_length=1.0`` for production-grade convergence (see performance
 #    guide).
 engine = gf.create_engine(
     backend="image_2layer",
@@ -77,7 +77,7 @@ plt.show()
 For the configuration above, the generator instantiated:
 
 * a substation at $(0, 0)$ with a ring earth electrode (radius
-  4 m) plus 4 driven rods bonded into it (the AP1 default
+  4 m) plus 4 driven rods bonded into it (the default
   substation grounding),
 * 30 foundation electrodes on the Manhattan grid, each a
   $10 \times 10$ m grid mesh ($n_x = n_y = 2$ — one
@@ -142,7 +142,7 @@ from groundfield.generators import (
 # Homogeneous (sanity baseline):
 cfg.soil = HomogeneousSoilSpec(resistivity=100.0)
 
-# AP1 default:
+# default:
 cfg.soil = TwoLayerSoilSpec(rho_1=100.0, rho_2=50.0, h_1=5.0)
 
 # Multi-layer (e.g. a measurement campaign with three identifiable

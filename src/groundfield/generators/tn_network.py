@@ -1,4 +1,4 @@
-"""TN low-voltage distribution network generator (AP1 reference cases).
+"""TN low-voltage distribution network generator (reference cases).
 
 The generator composes the four reusable spec layers
 (:mod:`~groundfield.generators.electrode_specs`,
@@ -6,9 +6,9 @@ The generator composes the four reusable spec layers
 :mod:`~groundfield.generators.placement`,
 :mod:`~groundfield.generators.soil_specs`) plus the
 per-:mod:`~groundfield.generators.building` type catalog into a
-fully populated :class:`groundfield.World` that matches the AP1
-work-package description in
-``999_projektmanagement/arbeitspakete/AP1_tn_ortsnetz.md``.
+fully populated :class:`groundfield.World` representing a typical
+TN low-voltage distribution network (substation, house connections,
+cable cabinets).
 
 Compared with the v1 prototype this generator now supports:
 
@@ -62,8 +62,8 @@ Geometric layout
 
 Validity envelope
 -----------------
-* Frequency: $f \\le 1\\,\\mathrm{kHz}$ (AP1 quasi-static).
-* Soil: any of the spec'd models. AP1 default is two-layer.
+* Frequency: $f \\le 1\\,\\mathrm{kHz}$ (quasi-static).
+* Soil: any of the spec'd models. default is two-layer.
 * Topology: radial-with-trunk via cable cabinets — the
   open-building-map / real-street layout is roadmap.
 """
@@ -71,7 +71,8 @@ Validity envelope
 from __future__ import annotations
 
 import math
-from typing import Optional, Union
+import warnings
+from typing import Literal, Optional, Union
 
 import numpy as np
 from pydantic import Field
@@ -142,7 +143,7 @@ def _to_int(value: Union[int, Distribution], rng: np.random.Generator) -> int:
 
 
 def _default_substation_grounding() -> GroundingSystemSpec:
-    """AP1 default substation grounding: ring + 4 rods on a 2 m circle."""
+    """default substation grounding: ring + 4 rods on a 2 m circle."""
     return GroundingSystemSpec(
         electrodes=[
             RingElectrodeSpec(radius_m=4.0, depth_m=0.6),
@@ -152,7 +153,7 @@ def _default_substation_grounding() -> GroundingSystemSpec:
 
 
 def _default_kvs_grounding() -> GroundingSystemSpec:
-    """AP1 default KVS grounding: a single 1.5 m driven rod."""
+    """default KVS grounding: a single 1.5 m driven rod."""
     return GroundingSystemSpec(
         electrodes=[
             RodElectrodeSpec(length_m=1.5, depth_m=0.0),
@@ -161,7 +162,7 @@ def _default_kvs_grounding() -> GroundingSystemSpec:
 
 
 def _default_building_placement() -> PlacementSpec:
-    """AP1 default building placement: Manhattan grid 25 × 30 m, 10 per row."""
+    """default building placement: Manhattan grid 25 × 30 m, 10 per row."""
     return ManhattanGridPlacement(
         spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=10,
         centre_xy=(0.0, 0.0),
@@ -350,13 +351,45 @@ class TnNetworkConfig(GeneratorConfig):
         default=None,
         description=(
             "Optional grounding-resistance measurement setup "
-            "(AP1 Analysis 1 + 2). When set, the generator adds "
+            "(the galvanic fall-of-potential analysis + 2). When set, the generator adds "
             "the auxiliary current electrode, the voltage probe, "
             "and (optionally) the metallic feed / probe leads, and "
             "re-routes the source's return path through the "
             "auxiliary electrode. ``None`` keeps the historic "
             "behaviour: source returns to remote earth, no probe "
             "or aux electrode."
+        ),
+    )
+
+    source_return_to: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional **explicit** override for the source's "
+            "``return_to`` electrode name. ``None`` (default) "
+            "preserves the historic behaviour: ``return_to`` is "
+            "derived automatically from :attr:`measurement` (the "
+            "auxiliary current electrode) or left as ``None`` for "
+            "remote-earth return. Setting this field takes "
+            "precedence over the measurement-setup auto-routing — "
+            ":meth:`TnNetworkGenerator.build` emits a "
+            ":class:`UserWarning` when both are set so the "
+            "precedence is explicit rather than silent (fourth "
+            "2026-05-12 audit pass)."
+        ),
+    )
+
+    source_kind: Literal["current", "voltage"] = Field(
+        default="current",
+        description=(
+            "Source type at the substation. Only ``\"current\"`` "
+            "(default) and ``\"voltage\"`` are accepted — typos like "
+            "``\"voltage_\"`` are rejected at validation time with a "
+            "Pydantic ``ValidationError`` rather than silently falling "
+            "through to the default ``CurrentSource`` factory (fifth "
+            "2026-05-13 audit pass). ``\"current\"`` is the right "
+            "choice for the typical fall-of-potential measurement and "
+            "for fault simulations; ``\"voltage\"`` is reserved for "
+            "the rare multi-port tests."
         ),
     )
 
@@ -367,7 +400,7 @@ class TnNetworkConfig(GeneratorConfig):
 
 
 class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
-    """Generator for AP1 TN low-voltage distribution network reference worlds.
+    """Generator for TN low-voltage distribution network reference worlds.
 
     See the module docstring for the full pipeline. In one
     sentence: build soil → build substation grounding → place
@@ -454,7 +487,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             world, cfg, substation_anchor, kvs_anchors, building_anchors,
         )
 
-        # --- Optional measurement setup (AP1 Analysis 1 + 2) ---
+        # --- Optional measurement setup (the galvanic fall-of-potential analysis + 2) ---
         # Materialise the auxiliary current electrode, the voltage
         # probe, and (optionally) the metallic feed / probe leads.
         # The resulting return-path anchor (or ``None`` if no
@@ -468,9 +501,35 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # --- Source ---
         # ``source_magnitude_A`` may be a Distribution; resolve lazily
         # like every other top-level numeric field.
+        #
+        # ``cfg.source_return_to`` is the explicit user-side override
+        # for the source's ``return_to``. If it is set together with a
+        # measurement setup, warn that the auto-routed aux anchor is
+        # being overridden — that override was silent before the
+        # fourth 2026-05-12 audit pass.
+        effective_return_to = return_anchor
+        if cfg.source_return_to is not None:
+            if (
+                return_anchor is not None
+                and cfg.source_return_to != return_anchor
+            ):
+                warnings.warn(
+                    "TnNetworkConfig.source_return_to="
+                    f"{cfg.source_return_to!r} takes precedence over "
+                    "the measurement-setup auxiliary electrode "
+                    f"({return_anchor!r}). The aux electrode and any "
+                    "metallic feed/probe leads remain in the world, "
+                    "but the source's return current is routed to "
+                    "the user-supplied electrode instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            effective_return_to = cfg.source_return_to
+
         create_source(
             world, attached_to=substation_anchor,
-            return_to=return_anchor,
+            return_to=effective_return_to,
+            kind=cfg.source_kind,
             magnitude=_to_float(cfg.source_magnitude_A, rng),
         )
 

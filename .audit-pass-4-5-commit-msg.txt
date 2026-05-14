@@ -1,0 +1,35 @@
+feat: audit passes 4 + 5 — closure block
+
+Implementation of both 2026-05-12/13 review passes captured in
+CHANGELOG.md [Unreleased]. 81 files, +2341/-469, 24 regression
+tests across two new files.
+
+Pass 4 (2026-05-12 audit)
+-------------------------
+- Source: Pydantic discriminated union + SourceAdapter
+- Engine.frequencies: order-preserving validator + UserWarning
+- TnNetworkConfig.source_return_to: explicit override
+- World.set_boundary_conditions: revert-also-warns
+- vector_fit(n_poles=0): reject at API boundary
+- top-level re-exports evaluate_spec / fit_quality_summary /
+  LayeredEarth
+- io.csv: frozen column-name tuples
+- mkdocs.yml: drop polyfill.io reference
+
+Pass 5 (2026-05-13 review)
+--------------------------
+- VectorFitUnderdeterminedWarning (category)
+- EngineFrequencyOrderWarning (category, once-filterable)
+- LayeredEarth: FP64 precision contract documented
+- evaluate_spec: ValueError surface on malformed specs
+- TnNetworkConfig.source_kind: Literal validation
+- World.solve: source-mutation guard
+- SourceAdapter: top-level re-export
+- diagnostics: public MIN_THINWIRE_RATIO / SOFT_LIMIT /
+  HARD_LIMIT constants
+- scripts/release.py: enforce no-hardcoded-version in CLAUDE.md
+
+Tests: tests/test_audit_pass4_fixes.py (8),
+tests/test_audit_pass5_fixes.py (16).
+Notebooks: notebooks/30_audit_pass4_fixes.ipynb,
+notebooks/31_audit_pass5_fixes.ipynb.

@@ -135,7 +135,7 @@ in the assembled system is the matrix entries themselves.
   electrodes (rods, rings, meshes); collocation converges
   somewhat faster on the segment-length axis but is slightly
   more sensitive to the wire-radius / segment-length ratio at the
-  electrode ends. For the AP1 geometries the difference is
+  electrode ends. For the typical geometries the difference is
   negligible.
 - **Computational cost.** $O(N^2)$ matrix build, $O((N + K)^3)$
   solve. For the layered case the matrix build is dominated by the

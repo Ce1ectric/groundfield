@@ -18,7 +18,7 @@ rest of the software family:
 
 Guiding principle
 -----------------
-The export to ``groundinsight`` is the linchpin of the dissertation
+The export to ``groundinsight`` is the linchpin of this software
 pipeline: the PDE / field model produces the reduced equivalent
 model used for planning and type studies. ``io.groundinsight``
 provides the bridge.

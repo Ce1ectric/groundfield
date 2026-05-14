@@ -47,7 +47,7 @@ What this means in practice
 Limitations
 -----------
 - Performance is $O(N^3)$ for the LU solve plus $O(N^2)$
-  for the matrix build. For AP1 geometries ``N`` stays well below
+  for the matrix build. For typical geometries ``N`` stays well below
   1 000, so the runtime is acceptable. Larger meshes will need a
   preconditioned iterative solver later.
 - This backend deliberately re-uses the existing Green's-function

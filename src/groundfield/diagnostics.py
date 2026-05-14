@@ -3,7 +3,7 @@
 This module collects **structural** diagnostics that work directly
 on a :class:`~groundfield.world.World` (and optionally an
 :class:`~groundfield.solver.engine.Engine`), without invoking the
-solver. It is the AP1 counterpart to
+solver. It is the typical counterpart to
 :mod:`groundfield.validation` (which is a *post-solve* cross-engine
 check):
 
@@ -53,6 +53,9 @@ __all__ = [
     "world_statistics",
     "expected_segments",
     "check_segment_resolution",
+    "MIN_THINWIRE_RATIO",
+    "SOFT_LIMIT",
+    "HARD_LIMIT",
 ]
 
 
@@ -168,7 +171,7 @@ def world_statistics(world: "World") -> dict[str, Any]:
 
     Aggregates counts, lengths and the bounding box; complements
     :meth:`World.summary` (one-line text) with a richer
-    machine-readable dictionary that scales to AP1-grade networks.
+    machine-readable dictionary that scales to production-grade networks.
 
     Parameters
     ----------
@@ -347,10 +350,14 @@ def expected_segments(world: "World", engine: "Engine") -> dict[str, Any]:
 # check_segment_resolution
 # ---------------------------------------------------------------------
 
-# Heuristic thresholds. Tuned for the AP1 envelope (image-family
+# Heuristic thresholds. Tuned for the typical envelope (image-family
 # backends, 50 Hz, ρ in [50, 1000] Ω·m, electrode dimensions
-# ~ 0.5 ... 30 m).
-_MIN_THINWIRE_RATIO = 5.0
+# ~ 0.5 ... 30 m). The module-level public constants below are the
+# canonical handles for tests, notebooks, and external callers — the
+# leading-underscore aliases are kept for backwards compatibility
+# with pre-pass-5 code paths (fifth 2026-05-13 audit pass).
+
+MIN_THINWIRE_RATIO: float = 5.0
 """Minimum recommended ratio of segment_length to wire_radius.
 
 Below this, the thin-wire approximation that underpins the
@@ -359,29 +366,42 @@ self-action integral is computed under the assumption
 ``segment_length >> wire_radius``.
 """
 
-_BUDGET_WARN_THRESHOLD = 5_000
+SOFT_LIMIT: int = 5_000
 """Total segment count above which the user should be aware of cost.
 
 The dense Z-matrix scales as :math:`O(N^2)` in memory and the
 solve as :math:`O(N^3)` for the LU + multi-port factorisation, so
 ~ 5 000 segments is roughly where solve time becomes minutes
-rather than seconds on a typical laptop.
+rather than seconds on a typical laptop. Promoted from the
+private ``_BUDGET_WARN_THRESHOLD`` in the fifth 2026-05-13 audit
+pass so tests and notebooks have a stable handle for the
+"soft warning" threshold.
 """
 
-_BUDGET_HARD_THRESHOLD = 20_000
-"""Total segment count above which the budget warning becomes urgent."""
+HARD_LIMIT: int = 20_000
+"""Total segment count above which the budget warning becomes urgent.
+
+Promoted from the private ``_BUDGET_HARD_THRESHOLD`` in the fifth
+2026-05-13 audit pass.
+"""
+
+# Backwards-compatible private aliases. Will be removed once the
+# next ``coarse_segments`` opt-in lands (Pass-3 roadmap finding).
+_MIN_THINWIRE_RATIO = MIN_THINWIRE_RATIO
+_BUDGET_WARN_THRESHOLD = SOFT_LIMIT
+_BUDGET_HARD_THRESHOLD = HARD_LIMIT
 
 
 def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
     """Heuristic discretisation-quality check.
 
-    Inspects the world / engine pair for common AP1 modelling
+    Inspects the world / engine pair for common typical modelling
     pitfalls and returns one human-readable string per finding.
     The empty list means *no concerns detected*. Categories:
 
     1. **Thin-wire ratio.** Each electrode must satisfy
-       ``segment_length >= 5 * wire_radius`` so that the
-       thin-wire average-potential self-action remains valid.
+       ``segment_length >= MIN_THINWIRE_RATIO * wire_radius`` so that
+       the thin-wire average-potential self-action remains valid.
     2. **Electrode smaller than one segment.** An electrode whose
        *smallest geometric dimension* is below ``segment_length``
        is either degenerately discretised (1 segment) or, for
@@ -390,10 +410,9 @@ def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
        ``segment_length``.
     3. **Distributed-conductor ratio.** A finite
        ``discretize_segment_length`` must also stay above
-       ``5 * conductor.wire_radius``.
+       ``MIN_THINWIRE_RATIO * conductor.wire_radius``.
     4. **Total segment budget.** Warns when the predicted total
-       crosses :data:`_BUDGET_WARN_THRESHOLD` and again at
-       :data:`_BUDGET_HARD_THRESHOLD`.
+       crosses :data:`SOFT_LIMIT` and again at :data:`HARD_LIMIT`.
 
     The function never raises — it only reports. Use the returned
     list to inform the user before kicking off a long solve.

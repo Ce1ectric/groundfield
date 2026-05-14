@@ -422,7 +422,7 @@ def two_layer_layered_correction_real_space(
     - explicit float: subtract homog with the given resistivity.
       Use ``rho_2`` for source segments in the lower layer when
       the calling solver matches its $\\phi_\\text{hom}$ baseline
-      to the source layer (recommended for AP1-grade solver,
+      to the source layer (recommended for production-grade solver,
       ADR-0007 §"Phase A.1").
 
     Returns 0 in the homogeneous limit by construction; otherwise

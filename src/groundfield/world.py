@@ -132,7 +132,19 @@ class World(BaseModel):
             upcoming FEM backend; see
             :class:`groundfield.boundary.BoundaryConditions` for the
             full implementation-status note.
+        UserWarning
+            If a field is reverted from a previously-set non-default
+            value back to the default. The previous non-default value
+            was never consumed by any backend, so a silent revert
+            would suggest a change of behaviour that the user never
+            actually experienced. The revert warning makes that
+            visible.
         """
+        # Snapshot the previous boundary state so we can detect both
+        # "non-default value set" and "non-default value reverted to
+        # default" transitions on the keys the caller touched.
+        previous = self.boundary.model_dump()
+
         new = self.boundary.model_copy(update=kwargs)
         # Force re-validation through a fresh model construction
         self.boundary = BoundaryConditions(**new.model_dump())
@@ -160,6 +172,31 @@ class World(BaseModel):
                 UserWarning,
                 stacklevel=2,
             )
+
+        # Revert detection: a key the caller now sets back to the
+        # default *was* previously non-default. The previous value
+        # never reached any backend; warning the user closes that
+        # silent-no-op feedback gap (fourth 2026-05-12 audit pass).
+        reverted = {
+            k: previous[k]
+            for k, v in kwargs.items()
+            if k in _DEFAULT_BOUNDARY_VALUES
+            and v == _DEFAULT_BOUNDARY_VALUES[k]
+            and previous.get(k) != _DEFAULT_BOUNDARY_VALUES[k]
+        }
+        if reverted:
+            warnings.warn(
+                "BoundaryConditions field(s) "
+                f"{sorted(reverted)} reverted to the default value. The "
+                "previous non-default setting "
+                f"{reverted!r} was never consumed by the v0.2.0 integral "
+                "/ image-charge backends, so this revert does not change "
+                "any computed result. See "
+                "groundfield.boundary.BoundaryConditions for the full "
+                "implementation-status note.",
+                UserWarning,
+                stacklevel=2,
+            )
         return self.boundary
 
     # ------------------------------------------------------------------
@@ -171,6 +208,15 @@ class World(BaseModel):
 
         Delegates to :meth:`Engine.solve`, so users may write either
         ``world.solve(engine)`` or ``engine.solve(world)``.
+
+        Notes
+        -----
+        ``self.sources`` is snapshotted before dispatching to the
+        backend and restored on exit. Earlier integration paths (see
+        :class:`groundfield.generators.measurement.MeasurementSetupConfig.build`)
+        could mutate a source's ``return_to`` field in flight; the
+        snapshot/restore makes the contract explicit: solving never
+        rewrites the input world (fifth 2026-05-13 audit pass).
         """
         # Local import to avoid a circular dependency at module load.
         from groundfield.solver.engine import Engine
@@ -180,7 +226,15 @@ class World(BaseModel):
                 f"Expected an Engine, got {type(engine).__name__}. "
                 "Build one with gf.create_engine(backend='image')."
             )
-        return engine.solve(self)
+        # Snapshot every source via Pydantic's deep-copy semantics so
+        # backends that mutate a source field in flight cannot leak
+        # the change back into the caller's world (fifth 2026-05-13
+        # audit pass).
+        sources_snapshot = [s.model_copy(deep=True) for s in self.sources]
+        try:
+            return engine.solve(self)
+        finally:
+            self.sources = sources_snapshot
 
     # ------------------------------------------------------------------
     # Diagnostics

@@ -3,18 +3,18 @@
 This page collects the empirical performance characteristics of
 the `image_2layer` solver pipeline (with optional Carson /
 Sommerfeld earth-return correction and Neumann mutual inductance)
-and gives concrete recommendations for AP1-style studies and
+and gives concrete recommendations for parameter studies and
 Monte-Carlo sweeps. The numbers come from
 [`notebooks/21_performance_tuning.ipynb`](https://github.com/Ce1ectric/groundfield/blob/main/notebooks/21_performance_tuning.ipynb)
 on a typical laptop and are reproducible end-to-end.
 
 ## TL;DR
 
-For AP1 work-package 1, the three configuration choices that
+For a typical study, the three configuration choices that
 dominate wall-clock time are:
 
 1. **`earth_inductive_model="carson_series"` instead of `"sommerfeld"`.**
-   On the AP1 frequency band ($f \le 1\,\mathrm{kHz}$) and with
+   On the quasi-static frequency band ($f \le 1\,\mathrm{kHz}$) and with
    long parallel measurement / PEN structures both models give
    identical impedances; Carson is up to **~1200×** faster. Use
    `"sommerfeld"` only for spot-checks where the parallel-wires
@@ -28,7 +28,7 @@ dominate wall-clock time are:
    study induced effects on the PEN.** PEN-Neumann adds ~1 % to
    $|Z|$ at 50 Hz for a 3× cost. Switch it on only when the
    inductive coupling between the PEN trunk and the measurement
-   leads is the actual research question (AP1 Analysis 2).
+   leads is the question under study.
 
 Every other knob is secondary.
 
@@ -60,7 +60,7 @@ each frequency adds roughly the cost of one matrix rebuild plus
 the LU solve; the per-frequency overhead scales with the active
 inductance model.
 
-## Wall-clock estimates for AP1 study sizes
+## Wall-clock estimates for typical study sizes
 
 Assuming converged settings (`segment_length=1.0 m`, Carson,
 PEN-Neumann off, leads-Neumann on):
@@ -80,7 +80,7 @@ sub-dominant at small $N$ to dominant near $N \sim 5\,000$.
 
 ## Monte-Carlo strategy
 
-For AP1 work-package 1 the parameter axes alone produce
+For a typical large study the parameter axes alone produce
 $5 \times 4 \times 4 \times 5 \times 3 \times 3 = 3\,600$
 deterministic configurations. With $K$ stochastic realisations
 per configuration (typical $K = 20$–$100$) you reach $10^4$ to
@@ -90,7 +90,7 @@ tractable with parallelisation.
 ### Recommended pattern
 
 ```python
-# studies/ap1_sweep.py
+# studies/parameter_sweep.py
 from joblib import Parallel, delayed
 
 import groundfield as gf
@@ -149,7 +149,7 @@ def solve_one(rho_1: float, n_efh: int, seed: int) -> dict:
 
 # Parameter grid + Monte-Carlo realisations per cell
 RHO_1_GRID = [30.0, 100.0, 200.0, 500.0, 1000.0]
-N_EFH_GRID = [5, 10, 30]   # add 80, 200 for the full AP1 set
+N_EFH_GRID = [5, 10, 30]   # add 80, 200 for the full default set
 N_REALISATIONS = 20
 
 jobs = [
@@ -166,20 +166,20 @@ results = Parallel(n_jobs=-1, verbose=10)(
 
 import pandas as pd
 df = pd.DataFrame(results)
-df.to_parquet("ap1_sweep.parquet")  # cheap binary; survives kernel restarts
+df.to_parquet("parameter_sweep.parquet")  # cheap binary; survives kernel restarts
 ```
 
 ### Throughput estimate
 
 On a 12-core laptop with the recommended settings:
 
-| Per-solve cost | Per-cell M-C cost (K=20) | Full AP1 grid M-C |
+| Per-solve cost | Per-cell M-C cost (K=20) | Full default grid M-C |
 |---|---|---|
 | 30 EFH @ 5 s | ~10 s wall (parallel) | ~1.5 h |
 | 80 EFH @ 30 s | ~50 s wall (parallel) | ~7 h |
 | 200 EFH @ 4 min | ~7 min wall (parallel) | ~50 h |
 
-Overnight or weekend runs cover the full AP1 axis comfortably for
+Overnight or weekend runs cover the full parameter axis comfortably for
 sizes ≤ 80 EFH. The 200-EFH × full Monte-Carlo case is the one
 that motivates the ACA roadmap below.
 
@@ -198,7 +198,7 @@ that motivates the ACA roadmap below.
    lives.
 4. **Run a 100-element pilot Monte Carlo first** at a single
    `(n_efh, ρ_1)` cell. Quantile bands stabilise around K ≈ 20–30
-   for the AP1-typical Lognormal soil; full $K = 100$ is rarely
+   for the typical Lognormal soil; full $K = 100$ is rarely
    needed.
 
 ### What does *not* work today
@@ -235,10 +235,8 @@ this regime:
 
 Together, these would push 200-EFH × full Monte Carlo from
 ~weeks to ~hours on the same hardware. They are deferred
-because the current AP1 study scope (≤ 80 EFH single shot,
-≤ 30 EFH × Monte Carlo) is well within the dense-solver regime
-and the algorithmic work would consume time better spent on the
-research questions of the dissertation.
+because the current typical study scope (≤ 80 EFH single shot,
+≤ 30 EFH × Monte Carlo) is well within the dense-solver regime.
 
 ## Reproducing these numbers yourself
 

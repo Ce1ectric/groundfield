@@ -46,7 +46,7 @@ condition of this weak form.
 
 ## Axisymmetric reduction
 
-For work-package-1 reference electrodes (rod, ring, mesh) the
+For typical reference electrodes (rod, ring, mesh) the
 problem is **rotationally symmetric** around the cluster centroid
 to a good approximation. Exploiting this symmetry reduces the
 problem from 3-D to 2-D in cylindrical coordinates $(s, z)$:
@@ -231,10 +231,10 @@ upgrade. It would:
 - Cost one to two orders of magnitude more in mesh-build and solve
   time.
 
-The current axisymmetric implementation is sufficient for the AP1
-work package and provides the volume-PDE cross-check at minimal
-implementation cost. Upgrading to a full 3-D FEM is deferred until
-AP1 demands it.
+The current axisymmetric implementation is sufficient for typical
+use cases and provides the volume-PDE cross-check at minimal
+implementation cost. Upgrading to a full 3-D FEM is deferred until a
+concrete use case demands it.
 
 ## References
 

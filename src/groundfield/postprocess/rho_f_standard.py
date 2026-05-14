@@ -1,6 +1,6 @@
 """Standard-form rho-f model for the ``groundinsight`` bridge.
 
-The dissertation's reduced grounding-cluster impedance uses the
+The reduced grounding-cluster impedance uses the
 **physically-motivated 5-coefficient form**
 
 $$
@@ -18,13 +18,13 @@ interpretation:
 - $k_2\\,f$           — purely-inductive coupling that does not
   depend on the soil (e.g. a metallic-cable loop-inductance term).
 - $k_3\\,f$           — purely-resistive frequency-dependent term
-  (negligible in most quasi-static AP1 studies).
+  (negligible in most quasi-static typical studies).
 - $k_4\\,f\\,\\rho$   — Carson-type earth-return resistance: scales
   with both frequency and soil resistivity.
 - $k_5\\,f\\,\\rho$   — Carson-type earth-return reactance.
 
 This is **not** a general rational function — it is a fixed
-parametric ansatz that captures the leading orders for AP1-grade
+parametric ansatz that captures the leading orders for production-grade
 grounding-cluster impedances. It is fitted from a *parametric
 family* of `groundfield` runs that span both $\\rho$ and $f$, and
 exported as a SymPy expression with two free symbols $\\rho$
@@ -45,9 +45,8 @@ $\\rho$ values and at least two distinct frequencies.
 
 References
 ----------
-- AP1 dissertation concept (`0_forschungsfragen/main.tex`,
-  `06_modellbildung.tex`): the rho-f model is the reduced
-  grey-box representation handed to `groundinsight`.
+- The rho-f model is the reduced grey-box representation handed to
+  `groundinsight`.
 - `groundinsight.BusType.impedance_formula`: the consumer of
   the SymPy expression returned by :func:`fit_to_sympy_standard`.
 """
@@ -252,7 +251,7 @@ def fit_to_sympy_standard(fit: RhoFStandardFit, *, decimals: int = 6):
     """Convert a :class:`RhoFStandardFit` to a SymPy expression.
 
     Returns a :class:`sympy.Expr` in two free symbols ``rho`` and
-    ``f`` (both real), in the canonical AP1 form
+    ``f`` (both real), in the canonical typical form
 
     $$
     Z(\\rho, f) \\;=\\; k_1\\rho \\;+\\; (k_2 + j k_3)\\,f

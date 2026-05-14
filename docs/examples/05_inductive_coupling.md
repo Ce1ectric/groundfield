@@ -1,4 +1,4 @@
-# Example 05 — AP1 Analysis 2: inductive coupling on the measurement leads
+# Example 05 — Inductive coupling on the measurement leads
 
 The galvanic measurement of example 04 is the textbook ideal,
 but it ignores a real-world effect: the **metallic measurement
@@ -6,7 +6,7 @@ leads** that physically connect the source / measurement device
 to the auxiliary electrode and the voltage probe. Those leads
 carry current and generate magnetic fields, and a long parallel
 voltage-measurement lead picks up an additional **induced EMF**
-from the current-feed lead. AP1 Analysis 2 quantifies how much
+from the current-feed lead. This example quantifies how much
 this distorts the apparent impedance.
 
 ## What you'll see
@@ -16,7 +16,7 @@ this distorts the apparent impedance.
 * What `inductance_model="neumann"` does (mutual inductance
   via the Neumann double-line integral).
 * The choice of earth-return correction — `carson_series` is
-  the AP1 production path.
+  the default path.
 * A direct comparison of the apparent impedance with and
   without inductive coupling.
 
@@ -44,8 +44,8 @@ from groundfield.generators import (
 def make_cfg(*, with_leads: bool) -> TnNetworkConfig:
     """Same network, two measurement variants:
 
-    - ``with_leads=False``: galvanic only (Analysis 1).
-    - ``with_leads=True``:  metallic feed and probe leads (Analysis 2).
+    - ``with_leads=False``: galvanic only.
+    - ``with_leads=True``:  metallic feed and probe leads.
     """
     if with_leads:
         injection = MeasurementInjectionConfig(
@@ -69,9 +69,9 @@ def make_cfg(*, with_leads: bool) -> TnNetworkConfig:
             spacing_x_m=20.0, spacing_y_m=20.0, n_per_row=5,
         ),
         soil=TwoLayerSoilSpec(rho_1=100.0, rho_2=50.0, h_1=5.0),
-        # PEN inductance off — for AP1 Analysis 2 we are studying the
-        # inductive coupling between the *measurement* leads, not the
-        # PEN trunk. Switching this on adds ~1 % at 50 Hz at a 3×
+        # PEN inductance off — here we are studying the inductive
+        # coupling between the *measurement* leads, not the PEN
+        # trunk. Switching this on adds ~1 % at 50 Hz at a 3×
         # cost; see the performance guide.
         pen=PenConfig(inductance_model=None),
         measurement=MeasurementSetupConfig(injection=injection, probe=probe),
@@ -85,7 +85,7 @@ def solve(cfg: TnNetworkConfig, frequency_Hz: float) -> tuple[complex, complex]:
         backend="image_2layer",
         segment_length=1.0,
         frequencies=[frequency_Hz],
-        # Carson is the AP1 production path; Sommerfeld would be 1000×
+        # Carson is the default path; Sommerfeld would be 1000×
         # slower and gives identical results in this regime.
         earth_inductive_model="carson_series",
     )
@@ -133,7 +133,7 @@ axes[1].set_xlabel("f / Hz"); axes[1].set_ylabel("arg Z / °")
 axes[1].grid(True, which="both", alpha=0.3); axes[1].legend()
 axes[1].set_title("Phase")
 
-fig.suptitle("AP1 Analysis 2 — measurement error from inductive coupling")
+fig.suptitle("Measurement error from inductive coupling")
 fig.tight_layout()
 plt.show()
 ```
@@ -142,7 +142,7 @@ plt.show()
 
 * **Magnitude error grows with frequency**: at 50 Hz the
   inductive distortion of the apparent impedance is small
-  (sub-percent for typical AP1 geometries), but at 1 kHz it is
+  (sub-percent for typical geometries), but at 1 kHz it is
   several percent — the precise number depends on lead length,
   spacing, and soil resistivity.
 * **Phase shift**: the galvanic-only measurement reads a real
@@ -154,7 +154,7 @@ plt.show()
   what you would *want* to recover. The gap between the dashed
   curve and the dotted line is the measurement error.
 
-## Configuration knobs that matter for AP1 Analysis 2
+## Configuration knobs that matter
 
 `overhead_lead()` returns a `MeasurementLeadConfig` with these
 defaults — all overridable:

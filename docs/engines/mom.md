@@ -133,7 +133,7 @@ kernel as a future action item, but the existing
   consistently the closest match to the literature reference values
   among the segment-discretised engines.
 - **Computational cost.** $O(N^2)$ matrix build, $O((N + K)^3)$ LU
-  solve. For AP1 with $N \le 1000$ the runtime is dominated by the
+  solve. For typical cases with $N \le 1000$ the runtime is dominated by the
   matrix build (a few hundred milliseconds in the 2-layer case
   with $\sim 200$ image terms).
 - **Reduction.** At $K_1 = 0$ the engine collapses bit-exactly to

@@ -4,7 +4,7 @@ This module provides three convenience writers that turn a
 :class:`FieldResult` (and optionally its companion :class:`World`)
 into machine-readable, tool-agnostic CSV files. They wrap the
 existing ``postprocess`` helpers — no new science here, just a
-clean disk format for sharing AP1 results across notebooks,
+clean disk format for sharing typical results across notebooks,
 spreadsheets, and downstream pipelines.
 
 Functions
@@ -19,6 +19,24 @@ Functions
 :func:`save_cluster_impedances_csv`
     Wrap :func:`groundfield.postprocess.cluster_current_balance`
     and dump the per-cluster summary.
+
+Column-name convention
+----------------------
+All complex-valued quantities follow the same ``<symbol>_re``,
+``<symbol>_im``, ``abs_<symbol>`` triple where ``symbol`` is the
+physical symbol of the quantity:
+
+* potential — ``phi_re`` / ``phi_im`` / ``abs_phi``;
+* current — ``I_re`` / ``I_im`` / ``abs_I``;
+* impedance — ``Z_re`` / ``Z_im`` / ``abs_Z``.
+
+The three writers therefore deliberately use *different* magnitude
+columns (``abs_phi`` for the potential path, ``abs_I`` for the
+electrode table, ``abs_Z`` for the cluster table). They are **not**
+intended to be ``concat``/``merge``-ed on the magnitude column
+without an explicit rename; the column constants below
+(:data:`POTENTIAL_PATH_COLUMNS`, etc.) lock the schema for
+downstream consumers (fourth 2026-05-12 audit pass).
 
 All writers use UTF-8, comma-separated, with a header row;
 floating-point values are written at full precision so the
@@ -41,7 +59,44 @@ __all__ = [
     "save_potential_path_csv",
     "save_electrode_table_csv",
     "save_cluster_impedances_csv",
+    "POTENTIAL_PATH_COLUMNS",
+    "ELECTRODE_TABLE_REQUIRED_COLUMNS",
+    "CLUSTER_IMPEDANCE_REQUIRED_COLUMNS",
 ]
+
+
+#: Frozen column list for :func:`save_potential_path_csv`. The
+#: writer always emits exactly these columns in exactly this order.
+#: Locking this contract here makes regressions on the column name
+#: convention test-detectable (fourth 2026-05-12 audit pass).
+POTENTIAL_PATH_COLUMNS: tuple[str, ...] = (
+    "s",
+    "x",
+    "y",
+    "z",
+    "frequency_Hz",
+    "phi_re",
+    "phi_im",
+    "abs_phi",
+)
+
+#: Mandatory columns of :func:`save_electrode_table_csv` (additional
+#: columns such as ``kind`` / ``depth_m`` may appear when a
+#: ``world`` is supplied).
+ELECTRODE_TABLE_REQUIRED_COLUMNS: tuple[str, ...] = (
+    "electrode",
+    "I_re",
+    "I_im",
+    "abs_I",
+)
+
+#: Mandatory columns of :func:`save_cluster_impedances_csv`.
+CLUSTER_IMPEDANCE_REQUIRED_COLUMNS: tuple[str, ...] = (
+    "cluster",
+    "Z_re",
+    "Z_im",
+    "abs_Z",
+)
 
 
 # ---------------------------------------------------------------------

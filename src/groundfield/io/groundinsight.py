@@ -426,7 +426,7 @@ def to_bustype_dict(
         rendering the SymPy formula. Default 12 — chosen so that the
         round-trip through ``groundinsight.compute_impedance``
         reproduces ``fit.evaluate(...)`` to better than $10^{-9}$
-        relative on AP1-typical impedance magnitudes. Reduce to 6 if
+        relative on typical impedance magnitudes. Reduce to 6 if
         you want a shorter, human-readable formula at the cost of
         ~$10^{-7}$ round-trip drift.
     rho_at_fit
@@ -653,13 +653,66 @@ def evaluate_spec(
     -------
     np.ndarray
         Complex-valued $Z$ at every requested frequency.
+
+    Raises
+    ------
+    ValueError
+        If ``spec`` is not a :class:`BusTypeSpec` instance, if
+        ``impedance_formula`` is empty / missing on the spec, or if
+        the formula contains unrecognised free symbols (anything
+        other than ``f``, ``rho`` and ``j``). The deep
+        ``KeyError`` / ``AttributeError`` stack trace produced by
+        SymPy ``sympify`` on malformed input is wrapped here so the
+        diagnostic points at the missing field instead of an
+        internal SymPy frame (fifth 2026-05-13 audit pass).
     """
     import sympy as sp
+
+    # Defensive entry-point validation. Hand-rolled BusTypeSpec-like
+    # dicts (e.g. constructed in a CLI helper from a YAML campaign
+    # config) routinely miss the impedance_formula; the previous
+    # implementation produced an opaque KeyError / AttributeError
+    # several frames deep in sympy. Surface the real problem here.
+    if not isinstance(spec, BusTypeSpec):
+        raise ValueError(
+            "evaluate_spec: expected a BusTypeSpec instance, got "
+            f"{type(spec).__name__}. Build one via load_bustype_json "
+            "or BusTypeSpec.from_dict before calling evaluate_spec."
+        )
+    formula = getattr(spec, "impedance_formula", None)
+    if formula is None or not str(formula).strip():
+        raise ValueError(
+            "evaluate_spec: spec.impedance_formula is missing or "
+            "empty. A BusTypeSpec must carry a non-empty "
+            "impedance_formula string with free symbols in "
+            "{f, rho, j}."
+        )
 
     f_sym = sp.Symbol("f", real=True, positive=True)
     rho_sym = sp.Symbol("rho", real=True, positive=True)
     j_sym = sp.Symbol("j")
-    expr = sp.sympify(spec.impedance_formula).subs(j_sym, sp.I)
+    try:
+        parsed = sp.sympify(str(formula))
+    except (sp.SympifyError, SyntaxError, TypeError) as exc:
+        raise ValueError(
+            "evaluate_spec: could not parse spec.impedance_formula "
+            f"({formula!r}) as a SymPy expression: {exc}. Expected "
+            "free symbols are f (Hz), rho (Ohm·m) and j (imag. unit)."
+        ) from exc
+    expr = parsed.subs(j_sym, sp.I)
+    allowed_symbols = {f_sym, rho_sym}
+    unknown = {
+        s for s in expr.free_symbols
+        if s.name not in {"f", "rho"}
+    }
+    if unknown:
+        unknown_names = sorted(s.name for s in unknown)
+        raise ValueError(
+            "evaluate_spec: spec.impedance_formula contains "
+            f"unrecognised free symbols {unknown_names!r}. Only "
+            "f (frequency in Hz), rho (resistivity in Ohm·m) and "
+            "the imaginary unit j are allowed."
+        )
     func = sp.lambdify((f_sym, rho_sym), expr, modules=["numpy"])
     f_arr = np.asarray(frequencies, dtype=float)
     out = func(f_arr, float(rho))

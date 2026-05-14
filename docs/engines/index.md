@@ -21,7 +21,7 @@ What differentiates the engines is **how** they evaluate this
 integral.
 
 This section gathers the mathematical and physical foundations for
-each backend in a long-form, dissertation-grade treatment. The API
+each backend in a long-form, production-grade treatment. The API
 reference below it (under [Solver](../api/solver.md)) carries the
 auto-generated mkdocstrings output and stays close to the code; this
 section instead derives, justifies, and bounds the methods.
@@ -136,7 +136,7 @@ architecture decision records:
 
 - [ADR-0001](../adr/0001-two-layer-method.md) — the original
   argument for the two-engine setup (`image_2layer` + `mom`) for the
-  AP1 work package.
+  typical study.
 - [ADR-0002](../adr/0002-engine-family.md) — the extension to eight
   backends, the cross-validation envelope above, and the rationale
   for *not* implementing the real Stefanescu series for $n \ge 3$.

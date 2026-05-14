@@ -9,8 +9,8 @@ conductor geometry and the material properties:
   few kHz,
 - capacitive coupling between conductor and soil (optional).
 
-Guiding question from work package 1
-------------------------------------
+Guiding question
+----------------
 How strong are coupling and return-path effects in the low-frequency
 range, and when does the diffusion field / Carson model actually
 matter? The routines here provide the numerical basis for that
