@@ -145,7 +145,7 @@ RAILWAY_25HZ = CarsonExample(
 #
 # Tleis publishes a table of (P, Q) values for several (a, theta)
 # pairs computed with many-term Carson series. We include four
-# spot checks across the AP1 parameter range.
+# spot checks across the typical parameter range.
 
 
 # ---------------------------------------------------------------------

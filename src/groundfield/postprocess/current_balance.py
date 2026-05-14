@@ -2,8 +2,8 @@
 
 This module turns the per-electrode currents stored in
 :class:`groundfield.solver.result.FieldResult` into the engineering
-quantities used to answer the AP1 question *"where does the
-injected source current actually return?"*. In a TN-Ortsnetz with
+quantities that answer *"where does the injected source current
+actually return?"*. In a TN-Ortsnetz with
 hundreds of houses, dozens of cable cabinets and one or more
 metallic return paths (PEN trunk, measurement leads, cable
 shields), the soil-leakage current of every cluster matters and
@@ -49,7 +49,7 @@ Quantities
 
 Validity envelope
 -----------------
-* Frequency: dissertation envelope :math:`f \\le 1\\,\\mathrm{kHz}`.
+* Frequency: quasi-static envelope :math:`f \\le 1\\,\\mathrm{kHz}`.
 * Conventions: :class:`FieldResult.electrode_currents` carries
   the **per-electrode soil-leakage current** in A (complex
   phasor), with positive sign in the direction *electrode → soil*.
@@ -168,7 +168,7 @@ def cluster_current_balance(
         ``sum_I_re``, ``sum_I_im``, ``abs_sum_I``,
         ``Z_re``, ``Z_im``, ``abs_Z``, ``arg_Z_deg``.
         Rows are sorted by descending ``abs_sum_I`` so the
-        dominant clusters surface first — the AP1-typical
+        dominant clusters surface first — the typical
         debugging order.
     """
     rows = []
@@ -246,7 +246,7 @@ def electrode_current_table(
         Optional companion world. When given, the table includes
         the electrode kind (``rod`` / ``ring`` / ``mesh`` / ...)
         and the connection-point depth in metres — a small but
-        very helpful annotation when scanning a 200-EFH AP1 run.
+        very helpful annotation when scanning a 200-EFH typical run.
     frequency_index
         Index into :attr:`FieldResult.frequencies`. Default 0.
 
@@ -473,7 +473,7 @@ def plot_current_sharing(
 
     Renders ``|I|`` (in A) for either every electrode or every
     galvanic cluster, sorted descending. The default ``by =
-    "electrode"`` is the AP1 default — *which physical electrode
+    "electrode"`` is the default — *which physical electrode
     actually carries the test current?* The companion option
     ``by = "cluster"`` aggregates over each cluster.
 

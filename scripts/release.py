@@ -86,6 +86,25 @@ _EMPTY_UNRELEASED_MARKERS: frozenset[str] = frozenset(
 )
 
 
+# CLAUDE.md must NOT hard-code a __version__ literal (fourth 2026-05-12
+# audit pass introduced the convention; the fifth 2026-05-13 pass
+# promotes it to an enforced check). The guard regex flags any line
+# that looks like ``__version__ = "<X.Y.Z>"`` or ``version = "<X.Y.Z>"``
+# inside the project's CLAUDE.md so a contributor who manually refreshes
+# the file is caught at release time instead of letting a stale literal
+# drift past four more audit passes.
+_CLAUDE_HARDCODED_VERSION_RE = re.compile(
+    r"""(?mx)
+    ^[^\n]*                              # leading prose / list marker
+    (?:__version__|version)              # the field name
+    \s*[:=]\s*                           # ':' or '='
+    ['"]?
+    (?P<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)
+    ['"]?
+    """
+)
+
+
 @dataclass(frozen=True)
 class VersionLocation:
     """Description of a file in which the project version is recorded.
@@ -518,6 +537,64 @@ def _update_changelog(
     return True
 
 
+def _check_claude_md_no_hardcoded_version(root: Path) -> None:
+    """Refuse the release if ``CLAUDE.md`` hard-codes a version literal.
+
+    Fifth 2026-05-13 audit pass: the "Version (do not hard-code in
+    this file)" convention introduced in pass 4 was documented but
+    not enforced. A contributor who manually pasted a fresh
+    ``__version__ = "0.4.0"`` line into ``CLAUDE.md`` could drift
+    past four audit passes before anyone noticed. This guard scans
+    the file at release time and raises a :class:`RuntimeError` if
+    a hard-coded literal is detected, with a pointer to the
+    canonical sources (``pyproject.toml`` /
+    ``src/groundfield/__init__.py`` / ``CITATION.cff``).
+
+    Parameters
+    ----------
+    root : Path
+        Repository root.
+
+    Raises
+    ------
+    RuntimeError
+        If ``CLAUDE.md`` contains a hard-coded version literal.
+    """
+    path = root / "CLAUDE.md"
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8")
+    # Skip code-fence blocks (```), in-line snippets in fenced blocks,
+    # and the explicit "do not hard-code" reminder paragraph. We scan
+    # line-by-line so we can drop lines inside a fenced block.
+    in_fence = False
+    offenders: list[tuple[int, str]] = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        # Skip the warning paragraph itself.
+        if "do not hard-code" in line.lower():
+            continue
+        match = _CLAUDE_HARDCODED_VERSION_RE.search(line)
+        if match is not None:
+            offenders.append((lineno, line.rstrip()))
+    if offenders:
+        lines = "\n".join(f"  CLAUDE.md:{n}: {ln}" for n, ln in offenders)
+        raise RuntimeError(
+            "CLAUDE.md hard-codes a version literal:\n"
+            f"{lines}\n"
+            "Remove the literal — the canonical sources are "
+            "pyproject.toml, src/groundfield/__init__.py:__version__ "
+            "and CITATION.cff. scripts/release.py keeps these three "
+            "in sync; CLAUDE.md must defer to them (fifth 2026-05-13 "
+            "audit pass)."
+        )
+
+
 def _run_git(args: list[str], *, dry_run: bool) -> None:
     """Run a git command, honouring ``dry_run``.
 
@@ -682,6 +759,15 @@ def main(argv: list[str] | None = None) -> int:
         logger.error(
             "working tree is dirty; commit or stash changes, or pass --allow-dirty"
         )
+        return 2
+
+    # CLAUDE.md hard-coded version guard (fifth 2026-05-13 audit pass).
+    # Refuse the release before we touch any file so the working tree
+    # stays clean if the contributor needs to neutralise the literal.
+    try:
+        _check_claude_md_no_hardcoded_version(root)
+    except RuntimeError as exc:
+        logger.error("%s", exc)
         return 2
 
     # Rewrite files.

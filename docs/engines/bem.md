@@ -135,7 +135,7 @@ in the assembled system is the matrix entries themselves.
   electrodes (rods, rings, meshes); collocation converges
   somewhat faster on the segment-length axis but is slightly
   more sensitive to the wire-radius / segment-length ratio at the
-  electrode ends. For the AP1 geometries the difference is
+  electrode ends. For the typical geometries the difference is
   negligible.
 - **Computational cost.** $O(N^2)$ matrix build, $O((N + K)^3)$
   solve. For the layered case the matrix build is dominated by the
@@ -181,9 +181,30 @@ disagreement).
   Methods*, Macmillan. Cross-reference for the Galerkin
   alternative.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="bem",
+                          segment_length=0.1,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+```
+
+## API reference
+
+::: groundfield.solver.bem
+
 ## Related material
 
-- API reference: `groundfield.solver.bem`.
 - ADR-0002 — engine selection heuristic; `bem` is the
   alternative-weighting cross-check in the layered family.
 - Notebook `07_bem.ipynb` — single rod, bonded-rod cluster,

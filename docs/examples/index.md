@@ -28,8 +28,8 @@ distributions; otherwise `pip install joblib pandas pyarrow`.
 | [01](01_first_solve.md) | First solve: a single rod | Build a `World` by hand, run `engine.solve(world)`, plot the radial potential |
 | [02](02_substation_dwight.md) | Substation grounding vs. Dwight 1936 | Cluster impedance, comparison against closed-form references |
 | [03](03_tn_network_basics.md) | TN-Ortsnetz generator basics | `TnNetworkConfig`, `TnNetworkGenerator`, surface-potential plot |
-| [04](04_grounding_measurement.md) | AP1 Analysis 1 — galvanic measurement | Auxiliary electrode + voltage probe, fall-of-potential characteristic |
-| [05](05_inductive_coupling.md) | AP1 Analysis 2 — inductive coupling | Overhead leads with Neumann coupling, Carson earth-return, measurement-error quantification |
+| [04](04_grounding_measurement.md) | Galvanic fall-of-potential measurement | Auxiliary electrode + voltage probe, fall-of-potential characteristic |
+| [05](05_inductive_coupling.md) | Inductive coupling on the measurement leads | Overhead leads with Neumann coupling, Carson earth-return, measurement-error quantification |
 | [06](06_parameter_sweep_soil.md) | Parameter sweep over soil resistivity | Deterministic sweep over $\rho_1$, log-log $\|Z(\rho_1)\|$ trend |
 | [07](07_monte_carlo.md) | Monte-Carlo sweep with `joblib` | Stochastic distributions, parallel workers, persistent results, statistical bands |
 | [08](08_pipeline_groundinsight.md) | Full pipeline to `groundinsight` | $\rho$-$f$ fit, JSON `BusType` export, downstream fault analysis |
@@ -40,7 +40,7 @@ distributions; otherwise `pip install joblib pandas pyarrow`.
   cover "build a world", "build a network from a config", and
   "sweep over a parameter axis" — most engineering use cases
   are mash-ups of those three.
-* If your goal is the AP1 measurement-error question, jump to
+* If your goal is the measurement-error question, jump to
   04 → 05.
 * If you are about to launch a serious parameter study, read
   example 07 *and* the [performance guide](../performance.md)

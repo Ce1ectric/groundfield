@@ -27,7 +27,7 @@ domain. Stefanescu / Sunde (1968, ch. 3.5) describe a doubly-nested
 expansion that recovers a real-image series, but its
 implementation is fragile for hard contrasts: the convergence
 factor at every interface is $|K_i|$, and the doubly-nested loop
-has to converge in *every* nested level. For practical AP1
+has to converge in *every* nested level. For practical typical
 contrasts this works only with non-trivial Aitken / Pade
 acceleration on top.
 
@@ -56,7 +56,7 @@ selection. The original delegate is preserved in
 Three reasons, each independently sufficient:
 
 1. **Convergence sensitivity.** The doubly-nested Stefanescu series
-   converges as $\prod_i |K_i \Gamma_{i+1}|^{n_i}$. For typical AP1
+   converges as $\prod_i |K_i \Gamma_{i+1}|^{n_i}$. For typical
    parameters with $|K_i| \approx 0.5$–$0.9$, the series can take
    $\gtrsim 10^4$ terms in the worst-case nested combinations.
    Without Aitken / Pade acceleration the engine would routinely
@@ -66,7 +66,7 @@ Three reasons, each independently sufficient:
    solves the same problem with $\sim 8$ complex exponentials and
    gives a closed-form spatial Green's function for *any* $n$. The
    per-evaluation cost is independent of the layer count, and the
-   matrix-pencil fit is numerically robust for the AP1 contrast
+   matrix-pencil fit is numerically robust for the typical contrast
    range.
 
 3. **Cross-validation strength.** `mom_sommerfeld` provides the
@@ -77,8 +77,8 @@ Three reasons, each independently sufficient:
    the cross-validation matrix would have to discount when it
    diverges.
 
-The trade-off is documented in ADR-0002 and revisited every time
-the dissertation work-package scope expands.
+The trade-off is documented in ADR-0002 and revisited every time the
+supported use-case scope expands.
 
 ## Notebook ergonomics
 
@@ -138,9 +138,32 @@ $n \ge 3$ design decision see:
 - **ADR-0002** — the in-repo justification of the dispatcher
   design.
 
+## Example
+
+```python
+import groundfield as gf
+
+# 2-layer soil — dispatcher delegates to image_2layer.
+soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="image_nlayer",
+                          segment_length=0.1,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+print(result.metadata["dispatched_to"])  # 'image_2layer'
+```
+
+## API reference
+
+::: groundfield.solver.image_nlayer
+
 ## Related material
 
-- API reference: `groundfield.solver.image_nlayer`.
 - ADR-0002 — engine selection heuristic.
 - Notebook `04_image_nlayer.ipynb` — exercises the dispatch table
   including the deliberate `ValueError` for $n = 3$ stacks.

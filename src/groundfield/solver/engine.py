@@ -47,9 +47,10 @@ is replaced by a layered one.
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from groundfield.solver.result import FieldResult
 from groundfield.utils.logging import get_logger
@@ -57,7 +58,27 @@ from groundfield.utils.logging import get_logger
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.world import World
 
-__all__ = ["Engine", "Backend", "EarthInductiveModel"]
+__all__ = [
+    "Engine",
+    "Backend",
+    "EarthInductiveModel",
+    "EngineFrequencyOrderWarning",
+]
+
+
+class EngineFrequencyOrderWarning(UserWarning):
+    """``Engine.frequencies`` is not strictly monotonically increasing.
+
+    A dedicated category for the monotonic-order warning emitted by
+    :meth:`Engine._validate_frequencies`. Using a dedicated class lets
+    notebook authors silence the diagnostic with a stable
+    ``warnings.simplefilter("once",
+    EngineFrequencyOrderWarning)`` — the default ``UserWarning`` filter
+    deduplicates by *message text*, and because the message embeds the
+    offending list literal, every distinct non-monotonic list
+    triggers a fresh warning even when the underlying convention is
+    the same (fifth 2026-05-13 audit pass).
+    """
 
 Backend = Literal[
     "image",
@@ -128,11 +149,142 @@ class Engine(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: Backend = Field(default="image")
-    frequencies: list[float] = Field(default_factory=lambda: [50.0])
+    frequencies: list[float] = Field(
+        default_factory=lambda: [50.0],
+        description=(
+            "Frequency list in Hz. **The given order is preserved** — "
+            "the solver iterates over the list as-is and "
+            ":attr:`FieldResult.frequencies` is the user-supplied list "
+            "without sorting. A non-monotonic list (e.g. ``[5000, 50]``) "
+            "is accepted but triggers a :class:`UserWarning` to surface "
+            "the convention; use :meth:`Engine.with_frequencies` with "
+            "``preserve_order=True`` to silence the warning."
+        ),
+    )
     segment_length: float = Field(default=0.5, gt=0.0)
     tolerance: float = Field(default=1e-6, gt=0.0)
     max_iterations: int = Field(default=200, gt=0)
     earth_inductive_model: EarthInductiveModel = Field(default="perfect_mirror")
+
+    @field_validator("frequencies")
+    @classmethod
+    def _validate_frequencies(cls, value: list[float]) -> list[float]:
+        """Validate ``frequencies`` and warn on non-monotonic input.
+
+        The validator deliberately *does not sort*. Notebooks that pass
+        ``[5000, 50]`` get back a result with ``frequencies == [5000, 50]``
+        and the per-frequency column order in the matching order. A
+        :class:`UserWarning` makes the convention visible so users who
+        previously relied on an implicit sort notice it during the
+        migration to ``v0.5.0``.
+        """
+        if not value:
+            raise ValueError("Engine.frequencies must not be empty.")
+        for f in value:
+            # DC (``f == 0``) is a legitimate operating point for
+            # quasi-static grounding studies — reject only negatives
+            # and non-finite values.
+            if not (f >= 0.0):
+                raise ValueError(
+                    "Engine.frequencies must be non-negative, got "
+                    f"{f}."
+                )
+            if f != f:  # NaN guard
+                raise ValueError(
+                    "Engine.frequencies must be finite, got NaN."
+                )
+        # Strict-monotone-increasing detection. Use a tolerance-free
+        # comparison: explicit duplicates are also flagged because they
+        # silently double-evaluate the kernel at the same frequency.
+        non_monotonic = any(b <= a for a, b in zip(value, value[1:]))
+        if non_monotonic:
+            # Deliberately *stable* message text — the per-call list
+            # literal is logged at debug level so users can still find
+            # the offending Engine in their notebook, but the warning
+            # text itself is kept identical across every distinct
+            # non-monotonic list. That lets a single
+            # ``warnings.simplefilter("once",
+            # EngineFrequencyOrderWarning)`` collapse a 10-engine
+            # sweep down to a single notification (fifth 2026-05-13
+            # audit pass).
+            _log.debug(
+                "Engine.frequencies non-monotonic: %r — preserving order.",
+                value,
+            )
+            warnings.warn(
+                "Engine.frequencies is not strictly increasing. The "
+                "solver preserves the given order — result columns "
+                "appear in the same order as the input. Wrap your "
+                "list with sorted(set(...)) for ascending unique "
+                "frequencies, or call "
+                "Engine.with_frequencies(*freqs, preserve_order=True) "
+                "to opt in explicitly and silence this warning.",
+                EngineFrequencyOrderWarning,
+                stacklevel=2,
+            )
+        return list(value)
+
+    # ------------------------------------------------------------------
+    # Convenience constructors
+    # ------------------------------------------------------------------
+
+    def with_frequencies(
+        self,
+        *frequencies: float,
+        preserve_order: bool = False,
+    ) -> "Engine":
+        """Return a copy of this engine with a new ``frequencies`` list.
+
+        Parameters
+        ----------
+        *frequencies
+            One or more frequencies in Hz. Variadic to make the
+            common case readable: ``engine.with_frequencies(50, 5000)``.
+        preserve_order
+            If ``True``, the frequencies are stored verbatim and no
+            non-monotonic warning is raised even for a decreasing or
+            duplicate-bearing list. This is the explicit opt-in for
+            sweeps that require a specific iteration order. If ``False``
+            (default) the standard :func:`_validate_frequencies` checks
+            run.
+
+        Returns
+        -------
+        Engine
+            A new :class:`Engine` instance — the receiver is **not**
+            mutated.
+
+        Examples
+        --------
+        >>> eng = Engine(backend="image").with_frequencies(50, 5000,
+        ...                                                preserve_order=True)
+        >>> eng.frequencies
+        [50.0, 5000.0]
+        """
+        freqs = [float(f) for f in frequencies]
+        if preserve_order:
+            # Bypass the validator's monotone-check by using
+            # ``model_construct`` for the field. We still want type /
+            # positivity checks, so do them explicitly here.
+            if not freqs:
+                raise ValueError(
+                    "with_frequencies(): at least one frequency required."
+                )
+            for f in freqs:
+                if not (f >= 0.0):
+                    raise ValueError(
+                        "with_frequencies(): frequencies must be "
+                        f"non-negative, got {f}."
+                    )
+            data = self.model_dump()
+            data["frequencies"] = freqs
+            # Re-validate the rest, but inject the preserved list
+            # directly so the field-validator's monotone-warning is
+            # silenced.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", EngineFrequencyOrderWarning)
+                return self.__class__.model_validate(data)
+        return self.model_copy(update={"frequencies": freqs})
 
     # ------------------------------------------------------------------
     # Run

@@ -4,19 +4,19 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-01 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
 ADR-0001 settled the methodology for the **2-layer** case: closed-form
 Tagg/Sunde image-charge series (`image_2layer`) plus a Galerkin MoM
-cross-validation engine (`mom`). For work package 1 in isolation
+cross-validation engine (`mom`). For two-layer soils in isolation
 that is enough. Two outstanding issues motivate this ADR:
 
-1. **Three or more layers.** Although AP1 itself targets a 2-layer
-   soil, several supporting cases in the dissertation involve a
-   weathered or frozen surface layer above a representative AP1 stack
+1. **Three or more layers.** Although the default scope targets a
+   2-layer soil, several supporting cases involve a weathered or
+   frozen surface layer above a representative two-layer stack
    (i.e. effectively 3 layers). The closed-form Tagg/Sunde series
    does not extend cleanly to $n \ge 3$: the upward-looking
    reflection $\Gamma_1(\lambda)$ stops being constant in $\lambda$
@@ -130,7 +130,7 @@ check.
   `result.metadata["cim_rms"]`.
 - `fem` covers single-cluster worlds via the equivalent-hemisphere
   reduction. Multi-cluster volume runs would need a real 3-D mesh
-  generator and a stronger FEM kernel — out of scope for AP1.
+  generator and a stronger FEM kernel — out of scope for typical cases.
 
 ## Action items
 
@@ -144,8 +144,7 @@ check.
 - [x] `tests/test_image_nlayer.py`, `test_cim.py`,
       `test_mom_sommerfeld.py`, `test_bem.py`, `test_fem.py`,
       `test_cross_engines_extended.py`.
-- [ ] Reference-case library for AP1 (separate notebooks under
-      `notebooks/ap1_*`).
+- [ ] Reference-case library for typical cases (separate notebooks).
 - [ ] Optional: scikit-fem-backed 3-D `fem` (lifted from the
       equivalent-hemisphere reduction) for full multi-cluster
-      worlds; deferred until AP1 demands it.
+      worlds; deferred until a concrete use case demands it.

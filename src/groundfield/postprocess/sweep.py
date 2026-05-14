@@ -1,6 +1,6 @@
-"""Cartesian-product parameter sweeps for AP1 axis studies.
+"""Cartesian-product parameter sweeps for parameter axis studies.
 
-This module turns the AP1 work-package axes — soil resistivity
+This module turns the typical study axes — soil resistivity
 :math:`\\rho_1` / :math:`\\rho_2`, layer thickness :math:`h_1`,
 electrode geometry, frequency — into a single tabular response
 that is cheap to plot and easy to feed into vector-fitting,
@@ -37,7 +37,7 @@ the engineering :math:`Z(\\rho_1, h_1, f)` curve that
 
 Validity envelope
 -----------------
-* Frequency: dissertation envelope :math:`f \\le 1\\,\\mathrm{kHz}`.
+* Frequency: quasi-static envelope :math:`f \\le 1\\,\\mathrm{kHz}`.
 * Linearity: the sweep does not interpolate between samples — for
   a smooth :math:`Z(\\rho, f)` surface, hand the resulting
   DataFrame to :func:`fit_rho_f_standard` /

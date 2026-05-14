@@ -1,13 +1,13 @@
 # Diagnostics
 
 The :mod:`groundfield.diagnostics` module provides **pre-solve**
-structural diagnostics for a :class:`World`. It is the AP1
+structural diagnostics for a :class:`World`. It is the typical
 counterpart to :mod:`groundfield.validation` (which is the
 **post-solve** cross-engine consistency check).
 
 ## Why pre-solve diagnostics?
 
-For an AP1-grade TN-Ortsnetz with several hundred electrodes a
+For an production-grade TN-Ortsnetz with several hundred electrodes a
 mistake in the geometry — an electrode placed at the wrong
 coordinate, a missing conductor, or a segmentation budget that
 silently triples the wall-clock time — should be caught **before**

@@ -8,18 +8,28 @@ optional subclass for completeness.
 A source is attached to an electrode (or a conductor). The actual
 distribution of the injected current onto the discretised segments is
 done by the solver.
+
+Notes
+-----
+:data:`Source` is a *discriminated* union — Pydantic uses the
+``kind`` field to pick the correct sub-class on validation and JSON
+round-trip. This means error messages for malformed source dicts point
+at the specific sub-class (``CurrentSource`` / ``VoltageSource``)
+selected by ``kind``, instead of dumping the entire union's validator
+chain.
 """
 
 from __future__ import annotations
 
-from typing import Literal, Union
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter
 
 __all__ = [
     "Source",
     "CurrentSource",
     "VoltageSource",
+    "SourceAdapter",
 ]
 
 
@@ -73,4 +83,16 @@ class VoltageSource(_SourceBase):
     phase_deg: float = Field(default=0.0)
 
 
-Source = Union[CurrentSource, VoltageSource]
+#: Discriminated union over the concrete source subclasses. The
+#: ``kind`` field selects the validator at validation time, which keeps
+#: Pydantic error messages on the actual sub-class instead of the union.
+Source = Annotated[
+    Union[CurrentSource, VoltageSource],
+    Discriminator("kind"),
+]
+
+#: Convenience :class:`TypeAdapter` for the discriminated union, used by
+#: code paths that need to validate a stand-alone source dict (e.g. CLI
+#: imports, JSON round-trips). ``World.sources`` uses the annotation
+#: directly via Pydantic field generation.
+SourceAdapter: TypeAdapter[Source] = TypeAdapter(Source)

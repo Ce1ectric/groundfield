@@ -4,9 +4,10 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-08 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield.generators` (new subpackage); AP1 parameter
-              studies; foundation for the `ParameterSweep` API |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield.generators` (new subpackage); parameter
+              sweep / Monte Carlo studies; foundation for the
+              `ParameterSweep` API |
 
 ## Context
 
@@ -15,14 +16,13 @@ image_nlayer / cim / mom / mom_sommerfeld / bem / fem,
 inductive coupling, Carson, Sommerfeld, cross-layer, distributed
 conductors) and a closed bridge to `groundinsight` via the `rho-f`
 fit and the `BusType` exporter (ADR-0008). What is missing is the
-**factory layer** that converts AP1-style parameters
-(see *AP1_tn_ortsnetz.md* — number of single-family houses
-$n_\text{EFH} \in \{5, 10, 30, 80, 200\}$, small/medium commercial
+**factory layer** that converts high-level parameters (number of
+single-family houses $n_\text{EFH}$, small/medium commercial
 buildings, cable-cabinet quota, two-layer soil with
 $\rho_1, \rho_2, h_1$) into a fully populated `World`. Without it
 each parameter combination is hand-coded; with it the same
-combination is one line and the parameter sweep across the AP1
-table is a straightforward outer loop.
+combination is one line and a parameter sweep across the table is
+a straightforward outer loop.
 
 The user request additionally asks for two non-negotiable features:
 
@@ -64,7 +64,7 @@ Rationale (vs. a flat function `build_tn_ortsnetz(**params)`):
 - Sweeps and CLI tools talk to the abstract `WorldGenerator`
   interface; no per-generator dispatch.
 - Persisting a config is a one-liner; the resulting JSON is the
-  *experimental record* of an AP1 run.
+  *experimental record* of a single run.
 
 ### Stochastic parameters: `Distribution` Pydantic classes
 
@@ -79,7 +79,7 @@ the seven first-class distributions:
 | `Normal(mean, std, truncate_low?, truncate_high?)` | rejection sampling | engineering tolerances |
 | `LogNormal(mu, sigma)` (or `mean_phys, std_phys`) | `rng.lognormal` | resistivities, sizes |
 | `Weibull(shape, scale)` | `rng.weibull` × scale | wind/wear/lifetime |
-| `Discrete(values, weights?)` | `rng.choice` | AP1 grid `n_efh ∈ {5,10,30,80,200}` |
+| `Discrete(values, weights?)` | `rng.choice` | default grid `n_efh ∈ {5,10,30,80,200}` |
 | `Categorical(values, weights?)` | `rng.choice` (string) | electrode-kind mix |
 
 Every distribution is a Pydantic v2 model with a `.sample(rng) -> Any`
@@ -184,7 +184,7 @@ union `SoilSpec` with three members: `HomogeneousSoilSpec`,
 `TwoLayerSoilSpec`, `MultiLayerSoilSpec`. Each carries the same
 fields as the underlying :class:`SoilModel` but allows
 distributions; the method `to_soil(rng)` returns a fully numeric
-:class:`SoilModel`. AP1's two-layer is the default.
+:class:`SoilModel`. A two-layer soil is the default.
 
 **5. `building.BuildingTypeSpec` — building type definition.**
 Bundles a `name`, a `GroundingSystemSpec`, and an optional
@@ -192,7 +192,7 @@ Bundles a `name`, a `GroundingSystemSpec`, and an optional
 `TnNetworkConfig.building_types`; the count per type is set via
 `TnNetworkConfig.building_counts: dict[name, int | Distribution]`.
 The default catalog returned by `default_building_catalog()`
-ships AP1-typical entries for `residential`, `small_industry`,
+ships typical entries for `residential`, `small_industry`,
 `medium_industry`, and `large_industry`.
 
 ### Topology: medium detail (`TnNetworkGenerator` v2)
@@ -217,7 +217,7 @@ The generator composes the five spec layers into:
   ADR-0004.
 - A current source attached to the substation cluster.
 
-This level of detail captures every AP1 question (remote-injection
+This level of detail captures every research question (remote-injection
 influence, inductive coupling between measurement leads and PEN/MV
 shield, Carson relevance below 1 kHz, soil-layering monotonicity).
 Higher fidelity (real street polygons, plot-level layouts,
@@ -271,8 +271,7 @@ that will read from open building-map data.
 
 ## References
 
-- AP1 work-package definition: `999_projektmanagement/arbeitspakete/AP1_tn_ortsnetz.md`.
-- ADR-0003 — distributed conductors (PEN trunk leans on this).
+- - ADR-0003 — distributed conductors (PEN trunk leans on this).
 - ADR-0008 — `BusType` export (downstream consumer of generator
   outputs after a `rho-f` fit).
 - Vector fitting & rho-f standard form — what we eventually run

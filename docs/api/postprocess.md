@@ -21,7 +21,7 @@ model** path that closes the field → network bridge.
 For a passive, linear, time-invariant grounding cluster, the
 driving-point impedance $Z(s)$ at the feed-in electrode is a
 rational function of the Laplace variable $s = j\omega$. Under
-the dissertation's $f \le 1\,\mathrm{kHz}$ assumption, the
+the $f \le 1\,\mathrm{kHz}$ quasi-static assumption, the
 function is well approximated by a low-order partial-fraction
 expansion
 
@@ -92,7 +92,7 @@ For the export of the fit as a ``BusType`` (JSON file or live
 
 ## Standard rho-f form
 
-The dissertation's five-coefficient ansatz
+The  five-coefficient ansatz
 
 $$
 Z(\rho, f) \;=\; k_1 \rho \;+\; (k_2 + j k_3)\,f \;+\; (k_4 + j k_5)\,f\,\rho
@@ -138,7 +138,7 @@ $$
 
 Both quantities are returned as **complex phasors per frequency
 index**, so that inductive- and resistive-coupling effects above
-DC remain visible in AP1 studies.
+DC remain visible in typical studies.
 
 ### Example
 
@@ -172,7 +172,7 @@ U_TP = gf.permissible_touch_voltage_en50522(0.5)   # 225 V
 
 ### Validity envelope
 
-* Frequency: dissertation envelope $f \le 1\,\mathrm{kHz}$,
+* Frequency: quasi-static envelope $f \le 1\,\mathrm{kHz}$,
   inherited from the underlying Green's function.
 * Backends: every solver that populates ``point_sources`` (image,
   image_2layer, image_nlayer, mom, mom_sommerfeld, cim, bem).
@@ -197,8 +197,8 @@ U_TP = gf.permissible_touch_voltage_en50522(0.5)   # 225 V
 
 The :mod:`groundfield.postprocess.current_balance` module turns
 the per-electrode currents in :class:`FieldResult` into the
-engineering quantities that answer the AP1 question *"where does
-the injected source current actually return?"*.
+engineering quantities that answer *"where does the injected source
+current actually return?"*.
 
 ### Physical background
 
@@ -283,7 +283,7 @@ gf.plot_current_sharing(result, world=world, top_n=15)
 
 ### Validity envelope
 
-* Frequency: dissertation envelope $f \le 1\,\mathrm{kHz}$.
+* Frequency: quasi-static envelope $f \le 1\,\mathrm{kHz}$.
 * Backends: every solver that populates
   ``electrode_potentials`` / ``electrode_currents`` / ``clusters``
   (image, image_2layer, image_nlayer, mom, mom_sommerfeld, cim,
@@ -302,7 +302,7 @@ gf.plot_current_sharing(result, world=world, top_n=15)
 ## Parameter sweeps and convergence studies
 
 The :mod:`groundfield.postprocess.sweep` and
-:mod:`groundfield.postprocess.convergence` modules turn the AP1
+:mod:`groundfield.postprocess.convergence` modules turn the typical
 parameter axes into a single tabular response. Both produce
 long-format :class:`pandas.DataFrame` objects that feed naturally
 into the :math:`\rho`-:math:`f` fit and the vector-fitting
@@ -368,7 +368,7 @@ asymptote line.
 
 The :mod:`groundfield.postprocess.geometry_plot` module renders
 the *physical* world — electrodes, conductors and current sources
-— **before** the solver runs. AP1-grade networks with several
+— **before** the solver runs. production-grade networks with several
 hundred electrodes benefit from a quick sanity check that catches
 typos in coordinates, missing conductors, or sources attached to
 the wrong electrode without paying for a full solve.

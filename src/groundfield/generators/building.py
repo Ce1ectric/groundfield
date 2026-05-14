@@ -24,7 +24,7 @@ Typical predefined types (see the helper builders in this module):
   built in so an actual site can wire in a real geometry.
 
 The default catalog returned by :func:`default_building_catalog` is
-a sensible AP1 starting point; users tailor it to their study by
+a sensible starting point; users tailor it to their study by
 copying the resulting list and editing entries.
 """
 
@@ -90,12 +90,12 @@ class BuildingTypeSpec(GeneratorConfig):
 
 
 # ---------------------------------------------------------------------
-# Default catalog — AP1 starting point
+# Default catalog — starting point
 # ---------------------------------------------------------------------
 
 
 def default_building_catalog() -> list[BuildingTypeSpec]:
-    """Return a sensible AP1 starting catalog of four building types.
+    """Return a sensible starting catalog of four building types.
 
     Returns
     -------

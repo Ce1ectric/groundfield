@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-06 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
@@ -28,17 +28,17 @@ $$
 \;\approx\; 503\,\sqrt{\rho_\text{earth} \big/ f}\quad[\text{m}].
 $$
 
-For the AP1 frequency window ($f \le 1\,\mathrm{kHz}$) and typical
+For the quasi-static frequency window ($f \le 1\,\mathrm{kHz}$) and typical
 soil resistivities ($\rho_\text{earth} \in [50, 5000]\,\Omega\,\mathrm{m}$)
 the skin depth $\delta$ ranges from roughly **350 m** (50 Hz, 50 Ωm)
 to **35 km** (50 Hz, 5000 Ωm). The relevant geometric dimensions of
-an AP1 LV TN-Ortsnetz — house-to-station distance < 200 m, PEN-cable
+an the TN low-voltage distribution network — house-to-station distance < 200 m, PEN-cable
 length up to 1 km, separation between measurement-lead and current
 injection 10–100 m — are *not always* small compared to $\delta$.
 The perfect-mirror model therefore systematically **underestimates**
 the resistive part of the earth-return impedance and slightly
 **overestimates** the reactive part. The discrepancy is the very
-quantity that the AP1 question
+quantity that the research question
 
 > *"diffusion field and Carson relevance for earth currents"*
 
@@ -309,7 +309,7 @@ for the layered case. Cost: every frequency requires a 2-D
 Sommerfeld quadrature *per segment pair* — orders of magnitude
 slower than the closed-form Carson series. We defer this to a
 follow-up ADR (ADR-0006) and use `mom_sommerfeld` (electric only)
-plus Carson series (magnetic) as the AP1 working configuration.
+plus Carson series (magnetic) as the typical working configuration.
 
 ### Layered earth via effective resistivity
 
@@ -418,14 +418,14 @@ unless noted otherwise.
 
 ### Positive
 
-- Closes the AP1 question on Carson relevance for earth currents.
-  Christian can now answer "at which frequency / soil resistivity
-  does the perfect-mirror approximation break down" quantitatively
-  — see `notebooks/15_carson_correction.ipynb`.
+- Quantifies the relevance of the Carson correction for earth
+  currents: "at which frequency / soil resistivity does the
+  perfect-mirror approximation break down" can now be answered
+  numerically — see `notebooks/15_carson_correction.ipynb`.
 - The closed-form Carson series adds essentially zero cost
   ($\mathcal{O}(M^2)$ scalar evaluations per frequency, vectorised
   via `numpy`). Frequency sweeps with $N_f \le 20$ on
-  AP1-relevant geometries ($M \le 5\,000$) remain inside the
+  relevant geometries ($M \le 5\,000$) remain inside the
   workstation budget.
 - The implementation is **physically transparent**: the same
   series Carson published in 1926, with the same regime split.
@@ -446,7 +446,7 @@ unless noted otherwise.
 - The branch block is rebuilt at every frequency. With Carson on
   and $N_f$ frequencies, $N$ segments, the assembly cost is
   $\mathcal{O}(N_f \cdot M^2)$ closed-form evaluations on top of
-  the existing $\mathcal{O}(N_f \cdot N^3)$ LU. For AP1
+  the existing $\mathcal{O}(N_f \cdot N^3)$ LU. For typical
   ($M \le 5\,000$, $N_f \le 20$) the assembly is still
   $\le 10\,\mathrm{s}$ in the worst case; the LU dominates.
 

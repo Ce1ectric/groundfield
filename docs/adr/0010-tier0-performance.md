@@ -4,7 +4,7 @@
 |---|---|
 | **Status** | Accepted (Tier 0b implemented; 0a / 0c follow-ups) |
 | **Date** | 2026-05-09 |
-| **Deciders** | Christian Ehlert |
+| **Deciders** | Project maintainers |
 | **Scope** | `groundfield.coupling.inductance`, `groundfield.solver.image` (LU caching), discretiser heuristics |
 
 ## Context
@@ -17,7 +17,7 @@ substantially:
 
 * **0a — LU caching across frequencies.** Today the solver
   rebuilds the dense reaction matrix and re-factorises per
-  frequency. For the AP1 production path
+  frequency. For the default path
   (`earth_inductive_model="perfect_mirror"`, no
   per-conductor `inductance_model`) the matrix is identical
   across frequencies; the solve currently does $n_\text{freq}$
@@ -87,9 +87,9 @@ internally rebuilds + factorises ``A``. Implementing 0a
 requires hoisting that build out of the per-call API to a
 "prepare once, solve many" interface — touching seven backends
 plus the engine dispatch. Estimated effort: 3–5 days plus
-regression-test maintenance. The win on the AP1 production path
+regression-test maintenance. The win on the default path
 (galvanic + multi-frequency) is exactly ``len(frequencies)``;
-typical AP1 sweeps use 1 frequency, so the practical
+typical sweeps use 1 frequency, so the practical
 improvement is small unless the user explicitly runs a
 multi-frequency study without inductive coupling. Listed
 explicitly in this ADR to make the plan reviewable; will be
@@ -120,12 +120,12 @@ For 0b (this release):
 1. **Bit-exact regression** against the legacy loop on every
    geometric class used by the existing test suite — single
    rod, ring, strip, mesh, multi-electrode network with
-   bonding straps, AP1 reference networks. Tolerance:
+   bonding straps, reference networks. Tolerance:
    $10^{-12}$ relative on every matrix entry.
 2. **Numerical stability** at extreme aspect ratios — very long
    thin PEN runs, very short bonding straps, near-parallel
    geometries.
-3. **Performance** — measured speed-up on a representative AP1
+3. **Performance** — measured speed-up on a representative typical
    network with $M \in [100, 5\,000]$, plotted in
    `notebooks/22_tier0_performance.ipynb`.
 
@@ -133,7 +133,7 @@ For 0a (follow-up):
 
 1. Bit-exact regression on every multi-frequency test
    (`tests/test_*` that use `frequencies=[...]`).
-2. End-to-end frequency-sweep speed-up on the AP1 reference
+2. End-to-end frequency-sweep speed-up on the reference
    network.
 
 ## Consequences

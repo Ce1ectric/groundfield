@@ -133,7 +133,7 @@ kernel as a future action item, but the existing
   consistently the closest match to the literature reference values
   among the segment-discretised engines.
 - **Computational cost.** $O(N^2)$ matrix build, $O((N + K)^3)$ LU
-  solve. For AP1 with $N \le 1000$ the runtime is dominated by the
+  solve. For typical cases with $N \le 1000$ the runtime is dominated by the
   matrix build (a few hundred milliseconds in the 2-layer case
   with $\sim 200$ image terms).
 - **Reduction.** At $K_1 = 0$ the engine collapses bit-exactly to
@@ -171,9 +171,30 @@ bias issue.
   multilayer soils. *IEEE PWRD* 6(4). Reference values for
   cross-validation.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.HomogeneousSoil(resistivity=100.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="mom",
+                          segment_length=0.05,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+```
+
+## API reference
+
+::: groundfield.solver.mom
+
 ## Related material
 
-- API reference: `groundfield.solver.mom`.
 - ADR-0001 — original methodology decision.
 - Notebook `03_cross_engine.ipynb` — image vs. mom side-by-side on
   homogeneous and 2-layer worlds.

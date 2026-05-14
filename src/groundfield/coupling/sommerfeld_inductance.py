@@ -109,6 +109,21 @@ class LayeredEarth:
         Thicknesses $h_1, \\dots, h_{n-1}$ in metres. The bottom
         layer has no thickness (semi-infinite). For
         ``len(thicknesses) == len(rhos) - 1``.
+
+    Notes
+    -----
+    **Numerical precision contract.** The reflection-coefficient
+    evaluators (:func:`reflection_coefficient_homogeneous`,
+    :func:`reflection_coefficient_layered`) and every consumer of
+    this dataclass operate in **IEEE-754 double precision (FP64)**.
+    Future hardware-accelerated backends (e.g. an MLX path on Apple
+    silicon) must honour the same precision or the cross-backend
+    cross-check in
+    ``tests/test_layered_green.py::test_cross_backend_precision``
+    will fail. ``np.complex128`` is the default at every entry point
+    and is preserved through the Sommerfeld quadrature; do not
+    silently down-cast to FP32 in a derived backend (fifth
+    2026-05-13 audit pass).
     """
 
     rhos: tuple[float, ...]
@@ -235,7 +250,7 @@ def reflection_coefficient_layered(
         R_k = (u[k] - u[k + 1]) / (u[k] + u[k + 1])
         R_internal.append(R_k)
     # Walk up: combined reflection at the top of layer k seen from layer 1
-    # is built recursively. For the AP1 case n=2, this is just
+    # is built recursively. For the default case n=2, this is just
     #   Gamma_eff = (R_{0,1} + R_{1,2} e^{-2 u_1 h_1}) / (1 + R_{0,1} R_{1,2} e^{-2 u_1 h_1})
     # with R_{0,1} = (u_a - u_1)/(u_a + u_1) = (lambda - u_1)/(lambda + u_1) (sign opposite).
     # Hmm, for the magnetic case the air-side coefficient is
@@ -327,7 +342,7 @@ def _build_lambda_grid(
         Geometry and material parameters; see module docstring.
     n_panels_per_oscillation
         Resolution of the Bessel oscillations on the uniform tail.
-        8 × 8-point GL ≅ machine precision for AP1 ranges.
+        8 × 8-point GL ≅ machine precision for typical ranges.
     n_log_nodes
         Number of nodes on the logarithmic small-$\\lambda$ part.
 

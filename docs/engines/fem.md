@@ -46,7 +46,7 @@ condition of this weak form.
 
 ## Axisymmetric reduction
 
-For work-package-1 reference electrodes (rod, ring, mesh) the
+For typical reference electrodes (rod, ring, mesh) the
 problem is **rotationally symmetric** around the cluster centroid
 to a good approximation. Exploiting this symmetry reduces the
 problem from 3-D to 2-D in cylindrical coordinates $(s, z)$:
@@ -231,10 +231,10 @@ upgrade. It would:
 - Cost one to two orders of magnitude more in mesh-build and solve
   time.
 
-The current axisymmetric implementation is sufficient for the AP1
-work package and provides the volume-PDE cross-check at minimal
-implementation cost. Upgrading to a full 3-D FEM is deferred until
-AP1 demands it.
+The current axisymmetric implementation is sufficient for typical
+use cases and provides the volume-PDE cross-check at minimal
+implementation cost. Upgrading to a full 3-D FEM is deferred until a
+concrete use case demands it.
 
 ## References
 
@@ -251,10 +251,29 @@ AP1 demands it.
 - **Reddy, J. N.** (2005). *An Introduction to the Finite Element
   Method*, McGraw-Hill. The FEM textbook.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.HomogeneousSoil(resistivity=100.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="fem", frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+print(result.metadata.get("equivalent_hemisphere_radius"))
+```
+
+## API reference
+
+::: groundfield.solver.fem
+
 ## Related material
 
-- API reference: `groundfield.solver.fem`,
-  `groundfield.solver.fem.equivalent_hemisphere_radius`.
 - ADR-0002 — engine selection heuristic; the FEM is the volume-PDE
   cross-check.
 - Notebook `08_fem.ipynb` — equivalent-hemisphere visualisation,

@@ -17,9 +17,9 @@ electrically insulating air) and a Dirichlet far-field
 truncated to a finite outer radius $R_{\\text{far}}$).
 $q$ is the current source density.
 
-For work package 1, where most reference electrodes are essentially
-**axisymmetric** around their connection point (a single rod, a ring,
-a hemisphere), we exploit the symmetry and discretise the problem on
+For most reference electrodes that are essentially **axisymmetric**
+around their connection point (a single rod, a ring, a hemisphere),
+we exploit the symmetry and discretise the problem on
 a 2-D $(s, z)$ mesh with cylindrical coordinates. The PDE
 becomes
 $$
@@ -49,7 +49,7 @@ Scope
   :class:`RingElectrode` and :class:`MeshElectrode` *as effective
   hemispheres* — the equivalent-hemisphere radius is computed from
   the electrode's geometric parameters before the FEM run. This is
-  the standard reduction used in dissertation-level reference
+  the standard reduction used in research-level reference
   comparisons (see Sunde 1968 ch. 2.1, Dwight 1936): a ring or mesh
   electrode of effective area $A$ and effective length
   $L$ is replaced by the hemisphere of radius
@@ -60,7 +60,7 @@ Scope
 - **Multi-electrode.** Multiple electrodes are aggregated into one
   effective hemisphere centred at the centroid of the cluster — the
   ``fem`` backend therefore reports cluster-level results rather than
-  per-electrode currents. For a single cluster (the typical AP1
+  per-electrode currents. For a single cluster (the typical
   case) the approximation is appropriate.
 - **Frequency.** Quasi-static, frequency-independent.
 

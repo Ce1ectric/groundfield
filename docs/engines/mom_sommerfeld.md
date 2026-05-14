@@ -85,7 +85,7 @@ makes the integrand non-oscillatory along the contour. The current
 implementation uses the simpler real-axis adaptive quadrature.
 Pragmatic justification:
 
-- For $s \lesssim 100\,\text{m}$ (the AP1 range) the real-axis
+- For $s \lesssim 100\,\text{m}$ (the typical range) the real-axis
   adaptive rule converges in 200–400 kernel evaluations per pair,
   which is acceptable for the engine's role as cross-check
   reference.
@@ -94,7 +94,7 @@ Pragmatic justification:
   significantly larger.
 - The cross-validation tests show that the real-axis rule already
   agrees with the closed-form engines to better than 1 % across
-  the AP1 contrast range.
+  the typical contrast range.
 
 The module's docstring still cites Zou et al. as the reference for
 the *idea*; switching to a complex contour is a documented future
@@ -188,10 +188,31 @@ report agreement tables relative to this engine.
 - **Dwight, H. B.** (1936). Calculation of resistances to ground.
   Reference DC resistances used in the cross-validation tests.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+# Reference engine — slow but methodologically independent.
+engine = gf.create_engine(backend="mom_sommerfeld",
+                          segment_length=0.1,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+```
+
+## API reference
+
+::: groundfield.solver.mom_sommerfeld
+
 ## Related material
 
-- API reference: `groundfield.solver.mom_sommerfeld`,
-  `groundfield.solver.mom_sommerfeld.sommerfeld_kernel_value`.
 - ADR-0002 — engine selection heuristic; this engine is the
   reference for the layered family.
 - Notebook `06_mom_sommerfeld.ipynb` — kernel sanity checks at the

@@ -2,7 +2,7 @@
 
 This module provides quick visualisations of the *physical world*
 — electrodes, conductors and current sources — **before** the
-solver runs. In AP1 setups with several hundred electrodes
+solver runs. In default setups with several hundred electrodes
 (200 EFH plus KVS plus substation plus measurement aux/probe) it
 is very useful to inspect the geometry first to catch typos in
 positions, accidental clusters, missing conductors, or sources
@@ -288,7 +288,7 @@ def plot_world(
 
     Pure-geometry visualisation; no field quantity is evaluated
     and no solver is invoked. Useful as a sanity check before
-    :meth:`World.solve` on a large AP1 network.
+    :meth:`World.solve` on a large typical network.
 
     Parameters
     ----------
@@ -314,7 +314,7 @@ def plot_world(
     annotate_electrodes
         If ``True``, attach a small text label with the electrode
         name to each electrode. Default ``False`` because
-        AP1-grade worlds with > 50 electrodes look cluttered.
+        production-grade worlds with > 50 electrodes look cluttered.
     figsize
         Matplotlib figure size in inches (used when ``ax`` is
         ``None``).

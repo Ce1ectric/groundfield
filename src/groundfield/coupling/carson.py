@@ -119,7 +119,7 @@ _REGIME_LARGE_MIN = 5.0
 
 # Gauss–Legendre quadrature nodes for the intermediate regime.
 # 64 nodes are sufficient for machine-precision evaluation of
-# Carson's integral over the AP1 parameter range; the marginal
+# Carson's integral over the typical parameter range; the marginal
 # cost vs. 32 nodes is negligible compared with the surrounding
 # linear-system solve.
 _GL_NODES_64, _GL_WEIGHTS_64 = np.polynomial.legendre.leggauss(64)
@@ -228,7 +228,7 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
     classical Tleis recurrence on Carson's series is numerically
     delicate (alternating coefficients with rapidly varying
     magnitudes). Quadrature converges to machine precision in
-    $\\le 64$ nodes across the AP1 parameter range and is the
+    $\\le 64$ nodes across the typical parameter range and is the
     reference implementation of the present module.
 
     For $\\theta \\to \\pi/2$ (wires at the same height with only
@@ -253,7 +253,7 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
     if p <= 1e-6:
         # Degenerate (theta -> pi/2). The integrand has no
         # exponential decay; fall back to the small-a form so
-        # tests do not fail on edge cases. AP1 geometries always
+        # tests do not fail on edge cases. typical geometries always
         # have h > 0 for both wires, so we never hit this branch
         # in production.
         return _p_q_small(max(a, 1e-12), theta)
@@ -498,7 +498,7 @@ def deri_semlyen_correction(
     The Deri/Semlyen approximation is **not** the production
     code path. It is provided as an alternative independent
     estimator that the test suite can compare against the Carson
-    series — agreement within $\\approx 5\\,\\%$ over the AP1
+    series — agreement within $\\approx 5\\,\\%$ over the typical
     parameter range confirms that neither implementation contains
     a sign or pre-factor bug.
 

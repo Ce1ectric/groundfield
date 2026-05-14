@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-04 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
@@ -17,8 +17,8 @@ is *short* compared to its electrical size — for a few-metre run
 between two rod electrodes the lumped approximation matches the
 distributed solution to within a fraction of a percent.
 
-For work package 1 (TN distribution network) several questions
-**fall outside that regime**:
+For TN distribution networks several questions **fall outside
+that regime**:
 
 1. **PEN-strand spanning the village.** A 100 – 200 m PEN section
    between the transformer station and the cable cabinets does not
@@ -36,13 +36,13 @@ For work package 1 (TN distribution network) several questions
    shield itself is a distributed earth conductor whose leakage and
    longitudinal current are coupled through Carson-type effects
    below 1 kHz.
-4. **Inductive coupling between conductor sections.** The AP1
-   research question on the *coupling between the measurement lead
-   and the current injection* requires the geometry of the leads to
-   be resolved spatially — Neumann integrals are point-pair
-   integrals; lumped branches do not capture them.
+4. **Inductive coupling between conductor sections.** Analysing the
+   *coupling between the measurement lead and the current injection*
+   requires the geometry of the leads to be resolved spatially —
+   Neumann integrals are point-pair integrals; lumped branches do
+   not capture them.
 
-The lumped model is therefore insufficient for AP1 in its current
+The lumped model is therefore insufficient for typical cases in its current
 form. ADR-0003 settles **how to extend** the conductor stack so
 that it remains compatible with the eight existing backends, the
 finite-impedance branches added in the previous step, and the
@@ -160,7 +160,7 @@ If a conductor's start- or end-electrode is `None` (purely geometric
 end), the corresponding endpoint becomes a **floating node**: it
 participates in the linear system but has no external source, no
 leakage, and no constraint other than KCL. This case will be useful
-for future work on partial measurement-lead geometries; for AP1 the
+for future work on partial measurement-lead geometries; for typical cases the
 ends are always anchored to electrodes.
 
 ### Implementation strategy
@@ -220,7 +220,7 @@ ends are always anchored to electrodes.
   the conductor has segments, Neumann integrals between segment
   pairs become a straightforward addition to the longitudinal
   impedance.
-- Enables AP1 questions that the lumped model cannot answer:
+- Enables research questions that the lumped model cannot answer:
   PEN-strand voltage drop with intermediate leakage, bare-copper
   conductor as a distributed earth element, partial-shield current
   redistribution.
@@ -231,7 +231,7 @@ ends are always anchored to electrodes.
 
 ### Negative
 
-- Larger linear system. For an AP1 world with ~100 rods and
+- Larger linear system. For an a typical world with ~100 rods and
   ~150 m of PEN at $\Delta s = 1\,\mathrm{m}$, the additional
   conductor segments push the segment count from ~1 500
   (electrodes only) towards ~3 000. The dense $O(N^2)$ memory

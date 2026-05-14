@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-07 |
-| **Deciders** | Christian Ehlert |
-| **Scope** | `groundfield`, work package 1 of the dissertation |
+| **Deciders** | Project maintainers |
+| **Scope** | `groundfield` |
 
 ## Context
 
@@ -21,22 +21,22 @@ $\ell_{ij}$ is the projected geometric length of the segment pair.
 This is the standard **transmission-line modelling** convention used
 in EMTP/PSCAD/ATP. It is exact for **infinite parallel wires over a
 homogeneous earth**, but it has two structural limitations that
-matter for the AP1 dissertation work:
+matter for typical applications:
 
 1. **Short conductors / arbitrary geometry.** Carson's per-meter
    formula assumes translation invariance along the wire axis. For
    wires whose length is comparable to the earth skin depth
    $\delta$, or for non-parallel / 3-D arrangements, the per-meter
-   closed form does not capture end effects. The AP1 frequency
+   closed form does not capture end effects. The typical frequency
    range ($f \le 1\,\mathrm{kHz}$) and soil resistivities
    ($\rho_e \in [50, 5000]\,\Omega\,\mathrm{m}$) yield
    $\delta \in [350\,\mathrm{m}, 35\,\mathrm{km}]$ — comparable to
-   or larger than typical TN-Ortsnetz distances. Many electrodes
+   or larger than typical TN low-voltage distances. Many electrodes
    and short connection wires therefore live in the regime
    $L \lesssim \delta$ where Carson is the wrong asymptote.
 2. **Layered earth.** Carson's series is rigorously derived for a
    homogeneous half-space. Layered configurations
-   ($\rho_1, \rho_2, h_1$) appear in every AP1 study, and ADR-0005
+   ($\rho_1, \rho_2, h_1$) appear in every typical study, and ADR-0005
    handles them only with a `UserWarning` and the upper-layer
    $\rho_1$ — a documented approximation, not a model.
 
@@ -45,7 +45,7 @@ earth-return inductive coupling: the vector-potential Green's
 function with the σ- (and layer-) dependent earth correction is
 integrated over the actual segment-pair geometry. ADR-0005's Carson
 series then becomes a **fast asymptotic option**, and ADR-0006
-becomes the **default for AP1-relevant studies** where the
+becomes the **default for relevant studies** where the
 asymptotic assumptions break down.
 
 ## Decision
@@ -91,7 +91,7 @@ This is the analogue of ADR-0004's Neumann integral, but with the
 | $\sigma_e \to 0$ | $G_\text{mag}\to 1/R$ → free space, no image | $\omega \to 0$ same |
 | Long parallel wires + homogeneous earth | $\int Z_{ij}$ collapses to Carson's per-m × $\ell$ | ADR-0005 recovered as asymptote |
 | Short wires over homogeneous earth | $Z_{ij}$ deviates from Carson by $\mathcal{O}((L/\delta)^2)$ | New physics captured |
-| Layered earth | $G_\text{mag}$ uses the **layered** reflection coefficient $\Gamma_\text{mag}^{(n)}(\lambda)$ | AP1 layered studies |
+| Layered earth | $G_\text{mag}$ uses the **layered** reflection coefficient $\Gamma_\text{mag}^{(n)}(\lambda)$ | layered-earth studies |
 
 ### Two pillars in one ADR
 
@@ -119,7 +119,7 @@ def earth_return_green_homogeneous(
     """G_mag(r, r') - 1/R, the σ-dependent earth correction."""
 ```
 
-#### Pillar B — Layered earth (same ADR, planned for the AP1 sweep)
+#### Pillar B — Layered earth (same ADR, planned for the typical sweep)
 
 For an `n`-layer earth, the reflection coefficient is built from
 the recursive Tagg/Sunde-style formula
@@ -161,8 +161,8 @@ EarthInductiveModel = Literal[
 ```
 
 Default remains `"perfect_mirror"` — every existing notebook and
-test continues to produce its current bit-exact result. AP1
-notebooks opt into `"sommerfeld"` for the dissertation-grade
+test continues to produce its current bit-exact result. typical
+notebooks opt into `"sommerfeld"` for the production-grade
 runs; `"carson_series"` is preserved as the cheap asymptotic
 diagnostic and is documented as such.
 
@@ -192,7 +192,7 @@ T_{Sommerfeld} \;=\; \mathcal{O}\bigl(N_f \cdot M^2 \cdot N_\lambda\bigr)
 $$
 
 evaluations of $J_0$ per outer node, fully vectorised through
-`numpy`. For AP1 ($M \le 5000$, $N_\lambda \le 200$, $N_f \le 20$)
+`numpy`. For typical ($M \le 5000$, $N_\lambda \le 200$, $N_f \le 20$)
 this is ≲ 5 minutes total — tolerable for the planned parameter
 sweeps.
 
@@ -248,7 +248,7 @@ module.
 
 ### Positive
 
-- **AP1 dissertation work runs on a physically rigorous model.**
+- **Reference computations run on a physically rigorous model.**
   Layered earth, short wires, non-parallel geometries — all are
   treated correctly within the same numerical machinery.
 - The Carson series stays available as a cheap asymptotic
@@ -266,7 +266,7 @@ module.
 ### Negative
 
 - Computational cost grows by $\mathcal{O}(N_\lambda)$ per
-  segment-pair per frequency. Modest for AP1 (5 min sweep) but
+  segment-pair per frequency. Modest for typical cases (5 min sweep) but
   substantial for very large worlds (>10 000 segments). For those
   cases the asymptotic Carson model remains available as the
   fallback.

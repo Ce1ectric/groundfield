@@ -48,8 +48,8 @@ log-spaced grid in $\\lambda$ to ``P`` complex exponentials.
 This is a faithful Python re-implementation of the segmented-sampling
 least-squares idea of Dan et al. 2021 (without the segmentation
 heuristic, which is needed mainly for very many layers; for the
-two-/three-layer use cases of work package 1 a single segment with a
-moderately oversampled grid is enough).
+typical two-/three-layer use cases a single segment with a moderately
+oversampled grid is enough).
 
 Validity
 --------

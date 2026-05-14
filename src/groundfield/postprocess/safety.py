@@ -41,7 +41,7 @@ visible.
 
 Validity envelope
 -----------------
-* Frequency: dissertation envelope :math:`f \\le 1\\,\\mathrm{kHz}`,
+* Frequency: quasi-static envelope :math:`f \\le 1\\,\\mathrm{kHz}`,
   inherited from the underlying Green's function.
 * Geometry: relies on
   :meth:`FieldResult.potential` and
@@ -408,11 +408,11 @@ def permissible_touch_voltage_en50522(t_clear_s: float) -> float:
 
     Notes
     -----
-    The EN 50522 curve is intended for engineering design; for the
-    AP1 dissertation the helper is used as a *reference line* on
-    plots of computed touch voltages, not as a regulatory
-    pass/fail. Use :func:`touch_voltage` to compute the actual
-    :math:`U_T` and compare against this reference.
+    The EN 50522 curve is intended for engineering design; this
+    helper is used as a *reference line* on plots of computed touch
+    voltages, not as a regulatory pass/fail. Use
+    :func:`touch_voltage` to compute the actual :math:`U_T` and
+    compare against this reference.
     """
     if not math.isfinite(t_clear_s) or t_clear_s <= 0.0:
         raise ValueError(f"t_clear_s must be > 0, got {t_clear_s!r}.")

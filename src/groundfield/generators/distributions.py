@@ -244,7 +244,7 @@ class Weibull(Distribution):
 class Discrete(Distribution):
     """Discrete numerical distribution over a finite value set.
 
-    Mirrors AP1 parameter axes such as
+    Mirrors typical parameter axes such as
     $n_\\text{EFH} \\in \\{5, 10, 30, 80, 200\\}$. ``weights`` may be
     supplied to bias the choice; if omitted the values are sampled
     uniformly.

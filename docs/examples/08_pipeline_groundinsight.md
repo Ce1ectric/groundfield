@@ -5,13 +5,13 @@ produces a **reduced equivalent model** that drops straight into
 `groundinsight` for downstream fault-current and reduction-factor
 analyses. This is the bridge described in
 [ADR-0008](../adr/0008-groundinsight-bridge.md) and demonstrated
-on a small AP1 case.
+on a small default case.
 
 ## What you'll see
 
 * How to run a parametric soil sweep that produces a
   $(rho, f, Z)$ sample table.
-* How `RhoFStandardFit` fits the dissertation's
+* How `RhoFStandardFit` fits the
   five-coefficient form
   $Z(\rho, f) = k_1 \rho + (k_2 + j k_3) f + (k_4 + j k_5) f \rho$.
 * How `to_bustype(fit, ...)` produces a live
@@ -50,7 +50,7 @@ from groundfield.io.groundinsight import (
 )
 
 
-# 1. A small AP1 network — substation + 5 EFH residential houses.
+# 1. A small typical network — substation + 5 EFH residential houses.
 def make_world(rho_1: float) -> gf.World:
     cfg = TnNetworkConfig(
         building_counts={"residential": 5},
@@ -100,8 +100,8 @@ print(f"rms_rel    = {fit.rms_relative:.2%}")
 print("\n=== Export to groundinsight ===")
 bustype = to_bustype(
     fit,
-    name="AP1_substation_5EFH",
-    description="AP1 reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m",
+    name="substation_5EFH",
+    description="reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m",
     system_type="LV",
     voltage_level=0.4,
 )
@@ -110,11 +110,11 @@ print("formula:", bustype.impedance_formula)
 
 
 # 5. Persistent JSON record (no groundinsight required to read it)
-json_path = "ap1_substation_5EFH.bustype.json"
+json_path = "substation_5EFH.bustype.json"
 save_bustype_json(
     fit, json_path,
-    name="AP1_substation_5EFH",
-    description="AP1 reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m",
+    name="substation_5EFH",
+    description="reference: 5 EFH, 2-layer soil ρ_2=50, h_1=5 m",
     system_type="LV", voltage_level=0.4,
     electrode_name="trafo_ring_0",
     soil_summary="TwoLayerSoil(rho_1 sweep [50,100,300,1000], rho_2=50, h_1=5)",
@@ -183,7 +183,7 @@ k2 = +1.5912e-04     (purely inductive ∝ f)
 rms_rel    = 0.32%
 
 === Export to groundinsight ===
-BusType: BusType(name=AP1_substation_5EFH, system_type=LV, voltage_level=0.4)
+BusType: BusType(name=substation_5EFH, system_type=LV, voltage_level=0.4)
 formula: 0.10023*rho + 1.5912e-4*f + 7.421e-7*f*rho + 2.103e-7*j*f*rho
 
 === Round-trip verification ===
@@ -206,8 +206,8 @@ The exported `BusType` plugs straight into a
 like (see `groundinsight` docs for details):
 
 ```python
-gi.start_dbsession("ap1_grounding.db")
-net = gi.create_network(name="AP1_test", frequencies=FREQS)
+gi.start_dbsession("grounding.db")
+net = gi.create_network(name="test", frequencies=FREQS)
 gi.create_bus(name="substation", network=net, type=bustype,
               specific_earth_resistance=100.0)
 # ... add more buses, branches, faults, sources ...
@@ -225,10 +225,10 @@ the field study — no manual transcription, no version drift.
 
 ## When the standard form is not enough
 
-`RhoFStandardFit` assumes the AP1-typical leading-order
+`RhoFStandardFit` assumes the typical leading-order
 behaviour (linear in $\rho$, linear in $f$, plus the Carson
 cross-term). For wider frequency bands, transient analyses, or
-non-AP1 geometries where the impedance has clear resonance peaks,
+non-typical geometries where the impedance has clear resonance peaks,
 use the **Vector Fitting** family instead:
 
 ```python
@@ -247,7 +247,7 @@ print(vf.poles, vf.residues)
 # Export the same way; ``rho_at_fit_Ohm_m`` is the soil it was fit at
 bustype_vf = to_bustype(
     vf,
-    name="AP1_substation_5EFH_vector_fit",
+    name="substation_5EFH_vector_fit",
     description="Vector fit at ρ_1 = 100 Ω·m",
     system_type="LV", voltage_level=0.4,
     rho_at_fit=100.0,
@@ -265,7 +265,7 @@ $s \to j\,2\pi f$).
   a single `groundinsight` study to obtain confidence bands on
   the fault current.
 * Persist a "library of BusTypes" to a single SQLite database
-  via `gi.start_dbsession("ap1_library.db")` plus
+  via `gi.start_dbsession("bustype_library.db")` plus
   `save_bustype_to_db(...)`. Subsequent studies pick them up
   with `gi.load_bustype(...)` — no recomputation.
 * Iterate the loop with the Vector Fitting variant for

@@ -3,7 +3,7 @@
 ```python
 import groundfield as gf
 
-# 1) Soil model: typical two-layer soil from the AP1 parameter space
+# 1) Soil model: a representative two-layer soil
 soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
 
 # 2) Build a world and add a ring electrode around a substation
@@ -24,6 +24,13 @@ engine = gf.create_engine(
     segment_length=0.05,
     frequencies=[50.0, 150.0, 250.0, 350.0],
 )
+
+# 3a) Sweeps that intentionally iterate non-monotonically must use
+# the explicit opt-in to silence the EngineFrequencyOrderWarning:
+#     engine_sweep = engine.with_frequencies(5000.0, 50.0,
+#                                            preserve_order=True)
+# The resulting Engine carries the list verbatim — the solver never
+# sorts behind your back.
 
 # 4) Run the simulation
 result = world.solve(engine)
@@ -83,9 +90,9 @@ to enforce the methodological cross-checks between the closed-form
 image engines, the integral-equation engines (`mom`,
 `mom_sommerfeld`, `bem`) and the volume-PDE engine (`fem`).
 
-## Where this fits in work package 1
+## Parameter sweeps
 
 - Vary `soil.rho_1`, `soil.rho_2`, `soil.h_1` and the auxiliary
-  electrode position to span the AP1 parameter space.
+  electrode position to span the parameter space of interest.
 - The resulting `rho-f` curves feed the model reduction step in
   `groundinsight`.

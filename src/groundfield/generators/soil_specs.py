@@ -12,7 +12,7 @@ models:
 
 * :class:`HomogeneousSoilSpec` — single-resistivity, half-space.
 * :class:`TwoLayerSoilSpec` — finite upper layer over a
-  semi-infinite lower layer. The default for AP1.
+  semi-infinite lower layer. The default for typical cases.
 * :class:`MultiLayerSoilSpec` — arbitrary stratification, the last
   layer semi-infinite.
 
@@ -81,7 +81,7 @@ class HomogeneousSoilSpec(BaseModel):
 
 
 class TwoLayerSoilSpec(BaseModel):
-    """Two-layer model — the AP1 default.
+    """Two-layer model — the default.
 
     Upper layer of resistivity $\\rho_1$ and thickness $h_1$ over a
     semi-infinite lower layer of resistivity $\\rho_2$.

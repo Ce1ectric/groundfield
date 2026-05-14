@@ -18,10 +18,10 @@ rest of the software family:
 
 Guiding principle
 -----------------
-The export to ``groundinsight`` is the linchpin of the dissertation
-pipeline: the PDE / field model produces the reduced equivalent
-model used for planning and type studies. ``io.groundinsight``
-provides the bridge.
+The export to ``groundinsight`` closes the pipeline: the PDE /
+field model produces the reduced equivalent model used for
+planning and type studies. ``io.groundinsight`` provides the
+bridge.
 """
 
 from __future__ import annotations

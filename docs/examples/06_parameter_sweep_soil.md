@@ -2,7 +2,7 @@
 
 The first parameter sweep. We hold the network and the
 measurement setup fixed, sweep the upper-layer soil resistivity
-$\rho_1$ over the AP1 grid, and observe how the cluster
+$\rho_1$ over the default grid, and observe how the cluster
 impedance scales. This example is the bridge to the Monte-Carlo
 sweep in example 07.
 
@@ -56,7 +56,7 @@ def solve_one(rho_1: float) -> dict:
     }
 
 
-# AP1 ρ_1 grid
+# Example ρ_1 grid
 RHO_1_GRID = [30.0, 100.0, 200.0, 500.0, 1000.0]
 rows = [solve_one(rho_1) for rho_1 in RHO_1_GRID]
 df = pd.DataFrame(rows)
@@ -77,8 +77,8 @@ fig.tight_layout()
 plt.show()
 
 # --- save the table for later analysis (e.g. publication tables) ---
-df.to_csv("ap1_rho1_sweep.csv", index=False)
-print("\nSaved to ap1_rho1_sweep.csv")
+df.to_csv("rho1_sweep.csv", index=False)
+print("\nSaved to rho1_sweep.csv")
 ```
 
 ## Expected output
@@ -105,7 +105,7 @@ return current.
 The same loop works for any single-axis sweep. Replace
 `rho_1=rho_1` with `rho_2=...` or `h_1=...` to sweep the
 other soil parameters; replace `building_counts={"residential":
-30}` with the AP1 grid `[5, 10, 30, 80, 200]`. Outer-product
+30}` with the default grid `[5, 10, 30, 80, 200]`. Outer-product
 two axes:
 
 ```python

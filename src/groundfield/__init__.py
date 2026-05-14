@@ -9,10 +9,10 @@ soil and solved numerically. The results are field profiles, potential
 curves, current distributions, and reduced equivalent models
 (``rho-f``) for further use in ``groundinsight``.
 
-The package is deliberately designed to support the reference
-computations required for work package 1 of the dissertation on
-networked grounding systems: a TN distribution network with a
-substation, house connections, cable cabinets, and layered soil.
+The package is deliberately designed to support reference
+computations for networked grounding systems such as TN distribution
+networks with a substation, house connections, cable cabinets, and
+layered soil.
 
 Subpackages
 -----------
@@ -73,7 +73,12 @@ from groundfield.soil.models import (
 )
 from groundfield.solver.engine import Backend, Engine
 from groundfield.solver.result import FieldResult
-from groundfield.sources import CurrentSource, Source, VoltageSource
+from groundfield.sources import (
+    CurrentSource,
+    Source,
+    SourceAdapter,
+    VoltageSource,
+)
 from groundfield.world import World
 
 # Re-exports — top-level factories
@@ -141,17 +146,20 @@ from groundfield.io.csv import (
 )
 from groundfield.io.groundinsight import (
     BusTypeSpec,
+    evaluate_spec,
+    fit_quality_summary,
     load_bustype_json,
     save_bustype_json,
     to_bustype,
     to_bustype_dict,
 )
+from groundfield.coupling.sommerfeld_inductance import LayeredEarth
 from groundfield.io.vtk import (
     export_field_vtk,
     export_geometry_vtk,
 )
 
-# Re-exports — world generators (AP1 + future)
+# Re-exports — world generators (typical + future)
 from groundfield.generators import (
     BuildingTypeSpec,
     Categorical,
@@ -221,6 +229,7 @@ __all__ = [
     "Conductor",
     "ConductorType",
     "Source",
+    "SourceAdapter",
     "CurrentSource",
     "VoltageSource",
     # Numerics
@@ -260,7 +269,7 @@ __all__ = [
     "plot_sweep_heatmap",
     "convergence_study",
     "plot_convergence",
-    # rho-f fits (vector fitting + dissertation standard form)
+    # rho-f fits (vector fitting + research standard form)
     "VectorFitResult",
     "vector_fit",
     "fit_to_sympy",
@@ -275,6 +284,10 @@ __all__ = [
     "to_bustype",
     "save_bustype_json",
     "load_bustype_json",
+    "evaluate_spec",
+    "fit_quality_summary",
+    # Coupling / layered earth
+    "LayeredEarth",
     # IO / CSV
     "save_potential_path_csv",
     "save_electrode_table_csv",

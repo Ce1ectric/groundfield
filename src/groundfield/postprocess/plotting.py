@@ -46,7 +46,7 @@ __all__ = [
 def _draw_electrodes(ax, world: "World", plane: str) -> None:
     """Draw the electrodes' geometric outlines onto an existing axes.
 
-    Names are *not* annotated on purpose: in dense AP1 networks
+    Names are *not* annotated on purpose: in dense typical networks
     (200 EFH plus KVS plus substation plus measurement aux/probe
     electrodes) the labels overlap heavily and clutter the
     surface-potential plot. If a name annotation is genuinely
@@ -404,7 +404,7 @@ def plot_surface_potential(
        network — including the "boundary regions" where the
        potential decays back to remote earth.
     2. The plot is locked to a horizontal slice (always
-       ``plane="xy"``); this is what AP1 calls the *surface
+       ``plane="xy"``); this is what typical calls the *surface
        potential*. Use :func:`plot_potential_contour` for vertical
        slices.
 

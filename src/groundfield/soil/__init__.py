@@ -23,9 +23,9 @@ SoilModel
 
 Notes
 -----
-For work package 1 the two-layer model is the primary case (parameter
-space: varying resistivities and layer thicknesses). The other classes
-are extension points for later work.
+The two-layer model is the primary case (parameter space: varying
+resistivities and layer thicknesses). The other classes are extension
+points for additional soil structures.
 """
 
 from __future__ import annotations

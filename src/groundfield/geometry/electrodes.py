@@ -15,9 +15,9 @@ Conventions
 
 Notes
 -----
-For work package 1 (TN distribution network), ``RodElectrode``
-(driven rod), ``RingElectrode`` (foundation / ring earth electrode)
-and ``MeshElectrode`` (mesh / foundation earth electrode) are the most
+For TN distribution networks, ``RodElectrode`` (driven rod),
+``RingElectrode`` (foundation / ring earth electrode) and
+``MeshElectrode`` (mesh / foundation earth electrode) are the most
 relevant primitives.
 """
 
@@ -214,8 +214,8 @@ class GridMeshElectrode(_ElectrodeBase):
 
     Notes
     -----
-    The naming convention follows the dissertation context:
-    ``n_x`` × ``n_y`` is the count of *meshes* (cells), not of wires.
+    Naming convention: ``n_x`` × ``n_y`` is the count of *meshes*
+    (cells), not of wires.
     A grid with ``n_x = n_y = 1`` is therefore a single closed
     rectangle (the perimeter wires only).
     """

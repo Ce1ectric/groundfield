@@ -12,7 +12,7 @@ Mathematical background
 For a passive, linear, time-invariant grounding cluster, the
 driving-point impedance $Z(s)$ at the feed-in electrode is a
 rational function of the Laplace variable $s = j\\omega$. Under
-the dissertation's $f \\le 1\\,\\mathrm{kHz}$ assumption the
+the $f \\le 1\\,\\mathrm{kHz}$ assumption the
 function is well approximated by a low-order partial-fraction
 expansion
 
@@ -67,10 +67,28 @@ import numpy as np
 
 __all__ = [
     "VectorFitResult",
+    "VectorFitUnderdeterminedWarning",
     "vector_fit",
     "fit_to_sympy",
     "rho_f_from_field_result",
 ]
+
+
+class VectorFitUnderdeterminedWarning(UserWarning):
+    """Vector fit is under- or exactly-determined.
+
+    A vector fit with ``n_poles`` poles has ``2 * n_poles + extras``
+    real unknowns (residues plus optional ``R_inf`` / ``L_inf``); the
+    real-imag stacking of an input of length ``N`` gives ``2 N``
+    equations. ``n_poles >= N`` therefore leads to an under- or
+    exactly-determined least-squares problem. The fit *can* succeed
+    numerically but is effectively an identity interpolation that
+    carries no information beyond the input samples.
+
+    A dedicated warning category lets users opt into / out of the
+    diagnostic with ``warnings.simplefilter("once",
+    VectorFitUnderdeterminedWarning)`` (fifth 2026-05-13 audit pass).
+    """
 
 
 @dataclass(frozen=True)
@@ -257,7 +275,42 @@ def vector_fit(
             "frequencies and Z_values must have the same shape"
         )
     if n_poles < 1:
-        raise ValueError("n_poles must be at least 1")
+        raise ValueError(
+            "vector_fit: n_poles must be at least 1, got "
+            f"n_poles={n_poles}. n_poles == 0 produces an s-free fit "
+            "whose SymPy conversion yields a constant Z(rho, f) "
+            "expression without frequency dependence — that is never "
+            "the intended behaviour, so this case is rejected at the "
+            "API boundary (fourth 2026-05-12 audit pass)."
+        )
+    if 2 * n_poles >= frequencies.size:
+        # Each pole introduces a residue (complex, 2 real DOFs) and
+        # a pole position (complex, 2 real DOFs) — 4 real unknowns
+        # per pole. The real-imag stacking of N complex samples gives
+        # 2N equations. ``4 * n_poles + extras >= 2 * N`` therefore
+        # marks the under- or exactly-determined regime; the fit
+        # *can* succeed numerically but collapses to an identity
+        # interpolation that carries no information beyond the
+        # input samples. The conservative trigger ``2*n_poles >= N``
+        # closes the gap the audit flagged: ``n_poles=1`` on
+        # ``N in {1, 2}`` was accepted without protest (fifth
+        # 2026-05-13 audit pass).
+        import warnings as _warnings
+
+        _warnings.warn(
+            "vector_fit: n_poles="
+            f"{n_poles} with len(frequencies)={frequencies.size} "
+            "leads to an under- or exactly-determined least-squares "
+            "fit (each pole contributes residue + pole-location "
+            "DOFs; 2*n_poles >= len(frequencies) is the critical "
+            "ratio). The numerical solve may succeed but produces an "
+            "identity interpolation of the input samples that "
+            "carries no information beyond the raw frequency "
+            f"response. Reduce n_poles to {max(1, frequencies.size // 2 - 1)} "
+            "or fewer, or supply more frequency samples.",
+            VectorFitUnderdeterminedWarning,
+            stacklevel=2,
+        )
     s = 2j * math.pi * frequencies
 
     poles = _initial_poles(frequencies, n_poles, complex_conj=complex_poles)
@@ -476,7 +529,31 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
         den = (s - Re_p_sym) ** 2 + Im_p_sym ** 2
         expr = expr + num / den
 
-    return sp.simplify(expr)
+    expr = sp.simplify(expr)
+
+    # Defensive guard: every rho-f formula must depend on ``s``. A
+    # constant Z(rho, f) silently breaks the groundinsight BusType
+    # extraction, so we surface that as a ``UserWarning`` here. This
+    # cannot trigger under the current ``vector_fit`` because
+    # ``n_poles >= 1`` is enforced — the guard catches programmatically
+    # constructed ``VectorFitResult`` objects with zero poles and zero
+    # ``L_inf`` (fourth 2026-05-12 audit pass).
+    if s not in expr.free_symbols:
+        import warnings
+
+        warnings.warn(
+            "fit_to_sympy: the resulting expression has no dependency "
+            f"on the frequency-domain variable s ({expr!r}). Downstream "
+            "groundinsight BusType.impedance_formula consumers expect "
+            "a frequency-dependent rho-f model. Re-run vector_fit with "
+            "n_poles >= 1 and at least one non-zero residue, or pass "
+            "include_L_inf=True if you genuinely want a constant + "
+            "inductive shoulder.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return expr
 
 
 # ---------------------------------------------------------------------

@@ -18,7 +18,7 @@ $h_i$. The half-space at infinity acts as a Dirichlet boundary
 ("remote earth") and the air–soil interface as a Neumann
 boundary ($\partial_z\varphi = 0$ at $z = 0$).
 
-For the AP1 dissertation case the two-layer model is the primary
+For the typical case the two-layer model is the primary
 workhorse: a top layer of resistivity $\rho_1$ and finite thickness
 $h_1$ over a half-space of resistivity $\rho_2$. The homogeneous
 case is recovered for $\rho_1 = \rho_2$; the multilayer case
@@ -34,14 +34,14 @@ import groundfield as gf
 # Homogeneous half-space — fastest, used as a sanity baseline.
 homo = gf.HomogeneousSoil(resistivity=100.0)
 
-# Two-layer soil — primary AP1 case (e.g. 1 m topsoil over rock).
+# Two-layer soil — primary default case (e.g. 1 m topsoil over rock).
 two_layer = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=1.0)
 
 # Multi-layer soil — generic n-layer stack.
 multi = gf.MultiLayerSoil(layers=[
-    gf.SoilLayer(rho=80.0, h=0.5),
-    gf.SoilLayer(rho=300.0, h=2.0),
-    gf.SoilLayer(rho=50.0),  # bottom half-space (no thickness)
+    gf.SoilLayer(resistivity=80.0, thickness=0.5),
+    gf.SoilLayer(resistivity=300.0, thickness=2.0),
+    gf.SoilLayer(resistivity=50.0),  # bottom half-space (no thickness)
 ])
 
 world = gf.create_world(soil=two_layer)

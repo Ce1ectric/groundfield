@@ -60,7 +60,7 @@ for warning in gf.check_segment_resolution(
     print("WARN:", warning)
 ```
 
-For programmatic generation of large AP1 worlds (5 – 200
+For programmatic generation of large typical worlds (5 – 200
 single-family houses, stochastic electrode mixes) see
 [Generators](generators.md).
 

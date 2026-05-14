@@ -4,14 +4,14 @@
 |---|---|
 | **Status** | Accepted |
 | **Date** | 2026-05-08 |
-| **Deciders** | Christian Ehlert |
+| **Deciders** | Project maintainers |
 | **Scope** | `groundfield.io.groundinsight`; bridge to the sister project `groundinsight` |
 
 ## Context
 
 `groundfield` is the field-grade reference. `groundinsight` is the
 reduced equivalent network model that runs the actual planning and
-fault-current studies. The dissertation pipeline
+fault-current studies. The reduction pipeline
 
 ```
 PDE / field model  →  reduced rho-f model  →  measurement-anchored
@@ -25,7 +25,7 @@ in two flavours:
 - `groundfield.postprocess.vector_fitting` — a Gustavsen/Semlyen
   rational fit $Z(s)$ in the Laplace variable $s = j\,2\pi f$ at
   **fixed soil** (output of one parametric run).
-- `groundfield.postprocess.rho_f_standard` — the dissertation's
+- `groundfield.postprocess.rho_f_standard` — the
   physically-motivated 5-coefficient form
   $Z(\rho, f) = k_1\rho + (k_2 + j k_3)f + (k_4 + j k_5)f\rho$
   fitted across a soil-resistivity sweep.
@@ -180,7 +180,7 @@ return `BusType` instances or talk to the database, so
   produced the underlying physics.
 - Vector fitting: Gustavsen & Semlyen, *IEEE T-PWRD* 14(3),
   1052–1061 (1999).
-- Standard `rho-f` form: dissertation concept document
-  (`0_forschungsfragen/main.tex`, kapitel 06).
+- Standard `rho-f` form: defined in
+  :mod:`groundfield.postprocess.rho_f_standard`.
 - `groundinsight.models.core_models.BusType` — consumer of the
   exported formula.

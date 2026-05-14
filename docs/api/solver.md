@@ -82,6 +82,26 @@ The same `World` can be solved with any of the eight backends —
 `compare_engines(world, engines={"image": ..., "mom": ...})` reports
 their cluster-impedance agreement (cross-validation rules below).
 
+### Frequency-list order
+
+`Engine.frequencies` is **order-preserving**. The list is iterated
+verbatim and the same order propagates to
+`FieldResult.frequencies` and to every per-frequency column in the
+post-processing helpers (`postprocess.sweep`, the CSV writers,
+`fit_to_sympy`, etc.). A non-monotonic list — e.g. `[5000, 50]` —
+is accepted but raises a `UserWarning` so the convention is
+visible. Use the explicit opt-in if the order is intentional:
+
+```python
+engine = (
+    gf.create_engine(backend="image")
+    .with_frequencies(5000.0, 50.0, preserve_order=True)
+)
+```
+
+`Engine.with_frequencies` returns a fresh `Engine` instance; the
+receiver is not mutated.
+
 ## Cross-engine validation
 
 `groundfield.compare_engines(world, engines={...})` runs the same
