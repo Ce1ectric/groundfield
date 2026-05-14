@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.5.0] — 2026-05-14
+
 ### Changed
 
 - **`Source = Union[CurrentSource, VoltageSource]` is now a Pydantic
@@ -2706,7 +2712,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.4.0
 [0.2.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.1.0
