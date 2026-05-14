@@ -418,10 +418,10 @@ unless noted otherwise.
 
 ### Positive
 
-- Closes the research question on Carson relevance for earth currents.
-  Christian can now answer "at which frequency / soil resistivity
-  does the perfect-mirror approximation break down" quantitatively
-  — see `notebooks/15_carson_correction.ipynb`.
+- Quantifies the relevance of the Carson correction for earth
+  currents: "at which frequency / soil resistivity does the
+  perfect-mirror approximation break down" can now be answered
+  numerically — see `notebooks/15_carson_correction.ipynb`.
 - The closed-form Carson series adds essentially zero cost
   ($\mathcal{O}(M^2)$ scalar evaluations per frequency, vectorised
   via `numpy`). Frequency sweeps with $N_f \le 20$ on

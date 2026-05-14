@@ -23,10 +23,10 @@ resistance measurement to a generator-built world:
   double-line integral (ADR-0004) plus the chosen earth-return
   correction (Carson / Sommerfeld, ADR-0005 / ADR-0006).
 
-This is the configuration layer needed for **the galvanic fall-of-potential analysis**
-(reference grounding measurement; vary aux electrode position) and
-**the inductive-coupling analysis** (inductive coupling between feed line and
-parallel measurement / PEN / cable shield).
+This is the configuration layer needed for the **galvanic
+fall-of-potential** study (vary aux electrode position) and for
+the **inductive coupling** between feed line and parallel
+measurement / PEN / cable shield.
 
 Mathematical / physical content
 -------------------------------
@@ -109,7 +109,7 @@ class MeasurementLeadConfig(GeneratorConfig):
     match a bare overhead measurement wire that does not leak
     current to the soil along its length but does generate a magnetic
     field that couples to every parallel conductor — exactly the
-    inductive-coupling problem of the inductive-coupling analysis.
+    inductive-coupling problem.
     """
 
     depth_m: Union[float, AnyDistribution] = Field(
@@ -149,8 +149,8 @@ class MeasurementLeadConfig(GeneratorConfig):
         description=(
             "ADR-0004 inductance model: 'neumann' enables mutual "
             "inductance to every other conductor in the world. "
-            "Set to ``None`` for galvanic-only studies (typical "
-            "Analysis 1) — that disables every inductive effect."
+            "Set to ``None`` for galvanic-only studies — that "
+            "disables every inductive effect."
         ),
     )
 
@@ -253,13 +253,12 @@ class MeasurementInjectionConfig(GeneratorConfig):
 
     ``feed_lead`` is the metallic *Stromeinspeiseleitung* between
     the substation cluster and the aux electrode. ``None`` (default)
-    means *galvanic-only* the galvanic fall-of-potential analysis: the source's
-    ``return_to`` is set to the aux electrode but no metallic wire
-    closes the loop — the return current flows entirely through the
-    soil. Setting ``feed_lead`` to an :class:`MeasurementLeadConfig`
-    (often via :func:`overhead_lead` or :func:`buried_lead`) adds
-    the physical wire and enables inductive coupling for the
-    inductive-coupling analysis.
+    means *galvanic-only*: the source's ``return_to`` is set to the
+    aux electrode but no metallic wire closes the loop — the return
+    current flows entirely through the soil. Setting ``feed_lead``
+    to a :class:`MeasurementLeadConfig` (often via
+    :func:`overhead_lead` or :func:`buried_lead`) adds the physical
+    wire and enables the inductive coupling.
     """
 
     position_xy: tuple[float, float] = Field(
@@ -274,9 +273,9 @@ class MeasurementInjectionConfig(GeneratorConfig):
         default=None,
         description=(
             "Optional metallic feed lead from the substation to the "
-            "auxiliary electrode. ``None`` = no wire (Analysis 1, "
-            "galvanic only); a :class:`MeasurementLeadConfig` adds "
-            "the wire and enables inductive coupling (Analysis 2)."
+            "auxiliary electrode. ``None`` = no wire (galvanic only); "
+            "a :class:`MeasurementLeadConfig` adds the wire and "
+            "enables inductive coupling."
         ),
     )
 
@@ -318,7 +317,7 @@ class MeasurementProbeConfig(GeneratorConfig):
 
 
 class MeasurementSetupConfig(GeneratorConfig):
-    """Earth-resistance measurement setup (the galvanic fall-of-potential analysis + 2).
+    """Earth-resistance measurement setup.
 
     When ``TnNetworkConfig.measurement`` is set, the generator:
 
@@ -338,8 +337,8 @@ class MeasurementSetupConfig(GeneratorConfig):
        physically returns through the auxiliary electrode (and,
        if the metallic feed lead is present, mostly through it).
 
-    The default factory leaves both leads as ``None`` (Analysis 1,
-    galvanic-only). For Analysis 2 set, e.g.,
+    The default factory leaves both leads as ``None`` (galvanic
+    only). To enable inductive coupling, set, e.g.,
 
     >>> measurement = MeasurementSetupConfig(
     ...     injection=MeasurementInjectionConfig(

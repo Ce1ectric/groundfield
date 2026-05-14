@@ -14,12 +14,10 @@ and validated against Dwight 1936 (< 10 % deviation across rod, rod
 pair, ring electrode; a systematic 4–5 % from the midpoint
 point-source approximation, decreasing with finer `segment_length`).
 
-The next step is the **2-layer model**, which is central to **typical**:
-a variable upper layer ($\rho_1$, $h_1$) over a semi-infinite lower
-layer ($\rho_2$). Parameter sweep as defined in this software
-proposal.
+The next step is the **2-layer model**: a variable upper layer
+($\rho_1$, $h_1$) over a semi-infinite lower layer ($\rho_2$).
 
-Project requirements:
+Requirements:
 
 - **Frequency range** $f < 1\,\text{kHz}$ → quasi-static; a real
   Green's function suffices.

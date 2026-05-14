@@ -22,9 +22,9 @@ ADR-0003 deferred $L^{(k)}$ to a follow-up step. With
 $L^{(k)} = 0$ the system is real and frequency-independent, and the
 ``engine.frequencies`` list returns the same DC solution for every
 entry. This is fine for DC-near grounding-impedance studies but
-**not** for the research question on **inductive coupling between the
-measurement lead and the current injection** — the very effect that
-forced the distributed-conductor refactor in the first place.
+**not** for analysing **inductive coupling between the measurement
+lead and the current injection** — the very effect that forced the
+distributed-conductor refactor in the first place.
 
 This ADR settles how the inductive part is added on top of the
 distributed model.
@@ -168,7 +168,7 @@ self-inductance is geometrically smaller; this distinction matters
 for shielded MV cables but not for the bare-copper / PEN typical study.
 We keep the model simple: `inductance_model == "neumann"` always
 uses the bare-conductor self formula; refinements come with the
-cable-shield work later in this software.
+cable-shield work later.
 
 ## Validation
 
@@ -196,10 +196,10 @@ cable-shield work later in this software.
 
 ### Positive
 
-- Closes the research question on inductive coupling between the
-  measurement lead and the current injection. The model is now
-  physically complete for $f < 1\,\mathrm{kHz}$ except for the
-  Carson earth-return correction.
+- Covers inductive coupling between the measurement lead and the
+  current injection. The model is now physically complete for
+  $f < 1\,\mathrm{kHz}$ except for the Carson earth-return
+  correction.
 - The Neumann integral is **geometric only** — it works on top of
   any of the existing electric Green's-function backends without
   duplicating their kernel logic.

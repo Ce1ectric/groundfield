@@ -36,11 +36,11 @@ that regime**:
    shield itself is a distributed earth conductor whose leakage and
    longitudinal current are coupled through Carson-type effects
    below 1 kHz.
-4. **Inductive coupling between conductor sections.** The typical
-   research question on the *coupling between the measurement lead
-   and the current injection* requires the geometry of the leads to
-   be resolved spatially — Neumann integrals are point-pair
-   integrals; lumped branches do not capture them.
+4. **Inductive coupling between conductor sections.** Analysing the
+   *coupling between the measurement lead and the current injection*
+   requires the geometry of the leads to be resolved spatially —
+   Neumann integrals are point-pair integrals; lumped branches do
+   not capture them.
 
 The lumped model is therefore insufficient for typical cases in its current
 form. ADR-0003 settles **how to extend** the conductor stack so

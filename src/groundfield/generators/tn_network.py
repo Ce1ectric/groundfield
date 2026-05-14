@@ -350,8 +350,8 @@ class TnNetworkConfig(GeneratorConfig):
     measurement: Optional[MeasurementSetupConfig] = Field(
         default=None,
         description=(
-            "Optional grounding-resistance measurement setup "
-            "(the galvanic fall-of-potential analysis + 2). When set, the generator adds "
+            "Optional grounding-resistance measurement setup. "
+            "When set, the generator adds "
             "the auxiliary current electrode, the voltage probe, "
             "and (optionally) the metallic feed / probe leads, and "
             "re-routes the source's return path through the "
@@ -487,7 +487,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             world, cfg, substation_anchor, kvs_anchors, building_anchors,
         )
 
-        # --- Optional measurement setup (the galvanic fall-of-potential analysis + 2) ---
+        # --- Optional measurement setup ---
         # Materialise the auxiliary current electrode, the voltage
         # probe, and (optionally) the metallic feed / probe leads.
         # The resulting return-path anchor (or ``None`` if no

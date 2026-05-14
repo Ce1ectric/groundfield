@@ -193,11 +193,35 @@ checked against `mom_sommerfeld` for absolute correctness.
   sinusoids in noise. *IEEE Trans. ASSP* 38(5). The original
   matrix-pencil derivation.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.MultiLayerSoil(layers=[
+    gf.SoilLayer(resistivity=80.0, thickness=0.5),
+    gf.SoilLayer(resistivity=300.0, thickness=2.0),
+    gf.SoilLayer(resistivity=50.0),  # semi-infinite bottom
+])
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=0.4)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="cim",
+                          segment_length=0.1,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+print(result.metadata.get("cim_n_images"))  # effective P
+```
+
+## API reference
+
+::: groundfield.solver.cim
+
 ## Related material
 
-- API reference: `groundfield.solver.cim`,
-  `groundfield.solver.cim.fit_complex_images`,
-  `groundfield.solver.cim.ComplexImageFit`.
 - ADR-0002 — engine selection heuristic.
 - Notebook `05_cim.ipynb` — visualises the matrix-pencil fit on a
   3-layer stack and exercises the engine on a two-bonded-rod

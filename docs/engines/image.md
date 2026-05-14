@@ -153,10 +153,30 @@ These bounds are codified as parametric pytest fixtures; see
 - **Tagg, G. F.** (1964). *Earth Resistances*, Pitman. The
   practitioner's reference for image methods.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.HomogeneousSoil(resistivity=100.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="image",
+                          segment_length=0.05,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+```
+
+## API reference
+
+::: groundfield.solver.image
+
 ## Related material
 
-- API reference: `groundfield.solver.image` (auto-generated from the
-  module docstring).
 - ADR-0001 documents why this homogeneous engine sits at the root
   of the engine family.
 - Notebook `01_smoke_test.ipynb` exercises the full API of this

@@ -2,8 +2,8 @@
 
 This module turns the per-electrode currents stored in
 :class:`groundfield.solver.result.FieldResult` into the engineering
-quantities used to answer the research question *"where does the
-injected source current actually return?"*. In a TN-Ortsnetz with
+quantities that answer *"where does the injected source current
+actually return?"*. In a TN-Ortsnetz with
 hundreds of houses, dozens of cable cabinets and one or more
 metallic return paths (PEN trunk, measurement leads, cable
 shields), the soil-leakage current of every cluster matters and

@@ -118,7 +118,7 @@ __all__ = [
     "rod_circle",
     # Grounding system
     "GroundingSystemSpec",
-    # Measurement setup (the galvanic fall-of-potential analysis + 2)
+    # Measurement setup
     "MeasurementSetupConfig",
     "MeasurementInjectionConfig",
     "MeasurementProbeConfig",

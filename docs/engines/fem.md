@@ -251,10 +251,29 @@ concrete use case demands it.
 - **Reddy, J. N.** (2005). *An Introduction to the Finite Element
   Method*, McGraw-Hill. The FEM textbook.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.HomogeneousSoil(resistivity=100.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="fem", frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+print(result.metadata.get("equivalent_hemisphere_radius"))
+```
+
+## API reference
+
+::: groundfield.solver.fem
+
 ## Related material
 
-- API reference: `groundfield.solver.fem`,
-  `groundfield.solver.fem.equivalent_hemisphere_radius`.
 - ADR-0002 — engine selection heuristic; the FEM is the volume-PDE
   cross-check.
 - Notebook `08_fem.ipynb` — equivalent-hemisphere visualisation,

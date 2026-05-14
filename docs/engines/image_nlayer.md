@@ -138,9 +138,32 @@ $n \ge 3$ design decision see:
 - **ADR-0002** — the in-repo justification of the dispatcher
   design.
 
+## Example
+
+```python
+import groundfield as gf
+
+# 2-layer soil — dispatcher delegates to image_2layer.
+soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="image_nlayer",
+                          segment_length=0.1,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+print(result.metadata["dispatched_to"])  # 'image_2layer'
+```
+
+## API reference
+
+::: groundfield.solver.image_nlayer
+
 ## Related material
 
-- API reference: `groundfield.solver.image_nlayer`.
 - ADR-0002 — engine selection heuristic.
 - Notebook `04_image_nlayer.ipynb` — exercises the dispatch table
   including the deliberate `ValueError` for $n = 3$ stacks.

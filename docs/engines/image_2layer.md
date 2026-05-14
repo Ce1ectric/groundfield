@@ -8,8 +8,10 @@ semi-infinite lower layer of resistivity $\rho_2$. It is the
 simplest soil that captures the dominant first-order effect of
 heterogeneity — a frozen, weathered, or saturated surface layer
 above a different sub-stratum — without introducing the
-identification problem that more layers create. The  /
-research parameter sweep covers $\rho_1 \in [50, 1000]\,\Omega\, \text{m}$, $\rho_2 \in [10, 5000]\,\Omega\,\text{m}$, $h_1 \in [0.5, 5]\,\text{m}$.
+identification problem that more layers create. A typical
+parameter range is $\rho_1 \in [50, 1000]\,\Omega\, \text{m}$,
+$\rho_2 \in [10, 5000]\,\Omega\,\text{m}$,
+$h_1 \in [0.5, 5]\,\text{m}$.
 
 The single design degree of freedom that controls the layered
 behaviour is the **interface reflection coefficient**
@@ -182,9 +184,31 @@ for $n = 2$.
   techniques. *Adv. Eng. Soft.* 44 — Aitken / Pade acceleration of
   the series for $|K_1| \to 1$.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "ring", name="g1",
+                    center=(0.0, 0.0, 0.8), radius=5.0,
+                    wire_radius=0.005)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="image_2layer",
+                          segment_length=0.1,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+```
+
+## API reference
+
+::: groundfield.solver.image_2layer
+
 ## Related material
 
-- API reference: `groundfield.solver.image_2layer`.
 - ADR-0001 — original methodology decision.
 - Notebook `02_two_layer.ipynb` — parameter sweep over $K_1$ and
   $h_1$, trumpet comparison homogeneous vs. 2-layer, exact $K_1=0$

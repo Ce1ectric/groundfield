@@ -171,9 +171,30 @@ bias issue.
   multilayer soils. *IEEE PWRD* 6(4). Reference values for
   cross-validation.
 
+## Example
+
+```python
+import groundfield as gf
+
+soil = gf.HomogeneousSoil(resistivity=100.0)
+world = gf.create_world(soil=soil)
+gf.create_electrode(world, "rod", name="g1",
+                    position=(0.0, 0.0, 0.0), length=1.5)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
+
+engine = gf.create_engine(backend="mom",
+                          segment_length=0.05,
+                          frequencies=[50.0])
+result = world.solve(engine)
+print(result.cluster_impedance("g1")[0])
+```
+
+## API reference
+
+::: groundfield.solver.mom
+
 ## Related material
 
-- API reference: `groundfield.solver.mom`.
 - ADR-0001 — original methodology decision.
 - Notebook `03_cross_engine.ipynb` — image vs. mom side-by-side on
   homogeneous and 2-layer worlds.
