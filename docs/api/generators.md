@@ -64,12 +64,50 @@ reproducibly given a fixed seed.
   not modelled.
 * Topology of :class:`TnNetworkGenerator`: radial-with-trunk
   via cable cabinets — every house connects to its nearest cable
-  cabinet, every cable cabinet connects to the substation. The
-  open-building-map / real-street layout is roadmap.
+  cabinet, every cable cabinet connects to the substation. Real
+  street layouts are now supported via
+  :class:`~groundfield.geo.placement.OsmBuildingPlacement` (see
+  [ADR-0011](../adr/0011-osm-building-footprints.md) and the
+  [geo API](geo.md)).
 * Per-building-type grounding is now type-driven via
   :class:`BuildingTypeSpec` and supports multi-electrode systems
   (foundation + extra rod, ring + grid + strips, …) with
   per-electrode ``presence_prob`` for stochastic fleets.
+
+## Foundation electrodes: orientation and concrete shell
+
+Two extensions to :class:`FoundationElectrodeSpec` since 0.6.0 round
+out the AP1 modelling envelope:
+
+* ``orientation_deg: float | None = None`` rotates the foundation
+  rectangle around its centre. ``None`` and ``0.0`` both keep the
+  historic axis-aligned :class:`GridMeshElectrode` fast path; any
+  other value synthesises the foundation from rotated
+  :class:`StripElectrode`s and bonds them internally. Set
+  automatically from the OMBR of an OSM polygon when the
+  configured placement is
+  :class:`~groundfield.geo.placement.OsmBuildingPlacement`.
+* ``concrete_rho_ohm_m: float | AnyDistribution | None = None`` and
+  ``concrete_thickness_m`` activate the **concrete-encasement model**
+  ([ADR-0012](../adr/0012-foundation-concrete-encasement.md)).
+  ``None`` keeps the wire-in-soil baseline; setting
+  ``concrete_rho_ohm_m`` switches to the cylindrical Sunde-shell
+  model with the chosen radial thickness. The
+  ``concrete_model: Literal["lumped", "distributed"]`` discriminator
+  selects between a lumped series resistance on the PEN service
+  drop (V1, default — zero solver-side change, exact for the
+  cluster impedance when current distributes uniformly) and a
+  per-segment diagonal augmentation in the
+  ``image`` / ``image_2layer`` backends (V2 — correct for non-uniform
+  current distributions and for the surface potential right at
+  the building wall). Stochastic moisture is supported via
+  ``concrete_rho_ohm_m=Discrete(values=[50, 150, 500, 2000],
+  weights=[0.25, 0.40, 0.25, 0.10])``.
+
+The other electrode kinds (`Rod`, `Ring`, `Strip`, `Mesh`,
+`GridMesh`) do **not** carry the concrete fields by design — they
+correspond to electrodes that sit in trenches or driven holes,
+never in a concrete strip foundation.
 
 ## Architecture
 

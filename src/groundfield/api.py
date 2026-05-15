@@ -186,6 +186,7 @@ def create_conductor(
     discretize_segment_length: float | None = None,
     coupling_to_soil: str = "isolated",
     inductance_model: str | None = None,
+    lumped_series_resistance_ohm: float | None = None,
 ) -> Conductor:
     """Create a conductor and register it with ``world``.
 
@@ -254,6 +255,7 @@ def create_conductor(
         discretize_segment_length=discretize_segment_length,
         coupling_to_soil=coupling_to_soil,
         inductance_model=inductance_model,
+        lumped_series_resistance_ohm=lumped_series_resistance_ohm,
     )
     world.add_conductor(cond)
     return cond

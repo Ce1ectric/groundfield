@@ -76,6 +76,7 @@ from groundfield.generators.measurement import (
 from groundfield.generators.placement import (
     ExplicitPlacement,
     ManhattanGridPlacement,
+    OsmBuildingPlacement,
     PlacementSpec,
 )
 from groundfield.generators.soil_specs import (
@@ -130,6 +131,7 @@ __all__ = [
     # Placement
     "ManhattanGridPlacement",
     "ExplicitPlacement",
+    "OsmBuildingPlacement",
     "PlacementSpec",
     # Soil specs
     "HomogeneousSoilSpec",

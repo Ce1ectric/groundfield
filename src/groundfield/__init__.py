@@ -180,6 +180,7 @@ from groundfield.generators import (
     MeasurementSetupConfig,
     MultiLayerSoilSpec,
     Normal,
+    OsmBuildingPlacement,
     RingElectrodeSpec,
     RodElectrodeSpec,
     StripElectrodeSpec,
@@ -195,6 +196,20 @@ from groundfield.generators import (
     overhead_lead,
     rod_circle,
     single_rod_grounding,
+)
+
+# Re-exports — geo subpackage (ADR-0011). The data class
+# :class:`BuildingFootprint` has zero optional dependencies and is
+# always importable; the active functions (:class:`Projector`,
+# :func:`query_buildings`, :func:`query_and_project`) raise a clear
+# :class:`ImportError` with an install hint when the optional
+# ``geo`` extra (``pip install groundfield[geo]``) is absent.
+from groundfield.geo import (
+    BuildingFootprint,
+    OverpassError,
+    Projector,
+    query_and_project,
+    query_buildings,
 )
 
 # Analytical reference formulas (used in plausibility tests)
@@ -332,6 +347,13 @@ __all__ = [
     "buried_lead",
     "single_rod_grounding",
     "neighbour_substation_grounding",
+    # Geo / OSM (optional ``geo`` extra; ADR-0011)
+    "BuildingFootprint",
+    "OsmBuildingPlacement",
+    "Projector",
+    "OverpassError",
+    "query_buildings",
+    "query_and_project",
     # Reference formulas
     "dwight1936",
     # Cross-engine

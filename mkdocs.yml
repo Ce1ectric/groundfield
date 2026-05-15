@@ -115,6 +115,7 @@ nav:
       - "06 — Parameter sweep over soil": examples/06_parameter_sweep_soil.md
       - "07 — Monte Carlo with joblib": examples/07_monte_carlo.md
       - "08 — Pipeline to groundinsight": examples/08_pipeline_groundinsight.md
+      - "09 — OSM pipeline with measurement setup": examples/09_osm_pipeline.md
   - Engine theory:
       - Overview: engines/index.md
       - "image — homogeneous": engines/image.md
@@ -136,6 +137,7 @@ nav:
       - Diagnostics: api/diagnostics.md
       - IO: api/io.md
       - Generators: api/generators.md
+      - Geo / OSM: api/geo.md
   - Architecture decisions:
       - "ADR-0001 — 2-layer method": adr/0001-two-layer-method.md
       - "ADR-0002 — Engine family": adr/0002-engine-family.md
@@ -147,5 +149,7 @@ nav:
       - "ADR-0008 — groundinsight bridge": adr/0008-groundinsight-bridge.md
       - "ADR-0009 — World generators": adr/0009-world-generators.md
       - "ADR-0010 — Tier-0 performance": adr/0010-tier0-performance.md
+      - "ADR-0011 — OSM building footprints": adr/0011-osm-building-footprints.md
+      - "ADR-0012 — Foundation concrete encasement": adr/0012-foundation-concrete-encasement.md
   - Tooling:
       - "Knowledge graph (graphify)": graphify.md

@@ -21,7 +21,7 @@ For Monte-Carlo sweeps you'll also want `joblib` and `pandas`,
 both standard scientific-Python tools. They come with most
 distributions; otherwise `pip install joblib pandas pyarrow`.
 
-## The eight examples
+## The nine examples
 
 | # | Topic | What you learn |
 |---|---|---|
@@ -33,6 +33,7 @@ distributions; otherwise `pip install joblib pandas pyarrow`.
 | [06](06_parameter_sweep_soil.md) | Parameter sweep over soil resistivity | Deterministic sweep over $\rho_1$, log-log $\|Z(\rho_1)\|$ trend |
 | [07](07_monte_carlo.md) | Monte-Carlo sweep with `joblib` | Stochastic distributions, parallel workers, persistent results, statistical bands |
 | [08](08_pipeline_groundinsight.md) | Full pipeline to `groundinsight` | $\rho$-$f$ fit, JSON `BusType` export, downstream fault analysis |
+| [09](09_osm_pipeline.md) | OSM-driven pipeline + measurement setup | Load real building footprints via Overpass, stochastic `presence_prob`, substation + auxiliary + voltage probe, read $\varphi$ at any (x, y), `Z_cluster` vs `Z_system` |
 
 ## How to use this catalogue
 
@@ -48,6 +49,11 @@ distributions; otherwise `pip install joblib pandas pyarrow`.
 * If you want to feed reduced models into `groundinsight` for
   fault calculations, the full chain is in example 08; it builds
   on the `rho-f` fitting machinery covered there.
+* If your study is bound to a specific real neighbourhood, jump
+  to example 09 — it loads building outlines from OpenStreetMap
+  and wires the measurement setup directly to the resulting world.
+  Pair it with the optional concrete-shell model from ADR-0012
+  for AP1-realistic foundation grounding.
 
 ## Related material
 
@@ -59,3 +65,8 @@ distributions; otherwise `pip install joblib pandas pyarrow`.
   and Monte-Carlo guidance.
 * [ADR-0009 — World generators](../adr/0009-world-generators.md) —
   the design behind `TnNetworkGenerator` and the spec layer.
+* [ADR-0011 — OSM building footprints](../adr/0011-osm-building-footprints.md) —
+  the optional `geo` subpackage that powers example 09.
+* [ADR-0012 — Foundation concrete encasement](../adr/0012-foundation-concrete-encasement.md) —
+  the cylindrical Sunde-shell model that pairs with the OSM-driven
+  foundations of example 09.

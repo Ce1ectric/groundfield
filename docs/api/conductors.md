@@ -61,6 +61,27 @@ Earth-return corrections are delegated to
 combined with the perfect-mirror approximation, with the Carson
 series, or with the rigorous Sommerfeld kernel.
 
+### Lumped series resistance (new in 0.6.0)
+
+The optional ``lumped_series_resistance_ohm`` field overrides the
+geometric series resistance $R = \rho_\text{mat}\,L / A$ with a
+caller-supplied value in Ω. The :attr:`series_resistance` property
+returns this value when set and the solver picks it up
+transparently through the existing distributed-conductor framework
+(ADR-0003).
+
+The primary consumer is the **lumped concrete-shell path of
+ADR-0012**:
+:class:`~groundfield.generators.tn_network.TnNetworkGenerator`
+reads each foundation's
+$R_\text{shell,total} = \rho_c/(2\pi\,L_\text{perim})\,\ln(r_b/r_a)$
+from ``world.concrete_shell_corrections`` (populated by the
+foundation-electrode materialiser) and injects it on the PEN
+service drop between the KVS and the foundation anchor. Setting
+``lumped_series_resistance_ohm`` requires the conductor to be in
+the finite-impedance branch — pair it with a non-``None``
+``cross_section`` to ensure the override is consumed.
+
 ## API reference
 
 ::: groundfield.conductors

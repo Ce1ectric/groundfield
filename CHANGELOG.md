@@ -26,7 +26,242 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- **`vector_fit` under-determined check now respects conjugate-pair
+  symmetry** (`postprocess/vector_fitting.py`, sixth 2026-05-14
+  audit pass). The previous trigger counted four real DOFs per
+  pole regardless of whether the search was constrained to
+  conjugate pairs. Under the default ``complex_poles=True`` the
+  pair constraint halves the actual free parameters; the
+  underdetermined-test is now ``2 * n_independent_poles >
+  len(frequencies)`` with
+  ``n_independent_poles = n_poles // 2 + (n_poles % 2)``. The
+  strict ``>`` admits the uniquely-determined boundary case
+  (``n_poles=2, N=2``) that the previous ``>=`` trigger
+  rejected as a false positive. The warning text now states
+  which ratio applies given the fit mode. Behaviour for
+  ``complex_poles=False`` is unchanged. No public API change;
+  this is a tightening of the
+  :class:`VectorFitUnderdeterminedWarning` envelope.
+
+### Added
+
+- **Concrete encasement for foundation electrodes** (ADR-0012). DIN-18014
+  Streifenfundamente sit in concrete, not in soil; the concrete's
+  resistivity varies from ~30 Ω·m (wet) to ~50 000 Ω·m (dry) and
+  materially changes the foundation's spreading impedance. Two new
+  optional fields on
+  :class:`generators.electrode_specs.FoundationElectrodeSpec` —
+  ``concrete_rho_ohm_m`` (``float | AnyDistribution | None``,
+  ``None`` = historic bare-wire behaviour) and
+  ``concrete_thickness_m`` (default 50 mm) — together with a
+  ``concrete_model: Literal["lumped", "distributed"]`` discriminator
+  expose the Sunde-shell model in two flavours:
+  - **V1 "lumped"** (default): the total shell resistance
+    ``R_shell_total = ρ_c / (2π · L_perim) · ln(r_b / r_a)`` is
+    recorded in the new ``world.concrete_shell_corrections`` registry
+    and injected as a series resistance on the PEN service drop
+    via the also-new ``Conductor.lumped_series_resistance_ohm``
+    field. Zero solver-side change; reuses ADR-0003's
+    distributed-conductor framework.
+  - **V2 "distributed"**: a per-segment radial coefficient
+    ``C = ρ_c / (2π) · ln(r_b / r_a)`` (in Ω·m) is stored on the
+    strip electrodes through the new
+    :attr:`geometry.electrodes.StripElectrode.concrete_shell_coefficient_ohm_m`
+    field; the image / image_2layer post-kernel diagonal is augmented
+    by ``C / Δs`` per segment in both the inverse-problem assembly
+    (inside ``_solve_cluster_currents``) and the post-solve
+    potential evaluation. Captures the wire-radius redistribution
+    on top of the lumped shell, so when ``ρ_c = ρ_soil`` the
+    concrete/soil interface becomes electrically invisible
+    (correct physics).
+  - Both paths route only :class:`FoundationElectrodeSpec` through
+    the shell; rod / ring / strip / mesh electrodes — which always
+    run in trenches or driven holes, never in concrete — keep their
+    bare-wire bulk-soil interface.
+  - Stochastic moisture: ``concrete_rho_ohm_m`` accepts an
+    :class:`AnyDistribution`, e.g.
+    ``Discrete(values=[50, 150, 500, 2000], weights=[...])`` for the
+    four empirical moisture bands.
+- **`groundfield.geo` — optional subpackage for OSM-driven building
+  footprints** (`src/groundfield/geo/`, ADR-0011). Four modules:
+  - `footprint.BuildingFootprint` — frozen Pydantic model carrying a
+    closed CCW polygon in the local ENU frame, optional holes,
+    ``building:levels`` and raw OSM tags. Pure-Python; no
+    :mod:`shapely` dependency at validation time. Includes
+    :func:`signed_area`, :func:`ensure_orientation`,
+    :meth:`area_m2`, :meth:`centroid_xy_m`.
+  - `projection.Projector` — WGS84 ↔ local ENU via :mod:`pyproj`
+    using ``+proj=aeqd`` centred on a user-supplied origin
+    (origin is *never* inferred from data; reproducibility
+    guarantee per ADR-0011). Single-point and vectorised
+    ring projection.
+  - `osm.build_query` / `query_buildings` / `parse_overpass_payload`
+    / `query_and_project` — Overpass-API client with deterministic
+    QL formatting, SHA-256 keyed on-disk cache
+    (default ``$XDG_CACHE_HOME/groundfield/osm/`` or
+    ``~/.cache/groundfield/osm/``), one retry on ``429`` / ``504``
+    with exponential backoff, RFC-7946 ring-orientation handling
+    for ways and multipolygon relations. Network layer is the only
+    place :mod:`requests` is imported.
+  - `placement.OsmBuildingPlacement` — Pydantic placement spec that
+    returns building centroids in declared order (interface parity
+    with :class:`generators.placement.ManhattanGridPlacement` /
+    :class:`ExplicitPlacement`) and exposes
+    :meth:`footprint_at` for the upcoming footprint-driven
+    foundation-electrode hook in `TnNetworkGenerator` (Task 3).
+    Construction is from pre-projected footprints — no HTTP call
+    in the config layer, keeps generator configs
+    JSON-serialisable and bit-exactly replayable. Filters out
+    OSM noise below ``min_area_m2`` (default 16 m², Gartenhaus).
+  - All optional :mod:`requests` / :mod:`shapely` / :mod:`pyproj`
+    imports are lazy and guarded with a clear :class:`ImportError`
+    pointing at ``pip install groundfield[geo]``.
+- **New `geo` extra in `pyproject.toml`** declaring
+  ``requests ^2.32``, ``shapely ^2.0``, ``pyproj ^3.6``. Same three
+  are added to the dev group so the new `tests/test_geo_*.py`
+  suite can run end-to-end.
+- **`OsmBuildingPlacement` is a member of the
+  `generators.placement.PlacementSpec` discriminated union** —
+  configs that use the OSM-driven path round-trip through JSON like
+  every other placement. Re-exported from
+  ``groundfield.generators`` and from the top-level
+  ``groundfield`` namespace alongside ``BuildingFootprint``,
+  ``Projector``, ``query_buildings``, ``query_and_project``, and
+  ``OverpassError``.
+- **`FoundationElectrodeSpec.orientation_deg`** (additive, default
+  ``None``). ``None`` and ``0.0`` keep the historic axis-aligned
+  ``GridMeshElectrode`` realisation; any other value triggers the
+  new rotated-foundation path in
+  ``GroundingSystemSpec._build_rotated_foundation``, which
+  synthesises the foundation as a closed
+  :class:`StripElectrode` chain (perimeter + optional inner
+  cross-braces for ``style="mesh"``) and bonds the sub-electrodes
+  internally so the spec still emits a single bondable anchor.
+- **OMBR-driven foundation override in `TnNetworkGenerator.build`** —
+  when the configured placement exposes a ``footprint_at(i)`` hook
+  (currently :class:`OsmBuildingPlacement`), every per-building
+  :class:`FoundationElectrodeSpec` is rewritten so that
+  ``size_xy_m`` and ``orientation_deg`` come from the polygon's
+  oriented minimum bounding rectangle. ``presence_prob`` and all
+  other axes survive unchanged, so the only stochastic axis in
+  an OSM-driven realisation is the Bernoulli on
+  ``presence_prob`` (per ADR-0011).
+- **`BuildingFootprint.oriented_bounding_rectangle()` and
+  `axis_aligned_bounding_rectangle()`** — public helpers exposing
+  the OMBR (Shapely-backed, requires ``geo`` extra) and the pure-
+  Python AABB. The OMBR helper is the canonical
+  Streifenfundament-Reduktion of an arbitrary polygon (see
+  ADR-0011, "Phase A").
+
+### Tests
+
+- **`tests/test_geo_footprint.py`** — 14 cases covering
+  ``signed_area`` / ``ensure_orientation``, the
+  :class:`BuildingFootprint` model (orientation normalisation,
+  hole area subtraction, frozen-instance guarantee), and the
+  AABB + OMBR helpers (axis-aligned identity, rotation
+  round-trip on a synthetic 10×6 rectangle, L-shape coverage).
+- **`tests/test_geo_osm.py`** — 15 cases on the projection
+  (round-trip, vectorised ring, invalid origin rejection),
+  the Overpass query builder (byte-determinism, parameter
+  validation), the on-disk cache (single POST per
+  ``(origin, radius)`` tuple, ``force_refresh`` bypass), and the
+  Overpass payload parser (way with ``building:levels``,
+  multipolygon with one inner hole, ``min_area_m2`` filter).
+  Network IO is mocked at the ``_post`` boundary; the suite
+  never opens a socket.
+- **`tests/test_geo_placement.py`** — 12 cases on
+  :class:`OsmBuildingPlacement` (centroid order, area filter,
+  ``selection="all"`` ignoring ``n``, ``footprint_at`` lookup,
+  JSON round-trip via the union) and on the rotated-foundation
+  branch of :meth:`GroundingSystemSpec.build_at` (4-strip
+  perimeter for ``style="ring"``, 6-wire mesh for ``style="mesh"``
+  with ``n_x = n_y = 2``, axis-aligned fast-path preservation),
+  plus two end-to-end :class:`TnNetworkGenerator` tests
+  asserting OMBR side lengths and bit-exact reproducibility
+  across seeds.
+- All three new files run in under 2 s on the dev workstation;
+  the existing 78 tests in the related suites (placement,
+  grounding, tn_ortsnetz, distributions, import) continue to
+  pass unchanged.
+
+### Notebooks
+
+- **`notebooks/32_osm_footprints.ipynb`** — AP1 demo with
+  six synthetic Reihenhaus-Footprints (varied sizes and
+  orientations), OMBR visualisation, side-by-side
+  :class:`ManhattanGridPlacement` vs.
+  :class:`OsmBuildingPlacement` plots, a 50 Hz cluster-impedance
+  micro-solve, and an optional live Overpass query (cached;
+  gracefully skipped offline).
+
+### Docs
+
+- **`docs/api/geo.md`** — new API-reference page documenting the
+  ``geo`` subpackage with the mathematical / physical context
+  (Streifenfundament reduction, OMBR rationale, validity
+  envelope, installation gate, JSON-roundtripable
+  :class:`OsmBuildingPlacement`). Hooked into ``mkdocs.yml`` nav
+  under *API reference → Geo / OSM*, and the new ADR-0011 entry
+  is wired up under *Architecture decisions*.
+- **`docs/examples/09_osm_pipeline.md`** — end-to-end AP1 walkthrough
+  in two flavours: hand-crafted pseudo-geometries (always runs)
+  and a live Overpass query (needs the ``geo`` extra + internet).
+  Both variants cover the full pipeline: OSM-Read → stochastic
+  ``presence_prob`` on :class:`FoundationElectrodeSpec` → substation
+  placement → :class:`MeasurementSetupConfig` for aux electrode +
+  voltage probe → reading φ at an arbitrary (x, y) via
+  :meth:`FieldResult.potential` (no need for a real probe
+  electrode) → surface-potential contour plot. Numerically
+  exercises the `Z_cluster` vs `Z_system` gap that defines AP1
+  Analyse 1. Linked from `mkdocs.yml` nav under *Examples →
+  09 — OSM pipeline with measurement setup*.
+- **`notebooks/32_osm_footprints.ipynb`** — extended with a live
+  Overpass section (query → world → solve → contour plot) parallel
+  to the synthetic one. Both sections produce surface-potential
+  contour plots; the live cells degrade gracefully when offline.
+- **`notebooks/33_concrete_encasement.ipynb`** — interactive
+  parameter-variation workbench for ADR-0012: closed-form Sunde
+  sweep on an isolated Banderder (V2 ↔ Sunde to within 10⁻⁴),
+  V1-vs-V2 comparison table across six $\rho_c$ decades on the
+  five-house OSM Ortsnetz, four-panel surface-potential contour
+  for the canonical moisture states (none / 80 / 500 / 5000
+  Ω·m), shell-thickness sweep at fixed $\rho_c$, and a 60-sample
+  Monte-Carlo histogram over the four-class moisture
+  distribution. Runs offline.
+- **`tests/test_concrete_encasement.py`** — 10 cases covering ADR-0012:
+  V2 Sunde-shell closed-form match on an isolated strip,
+  zero-coefficient no-op, insulating-concrete dominance, V1 registry
+  & PEN service-drop injection, V2-vs-lumped registry separation,
+  JSON round-trip of stochastic ``concrete_rho_ohm_m=Discrete(...)``,
+  reproducibility across seeds, discriminator (only foundations get
+  the shell), and end-to-end OSM-pipeline smoke (dry concrete
+  pushes system impedance up ≥ 2.5×).
+
+### Docs
+
+- **ADR-0012 — Concrete encasement of foundation electrodes**
+  (`docs/adr/0012-foundation-concrete-encasement.md`, *Accepted*).
+  Decision record for the cylindrical Sunde-shell model, the two
+  implementation variants (lumped vs. distributed), the API
+  additions on :class:`FoundationElectrodeSpec`, :class:`Conductor`
+  (``lumped_series_resistance_ohm``) and :class:`StripElectrode`
+  (``concrete_shell_coefficient_ohm_m``), and the validation
+  programme. Hooked into mkdocs nav under
+  *Architecture decisions → ADR-0012*.
+- **ADR-0011 — OSM building footprints and footprint-driven foundation
+  electrodes** (`docs/adr/0011-osm-building-footprints.md`,
+  *Accepted*). Specifies the new optional subpackage `groundfield.geo`
+  (Overpass query + on-disk cache, WGS84→ENU projection via `pyproj`,
+  `BuildingFootprint` Pydantic model, `OsmBuildingPlacement`
+  `PlacementSpec` variant) and the additive Phase-A extension to
+  `FoundationElectrodeSpec` (oriented bounding rectangle from polygon
+  +  new optional ``orientation_deg`` field). Pure stochasticity is
+  retained on ``presence_prob`` (Bernoulli per building). Implements the
+  OSM follow-up named in ADR-0009. Drives the new optional ``geo`` pip /
+  Poetry extra (`requests`, `shapely`, `pyproj`).
 
 ---
 
@@ -2496,6 +2731,113 @@ the appropriate Roadmap section in the next planning cycle.
   `re.search(r"__version__ = \"[^\"]+\"", claude_md)` raise on
   bump completes the Pass-4 closure.
 
+### Fixed (pending implementation) — sixth 2026-05-14 review pass
+
+> Sixth-pass findings against `0.5.0` (released 2026-05-14).
+> Focus: secondary effects of the just-shipped 0.5.0 surface,
+> notebook / docs reality vs. CHANGELOG claim, ADR-0011
+> follow-through, FP-precision contract enforcement, and the
+> `World.solve` deep-copy cost on engine-sweep workloads.
+
+- **`World.solve(engine)` deep-copies `self.sources` on every
+  call.** Pass-5 added the snapshot/restore pattern to defend
+  against backend-side `Source.return_to` mutation
+  (`MeasurementSetupConfig.build` was the textbook offender).
+  The implementation does
+  ``[s.model_copy(deep=True) for s in self.sources]`` on entry
+  *unconditionally*. On a 100-frequency sweep that re-uses the
+  same `World` across `Engine.with_frequencies(...).solve(...)`
+  calls the deep-copy cost dominates for sources that carry
+  large `return_to`-electrode meshes. Either gate the snapshot
+  behind a `World.solve(engine, snapshot_sources=True)`
+  default-on keyword (so power users can opt out), or do a
+  shallow snapshot of just the mutable fields
+  (`return_to`, `value`) instead of a full `model_copy(deep=True)`.
+- **`VectorFitUnderdeterminedWarning` threshold mis-fires on
+  conjugate-pair fits.** The current check
+  ``if 2 * n_poles >= len(frequencies)`` treats every pole as
+  contributing 4 real DOFs (residue real+imag, pole real+imag).
+  For a conjugate-pair fit (`complex_conj=True`, default) the
+  residues and pole locations come in complex-conjugate pairs,
+  halving the actual free parameters. The result is a false
+  positive on `n_poles=2, N=2` (warns) where the conjugate-pair
+  fit is in fact uniquely determined. Tighten the check to
+  ``2 * n_independent_poles >= len(frequencies)`` where
+  `n_independent_poles = n_poles // 2 + (n_poles % 2)`
+  under `complex_conj=True`.
+- **`LayeredEarth.compute_T_lambda` FP-precision contract is
+  documented but not enforced.** Pass-5 added the docstring
+  note "every consumer of LayeredEarth operates in IEEE-754
+  double precision" and a homogeneous-limit cross-check at
+  `rtol=1e-12`. What is still missing is the actual *guard*:
+  a future MLX-on-Apple backend silently downgrading to FP32
+  would pass the homogeneous check (which is a single-layer
+  identity, no roundoff to speak of) and fail only on
+  five-layer realistic soils. Add an assertion at the top of
+  `compute_T_lambda`: `assert out.dtype == np.float64,
+  "LayeredEarth contract: FP64 required"` — cheap, catches
+  the regression at the source.
+- **`Engine` frequency-list cache key.** `Engine.frequencies`
+  is now order-preserving with `EngineFrequencyOrderWarning`.
+  Pass 5 surfaces but does not solve the equality contract:
+  `Engine(frequencies=[50, 100]) == Engine(frequencies=[100, 50])`
+  evaluates to `False` (the warning is *per-instance*), so two
+  engines that map to the same physics produce two different
+  cache keys downstream in `compare_engines` / `convergence_study`
+  result tables. Either document the "order matters" contract
+  on `Engine.__eq__` *or* override `__eq__` / `__hash__` to
+  compare frozenset(frequencies).
+- **`io.groundinsight.evaluate_spec` free-symbol allow-list
+  is name-only.** The Pass-5 fix accepts every symbol whose
+  `name in {"f", "rho"}`, ignoring assumptions. A
+  `sp.Symbol("rho", real=False, positive=False)` slips through
+  and produces a complex-valued `rho` that crashes deep in
+  `lambdify` instead of at the validation step. Compare on
+  full symbol identity (`s == f_sym or s == rho_sym`) and
+  reject anything else.
+- **`Engine.with_frequencies(preserve_order=False)` is the
+  silent default.** The docstring shows
+  ``preserve_order=True`` but the constructor body checks
+  ``if not preserve_order`` and falls through; if the caller
+  omits the keyword the engine *does* preserve order but
+  the warning is still suppressed by the
+  `simplefilter("ignore")` block. Result: a sweep author who
+  copies the docstring example sees the same silenced
+  behaviour as the explicit `preserve_order=True` user, but
+  the silencing is by accident. Either flip the default
+  to `False` (loud) and document the explicit silencer, or
+  document that `Engine.with_frequencies` is the *opt-in*
+  silencer regardless of `preserve_order` value.
+- **`SourceAdapter` validates a single source dict but does
+  not validate a *list*.** A user-side helper that imports a
+  campaign YAML with a `sources: [...]` field has to call
+  `SourceAdapter.validate_python` per element. Add a
+  `SourcesAdapter = TypeAdapter(list[Source])` companion so
+  the bulk path is one call.
+- **`World.set_boundary_conditions(**kwargs)` revert-warning
+  is emitted regardless of whether the warning was already
+  raised for the same value.** Pass-4 added the set-and-revert
+  warning, Pass-5 left it as-is. A loop that toggles a
+  boundary value across 100 sweeps emits 200 warnings. Apply
+  a `simplefilter("once", BoundaryConditionWarning)` strategy
+  on first set, OR coalesce the warning by value identity
+  inside the method body.
+- **`vector_fit` initial pole placement is silent for
+  `n_poles == 1`.** `_initial_poles` chooses a single real
+  pole at the geometric mean of `omega_min`/`omega_max`. For
+  data with a complex-pole structure (e.g. capacitive return
+  path), the iteration cannot bend a real pole into a
+  conjugate pair within `max_iter=20` and the fit converges
+  to a poor RMSE. A `UserWarning` "vector_fit(n_poles=1)
+  cannot fit complex resonance peaks; pass n_poles=2 for
+  conjugate-pair coverage" at fit time would save a
+  Stack-Overflow round-trip.
+- **`compare_engines` returns the discrepancy matrix but
+  does not call `EngineFrequencyOrderWarning` silencer.**
+  A 4×4 cross-engine matrix over decreasing frequencies fires
+  16 warnings; the helper should suppress them once internally
+  while still surfacing them on the per-engine path.
+
 ### Docs (pending implementation) — fifth 2026-05-13 review pass
 
 - **`docs/api/sources.md`, `boundary.md`, `references.md`,
@@ -2546,6 +2888,68 @@ the appropriate Roadmap section in the next planning cycle.
   only. Append a pass-5 reference so the next session has the
   same starting context the previous ones did.
 
+### Docs (pending implementation) — sixth 2026-05-14 review pass
+
+- **`docs/api/sources.md`, `boundary.md`, `references.md`,
+  `validation.md`, `world.md`** — **sixth audit pass in a
+  row** these pages are still missing. Pass 5 promised
+  `mkdocs build --strict` would catch this in CI; the test
+  has not landed and the pages have not been written. This
+  is now the longest-standing structural doc gap in the
+  three-package family. Sixth-pass acknowledges that one
+  of two things has to happen before the next release tag:
+  either the five pages land, or the `mkdocs build --strict`
+  test lands (the latter is the one-line forcing function).
+- **`docs/adr/0011-cross-repo-release-shared.md`** does not
+  exist. Pass-5 cross-cutting recommendation #5 ("a single
+  shared `scripts/_release_shared.py` would lose three
+  release-flow problems in one diff") was elevated to an
+  explicit ADR-0011 proposal in the cross-cutting summary;
+  the ADR itself was not drafted. As the architectural
+  authority on cross-repo conventions sits in `groundfield`
+  (eight existing ADRs), ADR-0011 belongs here even though
+  the implementation will ultimately live in all three
+  repos.
+- **`docs/api/index.md` does not document the FP64 contract
+  on `LayeredEarth`** that Pass-5 added in code. The
+  rendered API index page therefore does not tell the user
+  that hardware-accelerated backends are required to keep
+  IEEE-754 double precision. Add a one-paragraph admonition
+  before the `LayeredEarth` `:::` directive.
+- **`docs/api/postprocess.md` does not document
+  `VectorFitUnderdeterminedWarning`** — the warning category
+  is publicly importable but unmentioned. A reader who tries
+  to `warnings.simplefilter("once", ...)` has to discover
+  the class name from the source.
+- **`docs/api/sources.md`** (once it ships) must enumerate
+  the `SourceAdapter` / proposed `SourcesAdapter` helpers
+  with a copy-pasteable round-trip example. The Pass-4 +
+  Pass-5 Source-discriminator surface is currently
+  documented only inside the source-file docstring.
+- **`docs/concepts.md`** does not describe the "Engine
+  re-use across `World.solve` calls" pattern. Tied to the
+  sixth-pass `World.solve` deep-copy finding: the user who
+  wants the snapshot-free behaviour should see a recipe for
+  the planned `snapshot_sources=False` opt-out before the
+  perf cost bites them.
+- **`docs/engines/*.md` — Capability matrix sub-section**
+  still missing on each engine page. Pass-5 listed this; the
+  pages have not been edited. A two-column matrix
+  (`feature` × `supported / partial / planned`) at the top
+  of every `bem.md` / `mom.md` / `fem.md` / ... gives the
+  reader a one-glance picture of why one engine is in beta
+  and another is reference-quality.
+- **`README.md` does not yet list the `0.5.0` release**.
+  The CHANGELOG carries `[0.5.0] — 2026-05-14`, but the
+  README "Latest release" / badges sub-section still points
+  at `0.4.0` (verified 2026-05-14). README/CHANGELOG drift
+  reappears on every release that does not run through
+  `scripts/release.py` end-to-end.
+- **CLAUDE.md "Audit history"** — append a sixth-pass
+  reference. Pass-5 already failed to do this for itself
+  (verified above as a Pass-5 Docs-backlog item); sixth
+  pass re-confirms.
+
 ### Tests (pending implementation) — fifth 2026-05-13 review pass
 
 - **No test for the new `EngineFrequencyOrderWarning`
@@ -2585,6 +2989,50 @@ the appropriate Roadmap section in the next planning cycle.
   a config with `source_kind="voltage_"` (trailing
   underscore) and assert a clear `ValueError`.
 
+### Tests (pending implementation) — sixth 2026-05-14 review pass
+
+- **No regression test for the
+  `VectorFitUnderdeterminedWarning` *false-positive* path
+  under `complex_conj=True`.** Build a `vector_fit(n_poles=2,
+  N=2, complex_conj=True)` instance and assert no warning
+  fires; today the Pass-5 threshold flags it as
+  underdetermined.
+- **No regression test for FP64 contract enforcement on
+  `LayeredEarth.compute_T_lambda`.** Construct a stub backend
+  that returns an FP32 array, invoke `compute_T_lambda`, and
+  assert the proposed runtime assertion (`out.dtype == np.float64`)
+  trips with a clear message.
+- **No regression test for `World.solve(engine,
+  snapshot_sources=False)` cost.** Once the keyword lands,
+  benchmark a 100-frequency sweep with and without the
+  snapshot and assert the difference is below the
+  `tests/test_perf_smoke.py` threshold; pin the opt-out so
+  the cost is documented.
+- **No regression test for `Engine.__eq__` / `Engine.__hash__`
+  contract.** Once the sixth-pass `frequency-order` finding
+  is resolved, pin the chosen contract
+  (`Engine([50,100]) == Engine([100,50])` true or false) so
+  it cannot regress in a refactor.
+- **No regression test for `io.groundinsight.evaluate_spec`
+  rejecting a non-canonical-assumption `rho` symbol.**
+  Construct `sp.Symbol("rho", real=False)`-bearing formula,
+  call `evaluate_spec` and assert the sixth-pass tightened
+  check raises `ValueError`. Today the symbol slips through
+  and the failure surfaces deep in `sympy.lambdify`.
+- **No regression test for the `compare_engines`
+  warning-suppression path.** Build a 4×4 comparison over
+  decreasing frequencies and assert exactly one
+  `EngineFrequencyOrderWarning` fires (after the sixth-pass
+  per-engine internal silencer lands), not 16.
+- **No regression test that `set_boundary_conditions` does
+  not double-warn on repeat assignment of the same
+  non-default value.** Today the helper warns on every
+  call, even with identical kwargs.
+- **No regression test for `SourcesAdapter = TypeAdapter
+  (list[Source])`** once it ships. Round-trip a heterogeneous
+  list with one `CurrentSource` and one `VoltageSource` and
+  assert each element keeps its discriminator.
+
 ### Roadmap candidates — fifth 2026-05-13 review pass
 
 - **`gf.show_versions()`** — print the installed
@@ -2622,6 +3070,50 @@ the appropriate Roadmap section in the next planning cycle.
   "v0.2.0 no-op" doc gap from a different angle: the type
   hierarchy itself documents what the upcoming FEM backend
   will and won't honour.
+
+### Roadmap candidates — sixth 2026-05-14 review pass
+
+- **`gf.SourcesAdapter = TypeAdapter(list[Source])`** —
+  bulk-validation companion to the Pass-4 `SourceAdapter`,
+  needed by any YAML / JSON campaign-config import path
+  that has more than one source per scenario.
+- **`World.solve(engine, snapshot_sources: bool = True)`** —
+  explicit opt-out for the Pass-5 deep-copy snapshot. The
+  perf-sensitive callers (`convergence_study`, parameter
+  sweeps, the cross-engine matrix) can disable the snapshot
+  once they have proven their backend does not mutate
+  `source.return_to`.
+- **`gf.set_warning_policy("verbose" | "once" | "silent")`** —
+  global helper to bulk-configure the pass-5 family of
+  warning categories (`EngineFrequencyOrderWarning`,
+  `VectorFitUnderdeterminedWarning`, the proposed
+  `BoundaryConditionWarning`, the proposed
+  `VectorFitRealPoleWarning`). Replaces the
+  `warnings.simplefilter("once", X)` boilerplate that
+  notebooks currently copy-paste per category.
+- **`gf.audit_apply(report_path)`** — twin of the
+  `groundinsight` proposal. Read a markdown audit's backlog
+  bullets and insert them into `[Unreleased]`. Six passes of
+  hand-merging strongly motivate the helper.
+- **ADR-0011 — cross-repo `_release_shared.py`**. Pass-5
+  cross-cutting recommendation #5; sixth pass elevates it
+  to a tracked roadmap candidate so the ADR file lands as
+  the next merge-able artefact. Mirrors the
+  `gi.scripts.release.py` and `gm.scripts.release.py` gaps
+  in a single shared implementation.
+- **`gf.show_versions()`** — keep the
+  cross-package-consistency lemma in the roadmap: when
+  `gi.show_versions()` (Pass-5 idea) and
+  `gm.show_versions()` (sixth-pass idea, see groundmeas
+  roadmap above) land, this one needs to land too with the
+  same return-shape contract.
+- **`gf.docs.assert_api_pages_exist()`** — a tiny
+  walker that asserts every `__all__` member has a
+  corresponding mkdocstrings directive somewhere under
+  `docs/api/`. Sixth pass elevates this from the Pass-5
+  proposal status to an explicit roadmap item because the
+  five-pass-in-a-row missing-pages backlog clearly demands
+  a structural forcing function.
 
 ## Roadmap
 

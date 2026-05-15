@@ -28,9 +28,18 @@ pandas = "^3.0.2"
 # (``save_bustype_json`` / ``load_bustype_json``) does not require
 # this extra. See ADR-0008.
 groundinsight = { version = ">=0.3", optional = true }
+# Optional dependencies for ``groundfield.geo`` (OpenStreetMap
+# building-footprint ingest via Overpass, WGS84 -> local ENU
+# projection, polygon geometry). The core install does not depend on
+# these; ``groundfield.geo`` raises a clear ``ImportError`` with an
+# install hint when called without the ``geo`` extra. See ADR-0011.
+requests = { version = "^2.32", optional = true }
+shapely = { version = "^2.0", optional = true }
+pyproj = { version = "^3.6", optional = true }
 
 [tool.poetry.extras]
 groundinsight = ["groundinsight"]
+geo = ["requests", "shapely", "pyproj"]
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
@@ -42,6 +51,12 @@ black = "^24.8.0"
 # the consumer's real Pydantic + SymPy parser. Keeps the runtime
 # dependency optional (see ``[tool.poetry.extras]``).
 groundinsight = ">=0.3"
+# Same logic for the ``geo`` extra: pulled into dev so the OSM /
+# footprint tests in ``tests/test_geo_*.py`` run end-to-end. Keeps
+# the runtime dependencies optional. See ADR-0011.
+requests = "^2.32"
+shapely = "^2.0"
+pyproj = "^3.6"
 
 [tool.poetry.group.docs]
 optional = true

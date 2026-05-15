@@ -64,6 +64,25 @@ For programmatic generation of large typical worlds (5 – 200
 single-family houses, stochastic electrode mixes) see
 [Generators](generators.md).
 
+### Strip electrode concrete shell (new in 0.6.0)
+
+:class:`StripElectrode` carries an optional
+``concrete_shell_coefficient_ohm_m`` field (default ``0.0`` —
+historic behaviour). When set, the per-meter Sunde coefficient
+$C = \rho_c/(2\pi)\,\ln(r_b/r_a)$ in Ω·m enters the
+``image`` / ``image_2layer`` self-action: every segment of length
+$\Delta s$ in this strip has its MoM diagonal augmented by
+$C/\Delta s$, the radial voltage drop through the concrete shell.
+This is the V2 distributed path of
+[ADR-0012](../adr/0012-foundation-concrete-encasement.md). The
+field is populated automatically by
+:meth:`~groundfield.generators.grounding.GroundingSystemSpec.build_at`
+when a :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
+with ``concrete_model="distributed"`` is materialised; it is not
+intended to be set by hand on isolated strip electrodes outside
+the generator pipeline (but does work there, see the closed-form
+verification in ``tests/test_concrete_encasement.py``).
+
 ## API reference
 
 ::: groundfield.geometry
