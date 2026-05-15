@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/adr/0002-engine-family/">
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/adr/0011-osm-building-footprints/">
       
       
-        <link rel="prev" href="../0001-two-layer-method/">
+        <link rel="prev" href="../0010-tier0-performance/">
       
       
-        <link rel="next" href="../0003-distributed-conductor-model/">
+        <link rel="next" href="../0012-foundation-concrete-encasement/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>ADR-0002 — Engine family - groundfield</title>
+        <title>ADR-0011 — OSM building footprints - groundfield</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#adr-0002-engine-family-for-layered-soils" class="md-skip">
+        <a href="#adr-0011-osm-building-footprints-and-footprint-driven-foundation-electrodes" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              ADR-0002 — Engine family
+              ADR-0011 — OSM building footprints
             
           </span>
         </div>
@@ -1758,37 +1758,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    ADR-0002 — Engine family
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../0002-engine-family/" class="md-nav__link">
         
   
   
@@ -1804,92 +1777,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Context
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Decision
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mathematical-physical-model" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Mathematical / physical model
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cross-validation-envelope" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cross-validation envelope
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#consequences" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Consequences
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#action-items" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Action items
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2123,10 +2010,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../0011-osm-building-footprints/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0011 — OSM building footprints
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2142,6 +2056,203 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#subpackage-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Subpackage layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#projection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Projection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#overpass-query-and-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overpass query and caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generator-integration-osmbuildingplacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generator integration — OsmBuildingPlacement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footprint-driven-foundation-electrodes-phase-a" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Footprint-driven foundation electrodes — Phase A
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footprint-driven-foundation-electrodes-phase-b-deferred" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Footprint-driven foundation electrodes — Phase B (deferred)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-programme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation programme
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Consequences">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#positive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Positive
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#negative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Negative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#neutral" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Neutral
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2319,24 +2430,96 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mathematical-physical-model" class="md-nav__link">
+    <nav class="md-nav" aria-label="Decision">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#subpackage-layout" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Mathematical / physical model
+        Subpackage layout
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#cross-validation-envelope" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#data-model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Cross-validation envelope
+        Data model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#projection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Projection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#overpass-query-and-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overpass query and caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generator-integration-osmbuildingplacement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generator integration — OsmBuildingPlacement
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footprint-driven-foundation-electrodes-phase-a" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Footprint-driven foundation electrodes — Phase A
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footprint-driven-foundation-electrodes-phase-b-deferred" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Footprint-driven foundation electrodes — Phase B (deferred)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-programme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation programme
       
     </span>
   </a>
@@ -2352,13 +2535,52 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Consequences">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#positive" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Positive
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#negative" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Negative
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#neutral" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Neutral
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#action-items" class="md-nav__link">
+  <a href="#references" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Action items
+        References
       
     </span>
   </a>
@@ -2385,7 +2607,7 @@
   
 
 
-<h1 id="adr-0002-engine-family-for-layered-soils">ADR-0002: Engine family for layered soils<a class="headerlink" href="#adr-0002-engine-family-for-layered-soils" title="Permanent link">&para;</a></h1>
+<h1 id="adr-0011-osm-building-footprints-and-footprint-driven-foundation-electrodes">ADR-0011: OSM building footprints and footprint-driven foundation electrodes<a class="headerlink" href="#adr-0011-osm-building-footprints-and-footprint-driven-foundation-electrodes" title="Permanent link">&para;</a></h1>
 <table>
 <thead>
 <tr>
@@ -2400,7 +2622,7 @@
 </tr>
 <tr>
 <td><strong>Date</strong></td>
-<td>2026-05-01</td>
+<td>2026-05-14</td>
 </tr>
 <tr>
 <td><strong>Deciders</strong></td>
@@ -2408,180 +2630,324 @@
 </tr>
 <tr>
 <td><strong>Scope</strong></td>
-<td><code>groundfield</code></td>
+<td><code>groundfield.geo</code> (new subpackage); <code>generators.placement</code>,</td>
+</tr>
+<tr>
+<td><code>generators.electrode_specs</code>, <code>generators.tn_network</code></td>
+<td></td>
+</tr>
+<tr>
+<td>(additive extensions); optional Poetry dependency group</td>
+<td></td>
+</tr>
+<tr>
+<td><code>geo</code> (<code>requests</code>, <code>shapely</code>, <code>pyproj</code>)</td>
+<td></td>
 </tr>
 </tbody>
 </table>
 <h2 id="context">Context<a class="headerlink" href="#context" title="Permanent link">&para;</a></h2>
-<p>ADR-0001 settled the methodology for the <strong>2-layer</strong> case: closed-form
-Tagg/Sunde image-charge series (<code>image_2layer</code>) plus a Galerkin MoM
-cross-validation engine (<code>mom</code>). For two-layer soils in isolation
-that is enough. Two outstanding issues motivate this ADR:</p>
+<p>ADR-0009 introduced the generator stack and explicitly deferred a
+<em>follow-up generator that will read from open building-map data</em>
+as the next fidelity step beyond <code>ManhattanGridPlacement</code>. The
+existing <code>placement.py</code> module docstring repeats that statement.
+This ADR delivers exactly that step for <code>TnNetworkGenerator</code>.</p>
+<p>The motivating AP1 question is whether the synthetic Manhattan grid
+ever masks effects that a real street layout would expose. Three
+mechanisms are sensitive to the geometry, not only to the count
+of houses:</p>
 <ol>
-<li><strong>Three or more layers.</strong> Although the default scope targets a
-   2-layer soil, several supporting cases involve a weathered or
-   frozen surface layer above a representative two-layer stack
-   (i.e. effectively 3 layers). The closed-form Tagg/Sunde series
-   does not extend cleanly to <span class="arithmatex">\(n \ge 3\)</span>: the upward-looking
-   reflection <span class="arithmatex">\(\Gamma_1(\lambda)\)</span> stops being constant in <span class="arithmatex">\(\lambda\)</span>
-   and a real geometric image series develops a doubly-nested
-   expansion that becomes fragile at hard contrasts.</li>
-<li><strong>Independent cross-validation.</strong> The current engine family
-   (<code>image_2layer</code> / <code>mom</code>) shares the same Green's-function kernel,
-   so its agreement reflects the resolution scheme but not the
-   physics layer. ADR-0001 already lists the addition of a
-   methodologically independent reference engine as an open action
-   item.</li>
+<li><strong>Galvanic dissipation per building.</strong> A foundation electrode's
+   spreading admittance scales with the <em>perimeter</em> of the
+   foundation, not with a generic side length. Real residential
+   footprints are L-shaped or rectangular with non-square aspect
+   ratios; the bounding-rectangle approximation already captures
+   the perimeter and the principal axes within <span class="arithmatex">\(\sim 10\,\%\)</span>,
+   which is below the AP1 soil-resistivity uncertainty.</li>
+<li><strong>Inductive coupling to PEN and measurement leads.</strong> The
+   <em>orientation</em> of a foundation ring matters for the mutual
+   inductance to a parallel PEN trunk along the street, which is
+   one of the AP1 effects (Carson coupling below 1 kHz).</li>
+<li><strong>Spatial distribution of houses.</strong> Bunched-up Reihenhäuser at
+   one end of a Ortsnetz behave differently from a uniform grid
+   even at the same total count — the cluster impedance of the
+   PEN backbone is not separable from layout.</li>
 </ol>
-<p>A literature review of recent layered-soil grounding work
-(Dawalibi 1991, Meliopoulos 1993, Güemes 2004, Colominas 2007/2012,
-Li 2006, Zou 2015, Dan 2021) yielded four method families that map
-cleanly onto the existing <code>groundfield</code> data model:</p>
+<p>OpenStreetMap (OSM, ODbL) is the only open data source that
+covers all three with metric accuracy and is queryable
+programmatically through the <strong>Overpass API</strong>. Coverage in
+Germany for <code>building=*</code> is essentially complete in built-up areas;
+<code>building:levels</code> is sparser but populated for newer surveys.</p>
+<p>The user also requested <strong>two implementation variants</strong>:</p>
 <ul>
-<li><strong>Image-charge series</strong> (Tagg/Sunde 2-layer; Stefanescu/Sunde n-layer).</li>
-<li><strong>Complex Image Method</strong> (matrix-pencil or segmented-sampling
-  least-squares fit of <span class="arithmatex">\(\Gamma_1(\lambda)\)</span>).</li>
-<li><strong>Direct Sommerfeld quadrature</strong>, optionally with the Zou et al.
-  complex integration path.</li>
-<li><strong>Boundary-element method</strong> (Colominas) and <strong>finite-element
-  method</strong> (Güemes), each adding either a different test-function
-  weighting (collocation vs. Galerkin) or a different problem form
-  (volume PDE vs. integral equation).</li>
+<li><strong>Variant 1 (Overpass-driven):</strong> lat/lon + radius → polygons.
+  Adopted as the primary path. Reproducible, scriptable, exact.</li>
+<li><strong>Variant 2 (image recognition):</strong> rasterised maps via CV/ML.
+  Deferred. The principal obstacle is metric scale recovery, not
+  segmentation. When implemented, it slots in behind the same
+  <code>BuildingFootprint</code> data class and is otherwise invisible to the
+  generator.</li>
 </ul>
 <h2 id="decision">Decision<a class="headerlink" href="#decision" title="Permanent link">&para;</a></h2>
-<p><code>groundfield</code> ships eight backends arranged in three families:</p>
-<table>
-<thead>
-<tr>
-<th>Family</th>
-<th>Backends</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Closed-form image-charge</td>
-<td><code>image</code>, <code>image_2layer</code>, <code>image_nlayer</code>, <code>cim</code></td>
-</tr>
-<tr>
-<td>Integral equation</td>
-<td><code>mom</code>, <code>mom_sommerfeld</code>, <code>bem</code></td>
-</tr>
-<tr>
-<td>Volume PDE</td>
-<td><code>fem</code></td>
-</tr>
-</tbody>
-</table>
-<p>The selection heuristic is:</p>
+<h3 id="subpackage-layout">Subpackage layout<a class="headerlink" href="#subpackage-layout" title="Permanent link">&para;</a></h3>
+<p>A new subpackage <code>groundfield.geo</code> is added, intentionally <strong>next
+to</strong> <code>groundfield.geometry/</code>, not inside it. <code>geometry/</code> holds
+electrode <em>primitives</em> (<code>RodElectrode</code>, <code>StripElectrode</code>, …); <code>geo/</code>
+holds <em>georeferencing and external-data ingest</em>. Keeping the two
+distinct prevents conflating "physical conductor shape" with
+"GIS-derived input metadata".</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>src/groundfield/geo/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>├── __init__.py
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├── osm.py          # Overpass query, cache, parser
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>├── projection.py   # WGS84 → local ENU via pyproj
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>├── footprint.py    # BuildingFootprint Pydantic model
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>└── placement.py    # OsmBuildingPlacement(PlacementSpec)
+</code></pre></div>
+<p><code>osm.py</code>, <code>projection.py</code>, and the <code>placement.OsmBuildingPlacement</code>
+class <strong>import</strong> <code>shapely</code>, <code>pyproj</code>, and <code>requests</code>. These three
+ship in a new optional Poetry dependency group:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[tool.poetry.group.geo]</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">optional</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">[tool.poetry.group.geo.dependencies]</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">requests</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;^2.32&quot;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">shapely</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;^2.0&quot;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">pyproj</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;^3.6&quot;</span>
+</code></pre></div>
+<p>The top-level re-export shim in <code>groundfield/__init__.py</code> lazy-loads
+<code>geo.*</code> and raises an instructive <code>ImportError</code> ("install with
+<code>poetry install --with geo</code>") on first access — matching the
+pattern already established by the optional <code>groundinsight</code>
+dependency.</p>
+<h3 id="data-model">Data model<a class="headerlink" href="#data-model" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">BuildingFootprint</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;A single OSM building, projected to local ENU metres.&quot;&quot;&quot;</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">polygon_xy_m</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span>     <span class="c1"># closed ring, CCW</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">holes_xy_m</span><span class="p">:</span>   <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">levels</span><span class="p">:</span>       <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>           <span class="c1"># building:levels (may be NaN)</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">building_use</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>             <span class="c1"># building=residential|...</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">osm_id</span><span class="p">:</span>       <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">osm_tags</span><span class="p">:</span>     <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+</code></pre></div>
+<p>Coordinates are metric in the local ENU frame defined by the user
+(see <em>Projection</em>). The model is Pydantic v2, JSON-roundtripable,
+and frozen — every cache hit deserialises to a bit-identical
+instance.</p>
+<h3 id="projection">Projection<a class="headerlink" href="#projection" title="Permanent link">&para;</a></h3>
+<p>WGS84 → local ENU via <code>pyproj.Proj</code> with a user-supplied origin
+<code>(lat0_deg, lon0_deg)</code>. The origin is <strong>never inferred from data</strong>
+(rejected during the <em>Coordinate-System</em> clarification) so two
+runs against the same query at different dates produce identical
+metric coordinates regardless of which buildings appear in the
+result.</p>
+<p>For radii up to a few kilometres at mid-latitudes the residual
+projection distortion is <span class="arithmatex">\(&lt; 10\,\text{ppm}\)</span>, two orders of
+magnitude below soil-resistivity uncertainty and the OSM polygon
+quantisation. This justifies a single tangent-plane projection
+for the whole query — no UTM zone bookkeeping, no zone-edge
+discontinuities. The exact projection string used is
+<code>+proj=aeqd +lat_0=… +lon_0=… +ellps=WGS84</code> (azimuthal
+equidistant). The choice and its rationale are documented in
+<code>projection.py</code>.</p>
+<h3 id="overpass-query-and-caching">Overpass query and caching<a class="headerlink" href="#overpass-query-and-caching" title="Permanent link">&para;</a></h3>
+<p><code>osm.query_buildings(lat0, lon0, radius_m, *, cache_dir=…)</code> builds
+a deterministic Overpass-QL query of the form</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>[out:json][timeout:30];
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>(
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>  way[&quot;building&quot;](around:{r},{lat},{lon});
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>  relation[&quot;building&quot;](around:{r},{lat},{lon});
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>);
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>out body geom tags;
+</code></pre></div>
+<p>and POSTs it to the configured Overpass endpoint. The response is
+written verbatim to <code>{cache_dir}/{sha256_of_query}.json</code> and is
+read from disk on every subsequent call — Overpass is hit at most
+once per <code>(lat0, lon0, radius)</code> tuple. The cache directory
+defaults to <code>~/.cache/groundfield/osm/</code> (XDG-aware via
+<code>appdirs</code>-style logic, implemented locally to avoid one more
+dependency). Disk format is the raw Overpass JSON, not the
+projected <code>BuildingFootprint</code>s, so users can swap projections
+without re-downloading.</p>
+<p>A user-agent header <code>groundfield/&lt;__version__&gt;
+(https://github.com/…)</code> is set per Overpass usage policy, and a
+single retry with exponential backoff is performed on <code>429</code> /
+<code>504</code>.</p>
+<p>The cache and the network call are <em>only</em> in <code>osm.py</code>; the
+generator layer never sees <code>requests</code>. This keeps the test
+surface small (mock at the <code>osm.query_buildings</code> boundary).</p>
+<h3 id="generator-integration-osmbuildingplacement">Generator integration — <code>OsmBuildingPlacement</code><a class="headerlink" href="#generator-integration-osmbuildingplacement" title="Permanent link">&para;</a></h3>
+<p>A new placement variant is added to the existing
+<code>generators.placement.PlacementSpec</code> discriminated union:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">OsmBuildingPlacement</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">kind</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;osm&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;osm&quot;</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">footprints</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BuildingFootprint</span><span class="p">]</span>      <span class="c1"># already projected</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">selection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="s2">&quot;first_n&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;first_n&quot;</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span> <span class="o">...</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">footprint_at</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BuildingFootprint</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</code></pre></div>
+<p><code>generate(n, rng)</code> returns the polygon centroids in metric ENU,
+exactly mirroring the interface of <code>ManhattanGridPlacement</code> and
+<code>ExplicitPlacement</code> so no caller needs to special-case it.
+<code>footprint_at(i)</code> is the <em>additive</em> hook the generator uses to
+ask "is there a polygon I can use for building <span class="arithmatex">\(i\)</span>?" — present
+only on this variant, looked up via <code>hasattr</code> in the generator.</p>
+<p><code>OsmBuildingPlacement</code> does <strong>not</strong> call Overpass itself. It is
+constructed from an explicit <code>footprints</code> list. The standard
+workflow is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">footprints</span> <span class="o">=</span> <span class="n">geo</span><span class="o">.</span><span class="n">query_and_project</span><span class="p">(</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">lat0</span><span class="o">=</span><span class="err">…</span><span class="p">,</span> <span class="n">lon0</span><span class="o">=</span><span class="err">…</span><span class="p">,</span> <span class="n">radius_m</span><span class="o">=</span><span class="err">…</span><span class="p">,</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">cache_dir</span><span class="o">=</span><span class="err">…</span><span class="p">,</span> <span class="n">projection_origin</span><span class="o">=</span><span class="p">(</span><span class="n">lat0</span><span class="p">,</span> <span class="n">lon0</span><span class="p">),</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">placement</span> <span class="o">=</span> <span class="n">OsmBuildingPlacement</span><span class="p">(</span><span class="n">footprints</span><span class="o">=</span><span class="n">footprints</span><span class="p">)</span>
+</code></pre></div>
+<p>Separating the network step from the placement keeps the
+generator config JSON-serialisable and bit-exactly reproducible
+without an internet round-trip.</p>
+<h3 id="footprint-driven-foundation-electrodes-phase-a">Footprint-driven foundation electrodes — Phase A<a class="headerlink" href="#footprint-driven-foundation-electrodes-phase-a" title="Permanent link">&para;</a></h3>
+<p><code>FoundationElectrodeSpec.size_xy_m</code> is currently <code>Optional</code>; the
+existing semantics ("when set, overrides <code>size_m</code>") are preserved.
+<code>TnNetworkGenerator.build</code> is extended at exactly one point:
+before sampling a building's <code>GroundingSystemSpec</code>, if the
+placement is an <code>OsmBuildingPlacement</code> and the per-building
+spec contains a <code>FoundationElectrodeSpec</code>, the generator derives
+three fields from the polygon and <em>overrides</em> the spec values
+for this realisation:</p>
+<ul>
+<li><strong><code>size_xy_m</code></strong> — sides of the oriented minimum bounding
+  rectangle (Shapely's <code>minimum_rotated_rectangle</code>).</li>
+<li><strong><code>offset_xy_m</code></strong> — polygon centroid minus the site (x, y);
+  zero by construction in v1 (site = centroid).</li>
+<li><strong>footprint orientation</strong> — angle of the OMBR principal axis.
+  This is <strong>not</strong> currently a field on <code>FoundationElectrodeSpec</code>;
+  Phase A adds it as <code>orientation_deg: float | None = None</code>,
+  defaulting to <code>None</code> (= +x as today). When set, the
+  underlying <code>GridMeshElectrode</code> is rotated about its centre by
+  this angle. This is also useful outside the OSM path (e.g.
+  hand-placed houses on a street that doesn't run E–W).</li>
+</ul>
+<p><code>presence_prob</code> is <em>unchanged</em>. This is the only stochastic axis
+the user requested — Bernoulli per building, defaulting to
+<span class="arithmatex">\(p_\text{install} = 1.0\)</span>. Per-realisation diversity comes from
+the <code>presence_prob</code> draw, not from sampling geometric
+distributions (the polygon fixes those).</p>
+<p>Buildings whose polygon has fewer than four vertices, or whose
+OMBR area is below a configurable threshold (default 16 m²,
+matches a typical Gartenhaus), are skipped with a debug log
+entry to keep <code>TnNetworkGenerator</code> robust to OSM mapper noise.</p>
+<h3 id="footprint-driven-foundation-electrodes-phase-b-deferred">Footprint-driven foundation electrodes — Phase B (deferred)<a class="headerlink" href="#footprint-driven-foundation-electrodes-phase-b-deferred" title="Permanent link">&para;</a></h3>
+<p>Phase A approximates every building by its bounding rectangle.
+Real L-shaped houses are covered correctly in their perimeter (by
+construction OMBR ≥ polygon area; perimeter typically matches to
+within 5 %) but the <em>interior</em> of an L-shape is not modelled.
+Phase B introduces a new electrode primitive
+<code>PolygonalStripElectrode(loop_xy_m, depth_m, wire_radius_m)</code> and
+a sibling spec <code>PolygonalFoundationElectrodeSpec(polygon, depth,
+inset_m, segment_max_m)</code> that materialises a closed Strip-chain
+along <code>polygon.buffer(-inset_m).exterior</code> with each long segment
+subdivided to <code>segment_max_m</code>. Phase B becomes essential once
+non-rectangular Reihenhauszeilen or Gewerbehallen with complex
+footprints enter AP1.</p>
+<p>Phase B has no impact on the cache, projection, or placement
+layers and can ship as an additive change.</p>
+<h2 id="validation-programme">Validation programme<a class="headerlink" href="#validation-programme" title="Permanent link">&para;</a></h2>
+<p><code>tests/test_geo_*.py</code>:</p>
 <ol>
-<li><strong>Homogeneous soil</strong> → <code>image</code> (cheapest, closed form).</li>
-<li><strong>2-layer soil</strong> → <code>image_2layer</code> (auto-dispatched from
-   <code>backend="image"</code>). Cross-check with <code>mom</code>, <code>cim</code>, <code>bem</code>,
-   <code>mom_sommerfeld</code>.</li>
-<li><strong>3+ layer soil</strong> → <code>cim</code> is the recommended primary engine
-   (closed form, cost independent of layer count once fitted).
-   <code>mom_sommerfeld</code> is the reference for hard contrasts.
-   <code>image_nlayer</code> raises a <code>ValueError</code> for <code>n ≥ 3</code> (the real
-   image-charge series is not implemented for that regime).</li>
-<li><strong>Volume cross-check</strong> → <code>fem</code> (axisymmetric, equivalent-hemisphere
-   reduction). Used as a third independent line of defence; not
-   intended for general meshing.</li>
+<li><strong>Overpass query construction</strong> — given <code>(lat0, lon0, radius_m)</code>
+   the QL string is byte-identical across runs, and the cache
+   filename is the sha256 of that string.</li>
+<li><strong>Cache round-trip</strong> — <code>query_buildings</code> against a mocked
+   Overpass response writes the cache file on first call and does
+   <strong>not</strong> open a socket on the second call (verified with a
+   <code>requests</code>-monkeypatch sentinel).</li>
+<li><strong>Projection</strong> — round-trip <code>(lat, lon) → ENU → (lat, lon)</code>
+   for ten points within a 5 km radius returns an absolute error
+   below <span class="arithmatex">\(10^{-6}\)</span> degrees (<span class="arithmatex">\(\approx 0.1\,\text{m}\)</span>).</li>
+<li><strong>Polygon parsing</strong> — a synthetic Overpass payload with one
+   simple way, one way with an inner ring, and one multipolygon
+   relation parses to the expected <code>BuildingFootprint</code> count and
+   ring orientation (CCW exteriors, CW holes).</li>
+<li><strong><code>OsmBuildingPlacement.generate</code></strong> — for <span class="arithmatex">\(n\)</span> ≤
+   <code>len(footprints)</code>, returns the first <span class="arithmatex">\(n\)</span> polygon centroids in
+   declared order. For <span class="arithmatex">\(n\)</span> &gt; available, raises with a clear
+   message.</li>
+<li><strong>OMBR override</strong> — for an L-shaped polygon, the override
+   produces a <code>FoundationElectrodeSpec</code> with <code>size_xy_m</code> matching
+   the OMBR sides to within <span class="arithmatex">\(10^{-9}\)</span> m and <code>orientation_deg</code>
+   matching the OMBR axis to within <span class="arithmatex">\(10^{-9}\)</span> deg.</li>
+<li><strong>Reproducibility under <code>presence_prob</code></strong> — fixed RNG seed
+   produces a bit-identical sequence of "house has / hasn't a
+   foundation electrode" decisions across two <code>TnNetworkGenerator.build</code>
+   calls on the same config.</li>
+<li><strong>End-to-end smoke</strong> — a small (~20 houses) cached fixture
+   under <code>tests/data/osm_sample.json</code> builds a <code>World</code> that
+   solves successfully with <code>image_2layer</code> and produces a
+   non-trivial PEN current distribution. Cluster impedance is
+   compared to a <code>ManhattanGridPlacement</code> reference at the same
+   house count and soil — values are expected to <em>differ</em> (the
+   point of the new path) but to remain within an order of
+   magnitude.</li>
+<li><strong>Optional-dependency gate</strong> — importing
+   <code>groundfield.geo.placement</code> without the <code>geo</code> group installed
+   raises <code>ImportError</code> with the install hint and does <strong>not</strong>
+   break any non-<code>geo</code> test.</li>
 </ol>
-<h2 id="mathematical-physical-model">Mathematical / physical model<a class="headerlink" href="#mathematical-physical-model" title="Permanent link">&para;</a></h2>
-<p>All seven layered engines evaluate the same Sommerfeld integral of
-the quasi-static layered Green's function</p>
-<div class="arithmatex">\[
-\varphi(s, z) \;=\; \frac{\rho_1\, I}{4\pi}
-\int_0^{\infty} \bigl[
-  e^{-\lambda |z - z_s|}
-+ \Gamma_1(\lambda)\, e^{-\lambda (z + z_s)}
-\bigr]\, J_0(\lambda s)\, d\lambda,
-\]</div>
-<p>with the recursive upward reflection <span class="arithmatex">\(\Gamma_1(\lambda)\)</span> built bottom
-up from the per-interface Fresnel coefficients
-<span class="arithmatex">\(K_i = (\rho_{i+1} - \rho_i)/(\rho_{i+1} + \rho_i)\)</span>. Differences
-between the engines lie purely in the numerical strategy used to
-evaluate the integral (real images, complex images, quadrature,
-volume PDE). The frequency band targeted by <code>groundfield</code> is
-<span class="arithmatex">\(f &lt; 1\,\text{kHz}\)</span>, where the quasi-static formulation is valid.</p>
-<h2 id="cross-validation-envelope">Cross-validation envelope<a class="headerlink" href="#cross-validation-envelope" title="Permanent link">&para;</a></h2>
-<p>For simple configurations all engines must agree within tightly
-defined tolerances (codified in
-<code>tests/test_cross_engines_extended.py</code>):</p>
-<table>
-<thead>
-<tr>
-<th>Pair</th>
-<th>Tolerance</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>any closed-form image vs. another closed-form image</td>
-<td>1e-9</td>
-<td>exact reduction (e.g. <code>image_nlayer</code> → <code>image_2layer</code>)</td>
-</tr>
-<tr>
-<td>closed-form image vs. <code>mom</code> / <code>bem</code> / <code>cim</code></td>
-<td>5 %</td>
-<td>resolution scheme differs</td>
-</tr>
-<tr>
-<td><code>mom_sommerfeld</code> vs. closed-form layered engines</td>
-<td>5 %</td>
-<td>quadrature is the reference</td>
-</tr>
-<tr>
-<td><code>fem</code> vs. integral engines</td>
-<td>10 %</td>
-<td>equivalent-hemisphere bias</td>
-</tr>
-</tbody>
-</table>
-<p>Layer-contrast sweeps must produce a monotonically increasing
-cluster impedance for every engine — a basic physics consistency
-check.</p>
 <h2 id="consequences">Consequences<a class="headerlink" href="#consequences" title="Permanent link">&para;</a></h2>
-<p><strong>Positive.</strong></p>
+<h3 id="positive">Positive<a class="headerlink" href="#positive" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Three independent methodologies (closed-form images, integral
-  equation, volume PDE) are now available side by side. A bug in any
-  single one is detectable through cross-comparison.</li>
-<li>For 3+ layer soils there is a clear recommended engine (<code>cim</code>)
-  with an independent reference (<code>mom_sommerfeld</code>) and a second-line
-  cross-check (<code>bem</code>).</li>
-<li><code>fem</code> adds a methodologically distinct line of defence at the cost
-  of a simple equivalent-hemisphere reduction; the bias is
-  documented and bounded.</li>
+<li>Realistic AP1 layouts become a one-liner: pick a TN-Ortsnetz on
+  the map, run the generator, the houses sit where they sit and
+  their foundation rings face the way the real buildings face.</li>
+<li>The Manhattan grid stays as the bit-reproducible <em>reference</em>
+  case; the OSM path is the <em>realism</em> case. Cross-validating
+  the two is itself an AP1 result.</li>
+<li>The cache + explicit-origin projection make a Monte-Carlo run
+  over OSM-driven worlds bit-exactly replayable without internet
+  access after the first run.</li>
+<li>The data class <code>BuildingFootprint</code> and the deferred Variant 2
+  (image recognition) share an interface — when CV-based polygon
+  recovery becomes interesting, it slots in behind the same
+  <code>OsmBuildingPlacement(footprints=…)</code> constructor.</li>
 </ul>
-<p><strong>Negative / open.</strong></p>
+<h3 id="negative">Negative<a class="headerlink" href="#negative" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>mom_sommerfeld</code> is slow (per-pair adaptive quadrature). Acceptable
-  for the cross-check role; not intended for production sweeps.</li>
-<li><code>cim</code> quality depends on the matrix-pencil fit; very hard contrasts
-  may need more images. The fit RMS is exposed in
-  <code>result.metadata["cim_rms"]</code>.</li>
-<li><code>fem</code> covers single-cluster worlds via the equivalent-hemisphere
-  reduction. Multi-cluster volume runs would need a real 3-D mesh
-  generator and a stronger FEM kernel — out of scope for typical cases.</li>
+<li>Three new optional dependencies (<code>requests</code>, <code>shapely</code>,
+  <code>pyproj</code>). All ODbL/MIT-friendly and widely available; opt-in
+  via the Poetry group keeps the core install lean.</li>
+<li>OSM data quality varies. <code>building:levels</code> is sparse outside
+  city centres; the generator must remain robust when the tag
+  is missing (handled by defaulting to <code>None</code>).</li>
+<li>Overpass rate limits (typically 10 000 queries/day; one query
+  per Ortsnetz is well within this). The on-disk cache makes the
+  effective rate one query per (origin, radius) tuple per
+  developer lifetime.</li>
 </ul>
-<h2 id="action-items">Action items<a class="headerlink" href="#action-items" title="Permanent link">&para;</a></h2>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> Add <code>_layered.py</code> with the recursive <span class="arithmatex">\(\Gamma_1(\lambda)\)</span> and the
-      shared <code>LayerStack</code> helper.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> Implement <code>image_nlayer</code>, <code>cim</code>, <code>mom_sommerfeld</code>, <code>bem</code>, <code>fem</code>
-      with NumPy docstrings.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> Extend <code>Engine.solve</code> dispatcher and the <code>Backend</code> literal.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> Notebooks <code>04</code>–<code>09</code> covering each engine and the joint
-      cross-engine view.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> <code>tests/test_image_nlayer.py</code>, <code>test_cim.py</code>,
-      <code>test_mom_sommerfeld.py</code>, <code>test_bem.py</code>, <code>test_fem.py</code>,
-      <code>test_cross_engines_extended.py</code>.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Reference-case library for typical cases (separate notebooks).</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Optional: scikit-fem-backed 3-D <code>fem</code> (lifted from the
-      equivalent-hemisphere reduction) for full multi-cluster
-      worlds; deferred until a concrete use case demands it.</li>
+<h3 id="neutral">Neutral<a class="headerlink" href="#neutral" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Existing <code>ManhattanGridPlacement</code> / <code>ExplicitPlacement</code> users
+  are unaffected; the new placement is purely additive.</li>
+<li><code>FoundationElectrodeSpec</code> gains one optional field
+  (<code>orientation_deg</code>), defaulting to <code>None</code>. JSON round-trips of
+  configs written before this ADR continue to load unchanged.</li>
+<li>ADR-0007 cross-layer-electrode preconditions cover the
+  foundation depth range used here (0.5–1.5 m); no new
+  numerical-kernel work is required.</li>
+</ul>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>OpenStreetMap contributors</strong> (2026). <code>building=*</code> tag wiki.
+  https://wiki.openstreetmap.org/wiki/Key:building</li>
+<li><strong>OpenStreetMap Foundation.</strong> <em>Open Database Licence (ODbL)
+  v1.0.</em> https://opendatacommons.org/licenses/odbl/1-0/</li>
+<li><strong>Overpass API</strong> project documentation.
+  https://wiki.openstreetmap.org/wiki/Overpass_API</li>
+<li><strong>DIN 18014:2023-04.</strong> <em>Fundamenterder — Planung, Ausführung
+  und Dokumentation.</em> DIN, Berlin. Defines the geometric and
+  electrical requirements that the <code>FoundationElectrodeSpec</code>
+  (perimeter strip at 0.5–1 m depth, ring or mesh) reflects.</li>
+<li><strong>ADR-0009</strong> — generator architecture; this ADR is the
+  deferred OSM follow-up named there.</li>
+<li><strong>ADR-0007</strong> — cross-layer electrodes; ensures a foundation
+  ring at 0.8 m straddling a thin top layer is solved correctly.</li>
 </ul>
 
 

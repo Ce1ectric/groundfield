@@ -640,6 +640,8 @@
       
         
       
+        
+      
     
     
     
@@ -905,6 +907,34 @@
     
   
     08 — Pipeline to groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/09_osm_pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    09 — OSM pipeline with measurement setup
   
 
     
@@ -1272,6 +1302,8 @@
       
         
       
+        
+      
     
     
     
@@ -1470,6 +1502,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Example">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lumped-series-resistance-new-in-060" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lumped series resistance (new in 0.6.0)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1761,6 +1810,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../geo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geo / OSM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1776,6 +1853,10 @@
   
     
     
+      
+        
+      
+        
       
         
       
@@ -2122,6 +2203,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0011-osm-building-footprints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0011 — OSM building footprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0012-foundation-concrete-encasement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0012 — Foundation concrete encasement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2265,6 +2402,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Example">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lumped-series-resistance-new-in-060" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lumped series resistance (new in 0.6.0)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2474,6 +2628,24 @@ Earth-return corrections are delegated to
 :mod:<code>groundfield.coupling</code>, so the same conductor object can be
 combined with the perfect-mirror approximation, with the Carson
 series, or with the rigorous Sommerfeld kernel.</p>
+<h3 id="lumped-series-resistance-new-in-060">Lumped series resistance (new in 0.6.0)<a class="headerlink" href="#lumped-series-resistance-new-in-060" title="Permanent link">&para;</a></h3>
+<p>The optional <code>lumped_series_resistance_ohm</code> field overrides the
+geometric series resistance <span class="arithmatex">\(R = \rho_\text{mat}\,L / A\)</span> with a
+caller-supplied value in Ω. The :attr:<code>series_resistance</code> property
+returns this value when set and the solver picks it up
+transparently through the existing distributed-conductor framework
+(ADR-0003).</p>
+<p>The primary consumer is the <strong>lumped concrete-shell path of
+ADR-0012</strong>:
+:class:<code>~groundfield.generators.tn_network.TnNetworkGenerator</code>
+reads each foundation's
+<span class="arithmatex">\(R_\text{shell,total} = \rho_c/(2\pi\,L_\text{perim})\,\ln(r_b/r_a)\)</span>
+from <code>world.concrete_shell_corrections</code> (populated by the
+foundation-electrode materialiser) and injects it on the PEN
+service drop between the KVS and the foundation anchor. Setting
+<code>lumped_series_resistance_ohm</code> requires the conductor to be in
+the finite-impedance branch — pair it with a non-<code>None</code>
+<code>cross_section</code> to ensure the override is consumed.</p>
 <h2 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
 
 
@@ -2817,7 +2989,20 @@ $ :attr:<code>discretize_segment_length</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Series DC resistance <span class="arithmatex">\(R_\text{ser} = \rho L / A\)</span> in Ω.</p>
+        <p>Series DC resistance <span class="arithmatex">\(R_\text{ser}\)</span> in Ω.</p>
+<p>Resolution order:</p>
+<ol>
+<li>If :attr:<code>lumped_series_resistance_ohm</code> is set (ADR-0012 V1
+   concrete-shell path or any user-supplied lumped override),
+   return that value verbatim.</li>
+<li>Otherwise compute the geometric formula
+   <span class="arithmatex">\(R = \rho_\text{mat}\, L / A\)</span> from
+   :attr:<code>resistivity</code>, :attr:<code>length</code> and
+   :attr:<code>effective_cross_section</code>.</li>
+<li>If :attr:<code>cross_section</code> is <code>None</code>, the conductor is in
+   the ideal-galvanic-short branch and the series resistance
+   is <code>0.0</code>.</li>
+</ol>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -2835,10 +3020,8 @@ $ :attr:<code>discretize_segment_length</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>0.0</code> when the conductor is ideal
-(<code>cross_section is None</code>). Otherwise the resistive value
-computed from material resistivity, geometric length and
-effective cross section.</p>
+                <p>Total series resistance in Ω consumed by the solver's
+distributed-conductor model (ADR-0003).</p>
               </div>
             </td>
           </tr>
@@ -2902,35 +3085,35 @@ value are treated as ideal by the solver. Default
 
             <details class="quote">
               <summary>Source code in <code>src/groundfield/conductors/conductor.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-217">217</a></span>
-<span class="normal"><a href="#__codelineno-0-218">218</a></span>
-<span class="normal"><a href="#__codelineno-0-219">219</a></span>
-<span class="normal"><a href="#__codelineno-0-220">220</a></span>
-<span class="normal"><a href="#__codelineno-0-221">221</a></span>
-<span class="normal"><a href="#__codelineno-0-222">222</a></span>
-<span class="normal"><a href="#__codelineno-0-223">223</a></span>
-<span class="normal"><a href="#__codelineno-0-224">224</a></span>
-<span class="normal"><a href="#__codelineno-0-225">225</a></span>
-<span class="normal"><a href="#__codelineno-0-226">226</a></span>
-<span class="normal"><a href="#__codelineno-0-227">227</a></span>
-<span class="normal"><a href="#__codelineno-0-228">228</a></span>
-<span class="normal"><a href="#__codelineno-0-229">229</a></span>
-<span class="normal"><a href="#__codelineno-0-230">230</a></span>
-<span class="normal"><a href="#__codelineno-0-231">231</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-217" name="__codelineno-0-217"></a><span class="k">def</span><span class="w"> </span><span class="nf">is_ideal</span><span class="p">(</span>
-<a id="__codelineno-0-218" name="__codelineno-0-218"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">_IDEAL_RESISTANCE_THRESHOLD</span>
-<a id="__codelineno-0-219" name="__codelineno-0-219"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``True`` when the conductor acts as a galvanic short.</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>
-<a id="__codelineno-0-222" name="__codelineno-0-222"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-223" name="__codelineno-0-223"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-224" name="__codelineno-0-224"></a><span class="sd">    threshold</span>
-<a id="__codelineno-0-225" name="__codelineno-0-225"></a><span class="sd">        Resistance threshold in Ω. Conductors at or below this</span>
-<a id="__codelineno-0-226" name="__codelineno-0-226"></a><span class="sd">        value are treated as ideal by the solver. Default</span>
-<a id="__codelineno-0-227" name="__codelineno-0-227"></a><span class="sd">        ``1e-6 Ω``.</span>
-<a id="__codelineno-0-228" name="__codelineno-0-228"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-229" name="__codelineno-0-229"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_section</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-230" name="__codelineno-0-230"></a>        <span class="k">return</span> <span class="kc">True</span>
-<a id="__codelineno-0-231" name="__codelineno-0-231"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">series_resistance</span> <span class="o">&lt;=</span> <span class="n">threshold</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-249">249</a></span>
+<span class="normal"><a href="#__codelineno-0-250">250</a></span>
+<span class="normal"><a href="#__codelineno-0-251">251</a></span>
+<span class="normal"><a href="#__codelineno-0-252">252</a></span>
+<span class="normal"><a href="#__codelineno-0-253">253</a></span>
+<span class="normal"><a href="#__codelineno-0-254">254</a></span>
+<span class="normal"><a href="#__codelineno-0-255">255</a></span>
+<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+<span class="normal"><a href="#__codelineno-0-257">257</a></span>
+<span class="normal"><a href="#__codelineno-0-258">258</a></span>
+<span class="normal"><a href="#__codelineno-0-259">259</a></span>
+<span class="normal"><a href="#__codelineno-0-260">260</a></span>
+<span class="normal"><a href="#__codelineno-0-261">261</a></span>
+<span class="normal"><a href="#__codelineno-0-262">262</a></span>
+<span class="normal"><a href="#__codelineno-0-263">263</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-249" name="__codelineno-0-249"></a><span class="k">def</span><span class="w"> </span><span class="nf">is_ideal</span><span class="p">(</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">_IDEAL_RESISTANCE_THRESHOLD</span>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``True`` when the conductor acts as a galvanic short.</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-255" name="__codelineno-0-255"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="sd">    threshold</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="sd">        Resistance threshold in Ω. Conductors at or below this</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="sd">        value are treated as ideal by the solver. Default</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="sd">        ``1e-6 Ω``.</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_section</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="k">return</span> <span class="kc">True</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">series_resistance</span> <span class="o">&lt;=</span> <span class="n">threshold</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

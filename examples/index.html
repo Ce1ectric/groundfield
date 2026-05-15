@@ -642,6 +642,8 @@
       
         
       
+        
+      
     
     
     
@@ -910,6 +912,34 @@
     
   
     08 — Pipeline to groundinsight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="09_osm_pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    09 — OSM pipeline with measurement setup
   
 
     
@@ -1275,6 +1305,8 @@
       
         
       
+        
+      
     
     
     
@@ -1581,6 +1613,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geo / OSM
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1596,6 +1656,10 @@
   
     
     
+      
+        
+      
+        
       
         
       
@@ -1942,6 +2006,62 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0011-osm-building-footprints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0011 — OSM building footprints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adr/0012-foundation-concrete-encasement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-0012 — Foundation concrete encasement
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2078,10 +2198,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-eight-examples" class="md-nav__link">
+  <a href="#the-nine-examples" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The eight examples
+        The nine examples
       
     </span>
   </a>
@@ -2146,7 +2266,7 @@ output you should see.</p>
 <p>For Monte-Carlo sweeps you'll also want <code>joblib</code> and <code>pandas</code>,
 both standard scientific-Python tools. They come with most
 distributions; otherwise <code>pip install joblib pandas pyarrow</code>.</p>
-<h2 id="the-eight-examples">The eight examples<a class="headerlink" href="#the-eight-examples" title="Permanent link">&para;</a></h2>
+<h2 id="the-nine-examples">The nine examples<a class="headerlink" href="#the-nine-examples" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -2196,6 +2316,11 @@ distributions; otherwise <code>pip install joblib pandas pyarrow</code>.</p>
 <td>Full pipeline to <code>groundinsight</code></td>
 <td><span class="arithmatex">\(\rho\)</span>-<span class="arithmatex">\(f\)</span> fit, JSON <code>BusType</code> export, downstream fault analysis</td>
 </tr>
+<tr>
+<td><a href="09_osm_pipeline/">09</a></td>
+<td>OSM-driven pipeline + measurement setup</td>
+<td>Load real building footprints via Overpass, stochastic <code>presence_prob</code>, substation + auxiliary + voltage probe, read <span class="arithmatex">\(\varphi\)</span> at any (x, y), <code>Z_cluster</code> vs <code>Z_system</code></td>
+</tr>
 </tbody>
 </table>
 <h2 id="how-to-use-this-catalogue">How to use this catalogue<a class="headerlink" href="#how-to-use-this-catalogue" title="Permanent link">&para;</a></h2>
@@ -2212,6 +2337,11 @@ distributions; otherwise <code>pip install joblib pandas pyarrow</code>.</p>
 <li>If you want to feed reduced models into <code>groundinsight</code> for
   fault calculations, the full chain is in example 08; it builds
   on the <code>rho-f</code> fitting machinery covered there.</li>
+<li>If your study is bound to a specific real neighbourhood, jump
+  to example 09 — it loads building outlines from OpenStreetMap
+  and wires the measurement setup directly to the resulting world.
+  Pair it with the optional concrete-shell model from ADR-0012
+  for AP1-realistic foundation grounding.</li>
 </ul>
 <h2 id="related-material">Related material<a class="headerlink" href="#related-material" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2223,6 +2353,11 @@ distributions; otherwise <code>pip install joblib pandas pyarrow</code>.</p>
   and Monte-Carlo guidance.</li>
 <li><a href="../adr/0009-world-generators/">ADR-0009 — World generators</a> —
   the design behind <code>TnNetworkGenerator</code> and the spec layer.</li>
+<li><a href="../adr/0011-osm-building-footprints/">ADR-0011 — OSM building footprints</a> —
+  the optional <code>geo</code> subpackage that powers example 09.</li>
+<li><a href="../adr/0012-foundation-concrete-encasement/">ADR-0012 — Foundation concrete encasement</a> —
+  the cylindrical Sunde-shell model that pairs with the OSM-driven
+  foundations of example 09.</li>
 </ul>
 
 
