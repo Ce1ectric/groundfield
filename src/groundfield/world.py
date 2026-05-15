@@ -66,6 +66,20 @@ class World(BaseModel):
     conductors: list[Conductor] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
     boundary: BoundaryConditions = Field(default_factory=BoundaryConditions)
+    concrete_shell_corrections: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Mapping from electrode anchor name to lumped concrete-"
+            "shell series resistance $R_\\text{shell,total}$ in Ω, "
+            "populated by foundation electrodes built with a "
+            "``FoundationElectrodeSpec`` whose "
+            "``concrete_rho_ohm_m`` is set (ADR-0012 V1). Consumed by "
+            "``TnNetworkGenerator._build_pen_backbone`` to inject the "
+            "resistance on the corresponding PEN service drop. The "
+            "field is additive — worlds built without the OSM / "
+            "concrete path keep an empty dict and behave as before."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Convenience API — lookup and mutation
@@ -203,20 +217,42 @@ class World(BaseModel):
     # Run
     # ------------------------------------------------------------------
 
-    def solve(self, engine: "Engine") -> "FieldResult":
+    def solve(
+        self,
+        engine: "Engine",
+        *,
+        snapshot_sources: bool = True,
+    ) -> "FieldResult":
         """Run the simulation with the given ``Engine``.
 
         Delegates to :meth:`Engine.solve`, so users may write either
         ``world.solve(engine)`` or ``engine.solve(world)``.
 
+        Parameters
+        ----------
+        engine
+            The :class:`~groundfield.solver.engine.Engine` instance that
+            drives the backend.
+        snapshot_sources
+            If ``True`` (default), every :attr:`sources` entry is
+            deep-copied before the backend runs and restored on exit.
+            This defends against backends that mutate
+            ``Source.return_to`` in flight (see
+            :class:`groundfield.generators.measurement.MeasurementSetupConfig.build`).
+            Power users who have verified that their backend does not
+            mutate the source list (typical in long
+            :func:`~groundfield.engines.compare_engines` sweeps or
+            :func:`~groundfield.engines.convergence_study` runs) may set
+            ``snapshot_sources=False`` to skip the deep-copy cost
+            (sixth 2026-05-14 audit pass).
+
         Notes
         -----
-        ``self.sources`` is snapshotted before dispatching to the
-        backend and restored on exit. Earlier integration paths (see
-        :class:`groundfield.generators.measurement.MeasurementSetupConfig.build`)
-        could mutate a source's ``return_to`` field in flight; the
-        snapshot/restore makes the contract explicit: solving never
-        rewrites the input world (fifth 2026-05-13 audit pass).
+        The default ``snapshot_sources=True`` makes the contract
+        explicit: solving never rewrites the input world. The opt-out
+        is documented in ``docs/concepts.md`` ("Engine re-use across
+        ``World.solve`` calls") and exercised in
+        ``notebooks/32_audit_pass6_fixes.ipynb``.
         """
         # Local import to avoid a circular dependency at module load.
         from groundfield.solver.engine import Engine
@@ -226,10 +262,14 @@ class World(BaseModel):
                 f"Expected an Engine, got {type(engine).__name__}. "
                 "Build one with gf.create_engine(backend='image')."
             )
+        if not snapshot_sources:
+            # Caller has opted out — backends are now contractually
+            # responsible for not mutating ``self.sources``.
+            return engine.solve(self)
         # Snapshot every source via Pydantic's deep-copy semantics so
         # backends that mutate a source field in flight cannot leak
         # the change back into the caller's world (fifth 2026-05-13
-        # audit pass).
+        # audit pass; opt-out sixth 2026-05-14 audit pass).
         sources_snapshot = [s.model_copy(deep=True) for s in self.sources]
         try:
             return engine.solve(self)

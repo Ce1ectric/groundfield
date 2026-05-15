@@ -559,6 +559,13 @@ def solve_image_2layer(
     seg_points = np.array([s.midpoint for s in all_segments])
     seg_lengths = np.array([s.length for s in all_segments])
     wire_radii = np.array([s.wire_radius for s in all_segments])
+    # ADR-0012 V2: per-segment radial shell coefficient. Zero for
+    # any segment that does not belong to a concrete-encased
+    # foundation electrode — historic case preserved bit-exact.
+    seg_shell_coeffs = np.array(
+        [s.concrete_shell_coefficient_ohm_m for s in all_segments],
+        dtype=float,
+    )
 
     # ADR-0007: detect cross-layer geometry. When all segments live
     # inside the upper layer, the historic Tagg/Sunde image series
@@ -608,6 +615,7 @@ def solve_image_2layer(
             omega=omega if has_inductance else 0.0,
             inductance_matrix=inductance_matrix_full if has_inductance else None,
             carson_correction=carson_dz,
+            shell_coefficients=seg_shell_coeffs,
         )
         sc = np.zeros(n_segments, dtype=complex)
         for ename, idxs in elec_to_segidx.items():
@@ -626,6 +634,21 @@ def solve_image_2layer(
             phi_im = self_kernel(
                 seg_points, seg_lengths, wire_radii, sc.imag,
             )
+            # ADR-0012 V2: post-solve potential evaluation must
+            # carry the same shell augmentation as the inverse-
+            # problem assembly inside _solve_cluster_currents.
+            # Without this step the electrode_potentials and
+            # cluster_impedance ignore the shell drop and report
+            # the bare-soil values, hiding the entire V2 effect.
+            if np.any(seg_shell_coeffs > 0.0):
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    shell_diag = np.where(
+                        seg_lengths > 0.0,
+                        seg_shell_coeffs / seg_lengths,
+                        0.0,
+                    )
+                phi_re = phi_re + shell_diag * sc.real
+                phi_im = phi_im + shell_diag * sc.imag
             ph = phi_re + 1j * phi_im
         return elec_total, sc, ph
 

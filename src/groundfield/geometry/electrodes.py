@@ -137,6 +137,23 @@ class StripElectrode(_ElectrodeBase):
     kind: Literal["strip"] = "strip"
     start: Point3D = Field(..., description="Strip start (x, y, z) in m.")
     end: Point3D = Field(..., description="Strip end (x, y, z) in m.")
+    concrete_shell_coefficient_ohm_m: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Per-segment radial concrete-shell coefficient "
+            "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m. "
+            "``0.0`` (default) — no shell, behaves as before. "
+            "When positive, the MoM diagonal entry of every "
+            "segment of length $\\Delta s$ in this strip is "
+            "augmented by $C/\\Delta s$ — the radial voltage drop "
+            "through the cylindrical shell (ADR-0012 V2 path). "
+            "Currently honoured by the ``image`` and "
+            "``image_2layer`` backends; the others raise "
+            "``NotImplementedError`` so a misconfiguration is "
+            "loud rather than silently wrong."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_horizontal(self) -> "StripElectrode":

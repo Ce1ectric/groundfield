@@ -112,6 +112,13 @@ class _Segment:
     # discretiser when ``layer_interfaces`` is supplied; left at 0
     # for homogeneous-soil callers.
     layer_index: int = 0
+    # ADR-0012 V2: per-segment radial shell coefficient
+    # $C = \rho_c/(2\pi)\,\ln(r_b/r_a)$ in Ω·m. The MoM diagonal
+    # entry for this segment is augmented by $C / \text{length}$
+    # (the radial voltage drop through the concrete shell). Left
+    # at ``0.0`` for segments that are not part of a concrete-
+    # encased foundation electrode.
+    concrete_shell_coefficient_ohm_m: float = 0.0
 
 
 # ---------------------------------------------------------------------
@@ -172,6 +179,10 @@ def _discretize_strip(electrode: StripElectrode, ds: float) -> list[_Segment]:
     p1 = np.array(electrode.end, dtype=float)
     direction = (p1 - p0) / L
     segs: list[_Segment] = []
+    # ADR-0012 V2: read the concrete-shell coefficient from the
+    # electrode and propagate to every segment. ``0.0`` (default)
+    # leaves the diagonal untouched.
+    shell_coeff = float(electrode.concrete_shell_coefficient_ohm_m)
     for k in range(n):
         midpoint = p0 + (k + 0.5) * seg_len * direction
         segs.append(
@@ -180,6 +191,7 @@ def _discretize_strip(electrode: StripElectrode, ds: float) -> list[_Segment]:
                 length=seg_len,
                 electrode_name=electrode.name,
                 wire_radius=electrode.wire_radius,
+                concrete_shell_coefficient_ohm_m=shell_coeff,
             )
         )
     return segs
@@ -937,6 +949,7 @@ def _solve_cluster_currents(
     omega: float = 0.0,
     inductance_matrix: np.ndarray | None = None,
     carson_correction: np.ndarray | None = None,
+    shell_coefficients: np.ndarray | None = None,
 ) -> dict[str, complex]:
     """Distribute input currents through grounding and finite-conductor branches.
 
@@ -1109,6 +1122,19 @@ def _solve_cluster_currents(
     # ------------------------------------------------------------------
     Z = np.zeros((N_a, N_a))
     n_segments = seg_points.shape[0]
+    # ADR-0012 V2: precompute the per-segment radial shell resistance
+    # $R_\text{shell,k} = C_k / \Delta s_k$. The diagonal augmentation
+    # ``phi_test[k] += R_shell_k · I_seg_k`` is applied below, after
+    # the bulk-soil ``self_kernel`` call. ``None`` (default) means no
+    # shell anywhere — historic behaviour preserved bit-exact.
+    shell_diag: np.ndarray | None = None
+    if shell_coefficients is not None and np.any(shell_coefficients > 0.0):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            shell_diag = np.where(
+                seg_lengths > 0.0,
+                np.asarray(shell_coefficients, dtype=float) / seg_lengths,
+                0.0,
+            )
     for j, name_j in enumerate(active_elecs):
         idxs_j = elec_to_segidx[name_j]
         test_currents = np.zeros(n_segments)
@@ -1117,6 +1143,8 @@ def _solve_cluster_currents(
         phi_test = self_kernel(
             seg_points, seg_lengths, wire_radii, test_currents
         )
+        if shell_diag is not None:
+            phi_test = phi_test + shell_diag * test_currents
         for i, name_i in enumerate(active_elecs):
             idxs_i = elec_to_segidx[name_i]
             Z[i, j] = float(phi_test[idxs_i].mean())
@@ -1374,6 +1402,13 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
 
     # 4) Current sharing within clusters via the multi-port matrix
     wire_radii = np.array([s.wire_radius for s in all_segments])
+    # ADR-0012 V2: per-segment concrete-shell coefficient (zero for
+    # every segment that does not belong to a concrete-encased
+    # foundation electrode — historic case).
+    seg_shell_coeffs = np.array(
+        [s.concrete_shell_coefficient_ohm_m for s in all_segments],
+        dtype=float,
+    )
 
     def _homogeneous_self(seg_pts, seg_lens, wr, currents):
         """Closure: homogeneous self-action with fixed rho."""
@@ -1415,6 +1450,7 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
             omega=omega if has_inductance else 0.0,
             inductance_matrix=inductance_matrix_full if has_inductance else None,
             carson_correction=carson_dz,
+            shell_coefficients=seg_shell_coeffs,
         )
         sc = np.zeros(n_segments, dtype=complex)
         for ename, idxs in elec_to_segidx.items():
@@ -1433,6 +1469,18 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
             phi_im = _self_corrected_kernel(
                 seg_points, seg_lengths, wire_radii, sc.imag, rho,
             )
+            # ADR-0012 V2: same shell augmentation as in
+            # _solve_cluster_currents so electrode_potentials /
+            # cluster_impedance reflect the concrete-shell drop.
+            if np.any(seg_shell_coeffs > 0.0):
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    shell_diag = np.where(
+                        seg_lengths > 0.0,
+                        seg_shell_coeffs / seg_lengths,
+                        0.0,
+                    )
+                phi_re = phi_re + shell_diag * sc.real
+                phi_im = phi_im + shell_diag * sc.imag
             ph = phi_re + 1j * phi_im
         return elec_total, sc, ph
 

@@ -171,6 +171,25 @@ class Conductor(BaseModel):
             "frequency."
         ),
     )
+    lumped_series_resistance_ohm: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Optional override for the conductor's total series "
+            "resistance. ``None`` (default) keeps the geometric "
+            "formula $R = \\rho_\\text{mat}\\, L / A$. When set, "
+            ":attr:`series_resistance` returns this value verbatim, "
+            "ignoring resistivity and cross section. Introduced for "
+            "the V1 concrete-shell path of ADR-0012, where each "
+            "foundation electrode's lumped Sunde-shell impedance is "
+            "injected on the PEN service drop without having to fake "
+            "geometric properties. Has no effect when the conductor "
+            "is in the ideal-galvanic-short branch (i.e. "
+            ":attr:`cross_section` is ``None``); pass a finite "
+            "``cross_section`` together with this field to put the "
+            "conductor in the finite-impedance branch model."
+        ),
+    )
 
     @property
     def length(self) -> float:
@@ -199,16 +218,29 @@ class Conductor(BaseModel):
 
     @property
     def series_resistance(self) -> float:
-        """Series DC resistance $R_\\text{ser} = \\rho L / A$ in Ω.
+        """Series DC resistance $R_\\text{ser}$ in Ω.
+
+        Resolution order:
+
+        1. If :attr:`lumped_series_resistance_ohm` is set (ADR-0012 V1
+           concrete-shell path or any user-supplied lumped override),
+           return that value verbatim.
+        2. Otherwise compute the geometric formula
+           $R = \\rho_\\text{mat}\\, L / A$ from
+           :attr:`resistivity`, :attr:`length` and
+           :attr:`effective_cross_section`.
+        3. If :attr:`cross_section` is ``None``, the conductor is in
+           the ideal-galvanic-short branch and the series resistance
+           is ``0.0``.
 
         Returns
         -------
         float
-            ``0.0`` when the conductor is ideal
-            (``cross_section is None``). Otherwise the resistive value
-            computed from material resistivity, geometric length and
-            effective cross section.
+            Total series resistance in Ω consumed by the solver's
+            distributed-conductor model (ADR-0003).
         """
+        if self.lumped_series_resistance_ohm is not None:
+            return float(self.lumped_series_resistance_ohm)
         A = self.effective_cross_section
         if A is None:
             return 0.0
