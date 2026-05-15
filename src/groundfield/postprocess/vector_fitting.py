@@ -283,31 +283,47 @@ def vector_fit(
             "the intended behaviour, so this case is rejected at the "
             "API boundary (fourth 2026-05-12 audit pass)."
         )
-    if 2 * n_poles >= frequencies.size:
-        # Each pole introduces a residue (complex, 2 real DOFs) and
-        # a pole position (complex, 2 real DOFs) — 4 real unknowns
-        # per pole. The real-imag stacking of N complex samples gives
-        # 2N equations. ``4 * n_poles + extras >= 2 * N`` therefore
-        # marks the under- or exactly-determined regime; the fit
-        # *can* succeed numerically but collapses to an identity
-        # interpolation that carries no information beyond the
-        # input samples. The conservative trigger ``2*n_poles >= N``
-        # closes the gap the audit flagged: ``n_poles=1`` on
-        # ``N in {1, 2}`` was accepted without protest (fifth
-        # 2026-05-13 audit pass).
+    # Audit pass 6 (2026-05-14): the previous trigger
+    # ``2 * n_poles >= N`` counted 4 real DOFs per pole regardless of
+    # whether the search was constrained to conjugate-symmetric pairs.
+    # Under ``complex_poles=True`` (the default) the conjugate-symmetry
+    # constraint halves the actual free parameters: a pair carries
+    # 4 real DOFs (real pole, imag pole, real residue, imag residue),
+    # and a lone unpaired real pole carries 2. The corrected formula
+    # counts ``n_independent_poles = n_poles // 2 + (n_poles % 2)`` for
+    # the pair-constrained search and ``n_poles`` for the all-real one.
+    # The strict ``>`` in the conjugate branch keeps a uniquely
+    # determined fit (e.g. ``n_poles=2, N=2``) from emitting a false
+    # positive.
+    if complex_poles:
+        n_independent_poles = n_poles // 2 + (n_poles % 2)
+        is_underdetermined = 2 * n_independent_poles > frequencies.size
+    else:
+        is_underdetermined = 2 * n_poles >= frequencies.size
+    if is_underdetermined:
         import warnings as _warnings
 
+        if complex_poles:
+            ratio_explanation = (
+                "2 * n_independent_poles > len(frequencies) is the "
+                "critical ratio under complex-conjugate-pair fitting"
+            )
+        else:
+            ratio_explanation = (
+                "2 * n_poles >= len(frequencies) is the critical "
+                "ratio under all-real-pole fitting"
+            )
         _warnings.warn(
             "vector_fit: n_poles="
             f"{n_poles} with len(frequencies)={frequencies.size} "
             "leads to an under- or exactly-determined least-squares "
             "fit (each pole contributes residue + pole-location "
-            "DOFs; 2*n_poles >= len(frequencies) is the critical "
-            "ratio). The numerical solve may succeed but produces an "
-            "identity interpolation of the input samples that "
-            "carries no information beyond the raw frequency "
-            f"response. Reduce n_poles to {max(1, frequencies.size // 2 - 1)} "
-            "or fewer, or supply more frequency samples.",
+            f"DOFs; {ratio_explanation}). The numerical solve may "
+            "succeed but produces an identity interpolation of the "
+            "input samples that carries no information beyond the "
+            "raw frequency response. Reduce n_poles to "
+            f"{max(1, frequencies.size // 2 - 1)} or fewer, or supply "
+            "more frequency samples.",
             VectorFitUnderdeterminedWarning,
             stacklevel=2,
         )
