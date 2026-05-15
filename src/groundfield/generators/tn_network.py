@@ -88,6 +88,8 @@ from groundfield.generators.building import (
 )
 from groundfield.generators.distributions import AnyDistribution, Distribution
 from groundfield.generators.electrode_specs import (
+    ElectrodeSpec,
+    FoundationElectrodeSpec,
     RingElectrodeSpec,
     RodElectrodeSpec,
     rod_circle,
@@ -135,6 +137,64 @@ def _to_int(value: Union[int, Distribution], rng: np.random.Generator) -> int:
     if isinstance(value, Distribution):
         return int(round(float(value.sample(rng))))
     return int(round(float(value)))
+
+
+def _override_foundation_from_footprint(
+    grounding: GroundingSystemSpec,
+    footprint,  # ``BuildingFootprint`` — typed loosely to avoid a hard import
+) -> GroundingSystemSpec:
+    """Return a copy of ``grounding`` with every
+    :class:`FoundationElectrodeSpec` rewritten to follow the
+    polygon's oriented minimum bounding rectangle (OMBR).
+
+    Parameters
+    ----------
+    grounding
+        Per-building :class:`GroundingSystemSpec`. The original is
+        not mutated; a new spec is returned.
+    footprint
+        :class:`groundfield.geo.footprint.BuildingFootprint` to take
+        the OMBR from. The footprint must already be projected into
+        the same local ENU frame as the rest of the world.
+
+    Returns
+    -------
+    GroundingSystemSpec
+        A spec with the foundation electrodes' ``size_xy_m`` and
+        ``orientation_deg`` set from the OMBR. ``presence_prob``,
+        ``offset_xy_m``, ``depth_m``, ``style``, ``n_x``, ``n_y``,
+        and ``wire_radius_m`` are left untouched so the rest of
+        the stochastic / configurable axes survive the override.
+
+    Notes
+    -----
+    OMBR computation requires :mod:`shapely`. The :class:`ImportError`
+    raised by
+    :meth:`BuildingFootprint.oriented_bounding_rectangle` is left
+    to propagate so the install hint
+    (``pip install groundfield[geo]``) reaches the user verbatim.
+    """
+    if not grounding.electrodes:
+        return grounding
+    _, (dx, dy), orientation_deg = footprint.oriented_bounding_rectangle()
+    rewritten: list[ElectrodeSpec] = []
+    changed = False
+    for spec in grounding.electrodes:
+        if isinstance(spec, FoundationElectrodeSpec):
+            rewritten.append(
+                spec.model_copy(
+                    update={
+                        "size_xy_m": (dx, dy),
+                        "orientation_deg": orientation_deg,
+                    }
+                )
+            )
+            changed = True
+        else:
+            rewritten.append(spec)
+    if not changed:
+        return grounding
+    return grounding.model_copy(update={"electrodes": rewritten})
 
 
 # ---------------------------------------------------------------------
@@ -446,13 +506,31 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 f"expected {n_buildings}."
             )
 
+        # Footprint-aware placement (ADR-0011): if the configured
+        # placement exposes a ``footprint_at(i)`` hook (currently
+        # only :class:`OsmBuildingPlacement`), the per-building
+        # grounding spec is rewritten so that every
+        # :class:`FoundationElectrodeSpec` inherits ``size_xy_m``
+        # and ``orientation_deg`` from the polygon's oriented
+        # bounding rectangle. The Bernoulli on ``presence_prob``
+        # is preserved, so the only stochastic axis the user
+        # asked for survives the override.
+        has_footprints = hasattr(cfg.placement, "footprint_at")
+
         building_anchors: list[tuple[str, tuple[float, float]]] = []
         idx = 0
         for type_idx, (btype, count) in enumerate(building_assignments):
             for k in range(count):
                 site_xy = positions[idx]
                 prefix = f"{btype.name}_{k}"
-                anchor = btype.grounding.build_at(
+                grounding = btype.grounding
+                if has_footprints:
+                    footprint = cfg.placement.footprint_at(idx)
+                    if footprint is not None:
+                        grounding = _override_foundation_from_footprint(
+                            grounding, footprint,
+                        )
+                anchor = grounding.build_at(
                     world, site_xy=site_xy, name_prefix=prefix, rng=rng,
                 )
                 if anchor is not None:
@@ -739,14 +817,31 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 start=substation_anchor, end=kvs_name,
                 **common_kwargs,
             )
-        # Each building → its nearest KVS (Manhattan metric)
+        # Each building → its nearest KVS (Manhattan metric). The
+        # service drop additionally carries the lumped concrete-shell
+        # resistance (ADR-0012 V1) when the building's foundation
+        # electrode was built with a concrete encasement; the
+        # registry was populated by
+        # :meth:`GroundingSystemSpec._maybe_concrete_shell` during
+        # the per-building build_at call.
         for building_name, (bx, by) in building_anchors:
             kvs_name, _ = min(
                 kvs_anchors,
                 key=lambda k: abs(k[1][0] - bx) + abs(k[1][1] - by),
             )
+            extra_kwargs: dict = {}
+            shell_ohm = world.concrete_shell_corrections.get(building_name)
+            if shell_ohm is not None and shell_ohm > 0.0:
+                # Force the finite-impedance branch so the lumped
+                # series resistance is actually applied. The PEN
+                # service drop already runs in this branch by
+                # default (the PEN block sets ``cross_section`` via
+                # ``"from_radius"``) — ``lumped_series_resistance_ohm``
+                # then overrides the geometric resistance.
+                extra_kwargs["lumped_series_resistance_ohm"] = float(shell_ohm)
             create_conductor(
                 world, name=f"pen_service_{building_name}",
                 start=kvs_name, end=building_name,
                 **common_kwargs,
+                **extra_kwargs,
             )

@@ -198,6 +198,67 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         ),
     )
     wire_radius_m: float = Field(default=0.005, description="Wire radius in m.")
+    orientation_deg: Optional[float] = Field(
+        default=None,
+        description=(
+            "Rotation of the foundation rectangle around its centre, "
+            "in degrees. ``None`` (the default) and ``0.0`` both keep "
+            "the historic axis-aligned realisation (one "
+            ":class:`GridMeshElectrode` primitive). Any other value "
+            "synthesises the foundation from rotated "
+            ":class:`StripElectrode` primitives in "
+            ":meth:`GroundingSystemSpec.build_at` and bonds them "
+            "internally, so the spec still emits a single bondable "
+            "anchor for the outer grounding cluster. Useful both for "
+            "footprint-driven foundations (see ADR-0011, the OSM path "
+            "sets this from the polygon OMBR) and for hand-placed "
+            "houses on a street that does not run E-W."
+        ),
+    )
+    # Concrete encasement (ADR-0012). See the ADR for the physical
+    # model (cylindrical Sunde shell around each wire segment).
+    concrete_rho_ohm_m: Union[float, AnyDistribution, None] = Field(
+        default=None,
+        description=(
+            "Resistivity of the concrete encasement in Ω·m (typical "
+            "ranges: 30-80 wet/fresh, 80-200 earth-moist, "
+            "200-2 000 cycling, 5 000-50 000 dry). ``None`` (default) "
+            "keeps the historic behaviour: wire sits directly in soil "
+            "— right for ring/strip/rod electrodes which always run "
+            "in trenches, wrong for foundation electrodes which sit "
+            "inside a Streifenfundament (DIN 18014). Set this field "
+            "to enable the concrete-shell model defined in ADR-0012."
+        ),
+    )
+    concrete_thickness_m: Union[float, AnyDistribution] = Field(
+        default=0.05,
+        description=(
+            "Radial thickness of the concrete shell around the wire, "
+            "in metres. Only honoured when ``concrete_rho_ohm_m`` is "
+            "not ``None``. Default 50 mm matches a typical 30 cm wide "
+            "Streifenfundament with the conductor on its central "
+            "axis; for the more conservative 'edge of the strip' "
+            "placement, use 15 mm; for industrial pad foundations "
+            "with the conductor on a reinforcement mat, 100-200 mm "
+            "is appropriate."
+        ),
+    )
+    concrete_model: Literal["lumped", "distributed"] = Field(
+        default="lumped",
+        description=(
+            "How the Sunde-shell impedance enters the linear system. "
+            "``\"lumped\"`` (default): total shell resistance is "
+            "injected as a single series resistor on the PEN service "
+            "drop. Zero solver-side risk; exact for the cluster "
+            "impedance when current distributes uniformly along the "
+            "foundation, which holds for AP1 frequencies. "
+            "``\"distributed\"``: per-segment radial impedance is "
+            "added to the MoM diagonal (ADR-0012 V2). More expensive "
+            "but right for non-uniform current distributions or "
+            "where the surface potential right at the building "
+            "matters."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------

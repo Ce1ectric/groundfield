@@ -1,10 +1,7 @@
 """Placement strategies for site positioning on a 2-D map.
 
 A :class:`PlacementSpec` decides where the buildings of a generator
-run end up on the horizontal plane. Two strategies are supported in
-v1; further strategies (random scatter with Poisson-disk sampling,
-sub-cluster placement, OSM ingest) are deferred to follow-up
-generators.
+run end up on the horizontal plane. Three strategies are supported:
 
 * :class:`ManhattanGridPlacement` — regular street-raster layout:
   ``n_per_row`` columns, $\\lceil n / n_\\text{per\\_row}
@@ -17,7 +14,25 @@ generators.
   drawn small reference cases. The number of positions must match
   or exceed the requested count.
 
-Both classes implement :meth:`generate(n, rng) -> list[(x, y)]`.
+* :class:`~groundfield.geo.placement.OsmBuildingPlacement` —
+  centroids of pre-projected OpenStreetMap building footprints.
+  Re-exported here for the discriminated union; lives in
+  :mod:`groundfield.geo.placement` because it forms the bridge
+  between the optional ``geo`` extra and the generator stack.
+  Importing this module without the ``geo`` extra is safe — the
+  class itself has no optional dependencies; only the upstream
+  ``groundfield.geo.osm`` / ``groundfield.geo.projection`` APIs
+  (which populate the placement) need :mod:`requests`,
+  :mod:`shapely`, and :mod:`pyproj`.
+
+Every placement class implements
+:meth:`generate(n, rng) -> list[(x, y)]`. Placement classes that
+additionally carry per-site polygon data expose a
+:meth:`footprint_at(i)` hook; :class:`TnNetworkGenerator` checks
+for it via :func:`hasattr` and, when present, derives
+foundation-electrode size and orientation from the footprint
+instead of from the per-spec :class:`Distribution` fields. See
+ADR-0011.
 """
 
 from __future__ import annotations
@@ -29,10 +44,12 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
 from groundfield.generators.distributions import AnyDistribution, Distribution
+from groundfield.geo.placement import OsmBuildingPlacement
 
 __all__ = [
     "ManhattanGridPlacement",
     "ExplicitPlacement",
+    "OsmBuildingPlacement",
     "PlacementSpec",
 ]
 
@@ -152,7 +169,7 @@ class ExplicitPlacement(BaseModel):
 
 
 PlacementSpec = Annotated[
-    Union[ManhattanGridPlacement, ExplicitPlacement],
+    Union[ManhattanGridPlacement, ExplicitPlacement, OsmBuildingPlacement],
     Field(discriminator="kind"),
 ]
 """JSON-serialisable union of placement strategies."""
