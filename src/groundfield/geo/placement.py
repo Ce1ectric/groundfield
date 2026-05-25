@@ -181,7 +181,12 @@ class OsmBuildingPlacement(BaseModel):
     # Footprint-driven hook used by ``TnNetworkGenerator``
     # -----------------------------------------------------------------
 
-    def footprint_at(self, i: int) -> Optional[BuildingFootprint]:
+    def footprint_at(
+        self,
+        i: int,
+        *,
+        strict: bool = False,
+    ) -> Optional[BuildingFootprint]:
         """Return the footprint associated with site ``i``.
 
         Parameters
@@ -189,24 +194,65 @@ class OsmBuildingPlacement(BaseModel):
         i
             Site index, matching the order returned by
             :meth:`generate`.
+        strict
+            If ``False`` (default), a out-of-range ``i`` returns
+            ``None`` so callers can fall back to the spec-defined
+            geometry without special-case logic — the historic
+            v0.6.0 contract that
+            :meth:`TnNetworkGenerator.build` relies on.
+
+            If ``True``, an out-of-range ``i`` raises a
+            self-describing :class:`IndexError` that names the
+            placement, the requested index, the size of the filtered
+            footprint list (after ``min_area_m2``) and the raw list
+            length. AP1 generator pipelines that want a hard failure
+            instead of a silent fall-back can opt in with ``strict=True``
+            and get an actionable traceback at the call site
+            (seventh 2026-05-18 audit pass).
 
         Returns
         -------
         BuildingFootprint or None
-            The footprint at index ``i``, or ``None`` when ``i`` is
-            out of range. ``None`` rather than raising lets the
-            consumer fall back to the spec-defined geometry without
-            special-case logic.
+            The footprint at index ``i`` (after applying the
+            ``min_area_m2`` filter), or ``None`` when ``i`` is out of
+            range and ``strict`` is ``False``.
+
+        Raises
+        ------
+        IndexError
+            If ``strict=True`` and ``i`` is outside
+            ``[0, n_footprints)``.
         """
         filtered = self._filtered()
-        if 0 <= i < len(filtered):
+        n = len(filtered)
+        if 0 <= i < n:
             return filtered[i]
+        if strict:
+            raise IndexError(
+                "OsmBuildingPlacement.footprint_at: requested index "
+                f"{i} but only {n} footprints are available after "
+                f"min_area_m2={self.min_area_m2} filter "
+                f"(raw list length {len(self.footprints)}). "
+                "Use ``len(placement)`` for the available count, or "
+                "pass ``strict=False`` (default) for a None fall-back."
+            )
         return None
 
     # -----------------------------------------------------------------
     # Diagnostics
     # -----------------------------------------------------------------
 
+    @property
+    def n_footprints(self) -> int:
+        """Number of footprints surviving the ``min_area_m2`` filter.
+
+        Identical to ``len(placement)`` and provided as an explicit
+        attribute so consumers can pre-flight an ``i`` against
+        :meth:`footprint_at` without invoking ``len()`` on the model
+        instance (seventh 2026-05-18 audit pass).
+        """
+        return len(self._filtered())
+
     def __len__(self) -> int:
         """Number of footprints after applying ``min_area_m2``."""
-        return len(self._filtered())
+        return self.n_footprints

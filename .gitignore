@@ -194,3 +194,7 @@ THIRD_PARTY_LICENSES_RAW.txt
 #  chosen LLM backend / model, so it must not be committed. See
 #  docs/graphify.md for the workflow.
 graphify-out/
+
+# Sandbox write-permission probe (Cowork-Mount); never committed.
+test_write_repo
+

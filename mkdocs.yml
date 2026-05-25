@@ -128,16 +128,21 @@ nav:
       - "fem — axisymmetric FEM": engines/fem.md
   - API reference:
       - Overview: api/index.md
+      - World: api/world.md
       - Soil: api/soil.md
       - Geometry: api/geometry.md
       - Conductors: api/conductors.md
+      - Sources: api/sources.md
+      - Boundary: api/boundary.md
       - Solver: api/solver.md
       - Coupling: api/coupling.md
       - Postprocess: api/postprocess.md
       - Diagnostics: api/diagnostics.md
+      - Validation: api/validation.md
       - IO: api/io.md
-      - Generators: api/generators.md
       - Geo / OSM: api/geo.md
+      - Generators: api/generators.md
+      - References: api/references.md
   - Architecture decisions:
       - "ADR-0001 — 2-layer method": adr/0001-two-layer-method.md
       - "ADR-0002 — Engine family": adr/0002-engine-family.md

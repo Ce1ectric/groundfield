@@ -214,6 +214,49 @@ class World(BaseModel):
         return self.boundary
 
     # ------------------------------------------------------------------
+    # ADR-0012 concrete-shell registry — cleanup helper
+    # ------------------------------------------------------------------
+
+    def reset_concrete_corrections(self) -> dict[str, float]:
+        """Clear and return the ADR-0012 V1 concrete-shell registry.
+
+        The :attr:`concrete_shell_corrections` dict accumulates one entry
+        per foundation-electrode anchor that the generator pipeline
+        materialised with a non-``None`` ``concrete_rho_ohm_m`` field
+        (see ADR-0012, V1 "lumped" path). Re-using a single :class:`World`
+        across several :meth:`TnNetworkGenerator.build` calls — the
+        canonical pattern for Monte-Carlo studies that flip
+        ``concrete_rho_ohm_m`` per realisation — would otherwise leak
+        stale shell resistances from earlier samples into later ones.
+
+        The helper is the explicit, opt-in counterpart of the "build,
+        solve, throw away the world" pattern: when the user *does*
+        want to keep the world but re-seed the corrections, calling
+        ``world.reset_concrete_corrections()`` immediately before
+        ``generator.build(world=...)`` (or before mutating the
+        generator config and re-building) produces a clean slate.
+
+        Returns
+        -------
+        dict[str, float]
+            The previous contents of the registry, before clearing. The
+            returned dict is a shallow copy so the caller can inspect or
+            log the dropped entries without holding a live reference to
+            the (now empty) registry on the world.
+
+        Notes
+        -----
+        Calling this on a world that was never touched by the
+        concrete-encasement code path is a no-op; the returned dict is
+        empty.
+
+        Seventh 2026-05-18 audit pass.
+        """
+        previous = dict(self.concrete_shell_corrections)
+        self.concrete_shell_corrections.clear()
+        return previous
+
+    # ------------------------------------------------------------------
     # Run
     # ------------------------------------------------------------------
 

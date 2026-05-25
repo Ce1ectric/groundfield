@@ -146,6 +146,7 @@ from groundfield.io.csv import (
 )
 from groundfield.io.groundinsight import (
     BusTypeSpec,
+    EvaluateSpecError,
     evaluate_spec,
     fit_quality_summary,
     load_bustype_json,
@@ -300,6 +301,7 @@ __all__ = [
     "save_bustype_json",
     "load_bustype_json",
     "evaluate_spec",
+    "EvaluateSpecError",
     "fit_quality_summary",
     # Coupling / layered earth
     "LayeredEarth",

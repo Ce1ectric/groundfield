@@ -217,6 +217,30 @@ requires an explicit rename. The frozen column tuples
 `CLUSTER_IMPEDANCE_REQUIRED_COLUMNS` expose the schema for
 regression testing.
 
+## Errors
+
+`groundfield.io.groundinsight.evaluate_spec` validates the
+:class:`BusTypeSpec` it receives before lambdifying the
+``impedance_formula``. Any malformed input — non-``BusTypeSpec``
+argument, empty formula, unparseable SymPy expression, unknown free
+symbol — raises a typed :class:`EvaluateSpecError`
+(subclass of :class:`ValueError`). Downstream ``groundinsight``
+consumers can catch the typed class instead of substring-matching
+on ``str(exc)`` (seventh 2026-05-18 audit pass). Existing
+``except ValueError`` blocks keep working unchanged.
+
+```python
+from groundfield.io.groundinsight import (
+    EvaluateSpecError, evaluate_spec, load_bustype_json,
+)
+
+spec = load_bustype_json("my-bustype.json")
+try:
+    Z = evaluate_spec(spec, frequencies=[50.0, 1000.0], rho=100.0)
+except EvaluateSpecError as exc:
+    print("Spec rejected:", exc)
+```
+
 ## API reference
 
 ::: groundfield.io.groundinsight
