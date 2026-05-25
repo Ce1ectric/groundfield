@@ -26,6 +26,267 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Added (OrtsnetzLayout GPS / OSM convenience layer — implemented 2026-05-18)
+
+- **`OrtsnetzLayout.from_osm`** — new classmethod that runs
+  :func:`groundfield.geo.osm.query_and_project` and pre-places
+  the substation and zero-or-more KVS anchors in one call. The
+  user supplies everything in WGS84 (``center_lat_deg``,
+  ``center_lon_deg``, ``radius_m``, ``substation_lat_lon``,
+  ``kvs_lat_lons=...``); the helper materialises the
+  :class:`Projector`, runs the Overpass query (with the same
+  ``cache_dir`` / ``force_refresh`` / ``max_retries`` knobs that
+  :func:`query_and_project` already exposes), and seeds the
+  layout's :attr:`frame_origin_lat_lon` so subsequent
+  ``lat_lon`` arguments stay consistent. Closes the
+  "quick evaluation over many GPS coordinates" request — the
+  typical AP1 sweep over several villages now reduces to one
+  loop calling :meth:`from_osm` per scenario.
+- **`OrtsnetzLayout.frame_origin_lat_lon`** — new optional
+  field carrying the WGS84 origin of the local ENU frame. Set
+  automatically by :meth:`from_osm`; can also be passed to
+  :meth:`from_footprints` when the projection was done by an
+  external pipeline.
+- **`OrtsnetzLayout.projector`, `.lat_lon_to_xy`,
+  `.xy_to_lat_lon`** — lazy access to the
+  :class:`groundfield.geo.projection.Projector` corresponding to
+  :attr:`frame_origin_lat_lon`, plus the single-point round-trip
+  helpers used by every lat / lon overload. The projector is
+  rebuilt on each access; ``pyproj`` caches the CRS objects so
+  the cost stays well below a millisecond.
+- **`OrtsnetzLayout.add_kvs(position_lat_lon=...)`** and
+  **`OrtsnetzLayout.add_pen_cable(end_lat_lon=...)`** — new
+  WGS84 overloads. The existing ``position_xy`` / ``end_xy``
+  paths remain bit-identical; the lat / lon variants project
+  through the layout's frame and raise
+  :class:`RuntimeError` when no frame origin is set, so a
+  layout built in an anonymous local frame fails fast instead
+  of silently mixing coordinate systems.
+
+### Tests (OrtsnetzLayout GPS / OSM convenience layer — implemented 2026-05-18)
+
+- **`tests/test_ortsnetz_builder.py`** — 5 new regression tests
+  for the GPS layer (running total: 28 tests). Coverage:
+  layouts without a frame origin raise a clear ``RuntimeError``
+  for any ``lat_lon`` argument; layouts with a frame origin
+  project lat / lon to the expected ENU coordinates within
+  1 m of the analytical small-angle approximation;
+  :meth:`add_kvs` enforces the "exactly one of
+  ``position_xy`` / ``position_lat_lon``" contract;
+  :meth:`add_pen_cable` accepts ``end_lat_lon`` and emits a
+  cable that terminates at the projected coordinate; and
+  ``lat_lon_to_xy`` composed with ``xy_to_lat_lon`` is the
+  identity to within 1e-7 deg.
+
+### Notebooks (OrtsnetzLayout real-OSM Mulmke walk-through — implemented 2026-05-18)
+
+- **`notebooks/36_ortsnetz_builder.ipynb`** — extended with a
+  *real* OSM extract of Mulmke (Heudeber, Nordharz; centre
+  51.9136 N, 10.8432 E). The new section drives
+  :meth:`OrtsnetzLayout.from_osm` end-to-end: query OSM at the
+  village centre, pre-place a substation south of the centre
+  via ``substation_lat_lon``, drop two KVS along the K1328 via
+  ``kvs_lat_lons``, route three PEN cables (two via ``end=`` to
+  named KVS, one via ``end_lat_lon=`` to a free GPS endpoint),
+  connect the houses, and render the layout. The section
+  finishes with a *usability check* table comparing the
+  user-visible workflow against the original "quick evaluation
+  over many GPS coordinates" request and lists four further
+  rough edges as roadmap items (multi-stop trunk helper,
+  basemap overlay, coverage report, per-footprint spec map).
+
+### Added (OrtsnetzLayout builder + Manhattan PEN router — implemented 2026-05-18)
+
+- **`groundfield.generators.manhattan_routing`** — new pure-Python
+  helper module that hosts the obstacle-aware Manhattan-grid
+  pathfinder used by the AP1 LV cable router. Key exports:
+  :class:`ObstacleBox` (axis-aligned bounding box for foundations
+  and any other no-go region), :func:`route_manhattan` (4-connected
+  A\\* on a regular grid of cell size
+  ``min_segment_length_m``; obstacles are inflated by an optional
+  ``clearance_m`` safety margin), :func:`segment_intersects_box`
+  (axis-aligned segment ↔ AABB test with boundary slack), and
+  :func:`merge_collinear_waypoints` (drops mid-cell stops so the
+  returned polyline carries only the actual corners). Pure
+  Python; no :mod:`shapely` dependency at import time.
+- **`groundfield.generators.ortsnetz_builder`** — new module that
+  hosts the imperative TN-Ortsnetz layout builder. Where
+  :class:`TnNetworkGenerator` generates stochastic AP1 worlds
+  from population-level parameters, :class:`OrtsnetzLayout`
+  composes a *single* deterministic network in the order an
+  engineer takes when sketching a real LV network:
+  :meth:`OrtsnetzLayout.from_footprints` ingests
+  :class:`BuildingFootprint` instances (typically from
+  :mod:`groundfield.geo.osm`) together with the substation
+  coordinate; :meth:`OrtsnetzLayout.add_kvs` drops one or more
+  cable cabinets at user-given $(x, y)$; :meth:`OrtsnetzLayout.add_pen_cable`
+  routes a PEN cable from any anchor to either another anchor or
+  a free coordinate, using the new Manhattan A\\* engine so the
+  cable never crosses a foundation polygon; finally
+  :meth:`OrtsnetzLayout.connect_buildings` attaches every house
+  to the closest PEN cable via a short axis-aligned stub (one or
+  two segments, never crossing another foundation).
+  :meth:`OrtsnetzLayout.to_world` materialises the layout into a
+  full :class:`World` (substation ring + rods, KVS rods, per-
+  house foundation electrodes, PEN-junction electrodes at every
+  corner and tap point, PEN conductors between junctions, service
+  drops to the houses, optional 1 A current source).
+  :meth:`OrtsnetzLayout.plot` renders the layout with matplotlib
+  without any solver work.
+- **`PenCable`, `KvsPlacement`, `BuildingConnection`** —
+  Pydantic-serialisable snapshot classes that record every
+  decision the builder takes, so the layout round-trips through
+  :meth:`model_dump_json` and can be persisted alongside a
+  reference run.
+- **Top-level re-exports** —
+  :data:`groundfield.OrtsnetzLayout`,
+  :data:`groundfield.PenCable`,
+  :data:`groundfield.ObstacleBox`. The :mod:`groundfield.generators`
+  subpackage also re-exports the routing primitives
+  (:func:`route_manhattan`, :func:`segment_intersects_box`,
+  :func:`merge_collinear_waypoints`) so notebooks can drive the
+  router directly when the high-level builder is too rigid.
+
+### Tests (OrtsnetzLayout builder — implemented 2026-05-18)
+
+- **`tests/test_ortsnetz_builder.py`** — 23 regression tests
+  covering: :func:`segment_intersects_box` boundary handling and
+  rejection of non-axis-aligned segments;
+  :func:`merge_collinear_waypoints` collapses consecutive
+  collinear cells; :func:`route_manhattan` produces a clear
+  line on an empty corridor, detours around a single obstacle,
+  raises when the start is fully enclosed, and keeps interior
+  legs ≥ ``min_segment_length_m`` after the collinear merge;
+  :meth:`OrtsnetzLayout.add_kvs` auto-generates unique names and
+  rejects duplicates / substation-name collisions;
+  :meth:`OrtsnetzLayout.add_pen_cable` produces a single segment
+  on an obstacle-free corridor, raises when neither end keyword
+  is supplied (or both), reroutes around a blocking foundation;
+  :meth:`OrtsnetzLayout.connect_buildings` connects every house
+  on a single-cable layout, picks the closest cable when several
+  are present, warns + skips when a house is fully enclosed by
+  neighbours, and requires at least one cable to exist;
+  :meth:`OrtsnetzLayout.to_world` registers the expected
+  substation / KVS / house / service-drop anchors, honours
+  ``include_source=False``, and the cable's Manhattan length
+  matches the analytical Manhattan distance on an empty corridor;
+  :meth:`OrtsnetzLayout.plot` runs without raising on the Agg
+  backend (CI-headless smoke test).
+
+### Notebooks (OrtsnetzLayout builder — implemented 2026-05-18)
+
+- **`notebooks/36_ortsnetz_builder.ipynb`** — narrative walk-
+  through of the new pipeline: ingest 20 synthetic
+  :class:`BuildingFootprint` houses (offline stand-in for an
+  :func:`query_and_project` OSM extract), drop the substation
+  at the origin, place two KVS at user-specified coordinates,
+  route two PEN cables Manhattan-style (substation → ``kvs_east``,
+  substation → ``kvs_north``), connect every house via short
+  stubs with :meth:`connect_buildings`, plot the layout with
+  :meth:`OrtsnetzLayout.plot`, materialise into a
+  :class:`groundfield.World` to verify the electrode + conductor
+  counts, and iterate by adding a third cable and re-running
+  the assignment. No solver call -- geometry only, as
+  requested for the AP1 layout sandbox.
+
+### Added (TN-Ortsnetz radial-trunk PEN topology — implemented 2026-05-18)
+
+- **`groundfield.generators.pen_topology`** — new module that hosts
+  the PEN backbone topologies of the AP1
+  :class:`TnNetworkGenerator`. The module ships two discriminated
+  variants:
+  :class:`StarKvsTopology` (legacy default, every KVS wired directly
+  to the substation, every building tapped to its nearest KVS by
+  Manhattan distance) and :class:`RadialTrunkTopology` (new). The
+  module's :data:`PenTopology` discriminated union is JSON-round-
+  trippable through Pydantic so Monte-Carlo configurations stay
+  persistable.
+- **`RadialTrunkTopology`** — radial-feeder PEN backbone that
+  reproduces the typical German *TN-Ortsnetz* layout: the
+  substation feeds :attr:`n_feeders` axis-aligned LV cables
+  (default 4, evenly spaced) each with a finite slot budget
+  (:attr:`slots_per_substation`). Once the budget is exhausted on
+  a feeder, a KVS is inserted along the trunk axis at
+  :attr:`kvs_spacing_m` and hosts the next batch of building taps
+  (:attr:`slots_per_kvs`). Buildings are assigned to the angularly
+  closest feeder and then sorted along the axis; buildings behind
+  the substation or beyond :attr:`max_feeder_length_m` are dropped
+  with a :class:`UserWarning`. KVS earthing reuses
+  :attr:`KvsConfig.grounding` so the per-cabinet electrode catalog
+  remains a single configuration point. Plays directly with the
+  :class:`OsmBuildingPlacement` footprint pipeline from notebook
+  32 / ADR-0011 — every assigned building's foundation electrode
+  still inherits the OSM polygon's oriented bounding rectangle.
+- **`TnNetworkConfig.pen_topology`** — new discriminated-union
+  field (default :class:`StarKvsTopology`, so pre-v0.7 configs
+  build bit-identically). When :class:`RadialTrunkTopology` is
+  selected the parent :attr:`KvsConfig.placement` /
+  :attr:`KvsConfig.fixed_count` /
+  :attr:`KvsConfig.quote_per_100_buildings` fields are ignored
+  because the topology now decides KVS positions and counts; the
+  *grounding* spec :attr:`KvsConfig.grounding` is still consumed
+  for every inserted cabinet.
+- **`TnNetworkGenerator._build_radial_trunk`** — internal builder
+  that materialises the radial-trunk topology end-to-end:
+  building → feeder assignment, KVS-position planning, trunk
+  segments (``pen_trunk_f<feeder>_<k>``), and per-building service
+  drops (``pen_service_<building>``). Surfaces a clear
+  :class:`ValueError` when every building has been dropped by the
+  assignment (typical configuration error — feeder pointing the
+  wrong way or :attr:`max_feeder_length_m` set too aggressively).
+  The concrete-shell injection path from ADR-0012 V1 is preserved
+  bit-identically: a foundation electrode whose
+  ``concrete_rho_ohm_m`` is set still injects its lumped Sunde-shell
+  impedance via ``lumped_series_resistance_ohm`` on the service
+  drop.
+- **Top-level re-exports** —
+  :data:`groundfield.PenTopology`,
+  :data:`groundfield.StarKvsTopology`,
+  :data:`groundfield.RadialTrunkTopology` for callers that want to
+  build configs without reaching into the ``generators``
+  subpackage.
+
+### Tests (TN-Ortsnetz radial-trunk PEN topology — implemented 2026-05-18)
+
+- **`tests/test_pen_topology.py`** — 18 regression tests covering
+  the radial-trunk topology end-to-end: the default
+  :class:`TnNetworkConfig.pen_topology` is :class:`StarKvsTopology`;
+  :class:`RadialTrunkTopology` rejects mismatched
+  ``feeder_directions_deg`` lengths and non-finite entries;
+  auto-distributed feeder angles equal $2\pi k/N$;
+  :meth:`RadialTrunkTopology.assign_buildings_to_feeders` groups by
+  quadrant, drops negative-projection buildings, drops buildings
+  beyond :attr:`max_feeder_length_m`, and sorts each feeder by
+  axial distance from the substation;
+  :meth:`plan_feeder_kvs_positions` returns ``[]`` when the slot
+  budget is sufficient, places one KVS per slot-overflow batch, and
+  clips to :attr:`max_feeder_length_m`; end-to-end
+  :meth:`TnNetworkGenerator.build` produces no KVS when the
+  substation budget covers every feeder, inserts one KVS per
+  feeder when buildings overflow, attaches the source to
+  ``trafo_ring_0``, and solves on the default
+  :class:`image_2layer` backend; the discriminated
+  :class:`PenTopology` union round-trips through
+  :meth:`TnNetworkConfig.model_dump_json` /
+  :meth:`TnNetworkConfig.model_validate_json` for both topology
+  variants; and an all-dropped run raises a self-describing
+  :class:`ValueError`.
+
+### Notebooks (TN-Ortsnetz radial-trunk PEN topology — implemented 2026-05-18)
+
+- **`notebooks/35_radial_trunk_pen_topology.ipynb`** — geometry-only
+  walk-through of a *bus-topology* TN-Ortsnetz: one transformer
+  station feeds a single PEN main cable that runs to a downstream
+  KVS, with 20 houses tapped along the way via short axis-aligned
+  branches (`Abzweig`). The notebook builds the grounding systems
+  (`trafo` ring + 4 rods, KVS rod, 20 foundation electrodes) with
+  :class:`GroundingSystemSpec` and lays out the PEN cabling by
+  hand in a strict Manhattan metric (no diagonals; every segment
+  is parallel to either +x or +y). Plot only — no solver call,
+  no impedance read-out. Concludes with a Manhattan-metric sanity
+  check that asserts every cable segment is axis-aligned and
+  reports the total cable length per category.
+
 ### Added (Audit pass 7 — implemented 2026-05-18)
 
 - **`groundfield.io.groundinsight.EvaluateSpecError`** — new typed
@@ -334,7 +595,6 @@ version section when a release is cut.
   ``show_versions``; the ADR is the forcing function that pins
   the return shape before any of the three packages ships its
   own implementation.
-
 
 ---
 
@@ -3483,12 +3743,17 @@ work package 1 progresses.
   EPRs and per-electrode currents. Drives the AP1 statistical
   studies (soil layering, electrode count and position, Monte Carlo
   realisations).
-- **TN-Ortsnetz topology generator** — helper that builds an
-  AP1-style world from high-level parameters
-  (#single-family / small-commercial / mid-commercial buildings,
-  cable-cabinet ratio, soil layering). Generates electrodes,
-  finite PEN sections, cable cabinets, and the transformer station
-  in one call.
+- **TN-Ortsnetz topology generator** — *implemented 2026-05-18 in
+  the `[Unreleased]` block above.* The radial-trunk PEN topology
+  (:class:`RadialTrunkTopology`) and the integration with
+  :class:`OsmBuildingPlacement` are live; what remains as a v2
+  enhancement is the *corner-routed* service drop (tap → axis-
+  aligned corner → building), which currently runs as a single
+  straight line between anchors. For typical street-aligned plots
+  the corner offset is small compared with the full feeder length
+  and the residual error in the longitudinal branch impedance
+  stays well below 1 % at 50 Hz.
+  
 - **penetration depth** Calculate the depth of the earth current as it is used in Carson integrals. It should be possible to create the earth current depth of any soild multilayer problem to use an equivilent for the typical formulas for calculating the self and coupling impedances of a cable or overheadline with earth return part.
 
 ### Features

@@ -99,6 +99,11 @@ from groundfield.generators.measurement import (
     MeasurementLeadConfig,
     MeasurementSetupConfig,
 )
+from groundfield.generators.pen_topology import (
+    PenTopology,
+    RadialTrunkTopology,
+    StarKvsTopology,
+)
 from groundfield.generators.placement import (
     ExplicitPlacement,
     ManhattanGridPlacement,
@@ -119,6 +124,9 @@ __all__ = [
     "KvsConfig",
     "TnNetworkConfig",
     "TnNetworkGenerator",
+    "PenTopology",
+    "RadialTrunkTopology",
+    "StarKvsTopology",
 ]
 
 
@@ -390,6 +398,27 @@ class TnNetworkConfig(GeneratorConfig):
         description="PEN backbone block.",
     )
 
+    pen_topology: PenTopology = Field(
+        default_factory=StarKvsTopology,
+        description=(
+            "PEN backbone topology. ``StarKvsTopology`` (default) "
+            "reproduces the legacy v0.6 behaviour: every KVS is "
+            "wired directly to the substation and every building "
+            "taps to its nearest KVS by Manhattan distance. "
+            "``RadialTrunkTopology`` lays out the substation as a "
+            "radial set of LV feeders (Manhattan-aligned) with a "
+            "finite slot budget per source — once a feeder's slots "
+            "are exhausted a KVS is inserted along the trunk axis "
+            "to host the next batch of building taps. When "
+            "``RadialTrunkTopology`` is selected the parent "
+            ":attr:`KvsConfig.placement` / ``fixed_count`` / "
+            "``quote_per_100_buildings`` fields are ignored — the "
+            "topology decides KVS positions and counts — but "
+            ":attr:`KvsConfig.grounding` is still honoured for the "
+            "earthing of every inserted cabinet."
+        ),
+    )
+
     source_magnitude_A: Union[float, AnyDistribution] = Field(
         default=1.0,
         description=(
@@ -543,27 +572,48 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 "present electrodes. Increase presence_prob."
             )
 
-        # --- Cable cabinets ---
-        n_kvs = self._resolve_kvs_count(cfg, n_buildings, rng)
-        kvs_positions = cfg.kvs.placement.generate(n_kvs, rng)
-        kvs_anchors: list[tuple[str, tuple[float, float]]] = []
-        for k, site_xy in enumerate(kvs_positions):
-            anchor = cfg.kvs.grounding.build_at(
-                world, site_xy=site_xy, name_prefix=f"kvs_{k}", rng=rng,
+        # --- Cable cabinets + PEN backbone ---
+        # Two PEN topologies are supported (see ``pen_topology.py``):
+        #
+        # * ``StarKvsTopology`` (default, legacy) — KVS placement,
+        #   count and grounding come from ``cfg.kvs``; every
+        #   building taps to its nearest KVS by Manhattan distance.
+        # * ``RadialTrunkTopology`` — the substation feeds N radial
+        #   feeders with a finite slot budget per source. KVSes are
+        #   inserted along the trunk axis as needed; ``cfg.kvs``
+        #   contributes only the per-KVS *grounding* spec.
+        if isinstance(cfg.pen_topology, RadialTrunkTopology):
+            self._build_radial_trunk(
+                world,
+                cfg,
+                substation_anchor,
+                building_anchors,
             )
-            if anchor is not None:
-                kvs_anchors.append((anchor, site_xy))
+        else:
+            # Star-KVS topology (default).
+            n_kvs = self._resolve_kvs_count(cfg, n_buildings, rng)
+            kvs_positions = cfg.kvs.placement.generate(n_kvs, rng)
+            kvs_anchors: list[tuple[str, tuple[float, float]]] = []
+            for k, site_xy in enumerate(kvs_positions):
+                anchor = cfg.kvs.grounding.build_at(
+                    world,
+                    site_xy=site_xy,
+                    name_prefix=f"kvs_{k}",
+                    rng=rng,
+                )
+                if anchor is not None:
+                    kvs_anchors.append((anchor, site_xy))
 
-        if not kvs_anchors:
-            raise ValueError(
-                "TnNetworkGenerator: every KVS grounding had zero present "
-                "electrodes. Increase presence_prob or set fixed_count > 0."
+            if not kvs_anchors:
+                raise ValueError(
+                    "TnNetworkGenerator: every KVS grounding had zero "
+                    "present electrodes. Increase presence_prob or set "
+                    "fixed_count > 0."
+                )
+
+            self._build_pen_backbone(
+                world, cfg, substation_anchor, kvs_anchors, building_anchors,
             )
-
-        # --- PEN backbone ---
-        self._build_pen_backbone(
-            world, cfg, substation_anchor, kvs_anchors, building_anchors,
-        )
 
         # --- Optional measurement setup ---
         # Materialise the auxiliary current electrode, the voltage
@@ -844,4 +894,212 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 start=kvs_name, end=building_name,
                 **common_kwargs,
                 **extra_kwargs,
+            )
+
+    # ------------------------------------------------------------------
+    # Radial-trunk PEN backbone (new in v0.7)
+    # ------------------------------------------------------------------
+
+    def _build_radial_trunk(
+        self,
+        world: World,
+        cfg: TnNetworkConfig,
+        substation_anchor: str,
+        building_anchors: list[tuple[str, tuple[float, float]]],
+    ) -> None:
+        r"""Build a radial-trunk PEN backbone.
+
+        Implements
+        :class:`~groundfield.generators.pen_topology.RadialTrunkTopology`:
+
+        1. Group every building by the angularly closest feeder out
+           of the substation.
+        2. Per feeder, sort the assigned buildings by their axial
+           projection onto the feeder direction.
+        3. Walk the sorted list, taking up to
+           :attr:`RadialTrunkTopology.slots_per_substation` taps at
+           the substation; when that budget is exhausted, instantiate
+           a KVS along the feeder axis (using
+           :attr:`KvsConfig.grounding` for its earthing system) and
+           continue with :attr:`RadialTrunkTopology.slots_per_kvs`
+           taps per KVS.
+        4. Wire the trunk (substation → KVS$_1$ → KVS$_2$ → …) and
+           the per-building service drops as straight-line PEN
+           conductors using the parameters from
+           :class:`PenConfig`.
+
+        The method is a no-op for buildings the topology decides to
+        drop (already warned at the assignment stage in
+        :meth:`RadialTrunkTopology.assign_buildings_to_feeders`).
+
+        Parameters
+        ----------
+        world
+            World being populated.
+        cfg
+            The full :class:`TnNetworkConfig` (we read
+            :attr:`cfg.pen`, :attr:`cfg.pen_topology`,
+            :attr:`cfg.kvs.grounding`, and :attr:`cfg.substation`).
+        substation_anchor
+            Anchor name of the substation cluster (the trunk roots
+            here).
+        building_anchors
+            Per-building anchor name + horizontal centre $(x, y)$,
+            in declared order (matches the ordering returned by
+            :meth:`TnNetworkGenerator.build`).
+
+        Raises
+        ------
+        ValueError
+            If the topology resolves to zero PEN connections for
+            every building (every building dropped or every KVS
+            grounding produced zero electrodes), which is almost
+            always a configuration error.
+        """
+        topology = cfg.pen_topology
+        assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
+        rng = self._rng
+        pen = cfg.pen
+
+        # Common kwargs for every PEN conductor (matches the
+        # star-KVS topology so the cable physics is identical).
+        common_kwargs: dict = dict(
+            conductor_type="pen",
+            wire_radius=pen.wire_radius_m,
+            cross_section="from_radius",
+            coupling_to_soil=pen.coupling_to_soil,
+        )
+        if pen.segment_length_m is not None:
+            common_kwargs["discretize_segment_length"] = pen.segment_length_m
+        if pen.inductance_model is not None:
+            common_kwargs["inductance_model"] = pen.inductance_model
+
+        substation_xy = cfg.substation.position
+        building_xys = [xy for _, xy in building_anchors]
+        groups = topology.assign_buildings_to_feeders(
+            substation_xy=substation_xy,
+            building_positions=building_xys,
+        )
+
+        n_assigned = sum(len(g) for g in groups)
+        if n_assigned == 0:
+            raise ValueError(
+                "TnNetworkGenerator: RadialTrunkTopology dropped every "
+                "building (all were behind the closest feeder axis or "
+                "beyond max_feeder_length_m). Check feeder directions "
+                "and the building layout."
+            )
+
+        # Per-feeder loop.
+        any_service_drop = False
+        for feeder_idx, building_indices in enumerate(groups):
+            if not building_indices:
+                continue
+            # Plan KVS positions for this feeder. The first
+            # ``slots_per_substation`` buildings tap directly to the
+            # substation; the remaining are distributed across
+            # equispaced KVSes.
+            kvs_positions = topology.plan_feeder_kvs_positions(
+                substation_xy=substation_xy,
+                feeder_idx=feeder_idx,
+                n_buildings_on_feeder=len(building_indices),
+            )
+
+            # Materialise KVS clusters along the trunk and stitch
+            # them together with substation → KVS_1 → … trunk
+            # conductors.
+            tap_anchors: list[str] = [substation_anchor]
+            previous_anchor = substation_anchor
+            for k, kvs_xy in enumerate(kvs_positions):
+                kvs_name = f"{topology.name_prefix}_f{feeder_idx}_{k}"
+                kvs_anchor = cfg.kvs.grounding.build_at(
+                    world,
+                    site_xy=kvs_xy,
+                    name_prefix=kvs_name,
+                    rng=rng,
+                )
+                if kvs_anchor is None:
+                    # KVS earthing had zero present electrodes;
+                    # warn and let the trunk skip this slot. The
+                    # buildings that would have tapped here go to
+                    # the previous tap source until that, too, is
+                    # exhausted.
+                    warnings.warn(
+                        f"RadialTrunkTopology: KVS {kvs_name!r} "
+                        "grounding produced zero electrodes "
+                        "(presence_prob=0?); the next batch of "
+                        "buildings falls back to the previous tap "
+                        "source.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    continue
+                create_conductor(
+                    world,
+                    name=f"pen_trunk_f{feeder_idx}_{k}",
+                    start=previous_anchor,
+                    end=kvs_anchor,
+                    **common_kwargs,
+                )
+                tap_anchors.append(kvs_anchor)
+                previous_anchor = kvs_anchor
+
+            # Assign each building on this feeder to the right tap
+            # source. The first ``slots_per_substation`` buildings
+            # go to ``tap_anchors[0]`` (the substation); the next
+            # ``slots_per_kvs`` go to ``tap_anchors[1]``, and so on.
+            budgets = [topology.slots_per_substation] + [
+                topology.slots_per_kvs for _ in range(len(tap_anchors) - 1)
+            ]
+            tap_idx = 0
+            for building_idx in building_indices:
+                # Advance through tap sources whose budget is
+                # exhausted. If every tap source is full the loop
+                # falls through and we attach the building to the
+                # *last* tap anchor — emit a UserWarning so it's
+                # not silent.
+                while (
+                    tap_idx < len(tap_anchors) - 1
+                    and budgets[tap_idx] <= 0
+                ):
+                    tap_idx += 1
+                if budgets[tap_idx] <= 0:
+                    warnings.warn(
+                        "RadialTrunkTopology: feeder "
+                        f"{feeder_idx} exhausted every slot "
+                        f"(have {len(tap_anchors)} tap sources, "
+                        f"need ≥ {len(building_indices)}); "
+                        "wiring remaining buildings to the last "
+                        "tap anchor. Increase slots_per_kvs or "
+                        "n_feeders.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                budgets[tap_idx] = max(0, budgets[tap_idx] - 1)
+                tap_anchor = tap_anchors[tap_idx]
+                building_name, _ = building_anchors[building_idx]
+
+                extra_kwargs: dict = {}
+                shell_ohm = world.concrete_shell_corrections.get(
+                    building_name,
+                )
+                if shell_ohm is not None and shell_ohm > 0.0:
+                    extra_kwargs["lumped_series_resistance_ohm"] = float(
+                        shell_ohm,
+                    )
+                create_conductor(
+                    world,
+                    name=f"pen_service_{building_name}",
+                    start=tap_anchor,
+                    end=building_name,
+                    **common_kwargs,
+                    **extra_kwargs,
+                )
+                any_service_drop = True
+
+        if not any_service_drop:
+            raise ValueError(
+                "TnNetworkGenerator: RadialTrunkTopology produced "
+                "zero PEN service drops. Check feeder directions, "
+                "KVS grounding presence_prob, and slot budgets."
             )

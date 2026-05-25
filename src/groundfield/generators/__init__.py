@@ -87,6 +87,23 @@ from groundfield.generators.soil_specs import (
     TwoLayerSoilSpec,
     materialise_soil,
 )
+from groundfield.generators.manhattan_routing import (
+    ObstacleBox,
+    merge_collinear_waypoints,
+    route_manhattan,
+    segment_intersects_box,
+)
+from groundfield.generators.ortsnetz_builder import (
+    BuildingConnection,
+    KvsPlacement,
+    OrtsnetzLayout,
+    PenCable,
+)
+from groundfield.generators.pen_topology import (
+    PenTopology,
+    RadialTrunkTopology,
+    StarKvsTopology,
+)
 from groundfield.generators.tn_network import (
     KvsConfig,
     PenConfig,
@@ -149,4 +166,17 @@ __all__ = [
     "SubstationConfig",
     "KvsConfig",
     "PenConfig",
+    # PEN topologies
+    "PenTopology",
+    "StarKvsTopology",
+    "RadialTrunkTopology",
+    # Manhattan routing + Ortsnetz builder
+    "ObstacleBox",
+    "route_manhattan",
+    "segment_intersects_box",
+    "merge_collinear_waypoints",
+    "OrtsnetzLayout",
+    "PenCable",
+    "KvsPlacement",
+    "BuildingConnection",
 ]
