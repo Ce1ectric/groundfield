@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/examples/02_substation_dwight/">
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/examples/04_interconnected_grounding/">
       
       
-        <link rel="prev" href="../01_first_solve/">
+        <link rel="prev" href="../03_multilayer_soil/">
       
       
-        <link rel="next" href="../03_tn_network_basics/">
+        <link rel="next" href="../05_inductive_coupling/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>02 — Substation vs. Dwight 1936 - groundfield</title>
+        <title>04 — Interconnected grounding system - groundfield</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#example-02-substation-grounding-vs-dwight-1936" class="md-skip">
+        <a href="#04-interconnected-grounding-system-with-line-connections" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              02 — Substation vs. Dwight 1936
+              04 — Interconnected grounding system
             
           </span>
         </div>
@@ -708,14 +708,70 @@
   
   
     <li class="md-nav__item">
-      <a href="../01_first_solve/" class="md-nav__link">
+      <a href="../01_quickstart_two_electrodes/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    01 — First solve (single rod)
+    01 — Quick start (two single electrodes)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02_engine_comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    02 — Comparison of the solver engines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../03_multilayer_soil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    03 — Multi-layer soil models
   
 
     
@@ -752,7 +808,7 @@
   <span class="md-ellipsis">
     
   
-    02 — Substation vs. Dwight 1936
+    04 — Interconnected grounding system
   
 
     
@@ -770,7 +826,7 @@
   <span class="md-ellipsis">
     
   
-    02 — Substation vs. Dwight 1936
+    04 — Interconnected grounding system
   
 
     
@@ -796,10 +852,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-youll-see" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What you'll see
+        Setup
       
     </span>
   </a>
@@ -807,10 +863,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#code" class="md-nav__link">
+  <a href="#how-the-clusters-are-formed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Code
+        How the clusters are formed
       
     </span>
   </a>
@@ -818,10 +874,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#expected-output-on-a-typical-machine" class="md-nav__link">
+  <a href="#what-to-look-at" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Expected output (on a typical machine)
+        What to look at
       
     </span>
   </a>
@@ -829,21 +885,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-just-happened" class="md-nav__link">
+  <a href="#where-to-go-next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What just happened
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#try-this-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Try this next
+        Where to go next
       
     </span>
   </a>
@@ -866,62 +911,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../03_tn_network_basics/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    03 — TN-Ortsnetz generator basics
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../04_grounding_measurement/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    04 — Galvanic measurement
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../05_inductive_coupling/" class="md-nav__link">
         
   
@@ -929,7 +918,7 @@
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling
+    05 — Analysing inductive coupling
   
 
     
@@ -950,14 +939,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../06_parameter_sweep_soil/" class="md-nav__link">
+      <a href="../06_tn_model/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    06 — Parameter sweep over soil
+    06 — Create a TN-Model
   
 
     
@@ -978,14 +967,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../07_monte_carlo/" class="md-nav__link">
+      <a href="../07_measurement_distance/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    07 — Monte Carlo with joblib
+    07 — Comparison of measurement distances
   
 
     
@@ -1006,14 +995,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../08_pipeline_groundinsight/" class="md-nav__link">
+      <a href="../08_osm_pipeline/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    08 — Pipeline to groundinsight
+    08 — OSM pipeline with simulation results
   
 
     
@@ -1034,14 +1023,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../09_osm_pipeline/" class="md-nav__link">
+      <a href="../09_plot_gallery/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    09 — OSM pipeline with measurement setup
+    09 — All plots in action
   
 
     
@@ -1409,6 +1398,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1461,6 +1460,34 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    World
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
               
             
               
@@ -1534,6 +1561,62 @@
     
   
     Conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Boundary
   
 
     
@@ -1666,6 +1749,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api/io/" class="md-nav__link">
         
   
@@ -1674,6 +1785,34 @@
     
   
     IO
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/geo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geo / OSM
   
 
     
@@ -1722,14 +1861,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/geo/" class="md-nav__link">
+      <a href="../../api/references/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Geo / OSM
+    References
   
 
     
@@ -2289,10 +2428,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-youll-see" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What you'll see
+        Setup
       
     </span>
   </a>
@@ -2300,10 +2439,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#code" class="md-nav__link">
+  <a href="#how-the-clusters-are-formed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Code
+        How the clusters are formed
       
     </span>
   </a>
@@ -2311,10 +2450,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#expected-output-on-a-typical-machine" class="md-nav__link">
+  <a href="#what-to-look-at" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Expected output (on a typical machine)
+        What to look at
       
     </span>
   </a>
@@ -2322,21 +2461,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-just-happened" class="md-nav__link">
+  <a href="#where-to-go-next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What just happened
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#try-this-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Try this next
+        Where to go next
       
     </span>
   </a>
@@ -2363,139 +2491,109 @@
   
 
 
-<h1 id="example-02-substation-grounding-vs-dwight-1936">Example 02 — Substation grounding vs. Dwight 1936<a class="headerlink" href="#example-02-substation-grounding-vs-dwight-1936" title="Permanent link">&para;</a></h1>
-<p>A transformer-station grounding system: one ring earth electrode
-plus four driven rods, all bonded with bare copper. The numerical
-result is compared against the closed-form expressions in
-<a href="https://ieeexplore.ieee.org/document/5057025">Dwight 1936</a> — a
-classical reference paper that ships with <code>groundfield</code> for
-plausibility checks.</p>
-<h2 id="what-youll-see">What you'll see<a class="headerlink" href="#what-youll-see" title="Permanent link">&para;</a></h2>
-<ul>
-<li>How to assemble a multi-electrode grounding system.</li>
-<li>How <strong>bonding</strong> with conductors fuses several electrodes into
-  one cluster.</li>
-<li>How <code>gf.dwight1936</code> provides reference impedances for sanity
-  checks of the numerical solution.</li>
-</ul>
-<h2 id="code">Code<a class="headerlink" href="#code" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># 1. Soil and world</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">soil</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">HomogeneousSoil</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;trafo&quot;</span><span class="p">,</span> <span class="n">soil</span><span class="o">=</span><span class="n">soil</span><span class="p">)</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># 2. Ring earth electrode, 4 m radius, 0.6 m deep</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">world</span><span class="p">,</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">),</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">radius</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># 3. Four driven rods on a 2 m radius circle, bonded into the ring</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">angle</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">k</span> <span class="o">/</span> <span class="mi">4</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="n">world</span><span class="p">,</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rod_</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>        <span class="n">position</span><span class="o">=</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">),</span>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>        <span class="n">length</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span>
-<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>        <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.008</span><span class="p">,</span>
-<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    <span class="p">)</span>
-<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    <span class="n">gf</span><span class="o">.</span><span class="n">create_conductor</span><span class="p">(</span>
-<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>        <span class="n">world</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;bond_</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>        <span class="n">start</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;rod_</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>        <span class="n">conductor_type</span><span class="o">=</span><span class="s2">&quot;bare_copper&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="p">)</span>
-<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>
-<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="c1"># 4. Source — 1 A injected into the ring. Because of the bonding,</span>
-<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="c1">#    every rod is part of the same galvanic cluster.</span>
-<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">attached_to</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span> <span class="n">magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
-<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>
-<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a><span class="c1"># 5. Solve at 50 Hz</span>
-<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
-<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>    <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
-<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>    <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
-<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a><span class="p">)</span>
-<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<h1 id="04-interconnected-grounding-system-with-line-connections">04 — Interconnected grounding system with line connections<a class="headerlink" href="#04-interconnected-grounding-system-with-line-connections" title="Permanent link">&para;</a></h1>
+<p>Real grounding installations are <em>clusters</em> of electrodes joined by
+copper bonds, PEN cables and bare earthing strips. <code>groundfield</code>
+models such systems via the :func:<code>create_conductor</code> API — every
+conductor either fuses its two endpoint electrodes into one
+galvanic cluster (ideal bond, <code>cross_section=None</code>) or enters the
+nodal-analysis system as a finite-impedance branch
+(<code>cross_section="from_radius"</code> or an explicit area in
+<span class="arithmatex">\(\mathrm{m}^2\)</span>).</p>
+<h2 id="setup">Setup<a class="headerlink" href="#setup" title="Permanent link">&para;</a></h2>
+<p>A small substation grounding: a 5 m ring at burial depth 0.6 m,
+three driven rods inside the ring, every electrode tied together
+with bare-copper bonds. A 30 m PEN service drop (insulated cable,
+finite impedance) feeds a house foundation electrode (1 m × 1 m,
+2 × 2 grid mesh) 25 m away.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">HomogeneousSoil</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">100.0</span><span class="p">))</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># --- Substation grounding cluster -------------------------------------</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">world</span><span class="p">,</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">theta</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.094</span><span class="p">,</span> <span class="mf">4.189</span><span class="p">)):</span>  <span class="c1"># 0, 120, 240 deg</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="n">world</span><span class="p">,</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;trafo_rod_</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="n">position</span><span class="o">=</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">theta</span> <span class="ow">and</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="nb">__import__</span><span class="p">(</span><span class="s1">&#39;math&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">)),</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                  <span class="mf">2.0</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="nb">__import__</span><span class="p">(</span><span class="s1">&#39;math&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)),</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                  <span class="mf">0.5</span><span class="p">),</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        <span class="n">length</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># Galvanic bonds (ideal short, cross_section=None).</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">gf</span><span class="o">.</span><span class="n">create_conductor</span><span class="p">(</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        <span class="n">world</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;trafo_bond_</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="n">start</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;trafo_rod_</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>        <span class="n">conductor_type</span><span class="o">=</span><span class="s2">&quot;bare_copper&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>    <span class="p">)</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="c1"># --- House foundation electrode ---------------------------------------</span>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span>
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    <span class="n">world</span><span class="p">,</span> <span class="s2">&quot;grid_mesh&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;house_foundation&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    <span class="n">corner</span><span class="o">=</span><span class="p">(</span><span class="mf">24.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">),</span>
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">n_x</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_y</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span>
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="p">)</span>
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="c1"># --- PEN service drop: substation -&gt; house, finite-impedance branch ---</span>
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_conductor</span><span class="p">(</span>
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    <span class="n">world</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;pen_service&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>    <span class="n">start</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s2">&quot;house_foundation&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>    <span class="n">conductor_type</span><span class="o">=</span><span class="s2">&quot;pen&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span>
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>    <span class="n">cross_section</span><span class="o">=</span><span class="s2">&quot;from_radius&quot;</span><span class="p">,</span>        <span class="c1"># finite impedance</span>
+<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>    <span class="n">coupling_to_soil</span><span class="o">=</span><span class="s2">&quot;isolated&quot;</span><span class="p">,</span>        <span class="c1"># insulated cable, no leakage</span>
+<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>    <span class="n">discretize_segment_length</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>      <span class="c1"># split into 2 m sub-segments</span>
+<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a><span class="p">)</span>
 <a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>
-<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a><span class="c1"># --- the cluster impedance ---</span>
-<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a><span class="n">Z</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;|Z(50 Hz)| = </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Ω    arg = </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span><span class="w"> </span><span class="n">deg</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="si">:</span><span class="s2">+.2f</span><span class="si">}</span><span class="s2">°&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>
-<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a><span class="c1"># --- compare against Dwight 1936 closed-form references ---</span>
-<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a><span class="c1"># Ring alone:</span>
-<a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a><span class="n">R_ring_only</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">dwight1936</span><span class="o">.</span><span class="n">ring</span><span class="p">(</span>
-<a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>    <span class="n">radius</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span> <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">rho</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a><span class="p">)</span>
-<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a><span class="c1"># Single rod alone:</span>
-<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a><span class="n">R_rod_alone</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">dwight1936</span><span class="o">.</span><span class="n">rod</span><span class="p">(</span><span class="n">length</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="mf">0.008</span><span class="p">,</span> <span class="n">rho</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
-<a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>
-<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dwight ring only:        R = </span><span class="si">{</span><span class="n">R_ring_only</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Ω&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dwight single rod:       R = </span><span class="si">{</span><span class="n">R_rod_alone</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Ω&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;4 rods in parallel only: R ≈ </span><span class="si">{</span><span class="n">R_rod_alone</span><span class="o">/</span><span class="mi">4</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Ω  (loose lower bound)&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>
-<a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="c1"># A ring + 4 rods is *not* the same as those in simple parallel —</span>
-<a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a><span class="c1"># the ring carries most of the current at the surface and the rods</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># pull the equipotential deeper. The exact numerical answer should</span>
-<a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a><span class="c1"># sit *between* &quot;ring only&quot; and &quot;parallel ring + rods&quot;.</span>
-<a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a><span class="nb">print</span><span class="p">()</span>
-<a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Sanity: the numerical answer should land between the two &quot;</span>
-<a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a>      <span class="s2">&quot;Dwight reference values above.&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-68" name="__codelineno-0-68" href="#__codelineno-0-68"></a>
-<a id="__codelineno-0-69" name="__codelineno-0-69" href="#__codelineno-0-69"></a><span class="c1"># --- plot the surface potential to visualise the result ---</span>
-<a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a><span class="n">fig</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">plot_surface_potential</span><span class="p">(</span>
-<a id="__codelineno-0-71" name="__codelineno-0-71" href="#__codelineno-0-71"></a>    <span class="n">result</span><span class="p">,</span> <span class="n">world</span><span class="p">,</span>
-<a id="__codelineno-0-72" name="__codelineno-0-72" href="#__codelineno-0-72"></a>    <span class="n">z</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">padding_m</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
-<a id="__codelineno-0-73" name="__codelineno-0-73" href="#__codelineno-0-73"></a>    <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Trafostation: ring + 4 rods, |Z| = </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> Ω&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a><span class="p">)</span>
-<a id="__codelineno-0-75" name="__codelineno-0-75" href="#__codelineno-0-75"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a><span class="c1"># --- Source + solve ---------------------------------------------------</span>
+<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">attached_to</span><span class="o">=</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">,</span> <span class="n">magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
+<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
+<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a><span class="p">)</span>
+<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>
+<a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;substation cluster Z =&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>      <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;trafo_ring&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;house cluster Z      =&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>      <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;house_foundation&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
-<h2 id="expected-output-on-a-typical-machine">Expected output (on a typical machine)<a class="headerlink" href="#expected-output-on-a-typical-machine" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>|Z(50 Hz)| = 9.842 Ω    arg = +0.00°
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>Dwight ring only:        R = 12.351 Ω
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>Dwight single rod:       R = 24.105 Ω
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>4 rods in parallel only: R ≈ 6.026 Ω  (loose lower bound)
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>Sanity: the numerical answer should land between the two
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>Dwight reference values above.
-</code></pre></div>
-<p>The numerical result sits comfortably between the "ring only"
-and "rods only in parallel" bounds, which is the qualitative
-check we expect.</p>
-<h2 id="what-just-happened">What just happened<a class="headerlink" href="#what-just-happened" title="Permanent link">&para;</a></h2>
+<h2 id="how-the-clusters-are-formed">How the clusters are formed<a class="headerlink" href="#how-the-clusters-are-formed" title="Permanent link">&para;</a></h2>
+<p>The three ideal bonds (cross_section=None) fuse the ring and the
+three rods into <strong>one</strong> cluster — they share a common potential at
+every frequency. The PEN service drop has a finite cross-section
+(<code>"from_radius"</code> resolves to <span class="arithmatex">\(\pi r_w^2\)</span>) and therefore lives as a
+<em>branch</em> in the nodal system: the substation cluster and the house
+cluster are independent galvanic islands joined by a single
+<span class="arithmatex">\(R + j\omega L\)</span> branch. That branch's series resistance is
+<span class="arithmatex">\(R = \rho_\text{Cu}\,L/A\)</span> and — when <code>inductance_model="neumann"</code>
+is set — the self- and mutual-inductance integrals across the
+discretised PEN sub-segments are added on top.</p>
+<h2 id="what-to-look-at">What to look at<a class="headerlink" href="#what-to-look-at" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Bonding fuses clusters.</strong> Without the four
-  <code>create_conductor(...)</code> calls each electrode would be its own
-  galvanic cluster and <code>cluster_impedance("trafo_ring")</code> would
-  only return the ring's contribution. With the bonds, all five
-  electrodes share one cluster and the function returns the
-  cluster grounding impedance — exactly what the substation
-  produces in reality.</li>
-<li><strong><code>conductor_type="bare_copper"</code></strong> is a placeholder for the
-  bonding strap. It is treated as an ideal galvanic short
-  (zero series resistance, no inductance). For finite-impedance
-  modelling — important for distributed conductors like PEN
-  cables and measurement leads — see examples 04 and 05.</li>
-<li><strong><code>gf.dwight1936</code></strong> is a reference module that re-implements
-  the closed-form expressions from Dwight's 1936 AIEE paper.
-  Use it to sanity-check the numerical solver on simple
-  reference geometries.</li>
+<li><code>result.cluster_impedance("trafo_ring")</code> gives the <em>measured</em>
+  grounding impedance of the substation cluster (everything
+  fused by the bonds) as seen at <span class="arithmatex">\(50\;\mathrm{Hz}\)</span>. The house
+  foundation only contributes via the PEN branch — its own
+  cluster keeps a separate potential.</li>
+<li><code>result.electrode_currents</code> shows how the substation's 1 A
+  injection distributes itself between the ring, the rods and the
+  PEN branch.</li>
 </ul>
-<h2 id="try-this-next">Try this next<a class="headerlink" href="#try-this-next" title="Permanent link">&para;</a></h2>
+<h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Add a fifth rod in the ring centre and observe how the cluster
-  impedance changes (very small effect — the central rod is
-  almost equipotential with the existing structure).</li>
-<li>Replace the ring with a buried strip electrode of the same
-  perimeter and compare. The strip is 1-D ("Banderder") versus
-  the closed loop of the ring; their impedances differ.</li>
-<li>Switch to a 2-layer soil and watch the cluster impedance
-  shift. That's the topic of example 03.</li>
+<li>Add the Neumann inductance kernel (<code>inductance_model="neumann"</code>)
+  and watch the PEN branch impedance grow with frequency — see
+  <a href="../05_inductive_coupling/">05 — Inductive coupling</a>.</li>
+<li>Replace the homogeneous soil with a layered profile — see
+  <a href="../03_multilayer_soil/">03 — Multi-layer soil models</a>.</li>
+<li>Build the same kind of cluster for a whole village with the
+  imperative builder — see
+  <a href="../06_tn_model/">06 — TN-Model with <code>OrtsnetzLayout</code></a>.</li>
 </ul>
 
 

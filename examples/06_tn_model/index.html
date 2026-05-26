@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/examples/04_grounding_measurement/">
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/examples/06_tn_model/">
       
       
-        <link rel="prev" href="../03_tn_network_basics/">
+        <link rel="prev" href="../05_inductive_coupling/">
       
       
-        <link rel="next" href="../05_inductive_coupling/">
+        <link rel="next" href="../07_measurement_distance/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>04 — Galvanic measurement - groundfield</title>
+        <title>06 — Create a TN-Model - groundfield</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#example-04-galvanic-grounding-measurement-fall-of-potential" class="md-skip">
+        <a href="#06-create-a-tn-model" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              04 — Galvanic measurement
+              06 — Create a TN-Model
             
           </span>
         </div>
@@ -708,14 +708,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../01_first_solve/" class="md-nav__link">
+      <a href="../01_quickstart_two_electrodes/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    01 — First solve (single rod)
+    01 — Quick start (two single electrodes)
   
 
     
@@ -736,14 +736,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../02_substation_dwight/" class="md-nav__link">
+      <a href="../02_engine_comparison/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    02 — Substation vs. Dwight 1936
+    02 — Comparison of the solver engines
   
 
     
@@ -764,14 +764,70 @@
   
   
     <li class="md-nav__item">
-      <a href="../03_tn_network_basics/" class="md-nav__link">
+      <a href="../03_multilayer_soil/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    03 — TN-Ortsnetz generator basics
+    03 — Multi-layer soil models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04_interconnected_grounding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    04 — Interconnected grounding system
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05_inductive_coupling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    05 — Analysing inductive coupling
   
 
     
@@ -808,7 +864,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement
+    06 — Create a TN-Model
   
 
     
@@ -826,7 +882,7 @@
   <span class="md-ellipsis">
     
   
-    04 — Galvanic measurement
+    06 — Create a TN-Model
   
 
     
@@ -852,10 +908,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-youll-see" class="md-nav__link">
+  <a href="#synthetic-tn-ortsnetz-with-stochastic-axes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What you'll see
+        Synthetic TN-Ortsnetz with stochastic axes
       
     </span>
   </a>
@@ -863,10 +919,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#code" class="md-nav__link">
+  <a href="#picking-the-pen-backbone-topology" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Code
+        Picking the PEN backbone topology
       
     </span>
   </a>
@@ -874,10 +930,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#expected-output" class="md-nav__link">
+  <a href="#stochastic-axes-and-reproducibility" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Expected output
+        Stochastic axes and reproducibility
       
     </span>
   </a>
@@ -885,32 +941,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-just-happened" class="md-nav__link">
+  <a href="#where-to-go-next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What just happened
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-the-curve-looks-the-way-it-does" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why the curve looks the way it does
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#try-this-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Try this next
+        Where to go next
       
     </span>
   </a>
@@ -933,14 +967,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../05_inductive_coupling/" class="md-nav__link">
+      <a href="../07_measurement_distance/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    05 — Inductive coupling
+    07 — Comparison of measurement distances
   
 
     
@@ -961,14 +995,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../06_parameter_sweep_soil/" class="md-nav__link">
+      <a href="../08_osm_pipeline/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    06 — Parameter sweep over soil
+    08 — OSM pipeline with simulation results
   
 
     
@@ -989,70 +1023,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../07_monte_carlo/" class="md-nav__link">
+      <a href="../09_plot_gallery/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    07 — Monte Carlo with joblib
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../08_pipeline_groundinsight/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    08 — Pipeline to groundinsight
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../09_osm_pipeline/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    09 — OSM pipeline with measurement setup
+    09 — All plots in action
   
 
     
@@ -1420,6 +1398,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1472,6 +1460,34 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/world/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    World
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
               
             
               
@@ -1545,6 +1561,62 @@
     
   
     Conductors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Boundary
   
 
     
@@ -1677,6 +1749,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../api/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../api/io/" class="md-nav__link">
         
   
@@ -1685,6 +1785,34 @@
     
   
     IO
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/geo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geo / OSM
   
 
     
@@ -1733,14 +1861,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/geo/" class="md-nav__link">
+      <a href="../../api/references/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Geo / OSM
+    References
   
 
     
@@ -2300,10 +2428,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-youll-see" class="md-nav__link">
+  <a href="#synthetic-tn-ortsnetz-with-stochastic-axes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What you'll see
+        Synthetic TN-Ortsnetz with stochastic axes
       
     </span>
   </a>
@@ -2311,10 +2439,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#code" class="md-nav__link">
+  <a href="#picking-the-pen-backbone-topology" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Code
+        Picking the PEN backbone topology
       
     </span>
   </a>
@@ -2322,10 +2450,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#expected-output" class="md-nav__link">
+  <a href="#stochastic-axes-and-reproducibility" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Expected output
+        Stochastic axes and reproducibility
       
     </span>
   </a>
@@ -2333,32 +2461,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-just-happened" class="md-nav__link">
+  <a href="#where-to-go-next" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What just happened
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#why-the-curve-looks-the-way-it-does" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why the curve looks the way it does
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#try-this-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Try this next
+        Where to go next
       
     </span>
   </a>
@@ -2385,187 +2491,131 @@
   
 
 
-<h1 id="example-04-galvanic-grounding-measurement-fall-of-potential">Example 04 — Galvanic grounding measurement (fall-of-potential)<a class="headerlink" href="#example-04-galvanic-grounding-measurement-fall-of-potential" title="Permanent link">&para;</a></h1>
-<p>This is the textbook <strong>fall-of-potential</strong> measurement,
-<strong>without</strong> modelling the metallic measurement leads —
-i.e. only the galvanic (DC-like) effects. We add an <strong>auxiliary
-current electrode</strong> (Hilfserder) that closes the current loop and
-a <strong>voltage probe</strong> (Spannungssonde) where we read off the
-potential difference. The measurement aims to recover the
-substation's grounding impedance, but it is sensitive to where
-the probe sits relative to the auxiliary electrode.</p>
-<h2 id="what-youll-see">What you'll see<a class="headerlink" href="#what-youll-see" title="Permanent link">&para;</a></h2>
-<ul>
-<li>How <code>MeasurementSetupConfig</code> adds the auxiliary electrode and
-  the voltage probe to the generated world.</li>
-<li>How the source's <code>return_to</code> is automatically wired to the
-  auxiliary electrode.</li>
-<li>The classical fall-of-potential (Spannungstrichter overlap)
-  curve when the probe is moved along the line between
-  substation and auxiliary electrode.</li>
-<li>The "62 % point" where the measurement reads the true
-  cluster impedance.</li>
-</ul>
-<h2 id="code">Code<a class="headerlink" href="#code" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.generators</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">ManhattanGridPlacement</span><span class="p">,</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">MeasurementInjectionConfig</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">MeasurementProbeConfig</span><span class="p">,</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">MeasurementSetupConfig</span><span class="p">,</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">TnNetworkConfig</span><span class="p">,</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">TnNetworkGenerator</span><span class="p">,</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">TwoLayerSoilSpec</span><span class="p">,</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="p">)</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="c1"># Fixed network: 10 EFH, 2-layer soil, default substation. The</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="c1"># auxiliary electrode sits at (200, 0) — well outside the network&#39;s</span>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># own potential funnel.</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="k">def</span><span class="w"> </span><span class="nf">make_cfg</span><span class="p">(</span><span class="n">probe_x</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TnNetworkConfig</span><span class="p">:</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="k">return</span> <span class="n">TnNetworkConfig</span><span class="p">(</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        <span class="n">building_counts</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;residential&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">},</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="n">placement</span><span class="o">=</span><span class="n">ManhattanGridPlacement</span><span class="p">(</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>            <span class="n">spacing_x_m</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span> <span class="n">spacing_y_m</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span> <span class="n">n_per_row</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>        <span class="p">),</span>
-<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>        <span class="n">soil</span><span class="o">=</span><span class="n">TwoLayerSoilSpec</span><span class="p">(</span><span class="n">rho_1</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">rho_2</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span> <span class="n">h_1</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>
-<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>        <span class="n">measurement</span><span class="o">=</span><span class="n">MeasurementSetupConfig</span><span class="p">(</span>
-<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>            <span class="n">injection</span><span class="o">=</span><span class="n">MeasurementInjectionConfig</span><span class="p">(</span>
-<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>                <span class="n">position_xy</span><span class="o">=</span><span class="p">(</span><span class="mf">200.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>     <span class="c1"># Hilfserder</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>                <span class="c1"># No metallic feed_lead — galvanic only.</span>
-<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>            <span class="p">),</span>
-<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>            <span class="n">probe</span><span class="o">=</span><span class="n">MeasurementProbeConfig</span><span class="p">(</span>
-<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>                <span class="n">position_xy</span><span class="o">=</span><span class="p">(</span><span class="n">probe_x</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>    <span class="c1"># Spannungssonde</span>
-<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>            <span class="p">),</span>
-<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>        <span class="p">),</span>
-<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>        <span class="n">source_magnitude_A</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    <span class="p">)</span>
-<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>
-<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>
-<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="c1"># Sweep the probe position along the substation → aux electrode line</span>
-<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="n">PROBE_DISTANCES_M</span> <span class="o">=</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">120</span><span class="p">,</span> <span class="mi">140</span><span class="p">,</span> <span class="mi">160</span><span class="p">,</span> <span class="mi">180</span><span class="p">]</span>
-<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>
-<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a><span class="n">records</span> <span class="o">=</span> <span class="p">[]</span>
-<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a><span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">PROBE_DISTANCES_M</span><span class="p">:</span>
-<a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>    <span class="n">cfg</span> <span class="o">=</span> <span class="n">make_cfg</span><span class="p">(</span><span class="n">probe_x</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">d</span><span class="p">))</span>
-<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>    <span class="n">world</span> <span class="o">=</span> <span class="n">TnNetworkGenerator</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
-<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>    <span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
-<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>        <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image_2layer&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>        <span class="n">segment_length</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>        <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
-<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>        <span class="n">earth_inductive_model</span><span class="o">=</span><span class="s2">&quot;perfect_mirror&quot;</span><span class="p">,</span>  <span class="c1"># galvanic regime</span>
-<a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>    <span class="p">)</span>
-<a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>
-<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>    <span class="c1"># The cluster impedance of the substation — the *true* answer</span>
-<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>    <span class="c1"># we are trying to measure.</span>
-<a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>    <span class="n">Z_true</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;trafo_ring_0&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">real</span>
-<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>
-<a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a>    <span class="c1"># The measured value: U_probe / I_source. The probe potential is</span>
-<a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a>    <span class="c1"># phi(probe_anchor); the substation potential is phi(trafo_ring_0).</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>    <span class="c1"># The actual measurement device reads (phi_substation - phi_probe).</span>
-<a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a>    <span class="n">phi_subst</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">electrode_potentials</span><span class="p">[</span><span class="s2">&quot;trafo_ring_0&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">real</span>
-<a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a>    <span class="c1"># Pick out the probe&#39;s anchor electrode (named ``probe_rod_0``):</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a>    <span class="n">phi_probe</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">electrode_potentials</span><span class="p">[</span><span class="s2">&quot;probe_rod_0&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">real</span>
-<a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a>    <span class="n">U_meas</span> <span class="o">=</span> <span class="n">phi_subst</span> <span class="o">-</span> <span class="n">phi_probe</span>
-<a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>    <span class="n">Z_meas</span> <span class="o">=</span> <span class="n">U_meas</span> <span class="o">/</span> <span class="n">cfg</span><span class="o">.</span><span class="n">source_magnitude_A</span>
-<a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a>
-<a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a>    <span class="n">records</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
-<a id="__codelineno-0-68" name="__codelineno-0-68" href="#__codelineno-0-68"></a>        <span class="s2">&quot;probe_x_m&quot;</span><span class="p">:</span> <span class="n">d</span><span class="p">,</span>
-<a id="__codelineno-0-69" name="__codelineno-0-69" href="#__codelineno-0-69"></a>        <span class="s2">&quot;Z_true_Ohm&quot;</span><span class="p">:</span> <span class="n">Z_true</span><span class="p">,</span>
-<a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a>        <span class="s2">&quot;Z_meas_Ohm&quot;</span><span class="p">:</span> <span class="n">Z_meas</span><span class="p">,</span>
-<a id="__codelineno-0-71" name="__codelineno-0-71" href="#__codelineno-0-71"></a>        <span class="s2">&quot;rel_error_pct&quot;</span><span class="p">:</span> <span class="mf">100.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">Z_meas</span> <span class="o">-</span> <span class="n">Z_true</span><span class="p">)</span> <span class="o">/</span> <span class="n">Z_true</span><span class="p">,</span>
-<a id="__codelineno-0-72" name="__codelineno-0-72" href="#__codelineno-0-72"></a>    <span class="p">})</span>
-<a id="__codelineno-0-73" name="__codelineno-0-73" href="#__codelineno-0-73"></a>
-<a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">records</span><span class="p">)</span>
-<a id="__codelineno-0-75" name="__codelineno-0-75" href="#__codelineno-0-75"></a><span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">to_string</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="k">lambda</span> <span class="n">v</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">v</span><span class="si">:</span><span class="s2">8.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
-<a id="__codelineno-0-76" name="__codelineno-0-76" href="#__codelineno-0-76"></a>
-<a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a><span class="c1"># --- plot the fall-of-potential curve ---</span>
-<a id="__codelineno-0-78" name="__codelineno-0-78" href="#__codelineno-0-78"></a><span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
-<a id="__codelineno-0-79" name="__codelineno-0-79" href="#__codelineno-0-79"></a><span class="n">ax</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;Z_true_Ohm&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;C2&quot;</span><span class="p">,</span> <span class="n">ls</span><span class="o">=</span><span class="s2">&quot;--&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a>           <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;true cluster |Z| = </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;Z_true_Ohm&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> Ω&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;probe_x_m&quot;</span><span class="p">],</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Z_meas_Ohm&quot;</span><span class="p">],</span> <span class="s2">&quot;o-&quot;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;C0&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-82" name="__codelineno-0-82" href="#__codelineno-0-82"></a>        <span class="n">label</span><span class="o">=</span><span class="s2">&quot;measured Z(probe_x)&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-83" name="__codelineno-0-83" href="#__codelineno-0-83"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">&quot;probe distance from substation in m&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84" href="#__codelineno-0-84"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s2">&quot;apparent grounding impedance in Ω&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85" href="#__codelineno-0-85"></a><span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
-<a id="__codelineno-0-86" name="__codelineno-0-86" href="#__codelineno-0-86"></a><span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
-<a id="__codelineno-0-87" name="__codelineno-0-87" href="#__codelineno-0-87"></a><span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s2">&quot;Fall-of-potential curve, aux at 200 m&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-88" name="__codelineno-0-88" href="#__codelineno-0-88"></a><span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
-<a id="__codelineno-0-89" name="__codelineno-0-89" href="#__codelineno-0-89"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-<a id="__codelineno-0-90" name="__codelineno-0-90" href="#__codelineno-0-90"></a>
-<a id="__codelineno-0-91" name="__codelineno-0-91" href="#__codelineno-0-91"></a><span class="c1"># Print the 62 % rule of thumb</span>
-<a id="__codelineno-0-92" name="__codelineno-0-92" href="#__codelineno-0-92"></a><span class="n">d_62</span> <span class="o">=</span> <span class="mf">0.62</span> <span class="o">*</span> <span class="mi">200</span>
-<a id="__codelineno-0-93" name="__codelineno-0-93" href="#__codelineno-0-93"></a><span class="n">Z_at_62</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">d_62</span><span class="p">,</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;probe_x_m&quot;</span><span class="p">],</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Z_meas_Ohm&quot;</span><span class="p">])</span>
-<a id="__codelineno-0-94" name="__codelineno-0-94" href="#__codelineno-0-94"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">62 % point (</span><span class="si">{</span><span class="n">d_62</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> m): Z_meas = </span><span class="si">{</span><span class="n">Z_at_62</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Ω, &quot;</span>
-<a id="__codelineno-0-95" name="__codelineno-0-95" href="#__codelineno-0-95"></a>      <span class="sa">f</span><span class="s2">&quot;Z_true = </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;Z_true_Ohm&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> Ω, &quot;</span>
-<a id="__codelineno-0-96" name="__codelineno-0-96" href="#__codelineno-0-96"></a>      <span class="sa">f</span><span class="s2">&quot;error = </span><span class="si">{</span><span class="mi">100</span><span class="o">*</span><span class="p">(</span><span class="n">Z_at_62</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;Z_true_Ohm&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">/</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;Z_true_Ohm&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">+.2f</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">)</span>
+<h1 id="06-create-a-tn-model">06 — Create a TN-Model<a class="headerlink" href="#06-create-a-tn-model" title="Permanent link">&para;</a></h1>
+<p>For an entire LV distribution-grid section — substation, KVS,
+many houses with their own foundation electrodes, PEN backbone —
+hand-rolling the world quickly becomes unwieldy. <code>groundfield</code>
+ships two factories:</p>
+<table>
+<thead>
+<tr>
+<th>Factory</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>:class:<code>TnNetworkGenerator</code></td>
+<td>Stochastic AP1-style worlds, parameter sweeps, Monte Carlo</td>
+</tr>
+<tr>
+<td>:class:<code>OrtsnetzLayout</code></td>
+<td>A <em>single deterministic</em> network composed piece by piece from a real map</td>
+</tr>
+</tbody>
+</table>
+<p>This example uses :class:<code>TnNetworkGenerator</code> for a synthetic
+parameter-sweep-friendly network. See the
+<a href="../08_osm_pipeline/">OSM-pipeline example</a> for the
+:class:<code>OrtsnetzLayout</code> workflow on a real OSM extract.</p>
+<h2 id="synthetic-tn-ortsnetz-with-stochastic-axes">Synthetic TN-Ortsnetz with stochastic axes<a class="headerlink" href="#synthetic-tn-ortsnetz-with-stochastic-axes" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TnNetworkConfig</span><span class="p">(</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">soil</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">TwoLayerSoilSpec</span><span class="p">(</span><span class="n">rho_1</span><span class="o">=</span><span class="mf">120.0</span><span class="p">,</span> <span class="n">rho_2</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span> <span class="n">h_1</span><span class="o">=</span><span class="mf">3.0</span><span class="p">),</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">building_counts</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="s2">&quot;residential&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="s2">&quot;small_industry&quot;</span><span class="p">:</span> <span class="n">gf</span><span class="o">.</span><span class="n">Discrete</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]),</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="p">},</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">source_magnitude_A</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">gen</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TnNetworkGenerator</span><span class="p">()</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">))</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span>                       <span class="c1"># auto-dispatch to image_2layer</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;substation cluster Z =&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>      <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;trafo_ring_0&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
-<h2 id="expected-output">Expected output<a class="headerlink" href="#expected-output" title="Permanent link">&para;</a></h2>
-<p>The fall-of-potential curve is monotonically increasing from a
-small value (probe sits inside the substation's potential funnel)
-to nearly the true value as the probe moves outwards, with a
-characteristic plateau around the 62 % point. The
-"62 % rule of thumb" — the basis of the standard 62 % method —
-predicts that the apparent impedance read at the 62 % point of
-the substation–aux distance is closest to the true cluster
-impedance.</p>
-<p>You should see something like:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>probe_x_m  Z_true_Ohm  Z_meas_Ohm  rel_error_pct
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>   10.000      14.295       3.142       -78.022
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>   20.000      14.295       6.038       -57.768
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>   ...
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>  120.000      14.295      14.298         0.020
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>   ...
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>  180.000      14.295      16.421       +14.870
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>62 % point (124 m): Z_meas = 14.31 Ω, Z_true = 14.30 Ω,
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>error = +0.10 %
-</code></pre></div>
-<h2 id="what-just-happened">What just happened<a class="headerlink" href="#what-just-happened" title="Permanent link">&para;</a></h2>
+<p>A few things happen behind the scenes:</p>
 <ul>
-<li><strong><code>MeasurementSetupConfig</code></strong> added two new electrodes to the
-  world — an aux rod at <span class="arithmatex">\((200, 0)\)</span> and a probe rod at the swept
-  position. The generator also rewired the source's <code>return_to</code>
-  to the aux electrode, so the test current physically returns
-  through the aux instead of through remote earth.</li>
-<li><strong><code>feed_lead=None</code> and <code>lead=None</code></strong> mean <em>no metallic
-  measurement leads</em>. The current path is purely through the
-  soil, which is the textbook <strong>galvanic</strong> measurement.</li>
-<li>The measured "apparent impedance" is computed as the potential
-  difference between the substation anchor and the probe anchor,
-  divided by the source current — exactly what the measurement
-  device reads.</li>
+<li>The substation grounding (ring + 4 driven rods) is built at the
+  origin.</li>
+<li>Buildings are placed on a Manhattan grid centred on the
+  substation, with the configured count per type. Each building
+  gets the per-type :class:<code>GroundingSystemSpec</code> (default
+  <code>residential</code> = 1.0 m × 1.0 m foundation electrode).</li>
+<li>Cable cabinets (KVS) are placed in a row along the substation
+  axis at the configured quota.</li>
+<li>The PEN backbone fans out from the substation to every KVS and
+  from each KVS to its closest buildings.</li>
+<li>A 1 A current source is attached to the substation cluster.</li>
 </ul>
-<h2 id="why-the-curve-looks-the-way-it-does">Why the curve looks the way it does<a class="headerlink" href="#why-the-curve-looks-the-way-it-does" title="Permanent link">&para;</a></h2>
-<p>The probe potential is the <em>superposition</em> of two
-contributions:</p>
-<ol>
-<li>The substation injects <span class="arithmatex">\(+I\)</span> → produces a potential funnel
-   centred at the substation, decaying with distance.</li>
-<li>The aux electrode draws <span class="arithmatex">\(-I\)</span> → produces an inverted funnel
-   centred at the aux electrode.</li>
-</ol>
-<p>The probe sits in both funnels. When the probe is close to the
-substation, the substation funnel dominates; close to the aux,
-the aux funnel does. There is a <strong>sweet spot</strong> in between where
-both funnels have decayed enough that the measurement reads
-the substation's "remote-earth" potential — that's the 62 %
-point.</p>
-<h2 id="try-this-next">Try this next<a class="headerlink" href="#try-this-next" title="Permanent link">&para;</a></h2>
+<h2 id="picking-the-pen-backbone-topology">Picking the PEN backbone topology<a class="headerlink" href="#picking-the-pen-backbone-topology" title="Permanent link">&para;</a></h2>
+<p><code>TnNetworkConfig.pen_topology</code> now also accepts the new
+:class:<code>RadialTrunkTopology</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TnNetworkConfig</span><span class="p">(</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">soil</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">TwoLayerSoilSpec</span><span class="p">(</span><span class="n">rho_1</span><span class="o">=</span><span class="mf">120.0</span><span class="p">,</span> <span class="n">rho_2</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span> <span class="n">h_1</span><span class="o">=</span><span class="mf">3.0</span><span class="p">),</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">building_counts</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;residential&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">},</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">pen_topology</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">RadialTrunkTopology</span><span class="p">(</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="n">n_feeders</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>                 <span class="c1"># north / east / south / west</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">slots_per_substation</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>      <span class="c1"># houses directly at the trafo</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">slots_per_kvs</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>             <span class="c1"># houses per inserted KVS</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="n">kvs_spacing_m</span><span class="o">=</span><span class="mf">60.0</span><span class="p">,</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">max_feeder_length_m</span><span class="o">=</span><span class="mf">400.0</span><span class="p">,</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="p">),</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="p">)</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+</code></pre></div>
+<p>The substation now feeds four radial LV cables. Once a cable's
+<code>slots_per_substation</code> budget is exhausted, a new KVS is inserted
+along the cable axis. Buildings beyond <code>max_feeder_length_m</code> are
+dropped with a <code>UserWarning</code>.</p>
+<h2 id="stochastic-axes-and-reproducibility">Stochastic axes and reproducibility<a class="headerlink" href="#stochastic-axes-and-reproducibility" title="Permanent link">&para;</a></h2>
+<p>Every numeric field accepts either a constant or a
+:class:<code>Distribution</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Distribution</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Constant(v)</code></td>
+<td>Placeholder</td>
+</tr>
+<tr>
+<td><code>Uniform(low, high)</code></td>
+<td>Soil resistivities, geometry tolerances</td>
+</tr>
+<tr>
+<td><code>Normal(...)</code></td>
+<td>Engineering tolerances</td>
+</tr>
+<tr>
+<td><code>Discrete(values, weights=...)</code></td>
+<td>Categorical counts (n_efh in {5, 10, 30, 80, 200})</td>
+</tr>
+</tbody>
+</table>
+<p>For bit-exact reproducibility, pass an <code>np.random.default_rng(seed=...)</code>
+to <code>gen.build(cfg, rng=...)</code>. <code>gen.sample_world(rng=...)</code> returns
+both the world and the <em>resolved</em> config so the realisation can be
+persisted as JSON alongside the simulation output.</p>
+<h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Move the aux electrode further out (300 m, 500 m). The 62 %
-  rule still applies; the absolute distance scales.</li>
-<li>Vary the soil parameters and watch the optimal probe distance
-  shift. In high-resistivity upper soil the funnels reach
-  further.</li>
-<li>Continue with example 05 to see what happens when the
-  metallic measurement leads are added — the inductive
-  coupling distorts the apparent impedance even when the
-  geometry is "right".</li>
+<li>Place the substation + KVSes at user-chosen GPS / xy positions
+  and route the PEN cables Manhattan-style around the real
+  building polygons — see
+  <a href="../08_osm_pipeline/">08 — OSM pipeline with simulation results</a>.</li>
+<li>Compare measured grounding impedance vs Hilfserder distance on
+  the resulting world — see
+  <a href="../07_measurement_distance/">07 — Comparison of measurement distances</a>.</li>
 </ul>
 
 

@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/api/conductors/">
+        <link rel="canonical" href="https://ce1ectric.github.io/groundfield/api/boundary/">
       
       
-        <link rel="prev" href="../geometry/">
+        <link rel="prev" href="../sources/">
       
       
-        <link rel="next" href="../sources/">
+        <link rel="next" href="../solver/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Conductors - groundfield</title>
+        <title>Boundary - groundfield</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#conductors" class="md-skip">
+        <a href="#boundary-conditions" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Conductors
+              Boundary
             
           </span>
         </div>
@@ -1459,37 +1459,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Conductors
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../conductors/" class="md-nav__link">
         
   
   
@@ -1505,176 +1478,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#physical-background" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Physical background
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Example">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#lumped-series-resistance-new-in-060" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Lumped series resistance (new in 0.6.0)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#api-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API reference
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#groundfield.conductors" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        conductors
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="conductors">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Conductor
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Conductor">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.effective_cross_section" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        effective_cross_section
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.is_distributed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_distributed
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.length" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        length
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.n_segments" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        n_segments
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.series_resistance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        series_resistance
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.is_ideal" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_ideal
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1712,10 +1515,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../boundary/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Boundary
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1731,6 +1561,76 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#revert-warning-contract-050" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Revert-warning contract (0.5.0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#groundfield.boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        boundary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="boundary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.boundary.BoundaryConditions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BoundaryConditions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2534,41 +2434,13 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#physical-background" class="md-nav__link">
+  <a href="#revert-warning-contract-050" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Physical background
+        Revert-warning contract (0.5.0)
       
     </span>
   </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Example">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#lumped-series-resistance-new-in-060" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Lumped series resistance (new in 0.6.0)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -2584,97 +2456,25 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#groundfield.conductors" class="md-nav__link">
+  <a href="#groundfield.boundary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        conductors
+        boundary
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="conductors">
+    <nav class="md-nav" aria-label="boundary">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor" class="md-nav__link">
+  <a href="#groundfield.boundary.BoundaryConditions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Conductor
+        BoundaryConditions
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Conductor">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.effective_cross_section" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        effective_cross_section
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.is_distributed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_distributed
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.length" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        length
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.n_segments" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        n_segments
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.series_resistance" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        series_resistance
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#groundfield.conductors.Conductor.is_ideal" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        is_ideal
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
         
@@ -2703,99 +2503,19 @@
   
 
 
-<h1 id="conductors">Conductors<a class="headerlink" href="#conductors" title="Permanent link">&para;</a></h1>
-<p>The <code>conductors</code> subpackage describes the current-carrying
-elements that connect or surround electrodes but are <em>not</em>
-electrodes themselves: cable shields, PEN conductors of TN
-distribution networks, overhead earth wires, and auxiliary
-measurement leads.</p>
-<h2 id="physical-background">Physical background<a class="headerlink" href="#physical-background" title="Permanent link">&para;</a></h2>
-<p>A conductor segment is a thin cylindrical wire of radius <span class="arithmatex">\(a\)</span>
-between two end-points <span class="arithmatex">\(\mathbf{x}_a\)</span> and <span class="arithmatex">\(\mathbf{x}_b\)</span>, in or
-above the soil, with material parameters
-<span class="arithmatex">\((\rho_\text{wire}, \mu_r)\)</span>. In the frequency-domain assembly each
-conductor contributes</p>
-<div class="arithmatex">\[
-Z_b(\omega) \;=\; R \;+\; j\omega\, L_\text{Neumann}
-                \;+\; \Delta Z_\text{earth-return}(\omega),
-\]</div>
-<p>with the DC resistance <span class="arithmatex">\(R = \rho_\text{wire}\,\ell/A\)</span>, the
-perfect-mirror Neumann inductance <span class="arithmatex">\(L_\text{Neumann}\)</span> assembled in
-<a href="../coupling/">Coupling</a>, and the earth-return correction
-(<span class="arithmatex">\(\Delta Z_\text{Carson}\)</span> or the rigorous Sommerfeld kernel, see
-ADR-0005 / ADR-0006). The conductor type tag steers the default
-material parameters used by the engines:</p>
-<table>
-<thead>
-<tr>
-<th><code>conductor_type</code></th>
-<th>Typical use</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>"pen"</code></td>
-<td>combined neutral / protective earth in TN systems</td>
-</tr>
-<tr>
-<td><code>"cable_shield"</code></td>
-<td>concentric cable screen, returns shield currents</td>
-</tr>
-<tr>
-<td><code>"bare_copper"</code></td>
-<td>bare-wire bonding between electrodes</td>
-</tr>
-<tr>
-<td><code>"overhead"</code></td>
-<td>overhead earth wire above ground</td>
-</tr>
-<tr>
-<td><code>"generic"</code></td>
-<td>user-supplied material parameters</td>
-</tr>
-</tbody>
-</table>
-<h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">TwoLayerSoil</span><span class="p">(</span><span class="n">rho_1</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">rho_2</span><span class="o">=</span><span class="mf">500.0</span><span class="p">,</span> <span class="n">h_1</span><span class="o">=</span><span class="mf">1.0</span><span class="p">))</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># Two ring electrodes at neighbouring houses</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">g1</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;g1&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                         <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">g2</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;g2&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                         <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">40.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># PEN conductor along a 40 m cable trench between them</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_conductor</span><span class="p">(</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">world</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;pen_1&quot;</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="n">g1</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="n">g2</span><span class="p">,</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">conductor_type</span><span class="o">=</span><span class="s2">&quot;pen&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">discretize_segment_length</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>  <span class="c1"># split into ~20 inductive segments</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span>
-</code></pre></div>
-<p>The conductor object is purely geometric / material-based.
-Earth-return corrections are delegated to
-:mod:<code>groundfield.coupling</code>, so the same conductor object can be
-combined with the perfect-mirror approximation, with the Carson
-series, or with the rigorous Sommerfeld kernel.</p>
-<h3 id="lumped-series-resistance-new-in-060">Lumped series resistance (new in 0.6.0)<a class="headerlink" href="#lumped-series-resistance-new-in-060" title="Permanent link">&para;</a></h3>
-<p>The optional <code>lumped_series_resistance_ohm</code> field overrides the
-geometric series resistance <span class="arithmatex">\(R = \rho_\text{mat}\,L / A\)</span> with a
-caller-supplied value in Ω. The :attr:<code>series_resistance</code> property
-returns this value when set and the solver picks it up
-transparently through the existing distributed-conductor framework
-(ADR-0003).</p>
-<p>The primary consumer is the <strong>lumped concrete-shell path of
-ADR-0012</strong>:
-:class:<code>~groundfield.generators.tn_network.TnNetworkGenerator</code>
-reads each foundation's
-<span class="arithmatex">\(R_\text{shell,total} = \rho_c/(2\pi\,L_\text{perim})\,\ln(r_b/r_a)\)</span>
-from <code>world.concrete_shell_corrections</code> (populated by the
-foundation-electrode materialiser) and injects it on the PEN
-service drop between the KVS and the foundation anchor. Setting
-<code>lumped_series_resistance_ohm</code> requires the conductor to be in
-the finite-impedance branch — pair it with a non-<code>None</code>
-<code>cross_section</code> to ensure the override is consumed.</p>
+<h1 id="boundary-conditions">Boundary conditions<a class="headerlink" href="#boundary-conditions" title="Permanent link">&para;</a></h1>
+<p>The :mod:<code>groundfield.boundary</code> module defines the
+:class:<code>BoundaryConditions</code> model that a :class:<code>World</code> carries.
+The image-method, MoM and Sommerfeld backends implicitly assume a
+Dirichlet far field (<code>φ → 0</code>) and a Neumann surface (<code>∂φ/∂n = 0</code>
+at <code>z = 0</code>); the explicit fields on :class:<code>BoundaryConditions</code> are
+preserved for forward-compatibility with the upcoming FEM backend.</p>
+<h2 id="revert-warning-contract-050">Revert-warning contract (0.5.0)<a class="headerlink" href="#revert-warning-contract-050" title="Permanent link">&para;</a></h2>
+<p>Calling :meth:<code>World.set_boundary_conditions</code> with a non-default
+value emits a :class:<code>UserWarning</code> so the user does not silently
+configure a value that the v0.2.0 backends ignore. Reverting back
+to the default value also emits a :class:<code>UserWarning</code> — see the
+implementation note in the CHANGELOG.</p>
 <h2 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
 
 
@@ -2803,42 +2523,47 @@ the finite-impedance branch — pair it with a non-<code>None</code>
 
 
 
-<h2 id="groundfield.conductors" class="doc doc-heading">
-            <span class="doc doc-object-name doc-module-name">conductors</span>
+<h2 id="groundfield.boundary" class="doc doc-heading">
+            <span class="doc doc-object-name doc-module-name">boundary</span>
 
 
-<a href="#groundfield.conductors" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#groundfield.boundary" class="headerlink" title="Permanent link">&para;</a></h2>
 
     <div class="doc doc-contents first">
 
-        <p>Conductors, PEN, and cable shields.</p>
-<p>Subpackage for all current-carrying elements above and inside the soil
-that are not electrodes themselves but still take part in the current
-distribution:</p>
+        <p>Boundary conditions for the field computation.</p>
+<p>The boundary configuration bundles all assumptions imposed at the
+boundary of the computational domain:</p>
 <ul>
-<li>overhead lines (phase conductor, earth wire),</li>
-<li>cables (phase + shield, concentric or three-core),</li>
-<li>PEN conductors in TN low-voltage networks,</li>
-<li>auxiliary electrodes for grounding measurements.</li>
+<li><code>far_field</code>: behaviour at infinity (Dirichlet
+  <span class="arithmatex">\(\varphi = 0\)</span>, Neumann <span class="arithmatex">\(\partial_n \varphi = 0\)</span>). For
+  grounding systems, Dirichlet at infinity is the standard assumption
+  ("remote earth").</li>
+<li><code>surface</code>: condition at the soil surface (<span class="arithmatex">\(z = 0\)</span>). Default
+  is Neumann (no current flow into the air).</li>
+<li><code>reference_node</code>: optional reference node that fixes the zero
+  point of the potential.</li>
 </ul>
 
 
-<details class="contents" open>
-  <summary>Contents</summary>
-  <p>Conductor
-    Single conductor segment with end-point coordinates and a type tag
-    (<code>"pen"</code>, <code>"cable_shield"</code>, <code>"bare_copper"</code>, <code>"overhead"</code>,
-    <code>"generic"</code>).
-ConductorType
-    Literal union of the supported type tags.</p>
-</details>
-
-<details class="note" open>
-  <summary>Notes</summary>
-  <p>Carson corrections for the earth-return path are not computed here;
-they enter via :mod:<code>groundfield.coupling</code>. This keeps the conductor
-model purely geometric and material-based, so it can be combined with
-different earth-return models.</p>
+<details class="implementation-status-(v0.2.0)" open>
+  <summary>Implementation status (v0.2.0)</summary>
+  <p>The boundary fields are accepted on every :class:<code>World</code> and round-trip
+through serialisation, but the integral / image-charge backends in
+<code>groundfield.solver</code> enforce the <strong>defaults implicitly</strong>:</p>
+<ul>
+<li><code>far_field = "dirichlet"</code> is hard-wired through the
+  <span class="arithmatex">\(1/r\)</span> Green's-function decay.</li>
+<li><code>surface = "neumann"</code> is hard-wired through the
+  air-side image charge at <span class="arithmatex">\(z \to -z\)</span>.</li>
+<li><code>reference_node</code> is <strong>not</strong> consulted; all potentials are reported
+  relative to remote earth (<span class="arithmatex">\(\varphi \to 0\)</span> at infinity).</li>
+</ul>
+<p>Setting any field to a non-default value via
+:meth:<code>groundfield.world.World.set_boundary_conditions</code> therefore emits
+a :class:<code>UserWarning</code>. The fields remain reserved for the future
+:mod:<code>groundfield.solver.fem</code> backend, which will resolve them
+explicitly.</p>
 </details>
 
 
@@ -2860,11 +2585,11 @@ different earth-return models.</p>
 
 
 
-<h3 id="groundfield.conductors.Conductor" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">Conductor</span>
+<h3 id="groundfield.boundary.BoundaryConditions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">BoundaryConditions</span>
 
 
-<a href="#groundfield.conductors.Conductor" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#groundfield.boundary.BoundaryConditions" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
@@ -2872,113 +2597,17 @@ different earth-return models.</p>
               Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
 
 
-        <p>Wire segment between two points.</p>
+        <p>Boundary-condition configuration of a :class:<code>World</code>.</p>
 
 
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.name">name</span></code></td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Unique name within the <code>World</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.start, end">start, end</span></code></td>
-            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Start and end point <code>(x, y, z)</code> in metres. <code>z &gt; 0</code> puts
-the conductor inside the soil, <code>z &lt; 0</code> above ground.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.start_electrode, end_electrode">start_electrode, end_electrode</span></code></td>
-            <td>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional name of the electrode anchored at start / end. If
-both are set, the solver inserts this conductor as a branch
-in the nodal analysis: ideal (<code>cross_section=None</code>) → hard
-cluster constraint, finite section → branch with
-<span class="arithmatex">\(R_\text{ser} = \rho L / A\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.conductor_type">conductor_type</span></code></td>
-            <td>
-                  <code><span title="groundfield.conductors.conductor.ConductorType">ConductorType</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Type tag from :data:<code>ConductorType</code>. Drives later choice of
-coupling and impedance model.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.wire_radius">wire_radius</span></code></td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Wire radius in metres. Default 5 mm. Used for the geometric
-thin-wire approximation in the segment self-action and as
-a fallback for <code>cross_section</code> when the latter is given as
-<code>"from_radius"</code>.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.resistivity">resistivity</span></code></td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Material resistivity in <span class="arithmatex">\(\Omega\,\mathrm{m}\)</span>. Default:
-copper (1.68e-8).</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="groundfield.conductors.Conductor.cross_section">cross_section</span></code></td>
-            <td>
-                  <code><span title="float">float</span> | <span title="typing.Literal">Literal</span>[&#39;from_radius&#39;] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Conductor cross section in <span class="arithmatex">\(\mathrm{m}^2\)</span>. <code>None</code>
-(default) means <em>ideal galvanic short</em> — the conductor is a
-zero-impedance bridge. A finite value enables the
-nodal-analysis branch model with
-<span class="arithmatex">\(R_\text{ser} = \rho_\text{mat}\, L / A\)</span>. The string
-<code>"from_radius"</code> is a convenience shortcut for
-<span class="arithmatex">\(A = \pi r_\text{wire}^2\)</span>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>The integral / image-charge backends in <code>groundfield.solver</code> use
+the defaults implicitly (<code>far_field="dirichlet"</code>,
+<code>surface="neumann"</code>, <code>reference_node=None</code>) and ignore any
+other value. The fields are reserved for the upcoming FEM backend.
+See the module docstring for a longer discussion.</p>
+</details>
 
 
 
@@ -2995,280 +2624,7 @@ nodal-analysis branch model with
 
 
 
-<div class="doc doc-object doc-attribute">
 
-
-
-<h4 id="groundfield.conductors.Conductor.effective_cross_section" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">effective_cross_section</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#groundfield.conductors.Conductor.effective_cross_section" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">effective_cross_section</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Resolved cross section in <span class="arithmatex">\(\mathrm{m}^2\)</span> or <code>None</code>.</p>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="float">float</span> or None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p><code>None</code> when :attr:<code>cross_section</code> is <code>None</code>
-(ideal-galvanic mode). Otherwise the explicit cross section
-in m² (<code>"from_radius"</code> resolved to
-<span class="arithmatex">\(\pi\, r_\text{wire}^2\)</span>).</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="groundfield.conductors.Conductor.is_distributed" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">is_distributed</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#groundfield.conductors.Conductor.is_distributed" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">is_distributed</span><span class="p">:</span> <span class="nb">bool</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p><code>True</code> iff the conductor is split into sub-segments.</p>
-<p>A distributed conductor has a finite
-:attr:<code>discretize_segment_length</code> — the solver builds one
-longitudinal segment per sub-piece. <code>False</code> keeps the
-conductor lumped (single branch between the two end electrodes).</p>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="groundfield.conductors.Conductor.length" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">length</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#groundfield.conductors.Conductor.length" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">length</span><span class="p">:</span> <span class="nb">float</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Euclidean length of the conductor in m.</p>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="groundfield.conductors.Conductor.n_segments" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">n_segments</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#groundfield.conductors.Conductor.n_segments" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">n_segments</span><span class="p">:</span> <span class="nb">int</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Number of segments produced by the discretiser.</p>
-<p>Returns <code>1</code> for a lumped conductor. Otherwise
-<span class="arithmatex">\(n = \lceil L / \Delta s \rceil\)</span> with <span class="arithmatex">\(L\)</span> the
-Euclidean length and $\Delta s =
-$ :attr:<code>discretize_segment_length</code>.</p>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="groundfield.conductors.Conductor.series_resistance" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">series_resistance</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#groundfield.conductors.Conductor.series_resistance" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">series_resistance</span><span class="p">:</span> <span class="nb">float</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Series DC resistance <span class="arithmatex">\(R_\text{ser}\)</span> in Ω.</p>
-<p>Resolution order:</p>
-<ol>
-<li>If :attr:<code>lumped_series_resistance_ohm</code> is set (ADR-0012 V1
-   concrete-shell path or any user-supplied lumped override),
-   return that value verbatim.</li>
-<li>Otherwise compute the geometric formula
-   <span class="arithmatex">\(R = \rho_\text{mat}\, L / A\)</span> from
-   :attr:<code>resistivity</code>, :attr:<code>length</code> and
-   :attr:<code>effective_cross_section</code>.</li>
-<li>If :attr:<code>cross_section</code> is <code>None</code>, the conductor is in
-   the ideal-galvanic-short branch and the series resistance
-   is <code>0.0</code>.</li>
-</ol>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Total series resistance in Ω consumed by the solver's
-distributed-conductor model (ADR-0003).</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-    </div>
-
-</div>
-
-
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="groundfield.conductors.Conductor.is_ideal" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">is_ideal</span>
-
-
-<a href="#groundfield.conductors.Conductor.is_ideal" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">is_ideal</span><span class="p">(</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">_IDEAL_RESISTANCE_THRESHOLD</span><span class="p">,</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Return <code>True</code> when the conductor acts as a galvanic short.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>threshold</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Resistance threshold in Ω. Conductors at or below this
-value are treated as ideal by the solver. Default
-<code>1e-6 Ω</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code><span title="groundfield.conductors.conductor._IDEAL_RESISTANCE_THRESHOLD">_IDEAL_RESISTANCE_THRESHOLD</span></code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-            <details class="quote">
-              <summary>Source code in <code>src/groundfield/conductors/conductor.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-249">249</a></span>
-<span class="normal"><a href="#__codelineno-0-250">250</a></span>
-<span class="normal"><a href="#__codelineno-0-251">251</a></span>
-<span class="normal"><a href="#__codelineno-0-252">252</a></span>
-<span class="normal"><a href="#__codelineno-0-253">253</a></span>
-<span class="normal"><a href="#__codelineno-0-254">254</a></span>
-<span class="normal"><a href="#__codelineno-0-255">255</a></span>
-<span class="normal"><a href="#__codelineno-0-256">256</a></span>
-<span class="normal"><a href="#__codelineno-0-257">257</a></span>
-<span class="normal"><a href="#__codelineno-0-258">258</a></span>
-<span class="normal"><a href="#__codelineno-0-259">259</a></span>
-<span class="normal"><a href="#__codelineno-0-260">260</a></span>
-<span class="normal"><a href="#__codelineno-0-261">261</a></span>
-<span class="normal"><a href="#__codelineno-0-262">262</a></span>
-<span class="normal"><a href="#__codelineno-0-263">263</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-249" name="__codelineno-0-249"></a><span class="k">def</span><span class="w"> </span><span class="nf">is_ideal</span><span class="p">(</span>
-<a id="__codelineno-0-250" name="__codelineno-0-250"></a>    <span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">_IDEAL_RESISTANCE_THRESHOLD</span>
-<a id="__codelineno-0-251" name="__codelineno-0-251"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<a id="__codelineno-0-252" name="__codelineno-0-252"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``True`` when the conductor acts as a galvanic short.</span>
-<a id="__codelineno-0-253" name="__codelineno-0-253"></a>
-<a id="__codelineno-0-254" name="__codelineno-0-254"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-255" name="__codelineno-0-255"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="sd">    threshold</span>
-<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="sd">        Resistance threshold in Ω. Conductors at or below this</span>
-<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="sd">        value are treated as ideal by the solver. Default</span>
-<a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="sd">        ``1e-6 Ω``.</span>
-<a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-261" name="__codelineno-0-261"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_section</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="k">return</span> <span class="kc">True</span>
-<a id="__codelineno-0-263" name="__codelineno-0-263"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">series_resistance</span> <span class="o">&lt;=</span> <span class="n">threshold</span>
-</code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
 
 
 
