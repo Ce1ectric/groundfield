@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.7.0] — 2026-05-26
+
 ### Added — OrtsnetzLayout: imperative TN-Ortsnetz builder
 
 `groundfield.generators.OrtsnetzLayout` is the new entry point for
@@ -3971,7 +3977,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.4.0
