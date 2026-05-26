@@ -26,7 +26,763 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — OrtsnetzLayout: imperative TN-Ortsnetz builder
+
+`groundfield.generators.OrtsnetzLayout` is the new entry point for
+building a *single deterministic* TN-Ortsnetz piece by piece, in
+the order an engineer would draw it on a plan: ingest building
+footprints from OpenStreetMap, drop the substation, drop one or
+more KVS, route PEN cables in strict Manhattan geometry around
+the foundations, connect every house to its closest cable, and
+optionally drop a Hilfserder + Spannungssonde for a simulated
+fall-of-potential measurement. The whole pipeline is exposed as
+one-call-per-step methods on the layout so an AP1 sweep over many
+GPS-defined Ortsnetze reduces to a single Python loop.
+
+Key API surface (all on :class:`OrtsnetzLayout`):
+
+- `from_footprints(...)` / `from_osm(center_lat_deg, center_lon_deg,
+  radius_m, substation_xy=..., kvs_xys=..., substation_lat_lon=...,
+  kvs_lat_lons=...)` — two constructors. ``from_osm`` runs
+  :func:`groundfield.geo.osm.query_and_project` and pre-places the
+  substation and zero-or-more KVS anchors in one call. WGS84 and
+  local ENU metres are interchangeable on every anchor-placing
+  method.
+- `add_kvs(position_xy=... | position_lat_lon=...)` — drop a cable
+  cabinet at user coordinates.
+- `add_pen_cable(start=anchor, end=anchor | end_xy=... |
+  end_lat_lon=..., min_segment_length_m=..., clearance_m=...,
+  escape_radius_m=...)` — route a PEN cable from any anchor to
+  another anchor or a free coordinate using a 4-connected
+  Manhattan-grid A* that avoids every building's bounding
+  rectangle.
+- `connect_buildings()` — attach every house to the closest PEN
+  cable via a short axis-aligned stub (one or two segments);
+  unreachable houses emit a :class:`UserWarning` and stay
+  unconnected so the user can add another cable.
+- `add_auxiliary_electrode(distance_m=..., direction_deg=...,
+  grounding=..., length_m=...)` — drop the Hilfserder at a chosen
+  radius / bearing from the substation. Default geometry: a
+  3 × 0.5 m rod triangle (0.5 m side), parallel-bonded, matching
+  field-deployment practice. Override the geometry via the
+  ``grounding=GroundingSystemSpec(...)`` kwarg, or collapse to a
+  single 1.5 m rod via the ``length_m=`` legacy keyword. Each call
+  *replaces* the placement so sweeping the aux distance is a
+  one-line re-call.
+- `add_voltage_probe(inline_fraction=... | perpendicular_fraction=...
+  + perpendicular_side= | position_xy=... | position_lat_lon=...)`
+  — drop the Spannungssonde at 50 % of the Hilfserder distance,
+  inline or perpendicular (left = 90° CCW, right = 90° CW). The
+  probe is a *pure sampling point*: no rod is materialised in the
+  world, so the ideal-voltmeter assumption is preserved.
+- `foundation_mask(penetration, salt=0)` — deterministic per-house
+  :class:`bool` list derived from a stable MD5 hash of each
+  footprint's ``osm_id``. The same ``(penetration, salt)`` always
+  returns the same mask, and the mask is *nested* in
+  ``penetration`` — every house with a foundation at :math:`p_1`
+  also has one at any :math:`p_2 > p_1`. ``salt`` lets the user
+  draw independent Monte-Carlo realisations at the *same* nominal
+  penetration.
+- `to_world(foundation_mask=..., source_magnitude_A=..., ...)`
+  — materialise the layout into a full :class:`groundfield.World`:
+  substation ring + 4 rods, KVS rods, per-house foundation
+  electrodes (skipped where ``foundation_mask[i] == False``),
+  tiny PEN-junction rods at every cable corner and tap point so
+  the trunk physically follows the Manhattan polyline, PEN
+  conductors between junctions, service drops, a current source
+  at the substation cluster, and — when a Hilfserder is
+  configured — an opposite-sign return current at the aux anchor
+  that physically closes the measurement loop.
+- `measured_grounding_impedance(result, probe_xy=...,
+  source_magnitude_A=...)` — simulated meter reading
+  :math:`(\varphi_\text{sub} - \varphi_\text{probe}) / I_\text{src}`.
+  The ``probe_xy`` keyword lets the caller sample any probe
+  position from a single solve, enabling the inline-vs-perpendicular
+  comparison without re-running the solver.
+- `verify_current_balance(result, tolerance=0.02)` — Kirchhoff
+  plausibility check that aggregates leakage currents on both
+  sides of the loop (positive side = every non-aux electrode;
+  auxiliary side = every electrode prefixed with the aux name)
+  and asserts they sum to :math:`\pm I_\text{src}` within
+  tolerance. Catches the typical "stale-kernel" pitfall in a
+  notebook workflow.
+- `plot()` / `plot_surface_potential(result, world, two_slope=True,
+  symmetric=False, log=False, ...)` — interactive layout plot and
+  surface-potential pseudo-colour plot. Both overlay the
+  substation marker, Hilfserder marker (purple triangle with
+  dotted return-current line), and Spannungssonde marker (lime
+  star); the surface plot defaults to a
+  :class:`matplotlib.colors.TwoSlopeNorm` centred at zero so the
+  deep Hilfserder trough and the small substation + foundation
+  trumpet are both visible at full colour resolution.
+- `lat_lon_to_xy()` / `xy_to_lat_lon()` / `projector` — round-trip
+  helpers for plot overlays and external cross-checks.
+- `triangle_rod_grounding(rod_length_m=0.5, triangle_side_m=0.5)`
+  — free helper returning a :class:`GroundingSystemSpec` for the
+  default Hilfserder geometry; reusable for any anchor that needs
+  a rod-bundle.
+
+Snapshot data classes (Pydantic, JSON round-trippable):
+:class:`KvsPlacement`, :class:`AuxiliaryElectrodePlacement` (now
+holds a full :class:`GroundingSystemSpec`),
+:class:`VoltageProbePlacement` (pure sampling point),
+:class:`PenCable`, :class:`BuildingConnection`. Re-exported via
+:mod:`groundfield.generators` and the top-level
+:mod:`groundfield` package.
+
+### Added — Manhattan-routed PEN cable router
+
+`groundfield.generators.manhattan_routing` is the new pure-Python
+helper module behind ``OrtsnetzLayout.add_pen_cable``. Key exports:
+
+- :class:`ObstacleBox` — axis-aligned bounding box used as a
+  routing obstacle. Inflatable, with axis-aligned-segment overlap
+  test that ignores boundary touches.
+- :func:`route_manhattan(start, end, obstacles, grid_size,
+  clearance_m, escape_radius_m, max_iterations)` — 4-connected
+  A* on a regular Manhattan grid of cell size ``grid_size``.
+  Obstacles are inflated by ``clearance_m``. The ``escape_radius_m``
+  knob defines a disk around *both* start and end inside which
+  obstacle blocking is *not* enforced — the "release valve" for
+  real-OSM extracts where the substation lat/lon lands inside or
+  very near a foundation polygon. ``None`` (default) maps to
+  ``grid_size`` (one cell of slack); ``0.0`` restores the strict
+  pre-v0.7 behaviour. On failure the
+  :class:`RuntimeError` names which anchor is enclosed and
+  reports how many of the four immediate neighbour cells are
+  free, with concrete suggestions ("raise escape_radius_m to
+  e.g. X", "reduce clearance_m to Y", "move the offending
+  anchor").
+- :func:`segment_intersects_box` and
+  :func:`merge_collinear_waypoints` — supporting helpers.
+
+Pure Python; no :mod:`shapely` dependency at import time.
+
+### Added — TN-Ortsnetz radial-trunk PEN topology
+
+`groundfield.generators.pen_topology` adds a second PEN backbone
+topology for :class:`TnNetworkGenerator` alongside the legacy
+star-KVS layout: :class:`RadialTrunkTopology`. The substation
+feeds N radial feeders (default 4, evenly spaced) each with a
+finite slot budget per source; once the substation's slots are
+exhausted a KVS is inserted along the trunk axis and hosts the
+next batch of building taps. Buildings are assigned to the
+angularly-closest feeder; buildings behind the substation or
+beyond ``max_feeder_length_m`` are dropped with a
+:class:`UserWarning`. :class:`TnNetworkConfig.pen_topology` is a
+new discriminated-union field defaulting to
+:class:`StarKvsTopology` (legacy bit-identical), with
+:class:`RadialTrunkTopology` as the opt-in.
+
+### Fixed — closed measurement loop
+
+The v0.7 image solver (:mod:`groundfield.solver.image`) only
+consumes :attr:`Source.attached_to`; :attr:`Source.return_to` is
+silently ignored. Before the fix, ``add_auxiliary_electrode``
+plus an inline-probe reading produced a surface-potential plot
+in which the Hilfserder showed no gradient at all — the engine
+treated the entire test current as returning through the
+remote-earth boundary. :meth:`OrtsnetzLayout.to_world` now
+explicitly closes the loop by adding a second
+:class:`CurrentSource` with ``phase_deg=180`` at the aux anchor;
+the net injected charge is zero and the potential field develops
+the expected dipole pattern (positive trumpet at the substation,
+negative trumpet at the Hilfserder). ``Source.return_to`` on the
+substation-side source is still recorded for documentation and
+for future solver upgrades.
+
+### Tests
+
+- **`tests/test_pen_topology.py`** — 18 regression tests covering
+  :class:`RadialTrunkTopology` validation, assignment, KVS
+  planning, end-to-end :meth:`TnNetworkGenerator.build` and JSON
+  round-trip.
+- **`tests/test_ortsnetz_builder.py`** — 67 regression tests
+  covering the Manhattan routing primitives
+  (``ObstacleBox``, ``segment_intersects_box``,
+  ``merge_collinear_waypoints``, ``route_manhattan`` with
+  strict / default / generous ``escape_radius_m`` modes,
+  diagnostic error message); KVS / PEN cable placement and
+  validation; the building → cable connection algorithm
+  (single-cable + closest-cable + warn-and-skip +
+  missing-cable error); ``to_world`` honouring the
+  ``foundation_mask`` and wiring the auxiliary return source;
+  the GPS / OSM convenience layer (``from_osm``,
+  ``lat_lon_to_xy``, ``xy_to_lat_lon``, lat/lon overloads);
+  the foundation-mask helper (determinism, nestedness in
+  ``p``, fraction-tracking, salt-independence, bounds, osm-id
+  fallback); the full measurement workflow (Hilfserder
+  placement modes, voltage probe geometries, the ``probe_xy``
+  override, ``measured_grounding_impedance``,
+  ``verify_current_balance``); the surface-potential plot in
+  all three colour-axis modes (``two_slope``, ``symmetric``,
+  ``log``); and an end-to-end physics check that the engine
+  sees the expected positive-side / aux-side current split
+  within 2 % of the test current.
+
+### Notebooks
+
+- **`notebooks/35_radial_trunk_pen_topology.ipynb`** —
+  geometry-only walk-through of a bus-topology TN-Ortsnetz
+  (substation → one PEN main cable → 20 houses → KVS) with
+  strict Manhattan PEN routing.
+- **`notebooks/36_ortsnetz_builder.ipynb`** — end-to-end
+  :class:`OrtsnetzLayout` workflow on 20 synthetic OSM-style
+  footprints plus a *real* OSM extract of Mulmke (Heudeber /
+  Nordharz; 51.9136 °N, 10.8432 °E) with two KVS along the
+  K1328. Closes with a one-call-per-step usability table.
+- **`notebooks/37_foundation_penetration_sweep.ipynb`** — the
+  Mulmke layout with a reproducible foundation-electrode
+  penetration sweep, a fall-of-potential measurement
+  (Hilfserder + Spannungssonde + Kirchhoff balance check),
+  surface-potential galleries per penetration value and per
+  Hilfserder distance using the
+  :class:`TwoSlopeNorm`-default plot, and an inline-vs-
+  perpendicular probe comparison swept across Hilfserder
+  distances from a single solve per ``D``.
+
+### Added (Audit pass 7 — implemented 2026-05-18)
+
+- **`groundfield.io.groundinsight.EvaluateSpecError`** — new typed
+  exception (subclass of :class:`ValueError`) raised by
+  :func:`evaluate_spec` on malformed spec input. The class is
+  re-exported at the top level as :data:`groundfield.EvaluateSpecError`
+  and listed in :data:`groundfield.__all__`. Legacy
+  ``except ValueError`` blocks keep working unchanged because the
+  new class inherits from :class:`ValueError`; downstream
+  ``groundinsight`` consumers can now catch the typed exception
+  without grepping ``str(exc)`` (closes the *seventh 2026-05-18
+  audit pass* "no named class for evaluate_spec failures" bullet).
+- **`groundfield.World.reset_concrete_corrections()`** — explicit
+  cleanup helper for the ADR-0012 V1 concrete-shell registry
+  (`world.py`). Re-using a single :class:`World` across multiple
+  :meth:`TnNetworkGenerator.build` calls — the canonical AP1
+  Monte-Carlo pattern over ``concrete_rho_ohm_m`` — previously
+  accumulated stale entries in the public
+  :attr:`World.concrete_shell_corrections` dict. The new method
+  clears the registry and returns a shallow copy of the dropped
+  entries, so callers can inspect or log them. Calling on a fresh
+  world is an idempotent no-op. Closes the *seventh 2026-05-18
+  audit pass* "registry has no documented cleanup contract" bullet.
+- **`OsmBuildingPlacement.footprint_at(i, strict=...)`** — opt-in
+  defensive bounds check (`geo/placement.py`). Default
+  ``strict=False`` preserves the v0.6.0 "out-of-range → ``None``"
+  contract that :meth:`TnNetworkGenerator.build` relies on;
+  ``strict=True`` raises a self-describing :class:`IndexError`
+  that names the placement, the requested index, the filtered
+  footprint count (after ``min_area_m2``) and the raw list length.
+  The placement also exposes a new
+  :attr:`OsmBuildingPlacement.n_footprints` property identical to
+  ``len(placement)`` so consumers can pre-flight ``i`` without
+  invoking the dunder. Closes the *seventh 2026-05-18 audit pass*
+  "footprint_at lacks defensive bounds checking" bullet.
+- **`groundfield.geo.osm.query_buildings(..., max_retries=N)` and
+  `query_and_project(..., max_retries=N)`** — promote the
+  previously hard-coded ``1`` retry to a keyword
+  (`geo/osm.py`). Defaults to ``1``, matching the historic v0.6.0
+  contract; users on flaky cellular / VPN links can raise it,
+  CI pipelines that prefer fail-fast semantics can set ``0``.
+  ``max_retries < 0`` is rejected at the API boundary with a
+  clear :class:`ValueError`. The module docstring and the
+  :func:`_post_overpass` internal docstring are updated to match.
+  Closes the *seventh 2026-05-18 audit pass* "retry count
+  hardcoded as 1" bullet.
+
+### Tests (Audit pass 7 — implemented 2026-05-18)
+
+- **`tests/test_audit_pass7_fixes.py`** — 14 regression tests
+  mapped 1:1 to the user-visible bullets above:
+  :class:`EvaluateSpecError` is a :class:`ValueError` subclass,
+  is raised on missing / empty / unknown-symbol formulas, and is
+  reachable from the top level (4 tests);
+  :meth:`World.reset_concrete_corrections` clears the registry,
+  returns a defensive copy of the previous state, and is
+  idempotent on a fresh world (3 tests);
+  :meth:`OsmBuildingPlacement.footprint_at` keeps the historic
+  ``None`` default, raises a structured :class:`IndexError` under
+  ``strict=True`` (negative and out-of-range indices), the message
+  carries the expected diagnostic tokens, and the new
+  :attr:`n_footprints` property tracks ``len(placement)`` after
+  ``min_area_m2`` filtering (4 tests);
+  :func:`query_buildings` accepts and forwards ``max_retries``,
+  rejects negative values, defaults to ``1``, and
+  :func:`query_and_project` exposes the same keyword on its
+  signature (3 tests).
+
+### Notebooks (Audit pass 7 — implemented 2026-05-18)
+
+- **`notebooks/34_audit_pass7_fixes.ipynb`** — narrative walk-through
+  of the four behaviour changes, one short section per fix. The
+  notebook runs offline (no Overpass call) and uses synthetic
+  footprints for the placement demo.
+
+### Docs (Audit pass 7 — implemented 2026-05-18)
+
+- **`docs/api/world.md`, `docs/api/sources.md`, `docs/api/boundary.md`,
+  `docs/api/validation.md`, `docs/api/references.md`** — the five
+  long-standing missing API-reference pages (flagged from pass 1
+  through pass 6) now exist as mkdocstrings stubs that render the
+  module-level public surface. Wired into ``mkdocs.yml`` nav under
+  *API reference*. Closes the seven-pass-in-a-row backlog bullet.
+- **`docs/api/index.md`** — the API-reference index now lists the
+  ``Geo / OSM`` page that was added in 0.6.0 but missing from the
+  rendered index, alongside the five newly-added pages.
+- **`docs/api/io.md`** — adds an "Errors" subsection that documents
+  the new :class:`EvaluateSpecError` class and the typed-exception
+  contract for downstream ``groundinsight`` consumers.
+
+### Fixed (Backlog — seventh 2026-05-18 review pass)
+
+> The seventh audit pass was run on 2026-05-18, three days after the
+> `0.6.0` release (`geo` subpackage + concrete-encasement model). The
+> entries below capture new findings that emerged either as a
+> side-effect of the 0.6.0 surface (`World.concrete_shell_corrections`
+> registry, `OsmBuildingPlacement.footprint_at`, `geo.osm` retry
+> contract) or that have **still not been addressed** through six
+> previous audit passes (missing API pages, ADR cross-references).
+> Only the CHANGELOG is edited in this pass; no program code is
+> touched.
+
+- **`docs/api/sources.md`, `boundary.md`, `references.md`,
+  `validation.md`, `world.md` still missing — seventh pass in a row.**
+  The `0.6.0` release added `docs/api/geo.md` for the new OSM
+  subpackage but did **not** address the five long-standing missing
+  pages flagged in pass 1 through pass 6. `groundfield.world.World`,
+  `groundfield.solver.sources`, `groundfield.solver.boundary` and
+  `groundfield.validation` are all part of the public ``__all__`` of
+  `src/groundfield/__init__.py` (confirmed on 2026-05-18) and the
+  user has no rendered API documentation for any of them. The
+  six-pass-in-a-row finding is therefore re-elevated; without a
+  forcing CI gate it will reappear in the eighth pass.
+- **`docs/api/index.md` does not list the new `Geo / OSM` page.** The
+  rendered API-reference index enumerates Soil, Geometry, Conductors,
+  Solver, Coupling, Postprocess, Diagnostics, IO and Generators but
+  is missing the `Geo / OSM` entry that the 0.6.0 `mkdocs.yml` nav
+  added (``api/geo.md``). Drift between API overview prose and the
+  rendered nav appeared on the same release that landed the
+  subpackage — straightforward bullet-list addition.
+- **`World.concrete_shell_corrections` registry has no documented
+  cleanup contract.** Re-using a single :class:`World` across
+  multiple :meth:`TnNetworkGenerator.build` calls (the canonical
+  parameter-sweep pattern) accumulates entries from previous builds
+  in the same dict; the `0.6.0` release records the registry as a
+  public ``dict[str, float]`` but offers neither a
+  ``world.reset_concrete_corrections()`` helper nor a
+  per-build invalidation hook on the generator side. AP1 Monte-Carlo
+  studies that flip ``concrete_rho_ohm_m`` per realisation will
+  carry stale shell resistances from earlier samples into later
+  ones unless the user knows to clear the dict by hand.
+- **`OsmBuildingPlacement.footprint_at(i)` lacks defensive bounds
+  checking.** The current implementation indexes
+  ``self.footprints[i]`` directly; for ``i`` out of range CPython
+  raises a bare ``IndexError`` whose message does not name the
+  placement, the requested index, or the available range. Wrap with
+  an explicit ``raise IndexError(f"OsmBuildingPlacement: requested
+  index {i} but only {n} footprints are available; check
+  placement.n_buildings.")`` so the AP1 generator pipeline produces
+  a self-describing failure instead of an opaque traceback at
+  ``TnNetworkGenerator.build`` time.
+- **`geo.osm.query_buildings` retry count is hardcoded as ``1``.**
+  The docstring promises "one retry on ``429`` / ``504`` with
+  exponential backoff" but no parameter is exposed for users
+  working over flaky cellular / VPN links. Promote the retry count
+  to a ``max_retries: int = 1`` keyword on
+  :func:`query_buildings` / :func:`query_and_project`; the default
+  preserves current behaviour.
+- **`groundfield.io.groundinsight.evaluate_spec` ValueError class is
+  not re-exported.** Pass-5 widened `evaluate_spec` to raise
+  ``ValueError`` on non-canonical free symbols (and the Pass-5
+  Fixed block lists this as a public-surface improvement), but
+  downstream code that wants to catch the new exception has no
+  named class — it has to compare against ``str(exc)`` substrings
+  or fall back to the broad ``ValueError`` parent. Define an
+  ``EvaluateSpecError(ValueError)`` subclass in
+  `groundfield.io.groundinsight` and add it to the module ``__all__``;
+  follow-on `groundinsight` consumers will benefit from the typed
+  surface.
+- **`Conductor.lumped_series_resistance_ohm` and
+  `StripElectrode.concrete_shell_coefficient_ohm_m` are not
+  JSON-round-tripped in `tests/test_concrete_encasement.py`.** The
+  new test file covers the V2 Sunde-shell closed-form match, the
+  V1 registry, the discriminator and the end-to-end OSM smoke,
+  but does **not** assert that a `World` with a populated
+  `Conductor.lumped_series_resistance_ohm` or
+  `StripElectrode.concrete_shell_coefficient_ohm_m` survives
+  ``World.model_dump_json()`` → ``World.model_validate_json(...)``.
+  Add a single test case so the persistence contract is locked in
+  before users start sharing concrete-encasement-bearing world
+  files across runs.
+- **ADR cross-references are one-directional.** `ADR-0011`
+  (OSM building footprints) references `ADR-0009` (World
+  generators) and `ADR-0012` (Concrete encasement) references
+  `ADR-0003` (Distributed conductor) — but the *target* ADRs
+  carry no reciprocal "See also" link. A maintainer reading
+  ADR-0003 today sees no breadcrumb to the V1 lumped path that
+  reuses its framework; same for ADR-0009 → ADR-0011.
+  Bidirectional ADR linking is a one-line edit per file and
+  prevents future architectural drift.
+- **`docs/concepts.md` is silent on the lumped vs. distributed
+  Sunde-shell trade-off.** The 0.6.0 release added two
+  implementation variants (``concrete_model="lumped"`` vs.
+  ``"distributed"``) with materially different physics (V1
+  records the total shell resistance and injects a series
+  resistance on the PEN drop; V2 augments the post-kernel
+  diagonal per segment). The user-facing `concepts.md` page
+  describes neither variant nor the regime where each is
+  preferred. AP1 readers reach the ADR-0012 file as a fallback,
+  but the canonical "Concepts" page should carry a short
+  decision-guide table.
+- **`README.md` does not mention `0.6.0` features.** The README
+  Roadmap and Features sections were not updated alongside the
+  0.6.0 release — neither the `geo` extra, the
+  `BuildingFootprint` / `OsmBuildingPlacement` exports nor the
+  concrete-encasement model appear in the project description.
+  AP1 reviewers landing on the GitHub page have no signal that
+  the OSM and concrete-encasement features exist.
+- **Notebooks `30..33` are not wired into the docs nav.** All four
+  audit / OSM / concrete-encasement notebooks exist on disk and
+  are referenced in the 0.6.0 CHANGELOG "Docs" block, but
+  `mkdocs.yml` only loads `docs/examples/*.md`. The
+  `mkdocs-jupyter` plugin *is* enabled (``plugins: mkdocs-jupyter``
+  block, ``execute: false``), so adding a ``Notebooks:`` nav
+  section under Examples is a four-line edit. Without it the
+  notebook walkthroughs that the 0.6.0 changelog calls out are
+  invisible to docs-site readers.
+
+### Docs (Backlog — seventh 2026-05-18 review pass)
+
+- **`docs/index.md` Migration callout for `0.6.0`.** A short
+  "Migrating from 0.5.x" section under the index — listing the
+  new optional ``geo`` extra, the additive
+  ``concrete_rho_ohm_m`` field on
+  :class:`FoundationElectrodeSpec`, and the no-op default — would
+  spare users a CHANGELOG dive on upgrade. Mirror the pattern
+  that the 0.5 release introduced for the discriminated
+  ``Source`` union.
+- **`docs/quickstart.md` does not show the new exports.** The
+  page still ends at ``gf.create_engine(...).solve(world)``; the
+  0.6.0 exports `gf.BuildingFootprint`, `gf.OsmBuildingPlacement`,
+  `gf.Projector`, `gf.query_buildings`, `gf.query_and_project`,
+  `gf.OverpassError` are not introduced anywhere in the quickstart
+  flow. A short "Optional: OSM-driven footprints" appendix would
+  close the gap.
+- **`docs/performance.md` has no `geo` cost section.** The
+  on-disk Overpass cache, the projection cost and the OMBR
+  reduction are all new performance-relevant code paths in
+  `0.6.0`. AP1 readers running long Monte-Carlo sweeps over
+  10–100 buildings need an order-of-magnitude estimate
+  (current local: ~ms per footprint, network: ~hundreds of ms
+  on cold cache) and an explicit pointer at the cache directory
+  to clear between experiments.
+- **`docs/api/geo.md` lacks the offline-fallback contract.** The
+  0.6.0 page describes the live Overpass path and the cache
+  layer but does not state the contract of the *purely offline*
+  variant — the path through `BuildingFootprint` + manual
+  centroid placement that does not import `requests` /
+  `pyproj` / `shapely`. A "Working offline" subsection that
+  enumerates the no-dependency code path keeps the AP1 reproducible-
+  computation guarantee visible.
+- **`docs/adr/0003-distributed-conductor-model.md` and
+  `docs/adr/0009-world-generators.md`** do not yet reference
+  `ADR-0011` and `ADR-0012`. Same finding as the bidirectional
+  ADR cross-reference Fixed-backlog entry above.
+
+### Tests (Backlog — seventh 2026-05-18 review pass)
+
+- **No JSON round-trip test for `Conductor.lumped_series_resistance_ohm`.**
+  Tied to the ADR-0012 V1 persistence-contract Fixed-backlog entry above.
+- **No JSON round-trip test for
+  `StripElectrode.concrete_shell_coefficient_ohm_m`.** Tied to the
+  ADR-0012 V2 persistence-contract Fixed-backlog entry above.
+- **No regression test for `World.concrete_shell_corrections` cleanup
+  contract.** Once a per-build `reset_concrete_corrections()` helper
+  (or a `TnNetworkGenerator.build(reset_shell_corrections=True)`
+  keyword) lands, pin the contract with a two-build test that
+  asserts the second build sees a clean registry.
+- **No regression test for `OsmBuildingPlacement.footprint_at(i)`
+  out-of-range error message.** Once the bounds check lands, pin
+  the structured error string so the message does not regress to
+  a bare `IndexError`.
+- **No timing test for the `geo.osm` cache.** A trivial fixture
+  that mocks the Overpass `_post` boundary, asserts a single POST
+  per ``(origin, radius)`` tuple over five `query_buildings`
+  invocations and checks the cache directory carries exactly one
+  on-disk file is a one-screen test that would lock in the
+  ADR-0011 reproducibility guarantee.
+- **No `mkdocs build --strict` test.** Sixth-pass entry remains
+  open; seventh pass elevates it again because the new `geo.md`
+  page and the still-missing `sources.md` / `boundary.md` /
+  `references.md` / `validation.md` / `world.md` pages would all
+  be flagged by ``--strict`` immediately. Without the CI gate,
+  the eighth audit pass will inevitably re-list the same
+  five-page gap.
+
+### Roadmap candidates — seventh 2026-05-18 review pass
+
+- **`gf.show_versions()`** — same return-shape convention as the
+  proposed `gi.show_versions()` and `gm-cli doctor`. Sixth-pass
+  carried this; seventh pass re-emphasises the cross-repo
+  contract: ``dict[str, str]`` with keys ``package``, ``python``,
+  ``numpy``, ``scipy``, ``sympy``, ``pydantic``, ``polars``,
+  ``shapely``, ``pyproj``, ``requests`` (the last three reflect
+  the new ``geo`` extra) plus ``_meta = {timestamp, platform}``.
+- **`gf.docs.assert_api_pages_exist()`** — walk ``__all__`` and
+  assert every public symbol has at least one mkdocstrings
+  ``:::`` directive somewhere under ``docs/api/``. Companion to
+  the proposed `mkdocs build --strict` CI gate. Six passes have
+  flagged the missing-API-pages problem and *seven* passes the
+  forcing-function lack; this is now the highest-leverage
+  cross-repo roadmap item.
+- **`gf.World.reset_concrete_corrections()`** — public helper
+  matching the ADR-0012 V1 registry. Default behaviour stays
+  additive; the helper is opt-in for parameter sweeps. Tie to
+  the Fixed-backlog entry above.
+- **`gf.geo.OverpassCache(path, max_age_s=...)`** — promote the
+  current hidden ``$XDG_CACHE_HOME/groundfield/osm/`` directory
+  to a configurable cache object. Users running CI builds want
+  per-job cache control; AP1 Monte-Carlo runs want to pin the
+  cache for reproducibility.
+- **ADR-0013 — Cross-repo `show_versions` convention.** Bundle
+  the three-repo `show_versions` proposal into a single ADR
+  that lives in `groundfield` and is linked from
+  `groundinsight` / `groundmeas`. Five passes have proposed
+  ``show_versions``; the ADR is the forcing function that pins
+  the return shape before any of the three packages ships its
+  own implementation.
+
+### Fixed (Backlog — eighth 2026-05-25 review pass)
+
+> The eighth audit pass was run on 2026-05-25, ten days after the
+> `0.6.0` release (`geo` subpackage + concrete-encasement model) and
+> seven days after the seventh CHANGELOG-only audit pass. The
+> seventh-pass *code* fixes (`EvaluateSpecError`, `World.reset_concrete_corrections`,
+> `OsmBuildingPlacement.footprint_at` bounds-check, `query_buildings`
+> `max_retries` keyword) landed in commit `4c27695` on
+> `feature/audit-pass7-fixes` together with the new OrtsnetzLayout +
+> Manhattan PEN router + radial-trunk PEN topology in `60a9cf5`. The
+> bullets below capture both the **still-unmerged release-train risk**
+> and a new Pass-8 wave of behavioural / docs gaps. Only the
+> CHANGELOG is edited in this pass; no program code is touched.
+
+- **`feature/audit-pass7-fixes` carries two commits plus a large
+  unstaged delta — release cut blocked.** The branch holds the
+  seventh-pass code fixes (`4c27695`) and the AP1-feature commit
+  (`60a9cf5` — `OrtsnetzLayout`, `manhattan_routing`, `pen_topology`),
+  *plus* twenty-six modified files in the working tree (audit-label
+  cleanup in inline comments, AP1-reference removal in module
+  docstrings, the new `escape_radius_m` keyword on
+  :func:`route_manhattan` and :meth:`OrtsnetzLayout.add_pen_cable`,
+  CITATION.cff edits). Three CHANGELOG `Added`-blocks dated
+  2026-05-18 (escape-radius safety valve, OrtsnetzLayout GPS layer,
+  Manhattan router + Ortsnetz builder + radial-trunk topology) are
+  also unstaged. The 0.7.0 / 0.6.1 release cannot be tagged until
+  the working tree is split into a `chore(audit-cleanup)` commit
+  (audit-label / AP1-reference scrub) and a `feat(routing)` commit
+  (escape-radius valve + diagnostic error). Eighth-pass forcing
+  function: open the release PR before the next audit pass or the
+  backlog ledger keeps growing past the implementation.
+- **Audit-pass labels inside docstrings and inline comments are
+  being scrubbed without a Changelog `Internal` block.** The
+  working-tree diff against `60a9cf5` strips the parenthetical
+  *„(fifth 2026-05-13 audit pass)"* / *„(sixth 2026-05-14 audit
+  pass)"* / *„(seventh 2026-05-18 audit pass)"* breadcrumbs from
+  `src/groundfield/coupling/sommerfeld_inductance.py`,
+  `diagnostics.py`, `generators/electrode_specs.py`,
+  `generators/ortsnetz_builder.py`, `generators/tn_network.py`,
+  `geo/osm.py`, `geo/placement.py`, `io/csv.py`,
+  `io/groundinsight.py`, `postprocess/vector_fitting.py`,
+  `solver/engine.py` and `world.py`. The intent is reasonable (the
+  audit pass numbers are noise once the fix is shipped) but the
+  change is invisible to a CHANGELOG reader. Add an
+  `Internal (audit-label scrub — 2026-05-25)` block before the
+  cleanup commit lands.
+- **AP1-reference cleanup in module docstrings is undocumented.**
+  Same diff removes the *„AP1"* project name from the top-level
+  docstrings of `generators/manhattan_routing.py` and
+  `generators/ortsnetz_builder.py` (`AP1 PEN cable layout` →
+  `PEN cable layout`, `AP1 LV cable router` → `LV cable router`,
+  `AP1 reference worlds` → `reference worlds`). Project-neutral
+  docstrings are correct (`docs_review_report.md` from 2026-05-18
+  explicitly recommended this) but the change is not visible in the
+  Changelog. Add a `Docs (project-neutral docstrings — 2026-05-25)`
+  bullet referencing the 2026-05-18 docs review.
+- **`route_manhattan(..., escape_radius_m=...)` has no negative
+  test for `escape_radius_m = -1.0`.** The implementation in
+  `src/groundfield/generators/manhattan_routing.py` validates
+  ``if escape_radius_m < 0.0:`` and raises `ValueError`, but the
+  three new regression tests in `tests/test_ortsnetz_builder.py`
+  (running total 31) only cover positive defaults, `0.0` strict
+  mode and `6.0` rescue mode. Add a parametrised test on
+  `[-1.0, -0.001]` so the contract stays explicit.
+- **`OrtsnetzLayout.from_osm` accepts `kvs_lat_lons` without a
+  shape contract.** The classmethod (lines 311–432 of
+  `src/groundfield/generators/ortsnetz_builder.py`) lets the user
+  pass either `kvs_lat_lons` (list of `(lat, lon)` tuples) or
+  `kvs_xys` (list of `(x, y)` tuples), guarded by an XOR validation
+  on whether both are non-`None`. There is **no** validation that
+  the user-supplied `kvs_names` list (if given) has the same
+  length as `kvs_lat_lons` / `kvs_xys`, nor that each tuple has
+  exactly two elements. A typo like `kvs_lat_lons=[(51.0,)]`
+  reaches `projector.to_xy_m(*tup)` and raises a bare
+  `TypeError`. Add a `_validate_kvs_arguments(kvs_lat_lons,
+  kvs_xys, kvs_names)` helper that produces a self-describing
+  error at the API boundary.
+- **`evaluate_spec`'s `EvaluateSpecError` is in `docs/api/io.md`
+  but not in `docs/api/index.md`.** Pass-7 added the *„Errors"*
+  subsection to `docs/api/io.md` (commit `4c27695`); the
+  `api/index.md` overview prose still enumerates only the
+  read/write helpers and lacks a one-line pointer to the new
+  typed exception. Add it to the IO row so users browsing the
+  Overview see the typed-error contract before drilling into
+  the page.
+- **`groundfield.diagnostics` exposes `MIN_THINWIRE_RATIO`,
+  `SOFT_LIMIT`, `HARD_LIMIT` as public constants but they are not
+  listed in `docs/api/diagnostics.md`.** The constants were promoted
+  from the private leading-underscore aliases in pass 5 (commit
+  `72ee1b2`) and the audit-label cleanup currently underway in the
+  working tree keeps them but removes the *„fifth 2026-05-13 audit
+  pass"* breadcrumb. The mkdocstrings dump in `docs/api/diagnostics.md`
+  picks up the function symbols but not the module-level constants
+  because the page uses `:::groundfield.diagnostics:` without
+  `members:` or `filters:`. Add an explicit `:::groundfield.diagnostics:
+  members: [MIN_THINWIRE_RATIO, SOFT_LIMIT, HARD_LIMIT, expected_segments,
+  world_statistics, check_segment_resolution]` so the public surface
+  matches what `from groundfield.diagnostics import *` exposes.
+- **`docs/concepts.md` still has no V1 vs V2 Sunde-shell decision
+  table (eighth pass in a row for the V1/V2 distinction; second
+  pass that explicitly calls for the *table* form).** Same finding
+  as the seventh-pass `Fixed (Backlog)` entry. The two
+  implementation variants (`concrete_model="lumped"` vs
+  `"distributed"`) and their respective complexity / accuracy
+  trade-offs are still only discoverable through ADR-0012.
+- **`docs/index.md` 0.6.0 migration callout still missing
+  (seventh-pass finding re-flagged).** Same as the
+  Docs-backlog entry under the seventh review pass.
+- **`docs/quickstart.md` does not show the new 0.6.0 `geo`
+  exports (seventh-pass finding re-flagged).**
+- **`docs/performance.md` lacks a `geo` cost section
+  (seventh-pass finding re-flagged).**
+- **`docs/api/geo.md` does not document the offline fallback
+  contract (seventh-pass finding re-flagged).**
+- **ADR-0003 and ADR-0009 still have no reciprocal „See also"
+  link to ADR-0011 / ADR-0012 (seventh-pass finding re-flagged
+  — eighth pass).**
+- **Notebooks `30..36` not in `mkdocs.yml` nav (seventh-pass
+  finding re-flagged with two additional notebooks).** The 0.6.0
+  release added `32_osm_footprints.ipynb` and `33_concrete_encasement.ipynb`;
+  pass 7 added `34_audit_pass7_fixes.ipynb`; the AP1 feature
+  branch added `35_radial_trunk_pen_topology.ipynb` and
+  `36_ortsnetz_builder.ipynb`. None of the seven are reachable
+  from the rendered docs nav.
+- **`graphify-out/manifest.json` is stale.** `GRAPH_REPORT.md`
+  reports commit `aa9f0978` (the 0.6.0 release tag) while
+  `git log` is at `60a9cf5`; the manifest mtimes are all from
+  before commit `4c27695`. Run `graphify update .` before the
+  next audit pass so the knowledge-graph is in sync with the
+  Pass-7 / OrtsnetzLayout commits.
+
+### Docs (Backlog — eighth 2026-05-25 review pass)
+
+- **`README.md` still does not mention the OrtsnetzLayout +
+  Manhattan router + radial-trunk PEN topology (uncommitted
+  AP1 features).** The README's „New in 0.6.0" section lists
+  OSM-driven footprints and concrete encasement but not the
+  three uncommitted modules. Add a short *„Upcoming in 0.7.0
+  / 0.6.1"* paragraph (or wait until release-cut) describing
+  the imperative builder and the GPS / OSM convenience layer.
+- **`docs/examples/` has no end-to-end OrtsnetzLayout walkthrough.**
+  The `36_ortsnetz_builder.ipynb` notebook lives in `notebooks/`
+  (gitignored) and is rendered nowhere; an `examples/10_ortsnetz_layout.md`
+  page that imports the Mulmke OSM extract narrative would close
+  the gap for docs-site readers.
+- **`docs/adr/` has no ADR for the OrtsnetzLayout builder.** The
+  module is a substantive architectural addition (imperative
+  single-network builder vs. the stochastic `TnNetworkGenerator`)
+  but no ADR records the design rationale. Open ADR-0013 (or
+  ADR-0014 if ADR-0013 is reserved for the cross-repo
+  `show_versions` convention) — `OrtsnetzLayout: imperative
+  single-network builder for TN-Ortsnetze`.
+- **`docs/adr/` has no ADR for the Manhattan PEN router.** The
+  4-connected A* + AABB obstacle test is a new code path with
+  its own performance / correctness contract (cell size,
+  clearance, escape radius, max iterations). One paragraph of
+  rationale per knob is enough.
+- **`docs/api/generators.md` does not enumerate the new public
+  symbols** `OrtsnetzLayout`, `PenCable`, `KvsPlacement`,
+  `BuildingConnection`, `ObstacleBox`, `PenTopology`,
+  `StarKvsTopology`, `RadialTrunkTopology`,
+  `route_manhattan`, `segment_intersects_box`,
+  `merge_collinear_waypoints`. The 0.6.0 changelog block lists
+  them but the `docs/api/generators.md` mkdocstrings dump still
+  uses the default `:::groundfield.generators:` and the
+  pre-0.6.0 module docstring at the top of the page does not
+  reference them.
+- **`docs/api/io.md` *„Errors"* subsection does not show the
+  `try / except EvaluateSpecError` example.** The seventh-pass
+  edit added the subsection but only documents the class
+  surface. Add a five-line example so consumers can copy-paste
+  the pattern.
+
+### Tests (Backlog — eighth 2026-05-25 review pass)
+
+- **`route_manhattan(..., escape_radius_m=-1.0)` negative-input
+  parametrised test.** Tied to the Fixed-backlog entry above.
+- **`OrtsnetzLayout.from_osm` shape-contract regression tests.**
+  Add `tests/test_ortsnetz_builder.py::test_from_osm_kvs_shape_contract`
+  parametrised on the four failure modes: `kvs_lat_lons` with
+  mis-sized tuples, `kvs_names` length mismatch, both
+  `kvs_lat_lons` and `kvs_xys` set, both `substation_lat_lon`
+  and `substation_xy` set.
+- **No regression test against `graphify-out` staleness.** A
+  one-line `test_repo_hygiene.py::test_graphify_manifest_matches_head`
+  helper (read `GRAPH_REPORT.md` *„Built from commit"* line,
+  compare against `git rev-parse HEAD`) would surface the
+  knowledge-graph drift at PR time. Same Forcing-Function
+  pattern that `groundmeas` is rolling out for repo-root junk.
+- **JSON round-trip test for `Conductor.lumped_series_resistance_ohm`
+  (seventh-pass finding re-flagged).**
+- **JSON round-trip test for
+  `StripElectrode.concrete_shell_coefficient_ohm_m`
+  (seventh-pass finding re-flagged).**
+- **`mkdocs build --strict` CI hook (seven passes in a row
+  flagged this — eighth pass elevates it again).** With the
+  five long-standing API pages now present (commit `4c27695`)
+  the `--strict` build would *no longer* fail on the missing
+  pages; the remaining gates would catch the missing
+  `Geo / OSM` index entry, the unreferenced `0.7.0` notebooks
+  and any future broken cross-link. This is the single highest-
+  leverage forcing function for the docs backlog.
+
+### Roadmap candidates — eighth 2026-05-25 review pass
+
+- **`gf.OrtsnetzLayout.add_multi_stop_trunk(start, stops)`** —
+  the Mulmke walkthrough in `notebooks/36_ortsnetz_builder.ipynb`
+  ends with a four-item rough-edges list; the multi-stop trunk
+  helper (a single call that routes through N intermediate KVS
+  in sequence) is the first item and the only one that affects
+  the public API surface. Defer the basemap overlay and the
+  coverage report to follow-on PRs.
+- **`gf.OrtsnetzLayout.coverage_report()`** — Mulmke rough-edge
+  item 3. A read-only diagnostic that lists for each building
+  which PEN cable it was connected to, the stub length and any
+  building that ended up unconnected. Pairs with the proposed
+  `assert_api_pages_exist()` as a self-describing pre-solve
+  check.
+- **`gf.geo.OsmBuildingPlacement.per_footprint_specs`** —
+  Mulmke rough-edge item 4. Allow the user to attach a per-
+  building `FoundationElectrodeSpec` instead of the current
+  „one spec for all footprints" contract. Default behaviour
+  unchanged.
+- **`gf.cross_repo` namespace + `docs/cross-repo.md`** — once
+  ADR-0013 (Cross-repo `show_versions` convention) lands, mirror
+  the proposed `gi.cross_repo` / `gm.cross_repo` modules so the
+  three packages have a uniform façade for cross-repo helpers
+  (`show_versions`, `assert_api_pages_exist`,
+  `audit_apply(report_path)`).
+- **`gf.docs.assert_api_pages_exist()`** — same as Pass-7;
+  seven passes have flagged the missing-API-pages problem,
+  five of which are now closed, so the helper is the right
+  forcing function to prevent regression.
 
 ---
 
@@ -3175,12 +3931,17 @@ work package 1 progresses.
   EPRs and per-electrode currents. Drives the AP1 statistical
   studies (soil layering, electrode count and position, Monte Carlo
   realisations).
-- **TN-Ortsnetz topology generator** — helper that builds an
-  AP1-style world from high-level parameters
-  (#single-family / small-commercial / mid-commercial buildings,
-  cable-cabinet ratio, soil layering). Generates electrodes,
-  finite PEN sections, cable cabinets, and the transformer station
-  in one call.
+- **TN-Ortsnetz topology generator** — *implemented 2026-05-18 in
+  the `[Unreleased]` block above.* The radial-trunk PEN topology
+  (:class:`RadialTrunkTopology`) and the integration with
+  :class:`OsmBuildingPlacement` are live; what remains as a v2
+  enhancement is the *corner-routed* service drop (tap → axis-
+  aligned corner → building), which currently runs as a single
+  straight line between anchors. For typical street-aligned plots
+  the corner offset is small compared with the full feeder length
+  and the residual error in the longitudinal branch impedance
+  stays well below 1 % at 50 Hz.
+  
 - **penetration depth** Calculate the depth of the earth current as it is used in Carson integrals. It should be possible to create the earth current depth of any soild multilayer problem to use an equivilent for the typical formulas for calculating the self and coupling impedances of a cable or overheadline with earth return part.
 
 ### Features

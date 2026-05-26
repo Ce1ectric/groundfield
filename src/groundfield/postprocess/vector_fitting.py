@@ -87,7 +87,7 @@ class VectorFitUnderdeterminedWarning(UserWarning):
 
     A dedicated warning category lets users opt into / out of the
     diagnostic with ``warnings.simplefilter("once",
-    VectorFitUnderdeterminedWarning)`` (fifth 2026-05-13 audit pass).
+    VectorFitUnderdeterminedWarning)``.
     """
 
 
@@ -281,9 +281,9 @@ def vector_fit(
             "whose SymPy conversion yields a constant Z(rho, f) "
             "expression without frequency dependence — that is never "
             "the intended behaviour, so this case is rejected at the "
-            "API boundary (fourth 2026-05-12 audit pass)."
+            "API boundary."
         )
-    # Audit pass 6 (2026-05-14): the previous trigger
+    # The previous trigger
     # ``2 * n_poles >= N`` counted 4 real DOFs per pole regardless of
     # whether the search was constrained to conjugate-symmetric pairs.
     # Under ``complex_poles=True`` (the default) the conjugate-symmetry
@@ -553,7 +553,7 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
     # cannot trigger under the current ``vector_fit`` because
     # ``n_poles >= 1`` is enforced — the guard catches programmatically
     # constructed ``VectorFitResult`` objects with zero poles and zero
-    # ``L_inf`` (fourth 2026-05-12 audit pass).
+    # ``L_inf``.
     if s not in expr.free_symbols:
         import warnings
 

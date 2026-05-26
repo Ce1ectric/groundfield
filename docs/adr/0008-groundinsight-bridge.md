@@ -149,7 +149,7 @@ return `BusType` instances or talk to the database, so
    `load_bustype_json` reproduces every numerical field bit-exact
    and the formula string verbatim.
 3. **End-to-end** — a transformer-station notebook
-   (`notebooks/19_groundinsight_export.ipynb`) sweeps
+   (the internal groundinsight-export harness) sweeps
    $\rho_1 \in \{50, 100, 300, 1000\}\,\Omega\,\mathrm{m}$ on a
    2-layer soil, fits the standard form, exports a `BusType`,
    loads it back into a `groundinsight.Network`, and reproduces

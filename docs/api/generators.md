@@ -77,7 +77,7 @@ reproducibly given a fixed seed.
 ## Foundation electrodes: orientation and concrete shell
 
 Two extensions to :class:`FoundationElectrodeSpec` since 0.6.0 round
-out the AP1 modelling envelope:
+out the foundation modelling envelope:
 
 * ``orientation_deg: float | None = None`` rotates the foundation
   rectangle around its centre. ``None`` and ``0.0`` both keep the
@@ -216,6 +216,139 @@ world_strict, resolved_cfg = gen.sample_world(rng=np.random.default_rng(seed=42)
 
 Persist the resolved config (``cfg.model_dump_json()``) or the
 seed alongside the simulation output to guarantee reproducibility.
+
+## PEN backbone topology
+
+The PEN backbone of a :class:`TnNetworkGenerator` run is selected
+via the new :class:`TnNetworkConfig.pen_topology` field
+(discriminated union, default :class:`StarKvsTopology`):
+
+- :class:`StarKvsTopology` (default) — legacy v0.6 behaviour:
+  every KVS is wired directly to the substation, every building
+  taps to its nearest KVS by Manhattan distance.
+- :class:`RadialTrunkTopology` — the substation feeds ``n_feeders``
+  axis-aligned LV feeders (default 4, evenly spaced) each with a
+  finite slot budget at the substation; once exhausted, additional
+  KVS are inserted along the trunk axis. Buildings are assigned
+  to the angularly-closest feeder; buildings beyond
+  ``max_feeder_length_m`` are dropped with a
+  :class:`UserWarning`. See the *radial trunk* example in the docs for a bus-topology
+  demonstration.
+
+## `OrtsnetzLayout` — imperative builder
+
+Where :class:`TnNetworkGenerator` produces *stochastic* AP1
+reference worlds from population-level parameters,
+:class:`OrtsnetzLayout` composes a **single deterministic** network
+piece by piece — in the order an engineer would draw it on a plan.
+It is the recommended entry point when the network is known from a
+real OSM extract plus a hand-placed substation, and the AP1
+statistical sweep approach is too rigid.
+
+### Workflow
+
+```python
+import groundfield as gf
+from groundfield.generators import OrtsnetzLayout
+
+# 1. OSM ingest + anchor placement, all in one call.
+layout = OrtsnetzLayout.from_osm(
+    center_lat_deg=51.9136, center_lon_deg=10.8432,  # Mulmke
+    radius_m=200.0,
+    substation_xy=(0.0, -12.0),     # ENU metres relative to centre
+    kvs_xys=[(40.0, -12.0), (80.0, -12.0)],
+    obstacle_clearance_m=1.0,
+    min_area_m2=20.0,
+)
+
+# 2. PEN cables in strict Manhattan geometry. Endpoints can be
+#    anchor names, free ENU metres, or WGS84 lat/lon -- pick
+#    whichever style matches your map source.
+layout.add_pen_cable(start='substation', end='kvs_0',
+                     min_segment_length_m=8.0)
+layout.add_pen_cable(start='kvs_0', end='kvs_1',
+                     min_segment_length_m=8.0)
+layout.add_pen_cable(start='substation',
+                     end_xy=(0.0, 60.0),
+                     min_segment_length_m=8.0)
+
+# 3. Tap every house to its closest cable.
+layout.connect_buildings()
+
+# 4. Simulated fall-of-potential measurement.
+layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+layout.add_voltage_probe(inline_fraction=0.5)
+
+# 5. Reproducible foundation-electrode penetration.
+mask = layout.foundation_mask(0.30)   # always returns the same houses
+
+# 6. Materialise + solve.
+world = layout.to_world(foundation_mask=mask,
+                        source_magnitude_A=1.0)
+engine = gf.create_engine(backend='image',
+                          segment_length=0.5, frequencies=[50.0])
+result = engine.solve(world)
+
+# 7. Read the simulated meter reading + Kirchhoff plausibility.
+Z = layout.measured_grounding_impedance(result)
+balance = layout.verify_current_balance(result)
+assert balance['ok']
+
+# 8. Render: layout view + surface-potential plot.
+ax = layout.plot(foundation_mask=mask)
+fig = layout.plot_surface_potential(result, world)   # TwoSlopeNorm
+```
+
+### Routing semantics
+
+PEN cables are routed by
+:func:`groundfield.generators.manhattan_routing.route_manhattan`, a
+4-connected A* on a Manhattan grid of cell size
+``min_segment_length_m`` that avoids every building's bounding
+rectangle (inflated by ``obstacle_clearance_m``). When an anchor
+lands inside or right next to a foundation polygon — typical in
+real OSM extracts — the ``escape_radius_m`` parameter defines a
+disk around the anchor inside which obstacle blocking is *not*
+enforced. Default: one grid cell; pass a larger value when the
+anchor is wedged into a dense city block.
+
+### Foundation-electrode penetration mask
+
+:meth:`OrtsnetzLayout.foundation_mask(penetration, salt=0)` is the
+project-wide answer to "which houses have a Fundamenterder at
+this penetration rate $p$?". The decision is derived from a stable
+MD5 hash of each footprint's ``osm_id`` (with the footprint index
+as a fall-back for synthetic footprints), so the mask is:
+
+- **Reproducible.** Calling with the same ``(p, salt)`` always
+  returns the bit-identical mask, across runs, processes and
+  Python versions.
+- **Nested in $p$.** Every house with a foundation at $p_1$ also
+  has one at any $p_2 > p_1$ — increasing the penetration only
+  *grows* the equipped subset.
+
+``salt`` lets the user draw several *independent* Monte-Carlo
+realisations at the *same* nominal penetration.
+
+### Measurement-loop semantics
+
+When an :class:`AuxiliaryElectrodePlacement` is configured,
+:meth:`OrtsnetzLayout.to_world` adds a *second*
+:class:`CurrentSource` at the auxiliary anchor with
+``phase_deg=180``. The engine's net injected charge is then zero
+and the potential field develops the expected dipole pattern:
+positive trumpet at the substation, negative trumpet at the
+Hilfserder. ``Source.return_to`` on the substation-side source is
+preserved (it documents the planner's intent and will be honoured
+natively once the solver grows return-current support); the
+extra source is the v0.7 workaround for the image backend
+ignoring ``return_to``.
+
+The voltage probe is *not* materialised as an electrode in the
+world. :meth:`measured_grounding_impedance` samples the field at
+the probe location via :meth:`FieldResult.potential` — exactly
+what an ideal voltmeter would measure, with no perturbation of
+the field by a finite-impedance probe rod.
 
 ## API reference
 

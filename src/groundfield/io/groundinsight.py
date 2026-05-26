@@ -90,7 +90,18 @@ __all__ = [
     "save_bustype_to_db",
     "SCHEMA_NAME",
     "SCHEMA_VERSION",
+    "EvaluateSpecError",
 ]
+
+
+class EvaluateSpecError(ValueError):
+    """Raised when :func:`evaluate_spec` rejects a :class:`BusTypeSpec`.
+
+    Subclass of :class:`ValueError` so legacy ``except ValueError`` blocks
+    keep working unchanged; downstream consumers (notably the
+    ``groundinsight`` consumer of the bridge format) can now catch the
+    typed exception instead of matching against ``str(exc)`` substrings.
+    """
 
 
 SCHEMA_NAME = "groundfield.bustype"
@@ -656,15 +667,16 @@ def evaluate_spec(
 
     Raises
     ------
-    ValueError
-        If ``spec`` is not a :class:`BusTypeSpec` instance, if
-        ``impedance_formula`` is empty / missing on the spec, or if
-        the formula contains unrecognised free symbols (anything
-        other than ``f``, ``rho`` and ``j``). The deep
-        ``KeyError`` / ``AttributeError`` stack trace produced by
-        SymPy ``sympify`` on malformed input is wrapped here so the
-        diagnostic points at the missing field instead of an
-        internal SymPy frame (fifth 2026-05-13 audit pass).
+    EvaluateSpecError
+        Subclass of :class:`ValueError`; raised when ``spec`` is not a
+        :class:`BusTypeSpec` instance, ``impedance_formula`` is empty
+        / missing on the spec, the formula cannot be parsed by SymPy,
+        or the formula contains unrecognised free symbols (anything
+        other than ``f``, ``rho`` and ``j``). The exception is typed
+        so downstream consumers (notably ``groundinsight``) can catch
+        it without substring matching on the message. Existing
+        ``except ValueError`` blocks keep working because
+        :class:`EvaluateSpecError` inherits from :class:`ValueError`.
     """
     import sympy as sp
 
@@ -674,14 +686,14 @@ def evaluate_spec(
     # implementation produced an opaque KeyError / AttributeError
     # several frames deep in sympy. Surface the real problem here.
     if not isinstance(spec, BusTypeSpec):
-        raise ValueError(
+        raise EvaluateSpecError(
             "evaluate_spec: expected a BusTypeSpec instance, got "
             f"{type(spec).__name__}. Build one via load_bustype_json "
             "or BusTypeSpec.from_dict before calling evaluate_spec."
         )
     formula = getattr(spec, "impedance_formula", None)
     if formula is None or not str(formula).strip():
-        raise ValueError(
+        raise EvaluateSpecError(
             "evaluate_spec: spec.impedance_formula is missing or "
             "empty. A BusTypeSpec must carry a non-empty "
             "impedance_formula string with free symbols in "
@@ -694,7 +706,7 @@ def evaluate_spec(
     try:
         parsed = sp.sympify(str(formula))
     except (sp.SympifyError, SyntaxError, TypeError) as exc:
-        raise ValueError(
+        raise EvaluateSpecError(
             "evaluate_spec: could not parse spec.impedance_formula "
             f"({formula!r}) as a SymPy expression: {exc}. Expected "
             "free symbols are f (Hz), rho (Ohm·m) and j (imag. unit)."
@@ -707,7 +719,7 @@ def evaluate_spec(
     }
     if unknown:
         unknown_names = sorted(s.name for s in unknown)
-        raise ValueError(
+        raise EvaluateSpecError(
             "evaluate_spec: spec.impedance_formula contains "
             f"unrecognised free symbols {unknown_names!r}. Only "
             "f (frequency in Hz), rho (resistivity in Ohm·m) and "

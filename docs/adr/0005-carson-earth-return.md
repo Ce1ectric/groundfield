@@ -403,7 +403,7 @@ unless noted otherwise.
     the Pollaczek/Sommerfeld reference by less than the
     documented bound (≤ 20 % at 50 Hz, ≤ 10 % at 1 kHz). The
     bound itself is a documented test artefact, not a guarantee
-    — see `notebooks/15_carson_correction.ipynb`.
+    — validated by the project's internal Carson harness.
 
 ### Cross-references
 
@@ -421,7 +421,7 @@ unless noted otherwise.
 - Quantifies the relevance of the Carson correction for earth
   currents: "at which frequency / soil resistivity does the
   perfect-mirror approximation break down" can now be answered
-  numerically — see `notebooks/15_carson_correction.ipynb`.
+  numerically — validated by the project's internal Carson harness.
 - The closed-form Carson series adds essentially zero cost
   ($\mathcal{O}(M^2)$ scalar evaluations per frequency, vectorised
   via `numpy`). Frequency sweeps with $N_f \le 20$ on

@@ -81,10 +81,6 @@ plugins:
             show_root_heading: true
             show_root_full_path: false
             heading_level: 2
-  - mkdocs-jupyter:
-      execute: false
-      include_source: true
-
 extra_javascript:
   - javascripts/mathjax.js
   # The previously-referenced ES6 polyfill CDN was removed
@@ -107,15 +103,15 @@ nav:
   - Performance: performance.md
   - Examples:
       - Overview: examples/index.md
-      - "01 — First solve (single rod)": examples/01_first_solve.md
-      - "02 — Substation vs. Dwight 1936": examples/02_substation_dwight.md
-      - "03 — TN-Ortsnetz generator basics": examples/03_tn_network_basics.md
-      - "04 — Galvanic measurement": examples/04_grounding_measurement.md
-      - "05 — Inductive coupling": examples/05_inductive_coupling.md
-      - "06 — Parameter sweep over soil": examples/06_parameter_sweep_soil.md
-      - "07 — Monte Carlo with joblib": examples/07_monte_carlo.md
-      - "08 — Pipeline to groundinsight": examples/08_pipeline_groundinsight.md
-      - "09 — OSM pipeline with measurement setup": examples/09_osm_pipeline.md
+      - "01 — Quick start (two single electrodes)": examples/01_quickstart_two_electrodes.md
+      - "02 — Comparison of the solver engines": examples/02_engine_comparison.md
+      - "03 — Multi-layer soil models": examples/03_multilayer_soil.md
+      - "04 — Interconnected grounding system": examples/04_interconnected_grounding.md
+      - "05 — Analysing inductive coupling": examples/05_inductive_coupling.md
+      - "06 — Create a TN-Model": examples/06_tn_model.md
+      - "07 — Comparison of measurement distances": examples/07_measurement_distance.md
+      - "08 — OSM pipeline with simulation results": examples/08_osm_pipeline.md
+      - "09 — All plots in action": examples/09_plot_gallery.md
   - Engine theory:
       - Overview: engines/index.md
       - "image — homogeneous": engines/image.md
@@ -128,16 +124,21 @@ nav:
       - "fem — axisymmetric FEM": engines/fem.md
   - API reference:
       - Overview: api/index.md
+      - World: api/world.md
       - Soil: api/soil.md
       - Geometry: api/geometry.md
       - Conductors: api/conductors.md
+      - Sources: api/sources.md
+      - Boundary: api/boundary.md
       - Solver: api/solver.md
       - Coupling: api/coupling.md
       - Postprocess: api/postprocess.md
       - Diagnostics: api/diagnostics.md
+      - Validation: api/validation.md
       - IO: api/io.md
-      - Generators: api/generators.md
       - Geo / OSM: api/geo.md
+      - Generators: api/generators.md
+      - References: api/references.md
   - Architecture decisions:
       - "ADR-0001 — 2-layer method": adr/0001-two-layer-method.md
       - "ADR-0002 — Engine family": adr/0002-engine-family.md

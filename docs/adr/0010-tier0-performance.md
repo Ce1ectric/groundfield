@@ -10,7 +10,7 @@
 ## Context
 
 The empirical benchmarks in
-[`notebooks/21_performance_tuning.ipynb`](https://github.com/Ce1ectric/groundfield/blob/main/notebooks/21_performance_tuning.ipynb)
+the project's internal performance-tuning harness
 identified three classes of low-risk optimisation that do not
 change the underlying physics but cut wall-clock time
 substantially:
@@ -127,7 +127,7 @@ For 0b (this release):
    geometries.
 3. **Performance** — measured speed-up on a representative typical
    network with $M \in [100, 5\,000]$, plotted in
-   `notebooks/22_tier0_performance.ipynb`.
+   the project's internal Tier-0 performance harness.
 
 For 0a (follow-up):
 

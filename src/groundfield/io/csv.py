@@ -36,7 +36,7 @@ electrode table, ``abs_Z`` for the cluster table). They are **not**
 intended to be ``concat``/``merge``-ed on the magnitude column
 without an explicit rename; the column constants below
 (:data:`POTENTIAL_PATH_COLUMNS`, etc.) lock the schema for
-downstream consumers (fourth 2026-05-12 audit pass).
+downstream consumers.
 
 All writers use UTF-8, comma-separated, with a header row;
 floating-point values are written at full precision so the
@@ -68,7 +68,7 @@ __all__ = [
 #: Frozen column list for :func:`save_potential_path_csv`. The
 #: writer always emits exactly these columns in exactly this order.
 #: Locking this contract here makes regressions on the column name
-#: convention test-detectable (fourth 2026-05-12 audit pass).
+#: convention test-detectable.
 POTENTIAL_PATH_COLUMNS: tuple[str, ...] = (
     "s",
     "x",

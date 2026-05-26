@@ -18,7 +18,7 @@ as the next fidelity step beyond `ManhattanGridPlacement`. The
 existing `placement.py` module docstring repeats that statement.
 This ADR delivers exactly that step for `TnNetworkGenerator`.
 
-The motivating AP1 question is whether the synthetic Manhattan grid
+The motivating question is whether the synthetic Manhattan grid
 ever masks effects that a real street layout would expose. Three
 mechanisms are sensitive to the geometry, not only to the count
 of houses:
@@ -29,11 +29,11 @@ of houses:
    footprints are L-shaped or rectangular with non-square aspect
    ratios; the bounding-rectangle approximation already captures
    the perimeter and the principal axes within $\sim 10\,\%$,
-   which is below the AP1 soil-resistivity uncertainty.
+   which is below typical soil-resistivity uncertainty.
 2. **Inductive coupling to PEN and measurement leads.** The
    *orientation* of a foundation ring matters for the mutual
    inductance to a parallel PEN trunk along the street, which is
-   one of the AP1 effects (Carson coupling below 1 kHz).
+   one of the low-frequency effects (Carson coupling below 1 kHz).
 3. **Spatial distribution of houses.** Bunched-up Reihenhäuser at
    one end of a Ortsnetz behave differently from a uniform grid
    even at the same total count — the cluster impedance of the
@@ -249,7 +249,7 @@ inset_m, segment_max_m)` that materialises a closed Strip-chain
 along `polygon.buffer(-inset_m).exterior` with each long segment
 subdivided to `segment_max_m`. Phase B becomes essential once
 non-rectangular Reihenhauszeilen or Gewerbehallen with complex
-footprints enter AP1.
+footprints are studied.
 
 Phase B has no impact on the cache, projection, or placement
 layers and can ship as an additive change.
@@ -301,12 +301,12 @@ layers and can ship as an additive change.
 
 ### Positive
 
-- Realistic AP1 layouts become a one-liner: pick a TN-Ortsnetz on
+- Realistic layouts become a one-liner: pick a TN-Ortsnetz on
   the map, run the generator, the houses sit where they sit and
   their foundation rings face the way the real buildings face.
 - The Manhattan grid stays as the bit-reproducible *reference*
   case; the OSM path is the *realism* case. Cross-validating
-  the two is itself an AP1 result.
+  the two is itself a meaningful result.
 - The cache + explicit-origin projection make a Monte-Carlo run
   over OSM-driven worlds bit-exactly replayable without internet
   access after the first run.

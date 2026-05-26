@@ -86,13 +86,11 @@ _EMPTY_UNRELEASED_MARKERS: frozenset[str] = frozenset(
 )
 
 
-# CLAUDE.md must NOT hard-code a __version__ literal (fourth 2026-05-12
-# audit pass introduced the convention; the fifth 2026-05-13 pass
-# promotes it to an enforced check). The guard regex flags any line
-# that looks like ``__version__ = "<X.Y.Z>"`` or ``version = "<X.Y.Z>"``
-# inside the project's CLAUDE.md so a contributor who manually refreshes
-# the file is caught at release time instead of letting a stale literal
-# drift past four more audit passes.
+# CLAUDE.md must NOT hard-code a __version__ literal. The guard regex
+# flags any line that looks like ``__version__ = "<X.Y.Z>"`` or
+# ``version = "<X.Y.Z>"`` inside the project's CLAUDE.md so a
+# contributor who manually refreshes the file is caught at release
+# time instead of letting a stale literal drift undetected.
 _CLAUDE_HARDCODED_VERSION_RE = re.compile(
     r"""(?mx)
     ^[^\n]*                              # leading prose / list marker
@@ -540,15 +538,14 @@ def _update_changelog(
 def _check_claude_md_no_hardcoded_version(root: Path) -> None:
     """Refuse the release if ``CLAUDE.md`` hard-codes a version literal.
 
-    Fifth 2026-05-13 audit pass: the "Version (do not hard-code in
-    this file)" convention introduced in pass 4 was documented but
-    not enforced. A contributor who manually pasted a fresh
-    ``__version__ = "0.4.0"`` line into ``CLAUDE.md`` could drift
-    past four audit passes before anyone noticed. This guard scans
-    the file at release time and raises a :class:`RuntimeError` if
-    a hard-coded literal is detected, with a pointer to the
-    canonical sources (``pyproject.toml`` /
-    ``src/groundfield/__init__.py`` / ``CITATION.cff``).
+    The "Version (do not hard-code in this file)" convention is
+    documented but, without a guard, a contributor who manually
+    pasted a fresh ``__version__ = "0.4.0"`` line into ``CLAUDE.md``
+    could leave it drifting undetected. This guard scans the file
+    at release time and raises a :class:`RuntimeError` if a
+    hard-coded literal is detected, with a pointer to the canonical
+    sources (``pyproject.toml`` / ``src/groundfield/__init__.py`` /
+    ``CITATION.cff``).
 
     Parameters
     ----------
@@ -590,8 +587,7 @@ def _check_claude_md_no_hardcoded_version(root: Path) -> None:
             "Remove the literal — the canonical sources are "
             "pyproject.toml, src/groundfield/__init__.py:__version__ "
             "and CITATION.cff. scripts/release.py keeps these three "
-            "in sync; CLAUDE.md must defer to them (fifth 2026-05-13 "
-            "audit pass)."
+            "in sync; CLAUDE.md must defer to them."
         )
 
 
@@ -761,9 +757,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    # CLAUDE.md hard-coded version guard (fifth 2026-05-13 audit pass).
-    # Refuse the release before we touch any file so the working tree
-    # stays clean if the contributor needs to neutralise the literal.
+    # CLAUDE.md hard-coded version guard. Refuse the release before
+    # we touch any file so the working tree stays clean if the
+    # contributor needs to neutralise the literal.
     try:
         _check_claude_md_no_hardcoded_version(root)
     except RuntimeError as exc:

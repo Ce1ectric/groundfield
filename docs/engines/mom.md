@@ -196,5 +196,3 @@ print(result.cluster_impedance("g1")[0])
 ## Related material
 
 - ADR-0001 — original methodology decision.
-- Notebook `03_cross_engine.ipynb` — image vs. mom side-by-side on
-  homogeneous and 2-layer worlds.

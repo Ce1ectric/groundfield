@@ -86,8 +86,9 @@ This decomposition is exact in the cylindrically-symmetric limit
 non-uniformly distributed leakage current along the wire, the
 decomposition is no longer rigorous but remains a very good
 approximation as long as the soil's transverse diffusion length
-exceeds the foundation's extent — which it does for AP1
-($f \le 1\,\text{kHz}$, foundation $\lesssim 30\,\text{m}$ across).
+exceeds the foundation's extent — which it does in the
+quasi-static regime ($f \le 1\,\text{kHz}$, foundation
+$\lesssim 30\,\text{m}$ across).
 
 ### Why **not** a planar concrete layer
 
@@ -162,9 +163,9 @@ existing Sommerfeld-correction pattern.
 Default `concrete_model="lumped"` because:
 
 * The current distribution along the typical Fundamenterder
-  ring is close to uniform for AP1 frequencies, so V1's
-  approximation error vs. V2 is below the soil-resistivity
-  uncertainty.
+  ring is close to uniform for the low-frequency range
+  ($f \le 1\,\text{kHz}$), so V1's approximation error vs. V2
+  is below the soil-resistivity uncertainty.
 * V1 is zero solver-side risk: the existing distributed-conductor
   path already handles arbitrary bond impedances correctly across
   all backends.
@@ -174,7 +175,7 @@ Default `concrete_model="lumped"` because:
 * studies where the foundation's *internal* current distribution
   matters (e.g. inhomogeneous concrete drying patterns modelled by
   a per-segment $\rho_c$),
-* validation that V1 is sufficient for AP1.
+* validation that V1 is sufficient for a given study.
 
 The two variants share the same `concrete_rho_ohm_m` and
 `concrete_thickness_m` API. Cross-validation `V1 ≈ V2 (within 2 %)`
@@ -237,9 +238,9 @@ electrode is direct-in-soil.
 ### Stochastic concrete moisture
 
 `concrete_rho_ohm_m: float | AnyDistribution | None` lets the
-moisture state be sampled per realisation. The recommended default
-distribution for AP1 Monte-Carlo studies (matches the four
-empirical bands in the introduction):
+moisture state be sampled per realisation. A recommended default
+distribution for Monte-Carlo studies (matches the four empirical
+bands in the introduction):
 
 ```python
 concrete_rho_ohm_m=Discrete(
@@ -297,10 +298,9 @@ foundation is present.
 
 - Foundation electrodes generated from the OSM path (ADR-0011)
   now reflect their real `Streifenfundament` environment, closing
-  the largest physical gap in the current AP1 pipeline.
-- The dry-concrete worst case (a serious AP1-Analyse-1 concern)
-  becomes computable without leaving the 1-kHz quasi-static
-  regime.
+  one of the largest physical gaps in the generator pipeline.
+- The dry-concrete worst case becomes computable without leaving
+  the 1-kHz quasi-static regime.
 - Stochastic moisture maps cleanly onto the existing
   `Distribution` framework — Monte Carlo over `concrete_rho_ohm_m`
   is one line of config.
@@ -352,5 +352,5 @@ foundation is present.
 - **ADR-0003** — distributed conductor model. The V1 path reuses
   the per-conductor distributed framework introduced there.
 - **ADR-0011** — OSM building footprints. This ADR completes the
-  AP1 pipeline by giving the OSM-generated foundations the right
-  electrical boundary condition.
+  OSM-driven generator pipeline by giving the generated
+  foundations the right electrical boundary condition.

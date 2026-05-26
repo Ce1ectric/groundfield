@@ -168,9 +168,7 @@ production sweeps — use `image_2layer` / `cim` / `bem` there.
 
 The engine's role is the **absolute reference**. Whenever the
 closed-form layered engines disagree, the disagreement is measured
-against `mom_sommerfeld`. The cross-engine notebooks
-(`06_mom_sommerfeld.ipynb`,  `09_cross_engine_extended.ipynb`)
-report agreement tables relative to this engine.
+against `mom_sommerfeld`. The cross-engine validation harness report agreement tables relative to this engine.
 
 ## References
 
@@ -215,7 +213,3 @@ print(result.cluster_impedance("g1")[0])
 
 - ADR-0002 — engine selection heuristic; this engine is the
   reference for the layered family.
-- Notebook `06_mom_sommerfeld.ipynb` — kernel sanity checks at the
-  homogeneous / $K = 0$ limits, single rod and bonded-rod
-  fixtures, and a hard-contrast validation table where
-  `mom_sommerfeld` is the absolute reference.

@@ -5,9 +5,15 @@ docstrings via
 [`mkdocstrings`](https://mkdocstrings.github.io/). Each subpage
 corresponds to one subpackage.
 
+- [World](world.md) — top-level container (soil, electrodes,
+  conductors, sources, boundary, concrete-shell registry).
 - [Soil](soil.md) — soil models.
 - [Geometry](geometry.md) — electrode and conductor geometries.
 - [Conductors](conductors.md) — conductors, PEN, cable shields.
+- [Sources](sources.md) — current and voltage sources
+  (discriminated union, `SourceAdapter`).
+- [Boundary](boundary.md) — boundary-condition model and
+  revert-warning contract.
 - [Solver](solver.md) — numerical field solver.
 - [Coupling](coupling.md) — galvanic and inductive coupling.
 - [Postprocess](postprocess.md) — potentials, voltages, currents,
@@ -15,9 +21,15 @@ corresponds to one subpackage.
 - [Diagnostics](diagnostics.md) — pre-solve structural checks
   (`world_statistics`, `expected_segments`,
   `check_segment_resolution`).
+- [Validation](validation.md) — post-solve cross-engine
+  consistency check (`compare_engines`).
 - [IO](io.md) — JSON export and the bridge to `groundinsight`.
+- [Geo / OSM](geo.md) — optional OSM building footprints,
+  projection helpers, and `OsmBuildingPlacement`.
 - [Generators](generators.md) — world-generator framework
   (`TnNetworkGenerator`, distributions, spec layer; ADR-0009).
+- [References](references.md) — analytical reference formulas
+  (Dwight, Carson, Oeding) used in plausibility tests.
 
 ## Top-level package
 

@@ -122,8 +122,7 @@ class LayeredEarth:
     ``tests/test_layered_green.py::test_cross_backend_precision``
     will fail. ``np.complex128`` is the default at every entry point
     and is preserved through the Sommerfeld quadrature; do not
-    silently down-cast to FP32 in a derived backend (fifth
-    2026-05-13 audit pass).
+    silently down-cast to FP32 in a derived backend.
     """
 
     rhos: tuple[float, ...]

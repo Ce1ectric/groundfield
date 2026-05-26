@@ -33,9 +33,11 @@ request per the Overpass API usage policy. The default endpoint is
 the canonical ``https://overpass-api.de/api/interpreter`` mirror;
 users with their own instance can pass ``endpoint=…``.
 
-A single retry with exponential backoff is performed on HTTP
-``429 Too Many Requests`` or ``504 Gateway Timeout``; everything
-else raises immediately.
+Retries with exponential backoff are performed on HTTP
+``429 Too Many Requests`` or ``504 Gateway Timeout``; the count is
+controlled by the ``max_retries`` keyword on :func:`query_buildings`
+and :func:`query_and_project` (default ``1``, matching the v0.6.0
+contract). Everything else raises immediately.
 """
 
 from __future__ import annotations
@@ -236,8 +238,10 @@ def _post_overpass(
 ) -> dict[str, Any]:
     """POST ``query`` to ``endpoint`` and return the decoded JSON.
 
-    Retries once on ``429`` / ``504`` with exponential backoff. All
-    other non-2xx responses raise :class:`OverpassError`.
+    Retries up to ``max_retries`` times on ``429`` / ``504`` with
+    exponential backoff (default ``1``; the historic
+    public-API contract). All other non-2xx responses raise
+    :class:`OverpassError` immediately.
 
     The ``_sleep`` hook lets the test suite replace
     :func:`time.sleep` without touching the global module state.
@@ -292,6 +296,7 @@ def query_buildings(
     endpoint: str = DEFAULT_ENDPOINT,
     timeout_s: int = DEFAULT_TIMEOUT_S,
     force_refresh: bool = False,
+    max_retries: int = 1,
     _post: Any = None,
 ) -> dict[str, Any]:
     """Fetch (or load from cache) the raw Overpass response.
@@ -313,6 +318,12 @@ def query_buildings(
         If ``True``, ignore any cached payload and re-query the
         endpoint, overwriting the cache file. Useful when the user
         knows the upstream data changed.
+    max_retries
+        Number of retry attempts on ``429`` / ``504`` responses.
+        Defaults to ``1`` (one retry, matching the historic
+        behaviour). Raise to two or three for flaky cellular / VPN
+        links; set to ``0`` to disable retries entirely. Must be
+        ``>= 0``.
     _post
         Internal hook for tests: a callable with the same signature
         as :func:`_post_overpass`. Production calls use the default.
@@ -332,6 +343,10 @@ def query_buildings(
     different float formatting do *not* — see :func:`build_query`
     for the fixed formatting convention that guarantees stability.
     """
+    if max_retries < 0:
+        raise ValueError(
+            f"max_retries must be >= 0, got {max_retries}."
+        )
     cache_dir = cache_dir if cache_dir is not None else default_cache_dir()
     query = build_query(
         lat0_deg, lon0_deg, radius_m, timeout_s=timeout_s
@@ -346,6 +361,7 @@ def query_buildings(
         query,
         endpoint=endpoint,
         timeout_s=timeout_s,
+        max_retries=max_retries,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
@@ -534,6 +550,7 @@ def query_and_project(
     timeout_s: int = DEFAULT_TIMEOUT_S,
     min_area_m2: float = 0.0,
     force_refresh: bool = False,
+    max_retries: int = 1,
 ) -> tuple[list[BuildingFootprint], Projector]:
     """Run :func:`query_buildings` and :func:`parse_overpass_payload`
     end-to-end.
@@ -554,6 +571,9 @@ def query_and_project(
         Skip features below this footprint area. Defaults to
         ``0.0`` (keep everything; the placement layer applies its
         own threshold).
+    max_retries
+        Number of retry attempts on ``429`` / ``504`` responses.
+        Forwarded to :func:`query_buildings`. Defaults to ``1``.
 
     Returns
     -------
@@ -571,6 +591,7 @@ def query_and_project(
         endpoint=endpoint,
         timeout_s=timeout_s,
         force_refresh=force_refresh,
+        max_retries=max_retries,
     )
     if projector is None:
         projector = Projector(lat0_deg, lon0_deg)

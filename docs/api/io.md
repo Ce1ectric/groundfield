@@ -196,7 +196,7 @@ save_bustype_to_db(fit, db_path="grounding.db",
 
 `evaluate_spec(spec, frequencies, rho)` re-evaluates an exported
 formula at arbitrary $(f, \rho)$ points without round-tripping through
-``groundinsight``. Since the v0.5.0 audit-pass-4 closure, both
+``groundinsight``. Both
 `evaluate_spec` and the companion diagnostics helper
 `fit_quality_summary(spec)` are reachable directly as
 `groundfield.evaluate_spec` / `groundfield.fit_quality_summary`
@@ -216,6 +216,30 @@ requires an explicit rename. The frozen column tuples
 `POTENTIAL_PATH_COLUMNS`, `ELECTRODE_TABLE_REQUIRED_COLUMNS` and
 `CLUSTER_IMPEDANCE_REQUIRED_COLUMNS` expose the schema for
 regression testing.
+
+## Errors
+
+`groundfield.io.groundinsight.evaluate_spec` validates the
+:class:`BusTypeSpec` it receives before lambdifying the
+``impedance_formula``. Any malformed input — non-``BusTypeSpec``
+argument, empty formula, unparseable SymPy expression, unknown free
+symbol — raises a typed :class:`EvaluateSpecError`
+(subclass of :class:`ValueError`). Downstream ``groundinsight``
+consumers can catch the typed class instead of substring-matching
+on ``str(exc)``. Existing ``except ValueError`` blocks keep
+working unchanged.
+
+```python
+from groundfield.io.groundinsight import (
+    EvaluateSpecError, evaluate_spec, load_bustype_json,
+)
+
+spec = load_bustype_json("my-bustype.json")
+try:
+    Z = evaluate_spec(spec, frequencies=[50.0, 1000.0], rho=100.0)
+except EvaluateSpecError as exc:
+    print("Spec rejected:", exc)
+```
 
 ## API reference
 
