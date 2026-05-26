@@ -13,7 +13,7 @@ Calling :meth:`World.set_boundary_conditions` with a non-default
 value emits a :class:`UserWarning` so the user does not silently
 configure a value that the v0.2.0 backends ignore. Reverting back
 to the default value also emits a :class:`UserWarning` — see the
-*fourth 2026-05-12 audit pass* implementation note in the CHANGELOG.
+implementation note in the CHANGELOG.
 
 ## API reference
 

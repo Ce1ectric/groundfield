@@ -205,10 +205,10 @@ class OsmBuildingPlacement(BaseModel):
             self-describing :class:`IndexError` that names the
             placement, the requested index, the size of the filtered
             footprint list (after ``min_area_m2``) and the raw list
-            length. AP1 generator pipelines that want a hard failure
-            instead of a silent fall-back can opt in with ``strict=True``
-            and get an actionable traceback at the call site
-            (seventh 2026-05-18 audit pass).
+            length. Generator pipelines that want a hard failure
+            instead of a silent fall-back can opt in with
+            ``strict=True`` and get an actionable traceback at the
+            call site.
 
         Returns
         -------
@@ -249,7 +249,7 @@ class OsmBuildingPlacement(BaseModel):
         Identical to ``len(placement)`` and provided as an explicit
         attribute so consumers can pre-flight an ``i`` against
         :meth:`footprint_at` without invoking ``len()`` on the model
-        instance (seventh 2026-05-18 audit pass).
+        instance.
         """
         return len(self._filtered())
 

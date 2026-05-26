@@ -462,8 +462,7 @@ class TnNetworkConfig(GeneratorConfig):
             "precedence over the measurement-setup auto-routing — "
             ":meth:`TnNetworkGenerator.build` emits a "
             ":class:`UserWarning` when both are set so the "
-            "precedence is explicit rather than silent (fourth "
-            "2026-05-12 audit pass)."
+            "precedence is explicit rather than silent."
         ),
     )
 
@@ -474,8 +473,8 @@ class TnNetworkConfig(GeneratorConfig):
             "(default) and ``\"voltage\"`` are accepted — typos like "
             "``\"voltage_\"`` are rejected at validation time with a "
             "Pydantic ``ValidationError`` rather than silently falling "
-            "through to the default ``CurrentSource`` factory (fifth "
-            "2026-05-13 audit pass). ``\"current\"`` is the right "
+            "through to the default ``CurrentSource`` factory. "
+            "``\"current\"`` is the right "
             "choice for the typical fall-of-potential measurement and "
             "for fault simulations; ``\"voltage\"`` is reserved for "
             "the rare multi-port tests."
@@ -499,6 +498,35 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     """
 
     def build(self, cfg: Optional[TnNetworkConfig] = None) -> World:
+        """Materialise one realisation of the configured TN network.
+
+        Resolves all stochastic fields against the generator's RNG,
+        builds the substation grounding, places the configured number
+        of buildings (with per-type electrode systems), routes the PEN
+        backbone via the configured
+        :class:`~groundfield.generators.placement.Placement` strategy,
+        optionally adds a measurement setup, and returns the assembled
+        :class:`~groundfield.World` ready for ``world.solve(engine)``.
+
+        Parameters
+        ----------
+        cfg : TnNetworkConfig, optional
+            Configuration overriding :attr:`cfg`. When ``None``
+            (default) the generator's own ``cfg`` is used.
+
+        Returns
+        -------
+        World
+            The assembled world with soil, electrodes, conductors and
+            the configured source.
+
+        Raises
+        ------
+        ValueError
+            If the substation grounding resolves to zero electrodes,
+            if the total building count is zero, or if a configured
+            placement returns fewer positions than buildings.
+        """
         cfg = cfg or self.cfg
         rng = self._rng
 
@@ -633,8 +661,8 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # ``cfg.source_return_to`` is the explicit user-side override
         # for the source's ``return_to``. If it is set together with a
         # measurement setup, warn that the auto-routed aux anchor is
-        # being overridden — that override was silent before the
-        # fourth 2026-05-12 audit pass.
+        # being overridden — make the precedence explicit rather than
+        # silent.
         effective_return_to = return_anchor
         if cfg.source_return_to is not None:
             if (

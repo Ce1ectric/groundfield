@@ -24,11 +24,13 @@ import pytest
 
 import groundfield as gf
 from groundfield.generators import (
+    AuxiliaryElectrodePlacement,
     BuildingConnection,
     KvsPlacement,
     ObstacleBox,
     OrtsnetzLayout,
     PenCable,
+    VoltageProbePlacement,
     merge_collinear_waypoints,
     route_manhattan,
     segment_intersects_box,
@@ -139,6 +141,98 @@ def test_route_manhattan_raises_when_enclosed() -> None:
             obstacles=wall, grid_size=2.0, clearance_m=1.0,
             max_iterations=20_000,
         )
+
+
+def test_route_manhattan_escape_radius_unblocks_anchor() -> None:
+    """With ``escape_radius_m=0`` the substation enclosed by tight
+    obstacles is unroutable; with the default escape radius the
+    neighbours become reachable so the route succeeds.
+
+    Geometry: four small 1 m x 1 m obstacles centred on the *four
+    immediate cardinal neighbours* of the substation cell (grid
+    size = 2 m so the neighbours are at (±2, 0) / (0, ±2)). The
+    obstacles only block their own cell -- the next ring outward
+    is free, so the path exists as soon as A* can take a first
+    step.
+    """
+    blocking_neighbours = [
+        # East / West / North / South of the substation cell.
+        ObstacleBox(x_min=+1.5, y_min=-0.5, x_max=+2.5, y_max=+0.5),
+        ObstacleBox(x_min=-2.5, y_min=-0.5, x_max=-1.5, y_max=+0.5),
+        ObstacleBox(x_min=-0.5, y_min=+1.5, x_max=+0.5, y_max=+2.5),
+        ObstacleBox(x_min=-0.5, y_min=-2.5, x_max=+0.5, y_max=-1.5),
+    ]
+    # Strict mode (escape_radius_m=0) -- every immediate neighbour
+    # is blocked, A* cannot move.
+    with pytest.raises(RuntimeError):
+        route_manhattan(
+            start=(0.0, 0.0), end=(50.0, 0.0),
+            obstacles=blocking_neighbours, grid_size=2.0,
+            clearance_m=0.2, escape_radius_m=0.0,
+        )
+    # Default escape radius (= grid_size = 2 m) unblocks the four
+    # cardinal neighbours; the next ring outward is free, so the
+    # route succeeds.
+    out = route_manhattan(
+        start=(0.0, 0.0), end=(50.0, 0.0),
+        obstacles=blocking_neighbours, grid_size=2.0,
+        clearance_m=0.2,
+    )
+    assert out[0] == (0.0, 0.0)
+    assert out[-1] == (50.0, 0.0)
+
+
+def test_route_manhattan_error_message_names_offending_anchor() -> None:
+    """The RuntimeError mentions which endpoint is enclosed so the
+    user gets an actionable hint."""
+    wall = [
+        ObstacleBox(x_min=-5.0, y_min=5.0, x_max=5.0, y_max=15.0),
+        ObstacleBox(x_min=-5.0, y_min=-15.0, x_max=5.0, y_max=-5.0),
+        ObstacleBox(x_min=5.0, y_min=-5.0, x_max=15.0, y_max=5.0),
+        ObstacleBox(x_min=-15.0, y_min=-5.0, x_max=-5.0, y_max=5.0),
+    ]
+    with pytest.raises(RuntimeError, match=r"start|end|both"):
+        route_manhattan(
+            start=(0.0, 0.0), end=(50.0, 0.0),
+            obstacles=wall, grid_size=2.0, clearance_m=1.0,
+            escape_radius_m=0.0, max_iterations=20_000,
+        )
+
+
+def test_add_pen_cable_forwards_escape_radius() -> None:
+    """``OrtsnetzLayout.add_pen_cable`` forwards ``escape_radius_m``
+    so users can relax routing when an anchor is wedged into a
+    dense foundation cluster.
+
+    Geometry: four 1 m x 1 m footprints centred on the four
+    immediate cardinal neighbours of the substation cell (grid
+    size = 2 m). With ``escape_radius_m=0`` the substation cell
+    has no free neighbour; with a larger radius it does.
+    """
+    fps = [
+        _rect_footprint(+2.0,  0.0, dx=1.0, dy=1.0, osm_id=1),
+        _rect_footprint(-2.0,  0.0, dx=1.0, dy=1.0, osm_id=2),
+        _rect_footprint( 0.0, +2.0, dx=1.0, dy=1.0, osm_id=3),
+        _rect_footprint( 0.0, -2.0, dx=1.0, dy=1.0, osm_id=4),
+    ]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+        obstacle_clearance_m=0.2,
+    )
+    # With escape_radius_m=0 the immediate neighbours are blocked.
+    with pytest.raises(RuntimeError):
+        layout.add_pen_cable(
+            start="substation", end_xy=(50.0, 0.0),
+            min_segment_length_m=2.0, escape_radius_m=0.0,
+        )
+    # With a generous escape radius (>= one cell) the route
+    # succeeds.
+    cable = layout.add_pen_cable(
+        start="substation", end_xy=(50.0, 0.0),
+        min_segment_length_m=2.0, escape_radius_m=4.0,
+    )
+    assert cable.waypoints[0] == (0.0, 0.0)
+    assert cable.waypoints[-1] == (50.0, 0.0)
 
 
 def test_route_manhattan_min_segment_length_after_merge() -> None:
@@ -469,6 +563,676 @@ def test_lat_lon_round_trip_via_layout_projector() -> None:
         lat_back, lon_back = layout.xy_to_lat_lon(x, y)
         assert math.isclose(lat, lat_back, abs_tol=1e-7)
         assert math.isclose(lon, lon_back, abs_tol=1e-7)
+
+
+# ---------------------------------------------------------------------
+# Deterministic foundation-electrode penetration mask
+# ---------------------------------------------------------------------
+
+
+def _layout_with_osm_ids(n: int = 12) -> OrtsnetzLayout:
+    """Synthetic layout with distinct, stable osm_id values."""
+    footprints = [
+        _rect_footprint(20.0 + 25.0 * i, 18.0 if i % 2 == 0 else -18.0,
+                        osm_id=1000 + i)
+        for i in range(n)
+    ]
+    return OrtsnetzLayout.from_footprints(
+        footprints, substation_xy=(0.0, 0.0),
+    )
+
+
+def test_foundation_mask_reproducible_across_calls() -> None:
+    layout = _layout_with_osm_ids(n=20)
+    m1 = layout.foundation_mask(0.30)
+    m2 = layout.foundation_mask(0.30)
+    assert m1 == m2
+
+
+def test_foundation_mask_zero_and_one_extremes() -> None:
+    layout = _layout_with_osm_ids(n=20)
+    assert layout.foundation_mask(0.0) == [False] * 20
+    assert layout.foundation_mask(1.0) == [True] * 20
+
+
+def test_foundation_mask_is_nested_in_penetration() -> None:
+    """A house with a foundation at p1 also has one at p2 > p1."""
+    layout = _layout_with_osm_ids(n=20)
+    for p1, p2 in [(0.10, 0.25), (0.25, 0.50), (0.50, 0.90)]:
+        m1 = layout.foundation_mask(p1)
+        m2 = layout.foundation_mask(p2)
+        for b1, b2 in zip(m1, m2):
+            # b1 implies b2
+            assert (not b1) or b2
+
+
+def test_foundation_mask_rough_fraction_matches_penetration() -> None:
+    """On a larger sample the realised fraction tracks p within a
+    few percent — the assignment is uniform, not adversarial."""
+    footprints = [
+        _rect_footprint(0.0, 5.0 * i, osm_id=10_000 + i)
+        for i in range(200)
+    ]
+    layout = OrtsnetzLayout.from_footprints(
+        footprints, substation_xy=(0.0, 0.0),
+    )
+    for p in (0.25, 0.5, 0.75):
+        mask = layout.foundation_mask(p)
+        realised = sum(mask) / len(mask)
+        assert abs(realised - p) < 0.10  # generous bound
+
+
+def test_foundation_mask_salt_shifts_assignment() -> None:
+    """Two different ``salt`` values produce independent masks at
+    the same penetration."""
+    layout = _layout_with_osm_ids(n=20)
+    m_a = layout.foundation_mask(0.40, salt=0)
+    m_b = layout.foundation_mask(0.40, salt=1)
+    # They must differ in at least one house (Monte-Carlo
+    # realisation changed) but each one is still self-consistent.
+    assert m_a != m_b
+    assert m_a == layout.foundation_mask(0.40, salt=0)
+    assert m_b == layout.foundation_mask(0.40, salt=1)
+
+
+def test_foundation_mask_rejects_out_of_range() -> None:
+    layout = _layout_with_osm_ids(n=4)
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        layout.foundation_mask(-0.01)
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        layout.foundation_mask(1.01)
+
+
+def test_foundation_mask_falls_back_to_index_without_osm_id() -> None:
+    """When ``osm_id`` is ``None`` the mask uses the footprint
+    index, so the assignment is still deterministic for synthetic
+    footprints."""
+    footprints = [
+        _rect_footprint(20.0 + 25.0 * i, 0.0)  # osm_id default = 0
+        for i in range(10)
+    ]
+    # Wipe osm_id so the fallback path is exercised.
+    footprints = [
+        BuildingFootprint(polygon_xy_m=fp.polygon_xy_m,
+                          building_use="residential")
+        for fp in footprints
+    ]
+    layout = OrtsnetzLayout.from_footprints(
+        footprints, substation_xy=(0.0, 0.0),
+    )
+    m1 = layout.foundation_mask(0.40)
+    m2 = layout.foundation_mask(0.40)
+    assert m1 == m2
+
+
+def test_plot_accepts_foundation_mask() -> None:
+    """``plot(foundation_mask=...)`` colours houses by the mask
+    without raising on the Agg backend."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    layout = _layout_with_osm_ids(n=10)
+    mask = layout.foundation_mask(0.40)
+    ax = layout.plot(foundation_mask=mask)
+    plt.close(ax.figure)
+
+
+def test_plot_rejects_mismatched_foundation_mask_length() -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+
+    layout = _layout_with_osm_ids(n=10)
+    with pytest.raises(ValueError, match="foundation_mask length"):
+        layout.plot(foundation_mask=[True] * 9)
+
+
+# ---------------------------------------------------------------------
+# Auxiliary current electrode (Hilfserder) + measurement workflow
+# ---------------------------------------------------------------------
+
+
+def test_add_auxiliary_electrode_distance_and_direction() -> None:
+    """``distance_m`` + ``direction_deg`` places the electrode along
+    a ray from the substation."""
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(10.0, 20.0),
+    )
+    # 200 m east of the substation.
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+    aux = layout.auxiliary_electrode
+    assert aux is not None
+    assert math.isclose(aux.position_xy[0], 210.0, abs_tol=1e-9)
+    assert math.isclose(aux.position_xy[1], 20.0, abs_tol=1e-9)
+    # 100 m north of the substation.
+    layout.add_auxiliary_electrode(distance_m=100.0, direction_deg=90.0)
+    aux = layout.auxiliary_electrode
+    assert aux is not None
+    assert math.isclose(aux.position_xy[0], 10.0, abs_tol=1e-9)
+    assert math.isclose(aux.position_xy[1], 120.0, abs_tol=1e-9)
+
+
+def test_add_auxiliary_electrode_explicit_xy() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(position_xy=(123.0, -45.0))
+    assert layout.auxiliary_electrode is not None
+    assert layout.auxiliary_electrode.position_xy == (123.0, -45.0)
+
+
+def test_add_auxiliary_electrode_rejects_negative_distance() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    with pytest.raises(ValueError, match="distance_m must be > 0"):
+        layout.add_auxiliary_electrode(distance_m=-10.0)
+    with pytest.raises(ValueError, match="distance_m must be > 0"):
+        layout.add_auxiliary_electrode(distance_m=0.0)
+
+
+def test_add_auxiliary_electrode_rejects_multiple_positions() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    with pytest.raises(ValueError, match="exactly one"):
+        layout.add_auxiliary_electrode()
+    with pytest.raises(ValueError, match="exactly one"):
+        layout.add_auxiliary_electrode(
+            distance_m=200.0, position_xy=(0.0, 0.0),
+        )
+
+
+def test_add_auxiliary_electrode_name_clash() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+        substation_name="trafo",
+    )
+    with pytest.raises(ValueError, match="substation"):
+        layout.add_auxiliary_electrode(distance_m=200.0, name="trafo")
+    layout.add_kvs((100.0, 0.0), name="kvs_a")
+    with pytest.raises(ValueError, match="KVS"):
+        layout.add_auxiliary_electrode(distance_m=200.0, name="kvs_a")
+
+
+def test_add_auxiliary_electrode_replaces_previous() -> None:
+    """Calling add_auxiliary_electrode twice replaces the placement
+    (only one aux in v1)."""
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+    layout.add_auxiliary_electrode(distance_m=300.0, direction_deg=180.0)
+    assert layout.auxiliary_electrode is not None
+    assert math.isclose(layout.auxiliary_electrode.position_xy[0], -300.0)
+
+
+def test_to_world_skips_houses_without_foundation() -> None:
+    """``foundation_mask=[True, False]`` builds only one house
+    foundation; the masked-out house has no electrode in the world.
+    """
+    fps = [
+        _rect_footprint(30.0, 20.0, osm_id=1),
+        _rect_footprint(60.0, 20.0, osm_id=2),
+    ]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(100.0, 0.0))
+    layout.connect_buildings()
+
+    world = layout.to_world(
+        foundation_mask=[True, False],
+        seed=0,
+    )
+    foundation_names = [e.name for e in world.electrodes
+                        if "_foundation_0" in e.name]
+    assert any(n.startswith("house_000_") for n in foundation_names)
+    assert not any(n.startswith("house_001_") for n in foundation_names)
+
+
+def test_to_world_rejects_mismatched_foundation_mask() -> None:
+    fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(100.0, 0.0))
+    layout.connect_buildings()
+    with pytest.raises(ValueError, match="foundation_mask length"):
+        layout.to_world(foundation_mask=[True, False, True])
+
+
+def test_to_world_wires_source_return_through_aux() -> None:
+    """When an auxiliary electrode is configured the layout adds the
+    substation-side source AND an opposite-sign return source at
+    the aux anchor so the measurement loop is physically closed.
+
+    The v0.7 image solver only consumes :attr:`Source.attached_to`;
+    :attr:`Source.return_to` is recorded for documentation but not
+    honoured by the engine. The extra ``phase_deg=180`` source is
+    the workaround that makes the engine see the test current
+    leaving via the Hilfserder. With the v0.7 default geometry the
+    aux anchor is ``aux_rod_0`` (first rod of the 3-rod triangle).
+    """
+    fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(100.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0,
+                                   name="aux")
+
+    world = layout.to_world(seed=0)
+    # The triangle creates 3 rod electrodes, all prefixed ``aux_``.
+    aux_rod_electrodes = [
+        e for e in world.electrodes if e.name.startswith("aux_rod_")
+    ]
+    assert len(aux_rod_electrodes) == 3
+    # Two sources -- substation injection + aux return.
+    assert len(world.sources) == 2
+    sub_source = next(
+        s for s in world.sources if s.attached_to == "substation_ring_0"
+    )
+    aux_source = next(
+        s for s in world.sources if s.attached_to == "aux_rod_0"
+    )
+    # The substation source still records the aux as its (logical)
+    # return_to (= the first present aux electrode) even though the
+    # solver ignores it.
+    assert sub_source.return_to == "aux_rod_0"
+    assert math.isclose(sub_source.phase_deg, 0.0)
+    # The auxiliary return source is the same magnitude but
+    # 180 deg out of phase.
+    assert math.isclose(aux_source.magnitude, sub_source.magnitude)
+    assert math.isclose(aux_source.phase_deg, 180.0)
+
+
+def test_to_world_remote_return_when_no_aux() -> None:
+    """Without an auxiliary electrode the source uses the remote-
+    earth return (``return_to=None``), preserving the pre-v0.7
+    behaviour. Only one source is created (no return source)."""
+    fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(100.0, 0.0))
+    layout.connect_buildings()
+    world = layout.to_world(seed=0)
+    assert len(world.sources) == 1
+    assert world.sources[0].return_to is None
+
+
+def test_engine_sees_opposite_currents_at_sub_and_aux() -> None:
+    """End-to-end physics check: after solving, the positive side
+    of the measurement loop (substation + KVS + foundation
+    electrodes -- everything PEN-bonded to the substation cluster)
+    carries the +I injection, and the auxiliary bundle carries -I
+    -- confirming the loop is closed in the engine's view.
+
+    Note that the substation cluster *alone* does NOT see +I:
+    only a fraction of the injected current leaks via the
+    substation grounding, the rest flows out via the PEN cables
+    to the connected foundations. That's why we sum over *every*
+    non-aux electrode.
+    """
+    import groundfield as gf
+
+    fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i)
+           for i in range(2)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(120.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+
+    world = layout.to_world(
+        soil=gf.HomogeneousSoil(resistivity=100.0),
+        source_magnitude_A=1.0, seed=0,
+    )
+    engine = gf.create_engine(
+        backend="image", segment_length=0.5, frequencies=[50.0],
+    )
+    result = engine.solve(world)
+
+    # Sum every leakage current on each side of the loop. The
+    # auxiliary side consists of every electrode whose name starts
+    # with ``aux_`` (the 3-rod triangle); the positive side is
+    # everything else.
+    aux_prefix = "aux_"
+    pos_i = sum(
+        result.electrode_currents[e.name][0] for e in world.electrodes
+        if not e.name.startswith(aux_prefix)
+    )
+    aux_i = sum(
+        result.electrode_currents[e.name][0] for e in world.electrodes
+        if e.name.startswith(aux_prefix)
+    )
+    assert pos_i.real > 0.0
+    assert aux_i.real < 0.0
+    # Magnitudes match the test current to within 2 %.
+    assert abs(pos_i.real - 1.0) < 0.02
+    assert abs(aux_i.real + 1.0) < 0.02
+    # And the two sides sum (almost) to zero -- Kirchhoff.
+    assert abs((pos_i + aux_i).real) < 0.02
+
+
+def test_plot_includes_auxiliary_marker() -> None:
+    """``plot()`` adds the Hilfserder marker without raising."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    layout = _layout_with_osm_ids(n=6)
+    layout.add_pen_cable(start="substation", end_xy=(180.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0)
+    ax = layout.plot()
+    plt.close(ax.figure)
+
+
+# ---------------------------------------------------------------------
+# Voltage probe (Spannungssonde) + measured impedance
+# ---------------------------------------------------------------------
+
+
+def test_add_voltage_probe_inline_fraction_midpoint() -> None:
+    """``inline_fraction=0.5`` puts the probe at the midpoint of the
+    substation -> aux axis."""
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+    layout.add_voltage_probe(inline_fraction=0.5)
+    probe = layout.voltage_probe
+    assert probe is not None
+    assert math.isclose(probe.position_xy[0], 100.0, abs_tol=1e-9)
+    assert math.isclose(probe.position_xy[1], 0.0, abs_tol=1e-9)
+
+
+def test_add_voltage_probe_perpendicular_left_and_right() -> None:
+    """``perpendicular_fraction=0.5`` + side selects north / south
+    when the aux points east."""
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+    # left = CCW from +x = north (positive y).
+    layout.add_voltage_probe(
+        perpendicular_fraction=0.5, perpendicular_side="left",
+    )
+    assert layout.voltage_probe is not None
+    assert math.isclose(layout.voltage_probe.position_xy[0], 0.0, abs_tol=1e-9)
+    assert math.isclose(layout.voltage_probe.position_xy[1], 100.0, abs_tol=1e-9)
+    # right = CW from +x = south (negative y).
+    layout.add_voltage_probe(
+        perpendicular_fraction=0.5, perpendicular_side="right",
+    )
+    assert math.isclose(layout.voltage_probe.position_xy[1], -100.0, abs_tol=1e-9)
+
+
+def test_add_voltage_probe_requires_aux_for_fraction_modes() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    with pytest.raises(RuntimeError, match="auxiliary electrode"):
+        layout.add_voltage_probe(inline_fraction=0.5)
+    with pytest.raises(RuntimeError, match="auxiliary electrode"):
+        layout.add_voltage_probe(perpendicular_fraction=0.5)
+
+
+def test_add_voltage_probe_explicit_xy_works_without_aux() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_voltage_probe(position_xy=(45.0, 30.0))
+    assert layout.voltage_probe is not None
+    assert layout.voltage_probe.position_xy == (45.0, 30.0)
+
+
+def test_add_voltage_probe_rejects_multiple_positions() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(distance_m=100.0)
+    with pytest.raises(ValueError, match="exactly one"):
+        layout.add_voltage_probe()
+    with pytest.raises(ValueError, match="exactly one"):
+        layout.add_voltage_probe(
+            inline_fraction=0.5, position_xy=(0.0, 0.0),
+        )
+
+
+def test_add_voltage_probe_rejects_invalid_fractions() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(distance_m=100.0)
+    with pytest.raises(ValueError, match="inline_fraction"):
+        layout.add_voltage_probe(inline_fraction=-0.1)
+    with pytest.raises(ValueError, match="inline_fraction"):
+        layout.add_voltage_probe(inline_fraction=1.5)
+    with pytest.raises(ValueError, match="perpendicular_fraction"):
+        layout.add_voltage_probe(perpendicular_fraction=2.0)
+
+
+def test_add_voltage_probe_rejects_invalid_side() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    layout.add_auxiliary_electrode(distance_m=100.0)
+    with pytest.raises(ValueError, match="perpendicular_side"):
+        layout.add_voltage_probe(
+            perpendicular_fraction=0.5,
+            perpendicular_side="north",  # invalid; must be left / right
+        )
+
+
+def test_voltage_probe_is_not_materialised_as_electrode() -> None:
+    """The probe is a sampling point; ``to_world`` must not create a
+    physical rod for it (so it doesn't perturb the potential field).
+    """
+    fp = _rect_footprint(30.0, 0.0, osm_id=1)
+    layout = OrtsnetzLayout.from_footprints(
+        [fp], substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(100.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0)
+    layout.add_voltage_probe(
+        position_xy=(75.0, 25.0), name="my_probe",
+    )
+    world = layout.to_world(seed=0)
+    names = [e.name for e in world.electrodes]
+    assert "my_probe" not in names  # not materialised
+    # ... but the auxiliary electrode IS in the world (3 rods of
+    # the default triangle).
+    assert any(n.startswith("aux_rod_") for n in names)
+
+
+def test_measured_grounding_impedance_with_and_without_probe() -> None:
+    """End-to-end: build a small world, solve, and compute the
+    fall-of-potential reading with and without a probe. The probe
+    reading is *lower* than the remote-earth reading because the
+    probe is at a finite, positive potential."""
+    import groundfield as gf
+
+    fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i)
+           for i in range(4)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(120.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+
+    world = layout.to_world(
+        soil=gf.HomogeneousSoil(resistivity=100.0),
+        source_magnitude_A=1.0, seed=0,
+    )
+    engine = gf.create_engine(
+        backend="image", segment_length=0.5, frequencies=[50.0],
+    )
+    result = engine.solve(world)
+
+    # Without a probe: remote-earth reference.
+    z_remote = layout.measured_grounding_impedance(
+        result, source_magnitude_A=1.0,
+    )
+    assert math.isfinite(abs(z_remote))
+    assert abs(z_remote) > 0.0
+
+    # With a 50 % inline probe at (100, 0): U_probe > 0, so the
+    # measured value is smaller (a real fall-of-potential meter
+    # under-reads when the probe sits in the field's near zone).
+    layout.add_voltage_probe(inline_fraction=0.5)
+    z_probe = layout.measured_grounding_impedance(
+        result, source_magnitude_A=1.0,
+    )
+    assert math.isfinite(abs(z_probe))
+    assert abs(z_probe) < abs(z_remote) + 1e-9
+
+
+def test_measured_grounding_impedance_requires_aux() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    with pytest.raises(RuntimeError, match="auxiliary electrode"):
+        layout.measured_grounding_impedance(object())
+
+
+def test_measured_grounding_impedance_probe_xy_override() -> None:
+    """``probe_xy=`` lets the caller sample any probe position
+    from a single solve, overriding ``self.voltage_probe`` for
+    that call only. Two different probe positions give two
+    different impedance readings on the same field result."""
+    import groundfield as gf
+
+    fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i)
+           for i in range(2)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(120.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+    layout.add_voltage_probe(inline_fraction=0.5)  # stored placement
+
+    world = layout.to_world(
+        soil=gf.HomogeneousSoil(resistivity=100.0),
+        source_magnitude_A=1.0, seed=0,
+    )
+    engine = gf.create_engine(
+        backend="image", segment_length=0.5, frequencies=[50.0],
+    )
+    result = engine.solve(world)
+
+    # Default call -- uses the stored inline probe at (100, 0).
+    z_default = layout.measured_grounding_impedance(result)
+    # Override with the SAME position -- must yield the same value.
+    z_inline_explicit = layout.measured_grounding_impedance(
+        result, probe_xy=(100.0, 0.0),
+    )
+    assert abs(z_default - z_inline_explicit) < 1e-9
+    # Override with the perpendicular position -- yields a
+    # different reading because the field is anisotropic with the
+    # Hilfserder on the +x axis.
+    z_perp = layout.measured_grounding_impedance(
+        result, probe_xy=(0.0, 100.0),
+    )
+    assert abs(z_inline_explicit - z_perp) > 1e-6
+
+
+def test_verify_current_balance_closes_the_loop() -> None:
+    """End-to-end Kirchhoff check: positive-side leakage sums to
+    +I_src and the Hilfserder bundle to -I_src."""
+    import groundfield as gf
+
+    fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i)
+           for i in range(3)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(120.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0, direction_deg=0.0)
+
+    world = layout.to_world(
+        soil=gf.HomogeneousSoil(resistivity=100.0),
+        source_magnitude_A=1.0, seed=0,
+    )
+    engine = gf.create_engine(
+        backend="image", segment_length=0.5, frequencies=[50.0],
+    )
+    result = engine.solve(world)
+
+    balance = layout.verify_current_balance(
+        result, source_magnitude_A=1.0,
+    )
+    assert balance["ok"], balance
+    # Positive side sums to +1 A (substation + KVS + foundations).
+    assert abs(balance["positive_side_A"].real - 1.0) < 0.02
+    # Auxiliary side sums to -1 A.
+    assert abs(balance["auxiliary_side_A"].real + 1.0) < 0.02
+
+
+def test_verify_current_balance_requires_aux() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [], substation_xy=(0.0, 0.0),
+    )
+    with pytest.raises(RuntimeError, match="auxiliary electrode"):
+        layout.verify_current_balance(object())
+
+
+def test_plot_surface_potential_two_slope_runs() -> None:
+    """``two_slope=True`` produces a valid figure with the TwoSlopeNorm
+    colour mapping -- smoke test on the Agg backend."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import groundfield as gf
+
+    fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i)
+           for i in range(2)]
+    layout = OrtsnetzLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(120.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=150.0, direction_deg=0.0)
+    layout.add_voltage_probe(inline_fraction=0.5)
+
+    world = layout.to_world(
+        soil=gf.HomogeneousSoil(resistivity=100.0),
+        source_magnitude_A=1.0, seed=0,
+    )
+    engine = gf.create_engine(
+        backend="image", segment_length=0.5, frequencies=[50.0],
+    )
+    result = engine.solve(world)
+
+    for mode in ({"two_slope": True}, {"symmetric": True}, {"log": True}):
+        fig = layout.plot_surface_potential(
+            result, world,
+            padding_m=40.0, n=60, levels=21,
+            **mode,
+        )
+        plt.close(fig)
+
+
+def test_plot_includes_voltage_probe_marker() -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    layout = _layout_with_osm_ids(n=4)
+    layout.add_pen_cable(start="substation", end_xy=(180.0, 0.0))
+    layout.connect_buildings()
+    layout.add_auxiliary_electrode(distance_m=200.0)
+    layout.add_voltage_probe(inline_fraction=0.5)
+    ax = layout.plot()
+    plt.close(ax.figure)
 
 
 # ---------------------------------------------------------------------

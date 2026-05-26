@@ -94,10 +94,13 @@ from groundfield.generators.manhattan_routing import (
     segment_intersects_box,
 )
 from groundfield.generators.ortsnetz_builder import (
+    AuxiliaryElectrodePlacement,
     BuildingConnection,
     KvsPlacement,
     OrtsnetzLayout,
     PenCable,
+    VoltageProbePlacement,
+    triangle_rod_grounding,
 )
 from groundfield.generators.pen_topology import (
     PenTopology,
@@ -178,5 +181,8 @@ __all__ = [
     "OrtsnetzLayout",
     "PenCable",
     "KvsPlacement",
+    "AuxiliaryElectrodePlacement",
+    "VoltageProbePlacement",
     "BuildingConnection",
+    "triangle_rod_grounding",
 ]

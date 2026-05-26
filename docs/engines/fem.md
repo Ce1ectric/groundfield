@@ -276,6 +276,3 @@ print(result.metadata.get("equivalent_hemisphere_radius"))
 
 - ADR-0002 — engine selection heuristic; the FEM is the volume-PDE
   cross-check.
-- Notebook `08_fem.ipynb` — equivalent-hemisphere visualisation,
-  single rod and bonded-rod cluster, layer-contrast trend, mesh-
-  refinement sanity check.

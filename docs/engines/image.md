@@ -179,5 +179,3 @@ print(result.cluster_impedance("g1")[0])
 
 - ADR-0001 documents why this homogeneous engine sits at the root
   of the engine family.
-- Notebook `01_smoke_test.ipynb` exercises the full API of this
-  backend on a single rod and on a two-electrode cluster.

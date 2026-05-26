@@ -223,6 +223,3 @@ print(result.metadata.get("cim_n_images"))  # effective P
 ## Related material
 
 - ADR-0002 — engine selection heuristic.
-- Notebook `05_cim.ipynb` — visualises the matrix-pencil fit on a
-  3-layer stack and exercises the engine on a two-bonded-rod
-  fixture under multiple soil contrasts.

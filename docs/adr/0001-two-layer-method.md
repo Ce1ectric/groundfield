@@ -300,7 +300,7 @@ C and D would be additional engines that we may add later if needed
    < 5 % from the homogeneous result — matches expectations.
    *(2026-04-30)*
 
-6. [x] **Notebook `02_two_layer.ipynb`** with a parameter sweep over
+6. [x] **Validation harness** with a parameter sweep over
    $K \in [-0.82, +0.82]$ (rho_2 from 10 to 1000) and over the
    layer thickness $h_1 \in \{1.55, 2, 3, 5, 10, 20\}$ m. Plots of
    the cluster impedance, trumpet comparison, and the K=0 sanity

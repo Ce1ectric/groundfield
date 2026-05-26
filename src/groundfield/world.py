@@ -190,7 +190,7 @@ class World(BaseModel):
         # Revert detection: a key the caller now sets back to the
         # default *was* previously non-default. The previous value
         # never reached any backend; warning the user closes that
-        # silent-no-op feedback gap (fourth 2026-05-12 audit pass).
+        # silent-no-op feedback gap.
         reverted = {
             k: previous[k]
             for k, v in kwargs.items()
@@ -249,8 +249,6 @@ class World(BaseModel):
         Calling this on a world that was never touched by the
         concrete-encasement code path is a no-op; the returned dict is
         empty.
-
-        Seventh 2026-05-18 audit pass.
         """
         previous = dict(self.concrete_shell_corrections)
         self.concrete_shell_corrections.clear()
@@ -286,16 +284,14 @@ class World(BaseModel):
             mutate the source list (typical in long
             :func:`~groundfield.engines.compare_engines` sweeps or
             :func:`~groundfield.engines.convergence_study` runs) may set
-            ``snapshot_sources=False`` to skip the deep-copy cost
-            (sixth 2026-05-14 audit pass).
+            ``snapshot_sources=False`` to skip the deep-copy cost.
 
         Notes
         -----
         The default ``snapshot_sources=True`` makes the contract
         explicit: solving never rewrites the input world. The opt-out
         is documented in ``docs/concepts.md`` ("Engine re-use across
-        ``World.solve`` calls") and exercised in
-        ``notebooks/32_audit_pass6_fixes.ipynb``.
+        ``World.solve`` calls").
         """
         # Local import to avoid a circular dependency at module load.
         from groundfield.solver.engine import Engine
@@ -311,8 +307,7 @@ class World(BaseModel):
             return engine.solve(self)
         # Snapshot every source via Pydantic's deep-copy semantics so
         # backends that mutate a source field in flight cannot leak
-        # the change back into the caller's world (fifth 2026-05-13
-        # audit pass; opt-out sixth 2026-05-14 audit pass).
+        # the change back into the caller's world.
         sources_snapshot = [s.model_copy(deep=True) for s in self.sources]
         try:
             return engine.solve(self)

@@ -77,7 +77,7 @@ class EngineFrequencyOrderWarning(UserWarning):
     deduplicates by *message text*, and because the message embeds the
     offending list literal, every distinct non-monotonic list
     triggers a fresh warning even when the underlying convention is
-    the same (fifth 2026-05-13 audit pass).
+    the same.
     """
 
 Backend = Literal[
@@ -205,8 +205,7 @@ class Engine(BaseModel):
             # non-monotonic list. That lets a single
             # ``warnings.simplefilter("once",
             # EngineFrequencyOrderWarning)`` collapse a 10-engine
-            # sweep down to a single notification (fifth 2026-05-13
-            # audit pass).
+            # sweep down to a single notification.
             _log.debug(
                 "Engine.frequencies non-monotonic: %r — preserving order.",
                 value,
@@ -291,7 +290,35 @@ class Engine(BaseModel):
     # ------------------------------------------------------------------
 
     def solve(self, world: "World") -> FieldResult:
-        """Run the simulation with the configured backend."""
+        """Run the simulation with the configured backend.
+
+        Dispatches the assembled ``world`` to the backend selected by
+        :attr:`backend`. When ``backend == "image"`` the backend is
+        auto-forwarded to ``"image_2layer"`` for a
+        :class:`~groundfield.soil.models.TwoLayerSoil` and to
+        ``"image_nlayer"`` for a
+        :class:`~groundfield.soil.models.MultiLayerSoil`, so notebooks
+        written for the homogeneous case keep working when the soil
+        model is replaced.
+
+        Parameters
+        ----------
+        world : World
+            The assembled world (soil, electrodes, conductors and at
+            least one source) the backend should solve.
+
+        Returns
+        -------
+        FieldResult
+            Container with per-frequency potentials, currents, cluster
+            impedances and post-processing metadata.
+
+        Raises
+        ------
+        ValueError
+            If ``world.soil`` is unset, or ``world`` contains no
+            electrodes.
+        """
         if world.soil is None:
             raise ValueError(
                 "World has no soil model. Set one before calling solve()."

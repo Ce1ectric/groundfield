@@ -46,32 +46,64 @@ result, and the derivation of reduced `rho-f` models for
 `groundinsight`. See the [scope and concepts page](https://ce1ectric.github.io/groundfield/concepts/)
 for the full list with references to the underlying ADRs.
 
-## New in 0.6.0
+## New in 0.7.0
 
-- **OSM-driven building footprints** ([ADR-0011](docs/adr/0011-osm-building-footprints.md)).
-  Pull real building outlines from OpenStreetMap via the Overpass API,
-  project them into a local ENU frame, and feed them straight into
-  `TnNetworkGenerator`. Each house's foundation electrode inherits its
-  size and orientation from the polygon's oriented minimum bounding
-  rectangle; the only stochastic axis that survives the override is
-  `presence_prob`. See the new optional [`groundfield.geo`](docs/api/geo.md)
-  subpackage, [example 09](docs/examples/09_osm_pipeline.md), and
-  notebook [`32_osm_footprints.ipynb`](notebooks/32_osm_footprints.ipynb).
+- **`OrtsnetzLayout` — imperative TN-Ortsnetz builder.** New entry
+  point in `groundfield.generators` for composing a *single
+  deterministic* LV network from a real OSM extract: ingest
+  footprints, drop the substation + KVS by lat/lon **or** local
+  ENU metres, route PEN cables in strict Manhattan geometry around
+  the foundations, connect every house to its closest cable.
+  Everything is one method per step on the layout — see the
+  [OSM-pipeline example](docs/examples/08_osm_pipeline.md) for the
+  full workflow on a real village.
 
-- **Concrete encasement for foundation electrodes** ([ADR-0012](docs/adr/0012-foundation-concrete-encasement.md)).
-  DIN-18014 foundation electrodes sit in a concrete shell that, depending
-  on moisture, has a resistivity anywhere from 30 Ω·m (wet) to 50 000 Ω·m
-  (dry) — materially different from the surrounding soil. New optional
-  fields on `FoundationElectrodeSpec` (`concrete_rho_ohm_m`,
-  `concrete_thickness_m`, `concrete_model`) expose the closed-form
-  Sunde-shell model in two flavours: a *lumped* series resistance on
-  the PEN service drop (V1, default, zero solver-side risk) and a
-  *distributed* per-segment diagonal augmentation in the
-  `image` / `image_2layer` backends (V2). Stochastic moisture maps onto
-  `concrete_rho_ohm_m=Discrete(values=[50, 150, 500, 2000], weights=…)`
-  for the four empirical bands. Notebook
-  [`33_concrete_encasement.ipynb`](notebooks/33_concrete_encasement.ipynb)
-  is the interactive parameter-variation workbench.
+- **Manhattan-routed PEN cable router.** New
+  `groundfield.generators.manhattan_routing.route_manhattan` runs
+  4-connected A* on a regular Manhattan grid of user-chosen cell
+  size and avoids every building's bounding rectangle inflated by a
+  configurable clearance. PEN cables therefore never cross a
+  foundation polygon. An `escape_radius_m` safety valve handles
+  substations that land inside or right next to a foundation in a
+  real OSM extract.
+
+- **Simulated fall-of-potential measurement.** `OrtsnetzLayout.add_auxiliary_electrode`
+  drops a *Hilfserder* (default: 3 × 0.5 m rod triangle,
+  parallel-bonded) at a user-controlled distance / direction from
+  the substation. `OrtsnetzLayout.add_voltage_probe` adds the
+  *Spannungssonde* as a pure sampling point (no rod in the world →
+  no field perturbation), either inline along the substation →
+  aux axis or 90° rotated from it. `measured_grounding_impedance`
+  returns the simulated meter reading
+  $(\varphi_\text{sub} - \varphi_\text{probe}) / I_\text{src}$ —
+  with a `probe_xy` override that lets a single solve yield
+  multiple probe readings. `verify_current_balance` is the
+  Kirchhoff plausibility check that confirms the loop is
+  physically closed in the engine's view.
+
+- **Reproducible foundation-electrode penetration mask.**
+  `OrtsnetzLayout.foundation_mask(penetration, salt=0)` returns a
+  deterministic per-house `bool` list derived from a stable MD5
+  hash of each footprint's OSM id. Same `(p, salt)` → same mask
+  every time, and the mask is *nested* in `p` so AP1 penetration
+  sweeps grow the foundation-equipped subset monotonically. See
+  the [measurement-distance comparison
+  example](docs/examples/07_measurement_distance.md) for a full
+  study including surface-potential galleries and a dual-probe
+  (0° / 90°) Hilfserder-distance sweep.
+
+- **`RadialTrunkTopology` for `TnNetworkGenerator`.** New PEN
+  backbone option alongside the legacy star-KVS layout: the
+  substation feeds N radial feeders with a finite slot budget per
+  source; once exhausted, additional KVS are inserted along the
+  trunk axis. See the [TN-Model example](docs/examples/06_tn_model.md)
+  for a complete walk-through.
+
+- **Surface-potential plot with `TwoSlopeNorm`.**
+  `OrtsnetzLayout.plot_surface_potential` defaults to a
+  TwoSlopeNorm-based diverging colour map (`RdBu_r`) centred at
+  zero so the deep Hilfserder trough and the small substation +
+  foundation trumpet are both visible at full colour resolution.
 
 ## Installation
 

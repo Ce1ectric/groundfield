@@ -5,7 +5,7 @@ the `image_2layer` solver pipeline (with optional Carson /
 Sommerfeld earth-return correction and Neumann mutual inductance)
 and gives concrete recommendations for parameter studies and
 Monte-Carlo sweeps. The numbers come from
-[`notebooks/21_performance_tuning.ipynb`](https://github.com/Ce1ectric/groundfield/blob/main/notebooks/21_performance_tuning.ipynb)
+the project's internal performance harness
 on a typical laptop and are reproducible end-to-end.
 
 ## TL;DR
@@ -240,7 +240,7 @@ because the current typical study scope (≤ 80 EFH single shot,
 
 ## Reproducing these numbers yourself
 
-`notebooks/21_performance_tuning.ipynb` runs the exact
+The project's internal performance harness runs the exact
 benchmarks. The `PRESET = 'fast'` mode finishes in well under
 10 minutes on any modern laptop. Run after every solver-side
 change to spot regressions early.

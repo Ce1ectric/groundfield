@@ -100,8 +100,7 @@ class EvaluateSpecError(ValueError):
     Subclass of :class:`ValueError` so legacy ``except ValueError`` blocks
     keep working unchanged; downstream consumers (notably the
     ``groundinsight`` consumer of the bridge format) can now catch the
-    typed exception instead of matching against ``str(exc)`` substrings
-    (seventh 2026-05-18 audit pass).
+    typed exception instead of matching against ``str(exc)`` substrings.
     """
 
 
@@ -675,10 +674,9 @@ def evaluate_spec(
         or the formula contains unrecognised free symbols (anything
         other than ``f``, ``rho`` and ``j``). The exception is typed
         so downstream consumers (notably ``groundinsight``) can catch
-        it without substring matching on the message (seventh
-        2026-05-18 audit pass). Existing ``except ValueError`` blocks
-        keep working because :class:`EvaluateSpecError` inherits from
-        :class:`ValueError`.
+        it without substring matching on the message. Existing
+        ``except ValueError`` blocks keep working because
+        :class:`EvaluateSpecError` inherits from :class:`ValueError`.
     """
     import sympy as sp
 

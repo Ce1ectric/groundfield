@@ -77,8 +77,8 @@ non-rectangular foundation interiors become electrically relevant
 * **Origin** — **never inferred from data**. Two runs over the
   same area at different dates produce identical metric
   coordinates regardless of which features the underlying query
-  returns. This is the reproducibility guarantee the AP1
-  Monte-Carlo phase relies on.
+  returns. This is the reproducibility guarantee any
+  Monte-Carlo study relies on.
 * **Stochasticity** — the only *geometric* stochastic axis
   preserved across the OMBR override is
   [`FoundationElectrodeSpec.presence_prob`][groundfield.generators.electrode_specs.FoundationElectrodeSpec].
@@ -174,7 +174,7 @@ src/groundfield/geo/
 ## Worked example
 
 A full end-to-end demo lives in
-[`notebooks/32_osm_footprints.ipynb`](https://github.com/Ce1ectric/groundfield/blob/main/notebooks/32_osm_footprints.ipynb).
+the OSM-pipeline example in the docs.
 It synthesises six rotated rectangles (so the notebook needs no
 internet), feeds them into ``TnNetworkGenerator``, compares the
 resulting cluster impedance against a Manhattan-grid reference

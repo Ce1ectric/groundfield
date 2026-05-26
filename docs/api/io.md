@@ -196,7 +196,7 @@ save_bustype_to_db(fit, db_path="grounding.db",
 
 `evaluate_spec(spec, frequencies, rho)` re-evaluates an exported
 formula at arbitrary $(f, \rho)$ points without round-tripping through
-``groundinsight``. Since the v0.5.0 audit-pass-4 closure, both
+``groundinsight``. Both
 `evaluate_spec` and the companion diagnostics helper
 `fit_quality_summary(spec)` are reachable directly as
 `groundfield.evaluate_spec` / `groundfield.fit_quality_summary`
@@ -226,8 +226,8 @@ argument, empty formula, unparseable SymPy expression, unknown free
 symbol — raises a typed :class:`EvaluateSpecError`
 (subclass of :class:`ValueError`). Downstream ``groundinsight``
 consumers can catch the typed class instead of substring-matching
-on ``str(exc)`` (seventh 2026-05-18 audit pass). Existing
-``except ValueError`` blocks keep working unchanged.
+on ``str(exc)``. Existing ``except ValueError`` blocks keep
+working unchanged.
 
 ```python
 from groundfield.io.groundinsight import (

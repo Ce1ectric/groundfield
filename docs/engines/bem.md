@@ -207,5 +207,3 @@ print(result.cluster_impedance("g1")[0])
 
 - ADR-0002 — engine selection heuristic; `bem` is the
   alternative-weighting cross-check in the layered family.
-- Notebook `07_bem.ipynb` — single rod, bonded-rod cluster,
-  surface-potential profile, mesh-refinement convergence study.

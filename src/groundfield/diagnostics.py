@@ -354,8 +354,7 @@ def expected_segments(world: "World", engine: "Engine") -> dict[str, Any]:
 # backends, 50 Hz, ρ in [50, 1000] Ω·m, electrode dimensions
 # ~ 0.5 ... 30 m). The module-level public constants below are the
 # canonical handles for tests, notebooks, and external callers — the
-# leading-underscore aliases are kept for backwards compatibility
-# with pre-pass-5 code paths (fifth 2026-05-13 audit pass).
+# leading-underscore aliases are kept for backwards compatibility.
 
 MIN_THINWIRE_RATIO: float = 5.0
 """Minimum recommended ratio of segment_length to wire_radius.
@@ -373,16 +372,15 @@ The dense Z-matrix scales as :math:`O(N^2)` in memory and the
 solve as :math:`O(N^3)` for the LU + multi-port factorisation, so
 ~ 5 000 segments is roughly where solve time becomes minutes
 rather than seconds on a typical laptop. Promoted from the
-private ``_BUDGET_WARN_THRESHOLD`` in the fifth 2026-05-13 audit
-pass so tests and notebooks have a stable handle for the
-"soft warning" threshold.
+private ``_BUDGET_WARN_THRESHOLD`` so tests and notebooks have a
+stable handle for the "soft warning" threshold.
 """
 
 HARD_LIMIT: int = 20_000
 """Total segment count above which the budget warning becomes urgent.
 
-Promoted from the private ``_BUDGET_HARD_THRESHOLD`` in the fifth
-2026-05-13 audit pass.
+Promoted from the private ``_BUDGET_HARD_THRESHOLD`` for a stable
+public handle.
 """
 
 # Backwards-compatible private aliases. Will be removed once the

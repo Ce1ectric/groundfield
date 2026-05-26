@@ -80,14 +80,14 @@ Three reasons, each independently sufficient:
 The trade-off is documented in ADR-0002 and revisited every time the
 supported use-case scope expands.
 
-## Notebook ergonomics
+## Backend ergonomics
 
 `Engine.solve` automatically forwards `backend="image"` to:
 
 - `image_2layer` if the world holds a `TwoLayerSoil`,
 - `image_nlayer` if the world holds a `MultiLayerSoil`,
 
-so notebooks written for the homogeneous case keep working when only
+so client code written for the homogeneous case keeps working when only
 the soil model is swapped. The path through `image_nlayer` for an
 $n \ge 3$ soil therefore terminates with a clear `ValueError`
 suggesting the appropriate alternative engine — useful safety rail
@@ -165,5 +165,3 @@ print(result.metadata["dispatched_to"])  # 'image_2layer'
 ## Related material
 
 - ADR-0002 — engine selection heuristic.
-- Notebook `04_image_nlayer.ipynb` — exercises the dispatch table
-  including the deliberate `ValueError` for $n = 3$ stacks.

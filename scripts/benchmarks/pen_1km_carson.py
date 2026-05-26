@@ -1,6 +1,6 @@
 """1 km PEN benchmark — self and mutual impedance with Carson correction.
 
-Stand-alone tool that answers two AP1 questions directly:
+Stand-alone tool that answers two typical questions directly:
 
 1. *What is the self-impedance per unit length of a 1 km bare-copper PEN
    conductor at depth 0.6 m above a homogeneous earth?*

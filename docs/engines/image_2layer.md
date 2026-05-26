@@ -112,7 +112,7 @@ added on top.
 
 `Engine.solve` picks `image_2layer` automatically when the user
 passed `backend="image"` and `world.soil` is a `TwoLayerSoil`. A
-notebook written for the homogeneous backend therefore keeps
+client code written for the homogeneous backend therefore keeps
 working when only the soil model is swapped — no string change
 required.
 
@@ -210,6 +210,3 @@ print(result.cluster_impedance("g1")[0])
 ## Related material
 
 - ADR-0001 — original methodology decision.
-- Notebook `02_two_layer.ipynb` — parameter sweep over $K_1$ and
-  $h_1$, trumpet comparison homogeneous vs. 2-layer, exact $K_1=0$
-  collapse.

@@ -1,4 +1,4 @@
-r"""Manhattan-routed pathfinding for the AP1 PEN cable layout.
+r"""Manhattan-routed pathfinding for the PEN cable layout.
 
 The :func:`route_manhattan` helper finds an axis-aligned (no
 diagonals) polyline from a start to an end point on a coarse
@@ -210,6 +210,7 @@ def route_manhattan(
     *,
     grid_size: float = 10.0,
     clearance_m: float = 0.5,
+    escape_radius_m: Optional[float] = None,
     max_iterations: int = 200_000,
 ) -> list[tuple[float, float]]:
     r"""Route a Manhattan polyline from ``start`` to ``end``.
@@ -233,6 +234,21 @@ def route_manhattan(
         Additional padding around each obstacle. Defaults to
         ``0.5`` m so the cable keeps a small safety distance from
         every foundation wall.
+    escape_radius_m
+        Inside a disk of this radius around ``start`` *and* around
+        ``end``, obstacles are *not* enforced. This is the "release
+        valve" for real-OSM layouts where the substation or a KVS
+        lat/lon lands inside or very near a foundation polygon and
+        every neighbouring grid cell would otherwise be blocked --
+        the cable physically has to exit the substation cubicle
+        somehow, so allowing a short blind-spot around each anchor
+        models reality and prevents spurious
+        :class:`RuntimeError` from
+        ``A* exhausted``. ``None`` (default) maps to
+        ``grid_size`` (i.e. exactly one cell of slack around each
+        anchor). Pass ``0.0`` to restore the strict pre-v0.7
+        behaviour, or a larger value when an anchor lands inside a
+        dense city block.
     max_iterations
         Upper bound on the A\* loop body. Increase for very large
         layouts (hundreds of obstacles spread across kilometres).
@@ -253,6 +269,13 @@ def route_manhattan(
     if grid_size <= 0.0:
         raise ValueError(
             f"route_manhattan: grid_size must be positive, got {grid_size}."
+        )
+    if escape_radius_m is None:
+        escape_radius_m = grid_size
+    if escape_radius_m < 0.0:
+        raise ValueError(
+            "route_manhattan: escape_radius_m must be >= 0, got "
+            f"{escape_radius_m}."
         )
 
     obstacles = [o.inflated(clearance_m) for o in obstacles]
@@ -288,8 +311,27 @@ def route_manhattan(
         max(j_min, min(j_max, end_cell[1])),
     )
 
+    # Pre-compute the "escape" cell sets: every cell whose centre
+    # is within ``escape_radius_m`` of the start (or end) endpoint
+    # is exempt from obstacle blocking, no matter how dense the
+    # surrounding building cluster is.
+    escape_r2 = escape_radius_m * escape_radius_m
+
+    def _in_escape_zone(i: int, j: int) -> bool:
+        if escape_radius_m <= 0.0:
+            return False
+        cx, cy = cell_center(i, j)
+        for (ax, ay) in (start, end):
+            dx = cx - ax
+            dy = cy - ay
+            if dx * dx + dy * dy <= escape_r2:
+                return True
+        return False
+
     def is_blocked(i: int, j: int) -> bool:
         if (i, j) == start_cell or (i, j) == end_cell:
+            return False
+        if _in_escape_zone(i, j):
             return False
         cx, cy = cell_center(i, j)
         for o in obstacles:
@@ -338,11 +380,37 @@ def route_manhattan(
                 heapq.heappush(open_heap, (f, counter, (i, j)))
 
     if not found:
+        # Diagnose which side is enclosed so the caller gets an
+        # actionable suggestion (move that anchor, widen the
+        # escape_radius_m, or drop clearance_m).
+        start_neighbours_open = sum(
+            not is_blocked(start_cell[0] + di, start_cell[1] + dj)
+            and i_min <= start_cell[0] + di <= i_max
+            and j_min <= start_cell[1] + dj <= j_max
+            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        )
+        end_neighbours_open = sum(
+            not is_blocked(end_cell[0] + di, end_cell[1] + dj)
+            and i_min <= end_cell[0] + di <= i_max
+            and j_min <= end_cell[1] + dj <= j_max
+            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        )
+        offender = "start" if start_neighbours_open == 0 else (
+            "end" if end_neighbours_open == 0 else "both endpoints"
+        )
         raise RuntimeError(
             "route_manhattan: no Manhattan path from "
-            f"{start} to {end} -- the obstacles enclose one of "
-            "the endpoints. Reduce clearance_m or remove blocking "
-            "footprints."
+            f"{start} to {end}. The {offender} anchor is enclosed "
+            f"by obstacles (start has {start_neighbours_open}/4 free "
+            f"neighbours, end has {end_neighbours_open}/4). "
+            "Suggested fixes (in order of safety): "
+            "(1) increase ``escape_radius_m`` (currently "
+            f"{escape_radius_m:.1f} m -- raise to e.g. "
+            f"{2 * escape_radius_m:.1f} m); "
+            "(2) reduce ``clearance_m`` (currently "
+            f"{clearance_m:.2f} m); "
+            "(3) move the offending anchor by a few metres so it "
+            "lands clearly outside any foundation footprint."
         )
 
     # Reconstruct path of cell centres.

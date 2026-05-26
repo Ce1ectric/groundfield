@@ -322,8 +322,8 @@ def query_buildings(
         Number of retry attempts on ``429`` / ``504`` responses.
         Defaults to ``1`` (one retry, matching the historic
         behaviour). Raise to two or three for flaky cellular / VPN
-        links; set to ``0`` to disable retries entirely (seventh
-        2026-05-18 audit pass). Must be ``>= 0``.
+        links; set to ``0`` to disable retries entirely. Must be
+        ``>= 0``.
     _post
         Internal hook for tests: a callable with the same signature
         as :func:`_post_overpass`. Production calls use the default.
@@ -573,8 +573,7 @@ def query_and_project(
         own threshold).
     max_retries
         Number of retry attempts on ``429`` / ``504`` responses.
-        Forwarded to :func:`query_buildings`. Defaults to ``1``
-        (seventh 2026-05-18 audit pass).
+        Forwarded to :func:`query_buildings`. Defaults to ``1``.
 
     Returns
     -------
