@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.8.0] — 2026-06-18
+
 ### Added — `create_engine`: configurable image-series convergence (`image_max_terms` / `image_series_tol`)
 
 `create_engine()` and the underlying `Engine` gain two optional parameters,
@@ -4009,7 +4015,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.5.0
