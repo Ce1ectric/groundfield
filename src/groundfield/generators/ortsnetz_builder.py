@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, NamedTuple, Optional
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -314,6 +314,29 @@ class BuildingConnection(BaseModel):
                 self.stub_waypoints[:-1], self.stub_waypoints[1:],
             )
         )
+
+
+class LateralCoverageResult(NamedTuple):
+    """Outcome of :meth:`OrtsnetzLayout.connect_all_buildings`.
+
+    Attributes
+    ----------
+    laterals
+        Names of the PEN lateral cables that were added to reach
+        otherwise-unconnected houses, in the order they were created.
+    islands
+        Indices of footprints that still could not be connected -- houses
+        enclosed by other footprints on every side, for which no
+        obstacle-free service stub exists even after adding a lateral. An
+        empty list means full coverage.
+    connections
+        Snapshot of :attr:`OrtsnetzLayout.connections` after the pass (the
+        tap from every connected house to its serving cable).
+    """
+
+    laterals: list[str]
+    islands: list[int]
+    connections: list["BuildingConnection"]
 
 
 # ---------------------------------------------------------------------
@@ -650,7 +673,7 @@ class OrtsnetzLayout(BaseModel):
           a foundation at :math:`p_1` also has one at
           :math:`p_2 > p_1` — increasing the penetration only
           *grows* the foundation-equipped subset. This is the
-          natural property for AP1 sweep studies.
+          natural property for penetration-rate sweep studies.
 
         Parameters
         ----------
@@ -1424,6 +1447,181 @@ class OrtsnetzLayout(BaseModel):
         self.connections.extend(new_connections)
         return new_connections
 
+    def connect_all_buildings(
+        self,
+        *,
+        source_anchors: Optional[list[str]] = None,
+        max_passes: int = 4,
+        margin_m: float = 3.0,
+        lateral_clearance_m: Optional[float] = None,
+        min_segment_length_m: float = 10.0,
+        escape_radius_m: Optional[float] = None,
+        clearance_m: Optional[float] = None,
+    ) -> "LateralCoverageResult":
+        r"""Connect *every* house to the LV network, adding laterals as needed.
+
+        :meth:`connect_buildings` only taps each house to the nearest
+        existing cable with a short (at most two-segment) stub and skips
+        houses whose stub would cross another footprint -- typically houses
+        with no cable in reach. This method closes that gap so the layout
+        models a real LV network in which every customer is served.
+
+        Strategy ("laterals from the nearest node" model):
+
+        1. Tap whatever is already reachable via :meth:`connect_buildings`.
+        2. For every still-unconnected house (farthest from any source node
+           first), route an obstacle-avoiding PEN *lateral*
+           (:meth:`add_pen_cable`, full Manhattan A\*) from the nearest
+           connected source node (substation or a KVS) to a free point just
+           outside the house, then re-tap. Re-tapping frequently connects
+           neighbouring houses to the same new lateral for free.
+        3. Repeat until no house remains or no further progress is made.
+
+        Houses enclosed by other footprints on every side stay unconnected
+        and are reported in :attr:`LateralCoverageResult.islands` rather
+        than raising.
+
+        Parameters
+        ----------
+        source_anchors
+            Names of the nodes laterals may originate from. ``None`` (the
+            default) uses the substation plus every KVS galvanically
+            connected to it through the existing PEN-cable graph (see
+            :meth:`_anchors_connected_to_substation`), so a stranded KVS is
+            never used as a source and cannot create an isolated
+            sub-network.
+        max_passes
+            Maximum number of tap/lateral rounds. Each round adds at most
+            one lateral per still-unconnected house.
+        margin_m
+            Extra distance, beyond the house's bounding-box half-diagonal,
+            at which the lateral end point is placed outside the footprint.
+        lateral_clearance_m
+            Obstacle inflation used when searching for a free lateral end
+            point. Defaults to :attr:`obstacle_clearance_m`.
+        min_segment_length_m, escape_radius_m, clearance_m
+            Forwarded to :meth:`add_pen_cable` for the lateral routing
+            (with one finer-grid retry on failure). ``clearance_m`` also
+            overrides the tap clearance in :meth:`connect_buildings`.
+
+        Returns
+        -------
+        LateralCoverageResult
+            ``laterals`` (added cable names), ``islands`` (still-unconnected
+            footprint indices), and ``connections`` (snapshot after the
+            pass).
+
+        Raises
+        ------
+        RuntimeError
+            If ``source_anchors`` resolves to an empty list (e.g. passed
+            explicitly as ``[]``).
+        """
+        import warnings
+
+        if not self.footprints:
+            return LateralCoverageResult([], [], list(self.connections))
+
+        clearance = (
+            self.obstacle_clearance_m if clearance_m is None else clearance_m
+        )
+        lat_clear = (
+            clearance if lateral_clearance_m is None else lateral_clearance_m
+        )
+
+        if source_anchors is None:
+            source_anchors = self._anchors_connected_to_substation()
+        nodes = [(a, self._anchor_position(a)) for a in source_anchors]
+        if not nodes:
+            raise RuntimeError(
+                "OrtsnetzLayout.connect_all_buildings: no source anchor to "
+                "originate laterals from. Pass ``source_anchors`` or route "
+                "a PEN cable from the substation first."
+            )
+
+        def _tap() -> None:
+            # connect_buildings warns per skipped house; islands are reported
+            # at the end, so silence the per-house noise here. It also raises
+            # when there are no cables yet -- skip the tap in that case so the
+            # very first lateral can still be laid from the substation.
+            if not self.pen_cables:
+                return
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                self.connect_buildings(
+                    only_unconnected=True, clearance_m=clearance,
+                )
+
+        def _nearest_distance(i: int) -> float:
+            cx, cy = self.footprints[i].centroid_xy_m()
+            return min(
+                math.hypot(cx - px, cy - py) for _, (px, py) in nodes
+            )
+
+        laterals: list[str] = []
+        for _ in range(max_passes):
+            _tap()
+            done = {c.house_idx for c in self.connections}
+            orphans = [
+                i for i in range(len(self.footprints)) if i not in done
+            ]
+            if not orphans:
+                break
+            progressed = False
+            for i in sorted(orphans, key=_nearest_distance, reverse=True):
+                if i in {c.house_idx for c in self.connections}:
+                    continue  # already tapped via a neighbour's lateral
+                fp = self.footprints[i]
+                cx, cy = fp.centroid_xy_m()
+                src, _src_xy = min(
+                    nodes,
+                    key=lambda nd: math.hypot(cx - nd[1][0], cy - nd[1][1]),
+                )
+                end_xy = self._free_point_near_house(
+                    fp, self._anchor_position(src),
+                    clearance=lat_clear, margin_m=margin_m,
+                )
+                if end_xy is None:
+                    continue
+                name = f"lateral_house_{i:04d}"
+                if any(c.name == name for c in self.pen_cables):
+                    continue
+                routed = False
+                eff_escape = (
+                    escape_radius_m
+                    if escape_radius_m is not None
+                    else min_segment_length_m
+                )
+                # Grid ladder: configured -> half (tighter final bridges) ->
+                # fifth (maze escape on long winding routes, where a fine grid
+                # would otherwise exhaust the A* iteration budget).
+                for grid, esc in (
+                    (min_segment_length_m, escape_radius_m),
+                    (max(1.0, min_segment_length_m / 2.0), 2.0 * eff_escape),
+                    (max(1.0, min_segment_length_m / 5.0), 2.0 * eff_escape),
+                ):
+                    try:
+                        self.add_pen_cable(
+                            start=src, end_xy=end_xy, name=name,
+                            min_segment_length_m=grid,
+                            clearance_m=clearance, escape_radius_m=esc,
+                        )
+                        routed = True
+                        break
+                    except RuntimeError:
+                        continue
+                if not routed:
+                    continue
+                laterals.append(name)
+                progressed = True
+                _tap()  # tap house i (and any neighbours now in reach)
+            if not progressed:
+                break
+
+        done = {c.house_idx for c in self.connections}
+        islands = [i for i in range(len(self.footprints)) if i not in done]
+        return LateralCoverageResult(laterals, islands, list(self.connections))
+
     # ------------------------------------------------------------------
     # Materialisation
     # ------------------------------------------------------------------
@@ -2053,6 +2251,76 @@ class OrtsnetzLayout(BaseModel):
             self._footprint_to_box(fp, i)
             for i, fp in enumerate(self.footprints)
         ]
+
+    def _anchors_connected_to_substation(self) -> list[str]:
+        """Source anchors galvanically connected to the substation.
+
+        Walks the node graph induced by PEN cables whose *both* endpoints
+        are named anchors (``start_anchor`` / ``end_anchor``) and returns
+        the connected component containing the substation, ordered
+        substation-first then KVS in placement order. A KVS reachable only
+        through a free-ended cable (e.g. a trunk tail) is *not* included.
+        """
+        adjacency: dict[str, set[str]] = {self.substation_name: set()}
+        for k in self.kvs_placements:
+            adjacency.setdefault(k.name, set())
+        for cable in self.pen_cables:
+            a, b = cable.start_anchor, cable.end_anchor
+            if a in adjacency and b is not None and b in adjacency:
+                adjacency[a].add(b)
+                adjacency[b].add(a)
+        seen = {self.substation_name}
+        stack = [self.substation_name]
+        while stack:
+            current = stack.pop()
+            for neighbour in adjacency.get(current, ()):
+                if neighbour not in seen:
+                    seen.add(neighbour)
+                    stack.append(neighbour)
+        return [self.substation_name] + [
+            k.name for k in self.kvs_placements if k.name in seen
+        ]
+
+    def _free_point_near_house(
+        self,
+        fp: BuildingFootprint,
+        node_xy: tuple[float, float],
+        *,
+        clearance: float,
+        margin_m: float = 3.0,
+    ) -> Optional[tuple[float, float]]:
+        r"""Free $(x, y)$ just outside ``fp``, biased towards ``node_xy``.
+
+        Returns the first candidate -- placed at growing distances and a
+        fan of bearings around the house→node direction -- that lies
+        outside every footprint box inflated by ``clearance``. Returns
+        ``None`` if the house is enclosed on all tried bearings.
+        """
+        (cx, cy), (dx, dy) = fp.axis_aligned_bounding_rectangle()
+        half_diag = 0.5 * math.hypot(dx, dy)
+        ux, uy = node_xy[0] - cx, node_xy[1] - cy
+        norm = math.hypot(ux, uy)
+        if norm < 1e-9:
+            ux, uy = 1.0, 0.0
+        else:
+            ux, uy = ux / norm, uy / norm
+        boxes = [
+            self._footprint_to_box(f, j).inflated(clearance)
+            for j, f in enumerate(self.footprints)
+        ]
+        for extra in (0.0, 3.0, 6.0, 10.0, 16.0):
+            dist = half_diag + margin_m + extra
+            for ang_deg in (
+                0, 20, -20, 45, -45, 70, -70, 110, -110, 160, -160, 180,
+            ):
+                theta = math.radians(ang_deg)
+                cos_t, sin_t = math.cos(theta), math.sin(theta)
+                vx = cos_t * ux - sin_t * uy
+                vy = sin_t * ux + cos_t * uy
+                px, py = cx + dist * vx, cy + dist * vy
+                if not any(b.contains_point(px, py) for b in boxes):
+                    return (px, py)
+        return None
 
     def _stub_to_cable(
         self,

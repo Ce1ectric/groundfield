@@ -1250,3 +1250,70 @@ def test_plot_returns_axes_without_displaying() -> None:
     ax = layout.plot()
     assert ax is not None
     plt.close(ax.figure)
+
+
+# ---------------------------------------------------------------------
+# connect_all_buildings — guaranteed LV coverage (laterals)
+# ---------------------------------------------------------------------
+
+
+def test_connect_all_buildings_connects_isolated_house() -> None:
+    """A far house behind a blocker is unreachable by a plain tap but gets
+    a routed lateral and ends up connected.
+
+    The blocker is a tall wall (``dy=60``): a short wall would let the
+    two-segment L-stub of :meth:`connect_buildings` route *over the top*
+    and the far house would not be orphaned in the first place.
+    """
+    footprints = [
+        _rect_footprint(20.0, 0.0, dx=10.0, dy=10.0, osm_id=1),    # near house
+        _rect_footprint(100.0, 0.0, dx=20.0, dy=60.0, osm_id=2),   # blocker wall
+        _rect_footprint(200.0, 0.0, dx=10.0, dy=10.0, osm_id=3),   # far house
+    ]
+    layout = OrtsnetzLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
+    layout.add_pen_cable(start="substation", end_xy=(40.0, 0.0))   # short feeder
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        layout.connect_buildings()
+    assert 2 not in {c.house_idx for c in layout.connections}      # far house orphaned
+
+    result = layout.connect_all_buildings()
+    assert {c.house_idx for c in layout.connections} == {0, 1, 2}
+    assert result.islands == []
+    assert len(result.laterals) >= 1
+
+
+def test_connect_all_buildings_without_cables_lays_laterals_from_substation() -> None:
+    """With no PEN cable yet, laterals are laid straight from the substation."""
+    footprints = [
+        _rect_footprint(30.0, 0.0, dx=10.0, dy=10.0, osm_id=1),
+        _rect_footprint(-30.0, 20.0, dx=10.0, dy=10.0, osm_id=2),
+    ]
+    layout = OrtsnetzLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
+    result = layout.connect_all_buildings()
+    assert {c.house_idx for c in layout.connections} == {0, 1}
+    assert result.islands == []
+    assert len(result.laterals) >= 1
+
+
+def test_anchors_connected_to_substation_excludes_stranded_kvs() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [_rect_footprint(40.0, 0.0)], substation_xy=(0.0, 0.0),
+    )
+    layout.add_kvs(position_xy=(60.0, 0.0), name="kvs_wired")
+    layout.add_kvs(position_xy=(-60.0, 0.0), name="kvs_stranded")
+    layout.add_pen_cable(start="substation", end="kvs_wired")
+    anchors = layout._anchors_connected_to_substation()
+    assert anchors[0] == "substation"
+    assert "kvs_wired" in anchors
+    assert "kvs_stranded" not in anchors
+
+
+def test_connect_all_buildings_empty_source_anchors_raises() -> None:
+    layout = OrtsnetzLayout.from_footprints(
+        [_rect_footprint(40.0, 0.0)], substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(20.0, 0.0))
+    with pytest.raises(RuntimeError, match="no source anchor"):
+        layout.connect_all_buildings(source_anchors=[])

@@ -237,12 +237,12 @@ via the new :class:`TnNetworkConfig.pen_topology` field
 
 ## `OrtsnetzLayout` — imperative builder
 
-Where :class:`TnNetworkGenerator` produces *stochastic* AP1
-reference worlds from population-level parameters,
+Where :class:`TnNetworkGenerator` produces *stochastic* reference
+worlds from population-level parameters,
 :class:`OrtsnetzLayout` composes a **single deterministic** network
 piece by piece — in the order an engineer would draw it on a plan.
 It is the recommended entry point when the network is known from a
-real OSM extract plus a hand-placed substation, and the AP1
+real OSM extract plus a hand-placed substation, and the
 statistical sweep approach is too rigid.
 
 ### Workflow

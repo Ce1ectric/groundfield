@@ -165,6 +165,18 @@ class Engine(BaseModel):
     tolerance: float = Field(default=1e-6, gt=0.0)
     max_iterations: int = Field(default=200, gt=0)
     earth_inductive_model: EarthInductiveModel = Field(default="perfect_mirror")
+    image_max_terms: int = Field(
+        default=100, gt=0,
+        description=(
+            "Maximale Anzahl Reihenterme der image_2layer-/image_nlayer-"
+            "Bildladungsreihe. Bei hohem Schichtkontrast (|K| nahe 1) sind "
+            "mehr Terme noetig, um |K|^n < image_series_tol zu erreichen."
+        ),
+    )
+    image_series_tol: float = Field(
+        default=1e-6, gt=0.0,
+        description="Abbruchtoleranz |K|^n der image_2layer-Bildladungsreihe.",
+    )
 
     @field_validator("frequencies")
     @classmethod
@@ -362,7 +374,10 @@ class Engine(BaseModel):
         if effective_backend == "image_2layer":
             from groundfield.solver.image_2layer import solve_image_2layer
 
-            return solve_image_2layer(world, self)
+            return solve_image_2layer(
+                world, self,
+                max_terms=self.image_max_terms, tol=self.image_series_tol,
+            )
 
         if effective_backend == "image_nlayer":
             from groundfield.solver.image_nlayer import solve_image_nlayer

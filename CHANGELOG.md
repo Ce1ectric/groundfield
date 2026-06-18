@@ -30,6 +30,44 @@ _No changes yet._
 
 ---
 
+## [0.8.0] — 2026-06-18
+
+### Added — `create_engine`: configurable image-series convergence (`image_max_terms` / `image_series_tol`)
+
+`create_engine()` and the underlying `Engine` gain two optional parameters,
+`image_max_terms` (default `100`) and `image_series_tol` (default `1e-6`),
+forwarded to the `image_2layer` / `image_nlayer` backends. They control the
+truncation of the Tagg/Sunde image-charge series (ADR-0001). For high layer
+contrast — `|K|` close to 1, e.g. ρ₁ = 1000 Ω·m over ρ₂ = 30 Ω·m
+(`|K|` ≈ 0.94) — the series needs ≈ 230 terms to reach the tolerance; the
+previously hard-coded cap of 100 left such cases unconverged
+(`metadata["converged"] == False`) with a "Result may be inaccurate" warning
+and a truncation error up to a few percent. Callers can now raise the cap
+(e.g. `create_engine(backend="image", image_max_terms=500)`). Defaults are
+unchanged, so existing behaviour and all prior results are bit-identical.
+Regression test in `tests/test_two_layer.py`
+(`test_two_layer_image_max_terms_raises_convergence_cap`).
+
+### Added — OrtsnetzLayout.connect_all_buildings: guaranteed LV coverage
+
+`OrtsnetzLayout.connect_all_buildings()` connects *every* house to the LV
+network. `connect_buildings()` only taps each house to the nearest cable
+with a short straight stub and skips houses whose stub would cross another
+footprint (typically houses with no cable in reach). The new method closes
+that gap so the layout models a real LV network in which every customer is
+served: after the initial tap pass it routes obstacle-avoiding PEN
+*laterals* (full Manhattan A\*) from the nearest substation/KVS node to a
+free point just outside each still-unconnected house, then re-taps —
+re-tapping frequently connects neighbouring houses to the same new lateral.
+Laterals only originate from nodes galvanically connected to the substation
+(new helper `_anchors_connected_to_substation`), so a stranded KVS never
+seeds an isolated sub-network. Houses enclosed by other footprints on every
+side are reported in the returned `LateralCoverageResult.islands` instead of
+raising. The box-model free-point search lives in the new helper
+`_free_point_near_house`.
+
+---
+
 ## [0.7.0] — 2026-05-26
 
 ### Added — OrtsnetzLayout: imperative TN-Ortsnetz builder
@@ -3977,7 +4015,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.5.0
