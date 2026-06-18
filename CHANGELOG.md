@@ -26,7 +26,21 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — `create_engine`: configurable image-series convergence (`image_max_terms` / `image_series_tol`)
+
+`create_engine()` and the underlying `Engine` gain two optional parameters,
+`image_max_terms` (default `100`) and `image_series_tol` (default `1e-6`),
+forwarded to the `image_2layer` / `image_nlayer` backends. They control the
+truncation of the Tagg/Sunde image-charge series (ADR-0001). For high layer
+contrast — `|K|` close to 1, e.g. ρ₁ = 1000 Ω·m over ρ₂ = 30 Ω·m
+(`|K|` ≈ 0.94) — the series needs ≈ 230 terms to reach the tolerance; the
+previously hard-coded cap of 100 left such cases unconverged
+(`metadata["converged"] == False`) with a "Result may be inaccurate" warning
+and a truncation error up to a few percent. Callers can now raise the cap
+(e.g. `create_engine(backend="image", image_max_terms=500)`). Defaults are
+unchanged, so existing behaviour and all prior results are bit-identical.
+Regression test in `tests/test_two_layer.py`
+(`test_two_layer_image_max_terms_raises_convergence_cap`).
 
 ---
 

@@ -190,6 +190,25 @@ def test_two_layer_series_converges_within_max_terms() -> None:
     assert res.metadata["n_terms_used"] < 100
 
 
+def test_two_layer_image_max_terms_raises_convergence_cap() -> None:
+    """High contrast (rho1 >> rho2, |K| -> 1) needs > 100 series terms;
+    ``image_max_terms`` lets the caller raise the cap so the Tagg/Sunde
+    series converges (ADR-0001)."""
+    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=10.0)  # |K|≈0.94
+    world = gf.create_world(soil=soil)
+    gf.create_electrode(world, "rod", name="g1",
+                        position=(0, 0, 0.0), length=1.5)
+    gf.create_source(world, attached_to="g1", magnitude=1.0)
+    # Default cap (100) is too low for this contrast -> not converged.
+    res100 = gf.create_engine(backend="image", segment_length=0.05).solve(world)
+    assert res100.metadata["converged"] is False
+    # Raising the cap converges within tolerance, using more than 100 terms.
+    res500 = gf.create_engine(backend="image", segment_length=0.05,
+                              image_max_terms=500).solve(world)
+    assert res500.metadata["converged"] is True
+    assert 100 < res500.metadata["n_terms_used"] < 500
+
+
 # ---------------------------------------------------------------------
 # 7. Potential field decays monotonically
 # ---------------------------------------------------------------------

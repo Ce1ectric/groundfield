@@ -349,6 +349,8 @@ def create_engine(
     tolerance: float = 1e-6,
     max_iterations: int = 200,
     earth_inductive_model: str = "perfect_mirror",
+    image_max_terms: int = 100,
+    image_series_tol: float = 1e-6,
 ) -> Engine:
     """Create a configured :class:`Engine`.
 
@@ -386,6 +388,14 @@ def create_engine(
         - ``"sommerfeld"`` (ADR-0006) — geometric integration of the
           σ-dependent vector-potential Green's function. Rigorous for
           arbitrary wire lengths and for layered earth.
+    image_max_terms
+        Maximum number of image-charge series terms for the
+        ``image_2layer`` / ``image_nlayer`` backends (ADR-0001). Raise
+        above the default (100) for high layer contrast (``|K|`` near 1),
+        where the series needs more terms to reach ``image_series_tol``
+        (e.g. ρ₁=1000 / ρ₂=30, ``|K|`` ≈ 0.94, needs ≈ 230 terms).
+    image_series_tol
+        Series truncation tolerance ``|K|^n`` for the image backends.
     """
     return Engine(
         backend=backend,
@@ -394,6 +404,8 @@ def create_engine(
         tolerance=tolerance,
         max_iterations=max_iterations,
         earth_inductive_model=earth_inductive_model,
+        image_max_terms=image_max_terms,
+        image_series_tol=image_series_tol,
     )
 
 
