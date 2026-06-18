@@ -42,6 +42,24 @@ unchanged, so existing behaviour and all prior results are bit-identical.
 Regression test in `tests/test_two_layer.py`
 (`test_two_layer_image_max_terms_raises_convergence_cap`).
 
+### Added — OrtsnetzLayout.connect_all_buildings: guaranteed LV coverage
+
+`OrtsnetzLayout.connect_all_buildings()` connects *every* house to the LV
+network. `connect_buildings()` only taps each house to the nearest cable
+with a short straight stub and skips houses whose stub would cross another
+footprint (typically houses with no cable in reach). The new method closes
+that gap so the layout models a real LV network in which every customer is
+served: after the initial tap pass it routes obstacle-avoiding PEN
+*laterals* (full Manhattan A\*) from the nearest substation/KVS node to a
+free point just outside each still-unconnected house, then re-taps —
+re-tapping frequently connects neighbouring houses to the same new lateral.
+Laterals only originate from nodes galvanically connected to the substation
+(new helper `_anchors_connected_to_substation`), so a stranded KVS never
+seeds an isolated sub-network. Houses enclosed by other footprints on every
+side are reported in the returned `LateralCoverageResult.islands` instead of
+raising. The box-model free-point search lives in the new helper
+`_free_point_near_house`.
+
 ---
 
 ## [0.7.0] — 2026-05-26
