@@ -28,7 +28,7 @@ pip install "groundfield[groundinsight]"
 | [03](03_multilayer_soil.md) | Using multi-layer soil models | `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil` and the auto-dispatching backends |
 | [04](04_interconnected_grounding.md) | Interconnected grounding system with line connections | Cluster fusion via ideal bonds, finite-impedance branches (PEN cable) between clusters |
 | [05](05_inductive_coupling.md) | Analysing inductive coupling | Neumann self-/mutual inductance and the Carson earth-return correction |
-| [06](06_tn_model.md) | Create a TN-Model | Stochastic AP1 network via `TnNetworkGenerator` + `RadialTrunkTopology` |
+| [06](06_tn_model.md) | Create a TN-Model | Stochastic TN low-voltage network via `TnNetworkGenerator` + `RadialTrunkTopology` |
 | [07](07_measurement_distance.md) | Comparison of measurement distances on a synthetic grounding system | Hilfserder distance sweep with inline + perpendicular voltage probes |
 | [08](08_osm_pipeline.md) | OSM pipeline with simulation results | End-to-end `OrtsnetzLayout` workflow: OSM ingest → Manhattan PEN → measurement loop |
 | [09](09_plot_gallery.md) | All plots in action | Layout, surface potential (`two_slope` / `symmetric` / `log`), radial decay, $x$-$z$ cross-section, world geometry |

@@ -85,7 +85,7 @@ for the full list with references to the underlying ADRs.
   `OrtsnetzLayout.foundation_mask(penetration, salt=0)` returns a
   deterministic per-house `bool` list derived from a stable MD5
   hash of each footprint's OSM id. Same `(p, salt)` → same mask
-  every time, and the mask is *nested* in `p` so AP1 penetration
+  every time, and the mask is *nested* in `p` so penetration
   sweeps grow the foundation-equipped subset monotonically. See
   the [measurement-distance comparison
   example](docs/examples/07_measurement_distance.md) for a full

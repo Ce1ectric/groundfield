@@ -81,7 +81,7 @@ parameter sweeps that don't need the full Sommerfeld accuracy.
 ## Picking a backend
 
 - Quick exploration, homogeneous soil → `image`.
-- AP1-style 2-layer studies → `image_2layer` (default for any
+- Typical 2-layer studies → `image_2layer` (default for any
   `TwoLayerSoil` world).
 - More than two layers → `image_nlayer` dispatcher, or `cim` for
   many frequencies.

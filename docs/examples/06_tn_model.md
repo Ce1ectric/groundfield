@@ -7,7 +7,7 @@ ships two factories:
 
 | Factory                        | Use when                                                                 |
 |--------------------------------|--------------------------------------------------------------------------|
-| :class:`TnNetworkGenerator`    | Stochastic AP1-style worlds, parameter sweeps, Monte Carlo               |
+| :class:`TnNetworkGenerator`    | Stochastic TN reference worlds, parameter sweeps, Monte Carlo            |
 | :class:`OrtsnetzLayout`        | A *single deterministic* network composed piece by piece from a real map |
 
 This example uses :class:`TnNetworkGenerator` for a synthetic
