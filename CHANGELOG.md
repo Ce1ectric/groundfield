@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.9.0] — 2026-06-19
+
 ### Added — `solve_mutual_matrix`: full mutual grounding-impedance matrix in one assembly
 
 `solve_mutual_matrix(world, engine, anchors, probe_points, …)` returns the full
@@ -4066,7 +4072,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.9.0
 [0.8.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.7.0
