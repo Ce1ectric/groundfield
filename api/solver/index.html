@@ -1822,6 +1822,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#groundfield.solver.solve_mutual_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        solve_mutual_matrix
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2816,6 +2827,17 @@
     <span class="md-ellipsis">
       
         solve_mom
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groundfield.solver.solve_mutual_matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        solve_mutual_matrix
       
     </span>
   </a>
@@ -6864,6 +6886,972 @@ image backends. <code>metadata['solver']</code> is set to <code>'galerkin'</code
 <a id="__codelineno-0-634" name="__codelineno-0-634"></a>            <span class="p">),</span>
 <a id="__codelineno-0-635" name="__codelineno-0-635"></a>        <span class="p">},</span>
 <a id="__codelineno-0-636" name="__codelineno-0-636"></a>    <span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="groundfield.solver.solve_mutual_matrix" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">solve_mutual_matrix</span>
+
+
+<a href="#groundfield.solver.solve_mutual_matrix" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">solve_mutual_matrix</span><span class="p">(</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">anchors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">probe_points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">frequency_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">symmetrize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">matrix_min_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.001</span><span class="p">,</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">matrix_max_terms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">matrix_tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-06</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Full mutual grounding-impedance matrix <code>Z_G</code> in one assembly.</p>
+<p>Reproduces the historic per-excitation construction (one
+<code>Engine.solve</code> per gnode; diagonal from
+:meth:<code>FieldResult.cluster_impedance</code>, off-diagonal from
+:meth:<code>FieldResult.potential</code> at the probe points) <strong>bit-for-bit</strong>,
+but assembles the segment reaction matrix and the probe-point field
+kernel only once.</p>
+<p><code>world</code> must already carry <strong>all</strong> <code>nG</code> grounding clusters
+(every anchor in <code>anchors</code> must be a real electrode in
+<code>world</code>). It must <strong>not</strong> carry any current source — the
+excitations are applied internally, one cluster at a time, exactly
+as the historic loop did. Finite-impedance / distributed conductors
+<em>between distinct clusters</em> are out of scope for the catalogue use
+case (each gnode is an isolated galvanic cluster) and are handled
+via the standard :func:<code>_solve_cluster_currents</code> machinery only in
+so far as they remain confined to a single excited cluster.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>world</code>
+            </td>
+            <td>
+                  <code>&#39;World&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Assembled world holding all <code>nG</code> grounding clusters and the
+soil model. Sources, if any, are ignored.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>engine</code>
+            </td>
+            <td>
+                  <code>&#39;Engine&#39;</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Engine configuration. <code>segment_length</code> controls the
+discretisation; <code>frequencies</code> selects the solved frequency
+via <code>frequency_index</code>; <code>image_max_terms</code> /
+<code>image_series_tol</code> feed the 2-layer <strong>self</strong>-kernel (the
+reaction-matrix assembly), exactly as <code>Engine.solve</code> would.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>anchors</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Length-<code>nG</code> list of electrode names, one per gnode. Anchor
+<code>j</code> receives the unit current of excitation <code>j</code> and its
+cluster supplies the diagonal entry <code>Z[j, j]</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>probe_points</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>(nG, 3)</code> array of off-diagonal probe coordinates: row <code>i</code>
+is the <code>(x, y, depth)</code> point at which the potential of every
+other excitation is sampled to fill column <code>i</code> of the
+off-diagonal. Mirrors <code>res.potential([[x_i, y_i, depth]])</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>frequency_index</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Index into <code>engine.frequencies</code>. Default 0.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>symmetrize</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>True</code> (default) return <code>0.5 · (Z + Zᵀ)</code> — the historic
+post-processing.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>matrix_min_distance</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Truncation / clamp parameters of the <strong>off-diagonal</strong> field
+evaluation. The defaults <code>1e-3 / 100 / 1e-6</code> reproduce the
+hard-coded defaults of :meth:<code>FieldResult.potential</code> /
+<code>_potential_two_layer</code> exactly. (The reaction-matrix
+assembly uses <code>engine.image_max_terms</code> / <code>image_series_tol</code>
+independently, just like the live solver.)</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.001</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>matrix_max_terms</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Truncation / clamp parameters of the <strong>off-diagonal</strong> field
+evaluation. The defaults <code>1e-3 / 100 / 1e-6</code> reproduce the
+hard-coded defaults of :meth:<code>FieldResult.potential</code> /
+<code>_potential_two_layer</code> exactly. (The reaction-matrix
+assembly uses <code>engine.image_max_terms</code> / <code>image_series_tol</code>
+independently, just like the live solver.)</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.001</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>matrix_tol</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Truncation / clamp parameters of the <strong>off-diagonal</strong> field
+evaluation. The defaults <code>1e-3 / 100 / 1e-6</code> reproduce the
+hard-coded defaults of :meth:<code>FieldResult.potential</code> /
+<code>_potential_two_layer</code> exactly. (The reaction-matrix
+assembly uses <code>engine.image_max_terms</code> / <code>image_series_tol</code>
+independently, just like the live solver.)</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.001</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>Z</code></td>            <td>
+                  <code>(<span title="numpy.ndarray">ndarray</span>, <span title="shape">shape</span>(<span title="nG">nG</span>, <span title="nG">nG</span>), <span title="complex">complex</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The mutual grounding-impedance matrix.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+            <details class="quote">
+              <summary>Source code in <code>src/groundfield/solver/mutual.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-203">203</a></span>
+<span class="normal"><a href="#__codelineno-0-204">204</a></span>
+<span class="normal"><a href="#__codelineno-0-205">205</a></span>
+<span class="normal"><a href="#__codelineno-0-206">206</a></span>
+<span class="normal"><a href="#__codelineno-0-207">207</a></span>
+<span class="normal"><a href="#__codelineno-0-208">208</a></span>
+<span class="normal"><a href="#__codelineno-0-209">209</a></span>
+<span class="normal"><a href="#__codelineno-0-210">210</a></span>
+<span class="normal"><a href="#__codelineno-0-211">211</a></span>
+<span class="normal"><a href="#__codelineno-0-212">212</a></span>
+<span class="normal"><a href="#__codelineno-0-213">213</a></span>
+<span class="normal"><a href="#__codelineno-0-214">214</a></span>
+<span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span>
+<span class="normal"><a href="#__codelineno-0-222">222</a></span>
+<span class="normal"><a href="#__codelineno-0-223">223</a></span>
+<span class="normal"><a href="#__codelineno-0-224">224</a></span>
+<span class="normal"><a href="#__codelineno-0-225">225</a></span>
+<span class="normal"><a href="#__codelineno-0-226">226</a></span>
+<span class="normal"><a href="#__codelineno-0-227">227</a></span>
+<span class="normal"><a href="#__codelineno-0-228">228</a></span>
+<span class="normal"><a href="#__codelineno-0-229">229</a></span>
+<span class="normal"><a href="#__codelineno-0-230">230</a></span>
+<span class="normal"><a href="#__codelineno-0-231">231</a></span>
+<span class="normal"><a href="#__codelineno-0-232">232</a></span>
+<span class="normal"><a href="#__codelineno-0-233">233</a></span>
+<span class="normal"><a href="#__codelineno-0-234">234</a></span>
+<span class="normal"><a href="#__codelineno-0-235">235</a></span>
+<span class="normal"><a href="#__codelineno-0-236">236</a></span>
+<span class="normal"><a href="#__codelineno-0-237">237</a></span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span>
+<span class="normal"><a href="#__codelineno-0-246">246</a></span>
+<span class="normal"><a href="#__codelineno-0-247">247</a></span>
+<span class="normal"><a href="#__codelineno-0-248">248</a></span>
+<span class="normal"><a href="#__codelineno-0-249">249</a></span>
+<span class="normal"><a href="#__codelineno-0-250">250</a></span>
+<span class="normal"><a href="#__codelineno-0-251">251</a></span>
+<span class="normal"><a href="#__codelineno-0-252">252</a></span>
+<span class="normal"><a href="#__codelineno-0-253">253</a></span>
+<span class="normal"><a href="#__codelineno-0-254">254</a></span>
+<span class="normal"><a href="#__codelineno-0-255">255</a></span>
+<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+<span class="normal"><a href="#__codelineno-0-257">257</a></span>
+<span class="normal"><a href="#__codelineno-0-258">258</a></span>
+<span class="normal"><a href="#__codelineno-0-259">259</a></span>
+<span class="normal"><a href="#__codelineno-0-260">260</a></span>
+<span class="normal"><a href="#__codelineno-0-261">261</a></span>
+<span class="normal"><a href="#__codelineno-0-262">262</a></span>
+<span class="normal"><a href="#__codelineno-0-263">263</a></span>
+<span class="normal"><a href="#__codelineno-0-264">264</a></span>
+<span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span>
+<span class="normal"><a href="#__codelineno-0-269">269</a></span>
+<span class="normal"><a href="#__codelineno-0-270">270</a></span>
+<span class="normal"><a href="#__codelineno-0-271">271</a></span>
+<span class="normal"><a href="#__codelineno-0-272">272</a></span>
+<span class="normal"><a href="#__codelineno-0-273">273</a></span>
+<span class="normal"><a href="#__codelineno-0-274">274</a></span>
+<span class="normal"><a href="#__codelineno-0-275">275</a></span>
+<span class="normal"><a href="#__codelineno-0-276">276</a></span>
+<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+<span class="normal"><a href="#__codelineno-0-278">278</a></span>
+<span class="normal"><a href="#__codelineno-0-279">279</a></span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span>
+<span class="normal"><a href="#__codelineno-0-290">290</a></span>
+<span class="normal"><a href="#__codelineno-0-291">291</a></span>
+<span class="normal"><a href="#__codelineno-0-292">292</a></span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span>
+<span class="normal"><a href="#__codelineno-0-295">295</a></span>
+<span class="normal"><a href="#__codelineno-0-296">296</a></span>
+<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+<span class="normal"><a href="#__codelineno-0-298">298</a></span>
+<span class="normal"><a href="#__codelineno-0-299">299</a></span>
+<span class="normal"><a href="#__codelineno-0-300">300</a></span>
+<span class="normal"><a href="#__codelineno-0-301">301</a></span>
+<span class="normal"><a href="#__codelineno-0-302">302</a></span>
+<span class="normal"><a href="#__codelineno-0-303">303</a></span>
+<span class="normal"><a href="#__codelineno-0-304">304</a></span>
+<span class="normal"><a href="#__codelineno-0-305">305</a></span>
+<span class="normal"><a href="#__codelineno-0-306">306</a></span>
+<span class="normal"><a href="#__codelineno-0-307">307</a></span>
+<span class="normal"><a href="#__codelineno-0-308">308</a></span>
+<span class="normal"><a href="#__codelineno-0-309">309</a></span>
+<span class="normal"><a href="#__codelineno-0-310">310</a></span>
+<span class="normal"><a href="#__codelineno-0-311">311</a></span>
+<span class="normal"><a href="#__codelineno-0-312">312</a></span>
+<span class="normal"><a href="#__codelineno-0-313">313</a></span>
+<span class="normal"><a href="#__codelineno-0-314">314</a></span>
+<span class="normal"><a href="#__codelineno-0-315">315</a></span>
+<span class="normal"><a href="#__codelineno-0-316">316</a></span>
+<span class="normal"><a href="#__codelineno-0-317">317</a></span>
+<span class="normal"><a href="#__codelineno-0-318">318</a></span>
+<span class="normal"><a href="#__codelineno-0-319">319</a></span>
+<span class="normal"><a href="#__codelineno-0-320">320</a></span>
+<span class="normal"><a href="#__codelineno-0-321">321</a></span>
+<span class="normal"><a href="#__codelineno-0-322">322</a></span>
+<span class="normal"><a href="#__codelineno-0-323">323</a></span>
+<span class="normal"><a href="#__codelineno-0-324">324</a></span>
+<span class="normal"><a href="#__codelineno-0-325">325</a></span>
+<span class="normal"><a href="#__codelineno-0-326">326</a></span>
+<span class="normal"><a href="#__codelineno-0-327">327</a></span>
+<span class="normal"><a href="#__codelineno-0-328">328</a></span>
+<span class="normal"><a href="#__codelineno-0-329">329</a></span>
+<span class="normal"><a href="#__codelineno-0-330">330</a></span>
+<span class="normal"><a href="#__codelineno-0-331">331</a></span>
+<span class="normal"><a href="#__codelineno-0-332">332</a></span>
+<span class="normal"><a href="#__codelineno-0-333">333</a></span>
+<span class="normal"><a href="#__codelineno-0-334">334</a></span>
+<span class="normal"><a href="#__codelineno-0-335">335</a></span>
+<span class="normal"><a href="#__codelineno-0-336">336</a></span>
+<span class="normal"><a href="#__codelineno-0-337">337</a></span>
+<span class="normal"><a href="#__codelineno-0-338">338</a></span>
+<span class="normal"><a href="#__codelineno-0-339">339</a></span>
+<span class="normal"><a href="#__codelineno-0-340">340</a></span>
+<span class="normal"><a href="#__codelineno-0-341">341</a></span>
+<span class="normal"><a href="#__codelineno-0-342">342</a></span>
+<span class="normal"><a href="#__codelineno-0-343">343</a></span>
+<span class="normal"><a href="#__codelineno-0-344">344</a></span>
+<span class="normal"><a href="#__codelineno-0-345">345</a></span>
+<span class="normal"><a href="#__codelineno-0-346">346</a></span>
+<span class="normal"><a href="#__codelineno-0-347">347</a></span>
+<span class="normal"><a href="#__codelineno-0-348">348</a></span>
+<span class="normal"><a href="#__codelineno-0-349">349</a></span>
+<span class="normal"><a href="#__codelineno-0-350">350</a></span>
+<span class="normal"><a href="#__codelineno-0-351">351</a></span>
+<span class="normal"><a href="#__codelineno-0-352">352</a></span>
+<span class="normal"><a href="#__codelineno-0-353">353</a></span>
+<span class="normal"><a href="#__codelineno-0-354">354</a></span>
+<span class="normal"><a href="#__codelineno-0-355">355</a></span>
+<span class="normal"><a href="#__codelineno-0-356">356</a></span>
+<span class="normal"><a href="#__codelineno-0-357">357</a></span>
+<span class="normal"><a href="#__codelineno-0-358">358</a></span>
+<span class="normal"><a href="#__codelineno-0-359">359</a></span>
+<span class="normal"><a href="#__codelineno-0-360">360</a></span>
+<span class="normal"><a href="#__codelineno-0-361">361</a></span>
+<span class="normal"><a href="#__codelineno-0-362">362</a></span>
+<span class="normal"><a href="#__codelineno-0-363">363</a></span>
+<span class="normal"><a href="#__codelineno-0-364">364</a></span>
+<span class="normal"><a href="#__codelineno-0-365">365</a></span>
+<span class="normal"><a href="#__codelineno-0-366">366</a></span>
+<span class="normal"><a href="#__codelineno-0-367">367</a></span>
+<span class="normal"><a href="#__codelineno-0-368">368</a></span>
+<span class="normal"><a href="#__codelineno-0-369">369</a></span>
+<span class="normal"><a href="#__codelineno-0-370">370</a></span>
+<span class="normal"><a href="#__codelineno-0-371">371</a></span>
+<span class="normal"><a href="#__codelineno-0-372">372</a></span>
+<span class="normal"><a href="#__codelineno-0-373">373</a></span>
+<span class="normal"><a href="#__codelineno-0-374">374</a></span>
+<span class="normal"><a href="#__codelineno-0-375">375</a></span>
+<span class="normal"><a href="#__codelineno-0-376">376</a></span>
+<span class="normal"><a href="#__codelineno-0-377">377</a></span>
+<span class="normal"><a href="#__codelineno-0-378">378</a></span>
+<span class="normal"><a href="#__codelineno-0-379">379</a></span>
+<span class="normal"><a href="#__codelineno-0-380">380</a></span>
+<span class="normal"><a href="#__codelineno-0-381">381</a></span>
+<span class="normal"><a href="#__codelineno-0-382">382</a></span>
+<span class="normal"><a href="#__codelineno-0-383">383</a></span>
+<span class="normal"><a href="#__codelineno-0-384">384</a></span>
+<span class="normal"><a href="#__codelineno-0-385">385</a></span>
+<span class="normal"><a href="#__codelineno-0-386">386</a></span>
+<span class="normal"><a href="#__codelineno-0-387">387</a></span>
+<span class="normal"><a href="#__codelineno-0-388">388</a></span>
+<span class="normal"><a href="#__codelineno-0-389">389</a></span>
+<span class="normal"><a href="#__codelineno-0-390">390</a></span>
+<span class="normal"><a href="#__codelineno-0-391">391</a></span>
+<span class="normal"><a href="#__codelineno-0-392">392</a></span>
+<span class="normal"><a href="#__codelineno-0-393">393</a></span>
+<span class="normal"><a href="#__codelineno-0-394">394</a></span>
+<span class="normal"><a href="#__codelineno-0-395">395</a></span>
+<span class="normal"><a href="#__codelineno-0-396">396</a></span>
+<span class="normal"><a href="#__codelineno-0-397">397</a></span>
+<span class="normal"><a href="#__codelineno-0-398">398</a></span>
+<span class="normal"><a href="#__codelineno-0-399">399</a></span>
+<span class="normal"><a href="#__codelineno-0-400">400</a></span>
+<span class="normal"><a href="#__codelineno-0-401">401</a></span>
+<span class="normal"><a href="#__codelineno-0-402">402</a></span>
+<span class="normal"><a href="#__codelineno-0-403">403</a></span>
+<span class="normal"><a href="#__codelineno-0-404">404</a></span>
+<span class="normal"><a href="#__codelineno-0-405">405</a></span>
+<span class="normal"><a href="#__codelineno-0-406">406</a></span>
+<span class="normal"><a href="#__codelineno-0-407">407</a></span>
+<span class="normal"><a href="#__codelineno-0-408">408</a></span>
+<span class="normal"><a href="#__codelineno-0-409">409</a></span>
+<span class="normal"><a href="#__codelineno-0-410">410</a></span>
+<span class="normal"><a href="#__codelineno-0-411">411</a></span>
+<span class="normal"><a href="#__codelineno-0-412">412</a></span>
+<span class="normal"><a href="#__codelineno-0-413">413</a></span>
+<span class="normal"><a href="#__codelineno-0-414">414</a></span>
+<span class="normal"><a href="#__codelineno-0-415">415</a></span>
+<span class="normal"><a href="#__codelineno-0-416">416</a></span>
+<span class="normal"><a href="#__codelineno-0-417">417</a></span>
+<span class="normal"><a href="#__codelineno-0-418">418</a></span>
+<span class="normal"><a href="#__codelineno-0-419">419</a></span>
+<span class="normal"><a href="#__codelineno-0-420">420</a></span>
+<span class="normal"><a href="#__codelineno-0-421">421</a></span>
+<span class="normal"><a href="#__codelineno-0-422">422</a></span>
+<span class="normal"><a href="#__codelineno-0-423">423</a></span>
+<span class="normal"><a href="#__codelineno-0-424">424</a></span>
+<span class="normal"><a href="#__codelineno-0-425">425</a></span>
+<span class="normal"><a href="#__codelineno-0-426">426</a></span>
+<span class="normal"><a href="#__codelineno-0-427">427</a></span>
+<span class="normal"><a href="#__codelineno-0-428">428</a></span>
+<span class="normal"><a href="#__codelineno-0-429">429</a></span>
+<span class="normal"><a href="#__codelineno-0-430">430</a></span>
+<span class="normal"><a href="#__codelineno-0-431">431</a></span>
+<span class="normal"><a href="#__codelineno-0-432">432</a></span>
+<span class="normal"><a href="#__codelineno-0-433">433</a></span>
+<span class="normal"><a href="#__codelineno-0-434">434</a></span>
+<span class="normal"><a href="#__codelineno-0-435">435</a></span>
+<span class="normal"><a href="#__codelineno-0-436">436</a></span>
+<span class="normal"><a href="#__codelineno-0-437">437</a></span>
+<span class="normal"><a href="#__codelineno-0-438">438</a></span>
+<span class="normal"><a href="#__codelineno-0-439">439</a></span>
+<span class="normal"><a href="#__codelineno-0-440">440</a></span>
+<span class="normal"><a href="#__codelineno-0-441">441</a></span>
+<span class="normal"><a href="#__codelineno-0-442">442</a></span>
+<span class="normal"><a href="#__codelineno-0-443">443</a></span>
+<span class="normal"><a href="#__codelineno-0-444">444</a></span>
+<span class="normal"><a href="#__codelineno-0-445">445</a></span>
+<span class="normal"><a href="#__codelineno-0-446">446</a></span>
+<span class="normal"><a href="#__codelineno-0-447">447</a></span>
+<span class="normal"><a href="#__codelineno-0-448">448</a></span>
+<span class="normal"><a href="#__codelineno-0-449">449</a></span>
+<span class="normal"><a href="#__codelineno-0-450">450</a></span>
+<span class="normal"><a href="#__codelineno-0-451">451</a></span>
+<span class="normal"><a href="#__codelineno-0-452">452</a></span>
+<span class="normal"><a href="#__codelineno-0-453">453</a></span>
+<span class="normal"><a href="#__codelineno-0-454">454</a></span>
+<span class="normal"><a href="#__codelineno-0-455">455</a></span>
+<span class="normal"><a href="#__codelineno-0-456">456</a></span>
+<span class="normal"><a href="#__codelineno-0-457">457</a></span>
+<span class="normal"><a href="#__codelineno-0-458">458</a></span>
+<span class="normal"><a href="#__codelineno-0-459">459</a></span>
+<span class="normal"><a href="#__codelineno-0-460">460</a></span>
+<span class="normal"><a href="#__codelineno-0-461">461</a></span>
+<span class="normal"><a href="#__codelineno-0-462">462</a></span>
+<span class="normal"><a href="#__codelineno-0-463">463</a></span>
+<span class="normal"><a href="#__codelineno-0-464">464</a></span>
+<span class="normal"><a href="#__codelineno-0-465">465</a></span>
+<span class="normal"><a href="#__codelineno-0-466">466</a></span>
+<span class="normal"><a href="#__codelineno-0-467">467</a></span>
+<span class="normal"><a href="#__codelineno-0-468">468</a></span>
+<span class="normal"><a href="#__codelineno-0-469">469</a></span>
+<span class="normal"><a href="#__codelineno-0-470">470</a></span>
+<span class="normal"><a href="#__codelineno-0-471">471</a></span>
+<span class="normal"><a href="#__codelineno-0-472">472</a></span>
+<span class="normal"><a href="#__codelineno-0-473">473</a></span>
+<span class="normal"><a href="#__codelineno-0-474">474</a></span>
+<span class="normal"><a href="#__codelineno-0-475">475</a></span>
+<span class="normal"><a href="#__codelineno-0-476">476</a></span>
+<span class="normal"><a href="#__codelineno-0-477">477</a></span>
+<span class="normal"><a href="#__codelineno-0-478">478</a></span>
+<span class="normal"><a href="#__codelineno-0-479">479</a></span>
+<span class="normal"><a href="#__codelineno-0-480">480</a></span>
+<span class="normal"><a href="#__codelineno-0-481">481</a></span>
+<span class="normal"><a href="#__codelineno-0-482">482</a></span>
+<span class="normal"><a href="#__codelineno-0-483">483</a></span>
+<span class="normal"><a href="#__codelineno-0-484">484</a></span>
+<span class="normal"><a href="#__codelineno-0-485">485</a></span>
+<span class="normal"><a href="#__codelineno-0-486">486</a></span>
+<span class="normal"><a href="#__codelineno-0-487">487</a></span>
+<span class="normal"><a href="#__codelineno-0-488">488</a></span>
+<span class="normal"><a href="#__codelineno-0-489">489</a></span>
+<span class="normal"><a href="#__codelineno-0-490">490</a></span>
+<span class="normal"><a href="#__codelineno-0-491">491</a></span>
+<span class="normal"><a href="#__codelineno-0-492">492</a></span>
+<span class="normal"><a href="#__codelineno-0-493">493</a></span>
+<span class="normal"><a href="#__codelineno-0-494">494</a></span>
+<span class="normal"><a href="#__codelineno-0-495">495</a></span>
+<span class="normal"><a href="#__codelineno-0-496">496</a></span>
+<span class="normal"><a href="#__codelineno-0-497">497</a></span>
+<span class="normal"><a href="#__codelineno-0-498">498</a></span>
+<span class="normal"><a href="#__codelineno-0-499">499</a></span>
+<span class="normal"><a href="#__codelineno-0-500">500</a></span>
+<span class="normal"><a href="#__codelineno-0-501">501</a></span>
+<span class="normal"><a href="#__codelineno-0-502">502</a></span>
+<span class="normal"><a href="#__codelineno-0-503">503</a></span>
+<span class="normal"><a href="#__codelineno-0-504">504</a></span>
+<span class="normal"><a href="#__codelineno-0-505">505</a></span>
+<span class="normal"><a href="#__codelineno-0-506">506</a></span>
+<span class="normal"><a href="#__codelineno-0-507">507</a></span>
+<span class="normal"><a href="#__codelineno-0-508">508</a></span>
+<span class="normal"><a href="#__codelineno-0-509">509</a></span>
+<span class="normal"><a href="#__codelineno-0-510">510</a></span>
+<span class="normal"><a href="#__codelineno-0-511">511</a></span>
+<span class="normal"><a href="#__codelineno-0-512">512</a></span>
+<span class="normal"><a href="#__codelineno-0-513">513</a></span>
+<span class="normal"><a href="#__codelineno-0-514">514</a></span>
+<span class="normal"><a href="#__codelineno-0-515">515</a></span>
+<span class="normal"><a href="#__codelineno-0-516">516</a></span>
+<span class="normal"><a href="#__codelineno-0-517">517</a></span>
+<span class="normal"><a href="#__codelineno-0-518">518</a></span>
+<span class="normal"><a href="#__codelineno-0-519">519</a></span>
+<span class="normal"><a href="#__codelineno-0-520">520</a></span>
+<span class="normal"><a href="#__codelineno-0-521">521</a></span>
+<span class="normal"><a href="#__codelineno-0-522">522</a></span>
+<span class="normal"><a href="#__codelineno-0-523">523</a></span>
+<span class="normal"><a href="#__codelineno-0-524">524</a></span>
+<span class="normal"><a href="#__codelineno-0-525">525</a></span>
+<span class="normal"><a href="#__codelineno-0-526">526</a></span>
+<span class="normal"><a href="#__codelineno-0-527">527</a></span>
+<span class="normal"><a href="#__codelineno-0-528">528</a></span>
+<span class="normal"><a href="#__codelineno-0-529">529</a></span>
+<span class="normal"><a href="#__codelineno-0-530">530</a></span>
+<span class="normal"><a href="#__codelineno-0-531">531</a></span>
+<span class="normal"><a href="#__codelineno-0-532">532</a></span>
+<span class="normal"><a href="#__codelineno-0-533">533</a></span>
+<span class="normal"><a href="#__codelineno-0-534">534</a></span>
+<span class="normal"><a href="#__codelineno-0-535">535</a></span>
+<span class="normal"><a href="#__codelineno-0-536">536</a></span>
+<span class="normal"><a href="#__codelineno-0-537">537</a></span>
+<span class="normal"><a href="#__codelineno-0-538">538</a></span>
+<span class="normal"><a href="#__codelineno-0-539">539</a></span>
+<span class="normal"><a href="#__codelineno-0-540">540</a></span>
+<span class="normal"><a href="#__codelineno-0-541">541</a></span>
+<span class="normal"><a href="#__codelineno-0-542">542</a></span>
+<span class="normal"><a href="#__codelineno-0-543">543</a></span>
+<span class="normal"><a href="#__codelineno-0-544">544</a></span>
+<span class="normal"><a href="#__codelineno-0-545">545</a></span>
+<span class="normal"><a href="#__codelineno-0-546">546</a></span>
+<span class="normal"><a href="#__codelineno-0-547">547</a></span>
+<span class="normal"><a href="#__codelineno-0-548">548</a></span>
+<span class="normal"><a href="#__codelineno-0-549">549</a></span>
+<span class="normal"><a href="#__codelineno-0-550">550</a></span>
+<span class="normal"><a href="#__codelineno-0-551">551</a></span>
+<span class="normal"><a href="#__codelineno-0-552">552</a></span>
+<span class="normal"><a href="#__codelineno-0-553">553</a></span>
+<span class="normal"><a href="#__codelineno-0-554">554</a></span>
+<span class="normal"><a href="#__codelineno-0-555">555</a></span>
+<span class="normal"><a href="#__codelineno-0-556">556</a></span>
+<span class="normal"><a href="#__codelineno-0-557">557</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="k">def</span><span class="w"> </span><span class="nf">solve_mutual_matrix</span><span class="p">(</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a>    <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a>    <span class="n">anchors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>    <span class="n">probe_points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a>    <span class="n">frequency_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="n">symmetrize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>    <span class="n">matrix_min_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>    <span class="n">matrix_max_terms</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="n">matrix_tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Full mutual grounding-impedance matrix ``Z_G`` in one assembly.</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a><span class="sd">    Reproduces the historic per-excitation construction (one</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a><span class="sd">    ``Engine.solve`` per gnode; diagonal from</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a><span class="sd">    :meth:`FieldResult.cluster_impedance`, off-diagonal from</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a><span class="sd">    :meth:`FieldResult.potential` at the probe points) **bit-for-bit**,</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a><span class="sd">    but assembles the segment reaction matrix and the probe-point field</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a><span class="sd">    kernel only once.</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a><span class="sd">    ``world`` must already carry **all** ``nG`` grounding clusters</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a><span class="sd">    (every anchor in ``anchors`` must be a real electrode in</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a><span class="sd">    ``world``). It must **not** carry any current source — the</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a><span class="sd">    excitations are applied internally, one cluster at a time, exactly</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a><span class="sd">    as the historic loop did. Finite-impedance / distributed conductors</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a><span class="sd">    *between distinct clusters* are out of scope for the catalogue use</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a><span class="sd">    case (each gnode is an isolated galvanic cluster) and are handled</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a><span class="sd">    via the standard :func:`_solve_cluster_currents` machinery only in</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a><span class="sd">    so far as they remain confined to a single excited cluster.</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a><span class="sd">    world</span>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a><span class="sd">        Assembled world holding all ``nG`` grounding clusters and the</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a><span class="sd">        soil model. Sources, if any, are ignored.</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a><span class="sd">    engine</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a><span class="sd">        Engine configuration. ``segment_length`` controls the</span>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a><span class="sd">        discretisation; ``frequencies`` selects the solved frequency</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a><span class="sd">        via ``frequency_index``; ``image_max_terms`` /</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a><span class="sd">        ``image_series_tol`` feed the 2-layer **self**-kernel (the</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a><span class="sd">        reaction-matrix assembly), exactly as ``Engine.solve`` would.</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a><span class="sd">    anchors</span>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a><span class="sd">        Length-``nG`` list of electrode names, one per gnode. Anchor</span>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a><span class="sd">        ``j`` receives the unit current of excitation ``j`` and its</span>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a><span class="sd">        cluster supplies the diagonal entry ``Z[j, j]``.</span>
+<a id="__codelineno-0-249" name="__codelineno-0-249"></a><span class="sd">    probe_points</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a><span class="sd">        ``(nG, 3)`` array of off-diagonal probe coordinates: row ``i``</span>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a><span class="sd">        is the ``(x, y, depth)`` point at which the potential of every</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a><span class="sd">        other excitation is sampled to fill column ``i`` of the</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a><span class="sd">        off-diagonal. Mirrors ``res.potential([[x_i, y_i, depth]])``.</span>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a><span class="sd">    frequency_index</span>
+<a id="__codelineno-0-255" name="__codelineno-0-255"></a><span class="sd">        Index into ``engine.frequencies``. Default 0.</span>
+<a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="sd">    symmetrize</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="sd">        If ``True`` (default) return ``0.5 · (Z + Zᵀ)`` — the historic</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="sd">        post-processing.</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="sd">    matrix_min_distance, matrix_max_terms, matrix_tol</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">        Truncation / clamp parameters of the **off-diagonal** field</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="sd">        evaluation. The defaults ``1e-3 / 100 / 1e-6`` reproduce the</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a><span class="sd">        hard-coded defaults of :meth:`FieldResult.potential` /</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">        ``_potential_two_layer`` exactly. (The reaction-matrix</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="sd">        assembly uses ``engine.image_max_terms`` / ``image_series_tol``</span>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="sd">        independently, just like the live solver.)</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-269" name="__codelineno-0-269"></a><span class="sd">    Z : np.ndarray, shape (nG, nG), complex</span>
+<a id="__codelineno-0-270" name="__codelineno-0-270"></a><span class="sd">        The mutual grounding-impedance matrix.</span>
+<a id="__codelineno-0-271" name="__codelineno-0-271"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-272" name="__codelineno-0-272"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.solver.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Engine</span>  <span class="c1"># noqa: F401  (typing only)</span>
+<a id="__codelineno-0-273" name="__codelineno-0-273"></a>
+<a id="__codelineno-0-274" name="__codelineno-0-274"></a>    <span class="k">if</span> <span class="n">world</span><span class="o">.</span><span class="n">soil</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;World has no soil model.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-277" name="__codelineno-0-277"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;World contains no electrodes.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a>    <span class="n">soil</span> <span class="o">=</span> <span class="n">world</span><span class="o">.</span><span class="n">soil</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a>    <span class="n">nG</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">anchors</span><span class="p">)</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a>    <span class="n">probe_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">probe_points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a>    <span class="k">if</span> <span class="n">probe_points</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">nG</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a>            <span class="sa">f</span><span class="s2">&quot;probe_points must have shape (</span><span class="si">{</span><span class="n">nG</span><span class="si">}</span><span class="s2">, 3), got &quot;</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a>            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">probe_points</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">.&quot;</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a>        <span class="p">)</span>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a>    <span class="c1"># 1) Discretisation + topology — identical to the live backends.</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a>    <span class="n">ds</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">segment_length</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a>    <span class="n">all_segments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">_Segment</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a>    <span class="n">elec_to_segidx</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a>    <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">:</span>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a>        <span class="n">segs</span> <span class="o">=</span> <span class="n">_discretize_electrode</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">ds</span><span class="p">)</span>
+<a id="__codelineno-0-296" name="__codelineno-0-296"></a>        <span class="n">elec_to_segidx</span><span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a>            <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">all_segments</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_segments</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">segs</span><span class="p">))</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a>        <span class="p">)</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a>        <span class="n">all_segments</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">segs</span><span class="p">)</span>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a>    <span class="n">cluster_id</span> <span class="o">=</span> <span class="n">_build_clusters</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">,</span> <span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">)</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a>    <span class="n">finite_branches</span> <span class="o">=</span> <span class="n">_build_finite_branches</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">,</span> <span class="n">cluster_id</span><span class="p">)</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a>    <span class="n">cond_segs</span><span class="p">,</span> <span class="n">distributed_branches_objs</span><span class="p">,</span> <span class="n">interior_nodes</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a>        <span class="n">_build_distributed_topology</span><span class="p">(</span><span class="n">world</span><span class="o">.</span><span class="n">conductors</span><span class="p">,</span> <span class="n">cluster_id</span><span class="p">)</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a>    <span class="p">)</span>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a>    <span class="n">pseudo_owners</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a>    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">cond_segs</span><span class="p">:</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a>        <span class="n">pn</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">electrode_name</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a>        <span class="n">elec_to_segidx</span><span class="p">[</span><span class="n">pn</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">all_segments</span><span class="p">)]</span>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a>        <span class="n">all_segments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a>        <span class="n">cluster_id</span><span class="p">[</span><span class="n">pn</span><span class="p">]</span> <span class="o">=</span> <span class="n">pn</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>        <span class="n">pseudo_owners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pn</span><span class="p">)</span>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a>    <span class="k">for</span> <span class="n">n_</span> <span class="ow">in</span> <span class="n">interior_nodes</span><span class="p">:</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a>        <span class="k">if</span> <span class="n">n_</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cluster_id</span><span class="p">:</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>            <span class="n">cluster_id</span><span class="p">[</span><span class="n">n_</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_</span>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a>            <span class="n">pseudo_owners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_</span><span class="p">)</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a>            <span class="n">elec_to_segidx</span><span class="p">[</span><span class="n">n_</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>    <span class="n">n_lumped_branches</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">finite_branches</span><span class="p">)</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>    <span class="n">distributed_branch_tuples</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>        <span class="p">(</span><span class="n">db</span><span class="o">.</span><span class="n">node_a</span><span class="p">,</span> <span class="n">db</span><span class="o">.</span><span class="n">node_b</span><span class="p">,</span> <span class="n">db</span><span class="o">.</span><span class="n">R</span><span class="p">)</span> <span class="k">for</span> <span class="n">db</span> <span class="ow">in</span> <span class="n">distributed_branches_objs</span>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>    <span class="p">]</span>
+<a id="__codelineno-0-323" name="__codelineno-0-323"></a>    <span class="n">finite_branches</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">finite_branches</span><span class="p">)</span> <span class="o">+</span> <span class="n">distributed_branch_tuples</span>
+<a id="__codelineno-0-324" name="__codelineno-0-324"></a>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>    <span class="c1"># Inductive coupling assembly (kept for parity; the catalogue probe</span>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a>    <span class="c1"># case has no distributed conductors, so ``has_inductance`` is False</span>
+<a id="__codelineno-0-327" name="__codelineno-0-327"></a>    <span class="c1"># and the system stays real/frequency-independent — matching the</span>
+<a id="__codelineno-0-328" name="__codelineno-0-328"></a>    <span class="c1"># historic ``image`` / ``image_2layer`` no-inductance fast path).</span>
+<a id="__codelineno-0-329" name="__codelineno-0-329"></a>    <span class="n">earth_inductive_model</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
+<a id="__codelineno-0-330" name="__codelineno-0-330"></a>        <span class="n">engine</span><span class="p">,</span> <span class="s2">&quot;earth_inductive_model&quot;</span><span class="p">,</span> <span class="s2">&quot;perfect_mirror&quot;</span>
+<a id="__codelineno-0-331" name="__codelineno-0-331"></a>    <span class="p">)</span>
+<a id="__codelineno-0-332" name="__codelineno-0-332"></a>    <span class="n">sigma_earth_for_carson</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-333" name="__codelineno-0-333"></a>    <span class="n">layered_earth_for_sommerfeld</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-334" name="__codelineno-0-334"></a>    <span class="k">if</span> <span class="n">earth_inductive_model</span> <span class="o">==</span> <span class="s2">&quot;carson_series&quot;</span><span class="p">:</span>
+<a id="__codelineno-0-335" name="__codelineno-0-335"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.coupling</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve_earth_conductivity</span>
+<a id="__codelineno-0-336" name="__codelineno-0-336"></a>
+<a id="__codelineno-0-337" name="__codelineno-0-337"></a>        <span class="n">sigma_earth_for_carson</span> <span class="o">=</span> <span class="n">resolve_earth_conductivity</span><span class="p">(</span><span class="n">soil</span><span class="p">)</span>
+<a id="__codelineno-0-338" name="__codelineno-0-338"></a>    <span class="k">elif</span> <span class="n">earth_inductive_model</span> <span class="o">==</span> <span class="s2">&quot;sommerfeld&quot;</span><span class="p">:</span>
+<a id="__codelineno-0-339" name="__codelineno-0-339"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.coupling</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve_earth_layers</span>
+<a id="__codelineno-0-340" name="__codelineno-0-340"></a>
+<a id="__codelineno-0-341" name="__codelineno-0-341"></a>        <span class="n">layered_earth_for_sommerfeld</span> <span class="o">=</span> <span class="n">resolve_earth_layers</span><span class="p">(</span><span class="n">soil</span><span class="p">)</span>
+<a id="__codelineno-0-342" name="__codelineno-0-342"></a>    <span class="n">inductance_matrix_full</span><span class="p">,</span> <span class="n">has_inductance</span><span class="p">,</span> <span class="n">carson_builder</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-343" name="__codelineno-0-343"></a>        <span class="n">_assemble_inductance_matrix</span><span class="p">(</span>
+<a id="__codelineno-0-344" name="__codelineno-0-344"></a>            <span class="n">distributed_branches_objs</span><span class="p">,</span>
+<a id="__codelineno-0-345" name="__codelineno-0-345"></a>            <span class="n">n_lumped_branches</span><span class="o">=</span><span class="n">n_lumped_branches</span><span class="p">,</span>
+<a id="__codelineno-0-346" name="__codelineno-0-346"></a>            <span class="n">n_total_branches</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">finite_branches</span><span class="p">),</span>
+<a id="__codelineno-0-347" name="__codelineno-0-347"></a>            <span class="n">earth_model</span><span class="o">=</span><span class="n">earth_inductive_model</span><span class="p">,</span>
+<a id="__codelineno-0-348" name="__codelineno-0-348"></a>            <span class="n">sigma_earth</span><span class="o">=</span><span class="n">sigma_earth_for_carson</span><span class="p">,</span>
+<a id="__codelineno-0-349" name="__codelineno-0-349"></a>            <span class="n">layered_earth</span><span class="o">=</span><span class="n">layered_earth_for_sommerfeld</span><span class="p">,</span>
+<a id="__codelineno-0-350" name="__codelineno-0-350"></a>        <span class="p">)</span>
+<a id="__codelineno-0-351" name="__codelineno-0-351"></a>    <span class="p">)</span>
+<a id="__codelineno-0-352" name="__codelineno-0-352"></a>
+<a id="__codelineno-0-353" name="__codelineno-0-353"></a>    <span class="n">n_segments</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_segments</span><span class="p">)</span>
+<a id="__codelineno-0-354" name="__codelineno-0-354"></a>    <span class="n">seg_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">s</span><span class="o">.</span><span class="n">midpoint</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">all_segments</span><span class="p">])</span>   <span class="c1"># (N, 3)</span>
+<a id="__codelineno-0-355" name="__codelineno-0-355"></a>    <span class="n">seg_lengths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">s</span><span class="o">.</span><span class="n">length</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">all_segments</span><span class="p">])</span>     <span class="c1"># (N,)</span>
+<a id="__codelineno-0-356" name="__codelineno-0-356"></a>    <span class="n">wire_radii</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">s</span><span class="o">.</span><span class="n">wire_radius</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">all_segments</span><span class="p">])</span>  <span class="c1"># (N,)</span>
+<a id="__codelineno-0-357" name="__codelineno-0-357"></a>    <span class="n">seg_shell_coeffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+<a id="__codelineno-0-358" name="__codelineno-0-358"></a>        <span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">concrete_shell_coefficient_ohm_m</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">all_segments</span><span class="p">],</span>
+<a id="__codelineno-0-359" name="__codelineno-0-359"></a>        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+<a id="__codelineno-0-360" name="__codelineno-0-360"></a>    <span class="p">)</span>
+<a id="__codelineno-0-361" name="__codelineno-0-361"></a>
+<a id="__codelineno-0-362" name="__codelineno-0-362"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-363" name="__codelineno-0-363"></a>    <span class="c1"># 2) Soil-specific self-kernel closure — same dispatch as</span>
+<a id="__codelineno-0-364" name="__codelineno-0-364"></a>    <span class="c1">#    ``Engine.solve`` (image -&gt; image_2layer for TwoLayerSoil).</span>
+<a id="__codelineno-0-365" name="__codelineno-0-365"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-366" name="__codelineno-0-366"></a>    <span class="n">rho_homog</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-367" name="__codelineno-0-367"></a>    <span class="n">soil_two_layer</span><span class="p">:</span> <span class="n">TwoLayerSoil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-368" name="__codelineno-0-368"></a>    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">soil</span><span class="p">,</span> <span class="n">TwoLayerSoil</span><span class="p">):</span>
+<a id="__codelineno-0-369" name="__codelineno-0-369"></a>        <span class="n">soil_two_layer</span> <span class="o">=</span> <span class="n">soil</span>
+<a id="__codelineno-0-370" name="__codelineno-0-370"></a>    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">soil</span><span class="p">,</span> <span class="n">MultiLayerSoil</span><span class="p">):</span>
+<a id="__codelineno-0-371" name="__codelineno-0-371"></a>        <span class="n">n_layers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">soil</span><span class="o">.</span><span class="n">layers</span><span class="p">)</span>
+<a id="__codelineno-0-372" name="__codelineno-0-372"></a>        <span class="k">if</span> <span class="n">n_layers</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+<a id="__codelineno-0-373" name="__codelineno-0-373"></a>            <span class="n">rho_homog</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">soil</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">resistivity</span><span class="p">)</span>
+<a id="__codelineno-0-374" name="__codelineno-0-374"></a>        <span class="k">elif</span> <span class="n">n_layers</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+<a id="__codelineno-0-375" name="__codelineno-0-375"></a>            <span class="n">soil_two_layer</span> <span class="o">=</span> <span class="n">TwoLayerSoil</span><span class="p">(</span>
+<a id="__codelineno-0-376" name="__codelineno-0-376"></a>                <span class="n">rho_1</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">soil</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">resistivity</span><span class="p">),</span>
+<a id="__codelineno-0-377" name="__codelineno-0-377"></a>                <span class="n">rho_2</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">soil</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">resistivity</span><span class="p">),</span>
+<a id="__codelineno-0-378" name="__codelineno-0-378"></a>                <span class="n">h_1</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">soil</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">thickness</span><span class="p">),</span>
+<a id="__codelineno-0-379" name="__codelineno-0-379"></a>            <span class="p">)</span>
+<a id="__codelineno-0-380" name="__codelineno-0-380"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-381" name="__codelineno-0-381"></a>            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+<a id="__codelineno-0-382" name="__codelineno-0-382"></a>                <span class="s2">&quot;solve_mutual_matrix supports homogeneous and 2-layer &quot;</span>
+<a id="__codelineno-0-383" name="__codelineno-0-383"></a>                <span class="sa">f</span><span class="s2">&quot;soils; got MultiLayerSoil with n=</span><span class="si">{</span><span class="n">n_layers</span><span class="si">}</span><span class="s2"> layers.&quot;</span>
+<a id="__codelineno-0-384" name="__codelineno-0-384"></a>            <span class="p">)</span>
+<a id="__codelineno-0-385" name="__codelineno-0-385"></a>    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">soil</span><span class="p">,</span> <span class="n">HomogeneousSoil</span><span class="p">):</span>
+<a id="__codelineno-0-386" name="__codelineno-0-386"></a>        <span class="n">rho_homog</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">soil</span><span class="o">.</span><span class="n">resistivity</span><span class="p">)</span>
+<a id="__codelineno-0-387" name="__codelineno-0-387"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-388" name="__codelineno-0-388"></a>        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported soil type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">soil</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-389" name="__codelineno-0-389"></a>
+<a id="__codelineno-0-390" name="__codelineno-0-390"></a>    <span class="k">if</span> <span class="n">soil_two_layer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-391" name="__codelineno-0-391"></a>        <span class="c1"># 2-layer reaction-matrix self-kernel: feed the engine&#39;s</span>
+<a id="__codelineno-0-392" name="__codelineno-0-392"></a>        <span class="c1"># image-series truncation, exactly like ``solve_image_2layer``.</span>
+<a id="__codelineno-0-393" name="__codelineno-0-393"></a>        <span class="n">self_max_terms</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="s2">&quot;image_max_terms&quot;</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+<a id="__codelineno-0-394" name="__codelineno-0-394"></a>        <span class="n">self_tol</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="s2">&quot;image_series_tol&quot;</span><span class="p">,</span> <span class="mf">1e-6</span><span class="p">))</span>
+<a id="__codelineno-0-395" name="__codelineno-0-395"></a>        <span class="n">z_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">seg_points</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+<a id="__codelineno-0-396" name="__codelineno-0-396"></a>        <span class="n">cross_layer</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">z_max</span> <span class="o">&gt;=</span> <span class="n">soil_two_layer</span><span class="o">.</span><span class="n">h_1</span><span class="p">)</span>
+<a id="__codelineno-0-397" name="__codelineno-0-397"></a>        <span class="n">self_kernel</span> <span class="o">=</span> <span class="n">_two_layer_self_kernel_factory</span><span class="p">(</span>
+<a id="__codelineno-0-398" name="__codelineno-0-398"></a>            <span class="n">soil_two_layer</span><span class="p">,</span> <span class="n">self_max_terms</span><span class="p">,</span> <span class="n">self_tol</span><span class="p">,</span>
+<a id="__codelineno-0-399" name="__codelineno-0-399"></a>            <span class="n">allow_cross_layer</span><span class="o">=</span><span class="n">cross_layer</span><span class="p">,</span>
+<a id="__codelineno-0-400" name="__codelineno-0-400"></a>        <span class="p">)</span>
+<a id="__codelineno-0-401" name="__codelineno-0-401"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-402" name="__codelineno-0-402"></a>        <span class="n">rho_for_kernel</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rho_homog</span><span class="p">)</span>
+<a id="__codelineno-0-403" name="__codelineno-0-403"></a>
+<a id="__codelineno-0-404" name="__codelineno-0-404"></a>        <span class="k">def</span><span class="w"> </span><span class="nf">self_kernel</span><span class="p">(</span><span class="n">seg_pts</span><span class="p">,</span> <span class="n">seg_lens</span><span class="p">,</span> <span class="n">wr</span><span class="p">,</span> <span class="n">currents</span><span class="p">):</span>  <span class="c1"># noqa: ANN001</span>
+<a id="__codelineno-0-405" name="__codelineno-0-405"></a>            <span class="k">return</span> <span class="n">_self_corrected_kernel</span><span class="p">(</span>
+<a id="__codelineno-0-406" name="__codelineno-0-406"></a>                <span class="n">seg_pts</span><span class="p">,</span> <span class="n">seg_lens</span><span class="p">,</span> <span class="n">wr</span><span class="p">,</span> <span class="n">currents</span><span class="p">,</span> <span class="n">rho_for_kernel</span>
+<a id="__codelineno-0-407" name="__codelineno-0-407"></a>            <span class="p">)</span>
+<a id="__codelineno-0-408" name="__codelineno-0-408"></a>
+<a id="__codelineno-0-409" name="__codelineno-0-409"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-410" name="__codelineno-0-410"></a>    <span class="c1"># 3) Reaction matrix ONCE.  ``Z_seg_full = self_kernel(eye)`` is the</span>
+<a id="__codelineno-0-411" name="__codelineno-0-411"></a>    <span class="c1">#    N×N segment reaction matrix used by ``mom._build_Z_*``; column</span>
+<a id="__codelineno-0-412" name="__codelineno-0-412"></a>    <span class="c1">#    k is ``self_kernel(e_k)``. Reusing it for every excitation makes</span>
+<a id="__codelineno-0-413" name="__codelineno-0-413"></a>    <span class="c1">#    the diagonal ``ph`` evaluation and the cluster-current assembly</span>
+<a id="__codelineno-0-414" name="__codelineno-0-414"></a>    <span class="c1">#    a sequence of matvecs instead of nG full kernel calls.</span>
+<a id="__codelineno-0-415" name="__codelineno-0-415"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-416" name="__codelineno-0-416"></a>    <span class="n">eye</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">n_segments</span><span class="p">)</span>
+<a id="__codelineno-0-417" name="__codelineno-0-417"></a>    <span class="n">Z_seg_full</span> <span class="o">=</span> <span class="n">self_kernel</span><span class="p">(</span><span class="n">seg_points</span><span class="p">,</span> <span class="n">seg_lengths</span><span class="p">,</span> <span class="n">wire_radii</span><span class="p">,</span> <span class="n">eye</span><span class="p">)</span>  <span class="c1"># (N, N)</span>
+<a id="__codelineno-0-418" name="__codelineno-0-418"></a>
+<a id="__codelineno-0-419" name="__codelineno-0-419"></a>    <span class="c1"># ADR-0012 V2 shell augmentation (added to the *diagonal* of the</span>
+<a id="__codelineno-0-420" name="__codelineno-0-420"></a>    <span class="c1"># reaction matrix exactly as in ``_solve_cluster_currents`` and the</span>
+<a id="__codelineno-0-421" name="__codelineno-0-421"></a>    <span class="c1"># post-solve ``ph`` step).</span>
+<a id="__codelineno-0-422" name="__codelineno-0-422"></a>    <span class="n">shell_diag</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-423" name="__codelineno-0-423"></a>    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">seg_shell_coeffs</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">):</span>
+<a id="__codelineno-0-424" name="__codelineno-0-424"></a>        <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">):</span>
+<a id="__codelineno-0-425" name="__codelineno-0-425"></a>            <span class="n">shell_diag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+<a id="__codelineno-0-426" name="__codelineno-0-426"></a>                <span class="n">seg_lengths</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-0-427" name="__codelineno-0-427"></a>                <span class="n">seg_shell_coeffs</span> <span class="o">/</span> <span class="n">seg_lengths</span><span class="p">,</span>
+<a id="__codelineno-0-428" name="__codelineno-0-428"></a>                <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-0-429" name="__codelineno-0-429"></a>            <span class="p">)</span>
+<a id="__codelineno-0-430" name="__codelineno-0-430"></a>
+<a id="__codelineno-0-431" name="__codelineno-0-431"></a>    <span class="c1"># A linear ``self_kernel``-equivalent backed by the precomputed</span>
+<a id="__codelineno-0-432" name="__codelineno-0-432"></a>    <span class="c1"># matrix: ``Z_seg_full @ currents`` reproduces ``self_kernel(...)``</span>
+<a id="__codelineno-0-433" name="__codelineno-0-433"></a>    <span class="c1"># for the unit-current assembly inside ``_solve_cluster_currents``.</span>
+<a id="__codelineno-0-434" name="__codelineno-0-434"></a>    <span class="c1"># The shell augmentation is applied on top (the assembly inside</span>
+<a id="__codelineno-0-435" name="__codelineno-0-435"></a>    <span class="c1"># ``_solve_cluster_currents`` does the same: bulk kernel then</span>
+<a id="__codelineno-0-436" name="__codelineno-0-436"></a>    <span class="c1"># ``phi += shell_diag · currents``), so we deliberately pass a</span>
+<a id="__codelineno-0-437" name="__codelineno-0-437"></a>    <span class="c1"># *bulk-only* kernel here and let ``shell_coefficients`` re-add the</span>
+<a id="__codelineno-0-438" name="__codelineno-0-438"></a>    <span class="c1"># shell — keeping the exact same operation order as the live solver.</span>
+<a id="__codelineno-0-439" name="__codelineno-0-439"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_cached_bulk_self_kernel</span><span class="p">(</span><span class="n">seg_pts</span><span class="p">,</span> <span class="n">seg_lens</span><span class="p">,</span> <span class="n">wr</span><span class="p">,</span> <span class="n">currents</span><span class="p">):</span>  <span class="c1"># noqa: ANN001</span>
+<a id="__codelineno-0-440" name="__codelineno-0-440"></a>        <span class="k">return</span> <span class="n">Z_seg_full</span> <span class="o">@</span> <span class="n">currents</span>
+<a id="__codelineno-0-441" name="__codelineno-0-441"></a>
+<a id="__codelineno-0-442" name="__codelineno-0-442"></a>    <span class="n">omega</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-443" name="__codelineno-0-443"></a>        <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">engine</span><span class="o">.</span><span class="n">frequencies</span><span class="p">[</span><span class="n">frequency_index</span><span class="p">])</span>
+<a id="__codelineno-0-444" name="__codelineno-0-444"></a>        <span class="k">if</span> <span class="n">has_inductance</span>
+<a id="__codelineno-0-445" name="__codelineno-0-445"></a>        <span class="k">else</span> <span class="mf">0.0</span>
+<a id="__codelineno-0-446" name="__codelineno-0-446"></a>    <span class="p">)</span>
+<a id="__codelineno-0-447" name="__codelineno-0-447"></a>    <span class="n">carson_dz</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="n">carson_builder</span><span class="p">(</span><span class="n">omega</span><span class="p">)</span>
+<a id="__codelineno-0-449" name="__codelineno-0-449"></a>        <span class="k">if</span> <span class="p">(</span><span class="n">has_inductance</span> <span class="ow">and</span> <span class="n">carson_builder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
+<a id="__codelineno-0-450" name="__codelineno-0-450"></a>        <span class="k">else</span> <span class="kc">None</span>
+<a id="__codelineno-0-451" name="__codelineno-0-451"></a>    <span class="p">)</span>
+<a id="__codelineno-0-452" name="__codelineno-0-452"></a>
+<a id="__codelineno-0-453" name="__codelineno-0-453"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-454" name="__codelineno-0-454"></a>    <span class="c1"># 4) Per-excitation leakage distribution.  Each gnode is an isolated</span>
+<a id="__codelineno-0-455" name="__codelineno-0-455"></a>    <span class="c1">#    galvanic cluster, so injecting 1 A into cluster ``j`` activates</span>
+<a id="__codelineno-0-456" name="__codelineno-0-456"></a>    <span class="c1">#    only that cluster; the resulting per-segment leakage column</span>
+<a id="__codelineno-0-457" name="__codelineno-0-457"></a>    <span class="c1">#    ``sc_j`` is non-zero on cluster-``j`` segments only — exactly</span>
+<a id="__codelineno-0-458" name="__codelineno-0-458"></a>    <span class="c1">#    what the historic single-source solve produced.</span>
+<a id="__codelineno-0-459" name="__codelineno-0-459"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-460" name="__codelineno-0-460"></a>    <span class="n">real_electrode_names</span> <span class="o">=</span> <span class="p">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">}</span>
+<a id="__codelineno-0-461" name="__codelineno-0-461"></a>    <span class="c1"># cluster members per real electrode (== FieldResult.clusters), used</span>
+<a id="__codelineno-0-462" name="__codelineno-0-462"></a>    <span class="c1"># for the diagonal ``cluster_impedance`` average and current sum.</span>
+<a id="__codelineno-0-463" name="__codelineno-0-463"></a>    <span class="n">cluster_members</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-464" name="__codelineno-0-464"></a>    <span class="k">for</span> <span class="n">ename</span> <span class="ow">in</span> <span class="n">real_electrode_names</span><span class="p">:</span>
+<a id="__codelineno-0-465" name="__codelineno-0-465"></a>        <span class="n">cluster_members</span><span class="p">[</span><span class="n">ename</span><span class="p">]</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+<a id="__codelineno-0-466" name="__codelineno-0-466"></a>            <span class="n">n</span>
+<a id="__codelineno-0-467" name="__codelineno-0-467"></a>            <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">cluster_id</span>
+<a id="__codelineno-0-468" name="__codelineno-0-468"></a>            <span class="k">if</span> <span class="n">cluster_id</span><span class="p">[</span><span class="n">n</span><span class="p">]</span> <span class="o">==</span> <span class="n">cluster_id</span><span class="p">[</span><span class="n">ename</span><span class="p">]</span> <span class="ow">and</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">real_electrode_names</span>
+<a id="__codelineno-0-469" name="__codelineno-0-469"></a>        <span class="p">)</span>
+<a id="__codelineno-0-470" name="__codelineno-0-470"></a>
+<a id="__codelineno-0-471" name="__codelineno-0-471"></a>    <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_segments</span><span class="p">,</span> <span class="n">nG</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>  <span class="c1"># column j = sc_j</span>
+<a id="__codelineno-0-472" name="__codelineno-0-472"></a>    <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nG</span><span class="p">,</span> <span class="n">nG</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<a id="__codelineno-0-473" name="__codelineno-0-473"></a>
+<a id="__codelineno-0-474" name="__codelineno-0-474"></a>    <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">anchor_j</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">anchors</span><span class="p">):</span>
+<a id="__codelineno-0-475" name="__codelineno-0-475"></a>        <span class="k">if</span> <span class="n">anchor_j</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">elec_to_segidx</span><span class="p">:</span>
+<a id="__codelineno-0-476" name="__codelineno-0-476"></a>            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Anchor &#39;</span><span class="si">{</span><span class="n">anchor_j</span><span class="si">}</span><span class="s2">&#39; is not an electrode in world.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-477" name="__codelineno-0-477"></a>        <span class="n">elec_input_current</span> <span class="o">=</span> <span class="p">{</span><span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="mi">0</span><span class="n">j</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">}</span>
+<a id="__codelineno-0-478" name="__codelineno-0-478"></a>        <span class="n">elec_input_current</span><span class="p">[</span><span class="n">anchor_j</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mi">0</span><span class="n">j</span>
+<a id="__codelineno-0-479" name="__codelineno-0-479"></a>
+<a id="__codelineno-0-480" name="__codelineno-0-480"></a>        <span class="n">elec_total</span> <span class="o">=</span> <span class="n">_solve_cluster_currents</span><span class="p">(</span>
+<a id="__codelineno-0-481" name="__codelineno-0-481"></a>            <span class="n">electrodes</span><span class="o">=</span><span class="n">world</span><span class="o">.</span><span class="n">electrodes</span><span class="p">,</span>
+<a id="__codelineno-0-482" name="__codelineno-0-482"></a>            <span class="n">elec_input_current</span><span class="o">=</span><span class="n">elec_input_current</span><span class="p">,</span>
+<a id="__codelineno-0-483" name="__codelineno-0-483"></a>            <span class="n">cluster_id</span><span class="o">=</span><span class="n">cluster_id</span><span class="p">,</span>
+<a id="__codelineno-0-484" name="__codelineno-0-484"></a>            <span class="n">seg_points</span><span class="o">=</span><span class="n">seg_points</span><span class="p">,</span>
+<a id="__codelineno-0-485" name="__codelineno-0-485"></a>            <span class="n">seg_lengths</span><span class="o">=</span><span class="n">seg_lengths</span><span class="p">,</span>
+<a id="__codelineno-0-486" name="__codelineno-0-486"></a>            <span class="n">wire_radii</span><span class="o">=</span><span class="n">wire_radii</span><span class="p">,</span>
+<a id="__codelineno-0-487" name="__codelineno-0-487"></a>            <span class="n">elec_to_segidx</span><span class="o">=</span><span class="n">elec_to_segidx</span><span class="p">,</span>
+<a id="__codelineno-0-488" name="__codelineno-0-488"></a>            <span class="n">self_kernel</span><span class="o">=</span><span class="n">_cached_bulk_self_kernel</span><span class="p">,</span>
+<a id="__codelineno-0-489" name="__codelineno-0-489"></a>            <span class="n">finite_branches</span><span class="o">=</span><span class="n">finite_branches</span><span class="p">,</span>
+<a id="__codelineno-0-490" name="__codelineno-0-490"></a>            <span class="n">pseudo_owners</span><span class="o">=</span><span class="n">pseudo_owners</span><span class="p">,</span>
+<a id="__codelineno-0-491" name="__codelineno-0-491"></a>            <span class="n">omega</span><span class="o">=</span><span class="n">omega</span> <span class="k">if</span> <span class="n">has_inductance</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-0-492" name="__codelineno-0-492"></a>            <span class="n">inductance_matrix</span><span class="o">=</span><span class="n">inductance_matrix_full</span> <span class="k">if</span> <span class="n">has_inductance</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-493" name="__codelineno-0-493"></a>            <span class="n">carson_correction</span><span class="o">=</span><span class="n">carson_dz</span><span class="p">,</span>
+<a id="__codelineno-0-494" name="__codelineno-0-494"></a>            <span class="n">shell_coefficients</span><span class="o">=</span><span class="n">seg_shell_coeffs</span><span class="p">,</span>
+<a id="__codelineno-0-495" name="__codelineno-0-495"></a>        <span class="p">)</span>
+<a id="__codelineno-0-496" name="__codelineno-0-496"></a>
+<a id="__codelineno-0-497" name="__codelineno-0-497"></a>        <span class="c1"># Reconstruct the per-segment leakage column (image.py:1455-1463).</span>
+<a id="__codelineno-0-498" name="__codelineno-0-498"></a>        <span class="n">sc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_segments</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<a id="__codelineno-0-499" name="__codelineno-0-499"></a>        <span class="k">for</span> <span class="n">ename</span><span class="p">,</span> <span class="n">idxs</span> <span class="ow">in</span> <span class="n">elec_to_segidx</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-500" name="__codelineno-0-500"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">idxs</span><span class="p">:</span>
+<a id="__codelineno-0-501" name="__codelineno-0-501"></a>                <span class="k">continue</span>
+<a id="__codelineno-0-502" name="__codelineno-0-502"></a>            <span class="n">I_total</span> <span class="o">=</span> <span class="n">elec_total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">ename</span><span class="p">,</span> <span class="mi">0</span><span class="n">j</span><span class="p">)</span>
+<a id="__codelineno-0-503" name="__codelineno-0-503"></a>            <span class="k">if</span> <span class="n">I_total</span> <span class="o">==</span> <span class="mi">0</span><span class="n">j</span><span class="p">:</span>
+<a id="__codelineno-0-504" name="__codelineno-0-504"></a>                <span class="k">continue</span>
+<a id="__codelineno-0-505" name="__codelineno-0-505"></a>            <span class="n">L_total</span> <span class="o">=</span> <span class="n">seg_lengths</span><span class="p">[</span><span class="n">idxs</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<a id="__codelineno-0-506" name="__codelineno-0-506"></a>            <span class="n">sc</span><span class="p">[</span><span class="n">idxs</span><span class="p">]</span> <span class="o">=</span> <span class="n">I_total</span> <span class="o">*</span> <span class="n">seg_lengths</span><span class="p">[</span><span class="n">idxs</span><span class="p">]</span> <span class="o">/</span> <span class="n">L_total</span>
+<a id="__codelineno-0-507" name="__codelineno-0-507"></a>        <span class="n">T</span><span class="p">[:,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">sc</span>
+<a id="__codelineno-0-508" name="__codelineno-0-508"></a>
+<a id="__codelineno-0-509" name="__codelineno-0-509"></a>        <span class="c1"># -- Diagonal Z[j, j] == cluster_impedance(anchor_j) -----------</span>
+<a id="__codelineno-0-510" name="__codelineno-0-510"></a>        <span class="c1"># Build ``ph`` (potential at every segment midpoint) exactly as</span>
+<a id="__codelineno-0-511" name="__codelineno-0-511"></a>        <span class="c1"># the post-solve step of the live solver: bulk self-kernel on</span>
+<a id="__codelineno-0-512" name="__codelineno-0-512"></a>        <span class="c1"># the real and imaginary leakage, then the shell augmentation.</span>
+<a id="__codelineno-0-513" name="__codelineno-0-513"></a>        <span class="n">members</span> <span class="o">=</span> <span class="n">cluster_members</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">anchor_j</span><span class="p">,</span> <span class="p">[</span><span class="n">anchor_j</span><span class="p">])</span>
+<a id="__codelineno-0-514" name="__codelineno-0-514"></a>        <span class="n">i_sum</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">elec_total</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="mi">0</span><span class="n">j</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">members</span><span class="p">)</span>
+<a id="__codelineno-0-515" name="__codelineno-0-515"></a>        <span class="n">member0_idxs</span> <span class="o">=</span> <span class="n">elec_to_segidx</span><span class="p">[</span><span class="n">members</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+<a id="__codelineno-0-516" name="__codelineno-0-516"></a>        <span class="k">if</span> <span class="n">sc</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+<a id="__codelineno-0-517" name="__codelineno-0-517"></a>            <span class="n">phi_re</span> <span class="o">=</span> <span class="n">Z_seg_full</span> <span class="o">@</span> <span class="n">sc</span><span class="o">.</span><span class="n">real</span>
+<a id="__codelineno-0-518" name="__codelineno-0-518"></a>            <span class="n">phi_im</span> <span class="o">=</span> <span class="n">Z_seg_full</span> <span class="o">@</span> <span class="n">sc</span><span class="o">.</span><span class="n">imag</span>
+<a id="__codelineno-0-519" name="__codelineno-0-519"></a>            <span class="k">if</span> <span class="n">shell_diag</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-520" name="__codelineno-0-520"></a>                <span class="n">phi_re</span> <span class="o">=</span> <span class="n">phi_re</span> <span class="o">+</span> <span class="n">shell_diag</span> <span class="o">*</span> <span class="n">sc</span><span class="o">.</span><span class="n">real</span>
+<a id="__codelineno-0-521" name="__codelineno-0-521"></a>                <span class="n">phi_im</span> <span class="o">=</span> <span class="n">phi_im</span> <span class="o">+</span> <span class="n">shell_diag</span> <span class="o">*</span> <span class="n">sc</span><span class="o">.</span><span class="n">imag</span>
+<a id="__codelineno-0-522" name="__codelineno-0-522"></a>            <span class="n">ph_member0</span> <span class="o">=</span> <span class="p">(</span><span class="n">phi_re</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">phi_im</span><span class="p">)[</span><span class="n">member0_idxs</span><span class="p">]</span>
+<a id="__codelineno-0-523" name="__codelineno-0-523"></a>            <span class="n">u_cluster</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">ph_member0</span><span class="p">))</span>
+<a id="__codelineno-0-524" name="__codelineno-0-524"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-525" name="__codelineno-0-525"></a>            <span class="n">u_cluster</span> <span class="o">=</span> <span class="mi">0</span><span class="n">j</span>
+<a id="__codelineno-0-526" name="__codelineno-0-526"></a>        <span class="n">Z</span><span class="p">[</span><span class="n">j</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">u_cluster</span> <span class="o">/</span> <span class="n">i_sum</span><span class="p">)</span> <span class="k">if</span> <span class="n">i_sum</span> <span class="o">!=</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">complex</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-527" name="__codelineno-0-527"></a>
+<a id="__codelineno-0-528" name="__codelineno-0-528"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-529" name="__codelineno-0-529"></a>    <span class="c1"># 5) Off-diagonal block.  ``Z[i, j] = potential at probe_i due to the</span>
+<a id="__codelineno-0-530" name="__codelineno-0-530"></a>    <span class="c1">#    leakage column sc_j`` — the probe kernel is built ONCE and</span>
+<a id="__codelineno-0-531" name="__codelineno-0-531"></a>    <span class="c1">#    applied to all excitation columns at once.</span>
+<a id="__codelineno-0-532" name="__codelineno-0-532"></a>    <span class="c1"># ------------------------------------------------------------------</span>
+<a id="__codelineno-0-533" name="__codelineno-0-533"></a>    <span class="k">if</span> <span class="n">soil_two_layer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-534" name="__codelineno-0-534"></a>        <span class="n">Phi</span> <span class="o">=</span> <span class="n">_probe_potential_two_layer</span><span class="p">(</span>
+<a id="__codelineno-0-535" name="__codelineno-0-535"></a>            <span class="n">probe_points</span><span class="p">,</span>
+<a id="__codelineno-0-536" name="__codelineno-0-536"></a>            <span class="n">seg_points</span><span class="p">,</span>
+<a id="__codelineno-0-537" name="__codelineno-0-537"></a>            <span class="n">T</span><span class="p">,</span>
+<a id="__codelineno-0-538" name="__codelineno-0-538"></a>            <span class="n">soil_two_layer</span><span class="p">,</span>
+<a id="__codelineno-0-539" name="__codelineno-0-539"></a>            <span class="n">matrix_min_distance</span><span class="p">,</span>
+<a id="__codelineno-0-540" name="__codelineno-0-540"></a>            <span class="n">max_terms</span><span class="o">=</span><span class="n">matrix_max_terms</span><span class="p">,</span>
+<a id="__codelineno-0-541" name="__codelineno-0-541"></a>            <span class="n">tol</span><span class="o">=</span><span class="n">matrix_tol</span><span class="p">,</span>
+<a id="__codelineno-0-542" name="__codelineno-0-542"></a>        <span class="p">)</span>  <span class="c1"># (nG, nG): row i = probe i, col j = excitation j</span>
+<a id="__codelineno-0-543" name="__codelineno-0-543"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-544" name="__codelineno-0-544"></a>        <span class="n">K_probe</span> <span class="o">=</span> <span class="n">_probe_kernel_homogeneous</span><span class="p">(</span>
+<a id="__codelineno-0-545" name="__codelineno-0-545"></a>            <span class="n">probe_points</span><span class="p">,</span> <span class="n">seg_points</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">rho_homog</span><span class="p">),</span> <span class="n">matrix_min_distance</span>
+<a id="__codelineno-0-546" name="__codelineno-0-546"></a>        <span class="p">)</span>  <span class="c1"># (nG, N)</span>
+<a id="__codelineno-0-547" name="__codelineno-0-547"></a>        <span class="n">Phi</span> <span class="o">=</span> <span class="n">K_probe</span> <span class="o">@</span> <span class="n">T</span><span class="o">.</span><span class="n">real</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="p">(</span><span class="n">K_probe</span> <span class="o">@</span> <span class="n">T</span><span class="o">.</span><span class="n">imag</span><span class="p">)</span>
+<a id="__codelineno-0-548" name="__codelineno-0-548"></a>
+<a id="__codelineno-0-549" name="__codelineno-0-549"></a>    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nG</span><span class="p">):</span>
+<a id="__codelineno-0-550" name="__codelineno-0-550"></a>        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nG</span><span class="p">):</span>
+<a id="__codelineno-0-551" name="__codelineno-0-551"></a>            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">j</span><span class="p">:</span>
+<a id="__codelineno-0-552" name="__codelineno-0-552"></a>                <span class="k">continue</span>
+<a id="__codelineno-0-553" name="__codelineno-0-553"></a>            <span class="n">Z</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">Phi</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+<a id="__codelineno-0-554" name="__codelineno-0-554"></a>
+<a id="__codelineno-0-555" name="__codelineno-0-555"></a>    <span class="k">if</span> <span class="n">symmetrize</span><span class="p">:</span>
+<a id="__codelineno-0-556" name="__codelineno-0-556"></a>        <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">Z</span> <span class="o">+</span> <span class="n">Z</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+<a id="__codelineno-0-557" name="__codelineno-0-557"></a>    <span class="k">return</span> <span class="n">Z</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
