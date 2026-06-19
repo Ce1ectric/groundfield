@@ -72,6 +72,7 @@ from groundfield.soil.models import (
     TwoLayerSoil,
 )
 from groundfield.solver.engine import Backend, Engine
+from groundfield.solver.mutual import solve_mutual_matrix
 from groundfield.solver.result import FieldResult
 from groundfield.sources import (
     CurrentSource,
@@ -258,6 +259,7 @@ __all__ = [
     "Engine",
     "Backend",
     "FieldResult",
+    "solve_mutual_matrix",
     # Factories
     "create_world",
     "create_electrode",

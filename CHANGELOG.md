@@ -26,7 +26,22 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — `solve_mutual_matrix`: full mutual grounding-impedance matrix in one assembly
+
+`solve_mutual_matrix(world, engine, anchors, probe_points, …)` returns the full
+nG×nG mutual grounding-impedance matrix `Z_G` from a **single** reaction-matrix
+assembly, instead of nG separate `Engine.solve` calls. Diagonal = cluster
+self-impedance (as `FieldResult.cluster_impedance`); off-diagonal `[i, j]` =
+potential at `probe_points[i]` under unit excitation of cluster `j` (as
+`FieldResult.potential`); then `0.5·(Z + Zᵀ)`. The segment reaction matrix and the
+probe-point field kernel are each built **once** and reused across all excitations
+(`Phi = K @ T`); per-cluster current distributions use the existing
+`_solve_cluster_currents` machinery, so multi-electrode clusters are handled
+exactly. Reuses the existing `image` / `image_2layer` kernels (incl. the ADR-0007
+cross-layer path) unchanged — results are **bit-identical** to the per-excitation
+construction (verified `max|ΔZ| ≈ 1e-13`, pure BLAS-reordering residual) and
+~20–40× faster at nG ≈ 25–40. New module `solver/mutual.py`, exported as
+`groundfield.solve_mutual_matrix`. Purely additive; existing solve paths unchanged.
 
 ---
 

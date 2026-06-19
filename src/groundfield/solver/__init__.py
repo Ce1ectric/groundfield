@@ -36,6 +36,7 @@ from groundfield.solver.engine import Backend, Engine
 from groundfield.solver.image import solve_image
 from groundfield.solver.image_2layer import solve_image_2layer
 from groundfield.solver.mom import solve_mom
+from groundfield.solver.mutual import solve_mutual_matrix
 from groundfield.solver.result import FieldResult, PointSource
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "solve_image",
     "solve_image_2layer",
     "solve_mom",
+    "solve_mutual_matrix",
 ]
