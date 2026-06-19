@@ -3960,6 +3960,23 @@ the appropriate Roadmap section in the next planning cycle.
 Backlog of feature ideas that are not yet scheduled. Updated as
 work package 1 progresses.
 
+### Performance
+
+- **Vectorise the ADR-0007 cross-layer Sommerfeld path.** After caching the
+  Gauss–Legendre nodes (see `[Unreleased]`), the remaining cost of the
+  cross-layer fallback is the genuine $O(N^2)$ per-segment-pair work in
+  `coupling/layered_green.py::two_layer_layered_correction_real_space` /
+  `_spectral_amplitudes`: many small `np.linalg.solve` calls (one
+  spectral-amplitude system per pair) plus per-pair quadrature. Batching the
+  per-pair spectral solves into a single vectorised `np.linalg.solve` over the
+  pair axis, and evaluating the Bessel/exponential kernels on the shared
+  quadrature grid in one array op, should give another ~2–5×. Motivation: AP1
+  catalogues two-layer soils with a thin upper layer (`h_1 = 5 m`) where a deep
+  station rod can cross the interface — currently the dominant per-station cost
+  even after the leggauss cache (~155 s vs ~3 s within-layer at 5 %
+  penetration). Cost scales $O(N^2)$ in segment count, so larger /
+  higher-penetration geometries benefit most.
+
 ### Core functionality
 
 - **Inductive coupling (ADR-0004 — to be written).** Now that the
