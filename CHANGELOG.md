@@ -26,7 +26,20 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Fixed — image_2layer cross-layer path ~20× faster (cache Gauss–Legendre nodes)
+
+The ADR-0007 Sommerfeld cross-layer fallback (used when an electrode crosses
+the layer interface, e.g. a 9 m rod with `h_1 = 5 m`) recomputed the
+Gauss–Legendre quadrature nodes/weights
+(`numpy.polynomial.legendre.leggauss`, an O(n³) eigenvalue problem) once per
+segment pair for the fixed orders `n_log = 32` / `n_lin = 96`. Profiling
+showed ~93 % of the solve in `leggauss`/`legval`. The nodes are now cached
+per order (`coupling/layered_green.py::_leggauss_cached`); results are
+bit-identical (the quadrature itself is unchanged). A single 9 m rod over a
+1000/30 Ω·m, `h_1 = 5 m` two-layer soil drops from ~3.9 s to ~0.20 s
+(18 segments) and ~19.9 s to ~0.93 s (45 segments); the cost scales O(n²) in
+the segment count, so larger geometries benefit even more. The within-layer
+image-series path is unaffected.
 
 ---
 

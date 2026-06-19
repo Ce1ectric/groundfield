@@ -75,6 +75,22 @@ import math
 
 import numpy as np
 from scipy.special import j0
+from functools import lru_cache
+
+
+@lru_cache(maxsize=None)
+def _leggauss_cached(n: int):
+    """Gauss-Legendre-Knoten/Gewichte fuer feste Ordnung ``n`` (gecacht).
+
+    ``numpy.polynomial.legendre.leggauss`` loest je Aufruf ein
+    Eigenwertproblem (O(n^3)). Im ADR-0007-Cross-Layer-Pfad wird die
+    Quadratur pro Segmentpaar mit denselben festen Ordnungen
+    (``n_log=32``, ``n_lin=96``) aufgerufen; ohne Cache dominiert der
+    wiederholte Knotenaufbau die Laufzeit. Die Rueckgabe wird nur
+    gelesen (keine In-place-Mutation), daher ist das Teilen sicher.
+    """
+    return np.polynomial.legendre.leggauss(n)
+
 
 __all__ = [
     "two_layer_spectral_kernel",
@@ -347,7 +363,7 @@ def two_layer_real_space_kernel(
     lambda_break = max(min(1.0 / char_length, 0.5 * lambda_max), 1e-9)
 
     # Logarithmic part [eps, lambda_break]
-    nodes_log_x, weights_log_x = np.polynomial.legendre.leggauss(n_log)
+    nodes_log_x, weights_log_x = _leggauss_cached(n_log)
     eps = max(lambda_max * 1e-12, 1e-15)
     a_log = math.log(eps)
     b_log = math.log(lambda_break)
@@ -356,7 +372,7 @@ def two_layer_real_space_kernel(
     weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
 
     # Uniform part [lambda_break, lambda_max] with Bessel resolution
-    nodes_lin_x, weights_lin_x = np.polynomial.legendre.leggauss(n_lin)
+    nodes_lin_x, weights_lin_x = _leggauss_cached(n_lin)
     half = 0.5 * (lambda_max - lambda_break)
     lambdas_lin = half * (nodes_lin_x + 1.0) + lambda_break
     weights_lin = half * weights_lin_x
@@ -439,7 +455,7 @@ def two_layer_layered_correction_real_space(
     lambda_max = lambda_max_factor / char_length
     lambda_break = max(min(1.0 / char_length, 0.5 * lambda_max), 1e-9)
 
-    nodes_log_x, weights_log_x = np.polynomial.legendre.leggauss(n_log)
+    nodes_log_x, weights_log_x = _leggauss_cached(n_log)
     eps = max(lambda_max * 1e-12, 1e-15)
     a_log = math.log(eps)
     b_log = math.log(lambda_break)
@@ -447,7 +463,7 @@ def two_layer_layered_correction_real_space(
     lambdas_log = np.exp(t)
     weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
 
-    nodes_lin_x, weights_lin_x = np.polynomial.legendre.leggauss(n_lin)
+    nodes_lin_x, weights_lin_x = _leggauss_cached(n_lin)
     half = 0.5 * (lambda_max - lambda_break)
     lambdas_lin = half * (nodes_lin_x + 1.0) + lambda_break
     weights_lin = half * weights_lin_x
