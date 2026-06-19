@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.8.1] — 2026-06-19
+
 ### Fixed — image_2layer cross-layer path ~20× faster (cache Gauss–Legendre nodes)
 
 The ADR-0007 Sommerfeld cross-layer fallback (used when an electrode crosses
@@ -4028,7 +4034,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.6.0
