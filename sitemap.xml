@@ -2,214 +2,214 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://ce1ectric.github.io/groundfield/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/concepts/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/graphify/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/installation/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/performance/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/quickstart/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0001-two-layer-method/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0002-engine-family/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0003-distributed-conductor-model/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0004-inductive-coupling/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0005-carson-earth-return/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0006-sommerfeld-earth-return/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0007-cross-layer-electrodes/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0008-groundinsight-bridge/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0009-world-generators/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0010-tier0-performance/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0011-osm-building-footprints/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/adr/0012-foundation-concrete-encasement/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/boundary/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/conductors/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/coupling/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/diagnostics/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/generators/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/geo/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/geometry/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/io/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/postprocess/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/references/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/soil/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/solver/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/sources/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/validation/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/api/world/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/bem/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/cim/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/fem/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/image/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/image_2layer/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/image_nlayer/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/mom/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/engines/mom_sommerfeld/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/01_quickstart_two_electrodes/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/02_engine_comparison/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/03_multilayer_soil/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/04_interconnected_grounding/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/05_inductive_coupling/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/06_tn_model/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/07_measurement_distance/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/08_osm_pipeline/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
     <url>
          <loc>https://ce1ectric.github.io/groundfield/examples/09_plot_gallery/</loc>
-         <lastmod>2026-06-18</lastmod>
+         <lastmod>2026-06-19</lastmod>
     </url>
 </urlset>
