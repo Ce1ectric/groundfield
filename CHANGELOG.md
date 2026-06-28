@@ -26,7 +26,23 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — `solve_mutual_field`: surface potential at arbitrary points per node
+
+`solve_mutual_field(world, engine, anchors, field_points, …)` returns the galvanic
+Green-function matrix `R` of shape `(M, nG)` with `R[i, j]` = potential at
+`field_points[i]` under unit excitation of cluster `j` (all other clusters
+floating). It generalises the off-diagonal field evaluation of
+`solve_mutual_matrix` to an **arbitrary** number of probe points (decoupled from
+`nG`) and omits the self/diagonal term. The reaction matrix and per-excitation
+leakage columns are assembled **once** (as in `solve_mutual_matrix`); only the
+probe evaluation differs (`R = K_probe @ T`). Reuses the existing
+`image`/`image_2layer` kernels unchanged; results are bit-identical to the
+per-excitation `Engine.solve` construction (verified `max|ΔR| < 1e-9`, incl. the
+ADR-0007 cross-layer path). Building block for frequency-dependent surface
+potentials by superposition: `phi(points, f) = R @ I_leak(f)` with `I_leak(f)`
+from the reduced network `(Y_L(f) + Y_G) u = i` — the expensive 3D part is computed
+once (f-independent), the frequency sweep is cheap. New public API
+`groundfield.solve_mutual_field`; purely additive, `solve_mutual_matrix` untouched.
 
 ---
 

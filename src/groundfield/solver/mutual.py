@@ -78,7 +78,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
-__all__ = ["solve_mutual_matrix"]
+__all__ = ["solve_mutual_matrix", "solve_mutual_field"]
 
 
 # ---------------------------------------------------------------------
@@ -555,3 +555,258 @@ def solve_mutual_matrix(
     if symmetrize:
         return 0.5 * (Z + Z.T)
     return Z
+
+
+def solve_mutual_field(
+    world: "World",
+    engine: "Engine",
+    anchors: list[str],
+    field_points: np.ndarray,
+    *,
+    frequency_index: int = 0,
+    matrix_min_distance: float = 1e-3,
+    matrix_max_terms: int = 100,
+    matrix_tol: float = 1e-6,
+) -> np.ndarray:
+    """Galvanic Green-function matrix: potential at arbitrary field points per node.
+
+    Returns ``R`` of shape ``(M, nG)`` with ``R[i, j]`` = potential at
+    ``field_points[i]`` (``x, y, depth``) under unit current (1 A) injected
+    into ``anchors[j]`` while all other clusters stay floating. This is the
+    off-diagonal field evaluation of :func:`solve_mutual_matrix`, generalised
+    to an **arbitrary** number of field points (decoupled from ``nG``) and
+    without the self/diagonal term — the building block for the
+    frequency-dependent surface-potential distribution by superposition::
+
+        phi(field_points, f) = R @ I_leak(f)
+
+    with ``I_leak(f) = Y_G @ u(f)`` from the reduced network
+    ``(Y_L(f) + Y_G) u = i``. Uses the same one-shot assembly as
+    :func:`solve_mutual_matrix` (reaction matrix and per-excitation leakage
+    columns built once); only the field-point evaluation is generalised. The
+    expensive 3D part is therefore frequency-independent and computed once, so
+    a frequency sweep over ``I_leak(f)`` is cheap.
+
+    ``world`` must already carry **all** ``nG`` grounding clusters (every
+    anchor in ``anchors`` must be a real electrode in ``world``) and the soil
+    model. Any current source is ignored — the excitations are applied
+    internally, one cluster at a time, exactly as the historic per-excitation
+    loop did.
+
+    Parameters
+    ----------
+    world
+        Assembled world holding all ``nG`` grounding clusters and the soil
+        model. Sources, if any, are ignored.
+    engine
+        Engine configuration. ``segment_length`` controls the
+        discretisation; ``frequencies`` selects the solved frequency via
+        ``frequency_index``; ``image_max_terms`` / ``image_series_tol`` feed
+        the 2-layer **self**-kernel (the reaction-matrix assembly), exactly
+        as ``Engine.solve`` would.
+    anchors
+        Length-``nG`` list of electrode names, one per node. Anchor ``j``
+        receives the unit current of excitation ``j`` and fills column ``j``
+        of ``R``.
+    field_points
+        ``(M, 3)`` array of ``(x, y, depth)`` evaluation points, decoupled
+        from ``nG``: ``M`` may differ from ``nG`` and the points are
+        arbitrary (surface or buried). Row ``i`` becomes row ``i`` of ``R``.
+    frequency_index
+        Index into ``engine.frequencies``. Default 0. Only relevant when
+        distributed conductors make the assembled system
+        frequency-dependent.
+    matrix_min_distance, matrix_max_terms, matrix_tol
+        Truncation / clamp parameters of the field evaluation. The defaults
+        ``1e-3 / 100 / 1e-6`` reproduce the hard-coded defaults of
+        :meth:`FieldResult.potential` / ``_potential_two_layer`` exactly.
+        (The reaction-matrix assembly uses ``engine.image_max_terms`` /
+        ``image_series_tol`` independently, just like the live solver.)
+
+    Returns
+    -------
+    R : np.ndarray, shape (M, nG), complex
+        Galvanic Green-function matrix; ``R[i, j]`` is the potential at
+        ``field_points[i]`` under unit excitation of cluster ``j``.
+
+    Raises
+    ------
+    ValueError
+        If ``world`` has no soil model, holds no electrodes, or
+        ``field_points`` does not have shape ``(M, 3)``.
+    KeyError
+        If an entry of ``anchors`` is not an electrode in ``world``.
+    NotImplementedError
+        If the soil is a ``MultiLayerSoil`` with three or more layers
+        (only homogeneous and 2-layer soils are supported).
+    TypeError
+        If the soil model type is not supported.
+
+    See Also
+    --------
+    solve_mutual_matrix : Full ``nG × nG`` mutual grounding-impedance matrix.
+    """
+    if world.soil is None:
+        raise ValueError("World has no soil model.")
+    if not world.electrodes:
+        raise ValueError("World contains no electrodes.")
+
+    soil = world.soil
+    nG = len(anchors)
+    field_points = np.asarray(field_points, dtype=float)
+    if field_points.ndim != 2 or field_points.shape[1] != 3:
+        raise ValueError(f"field_points must have shape (M, 3), got {field_points.shape}.")
+
+    # 1) Discretisation + topology — identical to solve_mutual_matrix.
+    ds = engine.segment_length
+    all_segments: list[_Segment] = []
+    elec_to_segidx: dict[str, list[int]] = {}
+    for e in world.electrodes:
+        segs = _discretize_electrode(e, ds)
+        elec_to_segidx[e.name] = list(range(len(all_segments), len(all_segments) + len(segs)))
+        all_segments.extend(segs)
+
+    cluster_id = _build_clusters(world.electrodes, world.conductors)
+    finite_branches = _build_finite_branches(world.conductors, cluster_id)
+    cond_segs, distributed_branches_objs, interior_nodes = (
+        _build_distributed_topology(world.conductors, cluster_id)
+    )
+    pseudo_owners: list[str] = []
+    for s in cond_segs:
+        pn = s.electrode_name
+        elec_to_segidx[pn] = [len(all_segments)]
+        all_segments.append(s)
+        cluster_id[pn] = pn
+        pseudo_owners.append(pn)
+    for n_ in interior_nodes:
+        if n_ not in cluster_id:
+            cluster_id[n_] = n_
+            pseudo_owners.append(n_)
+            elec_to_segidx[n_] = []
+    n_lumped_branches = len(finite_branches)
+    distributed_branch_tuples = [(db.node_a, db.node_b, db.R) for db in distributed_branches_objs]
+    finite_branches = list(finite_branches) + distributed_branch_tuples
+
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
+    sigma_earth_for_carson: float | None = None
+    layered_earth_for_sommerfeld: object = None
+    if earth_inductive_model == "carson_series":
+        from groundfield.coupling import resolve_earth_conductivity
+        sigma_earth_for_carson = resolve_earth_conductivity(soil)
+    elif earth_inductive_model == "sommerfeld":
+        from groundfield.coupling import resolve_earth_layers
+        layered_earth_for_sommerfeld = resolve_earth_layers(soil)
+    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
+        distributed_branches_objs,
+        n_lumped_branches=n_lumped_branches,
+        n_total_branches=len(finite_branches),
+        earth_model=earth_inductive_model,
+        sigma_earth=sigma_earth_for_carson,
+        layered_earth=layered_earth_for_sommerfeld,
+    )
+
+    n_segments = len(all_segments)
+    seg_points = np.array([s.midpoint for s in all_segments])
+    seg_lengths = np.array([s.length for s in all_segments])
+    wire_radii = np.array([s.wire_radius for s in all_segments])
+    seg_shell_coeffs = np.array(
+        [s.concrete_shell_coefficient_ohm_m for s in all_segments], dtype=float
+    )
+
+    # 2) Soil self-kernel — same case split as solve_mutual_matrix.
+    rho_homog: float | None = None
+    soil_two_layer: TwoLayerSoil | None = None
+    if isinstance(soil, TwoLayerSoil):
+        soil_two_layer = soil
+    elif isinstance(soil, MultiLayerSoil):
+        n_layers = len(soil.layers)
+        if n_layers == 1:
+            rho_homog = float(soil.layers[0].resistivity)
+        elif n_layers == 2:
+            soil_two_layer = TwoLayerSoil(
+                rho_1=float(soil.layers[0].resistivity),
+                rho_2=float(soil.layers[1].resistivity),
+                h_1=float(soil.layers[0].thickness),
+            )
+        else:
+            raise NotImplementedError(
+                "solve_mutual_field supports homogeneous and 2-layer soils; "
+                f"got MultiLayerSoil with n={n_layers} layers."
+            )
+    elif isinstance(soil, HomogeneousSoil):
+        rho_homog = float(soil.resistivity)
+    else:
+        raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
+
+    if soil_two_layer is not None:
+        self_max_terms = int(getattr(engine, "image_max_terms", 100))
+        self_tol = float(getattr(engine, "image_series_tol", 1e-6))
+        z_max = float(seg_points[:, 2].max())
+        cross_layer = bool(z_max >= soil_two_layer.h_1)
+        self_kernel = _two_layer_self_kernel_factory(
+            soil_two_layer, self_max_terms, self_tol, allow_cross_layer=cross_layer
+        )
+    else:
+        rho_for_kernel = float(rho_homog)
+
+        def self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
+            return _self_corrected_kernel(seg_pts, seg_lens, wr, currents, rho_for_kernel)
+
+    eye = np.eye(n_segments)
+    Z_seg_full = self_kernel(seg_points, seg_lengths, wire_radii, eye)
+    omega = (
+        2.0 * np.pi * float(engine.frequencies[frequency_index]) if has_inductance else 0.0
+    )
+    carson_dz = (
+        carson_builder(omega) if (has_inductance and carson_builder is not None) else None
+    )
+
+    def _cached_bulk_self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
+        return Z_seg_full @ currents
+
+    # 3) Per-excitation leakage columns T (no diagonal/self term needed).
+    T = np.zeros((n_segments, nG), dtype=complex)
+    for j, anchor_j in enumerate(anchors):
+        if anchor_j not in elec_to_segidx:
+            raise KeyError(f"Anchor '{anchor_j}' is not an electrode in world.")
+        elec_input_current = {e.name: 0j for e in world.electrodes}
+        elec_input_current[anchor_j] = 1.0 + 0j
+        elec_total = _solve_cluster_currents(
+            electrodes=world.electrodes,
+            elec_input_current=elec_input_current,
+            cluster_id=cluster_id,
+            seg_points=seg_points,
+            seg_lengths=seg_lengths,
+            wire_radii=wire_radii,
+            elec_to_segidx=elec_to_segidx,
+            self_kernel=_cached_bulk_self_kernel,
+            finite_branches=finite_branches,
+            pseudo_owners=pseudo_owners,
+            omega=omega if has_inductance else 0.0,
+            inductance_matrix=inductance_matrix_full if has_inductance else None,
+            carson_correction=carson_dz,
+            shell_coefficients=seg_shell_coeffs,
+        )
+        sc = np.zeros(n_segments, dtype=complex)
+        for ename, idxs in elec_to_segidx.items():
+            if not idxs:
+                continue
+            I_total = elec_total.get(ename, 0j)
+            if I_total == 0j:
+                continue
+            L_total = seg_lengths[idxs].sum()
+            sc[idxs] = I_total * seg_lengths[idxs] / L_total
+        T[:, j] = sc
+
+    # 4) Potential at the M field points per excitation (nG) — one kernel pass.
+    if soil_two_layer is not None:
+        R = _probe_potential_two_layer(
+            field_points, seg_points, T, soil_two_layer,
+            matrix_min_distance, max_terms=matrix_max_terms, tol=matrix_tol,
+        )
+    else:
+        K_probe = _probe_kernel_homogeneous(
+            field_points, seg_points, float(rho_homog), matrix_min_distance
+        )
+        R = K_probe @ T.real + 1j * (K_probe @ T.imag)
+    return R
