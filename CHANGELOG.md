@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.10.0] — 2026-06-28
+
 ### Added — `solve_mutual_field`: surface potential at arbitrary points per node
 
 `solve_mutual_field(world, engine, anchors, field_points, …)` returns the galvanic
@@ -4088,7 +4094,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.9.0
 [0.8.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.0

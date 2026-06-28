@@ -51,7 +51,7 @@ Examples
 from __future__ import annotations
 
 # Version
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 # Re-exports — data model
 from groundfield.boundary import BoundaryConditions
