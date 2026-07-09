@@ -575,9 +575,11 @@ def solve_cim(
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
 
-    def _solve_at(omega: float) -> tuple[
-        dict[str, complex], np.ndarray, np.ndarray
-    ]:
+    # ADR-0010 Tier 1 (WP-F): the multi-port grounding matrix Z is
+    # frequency-independent — share it across the per-frequency calls.
+    _mp_cache: dict = {}
+
+    def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
         carson_dz = (
             carson_builder(omega) if (has_inductance and carson_builder is not None)
             else None
@@ -596,6 +598,7 @@ def solve_cim(
             omega=omega if has_inductance else 0.0,
             inductance_matrix=inductance_matrix_full if has_inductance else None,
             carson_correction=carson_dz,
+            multiport_cache=_mp_cache,
         )
         sc = np.zeros(n_segments, dtype=complex)
         for ename, idxs in elec_to_segidx.items():
@@ -606,24 +609,32 @@ def solve_cim(
                 continue
             L_total = seg_lengths[idxs].sum()
             sc[idxs] = I_total * seg_lengths[idxs] / L_total
-        ph = np.zeros(n_segments, dtype=complex)
-        if sc.any():
-            phi_re = self_kernel(seg_points, seg_lengths, wire_radii, sc.real)
-            phi_im = self_kernel(seg_points, seg_lengths, wire_radii, sc.imag)
-            ph = phi_re + 1j * phi_im
-        return elec_total, sc, ph
+        return elec_total, sc
+
+    def _phi_batch(sc_list: list[np.ndarray]) -> list[np.ndarray]:
+        """Batched segment-potential evaluation (ADR-0010 Tier 1)."""
+        k = len(sc_list)
+        stacked = np.zeros((n_segments, 2 * k))
+        for m, sc in enumerate(sc_list):
+            stacked[:, m] = sc.real
+            stacked[:, k + m] = sc.imag
+        if not stacked.any():
+            return [np.zeros(n_segments, dtype=complex)] * k
+        phi = self_kernel(seg_points, seg_lengths, wire_radii, stacked)
+        return [phi[:, m] + 1j * phi[:, k + m] for m in range(k)]
 
     elec_per_freq: list[dict[str, complex]] = []
     sc_per_freq: list[np.ndarray] = []
     phi_per_freq: list[np.ndarray] = []
     if has_inductance:
         for omega in omegas:
-            et, sc, ph = _solve_at(omega)
+            et, sc = _solve_at(omega)
             elec_per_freq.append(et)
             sc_per_freq.append(sc)
-            phi_per_freq.append(ph)
+        phi_per_freq = _phi_batch(sc_per_freq)
     else:
-        et, sc, ph = _solve_at(0.0)
+        et, sc = _solve_at(0.0)
+        ph = _phi_batch([sc])[0]
         elec_per_freq = [et] * n_freq
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq

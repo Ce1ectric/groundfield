@@ -633,8 +633,10 @@ def solve_fem(
         A_mat[K_a + m, kb] = -1.0
         A_mat[K_a + m, K_a + m] = -R
     if n_unk > 0:
-        sol_re = np.linalg.solve(A_mat, rhs_re)
-        sol_im = np.linalg.solve(A_mat, rhs_im)
+        # Multi-RHS: one LU factorisation for both right-hand sides
+        # (ADR-0010 Tier 1).
+        sol = np.linalg.solve(A_mat, np.column_stack([rhs_re, rhs_im]))
+        sol_re, sol_im = sol[:, 0], sol[:, 1]
     else:
         sol_re = np.zeros(0)
         sol_im = np.zeros(0)

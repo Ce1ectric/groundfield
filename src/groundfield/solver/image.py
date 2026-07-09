@@ -1058,6 +1058,7 @@ def _solve_cluster_currents(
     inductance_matrix: np.ndarray | None = None,
     carson_correction: np.ndarray | None = None,
     shell_coefficients: np.ndarray | None = None,
+    multiport_cache: dict | None = None,
 ) -> dict[str, complex]:
     """Distribute input currents through grounding and finite-conductor branches.
 
@@ -1139,6 +1140,14 @@ def _solve_cluster_currents(
         ``cluster_id[name] == name`` is expected, and
         ``elec_to_segidx[name]`` must already point at its conductor
         midpoint segment.
+    multiport_cache
+        Optional dict used to reuse the multi-port grounding matrix
+        ``Z`` across calls with identical geometry (ADR-0010 Tier 0a:
+        the frequency loop only changes the branch block, never
+        ``Z``). Pass one empty dict per solve and share it across the
+        per-frequency calls; the first call fills it, subsequent
+        calls skip the kernel assembly entirely. ``None`` (default)
+        disables caching.
     """
     if finite_branches is None:
         finite_branches = []
@@ -1226,14 +1235,23 @@ def _solve_cluster_currents(
     # ------------------------------------------------------------------
     # Multi-port grounding matrix Z[i, j]: average potential at
     # electrode i for 1 A injected (uniform per unit length) at
-    # electrode j. Built one column at a time.
+    # electrode j.
+    #
+    # ADR-0010 Tier 1 (audit 2026-07-08, WP-F): all N_a excitation
+    # columns are passed to the kernel in ONE call as an
+    # ``(n_segments, N_a)`` matrix. The kernel's O(N²) geometry
+    # tensors (pairwise differences, norms, image terms) are then
+    # built exactly once instead of once per column — previously 97 %
+    # of the wall time of AP1-sized solves. With ``multiport_cache``
+    # the assembled Z is additionally reused across the per-frequency
+    # calls (Z is frequency-independent; only the branch block of the
+    # augmented system changes with ω).
     # ------------------------------------------------------------------
-    Z = np.zeros((N_a, N_a))
     n_segments = seg_points.shape[0]
     # ADR-0012 V2: precompute the per-segment radial shell resistance
     # $R_\text{shell,k} = C_k / \Delta s_k$. The diagonal augmentation
-    # ``phi_test[k] += R_shell_k · I_seg_k`` is applied below, after
-    # the bulk-soil ``self_kernel`` call. ``None`` (default) means no
+    # ``phi[k] += R_shell_k · I_seg_k`` is applied below, after the
+    # bulk-soil ``self_kernel`` call. ``None`` (default) means no
     # shell anywhere — historic behaviour preserved bit-exact.
     shell_diag: np.ndarray | None = None
     if shell_coefficients is not None and np.any(shell_coefficients > 0.0):
@@ -1243,19 +1261,30 @@ def _solve_cluster_currents(
                 np.asarray(shell_coefficients, dtype=float) / seg_lengths,
                 0.0,
             )
-    for j, name_j in enumerate(active_elecs):
-        idxs_j = elec_to_segidx[name_j]
-        test_currents = np.zeros(n_segments)
-        L_j = seg_lengths[idxs_j].sum()
-        test_currents[idxs_j] = seg_lengths[idxs_j] / L_j  # uniform, Σ = 1 A
-        phi_test = self_kernel(
-            seg_points, seg_lengths, wire_radii, test_currents
+    if (
+        multiport_cache is not None
+        and multiport_cache.get("active_elecs") == active_elecs
+    ):
+        Z = multiport_cache["Z"]
+    else:
+        excitation = np.zeros((n_segments, N_a))
+        for j, name_j in enumerate(active_elecs):
+            idxs_j = elec_to_segidx[name_j]
+            L_j = seg_lengths[idxs_j].sum()
+            # uniform per unit length, Σ = 1 A
+            excitation[idxs_j, j] = seg_lengths[idxs_j] / L_j
+        phi_all = self_kernel(
+            seg_points, seg_lengths, wire_radii, excitation
         )
         if shell_diag is not None:
-            phi_test = phi_test + shell_diag * test_currents
+            phi_all = phi_all + shell_diag[:, None] * excitation
+        Z = np.empty((N_a, N_a))
         for i, name_i in enumerate(active_elecs):
             idxs_i = elec_to_segidx[name_i]
-            Z[i, j] = float(phi_test[idxs_i].mean())
+            Z[i, :] = phi_all[idxs_i, :].mean(axis=0)
+        if multiport_cache is not None:
+            multiport_cache["active_elecs"] = list(active_elecs)
+            multiport_cache["Z"] = Z
 
     # ------------------------------------------------------------------
     # Augmented linear system
@@ -1328,9 +1357,11 @@ def _solve_cluster_currents(
     )
 
     if not use_inductive:
-        sol_re = np.linalg.solve(A, b_re)
-        sol_im = np.linalg.solve(A, b_im)
-        I_active = sol_re[:N_a] + 1j * sol_im[:N_a]
+        # Multi-RHS solve: one LU factorisation for both the real and
+        # the imaginary part (previously two `solve` calls factorised
+        # the same real matrix twice — ADR-0010 Tier 1).
+        sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
+        I_active = sol[:N_a, 0] + 1j * sol[:N_a, 1]
     else:
         # Restrict the (full-finite-branches) inductance matrix to the
         # active subset; both ``finite_branches`` and
@@ -1536,9 +1567,11 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
 
-    def _solve_at(omega: float) -> tuple[
-        dict[str, complex], np.ndarray, np.ndarray
-    ]:
+    # ADR-0010 Tier 1 (WP-F): the multi-port grounding matrix Z is
+    # frequency-independent — share it across the per-frequency calls.
+    _mp_cache: dict = {}
+
+    def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
         """Solve once at a given angular frequency.
 
         Returns
@@ -1547,8 +1580,6 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
             Per-owner total leakage current.
         seg_currents : np.ndarray
             Per-segment current distribution (uniform per unit length).
-        phi_at_segments : np.ndarray
-            Potential at every segment midpoint.
         """
         carson_dz = (
             carson_builder(omega) if (has_inductance and carson_builder is not None)
@@ -1569,6 +1600,7 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
             inductance_matrix=inductance_matrix_full if has_inductance else None,
             carson_correction=carson_dz,
             shell_coefficients=seg_shell_coeffs,
+            multiport_cache=_mp_cache,
         )
         sc = np.zeros(n_segments, dtype=complex)
         for ename, idxs in elec_to_segidx.items():
@@ -1579,28 +1611,38 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
                 continue
             L_total = seg_lengths[idxs].sum()
             sc[idxs] = I_total * seg_lengths[idxs] / L_total
-        ph = np.zeros(n_segments, dtype=complex)
-        if sc.any():
-            phi_re = _self_corrected_kernel(
-                seg_points, seg_lengths, wire_radii, sc.real, rho,
-            )
-            phi_im = _self_corrected_kernel(
-                seg_points, seg_lengths, wire_radii, sc.imag, rho,
-            )
-            # ADR-0012 V2: same shell augmentation as in
-            # _solve_cluster_currents so electrode_potentials /
-            # cluster_impedance reflect the concrete-shell drop.
-            if np.any(seg_shell_coeffs > 0.0):
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    shell_diag = np.where(
-                        seg_lengths > 0.0,
-                        seg_shell_coeffs / seg_lengths,
-                        0.0,
-                    )
-                phi_re = phi_re + shell_diag * sc.real
-                phi_im = phi_im + shell_diag * sc.imag
-            ph = phi_re + 1j * phi_im
-        return elec_total, sc, ph
+        return elec_total, sc
+
+    def _phi_batch(sc_list: list[np.ndarray]) -> list[np.ndarray]:
+        """Segment-midpoint potentials for a list of current vectors.
+
+        All real/imaginary parts are stacked into one
+        ``(n_segments, 2·len(sc_list))`` excitation matrix so the
+        kernel's O(N²) geometry tensors are built exactly once for
+        the whole frequency set (ADR-0010 Tier 1).
+        """
+        k = len(sc_list)
+        stacked = np.zeros((n_segments, 2 * k))
+        for m, sc in enumerate(sc_list):
+            stacked[:, m] = sc.real
+            stacked[:, k + m] = sc.imag
+        if not stacked.any():
+            return [np.zeros(n_segments, dtype=complex)] * k
+        phi = _self_corrected_kernel(
+            seg_points, seg_lengths, wire_radii, stacked, rho,
+        )
+        # ADR-0012 V2: same shell augmentation as in
+        # _solve_cluster_currents so electrode_potentials /
+        # cluster_impedance reflect the concrete-shell drop.
+        if np.any(seg_shell_coeffs > 0.0):
+            with np.errstate(divide="ignore", invalid="ignore"):
+                shell_diag = np.where(
+                    seg_lengths > 0.0,
+                    seg_shell_coeffs / seg_lengths,
+                    0.0,
+                )
+            phi = phi + shell_diag[:, None] * stacked
+        return [phi[:, m] + 1j * phi[:, k + m] for m in range(k)]
 
     # Frequency loop. With no inductive coupling the system is
     # frequency-independent, so we solve once and replicate.
@@ -1609,12 +1651,13 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     phi_per_freq: list[np.ndarray] = []
     if has_inductance:
         for omega in omegas:
-            et, sc, ph = _solve_at(omega)
+            et, sc = _solve_at(omega)
             elec_per_freq.append(et)
             sc_per_freq.append(sc)
-            phi_per_freq.append(ph)
+        phi_per_freq = _phi_batch(sc_per_freq)
     else:
-        et, sc, ph = _solve_at(0.0)
+        et, sc = _solve_at(0.0)
+        ph = _phi_batch([sc])[0]
         elec_per_freq = [et] * n_freq
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq

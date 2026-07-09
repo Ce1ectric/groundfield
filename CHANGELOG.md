@@ -26,6 +26,35 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Changed — Tier-1 performance: one-shot multiport assembly (audit 2026-07-08, WP-F)
+
+Profiling of AP1-sized worlds showed 97 % of `Engine.solve` wall time
+inside `_self_corrected_kernel`, called once per electrode column and
+per frequency — each call rebuilding the full (N, N) geometry
+tensors. Three changes (ADR-0010 Tier 0a/1, results numerically
+identical to FP rounding):
+
+- **Batched multiport-Z assembly.** `_solve_cluster_currents` passes
+  all `N_a` excitation columns to the self-kernel in one call as an
+  `(n_segments, N_a)` matrix; the O(N²) kernel tensors are built
+  exactly once instead of `N_a` times.
+- **Multiport cache across the frequency loop.** The grounding
+  matrix Z is frequency-independent; `image`, `image_2layer` and
+  `cim` now assemble it once per solve and reuse it for every
+  frequency (new `multiport_cache` parameter).
+- **Batched potential evaluation + multi-RHS solves.** The
+  per-frequency segment potentials are evaluated in one stacked
+  kernel call for the whole frequency set; the real DC-path linear
+  systems solve `[b_re, b_im]` with a single LU factorisation
+  (also in `mom`/`bem`/`mom_sommerfeld` via `_galerkin_solve`, and
+  in `fem`).
+
+Measured (sandbox, 4 cores): 50-building TN world, ds = 0.5 m
+(N = 1476): 22.0 s → 0.18 s; 100 buildings (N = 2926): ≈ 2 min →
+0.85 s; two-rod world with distributed inductive PEN at 7
+frequencies: 7 ms. Solver output verified identical against the
+pre-change audit reference values (galvanic and inductive paths).
+
 ### Added — guard rails against silently wrong results (audit 2026-07-08, WP-A)
 
 The physics/numerics audit of 2026-07-08 (report in

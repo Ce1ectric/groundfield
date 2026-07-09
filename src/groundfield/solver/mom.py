@@ -299,10 +299,10 @@ def _galerkin_solve(
     )
 
     if not use_inductive:
-        # DC / no-inductive fast path: A is real, solve real and imag
-        # right-hand sides independently.
-        sol_re = np.linalg.solve(A, b_re)
-        sol_im = np.linalg.solve(A, b_im)
+        # DC / no-inductive fast path: A is real; one LU factorisation
+        # for both right-hand sides (multi-RHS, ADR-0010 Tier 1).
+        sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
+        sol_re, sol_im = sol[:, 0], sol[:, 1]
         I_active = sol_re[:N_a] + 1j * sol_im[:N_a]
         phi_active = sol_re[N_a:N_a + K_a] + 1j * sol_im[N_a:N_a + K_a]
     else:

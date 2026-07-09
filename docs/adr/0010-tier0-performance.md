@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted (Tier 0b implemented; 0a / 0c follow-ups) |
+| **Status** | Accepted (Tier 0b implemented; Tier 0a/1 implemented 2026-07-09, audit WP-F; 0c deferred) |
 | **Date** | 2026-05-09 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.coupling.inductance`, `groundfield.solver.image` (LU caching), discretiser heuristics |
@@ -79,22 +79,30 @@ is frequency-independent (`earth_inductive_model ==
 factor once and reuse the LU across the whole frequency list.
 For the inductive paths, factor per frequency as today.
 
-**Status**: scoped, not yet implemented. The current
-``_solve_cluster_currents`` function in
-``solver/image.py`` (and equivalent helpers in ``image_2layer``,
-``mom``, ``cim``, ``bem``) takes one ``omega`` per call and
-internally rebuilds + factorises ``A``. Implementing 0a
-requires hoisting that build out of the per-call API to a
-"prepare once, solve many" interface — touching seven backends
-plus the engine dispatch. Estimated effort: 3–5 days plus
-regression-test maintenance. The win on the default path
-(galvanic + multi-frequency) is exactly ``len(frequencies)``;
-typical sweeps use 1 frequency, so the practical
-improvement is small unless the user explicitly runs a
-multi-frequency study without inductive coupling. Listed
-explicitly in this ADR to make the plan reviewable; will be
-implemented when a multi-frequency-without-inductance use case
-materialises.
+**Status**: implemented 2026-07-09 (audit 2026-07-08, WP-F), in a
+slightly different — and stronger — form than originally scoped. The
+2026-07-08 audit profile showed that the dominant cost was not the LU
+factorisation but the **multiport-Z assembly**: the self-kernel was
+invoked once per electrode column *and* per frequency, rebuilding its
+O(N²) geometry tensors every time (97 % of wall time on AP1-sized
+worlds). The implemented Tier 1 therefore covers:
+
+* one-shot batched Z assembly — all ``N_a`` excitation columns in a
+  single kernel call with an ``(n_segments, N_a)`` matrix;
+* a ``multiport_cache`` shared across the per-frequency calls in
+  ``image`` / ``image_2layer`` / ``cim`` (Z is
+  frequency-independent);
+* batched per-frequency potential evaluation (one stacked kernel
+  call for the whole frequency set);
+* multi-RHS ``solve(A, [b_re, b_im])`` on every real DC path
+  (image family, ``_galerkin_solve``, ``fem``).
+
+Measured effect: 50-building TN world (N = 1476) 22.0 s → 0.18 s;
+100 buildings (N = 2926) ≈ 2 min → 0.85 s. Results are numerically
+identical to FP rounding (verified against the audit reference
+values on the galvanic and inductive paths). The originally scoped
+LU cache across frequencies remains unimplemented — after Tier 1 the
+augmented-system LU is no longer a relevant cost below N ≈ 10⁴.
 
 ### 0c (deferred)
 
