@@ -381,7 +381,9 @@ class FieldResult(BaseModel):
                         np.maximum(r, min_distance, out=r)
                         acc += (1.0 / r) @ real_currents
                 phi += K_n * acc
-                if abs_K ** n < tol:
+                # Geometric tail bound |K|^(n+1)/(1-|K|) — consistent
+                # with the solver-side criterion in image_2layer.
+                if abs_K < 1.0 and abs_K ** (n + 1) / (1.0 - abs_K) < tol:
                     break
             return phi
 

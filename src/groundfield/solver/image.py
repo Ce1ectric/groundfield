@@ -46,6 +46,7 @@ References
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -72,6 +73,81 @@ __all__ = ["solve_image"]
 # ``_MIN_DISTANCE`` (in metres). Distances below the cutoff are clamped
 # to it to suppress the 1/r singularity during visual evaluations.
 _MIN_DISTANCE = 1e-3
+
+
+def _require_thin_wire(
+    seg_len: float, wire_radius: float, electrode_name: str
+) -> None:
+    """Reject segment lengths at or below the wire radius.
+
+    The analytical line self-term on the reaction-matrix diagonal is
+    $2 \\ln(L/a) / L$; for $L \\le a$ the logarithm is non-positive,
+    the diagonal loses dominance and the solve silently returns
+    nonsense currents. This is a hard error because no downstream
+    result can be salvaged. The softer thin-wire quality criterion
+    ($L \\ge 5a$, ``MIN_THINWIRE_RATIO``) remains an advisory
+    diagnostic in :func:`groundfield.diagnostics.check_segment_resolution`.
+
+    Raises
+    ------
+    ValueError
+        If ``seg_len <= wire_radius``.
+    """
+    if seg_len <= wire_radius:
+        raise ValueError(
+            f"Electrode '{electrode_name}': discretised segment length "
+            f"{seg_len:.4g} m is <= wire_radius {wire_radius:.4g} m. "
+            "The thin-wire self-term ln(L/a) is invalid there. Use a "
+            "larger segment_length, a smaller wire radius, or a larger "
+            "electrode."
+        )
+
+
+def _warn_ignored_sources(world, backend: str) -> None:
+    """Warn when a backend drops non-current sources.
+
+    Every backend supports impressed current sources only; other
+    source kinds are skipped during the injection assembly. Without
+    this warning a world driven solely by voltage sources solves to
+    all-zero with no diagnostic.
+    """
+    n_ignored = sum(1 for s in world.sources if s.kind != "current")
+    if n_ignored:
+        warnings.warn(
+            f"{backend}: {n_ignored} non-current source(s) ignored — "
+            "only CurrentSource is supported. A world driven solely "
+            "by non-current sources solves to all-zero.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
+def _reject_concrete_shells(world, backend: str) -> None:
+    """Reject worlds carrying concrete-shell corrections (ADR-0012).
+
+    Only the image family consumes the per-segment shell coefficient
+    on the reaction-matrix diagonal. Every other backend would
+    silently solve the bare-metal problem, which the electrode
+    documentation explicitly promises will fail loudly instead.
+
+    Raises
+    ------
+    NotImplementedError
+        If any electrode carries a non-zero
+        ``concrete_shell_coefficient_ohm_m``.
+    """
+    shelled = [
+        e.name for e in world.electrodes
+        if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0)
+        != 0.0
+    ]
+    if shelled:
+        raise NotImplementedError(
+            f"Backend '{backend}' does not implement the concrete-shell "
+            f"correction (ADR-0012) carried by electrode(s) {shelled}. "
+            "Use backend='image' / 'image_2layer', or set "
+            "concrete_shell_coefficient_ohm_m = 0."
+        )
 
 
 @dataclass
@@ -130,6 +206,7 @@ def _discretize_rod(electrode: RodElectrode, ds: float) -> list[_Segment]:
     """Vertical driven rod into N equally long segments."""
     n = max(1, int(np.ceil(electrode.length / ds)))
     seg_len = electrode.length / n
+    _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
     x0, y0, z0 = electrode.position
     segs: list[_Segment] = []
     for k in range(n):
@@ -150,6 +227,7 @@ def _discretize_ring(electrode: RingElectrode, ds: float) -> list[_Segment]:
     perimeter = 2.0 * np.pi * electrode.radius
     n = max(8, int(np.ceil(perimeter / ds)))
     seg_len = perimeter / n
+    _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
     cx, cy, cz = electrode.center
     segs: list[_Segment] = []
     for k in range(n):
@@ -175,6 +253,7 @@ def _discretize_strip(electrode: StripElectrode, ds: float) -> list[_Segment]:
     L = electrode.length
     n = max(1, int(np.ceil(L / ds)))
     seg_len = L / n
+    _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
     p0 = np.array(electrode.start, dtype=float)
     p1 = np.array(electrode.end, dtype=float)
     direction = (p1 - p0) / L
@@ -229,6 +308,7 @@ def _grid_segments(
     for y in ys:
         n = max(1, int(np.ceil(dx / ds)))
         seg_len = dx / n
+        _require_thin_wire(seg_len, wire_radius, electrode_name)
         for k in range(n):
             xm = cx + (k + 0.5) * seg_len
             segs.append(
@@ -243,6 +323,7 @@ def _grid_segments(
     for x in xs:
         n = max(1, int(np.ceil(dy / ds)))
         seg_len = dy / n
+        _require_thin_wire(seg_len, wire_radius, electrode_name)
         for k in range(n):
             ym = cy + (k + 0.5) * seg_len
             segs.append(
@@ -801,6 +882,22 @@ def _self_corrected_kernel(
     r_real = np.linalg.norm(diff_real, axis=2)
     r_image = np.linalg.norm(diff_image, axis=2)
 
+    # The 1 mm clamp below is meant for *field* evaluations; inside
+    # the reaction matrix a clamped off-diagonal pair means two
+    # distinct segments (nearly) coincide and the mutual term is
+    # silently saturated — surface that instead of hiding it.
+    n_clamped = (int((r_real < _MIN_DISTANCE).sum()) - n) // 2  # diag is 0
+    if n_clamped > 0:
+        warnings.warn(
+            f"_self_corrected_kernel: {n_clamped} off-diagonal segment "
+            f"pair(s) are closer than the {_MIN_DISTANCE * 1e3:.0f} mm "
+            "singularity clamp — distinct electrodes/segments overlap "
+            "and their mutual coupling is saturated at the clamp. "
+            "Check the geometry for coincident conductors.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # Off-diagonal: point source, safely clamped.
     np.maximum(r_real, _MIN_DISTANCE, out=r_real)
     np.maximum(r_image, _MIN_DISTANCE, out=r_image)
@@ -917,8 +1014,19 @@ def _build_finite_branches(
         is_ideal = getattr(c, "is_ideal", None)
         if not callable(is_ideal) or is_ideal():
             continue
-        if getattr(c, "is_distributed", False) and not distributed_as_lumped:
+        if (
+            getattr(c, "is_distributed", False)
+            and not distributed_as_lumped
+            and getattr(c, "n_segments", 1) > 1
+        ):
             # Routed through _build_distributed_topology instead.
+            # A distributed conductor that degenerates to a single
+            # sub-piece (n_segments == 1, i.e.
+            # discretize_segment_length >= conductor length) is *not*
+            # handled there — _discretize_conductor returns an empty
+            # topology for n <= 1 — so it must fall through to the
+            # lumped branch here. Previously it silently vanished
+            # from the system (open circuit).
             continue
         node_a = cluster_id[a]
         node_b = cluster_id[b]
@@ -1323,13 +1431,23 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     elec_input_current: dict[str, complex] = {
         e.name: 0j for e in world.electrodes
     }
+    n_ignored_sources = 0
     for src in world.sources:
         if src.kind != "current":
-            # Voltage sources are ignored in this simple image model.
+            # Voltage sources are not supported by this backend.
+            n_ignored_sources += 1
             continue
         i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
         if src.attached_to in elec_input_current:
             elec_input_current[src.attached_to] += i_complex
+    if n_ignored_sources:
+        warnings.warn(
+            f"solve_image: {n_ignored_sources} non-current source(s) "
+            "ignored — only CurrentSource is supported. A world driven "
+            "solely by voltage sources solves to all-zero.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     # 3) Cluster building: electrodes joined by an *ideal* conductor
     #    share a common potential. Conductors with a finite series

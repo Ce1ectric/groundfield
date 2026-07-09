@@ -609,6 +609,29 @@ def build_inductance_matrix(
     # flipping z; same shape and tangent direction up to a sign — the
     # Neumann integrand handles the sign via the dot product.
     if use_image:
+        # Guard against the degenerate mirror geometry: a segment
+        # lying (almost) in the soil-surface plane z = 0 coincides
+        # with its own image, and the partial self-inductance
+        # diverges logarithmically as the mirror distance 2|z|
+        # approaches the wire radius. Without this check the
+        # assembly silently produces self-inductances that are
+        # orders of magnitude too large (observed: ~4.7 H instead
+        # of ~55 µH for a 25 m segment), which in turn blocks the
+        # branch current in the nodal solve. Conductors strung
+        # between electrode heads at z = 0 are the typical trap.
+        z_mid = 0.5 * np.abs(p1[:, 2] + p2[:, 2])
+        degenerate = 2.0 * z_mid <= wire_radii
+        if degenerate.any():
+            k = int(np.argmax(degenerate))
+            raise ValueError(
+                f"build_inductance_matrix: segment {k} lies in the "
+                f"soil-surface plane (|z_mid| = {z_mid[k]:.4g} m <= "
+                f"wire_radius/2 = {0.5 * wire_radii[k]:.4g} m). Its "
+                "perfect-mirror image coincides with the segment and "
+                "the partial self-inductance diverges. Bury the "
+                "conductor (e.g. z = 0.7 m) or disable the image "
+                "term with use_image=False."
+            )
         p1_img = p1.copy(); p1_img[:, 2] = -p1_img[:, 2]
         p2_img = p2.copy(); p2_img[:, 2] = -p2_img[:, 2]
         da_img = p2_img - p1_img

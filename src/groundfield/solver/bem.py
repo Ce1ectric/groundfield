@@ -84,8 +84,10 @@ from groundfield.solver.image import (
     _build_distributed_topology,
     _build_finite_branches,
     _discretize_electrode,
+    _reject_concrete_shells,
     _self_corrected_kernel,
     _Segment,
+    _warn_ignored_sources,
 )
 from groundfield.solver.mom import _galerkin_solve  # used as constraint solver
 from groundfield.solver.result import FieldResult, PointSource
@@ -111,6 +113,9 @@ def _build_Z_collocation(
     wire_radii: np.ndarray,
     stack: LayerStack,
     fit: ComplexImageFit,
+    *,
+    max_terms: int = 200,
+    tol: float = 1e-6,
 ) -> np.ndarray:
     """Collocation N×N reaction matrix.
 
@@ -120,10 +125,19 @@ def _build_Z_collocation(
       ``image`` self-kernel (line self-action on the diagonal,
       point-source ``1/r + 1/r_{\\text{air}}`` off-diagonal).
     - ``n_layers == 2`` → exact Tagg/Sunde matrix from the
-      ``image_2layer`` self-kernel.
+      ``image_2layer`` self-kernel (``allow_cross_layer=True``, so
+      interface-crossing geometries dispatch to the rigorous
+      cross-layer path instead of silently applying the upper-layer
+      series).
     - ``n_layers >= 3`` → homogeneous matrix plus the complex-image
       contribution $\\sum_k a_k / r_k$ from the matrix-pencil
       fit (single image per pole at $z = -(z_s + 2 \\beta_k)$).
+
+    Parameters
+    ----------
+    max_terms, tol
+        Tagg/Sunde series truncation, forwarded from the engine
+        (``Engine.image_max_terms`` / ``Engine.image_series_tol``).
     """
     n = seg_points.shape[0]
     rho_1 = float(stack.rhos[0])
@@ -144,7 +158,9 @@ def _build_Z_collocation(
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
         )
-        kern = _two_layer_self_kernel_factory(soil, max_terms=200, tol=1e-6)
+        kern = _two_layer_self_kernel_factory(
+            soil, max_terms=max_terms, tol=tol, allow_cross_layer=True,
+        )
         return kern(seg_points, seg_lengths, wire_radii, eye)
 
     # n >= 3: homogeneous matrix + complex-image contribution.
@@ -206,6 +222,8 @@ def solve_bem(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    _reject_concrete_shells(world, "bem")
+    _warn_ignored_sources(world, "bem")
 
     stack = as_layer_stack(world.soil)
     fit = fit_complex_images(stack, n_images=n_images, n_samples=n_samples)
@@ -290,21 +308,26 @@ def solve_bem(
         z_max = seg_points[:, 2].max()
         h_1 = float(stack.h[0])
         if z_max >= h_1:
-            # n=2 cross-layer is handled via the shared
-            # _two_layer_self_kernel_factory dispatcher (Phase A).
-            import warnings as _w
-
-            _w.warn(
+            # n>=3 cross-layer is not implemented — the complex-image
+            # kernel would silently apply the upper-layer expansion
+            # below the first interface. Hard error instead of a
+            # warning followed by wrong physics. (n=2 cross-layer is
+            # handled via the _two_layer_self_kernel_factory
+            # dispatcher with allow_cross_layer=True.)
+            raise ValueError(
                 f"bem: cross-layer geometry on n_layers="
-                f"{stack.n_layers} not yet supported. "
-                "Use backend='image_2layer' for n=2; for n>=3 "
-                "thicken the upper layer.",
-                UserWarning,
-                stacklevel=2,
+                f"{stack.n_layers} is not supported (z_max = "
+                f"{z_max:.3f} m >= h_1 = {h_1:.3f} m). Use "
+                "backend='image_2layer' for n=2 cross-layer worlds; "
+                "for n>=3 use 'mom_sommerfeld' or thicken the upper "
+                "layer."
             )
 
-    # 3) Reaction matrix via collocation.
-    Z = _build_Z_collocation(seg_points, seg_lengths, wire_radii, stack, fit)
+    # 3) Reaction matrix via collocation (series knobs from engine).
+    Z = _build_Z_collocation(
+        seg_points, seg_lengths, wire_radii, stack, fit,
+        max_terms=engine.image_max_terms, tol=engine.image_series_tol,
+    )
 
     # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).
     n_freq = len(engine.frequencies)

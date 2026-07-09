@@ -166,16 +166,26 @@ class Engine(BaseModel):
     max_iterations: int = Field(default=200, gt=0)
     earth_inductive_model: EarthInductiveModel = Field(default="perfect_mirror")
     image_max_terms: int = Field(
-        default=100, gt=0,
+        default=300, gt=0,
         description=(
-            "Maximale Anzahl Reihenterme der image_2layer-/image_nlayer-"
-            "Bildladungsreihe. Bei hohem Schichtkontrast (|K| nahe 1) sind "
-            "mehr Terme noetig, um |K|^n < image_series_tol zu erreichen."
+            "Maximum number of series terms of the image_2layer / "
+            "image_nlayer image-charge series. High layer contrast "
+            "(|K| close to 1) needs more terms to bring the geometric "
+            "tail bound |K|^(n+1)/(1-|K|) below image_series_tol. The "
+            "default 300 covers |K| = 0.94 (AP1 corner soils); the "
+            "solver emits a SeriesTruncationWarning when the cap is "
+            "reached. Forwarded to every layered backend "
+            "(image_2layer, image_nlayer, mom, cim, bem, "
+            "mom_sommerfeld)."
         ),
     )
     image_series_tol: float = Field(
         default=1e-6, gt=0.0,
-        description="Abbruchtoleranz |K|^n der image_2layer-Bildladungsreihe.",
+        description=(
+            "Stop tolerance for the image-charge series: iteration "
+            "ends when the geometric tail bound |K|^(n+1)/(1-|K|) "
+            "falls below this value."
+        ),
     )
 
     @field_validator("frequencies")
@@ -344,6 +354,15 @@ class Engine(BaseModel):
             len(world.electrodes),
             len(self.frequencies),
         )
+
+        # Pre-flight discretisation check (advisory, never raises).
+        # Surfaces thin-wire violations, degenerate electrode sizes
+        # and segment-budget overruns as warnings *before* the solve
+        # spends minutes on a misconfigured world.
+        from groundfield.diagnostics import check_segment_resolution
+
+        for finding in check_segment_resolution(world, self):
+            warnings.warn(finding, UserWarning, stacklevel=2)
 
         # Auto-forwarding: ``backend="image"`` transparently picks
         # ``image_2layer`` for a 2-layer soil and ``image_nlayer`` for

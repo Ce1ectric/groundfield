@@ -98,9 +98,11 @@ from groundfield.solver.image import (
     _build_distributed_topology,
     _build_finite_branches,
     _discretize_electrode,
+    _reject_concrete_shells,
     _self_corrected_kernel,
     _Segment,
     _solve_cluster_currents,
+    _warn_ignored_sources,
 )
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
@@ -297,7 +299,13 @@ def fit_complex_images(
 # ---------------------------------------------------------------------
 
 
-def _cim_self_kernel_factory(stack: LayerStack, fit: ComplexImageFit):
+def _cim_self_kernel_factory(
+    stack: LayerStack,
+    fit: ComplexImageFit,
+    *,
+    max_terms: int = 200,
+    tol: float = 1e-6,
+):
     """Build a self-action closure for the CIM.
 
     Strategy:
@@ -305,9 +313,13 @@ def _cim_self_kernel_factory(stack: LayerStack, fit: ComplexImageFit):
     - ``n_layers == 1`` → homogeneous self-kernel (Γ_1 ≡ 0, no extra
       images).
     - ``n_layers == 2`` → exact Tagg/Sunde self-kernel (closed form,
-      bit-identical to ``image_2layer``). The matrix-pencil fit of a
-      constant Γ_1 = K_1 is ill-conditioned, so we deliberately skip
-      it and use the closed-form geometric series instead.
+      bit-identical to ``image_2layer``), created with
+      ``allow_cross_layer=True`` so a rod through the interface
+      dispatches to the rigorous cross-layer path (ADR-0007) instead
+      of silently applying the upper-layer series. The matrix-pencil
+      fit of a constant Γ_1 = K_1 is ill-conditioned, so we
+      deliberately skip it and use the closed-form geometric series
+      instead.
     - ``n_layers ≥ 3`` → complex-image contribution
       $\\sum_k a_k / r_k$ added to the homogeneous self-kernel, with
       $r_k = \\sqrt{s^2 + (z + z_s + 2 \\beta_k)^2}$. The
@@ -334,7 +346,9 @@ def _cim_self_kernel_factory(stack: LayerStack, fit: ComplexImageFit):
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
         )
-        return _two_layer_self_kernel_factory(soil, max_terms=200, tol=1e-6)
+        return _two_layer_self_kernel_factory(
+            soil, max_terms=max_terms, tol=tol, allow_cross_layer=True,
+        )
 
     # n >= 3: closed-form complex-image expansion of Γ_1(λ).
     def _kernel(seg_points, seg_lengths, wire_radii, currents):
@@ -446,6 +460,8 @@ def solve_cim(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    _reject_concrete_shells(world, "cim")
+    _warn_ignored_sources(world, "cim")
 
     stack = as_layer_stack(world.soil)
     fit = fit_complex_images(stack, n_images=n_images, n_samples=n_samples)
@@ -534,22 +550,26 @@ def solve_cim(
         z_max = seg_points[:, 2].max()
         h_1 = float(stack.h[0])
         if z_max >= h_1:
-            # ADR-0006/0007 Phase B: n>=3 cross-layer not yet
-            # implemented. For n=2 the kernel delegates to the
-            # cross-layer-aware _two_layer_self_kernel_factory.
-            import warnings as _w
-
-            _w.warn(
+            # ADR-0006/0007 Phase B: n>=3 cross-layer is not
+            # implemented — the CIM kernel would silently apply the
+            # upper-layer expansion to segments below the first
+            # interface. Hard error instead of a warning that is
+            # followed by wrong physics.
+            raise ValueError(
                 f"cim: cross-layer geometry on n_layers="
-                f"{stack.n_layers} not yet supported. "
-                "Use backend='image_2layer' for n=2; for n>=3 "
-                "thicken the upper layer.",
-                UserWarning,
-                stacklevel=2,
+                f"{stack.n_layers} is not supported (z_max = "
+                f"{z_max:.3f} m >= h_1 = {h_1:.3f} m). Use "
+                "backend='image_2layer' for n=2 cross-layer worlds; "
+                "for n>=3 use 'mom_sommerfeld' or thicken the upper "
+                "layer."
             )
 
-    # 4) Self-kernel + frequency loop.
-    self_kernel = _cim_self_kernel_factory(stack, fit)
+    # 4) Self-kernel + frequency loop. The Tagg/Sunde truncation
+    #    knobs come from the engine (consistent with image_2layer).
+    self_kernel = _cim_self_kernel_factory(
+        stack, fit,
+        max_terms=engine.image_max_terms, tol=engine.image_series_tol,
+    )
     n_segments = len(all_segments)
     n_freq = len(engine.frequencies)
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]

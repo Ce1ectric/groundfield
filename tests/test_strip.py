@@ -89,16 +89,18 @@ def test_image_strip_matches_dwight_horizontal_wire() -> None:
 
 
 def test_strip_more_accurate_than_degenerate_mesh_workaround() -> None:
-    """The native ``StripElectrode`` must beat the historical
-    degenerate-mesh workaround when checked against Dwight 1936.
+    """The native ``StripElectrode`` replaces the historical
+    degenerate-mesh workaround, which the discretiser now rejects.
 
-    The workaround puts two parallel longitudinal wires 1 mm apart
-    and distributes the cluster current uniformly over their *total*
-    length (``2 L`` instead of ``L``). The per-unit-length emission
-    is therefore halved, which inflates the cluster impedance by
-    roughly a factor of two — this was the root cause of the
-    "potential at the strip end is not the ring potential" symptom
-    and motivates the migration to the native primitive.
+    The workaround put two parallel longitudinal wires 1 mm apart
+    and distributed the cluster current uniformly over their *total*
+    length (``2 L`` instead of ``L``), inflating the cluster
+    impedance by roughly a factor of two. Its transverse wires are
+    1 mm long at a 5 mm wire radius — exactly the degenerate
+    ``segment_length <= wire_radius`` geometry whose thin-wire
+    self-term ln(L/a) flips sign. Since the discretiser guard
+    (audit 2026-07-08, WP-A) that configuration raises a hard
+    ``ValueError`` instead of producing a silently wrong number.
     """
     L = 8.0
     a = 0.005
@@ -114,7 +116,18 @@ def test_strip_more_accurate_than_degenerate_mesh_workaround() -> None:
     gf.create_source(w1, attached_to="g1", magnitude=1.0)
     Z_strip = ENG.solve(w1).cluster_impedance("g1")[0].real
 
-    # Degenerate mesh with eps = 1 mm (the prior workaround)
+    R_dw = dw.horizontal_wire(rho=100.0, length=L / 2.0,
+                              radius=a, depth=depth)
+    err_strip = abs(Z_strip - R_dw) / R_dw
+
+    # Native primitive is well within the 10 % image-vs-Dwight envelope.
+    assert err_strip < 0.10, (
+        f"native strip Z = {Z_strip:.3f} Ω, Dwight = {R_dw:.3f} Ω, "
+        f"Δ = {err_strip*100:.2f} %"
+    )
+
+    # Degenerate mesh with eps = 1 mm (the prior workaround) is now
+    # rejected by the thin-wire guard instead of solving wrongly.
     w2 = gf.create_world(soil=SOIL)
     gf.create_electrode(
         w2, "mesh", name="g1",
@@ -122,25 +135,8 @@ def test_strip_more_accurate_than_degenerate_mesh_workaround() -> None:
         spacing=10.0 * L, wire_radius=a,
     )
     gf.create_source(w2, attached_to="g1", magnitude=1.0)
-    Z_mesh = ENG.solve(w2).cluster_impedance("g1")[0].real
-
-    R_dw = dw.horizontal_wire(rho=100.0, length=L / 2.0,
-                              radius=a, depth=depth)
-    err_strip = abs(Z_strip - R_dw) / R_dw
-    err_mesh = abs(Z_mesh - R_dw) / R_dw
-
-    # Native primitive is well within the 10 % image-vs-Dwight envelope.
-    assert err_strip < 0.10, (
-        f"native strip Z = {Z_strip:.3f} Ω, Dwight = {R_dw:.3f} Ω, "
-        f"Δ = {err_strip*100:.2f} %"
-    )
-    # Workaround is much further off — the very symptom that motivated
-    # the migration. Pin it as a regression guard.
-    assert err_mesh > 5 * err_strip, (
-        "Expected the degenerate-mesh workaround to be much less "
-        f"accurate than the native strip. Got err_strip = "
-        f"{err_strip*100:.1f} %, err_mesh = {err_mesh*100:.1f} %."
-    )
+    with pytest.raises(ValueError, match="wire_radius"):
+        ENG.solve(w2)
 
 
 # ---------------------------------------------------------------------

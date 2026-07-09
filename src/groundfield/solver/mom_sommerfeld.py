@@ -76,8 +76,10 @@ from groundfield.solver.image import (
     _build_distributed_topology,
     _build_finite_branches,
     _discretize_electrode,
+    _reject_concrete_shells,
     _self_corrected_kernel,
     _Segment,
+    _warn_ignored_sources,
 )
 from groundfield.solver.mom import _galerkin_solve
 from groundfield.solver.result import FieldResult, PointSource
@@ -226,6 +228,8 @@ def _build_Z_sommerfeld(
     lambda_max_factor: float,
     epsabs: float,
     epsrel: float,
+    max_terms: int = 200,
+    tol: float = 1e-6,
 ) -> np.ndarray:
     """N×N Sommerfeld reaction matrix.
 
@@ -283,7 +287,13 @@ def _build_Z_sommerfeld(
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
         )
-        self_kern = _two_layer_self_kernel_factory(soil, max_terms=200, tol=1e-6)
+        # allow_cross_layer=True keeps the diagonal consistent with
+        # the off-diagonal Sommerfeld integral for interface-crossing
+        # geometries (previously the diagonal silently fell back to
+        # the upper-layer series).
+        self_kern = _two_layer_self_kernel_factory(
+            soil, max_terms=max_terms, tol=tol, allow_cross_layer=True,
+        )
         eye = np.eye(n)
         Z_layered_diag = self_kern(seg_points, seg_lengths, wire_radii, eye)
         np.fill_diagonal(Z, np.diag(Z_layered_diag))
@@ -367,6 +377,8 @@ def solve_mom_sommerfeld(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    _reject_concrete_shells(world, "mom_sommerfeld")
+    _warn_ignored_sources(world, "mom_sommerfeld")
 
     stack = as_layer_stack(world.soil)
     ds = engine.segment_length
@@ -449,25 +461,25 @@ def solve_mom_sommerfeld(
         z_max = seg_points[:, 2].max()
         h_1 = float(stack.h[0])
         if z_max >= h_1:
-            # ADR-0007 Phase B (n≥3): not yet implemented in
-            # mom_sommerfeld; ADR-0006 Phase B handles n=2.
-            import warnings as _w
-
-            _w.warn(
+            # ADR-0007 Phase B (n≥3): not implemented — the
+            # reflection-only diagonal correction below assumes all
+            # segments in the top layer. Hard error instead of a
+            # warning followed by wrong physics.
+            raise ValueError(
                 f"mom_sommerfeld: cross-layer geometry on "
-                f"n_layers={stack.n_layers} not yet supported "
-                f"(z_max={z_max:.3f} m >= h_1={h_1:.3f} m). "
-                "Use backend='image_2layer' for n=2; for n>=3 "
-                "thicken the upper layer.",
-                UserWarning,
-                stacklevel=2,
+                f"n_layers={stack.n_layers} is not supported "
+                f"(z_max = {z_max:.3f} m >= h_1 = {h_1:.3f} m). "
+                "Use backend='image_2layer' for n=2 cross-layer "
+                "worlds; for n>=3 thicken the upper layer."
             )
 
-    # 3) Z-matrix via direct Sommerfeld quadrature.
+    # 3) Z-matrix via direct Sommerfeld quadrature (series knobs for
+    #    the n=2 diagonal from the engine).
     Z = _build_Z_sommerfeld(
         seg_points, seg_lengths, wire_radii, stack,
         lambda_max_factor=lambda_max_factor,
         epsabs=epsabs, epsrel=epsrel,
+        max_terms=engine.image_max_terms, tol=engine.image_series_tol,
     )
 
     # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).

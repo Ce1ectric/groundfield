@@ -59,6 +59,7 @@ Limitations
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -70,10 +71,16 @@ from groundfield.solver.image import (
     _build_distributed_topology,
     _build_finite_branches,
     _discretize_electrode,
+    _reject_concrete_shells,
     _Segment,
     _self_corrected_kernel,
+    _warn_ignored_sources,
 )
-from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
+from groundfield.solver.image_2layer import (
+    SeriesTruncationWarning,
+    _series_tail_bound,
+    _two_layer_self_kernel_factory,
+)
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
 
@@ -358,8 +365,8 @@ def solve_mom(
     world: "World",
     engine: "Engine",
     *,
-    two_layer_max_terms: int = 100,
-    two_layer_tol: float = 1e-6,
+    two_layer_max_terms: int | None = None,
+    two_layer_tol: float | None = None,
 ) -> FieldResult:
     """Galerkin Method-of-Moments backend.
 
@@ -377,7 +384,10 @@ def solve_mom(
         discretisation.
     two_layer_max_terms, two_layer_tol
         Truncation parameters for the Tagg/Sunde series, only used
-        when ``world.soil`` is a :class:`TwoLayerSoil`.
+        when ``world.soil`` is a :class:`TwoLayerSoil`. ``None``
+        (default) takes ``engine.image_max_terms`` /
+        ``engine.image_series_tol``, so the engine knob reaches this
+        backend consistently with ``image_2layer``.
 
     Returns
     -------
@@ -392,6 +402,12 @@ def solve_mom(
             "Backend 'mom' currently supports HomogeneousSoil and "
             f"TwoLayerSoil only. Got: {type(world.soil).__name__}."
         )
+    _reject_concrete_shells(world, "mom")
+    _warn_ignored_sources(world, "mom")
+    if two_layer_max_terms is None:
+        two_layer_max_terms = engine.image_max_terms
+    if two_layer_tol is None:
+        two_layer_tol = engine.image_series_tol
 
     ds = engine.segment_length
     _log.info(
@@ -594,14 +610,26 @@ def solve_mom(
     else:
         K = world.soil.reflection_coefficient
         soil_resistivity = float(world.soil.rho_1)
+        converged = (
+            _series_tail_bound(abs(K), n_terms_used) < two_layer_tol
+            if n_terms_used else True
+        )
+        if not converged:
+            warnings.warn(
+                f"mom: the Tagg/Sunde image series was truncated at "
+                f"max_terms={two_layer_max_terms} with tail bound > "
+                f"tol={two_layer_tol:.2e} (|K| = {abs(K):.3f}). Raise "
+                "Engine.image_max_terms for high layer contrasts.",
+                SeriesTruncationWarning,
+                stacklevel=2,
+            )
         soil_meta = {
             "K": float(K),
             "rho_1": float(world.soil.rho_1),
             "rho_2": float(world.soil.rho_2),
             "h_1": float(world.soil.h_1),
             "n_terms_used": n_terms_used,
-            "converged": bool(abs(K) ** n_terms_used < two_layer_tol)
-            if n_terms_used else True,
+            "converged": bool(converged),
         }
 
     return FieldResult(

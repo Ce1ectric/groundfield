@@ -81,17 +81,29 @@ homogeneous image-charge solution.
 
 ### Series truncation
 
-The series is truncated at the smallest index for which
-$|K_1|^n < \text{tol}$ (default $\text{tol} = 10^{-6}$) or at
-`max_terms` (default $200$), whichever happens first. For
-practically observed contrasts ($|K_1| \le 0.96$, i.e. $\rho_2 / \rho_1 \le 50$), the tolerance criterion is reached in $\le 200$ terms.
-For harder contrasts (closer to $|K_1| = 1$), the convergence slows
-significantly and the per-segment cost grows linearly with the
-required number of image terms.
+The series is truncated at the smallest index for which the
+geometric **tail bound** falls below the tolerance,
+
+$$
+\frac{|K_1|^{n+1}}{1 - |K_1|} < \text{tol}
+\qquad (\text{default } \text{tol} = 10^{-6}),
+$$
+
+or at `max_terms` (`Engine.image_max_terms`, default $300$),
+whichever happens first. The tail bound is the exact geometric
+remainder of the weight series $\sum_{m>n} |K_1|^m$; the historic
+per-term test $|K_1|^n < \text{tol}$ underestimated the neglected
+remainder by the factor $1/(1-|K_1|)$ — a factor 17 at
+$|K_1| = 0.94$. The default `max_terms` covers $|K_1| = 0.94$
+(277 terms); harder contrasts converge more slowly and the
+per-segment cost grows linearly with the required number of image
+terms.
 
 When `max_terms` is reached without meeting the tolerance,
-`FieldResult.metadata['converged']` is set to `False` and a warning
-is logged.
+`FieldResult.metadata['converged']` is set to `False`, a warning is
+logged **and a `SeriesTruncationWarning` is emitted** (silence with
+`warnings.simplefilter("ignore", SeriesTruncationWarning)` or raise
+`Engine.image_max_terms`).
 
 ### Self-action
 
@@ -124,7 +136,7 @@ required.
 | Frequency | quasi-static, $f < 1\,\text{kHz}$ |
 | Electrode placement | every segment must have $z < h_1$ (raises `ValueError` otherwise) |
 | Reflection coefficient | $|K_1| < 1$; convergence slows as $|K_1| \to 1$ |
-| Series truncation | adaptive in $|K_1|^n < \text{tol}$, capped at `max_terms` |
+| Series truncation | adaptive tail bound $|K_1|^{n+1}/(1-|K_1|) < \text{tol}$, capped at `max_terms` |
 | Wire radius / segment ratio | thin-wire, $a \ll L_i$ |
 
 The hard constraint that all segments lie inside the upper layer is
@@ -135,11 +147,15 @@ positions $\pm 2 n h_1 \pm z_s$ are derived assuming the source is
 
 ## Convergence and cost
 
-- **Series convergence.** Geometric in $|K_1|$:
-  - $|K_1| = 0.5$ → 17 terms for $10^{-6}$ accuracy.
-  - $|K_1| = 0.8$ → 62 terms.
-  - $|K_1| = 0.9$ → 131 terms.
-  - $|K_1| = 0.95$ → 270 terms (above the default `max_terms`).
+- **Series convergence.** Geometric in $|K_1|$ (terms for the
+  $10^{-6}$ tail bound):
+  - $|K_1| = 0.5$ → 20 terms.
+  - $|K_1| = 0.8$ → 69 terms.
+  - $|K_1| = 0.9$ → 153 terms.
+  - $|K_1| = 0.94$ → 277 terms (just inside the default
+    `max_terms = 300`).
+  - $|K_1| = 0.95$ → 328 terms (above the default — raises a
+    `SeriesTruncationWarning`; increase `Engine.image_max_terms`).
 - **Per-segment cost.** $O(N^2 \cdot M)$ kernel evaluations with $M$
   the truncated series length. For typical cases with $N \le 1000$ and
   $M \le 200$ the engine still runs in seconds.

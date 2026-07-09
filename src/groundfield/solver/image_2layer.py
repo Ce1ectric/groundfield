@@ -61,6 +61,7 @@ References
 from __future__ import annotations
 
 import math
+import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -84,9 +85,39 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
-__all__ = ["solve_image_2layer"]
+__all__ = ["solve_image_2layer", "SeriesTruncationWarning"]
 
 _log = get_logger(__name__)
+
+
+class SeriesTruncationWarning(UserWarning):
+    """The Tagg/Sunde image series hit ``max_terms`` before ``tol``.
+
+    Emitted (in addition to the logger record) whenever a backend
+    truncates the two-layer image-charge series without reaching the
+    requested tail tolerance — typically at high layer contrast
+    (:math:`|K| \\to 1`). Silence with
+    ``warnings.simplefilter("ignore", SeriesTruncationWarning)`` or
+    raise ``Engine.image_max_terms``.
+    """
+
+
+def _series_tail_bound(abs_K: float, n: int) -> float:
+    """Upper bound of the neglected series tail after term ``n``.
+
+    The image weights are :math:`K^m`; the neglected tail is bounded
+    by the geometric remainder
+
+    .. math:: \\sum_{m > n} |K|^m = \\frac{|K|^{n+1}}{1 - |K|}.
+
+    This replaces the historic per-term test :math:`|K|^n < tol`,
+    which underestimates the remainder by the factor
+    :math:`1/(1-|K|)` — a factor 17 at the AP1 corner soil
+    :math:`|K| = 0.94`.
+    """
+    if abs_K >= 1.0:  # defensive; |K| < 1 for finite resistivities
+        return math.inf
+    return abs_K ** (n + 1) / (1.0 - abs_K)
 
 
 # ---------------------------------------------------------------------
@@ -125,7 +156,7 @@ def _two_layer_image_offsets(
             for sign_zs in (+1, -1):
                 pairs.append((sign_n * 2.0 * n * h_1, sign_zs, K_n))
         n_terms_used = n
-        if abs_K ** n < tol:
+        if _series_tail_bound(abs_K, n) < tol:
             break
 
     z_offsets = np.array([p[0] for p in pairs], dtype=float)
@@ -264,7 +295,7 @@ def _two_layer_self_kernel_factory(
                     r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
                     np.maximum(r, _MIN_DISTANCE, out=r)
                     extra += K_n * ((1.0 / r) @ currents)
-            if abs_K ** n < tol:
+            if _series_tail_bound(abs_K, n) < tol:
                 break
 
         extra *= rho_1 / (4.0 * np.pi)
@@ -500,12 +531,21 @@ def solve_image_2layer(
     elec_input_current: dict[str, complex] = {
         e.name: 0j for e in world.electrodes
     }
+    n_ignored_sources = 0
     for src in world.sources:
         if src.kind != "current":
+            n_ignored_sources += 1
             continue
         i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
         if src.attached_to in elec_input_current:
             elec_input_current[src.attached_to] += i_complex
+    if n_ignored_sources:
+        warnings.warn(
+            f"image_2layer: {n_ignored_sources} non-current source(s) "
+            "ignored — only CurrentSource is supported.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     # 3) Cluster building (ideal conductors only) and finite-impedance
     #    branch list (passed into the nodal-analysis solver).
@@ -709,12 +749,25 @@ def solve_image_2layer(
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
-    converged = (abs(K) ** n_terms_used_self < tol) if n_terms_used_self else True
+    converged = (
+        _series_tail_bound(abs(K), n_terms_used_self) < tol
+        if n_terms_used_self else True
+    )
     if not converged:
+        tail = _series_tail_bound(abs(K), n_terms_used_self)
         _log.warning(
-            "image_2layer: max_terms=%d reached, |K|^n = %.2e > tol=%.2e. "
-            "Result may be inaccurate.",
-            max_terms, abs(K) ** n_terms_used_self, tol,
+            "image_2layer: max_terms=%d reached, series tail bound "
+            "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e. Result may be "
+            "inaccurate.",
+            max_terms, tail, tol,
+        )
+        warnings.warn(
+            f"image_2layer: the Tagg/Sunde image series was truncated "
+            f"at max_terms={max_terms} with a remaining tail bound of "
+            f"{tail:.2e} > tol={tol:.2e} (|K| = {abs(K):.3f}). Raise "
+            "Engine.image_max_terms for high layer contrasts.",
+            SeriesTruncationWarning,
+            stacklevel=2,
         )
 
     metadata = {

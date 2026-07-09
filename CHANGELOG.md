@@ -26,7 +26,94 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — guard rails against silently wrong results (audit 2026-07-08, WP-A)
+
+The physics/numerics audit of 2026-07-08 (report in
+`audit-report-2026-07-08/`) identified a class of configurations that
+solved to physically wrong numbers without any diagnostic. This patch
+converts them into hard errors or visible warnings:
+
+- **Surface-laid inductive conductors raise.**
+  `build_inductance_matrix(use_image=True)` rejects segments lying in
+  the soil-surface plane (`2·|z_mid| <= wire_radius`): the
+  perfect-mirror image coincides with the segment and the partial
+  self-inductance diverges (observed ~4.7 H instead of ~55 µH for a
+  25 m segment at z = 0, silently blocking the branch current). Bury
+  the conductor or pass `use_image=False`.
+- **Thin-wire hard guard.** The discretisers raise `ValueError` when
+  the resulting segment length is `<= wire_radius` — there the
+  analytic self-term `ln(L/a)` flips sign and the solve returns
+  nonsense currents. The advisory quality criterion (`L >= 5a`)
+  remains a warning (see below).
+- **Pre-flight diagnostics on every solve.** `Engine.solve` now runs
+  `check_segment_resolution` and emits each finding as a
+  `UserWarning` (thin-wire ratio, electrode smaller than one segment,
+  distributed-conductor ratio, segment budget).
+- **`SeriesTruncationWarning`.** A truncated Tagg/Sunde series
+  (`image_max_terms` reached before the tolerance) now emits a
+  visible warning in `image_2layer` and `mom` instead of a
+  logger-only record; `metadata['converged']` is unchanged.
+- **Concrete shells rejected loudly.** `mom`, `cim`, `bem`,
+  `mom_sommerfeld` and `fem` raise `NotImplementedError` for worlds
+  carrying `concrete_shell_coefficient_ohm_m != 0` (ADR-0012) instead
+  of silently solving the bare-metal problem — as the electrode
+  documentation always promised.
+- **Non-current sources warn.** Every backend warns when it drops
+  non-current sources; a world driven solely by voltage sources no
+  longer solves to all-zero silently.
+- **Clamp diagnostic.** The reaction-matrix assembly warns when
+  distinct segments fall below the 1 mm singularity clamp
+  (coincident/overlapping conductors).
+
+### Fixed
+
+- **Single-segment distributed conductors no longer vanish.** A
+  distributed conductor with `discretize_segment_length >= length`
+  (`n_segments == 1`) was skipped by both the distributed topology
+  builder *and* the lumped-branch builder and disappeared from the
+  nodal system entirely (open circuit, measured `I = 0` through the
+  conductor). It now falls back to a lumped finite branch,
+  bit-identical to the equivalent lumped conductor.
+- **Cross-layer consistency of `cim`, `bem` and the `mom_sommerfeld`
+  diagonal.** For two-layer worlds with electrodes crossing the layer
+  interface these backends silently applied the upper-layer Tagg/Sunde
+  series. The shared self-kernel factory is now created with
+  `allow_cross_layer=True`, dispatching the rigorous ADR-0007
+  cross-layer kernel — consistent with `image_2layer`. For
+  `n_layers >= 3` cross-layer worlds, `cim`/`bem`/`mom_sommerfeld` now
+  raise `ValueError` (previously: warning followed by wrong physics).
+
+### Changed
+
+- **Series truncation criterion.** The Tagg/Sunde stop test now uses
+  the geometric tail bound `|K|^(n+1)/(1-|K|) < tol` instead of the
+  per-term weight `|K|^n < tol`, which underestimated the neglected
+  remainder by `1/(1-|K|)` (a factor 17 at the AP1 corner soil
+  |K| = 0.94). Applied consistently in the solver, the
+  post-processing potential kernels (`FieldResult.potential`,
+  `solve_mutual_*`) and the `converged` metadata.
+- **`Engine.image_max_terms` default raised 100 → 300** so the AP1
+  corner contrast |K| = 0.94 converges under the new tail criterion
+  (needs 277 terms). Same default in `create_engine`.
+- **Engine truncation knobs reach all layered backends.**
+  `image_max_terms` / `image_series_tol` are now forwarded to `mom`,
+  `cim`, `bem` and `mom_sommerfeld` (previously hard-coded 100/200
+  terms in those paths).
+
+### Removed
+
+- **`_layered.image_series_offsets`** (dead code, never called by any
+  backend): its higher-order expansion terms dropped the required
+  `Γ^{m+1}` powers and would have produced wrong n ≥ 3 image series
+  had it ever been consumed.
+
+### Internal
+
+- New regression suite `tests/test_audit_guards.py` (21 tests)
+  covering every guard above end-to-end.
+- `tests/test_strip.py`: the degenerate-mesh workaround comparison now
+  asserts the thin-wire `ValueError` (the workaround geometry is
+  exactly what the guard rejects).
 
 ---
 

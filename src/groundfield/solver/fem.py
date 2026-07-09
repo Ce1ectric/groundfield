@@ -107,6 +107,8 @@ from groundfield.solver._layered import LayerStack, as_layer_stack
 from groundfield.solver.image import (
     _build_clusters,
     _build_finite_branches,
+    _reject_concrete_shells,
+    _warn_ignored_sources,
 )
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
@@ -397,6 +399,8 @@ def solve_fem(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    _reject_concrete_shells(world, "fem")
+    _warn_ignored_sources(world, "fem")
 
     stack = as_layer_stack(world.soil)
     rho_1 = float(stack.rhos[0])
