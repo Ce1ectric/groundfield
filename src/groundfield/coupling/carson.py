@@ -108,14 +108,18 @@ __all__ = [
 MU_0 = 4.0e-7 * math.pi
 
 # Carson eq. 35 leading offset for Q. Carson 1926 prints this as
-# "-0.0386"; modern textbooks (Tleis 2008 Tab. 3.1) trace it back to
-# (1/2)·ln(γ/2) - 1/4 with Euler's γ = 0.57721566... and arrive at
-# the same numerical value.
+# "-0.0386"; the exact closed form is (1/2)·(1/2 − γ_E) with Euler's
+# constant γ_E = 0.57721566... → −0.0386078...
 _Q_OFFSET_SMALL_A = -0.0386
 
 # Regime boundaries (Carson 1926, p. 547).
 _REGIME_SMALL_MAX = 0.25
 _REGIME_LARGE_MIN = 5.0
+# Above this angle the a > 5 asymptotic expansion degrades (measured
+# absolute errors up to ~2e-3 near the regime boundary at
+# theta ~ 89°); route through the oscillatory quadrature instead
+# (audit 2026-07-08, WP-B2).
+_ASYMPTOTE_THETA_MAX = 1.4  # rad, ~80.2°
 
 # Gauss–Legendre quadrature nodes for the intermediate regime.
 # 64 nodes are sufficient for machine-precision evaluation of
@@ -190,10 +194,14 @@ def carson_parameter(distance: float, omega: float, sigma_earth: float) -> float
 def _p_q_small(a: float, theta: float) -> tuple[float, float]:
     """Carson eqs. 34/35, leading-term small-$a$ form.
 
-    Valid for $a \\le 0.25$ to within $\\le 1 \\cdot 10^{-9}$ of
-    the full integral, and still accurate to $\\sim 0.5\\,\\%$
-    at $a = 0.4$ (cf. Carson's *railway* and *wave-antenna*
-    worked examples in section V of the original paper).
+    Truncation accuracy (measured against adaptive quadrature of the
+    full integral, audit 2026-07-08): $|\\Delta Q| \\approx
+    3 \\cdot 10^{-3}$ absolute at $a = 0.25$ (the dropped
+    $a^2$-term of the Q series), decaying $\\propto a^2$;
+    $|\\Delta P| \\le 10^{-4}$ over the whole $a \\le 0.25$ range.
+    Adequate for the per-metre correction because the prefactor
+    $\\omega\\mu_0/\\pi$ keeps the absolute impedance error in the
+    µΩ/m range at $f \\le 1$ kHz.
     """
     if a == 0.0:
         return math.pi / 8.0, math.inf
@@ -219,22 +227,33 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
 
     Computes $P + jQ = J(p, q) = \\int_0^\\infty (\\sqrt{\\mu^2 + j}
     - \\mu)\\, e^{-p\\mu}\\, \\cos(q\\mu)\\, d\\mu$ with
-    $p = a\\cos\\theta$, $q = a\\sin\\theta$, by 64-point
-    Gauss–Legendre quadrature on the truncated interval
-    $[0, \\mu_\\max]$ with $\\mu_\\max = 30/p$ — ensuring
-    $e^{-p\\mu_\\max} \\le 10^{-13}$.
+    $p = a\\cos\\theta$, $q = a\\sin\\theta$.
 
     Used for the intermediate regime $0.25 < a \\le 5$ where the
     classical Tleis recurrence on Carson's series is numerically
     delicate (alternating coefficients with rapidly varying
-    magnitudes). Quadrature converges to machine precision in
-    $\\le 64$ nodes across the typical parameter range and is the
-    reference implementation of the present module.
+    magnitudes).
 
-    For $\\theta \\to \\pi/2$ (wires at the same height with only
-    horizontal separation) $p \\to 0$ and the truncation interval
-    grows; in that case the function falls back to the small-$a$
-    closed form which is exact in the $p = 0$ limit.
+    Two evaluation paths (audit 2026-07-08, finding N3):
+
+    - **Non-oscillatory** ($q \\approx 0$, i.e.
+      $\\theta \\approx 0$, the self-correction geometry): 64-point
+      Gauss–Legendre on the truncated interval $[0, 30/p]$
+      ($e^{-p\\mu_\\max} \\le 10^{-13}$). Machine-accurate here,
+      verified against adaptive references.
+    - **Oscillatory** ($q > 0$): QUADPACK's Fourier integrator
+      (``scipy.integrate.quad`` with ``weight='cos'``), designed for
+      $\\int_0^\\infty f(\\mu)\\cos(q\\mu)\\,d\\mu$ with slowly
+      decaying $f$. This replaces the historic fixed-node
+      Gauss–Legendre on $[0, 30/p]$, which failed for
+      $\\theta \\to \\pi/2$ (small $p$, huge unresolved interval):
+      measured errors up to $-36\\,\\%$ in $P$ and $+67\\,\\%$ in
+      $Q$ at buried-pair mutual geometries ($a = 0.44$–$1.6$,
+      $\\theta \\approx 89°$). The Fourier path also covers the
+      degenerate $p \\to 0$ limit exactly (the imaginary part
+      decays only $\\propto 1/(2\\mu)$ and converges conditionally
+      through the oscillation — precisely QAWF's use case), so the
+      former inaccurate small-$a$ fallback is gone.
 
     Parameters
     ----------
@@ -250,27 +269,36 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
     """
     p = a * math.cos(theta)
     q = a * math.sin(theta)
-    if p <= 1e-6:
-        # Degenerate (theta -> pi/2). The integrand has no
-        # exponential decay; fall back to the small-a form so
-        # tests do not fail on edge cases. typical geometries always
-        # have h > 0 for both wires, so we never hit this branch
-        # in production.
-        return _p_q_small(max(a, 1e-12), theta)
 
-    mu_max = 30.0 / p
-    half = 0.5 * mu_max
-    mu = half * (_GL_NODES_64 + 1.0)
-    w = half * _GL_WEIGHTS_64
+    if q <= 1e-9 * max(a, 1.0):
+        # theta ~ 0: pure exponential decay, no oscillation.
+        mu_max = 30.0 / p
+        half = 0.5 * mu_max
+        mu = half * (_GL_NODES_64 + 1.0)
+        w = half * _GL_WEIGHTS_64
+        # sqrt(mu^2 + j) with j = imaginary unit. numpy gives the
+        # principal branch automatically.
+        sqrt_term = np.sqrt(mu * mu + 1j)
+        decay = np.exp(-p * mu)
+        P = float(np.sum(w * (sqrt_term.real - mu) * decay))
+        Q = float(np.sum(w * sqrt_term.imag * decay))
+        return P, Q
 
-    # sqrt(mu^2 + j) with j = imaginary unit. numpy gives the
-    # principal branch automatically.
-    sqrt_term = np.sqrt(mu * mu + 1j)
-    decay = np.exp(-p * mu) * np.cos(q * mu)
-    integrand_re = (sqrt_term.real - mu) * decay
-    integrand_im = sqrt_term.imag * decay
-    P = float(np.sum(w * integrand_re))
-    Q = float(np.sum(w * integrand_im))
+    from scipy.integrate import quad
+
+    def _f_re(mu: float) -> float:
+        return (math.sqrt(0.5 * (math.hypot(mu * mu, 1.0) + mu * mu))
+                - mu) * math.exp(-p * mu)
+
+    def _f_im(mu: float) -> float:
+        # Im sqrt(mu^2 + j) = 1 / (2 · Re sqrt(mu^2 + j))
+        re = math.sqrt(0.5 * (math.hypot(mu * mu, 1.0) + mu * mu))
+        return 0.5 / re * math.exp(-p * mu)
+
+    P = quad(_f_re, 0.0, np.inf, weight="cos", wvar=q,
+             limit=200, limlst=200)[0]
+    Q = quad(_f_im, 0.0, np.inf, weight="cos", wvar=q,
+             limit=200, limlst=200)[0]
     return P, Q
 
 
@@ -300,7 +328,7 @@ def _p_q_large(a: float, theta: float) -> tuple[float, float]:
     )
     Q = (
         sqrt2_inv * cos_t * inv_a
-        - cos_3t * inv_a3
+        - sqrt2_inv * cos_3t * inv_a3
         + 3.0 * sqrt2_inv * cos_5t * inv_a5
         - 45.0 * sqrt2_inv * cos_7t * inv_a7
     )
@@ -316,11 +344,14 @@ def carson_p_q(a: float, theta: float) -> tuple[float, float]:
     - $a \\le 0.25$: closed-form leading-term expansion (Carson
       eqs. 34/35).
     - $0.25 < a \\le 5$: direct numerical quadrature of Carson's
-      $J(p, q)$.
-    - $a > 5$: asymptotic expansion (Carson eqs. 36/37).
+      $J(p, q)$ (Gauss–Legendre for $\\theta \\approx 0$, QUADPACK
+      Fourier integrator otherwise — audit 2026-07-08, WP-B2).
+    - $a > 5$: asymptotic expansion (Carson eqs. 36/37), except for
+      $\\theta > 1.4$ rad where the expansion degrades and the
+      quadrature path is used instead.
 
-    The three regimes are continuous at the boundaries to within
-    the tolerances documented in ADR-0005 §5/§6.
+    The regimes are continuous at the boundaries to within the
+    tolerances documented in ADR-0005 §5/§6.
 
     Parameters
     ----------
@@ -348,7 +379,7 @@ def carson_p_q(a: float, theta: float) -> tuple[float, float]:
         return math.pi / 8.0, math.inf
     if a <= _REGIME_SMALL_MAX:
         return _p_q_small(a, theta)
-    if a <= _REGIME_LARGE_MIN:
+    if a <= _REGIME_LARGE_MIN or theta > _ASYMPTOTE_THETA_MAX:
         return _p_q_quadrature(a, theta)
     return _p_q_large(a, theta)
 

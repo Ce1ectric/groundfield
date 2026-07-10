@@ -308,6 +308,80 @@ def two_layer_spectral_kernel(
     )
 
 
+def _hankel_lambda_grid(
+    *,
+    char_length: float,
+    s: float,
+    lambda_max_factor: float,
+    n_log: int,
+    n_lin: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Quadrature grid for the semi-infinite Hankel integrals.
+
+    Log-spaced Gauss nodes on $[\\epsilon, \\lambda_\\text{break}]$
+    plus a linear region $[\\lambda_\\text{break},
+    \\lambda_\\text{max}]$ that **resolves the $J_0(\\lambda s)$
+    oscillations** (audit 2026-07-08, finding N1): the historic
+    single ``n_lin``-node panel under-integrated the tail for
+    $s \\gg \\min(h_1, \\text{depths})$ — measured errors of 2.5 %
+    at $s = 100$ m and 46 % at $s = 200$ m for cross-layer pairs.
+
+    Strategy: when the linear region carries at most ``n_lin / 8``
+    oscillations, the historic single panel is kept (bit-exact with
+    pre-audit results). Beyond that, the region is split into one
+    16-node Gauss panel per oscillation period $2\\pi/s$ (capped at
+    4096 panels), mirroring
+    :func:`groundfield.coupling.sommerfeld_inductance._build_lambda_grid`.
+
+    Returns
+    -------
+    lambdas, weights : np.ndarray
+        Concatenated nodes and weights of both regions.
+    """
+    lambda_max = lambda_max_factor / char_length
+    lambda_break = max(min(1.0 / char_length, 0.5 * lambda_max), 1e-9)
+    # The log region must stay oscillation-free: cap lambda_break at
+    # 1/8 of the first J0 period so that all Bessel oscillations fall
+    # into the (oscillation-resolved) linear region. For small s the
+    # cap is inactive and the historic break point is kept bit-exact.
+    if s > 0.0:
+        lambda_break = max(
+            min(lambda_break, 0.25 * math.pi / s), 1e-9,
+        )
+
+    # Logarithmic part [eps, lambda_break] — unchanged.
+    nodes_log_x, weights_log_x = _leggauss_cached(n_log)
+    eps = max(lambda_max * 1e-12, 1e-15)
+    a_log = math.log(eps)
+    b_log = math.log(lambda_break)
+    t = 0.5 * (nodes_log_x + 1.0) * (b_log - a_log) + a_log
+    lambdas_log = np.exp(t)
+    weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
+
+    # Linear part [lambda_break, lambda_max].
+    n_osc = (lambda_max - lambda_break) * s / (2.0 * math.pi)
+    if 8.0 * n_osc <= float(n_lin):
+        # Historic single panel — >= 8 nodes per oscillation.
+        nodes_lin_x, weights_lin_x = _leggauss_cached(n_lin)
+        half = 0.5 * (lambda_max - lambda_break)
+        lambdas_lin = half * (nodes_lin_x + 1.0) + lambda_break
+        weights_lin = half * weights_lin_x
+    else:
+        n_panels = int(min(math.ceil(n_osc), 4096))
+        edges = np.linspace(lambda_break, lambda_max, n_panels + 1)
+        nodes_p, weights_p = _leggauss_cached(16)
+        half_w = 0.5 * np.diff(edges)                       # (n_panels,)
+        centers = 0.5 * (edges[:-1] + edges[1:])            # (n_panels,)
+        lambdas_lin = (
+            centers[:, None] + half_w[:, None] * nodes_p[None, :]
+        ).ravel()
+        weights_lin = (half_w[:, None] * weights_p[None, :]).ravel()
+
+    lambdas = np.concatenate([lambdas_log, lambdas_lin])
+    weights = np.concatenate([weights_log, weights_lin])
+    return lambdas, weights
+
+
 def two_layer_real_space_kernel(
     s: float,
     z: float,
@@ -359,26 +433,10 @@ def two_layer_real_space_kernel(
         dividing by $\\rho$).
     """
     char_length = max(min(h_1, s + z + z_s + 1e-9), 1e-3)
-    lambda_max = lambda_max_factor / char_length
-    lambda_break = max(min(1.0 / char_length, 0.5 * lambda_max), 1e-9)
-
-    # Logarithmic part [eps, lambda_break]
-    nodes_log_x, weights_log_x = _leggauss_cached(n_log)
-    eps = max(lambda_max * 1e-12, 1e-15)
-    a_log = math.log(eps)
-    b_log = math.log(lambda_break)
-    t = 0.5 * (nodes_log_x + 1.0) * (b_log - a_log) + a_log
-    lambdas_log = np.exp(t)
-    weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
-
-    # Uniform part [lambda_break, lambda_max] with Bessel resolution
-    nodes_lin_x, weights_lin_x = _leggauss_cached(n_lin)
-    half = 0.5 * (lambda_max - lambda_break)
-    lambdas_lin = half * (nodes_lin_x + 1.0) + lambda_break
-    weights_lin = half * weights_lin_x
-
-    lambdas = np.concatenate([lambdas_log, lambdas_lin])
-    weights = np.concatenate([weights_log, weights_lin])
+    lambdas, weights = _hankel_lambda_grid(
+        char_length=char_length, s=s,
+        lambda_max_factor=lambda_max_factor, n_log=n_log, n_lin=n_lin,
+    )
 
     Phi = two_layer_spectral_kernel(
         lambdas, z, z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
@@ -452,24 +510,10 @@ def two_layer_layered_correction_real_space(
         return 0.0
 
     char_length = max(min(h_1, s + z + z_s + 1e-9), 1e-3)
-    lambda_max = lambda_max_factor / char_length
-    lambda_break = max(min(1.0 / char_length, 0.5 * lambda_max), 1e-9)
-
-    nodes_log_x, weights_log_x = _leggauss_cached(n_log)
-    eps = max(lambda_max * 1e-12, 1e-15)
-    a_log = math.log(eps)
-    b_log = math.log(lambda_break)
-    t = 0.5 * (nodes_log_x + 1.0) * (b_log - a_log) + a_log
-    lambdas_log = np.exp(t)
-    weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
-
-    nodes_lin_x, weights_lin_x = _leggauss_cached(n_lin)
-    half = 0.5 * (lambda_max - lambda_break)
-    lambdas_lin = half * (nodes_lin_x + 1.0) + lambda_break
-    weights_lin = half * weights_lin_x
-
-    lambdas = np.concatenate([lambdas_log, lambdas_lin])
-    weights = np.concatenate([weights_log, weights_lin])
+    lambdas, weights = _hankel_lambda_grid(
+        char_length=char_length, s=s,
+        lambda_max_factor=lambda_max_factor, n_log=n_log, n_lin=n_lin,
+    )
 
     # Layered amplitudes
     A, B, _, C = _spectral_amplitudes(

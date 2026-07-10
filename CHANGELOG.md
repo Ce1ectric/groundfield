@@ -26,6 +26,41 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — quadrature defects in the coupling kernels (audit 2026-07-08, WP-B)
+
+- **`layered_green` Hankel grid resolves the Bessel oscillations.**
+  The cross-layer kernels (`two_layer_real_space_kernel`,
+  `two_layer_layered_correction_real_space`) integrated the linear
+  λ-region with a single fixed 96-node Gauss panel; for radial
+  distances `s >> min(h_1, depths)` the `J0(λs)` oscillations were
+  unresolved — measured errors of 2.5 % at s = 100 m and **46 % at
+  s = 200 m** for cross-layer pairs (live in AP1 via the ADR-0007
+  path). The new `_hankel_lambda_grid` keeps the historic single
+  panel while it holds ≥ 8 nodes per oscillation (bit-compatible for
+  small s), splits into one 16-node panel per J0 period beyond that,
+  and caps the log-region below the first oscillation
+  (`lambda_break <= pi/(4 s)`). Verified to ~1e-9 against adaptive
+  scipy references up to s = 200 m.
+- **Carson intermediate regime handles near-perpendicular
+  geometries.** `_p_q_quadrature` truncated at `mu_max = 30/p` with
+  64 fixed Gauss nodes; for buried-pair mutual geometries
+  (`theta -> 90°`, small p) the `cos(q·mu)` oscillation was
+  unresolved — measured errors up to **−36 % in P and +67 % in Q**
+  (a = 0.44–1.6, θ ≈ 89°), squarely inside the AP1 parameter space.
+  Oscillatory cases now use QUADPACK's Fourier integrator
+  (`quad(..., weight='cos')`), which also covers the exact
+  `theta = 90°` limit (the former small-a fallback there was invalid
+  for a > 0.25 and is gone). Verified to 1e-11 against an
+  independent composite-panel/Euler-accelerated reference.
+- **Large-a asymptote:** the `a^-3` term of Q was missing its
+  `1/sqrt(2)` (~6e-4 absolute at a = 8); for `theta > 1.4 rad` the
+  asymptotic expansion degrades and now routes through the
+  quadrature path.
+- New regression suite `tests/test_audit_quadratures.py` pinning the
+  audit's failing points with independent reference values; ADR-0005
+  regime section rewritten to describe the implemented quadrature
+  (the previously documented σ-series never existed).
+
 ### Changed — Tier-1 performance: one-shot multiport assembly (audit 2026-07-08, WP-F)
 
 Profiling of AP1-sized worlds showed 97 % of `Engine.solve` wall time

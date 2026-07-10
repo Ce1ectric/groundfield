@@ -141,18 +141,32 @@ Q_\text{small}(a,\theta) \;=\; -0.0386
 \;+\; \frac{a}{3\sqrt{2}}\cos\theta.
 $$
 
-#### Regime 2 — intermediate $a$ ($0.25 < a \le 5$, full series)
+#### Regime 2 — intermediate $a$ ($0.25 < a \le 5$, direct quadrature)
 
-Carson eqs. 32–33 with the absolutely convergent series
-$\sigma_1, \sigma_2, \sigma_3, \sigma_4, s'_2, s'_4$ (defined in
-Carson p. 546). The implementation truncates each $\sigma_i$ when
-the next term satisfies $|t_{n+1}| < 10^{-10}\,|S_n|$ (relative
-tolerance) or the term count reaches 50, whichever comes first.
-For $a \le 1$ Carson notes that *only the leading terms are of
-importance*; for $a \le 2$ only two terms are needed. The
-truncation is chosen so that the leading-term form (regime 1) and
-the full series (regime 2) agree to $\le 10^{-9}$ in $P, Q$ at
-$a = 0.25$.
+*(Rewritten after the 2026-07-08 audit, WP-B2. The originally
+planned $\sigma_i$-series implementation was never built; the code
+evaluates Carson's integral $J(p, q)$ numerically.)*
+
+Two quadrature paths, selected by the oscillation parameter
+$q = a\sin\theta$:
+
+- **$\theta \approx 0$ (self-correction geometry):** 64-node
+  Gauss–Legendre on $[0, 30/p]$ — the integrand decays purely
+  exponentially and the historic evaluation is machine-accurate
+  (verified against adaptive references).
+- **$q > 0$ (mutual geometries):** QUADPACK's Fourier integrator
+  (``scipy.integrate.quad`` with ``weight='cos'``) on
+  $[0, \infty)$. This replaced the historic fixed-node
+  Gauss–Legendre on $[0, 30/p]$, which failed for
+  $\theta \to \pi/2$ (small $p$, unresolved $\cos(q\mu)$
+  oscillation over a huge interval): the audit measured errors up
+  to $-36\,\%$ in $P$ and $+67\,\%$ in $Q$ at buried-pair mutual
+  geometries ($a = 0.44$–$1.6$, $\theta \approx 89°$). The Fourier
+  path also covers $p = 0$ ($\theta = \pi/2$) exactly, where the
+  imaginary part converges only conditionally through the
+  oscillation. Verified to $10^{-11}$ against an independent
+  composite per-half-period Gauss rule with Euler acceleration
+  (``tests/test_audit_quadratures.py``).
 
 #### Regime 3 — large $a$ ($a > 5$, asymptotic expansion)
 
@@ -172,9 +186,15 @@ Q_\text{large}(a,\theta) \;=\; \frac{1}{\sqrt{2}}\,\frac{\cos\theta}{a}
 $$
 
 The truncation matches Carson's published curves (Fig. 2/3 of the
-original paper) within plotting accuracy for $a \ge 5$, and the
-regime-2/regime-3 boundary at $a = 5$ has a discontinuity below
-$10^{-6}$ in $P, Q$.
+original paper) within plotting accuracy for $a \ge 5$; the
+regime-2/regime-3 boundary at $a = 5$ carries the asymptote's
+truncation error ($\lesssim 5\cdot10^{-4}$ absolute in $P, Q$ at
+$\theta = 80°$, smaller for steeper geometries). Two audit
+corrections (2026-07-08, WP-B2): the $a^{-3}$ term of $Q$ carries
+the factor $1/\sqrt{2}$ (previously missing — $\sim 6\cdot10^{-4}$
+absolute at $a = 8$), and for $\theta > 1.4$ rad ($\approx 80°$)
+the expansion degrades and the dispatcher routes through the
+regime-2 quadrature instead.
 
 ### Linear-system integration
 
