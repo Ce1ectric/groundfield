@@ -259,23 +259,36 @@ def test_convergence_diagnostics_exposed() -> None:
     assert fit.poles[0].real == pytest.approx(-500.0, rel=1e-6)
 
 
-def test_inverse_magnitude_weighting_improves_small_band() -> None:
-    """With |Z| spanning decades, inverse-magnitude weighting must
-    not degrade the fit and must improve the relative error on the
-    low-|Z| band."""
+def test_inverse_magnitude_weighting_redistributes_the_error() -> None:
+    """Weighting trades absolute for relative accuracy — testable
+    only with a genuine model error.
+
+    The target carries two poles but is fitted with one, so the fit
+    *must* compromise; the weighting then decides where the residual
+    lands. Defining property (checked on this deliberately
+    under-parameterised fit): ``inverse_magnitude`` minimises the
+    *relative* error, ``uniform`` the *absolute* one. (An earlier
+    version of this test compared two numerically perfect fits of an
+    exactly representable target — a meaningless round-off race that
+    flipped between BLAS builds.)
+    """
     freqs = np.geomspace(1.0, 1000.0, 50)
     s = 2j * np.pi * freqs
-    Z = 0.05 + 1e-4 * s + 500.0 / (s + 30.0)   # |Z|: ~0.1 .. ~17 Ohm
-    fit_u = vector_fit(freqs, Z, n_poles=2, n_iter=20,
-                       include_L_inf=True)
-    fit_w = vector_fit(freqs, Z, n_poles=2, n_iter=20,
-                       include_L_inf=True,
+    Z = 0.05 + 500.0 / (s + 30.0) + 800.0 / (s + 2.0 * np.pi * 800.0)
+    fit_u = vector_fit(freqs, Z, n_poles=1, n_iter=25)
+    fit_w = vector_fit(freqs, Z, n_poles=1, n_iter=25,
                        weighting="inverse_magnitude")
-    hi = np.abs(Z) < 0.5
-    err_u = np.max(np.abs(fit_u.evaluate(freqs[hi]) - Z[hi]) / np.abs(Z[hi]))
-    err_w = np.max(np.abs(fit_w.evaluate(freqs[hi]) - Z[hi]) / np.abs(Z[hi]))
-    assert err_w <= err_u * 1.5
-    assert err_w < 1e-4
+    d_u = fit_u.evaluate(freqs) - Z
+    d_w = fit_w.evaluate(freqs) - Z
+    rel_u = float(np.sqrt(np.mean((np.abs(d_u) / np.abs(Z)) ** 2)))
+    rel_w = float(np.sqrt(np.mean((np.abs(d_w) / np.abs(Z)) ** 2)))
+    abs_u = float(np.sqrt(np.mean(np.abs(d_u) ** 2)))
+    abs_w = float(np.sqrt(np.mean(np.abs(d_w) ** 2)))
+    # Weighted fit wins on the relative metric (sandbox reference:
+    # 0.130 vs 0.155), uniform wins on the absolute one (0.040 vs
+    # 0.271) — generous factors keep the test BLAS-independent.
+    assert rel_w < rel_u * 0.95
+    assert abs_u < abs_w * 0.5
 
 
 def test_dead_frequency_masked_with_warning() -> None:
