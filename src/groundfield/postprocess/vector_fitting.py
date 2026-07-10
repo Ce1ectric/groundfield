@@ -68,10 +68,24 @@ import numpy as np
 __all__ = [
     "VectorFitResult",
     "VectorFitUnderdeterminedWarning",
+    "VectorFitConvergenceWarning",
     "vector_fit",
     "fit_to_sympy",
     "rho_f_from_field_result",
 ]
+
+
+class VectorFitConvergenceWarning(UserWarning):
+    """The pole-relocation loop did not converge.
+
+    Emitted when the relative pole displacement of the last
+    relocation step is still above 1 % after ``n_iter`` iterations
+    (audit 2026-07-08, WP-B4 — the historic implementation ran a
+    fixed number of blind iterations with no convergence check).
+    Inspect ``VectorFitResult.pole_shift`` / ``n_iter_used`` and
+    consider more iterations, a different ``n_poles``, or
+    ``weighting="inverse_magnitude"`` for wide-dynamic-range data.
+    """
 
 
 class VectorFitUnderdeterminedWarning(UserWarning):
@@ -123,6 +137,11 @@ class VectorFitResult:
     rms_error: float
     fit_frequencies: np.ndarray
     fit_values: np.ndarray
+    # Convergence diagnostics of the pole-relocation loop
+    # (audit 2026-07-08, WP-B4). Defaults keep older constructors
+    # (e.g. the groundinsight JSON bridge) source-compatible.
+    n_iter_used: int = 0
+    pole_shift: float = 0.0
 
     def evaluate(self, frequencies: Sequence[float]) -> np.ndarray:
         """Evaluate the fitted $Z(s)$ at arbitrary frequencies."""
@@ -224,6 +243,105 @@ def _enforce_conjugate_symmetry(poles: np.ndarray) -> np.ndarray:
     return out
 
 
+def _pole_pair_structure(poles: np.ndarray) -> list[tuple]:
+    """Classify a conjugate-symmetric pole list into real poles and
+    conjugate pairs.
+
+    Returns a list of ``("real", i)`` and ``("pair", i, j)`` entries,
+    where entry ``i`` carries ``imag > 0`` and ``j`` its exact
+    conjugate. Assumes :func:`_enforce_conjugate_symmetry` ran first.
+    """
+    structure: list[tuple] = []
+    used = np.zeros(poles.size, dtype=bool)
+    for i in range(poles.size):
+        if used[i]:
+            continue
+        if abs(poles[i].imag) < 1e-12:
+            structure.append(("real", i))
+            used[i] = True
+            continue
+        partner = -1
+        for j in range(i + 1, poles.size):
+            if used[j]:
+                continue
+            if (
+                abs(poles[j].real - poles[i].real) < 1e-9
+                and abs(poles[j].imag + poles[i].imag) < 1e-9
+            ):
+                partner = j
+                break
+        if partner < 0:  # defensive — symmetrisation guarantees a partner
+            structure.append(("real", i))
+            used[i] = True
+            continue
+        if poles[i].imag > 0:
+            structure.append(("pair", i, partner))
+        else:
+            structure.append(("pair", partner, i))
+        used[i] = True
+        used[partner] = True
+    return structure
+
+
+def _pair_basis(
+    s: np.ndarray, poles: np.ndarray, structure: list[tuple],
+) -> np.ndarray:
+    """Real-coefficient partial-fraction basis (Gustavsen pair form).
+
+    Audit 2026-07-08, WP-B4: the historic implementation solved the
+    real-stacked LS with one **real** unknown per pole, which forced
+    every residue (and every σ-residue steering the pole relocation)
+    to be real — silently removing the ``Im r`` degree of freedom of
+    complex pole pairs. The standard remedy is the pair-transformed
+    real basis: a conjugate pair ``(p, p̄)`` contributes the two
+    columns
+
+    .. math::
+
+        \\phi_1 = \\frac{1}{s-p} + \\frac{1}{s-\\bar p},
+        \\qquad
+        \\phi_2 = \\frac{j}{s-p} - \\frac{j}{s-\\bar p},
+
+    whose **real** coefficients ``(c_1, c_2)`` reconstruct the
+    complex residue ``r = c_1 + j c_2`` (and ``\\bar r`` at the
+    conjugate pole). Real poles keep their single ``1/(s-p)``
+    column.
+
+    Returns the complex ``(N, n_poles)`` matrix whose columns are
+    ordered by ``structure`` (pairs occupy two adjacent columns).
+    """
+    A = np.zeros((s.size, poles.size), dtype=complex)
+    col = 0
+    for entry in structure:
+        if entry[0] == "real":
+            A[:, col] = 1.0 / (s - poles[entry[1]])
+            col += 1
+        else:
+            _, i, j = entry
+            A[:, col] = 1.0 / (s - poles[i]) + 1.0 / (s - poles[j])
+            A[:, col + 1] = 1j / (s - poles[i]) - 1j / (s - poles[j])
+            col += 2
+    return A
+
+
+def _coeffs_to_residues(
+    coeffs: np.ndarray, poles: np.ndarray, structure: list[tuple],
+) -> np.ndarray:
+    """Map the real pair-basis coefficients back to complex residues."""
+    residues = np.zeros(poles.size, dtype=complex)
+    col = 0
+    for entry in structure:
+        if entry[0] == "real":
+            residues[entry[1]] = complex(coeffs[col], 0.0)
+            col += 1
+        else:
+            _, i, j = entry
+            residues[i] = complex(coeffs[col], coeffs[col + 1])
+            residues[j] = residues[i].conjugate()
+            col += 2
+    return residues
+
+
 def vector_fit(
     frequencies: Sequence[float],
     Z_values: Sequence[complex],
@@ -233,6 +351,7 @@ def vector_fit(
     include_R_inf: bool = True,
     include_L_inf: bool = False,
     complex_poles: bool = True,
+    weighting: str = "uniform",
 ) -> VectorFitResult:
     """Fit a rational $Z(s)$ approximation to a sampled frequency response.
 
@@ -263,6 +382,24 @@ def vector_fit(
         ``True`` (default) initialises with complex-conjugate pole
         pairs, suitable for resonant behaviour. Set ``False`` for
         purely-resistive / monotonic responses.
+    weighting
+        ``"uniform"`` (default, historic behaviour) or
+        ``"inverse_magnitude"``: weights every sample by
+        ``1/|Z_n|``, the standard remedy when ``|Z|`` spans several
+        decades and the unweighted LS would fit only the largest
+        magnitudes (audit 2026-07-08, WP-B4).
+
+    Notes
+    -----
+    Since the 2026-07-08 audit (WP-B4) the least-squares systems use
+    the **conjugate-pair real basis** (see :func:`_pair_basis`):
+    complex pole pairs carry genuinely complex residues, matching
+    the cited Gustavsen & Semlyen algorithm. The pole-relocation
+    loop additionally monitors the relative pole displacement,
+    breaks early below ``1e-8`` and warns
+    (:class:`VectorFitConvergenceWarning`) when it is still above
+    1 % after ``n_iter`` iterations; the diagnostics are exposed as
+    ``VectorFitResult.n_iter_used`` / ``pole_shift``.
 
     Returns
     -------
@@ -327,21 +464,36 @@ def vector_fit(
             VectorFitUnderdeterminedWarning,
             stacklevel=2,
         )
+    if weighting not in ("uniform", "inverse_magnitude"):
+        raise ValueError(
+            "vector_fit: weighting must be 'uniform' or "
+            f"'inverse_magnitude', got {weighting!r}."
+        )
     s = 2j * math.pi * frequencies
+    if weighting == "inverse_magnitude":
+        w = 1.0 / np.maximum(np.abs(Z), 1e-12 * float(np.max(np.abs(Z))))
+    else:
+        w = np.ones(s.size)
 
     poles = _initial_poles(frequencies, n_poles, complex_conj=complex_poles)
+    poles = _enforce_conjugate_symmetry(poles)
 
     # Outer loop: pole relocation. The system is, schematically,
     #   sum_k r_k / (s_n - p_k) + d + s_n*h - sum_k r'_k Z_n / (s_n - p_k)
     #     = Z_n
     # where {r_k, d, h, r'_k} are the unknowns and the new poles are
     # the zeros of the denominator polynomial 1 + sum r'_k/(s-p_k).
+    # Both the numerator residues r_k and the sigma residues r'_k use
+    # the conjugate-pair real basis (audit 2026-07-08, WP-B4), so
+    # complex pole pairs carry genuinely complex residues.
     extras = (1 if include_R_inf else 0) + (1 if include_L_inf else 0)
+    n_iter_used = 0
+    pole_shift = float("inf")
     for _ in range(max(1, n_iter)):
-        n_unknowns = n_poles + extras + n_poles  # numer poles + d/h + denom poles
-        A = np.zeros((s.size, n_unknowns), dtype=complex)
-        for k, p in enumerate(poles):
-            A[:, k] = 1.0 / (s - p)
+        structure = _pole_pair_structure(poles)
+        basis = _pair_basis(s, poles, structure)      # (N, n_poles)
+        A = np.zeros((s.size, n_poles + extras + n_poles), dtype=complex)
+        A[:, :n_poles] = basis
         col = n_poles
         if include_R_inf:
             A[:, col] = 1.0
@@ -349,16 +501,19 @@ def vector_fit(
         if include_L_inf:
             A[:, col] = s
             col += 1
-        for k, p in enumerate(poles):
-            A[:, col + k] = -Z / (s - p)
+        A[:, col:col + n_poles] = -Z[:, None] * basis
 
-        # Solve with real-imag stacking (least-squares)
-        M = np.vstack([A.real, A.imag])
-        rhs = np.concatenate([Z.real, Z.imag])
+        # Solve with real-imag stacking (least-squares), optionally
+        # row-weighted.
+        Aw = A * w[:, None]
+        M = np.vstack([Aw.real, Aw.imag])
+        rhs = np.concatenate([(w * Z).real, (w * Z).imag])
         sol, *_ = np.linalg.lstsq(M, rhs, rcond=None)
 
-        # Extract residues of the denominator polynomial
-        sigma_residues = sol[n_poles + extras:]
+        # Reconstruct the complex sigma residues from the pair basis.
+        sigma_residues = _coeffs_to_residues(
+            sol[n_poles + extras:], poles, structure,
+        )
         # New poles: eigenvalues of A_p - b·c^T where A_p = diag(poles),
         # b = ones, c = sigma_residues. (Standard Gustavsen formulation.)
         Ap = np.diag(poles)
@@ -369,13 +524,35 @@ def vector_fit(
         # Sort for deterministic order (deepest |imag| first).
         sorted_idx = np.argsort(-np.abs(new_poles.imag))
         new_poles = new_poles[sorted_idx]
+        n_iter_used += 1
+        scale = float(np.max(np.abs(poles))) or 1.0
+        pole_shift = float(
+            np.max(np.abs(np.sort_complex(new_poles)
+                          - np.sort_complex(poles)))
+        ) / scale
         poles = new_poles
+        if pole_shift < 1e-8:
+            break
+    if pole_shift > 1e-2:
+        import warnings as _warnings
 
-    # Final residue solve with the converged poles
-    n_unknowns = n_poles + extras
-    A = np.zeros((s.size, n_unknowns), dtype=complex)
-    for k, p in enumerate(poles):
-        A[:, k] = 1.0 / (s - p)
+        _warnings.warn(
+            f"vector_fit: pole relocation did not converge within "
+            f"n_iter={n_iter} iterations (last relative pole shift "
+            f"{pole_shift:.2e}). The returned fit may sit in a limit "
+            "cycle; inspect rms_error, increase n_iter, or adjust "
+            "n_poles / weighting.",
+            VectorFitConvergenceWarning,
+            stacklevel=2,
+        )
+
+    # Final residue solve with the converged poles (pair basis —
+    # residues at conjugate poles are exact conjugates by
+    # construction, no post-hoc repair required).
+    structure = _pole_pair_structure(poles)
+    basis = _pair_basis(s, poles, structure)
+    A = np.zeros((s.size, n_poles + extras), dtype=complex)
+    A[:, :n_poles] = basis
     col = n_poles
     if include_R_inf:
         A[:, col] = 1.0
@@ -383,50 +560,13 @@ def vector_fit(
     if include_L_inf:
         A[:, col] = s
         col += 1
-    M = np.vstack([A.real, A.imag])
-    rhs = np.concatenate([Z.real, Z.imag])
+    Aw = A * w[:, None]
+    M = np.vstack([Aw.real, Aw.imag])
+    rhs = np.concatenate([(w * Z).real, (w * Z).imag])
     sol, *_ = np.linalg.lstsq(M, rhs, rcond=None)
-    residues = sol[:n_poles].astype(complex)
+    residues = _coeffs_to_residues(sol[:n_poles], poles, structure)
     R_inf = float(sol[n_poles]) if include_R_inf else 0.0
     L_inf = float(sol[n_poles + (1 if include_R_inf else 0)]) if include_L_inf else 0.0
-
-    # Enforce that residues at conjugate poles are themselves
-    # conjugates (same numerical-precision argument as for the
-    # poles). Pairs are identified by exact equality after
-    # _enforce_conjugate_symmetry.
-    used = np.zeros(n_poles, dtype=bool)
-    for i in range(n_poles):
-        if used[i]:
-            continue
-        if abs(poles[i].imag) < 1e-12:
-            residues[i] = complex(residues[i].real, 0.0)
-            used[i] = True
-            continue
-        # Find the conjugate partner
-        for j in range(i + 1, n_poles):
-            if used[j]:
-                continue
-            if (
-                abs(poles[j].real - poles[i].real) < 1e-9
-                and abs(poles[j].imag + poles[i].imag) < 1e-9
-            ):
-                re_avg = 0.5 * (residues[i].real + residues[j].real)
-                im_diff = 0.5 * (residues[i].imag - residues[j].imag)
-                # If pole_i has positive imag, the canonical residue
-                # also carries positive imag; flip sign for j.
-                if poles[i].imag > 0:
-                    residues[i] = complex(re_avg, im_diff)
-                    residues[j] = complex(re_avg, -im_diff)
-                else:
-                    residues[i] = complex(re_avg, -im_diff)
-                    residues[j] = complex(re_avg, im_diff)
-                used[i] = True
-                used[j] = True
-                break
-        else:
-            # Lone complex pole (shouldn't happen after symmetrisation)
-            residues[i] = complex(residues[i].real, 0.0)
-            used[i] = True
 
     Z_fit = (
         np.full_like(s, R_inf, dtype=complex)
@@ -436,6 +576,8 @@ def vector_fit(
     rms = float(np.sqrt(np.mean(np.abs(Z_fit - Z) ** 2)))
 
     return VectorFitResult(
+        n_iter_used=n_iter_used,
+        pole_shift=pole_shift,
         poles=poles,
         residues=residues,
         R_inf=R_inf,
@@ -622,9 +764,32 @@ def rho_f_from_field_result(
         raise ValueError(
             "Inconsistent shapes between frequencies and electrode currents"
         )
-    Z = np.where(np.abs(I) > 0.0, U / np.where(I != 0, I, 1.0), 0.0 + 0.0j)
+    # Audit 2026-07-08, WP-B4 (finding N23): frequencies where the
+    # electrode carries no current (passive electrode / dead column)
+    # are MASKED instead of being injected as Z = 0 samples — a
+    # single dead frequency used to pull the whole fit through the
+    # origin silently.
+    alive = np.abs(I) > 0.0
+    if not alive.any():
+        raise ValueError(
+            f"rho_f_from_field_result: electrode '{electrode_name}' "
+            "carries no current at any frequency — Z = U/I is "
+            "undefined. Fit the driven electrode instead."
+        )
+    if not alive.all():
+        import warnings as _warnings
+
+        _warnings.warn(
+            f"rho_f_from_field_result: electrode '{electrode_name}' "
+            f"carries no current at {int((~alive).sum())} of "
+            f"{alive.size} frequencies; those samples are excluded "
+            "from the fit (historic behaviour injected Z = 0 there).",
+            UserWarning,
+            stacklevel=2,
+        )
+    Z = U[alive] / I[alive]
     return vector_fit(
-        freqs, Z,
+        freqs[alive], Z,
         n_poles=n_poles, n_iter=n_iter,
         include_R_inf=include_R_inf, include_L_inf=include_L_inf,
         complex_poles=complex_poles,

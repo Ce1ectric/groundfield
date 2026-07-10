@@ -26,6 +26,57 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — discrete reciprocity and honest n ≥ 3 handling (audit 2026-07-08, WP-B3/WP-E)
+
+- **Multiport Z is exactly reciprocal.** The grounding matrix paired
+  length-weighted excitation columns with an *unweighted* potential
+  average, breaking `Z[i, j] == Z[j, i]` at the discretisation level
+  for electrodes with unequal segment lengths (mesh electrodes with
+  `dx/nx != dy/ny`, rods split at the layer interface). The row
+  reduction now uses the Galerkin-consistent **length-weighted**
+  average — symmetry to machine precision (regression test at
+  1e-13); results for uniform per-electrode segment lengths (every
+  rod/ring/strip) are unchanged.
+- **`cim` and `bem` reject `n_layers >= 3`.** The historic
+  complex-image kernel implemented an incomplete Green's function
+  (single image family; missing the `2·h_1`-reflected families and
+  the surface–interface multiple-reflection denominator) and
+  systematically underestimated the layered correction. Both
+  backends now raise `NotImplementedError` pointing at
+  `mom_sommerfeld` / `fem`; the corrected full kernel formula is
+  documented in `solver/_layered.py`, and ADR-0002 carries an
+  amendment revoking `cim` as the primary n ≥ 3 engine.
+- **`bem` docstring no longer claims independence from `mom`** for
+  n ≤ 2 (they assemble the identical matrix — measured 4e-16;
+  audit finding P4). Genuine layered cross-validation:
+  `mom_sommerfeld` and `fem`.
+
+### Changed — vector fitting on the conjugate-pair real basis (audit 2026-07-08, WP-B4)
+
+- **Complex pole pairs now carry genuinely complex residues.** The
+  historic real-stacked least squares used one *real* unknown per
+  pole, silently removing the `Im(r)` degree of freedom for both the
+  residues and the σ-residues that steer the pole relocation — a
+  deviation from the cited Gustavsen & Semlyen algorithm. Both LS
+  systems now use the standard conjugate-pair real basis
+  (`1/(s-p) + 1/(s-p̄)` and `j/(s-p) - j/(s-p̄)` with two real
+  coefficients per pair); residues at conjugate poles are exact
+  conjugates by construction (the post-hoc repair is gone).
+  Regression test: a synthetic resonant Z with `Im(r) = 40` is now
+  reproduced to rms 1e-6 relative (previously unfittable).
+- **Convergence monitoring.** The relocation loop tracks the
+  relative pole displacement, breaks early below 1e-8 and emits a
+  `VectorFitConvergenceWarning` when it is still above 1 % after
+  `n_iter` iterations; diagnostics exposed as
+  `VectorFitResult.n_iter_used` / `pole_shift`.
+- **Optional weighting.** `vector_fit(..., weighting=
+  "inverse_magnitude")` weights samples by `1/|Z|` — the standard
+  remedy when `|Z|` spans decades.
+- **Dead frequencies are masked.** `rho_f_from_field_result` used to
+  inject `Z = 0` samples for frequencies where the electrode carries
+  no current, silently pulling the fit through the origin; those
+  samples are now excluded with a warning (all-dead input raises).
+
 ### Fixed — layer-2 field evaluation and cross-layer plumbing (audit 2026-07-08, WP-D)
 
 - **Layer dispatch in the post-solve potential paths.**

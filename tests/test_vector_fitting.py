@@ -17,6 +17,7 @@ import math
 import numpy as np
 import pytest
 
+import groundfield as gf
 from groundfield.postprocess.vector_fitting import (
     VectorFitResult,
     fit_to_sympy,
@@ -213,3 +214,82 @@ def test_rho_f_from_field_result_unknown_electrode_raises() -> None:
     )
     with pytest.raises(KeyError, match="not in result"):
         rho_f_from_field_result(res, "nonexistent")
+
+
+# ---------------------------------------------------------------------
+# Audit 2026-07-08, WP-B4 — conjugate-pair real basis
+# ---------------------------------------------------------------------
+
+
+def test_complex_residues_are_recovered() -> None:
+    """A synthetic resonant Z with genuinely complex residues must be
+    reproduced to high accuracy.
+
+    The historic real-stacked LS forced all residues real, silently
+    removing the Im(r) degree of freedom of complex pole pairs — this
+    synthetic target was unfittable then (audit finding N2/WP-B4).
+    """
+    p = complex(-80.0, 2 * np.pi * 300.0)
+    r = complex(3.0, 40.0)          # deliberately large Im(r)
+    p2 = -2 * np.pi * 40.0          # one real pole
+    r2 = 25.0
+    freqs = np.linspace(10.0, 1000.0, 60)
+    s = 2j * np.pi * freqs
+    Z = 5.0 + r / (s - p) + np.conj(r) / (s - np.conj(p)) + r2 / (s - p2)
+
+    fit = vector_fit(freqs, Z, n_poles=3, n_iter=30)
+    rel = fit.rms_error / float(np.mean(np.abs(Z)))
+    assert rel < 1e-6
+    # The fitted pair must carry a genuinely complex residue.
+    pair_res = [x for x, q in zip(fit.residues, fit.poles)
+                if abs(q.imag) > 1.0]
+    assert pair_res and max(abs(x.imag) for x in pair_res) > 10.0
+
+
+def test_convergence_diagnostics_exposed() -> None:
+    """The relocation loop reports n_iter_used / pole_shift and
+    breaks early once the poles settle."""
+    freqs = np.linspace(10.0, 1000.0, 40)
+    s = 2j * np.pi * freqs
+    Z = 10.0 + (2000.0) / (s + 500.0)
+    fit = vector_fit(freqs, Z, n_poles=1, n_iter=25)
+    assert fit.n_iter_used >= 1
+    assert fit.pole_shift < 1e-8          # converged (early break)
+    assert fit.n_iter_used < 25           # did not run blind to the cap
+    assert fit.poles[0].real == pytest.approx(-500.0, rel=1e-6)
+
+
+def test_inverse_magnitude_weighting_improves_small_band() -> None:
+    """With |Z| spanning decades, inverse-magnitude weighting must
+    not degrade the fit and must improve the relative error on the
+    low-|Z| band."""
+    freqs = np.geomspace(1.0, 1000.0, 50)
+    s = 2j * np.pi * freqs
+    Z = 0.05 + 1e-4 * s + 500.0 / (s + 30.0)   # |Z|: ~0.1 .. ~17 Ohm
+    fit_u = vector_fit(freqs, Z, n_poles=2, n_iter=20,
+                       include_L_inf=True)
+    fit_w = vector_fit(freqs, Z, n_poles=2, n_iter=20,
+                       include_L_inf=True,
+                       weighting="inverse_magnitude")
+    hi = np.abs(Z) < 0.5
+    err_u = np.max(np.abs(fit_u.evaluate(freqs[hi]) - Z[hi]) / np.abs(Z[hi]))
+    err_w = np.max(np.abs(fit_w.evaluate(freqs[hi]) - Z[hi]) / np.abs(Z[hi]))
+    assert err_w <= err_u * 1.5
+    assert err_w < 1e-4
+
+
+def test_dead_frequency_masked_with_warning() -> None:
+    """Zero-current frequencies are masked (not fitted as Z = 0)."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0),
+                        length=3.0, wire_radius=0.005)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    eng = gf.create_engine(backend="image", segment_length=0.5,
+                           frequencies=[10.0, 50.0, 100.0, 500.0,
+                                        800.0, 1000.0])
+    res = eng.solve(w)
+    # Forge one dead frequency in a copy of the result arrays.
+    res.electrode_currents["g1"][2] = 0j
+    with pytest.warns(UserWarning, match="no current"):
+        fit = rho_f_from_field_result(res, "g1", n_poles=1)
+    assert fit.fit_frequencies.size == 5  # dead sample excluded
