@@ -2282,6 +2282,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-09-wp-d-audit-2026-07-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-09 — WP-D (audit 2026-07-08)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2727,6 +2738,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-09-wp-d-audit-2026-07-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-09 — WP-D (audit 2026-07-08)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2758,7 +2780,7 @@
 <tbody>
 <tr>
 <td><strong>Status</strong></td>
-<td>Accepted</td>
+<td>Accepted — step 1 (interface split), layer-aware post-processing and the mom lift implemented 2026-07-09 (audit WP-D; see the amendment at the end)</td>
 </tr>
 <tr>
 <td><strong>Date</strong></td>
@@ -2989,6 +3011,32 @@ straightforward extension once Phase A is stable.</p>
   Analysis</em>, Newnes. Modern transmission-line interpretation of
   the layered Green's function.</li>
 </ul>
+<hr />
+<h2 id="amendment-2026-07-09-wp-d-audit-2026-07-08">Amendment 2026-07-09 — WP-D (audit 2026-07-08)<a class="headerlink" href="#amendment-2026-07-09-wp-d-audit-2026-07-08" title="Permanent link">&para;</a></h2>
+<p>Three gaps between this ADR and the implementation were closed:</p>
+<ol>
+<li><strong>Step 1 (interface-split discretiser) is now implemented.</strong> The
+   original phase plan promised segments that never straddle the
+   interface; the discretiser had ignored <code>layer_interfaces</code> and
+   assigned straddling segments by midpoint (mis-assignment up to
+   <code>ds/2</code>). Rods and sloped strips now split at <code>h_1</code> in every
+   layered backend; a margin warning fires when the deepest segment
+   ends within <code>2·segment_length</code> above <code>h_1</code>.</li>
+<li><strong>Post-solve field evaluation dispatches by layer.</strong>
+   <code>FieldResult.potential</code> and the <code>solve_mutual_*</code> probe kernels
+   used the upper-layer image series for all points (measured +7 %
+   at z = 7 m, +25 % at z = 12 m for K = +0.818); layer-2 pairs now
+   use the spectral kernel (<code>two_layer_probe_matrix</code>).</li>
+<li><strong><code>mom</code> no longer rejects cross-layer worlds</strong> — the action item
+   "lift the remaining backends" is done for the n = 2 family
+   (mom/cim/bem and the mom_sommerfeld diagonal all dispatch the
+   cross-layer kernel; n ≥ 3 cross-layer raises everywhere).</li>
+</ol>
+<p>Performance note: the cross-layer reaction-matrix correction is now
+grouped by depth pairs (one spectral BVP solve per (z_i, z_j) group
+instead of per matrix entry) and cached across the kernel calls of
+one solve — a 3-rod cross-layer world dropped from 33.7 s to 4.6 s
+on the audit sandbox with identical results.</p>
 
 
 

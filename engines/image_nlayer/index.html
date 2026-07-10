@@ -3237,7 +3237,9 @@ cross-engine reports use one unified label.</p>
 <span class="normal"><a href="#__codelineno-0-193">193</a></span>
 <span class="normal"><a href="#__codelineno-0-194">194</a></span>
 <span class="normal"><a href="#__codelineno-0-195">195</a></span>
-<span class="normal"><a href="#__codelineno-0-196">196</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-91" name="__codelineno-0-91"></a><span class="k">def</span><span class="w"> </span><span class="nf">solve_image_nlayer</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-196">196</a></span>
+<span class="normal"><a href="#__codelineno-0-197">197</a></span>
+<span class="normal"><a href="#__codelineno-0-198">198</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-91" name="__codelineno-0-91"></a><span class="k">def</span><span class="w"> </span><span class="nf">solve_image_nlayer</span><span class="p">(</span>
 <a id="__codelineno-0-92" name="__codelineno-0-92"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
 <a id="__codelineno-0-93" name="__codelineno-0-93"></a>    <span class="n">engine</span><span class="p">:</span> <span class="s2">&quot;Engine&quot;</span><span class="p">,</span>
 <a id="__codelineno-0-94" name="__codelineno-0-94"></a>    <span class="o">*</span><span class="p">,</span>
@@ -3330,19 +3332,21 @@ cross-engine reports use one unified label.</p>
 <a id="__codelineno-0-181" name="__codelineno-0-181"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
 <a id="__codelineno-0-182" name="__codelineno-0-182"></a>            <span class="sa">f</span><span class="s2">&quot;image_nlayer: layer count </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2"> ≥ 3 is not supported by &quot;</span>
 <a id="__codelineno-0-183" name="__codelineno-0-183"></a>            <span class="s2">&quot;the real image-charge series (Γ_1(λ) is no longer &quot;</span>
-<a id="__codelineno-0-184" name="__codelineno-0-184"></a>            <span class="s2">&quot;constant in λ). Use one of the engines designed for &quot;</span>
-<a id="__codelineno-0-185" name="__codelineno-0-185"></a>            <span class="s2">&quot;this regime: &#39;cim&#39; (complex images), &#39;mom_sommerfeld&#39; &quot;</span>
-<a id="__codelineno-0-186" name="__codelineno-0-186"></a>            <span class="s2">&quot;(direct Sommerfeld quadrature), or &#39;bem&#39;.&quot;</span>
-<a id="__codelineno-0-187" name="__codelineno-0-187"></a>        <span class="p">)</span>
-<a id="__codelineno-0-188" name="__codelineno-0-188"></a>
-<a id="__codelineno-0-189" name="__codelineno-0-189"></a>    <span class="c1"># Rewrite backend tag so that cross-engine reports use the unified label.</span>
-<a id="__codelineno-0-190" name="__codelineno-0-190"></a>    <span class="n">res</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span>
-<a id="__codelineno-0-191" name="__codelineno-0-191"></a>        <span class="n">update</span><span class="o">=</span><span class="p">{</span>
-<a id="__codelineno-0-192" name="__codelineno-0-192"></a>            <span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;image_nlayer&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-193" name="__codelineno-0-193"></a>            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">**</span><span class="n">res</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="s2">&quot;n_layers&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="s2">&quot;dispatched_to&quot;</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">backend</span><span class="p">},</span>
-<a id="__codelineno-0-194" name="__codelineno-0-194"></a>        <span class="p">}</span>
-<a id="__codelineno-0-195" name="__codelineno-0-195"></a>    <span class="p">)</span>
-<a id="__codelineno-0-196" name="__codelineno-0-196"></a>    <span class="k">return</span> <span class="n">res</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a>            <span class="s2">&quot;constant in λ). Use &#39;mom_sommerfeld&#39; (direct Sommerfeld &quot;</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>            <span class="s2">&quot;quadrature of the full layered Green&#39;s function) or &quot;</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a>            <span class="s2">&quot;&#39;fem&#39; — the &#39;cim&#39;/&#39;bem&#39; n ≥ 3 kernels were found &quot;</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a>            <span class="s2">&quot;structurally incomplete in the 2026-07-08 audit and &quot;</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a>            <span class="s2">&quot;are rejected as well.&quot;</span>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a>        <span class="p">)</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a>    <span class="c1"># Rewrite backend tag so that cross-engine reports use the unified label.</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a>    <span class="n">res</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">model_copy</span><span class="p">(</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a>        <span class="n">update</span><span class="o">=</span><span class="p">{</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a>            <span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;image_nlayer&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a>            <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="o">**</span><span class="n">res</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="s2">&quot;n_layers&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="s2">&quot;dispatched_to&quot;</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">backend</span><span class="p">},</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a>        <span class="p">}</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a>    <span class="p">)</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a>    <span class="k">return</span> <span class="n">res</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

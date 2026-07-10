@@ -2036,6 +2036,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-09-engine-family-independence-audit-2026-07-08-wp-e" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-09 — engine-family independence (audit 2026-07-08, WP-E)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2515,6 +2526,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-09-engine-family-independence-audit-2026-07-08-wp-e" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-09 — engine-family independence (audit 2026-07-08, WP-E)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2546,7 +2568,7 @@
 <tbody>
 <tr>
 <td><strong>Status</strong></td>
-<td>Accepted</td>
+<td>Accepted — amended 2026-07-09 (audit WP-E, see the end of this document)</td>
 </tr>
 <tr>
 <td><strong>Date</strong></td>
@@ -2733,6 +2755,30 @@ check.</p>
       equivalent-hemisphere reduction) for full multi-cluster
       worlds; deferred until a concrete use case demands it.</li>
 </ul>
+<hr />
+<h2 id="amendment-2026-07-09-engine-family-independence-audit-2026-07-08-wp-e">Amendment 2026-07-09 — engine-family independence (audit 2026-07-08, WP-E)<a class="headerlink" href="#amendment-2026-07-09-engine-family-independence-audit-2026-07-08-wp-e" title="Permanent link">&para;</a></h2>
+<p>Two corrections to this ADR's cross-validation narrative:</p>
+<ol>
+<li><strong><code>bem</code> and <code>mom</code> are not independent for n ≤ 2.</strong> They assemble
+   the identical reaction matrix from the same kernels and solve it
+   with the same constraint solver (measured relative difference
+   4e-16). Their agreement validates the shared discretisation, not
+   the physics. Genuine methodological independence in the layered
+   cross-checks comes from <code>mom_sommerfeld</code> (direct Sommerfeld
+   quadrature of the full layered Green's function) and <code>fem</code>
+   (volume PDE, with its documented equivalent-hemisphere reduction
+   bias). <code>cim</code> shares the exact Tagg/Sunde kernel with
+   <code>image_2layer</code> for n = 2.</li>
+<li><strong><code>cim</code>/<code>bem</code> reject n ≥ 3 soils.</strong> The historic n ≥ 3
+   complex-image kernel implemented an incomplete Green's function
+   (single (z+z_s) image family; missing the 2·h_1-reflected
+   families and the surface-interface multiple-reflection
+   denominator — see <code>solver/_layered.py</code>) and systematically
+   underestimated the layered correction. This ADR's designation of
+   <code>cim</code> as the primary n ≥ 3 engine is revoked until a complete
+   kernel exists; use <code>mom_sommerfeld</code> or <code>fem</code> for three and more
+   layers.</li>
+</ol>
 
 
 

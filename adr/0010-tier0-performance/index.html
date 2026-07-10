@@ -2602,7 +2602,7 @@
 <tbody>
 <tr>
 <td><strong>Status</strong></td>
-<td>Accepted (Tier 0b implemented; 0a / 0c follow-ups)</td>
+<td>Accepted (Tier 0b implemented; Tier 0a/1 implemented 2026-07-09, audit WP-F; 0c deferred)</td>
 </tr>
 <tr>
 <td><strong>Date</strong></td>
@@ -2682,22 +2682,30 @@ is frequency-independent (<code>earth_inductive_model ==
 "perfect_mirror"</code> and no per-conductor <code>inductance_model</code>),
 factor once and reuse the LU across the whole frequency list.
 For the inductive paths, factor per frequency as today.</p>
-<p><strong>Status</strong>: scoped, not yet implemented. The current
-<code>_solve_cluster_currents</code> function in
-<code>solver/image.py</code> (and equivalent helpers in <code>image_2layer</code>,
-<code>mom</code>, <code>cim</code>, <code>bem</code>) takes one <code>omega</code> per call and
-internally rebuilds + factorises <code>A</code>. Implementing 0a
-requires hoisting that build out of the per-call API to a
-"prepare once, solve many" interface — touching seven backends
-plus the engine dispatch. Estimated effort: 3–5 days plus
-regression-test maintenance. The win on the default path
-(galvanic + multi-frequency) is exactly <code>len(frequencies)</code>;
-typical sweeps use 1 frequency, so the practical
-improvement is small unless the user explicitly runs a
-multi-frequency study without inductive coupling. Listed
-explicitly in this ADR to make the plan reviewable; will be
-implemented when a multi-frequency-without-inductance use case
-materialises.</p>
+<p><strong>Status</strong>: implemented 2026-07-09 (audit 2026-07-08, WP-F), in a
+slightly different — and stronger — form than originally scoped. The
+2026-07-08 audit profile showed that the dominant cost was not the LU
+factorisation but the <strong>multiport-Z assembly</strong>: the self-kernel was
+invoked once per electrode column <em>and</em> per frequency, rebuilding its
+O(N²) geometry tensors every time (97 % of wall time on AP1-sized
+worlds). The implemented Tier 1 therefore covers:</p>
+<ul>
+<li>one-shot batched Z assembly — all <code>N_a</code> excitation columns in a
+  single kernel call with an <code>(n_segments, N_a)</code> matrix;</li>
+<li>a <code>multiport_cache</code> shared across the per-frequency calls in
+  <code>image</code> / <code>image_2layer</code> / <code>cim</code> (Z is
+  frequency-independent);</li>
+<li>batched per-frequency potential evaluation (one stacked kernel
+  call for the whole frequency set);</li>
+<li>multi-RHS <code>solve(A, [b_re, b_im])</code> on every real DC path
+  (image family, <code>_galerkin_solve</code>, <code>fem</code>).</li>
+</ul>
+<p>Measured effect: 50-building TN world (N = 1476) 22.0 s → 0.18 s;
+100 buildings (N = 2926) ≈ 2 min → 0.85 s. Results are numerically
+identical to FP rounding (verified against the audit reference
+values on the galvanic and inductive paths). The originally scoped
+LU cache across frequencies remains unimplemented — after Tier 1 the
+augmented-system LU is no longer a relevant cost below N ≈ 10⁴.</p>
 <h3 id="0c-deferred">0c (deferred)<a class="headerlink" href="#0c-deferred" title="Permanent link">&para;</a></h3>
 <p>Adaptive discretisation requires:</p>
 <ul>

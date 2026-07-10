@@ -2112,10 +2112,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#regime-2-intermediate-a-025-a-le-5-full-series" class="md-nav__link">
+  <a href="#regime-2-intermediate-a-025-a-le-5-direct-quadrature" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Regime 2 — intermediate \(a\) (\(0.25 &lt; a \le 5\), full series)
+        Regime 2 — intermediate \(a\) (\(0.25 &lt; a \le 5\), direct quadrature)
       
     </span>
   </a>
@@ -2768,10 +2768,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#regime-2-intermediate-a-025-a-le-5-full-series" class="md-nav__link">
+  <a href="#regime-2-intermediate-a-025-a-le-5-direct-quadrature" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Regime 2 — intermediate \(a\) (\(0.25 &lt; a \le 5\), full series)
+        Regime 2 — intermediate \(a\) (\(0.25 &lt; a \le 5\), direct quadrature)
       
     </span>
   </a>
@@ -3190,17 +3190,31 @@ Q_\text{small}(a,\theta) \;=\; -0.0386
 \;+\; \tfrac{1}{2}\,\ln(2/a)
 \;+\; \frac{a}{3\sqrt{2}}\cos\theta.
 \]</div>
-<h4 id="regime-2-intermediate-a-025-a-le-5-full-series">Regime 2 — intermediate <span class="arithmatex">\(a\)</span> (<span class="arithmatex">\(0.25 &lt; a \le 5\)</span>, full series)<a class="headerlink" href="#regime-2-intermediate-a-025-a-le-5-full-series" title="Permanent link">&para;</a></h4>
-<p>Carson eqs. 32–33 with the absolutely convergent series
-<span class="arithmatex">\(\sigma_1, \sigma_2, \sigma_3, \sigma_4, s'_2, s'_4\)</span> (defined in
-Carson p. 546). The implementation truncates each <span class="arithmatex">\(\sigma_i\)</span> when
-the next term satisfies <span class="arithmatex">\(|t_{n+1}| &lt; 10^{-10}\,|S_n|\)</span> (relative
-tolerance) or the term count reaches 50, whichever comes first.
-For <span class="arithmatex">\(a \le 1\)</span> Carson notes that <em>only the leading terms are of
-importance</em>; for <span class="arithmatex">\(a \le 2\)</span> only two terms are needed. The
-truncation is chosen so that the leading-term form (regime 1) and
-the full series (regime 2) agree to <span class="arithmatex">\(\le 10^{-9}\)</span> in <span class="arithmatex">\(P, Q\)</span> at
-<span class="arithmatex">\(a = 0.25\)</span>.</p>
+<h4 id="regime-2-intermediate-a-025-a-le-5-direct-quadrature">Regime 2 — intermediate <span class="arithmatex">\(a\)</span> (<span class="arithmatex">\(0.25 &lt; a \le 5\)</span>, direct quadrature)<a class="headerlink" href="#regime-2-intermediate-a-025-a-le-5-direct-quadrature" title="Permanent link">&para;</a></h4>
+<p><em>(Rewritten after the 2026-07-08 audit, WP-B2. The originally
+planned <span class="arithmatex">\(\sigma_i\)</span>-series implementation was never built; the code
+evaluates Carson's integral <span class="arithmatex">\(J(p, q)\)</span> numerically.)</em></p>
+<p>Two quadrature paths, selected by the oscillation parameter
+<span class="arithmatex">\(q = a\sin\theta\)</span>:</p>
+<ul>
+<li><strong><span class="arithmatex">\(\theta \approx 0\)</span> (self-correction geometry):</strong> 64-node
+  Gauss–Legendre on <span class="arithmatex">\([0, 30/p]\)</span> — the integrand decays purely
+  exponentially and the historic evaluation is machine-accurate
+  (verified against adaptive references).</li>
+<li><strong><span class="arithmatex">\(q &gt; 0\)</span> (mutual geometries):</strong> QUADPACK's Fourier integrator
+  (<code>scipy.integrate.quad</code> with <code>weight='cos'</code>) on
+  <span class="arithmatex">\([0, \infty)\)</span>. This replaced the historic fixed-node
+  Gauss–Legendre on <span class="arithmatex">\([0, 30/p]\)</span>, which failed for
+  <span class="arithmatex">\(\theta \to \pi/2\)</span> (small <span class="arithmatex">\(p\)</span>, unresolved <span class="arithmatex">\(\cos(q\mu)\)</span>
+  oscillation over a huge interval): the audit measured errors up
+  to <span class="arithmatex">\(-36\,\%\)</span> in <span class="arithmatex">\(P\)</span> and <span class="arithmatex">\(+67\,\%\)</span> in <span class="arithmatex">\(Q\)</span> at buried-pair mutual
+  geometries (<span class="arithmatex">\(a = 0.44\)</span>–<span class="arithmatex">\(1.6\)</span>, <span class="arithmatex">\(\theta \approx 89°\)</span>). The Fourier
+  path also covers <span class="arithmatex">\(p = 0\)</span> (<span class="arithmatex">\(\theta = \pi/2\)</span>) exactly, where the
+  imaginary part converges only conditionally through the
+  oscillation. Verified to <span class="arithmatex">\(10^{-11}\)</span> against an independent
+  composite per-half-period Gauss rule with Euler acceleration
+  (<code>tests/test_audit_quadratures.py</code>).</li>
+</ul>
 <h4 id="regime-3-large-a-a-5-asymptotic-expansion">Regime 3 — large <span class="arithmatex">\(a\)</span> (<span class="arithmatex">\(a &gt; 5\)</span>, asymptotic expansion)<a class="headerlink" href="#regime-3-large-a-a-5-asymptotic-expansion" title="Permanent link">&para;</a></h4>
 <p>Carson eqs. 36–37:</p>
 <div class="arithmatex">\[
@@ -3215,9 +3229,15 @@ Q_\text{large}(a,\theta) \;=\; \frac{1}{\sqrt{2}}\,\frac{\cos\theta}{a}
 \;+\; \frac{3}{\sqrt{2}}\,\frac{\cos(5\theta)}{a^5} \;-\; \dots
 \]</div>
 <p>The truncation matches Carson's published curves (Fig. 2/3 of the
-original paper) within plotting accuracy for <span class="arithmatex">\(a \ge 5\)</span>, and the
-regime-2/regime-3 boundary at <span class="arithmatex">\(a = 5\)</span> has a discontinuity below
-<span class="arithmatex">\(10^{-6}\)</span> in <span class="arithmatex">\(P, Q\)</span>.</p>
+original paper) within plotting accuracy for <span class="arithmatex">\(a \ge 5\)</span>; the
+regime-2/regime-3 boundary at <span class="arithmatex">\(a = 5\)</span> carries the asymptote's
+truncation error (<span class="arithmatex">\(\lesssim 5\cdot10^{-4}\)</span> absolute in <span class="arithmatex">\(P, Q\)</span> at
+<span class="arithmatex">\(\theta = 80°\)</span>, smaller for steeper geometries). Two audit
+corrections (2026-07-08, WP-B2): the <span class="arithmatex">\(a^{-3}\)</span> term of <span class="arithmatex">\(Q\)</span> carries
+the factor <span class="arithmatex">\(1/\sqrt{2}\)</span> (previously missing — <span class="arithmatex">\(\sim 6\cdot10^{-4}\)</span>
+absolute at <span class="arithmatex">\(a = 8\)</span>), and for <span class="arithmatex">\(\theta &gt; 1.4\)</span> rad (<span class="arithmatex">\(\approx 80°\)</span>)
+the expansion degrades and the dispatcher routes through the
+regime-2 quadrature instead.</p>
 <h3 id="linear-system-integration">Linear-system integration<a class="headerlink" href="#linear-system-integration" title="Permanent link">&para;</a></h3>
 <p>The Carson correction enters the existing per-branch impedance
 block as <strong>one extra complex contribution</strong> per branch pair

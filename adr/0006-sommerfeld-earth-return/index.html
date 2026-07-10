@@ -2276,6 +2276,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-09-pollaczek-kernel-audit-2026-07-08-wp-c1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-09 — Pollaczek kernel (audit 2026-07-08, WP-C1)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2771,6 +2782,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-09-pollaczek-kernel-audit-2026-07-08-wp-c1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-09 — Pollaczek kernel (audit 2026-07-08, WP-C1)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2802,7 +2824,7 @@
 <tbody>
 <tr>
 <td><strong>Status</strong></td>
-<td>Accepted</td>
+<td>Accepted — kernel corrected to the genuine Pollaczek form 2026-07-09 (audit 2026-07-08, WP-C1; see the amendment at the end of this document)</td>
 </tr>
 <tr>
 <td><strong>Date</strong></td>
@@ -3097,6 +3119,66 @@ module.</p>
   McGraw-Hill. §9-10 — derivation of the half-space vector
   potential.</li>
 </ul>
+<hr />
+<h2 id="amendment-2026-07-09-pollaczek-kernel-audit-2026-07-08-wp-c1">Amendment 2026-07-09 — Pollaczek kernel (audit 2026-07-08, WP-C1)<a class="headerlink" href="#amendment-2026-07-09-pollaczek-kernel-audit-2026-07-08-wp-c1" title="Permanent link">&para;</a></h2>
+<p>The 2026-07-08 physics audit found two structural defects in the
+kernel as originally implemented (<code>1/R + ∫Γ e^{-λ(z+z')}J0</code>):</p>
+<ol>
+<li>The primary term kept the <strong>static</strong> <code>1/R</code> instead of the in-soil
+   attenuated <code>e^{-γR}/R</code>. For buried conductors the attenuation is
+   precisely where the earth-return <strong>resistance</strong> lives; the
+   remaining <code>(Γ-1)</code> correction accumulated to ≈ <code>-ωμ0/8</code> per metre —
+   Carson's value with the <strong>wrong sign</strong> (verified numerically).
+   The "Carson recovered as long-wire asymptote" row in the limit
+   table above was never actually implemented as a test and does not
+   hold for the historic kernel's real part.</li>
+<li>The soil-side reflection <code>+Γ</code> was applied to <strong>overhead</strong>
+   conductors as well; the air-side boundary condition requires <code>-Γ</code>
+   (Carson's geometry).</li>
+</ol>
+<p>The implementation now dispatches per segment pair (buried–buried /
+overhead–overhead / mixed) with the genuine quasi-static Pollaczek
+kernels (see the module docstring of
+<code>coupling/sommerfeld_inductance.py</code>), keeps the mirror deduplication
+<code>-1/R'</code> and the buried direct-term attenuation <code>(e^{-γR}-1)/R</code> in
+closed form, and integrates only the smooth reflected/transmitted
+remainder (interpolated over ρ — the historic <code>(16,16,nλ)</code> tensor
+evaluation cost up to ~2 s per distant segment pair, now
+milliseconds).</p>
+<p><strong>Corrected limit table</strong> (regression-tested in
+<code>tests/test_audit_inductive_stack.py</code> and
+<code>tests/test_sommerfeld_inductance.py</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="arithmatex">\(\sigma_e \to 0\)</span></td>
+<td>free space, <strong>no image</strong> (magnetically transparent earth)</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(\sigma_e \to \infty\)</span>, overhead pair</td>
+<td><strong>anti-parallel PEC image</strong> <span class="arithmatex">\(1/R - 1/R'\)</span> (Carson baseline)</td>
+</tr>
+<tr>
+<td><span class="arithmatex">\(\sigma_e \to \infty\)</span>, buried pair</td>
+<td>total coupling → 0 (conductor screened by the medium)</td>
+</tr>
+<tr>
+<td>Long parallel buried wires</td>
+<td>Pollaczek's <span class="arithmatex">\(\frac{j\omega\mu_0}{2\pi}[K_0(\gamma d) - K_0(\gamma D') + J_P]\)</span>, with <span class="arithmatex">\(\mathrm{Re} \to +\omega\mu_0/8\)</span> per m at low frequency — validated to ~1 % (Im) / few % (Re, chain truncation)</td>
+</tr>
+</tbody>
+</table>
+<p>Consequence for <code>perfect_mirror</code>: the default remains available and
+bit-stable, but it is now documented as a frequency-independent
+<em>baseline</em> whose additive image is far from the f &lt; 1 kHz physics of
+buried conductors (audit finding F5) — use <code>"sommerfeld"</code> whenever
+quantitative Z(f) matters.</p>
 
 
 
