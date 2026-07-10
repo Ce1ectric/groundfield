@@ -195,6 +195,10 @@ THIRD_PARTY_LICENSES_RAW.txt
 #  docs/graphify.md for the workflow.
 graphify-out/
 
+# audit reports
+audit*
+
+
 # Sandbox write-permission probe (Cowork-Mount); never committed.
 test_write_repo
 
