@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — step 1 (interface split), layer-aware post-processing and the mom lift implemented 2026-07-09 (audit WP-D; see the amendment at the end) |
 | **Date** | 2026-05-07 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -243,3 +243,33 @@ straightforward extension once Phase A is stable.
 - **Tleis, N. D.** (2008). *Power Systems Modelling and Fault
   Analysis*, Newnes. Modern transmission-line interpretation of
   the layered Green's function.
+
+
+---
+
+## Amendment 2026-07-09 — WP-D (audit 2026-07-08)
+
+Three gaps between this ADR and the implementation were closed:
+
+1. **Step 1 (interface-split discretiser) is now implemented.** The
+   original phase plan promised segments that never straddle the
+   interface; the discretiser had ignored `layer_interfaces` and
+   assigned straddling segments by midpoint (mis-assignment up to
+   `ds/2`). Rods and sloped strips now split at `h_1` in every
+   layered backend; a margin warning fires when the deepest segment
+   ends within `2·segment_length` above `h_1`.
+2. **Post-solve field evaluation dispatches by layer.**
+   `FieldResult.potential` and the `solve_mutual_*` probe kernels
+   used the upper-layer image series for all points (measured +7 %
+   at z = 7 m, +25 % at z = 12 m for K = +0.818); layer-2 pairs now
+   use the spectral kernel (`two_layer_probe_matrix`).
+3. **`mom` no longer rejects cross-layer worlds** — the action item
+   "lift the remaining backends" is done for the n = 2 family
+   (mom/cim/bem and the mom_sommerfeld diagonal all dispatch the
+   cross-layer kernel; n ≥ 3 cross-layer raises everywhere).
+
+Performance note: the cross-layer reaction-matrix correction is now
+grouped by depth pairs (one spectral BVP solve per (z_i, z_j) group
+instead of per matrix entry) and cached across the kernel calls of
+one solve — a 3-rod cross-layer world dropped from 33.7 s to 4.6 s
+on the audit sandbox with identical results.

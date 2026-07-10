@@ -130,7 +130,9 @@ def _build_Z_two_layer(
     :func:`groundfield.solver.image_2layer._two_layer_self_kernel_factory`.
     """
     n = seg_points.shape[0]
-    self_kernel = _two_layer_self_kernel_factory(soil, max_terms, tol)
+    self_kernel = _two_layer_self_kernel_factory(
+        soil, max_terms, tol, allow_cross_layer=True,
+    )
     eye = np.eye(n)
     return self_kernel(seg_points, seg_lengths, wire_radii, eye)
 
@@ -415,11 +417,16 @@ def solve_mom(
         type(world.soil).__name__, ds,
     )
 
-    # 1) Discretisation — identical to the image backends.
+    # 1) Discretisation — identical to the image backends; for
+    #    two-layer soil segments are split at the interface
+    #    (ADR-0007 step 1, audit 2026-07-08 WP-D2).
+    interfaces = (
+        (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
+    )
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
-        segs = _discretize_electrode(e, ds)
+        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(range(len(all_segments),
                                             len(all_segments) + len(segs)))
         all_segments.extend(segs)
@@ -484,14 +491,20 @@ def solve_mom(
     seg_lengths = np.array([s.length for s in all_segments])
     wire_radii = np.array([s.wire_radius for s in all_segments])
 
-    # 4) Validate 2-layer precondition (after all segments collected).
+    # 4) Cross-layer support (audit 2026-07-08, WP-D3): the shared
+    #    self-kernel factory dispatches to the rigorous ADR-0007
+    #    Sommerfeld path when any segment sits at or below h_1, so
+    #    the historic hard rejection is gone. mom is the engine that
+    #    *solves* the per-segment current distribution — exactly the
+    #    tool to quantify the image family's uniform-leakage bias
+    #    across the interface.
     if isinstance(world.soil, TwoLayerSoil):
         z_max = seg_points[:, 2].max()
         if z_max >= world.soil.h_1:
-            raise ValueError(
-                "mom: a segment lies below the layer interface "
-                f"(z_max = {z_max:.3f} m, h_1 = {world.soil.h_1:.3f} m). "
-                "All electrodes must sit in the upper layer."
+            _log.info(
+                "mom: cross-layer geometry (z_max = %.3f m >= h_1 = "
+                "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
+                z_max, world.soil.h_1,
             )
 
     # 5) Assemble the reaction matrix Z (kernel depends on soil model).
@@ -528,6 +541,7 @@ def solve_mom(
     else:
         self_kernel = _two_layer_self_kernel_factory(
             world.soil, two_layer_max_terms, two_layer_tol,
+            allow_cross_layer=True,
         )
         phi_kernel = lambda sc_real: self_kernel(
             seg_points, seg_lengths, wire_radii, sc_real,

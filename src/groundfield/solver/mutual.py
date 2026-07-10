@@ -152,17 +152,57 @@ def _probe_potential_two_layer(
     h_1 = soil.h_1
     rho_1 = soil.rho_1
 
-    diff_xy = probe_points[:, None, 0:2] - source_points[None, :, 0:2]
-    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
-    z_field = probe_points[:, 2:3]      # (M, 1)
-    z_src = source_points[None, :, 2]   # (1, N)
-
     M = probe_points.shape[0]
     currents = np.atleast_2d(currents)
     if currents.shape[0] != source_points.shape[0]:
         # accept a single column passed as shape (N,) -> (1, N)
         currents = currents.T
     J = currents.shape[1]
+
+    # ------------------------------------------------------------------
+    # Layer dispatch (audit 2026-07-08, WP-D1). The Tagg/Sunde image
+    # series below is derived for source AND observer in the upper
+    # layer; applying it to layer-2 points is wrong (measured +7 % at
+    # z = 7 m, +25 % at z = 12 m for K = +0.818, h_1 = 5 m). Pure
+    # upper-layer evaluations keep the historic fast path bit-exact;
+    # any pair involving layer 2 goes through the rigorous spectral
+    # kernel of coupling.layered_green.
+    # ------------------------------------------------------------------
+    probe_l1 = probe_points[:, 2] < h_1
+    src_l1 = source_points[:, 2] < h_1
+    if not (probe_l1.all() and src_l1.all()):
+        from groundfield.coupling.layered_green import two_layer_probe_matrix
+
+        rho_2 = soil.rho_2
+        phi = np.zeros((M, J), dtype=complex)
+        # uu block — fast image series on the sub-arrays.
+        if probe_l1.any() and src_l1.any():
+            phi[probe_l1] += _probe_potential_two_layer(
+                probe_points[probe_l1], source_points[src_l1],
+                currents[src_l1], soil, min_distance, max_terms, tol,
+            )
+        # Remaining blocks via the spectral kernel: layer-2 sources to
+        # all probes, layer-1 sources to layer-2 probes.
+        if (~src_l1).any():
+            G = two_layer_probe_matrix(
+                probe_points, source_points[~src_l1],
+                rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                min_distance=min_distance,
+            )
+            phi += G @ currents[~src_l1]
+        if (~probe_l1).any() and src_l1.any():
+            G = two_layer_probe_matrix(
+                probe_points[~probe_l1], source_points[src_l1],
+                rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                min_distance=min_distance,
+            )
+            phi[~probe_l1] += G @ currents[src_l1]
+        return phi
+
+    diff_xy = probe_points[:, None, 0:2] - source_points[None, :, 0:2]
+    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
+    z_field = probe_points[:, 2:3]      # (M, 1)
+    z_src = source_points[None, :, 2]   # (1, N)
 
     def _series_for(real_currents: np.ndarray) -> np.ndarray:
         """Core series for a real-valued ``(N, J)`` current stack."""
@@ -293,8 +333,11 @@ def solve_mutual_matrix(
     ds = engine.segment_length
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
+    interfaces = (
+        (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
+    )
     for e in world.electrodes:
-        segs = _discretize_electrode(e, ds)
+        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(
             range(len(all_segments), len(all_segments) + len(segs))
         )
@@ -663,8 +706,11 @@ def solve_mutual_field(
     ds = engine.segment_length
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
+    interfaces = (
+        (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
+    )
     for e in world.electrodes:
-        segs = _discretize_electrode(e, ds)
+        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(range(len(all_segments), len(all_segments) + len(segs)))
         all_segments.extend(segs)
 

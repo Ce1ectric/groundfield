@@ -475,8 +475,11 @@ def solve_cim(
     # 1) Discretisation.
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
+    interfaces = (
+        (float(stack.h[0]),) if stack.n_layers >= 2 else None
+    )
     for e in world.electrodes:
-        segs = _discretize_electrode(e, ds)
+        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(
             range(len(all_segments), len(all_segments) + len(segs))
         )

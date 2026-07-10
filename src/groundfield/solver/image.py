@@ -202,23 +202,54 @@ class _Segment:
 # ---------------------------------------------------------------------
 
 
-def _discretize_rod(electrode: RodElectrode, ds: float) -> list[_Segment]:
-    """Vertical driven rod into N equally long segments."""
-    n = max(1, int(np.ceil(electrode.length / ds)))
-    seg_len = electrode.length / n
-    _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
+def _split_interval_at_interfaces(
+    t0: float, t1: float, interfaces,
+) -> list[tuple[float, float]]:
+    """Partition ``[t0, t1]`` at every interior interface value.
+
+    ADR-0007 step 1 (audit 2026-07-08, WP-D2): segments must not
+    straddle a soil-layer interface, otherwise the discretiser
+    assigns the whole segment to the layer of its midpoint and the
+    kernel evaluates up to ``ds/2`` of wire length with the wrong
+    layer resistivity.
+    """
+    cuts = sorted(
+        t for t in (interfaces or ())
+        if t0 + 1e-12 < t < t1 - 1e-12
+    )
+    bounds = [t0, *cuts, t1]
+    return [(bounds[k], bounds[k + 1]) for k in range(len(bounds) - 1)]
+
+
+def _discretize_rod(
+    electrode: RodElectrode, ds: float, layer_interfaces=None,
+) -> list[_Segment]:
+    """Vertical driven rod into N equally long segments per layer.
+
+    With ``layer_interfaces`` given, the rod's z-interval is first
+    split at every interface it crosses; each part is then
+    discretised independently, so no segment straddles an interface.
+    """
     x0, y0, z0 = electrode.position
     segs: list[_Segment] = []
-    for k in range(n):
-        zc = z0 + (k + 0.5) * seg_len
-        segs.append(
-            _Segment(
-                midpoint=np.array([x0, y0, zc], dtype=float),
-                length=seg_len,
-                electrode_name=electrode.name,
-                wire_radius=electrode.wire_radius,
+    parts = _split_interval_at_interfaces(
+        z0, z0 + electrode.length, layer_interfaces,
+    )
+    for z_lo, z_hi in parts:
+        part_len = z_hi - z_lo
+        n = max(1, int(np.ceil(part_len / ds)))
+        seg_len = part_len / n
+        _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
+        for k in range(n):
+            zc = z_lo + (k + 0.5) * seg_len
+            segs.append(
+                _Segment(
+                    midpoint=np.array([x0, y0, zc], dtype=float),
+                    length=seg_len,
+                    electrode_name=electrode.name,
+                    wire_radius=electrode.wire_radius,
+                )
             )
-        )
     return segs
 
 
@@ -248,31 +279,46 @@ def _discretize_ring(electrode: RingElectrode, ds: float) -> list[_Segment]:
     return segs
 
 
-def _discretize_strip(electrode: StripElectrode, ds: float) -> list[_Segment]:
-    """Horizontal straight strip into N equally long segments along its axis."""
+def _discretize_strip(
+    electrode: StripElectrode, ds: float, layer_interfaces=None,
+) -> list[_Segment]:
+    """Straight strip into N equally long segments along its axis.
+
+    A sloped strip whose z-range crosses a layer interface is split
+    there first (ADR-0007 step 1) — horizontal strips are unaffected.
+    """
     L = electrode.length
-    n = max(1, int(np.ceil(L / ds)))
-    seg_len = L / n
-    _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
     p0 = np.array(electrode.start, dtype=float)
     p1 = np.array(electrode.end, dtype=float)
     direction = (p1 - p0) / L
+    # Map interface depths to axis parameters t in [0, L].
+    t_cuts: list[float] = []
+    dz = p1[2] - p0[2]
+    if layer_interfaces and abs(dz) > 1e-12:
+        for h in layer_interfaces:
+            t = (h - p0[2]) / dz * L
+            t_cuts.append(t)
     segs: list[_Segment] = []
     # ADR-0012 V2: read the concrete-shell coefficient from the
     # electrode and propagate to every segment. ``0.0`` (default)
     # leaves the diagonal untouched.
     shell_coeff = float(electrode.concrete_shell_coefficient_ohm_m)
-    for k in range(n):
-        midpoint = p0 + (k + 0.5) * seg_len * direction
-        segs.append(
-            _Segment(
-                midpoint=midpoint,
-                length=seg_len,
-                electrode_name=electrode.name,
-                wire_radius=electrode.wire_radius,
-                concrete_shell_coefficient_ohm_m=shell_coeff,
+    for t_lo, t_hi in _split_interval_at_interfaces(0.0, L, t_cuts):
+        part_len = t_hi - t_lo
+        n = max(1, int(np.ceil(part_len / ds)))
+        seg_len = part_len / n
+        _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
+        for k in range(n):
+            midpoint = p0 + (t_lo + (k + 0.5) * seg_len) * direction
+            segs.append(
+                _Segment(
+                    midpoint=midpoint,
+                    length=seg_len,
+                    electrode_name=electrode.name,
+                    wire_radius=electrode.wire_radius,
+                    concrete_shell_coefficient_ohm_m=shell_coeff,
+                )
             )
-        )
     return segs
 
 
@@ -372,14 +418,26 @@ def _discretize_grid_mesh(
 
 
 def _discretize_electrode(
-    electrode: "_ElectrodeBase", ds: float
+    electrode: "_ElectrodeBase", ds: float, layer_interfaces=None,
 ) -> list[_Segment]:
+    """Dispatch to the per-primitive discretiser.
+
+    Parameters
+    ----------
+    layer_interfaces
+        Optional sequence of soil-layer interface depths in m
+        (e.g. ``(h_1,)`` for a two-layer soil). Primitives whose
+        geometry can cross an interface (rods, sloped strips) split
+        their segments there so no segment straddles a layer boundary
+        (ADR-0007 step 1, audit 2026-07-08 WP-D2). Horizontal
+        primitives (rings, meshes) are unaffected.
+    """
     if isinstance(electrode, RodElectrode):
-        return _discretize_rod(electrode, ds)
+        return _discretize_rod(electrode, ds, layer_interfaces)
     if isinstance(electrode, RingElectrode):
         return _discretize_ring(electrode, ds)
     if isinstance(electrode, StripElectrode):
-        return _discretize_strip(electrode, ds)
+        return _discretize_strip(electrode, ds, layer_interfaces)
     if isinstance(electrode, GridMeshElectrode):
         return _discretize_grid_mesh(electrode, ds)
     if isinstance(electrode, MeshElectrode):

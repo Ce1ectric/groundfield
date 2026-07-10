@@ -26,6 +26,47 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — layer-2 field evaluation and cross-layer plumbing (audit 2026-07-08, WP-D)
+
+- **Layer dispatch in the post-solve potential paths.**
+  `FieldResult.potential` and the `solve_mutual_*` probe kernels
+  applied the upper-layer Tagg/Sunde image series to *every* probe
+  and source point; for layer-2 points the measured error was +7 %
+  at z = 7 m and +25 % at z = 12 m (K = +0.818, h_1 = 5 m). Pairs
+  involving layer 2 now go through the rigorous spectral kernel
+  (new `coupling.layered_green.two_layer_probe_matrix`, grouped by
+  depth pair with one spectral-amplitude solve per group); pure
+  upper-layer evaluation keeps the historic fast path bit-exact.
+  Verified: potential continuity across the interface, homogeneous
+  limit, exact agreement with the spectral reference at depth.
+- **Interface-split discretiser (ADR-0007 step 1, previously
+  documented but not implemented).** Rod and sloped-strip segments
+  are split at the layer interface so no segment straddles h_1
+  (historic mis-assignment: up to ds/2 of wire in the wrong layer);
+  wired into every layered backend. A margin warning fires when the
+  deepest segment ends within 2·segment_length of h_1 (the
+  image-series self-terms degrade there).
+- **`mom` accepts cross-layer worlds.** The hard rejection is gone;
+  the shared self-kernel factory dispatches to the ADR-0007
+  Sommerfeld path. mom is the engine that *solves* the per-segment
+  current distribution — the audit's P5 uniform-leakage bias across
+  the interface is now measurable inside the package (regression
+  test pins mom below image_2layer for rho_2 > rho_1, and
+  mom ≡ bem to 1e-6).
+- **Cross-layer assembly grouped and cached** (performance): the
+  ADR-0007 reaction-matrix correction ran one scalar Sommerfeld
+  BVP solve per matrix entry — O(n²) quadratures, prohibitively
+  slow after the WP-B1 oscillation-resolved grids. Off-diagonals
+  are now grouped by (z_i, z_j) with one spectral-amplitude solve
+  per group (`two_layer_layered_correction_group`), identical
+  diagonal entries are deduplicated, and the current-independent
+  matrices are cached across the per-frequency/per-excitation
+  kernel calls of one solve. Measured: 3-rod cross-layer world
+  33.7 s → 4.6 s on the audit sandbox (identical result).
+- New regression suite `tests/test_audit_layer2.py` (8 tests:
+  interface continuity, pinned layer-2 anchor values, homogeneous
+  limit, split invariants, margin warning, mom cross-layer).
+
 ### Fixed — inductive earth-return stack consolidated (audit 2026-07-08, WP-C)
 
 The audit's headline physics finding: the inductive coupling stack

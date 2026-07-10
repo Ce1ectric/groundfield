@@ -350,10 +350,48 @@ class FieldResult(BaseModel):
         max_terms: int = 100,
         tol: float = 1e-6,
     ) -> np.ndarray:
-        """Tagg/Sunde series for 2-layer soil."""
+        """Tagg/Sunde series for 2-layer soil (upper-layer fast path).
+
+        Layer dispatch (audit 2026-07-08, WP-D1): the image series is
+        valid for source AND observer in the upper layer only. Any
+        pair involving layer 2 is routed through the rigorous
+        spectral kernel of :mod:`groundfield.coupling.layered_green`
+        (measured uu-series error before the fix: +7 % at z = 7 m,
+        +25 % at z = 12 m for K = +0.818, h_1 = 5 m). Pure
+        upper-layer evaluations are bit-exact to the historic path.
+        """
         K = soil.reflection_coefficient
         h_1 = soil.h_1
         rho_1 = soil.rho_1
+
+        pts_l1 = pts[:, 2] < h_1
+        src_l1 = sources[:, 2] < h_1
+        if not (pts_l1.all() and src_l1.all()):
+            from groundfield.coupling.layered_green import (
+                two_layer_probe_matrix,
+            )
+
+            phi = np.zeros(pts.shape[0], dtype=complex)
+            if pts_l1.any() and src_l1.any():
+                phi[pts_l1] += self._potential_two_layer(
+                    pts[pts_l1], sources[src_l1], currents[src_l1],
+                    soil, min_distance, max_terms, tol,
+                )
+            if (~src_l1).any():
+                G = two_layer_probe_matrix(
+                    pts, sources[~src_l1],
+                    rho_1=rho_1, rho_2=soil.rho_2, h_1=h_1,
+                    min_distance=min_distance,
+                )
+                phi += G @ currents[~src_l1]
+            if (~pts_l1).any() and src_l1.any():
+                G = two_layer_probe_matrix(
+                    pts[~pts_l1], sources[src_l1],
+                    rho_1=rho_1, rho_2=soil.rho_2, h_1=h_1,
+                    min_distance=min_distance,
+                )
+                phi[~pts_l1] += G @ currents[src_l1]
+            return phi
 
         diff_xy = pts[:, None, 0:2] - sources[None, :, 0:2]
         delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)

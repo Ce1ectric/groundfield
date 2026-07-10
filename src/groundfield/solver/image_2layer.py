@@ -258,6 +258,12 @@ def _two_layer_self_kernel_factory(
     h_1 = soil.h_1
     abs_K = abs(K)
 
+    # Cache for the (current-independent) cross-layer matrices: the
+    # per-frequency and per-excitation kernel calls within one solve
+    # share the identical geometry, so phi_hom_matrix and delta_Z are
+    # assembled once (audit 2026-07-08, WP-D performance note).
+    _cross_cache: dict = {}
+
     def _self_kernel(seg_points, seg_lengths, wire_radii, currents):
         # ADR-0007: when the geometry crosses the layer interface we
         # dispatch the Sommerfeld kernel from coupling.layered_green
@@ -267,7 +273,7 @@ def _two_layer_self_kernel_factory(
         if allow_cross_layer and z_max >= h_1:
             return _layered_green_kernel(
                 seg_points, seg_lengths, wire_radii, currents,
-                soil=soil,
+                soil=soil, cache=_cross_cache,
             )
 
         # n = 0: identical to the homogeneous self-kernel with rho = rho_1
@@ -311,6 +317,7 @@ def _layered_green_kernel(
     currents,
     *,
     soil: TwoLayerSoil,
+    cache: dict | None = None,
 ):
     """ADR-0007 cross-layer fallback using the rigorous Sommerfeld kernel.
 
@@ -369,6 +376,17 @@ def _layered_green_kernel(
         seg_points[:, 2] < h_1, rho_1, rho_2,
     )
 
+    # Both matrices below are independent of ``currents`` — reuse
+    # them across the per-excitation / per-frequency kernel calls of
+    # one solve (keyed by the geometry buffer).
+    cache_key = None
+    if cache is not None:
+        cache_key = (n, hash(seg_points.tobytes()),
+                     hash(seg_lengths.tobytes()))
+        if cache.get("key") == cache_key:
+            return cache["phi_hom_matrix"] @ currents \
+                + cache["delta_Z"] @ currents
+
     # Step 1: build phi_hom matrix that uses rho_at_source(j) for
     # each column (source segment). This generalises
     # _self_corrected_kernel: the diagonal still uses the line-
@@ -384,38 +402,75 @@ def _layered_green_kernel(
     # handle the residual line-self peak by 3×3 Gauss-Legendre
     # averaging along the segment axis — this is small but
     # important for short segments in highly contrasting soils.
+    #
+    # Off-diagonal assembly is grouped by the (z_i, z_j, baseline)
+    # combination and evaluated with ONE spectral-amplitude solve per
+    # group (audit 2026-07-08, WP-D performance note): the historic
+    # per-entry scalar quadrature made the cross-layer reaction
+    # matrix O(n²) BVP solves, which dominated multi-electrode
+    # cross-layer worlds after the WP-B1 oscillation-resolved grids.
+    from groundfield.coupling.layered_green import (
+        two_layer_layered_correction_group,
+    )
+
     delta_Z = np.zeros((n, n), dtype=float)
+    z_keys = np.round(seg_points[:, 2] / 1e-9).astype(np.int64)
+    for zi_key in np.unique(z_keys):
+        rows = np.where(z_keys == zi_key)[0]
+        z_i = float(seg_points[rows[0], 2])
+        for zj_key in np.unique(z_keys):
+            cols = np.where(z_keys == zj_key)[0]
+            z_j = float(seg_points[cols[0], 2])
+            rho_baseline_j = float(rho_per_segment[cols[0]])
+            dxy = (
+                seg_points[rows][:, None, 0:2]
+                - seg_points[cols][None, :, 0:2]
+            )
+            s_grid = np.sqrt(np.einsum("mnk,mnk->mn", dxy, dxy))
+            vals = two_layer_layered_correction_group(
+                s_grid.ravel(), z_i, z_j,
+                rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                rho_baseline=rho_baseline_j,
+            )
+            delta_Z[np.ix_(rows, cols)] = (
+                vals.reshape(s_grid.shape) / (2.0 * np.pi)
+            )
+
+    # Diagonal: 3×3 Gauss-Legendre along the segment axis (line-self
+    # peak regularised at the wire radius). Identical segments (same
+    # depth, length, radius, baseline) share one evaluation.
     gl3_nodes, gl3_weights = np.polynomial.legendre.leggauss(3)
     gl3_nodes = 0.5 * (gl3_nodes + 1.0)
     gl3_weights = 0.5 * gl3_weights
+    diag_cache: dict = {}
     for i in range(n):
-        x_i, y_i, z_i = seg_points[i]
+        z_i = float(seg_points[i, 2])
         L_i = float(seg_lengths[i])
-        for j in range(n):
-            x_j, y_j, z_j = seg_points[j]
-            s_horiz = float(np.hypot(x_i - x_j, y_i - y_j))
-            rho_baseline_j = float(rho_per_segment[j])
-            if i == j:
-                z_lo = float(z_i) - 0.5 * L_i
-                delta_G = 0.0
-                for a, w_a in zip(gl3_nodes, gl3_weights):
-                    z_a = z_lo + a * L_i
-                    for b, w_b in zip(gl3_nodes, gl3_weights):
-                        z_b = z_lo + b * L_i
-                        s_eval = max(s_horiz, float(wire_radii[i]))
-                        delta_G += w_a * w_b * two_layer_layered_correction_real_space(
-                            s=s_eval, z=z_a, z_s=z_b,
-                            rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-                            rho_baseline=rho_baseline_j,
-                        )
-                delta_Z[i, i] = delta_G / (2.0 * np.pi)
-            else:
-                delta_G = two_layer_layered_correction_real_space(
-                    s=s_horiz, z=float(z_i), z_s=float(z_j),
+        a_i = float(wire_radii[i])
+        rho_baseline_i = float(rho_per_segment[i])
+        key = (round(z_i, 9), round(L_i, 9), round(a_i, 9),
+               round(rho_baseline_i, 9))
+        if key in diag_cache:
+            delta_Z[i, i] = diag_cache[key]
+            continue
+        z_lo = z_i - 0.5 * L_i
+        delta_G = 0.0
+        for a, w_a in zip(gl3_nodes, gl3_weights):
+            z_a = z_lo + a * L_i
+            for b, w_b in zip(gl3_nodes, gl3_weights):
+                z_b = z_lo + b * L_i
+                delta_G += w_a * w_b * two_layer_layered_correction_real_space(
+                    s=a_i, z=z_a, z_s=z_b,
                     rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-                    rho_baseline=rho_baseline_j,
+                    rho_baseline=rho_baseline_i,
                 )
-                delta_Z[i, j] = delta_G / (2.0 * np.pi)
+        diag_cache[key] = delta_G / (2.0 * np.pi)
+        delta_Z[i, i] = diag_cache[key]
+
+    if cache is not None:
+        cache["key"] = cache_key
+        cache["phi_hom_matrix"] = phi_hom_matrix
+        cache["delta_Z"] = delta_Z
     return phi_hom + delta_Z @ currents
 
 
@@ -518,11 +573,13 @@ def solve_image_2layer(
         soil.rho_1, soil.rho_2, h_1, K,
     )
 
-    # 1) Discretisation — identical to the homogeneous backend
+    # 1) Discretisation — identical to the homogeneous backend, but
+    #    with segments split at the layer interface (ADR-0007 step 1,
+    #    audit 2026-07-08 WP-D2) so no segment straddles h_1.
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
-        segs = _discretize_electrode(e, ds)
+        segs = _discretize_electrode(e, ds, layer_interfaces=(h_1,))
         elec_to_segidx[e.name] = list(range(len(all_segments),
                                             len(all_segments) + len(segs)))
         all_segments.extend(segs)
@@ -620,6 +677,21 @@ def solve_image_2layer(
             "(z_max = %.3f m, h_1 = %.3f m). Using ADR-0007 "
             "Sommerfeld fallback for all source/observer pairs.",
             z_max, h_1,
+        )
+    elif h_1 - z_max < 2.0 * ds:
+        # Audit 2026-07-08 WP-D2: within ~one segment of the
+        # interface the point-source treatment of the K-weighted
+        # nearest image (distance 2(h_1 − z)) degrades. Surface the
+        # margin so the user can refine ds or accept the bias.
+        warnings.warn(
+            f"image_2layer: deepest segment ends {h_1 - z_max:.2f} m "
+            f"above the layer interface (h_1 = {h_1:.2f} m), which is "
+            f"less than 2×segment_length ({2.0 * ds:.2f} m). The "
+            "image-series self-terms near the interface carry an "
+            "elevated discretisation error there — consider a finer "
+            "segment_length.",
+            UserWarning,
+            stacklevel=2,
         )
     # Tag every segment with its layer index (0 = upper, 1 = lower).
     for s in all_segments:

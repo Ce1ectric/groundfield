@@ -445,6 +445,162 @@ def two_layer_real_space_kernel(
     return float(np.sum(weights * integrand))
 
 
+def two_layer_layered_correction_group(
+    s_values: np.ndarray,
+    z: float,
+    z_s: float,
+    *,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    rho_baseline: float | None = None,
+    lambda_max_factor: float = 200.0,
+    n_log: int = 32,
+    n_lin: int = 96,
+) -> np.ndarray:
+    """Vectorised form of :func:`two_layer_layered_correction_real_space`.
+
+    Evaluates the layered correction for **many horizontal distances
+    at one (z, z_s) pair** with a single spectral-amplitude solve:
+    the amplitudes depend on (λ, z, z_s) only, so the per-pair cost
+    of the historic scalar loop (one BVP solve per matrix entry —
+    the dominant cost of the ADR-0007 cross-layer reaction-matrix
+    assembly after the WP-B1 oscillation-resolved grids) collapses
+    to one BVP solve per (z, z_s) group plus a ``J0`` contraction.
+
+    The shared λ-grid is built for the most demanding radius of the
+    group: ``λ_max`` from the smallest ``s`` (near-field content),
+    oscillation resolution and log-region cap from the largest.
+    """
+    if rho_baseline is None:
+        rho_baseline = rho_1
+    s_values = np.asarray(s_values, dtype=float)
+    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and \
+            abs(rho_baseline - rho_1) < 1e-12 * max(rho_1, 1.0):
+        return np.zeros(s_values.shape, dtype=float)
+    s_min = float(s_values.min())
+    s_max = float(s_values.max())
+    char_min = max(min(h_1, s_min + z + z_s + 1e-9), 1e-3)
+    lambdas, weights = _hankel_lambda_grid(
+        char_length=char_min, s=s_max,
+        lambda_max_factor=lambda_max_factor, n_log=n_log, n_lin=n_lin,
+    )
+    A, B, _, C = _spectral_amplitudes(lambdas, z_s, rho_1, rho_2, h_1)
+    A_h, B_h, _, C_h = _spectral_amplitudes(
+        lambdas, z_s, rho_baseline, rho_baseline, h_1,
+    )
+    Phi_lay = _phi_from_stable_amplitudes(
+        lambdas, A, B, C, z, z_s, rho_1, rho_2, h_1,
+    )
+    Phi_hom = _phi_from_stable_amplitudes(
+        lambdas, A_h, B_h, C_h, z, z_s, rho_baseline, rho_baseline, h_1,
+    )
+    w_phi = (Phi_lay - Phi_hom) * weights * lambdas
+    return j0(lambdas[None, :] * s_values[:, None]) @ w_phi
+
+
+def two_layer_probe_matrix(
+    probe_points: np.ndarray,     # (M, 3)
+    source_points: np.ndarray,    # (N, 3)
+    *,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    min_distance: float = 1e-3,
+    lambda_max_factor: float = 200.0,
+) -> np.ndarray:
+    """Potential matrix ``phi = G @ I`` for arbitrary layer combinations.
+
+    Returns the ``(M, N)`` matrix with ``G[m, n]`` = potential at
+    ``probe_points[m]`` per unit current injected at
+    ``source_points[n]``, evaluated with the full two-layer spectral
+    kernel (:func:`two_layer_real_space_kernel`). Valid for **every**
+    probe/source layer combination — upper–upper, cross-layer and
+    lower–lower — unlike the Tagg/Sunde uu image series that the
+    fast paths use (audit 2026-07-08, WP-D1: the uu series applied to
+    layer-2 points was measured +7 % at z = 7 m and +25 % at z = 12 m
+    for K = +0.818, h_1 = 5 m).
+
+    Cost: one scalar Sommerfeld quadrature per (probe, source) pair —
+    reserve for the sub-blocks that the uu series cannot handle.
+
+    Notes
+    -----
+    The near-singularity is regularised like the image-series paths:
+    the horizontal distance is clamped at ``min_distance`` whenever
+    the vertical separation is below ``min_distance`` as well.
+
+    Cost control: probe/source pairs are grouped by their (z, z_s)
+    depth combination (rounded to 1 µm). Within a group the kernel is
+    a smooth, monotone function of the horizontal distance ``s``
+    alone; groups larger than 24 pairs are evaluated on 24 log-spaced
+    ``s``-nodes and interpolated (relative error ≲ 1e-4 — far below
+    the physical validity of the post-processing evaluation), keeping
+    surface-grid evaluations tractable.
+    """
+    M = probe_points.shape[0]
+    N = source_points.shape[0]
+    G = np.zeros((M, N), dtype=float)
+
+    def _group_values(
+        s_flat: np.ndarray, zm: float, zn: float,
+    ) -> np.ndarray:
+        """Vectorised kernel over many s at one (z, z_s) pair.
+
+        The spectral amplitudes depend on (λ-grid, z, z_s) only, so
+        they are solved **once per group** on a shared λ-grid built
+        for the most demanding radius (λ_max from the smallest s,
+        oscillation resolution and log-region cap from the largest);
+        all s-values then reduce to one ``J0``-matrix contraction.
+        """
+        s_min = float(s_flat.min())
+        s_max = float(s_flat.max())
+        char_min = max(min(h_1, s_min + zm + zn + 1e-9), 1e-3)
+        lambdas, weights = _hankel_lambda_grid(
+            char_length=char_min, s=s_max,
+            lambda_max_factor=lambda_max_factor, n_log=32, n_lin=96,
+        )
+        Phi = two_layer_spectral_kernel(
+            lambdas, zm, zn, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+        )
+        w_phi = Phi * weights * lambdas
+        if s_flat.size <= 64:
+            return j0(lambdas[None, :] * s_flat[:, None]) @ w_phi
+        # Large groups (surface grids): evaluate on 48 log-spaced
+        # s-nodes and interpolate — the Hankel integral is smooth and
+        # monotone in s.
+        c = max(abs(zm - zn), min_distance)
+        t_lo = math.log(s_min + c)
+        t_hi = math.log(max(s_max + c, s_min + c + 1e-9))
+        t_nodes = np.linspace(t_lo, t_hi, 48)
+        s_nodes = np.maximum(np.exp(t_nodes) - c, 0.0)
+        g_nodes = j0(lambdas[None, :] * s_nodes[:, None]) @ w_phi
+        return np.interp(np.log(s_flat + c), t_nodes, g_nodes)
+
+    # Group by the (z, z_s) pair — the kernel then depends on s only.
+    z_keys = np.round(probe_points[:, 2] / 1e-6).astype(np.int64)
+    zs_keys = np.round(source_points[:, 2] / 1e-6).astype(np.int64)
+    for zk in np.unique(z_keys):
+        rows = np.where(z_keys == zk)[0]
+        zm = float(probe_points[rows[0], 2])
+        for zsk in np.unique(zs_keys):
+            cols = np.where(zs_keys == zsk)[0]
+            zn = float(source_points[cols[0], 2])
+            dxy = (
+                probe_points[rows][:, None, 0:2]
+                - source_points[cols][None, :, 0:2]
+            )
+            s_grid = np.sqrt(np.einsum("mnk,mnk->mn", dxy, dxy))
+            if abs(zm - zn) < min_distance:
+                np.maximum(s_grid, min_distance, out=s_grid)
+            vals = _group_values(s_grid.ravel(), zm, zn)
+            G[np.ix_(rows, cols)] = vals.reshape(s_grid.shape)
+    # Physical prefactor: phi = G_phys / (2π) per unit current (the
+    # spectral kernel carries the rho/2 convention — see
+    # solver/mom_sommerfeld.py for the bookkeeping).
+    return G / (2.0 * math.pi)
+
+
 def two_layer_layered_correction_real_space(
     s: float,
     z: float,
