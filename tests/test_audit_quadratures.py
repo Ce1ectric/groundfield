@@ -119,10 +119,17 @@ def test_layered_correction_large_radius(s, z, z_s, ref) -> None:
 
 def test_layered_correction_small_radius_unchanged() -> None:
     """Small s keeps the historic single-panel path (bit-compatible):
-    the default grid must agree with a heavily refined one."""
+    the default grid must agree with a refined one.
+
+    Note: the refined reference deliberately stays at 384 linear
+    nodes — ``numpy.polynomial.legendre.leggauss`` scales super-
+    linearly and larger orders dominate the suite's runtime without
+    adding information (the default grid uses 96 nodes; 4× is ample
+    to expose an unconverged default).
+    """
     g_def = two_layer_layered_correction_real_space(1.0, 0.7, 7.0, **_PARS)
     g_ref = two_layer_layered_correction_real_space(
-        1.0, 0.7, 7.0, **_PARS, n_log=256, n_lin=4096,
+        1.0, 0.7, 7.0, **_PARS, n_log=128, n_lin=384,
     )
     assert g_def == pytest.approx(g_ref, rel=1e-10)
 

@@ -9,40 +9,76 @@ and layered earth.
 
 Mathematical background
 -----------------------
-For a horizontal current source $I\\,d\\vec{l}'$ at $\\vec{r}'$ over
-a conducting half-space (or layered stack), the quasi-static
-vector-potential Green's function is
+*(Rewritten in the 2026-07-08 audit, WP-C1: the historic kernel
+``1/R + ∫Γ·e^{-λ(z+z')}J0`` dropped the in-soil propagation of the
+primary term — precisely where the buried-wire earth-return
+resistance lives — and applied the soil-side reflection sign to
+overhead conductors. The implemented kernel is now the genuine
+quasi-static Pollaczek form, dispatched by which side of the soil
+surface the two segments are on.)*
+
+For a horizontal current element in a conducting half-space
+($z > 0$ soil, $z < 0$ air, $\\gamma^2 = j\\omega\\mu_0\\sigma_1$,
+$u_1 = \\sqrt{\\lambda^2 + \\gamma^2}$), the quasi-static
+vector-potential Green's functions are:
+
+**Buried source, buried observer** (depths $h, h' > 0$):
 
 $$
-G_\\text{mag}(\\vec{r}, \\vec{r}';\\,\\omega,\\sigma_e) \\;=\\;
-\\frac{1}{R} \\;+\\; \\int_0^{\\infty}\\!
-\\Gamma_\\text{mag}(\\lambda)\\,
-e^{-\\lambda(z+z')}\\,J_0(\\lambda\\rho)\\,d\\lambda,
+G_\\text{bb} \\;=\\; \\frac{e^{-\\gamma R}}{R} \\;+\\; \\int_0^{\\infty}\\!
+\\frac{\\lambda}{u_1}\\,\\Gamma(\\lambda)\\,
+e^{-u_1 (h + h')}\\,J_0(\\lambda\\rho)\\,d\\lambda,
 $$
 
-with $R = |\\vec{r}-\\vec{r}'|$, $\\rho$ the horizontal distance,
-$z, z'$ the depths (positive into soil), and the
-**reflection coefficient**
+**Overhead source and observer** (heights $H, H' > 0$):
+
+$$
+G_\\text{oo} \\;=\\; \\frac{1}{R} \\;-\\; \\int_0^{\\infty}\\!
+\\Gamma(\\lambda)\\,
+e^{-\\lambda (H + H')}\\,J_0(\\lambda\\rho)\\,d\\lambda
+\\qquad\\text{(Carson's geometry)},
+$$
+
+**Mixed** (buried $h$, overhead $H$):
+
+$$
+G_\\text{bo} \\;=\\; \\int_0^{\\infty}\\!
+\\frac{2\\lambda}{u_1 + \\lambda}\\,
+e^{-u_1 h - \\lambda H}\\,J_0(\\lambda\\rho)\\,d\\lambda,
+$$
+
+with the **reflection coefficient**
 
 - homogeneous earth (Pillar A):
-  $\\Gamma_\\text{mag}^{(1)}(\\lambda) = (u_e - \\lambda)/(u_e + \\lambda)$,
-  $u_e = \\sqrt{\\lambda^2 + j\\omega\\mu_0\\sigma_e}$,
-- $n$-layer earth (Pillar B): the recursive Tagg-Sunde-style
-  reflection coefficient (Wait 1972 §3, Tleis 2008 §3.5).
+  $\\Gamma(\\lambda) = (u_1 - \\lambda)/(u_1 + \\lambda)$,
+- $n$-layer earth (Pillar B): the recursive Wait-style reflection
+  coefficient (Wait 1972 §3, Tleis 2008 §3.5); the $\\lambda/u_1$
+  weight and the exponents use the top-layer $u_1$ (the conductors
+  live in layer 1).
 
-The two pillars share the same Sommerfeld-quadrature backend and
-differ only in the reflection-coefficient evaluator. ADR-0006 §
-"Two pillars in one ADR" spells out the API.
+The functions in this module return the **correction beyond the
+ADR-0004 additive perfect-mirror baseline** ($1/R + 1/R'$), so the
+solver assembles ``Z_b = jω·(L_Neumann+mirror) + ΔZ_Sommerfeld``.
+The mirror deduplication $-1/R'$ is carried in closed form; only
+the smooth reflected/transmitted remainder is integrated
+numerically.
 
 Limit checks (built into the test suite)
 ----------------------------------------
-- $\\sigma_e\\to\\infty$: $\\Gamma_\\text{mag} \\to +1$, integral
-  collapses to $1/R'$ → ADR-0004 perfect-mirror result, bit-exact.
-- $\\sigma_e\\to 0$: $\\Gamma_\\text{mag} \\to 0$, integral $\\to 0$
-  → free-space Green's function $1/R$.
-- Long parallel wires + homogeneous earth: integration over the
-  wire axes collapses to Carson's per-m formula × length
-  (ADR-0005 recovered as asymptote).
+- $\\sigma_e\\to 0$: every kernel collapses to free space — the
+  correction tends to $-1/R'$ and exactly cancels the ADR-0004
+  mirror. (At DC the soil is magnetically transparent: **no image**.)
+- $\\sigma_e\\to\\infty$, overhead pair: $-\\Gamma \\to -1$, the net
+  image becomes the **anti-parallel** PEC image $-1/R'$ (Carson's
+  baseline).
+- $\\sigma_e\\to\\infty$, buried pair: $e^{-\\gamma R} \\to 0$ — the
+  conductor is screened by the surrounding medium and the total
+  external coupling tends to zero.
+- Long parallel buried wires: the per-metre limit reproduces
+  Pollaczek's mutual $\\frac{j\\omega\\mu_0}{2\\pi}\\bigl[K_0(\\gamma d)
+  - K_0(\\gamma D') + J_P\\bigr]$, whose low-frequency real part is
+  Carson's $\\omega\\mu_0/8$ (with the **positive** sign — the
+  historic kernel produced $-\\omega\\mu_0/8$).
 
 References
 ----------
@@ -406,29 +442,39 @@ def earth_return_correction_homogeneous(
     rho: float, z_i: float, z_j: float,
     omega: float, sigma_earth: float,
 ) -> complex:
-    """σ-dependent earth-return correction beyond the perfect-mirror image.
+    """σ-dependent earth-return correction beyond the additive mirror.
 
-    Returns
+    Point-kernel form of the **buried–buried** Pollaczek correction
+    (audit 2026-07-08, WP-C1; see the module docstring):
+
     $$
-    \\int_0^\\infty\\bigl[\\Gamma_\\text{mag}(\\lambda) - 1\\bigr]\\,
-    e^{-\\lambda(z+z')}\\,J_0(\\lambda\\rho)\\,d\\lambda
-    \\;=\\;
-    \\bigl[G_\\text{mag}(\\vec{r}, \\vec{r}') - 1/R\\bigr] - 1/R',
+    \\Delta G \\;=\\; \\frac{e^{-\\gamma R} - 1}{R}
+    \\;-\\; \\frac{1}{R'}
+    \\;+\\; \\int_0^\\infty \\frac{\\lambda}{u_1}\\,
+    \\Gamma(\\lambda)\\, e^{-u_1 (z + z')}\\,
+    J_0(\\lambda\\rho)\\,d\\lambda,
     $$
-    i.e. the **difference** between the finite-σ Green's function
-    correction and the perfect-mirror image $1/R'$ that ADR-0004
-    already accounts for. This is the σ-dependent piece *to be
-    added to the ADR-0004 result* — adding $\\Gamma$ alone would
-    double-count the image at $\\sigma \\to \\infty$.
+
+    with $R = \\sqrt{\\rho^2 + (z - z')^2}$,
+    $R' = \\sqrt{\\rho^2 + (z + z')^2}$. This is the σ-dependent
+    piece *to be added to the ADR-0004 result* (which carries
+    $1/R + 1/R'$): the $-1/R'$ removes the additive mirror, the
+    attenuated direct term carries the buried-path earth-return
+    resistance, and the $\\lambda/u_1$-weighted reflection is the
+    genuine soil-side boundary response.
 
     Limit checks:
 
-    - $\\sigma_e \\to \\infty$: $\\Gamma \\to 1$, integrand
-      $(1-1)\\to 0$, correction $\\to 0$ → ADR-0004 unchanged. ✓
-    - $\\sigma_e \\to 0$: $\\Gamma \\to 0$, integrand
-      $(0-1) \\to -e^{-\\lambda(z+z')}J_0$,
-      integral $\\to -1/R'$ → cancels the ADR-0004 image, total →
-      free space $1/R$. ✓
+    - $\\sigma_e \\to 0$: $\\gamma \\to 0$, $\\Gamma \\to 0$ —
+      correction $\\to -1/R'$ → cancels the ADR-0004 image, total
+      → free space $1/R$ (at DC the soil is magnetically
+      transparent: no image). ✓
+    - $\\sigma_e \\to \\infty$: $e^{-\\gamma R} \\to 0$,
+      $\\lambda/u_1 \\to 0$ — correction $\\to -1/R - 1/R'$, total
+      → 0 (buried conductor screened by the surrounding medium). ✓
+      *(The historic kernel instead returned the additive mirror in
+      this limit, which is the electrostatic — not the magnetic —
+      image; see the audit report.)*
 
     Parameters
     ----------
@@ -449,7 +495,7 @@ def earth_return_correction_homogeneous(
     Returns
     -------
     correction : complex
-        The integral above, dimensionless (the calling
+        The kernel above, dimensionless (the calling
         :func:`build_sommerfeld_correction_matrix` multiplies by
         $\\mu_0 / (4\\pi)$ × ... × line integrations).
     """
@@ -458,6 +504,14 @@ def earth_return_correction_homogeneous(
     z_sum = z_i + z_j
     if z_sum <= 0.0:
         z_sum = 1e-3
+    gamma2 = 1j * omega * MU_0 * sigma_earth
+    gamma = complex(np.sqrt(gamma2))
+    R_dir = math.sqrt(rho * rho + (z_i - z_j) ** 2)
+    R_mir = math.sqrt(rho * rho + z_sum * z_sum)
+    if R_dir < 1e-9:
+        direct = -gamma
+    else:
+        direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
     lambdas, weights = _build_lambda_grid(
         z_sum=z_sum, rho_max=max(rho, 1e-6),
         omega=omega, sigma_top=sigma_earth,
@@ -465,11 +519,13 @@ def earth_return_correction_homogeneous(
     Gamma = reflection_coefficient_homogeneous(
         lambdas, omega=omega, sigma_earth=sigma_earth,
     )
-    decay = np.exp(-lambdas * z_sum)
+    u1 = np.sqrt(lambdas * lambdas + gamma2)
+    decay = np.exp(-u1 * z_sum)
     bessel = j0(lambdas * rho)
-    # (Gamma - 1) for the *correction beyond perfect mirror* — see docstring.
-    integrand = (Gamma - 1.0) * decay * bessel
-    return complex(np.sum(weights * integrand))
+    reflected = complex(
+        np.sum(weights * (lambdas / u1) * Gamma * decay * bessel)
+    )
+    return complex(direct) - 1.0 / max(R_mir, 1e-9) + reflected
 
 
 def earth_return_correction_layered(
@@ -479,9 +535,11 @@ def earth_return_correction_layered(
 ) -> complex:
     """Layered-earth analogue of :func:`earth_return_correction_homogeneous`.
 
-    Uses :func:`reflection_coefficient_layered` for $\\Gamma_\\text{mag}$.
-    For the homogeneous case (``earth.n_layers == 1``) it short-circuits
-    to the single-layer formula.
+    Uses :func:`reflection_coefficient_layered` for the reflected
+    term; the $\\lambda/u_1$ weight, the exponents and the direct
+    attenuation use the top-layer parameters (conductors live in
+    layer 1). For ``earth.n_layers == 1`` it short-circuits to the
+    single-layer formula.
     """
     if omega <= 0.0:
         return 0.0 + 0.0j
@@ -494,21 +552,241 @@ def earth_return_correction_layered(
     if z_sum <= 0.0:
         z_sum = 1e-3
     sigma_top = 1.0 / earth.rhos[0]
+    gamma2 = 1j * omega * MU_0 * sigma_top
+    gamma = complex(np.sqrt(gamma2))
+    R_dir = math.sqrt(rho * rho + (z_i - z_j) ** 2)
+    R_mir = math.sqrt(rho * rho + z_sum * z_sum)
+    if R_dir < 1e-9:
+        direct = -gamma
+    else:
+        direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
     lambdas, weights = _build_lambda_grid(
         z_sum=z_sum, rho_max=max(rho, 1e-6),
         omega=omega, sigma_top=sigma_top,
     )
     Gamma = reflection_coefficient_layered(lambdas, omega=omega, earth=earth)
-    decay = np.exp(-lambdas * z_sum)
+    u1 = np.sqrt(lambdas * lambdas + gamma2)
+    decay = np.exp(-u1 * z_sum)
     bessel = j0(lambdas * rho)
-    # (Gamma - 1): correction beyond the ADR-0004 perfect-mirror term.
-    integrand = (Gamma - 1.0) * decay * bessel
-    return complex(np.sum(weights * integrand))
+    reflected = complex(
+        np.sum(weights * (lambdas / u1) * Gamma * decay * bessel)
+    )
+    return complex(direct) - 1.0 / max(R_mir, 1e-9) + reflected
 
 
 # ---------------------------------------------------------------------
 # Segment-pair integration via 16x16 Gauss-Legendre outer
 # ---------------------------------------------------------------------
+
+
+def _spectral_rho_interp(
+    rho_grid: np.ndarray,
+    z_ref: float,
+    spectral_weights: np.ndarray,   # (nλ,) complex — kernel × λ-weights
+    lambdas: np.ndarray,
+    *,
+    n_nodes: int = 24,
+) -> np.ndarray:
+    """Evaluate $S(\\rho) = \\sum_\\lambda w(\\lambda) J_0(\\lambda\\rho)$
+    on the outer grid via 1-D interpolation.
+
+    The spectral integral is a *smooth, monotone-decaying* function
+    of $\\rho$ (the $J_0$ oscillations integrate out), so it is
+    evaluated exactly on ``n_nodes`` log-spaced $\\rho$-nodes and
+    linearly interpolated in $t = \\log(\\rho + z_\\text{ref})$ to
+    the full 16×16 grid. This replaces the historic
+    ``(16, 16, nλ)`` tensor evaluation, whose cost exploded with the
+    oscillation-resolved λ-grid for distant segment pairs
+    (~2 s/pair at ρ = 200 m; now milliseconds) — audit 2026-07-08,
+    WP-C1 performance note.
+    """
+    rho_min = float(rho_grid.min())
+    rho_max = float(rho_grid.max())
+    if rho_max - rho_min < 1e-9:
+        s_val = complex(np.sum(spectral_weights * j0(lambdas * rho_min)))
+        return np.full(rho_grid.shape, s_val, dtype=complex)
+    z_off = max(z_ref, 1e-3)
+    t_lo = math.log(rho_min + z_off)
+    t_hi = math.log(rho_max + z_off)
+    t_nodes = np.linspace(t_lo, t_hi, n_nodes)
+    rho_nodes = np.exp(t_nodes) - z_off
+    # Exact evaluation at the nodes: (n_nodes, nλ) — small.
+    s_nodes = (
+        j0(lambdas[None, :] * np.maximum(rho_nodes, 0.0)[:, None])
+        @ spectral_weights
+    )
+    t_grid = np.log(rho_grid + z_off)
+    s_re = np.interp(t_grid.ravel(), t_nodes, s_nodes.real)
+    s_im = np.interp(t_grid.ravel(), t_nodes, s_nodes.imag)
+    return (s_re + 1j * s_im).reshape(rho_grid.shape)
+
+
+def _pollaczek_inner_kernel(
+    rho_grid: np.ndarray,      # (16, 16) horizontal distances
+    dz_grid: np.ndarray,       # (16, 16) signed z_a - z_b
+    depth_a: np.ndarray,       # (16,)   |z| along segment a
+    depth_b: np.ndarray,       # (16,)   |z| along segment b
+    buried_a: bool,
+    buried_b: bool,
+    *,
+    omega: float,
+    sigma_top: float,
+    lambdas: np.ndarray,
+    lambda_weights: np.ndarray,
+    Gamma: np.ndarray,
+) -> np.ndarray:
+    """Pollaczek correction kernel on the outer 16×16 node grid.
+
+    Returns the correction **beyond the ADR-0004 additive-mirror
+    baseline** (see module docstring): the closed-form mirror
+    deduplication $-1/R'$, plus (buried–buried) the closed-form
+    direct-term attenuation $(e^{-\\gamma R} - 1)/R$, plus the
+    numerically integrated reflected/transmitted remainder of the
+    case-specific kernel. The spectral part uses the pair's mean
+    depth sum (segments assumed approximately horizontal — same
+    assumption as the historic kernel reuse, ADR-0006 numerical
+    notes) and is interpolated over $\\rho$
+    (:func:`_spectral_rho_interp`).
+    """
+    gamma2 = 1j * omega * MU_0 * sigma_top
+    gamma = np.sqrt(gamma2)
+    u1 = np.sqrt(lambdas * lambdas + gamma2)
+
+    ha = depth_a[:, None]                     # (16, 1)
+    hb = depth_b[None, :]                     # (1, 16)
+
+    if buried_a and buried_b:
+        z_sum = ha + hb
+        z_ref = float(z_sum.mean())
+        # Closed-form mirror dedup −1/R' (mirror at z = −h_b).
+        R_mir = np.sqrt(rho_grid ** 2 + z_sum ** 2)
+        inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
+        # Closed-form direct-term attenuation (e^{−γR} − 1)/R —
+        # smooth at R → 0 (limit −γ); carries the earth-return
+        # resistance of the buried path.
+        R3 = np.sqrt(rho_grid ** 2 + dz_grid ** 2)
+        small = R3 < 1e-9
+        R3_safe = np.where(small, 1.0, R3)
+        direct = np.where(
+            small, -gamma, (np.exp(-gamma * R3_safe) - 1.0) / R3_safe,
+        )
+        inner = inner + direct
+        # Reflected remainder: (λ/u1)·Γ·e^{−u1(h+h')} — decays like
+        # Γ ~ γ²/(4λ²) at large λ, absolutely convergent.
+        spectral_w = (lambdas / u1) * Gamma * np.exp(-u1 * z_ref) \
+            * lambda_weights
+        inner = inner + _spectral_rho_interp(
+            rho_grid, z_ref, spectral_w, lambdas,
+        )
+        return inner
+
+    if (not buried_a) and (not buried_b):
+        # Overhead pair — Carson geometry: air-side reflection −Γ.
+        z_sum = ha + hb
+        z_ref = float(z_sum.mean())
+        R_mir = np.sqrt(rho_grid ** 2 + z_sum ** 2)
+        inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
+        spectral_w = -Gamma * np.exp(-lambdas * z_ref) * lambda_weights
+        inner = inner + _spectral_rho_interp(
+            rho_grid, z_ref, spectral_w, lambdas,
+        )
+        return inner
+
+    # Mixed pair: transmission through the soil surface. Assign the
+    # buried depth h and overhead height H per grid axis.
+    if buried_a:
+        h_g, H_g = ha, hb
+    else:
+        h_g, H_g = hb, ha
+    h_ref = float(h_g.mean())
+    H_ref = float(H_g.mean())
+    # Mirror dedup: the ADR-0004 mirror of the buried segment sits at
+    # −h, i.e. on the air side → mirror distance carries |h − H|.
+    R_mir = np.sqrt(rho_grid ** 2 + (h_g - H_g) ** 2)
+    inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
+    # Transmitted kernel minus the free-space direct term (the
+    # direct 1/R lives in the Neumann matrix): both decay with
+    # (h + H), so the remainder is integrable on the shared grid.
+    spectral_w = (
+        (2.0 * lambdas / (u1 + lambdas))
+        * np.exp(-u1 * h_ref - lambdas * H_ref)
+        - np.exp(-lambdas * (h_ref + H_ref))
+    ) * lambda_weights
+    inner = inner + _spectral_rho_interp(
+        rho_grid, h_ref + H_ref, spectral_w, lambdas,
+    )
+    return inner
+
+
+def _pollaczek_pair_integral(
+    p1_a: np.ndarray, p2_a: np.ndarray,
+    p1_b: np.ndarray, p2_b: np.ndarray,
+    *,
+    omega: float,
+    sigma_top: float,
+    gamma_provider,
+) -> complex:
+    """Shared geometric integration for both earth models.
+
+    ``gamma_provider(lambdas)`` returns the reflection coefficient
+    array (homogeneous or layered).
+    """
+    p1_a = np.asarray(p1_a, dtype=float)
+    p2_a = np.asarray(p2_a, dtype=float)
+    p1_b = np.asarray(p1_b, dtype=float)
+    p2_b = np.asarray(p2_b, dtype=float)
+    if omega <= 0.0 or sigma_top <= 0.0:
+        return 0.0 + 0.0j
+    da = p2_a - p1_a
+    db = p2_b - p1_b
+    la = float(np.linalg.norm(da))
+    lb = float(np.linalg.norm(db))
+    if la <= 0.0 or lb <= 0.0:
+        return 0.0 + 0.0j
+    ua = da / la
+    ub = db / lb
+    dot = float(ua @ ub)
+    if abs(dot) < 1e-12:
+        return 0.0 + 0.0j  # orthogonal segments
+
+    # Outer grids.
+    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
+    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
+    pts_a = p1_a[None, :] + s_nodes[:, None] * da[None, :]
+    pts_b = p1_b[None, :] + s_nodes[:, None] * db[None, :]
+    diff = pts_a[:, None, :] - pts_b[None, :, :]
+    rho_grid = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
+    dz_grid = diff[:, :, 2]
+    z_a = pts_a[:, 2]
+    z_b = pts_b[:, 2]
+    depth_a = np.abs(z_a)
+    depth_b = np.abs(z_b)
+    # Side dispatch by segment midpoint (segments crossing z = 0 are
+    # blocked upstream by the surface-plane guard in
+    # build_inductance_matrix).
+    buried_a = bool(0.5 * (z_a[0] + z_a[-1]) >= 0.0)
+    buried_b = bool(0.5 * (z_b[0] + z_b[-1]) >= 0.0)
+
+    z_sum_grid = depth_a[:, None] + depth_b[None, :]
+    z_sum_worst = max(float(z_sum_grid.min()), 1e-3)
+    rho_max = float(rho_grid.max() + 1e-9)
+    lambdas, lambda_weights = _build_lambda_grid(
+        z_sum=z_sum_worst, rho_max=rho_max,
+        omega=omega, sigma_top=sigma_top,
+    )
+    Gamma = gamma_provider(lambdas)
+
+    inner = _pollaczek_inner_kernel(
+        rho_grid, dz_grid, depth_a, depth_b, buried_a, buried_b,
+        omega=omega, sigma_top=sigma_top,
+        lambdas=lambdas, lambda_weights=lambda_weights, Gamma=Gamma,
+    )
+
+    outer_w = w_nodes[:, None] * w_nodes[None, :]
+    geom_integral = complex(np.sum(outer_w * inner))
+    geom_integral *= la * lb * dot
+
+    return 1j * omega * MU_0 / (4.0 * math.pi) * geom_integral
 
 
 def sommerfeld_pair_integral_homogeneous(
@@ -529,17 +807,21 @@ def sommerfeld_pair_integral_homogeneous(
     dl_i\\,dl_j,
     $$
 
-    where $\\Delta G_\\text{mag} = G_\\text{mag} - 1/R$ is the
-    σ-dependent earth-return correction (vanishes for σ → 0). Used
-    by :func:`build_sommerfeld_correction_matrix`.
+    where $\\Delta G_\\text{mag}$ is the σ-dependent earth-return
+    correction beyond the ADR-0004 additive-mirror baseline
+    (vanishes for σ → 0 together with the mirror; see the module
+    docstring for the case-dispatched Pollaczek kernels). Used by
+    :func:`build_sommerfeld_correction_matrix`.
 
     The integration is 16×16 Gauss–Legendre over the two segment
     parameterisations. The Sommerfeld inner integral is **not**
-    re-evaluated at every outer node — instead the kernel
-    $K(\\lambda) = \\Gamma(\\lambda)\\,e^{-\\lambda(z_i+z_j)}$ is
-    computed once per segment pair and reused (valid because the
-    segments are assumed approximately horizontal so $z_i + z_j$
-    varies negligibly along them; see ADR-0006 numerical notes).
+    re-evaluated at every outer node — the spectral kernel is
+    computed once per segment pair on a shared λ-grid and reused
+    (valid because the segments are assumed approximately horizontal
+    so the depth sum varies negligibly along them; see ADR-0006
+    numerical notes). The closed-form pieces (mirror deduplication
+    $-1/R'$; buried–buried direct attenuation
+    $(e^{-\\gamma R} - 1)/R$) are evaluated exactly per outer node.
 
     Returns
     -------
@@ -547,67 +829,18 @@ def sommerfeld_pair_integral_homogeneous(
         Per-pair earth-return correction in $\\Omega$ (already
         includes the $j\\omega\\mu_0/(4\\pi)$ pre-factor).
     """
-    p1_a = np.asarray(p1_a, dtype=float)
-    p2_a = np.asarray(p2_a, dtype=float)
-    p1_b = np.asarray(p1_b, dtype=float)
-    p2_b = np.asarray(p2_b, dtype=float)
     if omega <= 0.0 or sigma_earth <= 0.0:
         return 0.0 + 0.0j
-    da = p2_a - p1_a
-    db = p2_b - p1_b
-    la = float(np.linalg.norm(da))
-    lb = float(np.linalg.norm(db))
-    if la <= 0.0 or lb <= 0.0:
-        return 0.0 + 0.0j
-    ua = da / la
-    ub = db / lb
-    dot = float(ua @ ub)
-    if abs(dot) < 1e-12:
-        return 0.0 + 0.0j  # orthogonal segments
 
-    # Build outer grids.
-    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
-    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
-    pts_a = p1_a[None, :] + s_nodes[:, None] * da[None, :]
-    pts_b = p1_b[None, :] + s_nodes[:, None] * db[None, :]
-    diff = pts_a[:, None, :] - pts_b[None, :, :]
-    rho_pair = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
-    z_a = pts_a[:, 2]  # 16 values
-    z_b = pts_b[:, 2]  # 16 values
-    z_sum_grid = np.abs(z_a[:, None]) + np.abs(z_b[None, :])  # 16x16
+    def _gamma(lambdas: np.ndarray) -> np.ndarray:
+        return reflection_coefficient_homogeneous(
+            lambdas, omega=omega, sigma_earth=sigma_earth,
+        )
 
-    # Build a single lambda grid sized to the worst-case z_sum.
-    z_sum_worst = max(float(z_sum_grid.min()), 1e-3)
-    rho_max = float(rho_pair.max() + 1e-9)
-    lambdas, lambda_weights = _build_lambda_grid(
-        z_sum=z_sum_worst, rho_max=rho_max,
-        omega=omega, sigma_top=sigma_earth,
+    return _pollaczek_pair_integral(
+        p1_a, p2_a, p1_b, p2_b,
+        omega=omega, sigma_top=sigma_earth, gamma_provider=_gamma,
     )
-    Gamma = reflection_coefficient_homogeneous(
-        lambdas, omega=omega, sigma_earth=sigma_earth,
-    )
-
-    # For each outer (i, j) point pair, compute the inner Sommerfeld
-    # integral I(rho_ij, z_sum_ij) = sum_lam w_lam (Gamma-1) e^{-lam·z_sum} J_0(lam·rho).
-    # The (Gamma - 1) factor (rather than Gamma) makes this the
-    # *correction beyond ADR-0004's perfect mirror* — see the docstring
-    # of earth_return_correction_homogeneous.
-    decay = np.exp(-lambdas[None, None, :] * z_sum_grid[:, :, None])
-    bessel = j0(lambdas[None, None, :] * rho_pair[:, :, None])
-    integrand = (Gamma[None, None, :] - 1.0) * decay * bessel
-    inner = np.sum(integrand * lambda_weights[None, None, :], axis=2)  # (16, 16)
-
-    # Outer integration with the dot product factor.
-    # Note: each "ds" carries a Jacobian la, lb because we integrate
-    # over s in [0, 1] but the path length is la or lb.
-    outer_w = w_nodes[:, None] * w_nodes[None, :]
-    geom_integral = float(np.sum(outer_w * inner.real)) + 1j * float(
-        np.sum(outer_w * inner.imag)
-    )
-    geom_integral *= la * lb * dot
-
-    # Pre-factor jω·μ_0 / (4π).
-    return 1j * omega * MU_0 / (4.0 * math.pi) * geom_integral
 
 
 def sommerfeld_pair_integral_layered(
@@ -616,62 +849,32 @@ def sommerfeld_pair_integral_layered(
     *,
     omega: float, earth: LayeredEarth,
 ) -> complex:
-    """Layered-earth analogue of :func:`sommerfeld_pair_integral_homogeneous`."""
+    """Layered-earth analogue of :func:`sommerfeld_pair_integral_homogeneous`.
+
+    The reflected term uses the layered reflection coefficient; the
+    $\\lambda/u_1$ weight, the $e^{-u_1(\\cdot)}$ exponents and the
+    buried direct-term attenuation use the **top-layer** $u_1$ /
+    $\\gamma_1$ (the conductors live in layer 1 — deeper layers act
+    through the reflection coefficient only).
+    """
     if earth.n_layers == 1:
         return sommerfeld_pair_integral_homogeneous(
             p1_a, p2_a, p1_b, p2_b,
             omega=omega, sigma_earth=1.0 / earth.rhos[0],
         )
-    p1_a = np.asarray(p1_a, dtype=float)
-    p2_a = np.asarray(p2_a, dtype=float)
-    p1_b = np.asarray(p1_b, dtype=float)
-    p2_b = np.asarray(p2_b, dtype=float)
     if omega <= 0.0:
         return 0.0 + 0.0j
-    da = p2_a - p1_a
-    db = p2_b - p1_b
-    la = float(np.linalg.norm(da))
-    lb = float(np.linalg.norm(db))
-    if la <= 0.0 or lb <= 0.0:
-        return 0.0 + 0.0j
-    ua = da / la
-    ub = db / lb
-    dot = float(ua @ ub)
-    if abs(dot) < 1e-12:
-        return 0.0 + 0.0j
-
-    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
-    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
-    pts_a = p1_a[None, :] + s_nodes[:, None] * da[None, :]
-    pts_b = p1_b[None, :] + s_nodes[:, None] * db[None, :]
-    diff = pts_a[:, None, :] - pts_b[None, :, :]
-    rho_pair = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
-    z_a = pts_a[:, 2]
-    z_b = pts_b[:, 2]
-    z_sum_grid = np.abs(z_a[:, None]) + np.abs(z_b[None, :])
-
-    z_sum_worst = max(float(z_sum_grid.min()), 1e-3)
-    rho_max = float(rho_pair.max() + 1e-9)
     sigma_top = 1.0 / earth.rhos[0]
-    lambdas, lambda_weights = _build_lambda_grid(
-        z_sum=z_sum_worst, rho_max=rho_max,
-        omega=omega, sigma_top=sigma_top,
+
+    def _gamma(lambdas: np.ndarray) -> np.ndarray:
+        return reflection_coefficient_layered(
+            lambdas, omega=omega, earth=earth,
+        )
+
+    return _pollaczek_pair_integral(
+        p1_a, p2_a, p1_b, p2_b,
+        omega=omega, sigma_top=sigma_top, gamma_provider=_gamma,
     )
-    Gamma = reflection_coefficient_layered(lambdas, omega=omega, earth=earth)
-
-    decay = np.exp(-lambdas[None, None, :] * z_sum_grid[:, :, None])
-    bessel = j0(lambdas[None, None, :] * rho_pair[:, :, None])
-    # (Gamma - 1): correction beyond ADR-0004 perfect mirror.
-    integrand = (Gamma[None, None, :] - 1.0) * decay * bessel
-    inner = np.sum(integrand * lambda_weights[None, None, :], axis=2)
-
-    outer_w = w_nodes[:, None] * w_nodes[None, :]
-    geom_integral = float(np.sum(outer_w * inner.real)) + 1j * float(
-        np.sum(outer_w * inner.imag)
-    )
-    geom_integral *= la * lb * dot
-
-    return 1j * omega * MU_0 / (4.0 * math.pi) * geom_integral
 
 
 # ---------------------------------------------------------------------

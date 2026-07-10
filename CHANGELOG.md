@@ -26,6 +26,50 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+### Fixed — inductive earth-return stack consolidated (audit 2026-07-08, WP-C)
+
+The audit's headline physics finding: the inductive coupling stack
+(`earth_inductive_model`) had three structural defects that made
+quantitative Z(f) statements above ~100 Hz unreliable. All three are
+fixed; the galvanic (resistive) results are unaffected.
+
+- **`sommerfeld` is now a genuine Pollaczek kernel** (ADR-0006
+  amendment). The historic kernel `1/R + ∫Γ e^{-λ(z+z')}J0` dropped
+  the in-soil attenuation `e^{-γR}` of the primary term — which
+  carries the buried-wire earth-return *resistance* — and produced
+  `Re Z' ≈ −ωμ0/8` per metre (Carson's value with the wrong sign);
+  it also applied the soil-side reflection `+Γ` to overhead
+  conductors (air side requires `−Γ`). The kernel now dispatches per
+  segment pair (buried/overhead/mixed), keeps the mirror
+  deduplication `−1/R'` and the direct attenuation `(e^{-γR}−1)/R`
+  in closed form, and integrates only the smooth remainder.
+  **Validated against Pollaczek's analytic K0 mutual** (Im to ~1 %,
+  Re to a few % chain truncation, correct positive sign) and the
+  σ-limits: σ→0 → free space (no image), σ→∞ → screened (buried) /
+  anti-parallel PEC image (overhead).
+- **Spectral part interpolated over ρ** instead of the historic
+  `(16,16,nλ)` tensor evaluation: distant segment pairs drop from
+  ~2 s to milliseconds per pair (the smooth Hankel integral is
+  evaluated on 24 log-spaced ρ-nodes and interpolated).
+- **`carson_series` matrix is mesh-convergent** (tiling convention):
+  collinear same-wire segment pairs no longer receive a pseudo-mutual
+  term (with the axial midpoint distance misread as Carson's
+  perpendicular wire separation — the assembled correction grew
+  ~linearly with the segment count; measured branch-current drift of
+  ~2.5× between dsl = 50 m and 6.25 m, now < 1e-3). Near-parallel
+  pairs on distinct axes tile the per-metre mutual by their **axial
+  overlap length** at the **perpendicular** axis separation — the
+  assembled block reproduces `z'·ℓ` independent of segmentation.
+- Behaviour change: results with `earth_inductive_model` set to
+  `"sommerfeld"` or `"carson_series"` change (they were wrong);
+  `"perfect_mirror"` remains bit-stable and stays the default, but
+  is now documented as a frequency-independent baseline whose
+  additive image is far from the f < 1 kHz physics of buried
+  conductors — use `"sommerfeld"` for quantitative Z(f).
+- New regression suite `tests/test_audit_inductive_stack.py`
+  (Pollaczek K0 reference, σ-limit semantics, Carson mesh
+  convergence at matrix and solver level).
+
 ### Fixed — quadrature defects in the coupling kernels (audit 2026-07-08, WP-B)
 
 - **`layered_green` Hankel grid resolves the Bessel oscillations.**

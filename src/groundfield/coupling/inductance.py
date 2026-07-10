@@ -734,17 +734,38 @@ def build_carson_correction_matrix(
     but is **complex** and **frequency-dependent** — it is therefore
     rebuilt at every frequency by the solver.
 
-    Each entry is the Carson per-unit-length correction integrated
-    over the segment length(s) by the **midpoint rule** in the
-    longitudinal direction. For two parallel segments of equal length
-    $\\ell$, the midpoint rule recovers the per-unit-length result
-    exactly because the Carson correction is uniform along the wire
-    (translation invariance of the homogeneous half-space). For
-    non-parallel segments we project onto the parallel component of
-    the segment-pair geometry — Carson's original derivation only
-    covers parallel wires, and any orthogonal component contributes
-    zero by symmetry (cf. ADR-0005 §"Decision/Earth-conductivity
-    source").
+    Tiling convention (audit 2026-07-08, WP-C3)
+    -------------------------------------------
+    Carson's correction is an *infinite-wire, per-unit-length*
+    concept. To make the assembled matrix consistent — and, crucially,
+    **convergent under mesh refinement** — the per-pair entries tile
+    the per-unit-length values without double counting:
+
+    - **Diagonal** ``dZ[i, i]``: self correction per metre × segment
+      length. Summed over a refined straight wire this reproduces the
+      full ``z'_self · ℓ`` exactly, independent of the segment count.
+    - **Collinear pairs** (same axis, negligible perpendicular
+      offset): **zero.** The infinite-wire self value on the diagonal
+      already contains the interaction with the rest of the same
+      wire. The historic implementation additionally added a
+      "mutual" term per collinear pair — with the axial midpoint
+      distance misread as Carson's perpendicular wire separation —
+      which made the assembled correction grow roughly linearly with
+      the segment count (measured in the audit: no mesh convergence).
+    - **Near-parallel pairs on distinct axes** (``|cosφ| > 0.99``):
+      mutual correction per metre at the **perpendicular** horizontal
+      axis separation, weighted by the **axial overlap length** of
+      the two segment intervals. Summing over the segments of the
+      other wire recovers ``z'_mutual · ℓ_i`` exactly — refinement-
+      invariant. Non-overlapping (e.g. staggered or end-to-end)
+      pairs contribute zero: the long-range log tail is treated as
+      part of the infinite-wire per-metre value, in line with the
+      transmission-line locality of Carson's derivation.
+    - **Oblique pairs** (``1e-9 < |cosφ| ≤ 0.99``): the historic
+      projected geometric-mean heuristic is retained (Carson's
+      derivation only covers parallel wires; oblique pairs are rare
+      in Manhattan-routed networks). Orthogonal pairs contribute
+      zero by symmetry.
 
     Earth-conductivity sign convention
     ----------------------------------
@@ -820,18 +841,51 @@ def build_carson_correction_matrix(
         )
         dZ[i, i] = dz_per_m * lengths[i]
         for j in range(i + 1, M):
-            # Project segment j onto segment i's axis to get the
-            # "parallel" length. Orthogonal components contribute
-            # zero per the Neumann projection theorem (Carson's
-            # derivation is for parallel filaments).
             dot = float(unit_axes[i] @ unit_axes[j])
             if abs(dot) < 1e-9:
-                continue  # purely orthogonal
-            # Horizontal distance between the two midpoints, in the
-            # plane perpendicular to the soil normal.
-            dx = midpoints[i, 0] - midpoints[j, 0]
-            dy = midpoints[i, 1] - midpoints[j, 1]
-            d_horiz = math.hypot(dx, dy)
+                continue  # purely orthogonal — zero by symmetry
+            sign = 1.0 if dot > 0.0 else -1.0
+            d_vec = midpoints[j] - midpoints[i]
+
+            if abs(dot) > 0.99:
+                # Near-parallel: transmission-line tiling (WP-C3).
+                u = unit_axes[i]
+                axial = float(d_vec @ u)
+                perp = d_vec - axial * u
+                d_perp_horiz = math.hypot(perp[0], perp[1])
+                d_perp_vert = abs(perp[2])
+                same_axis = (
+                    d_perp_horiz < max(wire_radii[i], wire_radii[j], 1e-3)
+                    and d_perp_vert < 1e-6
+                )
+                if same_axis:
+                    # Same wire: earth term fully carried by the
+                    # per-length diagonals — adding a "mutual" here
+                    # double-counts (historic non-convergence bug).
+                    continue
+                # Axial overlap of the two segment intervals along u.
+                t_i0 = float((seg_endpoints[i, 0] - midpoints[i]) @ u)
+                t_i1 = float((seg_endpoints[i, 1] - midpoints[i]) @ u)
+                lo_i, hi_i = min(t_i0, t_i1), max(t_i0, t_i1)
+                t_j0 = float((seg_endpoints[j, 0] - midpoints[i]) @ u)
+                t_j1 = float((seg_endpoints[j, 1] - midpoints[i]) @ u)
+                lo_j, hi_j = min(t_j0, t_j1), max(t_j0, t_j1)
+                overlap = min(hi_i, hi_j) - max(lo_i, lo_j)
+                if overlap <= 0.0:
+                    continue  # staggered/end-to-end: no local tiling
+                dz_per_m = carson_mutual_correction(
+                    omega=omega,
+                    height_i=heights[i],
+                    height_j=heights[j],
+                    horizontal_distance=d_perp_horiz,
+                    sigma_earth=sigma_earth,
+                )
+                dZ[i, j] = dZ[j, i] = sign * dz_per_m * overlap
+                continue
+
+            # Oblique pair: historic projected geometric-mean
+            # heuristic (rare in Manhattan-routed networks).
+            d_horiz = math.hypot(d_vec[0], d_vec[1])
             dz_per_m = carson_mutual_correction(
                 omega=omega,
                 height_i=heights[i],
@@ -839,9 +893,6 @@ def build_carson_correction_matrix(
                 horizontal_distance=d_horiz,
                 sigma_earth=sigma_earth,
             )
-            # Effective length: geometric mean projected by the
-            # cosine of the segment-pair angle.
             ell = math.sqrt(lengths[i] * lengths[j]) * abs(dot)
-            sign = 1.0 if dot > 0.0 else -1.0
             dZ[i, j] = dZ[j, i] = sign * dz_per_m * ell
     return dZ

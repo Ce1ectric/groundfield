@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — kernel corrected to the genuine Pollaczek form 2026-07-09 (audit 2026-07-08, WP-C1; see the amendment at the end of this document) |
 | **Date** | 2026-05-07 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -299,3 +299,49 @@ module.
 - **Stratton, J. A.** (1941). *Electromagnetic Theory*,
   McGraw-Hill. §9-10 — derivation of the half-space vector
   potential.
+
+---
+
+## Amendment 2026-07-09 — Pollaczek kernel (audit 2026-07-08, WP-C1)
+
+The 2026-07-08 physics audit found two structural defects in the
+kernel as originally implemented (`1/R + ∫Γ e^{-λ(z+z')}J0`):
+
+1. The primary term kept the **static** `1/R` instead of the in-soil
+   attenuated `e^{-γR}/R`. For buried conductors the attenuation is
+   precisely where the earth-return **resistance** lives; the
+   remaining `(Γ-1)` correction accumulated to ≈ `-ωμ0/8` per metre —
+   Carson's value with the **wrong sign** (verified numerically).
+   The "Carson recovered as long-wire asymptote" row in the limit
+   table above was never actually implemented as a test and does not
+   hold for the historic kernel's real part.
+2. The soil-side reflection `+Γ` was applied to **overhead**
+   conductors as well; the air-side boundary condition requires `-Γ`
+   (Carson's geometry).
+
+The implementation now dispatches per segment pair (buried–buried /
+overhead–overhead / mixed) with the genuine quasi-static Pollaczek
+kernels (see the module docstring of
+`coupling/sommerfeld_inductance.py`), keeps the mirror deduplication
+`-1/R'` and the buried direct-term attenuation `(e^{-γR}-1)/R` in
+closed form, and integrates only the smooth reflected/transmitted
+remainder (interpolated over ρ — the historic `(16,16,nλ)` tensor
+evaluation cost up to ~2 s per distant segment pair, now
+milliseconds).
+
+**Corrected limit table** (regression-tested in
+`tests/test_audit_inductive_stack.py` and
+`tests/test_sommerfeld_inductance.py`):
+
+| Limit | Result |
+|---|---|
+| $\sigma_e \to 0$ | free space, **no image** (magnetically transparent earth) |
+| $\sigma_e \to \infty$, overhead pair | **anti-parallel PEC image** $1/R - 1/R'$ (Carson baseline) |
+| $\sigma_e \to \infty$, buried pair | total coupling → 0 (conductor screened by the medium) |
+| Long parallel buried wires | Pollaczek's $\frac{j\omega\mu_0}{2\pi}[K_0(\gamma d) - K_0(\gamma D') + J_P]$, with $\mathrm{Re} \to +\omega\mu_0/8$ per m at low frequency — validated to ~1 % (Im) / few % (Re, chain truncation) |
+
+Consequence for `perfect_mirror`: the default remains available and
+bit-stable, but it is now documented as a frequency-independent
+*baseline* whose additive image is far from the f < 1 kHz physics of
+buried conductors (audit finding F5) — use `"sommerfeld"` whenever
+quantitative Z(f) matters.

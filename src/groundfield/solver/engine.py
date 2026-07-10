@@ -135,15 +135,23 @@ class Engine(BaseModel):
           length of each segment-pair. Asymptotically correct for
           long parallel wires over homogeneous earth; an approximation
           for short wires or layered soils.
-        - ``"sommerfeld"`` (ADR-0006) — geometric integration of the
+        - ``"sommerfeld"`` (ADR-0006, Pollaczek kernel since the
+          2026-07-08 audit, WP-C1) — geometric integration of the
           σ-dependent vector-potential Green's function over the
-          actual segment-pair geometry. Rigorous for arbitrary wire
-          lengths and orientations, and supports layered earth
-          natively (Pollaczek/Wait kernel). Reduces to
-          ``perfect_mirror`` at $\\sigma \\to \\infty$ and to free
-          space at $\\sigma \\to 0$; converges to ``carson_series``
-          on the cluster-impedance level for long parallel wires
-          over homogeneous earth.
+          actual segment-pair geometry, dispatched by conductor
+          side: buried pairs carry the in-soil attenuation
+          $e^{-\\gamma R}$ (and with it the **positive**
+          earth-return resistance $\\approx \\omega\\mu_0/8$ per
+          metre in the long-wire limit), overhead pairs use the
+          air-side reflection (Carson's geometry). Supports layered
+          earth. Limits: $\\sigma \\to 0$ → free space (no image);
+          $\\sigma \\to \\infty$ → screened (buried) / anti-parallel
+          PEC image (overhead). Validated against Pollaczek's
+          analytic $K_0$ mutual. **Recommended whenever quantitative
+          Z(f) above ~100 Hz matters** — the ``perfect_mirror``
+          default is a frequency-independent baseline whose additive
+          image is far from the f < 1 kHz physics of buried
+          conductors (audit finding F5).
     """
 
     model_config = ConfigDict(extra="forbid")

@@ -129,14 +129,28 @@ def test_sigma_zero_recovers_lipschitz_hankel(z_sum: float, rho: float) -> None:
     assert abs(val.imag) < 1e-6
 
 
-def test_sigma_infinite_correction_vanishes() -> None:
-    """At $\\sigma \\to \\infty$, $(\\Gamma - 1) \\to 0$, integral
-    vanishes — ADR-0004 perfect-mirror is unchanged."""
+def test_sigma_infinite_buried_pair_is_screened() -> None:
+    """At $\\sigma \\to \\infty$ a buried pair is screened.
+
+    With the Pollaczek kernel (audit 2026-07-08, WP-C1) the buried
+    correction tends to $-1/R - 1/R'$: the attenuated direct term
+    $e^{-\\gamma R}/R \\to 0$ and the reflected term vanishes
+    ($\\lambda/u_1 \\to 0$), so the *total* coupling
+    (Neumann $1/R + 1/R'$ plus this correction) goes to zero —
+    a conductor embedded in a perfectly conducting medium carries no
+    external flux. (The historic kernel instead returned the
+    additive electrostatic mirror in this limit — one of the audit's
+    headline findings.)
+    """
+    rho, z_i, z_j = 5.0, 0.6, 0.6
     val = earth_return_correction_homogeneous(
-        rho=5.0, z_i=0.6, z_j=0.6,
+        rho=rho, z_i=z_i, z_j=z_j,
         omega=2.0 * math.pi * 50.0, sigma_earth=1e12,
     )
-    assert abs(val) < 1e-3
+    R_dir = math.sqrt(rho * rho + (z_i - z_j) ** 2)
+    R_mir = math.sqrt(rho * rho + (z_i + z_j) ** 2)
+    expected = -1.0 / R_dir - 1.0 / R_mir
+    assert val.real == pytest.approx(expected, rel=1e-3)
 
 
 # ---------------------------------------------------------------------
