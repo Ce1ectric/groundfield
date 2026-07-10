@@ -58,10 +58,12 @@ Validity
   collapses to the homogeneous image-charge sum exactly.
 - For ``n_layers == 2`` with a moderate $P$ (typically 6–10)
   the engine reproduces ``image_2layer`` to better than 0.1 %.
-- For ``n_layers ≥ 3`` the engine is the first one in the suite that
-  can be evaluated efficiently, and it forms one of the
-  cross-validation pairs in the test suite (against
-  ``mom_sommerfeld``).
+- ``n_layers ≥ 3`` is **rejected** (audit 2026-07-08, WP-E): the
+  historic complex-image expansion approximated an *incomplete*
+  Green's function (single image family, no multiple reflections —
+  see :mod:`groundfield.solver._layered`) and systematically
+  underestimated the layered correction. Use ``mom_sommerfeld`` or
+  ``fem`` for three and more layers.
 
 References
 ----------
@@ -464,6 +466,20 @@ def solve_cim(
     _warn_ignored_sources(world, "cim")
 
     stack = as_layer_stack(world.soil)
+    if stack.n_layers >= 3:
+        # Audit 2026-07-08, WP-E: the historic n>=3 CIM kernel
+        # implemented an incomplete Green's function (single
+        # (z+z_s)-type image family; missing the 2*h_1 families and
+        # the surface-interface multiple-reflection denominator — see
+        # solver/_layered.py). Reject loudly until a complete kernel
+        # exists.
+        raise NotImplementedError(
+            f"cim: n_layers = {stack.n_layers} >= 3 is not supported — "
+            "the historic complex-image kernel was structurally "
+            "incomplete (audit 2026-07-08). Use "
+            "backend='mom_sommerfeld' (full layered Green's function) "
+            "or 'fem' for n >= 3 soils."
+        )
     fit = fit_complex_images(stack, n_images=n_images, n_samples=n_samples)
     ds = engine.segment_length
 

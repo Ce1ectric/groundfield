@@ -181,9 +181,11 @@ def solve_image_nlayer(
         raise ValueError(
             f"image_nlayer: layer count {n} ≥ 3 is not supported by "
             "the real image-charge series (Γ_1(λ) is no longer "
-            "constant in λ). Use one of the engines designed for "
-            "this regime: 'cim' (complex images), 'mom_sommerfeld' "
-            "(direct Sommerfeld quadrature), or 'bem'."
+            "constant in λ). Use 'mom_sommerfeld' (direct Sommerfeld "
+            "quadrature of the full layered Green's function) or "
+            "'fem' — the 'cim'/'bem' n ≥ 3 kernels were found "
+            "structurally incomplete in the 2026-07-08 audit and "
+            "are rejected as well."
         )
 
     # Rewrite backend tag so that cross-engine reports use the unified label.

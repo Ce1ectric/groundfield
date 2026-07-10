@@ -17,11 +17,23 @@ a field point $(s, z)$ inside the upper layer is given by the
 $$
 \\varphi(s, z) \\;=\\; \\frac{\\rho_1\\, I}{4\\pi}\\,
 \\int_{0}^{\\infty}
-\\bigl[\\, e^{-\\lambda |z - z_s|}
-     + \\Gamma_1(\\lambda)\\, e^{-\\lambda (z + z_s)}\\bigr]
+\\frac{e^{-\\lambda |z - z_s|}
+     + \\Gamma_1\\, e^{-\\lambda (2 h_1 - |z - z_s|)}
+     + e^{-\\lambda (z + z_s)}
+     + \\Gamma_1\\, e^{-\\lambda (2 h_1 - z - z_s)}}
+     {1 - \\Gamma_1(\\lambda)\\, e^{-2 \\lambda h_1}}
 \\, J_0(\\lambda s)\\, d\\lambda,
 $$
-where $s$ is the cylindrical radius $\\sqrt{x^2 + y^2}$,
+with **both** reflected image families in the numerator and the
+surface-interface multiple-reflection denominator. *(Corrected in
+the 2026-07-08 audit, WP-E: the formula previously displayed here —
+$e^{-\\lambda|z-z_s|} + \\Gamma_1 e^{-\\lambda(z+z_s)}$ — is
+incomplete; it misses the $2h_1$ families and every multiple
+bounce. The historic ``cim``/``bem`` $n \\ge 3$ kernels
+implemented that incomplete form literally, which is why those
+backends now reject $n \\ge 3$ soils; ``mom_sommerfeld``
+implements the full form.)*
+Here $s$ is the cylindrical radius $\\sqrt{x^2 + y^2}$,
 $J_0$ the Bessel function of the first kind, and
 $\\Gamma_1(\\lambda)$ the **upward-looking reflection coefficient**
 seen at the bottom of layer 1, computed recursively from the bottom up:

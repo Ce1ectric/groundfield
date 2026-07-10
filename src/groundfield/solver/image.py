@@ -1336,10 +1336,21 @@ def _solve_cluster_currents(
         )
         if shell_diag is not None:
             phi_all = phi_all + shell_diag[:, None] * excitation
+        # Row reduction: **length-weighted** average of the segment
+        # potentials (audit 2026-07-08, WP-B3). This is the Galerkin
+        # pairing consistent with the length-weighted excitation
+        # columns and restores exact reciprocity Z[i, j] == Z[j, i]
+        # at the discrete level. The historic unweighted mean broke
+        # symmetry whenever an electrode carried segments of unequal
+        # length (mesh electrodes with dx/nx != dy/ny, rods split at
+        # the layer interface); for uniform per-electrode segment
+        # lengths — every rod/ring/strip — the two averages are
+        # identical, so historic results are unchanged there.
         Z = np.empty((N_a, N_a))
         for i, name_i in enumerate(active_elecs):
             idxs_i = elec_to_segidx[name_i]
-            Z[i, :] = phi_all[idxs_i, :].mean(axis=0)
+            w_i = seg_lengths[idxs_i]
+            Z[i, :] = (w_i @ phi_all[idxs_i, :]) / w_i.sum()
         if multiport_cache is not None:
             multiport_cache["active_elecs"] = list(active_elecs)
             multiport_cache["Z"] = Z

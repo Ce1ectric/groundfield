@@ -167,3 +167,66 @@ def test_multifrequency_inductive_solve_consistent() -> None:
     # |I_g2| decreases with frequency (rising PEN reactance).
     mags = [abs(i) for i in res_multi.electrode_currents["g2"]]
     assert mags[0] > mags[1] > mags[2]
+
+
+def test_multiport_z_exact_reciprocity_mixed_lengths() -> None:
+    """Length-weighted row reduction restores exact Z symmetry
+    (audit 2026-07-08, WP-B3).
+
+    A mesh electrode with unequal longitudinal/transverse segment
+    lengths plus a rod used to produce ``Z[i, j] != Z[j, i]`` at the
+    discretisation level (length-weighted excitation columns paired
+    with an *unweighted* potential average). With the Galerkin-
+    consistent length-weighted average the multiport matrix is
+    reciprocal to machine precision.
+    """
+    from groundfield.solver.image import (
+        _build_clusters,
+        _discretize_electrode,
+    )
+
+    w = gf.create_world(soil=SOIL)
+    # size 3.0 x 2.0 with ds = 0.7 -> longitudinal segments 0.6 m,
+    # transverse segments 0.5 m: unequal lengths inside one electrode.
+    gf.create_electrode(w, "mesh", name="g1", corner=(0.0, 0.0, 0.7),
+                        size=(3.0, 2.0), spacing=1.0, wire_radius=0.005)
+    gf.create_electrode(w, "rod", name="g2", position=(10.0, 0.0, 0.0),
+                        length=3.0, wire_radius=0.005)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    # A finite conductor keeps both electrodes in the active set.
+    gf.create_conductor(w, name="c", start="g1", end="g2",
+                        cross_section=50e-6)
+
+    segs = []
+    elec_to_segidx: dict[str, list[int]] = {}
+    for e in w.electrodes:
+        s = _discretize_electrode(e, 0.7)
+        elec_to_segidx[e.name] = list(range(len(segs), len(segs) + len(s)))
+        segs.extend(s)
+    pts = np.array([s.midpoint for s in segs])
+    lens = np.array([s.length for s in segs])
+    assert np.unique(np.round(lens[elec_to_segidx["g1"]], 12)).size > 1
+    radii = np.array([s.wire_radius for s in segs])
+    cluster_id = _build_clusters(w.electrodes, w.conductors)
+    from groundfield.solver.image import _build_finite_branches
+
+    branches = _build_finite_branches(w.conductors, cluster_id)
+
+    cache: dict = {}
+    _solve_cluster_currents(
+        electrodes=w.electrodes,
+        elec_input_current={"g1": 1.0 + 0j, "g2": 0j},
+        cluster_id=cluster_id,
+        seg_points=pts,
+        seg_lengths=lens,
+        wire_radii=radii,
+        elec_to_segidx=elec_to_segidx,
+        self_kernel=lambda p, ls, r, c: _self_corrected_kernel(
+            p, ls, r, c, RHO,
+        ),
+        finite_branches=branches,
+        multiport_cache=cache,
+    )
+    Z = cache["Z"]
+    asym = np.max(np.abs(Z - Z.T)) / np.max(np.abs(Z))
+    assert asym < 1e-13

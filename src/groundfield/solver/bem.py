@@ -35,13 +35,16 @@ soils $G(r) = 1/r + 1/r_{\\text{air-img}}$.
 
 Differences from ``mom``
 ------------------------
-- ``mom`` uses Galerkin (average potential) on a layered Green's
-  function expressed via the real Tagg/Sunde series (closed form for
-  ``n = 2``); ``bem`` uses collocation with the CIM kernel (closed
-  form for any ``n``).
-- The two engines therefore disagree at the ~1 % level on identical
-  inputs — they sample different aspects of the same continuum
-  problem. Their agreement is one of the cross-validation criteria.
+*(Corrected in the 2026-07-08 audit, WP-E/P4.)* For ``n <= 2`` the
+two engines assemble the **identical** reaction matrix from the same
+kernels and solve it with the same constraint solver — measured
+relative difference 4e-16. Their mutual agreement therefore
+validates the shared discretisation, **not** the physics; genuine
+methodological independence in the layered cross-checks comes from
+``mom_sommerfeld`` (direct Sommerfeld quadrature) and ``fem``
+(volume PDE). ``bem`` is kept as the collocation-flavoured entry
+point of the family; ``n >= 3`` soils are rejected (the historic
+CIM kernel was structurally incomplete).
 
 Validity
 --------
@@ -226,6 +229,17 @@ def solve_bem(
     _warn_ignored_sources(world, "bem")
 
     stack = as_layer_stack(world.soil)
+    if stack.n_layers >= 3:
+        # Audit 2026-07-08, WP-E: bem shares the historic incomplete
+        # n>=3 CIM kernel — reject loudly until a complete kernel
+        # exists.
+        raise NotImplementedError(
+            f"bem: n_layers = {stack.n_layers} >= 3 is not supported — "
+            "the shared complex-image kernel was structurally "
+            "incomplete (audit 2026-07-08). Use "
+            "backend='mom_sommerfeld' (full layered Green's function) "
+            "or 'fem' for n >= 3 soils."
+        )
     fit = fit_complex_images(stack, n_images=n_images, n_samples=n_samples)
     ds = engine.segment_length
 

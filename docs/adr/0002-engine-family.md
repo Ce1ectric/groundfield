@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — amended 2026-07-09 (audit WP-E, see the end of this document) |
 | **Date** | 2026-05-01 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -148,3 +148,30 @@ check.
 - [ ] Optional: scikit-fem-backed 3-D `fem` (lifted from the
       equivalent-hemisphere reduction) for full multi-cluster
       worlds; deferred until a concrete use case demands it.
+
+
+---
+
+## Amendment 2026-07-09 — engine-family independence (audit 2026-07-08, WP-E)
+
+Two corrections to this ADR's cross-validation narrative:
+
+1. **`bem` and `mom` are not independent for n ≤ 2.** They assemble
+   the identical reaction matrix from the same kernels and solve it
+   with the same constraint solver (measured relative difference
+   4e-16). Their agreement validates the shared discretisation, not
+   the physics. Genuine methodological independence in the layered
+   cross-checks comes from `mom_sommerfeld` (direct Sommerfeld
+   quadrature of the full layered Green's function) and `fem`
+   (volume PDE, with its documented equivalent-hemisphere reduction
+   bias). `cim` shares the exact Tagg/Sunde kernel with
+   `image_2layer` for n = 2.
+2. **`cim`/`bem` reject n ≥ 3 soils.** The historic n ≥ 3
+   complex-image kernel implemented an incomplete Green's function
+   (single (z+z_s) image family; missing the 2·h_1-reflected
+   families and the surface-interface multiple-reflection
+   denominator — see `solver/_layered.py`) and systematically
+   underestimated the layered correction. This ADR's designation of
+   `cim` as the primary n ≥ 3 engine is revoked until a complete
+   kernel exists; use `mom_sommerfeld` or `fem` for three and more
+   layers.

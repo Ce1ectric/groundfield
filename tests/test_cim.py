@@ -58,10 +58,15 @@ def test_cim_two_layer_matches_image_2layer(rho_2: float) -> None:
     )
 
 
-def test_cim_three_layer_collapse() -> None:
-    """ρ₁ = ρ₂ = ρ₃ → CIM result must collapse to the homogeneous one."""
+def test_cim_three_layer_rejected() -> None:
+    """n_layers >= 3 is rejected loudly (audit 2026-07-08, WP-E).
+
+    The historic n >= 3 complex-image kernel implemented an
+    incomplete Green's function (single image family, no multiple
+    reflections); until a complete kernel exists the backend raises
+    and points at mom_sommerfeld / fem.
+    """
     rho = 100.0
-    # Upper layer must be deep enough to contain the 1.5 m rod.
     multilayer = gf.MultiLayerSoil(
         layers=[
             gf.SoilLayer(resistivity=rho, thickness=2.0),
@@ -69,11 +74,9 @@ def test_cim_three_layer_collapse() -> None:
             gf.SoilLayer(resistivity=rho, thickness=None),
         ]
     )
-    homog = gf.HomogeneousSoil(resistivity=rho)
     eng = gf.create_engine(backend="cim", segment_length=SEG)
-    Z_ml = eng.solve(_world(multilayer)).cluster_impedance("g1")[0].real
-    Z_h = eng.solve(_world(homog)).cluster_impedance("g1")[0].real
-    assert abs(Z_ml - Z_h) / Z_h < 0.02
+    with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
+        eng.solve(_world(multilayer))
 
 
 def test_cim_rod_matches_dwight() -> None:
@@ -108,5 +111,6 @@ def test_cim_metadata() -> None:
         gf.SoilLayer(resistivity=400.0, thickness=2.0),
         gf.SoilLayer(resistivity=50.0, thickness=None),
     ])
-    res_3 = eng.solve(_world(soil_3))
-    assert res_3.metadata["cim_n_images"] >= 1
+    # n >= 3 is rejected since the WP-E audit fix.
+    with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
+        eng.solve(_world(soil_3))
