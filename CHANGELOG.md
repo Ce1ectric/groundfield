@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.11.0] — 2026-07-10
+
 ### Fixed — discrete reciprocity and honest n ≥ 3 handling (audit 2026-07-08, WP-B3/WP-E)
 
 - **Multiport Z is exactly reciprocal.** The grounding matrix paired
@@ -4381,7 +4387,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.9.0
 [0.8.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.8.1
