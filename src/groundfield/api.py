@@ -38,6 +38,7 @@ from groundfield.geometry.electrodes import (
     Electrode,
     GridMeshElectrode,
     MeshElectrode,
+    PolylineElectrode,
     RingElectrode,
     RodElectrode,
     StripElectrode,
@@ -140,6 +141,7 @@ def create_electrode(
         "rod": RodElectrode,
         "ring": RingElectrode,
         "strip": StripElectrode,
+        "polyline": PolylineElectrode,
         "mesh": MeshElectrode,
         "grid_mesh": GridMeshElectrode,
     }

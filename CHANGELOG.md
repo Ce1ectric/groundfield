@@ -26,7 +26,53 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — foundation ring along the real building outline (`PolylineElectrode`)
+
+Foundation electrodes could only be rectangles. Placing the ring on
+the *oriented bounding rectangle* (OMBR) of an OSM footprint has two
+consequences that only become visible at scale (AP1 catalogue, 196
+real low-voltage networks):
+
+- **Coincident conductors.** Terraced and semi-detached houses are
+  separate polygons sharing a party wall; their OMBRs share an edge.
+  L-/U-shaped buildings have OMBRs that overlap *other* buildings
+  outright. The resulting foundation strips fall on top of each other,
+  and the reaction-matrix assembly saturates their mutual coupling at
+  the 1 mm singularity clamp (the `clamp` warning added in 0.11.0).
+  Measured on the AP1 station set: **184 of 196 sites** carry at least
+  one such pair; at 40 % foundation penetration ~2–3 pairs per site are
+  actually built.
+- **Perimeter bias.** The OMBR overstates the electrode of every
+  non-rectangular building — median ratio 1.00, but 21 % of buildings
+  exceed +20 % and the tail reaches ×7. On an L-shaped test building
+  the OMBR ring under-states the spreading resistance by ~6 %.
+
+New primitive **`PolylineElectrode`** (`kind="polyline"`): a buried
+horizontal wire through an arbitrary vertex chain, `closed=True` making
+it a ring. It carries the same per-segment
+`concrete_shell_coefficient_ohm_m` as `StripElectrode`, and the shared
+discretiser (`solver.image._discretize_polyline`) serves every backend.
+
+**`FoundationElectrodeSpec.polygon_xy_m`** takes the outline as
+`(x, y)` vertices relative to the site centre and overrides
+`size_m` / `size_xy_m` / `orientation_deg`; `style="ring"` is required
+(cross-braces are undefined on a general polygon). The concrete shell
+(ADR-0012) uses the **polygon** perimeter for both paths — lumped
+`R_shell = C / L_perim` into `world.concrete_shell_corrections`,
+distributed `C` on every ring segment. Sub-`0.5 m` polygon edges are
+merged away first (OSM footprints routinely carry centimetre-scale
+edges that would trip the thin-wire guard).
+
+Backwards compatible: without `polygon_xy_m` nothing changes.
+A rectangular polygon reproduces the historic `GridMeshElectrode` ring
+**bit-identically** (regression test at 1e-12), and one polygon
+foundation is a single electrode with no internal bonds (the rotated
+rectangular path needed four strips plus three bond conductors).
+
+New regression suite `tests/test_polygon_foundation.py` (13 tests:
+rectangle equivalence, shell bookkeeping on both paths, the
+$\rho_c = \rho_\text{soil}$ transparency identity, L-shape bias,
+degenerate-edge cleanup, clamp-freedom for two houses sharing a wall).
 
 ---
 

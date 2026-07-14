@@ -32,6 +32,7 @@ __all__ = [
     "RodElectrode",
     "RingElectrode",
     "StripElectrode",
+    "PolylineElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
 ]
@@ -176,6 +177,96 @@ class StripElectrode(_ElectrodeBase):
         return self.start
 
 
+class PolylineElectrode(_ElectrodeBase):
+    """Buried wire following an arbitrary horizontal polyline.
+
+    Generalises :class:`StripElectrode` from a single straight wire to
+    a chain of straight wires through ``vertices``. With
+    ``closed = True`` the last vertex is wired back to the first,
+    which makes this the *Ringerder along an arbitrary building
+    outline* — the DIN-18014 Streifenfundament that follows the real
+    building perimeter instead of its bounding rectangle.
+
+    All vertices must lie at the same depth (the wire is horizontal),
+    consistent with :class:`StripElectrode`.
+
+    Attributes
+    ----------
+    vertices
+        Ordered polyline vertices ``(x, y, z)`` in metres, at least
+        two. For ``closed = True`` do **not** repeat the first vertex
+        at the end — the closing edge is implicit.
+    closed
+        Whether the polyline is closed into a ring (default
+        ``True``).
+
+    Notes
+    -----
+    Motivation (AP1): approximating a building footprint by its
+    oriented bounding rectangle (OMBR) overestimates the electrode
+    perimeter for L- and U-shaped buildings and — worse — lets the
+    rectangles of neighbouring buildings coincide or overlap, which
+    drives distinct segments into the solver's 1 mm singularity clamp.
+    Following the real polygon removes both artefacts by construction.
+    """
+
+    kind: Literal["polyline"] = "polyline"
+    vertices: list[Point3D] = Field(
+        ...,
+        min_length=2,
+        description="Polyline vertices (x, y, z) in m, same depth.",
+    )
+    closed: bool = Field(
+        default=True,
+        description="Close the polyline into a ring (last vertex wired to first).",
+    )
+    concrete_shell_coefficient_ohm_m: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Per-segment radial concrete-shell coefficient "
+            "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m — same "
+            "semantics as on :class:`StripElectrode` (ADR-0012 V2)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_horizontal_and_nondegenerate(self) -> "PolylineElectrode":
+        z0 = self.vertices[0][2]
+        if any(abs(v[2] - z0) > 1e-9 for v in self.vertices):
+            raise ValueError(
+                "PolylineElectrode is horizontal: every vertex must share "
+                f"the same z. Got {self.vertices}."
+            )
+        if self.length <= 0.0:
+            raise ValueError(
+                "PolylineElectrode has zero total length — check for "
+                "duplicate vertices."
+            )
+        return self
+
+    @property
+    def edges(self) -> list[tuple[Point3D, Point3D]]:
+        """Straight wires making up the polyline (closing edge included)."""
+        vs = self.vertices
+        out = [(vs[k], vs[k + 1]) for k in range(len(vs) - 1)]
+        if self.closed and len(vs) > 2:
+            out.append((vs[-1], vs[0]))
+        return out
+
+    @property
+    def length(self) -> float:
+        """Total wire length in metres (sum over all edges)."""
+        total = 0.0
+        for (sx, sy, _), (ex, ey, _) in self.edges:
+            total += float(((ex - sx) ** 2 + (ey - sy) ** 2) ** 0.5)
+        return total
+
+    @property
+    def connection_point(self) -> Point3D:
+        return self.vertices[0]
+
+
 class MeshElectrode(_ElectrodeBase):
     """Rectangular mesh earth electrode (uniform spacing).
 
@@ -255,6 +346,7 @@ Electrode = Union[
     RodElectrode,
     RingElectrode,
     StripElectrode,
+    PolylineElectrode,
     MeshElectrode,
     GridMeshElectrode,
 ]

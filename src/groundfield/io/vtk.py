@@ -65,6 +65,7 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -84,6 +85,11 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
         return [ring]
     if isinstance(e, StripElectrode):
         return [np.array([list(e.start), list(e.end)], dtype=float)]
+    if isinstance(e, PolylineElectrode):
+        pts = [list(v) for v in e.vertices]
+        if e.closed and len(pts) > 2:
+            pts.append(list(e.vertices[0]))
+        return [np.array(pts, dtype=float)]
     if isinstance(e, GridMeshElectrode):
         cx, cy, cz = e.corner
         dx, dy = e.size

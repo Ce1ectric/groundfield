@@ -74,6 +74,7 @@ def _electrode_wire_length(e) -> float:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -84,6 +85,8 @@ def _electrode_wire_length(e) -> float:
     if isinstance(e, RingElectrode):
         return float(2.0 * math.pi * e.radius)
     if isinstance(e, StripElectrode):
+        return float(e.length)
+    if isinstance(e, PolylineElectrode):
         return float(e.length)
     if isinstance(e, MeshElectrode):
         dx, dy = e.size
@@ -113,6 +116,7 @@ def _electrode_segment_count(e, ds: float) -> int:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -124,6 +128,13 @@ def _electrode_segment_count(e, ds: float) -> int:
         return max(8, int(math.ceil(2.0 * math.pi * e.radius / ds)))
     if isinstance(e, StripElectrode):
         return max(1, int(math.ceil(e.length / ds)))
+    if isinstance(e, PolylineElectrode):
+        n = 0
+        for (sx, sy, _), (ex, ey, _) in e.edges:
+            L = math.hypot(ex - sx, ey - sy)
+            if L > 1e-12:
+                n += max(1, int(math.ceil(L / ds)))
+        return n
     if isinstance(e, (MeshElectrode, GridMeshElectrode)):
         dx, dy = e.size
         if isinstance(e, GridMeshElectrode):
@@ -207,6 +218,7 @@ def world_statistics(world: "World") -> dict[str, Any]:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -218,6 +230,7 @@ def world_statistics(world: "World") -> dict[str, Any]:
         RodElectrode: "rod",
         RingElectrode: "ring",
         StripElectrode: "strip",
+        PolylineElectrode: "polyline",
         MeshElectrode: "mesh",
         GridMeshElectrode: "grid_mesh",
     }
@@ -432,6 +445,7 @@ def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,

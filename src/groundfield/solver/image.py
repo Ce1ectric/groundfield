@@ -60,6 +60,7 @@ if TYPE_CHECKING:  # pragma: no cover
 from groundfield.geometry.electrodes import (
     GridMeshElectrode,
     MeshElectrode,
+    PolylineElectrode,
     RingElectrode,
     RodElectrode,
     StripElectrode,
@@ -322,6 +323,51 @@ def _discretize_strip(
     return segs
 
 
+def _discretize_polyline(
+    electrode: "PolylineElectrode", ds: float, layer_interfaces=None,
+) -> list[_Segment]:
+    """Polyline (open or closed) — one strip-style chain per edge.
+
+    Every edge is discretised exactly like :func:`_discretize_strip`
+    (same segment-length convention, same thin-wire guard, same
+    per-segment concrete-shell coefficient), so a closed rectangular
+    polyline reproduces the four perimeter wires of the equivalent
+    ``grid_mesh`` / strip-chain foundation.
+
+    Degenerate edges (zero length, e.g. from duplicated polygon
+    vertices) are skipped rather than raising — OSM footprints
+    routinely carry repeated points.
+    """
+    shell_coeff = float(electrode.concrete_shell_coefficient_ohm_m)
+    segs: list[_Segment] = []
+    for start, end in electrode.edges:
+        p0 = np.array(start, dtype=float)
+        p1 = np.array(end, dtype=float)
+        L = float(np.linalg.norm(p1 - p0))
+        if L <= 1e-12:
+            continue
+        direction = (p1 - p0) / L
+        n = max(1, int(np.ceil(L / ds)))
+        seg_len = L / n
+        _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
+        for k in range(n):
+            segs.append(
+                _Segment(
+                    midpoint=p0 + (k + 0.5) * seg_len * direction,
+                    length=seg_len,
+                    electrode_name=electrode.name,
+                    wire_radius=electrode.wire_radius,
+                    concrete_shell_coefficient_ohm_m=shell_coeff,
+                )
+            )
+    if not segs:
+        raise ValueError(
+            f"PolylineElectrode {electrode.name!r} discretised to zero "
+            "segments — all edges are degenerate."
+        )
+    return segs
+
+
 def _grid_segments(
     *,
     cx: float,
@@ -438,6 +484,8 @@ def _discretize_electrode(
         return _discretize_ring(electrode, ds)
     if isinstance(electrode, StripElectrode):
         return _discretize_strip(electrode, ds, layer_interfaces)
+    if isinstance(electrode, PolylineElectrode):
+        return _discretize_polyline(electrode, ds, layer_interfaces)
     if isinstance(electrode, GridMeshElectrode):
         return _discretize_grid_mesh(electrode, ds)
     if isinstance(electrode, MeshElectrode):

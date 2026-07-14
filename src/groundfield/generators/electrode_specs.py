@@ -36,7 +36,7 @@ from __future__ import annotations
 import math
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from groundfield.generators.distributions import AnyDistribution
 
@@ -180,6 +180,28 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         default=None,
         description="(dx, dy) — overrides ``size_m`` for rectangular footprints.",
     )
+    polygon_xy_m: Optional[tuple[tuple[float, float], ...]] = Field(
+        default=None,
+        description=(
+            "Closed outline of the foundation as (x, y) vertices in "
+            "metres, **relative to the site centre** passed to "
+            ":meth:`GroundingSystemSpec.build_at` (do not repeat the "
+            "first vertex). When set it overrides ``size_m`` / "
+            "``size_xy_m`` / ``orientation_deg``: the foundation "
+            "electrode is materialised as a single closed "
+            ":class:`~groundfield.geometry.electrodes.PolylineElectrode` "
+            "following the real building outline (DIN 18014: the strip "
+            "foundation runs along the building perimeter), instead of "
+            "the oriented bounding rectangle. Only meaningful with "
+            "``style='ring'`` — the internal cross-braces of "
+            "``style='mesh'`` are undefined for a general polygon and "
+            "are rejected. Rationale: the OMBR overestimates the "
+            "perimeter of L-/U-shaped buildings and can make the "
+            "rectangles of neighbouring buildings coincide or overlap, "
+            "which drives distinct segments into the 1 mm singularity "
+            "clamp of the solver."
+        ),
+    )
     depth_m: Union[float, AnyDistribution] = Field(default=0.8, description="Burial depth in m.")
     n_x: int = Field(
         default=2,
@@ -260,6 +282,23 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "matters."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_polygon(self) -> "FoundationElectrodeSpec":
+        if self.polygon_xy_m is None:
+            return self
+        if len(self.polygon_xy_m) < 3:
+            raise ValueError(
+                "polygon_xy_m needs at least 3 vertices; got "
+                f"{len(self.polygon_xy_m)}."
+            )
+        if self.style != "ring":
+            raise ValueError(
+                "polygon_xy_m is only defined for style='ring' — the "
+                "internal cross-braces of style='mesh' have no meaning "
+                "on a general polygon."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------

@@ -58,12 +58,49 @@ def _to_float(value: Union[float, Distribution], rng: np.random.Generator) -> fl
     return float(value)
 
 
+# Shortest polygon edge kept in a polygon foundation ring. Below this,
+# vertices are merged: a segment shorter than the (concrete-inflated)
+# wire radius would trip the solver's thin-wire guard, and OSM
+# footprints routinely carry centimetre-scale edges that carry no
+# physical information about the strip foundation.
+_MIN_POLY_EDGE_M = 0.5
+
+
+def _clean_polygon(
+    polygon_xy: "tuple[tuple[float, float], ...]",
+    *,
+    min_edge_m: float = _MIN_POLY_EDGE_M,
+) -> list[tuple[float, float]]:
+    """Drop duplicate / sub-``min_edge_m`` vertices from a closed ring.
+
+    Walks the ring once, keeping a vertex only when it is farther than
+    ``min_edge_m`` from the last kept one; finally checks the closing
+    edge (last → first) and drops the last vertex if that edge is too
+    short. The result is the same closed outline with every edge at
+    least ``min_edge_m`` long (up to the usual one-vertex slack of a
+    greedy pass).
+    """
+    pts = [(float(x), float(y)) for x, y in polygon_xy]
+    # An explicitly repeated closing vertex is a common OSM/GeoJSON
+    # convention — the ring closes implicitly here.
+    if len(pts) > 1 and math.dist(pts[0], pts[-1]) < 1e-9:
+        pts = pts[:-1]
+    kept: list[tuple[float, float]] = []
+    for p in pts:
+        if not kept or math.dist(kept[-1], p) >= min_edge_m:
+            kept.append(p)
+    while len(kept) >= 3 and math.dist(kept[-1], kept[0]) < min_edge_m:
+        kept.pop()
+    return kept
+
+
 def _maybe_concrete_shell(
     spec: FoundationElectrodeSpec,
     *,
     dx: float,
     dy: float,
     rng: np.random.Generator,
+    perimeter_m: Optional[float] = None,
 ) -> tuple[float, float, float]:
     r"""Compute the effective wire radius, lumped shell resistance, and
     per-segment shell coefficient for ADR-0012.
@@ -97,7 +134,9 @@ def _maybe_concrete_shell(
 
         Perimeter $L_\text{perim} = 2 (d_x + d_y)$ — internal
         cross-braces of a ``style="mesh"`` foundation are *not*
-        encased in concrete and therefore do not contribute.
+        encased in concrete and therefore do not contribute. When
+        ``perimeter_m`` is given (polygon foundation) it is used
+        instead of the rectangle perimeter.
     shell_coefficient_ohm_m : float
         Per-meter Sunde coefficient $C = \rho_c/(2\pi)\,\ln(r_b/r_a)$
         in Ω·m, consumed by the V2 ("distributed") path. The
@@ -114,7 +153,9 @@ def _maybe_concrete_shell(
         return float(spec.wire_radius_m), 0.0, 0.0
     r_a = float(spec.wire_radius_m)
     r_b = r_a + t
-    perimeter = 2.0 * (dx + dy)
+    perimeter = (
+        float(perimeter_m) if perimeter_m is not None else 2.0 * (dx + dy)
+    )
     coefficient = rho_c / (2.0 * math.pi) * math.log(r_b / r_a)
     r_shell = coefficient / perimeter if perimeter > 0.0 else 0.0
     return r_b, float(r_shell), float(coefficient)
@@ -255,6 +296,12 @@ class GroundingSystemSpec(GeneratorConfig):
             return
         if isinstance(spec, FoundationElectrodeSpec):
             depth = _to_float(spec.depth_m, rng)
+            if spec.polygon_xy_m is not None:
+                self._build_polygon_foundation(
+                    world, spec=spec, centre_xy=(ex, ey), depth=depth,
+                    name=name, rng=rng,
+                )
+                return
             if spec.size_xy_m is not None:
                 dx, dy = spec.size_xy_m
             else:
@@ -344,6 +391,80 @@ class GroundingSystemSpec(GeneratorConfig):
         raise TypeError(
             f"GroundingSystemSpec.build_at: unknown electrode spec "
             f"{type(spec).__name__}."
+        )
+
+    # ------------------------------------------------------------------
+    # Polygon foundation electrode (real building outline)
+    # ------------------------------------------------------------------
+
+    def _build_polygon_foundation(
+        self,
+        world: World,
+        *,
+        spec: FoundationElectrodeSpec,
+        centre_xy: tuple[float, float],
+        depth: float,
+        name: str,
+        rng: np.random.Generator,
+    ) -> None:
+        r"""Build the foundation as a closed ring along the real outline.
+
+        The DIN-18014 Streifenfundament follows the building perimeter.
+        ``spec.polygon_xy_m`` carries that perimeter as vertices
+        relative to ``centre_xy``; the ring is materialised as a single
+        closed :class:`~groundfield.geometry.electrodes.PolylineElectrode`
+        — one primitive, one galvanic cluster, no internal bonds.
+
+        The concrete shell (ADR-0012) uses the **polygon** perimeter:
+
+        * ``concrete_model="lumped"`` — total Sunde resistance
+          $R_\text{shell} = C / L_\text{perim}$ into
+          ``world.concrete_shell_corrections`` (identical convention
+          to the rectangular path, only the perimeter differs);
+        * ``concrete_model="distributed"`` — the per-metre coefficient
+          $C$ rides on every segment of the ring.
+
+        Notes
+        -----
+        Very short polygon edges (OSM footprints carry the occasional
+        centimetre-scale edge) are merged away first: a vertex is
+        dropped when it sits closer than ``_MIN_POLY_EDGE_M`` to its
+        predecessor. Without this the discretiser would produce
+        segments shorter than the (concrete-inflated) wire radius and
+        trip the thin-wire guard.
+        """
+        cx, cy = centre_xy
+        verts = _clean_polygon(spec.polygon_xy_m, min_edge_m=_MIN_POLY_EDGE_M)
+        if len(verts) < 3:
+            raise ValueError(
+                f"Foundation {name!r}: polygon collapses to fewer than 3 "
+                "vertices after removing sub-centimetre edges — check the "
+                "footprint."
+            )
+        perimeter = 0.0
+        for k in range(len(verts)):
+            x0, y0 = verts[k]
+            x1, y1 = verts[(k + 1) % len(verts)]
+            perimeter += math.hypot(x1 - x0, y1 - y0)
+
+        effective_radius, shell_total_ohm, shell_coeff = _maybe_concrete_shell(
+            spec, dx=0.0, dy=0.0, rng=rng, perimeter_m=perimeter,
+        )
+        if spec.concrete_model == "lumped":
+            if shell_total_ohm > 0.0:
+                world.concrete_shell_corrections[name] = shell_total_ohm
+            ring_coeff = 0.0
+        elif spec.concrete_model == "distributed":
+            ring_coeff = shell_coeff
+        else:  # pragma: no cover - validated by the Literal
+            raise ValueError(f"Unknown concrete_model: {spec.concrete_model!r}")
+
+        create_electrode(
+            world, "polyline", name=name,
+            vertices=[(cx + vx, cy + vy, depth) for vx, vy in verts],
+            closed=True,
+            wire_radius=effective_radius,
+            concrete_shell_coefficient_ohm_m=ring_coeff,
         )
 
     # ------------------------------------------------------------------
