@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.12.0] — 2026-07-14
+
 ### Added — foundation ring along the real building outline (`PolylineElectrode`)
 
 Foundation electrodes could only be rectangles. Placing the ring on
@@ -4433,7 +4439,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.9.0
