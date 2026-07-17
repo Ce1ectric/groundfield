@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.12.1] — 2026-07-17
+
 ### Fixed — geometry plotters render the `polyline` electrode kind
 
 The matplotlib geometry helpers were not updated when 0.12.0 added
@@ -4449,7 +4455,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.1
 [0.12.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.10.0
