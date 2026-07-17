@@ -26,7 +26,17 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Fixed — geometry plotters render the `polyline` electrode kind
+
+The matplotlib geometry helpers were not updated when 0.12.0 added
+`PolylineElectrode` (the VTK export already was): `plot_world` /
+`plot_world_3d` silently skipped a polygon foundation ring, and
+`world_bounds_xy` / `world_bounds_3d` saw only its connection point — so
+`plot_surface_potential`'s auto-extent cropped the ring. All four now handle
+the `polyline` kind, mirroring the strip / mesh branches and
+`io.vtk._polylines_for_electrode`. A closed ring is drawn with its closing
+edge; the bounds span every vertex. Backwards compatible (no other kind
+changes). New regression tests in `tests/test_geometry_plot.py`.
 
 ---
 

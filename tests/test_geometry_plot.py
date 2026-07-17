@@ -230,6 +230,53 @@ def test_plot_world_accepts_external_axes() -> None:
 
 
 # ---------------------------------------------------------------------
+# PolylineElectrode (0.12.x) — the geometry plotters must see the kind
+# ---------------------------------------------------------------------
+
+
+def _polyline_world() -> gf.World:
+    """World holding a single closed, L-shaped ``PolylineElectrode``."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(
+        world, "polyline", name="foundation",
+        vertices=[(-5.0, -4.0, 0.7), (5.0, -4.0, 0.7), (5.0, 0.0, 0.7),
+                  (0.0, 0.0, 0.7), (0.0, 4.0, 0.7), (-5.0, 4.0, 0.7)],
+        closed=True, wire_radius=0.0075,
+    )
+    return world
+
+
+def test_world_bounds_cover_every_polyline_vertex() -> None:
+    """Bounds must span the whole outline, not just the connection point.
+
+    Regression: before the fix a ``polyline`` fell through to the
+    defensive branch and only its first vertex reached the bounds.
+    """
+    from groundfield import world_bounds_xy
+
+    world = _polyline_world()
+    assert world_bounds_xy(world) == (-5.0, 5.0, -4.0, 4.0)
+    assert world_bounds_3d(world) == (-5.0, 5.0, -4.0, 4.0, 0.7, 0.7)
+
+
+def test_plot_world_draws_the_polyline_outline() -> None:
+    """plot_world must emit a line tracing the closed vertex chain."""
+    world = _polyline_world()
+    fig = plot_world(world)
+    ax = fig.axes[0]
+    # 6 vertices + the closing point -> a line with >= 6 x-samples.
+    assert any(len(ln.get_xdata()) >= 6 for ln in ax.get_lines())
+    plt.close(fig)
+
+
+def test_plot_world_3d_handles_the_polyline_kind() -> None:
+    """plot_world_3d must not fall through to the single-dot fallback."""
+    fig = plot_world_3d(_polyline_world())
+    assert isinstance(fig, matplotlib.figure.Figure)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------
 # plot_world_3d
 # ---------------------------------------------------------------------
 

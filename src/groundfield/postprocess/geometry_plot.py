@@ -120,8 +120,9 @@ def world_bounds_3d(
     * :class:`RodElectrode`: ``[position[2], position[2] + length]``
       (head + foot of the rod).
     * :class:`RingElectrode`, :class:`StripElectrode`,
-      :class:`MeshElectrode`, :class:`GridMeshElectrode`: the
-      :math:`z` coordinate of the electrode (single buried depth).
+      :class:`PolylineElectrode`, :class:`MeshElectrode`,
+      :class:`GridMeshElectrode`: the :math:`z` coordinate(s) of the
+      electrode (single buried depth).
     * Conductors: ``min/max`` over both endpoint :math:`z` values
       (catches overhead :math:`z<0` and buried :math:`z>0`).
 
@@ -136,6 +137,7 @@ def world_bounds_3d(
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -169,6 +171,10 @@ def world_bounds_3d(
             xs.extend([cx, cx + dx])
             ys.extend([cy, cy + dy])
             zs.append(cz)
+        elif isinstance(e, PolylineElectrode):
+            xs.extend(v[0] for v in e.vertices)
+            ys.extend(v[1] for v in e.vertices)
+            zs.extend(v[2] for v in e.vertices)
         else:  # pragma: no cover — defensive
             cp = e.connection_point
             xs.append(cp[0])
@@ -426,6 +432,7 @@ def _draw_electrode_3d(ax, e) -> None:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -463,6 +470,13 @@ def _draw_electrode_3d(ax, e) -> None:
                 yk = cy + dy * k / e.n_y
                 ax.plot([cx, cx + dx], [yk, yk], [cz, cz],
                         color="k", linewidth=0.7, alpha=0.5)
+    elif isinstance(e, PolylineElectrode):
+        vx = [v[0] for v in e.vertices]
+        vy = [v[1] for v in e.vertices]
+        vz = [v[2] for v in e.vertices]
+        if e.closed:
+            vx, vy, vz = vx + [vx[0]], vy + [vy[0]], vz + [vz[0]]
+        ax.plot(vx, vy, vz, **kw)
     else:  # pragma: no cover — defensive
         cp = e.connection_point
         ax.scatter([cp[0]], [cp[1]], [cp[2]], color="k", s=20)

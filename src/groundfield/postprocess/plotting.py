@@ -61,6 +61,7 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -111,6 +112,16 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
                                 "k-", linewidth=0.7, alpha=0.6)
             else:
                 ax.plot([cx, cx + dx], [cz, cz], "k-", linewidth=1.5)
+        elif isinstance(e, PolylineElectrode):
+            vx = [v[0] for v in e.vertices]
+            vy = [v[1] for v in e.vertices]
+            vz = [v[2] for v in e.vertices]
+            if e.closed:
+                vx, vy, vz = vx + [vx[0]], vy + [vy[0]], vz + [vz[0]]
+            if plane == "xy":
+                ax.plot(vx, vy, "k-", linewidth=1.8)
+            else:  # xz — horizontal wire at a fixed depth
+                ax.plot(vx, vz, "k-", linewidth=1.8)
 
 
 def _make_grid(
@@ -341,6 +352,7 @@ def world_bounds_xy(world: "World") -> tuple[float, float, float, float]:
     from groundfield.geometry.electrodes import (
         GridMeshElectrode,
         MeshElectrode,
+        PolylineElectrode,
         RingElectrode,
         RodElectrode,
         StripElectrode,
@@ -367,6 +379,9 @@ def world_bounds_xy(world: "World") -> tuple[float, float, float, float]:
             dx, dy = e.size
             xs.extend([cx, cx + dx])
             ys.extend([cy, cy + dy])
+        elif isinstance(e, PolylineElectrode):
+            xs.extend(v[0] for v in e.vertices)
+            ys.extend(v[1] for v in e.vertices)
         else:  # pragma: no cover — defensive against future kinds
             cp = e.connection_point
             xs.append(cp[0])
