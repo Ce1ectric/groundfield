@@ -39,6 +39,7 @@ construction.
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -139,7 +140,7 @@ def ensure_orientation(ring: Ring, *, ccw: bool = True) -> Ring:
 class BuildingFootprint(BaseModel):
     """A single building's footprint, projected to the local ENU frame.
 
-    Parameters
+    Attributes
     ----------
     polygon_xy_m
         Vertices of the *exterior* ring in metres, CCW. May be
@@ -329,7 +330,7 @@ class BuildingFootprint(BaseModel):
 
         Notes
         -----
-        Uses :func:`shapely.geometry.Polygon.minimum_rotated_rectangle`,
+        Uses Shapely's ``Polygon.minimum_rotated_rectangle``,
         which implements the rotating-calipers algorithm. Requires
         the optional ``geo`` extra; raises :class:`ImportError`
         with the install hint otherwise.
@@ -360,7 +361,19 @@ class BuildingFootprint(BaseModel):
             # Buffer(0) is the Shapely idiom for cleaning up
             # self-intersections that occasionally show up in OSM data.
             poly = poly.buffer(0)
-        mrr = poly.minimum_rotated_rectangle
+        # Shapely's ``oriented_envelope`` GEOS ufunc trips benign numpy
+        # divide-by-zero / invalid-value floating-point flags on
+        # axis-aligned footprints (the OMBR of an axis-aligned rectangle
+        # is the rectangle itself; the returned geometry is correct).
+        # Silence only that specific ``RuntimeWarning`` here so it does
+        # not clutter a caller's — or pytest's — warning summary.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="(divide by zero|invalid value) encountered",
+                category=RuntimeWarning,
+            )
+            mrr = poly.minimum_rotated_rectangle
         coords = list(mrr.exterior.coords)
         # ``minimum_rotated_rectangle`` always returns five coords
         # (closed ring). The four sides connect coords[i] -> coords[i+1].

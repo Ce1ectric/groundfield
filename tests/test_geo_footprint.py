@@ -13,6 +13,7 @@ within numerical noise.
 from __future__ import annotations
 
 import math
+import warnings
 
 import pytest
 
@@ -170,3 +171,26 @@ def test_ombr_handles_l_shape() -> None:
     # for this L the angle is exactly 0.
     assert abs(angle_deg) < 1e-6
     assert fp.area_m2() == pytest.approx(80.0)
+
+
+def test_ombr_emits_no_runtime_warning_on_axis_aligned_footprint() -> None:
+    """Axis-aligned footprints must not leak Shapely's benign
+    ``oriented_envelope`` divide-by-zero / invalid-value floating-point
+    ``RuntimeWarning`` into the caller's warning stream.
+
+    Some Shapely / NumPy builds trip those FP flags while computing the
+    OMBR of an axis-aligned rectangle even though the result is correct.
+    :meth:`BuildingFootprint.oriented_bounding_rectangle` silences exactly
+    that warning at the call site; this test promotes any leaked
+    ``RuntimeWarning`` to an error so a regression fails loudly.
+    """
+    fp = BuildingFootprint(
+        polygon_xy_m=[(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)],
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        centre, size, angle_deg = fp.oriented_bounding_rectangle()
+    # The suppression must not change the (correct) result.
+    assert centre == pytest.approx((5.0, 2.5))
+    assert size == pytest.approx((10.0, 5.0))
+    assert abs(angle_deg) < 1e-6
