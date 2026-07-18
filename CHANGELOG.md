@@ -26,7 +26,59 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Fixed — MkDocs `--strict` build (API-reference docstring rendering)
+
+`mkdocs build --strict` aborted with 51 warnings while the docs CI deployed
+**without** `--strict`, so the published API reference silently rendered
+incomplete parameter tables. Root causes fixed:
+
+- Pydantic model fields in `sources.CurrentSource`,
+  `geo.footprint.BuildingFootprint`, `geo.placement.OsmBuildingPlacement`
+  and `generators.ortsnetz_builder.OrtsnetzLayout` were documented under a
+  NumPy `Parameters` section; griffe could not match them to a constructor
+  signature. Moved to the correct `Attributes` section (the bulk of the
+  warnings).
+- `OrtsnetzLayout.to_world` carried a prose paragraph indented under
+  `Parameters`; griffe parsed the prose words as parameter names. Moved to a
+  `Notes` section.
+- Demoted the un-resolvable
+  `shapely.geometry.Polygon.minimum_rotated_rectangle` cross-reference in
+  `docs/api/geo.md` and `geo.footprint` to inline code.
+
+`mkdocs build --strict` is now clean (0 warnings).
+
+### Fixed — silence Shapely's benign OMBR floating-point warning
+
+`BuildingFootprint.oriented_bounding_rectangle` now wraps the Shapely
+`minimum_rotated_rectangle` call in a targeted `warnings` filter. Some
+Shapely / NumPy builds emit a benign `RuntimeWarning` (`divide by zero` /
+`invalid value` `encountered in oriented_envelope`) while computing the OMBR
+of an axis-aligned footprint even though the returned geometry is correct;
+it no longer reaches callers or the pytest warning summary. New regression
+test in `tests/test_geo_footprint.py` promotes that `RuntimeWarning` to an
+error.
+
+### Changed — `strict: true` makes every MkDocs build fail on warnings
+
+`mkdocs.yml` now sets `strict: true`, so `mkdocs build`, `mkdocs serve` and
+the `mkdocs gh-deploy` step in `.github/workflows/docs.yml` all abort on any
+warning (broken nav link, unresolved cross-reference, malformed docstring)
+instead of shipping it silently to GitHub Pages.
+
+### Added — Changelog & Roadmap page on the documentation site
+
+New `docs/changelog.md` embeds this `CHANGELOG.md` verbatim via
+`pymdownx.snippets` (`base_path` set to the repository root) and is linked
+from the nav. The release history and the Roadmap are now visible on the
+published site.
+
+### Docs — pruned the stale Roadmap and refreshed the README
+
+- Removed Roadmap bullets that are already implemented and released:
+  inductive coupling (ADR-0004), `rho-f` vector fitting, OSM building-map
+  ingest, and the Manhattan connection-routing switch.
+- Replaced the frozen "New in 0.7.0" README section with a pointer to the
+  changelog plus a short list of current highlights.
 
 ---
 
@@ -4368,18 +4420,6 @@ work package 1 progresses.
 
 ### Core functionality
 
-- **Inductive coupling (ADR-0004 — to be written).** Now that the
-  distributed-conductor topology is in place (see
-  `[Unreleased]`/ADR-0003), the next step adds
-  Neumann self- and mutual-induction integrals between conductor
-  segments. Drops the quasi-static frequency limit from ≈ DC to
-  ~1 kHz with frequency-dependent longitudinal impedance
-  $Z_\text{long} = R + j\omega L$. Required for the AP1 question
-  on coupling between the measurement lead and the current
-  injection.
-- ~~**Carson correction** for the earth-return path below 1 kHz —~~
-  ~~AP1 question "diffusion field and Carson relevance for earth~~
-  ~~currents".~~ → done in `[Unreleased]` as ADR-0005.
 - **FEM support for distributed conductors.** The current FEM
   backend falls back to a lumped branch and logs a warning when
   it sees a distributed conductor — the equivalent-hemisphere
@@ -4405,7 +4445,6 @@ work package 1 progresses.
   Concrete prerequisites: ACA (adaptive cross approximation) for
   the dense reaction matrix to bring memory from $O(N^2)$ down to
   $O(N \log N)$ and a block-Jacobi preconditioner per cluster.
-- Vector fitting for the `rho-f` curve.
 
 ### Studies and tooling
 
@@ -4427,18 +4466,6 @@ work package 1 progresses.
   stays well below 1 % at 50 Hz.
   
 - **penetration depth** Calculate the depth of the earth current as it is used in Carson integrals. It should be possible to create the earth current depth of any soild multilayer problem to use an equivilent for the typical formulas for calculating the self and coupling impedances of a cable or overheadline with earth return part.
-
-### Features
-
-- Ingest open building map data to model foundation electrodes from
-  a map slice. The user decides whether every building has its own
-  grounding system, or whether they are sampled from a stochastic
-  distribution. Per building type (mesh / foundation / driven rod
-  or any combination) the geometry is determined.
-- Connection conductors need a switch between euclidean routing and
-  Manhattan routing (along x or y only, no diagonal). For
-  distribution networks Manhattan is often more realistic because
-  cables follow streets and footpaths.
 
 ### Integration
 

@@ -46,64 +46,24 @@ result, and the derivation of reduced `rho-f` models for
 `groundinsight`. See the [scope and concepts page](https://ce1ectric.github.io/groundfield/concepts/)
 for the full list with references to the underlying ADRs.
 
-## New in 0.7.0
+## What's new
 
-- **`OrtsnetzLayout` — imperative TN-Ortsnetz builder.** New entry
-  point in `groundfield.generators` for composing a *single
-  deterministic* LV network from a real OSM extract: ingest
-  footprints, drop the substation + KVS by lat/lon **or** local
-  ENU metres, route PEN cables in strict Manhattan geometry around
-  the foundations, connect every house to its closest cable.
-  Everything is one method per step on the layout — see the
-  [OSM-pipeline example](docs/examples/08_osm_pipeline.md) for the
-  full workflow on a real village.
+`groundfield` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). See the
+**[changelog](https://ce1ectric.github.io/groundfield/changelog/)** for the
+full release history and the forward-looking roadmap.
 
-- **Manhattan-routed PEN cable router.** New
-  `groundfield.generators.manhattan_routing.route_manhattan` runs
-  4-connected A* on a regular Manhattan grid of user-chosen cell
-  size and avoids every building's bounding rectangle inflated by a
-  configurable clearance. PEN cables therefore never cross a
-  foundation polygon. An `escape_radius_m` safety valve handles
-  substations that land inside or right next to a foundation in a
-  real OSM extract.
+Recent highlights:
 
-- **Simulated fall-of-potential measurement.** `OrtsnetzLayout.add_auxiliary_electrode`
-  drops a *Hilfserder* (default: 3 × 0.5 m rod triangle,
-  parallel-bonded) at a user-controlled distance / direction from
-  the substation. `OrtsnetzLayout.add_voltage_probe` adds the
-  *Spannungssonde* as a pure sampling point (no rod in the world →
-  no field perturbation), either inline along the substation →
-  aux axis or 90° rotated from it. `measured_grounding_impedance`
-  returns the simulated meter reading
-  $(\varphi_\text{sub} - \varphi_\text{probe}) / I_\text{src}$ —
-  with a `probe_xy` override that lets a single solve yield
-  multiple probe readings. `verify_current_balance` is the
-  Kirchhoff plausibility check that confirms the loop is
-  physically closed in the engine's view.
-
-- **Reproducible foundation-electrode penetration mask.**
-  `OrtsnetzLayout.foundation_mask(penetration, salt=0)` returns a
-  deterministic per-house `bool` list derived from a stable MD5
-  hash of each footprint's OSM id. Same `(p, salt)` → same mask
-  every time, and the mask is *nested* in `p` so penetration
-  sweeps grow the foundation-equipped subset monotonically. See
-  the [measurement-distance comparison
-  example](docs/examples/07_measurement_distance.md) for a full
-  study including surface-potential galleries and a dual-probe
-  (0° / 90°) Hilfserder-distance sweep.
-
-- **`RadialTrunkTopology` for `TnNetworkGenerator`.** New PEN
-  backbone option alongside the legacy star-KVS layout: the
-  substation feeds N radial feeders with a finite slot budget per
-  source; once exhausted, additional KVS are inserted along the
-  trunk axis. See the [TN-Model example](docs/examples/06_tn_model.md)
-  for a complete walk-through.
-
-- **Surface-potential plot with `TwoSlopeNorm`.**
-  `OrtsnetzLayout.plot_surface_potential` defaults to a
-  TwoSlopeNorm-based diverging colour map (`RdBu_r`) centred at
-  zero so the deep Hilfserder trough and the small substation +
-  foundation trumpet are both visible at full colour resolution.
+- **0.12 — `PolylineElectrode`.** Foundation rings follow the real building
+  outline (a closed polyline) instead of the oriented bounding rectangle,
+  removing the perimeter bias and the coincident-conductor artefacts that
+  appear at AP1 scale.
+- **0.11 — one-shot mutual grounding-impedance matrix** plus an audit-driven
+  hardening of the inductive (Carson / Sommerfeld / Neumann) and cross-layer
+  stacks.
+- **0.7 — `OrtsnetzLayout`.** Imperative TN-Ortsnetz builder with a
+  Manhattan-routed PEN router and a simulated fall-of-potential measurement.
 
 ## Installation
 

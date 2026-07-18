@@ -361,7 +361,7 @@ class OrtsnetzLayout(BaseModel):
     >>> layout.connect_buildings()
     >>> ax = layout.plot()
 
-    Parameters
+    Attributes
     ----------
     footprints
         Building footprints (already projected into the local
@@ -1662,6 +1662,8 @@ class OrtsnetzLayout(BaseModel):
             :meth:`foundation_mask` for a reproducible penetration
             sweep.
 
+        Notes
+        -----
         Other parameters follow the v0.7 :meth:`to_world` defaults.
         When :attr:`auxiliary_electrode` is set (i.e.
         :meth:`add_auxiliary_electrode` was called), the source's

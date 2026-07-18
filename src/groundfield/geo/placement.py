@@ -50,7 +50,7 @@ class OsmBuildingPlacement(BaseModel):
     placement too (once it has been added to the discriminated union;
     see Task 3 in ADR-0011's implementation plan).
 
-    Parameters
+    Attributes
     ----------
     footprints
         Pre-projected building polygons in the local ENU frame.

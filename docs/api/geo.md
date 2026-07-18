@@ -56,7 +56,7 @@ $$
 $$
 
 implemented via the rotating-calipers algorithm in
-[`shapely.geometry.Polygon.minimum_rotated_rectangle`][]. For an
+`shapely.geometry.Polygon.minimum_rotated_rectangle`. For an
 L-shape this contains the polygon (so the perimeter approximation
 is an upper bound) and aligns with the dominant edge; for a
 clean rectangle it is the rectangle itself. Phase B (deferred)

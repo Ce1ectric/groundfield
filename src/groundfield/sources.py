@@ -59,7 +59,7 @@ class _SourceBase(BaseModel):
 class CurrentSource(_SourceBase):
     """Impressed current source.
 
-    Parameters
+    Attributes
     ----------
     magnitude
         Current amplitude in A (RMS in the frequency domain).
