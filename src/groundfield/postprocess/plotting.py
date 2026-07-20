@@ -64,6 +64,7 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -122,6 +123,14 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
                 ax.plot(vx, vy, "k-", linewidth=1.8)
             else:  # xz — horizontal wire at a fixed depth
                 ax.plot(vx, vz, "k-", linewidth=1.8)
+        elif isinstance(e, StarElectrode):
+            for start, end in e.edges:
+                if plane == "xy":
+                    ax.plot([start[0], end[0]], [start[1], end[1]],
+                            "k-", linewidth=1.8)
+                else:  # xz
+                    ax.plot([start[0], end[0]], [start[2], end[2]],
+                            "k-", linewidth=1.8)
 
 
 def _make_grid(
@@ -355,6 +364,7 @@ def world_bounds_xy(world: "World") -> tuple[float, float, float, float]:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -382,6 +392,10 @@ def world_bounds_xy(world: "World") -> tuple[float, float, float, float]:
         elif isinstance(e, PolylineElectrode):
             xs.extend(v[0] for v in e.vertices)
             ys.extend(v[1] for v in e.vertices)
+        elif isinstance(e, StarElectrode):
+            for start, end in e.edges:
+                xs.extend([start[0], end[0]])
+                ys.extend([start[1], end[1]])
         else:  # pragma: no cover — defensive against future kinds
             cp = e.connection_point
             xs.append(cp[0])

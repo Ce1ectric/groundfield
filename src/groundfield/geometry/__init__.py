@@ -26,8 +26,10 @@ from groundfield.geometry.electrodes import (
     Electrode,
     GridMeshElectrode,
     MeshElectrode,
+    PolylineElectrode,
     RingElectrode,
     RodElectrode,
+    StarElectrode,
     StripElectrode,
 )
 
@@ -36,6 +38,8 @@ __all__ = [
     "RodElectrode",
     "RingElectrode",
     "StripElectrode",
+    "PolylineElectrode",
+    "StarElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
 ]

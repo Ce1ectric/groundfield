@@ -63,6 +63,7 @@ from groundfield.geometry.electrodes import (
     PolylineElectrode,
     RingElectrode,
     RodElectrode,
+    StarElectrode,
     StripElectrode,
 )
 from groundfield.soil.models import HomogeneousSoil
@@ -368,6 +369,58 @@ def _discretize_polyline(
     return segs
 
 
+def _discretize_star(
+    electrode: "StarElectrode", ds: float, layer_interfaces=None,
+) -> list[_Segment]:
+    """n-arm star (*Sternerder*) — one strip-style chain per radial arm.
+
+    Every arm runs from the shared centre node to its tip and is
+    discretised exactly like :func:`_discretize_strip` (same
+    segment-length convention, thin-wire guard, per-segment concrete-
+    shell coefficient). All arms belong to one electrode, so the shared
+    centre makes them a single galvanic cluster.
+    """
+    shell_coeff = float(electrode.concrete_shell_coefficient_ohm_m)
+    segs: list[_Segment] = []
+    for start, end in electrode.edges:
+        p0 = np.array(start, dtype=float)
+        p1 = np.array(end, dtype=float)
+        L = float(np.linalg.norm(p1 - p0))
+        direction = (p1 - p0) / L
+        n = max(1, int(np.ceil(L / ds)))
+        seg_len = L / n
+        _require_thin_wire(seg_len, electrode.wire_radius, electrode.name)
+        for k in range(n):
+            segs.append(
+                _Segment(
+                    midpoint=p0 + (k + 0.5) * seg_len * direction,
+                    length=seg_len,
+                    electrode_name=electrode.name,
+                    wire_radius=electrode.wire_radius,
+                    concrete_shell_coefficient_ohm_m=shell_coeff,
+                )
+            )
+    return segs
+
+
+def _segments_per_wire(span: float, ds: float, n_spans: int) -> int:
+    """Segments per grid wire, aligned to the crossing pattern.
+
+    A wire of length ``span`` is crossed at ``n_spans + 1`` points (the
+    perpendicular wires), dividing it into ``n_spans`` equal mesh spans.
+    The requested target is ``ceil(span / ds)`` segments; this rounds it
+    **up to the next multiple of** ``n_spans`` so every span holds a whole
+    number of segments and the crossings coincide with segment endpoints,
+    never with the midpoint point sources. With one interior span or none
+    (``n_spans <= 1``) there is nothing to align and the plain count is
+    returned. The result is never coarser than requested.
+    """
+    n = max(1, int(np.ceil(span / ds)))
+    if n_spans <= 1:
+        return n
+    return int(np.ceil(n / n_spans)) * n_spans
+
+
 def _grid_segments(
     *,
     cx: float,
@@ -395,13 +448,26 @@ def _grid_segments(
     xs = np.linspace(cx, cx + dx, ny_wires)
     ys = np.linspace(cy, cy + dy, nx_wires)
 
+    # Segments per wire, aligned so grid crossings fall on segment
+    # *endpoints* rather than midpoints. Longitudinal wires (span dx) are
+    # crossed by the ``ny_wires`` transverse wires, i.e. ``ny_wires - 1``
+    # mesh spans; making the segment count a multiple of that span count
+    # places one or more whole segments in each span, so no segment
+    # midpoint (the point-source location) ever coincides with a crossing.
+    # Coincident midpoints of a longitudinal and a transverse segment
+    # would otherwise land within the singularity clamp and inflate the
+    # grid resistance by ~2x for the uniform-current ``image`` backend (a
+    # silent grid-discretisation trap; the current-solving backends are
+    # far less sensitive but pay the same clamp warning).
+    n_long = _segments_per_wire(dx, ds, ny_wires - 1)
+    n_trans = _segments_per_wire(dy, ds, nx_wires - 1)
+
     segs: list[_Segment] = []
     # Longitudinal wires (along x for each y)
+    seg_len = dx / n_long
+    _require_thin_wire(seg_len, wire_radius, electrode_name)
     for y in ys:
-        n = max(1, int(np.ceil(dx / ds)))
-        seg_len = dx / n
-        _require_thin_wire(seg_len, wire_radius, electrode_name)
-        for k in range(n):
+        for k in range(n_long):
             xm = cx + (k + 0.5) * seg_len
             segs.append(
                 _Segment(
@@ -412,11 +478,10 @@ def _grid_segments(
                 )
             )
     # Transverse wires (along y for each x)
+    seg_len = dy / n_trans
+    _require_thin_wire(seg_len, wire_radius, electrode_name)
     for x in xs:
-        n = max(1, int(np.ceil(dy / ds)))
-        seg_len = dy / n
-        _require_thin_wire(seg_len, wire_radius, electrode_name)
-        for k in range(n):
+        for k in range(n_trans):
             ym = cy + (k + 0.5) * seg_len
             segs.append(
                 _Segment(
@@ -486,6 +551,8 @@ def _discretize_electrode(
         return _discretize_strip(electrode, ds, layer_interfaces)
     if isinstance(electrode, PolylineElectrode):
         return _discretize_polyline(electrode, ds, layer_interfaces)
+    if isinstance(electrode, StarElectrode):
+        return _discretize_star(electrode, ds, layer_interfaces)
     if isinstance(electrode, GridMeshElectrode):
         return _discretize_grid_mesh(electrode, ds)
     if isinstance(electrode, MeshElectrode):

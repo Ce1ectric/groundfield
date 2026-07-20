@@ -262,81 +262,31 @@ def reflection_coefficient_layered(
         return reflection_coefficient_homogeneous(
             lambdas, omega=omega, sigma_earth=1.0 / earth.rhos[0],
         )
-    # u_k for each layer k=1..n
-    sigmas = np.array([1.0 / r for r in earth.rhos])
-    u = [np.sqrt(lambdas * lambdas + 1j * omega * MU_0 * s) for s in sigmas]
-    # Walk up from the bottom: Gamma_n = 0 at the bottom interface
-    # (semi-infinite). At each interface k → k+1 we compose.
-    # Convention: the air-layer above has u_a = lambda (quasi-static).
-    # We compute the *effective* u_1 seen from above by recursing the
-    # reflection at each subsurface interface. The final Gamma is
-    # built from u_1 versus lambda.
-    # Implementation follows Tleis 2008 eq. (3.55)+: build R_{n-1, n} = 0,
-    # then propagate up with
-    #   R_{k,k+1}_visible = (R_{k,k+1} + R_{k+1,k+2}_visible · e^{-2 u_{k+1} h_{k+1}})
-    #                       / (1 + R_{k,k+1} · R_{k+1,k+2}_visible · e^{-2 u_{k+1} h_{k+1}})
-    # then the top reflection seen by the air is the standard
-    # (u_1 - lambda)/(u_1 + lambda) but with u_1 effectively replaced.
-    # For the first implementation we use the simpler "top-layer
-    # reflection composed with the next interface" form.
-    # Build R_{k, k+1} for k=1..n-1
-    R_internal = []
-    for k in range(n - 1):
-        R_k = (u[k] - u[k + 1]) / (u[k] + u[k + 1])
-        R_internal.append(R_k)
-    # Walk up: combined reflection at the top of layer k seen from layer 1
-    # is built recursively. For the default case n=2, this is just
-    #   Gamma_eff = (R_{0,1} + R_{1,2} e^{-2 u_1 h_1}) / (1 + R_{0,1} R_{1,2} e^{-2 u_1 h_1})
-    # with R_{0,1} = (u_a - u_1)/(u_a + u_1) = (lambda - u_1)/(lambda + u_1) (sign opposite).
-    # Hmm, for the magnetic case the air-side coefficient is
-    # (u_1 - lambda)/(u_1 + lambda) (using the sign convention we picked).
-    # The top reflection coefficient as seen by a wire in the air (or
-    # at z=0) is *not* (u_1 - lambda)/(u_1 + lambda) for n>1; it is
-    # the composed multilayer reflection. We compute it by walking
-    # bottom-up:
-    #
-    #   R_eff[n-1] = 0  (no reflection from a semi-infinite bottom)
-    #   R_eff[k]   = (R_{k,k+1} + R_eff[k+1] * exp(-2 u_{k+1} h_{k+1}))
-    #                / (1 + R_{k,k+1} * R_eff[k+1] * exp(-2 u_{k+1} h_{k+1}))
-    #               for k = n-2, n-3, ..., 0
-    #   Gamma_top  = (u_1 - lambda + R_eff[0] (u_1 + lambda) ...) [doesn't quite work]
-    #
-    # Simpler: the magnetic reflection coefficient seen from above is
-    #   Gamma_top(lambda) = (u_1 - lambda + (u_1 + lambda) R) / (u_1 + lambda + (u_1 - lambda) R)
-    # where R is the *internal* reflection seen at the top of layer 1.
-    # For n=2 this gives:
-    #   R = R_{1,2} * exp(-2 u_1 h_1)
-    # For n=3:
-    #   R = (R_{1,2} + R_{2,3} exp(-2 u_2 h_2)) / (1 + R_{1,2} R_{2,3} exp(-2 u_2 h_2))
-    #       times exp(-2 u_1 h_1)
-    # In general we compute R_eff recursively:
-    if n >= 2:
-        # Start from below: R_eff[n-1] = 0 (no reflection past the
-        # semi-infinite bottom).
-        R_eff = np.zeros_like(lambdas, dtype=complex)
-        for k in range(n - 2, -1, -1):
-            # Interface k between layer k+1 and layer k+2 (1-indexed
-            # k+1 and k+2 in math, 0-indexed in Python).
-            R_k = R_internal[k]
-            if k + 1 < len(earth.thicknesses):
-                # Round-trip across layer (k+2) of thickness h_{k+2}
-                # is captured below; here we account for the round trip
-                # across layer (k+1)... wait, this gets confusing with
-                # the indexing. Stick with the simpler 2-layer first.
-                phase = np.exp(-2.0 * u[k + 1] * earth.thicknesses[k + 1])
-            else:
-                phase = np.zeros_like(lambdas, dtype=complex)
-            R_eff = (R_k + R_eff * phase) / (1.0 + R_k * R_eff * phase)
-        # Apply the round trip across layer 1
-        R_top_internal = R_eff * np.exp(-2.0 * u[0] * earth.thicknesses[0])
-        # Compose with the air-to-layer-1 reflection
-        Gamma_top = (
-            (u[0] - lambdas + (u[0] + lambdas) * R_top_internal)
-            / (u[0] + lambdas + (u[0] - lambdas) * R_top_internal)
-        )
-        return Gamma_top
-    # Should not reach here.
-    return np.zeros_like(lambdas, dtype=complex)
+    # Standard recursive multilayer surface reflection (WP-D2 fix,
+    # 2026-07-20). Vertical wavenumbers with ``u[0]`` the air (quasi-
+    # static, u = lambda) and ``u[k]`` layer k (k = 1..n):
+    u = [lambdas.astype(complex)]
+    for rho_k in earth.rhos:
+        u.append(np.sqrt(lambdas * lambdas + 1j * omega * MU_0 / rho_k))
+    # Interface reflection at boundary k (between medium k and k+1), in the
+    # magnetic convention ``Gamma_hom = (u_e - lambda)/(u_e + lambda)``:
+    #   r_k = (u_{k+1} - u_k) / (u_{k+1} + u_k),  k = 0..n-1.
+    # Cascade from the deepest interface (top of the semi-infinite bottom
+    # layer) up to the air surface, adding the round-trip phase
+    # ``exp(-2 u_{k+1} h_{k+1})`` across each intermediate layer:
+    #   Gamma <- (r_k + Gamma·phase) / (1 + r_k·Gamma·phase).
+    # This correctly reduces to the homogeneous rho_1 half-space as
+    # h_1 -> inf and to the rho_2 half-space as h_1 -> 0. (The buried-in-
+    # layer-1 *correction* no longer uses this Gamma for the two-layer
+    # buried case — see ``_two_layer_reflected_weight`` — but it is the
+    # correct surface reflection for overhead conductors over layered
+    # earth and for the n>=3 approximation.)
+    gamma = (u[n] - u[n - 1]) / (u[n] + u[n - 1])  # r_{n-1}, deepest interface
+    for k in range(n - 2, -1, -1):
+        r_k = (u[k + 1] - u[k]) / (u[k + 1] + u[k])
+        phase = np.exp(-2.0 * u[k + 1] * earth.thicknesses[k])
+        gamma = (r_k + gamma * phase) / (1.0 + r_k * gamma * phase)
+    return gamma
 
 
 # ---------------------------------------------------------------------
@@ -621,6 +571,45 @@ def _spectral_rho_interp(
     return (s_re + 1j * s_im).reshape(rho_grid.shape)
 
 
+def _two_layer_reflected_weight(
+    lambdas: np.ndarray,
+    u1: np.ndarray,
+    *,
+    omega: float,
+    earth: "LayeredEarth",
+    h_a: float,
+    h_b: float,
+    lambda_weights: np.ndarray,
+) -> np.ndarray:
+    r"""Reflected spectral weight for a source **and** observer buried in
+    layer 1 of a two-layer earth — the correct four-term Green's function
+    that replaces the single air-image form ``(λ/u1)·Γ·e^{-u1(h_a+h_b)}``.
+
+    Solves the two-interface spectral boundary-value problem (magnetic
+    vector potential ``A_x``: continuity of ``A`` and ``∂A/∂z`` at the
+    air–layer-1 and layer-1–layer-2 boundaries). With the primary
+    ``e^{-u1|z-z'|}/(2u1)`` and reflected ``A e^{-u1 z} + B e^{+u1 z}`` in
+    layer 1, the coefficients follow from a 2×2 system; the weight is
+    calibrated (factor ``2λ``) so the homogeneous limit (interface depth
+    ``d → ∞``, ``B → 0``) reproduces the existing single-layer term
+    exactly. Written in the numerically stable ``E = e^{-u1 d}`` form
+    (``d`` = ``earth.thicknesses[0]``; requires the mean depths
+    ``h_a`` (observer), ``h_b`` (source) both ``< d``, i.e. conductors in
+    layer 1). Validated against Tsiamitros 2005 Eq.(8) (WP-D2, 2026-07-20).
+    """
+    sigma2 = 1.0 / earth.rhos[1]
+    u2 = np.sqrt(lambdas * lambdas + 1j * omega * MU_0 * sigma2)
+    d = float(earth.thicknesses[0])
+    E = np.exp(-u1 * d)
+    rhs1 = np.exp(-u1 * h_b) / (2.0 * u1) * (u1 - lambdas)
+    rhs2 = np.exp(-u1 * (d - h_b)) / (2.0 * u1) * (u2 - u1)
+    det = -(lambdas + u1) * (u1 + u2) - (lambdas - u1) * (u1 - u2) * E * E
+    a_up = (rhs1 * (-(u1 + u2)) - (lambdas - u1) * E * rhs2) / det
+    b_dn = ((lambdas + u1) * rhs2 - (u1 - u2) * E * rhs1) / det
+    reflected = a_up * np.exp(-u1 * h_a) + b_dn * np.exp(-u1 * (d - h_a))
+    return 2.0 * lambdas * reflected * lambda_weights
+
+
 def _pollaczek_inner_kernel(
     rho_grid: np.ndarray,      # (16, 16) horizontal distances
     dz_grid: np.ndarray,       # (16, 16) signed z_a - z_b
@@ -634,6 +623,7 @@ def _pollaczek_inner_kernel(
     lambdas: np.ndarray,
     lambda_weights: np.ndarray,
     Gamma: np.ndarray,
+    earth: "LayeredEarth | None" = None,
 ) -> np.ndarray:
     """Pollaczek correction kernel on the outer 16×16 node grid.
 
@@ -671,10 +661,26 @@ def _pollaczek_inner_kernel(
             small, -gamma, (np.exp(-gamma * R3_safe) - 1.0) / R3_safe,
         )
         inner = inner + direct
-        # Reflected remainder: (λ/u1)·Γ·e^{−u1(h+h')} — decays like
-        # Γ ~ γ²/(4λ²) at large λ, absolutely convergent.
-        spectral_w = (lambdas / u1) * Gamma * np.exp(-u1 * z_ref) \
-            * lambda_weights
+        # Reflected remainder. For a homogeneous earth (or n≥3, still
+        # approximate): the single air-image form (λ/u1)·Γ·e^{−u1(h+h')}.
+        # For a TWO-layer earth with both conductors in layer 1, use the
+        # correct buried-in-layer-1 four-term amplitude (WP-D2 fix): the
+        # single-image form under-weights the deep layer (validated vs
+        # Tsiamitros 2005 Eq.(8)). Both decay like Γ ~ γ²/(4λ²) at large λ.
+        h_a = float(depth_a.mean())
+        h_b = float(depth_b.mean())
+        if (
+            earth is not None
+            and earth.n_layers == 2
+            and max(h_a, h_b) < float(earth.thicknesses[0])
+        ):
+            spectral_w = _two_layer_reflected_weight(
+                lambdas, u1, omega=omega, earth=earth,
+                h_a=h_a, h_b=h_b, lambda_weights=lambda_weights,
+            )
+        else:
+            spectral_w = (lambdas / u1) * Gamma * np.exp(-u1 * z_ref) \
+                * lambda_weights
         inner = inner + _spectral_rho_interp(
             rho_grid, z_ref, spectral_w, lambdas,
         )
@@ -725,11 +731,15 @@ def _pollaczek_pair_integral(
     omega: float,
     sigma_top: float,
     gamma_provider,
+    earth: "LayeredEarth | None" = None,
 ) -> complex:
     """Shared geometric integration for both earth models.
 
     ``gamma_provider(lambdas)`` returns the reflection coefficient
-    array (homogeneous or layered).
+    array (homogeneous or layered). ``earth`` is forwarded to the inner
+    kernel so that a two-layer earth uses the correct buried-in-layer-1
+    reflected amplitude for a buried–buried pair (``None`` → the
+    single-image homogeneous form).
     """
     p1_a = np.asarray(p1_a, dtype=float)
     p2_a = np.asarray(p2_a, dtype=float)
@@ -780,6 +790,7 @@ def _pollaczek_pair_integral(
         rho_grid, dz_grid, depth_a, depth_b, buried_a, buried_b,
         omega=omega, sigma_top=sigma_top,
         lambdas=lambdas, lambda_weights=lambda_weights, Gamma=Gamma,
+        earth=earth,
     )
 
     outer_w = w_nodes[:, None] * w_nodes[None, :]
@@ -874,6 +885,7 @@ def sommerfeld_pair_integral_layered(
     return _pollaczek_pair_integral(
         p1_a, p2_a, p1_b, p2_b,
         omega=omega, sigma_top=sigma_top, gamma_provider=_gamma,
+        earth=earth,
     )
 
 

@@ -26,7 +26,195 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — Earth-return line-impedance benchmark (Carson)
+
+New reference module `groundfield.references.earth_return` with Carson's
+closed-form earth-return **line impedance** per unit length —
+`carson_self_impedance` / `carson_mutual_impedance` (the equivalent-depth
+reactance `(ωμ₀/2π)·ln(D_e/GMR)` with `D_e = 658.87·√(ρ/f)` and the
+soil-independent resistance `ωμ₀/8`), plus `carson_equivalent_depth` and
+`carson_earth_return_resistance`. New benchmark
+`tests/test_earth_return_benchmark.py` validates groundfield's assembled
+Sommerfeld/Pollaczek stack (`earth_inductive_model="sommerfeld"`) against
+it: the earth-return **reactance** — carrying the frequency- and
+soil-dependent depth `D_e`, not just the geometric image at `2h` —
+matches Carson to about 1 %; the **resistance** converges to `ωμ₀/8` from
+below as the modelled line lengthens (the return current closes over
+~one skin depth). 17 tests (reference-formula sanity, assembled self
+reactance/resistance, the two-layer homogeneous limit + bracketing, the
+layered-reflection half-space limits, and the quantitative two-layer
+validation against Tsiamitros et al. across 50 Hz – 1 MHz — see the Fixed
+entry below). Demo
+notebook `notebooks/45_earth_return_line_impedance.ipynb` plots `Z'(f)`
+(self and mutual) against Carson and the `R'` convergence, including the
+normal-soil power-frequency corner (100 Ω·m, 50 Hz, where `X'` still
+matches Carson to ~1 %) and a **two-layer** soil section: the layered
+earth-return reactance reproduces the homogeneous result when `ρ1 = ρ2`,
+lies between the two single-layer bounds, and — validated against
+Tsiamitros et al. (IEEE Trans. PWRD 20(3), 2005, Eq. 8) — matches that
+reference to a few percent in `X'` and to ≈ 0.003 in layer attribution
+across an explicit **50 Hz – 1 MHz** sweep, with the low-frequency
+(≤ 1 kHz) regime highlighted: there the inductive return is deep-layer
+dominated (a thin resistive topsoil is inductively 'seen through').
+`LayeredEarth` accepts three or more layers unchanged. This makes the
+inductive stack's earth-return impedance quotable. Exposed via
+`groundfield.references` (`__all__`).
+
+### Fixed — two-layer inductive earth-return kernel
+
+The layered Sommerfeld/Pollaczek earth-return correction for a conductor
+buried **in the upper layer** of a two-layer earth used the homogeneous
+single-air-image spectral form `(λ/u₁)·Γ·e^{−u₁(z_i+z_j)}`, valid only for a
+half-space. It therefore mis-weighted the layers: at 10 kHz for the
+Tsiamitros Case V soil it placed the earth-return reactance roughly halfway
+between the two homogeneous bounds (attribution `frac ≈ 0.51`) when the
+deep, conductive layer should dominate (`frac ≈ 0.08`). Replaced with the
+exact four-term boundary-value solution for the spectral magnetic vector
+potential — the up-/down-going reflected amplitudes from the 2×2 interface
+system, in an overflow-stable form that factors out `e^{−u₁d}` — which
+reduces to the homogeneous form as the interface deepens. Separately,
+`reflection_coefficient_layered` (used for the overhead and `n ≥ 3` paths)
+was corrected to the standard bottom-up interface cascade; the previous
+top-interface composition failed the `h₁ → 0` half-space limit (it
+under-weighted the deep layer). Validated against Tsiamitros et al.
+(IEEE Trans. PWRD 20(3), 2005, Eq. 8): the assembled two-layer `X'` now
+matches to 2–5 % (the residual being the finite-line offset shared with the
+homogeneous case, not a layered error) and the layer attribution to ≈ 0.003
+across **50 Hz – 1 MHz** — including the ≤ 1 kHz regime central to
+low-frequency analysis, where the return is deep-layer dominated. Galvanic /
+DC two-layer results (grounding resistance, GPR, touch/step — e.g. the
+IEEE Std 80 Grid 3 above) use a different path and were never affected.
+Regression: `tests/test_earth_return_benchmark.py`
+(`test_reflection_layered_reduces_to_halfspace_limits`,
+`test_two_layer_self_reactance_matches_eq8`,
+`test_two_layer_attribution_matches_eq8_across_frequency` at 100 Hz – 1 MHz,
+and `test_two_layer_frequency_regimes_low_vs_high` pinning the ≤ 1 kHz
+deep-layer-dominated behaviour).
+
+### Changed — default `earth_inductive_model` is now `sommerfeld`
+
+The default earth-return model for inductive coupling flips from
+`perfect_mirror` to **`sommerfeld`** (the rigorous Pollaczek stack,
+validated against Carson above and against Pollaczek's analytic mutual in
+`tests/test_audit_inductive_stack.py`). `perfect_mirror` — a fast,
+frequency-independent electrostatic-image baseline whose sign is far from
+the `f < 1 kHz` physics of buried conductors (audit finding F5) — is now
+opt-in (`earth_inductive_model="perfect_mirror"`). This only affects
+solves that have at least one distributed conductor with
+`inductance_model="neumann"` at a non-zero frequency; purely galvanic /
+DC solves and the resistive grounding path are unchanged. Quantitative
+`Z(f)` results therefore now carry the earth-return resistance and the
+equivalent-depth reactance by default. Regression:
+`tests/test_sommerfeld_inductance.py::test_default_engine_produces_sommerfeld_result`.
+
+### Added — IEEE Std 80-2013 Annex H grounding-grid benchmark
+
+New reference module `groundfield.references.ieee80` with
+`grid_resistance_sverak` (Sverak's grid resistance, IEEE Std 80-2000
+Eq. 57 / 2013 Eq. 53). New benchmark `tests/test_ieee80_benchmark.py`
+reproduces the standard's **Annex H** benchmark for **all three grids**
+(grid current 744.8 A), solved with the `mom` backend — which recovers
+the current distribution as the reference programs do:
+
+- **Grid 1** — bare grid, uniform 140 Ω·m soil (Table H.5);
+- **Grid 2** — grid + twenty 7.5 m rods, uniform soil (Table H.6);
+- **Grid 3** — Grid 2 geometry in a two-layer soil (ρ1 = 300 Ω·m,
+  ρ2 = 100 Ω·m, h = 6.096 m), rods crossing the layer interface
+  (Table H.7).
+
+`groundfield` matches the published CDEGS grid resistance, GPR and touch
+voltage to about 1 % on every grid (including two-layer Grid 3) and the
+step voltage to a few percent. 8 tests total (Sverak sanity,
+Sverak-vs-solve, and the Grid 1 / 2 / 3 reproduction, parametrised). Demo
+notebook `notebooks/43_ieee80_benchmark.ipynb` lays `groundfield` next to
+CDEGS / ETAP / WinIGS for all three grids, tabulates the relative error
+and plots the grid-resistance comparison and the touch-voltage surface.
+Exposed via `groundfield.references` (`__all__`).
+
+### Fixed — grid-crossing discretisation trap (silent ~2× resistance)
+
+Mesh / grid electrodes place one point source at each segment midpoint.
+When `segment_length` produced a half-integer number of segments per mesh
+span (e.g. 2.0 m on a 7 m pitch → 3.5 segments/span), a longitudinal and
+a transverse segment midpoint coincided on a grid crossing; their mutual
+distance collapsed to the 1 mm singularity clamp and the `image` backend
+returned a grid resistance **~2–3× too large** for an otherwise valid
+grid (`ds = 2.0` → 1.97×, `ds = 2.8` → 2.89×). The discretiser
+(`_grid_segments`) now aligns the segment count per wire to a whole
+multiple of the mesh-span count, so crossings fall on segment endpoints
+and no two point sources coincide; the resistance is stable for any
+`segment_length` (≤ 0.15 % from Sverak across the former trap values) and
+the spurious singularity-clamp warning no longer fires for valid grids.
+The result is never coarser than requested. New
+`tests/test_grid_crossing_discretization.py` (16 tests: helper alignment,
+the no-coincident-midpoint invariant, and resistance stability) plus demo
+notebook `notebooks/44_grid_discretization_robustness.ipynb`.
+
+### Fixed — cross-layer two-layer solve exhausted memory on grids
+
+The two-layer *layered correction* (ADR-0007) assembled its Hankel
+contraction `J0(λ·s) @ w_phi` as one dense `(n_pairs, n_lambda)` Bessel
+matrix. For a whole grounding grid `n_pairs = n_seg²` and the
+oscillation-resolved λ-grid reaches ~5·10⁴ nodes, so the IEEE Std 80
+Annex H Grid 3 (70 m grid + twenty cross-layer rods) tried to allocate
+**≈ 263 GiB** and failed with `MemoryError`. The contraction
+(`groundfield.coupling.layered_green`) is now **row-blocked** to a fixed
+memory budget and, for large single-depth-pair blocks, **interpolated**
+over a log-spaced distance grid — the same policy already used by
+`two_layer_probe_matrix`, valid because the correction is smooth in the
+horizontal distance (the singular `1/r` part cancels in
+`Φ_lay − Φ_hom`). Grid 3 now solves in a few seconds in well under 1 GB
+with no measurable accuracy change. Pinned by
+`tests/test_layered_green_chunking.py` (blocking is bit-for-bit; the
+interpolation agrees with the exact scalar kernel to ≲ 1e-3).
+
+### Fixed — `docs/api/geometry.md` grid_mesh example used `center=`
+
+The `grid_mesh` snippet passed `center=`, but `GridMeshElectrode` takes
+`corner=` and forbids extra fields, so the example raised on execution.
+Corrected to `corner=(-10.0, -10.0, 0.5)`.
+
+### Added — `StarElectrode` (n-point star / Sternerder)
+
+New electrode primitive `StarElectrode` (`kind="star"`): `n_arms` equal
+horizontal wires of length `arm_length` radiate from a shared centre node at
+one depth, uniformly spaced by 360°/n and optionally rotated by
+`orientation_deg`; all arms form a single galvanic cluster. A new
+`_discretize_star` (one strip-style chain per arm) serves the image /
+integral backends, and the kind is wired through `create_electrode`, the
+`Electrode` union, diagnostics, the 2-D/3-D geometry plots and the VTK
+export. Validated against Dwight (1936, Eqs. 23–26): the image backend
+matches `references.dwight1936.n_point_star` to ~1 % for n ∈ {3, 4, 6, 8}
+(`tests/test_dwight_references.py::test_image_n_point_star_vs_dwight`,
+previously skipped, now active). New `tests/test_star_electrode.py` — 5 tests:
+geometry, the `n_arms >= 2` guard, single-cluster monotone `R(n_arms)`,
+rotation invariance, and a plot/VTK smoke — plus demo notebook
+`notebooks/42_star_electrode.ipynb`. Exported from `groundfield` and
+`groundfield.geometry` (which now also re-exports the previously-missing
+`PolylineElectrode`); documented with the Dwight formula in
+`docs/api/geometry.md`.
+
+### Fixed — reject degenerate `PolylineElectrode` edges; warn on 2-vertex rings
+
+`PolylineElectrode` now rejects zero-length edges during validation: a
+consecutive duplicate vertex — or repeating the first vertex at the end of a
+`closed=True` ring — raises `ValueError` instead of silently feeding a pair of
+coincident segments into the reaction matrix (driven straight into the solver's
+1 mm singularity clamp). The previous total-length check could not catch a
+single degenerate edge. In addition, `closed=True` with only two vertices now
+emits a `UserWarning` and is treated as an open wire (a ring needs at least
+three vertices). New test module `tests/test_polyline_electrode.py` — 5 tests:
+the three guard cases, valid open/closed construction, and a segment-length
+convergence check for the polyline discretiser.
+
+### Docs — governing PDE and boundary conditions on the boundary page
+
+`docs/api/boundary.md` gains a *Mathematical / physical model* section: the
+quasi-static Laplace problem $\nabla\cdot(\sigma\nabla\varphi)=0$, the
+Dirichlet far-field / Neumann surface conditions and their image-charge
+realisation, the potential datum, layer-interface continuity, and the
+validity envelope. (The `coupling` page already carries the Neumann /
+Carson / Sommerfeld governing equations, so it needed no change.)
 
 ---
 
@@ -4426,6 +4614,18 @@ work package 1 progresses.
 
 ### Core functionality
 
+- **Exact buried two-layer inductive kernel → `n ≥ 3` layers.** The 0.13.0
+  fix (`coupling/sommerfeld_inductance.py::_two_layer_reflected_weight`)
+  solves the exact boundary-value problem for a conductor buried in the
+  upper layer of a **two-layer** earth, validated against Tsiamitros (2005)
+  Eq. (8) across 50 Hz – 1 MHz. For **`n ≥ 3`** layers a *buried* source
+  still falls back to the approximate single-air-image correction (the
+  surface reflection cascade `reflection_coefficient_layered` is already
+  exact for any `n`); a general `n`-layer buried spectral kernel would
+  extend the exact inductive earth-return to arbitrary multilayer soils.
+  The `n ≥ 3` buried path is currently pinned only by the homogeneous and
+  bounding checks — there is no exact multilayer reference for it yet.
+  Galvanic multilayer solves are unaffected (they use `layered_green`).
 - **FEM support for distributed conductors.** The current FEM
   backend falls back to a lumped branch and logs a warning when
   it sees a distributed conductor — the equivalent-hemisphere

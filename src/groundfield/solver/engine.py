@@ -124,10 +124,11 @@ class Engine(BaseModel):
         distributed-conductor segments (only effective when at least
         one conductor sets ``inductance_model = "neumann"``):
 
-        - ``"perfect_mirror"`` (default, ADR-0004) — the earth is a
-          perfect magnetic mirror. Cheap, frequency-independent
-          inductance assembly. Bit-exact reproduction of all ADR-0004
-          tests.
+        - ``"perfect_mirror"`` (ADR-0004, the pre-0.13 default) — the
+          earth is a perfect magnetic mirror. Cheap, frequency-independent
+          inductance assembly, but its additive image is far from the
+          f < 1 kHz physics of buried conductors (audit finding F5); kept
+          as a fast diagnostic baseline.
         - ``"carson_series"`` (ADR-0005) — the earth has finite
           conductivity. Adds Carson 1926's per-meter earth-return
           correction $\\Delta Z_\\text{Carson}(\\omega)$ on top of the
@@ -147,11 +148,10 @@ class Engine(BaseModel):
           earth. Limits: $\\sigma \\to 0$ → free space (no image);
           $\\sigma \\to \\infty$ → screened (buried) / anti-parallel
           PEC image (overhead). Validated against Pollaczek's
-          analytic $K_0$ mutual. **Recommended whenever quantitative
-          Z(f) above ~100 Hz matters** — the ``perfect_mirror``
-          default is a frequency-independent baseline whose additive
-          image is far from the f < 1 kHz physics of buried
-          conductors (audit finding F5).
+          analytic $K_0$ mutual and Carson's line impedance
+          (``tests/test_earth_return_benchmark.py``). **The default
+          since 0.13.0** — the rigorous choice whenever a quantitative
+          ``Z(f)`` matters.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -172,7 +172,7 @@ class Engine(BaseModel):
     segment_length: float = Field(default=0.5, gt=0.0)
     tolerance: float = Field(default=1e-6, gt=0.0)
     max_iterations: int = Field(default=200, gt=0)
-    earth_inductive_model: EarthInductiveModel = Field(default="perfect_mirror")
+    earth_inductive_model: EarthInductiveModel = Field(default="sommerfeld")
     image_max_terms: int = Field(
         default=300, gt=0,
         description=(

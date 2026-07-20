@@ -68,6 +68,7 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -90,6 +91,11 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
         if e.closed and len(pts) > 2:
             pts.append(list(e.vertices[0]))
         return [np.array(pts, dtype=float)]
+    if isinstance(e, StarElectrode):
+        return [
+            np.array([list(start), list(end)], dtype=float)
+            for start, end in e.edges
+        ]
     if isinstance(e, GridMeshElectrode):
         cx, cy, cz = e.corner
         dx, dy = e.size

@@ -41,6 +41,7 @@ from groundfield.geometry.electrodes import (
     PolylineElectrode,
     RingElectrode,
     RodElectrode,
+    StarElectrode,
     StripElectrode,
     _ElectrodeBase,
 )
@@ -127,7 +128,8 @@ def create_electrode(
     world
         Target world that will own the new electrode.
     kind
-        Geometry type: ``"rod"``, ``"ring"`` or ``"mesh"``.
+        Geometry type: one of ``"rod"``, ``"ring"``, ``"strip"``,
+        ``"polyline"``, ``"star"``, ``"mesh"`` or ``"grid_mesh"``.
     name
         Optional unique name. Auto-generated when ``None``.
     **params
@@ -142,6 +144,7 @@ def create_electrode(
         "ring": RingElectrode,
         "strip": StripElectrode,
         "polyline": PolylineElectrode,
+        "star": StarElectrode,
         "mesh": MeshElectrode,
         "grid_mesh": GridMeshElectrode,
     }
@@ -350,7 +353,7 @@ def create_engine(
     segment_length: float = 0.5,
     tolerance: float = 1e-6,
     max_iterations: int = 200,
-    earth_inductive_model: str = "perfect_mirror",
+    earth_inductive_model: str = "sommerfeld",
     image_max_terms: int = 300,
     image_series_tol: float = 1e-6,
 ) -> Engine:
@@ -380,16 +383,24 @@ def create_engine(
         Convergence parameters for iterative solvers.
     earth_inductive_model
         Earth model for the inductive coupling between distributed
-        conductor segments. Three values are supported:
+        conductor segments (effective only when at least one conductor
+        sets ``inductance_model="neumann"``). Three values are supported:
 
-        - ``"perfect_mirror"`` (default, ADR-0004) — perfect magnetic
-          mirror, frequency-independent Neumann inductance assembly.
+        - ``"sommerfeld"`` (**default** since 0.13.0, ADR-0006 /
+          Pollaczek kernel) — geometric integration of the σ-dependent
+          vector-potential Green's function; carries the earth-return
+          resistance and the equivalent-depth reactance, validated
+          against Carson (``tests/test_earth_return_benchmark.py``).
+          Rigorous for arbitrary wire lengths and for layered earth, and
+          the right choice whenever a quantitative ``Z(f)`` matters.
         - ``"carson_series"`` (ADR-0005) — Carson 1926 per-meter
           asymptotic correction × geometric length. Cheap,
           appropriate for long parallel wires over homogeneous earth.
-        - ``"sommerfeld"`` (ADR-0006) — geometric integration of the
-          σ-dependent vector-potential Green's function. Rigorous for
-          arbitrary wire lengths and for layered earth.
+        - ``"perfect_mirror"`` (ADR-0004, the pre-0.13 default) — perfect
+          magnetic mirror, a fast frequency-independent Neumann baseline;
+          its additive image is far from the ``f < 1 kHz`` physics of
+          buried conductors (audit finding F5), so it is now a diagnostic
+          baseline rather than the default.
     image_max_terms
         Maximum number of image-charge series terms for the layered
         backends (``image_2layer`` / ``image_nlayer`` / ``mom`` /

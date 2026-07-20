@@ -77,6 +77,7 @@ def _electrode_wire_length(e) -> float:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -86,7 +87,7 @@ def _electrode_wire_length(e) -> float:
         return float(2.0 * math.pi * e.radius)
     if isinstance(e, StripElectrode):
         return float(e.length)
-    if isinstance(e, PolylineElectrode):
+    if isinstance(e, (PolylineElectrode, StarElectrode)):
         return float(e.length)
     if isinstance(e, MeshElectrode):
         dx, dy = e.size
@@ -119,6 +120,7 @@ def _electrode_segment_count(e, ds: float) -> int:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -128,7 +130,7 @@ def _electrode_segment_count(e, ds: float) -> int:
         return max(8, int(math.ceil(2.0 * math.pi * e.radius / ds)))
     if isinstance(e, StripElectrode):
         return max(1, int(math.ceil(e.length / ds)))
-    if isinstance(e, PolylineElectrode):
+    if isinstance(e, (PolylineElectrode, StarElectrode)):
         n = 0
         for (sx, sy, _), (ex, ey, _) in e.edges:
             L = math.hypot(ex - sx, ey - sy)
@@ -221,6 +223,7 @@ def world_statistics(world: "World") -> dict[str, Any]:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
     from groundfield.postprocess.geometry_plot import world_bounds_3d
@@ -231,6 +234,7 @@ def world_statistics(world: "World") -> dict[str, Any]:
         RingElectrode: "ring",
         StripElectrode: "strip",
         PolylineElectrode: "polyline",
+        StarElectrode: "star",
         MeshElectrode: "mesh",
         GridMeshElectrode: "grid_mesh",
     }
@@ -448,6 +452,7 @@ def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 

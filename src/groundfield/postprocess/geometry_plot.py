@@ -140,6 +140,7 @@ def world_bounds_3d(
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -175,6 +176,11 @@ def world_bounds_3d(
             xs.extend(v[0] for v in e.vertices)
             ys.extend(v[1] for v in e.vertices)
             zs.extend(v[2] for v in e.vertices)
+        elif isinstance(e, StarElectrode):
+            for start, end in e.edges:
+                xs.extend([start[0], end[0]])
+                ys.extend([start[1], end[1]])
+                zs.extend([start[2], end[2]])
         else:  # pragma: no cover — defensive
             cp = e.connection_point
             xs.append(cp[0])
@@ -435,6 +441,7 @@ def _draw_electrode_3d(ax, e) -> None:
         PolylineElectrode,
         RingElectrode,
         RodElectrode,
+        StarElectrode,
         StripElectrode,
     )
 
@@ -477,6 +484,14 @@ def _draw_electrode_3d(ax, e) -> None:
         if e.closed:
             vx, vy, vz = vx + [vx[0]], vy + [vy[0]], vz + [vz[0]]
         ax.plot(vx, vy, vz, **kw)
+    elif isinstance(e, StarElectrode):
+        for start, end in e.edges:
+            ax.plot(
+                [start[0], end[0]],
+                [start[1], end[1]],
+                [start[2], end[2]],
+                **kw,
+            )
     else:  # pragma: no cover — defensive
         cp = e.connection_point
         ax.scatter([cp[0]], [cp[1]], [cp[2]], color="k", s=20)

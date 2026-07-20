@@ -63,6 +63,7 @@ from groundfield.geometry.electrodes import (
     PolylineElectrode,
     RingElectrode,
     RodElectrode,
+    StarElectrode,
     StripElectrode,
 )
 from groundfield.soil.models import (
@@ -249,6 +250,7 @@ __all__ = [
     "RingElectrode",
     "StripElectrode",
     "PolylineElectrode",
+    "StarElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
     "Conductor",

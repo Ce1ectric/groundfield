@@ -77,6 +77,55 @@ import numpy as np
 from scipy.special import j0
 from functools import lru_cache
 
+# Peak-memory budget (bytes) for the dense ``J0(lambda * s)`` Bessel
+# matrix that the Hankel contractions below would otherwise materialise
+# in one shot. For a cross-layer grounding grid the number of distance
+# pairs is ``n_seg**2`` and the oscillation-resolved lambda grid reaches
+# ~5e4 nodes, so the full matrix can exceed 100 GiB. The contraction is
+# blocked over the distance axis to keep the transient allocation below
+# this budget; row-blocking a matmul is bit-for-bit identical to the
+# single-shot form (see ``tests/test_layered_green_chunking.py``).
+_HANKEL_MATMUL_BUDGET_BYTES = 512 * 1024 * 1024
+
+# Above this many distance pairs in one (z, z_s) group, the layered
+# *correction* — smooth and monotone in the horizontal distance because
+# the singular 1/r part cancels in ``Phi_lay - Phi_hom`` — is evaluated
+# on a log-spaced ``s``-grid and interpolated instead of contracted at
+# every pair. This is the same policy already used for the potential
+# path in :func:`two_layer_probe_matrix` (relative error ≲ 1e-4) and
+# turns whole-grid reaction blocks from O(n_pairs · n_lambda) into
+# O(n_nodes · n_lambda), which is what makes a cross-layer grounding
+# grid (n_pairs = n_seg**2) tractable in both time and memory.
+_HANKEL_INTERP_THRESHOLD = 64
+_HANKEL_INTERP_NODES = 48
+
+
+def _hankel_contract(
+    lambdas: np.ndarray, s_values: np.ndarray, w_phi: np.ndarray
+) -> np.ndarray:
+    """Blocked evaluation of ``J0(lambdas * s) @ w_phi`` over ``s``.
+
+    Equivalent to ``j0(lambdas[None, :] * s_values[:, None]) @ w_phi``
+    but never materialises the full ``(n_s, n_lambda)`` Bessel matrix:
+    the distance axis is processed in row blocks sized so each transient
+    ``J0`` block stays within :data:`_HANKEL_MATMUL_BUDGET_BYTES`. The
+    result is identical to the single-shot contraction (a matmul is a
+    row-independent reduction), so accuracy is unchanged; only peak
+    memory is bounded. ``s_values`` of any shape is accepted and the
+    original shape is preserved on return.
+    """
+    orig_shape = s_values.shape
+    flat = np.ascontiguousarray(s_values, dtype=float).ravel()
+    n_lambda = int(lambdas.shape[0])
+    chunk = max(1, _HANKEL_MATMUL_BUDGET_BYTES // (8 * max(n_lambda, 1)))
+    if flat.shape[0] <= chunk:
+        return (j0(lambdas[None, :] * flat[:, None]) @ w_phi).reshape(orig_shape)
+    out = np.empty(flat.shape[0], dtype=float)
+    for a in range(0, flat.shape[0], chunk):
+        b = a + chunk
+        out[a:b] = j0(lambdas[None, :] * flat[a:b, None]) @ w_phi
+    return out.reshape(orig_shape)
+
 
 @lru_cache(maxsize=None)
 def _leggauss_cached(n: int):
@@ -496,7 +545,20 @@ def two_layer_layered_correction_group(
         lambdas, A_h, B_h, C_h, z, z_s, rho_baseline, rho_baseline, h_1,
     )
     w_phi = (Phi_lay - Phi_hom) * weights * lambdas
-    return j0(lambdas[None, :] * s_values[:, None]) @ w_phi
+    if s_values.size <= _HANKEL_INTERP_THRESHOLD:
+        return _hankel_contract(lambdas, s_values, w_phi)
+    # Large group (a whole-grid reaction block at one depth pair): the
+    # correction is smooth and monotone in ``s`` (the singular 1/r part
+    # cancels in ``Phi_lay - Phi_hom``), so sample it on a log-spaced
+    # ``s``-grid and interpolate — same policy as ``two_layer_probe_matrix``.
+    c = max(abs(z - z_s), 1e-3)
+    t_lo = math.log(s_min + c)
+    t_hi = math.log(max(s_max + c, s_min + c + 1e-9))
+    t_nodes = np.linspace(t_lo, t_hi, _HANKEL_INTERP_NODES)
+    s_nodes = np.maximum(np.exp(t_nodes) - c, 0.0)
+    g_nodes = _hankel_contract(lambdas, s_nodes, w_phi)
+    flat = np.interp(np.log(s_values.ravel() + c), t_nodes, g_nodes)
+    return flat.reshape(s_values.shape)
 
 
 def two_layer_probe_matrix(

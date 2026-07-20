@@ -186,10 +186,12 @@ def test_multiport_z_exact_reciprocity_mixed_lengths() -> None:
     )
 
     w = gf.create_world(soil=SOIL)
-    # size 3.0 x 2.0 with ds = 0.7 -> longitudinal segments 0.6 m,
-    # transverse segments 0.5 m: unequal lengths inside one electrode.
-    gf.create_electrode(w, "mesh", name="g1", corner=(0.0, 0.0, 0.7),
-                        size=(3.0, 2.0), spacing=1.0, wire_radius=0.005)
+    # 4.0 x 2.0 grid with a different pitch per axis (n_x=2 -> 2.0 m,
+    # n_y=2 -> 1.0 m). With ds = 0.7 and crossing-aligned discretisation
+    # the longitudinal wires get 0.667 m segments and the transverse
+    # wires 0.5 m: unequal lengths inside one electrode.
+    gf.create_electrode(w, "grid_mesh", name="g1", corner=(0.0, 0.0, 0.7),
+                        size=(4.0, 2.0), n_x=2, n_y=2, wire_radius=0.005)
     gf.create_electrode(w, "rod", name="g2", position=(10.0, 0.0, 0.0),
                         length=3.0, wire_radius=0.005)
     gf.create_source(w, attached_to="g1", magnitude=1.0)

@@ -265,10 +265,11 @@ def _galvanic_world(
     return w, eng
 
 
-def test_engine_carson_default_is_perfect_mirror() -> None:
-    """Default ``earth_inductive_model`` is ``perfect_mirror``."""
+def test_engine_default_is_sommerfeld() -> None:
+    """Default ``earth_inductive_model`` is ``sommerfeld`` (0.13.0); the
+    ``perfect_mirror`` baseline must now be requested explicitly."""
     eng = gf.create_engine(backend="image", segment_length=SEG)
-    assert eng.earth_inductive_model == "perfect_mirror"
+    assert eng.earth_inductive_model == "sommerfeld"
 
 
 def test_engine_carson_perfect_mirror_regression() -> None:

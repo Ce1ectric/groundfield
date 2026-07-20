@@ -197,10 +197,35 @@ def _galvanic_world(
     return w, eng
 
 
-def test_engine_sommerfeld_default_unchanged() -> None:
-    """``earth_inductive_model="perfect_mirror"`` is still the default."""
+def test_engine_sommerfeld_is_default() -> None:
+    """``earth_inductive_model="sommerfeld"`` is the default since 0.13.0."""
     eng = gf.create_engine(backend="image", segment_length=SEG)
-    assert eng.earth_inductive_model == "perfect_mirror"
+    assert eng.earth_inductive_model == "sommerfeld"
+
+
+def test_default_engine_produces_sommerfeld_result() -> None:
+    """A ``create_engine`` with no ``earth_inductive_model`` uses the
+    Sommerfeld/Pollaczek stack end-to-end: the solved inductive coupling
+    equals the explicit-``sommerfeld`` result and differs from the
+    ``perfect_mirror`` baseline (guards the default *and* its plumbing)."""
+    w_def, _ = _galvanic_world(n_seg=8, frequencies=[500.0])
+    eng_default = gf.create_engine(
+        backend="image", segment_length=SEG, frequencies=[500.0]
+    )  # no earth_inductive_model -> the new default
+    i_default = w_def.solve(eng_default).electrode_currents["g2"][0]
+
+    w_s, eng_s = _galvanic_world(
+        n_seg=8, earth_inductive_model="sommerfeld", frequencies=[500.0]
+    )
+    i_somm = w_s.solve(eng_s).electrode_currents["g2"][0]
+
+    w_p, eng_p = _galvanic_world(
+        n_seg=8, earth_inductive_model="perfect_mirror", frequencies=[500.0]
+    )
+    i_pm = w_p.solve(eng_p).electrode_currents["g2"][0]
+
+    assert i_default == pytest.approx(i_somm, rel=1e-9)
+    assert abs(i_default - i_pm) > 1e-6 * abs(i_pm)
 
 
 def test_engine_sommerfeld_dc_reproducibility() -> None:

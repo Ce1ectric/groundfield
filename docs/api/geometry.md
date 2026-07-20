@@ -1,9 +1,9 @@
 # Geometry
 
 The ``geometry`` subpackage describes the physical shape of every
-buried metallic object — rods, rings, strips, mesh and grid-mesh
-electrodes — together with the wire-segment representation that the
-field solver consumes.
+buried metallic object — rods, rings, strips, polylines, stars, mesh
+and grid-mesh electrodes — together with the wire-segment
+representation that the field solver consumes.
 
 ## Physical background
 
@@ -27,6 +27,16 @@ geometry layer is intentionally decoupled from the solver, so the
 same electrodes can be fed into the closed-form image backend, MoM,
 or FEM without modification.
 
+For mesh and grid electrodes the segment count per wire is aligned to a
+whole multiple of the mesh-span count, so the grid crossings fall on
+segment **endpoints** rather than on the midpoint point sources. This
+avoids a discretisation trap in which a longitudinal and a transverse
+segment midpoint would coincide on a crossing — collapsing to the
+singularity clamp and inflating the grid resistance by ~2× for the
+uniform-current image backend. The effective $\Delta s$ is therefore
+never coarser than requested and the grid resistance is stable for any
+`segment_length` (see `notebooks/44_grid_discretization_robustness.ipynb`).
+
 ## Example
 
 ```python
@@ -49,7 +59,7 @@ ring = gf.create_electrode(
 # Rectangular mesh (e.g. substation grid)
 mesh = gf.create_electrode(
     world, "grid_mesh", name="g3",
-    center=(0.0, 0.0, 0.5), size=(20.0, 20.0),
+    corner=(-10.0, -10.0, 0.5), size=(20.0, 20.0),
     n_x=11, n_y=11, wire_radius=0.005,
 )
 
@@ -82,6 +92,36 @@ with ``concrete_model="distributed"`` is materialised; it is not
 intended to be set by hand on isolated strip electrodes outside
 the generator pipeline (but does work there, see the closed-form
 verification in ``tests/test_concrete_encasement.py``).
+
+### Star electrode (Sternerder)
+
+:class:`StarElectrode` is the classic $n$-point star: ``n_arms`` equal
+horizontal wires of length $L$ radiate from a common centre node at one
+depth, uniformly spaced by $360^\circ / n$. All arms share the centre,
+so the star is a single galvanic cluster. Its closed-form grounding
+resistance follows Dwight (1936, Eqs. 23–26),
+
+$$
+R = \frac{\rho}{2\,n\,\pi\,L}\,
+    \Bigl(\ln\tfrac{2L}{a} + \ln\tfrac{2L}{s}
+          + c_0 + c_1\tfrac{s}{L}
+          + c_2\tfrac{s^2}{L^2} + c_3\tfrac{s^4}{L^4}\Bigr),
+\qquad s = 2t,
+$$
+
+with per-$n$ coefficients $c_k$ tabulated for $n \in \{3, 4, 6, 8\}$ in
+:func:`groundfield.references.dwight1936.n_point_star` ($a$ = wire
+radius, $t$ = burial depth, $s = 2t$ the image distance). The image
+backend reproduces this to ~1 % (see
+``tests/test_dwight_references.py``).
+
+```python
+star = gf.create_electrode(
+    world, "star", name="g4",
+    center=(0.0, 0.0, 0.5), n_arms=4, arm_length=5.0,
+    orientation_deg=0.0, wire_radius=0.005,
+)
+```
 
 ## API reference
 

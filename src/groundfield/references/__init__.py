@@ -30,10 +30,28 @@ carson
     (Bell STJ 5(4)) plus modern textbook reference points
     (Tleis 2008). Used to validate the Carson earth-return
     correction in :mod:`groundfield.coupling.carson` (ADR-0005).
+earth_return
+    Carson's engineering-level (Ω/km) earth-return **line impedance**
+    — self and mutual series impedance with the equivalent-depth
+    :math:`D_e` reactance and the soil-independent
+    :math:`\\omega\\mu_0/8` resistance. Benchmarks the assembled
+    Sommerfeld/Pollaczek inductive stack
+    (``earth_inductive_model="sommerfeld"``).
+ieee80
+    Sverak's grid grounding-resistance formula from IEEE Std 80
+    (*IEEE Guide for Safety in AC Substation Grounding*, 2000
+    Eq. 57 / 2013 Eq. 53). Benchmarks the image backend's grid
+    resistance against the industry-standard engineering estimate.
 """
 
 from __future__ import annotations
 
-from groundfield.references import carson, dwight1936, oeding
+from groundfield.references import (
+    carson,
+    dwight1936,
+    earth_return,
+    ieee80,
+    oeding,
+)
 
-__all__ = ["carson", "dwight1936", "oeding"]
+__all__ = ["carson", "dwight1936", "earth_return", "ieee80", "oeding"]

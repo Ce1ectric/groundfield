@@ -202,13 +202,35 @@ def test_image_horizontal_wire_vs_dwight(
     )
 
 
-def test_image_n_point_star_vs_dwight_skip() -> None:
+@pytest.mark.parametrize("n_arms", [3, 4, 6, 8])
+def test_image_n_point_star_vs_dwight(n_arms: int) -> None:
     """Star electrode (3/4/6/8) against Dwight Eqs. (23)–(26).
 
-    Reserved: the ``StarElectrode`` geometry is not yet in the data
-    model. The test will be activated as soon as that geometry exists.
+    ``n_arms`` equal horizontal wires of length ``L`` radiate from a
+    common centre at depth ``t``; the image backend must agree with
+    Dwight's closed-form n-point-star resistance to within 10 %.
     """
-    pytest.skip("StarElectrode is not implemented yet.")
+    L, a, depth = 5.0, 0.005, 0.5
+    world = gf.create_world(soil=SOIL)
+    gf.create_electrode(
+        world,
+        "star",
+        name="g1",
+        center=(0.0, 0.0, depth),
+        n_arms=n_arms,
+        arm_length=L,
+        wire_radius=a,
+    )
+    gf.create_source(world, attached_to="g1", magnitude=1.0)
+    Z = ENG.solve(world).cluster_impedance("g1")[0].real
+    R_dw = dw.n_point_star(
+        rho=100.0, arm_length=L, radius=a, depth=depth, n_arms=n_arms
+    )
+    rel = abs(Z - R_dw) / R_dw
+    assert rel < 0.10, (
+        f"star n={n_arms}: {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, "
+        f"Δ = {rel * 100:.1f} %"
+    )
 
 
 # ---------------------------------------------------------------------

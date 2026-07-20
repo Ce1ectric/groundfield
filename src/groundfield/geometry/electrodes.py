@@ -23,6 +23,8 @@ relevant primitives.
 
 from __future__ import annotations
 
+import math
+import warnings
 from typing import Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -33,12 +35,19 @@ __all__ = [
     "RingElectrode",
     "StripElectrode",
     "PolylineElectrode",
+    "StarElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
 ]
 
 # 3-D coordinate (x, y, z); z axis points into the soil.
 Point3D = tuple[float, float, float]
+
+#: Edges shorter than this (metres) are treated as degenerate: a
+#: :class:`PolylineElectrode` rejects them so a duplicate vertex cannot
+#: silently collapse a segment to zero length. Set far below any physical
+#: wire radius, so only true coincidences trip it.
+_MIN_EDGE_LENGTH_M = 1e-9
 
 
 class _ElectrodeBase(BaseModel):
@@ -238,10 +247,30 @@ class PolylineElectrode(_ElectrodeBase):
                 "PolylineElectrode is horizontal: every vertex must share "
                 f"the same z. Got {self.vertices}."
             )
-        if self.length <= 0.0:
-            raise ValueError(
-                "PolylineElectrode has zero total length — check for "
-                "duplicate vertices."
+        # Reject degenerate (zero-length) edges. A consecutive duplicate
+        # vertex — or, for ``closed=True``, repeating the first vertex at
+        # the end — collapses one segment to zero length. Left unchecked
+        # the discretiser absorbs it silently and the reaction matrix
+        # carries a spurious pair of coincident segments (driven into the
+        # solver's singularity clamp). ``self.length > 0`` does not catch
+        # this: only the individual edge is degenerate.
+        n = len(self.vertices)
+        for k, ((sx, sy, _), (ex, ey, _)) in enumerate(self.edges):
+            if ((ex - sx) ** 2 + (ey - sy) ** 2) ** 0.5 <= _MIN_EDGE_LENGTH_M:
+                a, b = self.vertices[k], self.vertices[(k + 1) % n]
+                raise ValueError(
+                    f"PolylineElectrode edge {k} has (near) zero length: "
+                    f"vertices {a} and {b} coincide. Remove duplicate "
+                    "vertices; for ``closed=True`` do not repeat the first "
+                    "vertex at the end (the closing edge is implicit)."
+                )
+        if self.closed and n == 2:
+            warnings.warn(
+                "PolylineElectrode(closed=True) needs at least three "
+                "vertices to form a ring; with two vertices it is treated "
+                "as an open wire (no closing edge is added).",
+                UserWarning,
+                stacklevel=2,
             )
         return self
 
@@ -265,6 +294,92 @@ class PolylineElectrode(_ElectrodeBase):
     @property
     def connection_point(self) -> Point3D:
         return self.vertices[0]
+
+
+class StarElectrode(_ElectrodeBase):
+    r"""Buried horizontal star electrode (*Sternerder*).
+
+    ``n_arms`` equal-length wires radiate from a common centre node at a
+    single depth, spaced uniformly by $360^\circ / n$. This is the
+    classic $n$-point star of Dwight (1936, Eqs. 23–26); the closed-form
+    grounding resistance is available as
+    :func:`groundfield.references.dwight1936.n_point_star` for
+    validation (Dwight covers 3, 4, 6 and 8 arms).
+
+    Attributes
+    ----------
+    center
+        Hub ``(x, y, z)`` in metres. Every arm shares this point and
+        stays at ``z = center[2]`` — the wire is horizontal.
+    n_arms
+        Number of radial arms ($\ge 2$).
+    arm_length
+        Length $L$ of a single arm in metres.
+    orientation_deg
+        Azimuth of the first arm measured from the world ``+x`` axis in
+        degrees; the remaining arms follow at multiples of
+        $360^\circ / n$.
+    concrete_shell_coefficient_ohm_m
+        Optional per-segment radial concrete-shell coefficient, same
+        semantics as on :class:`StripElectrode` (ADR-0012 V2).
+
+    Notes
+    -----
+    Discretisation and the reaction-matrix assembly treat the star as
+    ``n_arms`` straight wires sharing the centre node, so it forms a
+    single galvanic cluster — exactly the physical *Sternerder*.
+    """
+
+    kind: Literal["star"] = "star"
+    center: Point3D = Field(
+        ...,
+        description="Hub (x, y, z) in m; every arm stays at z = center[2].",
+    )
+    n_arms: int = Field(..., ge=2, description="Number of radial arms (>= 2).")
+    arm_length: float = Field(..., gt=0.0, description="Length L of a single arm in m.")
+    orientation_deg: float = Field(
+        default=0.0,
+        description="Azimuth of the first arm from +x in degrees.",
+    )
+    concrete_shell_coefficient_ohm_m: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "Per-segment radial concrete-shell coefficient "
+            "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m — same "
+            "semantics as on :class:`StripElectrode` (ADR-0012 V2)."
+        ),
+    )
+
+    @property
+    def arm_tips(self) -> list[Point3D]:
+        """Outer endpoint ``(x, y, z)`` of each arm."""
+        cx, cy, cz = self.center
+        tips: list[Point3D] = []
+        for k in range(self.n_arms):
+            theta = math.radians(self.orientation_deg + k * 360.0 / self.n_arms)
+            tips.append(
+                (
+                    cx + self.arm_length * math.cos(theta),
+                    cy + self.arm_length * math.sin(theta),
+                    cz,
+                )
+            )
+        return tips
+
+    @property
+    def edges(self) -> list[tuple[Point3D, Point3D]]:
+        """Straight wires making up the star (centre → each tip)."""
+        return [(self.center, tip) for tip in self.arm_tips]
+
+    @property
+    def length(self) -> float:
+        """Total wire length in metres (``n_arms * arm_length``)."""
+        return float(self.n_arms * self.arm_length)
+
+    @property
+    def connection_point(self) -> Point3D:
+        return self.center
 
 
 class MeshElectrode(_ElectrodeBase):
@@ -347,6 +462,7 @@ Electrode = Union[
     RingElectrode,
     StripElectrode,
     PolylineElectrode,
+    StarElectrode,
     MeshElectrode,
     GridMeshElectrode,
 ]
