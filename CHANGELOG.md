@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.13.0] — 2026-07-20
+
 ### Added — Earth-return line-impedance benchmark (Carson)
 
 New reference module `groundfield.references.earth_return` with Carson's
@@ -4688,7 +4694,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.13.0
 [0.12.2]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.2
 [0.12.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.1
 [0.12.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.0
