@@ -345,3 +345,36 @@ bit-stable, but it is now documented as a frequency-independent
 *baseline* whose additive image is far from the f < 1 kHz physics of
 buried conductors (audit finding F5) — use `"sommerfeld"` whenever
 quantitative Z(f) matters.
+
+---
+
+## Amendment 2026-07-20 — closed per-unit-length companion (`references.pollaczek`)
+
+The kernel above assembles a **PEEC segment inductance matrix**: it is
+rigorous for arbitrary wire lengths and orientations, but a single
+per-unit-length line impedance $z'(f)$ cannot be read back from it
+without an ill-defined return-path assumption (the self term is
+log-divergent in the segment length; PEEC $\neq$ per-unit-length). Some
+consumers need exactly that scalar — a reduced nodal network of an
+earthing system whose line elements are $L_\text{red}/z'(f)$, and an
+independent analytic reference for the assembled stack's earth-return
+reactance.
+
+`groundfield.references.pollaczek.pollaczek_self_impedance` supplies it:
+the rigorous **two-layer, buried-conductor** self impedance per unit
+length in the closed Pollaczek/Sunde spectral-integral form
+$Z' = j(\omega\mu_0/2\pi)[\ln(2h/\mathrm{GMR}) + 2\int_0^\infty
+e^{-2h\lambda}/(\lambda + u_\text{eff}(\lambda))\,d\lambda]$, with the
+Tagg/Sunde/Wait effective vertical wavenumber
+$u_\text{eff} = u_1(u_2 + u_1\tanh u_1 h_1)/(u_1 + u_2\tanh u_1 h_1)$.
+It is earth-return only (same convention as
+`references.earth_return.carson_self_impedance`), reduces to Carson in
+the homogeneous limit, and brackets between the two homogeneous Carson
+bounds otherwise (deep-layer dominated below ~1 kHz). It is the
+**analytic per-unit-length companion** to this ADR's assembled kernel:
+the two are the same quasi-static earth-return physics reached two
+different ways, and a loop-closure test
+(`tests/test_earth_return_benchmark.py`) pins the assembled stack, the
+Pollaczek reference and the independent Tsiamitros (2005, Eq. 8)
+two-layer integral to within ~1 % on the Case V reactance at 1 kHz. See
+`docs/api/references.md` and `tests/test_pollaczek_reference.py`.

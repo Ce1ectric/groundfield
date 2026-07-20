@@ -37,6 +37,25 @@ earth_return
     :math:`\\omega\\mu_0/8` resistance. Benchmarks the assembled
     Sommerfeld/Pollaczek inductive stack
     (``earth_inductive_model="sommerfeld"``).
+pollaczek
+    Rigorous **layered** (Pollaczek/Sunde) earth-return line impedance
+    — the two-layer, buried-conductor **self** impedance per unit
+    length :math:`z'(f)` as a spectral integral with the Tagg/Sunde/Wait
+    effective vertical wavenumber :math:`u_\\text{eff}(\\lambda)`. The
+    layered, buried companion to ``earth_return`` (Carson): it reduces to
+    :func:`~groundfield.references.earth_return.carson_self_impedance`
+    when :math:`\\rho_1 = \\rho_2`, brackets between the two homogeneous
+    Carson bounds otherwise, and supplies the scalar per-unit-length
+    series impedance that the assembled Sommerfeld/Pollaczek PEEC stack
+    (a segment inductance matrix) does not expose directly.
+    ``loop_impedance_conductor_earth`` adds the earthing conductor's own
+    series resistance on top, giving the full **conductor–earth loop**
+    impedance (cable PEN, cable screen) with ideal
+    (:math:`\\approx 0\\,\\Omega`) far-end earthing.
+    ``pollaczek_mutual_impedance`` is the off-diagonal counterpart — the
+    earth-return **coupling** between two parallel buried conductors — which
+    together with two self impedances forms the :math:`2\\times2` loop
+    impedance matrix of the coupled pair.
 ieee80
     Sverak's grid grounding-resistance formula from IEEE Std 80
     (*IEEE Guide for Safety in AC Substation Grounding*, 2000
@@ -52,6 +71,24 @@ from groundfield.references import (
     earth_return,
     ieee80,
     oeding,
+    pollaczek,
+)
+from groundfield.references.pollaczek import (
+    layered_effective_wavenumber,
+    loop_impedance_conductor_earth,
+    pollaczek_mutual_impedance,
+    pollaczek_self_impedance,
 )
 
-__all__ = ["carson", "dwight1936", "earth_return", "ieee80", "oeding"]
+__all__ = [
+    "carson",
+    "dwight1936",
+    "earth_return",
+    "ieee80",
+    "oeding",
+    "pollaczek",
+    "layered_effective_wavenumber",
+    "pollaczek_self_impedance",
+    "pollaczek_mutual_impedance",
+    "loop_impedance_conductor_earth",
+]

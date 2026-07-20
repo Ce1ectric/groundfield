@@ -26,7 +26,79 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Added — layered Pollaczek/Sunde per-unit-length earth-return reference
+
+New reference module `groundfield.references.pollaczek` with
+`pollaczek_self_impedance` — the rigorous two-layer, buried-conductor
+earth-return **self** impedance per unit length, in the Pollaczek/Sunde
+spectral-integral form
+`Z' = j(ωμ₀/2π)[ln(2h/GMR) + 2∫₀^∞ e^(−2hλ)/(λ+u_eff(λ)) dλ]` with the
+two-layer effective vertical wavenumber
+`u_eff = u₁(u₂+u₁tanh(u₁h₁))/(u₁+u₂tanh(u₁h₁))`, `u_i=√(λ²+jωμ₀/ρ_i)`
+(Tagg/Sunde/Wait recursion, exposed as `layered_effective_wavenumber`).
+Earth-return only (external inductance, no internal-conductor R/L — same
+convention as `references.earth_return.carson_self_impedance`).
+
+It is the layered, buried companion to the homogeneous Carson closed form:
+it reduces to `carson_self_impedance` when `ρ₁ = ρ₂` (reactance to < 0.1 %,
+the earth-return resistance sitting just below `ωμ₀/8` — Carson's
+small-argument limit, which the exact Pollaczek form recovers as `f → 0`,
+the deficit growing with frequency), collapses onto the upper layer as
+`h₁ → ∞` and the
+lower layer as `h₁ → 0`, and its two-layer reactance lies within the
+`[Carson(ρ₁), Carson(ρ₂)]` bracket — deep-layer dominated at low frequency
+(a thin resistive topsoil is inductively "seen through"). Unlike the
+assembled Sommerfeld/Pollaczek stack (`earth_inductive_model="sommerfeld"`),
+which yields a PEEC segment inductance matrix, this returns a single
+per-unit-length `z'(f)` that a reduced nodal network consumes directly and
+that serves as an independent analytic reference for the assembled stack's
+earth-return reactance. New `tests/test_pollaczek_reference.py` (50 tests:
+homogeneous↔Carson, resistance-from-below, both `h₁` limits, the Carson
+bracket across 50 Hz – 1 kHz, the low-frequency deep-layer regime, the
+wavenumber recursion, input guards), plus a loop-closure test in
+`tests/test_earth_return_benchmark.py` tying the assembled Sommerfeld stack
+to this reference and to the Tsiamitros 2005 Eq. (8) integral (all three
+within ~1 % on the Case V two-layer reactance at 1 kHz).
+
+The module also gains `loop_impedance_conductor_earth` — the full
+**conductor–earth loop** impedance `z'_loop = R'_internal + Z'_earth-return`
+of a buried earthing conductor (cable PEN, cable screen) with an ideal
+(≈ 0 Ω) far-end earthing: the Pollaczek earth-return plus the conductor's own
+IEC 60228 series resistance (its internal inductance folded into
+`gmr = 0.7788·a` for a solid round conductor, or the screen radius for a thin
+screen). This is the loop that governs earth-fault current sharing in a
+grounding system tied together through NAYY PENs / NA2XS2Y screens — which
+the bare earth-return impedance does not give on its own. Regression tests
+cover the internal-plus-earth-return composition, real NAYY-PEN (150 mm² Al)
+and NA2XS2Y-screen (25 mm² Cu) conductors at power frequency, and the
+two-layer reactance shift.
+
+And `pollaczek_mutual_impedance` — the **mutual** (off-diagonal)
+earth-return coupling impedance
+`z'_M = j(ωμ₀/2π)[ln(D/d) + 2∫ e^(−(h_i+h_j)λ)/(λ+u_eff)·cos(λx) dλ]` between
+two parallel buried conductor–earth loops (horizontal separation `x`,
+direct/mirror distances `d = √(x²+(h_i−h_j)²)`, `D = √(x²+(h_i+h_j)²)`). It
+carries no internal-conductor term (the loops are galvanically separate,
+coupled only through the earth), so with ideal termination the coupling of a
+parallel run of length `ℓ` is `z'_M·ℓ`; together with two self impedances it
+forms the 2×2 loop impedance matrix of the coupled pair. It reduces to
+`carson_mutual_impedance` and to the exact homogeneous Pollaczek mutual (the
+K₀ form) in the homogeneous limit, its magnitude sits below the self and
+decays with separation, and its two-layer reactance stays inside the Carson
+bracket (deep-layer dominated at low frequency). Regression tests cover the
+K₀ and Carson limits, the self-coincidence limit `x → GMR`, the
+separation decay, the two-layer bracket, the conductor-above-conductor
+`separation = 0` case, and the 2×2 loop matrix of two parallel PENs.
+
+Worked notebook `notebooks/46_pollaczek_earth_return.ipynb` plots `z'(f)`
+self against Carson, the homogeneous convergence, the two-layer Carson
+bracket across the layer thickness, the conductor–earth loop impedance
+`z'_loop(f)` of the two real conductors split into internal / earth-return /
+reactance, and the mutual coupling `z'_M` vs separation with the 2×2 loop
+matrix. Exposed via `groundfield.references` (`__all__`, including
+`layered_effective_wavenumber`, `pollaczek_mutual_impedance` and
+`loop_impedance_conductor_earth`); ADR-0006 gains the closed per-unit-length
+companion note.
 
 ---
 

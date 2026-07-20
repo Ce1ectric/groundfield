@@ -43,6 +43,7 @@ from groundfield.coupling.sommerfeld_inductance import (
     build_sommerfeld_correction_matrix,
 )
 from groundfield.references import earth_return as er
+from groundfield.references.pollaczek import pollaczek_self_impedance
 
 
 # ---------------------------------------------------------------------
@@ -388,3 +389,47 @@ def test_two_layer_frequency_regimes_low_vs_high() -> None:
     assert all(a < b for a, b in zip(fracs, fracs[1:])), fracs
     # (3) by 1 MHz the top layer contributes substantially (δ2 ~ interface).
     assert frac_by_f[1.0e6] > 0.4, f"1 MHz frac {frac_by_f[1.0e6]:.3f}"
+
+
+# ---------------------------------------------------------------------
+# 5. Loop closure: assembled PEEC stack vs the analytic per-unit-length
+#    Pollaczek reference (references.pollaczek) vs Tsiamitros Eq.(8).
+# ---------------------------------------------------------------------
+def test_assembled_stack_matches_pollaczek_reference_two_layer() -> None:
+    """Close the loop between the assembled stack and the scalar reference.
+
+    The assembled Sommerfeld PEEC stack (a segment inductance matrix summed
+    to a per-metre value), the closed-form layered Pollaczek reference
+    :func:`~groundfield.references.pollaczek.pollaczek_self_impedance`
+    (a Sunde/``u_eff`` spectral integral), and the independent Tsiamitros
+    2005 Eq.(8) quadrature must all agree on the Case V two-layer
+    earth-return **reactance** :math:`X'` at 1 kHz — the power-/audio-
+    frequency regime the dissertation works in. This ties the PEEC stack,
+    which cannot expose a per-unit-length impedance directly, to the scalar
+    ``z'(f)`` that a reduced nodal earthing network consumes: the two are
+    the same physics reached two different ways, and both land on Eq.(8).
+    """
+    f = 1.0e3
+    z_stack = _assemble_earth(
+        LayeredEarth(rhos=(_CV["rho1"], _CV["rho2"]), thicknesses=(_CV["d"],)),
+        f,
+        height=_CV["height"],
+        radius=_CV["radius"],
+        half_length=250.0,
+        n_seg=30,
+    )
+    z_poll = pollaczek_self_impedance(
+        _CV["rho1"], _CV["rho2"], _CV["d"], f,
+        depth=_CV["height"], gmr=_CV["radius"],
+    )
+    z_eq8 = _eq8_two_layer_self(
+        f, _CV["rho1"], _CV["rho2"], _CV["d"], _CV["height"], _CV["radius"]
+    )
+    # Assembled PEEC stack vs the analytic per-unit-length Pollaczek belag.
+    assert z_stack.imag == pytest.approx(z_poll.imag, rel=0.02), (
+        f"stack X' {z_stack.imag} vs pollaczek {z_poll.imag}"
+    )
+    # The Pollaczek reference vs the independent Tsiamitros Eq.(8) integral.
+    assert z_poll.imag == pytest.approx(z_eq8.imag, rel=0.02), (
+        f"pollaczek X' {z_poll.imag} vs Eq.(8) {z_eq8.imag}"
+    )
