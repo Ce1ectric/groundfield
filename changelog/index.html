@@ -2400,6 +2400,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#0140-2026-07-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.14.0 — 2026-07-20
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.14.0 — 2026-07-20">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added-layered-pollaczeksunde-per-unit-length-earth-return-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added — layered Pollaczek/Sunde per-unit-length earth-return reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#0130-2026-07-20" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3901,6 +3929,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#0140-2026-07-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.14.0 — 2026-07-20
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.14.0 — 2026-07-20">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added-layered-pollaczeksunde-per-unit-length-earth-return-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added — layered Pollaczek/Sunde per-unit-length earth-return reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -5412,8 +5468,78 @@ matching category in <code>[Unreleased]</code>; the release script
 (<code>scripts/release.py</code>) moves the whole <code>[Unreleased]</code> block into a new
 version section when a release is cut.</p>
 <hr />
-<h2 id="unreleased"><a href="https://github.com/Ce1ectric/groundfield/compare/v0.13.0...HEAD">Unreleased</a><a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
+<h2 id="unreleased"><a href="https://github.com/Ce1ectric/groundfield/compare/v0.14.0...HEAD">Unreleased</a><a class="headerlink" href="#unreleased" title="Permanent link">&para;</a></h2>
 <p><em>No changes yet.</em></p>
+<hr />
+<h2 id="0140-2026-07-20"><a href="https://github.com/Ce1ectric/groundfield/releases/tag/v0.14.0">0.14.0</a> — 2026-07-20<a class="headerlink" href="#0140-2026-07-20" title="Permanent link">&para;</a></h2>
+<h3 id="added-layered-pollaczeksunde-per-unit-length-earth-return-reference">Added — layered Pollaczek/Sunde per-unit-length earth-return reference<a class="headerlink" href="#added-layered-pollaczeksunde-per-unit-length-earth-return-reference" title="Permanent link">&para;</a></h3>
+<p>New reference module <code>groundfield.references.pollaczek</code> with
+<code>pollaczek_self_impedance</code> — the rigorous two-layer, buried-conductor
+earth-return <strong>self</strong> impedance per unit length, in the Pollaczek/Sunde
+spectral-integral form
+<code>Z' = j(ωμ₀/2π)[ln(2h/GMR) + 2∫₀^∞ e^(−2hλ)/(λ+u_eff(λ)) dλ]</code> with the
+two-layer effective vertical wavenumber
+<code>u_eff = u₁(u₂+u₁tanh(u₁h₁))/(u₁+u₂tanh(u₁h₁))</code>, <code>u_i=√(λ²+jωμ₀/ρ_i)</code>
+(Tagg/Sunde/Wait recursion, exposed as <code>layered_effective_wavenumber</code>).
+Earth-return only (external inductance, no internal-conductor R/L — same
+convention as <code>references.earth_return.carson_self_impedance</code>).</p>
+<p>It is the layered, buried companion to the homogeneous Carson closed form:
+it reduces to <code>carson_self_impedance</code> when <code>ρ₁ = ρ₂</code> (reactance to &lt; 0.1 %,
+the earth-return resistance sitting just below <code>ωμ₀/8</code> — Carson's
+small-argument limit, which the exact Pollaczek form recovers as <code>f → 0</code>,
+the deficit growing with frequency), collapses onto the upper layer as
+<code>h₁ → ∞</code> and the
+lower layer as <code>h₁ → 0</code>, and its two-layer reactance lies within the
+<code>[Carson(ρ₁), Carson(ρ₂)]</code> bracket — deep-layer dominated at low frequency
+(a thin resistive topsoil is inductively "seen through"). Unlike the
+assembled Sommerfeld/Pollaczek stack (<code>earth_inductive_model="sommerfeld"</code>),
+which yields a PEEC segment inductance matrix, this returns a single
+per-unit-length <code>z'(f)</code> that a reduced nodal network consumes directly and
+that serves as an independent analytic reference for the assembled stack's
+earth-return reactance. New <code>tests/test_pollaczek_reference.py</code> (50 tests:
+homogeneous↔Carson, resistance-from-below, both <code>h₁</code> limits, the Carson
+bracket across 50 Hz – 1 kHz, the low-frequency deep-layer regime, the
+wavenumber recursion, input guards), plus a loop-closure test in
+<code>tests/test_earth_return_benchmark.py</code> tying the assembled Sommerfeld stack
+to this reference and to the Tsiamitros 2005 Eq. (8) integral (all three
+within ~1 % on the Case V two-layer reactance at 1 kHz).</p>
+<p>The module also gains <code>loop_impedance_conductor_earth</code> — the full
+<strong>conductor–earth loop</strong> impedance <code>z'_loop = R'_internal + Z'_earth-return</code>
+of a buried earthing conductor (cable PEN, cable screen) with an ideal
+(≈ 0 Ω) far-end earthing: the Pollaczek earth-return plus the conductor's own
+IEC 60228 series resistance (its internal inductance folded into
+<code>gmr = 0.7788·a</code> for a solid round conductor, or the screen radius for a thin
+screen). This is the loop that governs earth-fault current sharing in a
+grounding system tied together through NAYY PENs / NA2XS2Y screens — which
+the bare earth-return impedance does not give on its own. Regression tests
+cover the internal-plus-earth-return composition, real NAYY-PEN (150 mm² Al)
+and NA2XS2Y-screen (25 mm² Cu) conductors at power frequency, and the
+two-layer reactance shift.</p>
+<p>And <code>pollaczek_mutual_impedance</code> — the <strong>mutual</strong> (off-diagonal)
+earth-return coupling impedance
+<code>z'_M = j(ωμ₀/2π)[ln(D/d) + 2∫ e^(−(h_i+h_j)λ)/(λ+u_eff)·cos(λx) dλ]</code> between
+two parallel buried conductor–earth loops (horizontal separation <code>x</code>,
+direct/mirror distances <code>d = √(x²+(h_i−h_j)²)</code>, <code>D = √(x²+(h_i+h_j)²)</code>). It
+carries no internal-conductor term (the loops are galvanically separate,
+coupled only through the earth), so with ideal termination the coupling of a
+parallel run of length <code>ℓ</code> is <code>z'_M·ℓ</code>; together with two self impedances it
+forms the 2×2 loop impedance matrix of the coupled pair. It reduces to
+<code>carson_mutual_impedance</code> and to the exact homogeneous Pollaczek mutual (the
+K₀ form) in the homogeneous limit, its magnitude sits below the self and
+decays with separation, and its two-layer reactance stays inside the Carson
+bracket (deep-layer dominated at low frequency). Regression tests cover the
+K₀ and Carson limits, the self-coincidence limit <code>x → GMR</code>, the
+separation decay, the two-layer bracket, the conductor-above-conductor
+<code>separation = 0</code> case, and the 2×2 loop matrix of two parallel PENs.</p>
+<p>Worked notebook <code>notebooks/46_pollaczek_earth_return.ipynb</code> plots <code>z'(f)</code>
+self against Carson, the homogeneous convergence, the two-layer Carson
+bracket across the layer thickness, the conductor–earth loop impedance
+<code>z'_loop(f)</code> of the two real conductors split into internal / earth-return /
+reactance, and the mutual coupling <code>z'_M</code> vs separation with the 2×2 loop
+matrix. Exposed via <code>groundfield.references</code> (<code>__all__</code>, including
+<code>layered_effective_wavenumber</code>, <code>pollaczek_mutual_impedance</code> and
+<code>loop_impedance_conductor_earth</code>); ADR-0006 gains the closed per-unit-length
+companion note.</p>
 <hr />
 <h2 id="0130-2026-07-20"><a href="https://github.com/Ce1ectric/groundfield/releases/tag/v0.13.0">0.13.0</a> — 2026-07-20<a class="headerlink" href="#0130-2026-07-20" title="Permanent link">&para;</a></h2>
 <h3 id="added-earth-return-line-impedance-benchmark-carson">Added — Earth-return line-impedance benchmark (Carson)<a class="headerlink" href="#added-earth-return-line-impedance-benchmark-carson" title="Permanent link">&para;</a></h3>
@@ -8708,10 +8834,10 @@ are kept out of library dependency graphs.</p>
 <hr />
 <h2 id="backlog-2026-05-10-audit">Backlog (2026-05-10 audit)<a class="headerlink" href="#backlog-2026-05-10-audit" title="Permanent link">&para;</a></h2>
 <p>Items identified in the cross-cutting code-review pass on
-2026-05-10 that did <strong>not</strong> ship in <a href="https://github.com/Ce1ectric/groundfield/compare/v0.13.0...HEAD">Unreleased</a>. Each entry is
+2026-05-10 that did <strong>not</strong> ship in <a href="https://github.com/Ce1ectric/groundfield/compare/v0.14.0...HEAD">Unreleased</a>. Each entry is
 queued for a future maintenance release; once an item ships, the
-matching CHANGELOG line moves into <a href="https://github.com/Ce1ectric/groundfield/compare/v0.13.0...HEAD">Unreleased</a>. The list is
-kept here (rather than in <a href="https://github.com/Ce1ectric/groundfield/compare/v0.13.0...HEAD">Unreleased</a>) so the published release
+matching CHANGELOG line moves into <a href="https://github.com/Ce1ectric/groundfield/compare/v0.14.0...HEAD">Unreleased</a>. The list is
+kept here (rather than in <a href="https://github.com/Ce1ectric/groundfield/compare/v0.14.0...HEAD">Unreleased</a>) so the published release
 notes describe shipped work only.</p>
 <h3 id="fixed-pending-implementation">Fixed (pending implementation)<a class="headerlink" href="#fixed-pending-implementation" title="Permanent link">&para;</a></h3>
 <blockquote>
@@ -9000,7 +9126,7 @@ partially mirrored in the docs site. The next docs sweep should:</p>
   <code>MeasurementSetupConfig</code> and the four convenience
   factories <code>overhead_lead</code>, <code>buried_lead</code>,
   <code>single_rod_grounding</code>, <code>neighbour_substation_grounding</code>)
-  is the largest single API addition in <a href="https://github.com/Ce1ectric/groundfield/compare/v0.13.0...HEAD">Unreleased</a> but the
+  is the largest single API addition in <a href="https://github.com/Ce1ectric/groundfield/compare/v0.14.0...HEAD">Unreleased</a> but the
   only entry point on the doc site is its mention in
   <code>docs/api/generators.md</code>. Add a sub-page that explains
   Analysis 1 vs. Analysis 2, the

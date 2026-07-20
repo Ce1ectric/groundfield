@@ -2306,6 +2306,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-20-closed-per-unit-length-companion-referencespollaczek" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-20 — closed per-unit-length companion (references.pollaczek)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2839,6 +2850,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-20-closed-per-unit-length-companion-referencespollaczek" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-20 — closed per-unit-length companion (references.pollaczek)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3225,6 +3247,35 @@ bit-stable, but it is now documented as a frequency-independent
 <em>baseline</em> whose additive image is far from the f &lt; 1 kHz physics of
 buried conductors (audit finding F5) — use <code>"sommerfeld"</code> whenever
 quantitative Z(f) matters.</p>
+<hr />
+<h2 id="amendment-2026-07-20-closed-per-unit-length-companion-referencespollaczek">Amendment 2026-07-20 — closed per-unit-length companion (<code>references.pollaczek</code>)<a class="headerlink" href="#amendment-2026-07-20-closed-per-unit-length-companion-referencespollaczek" title="Permanent link">&para;</a></h2>
+<p>The kernel above assembles a <strong>PEEC segment inductance matrix</strong>: it is
+rigorous for arbitrary wire lengths and orientations, but a single
+per-unit-length line impedance <span class="arithmatex">\(z'(f)\)</span> cannot be read back from it
+without an ill-defined return-path assumption (the self term is
+log-divergent in the segment length; PEEC <span class="arithmatex">\(\neq\)</span> per-unit-length). Some
+consumers need exactly that scalar — a reduced nodal network of an
+earthing system whose line elements are <span class="arithmatex">\(L_\text{red}/z'(f)\)</span>, and an
+independent analytic reference for the assembled stack's earth-return
+reactance.</p>
+<p><code>groundfield.references.pollaczek.pollaczek_self_impedance</code> supplies it:
+the rigorous <strong>two-layer, buried-conductor</strong> self impedance per unit
+length in the closed Pollaczek/Sunde spectral-integral form
+<span class="arithmatex">\(Z' = j(\omega\mu_0/2\pi)[\ln(2h/\mathrm{GMR}) + 2\int_0^\infty
+e^{-2h\lambda}/(\lambda + u_\text{eff}(\lambda))\,d\lambda]\)</span>, with the
+Tagg/Sunde/Wait effective vertical wavenumber
+<span class="arithmatex">\(u_\text{eff} = u_1(u_2 + u_1\tanh u_1 h_1)/(u_1 + u_2\tanh u_1 h_1)\)</span>.
+It is earth-return only (same convention as
+<code>references.earth_return.carson_self_impedance</code>), reduces to Carson in
+the homogeneous limit, and brackets between the two homogeneous Carson
+bounds otherwise (deep-layer dominated below ~1 kHz). It is the
+<strong>analytic per-unit-length companion</strong> to this ADR's assembled kernel:
+the two are the same quasi-static earth-return physics reached two
+different ways, and a loop-closure test
+(<code>tests/test_earth_return_benchmark.py</code>) pins the assembled stack, the
+Pollaczek reference and the independent Tsiamitros (2005, Eq. 8)
+two-layer integral to within ~1 % on the Case V reactance at 1 kHz. See
+<code>docs/api/references.md</code> and <code>tests/test_pollaczek_reference.py</code>.</p>
 
 
 
