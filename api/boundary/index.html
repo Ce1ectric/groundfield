@@ -1597,6 +1597,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#mathematical-physical-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mathematical / physical model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#revert-warning-contract-050" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2480,6 +2491,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#mathematical-physical-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mathematical / physical model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#revert-warning-contract-050" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2556,6 +2578,45 @@ The image-method, MoM and Sommerfeld backends implicitly assume a
 Dirichlet far field (<code>φ → 0</code>) and a Neumann surface (<code>∂φ/∂n = 0</code>
 at <code>z = 0</code>); the explicit fields on :class:<code>BoundaryConditions</code> are
 preserved for forward-compatibility with the upcoming FEM backend.</p>
+<h2 id="mathematical-physical-model">Mathematical / physical model<a class="headerlink" href="#mathematical-physical-model" title="Permanent link">&para;</a></h2>
+<p>groundfield solves the <strong>quasi-static</strong> grounding problem. Below roughly
+1 kHz the displacement current in the soil is negligible, so the leakage
+current density follows Ohm's law <span class="arithmatex">\(\vec{J} = \sigma\,\vec{E} =
+-\sigma\,\nabla\varphi\)</span> and charge conservation <span class="arithmatex">\(\nabla\cdot\vec{J} = 0\)</span> in
+the source-free bulk reduces the potential to <strong>Laplace's equation</strong></p>
+<div class="arithmatex">\[
+\nabla\cdot\!\bigl(\sigma(\vec{r})\,\nabla\varphi(\vec{r})\bigr) = 0,
+\]</div>
+<p>which becomes <span class="arithmatex">\(\nabla^2\varphi = 0\)</span> inside every homogeneous soil region.
+Injected electrode currents are <strong>not</strong> a volume source term; they enter
+through the electrode boundary (the solver's right-hand side), which is why
+they are not part of :class:<code>BoundaryConditions</code>.</p>
+<p>A well-posed boundary-value problem needs three conditions, and these are
+exactly the fields this module carries:</p>
+<ul>
+<li><strong>Far field (<code>far_field</code>, remote earth).</strong> Dirichlet <span class="arithmatex">\(\varphi \to 0\)</span> as
+  <span class="arithmatex">\(|\vec{r}| \to \infty\)</span>. The integral / image-charge backends realise it
+  through the <span class="arithmatex">\(1/r\)</span> decay of the free-space Green's function, so all
+  reported potentials are referred to remote earth.</li>
+<li><strong>Soil surface (<code>surface</code>, air–soil interface at <span class="arithmatex">\(z = 0\)</span>).</strong> Homogeneous
+  Neumann <span class="arithmatex">\(\partial\varphi/\partial n = \partial\varphi/\partial z = 0\)</span>: no
+  leakage current crosses into the insulating air. The backends realise it
+  with a mirror image charge at <span class="arithmatex">\(z \to -z\)</span>, which doubles the potential of a
+  buried source in the lower half-space.</li>
+<li><strong>Potential datum (<code>reference_node</code>).</strong> Fixes the additive gauge of
+  <span class="arithmatex">\(\varphi\)</span>. With the default Dirichlet far field the datum is remote earth;
+  an explicit reference node is reserved for the FEM backend.</li>
+</ul>
+<p>At an interface between two soil layers of conductivity <span class="arithmatex">\(\sigma_k\)</span> and
+<span class="arithmatex">\(\sigma_{k+1}\)</span> the potential <span class="arithmatex">\(\varphi\)</span> and the normal current density
+<span class="arithmatex">\(J_n = \sigma\,\partial_n\varphi\)</span> are continuous; those interface conditions
+are handled by the layered Green's functions in the
+<a href="../coupling/">coupling</a> package, not by this module.</p>
+<p><strong>Validity.</strong> Linear, isotropic, piecewise-homogeneous soil in the
+quasi-static regime. Frequency-dependent earth-return (inductive) effects
+are treated as a separate additive correction on the branch impedance (see
+<a href="../coupling/">coupling</a>), not as part of this electrostatic boundary-value
+problem.</p>
 <h2 id="revert-warning-contract-050">Revert-warning contract (0.5.0)<a class="headerlink" href="#revert-warning-contract-050" title="Permanent link">&para;</a></h2>
 <p>Calling :meth:<code>World.set_boundary_conditions</code> with a non-default
 value emits a :class:<code>UserWarning</code> so the user does not silently

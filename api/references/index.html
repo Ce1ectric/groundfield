@@ -1882,6 +1882,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#ieee-std-80-substation-grounding-grid-resistance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IEEE Std 80 — substation grounding-grid resistance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#carson-earth-return-line-impedance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carson — earth-return line impedance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#api-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2518,6 +2540,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#ieee-std-80-substation-grounding-grid-resistance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IEEE Std 80 — substation grounding-grid resistance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#carson-earth-return-line-impedance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carson — earth-return line impedance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#api-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2582,6 +2626,65 @@ overhead conductor over a homogeneous lossy half-space.</p>
 closed-form expressions for the mutual inductance between buried
 conductors in homogeneous soil from Oeding &amp; Oswald,
 <em>Elektrische Kraftwerke und Netze</em>.</p>
+<h2 id="ieee-std-80-substation-grounding-grid-resistance">IEEE Std 80 — substation grounding-grid resistance<a class="headerlink" href="#ieee-std-80-substation-grounding-grid-resistance" title="Permanent link">&para;</a></h2>
+<p><code>groundfield.references.ieee80</code> implements <strong>Sverak's equation</strong>
+(IEEE Std 80-2000 Eq. 57 / 2013 Eq. 53) for the grounding resistance of
+a horizontal grid,</p>
+<div class="arithmatex">\[
+R_g = \rho\left[\frac{1}{L_T}
+      + \frac{1}{\sqrt{20\,A}}
+        \left(1 + \frac{1}{1 + h\sqrt{20/A}}\right)\right],
+\]</div>
+<p>with total conductor length <span class="arithmatex">\(L_T\)</span>, grid area <span class="arithmatex">\(A\)</span> and burial depth <span class="arithmatex">\(h\)</span>.</p>
+<p>Beyond the closed-form resistance, <code>tests/test_ieee80_benchmark.py</code>
+reproduces the standard's <strong>Annex H benchmark</strong> (IEEE Std 80-2013) for
+all three benchmark grids: the uniform-soil Grid 1 (bare grid, Table H.5)
+and Grid 2 (grid + twenty 7.5 m rods, Table H.6), and the two-layer
+Grid 3 (Grid 2 geometry in a soil with <span class="arithmatex">\(\rho_1 = 300\)</span> Ω·m,
+<span class="arithmatex">\(\rho_2 = 100\)</span> Ω·m and interface <span class="arithmatex">\(h = 6.096\)</span> m, so the rods cross the
+layer boundary; Table H.7). Solved with the <code>mom</code> backend — which
+recovers the current distribution as the reference programs
+CDEGS / ETAP / WinIGS do — <code>groundfield</code> matches the published grid
+resistance, GPR and touch voltage to about 1 % on every grid and the step
+voltage to a few percent. The worked
+<code>notebooks/43_ieee80_benchmark.ipynb</code> lays the results side by side for
+all three grids, tabulates the relative error and plots the
+grid-resistance comparison and the touch-voltage surface.</p>
+<h2 id="carson-earth-return-line-impedance">Carson — earth-return line impedance<a class="headerlink" href="#carson-earth-return-line-impedance" title="Permanent link">&para;</a></h2>
+<p><code>groundfield.references.earth_return</code> implements <strong>Carson's</strong> closed-form
+series impedance per unit length of a conductor with earth return — the
+engineering-level (<span class="arithmatex">\(\Omega/\text{km}\)</span>) companion to the dimensionless
+Carson integral in <code>groundfield.references.carson</code>:</p>
+<div class="arithmatex">\[
+Z'_\text{self} = \frac{\omega\mu_0}{8}
+    + j\,\frac{\omega\mu_0}{2\pi}\,\ln\frac{D_e}{\mathrm{GMR}},
+\qquad
+D_e = 658.87\,\sqrt{\rho/f}\ \text{[m]},
+\]</div>
+<p>with the soil-independent earth-return resistance <span class="arithmatex">\(\omega\mu_0/8\)</span> and the
+equivalent-depth reactance (<span class="arithmatex">\(D_e\)</span> is the depth of the fictitious return
+conductor). The mutual form replaces <span class="arithmatex">\(\mathrm{GMR}\)</span> by the
+conductor–conductor separation.</p>
+<p><code>tests/test_earth_return_benchmark.py</code> validates the assembled
+Sommerfeld/Pollaczek earth-return stack
+(<code>earth_inductive_model="sommerfeld"</code>) against it: the reactance <span class="arithmatex">\(X'\)</span> —
+carrying the frequency- and soil-dependent depth <span class="arithmatex">\(D_e\)</span> rather than the
+naive geometric image at <span class="arithmatex">\(2h\)</span> — matches Carson to about 1 %, while the
+resistance <span class="arithmatex">\(R'\)</span> approaches <span class="arithmatex">\(\omega\mu_0/8\)</span> from below as the modelled line
+lengthens (the return current closes over roughly one skin depth). The
+worked <code>notebooks/45_earth_return_line_impedance.ipynb</code> plots <span class="arithmatex">\(Z'(f)\)</span>
+for the self and mutual terms and the <span class="arithmatex">\(R'\)</span> convergence, including the
+normal-soil power-frequency corner (100 Ω·m, 50 Hz). A <strong>two-layer</strong>
+section validates the layered earth-return reactance against the rigorous
+closed form of Tsiamitros <em>et al.</em> (IEEE Trans. PWRD <strong>20</strong>(3), 2005,
+Eq. 8) across an explicit <strong>50 Hz – 1 MHz</strong> frequency sweep — matching to a
+few percent in <span class="arithmatex">\(X'\)</span> and to <span class="arithmatex">\(\approx 0.003\)</span> in the layer attribution, with
+the low-frequency (<span class="arithmatex">\(\le 1\)</span> kHz) regime, where the inductive return is
+deep-layer dominated, highlighted for low-frequency analysis. Since 0.13.0
+<code>"sommerfeld"</code> is the <strong>default</strong> <code>earth_inductive_model</code>, so a plain
+inductive solve already carries this earth-return physics;
+<code>"perfect_mirror"</code> (the former default, a fast electrostatic-image
+baseline) is now opt-in for a quick frequency-independent estimate.</p>
 <h2 id="api-reference">API reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
 
 
@@ -2652,6 +2755,30 @@ the segment-based Neumann implementation in
 (Bell STJ 5(4)) plus modern textbook reference points
 (Tleis 2008). Used to validate the Carson earth-return
 correction in :mod:<code>groundfield.coupling.carson</code> (ADR-0005).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="groundfield.references.earth_return">earth_return</span></code></td>
+            <td>
+              <div class="doc-md-description">
+                <p>Carson's engineering-level (Ω/km) earth-return <strong>line impedance</strong>
+— self and mutual series impedance with the equivalent-depth
+:math:<code>D_e</code> reactance and the soil-independent
+:math:<code>\omega\mu_0/8</code> resistance. Benchmarks the assembled
+Sommerfeld/Pollaczek inductive stack
+(<code>earth_inductive_model="sommerfeld"</code>).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="groundfield.references.ieee80">ieee80</span></code></td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sverak's grid grounding-resistance formula from IEEE Std 80
+(<em>IEEE Guide for Safety in AC Substation Grounding</em>, 2000
+Eq. 57 / 2013 Eq. 53). Benchmarks the image backend's grid
+resistance against the industry-standard engineering estimate.</p>
               </div>
             </td>
           </tr>
