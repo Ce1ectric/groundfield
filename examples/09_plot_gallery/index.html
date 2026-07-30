@@ -2745,16 +2745,18 @@ Sunde formula.</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">fig</span> <span class="o">=</span> <span class="n">plot_potential_contour</span><span class="p">(</span>
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">result</span><span class="p">,</span> <span class="n">world</span><span class="o">=</span><span class="n">world</span><span class="p">,</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">plane</span><span class="o">=</span><span class="s2">&quot;xz&quot;</span><span class="p">,</span> <span class="n">fixed</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">plane</span><span class="o">=</span><span class="s2">&quot;xz&quot;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">extent</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">50.0</span><span class="p">,</span> <span class="mf">220.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">30.0</span><span class="p">),</span>
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">n</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
 <a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="p">)</span>
 <a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </code></pre></div>
 <p>Vertical slice at <span class="arithmatex">\(y = 0\)</span> — useful for visualising the current
-path through the soil between substation and Hilfserder. Pass
-<code>plane="xy"</code> for the horizontal slice or <code>plane="yz"</code> for the
-cross-section through the cable axis.</p>
+path through the soil between substation and Hilfserder. The slice
+plane is selected with <code>plane</code>, and the coordinate held fixed is the
+one the plane does not span: <code>plane="xz"</code> takes <code>y=...</code>, <code>plane="xy"</code>
+takes <code>z=...</code>. Omitting <code>extent</code> derives the window from the bounding
+box of the point sources.</p>
 <h2 id="7-world-level-matplotlib-geometry">7. World-level matplotlib geometry<a class="headerlink" href="#7-world-level-matplotlib-geometry" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.postprocess</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_geometry</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
