@@ -26,6 +26,12 @@ version section when a release is cut.
 
 ## [Unreleased]
 
+_No changes yet._
+
+---
+
+## [0.14.1] — 2026-07-30
+
 ### Fixed (Review pass 9 — implemented 2026-07-28)
 
 > The ninth review pass was run on 2026-07-28 against `0.14.0` (commit
@@ -4855,7 +4861,8 @@ work package 1 progresses.
 - Notebook suite that covers the full parameter space described in
   the dissertation proposal.
 
-[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.14.1
 [0.14.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.13.0
 [0.12.2]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.12.2
