@@ -671,12 +671,20 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
         Re_p_avg = 0.5 * (p.real + p2.real)
         Im_p_avg = 0.5 * (abs(p.imag) + abs(p2.imag))  # use positive imag for the canonical pair
         Re_r_avg = 0.5 * (r.real + r2.real)
-        # The residue conjugate carries opposite imag; canonical pair
-        # has +Im_r corresponding to +Im_p. If p.imag > 0, r.imag is
-        # the "canonical" imag; otherwise flip.
-        Im_r_avg = 0.5 * (abs(r.imag) + abs(r2.imag))
-        if p.imag < 0:
-            Im_r_avg *= -1.0  # match sign convention
+        # The canonical pair is written with ``Im(p) = +Im_p_avg``, so
+        # the canonical residue is the one sitting at the *positive*
+        # imaginary pole; its partner carries the negated imaginary
+        # part. Symmetrise by averaging ``Im(r_+)`` against
+        # ``-Im(r_-)`` — this keeps the *sign* of the canonical
+        # residue, which an ``abs()``-based average destroys whenever
+        # ``Im(r_+) < 0`` (the pre-0.14.1 defect: the exported
+        # expression then disagreed with the fit it claims to
+        # represent, see CHANGELOG 0.14.1).
+        if p.imag > 0.0:
+            r_plus, r_minus = r, r2
+        else:
+            r_plus, r_minus = r2, r
+        Im_r_avg = 0.5 * (r_plus.imag - r_minus.imag)
         # Real second-order term:
         # 2·Re(r)·(s - Re(p)) - 2·Im(r)·Im(p)  /  (s - Re(p))² + Im(p)²
         Re_p_sym = sp.Float(Re_p_avg, decimals)

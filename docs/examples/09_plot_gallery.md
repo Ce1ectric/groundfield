@@ -125,7 +125,7 @@ from groundfield.postprocess import plot_potential_contour
 
 fig = plot_potential_contour(
     result, world=world,
-    plane="xz", fixed=0.0,
+    plane="xz", y=0.0,
     extent=(-50.0, 220.0, -1.0, 30.0),
     n=200,
 )
@@ -133,9 +133,11 @@ plt.show()
 ```
 
 Vertical slice at $y = 0$ — useful for visualising the current
-path through the soil between substation and Hilfserder. Pass
-`plane="xy"` for the horizontal slice or `plane="yz"` for the
-cross-section through the cable axis.
+path through the soil between substation and Hilfserder. The slice
+plane is selected with `plane`, and the coordinate held fixed is the
+one the plane does not span: `plane="xz"` takes `y=...`, `plane="xy"`
+takes `z=...`. Omitting `extent` derives the window from the bounding
+box of the point sources.
 
 ## 7. World-level matplotlib geometry
 

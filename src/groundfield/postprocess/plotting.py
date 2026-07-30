@@ -220,7 +220,9 @@ def plot_potential_contour(
         else:
             ax = srcs[:, 0]
             bx = srcs[:, 2]
-        pad = max(5.0, 0.5 * (ax.ptp() + bx.ptp()))
+        # ``np.ptp(arr)``, not ``arr.ptp()`` — the ndarray method was
+        # removed in NumPy 2.0, and the project requires numpy >= 2.1.
+        pad = max(5.0, 0.5 * (np.ptp(ax) + np.ptp(bx)))
         extent = (ax.min() - pad, ax.max() + pad,
                   bx.min() - pad, bx.max() + pad)
 

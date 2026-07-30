@@ -26,7 +26,90 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Fixed (Review pass 9 — implemented 2026-07-28)
+
+> The ninth review pass was run on 2026-07-28 against `0.14.0` (commit
+> `428442d`) with eight parallel subsystem reviewers and an independent
+> adversarial verification stage; the report and the full finding list live in
+> `review-report-2026-07-28/`. This release deliberately carries **only the
+> three findings that are either data-corrupting or hard crashes**, so that a
+> `groundfield` version number is enough to decide whether a stored
+> `groundinsight` `BusType` is affected. The remaining patch-class findings
+> (F06, F09, F10, F14–F16, F18, F24–F26, F31, F33, F35–F42, plus the docs
+> cluster) are staged for `0.14.2`.
+
+- **⚠ `fit_to_sympy` lost the sign of the residue's imaginary part —
+  the exported `groundinsight` formula did not match the fit it exports**
+  (`postprocess/vector_fitting.py`, finding F03). When combining a
+  complex-conjugate pole/residue pair into the real second-order term
+  $r/(s-p) + r^{*}/(s-p^{*}) = [2\,\Re(r)\,(s-\Re(p)) - 2\,\Im(r)\,\Im(p)] /
+  [(s-\Re(p))^2 + \Im(p)^2]$,
+  the canonical residue is by construction the one sitting at the pole with
+  $\Im(p) > 0$. The previous symmetrisation used
+  `0.5 * (abs(r.imag) + abs(r2.imag))`, which forces $\Im(r) \ge 0$; the
+  following `if p.imag < 0` correction flips on the sign of the *pole*, not of
+  the *residue*. Whenever the canonical residue carried $\Im(r) < 0$ — which
+  vector fitting produces routinely for lossy earth-return driving-point
+  impedances — the $-2\,\Im(r)\,\Im(p)$ numerator term entered with the wrong
+  sign and the exported `BusType.impedance_formula` was a **different rational
+  function** from `VectorFitResult`. Measured on a
+  $Z_0\coth(\gamma\ell)$ line fit ($R = 0.3$, $L = 1$ mH, $G = 1$ nS,
+  $C = 10$ nF, $\ell = 5$ km, 6 poles): 28.1 % magnitude error at 16.7 Hz,
+  13.1 % at 50 Hz, and a *sign* difference in $\Re(Z)$ at 500 Hz. The fix
+  selects the residue belonging to the positive-imaginary pole and
+  symmetrises as $\tfrac12(\Im(r_+) - \Im(r_-))$, which preserves the sign
+  while keeping the existing exact-conjugate symmetrisation intent.
+
+  **Numerical results change.** Any `BusType` exported through
+  `to_bustype_dict` / `save_bustype_json` / `to_bustype` from a fit with at
+  least one negative-imaginary canonical residue is affected and should be
+  re-exported. `VectorFitResult` itself, `fit.evaluate()`, and every solver
+  result were always correct — the defect was confined to the SymPy rendering
+  step, so re-running `fit_to_sympy` on the stored fit is sufficient; the
+  field computation does not need repeating.
+
+- **`plot_potential_contour` raised `AttributeError` on every supported
+  NumPy when `extent` was omitted** (`postprocess/plotting.py`, finding F12).
+  The automatic-extent branch called the `ndarray.ptp()` *method*, removed in
+  NumPy 2.0, while `pyproject.toml` requires `numpy = "^2.1.0"` — so the
+  documented default call, including the one in
+  [Quickstart](quickstart.md), was dead. Now uses the free function
+  `np.ptp(...)`. A repo-wide sweep for the other NumPy-2.0 removals
+  (`itemset`, `newbyteorder`, `np.float_`, `np.complex_`, `np.NaN`, `np.Inf`,
+  `np.alltrue`, `np.product`) found no further occurrence.
+
+- **`Engine.with_frequencies()` bypassed all frequency validation on its
+  default path** (`solver/engine.py`, finding F19). The
+  `preserve_order=False` branch returned
+  `self.model_copy(update={"frequencies": freqs})`, and `model_copy(update=...)`
+  runs **no** validators under pydantic v2 — contradicting the method's own
+  docstring ("the standard `_validate_frequencies` checks run"). An empty
+  list, a negative frequency, NaN and infinity were all silently accepted, and
+  the `EngineFrequencyOrderWarning` for a non-monotonic list never fired.
+  Both paths now go through `model_validate`; the order warning is re-emitted
+  at the caller's frame so the notebook line that built the engine is the one
+  reported. The scalar checks moved into a shared
+  `_check_frequency_values` helper so the constructor and the convenience
+  constructor reject the same inputs with the same messages, and infinity is
+  now rejected explicitly (previously it fell through the `f >= 0.0` guard).
+  DC (`f == 0.0`) remains a legitimate quasi-static operating point.
+
+New `tests/test_audit_pass9_fixes.py` (14 tests): the residue-sign export for
+both signs and across a frequency sweep, the full
+`to_bustype_dict` → `BusTypeSpec` → `evaluate_spec` round trip against the
+analytic pair sum, `plot_potential_contour` without `extent` in both planes,
+and the five `with_frequencies` rejection cases plus the order-warning and
+`preserve_order` controls. Eleven of the fourteen fail on `428442d`; the other
+three are controls over behaviour that was already correct.
+
+### Docs
+
+- **`docs/examples/09_plot_gallery.md` — corrected the
+  `plot_potential_contour` cross-section snippet.** It passed a
+  non-existent `fixed=0.0` keyword (the parameter is `y` for `plane="xz"`
+  and `z` for `plane="xy"`) and advertised a `plane="yz"` option the
+  function does not implement. The surrounding prose now states the
+  plane/fixed-coordinate pairing and the `extent=None` behaviour.
 
 ---
 

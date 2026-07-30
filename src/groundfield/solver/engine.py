@@ -80,6 +80,44 @@ class EngineFrequencyOrderWarning(UserWarning):
     the same.
     """
 
+
+def _check_frequency_values(values: list[float]) -> None:
+    """Validate the scalar contract of a frequency list.
+
+    Shared by the ``frequencies`` field validator and by
+    :meth:`Engine.with_frequencies`, so both entry points reject the
+    same inputs with the same messages. The *order* check lives in the
+    field validator only, because ``with_frequencies(preserve_order=True)``
+    opts out of it.
+
+    Parameters
+    ----------
+    values
+        Candidate frequency list in Hz.
+
+    Raises
+    ------
+    ValueError
+        If the list is empty, or contains a negative, NaN or infinite
+        entry. DC (``f == 0.0``) is a legitimate quasi-static operating
+        point and is accepted.
+    """
+    if not values:
+        raise ValueError("Engine.frequencies must not be empty.")
+    for f in values:
+        if f != f:  # NaN guard — must precede the comparison below
+            raise ValueError("Engine.frequencies must be finite, got NaN.")
+        if f == float("inf"):
+            raise ValueError("Engine.frequencies must be finite, got inf.")
+        # DC (``f == 0``) is a legitimate operating point for
+        # quasi-static grounding studies — reject only negatives
+        # and non-finite values.
+        if not (f >= 0.0):
+            raise ValueError(
+                f"Engine.frequencies must be non-negative, got {f}."
+            )
+
+
 Backend = Literal[
     "image",
     "image_2layer",
@@ -208,21 +246,7 @@ class Engine(BaseModel):
         previously relied on an implicit sort notice it during the
         migration to ``v0.5.0``.
         """
-        if not value:
-            raise ValueError("Engine.frequencies must not be empty.")
-        for f in value:
-            # DC (``f == 0``) is a legitimate operating point for
-            # quasi-static grounding studies — reject only negatives
-            # and non-finite values.
-            if not (f >= 0.0):
-                raise ValueError(
-                    "Engine.frequencies must be non-negative, got "
-                    f"{f}."
-                )
-            if f != f:  # NaN guard
-                raise ValueError(
-                    "Engine.frequencies must be finite, got NaN."
-                )
+        _check_frequency_values(value)
         # Strict-monotone-increasing detection. Use a tolerance-free
         # comparison: explicit duplicates are also flagged because they
         # silently double-evaluate the kernel at the same frequency.
@@ -291,29 +315,30 @@ class Engine(BaseModel):
         [50.0, 5000.0]
         """
         freqs = [float(f) for f in frequencies]
+        # The scalar contract holds for *both* paths. Checking it here
+        # as well as in the validator keeps the error attributable to
+        # ``with_frequencies()`` rather than to a nested model rebuild.
+        _check_frequency_values(freqs)
+        data = self.model_dump()
+        data["frequencies"] = freqs
         if preserve_order:
-            # Bypass the validator's monotone-check by using
-            # ``model_construct`` for the field. We still want type /
-            # positivity checks, so do them explicitly here.
-            if not freqs:
-                raise ValueError(
-                    "with_frequencies(): at least one frequency required."
-                )
-            for f in freqs:
-                if not (f >= 0.0):
-                    raise ValueError(
-                        "with_frequencies(): frequencies must be "
-                        f"non-negative, got {f}."
-                    )
-            data = self.model_dump()
-            data["frequencies"] = freqs
-            # Re-validate the rest, but inject the preserved list
-            # directly so the field-validator's monotone-warning is
-            # silenced.
+            # Re-validate the rest, but suppress the field validator's
+            # monotone warning — a deliberately ordered sweep is the
+            # documented opt-in.
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", EngineFrequencyOrderWarning)
                 return self.__class__.model_validate(data)
-        return self.model_copy(update={"frequencies": freqs})
+        # Default path: run the full field validation, including the
+        # monotone-order warning. ``model_copy(update=...)`` would skip
+        # every validator (pydantic v2 semantics), which is the
+        # pre-0.14.1 defect. Re-emit any warning at the caller's frame
+        # so the notebook line that built the engine is the one shown.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            engine = self.__class__.model_validate(data)
+        for entry in caught:
+            warnings.warn(entry.message, entry.category, stacklevel=2)
+        return engine
 
     # ------------------------------------------------------------------
     # Run
