@@ -284,7 +284,7 @@ def horizontal_strip(
     $$
     R = \\frac{\\rho}{4\\pi L}\\,
         \\Bigl(\\ln\\tfrac{4L}{a} + \\tfrac{a^2 - \\pi a b}{2(a+b)^2}
-               + \\ln\\tfrac{4L}{s} - 2 + \\tfrac{s}{2L}
+               + \\ln\\tfrac{4L}{s} - 1 + \\tfrac{s}{2L}
                - \\tfrac{s^2}{16 L^2}
                + \\tfrac{s^4}{512 L^4}\\Bigr)
     $$
@@ -298,6 +298,33 @@ def horizontal_strip(
         Strip thickness $b$ in m. Validity: $b < a/8$.
     depth
         Burial depth; $s = 2\\,t$.
+
+    Notes
+    -----
+    The constant is $-1$, **not** the $-2$ of the round-wire form
+    :func:`horizontal_wire`, because the strip bracket already carries
+    the cross-section term $(a^2 - \\pi a b)/(2(a+b)^2) \\to 1/2$ as
+    $b \\to 0$:
+
+    $$
+    \\underbrace{\\ln\\tfrac{4L}{a} + \\tfrac12
+                 + \\ln\\tfrac{4L}{s} - 1}_{\\text{strip of width } a}
+    \\;=\\;
+    \\underbrace{\\ln\\tfrac{4L}{a} + \\tfrac32
+                 + \\ln\\tfrac{4L}{s} - 2}_{\\text{round wire of radius }
+                                            a\\,e^{-3/2}},
+    $$
+
+    i.e. a vanishingly thin strip of width $a$ *is* the round wire of
+    radius equal to the strip's self-GMD $a\\,e^{-3/2}$. That is the
+    consistency check: for $b \\to 0$ this function equals
+    ``horizontal_wire(rho, L, a*exp(-1.5), depth)`` up to the $O(b/a)$
+    residual of the cross-section term (8.6e-6 relative at
+    $a = 30$ mm, $b = 1$ µm; 8.6e-9 at $b = 1$ nm). Corrected in
+    0.15.0 (finding F37): the $-2$ used up to 0.14.1 made the bracket
+    one full unit too small, i.e. $R$ low by $\\rho/(4\\pi L)$ —
+    10 % at $a = 30$ mm, 13 % at $a = 300$ mm for $L = 10$ m,
+    $t = 0.8$ m.
     """
     L, a, b = length, width, thickness
     if b >= a / 8.0:
@@ -310,7 +337,7 @@ def horizontal_strip(
         math.log(4.0 * L / a)
         + (a ** 2 - math.pi * a * b) / (2.0 * (a + b) ** 2)
         + math.log(4.0 * L / s)
-        - 2.0
+        - 1.0
         + s / (2.0 * L)
         - s ** 2 / (16.0 * L ** 2)
         + s ** 4 / (512.0 * L ** 4)
@@ -346,17 +373,33 @@ def horizontal_round_plate(rho: float, radius: float, depth: float) -> float:
 
 def vertical_round_plate(rho: float, radius: float, depth: float) -> float:
     """Vertical round plate, Table I (Eqs. 32 + 38).
+    $$
+    R = \\frac{\\rho}{8 a} +
+        \\frac{\\rho}{4\\pi s}\\,
+          \\Bigl(1 + \\tfrac{7 a^2}{24 s^2}
+                    + \\tfrac{99 a^4}{320 s^4}\\Bigr)
+    $$
+    Assumption: plate plane perpendicular to the soil surface; image
+    distance $s = 2\\,t$ ≫ plate radius $a$ for the series to
+    converge.
 
-    In the original the plate-to-image distance is
-    $s_2 \\approx 2 s$ (twice the depth of the plate centre to
-    the surface). The series for the image contribution flips the sign
-    of the $a^2$ term.
+    Notes
+    -----
+    Same leading image term $\\rho/(4\\pi s)$ as
+    :func:`horizontal_round_plate` — the orientation of the plate is
+    invisible in the far field, so the two must agree to
+    $O(a^2/s^2)$; only the sign and size of the $a^2$ correction
+    differ (Eq. 38 vs Eq. 36), because the vertical plate presents its
+    edge, not its face, to the image. (Corrected in 0.15.0 — finding
+    F38; up to 0.14.1 the divisor carried an extra factor 2, halving
+    the image term, because ``s`` had been read as the burial depth
+    rather than as the plate-to-image distance it already is.)
     """
     s = 2.0 * depth
     a = radius
     R_self = rho / (8.0 * a)
     # Series Eq. (38): (1 + 7 a^2 / (24 s^2) + 99 a^4 / (320 s^4))
-    R_image = rho / (4.0 * math.pi * 2.0 * s) * (
+    R_image = rho / (4.0 * math.pi * s) * (
         1.0 + 7.0 * a ** 2 / (24.0 * s ** 2) + 99.0 * a ** 4 / (320.0 * s ** 4)
     )
     return R_self + R_image

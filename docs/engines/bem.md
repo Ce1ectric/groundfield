@@ -1,5 +1,19 @@
 # `bem` — Boundary-Element Collocation
 
+!!! warning "Status: $n \le 2$ only, and numerically identical to `mom`"
+
+    Since 0.11.0 `bem` **rejects** $n \ge 3$ soils with
+    `NotImplementedError` (it shared the structurally incomplete
+    complex-image kernel with [`cim`](cim.md) — audit 2026-07-08,
+    WP-E), and since 0.15.0 it computes no complex-image fit at all.
+    In the two regimes it accepts it assembles the **same reaction
+    matrix** as [`mom`](mom.md) and solves it with the **same**
+    constraint solver; the measured relative difference on a ring case
+    is 4e-16. `bem` is therefore **not an independent cross-check** of
+    `mom` — treating "`mom` and `bem` agree" as corroboration counts
+    one computation twice (ADR-0002 amendment 2026-07-09). It is kept
+    as the collocation-flavoured entry point of the family.
+
 ## Physical context
 
 The Boundary-Element Method is a sister to the Method of Moments:
@@ -26,10 +40,14 @@ sensitivity to the segment-length / wire-radius ratio at the wire
 end-points.
 
 `bem` was added to the engine family to provide a **methodological
-alternative** to the Galerkin scheme. When `mom` and `bem` agree
-on a given problem, the answer is robust against the choice of
-test function; when they disagree, the disagreement is reproducible
-and quantifiable.
+alternative** to the Galerkin scheme. That intent is only partly
+realised: on the diagonal both engines use the same analytical line
+self-potential and off the diagonal both reduce to a point-source
+evaluation at the segment midpoint, so on the soils `bem` accepts
+($n \le 2$) the two assembled matrices coincide to floating-point
+noise. The distinction between Galerkin and collocation is real in
+theory but has no numerical footprint in this implementation — see
+the status box above.
 
 ## Governing equation: boundary integral
 
@@ -72,22 +90,28 @@ engine family. For each soil class:
   on the diagonal). Bit-exact match to `image` and `mom` at the
   Galerkin level for $n = 1$.
 - **`TwoLayerSoil`** → the closed-form Tagg / Sunde self-kernel
-  (`_two_layer_self_kernel_factory`). The matrix-pencil-fit-based
-  CIM kernel is intentionally *not* used here, even though `bem`
-  takes a `fit_complex_images` instance: at $n = 2$ the
-  $\Gamma_1 \equiv K_1$ constant makes the matrix-pencil fit
-  ill-conditioned (a single pole at $\beta = 0$). Falling back on
-  the geometric series gives a bit-exact match with
-  `image_2layer`.
-- **`MultiLayerSoil`** ($n \ge 3$) → homogeneous self-kernel for
-  the direct + air-mirror part plus the closed-form complex-image
-  contribution from `cim`. This is the same closed-form layered
-  Green's function the `cim` engine uses, but evaluated with
-  collocation rather than Galerkin averaging.
+  (`_two_layer_self_kernel_factory`, with
+  `allow_cross_layer=True` so interface-crossing geometries take the
+  rigorous ADR-0007 path). At $n = 2$ the constant
+  $\Gamma_1 \equiv K_1$ *is* a single complex image at
+  $\beta = 0$, so the geometric series is the exact complex-image
+  representation — there is nothing for a fit to add.
+- **`MultiLayerSoil`** ($n \ge 3$) → `NotImplementedError`. The
+  historic contribution for this regime came from an incomplete
+  Green's function (no $2 h_1$ image families, no
+  surface-interface multiple-reflection denominator; see
+  `solver/_layered.py`). Use `mom_sommerfeld` or `fem`.
 
-The end result: `bem` and `mom` differ only in the *test function*;
-the *kernel* is identical for $n = 1, 2$, and shares the same CIM
-approximation for $n \ge 3$.
+No complex-image fit is computed. Up to 0.14.1 `solve_bem` called
+`fit_complex_images` on every solve and published its (failed)
+diagnostics as `cim_n_images` / `cim_rms`, although the only
+reachable branches never looked at them (review pass 9, F34). The
+metadata now records `cim_fit_used = False`, `cim_n_images = 0`,
+`cim_rms = None` and `reduces_to = "mom"`.
+
+The end result: `bem` and `mom` differ only in the *test function*,
+and on the soils `bem` accepts even that difference cancels — the
+*matrices* are identical.
 
 ### Reaction matrix assembly
 
@@ -97,8 +121,7 @@ the existing self-kernel factory with the identity matrix as the
 diagonal carries the line self-potential; the off-diagonals carry
 the point-source approximation.
 
-For $n \ge 3$ the homogeneous part is built first, then the
-complex-image contribution is added explicitly:
+The $n \ge 3$ branch used to add a complex-image contribution
 
 $$
 Z^{(\text{layered})}_{ij} \;=\; Z^{(\text{hom})}_{ij}
@@ -108,9 +131,14 @@ Z^{(\text{layered})}_{ij} \;=\; Z^{(\text{hom})}_{ij}
 $$
 
 with $s_{ij}$ the radial distance between the segment midpoints
-and $a_k, \beta_k$ the matrix-pencil fit coefficients. The
-imaginary part of the sum cancels by symmetry, so we take the real
-part to suppress numerical residue.
+and $a_k, \beta_k$ the matrix-pencil fit coefficients. That branch
+has been unreachable since 0.11.0 (the $n \ge 3$ rejection sits in
+front of it) and was **deleted in 0.15.0**: the sum represents only a
+single image family of the layered Green's function, so keeping it
+alive invited a silent wrong-physics path. The matrix builder now
+raises for $n \ge 3$ instead. The formula stays documented here
+because it is the shape a *complete* $n \ge 3$ kernel would take
+once the missing families are added.
 
 ### Linear-system solve
 
@@ -122,25 +150,25 @@ in the assembled system is the matrix entries themselves.
 
 | Property | Range / value |
 |---|---|
-| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil` |
+| Soil model | `HomogeneousSoil`, `TwoLayerSoil` (a `MultiLayerSoil` is accepted only while it reduces to $n \le 2$) |
 | Frequency | quasi-static, $f < 1\,\text{kHz}$ |
-| Electrode placement | every segment in the upper layer |
+| Number of layers | $n \le 2$; $n \ge 3$ raises `NotImplementedError` |
+| Electrode placement | free — $n = 2$ interface crossings dispatch to the ADR-0007 cross-layer kernel |
 | Wire radius / segment ratio | thin-wire, $a \ll L_i$ |
 | Mesh size $N$ | $\le 1000$ at acceptable runtime |
-| Number of complex images $P$ | inherited from `cim` (default 8) |
+| Number of complex images $P$ | not applicable — no fit runs |
 
 ## Convergence and cost
 
-- **Per-segment accuracy.** Comparable to `mom` for smooth
-  electrodes (rods, rings, meshes); collocation converges
-  somewhat faster on the segment-length axis but is slightly
-  more sensitive to the wire-radius / segment-length ratio at the
-  electrode ends. For the typical geometries the difference is
-  negligible.
+- **Per-segment accuracy.** Equal to `mom` on the soils this backend
+  accepts: the assembled matrices agree to 4e-16, so the two engines
+  converge along the segment-length axis in lockstep. (The textbook
+  difference between collocation and Galerkin — slightly faster
+  convergence, slightly higher sensitivity to the wire-radius /
+  segment-length ratio at wire ends — would only appear with a
+  genuinely averaged Galerkin kernel.)
 - **Computational cost.** $O(N^2)$ matrix build, $O((N + K)^3)$
-  solve. For the layered case the matrix build is dominated by the
-  one-shot CIM fit ($O(N_s P^2)$, $N_s = 64$, $P = 8$, so
-  negligible).
+  solve.
 - **Reduction.** At $K_1 = 0$ the engine collapses bit-exactly to
   the homogeneous `bem` solution, which itself agrees with `image`
   to within the segment-discretisation envelope.
@@ -149,19 +177,20 @@ in the assembled system is the matrix entries themselves.
 
 | Counterpart | Expected agreement | What is checked |
 |---|---|---|
-| `image` ($n = 1$) | $\le 5\,\%$ | uniform-current vs. collocation |
-| `image_2layer` ($n = 2$) | bit-exact | bem reuses the Tagg / Sunde kernel for $n = 2$ |
-| `mom` (any $n$) | $\le 5\,\%$ | Galerkin vs. collocation on the same kernel |
-| `cim` ($n \ge 3$) | $\le 5\,\%$ | shares the CIM kernel; only the test function differs |
-| `mom_sommerfeld` (any $n$) | $\le 5\,\%$ | quadrature reference |
+| `mom` ($n \le 2$) | bit-exact (4e-16) | *same computation* — identical reaction matrix and constraint solve; no independent information |
+| `image` ($n = 1$) | $\le 5\,\%$ | uniform-current vs. collocation weighting |
+| `image_2layer` ($n = 2$) | $\le 5\,\%$ | uniform-current vs. collocation weighting on the same Tagg / Sunde kernel |
+| `mom_sommerfeld` ($n \le 2$) | $\le 5\,\%$ | direct quadrature of the full layered Green's function — the genuinely independent kernel |
+| `fem` ($n \le 2$) | $\le 10\,\%$ | volume PDE, independent problem form |
 | Sunde / Dwight closed forms | $\le 5\,\%$ | tighter than the image backend |
 
-`bem` is the **alternative-weighting cross-check** in the matrix.
-It is paired with `mom` and `cim` in the test suite; together they
-form a triangle that detects bugs in the kernel (`mom` vs. `cim`
-disagreement), the test function (`mom` vs. `bem` disagreement), or
-the layered approximation (`cim` vs. `mom_sommerfeld`
-disagreement).
+`bem` is a **flavour** of the integral-equation family, not an
+independent line of defence: the historic "`mom` / `bem` / `cim`
+triangle" collapses to a single point, because `bem` reproduces
+`mom` bit-for-bit and `cim` reproduces `image_2layer` bit-for-bit.
+The independent checks are `mom_sommerfeld` (quadrature of the full
+layered kernel) and `fem` (volume PDE); see the [ADR-0002
+amendment](../adr/0002-engine-family.md).
 
 ## References
 
@@ -197,7 +226,12 @@ engine = gf.create_engine(backend="bem",
                           frequencies=[50.0])
 result = world.solve(engine)
 print(result.cluster_impedance("g1")[0])
+print(result.metadata["cim_fit_used"])   # False -- no fit runs
+print(result.metadata["reduces_to"])     # 'mom'
 ```
+
+For $n \ge 3$ the call raises; use `mom_sommerfeld` (full layered
+Green's function) or `fem` (volume PDE) instead.
 
 ## API reference
 
@@ -205,5 +239,6 @@ print(result.cluster_impedance("g1")[0])
 
 ## Related material
 
-- ADR-0002 — engine selection heuristic; `bem` is the
-  alternative-weighting cross-check in the layered family.
+- ADR-0002 — engine selection heuristic, and the 2026-07-09
+  amendment that revoked `bem`'s role as an independent
+  cross-validation engine.

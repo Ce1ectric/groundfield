@@ -85,6 +85,7 @@ power lines below 1 kHz; the **finite earth conductivity correction
 
 `Conductor` gains one new field:
 
+<!-- skip-doctest: schema sketch, not runnable code -->
 ```python
 inductance_model: Literal[None, "neumann"]   # default None
 ```

@@ -69,15 +69,24 @@ class World(BaseModel):
     concrete_shell_corrections: dict[str, float] = Field(
         default_factory=dict,
         description=(
-            "Mapping from electrode anchor name to lumped concrete-"
-            "shell series resistance $R_\\text{shell,total}$ in Ω, "
-            "populated by foundation electrodes built with a "
-            "``FoundationElectrodeSpec`` whose "
-            "``concrete_rho_ohm_m`` is set (ADR-0012 V1). Consumed by "
-            "``TnNetworkGenerator._build_pen_backbone`` to inject the "
-            "resistance on the corresponding PEN service drop. The "
-            "field is additive — worlds built without the OSM / "
-            "concrete path keep an empty dict and behave as before."
+            "Mapping from **galvanic-cluster anchor** name to the total "
+            "lumped concrete-shell series resistance "
+            "$R_\\text{shell,total}$ in Ω of that cluster, populated by "
+            "foundation electrodes built with a "
+            "``FoundationElectrodeSpec`` whose ``concrete_rho_ohm_m`` is "
+            "set (ADR-0012 V1). ``GroundingSystemSpec.build_at`` writes "
+            "each electrode's own contribution first and then folds the "
+            "site's entries onto the anchor once the bonds are in place, "
+            "so the key is always the anchor even when the foundation is "
+            "not the first electrode of its spec list. Several encased "
+            "electrodes in one cluster combine **in parallel** — each "
+            "leaks through its own radial shell into the soil — so the "
+            "folded value is $(\\sum_i 1/R_i)^{-1}$. Consumed by "
+            "``TnNetworkGenerator._build_pen_backbone`` and "
+            "``_build_radial_trunk`` to inject the resistance on the "
+            "corresponding PEN service drop. The field is additive — "
+            "worlds built without the OSM / concrete path keep an empty "
+            "dict and behave as before."
         ),
     )
 
@@ -292,6 +301,25 @@ class World(BaseModel):
         explicit: solving never rewrites the input world. The opt-out
         is documented in ``docs/concepts.md`` ("Engine re-use across
         ``World.solve`` calls").
+
+        The roll-back is **identity-preserving** (since 0.15.0): the
+        field values recorded in the snapshot are written back onto the
+        very objects that :func:`~groundfield.api.create_source`
+        returned, and :attr:`sources` keeps its list object. A handle
+        the caller is holding therefore stays live across an arbitrary
+        number of solves, so the canonical sweep pattern
+
+        .. code-block:: python
+
+            src = gf.create_source(world, attached_to="g1", magnitude=10.0)
+            r1 = world.solve(engine)
+            src.magnitude = 20.0     # still attached to ``world``
+            r2 = world.solve(engine)
+
+        does what it reads like. Before 0.15.0 the snapshot list was
+        rebound onto the world, which silently detached the caller's
+        handles after the first solve and made every subsequent
+        mutation a no-op.
         """
         # Local import to avoid a circular dependency at module load.
         from groundfield.solver.engine import Engine
@@ -307,12 +335,35 @@ class World(BaseModel):
             return engine.solve(self)
         # Snapshot every source via Pydantic's deep-copy semantics so
         # backends that mutate a source field in flight cannot leak
-        # the change back into the caller's world.
-        sources_snapshot = [s.model_copy(deep=True) for s in self.sources]
+        # the change back into the caller's world. Keep a reference to
+        # the live list *and* to the original objects: the roll-back
+        # below writes the recorded values back onto those objects
+        # instead of rebinding a fresh copy, so the handles returned by
+        # ``create_source`` stay attached to this world (F31).
+        source_list = self.sources
+        originals = list(source_list)
+        sources_snapshot = [s.model_copy(deep=True) for s in originals]
         try:
             return engine.solve(self)
         finally:
-            self.sources = sources_snapshot
+            for original, snapshot in zip(originals, sources_snapshot):
+                if original != snapshot:
+                    # Source models are flat (str / float / None), so a
+                    # dict update is a complete field-wise roll-back.
+                    original.__dict__.update(snapshot.__dict__)
+                    original.__pydantic_fields_set__ = set(
+                        snapshot.__pydantic_fields_set__
+                    )
+            # Undo list-level mutations (insert / remove / replace) and
+            # re-bind the original list object if a backend swapped the
+            # attribute wholesale.
+            if len(source_list) != len(originals) or any(
+                live is not original
+                for live, original in zip(source_list, originals)
+            ):
+                source_list[:] = originals
+            if self.sources is not source_list:
+                self.sources = source_list
 
     # ------------------------------------------------------------------
     # Diagnostics

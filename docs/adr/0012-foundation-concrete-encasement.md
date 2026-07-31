@@ -185,6 +185,7 @@ for uniform $\rho_c$ is the V2 acceptance criterion.
 
 `FoundationElectrodeSpec` (only):
 
+<!-- skip-doctest: schema sketch, not runnable code -->
 ```python
 concrete_rho_ohm_m: float | AnyDistribution | None = None
 """Resistivity of the concrete encasement.
@@ -204,6 +205,7 @@ concrete_model: Literal["lumped", "distributed"] = "lumped"
 
 `Conductor` (one new optional field, additive):
 
+<!-- skip-doctest: schema sketch, not runnable code -->
 ```python
 lumped_series_resistance_ohm: float | None = None
 """Optional override for the conductor's total series impedance.
@@ -218,6 +220,7 @@ that property and therefore pick up the override transparently."""
 
 `StripElectrode` (one new optional field, additive):
 
+<!-- skip-doctest: schema sketch, not runnable code -->
 ```python
 internal_impedance_per_m: complex | None = None
 """Per-metre radial internal impedance, in Ω/m. None means no
@@ -242,6 +245,7 @@ moisture state be sampled per realisation. A recommended default
 distribution for Monte-Carlo studies (matches the four empirical
 bands in the introduction):
 
+<!-- skip-doctest: keyword-argument sketch, not runnable code -->
 ```python
 concrete_rho_ohm_m=Discrete(
     values=[50.0, 150.0, 500.0, 2000.0],

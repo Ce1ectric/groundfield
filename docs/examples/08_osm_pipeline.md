@@ -33,6 +33,7 @@ response is cached locally so subsequent runs stay offline.
 
 ## End-to-end code
 
+<!-- skip-doctest: needs the Overpass network (live OSM download) -->
 ```python
 import groundfield as gf
 from groundfield.generators import OrtsnetzLayout
@@ -125,6 +126,7 @@ print(f"Closed measurement loop, |Z_meas| = {abs(Z):.3f} ohm "
 
 ## Visualising the result
 
+<!-- skip-doctest: continues the Overpass-dependent block above -->
 ```python
 import matplotlib.pyplot as plt
 

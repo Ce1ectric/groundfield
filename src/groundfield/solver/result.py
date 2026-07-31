@@ -164,15 +164,112 @@ class FieldResult(BaseModel):
         Raises
         ------
         KeyError
-            If the resolved cluster is empty.
+            If the resolved cluster is empty, or if none of its members
+            carries potential *and* current data.
+
+        Notes
+        -----
+        The cluster potential is the **length-weighted (Galerkin)
+        average** over all members,
+
+        .. math::
+            \\varphi_c \\;=\\;
+            \\frac{\\sum_{e \\in c} L_e\\, \\varphi_e}
+                  {\\sum_{e \\in c} L_e},
+            \\qquad
+            L_e = \\sum_{k \\in e} L_k ,
+
+        with the per-electrode lengths taken from
+        :attr:`point_sources`. Since every member potential
+        :math:`\\varphi_e` is itself the length-weighted average over
+        that electrode's segments, :math:`\\varphi_c` is exactly the
+        length-weighted average over the whole cluster surface — the
+        quantity the augmented system constrains to one value (see
+        ``solver/image.py``, block 1 of the multi-port system).
+
+        Up to 0.14.1 this method read ``members[0]``, i.e. the
+        *alphabetically first* member name. Because the reported
+        member potentials were unweighted segment means they did not
+        agree with each other, so renaming an electrode changed the
+        reported cluster impedance of an unchanged geometry (19.4393 Ω
+        → 19.2314 Ω in the audit case, 2026-07-28, F11). With the
+        weighted reduction the members agree to round-off for the
+        image family and the result is invariant under renaming for
+        every backend.
+
+        Numerator and denominator run over **different** member sets,
+        deliberately:
+
+        * :math:`\\varphi_c` averages over members that carry *both*
+          potential and current data — a member with no potential
+          cannot contribute a term to the average.
+        * :math:`\\sum_e I_e` sums over every member that carries
+          current data, whether or not its potential was stored,
+          because its injected current is part of the cluster total
+          regardless.
+
+        Every backend in this package populates both mappings for
+        every member, so the two sets coincide in practice. They
+        differ only for hand-built :class:`FieldResult` instances,
+        where restricting the current sum to the potential-carrying
+        members would silently under-count the cluster current
+        (audit 2026-07-29).
         """
         members = self.clusters.get(electrode_name, [electrode_name])
         if not members:
             raise KeyError(f"No cluster for '{electrode_name}'.")
-        u = self.electrode_potentials[members[0]]
+        usable = [
+            m for m in members
+            if m in self.electrode_potentials and m in self.electrode_currents
+        ]
+        if not usable:
+            raise KeyError(
+                f"No potential/current data for any member of the cluster "
+                f"of '{electrode_name}' (members: {members})."
+            )
+
+        # Per-electrode total leakage length (weights of the Galerkin
+        # average). Falls back to equal weights when the backend did
+        # not populate ``point_sources`` (stub results).
+        lengths: dict[str, float] = {}
+        for ps in self.point_sources:
+            lengths[ps.electrode_name] = (
+                lengths.get(ps.electrode_name, 0.0) + float(ps.length)
+            )
+        w = np.array([lengths.get(m, 0.0) for m in usable], dtype=float)
+        if w.sum() <= 0.0:
+            w = np.ones(len(usable), dtype=float)
+
+        n_freq = len(self.electrode_potentials[usable[0]])
+        u = [
+            complex(
+                sum(
+                    float(wm) * self.electrode_potentials[m][k]
+                    for wm, m in zip(w, usable)
+                )
+                / float(w.sum())
+            )
+            for k in range(n_freq)
+        ]
+        # The *denominator* runs over every member that has current
+        # data, not over ``usable``: a member without potential data
+        # cannot contribute to the weighted average, but its injected
+        # current is still part of the cluster's total. Restricting the
+        # sum to ``usable`` (0.15.0 development state) silently dropped
+        # it and returned a too-large impedance instead of the
+        # ``KeyError`` v0.14.1 raised — e.g. potentials {"a"} with
+        # currents {"a": 1 A, "b": 1 A} and cluster ["a", "b"] gave
+        # 10 V / 1 A = 10 Ω where 10 V / 2 A = 5 Ω is meant
+        # (audit 2026-07-29). Not reachable through any shipped
+        # backend, but ``FieldResult`` is public and user-constructible.
+        current_members = [
+            m for m in members
+            if m in self.electrode_currents
+            and len(self.electrode_currents[m]) >= n_freq
+        ]
         i_sum = [
-            sum(self.electrode_currents[m][k] for m in members)
-            for k in range(len(u))
+            sum(self.electrode_currents[m][k] for m in current_members)
+            for k in range(n_freq)
         ]
         return [
             (uk / ik) if ik != 0 else complex("nan")

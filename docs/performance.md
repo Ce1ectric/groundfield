@@ -89,6 +89,7 @@ tractable with parallelisation.
 
 ### Recommended pattern
 
+<!-- skip-doctest: needs optional joblib; runs 10^4 solves -->
 ```python
 # studies/parameter_sweep.py
 from joblib import Parallel, delayed

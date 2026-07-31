@@ -40,11 +40,22 @@ def test_homogeneous_reactance_matches_carson(rho, freq):
 
 @pytest.mark.parametrize("rho", [30.0, 100.0, 1000.0])
 @pytest.mark.parametrize("freq", [50.0, 550.0, 1000.0])
-def test_homogeneous_resistance_approaches_carson_from_below(rho, freq):
-    """Earth-return resistance approaches omega*mu0/8 from below (Pollaczek is exact)."""
+def test_homogeneous_resistance_approaches_carson_from_above(rho, freq):
+    """Earth-return resistance sits slightly *above* omega*mu0/8.
+
+    Changed in 0.15.0 (finding F09): up to 0.14.1 this test asserted
+    ``z_poll.real <= omega*mu0/8``, i.e. the resistance approached the
+    Carson constant *from below*. That was the signature of a bug — the
+    integral used Carson's air kernel ``exp(-2 h lam)`` instead of the
+    buried-conductor kernel ``exp(-2 h u_eff)`` — and not a property of
+    the exact Pollaczek solution. ``omega*mu0/8`` is Carson's
+    low-frequency, surface-return limit; a conductor buried at depth ``h``
+    drives its return current through more soil, so its earth-return
+    resistance is *larger*, and the excess grows with depth and frequency.
+    """
     z_poll = pollaczek_self_impedance(rho, rho, 10.0, freq, depth=DEPTH, gmr=GMR)
     r_carson = 2.0 * math.pi * freq * MU_0 / 8.0
-    assert z_poll.real <= r_carson * (1.0 + 1e-6)       # never above the Carson constant
+    assert z_poll.real >= r_carson * (1.0 - 1e-9)       # never below the Carson limit
     assert z_poll.real == pytest.approx(r_carson, rel=2e-2)  # within 2 %
 
 

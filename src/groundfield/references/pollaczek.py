@@ -29,7 +29,8 @@ axis yields the Pollaczek self impedance of a conductor buried at depth
 
     Z'_\text{self} = j\,\frac{\omega\mu_0}{2\pi}\left[
         \ln\!\frac{2h}{\mathrm{GMR}}
-        + 2\int_0^\infty \frac{e^{-2h\lambda}}{\lambda + u_\text{eff}(\lambda)}
+        + 2\int_0^\infty
+          \frac{e^{-2h\,u_\text{eff}(\lambda)}}{\lambda + u_\text{eff}(\lambda)}
           \,d\lambda \right],
 
 where the effective vertical wavenumber of the two-layer earth follows
@@ -46,6 +47,19 @@ The :math:`\ln(2h/\mathrm{GMR})` term is the small-argument form of the
 perfect-mirror image :math:`K_0(\gamma\,\mathrm{GMR}) - K_0(2\gamma h)`;
 the integral is the finite-conductivity earth-return correction.
 
+Note the exponent: for a conductor **buried in the earth** the vertical
+decay of the reflected field is governed by :math:`u_\text{eff}(\lambda)`,
+not by :math:`\lambda`. The Laplace kernel :math:`e^{-2h\lambda}` is
+Carson's *air* kernel, valid only for a conductor above the interface
+(:math:`\gamma \to 0` in the upper half-space); using it below the
+interface systematically under-counts :math:`R'` and inverts the sign of
+its depth dependence (fixed in 0.15.0). Because the head term uses the
+small-argument form of the :math:`K_0` pair, the validity envelope is
+:math:`|\gamma|\,2h \ll 1` — comfortably satisfied over the
+50 Hz – 1 kHz band this package targets (< 0.05 % in :math:`R'` at
+:math:`h \le 1` m, ~0.4 % at :math:`h = 3` m against the full
+:math:`K_0` form), but degrading above ~10 kHz.
+
 Like :mod:`groundfield.references.earth_return`, this returns the
 **earth-return** series impedance only (external inductance, no internal
 conductor resistance or internal inductance): pass ``gmr`` equal to the
@@ -57,8 +71,12 @@ Limiting cases (all covered by the regression tests):
 
 * ``rho_1 == rho_2``  →  ``u_eff = u_1``  →  homogeneous Pollaczek, which
   matches :func:`carson_self_impedance` to well under 1 % in the reactance
-  across 50 Hz – 1 kHz; the earth-return resistance approaches
-  :math:`\omega\mu_0/8` **from below** as ``f`` rises.
+  across 50 Hz – 1 kHz; the earth-return resistance sits slightly
+  **above** :math:`\omega\mu_0/8` (Carson's low-frequency, surface-return
+  limit) and **rises** with burial depth and with frequency, because a
+  deeper conductor forces the return current through more soil (e.g.
+  ``rho = 30`` Ω·m, 1 kHz: 1.012·:math:`\omega\mu_0/8` at 0.7 m,
+  1.040·:math:`\omega\mu_0/8` at 3 m).
 * ``h_1 → ∞``  →  ``u_eff → u_1``  (upper layer only).
 * ``h_1 → 0``  →  ``u_eff → u_2``  (lower layer only).
 * two-layer  →  the reactance lies within the
@@ -171,7 +189,10 @@ def pollaczek_self_impedance(
 
     def integrand(lam: float, part: int) -> float:
         ue = layered_effective_wavenumber(lam, rho_1, rho_2, h_1, omega)
-        v = math.exp(-2.0 * depth * lam) / (lam + ue)
+        # Buried-conductor (Pollaczek/Sunde) kernel: the vertical decay of
+        # the reflected field is governed by u_eff, not by lam. lam would be
+        # Carson's AIR kernel (gamma -> 0), which under-counts R'.
+        v = cmath.exp(-2.0 * depth * ue) / (lam + ue)
         return v.real if part == 0 else v.imag
 
     re, _ = quad(integrand, 0.0, math.inf, args=(0,), limit=200)
@@ -204,7 +225,8 @@ def pollaczek_mutual_impedance(
         Z'_\text{M} = j\,\frac{\omega\mu_0}{2\pi}\left[
             \ln\!\frac{D}{d}
             + 2\int_0^\infty
-              \frac{e^{-(h_i+h_j)\lambda}}{\lambda + u_\text{eff}(\lambda)}
+              \frac{e^{-(h_i+h_j)\,u_\text{eff}(\lambda)}}
+                   {\lambda + u_\text{eff}(\lambda)}
               \cos(\lambda x)\,d\lambda \right],
 
     with the horizontal separation :math:`x`, the direct and mirror
@@ -267,7 +289,10 @@ def pollaczek_mutual_impedance(
     -----
     Earth-return coupling only: quasi-static, no displacement current, and
     (like the self) the layering enters solely through
-    :math:`u_\text{eff}`. As :math:`x \to \mathrm{GMR}` with
+    :math:`u_\text{eff}`, which also governs the vertical decay in the
+    exponent — the buried-conductor kernel
+    :math:`e^{-(h_i+h_j)u_\text{eff}}`, not Carson's air kernel
+    :math:`e^{-(h_i+h_j)\lambda}`. As :math:`x \to \mathrm{GMR}` with
     :math:`depth_i = depth_j` it recovers :func:`pollaczek_self_impedance`.
     """
     _check_positive(
@@ -288,7 +313,9 @@ def pollaczek_mutual_impedance(
 
     def integrand(lam: float, part: int) -> float:
         ue = layered_effective_wavenumber(lam, rho_1, rho_2, h_1, omega)
-        v = math.exp(-(depth_i + depth_j) * lam) / (lam + ue)
+        # Buried-conductor (Pollaczek/Sunde) kernel: exp(-(h_i+h_j) u_eff),
+        # not Carson's air kernel exp(-(h_i+h_j) lam) — see the self impedance.
+        v = cmath.exp(-(depth_i + depth_j) * ue) / (lam + ue)
         return v.real if part == 0 else v.imag
 
     # Oscillatory cos(lam*x) tail. Use the weighted quadrature when the

@@ -21,6 +21,14 @@ FieldResult, PointSource
     Result objects.
 solve_image, solve_image_2layer
     Backend entry points (usually called via ``Engine.solve``).
+ShallowSegmentWarning
+    Diagnostic warning category of the galvanic image family: a
+    leakage segment is longer than four times its burial depth, so the
+    point-image stand-in for the segment's image line biases the
+    reaction-matrix diagonal high. Re-exported here so callers can
+    write ``warnings.simplefilter("ignore", ShallowSegmentWarning)``
+    without importing from the backend module
+    (``groundfield.solver.image``).
 
 Guiding principle
 -----------------
@@ -33,7 +41,7 @@ reduction step.
 from __future__ import annotations
 
 from groundfield.solver.engine import Backend, Engine
-from groundfield.solver.image import solve_image
+from groundfield.solver.image import ShallowSegmentWarning, solve_image
 from groundfield.solver.image_2layer import solve_image_2layer
 from groundfield.solver.mom import solve_mom
 from groundfield.solver.mutual import solve_mutual_field, solve_mutual_matrix
@@ -44,6 +52,7 @@ __all__ = [
     "Backend",
     "FieldResult",
     "PointSource",
+    "ShallowSegmentWarning",
     "solve_image",
     "solve_image_2layer",
     "solve_mom",

@@ -73,10 +73,13 @@ from groundfield.solver.image import (
     _build_clusters,
     _build_distributed_topology,
     _build_finite_branches,
+    _check_segment_depths,
     _discretize_electrode,
+    _require_image_separation,
     _self_corrected_kernel,
     _Segment,
     _solve_cluster_currents,
+    _weighted_node_potential,
 )
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
@@ -510,10 +513,17 @@ def _build_phi_hom_per_source_rho(
     # Off-diagonal kernel: 1/r + 1/r_image.
     kernel = (1.0 / r_real) + (1.0 / r_image)
 
-    # Diagonal: line-self + image-point.
+    # Diagonal: line-self + image-point. The image term is guarded
+    # instead of clamped (audit 2026-07-28, F26/F29): a segment whose
+    # mirror image touches the conductor has no finite self-image
+    # term, and the historic ``_MIN_DISTANCE`` clamp turned that into
+    # a silently mesh-dependent, far too large impedance.
     diag_direct = 2.0 * np.log(seg_lengths / wire_radii) / seg_lengths
+    _require_image_separation(
+        seg_points, wire_radii, where="_build_phi_hom_per_source_rho"
+    )
     z_mid = seg_points[:, 2]
-    diag_image = 1.0 / np.maximum(2.0 * np.abs(z_mid), _MIN_DISTANCE)
+    diag_image = 1.0 / (2.0 * np.abs(z_mid))
     np.fill_diagonal(kernel, diag_direct + diag_image)
 
     # Apply rho_per_segment per column (source segment).
@@ -656,6 +666,12 @@ def solve_image_2layer(
     seg_points = np.array([s.midpoint for s in all_segments])
     seg_lengths = np.array([s.length for s in all_segments])
     wire_radii = np.array([s.wire_radius for s in all_segments])
+
+    # Burial-depth validation (audit 2026-07-28, F26/F29). The air
+    # mirror of the Tagg/Sunde series is the same perfect mirror as in
+    # the homogeneous backend, so the same finite-image-separation
+    # requirement 2 z >> a applies to every leakage segment.
+    _check_segment_depths(all_segments, where="solve_image_2layer")
     # ADR-0012 V2: per-segment radial shell coefficient. Zero for
     # any segment that does not belong to a concrete-encased
     # foundation electrode — historic case preserved bit-exact.
@@ -802,9 +818,14 @@ def solve_image_2layer(
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [
-            complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)
-        ]
+        # Length-weighted (Galerkin) node potential — the same
+        # reduction the multi-port matrix enforces inside
+        # _solve_cluster_currents (audit 2026-07-28, F10/F11). The
+        # rod-split-at-the-interface case of ADR-0007 is exactly where
+        # the historic unweighted mean diverged from the solved value.
+        u_list = _weighted_node_potential(
+            phi_per_freq, idxs, seg_lengths, n_freq
+        )
         i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list

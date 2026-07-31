@@ -316,10 +316,26 @@ def test_sommerfeld_matches_carson_on_long_pen_at_50hz() -> None:
 
 def test_two_layer_soil_no_warning_under_sommerfeld() -> None:
     """Building an Engine with ``earth_inductive_model="sommerfeld"``
-    against a TwoLayerSoil **does not** emit a warning — the
-    Sommerfeld kernel handles layered earth natively (in contrast
-    to the Carson series, which only sees the upper layer)."""
+    against a TwoLayerSoil **does not** emit a layered-earth warning —
+    the Sommerfeld kernel handles layered earth natively (in contrast
+    to the Carson series, which only sees the upper layer).
+
+    Adjusted in 0.15.0 (review pass 9, F26/F29): the PEN conductor below
+    is discretised at ``discretize_segment_length=15.0`` while sitting at
+    $z = 0.5$ m, i.e. $L \\gg 4z$ — squarely inside the shallow-segment
+    regime that 0.15.0 started diagnosing with
+    :class:`~groundfield.solver.image.ShallowSegmentWarning`. That
+    warning is *correct* here and has nothing to do with layered earth,
+    so it is exempted **individually**. The blanket
+    ``simplefilter("error", UserWarning)`` is deliberately kept:
+    the warning this test contrasts against — Carson's "only sees
+    ``rho_1``" diagnostic — is a bare :class:`UserWarning`, so widening
+    the exemption to all of ``UserWarning`` would silently void the
+    test's own claim.
+    """
     import warnings
+
+    from groundfield.solver.image import ShallowSegmentWarning
 
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0)
     w = gf.create_world(soil=soil)
@@ -342,8 +358,12 @@ def test_two_layer_soil_no_warning_under_sommerfeld() -> None:
         earth_inductive_model="sommerfeld",
     )
     with warnings.catch_warnings():
+        # Keep the original strict filter: *any* UserWarning is an error,
+        # so the Carson layered-earth warning — a bare ``UserWarning`` —
+        # is still caught by this test. Only the one warning that this
+        # geometry legitimately earns is exempted.
         warnings.simplefilter("error", UserWarning)
-        # Should NOT raise — layered earth is supported natively.
+        warnings.simplefilter("ignore", ShallowSegmentWarning)
         eng.solve(w)
 
 

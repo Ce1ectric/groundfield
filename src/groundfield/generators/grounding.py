@@ -248,6 +248,46 @@ class GroundingSystemSpec(GeneratorConfig):
                 end=name,
                 conductor_type=self.bond_conductor_type,
             )
+
+        # ADR-0012 V1 concrete shell: fold the per-electrode entries of
+        # this site onto the cluster anchor.
+        #
+        # ``_build_one`` writes ``world.concrete_shell_corrections`` under
+        # the *electrode's own* name, because that is the only name it
+        # knows. The registry's documented contract, and what both PEN
+        # consumers look up, is the **cluster anchor**. The bonds above
+        # have just made every electrode of this site one galvanic
+        # cluster, so the anchor is known here.
+        #
+        # Before 0.15.0 this fold was missing (review pass 9, finding
+        # F16): a foundation electrode that was not the first *surviving*
+        # electrode of its site — i.e. any spec list where the foundation
+        # is not index 0, or where an earlier electrode lost its
+        # ``presence_prob`` Bernoulli draw — left its shell resistance
+        # under a key no consumer ever reads, so switching concrete on
+        # had no effect at all. Measured symptom: a factor-33 change in
+        # ``concrete_rho_ohm_m`` (150 -> 5000 Ω·m) produced bit-identical
+        # impedances.
+        #
+        # The shells combine **in parallel**, not in series. Each encased
+        # electrode's $R_i = \rho_c/(2\pi L_{\text{perim},i})\ln(r_b/r_a)$
+        # is already the parallel reduction of the radial shell over that
+        # electrode's own perimeter, and each electrode leaks its share of
+        # the cluster current through its *own* shell into the soil — two
+        # independent radial paths from one equipotential conductor to
+        # earth. The equivalent lumped shell seen by the single service
+        # drop that feeds the cluster is therefore
+        # $R_\text{eq} = (\sum_i 1/R_i)^{-1}$; for two identical
+        # foundations that is $R/2$, not $2R$. (Summing them would
+        # overestimate a two-foundation building by a factor of four.)
+        conductances = 0.0
+        for name in created:
+            r_i = world.concrete_shell_corrections.pop(name, 0.0)
+            if r_i > 0.0:
+                conductances += 1.0 / r_i
+        if conductances > 0.0:
+            world.concrete_shell_corrections[anchor] = 1.0 / conductances
+
         return anchor
 
     # ------------------------------------------------------------------

@@ -260,6 +260,7 @@ escape hatch (`mom_sommerfeld`) explicitly.
 
 A new field is added to `Engine`:
 
+<!-- skip-doctest: schema sketch with a ``...`` body -->
 ```python
 class Engine(BaseModel):
     ...

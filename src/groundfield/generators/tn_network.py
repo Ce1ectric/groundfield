@@ -150,10 +150,30 @@ def _to_int(value: Union[int, Distribution], rng: np.random.Generator) -> int:
 def _override_foundation_from_footprint(
     grounding: GroundingSystemSpec,
     footprint,  # ``BuildingFootprint`` — typed loosely to avoid a hard import
+    site_xy: Optional[tuple[float, float]] = None,
 ) -> GroundingSystemSpec:
     """Return a copy of ``grounding`` with every
     :class:`FoundationElectrodeSpec` rewritten to follow the
     polygon's oriented minimum bounding rectangle (OMBR).
+
+    Geometry
+    --------
+    The OMBR is the minimum-area rectangle enclosing the polygon;
+    it is fully described by its centre :math:`(c_x, c_y)`, its
+    side lengths :math:`(d_x, d_y)` and its orientation
+    :math:`\\varphi`. All three are needed: an electrode built
+    with the correct size and orientation but at the wrong centre
+    is a *translated* copy of the OMBR, and the translation is
+    non-zero for every polygon whose area centroid differs from
+    its OMBR centre — i.e. for every non-symmetric outline (an
+    L-shaped house displaces the ring by several metres).
+
+    :meth:`GroundingSystemSpec.build_at` places each electrode at
+    ``site_xy + offset_xy_m``, so the centre is restored by adding
+    :math:`(c_x, c_y) - \\text{site\\_xy}` to the user's
+    ``offset_xy_m``. The user offset therefore keeps its meaning
+    ("shift the foundation relative to the rectangle it was
+    derived from") instead of being silently redefined.
 
     Parameters
     ----------
@@ -164,13 +184,20 @@ def _override_foundation_from_footprint(
         :class:`groundfield.geo.footprint.BuildingFootprint` to take
         the OMBR from. The footprint must already be projected into
         the same local ENU frame as the rest of the world.
+    site_xy
+        The position the placement reports for this site, i.e. the
+        point ``build_at`` will treat as the origin of
+        ``offset_xy_m``. ``None`` (default) assumes the polygon
+        centroid, which is what
+        :meth:`groundfield.geo.placement.OsmBuildingPlacement.generate`
+        returns.
 
     Returns
     -------
     GroundingSystemSpec
-        A spec with the foundation electrodes' ``size_xy_m`` and
-        ``orientation_deg`` set from the OMBR. ``presence_prob``,
-        ``offset_xy_m``, ``depth_m``, ``style``, ``n_x``, ``n_y``,
+        A spec with the foundation electrodes' ``size_xy_m``,
+        ``orientation_deg`` and ``offset_xy_m`` set from the OMBR.
+        ``presence_prob``, ``depth_m``, ``style``, ``n_x``, ``n_y``,
         and ``wire_radius_m`` are left untouched so the rest of
         the stochastic / configurable axes survive the override.
 
@@ -184,7 +211,14 @@ def _override_foundation_from_footprint(
     """
     if not grounding.electrodes:
         return grounding
-    _, (dx, dy), orientation_deg = footprint.oriented_bounding_rectangle()
+    (cx, cy), (dx, dy), orientation_deg = (
+        footprint.oriented_bounding_rectangle()
+    )
+    if site_xy is None:
+        site_xy = footprint.centroid_xy_m()
+    # Recentre the rectangle on the OMBR centre (F25): ``build_at``
+    # anchors every electrode at ``site_xy + offset_xy_m``.
+    recentre = (cx - site_xy[0], cy - site_xy[1])
     rewritten: list[ElectrodeSpec] = []
     changed = False
     for spec in grounding.electrodes:
@@ -194,6 +228,10 @@ def _override_foundation_from_footprint(
                     update={
                         "size_xy_m": (dx, dy),
                         "orientation_deg": orientation_deg,
+                        "offset_xy_m": (
+                            spec.offset_xy_m[0] + recentre[0],
+                            spec.offset_xy_m[1] + recentre[1],
+                        ),
                     }
                 )
             )
@@ -567,11 +605,14 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # placement exposes a ``footprint_at(i)`` hook (currently
         # only :class:`OsmBuildingPlacement`), the per-building
         # grounding spec is rewritten so that every
-        # :class:`FoundationElectrodeSpec` inherits ``size_xy_m``
-        # and ``orientation_deg`` from the polygon's oriented
-        # bounding rectangle. The Bernoulli on ``presence_prob``
-        # is preserved, so the only stochastic axis the user
-        # asked for survives the override.
+        # :class:`FoundationElectrodeSpec` inherits ``size_xy_m``,
+        # ``orientation_deg`` *and* the centre of the polygon's
+        # oriented bounding rectangle (the centre enters as an
+        # ``offset_xy_m`` correction relative to the reported site
+        # position — see ``_override_foundation_from_footprint``).
+        # The Bernoulli on ``presence_prob`` is preserved, so the
+        # only stochastic axis the user asked for survives the
+        # override.
         has_footprints = hasattr(cfg.placement, "footprint_at")
 
         building_anchors: list[tuple[str, tuple[float, float]]] = []
@@ -585,7 +626,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     footprint = cfg.placement.footprint_at(idx)
                     if footprint is not None:
                         grounding = _override_foundation_from_footprint(
-                            grounding, footprint,
+                            grounding, footprint, site_xy,
                         )
                 anchor = grounding.build_at(
                     world, site_xy=site_xy, name_prefix=prefix, rng=rng,
@@ -700,31 +741,51 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     ) -> list[tuple[BuildingTypeSpec, int]]:
         """Resolve the (type → count) mapping into an ordered list.
 
+        Reproducibility
+        ---------------
+        Each entry of ``cfg.building_counts`` whose value is a
+        :class:`~groundfield.generators.distributions.Distribution`
+        consumes draws from ``rng``, so the *order* in which the
+        types are sampled decides which draw lands on which type.
+        The order used here is the **catalog order** of
+        ``cfg.building_types`` — a declared list, hence canonical —
+        and never the insertion order of the ``building_counts``
+        mapping. A config re-serialised with sorted keys, round-
+        tripped through YAML, or hand-edited by moving a line
+        therefore yields the *bit-identical* world for the same
+        seed (F33). Before 0.15.0 the draws followed dict insertion
+        order, so swapping two keys of an otherwise identical
+        config changed the sampled counts (e.g. seed 42:
+        ``residential`` 5 vs 30 houses).
+
         Returns
         -------
         list of (BuildingTypeSpec, int)
             One entry per building type present in
-            ``cfg.building_counts``. Order matches the catalog order
-            in ``cfg.building_types``. Types missing from the
-            catalog raise :class:`KeyError`.
+            ``cfg.building_counts`` with a resolved count > 0, in
+            catalog order. Types missing from the catalog raise
+            :class:`KeyError`.
         """
         catalog_by_name = {t.name: t for t in cfg.building_types}
-        out: list[tuple[BuildingTypeSpec, int]] = []
-        for name, count_spec in cfg.building_counts.items():
+        # Validate first, in sorted key order, so the error message
+        # does not depend on the mapping's insertion order either.
+        for name in sorted(cfg.building_counts):
             if name not in catalog_by_name:
                 raise KeyError(
                     f"building_counts['{name}'] has no matching entry in "
                     f"building_types (available: {list(catalog_by_name)})."
                 )
-            count = _to_int(count_spec, rng)
+        # Sample in catalog order: the RNG draw ↔ building-type
+        # pairing must not depend on how the mapping was written.
+        out: list[tuple[BuildingTypeSpec, int]] = []
+        seen: set[str] = set()
+        for btype in cfg.building_types:
+            if btype.name in seen or btype.name not in cfg.building_counts:
+                continue
+            seen.add(btype.name)
+            count = _to_int(cfg.building_counts[btype.name], rng)
             if count > 0:
-                out.append((catalog_by_name[name], count))
-        # Order by catalog (deterministic) then by counts dict insertion
-        # — `out` already follows insertion order of building_counts;
-        # re-sort to catalog order so layout is stable across reruns
-        # that change dict iteration.
-        catalog_order = {t.name: i for i, t in enumerate(cfg.building_types)}
-        out.sort(key=lambda pair: catalog_order[pair[0].name])
+                out.append((catalog_by_name[btype.name], count))
         return out
 
     def _resolve_kvs_count(

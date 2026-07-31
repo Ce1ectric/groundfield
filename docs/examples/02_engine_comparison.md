@@ -30,14 +30,27 @@ soil with $\rho = 100\,\Omega\,\mathrm{m}$. The cluster has a
 single current source at 1 A, returning through remote earth. We
 evaluate `cluster_impedance` at 50 Hz on every engine.
 
+Each backend declares the soil models it accepts, and
+`Engine.solve` enforces that contract with a `TypeError` rather
+than silently reinterpreting the soil. `image_2layer` in
+particular requires a `TwoLayerSoil` instance — it will *not*
+take a `HomogeneousSoil`. The physically homogeneous limit is
+reached from the two-layer side by setting
+$\rho_2 = \rho_1$ and any $h_1$: the reflection factor
+$K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)$ vanishes, every term of
+the Tagg/Sunde image series except the direct one drops out, and
+the result must reproduce `image` to machine precision. The
+comparison loop below therefore pairs each backend with a soil
+object it accepts.
+
 ## Code
 
 ```python
 import groundfield as gf
 
-def build_world() -> "gf.World":
-    """Two bonded rods on homogeneous soil."""
-    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+def build_world(soil) -> "gf.World":
+    """Two bonded rods on the given soil model."""
+    world = gf.create_world(soil=soil)
     gf.create_electrode(world, "rod", name="rod_a",
                         position=(0.0, 0.0, 0.5), length=2.0,
                         wire_radius=0.01)
@@ -50,9 +63,20 @@ def build_world() -> "gf.World":
     gf.create_source(world, attached_to="rod_a", magnitude=1.0)
     return world
 
-backends = ["image", "image_2layer", "mom", "bem", "fem"]
-for backend in backends:
-    world = build_world()
+homogeneous = gf.HomogeneousSoil(resistivity=100.0)
+# Degenerate two-layer stack: rho_2 = rho_1 => K = 0, the image
+# series collapses to the homogeneous case.
+degenerate_2layer = gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.0)
+
+cases = [
+    ("image", homogeneous),
+    ("image_2layer", degenerate_2layer),
+    ("mom", homogeneous),
+    ("bem", homogeneous),
+    ("fem", homogeneous),
+]
+for backend, soil in cases:
+    world = build_world(soil)
     engine = gf.create_engine(
         backend=backend,
         segment_length=0.5,
@@ -64,19 +88,26 @@ for backend in backends:
           f"(R = {Z.real:6.3f}, X = {Z.imag:+6.3f})")
 ```
 
-`image_2layer` accepts a homogeneous soil too — the upper layer
-resistivity equals the lower one and the Tagg/Sunde series collapses
-to the homogeneous case, so the result must match `image`.
-
 ## What you should see
 
-Within their validity envelopes the engines agree to better than
-1 % on this geometry. Larger residuals point at a discretisation
-that is too coarse for the highest-resolution engine; halve
-`segment_length` and re-run. `mom_sommerfeld` is the absolute
-multi-layer reference; the closed-form `image` family is faster
-for homogeneous / 2-layer problems and should be preferred in
-parameter sweeps that don't need the full Sommerfeld accuracy.
+`image` and `image_2layer` agree bit-for-bit — that is the
+$K = 0$ collapse of the Tagg/Sunde series, and it is the cheapest
+available self-check on the two-layer kernel. The
+integral-equation engines (`mom`, `bem`) land within a few tenths
+of a percent of the closed-form value; the residual is the
+difference between the closed-form average-potential self-term and
+the Galerkin / collocation quadrature at this `segment_length`.
+`fem` is the outlier by a few percent, and legitimately so: it
+reduces the geometry to an axisymmetric equivalent hemisphere, so
+a two-rod cluster with a bond conductor is outside the geometry
+class it represents exactly. Halving `segment_length` shrinks the
+`mom` / `bem` residual but not the `fem` one, which is a modelling
+rather than a discretisation error.
+
+`mom_sommerfeld` is the absolute multi-layer reference; the
+closed-form `image` family is faster for homogeneous / 2-layer
+problems and should be preferred in parameter sweeps that don't
+need the full Sommerfeld accuracy.
 
 ## Picking a backend
 

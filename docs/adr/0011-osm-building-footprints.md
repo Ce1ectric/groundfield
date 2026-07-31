@@ -96,6 +96,7 @@ dependency.
 
 ### Data model
 
+<!-- skip-doctest: schema sketch, not runnable code -->
 ```python
 class BuildingFootprint(BaseModel):
     """A single OSM building, projected to local ENU metres."""
@@ -169,6 +170,7 @@ surface small (mock at the `osm.query_buildings` boundary).
 A new placement variant is added to the existing
 `generators.placement.PlacementSpec` discriminated union:
 
+<!-- skip-doctest: schema sketch, not runnable code -->
 ```python
 class OsmBuildingPlacement(BaseModel):
     kind: Literal["osm"] = "osm"
@@ -190,6 +192,7 @@ only on this variant, looked up via `hasattr` in the generator.
 constructed from an explicit `footprints` list. The standard
 workflow is:
 
+<!-- skip-doctest: sketch with elided args; needs Overpass -->
 ```python
 footprints = geo.query_and_project(
     lat0=…, lon0=…, radius_m=…,
@@ -215,8 +218,13 @@ for this realisation:
 
 * **`size_xy_m`** — sides of the oriented minimum bounding
   rectangle (Shapely's `minimum_rotated_rectangle`).
-* **`offset_xy_m`** — polygon centroid minus the site (x, y);
-  zero by construction in v1 (site = centroid).
+* **`offset_xy_m`** — the user-supplied offset **plus** the OMBR
+  centre expressed relative to the site (x, y). Corrected in 0.15.0
+  (review pass 9, finding F25): v1 wrote only the user offset and
+  discarded the OMBR centre, which displaced the generated rectangle
+  from the very footprint it was derived from whenever the oriented
+  bounding rectangle's centre differs from the site — i.e. for every
+  non-symmetric building outline. It is *not* zero by construction.
 * **footprint orientation** — angle of the OMBR principal axis.
   This is **not** currently a field on `FoundationElectrodeSpec`;
   Phase A adds it as `orientation_deg: float | None = None`,

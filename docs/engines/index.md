@@ -42,6 +42,28 @@ The families share the same data model (`World`, `Electrode`,
 sum-of-currents constraints. They differ in the kernel, the test
 function, and the discretisation domain.
 
+!!! warning "Eight backends, six distinct computations"
+
+    Two entries in that map are **aliases in disguise**, and a
+    cross-validation table must not count them twice:
+
+    | Backend | Accepts | Actually computes |
+    |---|---|---|
+    | `cim` | $n \le 2$ | the `image` ($n = 1$) / `image_2layer` ($n = 2$) closed-form kernel, bit-identical; no complex-image fit runs |
+    | `bem` | $n \le 2$ | the `mom` reaction matrix and constraint solve, identical to 4e-16 |
+
+    Both raise `NotImplementedError` for $n \ge 3$ (since 0.11.0 —
+    the shared complex-image kernel was structurally incomplete,
+    audit 2026-07-08 WP-E), so **`mom_sommerfeld` is currently the
+    only engine that solves an $n \ge 3$ soil with the layered
+    Green's function**; `fem` adds an independent volume-PDE check
+    with its documented equivalent-hemisphere bias.
+
+    Each result records this: `metadata['reduces_to']` names the
+    backend the numbers are identical to, and
+    `metadata['cim_fit_used'] = False` states that no complex-image
+    fit entered the answer.
+
 ## Decision tree
 
 The recommended primary engine for a given problem follows the
@@ -55,18 +77,27 @@ n_layers = 1 (homogeneous)
 
 n_layers = 2 (two-layer)
    ├─ default              → image_2layer       (or image_nlayer / image — auto-dispatches)
-   ├─ independent kernel   → mom                (Galerkin on the same kernel)
-   ├─ alternative weighting→ bem                (collocation, CIM kernel)
-   └─ absolute reference   → mom_sommerfeld     (direct quadrature, slow)
+   ├─ resolution scheme    → mom                (Galerkin on the same kernel)
+   ├─ independent kernel   → mom_sommerfeld     (direct quadrature, slow — the real cross-check)
+   ├─ independent form     → fem                (volume PDE, ≤ 10 % hemisphere bias)
+   └─ cim / bem run, but reproduce image_2layer / mom
+     bit-for-bit — no independent information.
 
 n_layers ≥ 3 (multi-layer)
-   ├─ primary              → cim                (complex images, closed form)
-   ├─ alternative weighting→ bem                (collocation, same kernel)
-   ├─ absolute reference   → mom_sommerfeld     (direct quadrature)
+   ├─ primary              → mom_sommerfeld     (full layered Green's function, direct quadrature)
+   ├─ independent form     → fem                (volume PDE, the only cross-check available here)
+   ├─ cim / bem raise NotImplementedError —
+   │  the historic complex-image kernel was
+   │  structurally incomplete (audit 2026-07-08).
    └─ image_nlayer raises a clear ValueError —
      the real Stefanescu series is intentionally
      not implemented; ADR-0002 documents why.
 ```
+
+For $n \ge 3$ there is therefore exactly **one** production path
+(`mom_sommerfeld`) plus one independent sanity check (`fem`). If you
+need speed in that regime, reduce the stack to an equivalent two-layer
+soil first and state the reduction, rather than reaching for `cim`.
 
 `Engine.solve` automatically forwards `backend="image"` to
 `image_2layer` for a `TwoLayerSoil` and to `image_nlayer` for a
@@ -81,10 +112,15 @@ Cross-engine consistency is encoded in
 | Pair | Tolerance | Reason for bound |
 |---|---|---|
 | any closed-form image vs. another closed-form image | $10^{-9}$ | exact reduction (e.g. `image_nlayer` → `image_2layer`) |
-| closed-form image vs. `cim` | $5\,\%$ | matrix-pencil fit accuracy at low $P$ |
+| closed-form image vs. `cim` | $10^{-9}$ | **not a check** — same kernel, same numbers (`cim` reduces to `image` / `image_2layer`) |
+| `mom` vs. `bem` | $10^{-9}$ | **not a check** — identical reaction matrix (4e-16) |
 | closed-form image vs. `mom` / `bem` | $5\,\%$ | uniform-current vs. Galerkin / collocation |
 | `mom_sommerfeld` vs. closed-form layered engines | $5\,\%$ | absolute reference; quadrature is the truth |
 | `fem` vs. integral engines | $10\,\%$ | equivalent-hemisphere reduction |
+
+The two rows marked *not a check* are regression guards on an
+identity, not evidence about the physics. Only the last two rows
+compare methodologically distinct computations.
 
 Layer-contrast monotonicity (sweeping $\rho_2$ at fixed $\rho_1$
 must produce a monotonically increasing cluster impedance) is a
@@ -102,12 +138,14 @@ order is
    the family.
 3. [`mom`](mom.md) — Galerkin resolution scheme on the same
    kernels.
-4. [`cim`](cim.md) — closed-form layered Green's function via
-   complex images; the bridge from the literature on the
-   matrix-pencil method to the engine family.
-5. [`mom_sommerfeld`](mom_sommerfeld.md) — the absolute reference
-   engine; useful for checking the closed-form approximations.
-6. [`bem`](bem.md) — collocation alternative to the Galerkin MoM.
+4. [`cim`](cim.md) — the complex-image theory and the spectral
+   fit of $\Gamma_1(\lambda)$; read it for the method, not for a
+   solver you would choose (it reduces to `image_2layer`).
+5. [`mom_sommerfeld`](mom_sommerfeld.md) — the reference engine, and
+   the only $n \ge 3$ path; useful for checking the closed-form
+   approximations.
+6. [`bem`](bem.md) — collocation alternative to the Galerkin MoM,
+   numerically identical to `mom` on the soils it accepts.
 7. [`fem`](fem.md) — the only volume-PDE engine; provides an
    independent cross-check.
 8. [`image_nlayer`](image_nlayer.md) — the dispatcher that ties the
@@ -140,3 +178,6 @@ architecture decision records:
 - [ADR-0002](../adr/0002-engine-family.md) — the extension to eight
   backends, the cross-validation envelope above, and the rationale
   for *not* implementing the real Stefanescu series for $n \ge 3$.
+  Read its **amendments** as well: they revoke `cim` as the primary
+  $n \ge 3$ engine and revoke `cim` / `bem` as independent
+  cross-checks.

@@ -112,13 +112,52 @@ The wire-segment self-action splits cleanly:
 - The $n = 0$ direct contribution carries the singular line
   self-potential — handled by the homogeneous formula
   $2 \ln(L_i / a_i) / L_i$.
-- The $n = 0$ air-mirror term and all $n \ge 1$ image terms are at
-  least $2 z_s$ (or $2 h_1 - z - z_s$, etc.) away from the segment
-  midpoint, so the point-source approximation is safe.
+- The $n = 0$ air-mirror term is a point image at distance $2 z_s$
+  and all $n \ge 1$ image terms are at least $2 h_1 - z - z_s$ away
+  from the segment midpoint, so the point-source approximation is
+  safe **as long as the air mirror is well separated from the
+  conductor**, i.e. $2 z \gg a$ and $L_i \le 4 z_i$.
 
 This is the same construction as in the homogeneous backend, with
 $\rho \to \rho_1$ as the prefactor and the geometric image series
-added on top.
+added on top — including the burial-depth guards. Since 0.15.0:
+
+- a segment **midpoint** with $z \le 0$ or $2|z| \le a$ raises
+  `ValueError`, because its mirror image coincides with the conductor
+  and the self-image term has no finite value (a ring at $z = 0$ used
+  to return 164 Ω against a physical limit of ~11 Ω). Both conditions
+  are enforced in the shared reaction-matrix kernel
+  `solver.image._self_corrected_kernel`, which this backend routes its
+  $n = 0$ term through, so `mom` / `bem` / `cim` / `mom_sommerfeld` /
+  `mutual` reject the same geometries;
+- a segment whose **extent** crosses the surface
+  ($z_i - \tfrac{1}{2} L_i |e_{z,i}| < 0$, i.e. midpoint buried but
+  upper end in the air) also raises `ValueError`. This needs the
+  segment tangent, so it is checked here and in `image` but not in the
+  shared kernel;
+- $L_i > 4 z_i$ emits a `ShallowSegmentWarning` quantifying the bias
+  with the horizontal-segment formula. It fires for plain electrodes
+  too — a ring of radius 25 m at $z = 0.8$ m with
+  $\Delta s = 5$ m warns "by 26 %" — and it is *not* emitted by the
+  other backends of the family even though they share the bias.
+
+See [`image`](image.md#self-action-correction) for the derivation, the
+proof that the horizontal formula is the applicable one wherever the
+warning can still fire, and the honest statement of the residual bias
+(including the collocation-versus-Galerkin distinction).
+
+### Reported node potential
+
+Electrode potentials, `grounding_impedance` and `cluster_impedance`
+are reduced with the **length-weighted (Galerkin) average** of the
+segment potentials, identical to the homogeneous backend and to the
+row reduction of the multi-port matrix inside the solve. This
+matters here in particular: the ADR-0007 interface split gives a rod
+crossing $h_1$ segments of *unequal* length, and up to 0.14.1 the
+reported value was a plain segment mean — measured $-10.9\,\%$
+against the impedance the solver enforced for a 4.509 m rod split at
+$h_1 = 5$ m, and different reported potentials for two electrodes
+bonded into one galvanic node.
 
 ### Auto-dispatch
 
@@ -135,6 +174,9 @@ required.
 | Soil model | `TwoLayerSoil` only |
 | Frequency | quasi-static, $f < 1\,\text{kHz}$ |
 | Electrode placement | every segment must have $z < h_1$ (raises `ValueError` otherwise) |
+| Burial depth (midpoints) | $z > 0$ and $2 z > a$ for every segment midpoint — hard `ValueError` otherwise, raised in the shared reaction-matrix kernel so `mom` / `bem` / `cim` / `mom_sommerfeld` / `mutual` reject the same geometries |
+| Burial depth (extent) | $z_i - \tfrac{1}{2} L_i \lvert e_{z,i}\rvert \ge 0$: no segment may cross the surface. Hard `ValueError`, needs the segment tangent and therefore fires in `image` / `image_2layer` only. An upper end *exactly* at $z = 0$ is legal (ordinary driven rod) |
+| Self-image bias | $L_i \le 4 z_i$ for an unbiased self-image term; `ShallowSegmentWarning` otherwise, quantified with the horizontal-segment formula. Emitted by `image` / `image_2layer` only although the bias is shared by the whole family |
 | Reflection coefficient | $|K_1| < 1$; convergence slows as $|K_1| \to 1$ |
 | Series truncation | adaptive tail bound $|K_1|^{n+1}/(1-|K_1|) < \text{tol}$, capped at `max_terms` |
 | Wire radius / segment ratio | thin-wire, $a \ll L_i$ |

@@ -28,12 +28,18 @@ cfg = gf.TnNetworkConfig(
     },
     source_magnitude_A=1.0,
 )
-gen = gf.TnNetworkGenerator()
-world = gen.build(cfg, rng=gf.np.random.default_rng(seed=42))
+# The config is bound to the generator instance; ``seed`` accepts an
+# int or a ``numpy.random.Generator`` and makes the stochastic axes
+# (building counts, soil draws, presence probabilities) reproducible.
+gen = gf.TnNetworkGenerator(cfg, seed=42)
+world = gen.build()
 
 engine = gf.create_engine(
     backend="image",                       # auto-dispatch to image_2layer
-    segment_length=0.5, frequencies=[50.0],
+    # 1.0 m keeps this 30-house demo at a few seconds; a production
+    # run uses 0.5 m or finer (see the performance guide) at roughly
+    # an order of magnitude more solve time.
+    segment_length=1.0, frequencies=[50.0],
 )
 result = engine.solve(world)
 print("substation cluster Z =",
@@ -71,6 +77,8 @@ cfg = gf.TnNetworkConfig(
         max_feeder_length_m=400.0,
     ),
 )
+# build() takes an optional config override, so the same generator
+# (and hence the same RNG stream) can materialise a second variant.
 world = gen.build(cfg)
 ```
 
@@ -91,10 +99,13 @@ Every numeric field accepts either a constant or a
 | `Normal(...)`       | Engineering tolerances                   |
 | `Discrete(values, weights=...)` | Categorical counts (n_efh in {5, 10, 30, 80, 200}) |
 
-For bit-exact reproducibility, pass an `np.random.default_rng(seed=...)`
-to `gen.build(cfg, rng=...)`. `gen.sample_world(rng=...)` returns
-both the world and the *resolved* config so the realisation can be
-persisted as JSON alongside the simulation output.
+For bit-exact reproducibility, hand the seed to the *generator*, not
+to `build`: `gf.TnNetworkGenerator(cfg, seed=42)` accepts an `int`
+or a ready `np.random.default_rng(...)` and owns the RNG stream for
+the whole realisation. `gen.sample_world(rng)` is the sibling entry
+point — it resolves every distribution first and returns both the
+world and the *resolved* config, so the realisation can be persisted
+as JSON alongside the simulation output.
 
 ## Where to go next
 

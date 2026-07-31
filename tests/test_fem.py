@@ -38,13 +38,15 @@ def test_fem_rod_matches_dwight() -> None:
 def test_fem_two_layer_K_zero_collapses() -> None:
     """For ρ₁ = ρ₂ the FEM result must equal the homogeneous one.
 
-    The FEM mesh follows the soil description (one z-line per layer
-    boundary), so a 2-layer stack with equal resistivities still
-    carries the layer interface as a mesh feature even though the
-    physics is identical to a homogeneous half-space. We accept a
-    < 25 % discretisation bias here in exchange for a mesh that
-    stays consistent across a ρ₂ sweep — the price for the layer-
-    contrast-monotonicity guarantee in the cross-engine test.
+    The FEM mesh follows the soil description (the layer interface is
+    cut into the elements), so a 2-layer stack with equal
+    resistivities still carries the interface as a mesh feature even
+    though the physics is identical to a homogeneous half-space. Since
+    0.15.0 the mesh is graded relative to the equivalent hemisphere
+    instead of the domain height, so that feature costs only the
+    logarithmic resolution loss of the larger truncation radius:
+    measured 0.06 % at ``h_1 = 2 m`` (19.5 % before). The full sweep
+    over ``h_1`` lives in ``tests/test_pass9_fem.py``.
     """
     rho = 100.0
     eng = gf.create_engine(backend="fem", segment_length=SEG)
@@ -52,7 +54,7 @@ def test_fem_two_layer_K_zero_collapses() -> None:
     soil_2 = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=2.0)
     Z_h = eng.solve(_world_rod(soil_h)).cluster_impedance("g1")[0].real
     Z_2 = eng.solve(_world_rod(soil_2)).cluster_impedance("g1")[0].real
-    assert abs(Z_2 - Z_h) / Z_h < 0.25
+    assert abs(Z_2 - Z_h) / Z_h < 0.01
 
 
 def test_fem_two_layer_low_rho_below_lowers_R() -> None:

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026-07-09 (audit WP-E, see the end of this document) |
+| **Status** | Accepted — amended 2026-07-09 (audit WP-E) and 2026-07-30 (review pass 9, F17/F34/F39); see the amendments at the end of this document, which supersede the selection heuristic below |
 | **Date** | 2026-05-01 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -54,7 +54,7 @@ cleanly onto the existing `groundfield` data model:
 | Integral equation | `mom`, `mom_sommerfeld`, `bem` |
 | Volume PDE | `fem` |
 
-The selection heuristic is:
+The selection heuristic *as decided in 2026-05* was:
 
 1. **Homogeneous soil** → `image` (cheapest, closed form).
 2. **2-layer soil** → `image_2layer` (auto-dispatched from
@@ -68,6 +68,26 @@ The selection heuristic is:
 4. **Volume cross-check** → `fem` (axisymmetric, equivalent-hemisphere
    reduction). Used as a third independent line of defence; not
    intended for general meshing.
+
+!!! danger "Superseded — items 2 and 3 above are no longer valid"
+
+    Item 3 was revoked by the 2026-07-09 amendment (`cim`/`bem`
+    reject `n ≥ 3`), and item 2 overstates the cross-check value of
+    `cim`/`bem`. The heuristic **in force** is:
+
+    1. **Homogeneous soil** → `image`.
+    2. **2-layer soil** → `image_2layer`. Resolution cross-check with
+       `mom`; *independent* cross-check with `mom_sommerfeld`
+       (quadrature) or `fem` (volume PDE). `cim` reproduces
+       `image_2layer` bit-for-bit and `bem` reproduces `mom` to
+       4e-16 — running them adds no information.
+    3. **3+ layer soil** → `mom_sommerfeld` (the only engine that
+       evaluates the full layered Green's function in this regime),
+       cross-checked against `fem`. `cim`, `bem` raise
+       `NotImplementedError`; `image_nlayer` raises `ValueError`.
+    4. **Volume cross-check** → `fem`, as before.
+
+    See the 2026-07-30 amendment for details.
 
 ## Mathematical / physical model
 
@@ -99,9 +119,11 @@ defined tolerances (codified in
 | Pair | Tolerance | Notes |
 |---|---|---|
 | any closed-form image vs. another closed-form image | 1e-9 | exact reduction (e.g. `image_nlayer` → `image_2layer`) |
-| closed-form image vs. `mom` / `bem` / `cim` | 5 % | resolution scheme differs |
-| `mom_sommerfeld` vs. closed-form layered engines | 5 % | quadrature is the reference |
-| `fem` vs. integral engines | 10 % | equivalent-hemisphere bias |
+| closed-form image vs. `cim` | 1e-9 | identity, not a check — `cim` *is* the closed-form kernel |
+| `mom` vs. `bem` | 1e-9 | identity, not a check — same reaction matrix (4e-16) |
+| closed-form image vs. `mom` / `bem` | 5 % | resolution scheme differs |
+| `mom_sommerfeld` vs. closed-form layered engines | 5 % | quadrature is the reference; the only independent kernel |
+| `fem` vs. integral engines | 10 % | equivalent-hemisphere bias; independent problem form |
 
 Layer-contrast sweeps must produce a monotonically increasing
 cluster impedance for every engine — a basic physics consistency
@@ -114,20 +136,29 @@ check.
 - Three independent methodologies (closed-form images, integral
   equation, volume PDE) are now available side by side. A bug in any
   single one is detectable through cross-comparison.
-- For 3+ layer soils there is a clear recommended engine (`cim`)
+- ~~For 3+ layer soils there is a clear recommended engine (`cim`)
   with an independent reference (`mom_sommerfeld`) and a second-line
-  cross-check (`bem`).
+  cross-check (`bem`).~~ *Revoked 2026-07-09: for 3+ layers only
+  `mom_sommerfeld` (with `fem` as cross-check) remains.*
 - `fem` adds a methodologically distinct line of defence at the cost
   of a simple equivalent-hemisphere reduction; the bias is
   documented and bounded.
 
 **Negative / open.**
 
-- `mom_sommerfeld` is slow (per-pair adaptive quadrature). Acceptable
-  for the cross-check role; not intended for production sweeps.
-- `cim` quality depends on the matrix-pencil fit; very hard contrasts
-  may need more images. The fit RMS is exposed in
-  `result.metadata["cim_rms"]`.
+- `mom_sommerfeld` is slow (per-pair adaptive quadrature). Since it is
+  the only $n \ge 3$ path, that cost is now unavoidable in that
+  regime rather than optional.
+- ~~`cim` quality depends on the matrix-pencil fit; very hard
+  contrasts may need more images. The fit RMS is exposed in
+  `result.metadata["cim_rms"]`.~~ *Revoked 2026-07-30: no solve path
+  evaluates the fit, and `cim_rms` is `None` with an explicit
+  `cim_fit_used = False` flag. `fit_complex_images` survives as a
+  standalone helper with honest failure reporting.*
+- Two of the eight backends (`cim`, `bem`) are aliases of others on
+  every soil they accept. They are kept for API stability and as
+  entry points for future complete kernels, but the eight-backend
+  count overstates the number of independent computations (six).
 - `fem` covers single-cluster worlds via the equivalent-hemisphere
   reduction. Multi-cluster volume runs would need a real 3-D mesh
   generator and a stronger FEM kernel — out of scope for typical cases.
@@ -175,3 +206,69 @@ Two corrections to this ADR's cross-validation narrative:
    `cim` as the primary n ≥ 3 engine is revoked until a complete
    kernel exists; use `mom_sommerfeld` or `fem` for three and more
    layers.
+
+---
+
+## Amendment 2026-07-30 — the engine count is honest now (review pass 9, F17/F34/F39)
+
+Three corrections, all in the direction of *saying what the code
+does* rather than what the 2026-05 design intended.
+
+1. **`mom_sommerfeld` is the only $n \ge 3$ path.** The
+   documentation (`docs/engines/index.md` decision tree,
+   `docs/engines/cim.md`, `docs/engines/bem.md`,
+   `docs/concepts.md` backend table) still routed multi-layer users
+   to `cim` (primary) and `bem` (alternative) nine months after both
+   started raising `NotImplementedError`, including in a runnable
+   worked example. Those pages now describe the actual behaviour:
+   $n \ge 3$ → `mom_sommerfeld`, with `fem` as the independent
+   volume-PDE cross-check, and `cim`/`bem` documented as
+   `TwoLayerSoil`-max.
+
+2. **No complex-image fit is computed on any solve path.** Up to
+   0.14.1 `solve_cim` and `solve_bem` called `fit_complex_images` on
+   every solve although both reachable regimes ($n \le 1$ and
+   $n = 2$) use exact closed-form self-kernels that ignore it. Its
+   failed result was published as
+   `metadata['cim_n_images'] = 0` / `['cim_rms'] = nan`, inviting
+   readers to judge an approximation with no influence on the answer.
+   The call is gone; the metadata carries `cim_fit_used: False`,
+   `cim_rms: None` and a new `reduces_to` key naming the backend the
+   numbers are bit-identical to (`image` / `image_2layer` for `cim`,
+   `mom` for `bem`). The unreachable $n \ge 3$ code — the complex-image
+   self-kernel branch, the collocation-matrix branch, the whole
+   `_cim_field_potential` helper and the two `n >= 3` cross-layer
+   guards behind the `n >= 3` rejection — was deleted; the remaining
+   $n \ge 3$ branches raise instead of computing a single-family
+   Green's function.
+
+3. **The fit itself reports failure.** `fit_complex_images` could not
+   represent $\lim_{\lambda\to\infty}\Gamma_1 = K_1$ — the pole
+   filters discarded exactly the constant term ($p = 1$,
+   $\beta = 0$) that carries the asymptote — so its residual was of
+   order $|K_1|$ for every stack, silently, and for two-layer stacks
+   it returned $P = 0$ with `rms = nan`. It now splits $K_1$ off
+   analytically as a $\beta = 0$ image, fits only the decaying
+   remainder, re-solves the least-squares weights *after* the pole
+   filter, derives the grid step from the structure scale
+   $h_{\max}$ (not $h_{\min}$), verifies the result on an
+   independent log-spaced grid, and warns via a dedicated
+   `ComplexImageFitWarning` when either residual exceeds `rms_tol`.
+   Measured on $\rho = [100, 400, 50]\ \Omega\text{m}$,
+   $h = [2, 3]\ \text{m}$: RMS $0.585 \to 2.1 \cdot 10^{-13}$; on
+   a two-layer stack: `nan` $\to 0$ exactly.
+
+**Consequence for cross-validation tables.** A table listing
+`image_2layer`, `cim` and `bem` as three agreeing engines reports one
+computation up to three times. The independent checks are
+`mom_sommerfeld` (direct quadrature of the full layered Green's
+function) and `fem` (volume PDE).
+
+**Still open.** Reviving a genuine complex-image engine needs (a) the
+complete layered Green's function of `solver/_layered.py` — both
+$2h_1$ image families and the multiple-reflection denominator — and
+(b) the now-honest fit above. Only then should `cim`/`bem` accept
+$n \ge 3$ again, and only then does `Engine` need to expose
+`n_images` / `n_samples` (the parameters were removed from
+`solve_cim` / `solve_bem` in 0.15.0 because `Engine.solve` could
+never reach them).

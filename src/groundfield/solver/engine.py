@@ -190,6 +190,23 @@ class Engine(BaseModel):
           (``tests/test_earth_return_benchmark.py``). **The default
           since 0.13.0** — the rigorous choice whenever a quantitative
           ``Z(f)`` matters.
+    image_max_terms, image_series_tol
+        Controls of the Tagg / Sunde image-charge series, forwarded to
+        every layered backend.
+    sommerfeld_lambda_max_factor, sommerfeld_epsabs, sommerfeld_epsrel, sommerfeld_max_osc_panels
+        Accuracy controls of the ``mom_sommerfeld`` reflected-remainder
+        quadrature, forwarded to
+        :func:`groundfield.solver.mom_sommerfeld.solve_mom_sommerfeld`
+        (new in 0.15.0 — up to 0.14.x that backend was called with no
+        keywords at all, so none of these was reachable through the
+        public API). The defaults reproduce the previous behaviour
+        exactly. ``sommerfeld_max_osc_panels`` is the escape hatch for
+        the corner in which the backend raises
+        :class:`~groundfield.solver.mom_sommerfeld.SommerfeldConvergenceWarning`.
+        Not exposed through :func:`groundfield.create_engine`; construct
+        the engine directly, e.g.
+        ``gf.Engine(backend="mom_sommerfeld",
+        sommerfeld_max_osc_panels=2_000_000)``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -231,6 +248,51 @@ class Engine(BaseModel):
             "Stop tolerance for the image-charge series: iteration "
             "ends when the geometric tail bound |K|^(n+1)/(1-|K|) "
             "falls below this value."
+        ),
+    )
+    sommerfeld_lambda_max_factor: float = Field(
+        default=200.0, gt=0.0,
+        description=(
+            "backend='mom_sommerfeld' only. Truncation of the "
+            "reflected-remainder quadrature in units of 1/d_rem, the "
+            "decay length of the remainder. The discarded tail is "
+            "bounded by exp(-lambda_max_factor), and the factor "
+            "saturates at 60 (~1e-26), so raising it above the default "
+            "cannot change the top-layer result. Note the *different* "
+            "unit convention on the delegated n=2 cross-layer path "
+            "(units of 1/char_length, uncapped, where raising it "
+            "degrades the answer) documented in "
+            "mom_sommerfeld.sommerfeld_kernel_value."
+        ),
+    )
+    sommerfeld_epsabs: float = Field(
+        default=1e-9, gt=0.0,
+        description=(
+            "backend='mom_sommerfeld' only. Absolute threshold of the "
+            "grid-refinement convergence test of the reflected-"
+            "remainder quadrature."
+        ),
+    )
+    sommerfeld_epsrel: float = Field(
+        default=1e-7, gt=0.0,
+        description=(
+            "backend='mom_sommerfeld' only. Relative threshold of the "
+            "grid-refinement convergence test, measured against the "
+            "magnitude of the whole kernel. Missing it raises a "
+            "SommerfeldConvergenceWarning."
+        ),
+    )
+    sommerfeld_max_osc_panels: int = Field(
+        default=200_000, gt=0,
+        description=(
+            "backend='mom_sommerfeld' only. Budget for the half-period "
+            "(pi/s) Gauss panel family that resolves the J0(lambda*s) "
+            "oscillation of the reflected remainder. Binds only for "
+            "s/d_rem >~ 1.9e4 (a centimetre-thin intermediate layer "
+            "with a kilometre-scale horizontal separation); there the "
+            "coverage is incomplete, the solver raises a "
+            "SommerfeldConvergenceWarning and raising this budget is "
+            "the remedy. Cost grows linearly with it."
         ),
     )
 
@@ -434,7 +496,16 @@ class Engine(BaseModel):
         if effective_backend == "image_nlayer":
             from groundfield.solver.image_nlayer import solve_image_nlayer
 
-            return solve_image_nlayer(world, self)
+            # ``image_nlayer`` re-dispatches to ``solve_image_2layer``
+            # for n = 2, so the series controls must be forwarded here
+            # as well — otherwise the backend silently falls back to
+            # its own signature defaults (200, 1e-6) and the engine
+            # configuration promised by ``Engine.image_max_terms`` is
+            # discarded on the multilayer path.
+            return solve_image_nlayer(
+                world, self,
+                max_terms=self.image_max_terms, tol=self.image_series_tol,
+            )
 
         if effective_backend == "cim":
             from groundfield.solver.cim import solve_cim
@@ -449,7 +520,21 @@ class Engine(BaseModel):
         if effective_backend == "mom_sommerfeld":
             from groundfield.solver.mom_sommerfeld import solve_mom_sommerfeld
 
-            return solve_mom_sommerfeld(world, self)
+            # Up to 0.14.x this call passed no keywords, so the backend
+            # fell back to its own signature defaults and the accuracy
+            # knobs of the *reference* engine were unreachable from the
+            # public API — a user who hit the non-converged corner had
+            # nothing to tighten. Forwarded following the
+            # ``image_max_terms`` / ``image_series_tol`` precedent above;
+            # the field defaults equal the old signature defaults, so
+            # existing callers are unaffected.
+            return solve_mom_sommerfeld(
+                world, self,
+                lambda_max_factor=self.sommerfeld_lambda_max_factor,
+                epsabs=self.sommerfeld_epsabs,
+                epsrel=self.sommerfeld_epsrel,
+                max_osc_panels=self.sommerfeld_max_osc_panels,
+            )
 
         if effective_backend == "bem":
             from groundfield.solver.bem import solve_bem

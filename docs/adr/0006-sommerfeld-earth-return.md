@@ -111,6 +111,7 @@ $$
 
 Implementation:
 
+<!-- skip-doctest: signature sketch, not runnable code -->
 ```python
 def earth_return_green_homogeneous(
     *, rho: float, z_i: float, z_j: float,
@@ -136,6 +137,7 @@ can compare against.
 
 Implementation:
 
+<!-- skip-doctest: signature sketch, not runnable code -->
 ```python
 def earth_return_green_layered(
     *, rho: float, z_i: float, z_j: float,
@@ -152,6 +154,7 @@ only the reflection coefficient differs.
 
 `Engine.earth_inductive_model` gains a third value:
 
+<!-- skip-doctest: type-alias sketch, not runnable code -->
 ```python
 EarthInductiveModel = Literal[
     "perfect_mirror",   # ADR-0004
@@ -364,9 +367,25 @@ reactance.
 the rigorous **two-layer, buried-conductor** self impedance per unit
 length in the closed Pollaczek/Sunde spectral-integral form
 $Z' = j(\omega\mu_0/2\pi)[\ln(2h/\mathrm{GMR}) + 2\int_0^\infty
-e^{-2h\lambda}/(\lambda + u_\text{eff}(\lambda))\,d\lambda]$, with the
-Tagg/Sunde/Wait effective vertical wavenumber
-$u_\text{eff} = u_1(u_2 + u_1\tanh u_1 h_1)/(u_1 + u_2\tanh u_1 h_1)$.
+e^{-2h\,u_\text{eff}(\lambda)}/(\lambda + u_\text{eff}(\lambda))\,d\lambda]$,
+with the Tagg/Sunde/Wait effective vertical wavenumber
+$u_\text{eff} = u_1(u_2 + u_1\tanh u_1 h_1)/(u_1 + u_2\tanh u_1 h_1)$,
+$u_i = \sqrt{\lambda^2 + j\omega\mu_0/\rho_i}$.
+
+!!! note "Corrected in 0.15.0 (review pass 9, finding F09)"
+
+    Until 0.14.1 both this ADR and the implementation carried
+    $e^{-2h\lambda}$ in the exponent — Carson's **air** kernel, correct
+    only because $\gamma_\text{air}\approx 0$. For a conductor *buried in
+    the earth* the Pollaczek/Sunde form requires
+    $e^{-2h\,u}$. The consequence of the old exponent was a
+    systematically **under**-estimated earth-return resistance whose
+    deficit grew with frequency and with burial depth (−0.5 % at 50 Hz /
+    $h=1$ m, −5.8 % at 1 kHz / $h=3$ m, −54 % at 1 MHz), and — misleading
+    at the time — an $R'$ that sat *below* $\omega\mu_0/8$ and *fell*
+    with depth. Both are the opposite of the correct behaviour. That
+    inverted trend had been recorded as a physical nuance in the 0.14.0
+    notes; it was the bug's signature.
 It is earth-return only (same convention as
 `references.earth_return.carson_self_impedance`), reduces to Carson in
 the homogeneous limit, and brackets between the two homogeneous Carson

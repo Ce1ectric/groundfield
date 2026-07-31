@@ -113,7 +113,8 @@ $h_1$):
 $$
 Z'_\text{self} = j\,\frac{\omega\mu_0}{2\pi}\left[
     \ln\!\frac{2h}{\mathrm{GMR}}
-    + 2\int_0^\infty \frac{e^{-2h\lambda}}{\lambda + u_\text{eff}(\lambda)}
+    + 2\int_0^\infty
+      \frac{e^{-2h\,u_\text{eff}(\lambda)}}{\lambda + u_\text{eff}(\lambda)}
       \,d\lambda \right],
 $$
 
@@ -139,12 +140,26 @@ internal conductor term separately. The $\ln(2h/\mathrm{GMR})$ term is the
 small-argument form of the perfect-mirror image
 $K_0(\gamma\,\mathrm{GMR}) - K_0(2\gamma h)$; the integral is the
 finite-conductivity earth-return correction, with the layering entering
-through $u_\text{eff}$ alone. Limiting cases: $\rho_1 = \rho_2 \Rightarrow
+through $u_\text{eff}$ alone. Note the **exponent**: for a conductor buried
+*in* the earth the vertical decay of the reflected field is governed by
+$u_\text{eff}(\lambda)$, not by $\lambda$ — $e^{-2h\lambda}$ is Carson's
+*air* kernel ($\gamma \to 0$ above the interface) and is wrong below it.
+groundfield used the air kernel up to 0.14.1 (fixed in 0.15.0, finding F09);
+that under-counted $R'$ by 0.5 % at 50 Hz / $h = 1$ m, 2 % at 1 kHz /
+$h = 1$ m and 5.8 % at 1 kHz / $h = 3$ m, and inverted the sign of the
+depth dependence. Since the head term is the small-argument form of the
+$K_0$ pair, the validity envelope is $|\gamma|\,2h \ll 1$ — satisfied to
+$< 0.05\,\%$ in $R'$ over 50 Hz – 1 kHz at $h \le 1$ m ($\approx 0.4\,\%$ at
+$h = 3$ m), degrading above $\sim 10$ kHz.
+
+Limiting cases: $\rho_1 = \rho_2 \Rightarrow
 u_\text{eff} = u_1$ (homogeneous Pollaczek, matching `carson_self_impedance`
 in the reactance to $< 0.1\,\%$, the earth-return resistance sitting just
-**below** $\omega\mu_0/8$ — Carson's small-argument limit, which the exact
-Pollaczek integral recovers only as $f \to 0$, the deficit growing with
-frequency); $h_1 \to \infty \Rightarrow$
+**above** $\omega\mu_0/8$ and **rising** with burial depth and frequency —
+$\omega\mu_0/8$ is Carson's low-frequency surface-return limit, and a
+conductor buried at depth $h$ drives its return current through more soil,
+e.g. $1.012\,\omega\mu_0/8$ at 0.7 m and $1.040\,\omega\mu_0/8$ at 3 m for
+$\rho = 30$ Ω·m, 1 kHz); $h_1 \to \infty \Rightarrow$
 upper layer only; $h_1 \to 0 \Rightarrow$ lower layer only. In between, the
 reactance lies within the $[\text{Carson}(\rho_1), \text{Carson}(\rho_2)]$
 bracket and is **deep-layer dominated at low frequency** — a thin resistive
@@ -157,10 +172,13 @@ read back without an ill-defined return-path assumption, this returns one
 scalar series impedance $z'(f) = R' + jX'$ that a reduced nodal network of
 an earthing system consumes directly, and that serves as an independent
 analytic reference for the assembled stack's earth-return reactance.
-``tests/test_pollaczek_reference.py`` (50 tests) pins the homogeneous
-Carson limit, the resistance-from-below behaviour, both $h_1$ limits, the
+``tests/test_pollaczek_reference.py`` pins the homogeneous
+Carson limit, the resistance-from-above behaviour, both $h_1$ limits, the
 Carson bracket across 50 Hz – 1 kHz, the low-frequency deep-layer regime,
-the wavenumber recursion and the input guards; a loop-closure test in
+the wavenumber recursion and the input guards, and
+``tests/test_pass9_references.py`` pins the buried-conductor kernel itself
+against the textbook $K_0$ form and the rising depth dependence of $R'$;
+a loop-closure test in
 ``tests/test_earth_return_benchmark.py`` ties the assembled stack to this
 reference and to the Tsiamitros *et al.* (2005, Eq. 8) integral (all three
 within $\sim 1\,\%$ on the Case V two-layer reactance at 1 kHz). The worked
@@ -207,7 +225,7 @@ $$
 Z'_\text{M} = j\,\frac{\omega\mu_0}{2\pi}\left[
     \ln\frac{D}{d}
     + 2\int_0^\infty
-      \frac{e^{-(h_i+h_j)\lambda}}{\lambda + u_\text{eff}(\lambda)}
+      \frac{e^{-(h_i+h_j)\,u_\text{eff}(\lambda)}}{\lambda + u_\text{eff}(\lambda)}
       \cos(\lambda x)\,d\lambda\right],
 $$
 

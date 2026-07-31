@@ -18,18 +18,20 @@ The numerical core is swappable through a backend parameter. Eight
 backends share the same data model (`World`, `Electrode`,
 `Conductor`, `Source`) and the same Sommerfeld representation of the
 layered Green's function — they differ only in **how** the integral
-is evaluated:
+is evaluated. Two of the eight (`cim`, `bem`) reduce to another
+backend's computation on every soil they accept, so the eight names
+cover six distinct computations (see the note below the table):
 
 | Backend          | Suitable for                                          | Method                                                                              |
 |------------------|-------------------------------------------------------|-------------------------------------------------------------------------------------|
 | `image`          | homogeneous soil                                      | image-charge sum, closed form                                                       |
 | `image_2layer`   | 2-layer soil                                          | Tagg/Sunde geometric image-charge series                                            |
 | `image_nlayer`   | homogeneous, 2-layer, or multi-layer (dispatcher)     | image-charge dispatcher (delegates to `image` / `image_2layer`; raises for $n\ge3$) |
-| `cim`            | any layered                                           | Complex Image Method (closed form via matrix-pencil fit of $\Gamma_1(\lambda)$)     |
+| `cim`            | homogeneous or 2-layer ($n \ge 3$ raises)              | Complex-Image entry point — reduces to the `image` / `image_2layer` kernel; no fit runs |
 | `mom`            | homogeneous or 2-layer                                | Galerkin Method-of-Moments on the closed-form layered kernels                       |
-| `mom_sommerfeld` | any layered                                           | Galerkin MoM with direct Sommerfeld quadrature (reference engine, slow)             |
-| `bem`            | any layered                                           | Boundary-element collocation with the CIM kernel                                    |
-| `fem`            | any layered                                           | Axisymmetric volume PDE with equivalent-hemisphere reduction                        |
+| `mom_sommerfeld` | any layered — the only $n \ge 3$ integral-equation path | Galerkin MoM with direct Sommerfeld quadrature (reference engine, slow)             |
+| `bem`            | homogeneous or 2-layer ($n \ge 3$ raises)              | Boundary-element collocation — assembles the same matrix as `mom` (4e-16)            |
+| `fem`            | any layered — volume-PDE cross-check, also for $n \ge 3$ | Axisymmetric volume PDE with equivalent-hemisphere reduction                        |
 
 For homogeneous cases `image` is the default — evaluation reduces to
 a vectorised sum over image sources in NumPy. For 2-layer soils
@@ -37,11 +39,27 @@ a vectorised sum over image sources in NumPy. For 2-layer soils
 Tagg/Sunde image series. `Engine.solve` auto-dispatches `"image"` to
 `image_2layer` / `image_nlayer` based on the soil model, so notebooks
 written for the homogeneous case keep working when the soil is
-replaced by a layered one. For $n \ge 3$ layers the closed-form path
-runs through `cim`; `mom_sommerfeld` is the absolute reference
-engine. The full engine theory is collected in
-[Engine theory](engines/index.md); the selection heuristic is
-documented in [ADR-0002](adr/0002-engine-family.md).
+replaced by a layered one.
+
+For $n \ge 3$ layers **`mom_sommerfeld` is the only engine that
+evaluates the layered Green's function** (with `fem` as an
+independent volume-PDE cross-check):
+`cim` and `bem` raise `NotImplementedError` for three and more layers
+(since 0.11.0 — the complex-image kernel they shared was structurally
+incomplete, audit 2026-07-08), and `image_nlayer` raises a
+`ValueError` by design.
+
+Note also that `cim` and `bem` are **not independent checks** on the
+soils they do accept: for $n \le 2$ `cim` evaluates the same
+closed-form kernel as `image` / `image_2layer` (bit-identical) and
+`bem` assembles the same reaction matrix as `mom` (relative
+difference 4e-16). Each result says so in
+`metadata['reduces_to']`. Eight backends therefore mean six distinct
+computations; genuine methodological independence comes from
+`mom_sommerfeld` (direct quadrature) and `fem` (volume PDE). The full
+engine theory is collected in [Engine theory](engines/index.md); the
+selection heuristic and its amendments are documented in
+[ADR-0002](adr/0002-engine-family.md).
 
 ## Modelling assumptions
 

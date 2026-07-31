@@ -26,7 +26,10 @@ Algorithm
   first waypoint is exactly the requested ``start``; an
   axis-aligned bridge from the last grid cell to the requested
   ``end`` is appended at the end (one or two extra segments,
-  always axis-aligned).
+  always axis-aligned). The bridge obeys the same
+  ``escape_radius_m`` blind-spot rule as the grid cells, so an
+  anchor that lands *inside* a foundation polygon is routable
+  instead of raising.
 
 The implementation is intentionally pure-Python and obstacle-
 free at import time: :mod:`shapely` is never required even
@@ -249,6 +252,19 @@ def route_manhattan(
         anchor). Pass ``0.0`` to restore the strict pre-v0.7
         behaviour, or a larger value when an anchor lands inside a
         dense city block.
+
+        The escape zone applies to the A\* grid cells *and* to the
+        trailing bridge from the last cell centre to ``end`` (since
+        0.15.0): a bridge segment whose two endpoints both lie
+        inside one anchor's escape disk is exempt from obstacle
+        testing, and any obstacle that *contains* an anchor is
+        ignored by the bridge altogether — a cable whose endpoint
+        is inside a foundation polygon cannot avoid that polygon,
+        so enforcing it there would only turn a solvable route into
+        a hard error. Before 0.15.0 the bridge ignored
+        ``escape_radius_m`` entirely, so an ``end`` anchor inside a
+        footprint raised regardless of how large the escape radius
+        was set.
     max_iterations
         Upper bound on the A\* loop body. Increase for very large
         layouts (hundreds of obstacles spread across kilometres).
@@ -264,7 +280,9 @@ def route_manhattan(
     ------
     RuntimeError
         When no path exists (obstacle field encloses the
-        substation or KVS).
+        substation or KVS), or when neither candidate bridge from
+        the last grid cell to ``end`` clears the obstacles that the
+        escape zone does not exempt.
     """
     if grid_size <= 0.0:
         raise ValueError(
@@ -317,16 +335,19 @@ def route_manhattan(
     # surrounding building cluster is.
     escape_r2 = escape_radius_m * escape_radius_m
 
+    def _near_anchor(
+        p: tuple[float, float], anchor: tuple[float, float],
+    ) -> bool:
+        """Is ``p`` inside ``anchor``'s escape disk?"""
+        dx = p[0] - anchor[0]
+        dy = p[1] - anchor[1]
+        return dx * dx + dy * dy <= escape_r2
+
     def _in_escape_zone(i: int, j: int) -> bool:
         if escape_radius_m <= 0.0:
             return False
-        cx, cy = cell_center(i, j)
-        for (ax, ay) in (start, end):
-            dx = cx - ax
-            dy = cy - ay
-            if dx * dx + dy * dy <= escape_r2:
-                return True
-        return False
+        center = cell_center(i, j)
+        return any(_near_anchor(center, a) for a in (start, end))
 
     def is_blocked(i: int, j: int) -> bool:
         if (i, j) == start_cell or (i, j) == end_cell:
@@ -432,15 +453,52 @@ def route_manhattan(
         if math.isclose(dx, 0.0) or math.isclose(dy, 0.0):
             waypoints.append(end)
         else:
+            # The trailing bridge honours the same escape zone as
+            # ``is_blocked`` does inside the A* loop. Two exemptions,
+            # both active only for ``escape_radius_m > 0``:
+            #
+            # 1. An obstacle that *contains* an anchor is dropped for
+            #    the whole bridge. The cable ends inside that
+            #    foundation polygon, so no axis-aligned bridge can
+            #    avoid it -- enforcing it would turn the escape valve
+            #    into a guaranteed failure (the situation the valve
+            #    exists for).
+            # 2. A bridge segment whose *both* endpoints lie inside
+            #    one anchor's escape disk is exempt from every
+            #    obstacle, mirroring the per-cell blind spot.
+            if escape_radius_m > 0.0:
+                bridge_obstacles = [
+                    o
+                    for o in obstacles
+                    if not (
+                        o.contains_point(*start) or o.contains_point(*end)
+                    )
+                ]
+            else:
+                bridge_obstacles = obstacles
+
+            def _bridge_crosses(
+                a: tuple[float, float], b: tuple[float, float],
+            ) -> bool:
+                """Does bridge segment ``a -> b`` hit an enforced box?"""
+                if escape_radius_m > 0.0 and any(
+                    _near_anchor(a, anc) and _near_anchor(b, anc)
+                    for anc in (start, end)
+                ):
+                    return False
+                return any(
+                    segment_intersects_box(a, b, o)
+                    for o in bridge_obstacles
+                )
+
             # Choose the bridge corner that does not cross an
             # obstacle. Two options: go-x-first or go-y-first.
             corner_x_first = (end[0], last[1])
             corner_y_first = (last[0], end[1])
             for corner in (corner_x_first, corner_y_first):
-                if not any(
-                    segment_intersects_box(last, corner, o)
-                    or segment_intersects_box(corner, end, o)
-                    for o in obstacles
+                if not (
+                    _bridge_crosses(last, corner)
+                    or _bridge_crosses(corner, end)
                 ):
                     waypoints.append(corner)
                     waypoints.append(end)
@@ -450,7 +508,11 @@ def route_manhattan(
                 raise RuntimeError(
                     "route_manhattan: cannot bridge final cell "
                     f"{last} to end {end} without crossing an "
-                    "obstacle. Reduce grid_size."
+                    f"obstacle (escape_radius_m = {escape_radius_m:.1f} m). "
+                    "Suggested fixes: reduce grid_size (currently "
+                    f"{grid_size:.1f} m), increase escape_radius_m so the "
+                    "bridge fits inside the anchor's blind spot, or reduce "
+                    f"clearance_m (currently {clearance_m:.2f} m)."
                 )
 
     return merge_collinear_waypoints(waypoints)

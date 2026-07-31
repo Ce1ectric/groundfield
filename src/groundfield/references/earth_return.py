@@ -38,10 +38,16 @@ effect. Two features carry the physics:
   (:math:`\approx 0.0493` Ω/km at 50 Hz) is **independent of the soil
   resistivity** — it is the loss of the return current spreading through
   the earth;
-* the earth-return **reactance** grows logarithmically with :math:`D_e`,
-  i.e. it *increases* with soil resistivity and *decreases* with
-  frequency, because a more resistive or lower-frequency earth lets the
-  return current spread deeper and wider.
+* the equivalent depth :math:`D_e \propto \sqrt{\rho/f}` *shrinks* with
+  frequency and *grows* with soil resistivity — a more resistive or
+  lower-frequency earth lets the return current spread deeper and wider.
+  The earth-return **reactance**
+  :math:`X' = (\omega\mu_0/2\pi)\ln(D_e/\mathrm{GMR})` therefore
+  *increases* with soil resistivity and also *increases* with frequency:
+  the :math:`\omega` prefactor dominates the shrinking logarithm, so
+  :math:`X'` rises almost linearly with :math:`f` (1000 Ω·m,
+  GMR = 7 mm: 0.814 mΩ/m at 50 Hz → 14.39 mΩ/m at 1 kHz, a 17.7×
+  rise over a 20× frequency step).
 
 groundfield models the **external** conductor inductance only (no
 internal-flux contribution), so the comparison uses

@@ -15,10 +15,13 @@ interpretation:
 
 - $k_1\\,\\rho$       — DC spreading resistance (Dwight-class
   scaling with the dominant local soil resistivity).
-- $k_2\\,f$           — purely-inductive coupling that does not
-  depend on the soil (e.g. a metallic-cable loop-inductance term).
-- $k_3\\,f$           — purely-resistive frequency-dependent term
-  (negligible in most quasi-static typical studies).
+- $k_2\\,f$           — soil-independent **resistive** frequency
+  dependence in $\\Omega/\\mathrm{Hz}$ (skin/proximity losses of the
+  metallic parts; negligible in most quasi-static typical studies).
+- $k_3\\,f$           — soil-independent **reactive** coupling in
+  $\\Omega/\\mathrm{Hz}$, i.e. the loop-inductance term of a
+  metallic path; the equivalent inductance is
+  $L = k_3 / (2\\pi)$ in H.
 - $k_4\\,f\\,\\rho$   — Carson-type earth-return resistance: scales
   with both frequency and soil resistivity.
 - $k_5\\,f\\,\\rho$   — Carson-type earth-return reactance.
@@ -39,9 +42,22 @@ the five real unknowns:
 - Imaginary part: $\\Im Z = k_3 f + k_5 f\\rho$
   → 2-feature regression in ($f$, $f\\rho$).
 
+So $k_2$ and $k_4$ live in the **real** (resistive) half and
+$k_3$ and $k_5$ in the **imaginary** (reactive) half — the pairing
+implied by the complex factors $(k_2 + j k_3)$ and
+$(k_4 + j k_5)$ above.
+
 Both halves are decoupled in the coefficients, so the fit is
 unique whenever the sample set spans at least two distinct
-$\\rho$ values and at least two distinct frequencies.
+$\\rho$ values and at least two distinct frequencies. The two
+conditions remove two different collinearities of the design
+matrix:
+
+- A single $\\rho = R$ makes the columns $f$ and $f\\rho = R f$
+  proportional, so only $k_2 + R\\,k_4$ (resp. $k_3 + R\\,k_5$)
+  is identifiable.
+- A single $f = F$ makes the columns $\\rho$ and $f\\rho = F\\rho$
+  proportional, so only $k_1 + F\\,k_4$ is identifiable.
 
 References
 ----------
@@ -75,6 +91,13 @@ class RhoFStandardFit:
     k1, k2, k3, k4, k5
         The five real coefficients of the formula
         $Z = k_1\\rho + (k_2 + j k_3)f + (k_4 + j k_5)f\\rho$.
+        ``k1`` is the DC spreading-resistance slope in
+        $\\Omega/(\\Omega\\,\\mathrm{m})$; ``k2`` (real) and ``k3``
+        (imaginary) are the soil-independent resistive resp.
+        reactive frequency slopes in $\\Omega/\\mathrm{Hz}$; ``k4``
+        (real) and ``k5`` (imaginary) are the Carson-type
+        earth-return resistance resp. reactance slopes in
+        $\\Omega/(\\mathrm{Hz}\\,\\Omega\\,\\mathrm{m})$.
     rms_error
         Root-mean-square residual error in $\\Omega$ over the input
         samples.
@@ -160,15 +183,18 @@ def fit_rho_f_standard(
             "fit_rho_f_standard needs at least 4 samples; got "
             f"{rho.size}."
         )
+    # Identifiability: a constant rho makes the columns f and f*rho
+    # proportional (k2/k4 and k3/k5 confounded); a constant f makes
+    # the columns rho and f*rho proportional (k1/k4 confounded).
     if np.unique(rho).size < 2:
         raise ValueError(
             "fit_rho_f_standard needs at least two distinct rho values "
-            "to identify k1 and k4 separately."
+            "to identify k2 and k4 (and k3 and k5) separately."
         )
     if np.unique(f).size < 2:
         raise ValueError(
             "fit_rho_f_standard needs at least two distinct f values "
-            "to identify k2 and k4 separately."
+            "to identify k1 and k4 separately."
         )
 
     # Real part: Re(Z) = k1·ρ + k2·f + k4·f·ρ
@@ -222,6 +248,29 @@ def rho_f_standard_from_results(
     Returns
     -------
     RhoFStandardFit
+
+    Raises
+    ------
+    ValueError
+        If ``results`` and ``rhos`` differ in length, if the
+        per-electrode arrays of a result do not match its
+        ``frequencies``, or if the electrode carries no current at
+        *any* $(\\rho, f)$ sample (then $Z = U/I$ is nowhere
+        defined).
+    KeyError
+        If ``electrode_name`` is absent from a result's
+        ``electrode_potentials`` or ``electrode_currents``.
+
+    Notes
+    -----
+    Samples at which the electrode carries **no current** are
+    *masked out* rather than entered as $Z = 0$: a vanishing current
+    means the driving-point impedance is undefined, not zero, and a
+    single injected zero row pulls the least-squares plane through
+    the origin (a 1-in-7 dead DC column biases $k_1$ by tens of
+    percent). Masking mirrors
+    :func:`groundfield.postprocess.vector_fitting.rho_f_from_field_result`;
+    a :class:`UserWarning` reports how many samples were dropped.
     """
     if len(results) != len(rhos):
         raise ValueError(
@@ -231,19 +280,56 @@ def rho_f_standard_from_results(
     rho_arr: list[float] = []
     f_arr: list[float] = []
     Z_arr: list[complex] = []
+    n_dead = 0
+    n_total = 0
     for res, rho_val in zip(results, rhos):
         if electrode_name not in res.electrode_potentials:
             raise KeyError(
-                f"electrode '{electrode_name}' not in FieldResult; "
-                f"available: {list(res.electrode_potentials)}"
+                f"electrode '{electrode_name}' not in FieldResult "
+                f"potentials; available: {list(res.electrode_potentials)}"
+            )
+        if electrode_name not in res.electrode_currents:
+            raise KeyError(
+                f"electrode '{electrode_name}' not in FieldResult "
+                f"currents; available: {list(res.electrode_currents)}"
             )
         U = np.asarray(res.electrode_potentials[electrode_name], dtype=complex)
         I = np.asarray(res.electrode_currents[electrode_name], dtype=complex)
         f_local = np.asarray(res.frequencies, dtype=float)
-        Z = np.where(np.abs(I) > 0.0, U / np.where(I != 0, I, 1.0), 0.0 + 0.0j)
-        rho_arr.extend([float(rho_val)] * len(f_local))
-        f_arr.extend(f_local.tolist())
-        Z_arr.extend(Z.tolist())
+        if U.shape != f_local.shape or I.shape != f_local.shape:
+            raise ValueError(
+                "rho_f_standard_from_results: inconsistent shapes for "
+                f"electrode '{electrode_name}': frequencies={f_local.shape}, "
+                f"potentials={U.shape}, currents={I.shape}."
+            )
+        # Review pass 9 (finding F41), mirroring the earlier fix N23 in
+        # vector_fitting.rho_f_from_field_result: frequencies at which
+        # the electrode carries no current are MASKED, not injected as
+        # Z = 0 samples, which used to drag the fit toward the origin.
+        alive = np.abs(I) > 0.0
+        n_total += int(alive.size)
+        n_dead += int((~alive).sum())
+        rho_arr.extend([float(rho_val)] * int(alive.sum()))
+        f_arr.extend(f_local[alive].tolist())
+        Z_arr.extend((U[alive] / I[alive]).tolist())
+
+    if not Z_arr:
+        raise ValueError(
+            f"rho_f_standard_from_results: electrode '{electrode_name}' "
+            f"carries no current at any of the {n_total} (rho, f) samples "
+            "— Z = U/I is undefined. Fit the driven electrode instead."
+        )
+    if n_dead:
+        import warnings as _warnings
+
+        _warnings.warn(
+            f"rho_f_standard_from_results: electrode '{electrode_name}' "
+            f"carries no current at {n_dead} of {n_total} (rho, f) "
+            "samples; those samples are excluded from the fit "
+            "(historic behaviour injected Z = 0 there).",
+            UserWarning,
+            stacklevel=2,
+        )
     return fit_rho_f_standard(rho_arr, f_arr, Z_arr)
 
 

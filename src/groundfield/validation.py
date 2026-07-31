@@ -18,12 +18,15 @@ Usage
 ...     world,
 ...     engines={
 ...         "image": gf.create_engine(backend="image", segment_length=0.05),
-...         # "image_2layer": gf.create_engine(backend="image_2layer", ...),
+...         "mom": gf.create_engine(backend="mom", segment_length=0.05),
 ...     },
 ...     rel_tolerance=0.05,
 ... )
 >>> report.is_consistent
 True
+
+At least **two** engines are required — a single-entry mapping raises
+``ValueError``, because one engine cannot validate itself.
 """
 
 from __future__ import annotations
@@ -58,10 +61,20 @@ class EngineComparison:
         ``{cluster_root: {engine_label: Z(f0).real}}`` where ``f0`` is
         the first frequency in :attr:`FieldResult.frequencies`.
     deviations
-        ``{cluster_root: max relative deviation}``.
+        ``{cluster_root: worst pairwise relative deviation}`` with
+        ``dev = (max(Z) - min(Z)) / min(|Z|)`` over the engines — the
+        largest relative disagreement between any two engines,
+        referenced to the smaller of the two values (see
+        :func:`compare_engines` for the change in 0.15.0). Clusters
+        whose impedance is undefined for at least one engine do not
+        appear here.
     is_consistent
-        ``True`` if and only if ``max(deviations) <= rel_tolerance``
-        and no engine returned a stub result.
+        ``True`` if and only if **at least one** quantity was actually
+        evaluated (a cluster impedance, or a sample point with a defined
+        reference), every deviation is ``<= rel_tolerance``, and no
+        engine returned a stub result. A comparison in which nothing
+        could be evaluated is reported as *not* consistent — see
+        :func:`compare_engines`.
     notes
         Diagnostic strings (e.g. "stub backend", "frequency lists do
         not match").
@@ -117,9 +130,17 @@ def compare_engines(
     engines
         Mapping ``label -> Engine``. Must contain at least two entries.
     rel_tolerance
-        Maximum allowed relative deviation of the cluster impedances
-        (default 5 %). The tolerance applies to every cluster present
-        in the result.
+        Maximum allowed **pairwise** relative deviation of the cluster
+        impedances (default 5 %), i.e. the gate is
+
+        .. math::
+
+            \\max_{i,j} \\frac{|Z_i - Z_j|}{\\min_k |Z_k|}
+            \\;\\le\\; \\texttt{rel_tolerance}
+
+        over the engines :math:`i, j, k`. Two engines differing by 5 %
+        of the smaller value therefore sit exactly on the threshold.
+        The tolerance applies to every cluster present in the result.
     sample_points
         Optional. Array of shape ``(M, 3)``: additional field points
         whose potentials will be compared. Deviations are reported in
@@ -136,6 +157,30 @@ def compare_engines(
     first frequency. Clusters with ``Σ I = 0`` (purely passive
     observers) have an undefined impedance and are skipped; the skip
     is recorded in ``notes``.
+
+    **Metric definition (changed in 0.15.0).** The deviation is the
+    full spread of the compared values normalised by the *smallest*
+    magnitude among them,
+    ``dev = (max(Z) - min(Z)) / min(|Z|)``, which is identical to the
+    worst pairwise relative deviation ``max_ij |Z_i - Z_j| / |Z_j|``
+    for same-sign impedances. Up to 0.14.x the deviation was measured
+    against the ensemble *mean*
+    (``max_k |Z_k - mean(Z)| / |mean(Z)|``), which for two engines
+    reports exactly half the true disagreement and shrinks further as
+    engines are added — a ``rel_tolerance=0.05`` gate then admitted a
+    10.5 % disagreement. Reported deviations are therefore roughly
+    twice as large as in 0.14.x for the same world; a comparison that
+    was marginally green may now legitimately turn red.
+
+    **Vacuous comparisons (changed in 0.15.0).** A report is
+    ``is_consistent=True`` only if at least one quantity was actually
+    evaluated — a cluster impedance, or a ``sample_points`` potential
+    with a non-zero reference. A world without sources (or with a
+    misspelled ``Source.attached_to``) has no defined cluster impedance
+    anywhere, so nothing can be validated; such a run now yields
+    ``is_consistent=False`` plus a "comparison vacuous" note instead of
+    a false green (up to 0.14.x the running maximum deviation never left
+    its initial ``0.0`` and passed the tolerance gate).
     """
     if len(engines) < 2:
         raise ValueError("compare_engines requires at least 2 engines.")
@@ -185,6 +230,11 @@ def compare_engines(
             representative.setdefault(root, root)
 
     max_dev = 0.0
+    # Number of quantities for which a deviation was actually computed
+    # (cluster impedances + sample points with a defined reference).
+    # ``max_dev`` alone cannot distinguish "everything agreed" from
+    # "nothing was evaluated" — both leave it at 0.0.
+    n_compared = 0
     for cluster_root in representative.values():
         per_engine: dict[str, float] = {}
         for label, res in results.items():
@@ -202,13 +252,25 @@ def compare_engines(
             )
             continue
         cmp.cluster_impedance_table[cluster_root] = per_engine
-        zs = np.array(list(per_engine.values()))
-        zmean = zs.mean()
-        if zmean == 0.0:
+        # Worst *pairwise* relative deviation, referenced to the
+        # smallest magnitude among the compared impedances:
+        #   dev = max_ij |Z_i - Z_j| / min_k |Z_k|
+        #       = (max Z - min Z) / min |Z|      (same-sign Z).
+        # Measuring against the ensemble mean instead (as up to 0.14.x)
+        # halves the reported number for two engines and lets a 5 %
+        # gate pass a 10.5 % disagreement.
+        zs = np.asarray(list(per_engine.values()), dtype=float)
+        z_ref = float(np.min(np.abs(zs)))
+        if z_ref == 0.0:
+            cmp.notes.append(
+                f"Cluster '{cluster_root}': Z = 0 for at least one "
+                "engine — relative deviation undefined, skipped."
+            )
             continue
-        dev = float(np.max(np.abs(zs - zmean)) / abs(zmean))
+        dev = float(zs.max() - zs.min()) / z_ref
         cmp.deviations[cluster_root] = dev
         max_dev = max(max_dev, dev)
+        n_compared += 1
 
     # Optional point-sample for the potential
     if sample_points is not None and len(results) >= 2:
@@ -218,21 +280,47 @@ def compare_engines(
                 for lbl, res in results.items()
             }
             phis = np.stack(list(phi_table.values()))
-            mean = phis.mean(axis=0)
+            # Same pairwise metric as for the cluster impedances:
+            # spread over the smallest magnitude, per sample point.
+            spread = phis.max(axis=0) - phis.min(axis=0)
+            phi_ref = np.min(np.abs(phis), axis=0)
             with np.errstate(divide="ignore", invalid="ignore"):
-                rel = np.where(np.abs(mean) > 0,
-                               np.max(np.abs(phis - mean), axis=0) / np.abs(mean),
-                               0.0)
+                rel = np.where(phi_ref > 0.0, spread / phi_ref, 0.0)
+            n_undefined = int(np.count_nonzero(phi_ref <= 0.0))
             sample_max = float(rel.max()) if rel.size else 0.0
-            cmp.notes.append(
+            note = (
                 f"Potential point-sample at {len(sample_points)} points: "
-                f"max relative deviation = {sample_max*100:.2f} %."
+                f"max relative deviation = {sample_max*100:.2f} % "
+                "(max pairwise, referenced to min |phi|)."
             )
+            if n_undefined:
+                note += (
+                    f" {n_undefined} point(s) excluded: phi = 0 for at "
+                    "least one engine, relative deviation undefined."
+                )
+            cmp.notes.append(note)
             max_dev = max(max_dev, sample_max)
+            n_compared += int(rel.size) - n_undefined
         except RuntimeError as e:
             cmp.notes.append(f"Potential sample not evaluated: {e}")
 
-    cmp.is_consistent = (max_dev <= rel_tolerance) and not any(
-        n.startswith("Engine '") and "stub result" in n for n in cmp.notes
+    # A comparison that evaluated *nothing* has validated nothing:
+    # ``max_dev`` is still its initial 0.0, which would otherwise pass
+    # the tolerance gate and report a false green (typical cause: the
+    # world has no source, or ``Source.attached_to`` is misspelled, so
+    # every cluster carries Σ I = 0 and was skipped above).
+    if n_compared == 0:
+        cmp.notes.append(
+            "No comparable quantity (every cluster impedance undefined, "
+            "no usable sample point) — comparison vacuous, nothing was "
+            "validated."
+        )
+    cmp.is_consistent = (
+        n_compared > 0
+        and (max_dev <= rel_tolerance)
+        and not any(
+            n.startswith("Engine '") and "stub result" in n
+            for n in cmp.notes
+        )
     )
     return cmp

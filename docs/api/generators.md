@@ -57,6 +57,23 @@ Weibull; discrete: Discrete, Categorical, plus the trivial
 Constant). ``cfg.sample(rng)`` resolves every distribution
 reproducibly given a fixed seed.
 
+!!! warning "Seed reproducibility of ``building_counts`` (since 0.15.0)"
+    ``building_counts`` is a *mapping*, so its key order carries no
+    meaning — but a distribution-valued count consumes RNG draws,
+    and the sampling order decides which draw lands on which type.
+    Since 0.15.0 the counts are sampled in the **catalog order of
+    ``building_types``** (a declared list, hence canonical) rather
+    than in the mapping's insertion order. Two configs that differ
+    only in the order the ``building_counts`` keys were written —
+    for example after ``json.dumps(..., sort_keys=True)``, a YAML
+    round-trip, or a hand edit that moves a line — therefore build
+    the bit-identical world for the same seed. Up to 0.14.1 they did
+    not: with seed 42 and ``Discrete`` counts, swapping two keys
+    changed ``residential`` from 5 to 30 houses. Monte-Carlo studies
+    whose realisations were generated with distribution-valued
+    ``building_counts`` on 0.14.x must be re-run to be pinned by
+    their seed again.
+
 ## Validity envelope
 
 * Frequency: $f \le 1\,\mathrm{kHz}$ (quasi-static).
@@ -87,6 +104,16 @@ out the foundation modelling envelope:
   automatically from the OMBR of an OSM polygon when the
   configured placement is
   :class:`~groundfield.geo.placement.OsmBuildingPlacement`.
+  Since 0.15.0 the OMBR **centre** is inherited too: it enters as
+  an ``offset_xy_m`` correction relative to the site position the
+  placement reports (the polygon centroid), on top of any user
+  offset. Up to 0.14.1 only the side lengths and the orientation
+  were taken over and the rectangle was built on the centroid, so
+  for a non-symmetric outline the foundation was a *translated*
+  copy of the OMBR — 3.5 m off for a typical L-shaped house, 8.0 m
+  for a thin L — which pushed rings out of their own plot and into
+  the neighbour's footprint. Worlds built from OSM footprints with
+  non-symmetric outlines therefore change numerically in 0.15.0.
 * ``concrete_rho_ohm_m: float | AnyDistribution | None = None`` and
   ``concrete_thickness_m`` activate the **concrete-encasement model**
   ([ADR-0012](../adr/0012-foundation-concrete-encasement.md)).
@@ -311,6 +338,23 @@ real OSM extracts — the ``escape_radius_m`` parameter defines a
 disk around the anchor inside which obstacle blocking is *not*
 enforced. Default: one grid cell; pass a larger value when the
 anchor is wedged into a dense city block.
+
+Since 0.15.0 the escape zone also covers the trailing **bridge**
+from the last grid cell to the requested end point: a bridge
+segment with both endpoints inside one anchor's escape disk is
+exempt from obstacle testing, and an obstacle that *contains* an
+anchor is ignored by the bridge entirely (a cable that ends inside
+a foundation polygon cannot avoid that polygon). Up to 0.14.1 the
+bridge was tested against the raw obstacle list, so an end anchor
+inside a footprint raised ``RuntimeError: cannot bridge final
+cell …`` no matter how large ``escape_radius_m`` was — the escape
+valve did not cover the case it exists for. Consequence for
+:meth:`OrtsnetzLayout.connect_all_buildings`, whose grid ladder
+swallows that error: houses that were silently downgraded to
+"islands" are now connected, so LV coverage (and hence the solved
+potential distribution) can change for real-OSM layouts.
+``escape_radius_m=0.0`` still restores strict enforcement
+everywhere.
 
 ### Foundation-electrode penetration mask
 

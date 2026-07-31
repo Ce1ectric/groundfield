@@ -32,6 +32,36 @@ dropped = world.reset_concrete_corrections()
 
 Calling the helper on a fresh world is an idempotent no-op.
 
+## Source handles stay live across a solve (0.15.0)
+
+``World.solve(engine)`` snapshots every :attr:`World.sources` entry
+before the backend runs and restores it afterwards, so solving never
+rewrites the input world (opt out with ``snapshot_sources=False`` if a
+sweep cannot afford the deep copy). Since 0.15.0 that roll-back is
+**identity-preserving**: the recorded field values are written back onto
+the very objects ``create_source`` returned, and ``world.sources`` keeps
+its list object. The canonical parameter sweep therefore behaves as it
+reads:
+
+```python
+import groundfield as gf
+
+world  = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
+src    = gf.create_source(world, attached_to="g1", magnitude=10.0)
+engine = gf.create_engine(backend="image")
+
+for current in (10.0, 20.0, 40.0):
+    src.magnitude = current       # ``src`` is still world.sources[0]
+    print(world.solve(engine).electrode_potentials["g1"][0])
+```
+
+Up to 0.14.x the snapshot list was rebound onto the world, which
+detached the caller's handle after the first solve: every later
+mutation of ``src`` was a silent no-op and the loop above printed the
+same potential three times. Backend-side mutations of the source list
+(insert / remove / replace / wholesale rebind) are still rolled back.
+
 ## API reference
 
 ::: groundfield.world

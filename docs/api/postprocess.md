@@ -104,6 +104,30 @@ is fitted across a $\rho$-sweep and is already in the canonical
 :mod:`groundfield.postprocess.rho_f_standard` and the
 [IO reference](io.md) for the export path.
 
+The complex factors fix which half each coefficient belongs to:
+$k_1$, $k_2$ and $k_4$ are **real** (resistive) coefficients,
+$k_3$ and $k_5$ **imaginary** (reactive) ones, i.e.
+
+$$
+\Re Z = k_1\rho + k_2 f + k_4 f\rho, \qquad
+\Im Z = k_3 f + k_5 f\rho .
+$$
+
+So $k_2$ is the soil-independent *resistive* frequency slope in
+$\Omega/\mathrm{Hz}$ and $k_3$ the soil-independent *reactive*
+one — the metallic loop inductance is $L = k_3/(2\pi)$ in H, never
+$k_2/(2\pi)$. $k_4$ / $k_5$ are the Carson-type earth-return
+resistance / reactance slopes.
+
+`rho_f_standard_from_results` masks $(\rho, f)$ samples at which the
+requested electrode carries no current (a passive observer, or a DC
+column with no galvanic source path) and warns with the number of
+dropped samples; it raises `ValueError` if no sample survives. It
+does **not** substitute $Z = 0$ for a missing sample — a vanishing
+current means $Z = U/I$ is undefined, not zero, and zero rows would
+drag the least-squares plane through the origin. This matches
+`rho_f_from_field_result` on the vector-fitting side.
+
 ::: groundfield.postprocess.rho_f_standard
 
 ## Touch and step voltages

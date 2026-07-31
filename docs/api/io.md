@@ -217,6 +217,17 @@ requires an explicit rename. The frozen column tuples
 `CLUSTER_IMPEDANCE_REQUIRED_COLUMNS` expose the schema for
 regression testing.
 
+The identifier columns are inherited from the `postprocess` tables
+the writers wrap: an electrode row is keyed by `name` and its
+galvanic cluster by `cluster_root`; a cluster row is keyed by
+`cluster_root` alone. There is no `electrode` and no `cluster`
+column — `ELECTRODE_TABLE_REQUIRED_COLUMNS` is
+`("name", "cluster_root", "I_re", "I_im", "abs_I")` and
+`CLUSTER_IMPEDANCE_REQUIRED_COLUMNS` is
+`("cluster_root", "Z_re", "Z_im", "abs_Z")`, so
+`set(REQUIRED) <= set(pandas.read_csv(path).columns)` holds for
+every written file.
+
 ## Errors
 
 `groundfield.io.groundinsight.evaluate_spec` validates the

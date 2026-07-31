@@ -12,13 +12,20 @@ soil models with auto-dispatching backends.
 |-----------------------------|-------------|----------------------------|
 | `HomogeneousSoil`           | 1           | `image`, `mom`, `bem`, `fem` |
 | `TwoLayerSoil`              | 2           | `image_2layer`, `mom`        |
-| `MultiLayerSoil`            | ≥ 1         | `image_nlayer` dispatcher, `cim`, `mom_sommerfeld` |
+| `MultiLayerSoil`            | ≥ 1         | `image_nlayer` dispatcher, `cim` ($n \le 2$), `mom_sommerfeld`, `fem` |
 
 `backend="image"` auto-dispatches to the matching layered backend:
 a `TwoLayerSoil` ends up on `image_2layer`, a `MultiLayerSoil`
 with $n = 1$ collapses to `image`, $n = 2$ routes to
 `image_2layer`, $n \ge 3$ raises a clear `ValueError` directing
-the user to `cim` or `mom_sommerfeld`.
+the user to `mom_sommerfeld` or `fem`. `cim` shares that limit:
+its closed-form self-kernel is exact for $n \le 2$ and rejects
+$n \ge 3$ with a `NotImplementedError` (see
+[ADR-0002](../adr/0002-engine-family.md) and the
+[`cim` engine page](../engines/cim.md)), because for three or more
+layers the reflection coefficient $\Gamma_1(\lambda)$ is no longer
+constant in $\lambda$ and the historic complex-image expansion was
+structurally incomplete.
 
 ## Two-layer setup
 
@@ -84,28 +91,40 @@ for the 2-layer kernel.
 
 ## Three or more layers
 
-For $n \ge 3$ use `MultiLayerSoil` with the `cim` (Complex Image
-Method) or `mom_sommerfeld` backend:
+For $n \ge 3$ build a `MultiLayerSoil` from explicit `SoilLayer`
+entries — one per layer, top-down, and the last one semi-infinite
+(`thickness=None`, which is the default) — and solve it with the
+`mom_sommerfeld` reference backend:
 
 ```python
-soil = gf.MultiLayerSoil(layer_resistivities=[80.0, 30.0, 200.0],
-                          layer_thicknesses=[3.0, 5.0])
+soil = gf.MultiLayerSoil(
+    layers=[
+        gf.SoilLayer(resistivity=80.0, thickness=3.0),   # topsoil
+        gf.SoilLayer(resistivity=30.0, thickness=5.0),   # moist sand
+        gf.SoilLayer(resistivity=200.0),                 # bedrock, h = inf
+    ],
+)
 world = gf.create_world(soil=soil)
 gf.create_electrode(world, "ring", name="ring_1",
                     center=(0.0, 0.0, 0.8), radius=4.0,
                     wire_radius=0.005)
 gf.create_source(world, attached_to="ring_1", magnitude=1.0)
 
-engine = gf.create_engine(backend="cim", segment_length=0.5,
+engine = gf.create_engine(backend="mom_sommerfeld", segment_length=0.5,
                           frequencies=[50.0])
 result = engine.solve(world)
+print(result.cluster_impedance("ring_1"))
 ```
 
-`cim` builds a matrix-pencil fit of the spectral Green's function
-once and re-uses it at every frequency, so the second and following
-frequency points come for free. `mom_sommerfeld` is slower but is
-the absolute multi-layer reference — use it to validate `cim` on
-new soil profiles before launching long sweeps.
+`mom_sommerfeld` evaluates the full layered Green's function by
+direct Sommerfeld quadrature, so it carries no layer-count
+restriction and is the absolute multi-layer reference. `fem` is
+the cheap alternative for $n \ge 3$ (axisymmetric equivalent
+hemisphere, so useful for compact, roughly rotationally symmetric
+electrodes only). `cim` and the `image` family stay restricted to
+$n \le 2$; use them for the two-layer sweeps above, where `cim`
+re-uses its spectral fit across frequencies and the second and
+following frequency points come almost for free.
 
 ## Where to go next
 

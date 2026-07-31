@@ -165,6 +165,20 @@ class OsmBuildingPlacement(BaseModel):
             ``selection == "first_n"``. The generator can decide
             whether to widen its search radius or lower its
             ``n``-target.
+
+        Notes
+        -----
+        The reported site is the polygon's **area centroid**, not
+        the centre of its oriented minimum bounding rectangle
+        (OMBR); the two coincide only for outlines with a centre of
+        symmetry (an L-shaped house separates them by several
+        metres). Consumers that build OMBR-aligned geometry — i.e.
+        footprint-driven :class:`FoundationElectrodeSpec` in
+        :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
+        — must therefore compensate the centroid-to-OMBR-centre
+        difference themselves via ``offset_xy_m``. The service-drop
+        / PEN routing consumers legitimately use the centroid,
+        which is why ``generate`` keeps returning it.
         """
         filtered = self._filtered()
         if self.selection == "all":

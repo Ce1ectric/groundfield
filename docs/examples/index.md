@@ -9,6 +9,12 @@ If you're brand new to the project, work through them in order:
 each one introduces a couple of new concepts and shows what to
 expect.
 
+Every snippet on these pages is executed by the test suite (see
+[Executable documentation](../installation.md#executable-documentation)),
+so what you copy is what CI ran. The only exceptions are the blocks
+marked `<!-- skip-doctest: ... -->` in the Markdown source — today
+that is example 08, which needs a live Overpass download.
+
 ## Pre-requisites
 
 ```bash

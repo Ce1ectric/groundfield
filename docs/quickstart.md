@@ -21,7 +21,11 @@ gf.create_source(world, attached_to="g1", magnitude=1.0)
 # 3) Configure the engine
 engine = gf.create_engine(
     backend="image",                # auto-routes to image_2layer
-    segment_length=0.05,
+    # 0.25 m gives ~126 segments on this 5 m ring; the cluster
+    # impedance is converged to 5 digits (12.136 Ohm at 50 Hz, same
+    # as at 0.05 m) while the contour plot below stays fast. Refine
+    # only where the field gradient, not the impedance, matters.
+    segment_length=0.25,
     frequencies=[50.0, 150.0, 250.0, 350.0],
 )
 
@@ -54,11 +58,24 @@ gf.plot_potential_contour(result, world=world, plane="xy", z=0.0)
 | `image`          | `HomogeneousSoil`                                     | image-charge sum, closed form                                           | implemented |
 | `image_2layer`   | `TwoLayerSoil` (auto-dispatched from `"image"`)       | Tagg/Sunde geometric image-charge series                                | implemented |
 | `image_nlayer`   | `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil`   | dispatcher (delegates to `image` for $n=1$, `image_2layer` for $n=2$)   | implemented |
-| `cim`            | any layered                                           | Complex Image Method (matrix-pencil fit of $\Gamma_1(\lambda)$)         | implemented |
+| `cim`            | `HomogeneousSoil` or `TwoLayerSoil` ($n \ge 3$ raises) | closed-form self-kernel; reduces to `image` / `image_2layer`             | implemented |
 | `mom`            | `HomogeneousSoil` or `TwoLayerSoil`                   | Galerkin Method-of-Moments on segment level                             | implemented |
 | `mom_sommerfeld` | any layered                                           | Galerkin MoM with direct Sommerfeld quadrature (reference engine)        | implemented |
-| `bem`            | any layered                                           | Boundary-element collocation with the CIM kernel                        | implemented |
+| `bem`            | `HomogeneousSoil` or `TwoLayerSoil` ($n \ge 3$ raises) | collocation on the closed-form kernel; reduces to `mom`                  | implemented |
 | `fem`            | any layered                                           | Axisymmetric volume FEM with equivalent-hemisphere reduction            | implemented |
+
+!!! warning "Eight backends, six distinct computations"
+
+    For $n \le 2$ layers, `cim` returns values **bit-identical** to
+    `image_2layer` and `bem` bit-identical to `mom` — both use the same
+    closed-form self-kernels, and the complex-image fit that once
+    distinguished `cim` no longer runs (see
+    [ADR-0002](adr/0002-engine-family.md) and the
+    [`cim`](engines/cim.md) / [`bem`](engines/bem.md) pages). Treat them
+    as aliases, **not** as independent cross-checks. Both raise
+    `NotImplementedError` for $n \ge 3$; `mom_sommerfeld` is currently
+    the only integral-equation path for three or more layers, with `fem`
+    as the methodologically independent cross-check.
 
 `Engine.solve` automatically forwards `backend="image"` to
 `image_2layer` for a `TwoLayerSoil` and to `image_nlayer` for a
@@ -88,7 +105,10 @@ assert report.is_consistent
 The same pattern is used by `tests/test_cross_engines_extended.py`
 to enforce the methodological cross-checks between the closed-form
 image engines, the integral-equation engines (`mom`,
-`mom_sommerfeld`, `bem`) and the volume-PDE engine (`fem`).
+`mom_sommerfeld`) and the volume-PDE engine (`fem`). `bem` and `cim`
+are deliberately absent from that list: for $n \le 2$ they reduce to
+`mom` and `image_2layer` respectively, so pairing them adds no
+independent information.
 
 ## Parameter sweeps
 

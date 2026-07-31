@@ -27,28 +27,38 @@ historically dominant flavour of BEM in the grounding literature
 because it preserves the same accuracy on smooth electrodes while
 being roughly half the cost of the Galerkin scheme.
 
-The Green's function $G$ is the **layered Sommerfeld kernel**
-itself; we evaluate it through the closed-form complex-image fit
-provided by :mod:`groundfield.solver.cim`, so the BEM and the CIM
-engines share the same physics for layered soils. For homogeneous
-soils $G(r) = 1/r + 1/r_{\\text{air-img}}$.
+The Green's function $G$ is the closed-form self-kernel of the
+image-charge family: $G(r) = 1/r + 1/r_{\\text{air-img}}$ for
+homogeneous soil, and the exact Tagg/Sunde series of
+:mod:`groundfield.solver.image_2layer` for a two-layer soil.
 
-Differences from ``mom``
-------------------------
-*(Corrected in the 2026-07-08 audit, WP-E/P4.)* For ``n <= 2`` the
-two engines assemble the **identical** reaction matrix from the same
-kernels and solve it with the same constraint solver — measured
-relative difference 4e-16. Their mutual agreement therefore
-validates the shared discretisation, **not** the physics; genuine
+Differences from ``mom`` — and why they are nil in practice
+-----------------------------------------------------------
+*(Corrected in the 2026-07-08 audit, WP-E/P4; the last remnant of the
+complex-image story removed in 0.15.0, review pass 9 F34.)* For
+``n <= 2`` — the only regime this backend accepts — the two engines
+assemble the **identical** reaction matrix from the same kernels and
+solve it with the same constraint solver; the measured relative
+difference is 4e-16, i.e. ``bem`` reproduces ``mom`` bit-for-bit up
+to floating-point associativity. Their mutual agreement therefore
+validates the shared discretisation, **not** the physics, and a
+cross-validation table must not count them as two engines. Genuine
 methodological independence in the layered cross-checks comes from
 ``mom_sommerfeld`` (direct Sommerfeld quadrature) and ``fem``
 (volume PDE). ``bem`` is kept as the collocation-flavoured entry
-point of the family; ``n >= 3`` soils are rejected (the historic
-CIM kernel was structurally incomplete).
+point of the family. ``n >= 3`` soils are rejected — the historic
+complex-image kernel this backend shared with ``cim`` was
+structurally incomplete — and consequently **no complex-image fit is
+computed** any more: up to 0.14.1 ``solve_bem`` called
+``fit_complex_images`` on every solve and published its (failed)
+diagnostics as ``cim_n_images`` / ``cim_rms`` although no reachable
+path consumed them.
 
 Validity
 --------
 - Quasi-static, $f < 1\\,\\mathrm{kHz}$.
+- ``HomogeneousSoil`` and ``TwoLayerSoil`` only (``MultiLayerSoil``
+  is accepted while it reduces to $n \\le 2$).
 - Wire radius small compared to segment length; thin-wire
   approximation in the line self-correction (same as the other
   segment-based engines).
@@ -76,12 +86,7 @@ from groundfield.soil.models import (
     TwoLayerSoil,
 )
 from groundfield.solver._layered import LayerStack, as_layer_stack
-from groundfield.solver.cim import (
-    ComplexImageFit,
-    fit_complex_images,
-)
 from groundfield.solver.image import (
-    _MIN_DISTANCE,
     _assemble_inductance_matrix,
     _build_clusters,
     _build_distributed_topology,
@@ -115,7 +120,6 @@ def _build_Z_collocation(
     seg_lengths: np.ndarray,
     wire_radii: np.ndarray,
     stack: LayerStack,
-    fit: ComplexImageFit,
     *,
     max_terms: int = 200,
     tol: float = 1e-6,
@@ -132,9 +136,12 @@ def _build_Z_collocation(
       interface-crossing geometries dispatch to the rigorous
       cross-layer path instead of silently applying the upper-layer
       series).
-    - ``n_layers >= 3`` → homogeneous matrix plus the complex-image
-      contribution $\\sum_k a_k / r_k$ from the matrix-pencil
-      fit (single image per pole at $z = -(z_s + 2 \\beta_k)$).
+    - ``n_layers >= 3`` → :class:`NotImplementedError`. The historic
+      complex-image contribution for this regime came from an
+      incomplete Green's function (audit 2026-07-08, WP-E);
+      :func:`solve_bem` rejects such soils before reaching this
+      builder, and this branch keeps the module from growing a silent
+      wrong-physics path again.
 
     Parameters
     ----------
@@ -166,28 +173,12 @@ def _build_Z_collocation(
         )
         return kern(seg_points, seg_lengths, wire_radii, eye)
 
-    # n >= 3: homogeneous matrix + complex-image contribution.
-    Z = _self_corrected_kernel(
-        seg_points, seg_lengths, wire_radii, eye, rho_1
+    raise NotImplementedError(
+        f"bem: no reaction matrix for n_layers = {stack.n_layers} "
+        ">= 3 — the shared complex-image kernel was structurally "
+        "incomplete (audit 2026-07-08). Use "
+        "backend='mom_sommerfeld' or 'fem'."
     )
-    if fit.a.size == 0:
-        return Z
-
-    diff_xy = seg_points[:, None, 0:2] - seg_points[None, :, 0:2]
-    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)
-    z_field = seg_points[:, 2:3]
-    z_src = seg_points[None, :, 2]
-    Z_complex = np.zeros_like(Z, dtype=complex)
-    for a, b in zip(fit.a, fit.beta):
-        d = z_field + z_src + 2.0 * b
-        r = np.sqrt(delta_sq + d ** 2)
-        r_abs = np.abs(r)
-        tiny = r_abs < _MIN_DISTANCE
-        if np.any(tiny):
-            r = np.where(tiny, _MIN_DISTANCE + 0j, r)
-        Z_complex += a * (1.0 / r)
-    Z_complex *= rho_1 / (4.0 * np.pi)
-    return Z + Z_complex.real
 
 
 # ---------------------------------------------------------------------
@@ -195,28 +186,37 @@ def _build_Z_collocation(
 # ---------------------------------------------------------------------
 
 
-def solve_bem(
-    world: "World",
-    engine: "Engine",
-    *,
-    n_images: int = 8,
-    n_samples: int = 64,
-) -> FieldResult:
-    """Boundary-Element-Method solver (collocation, layered CIM kernel).
+def solve_bem(world: "World", engine: "Engine") -> FieldResult:
+    """Boundary-Element-Method solver (collocation, closed-form kernels).
+
+    What actually runs
+    ------------------
+    - $n = 1$ → homogeneous image-charge kernel.
+    - $n = 2$ → exact Tagg/Sunde series kernel.
+    - $n \\ge 3$ → :class:`NotImplementedError` (audit 2026-07-08,
+      WP-E). Use ``mom_sommerfeld`` or ``fem``.
+
+    In both reachable regimes the assembled reaction matrix and the
+    constraint solve are the same as in ``mom`` (relative difference
+    4e-16), so this result is **not** an independent check of ``mom``
+    — see the module docstring and the ADR-0002 amendment. No
+    complex-image fit is computed (review pass 9, F34).
 
     Parameters
     ----------
     world
         World to evaluate.
     engine
-        Engine configuration.
-    n_images, n_samples
-        Forwarded to :func:`groundfield.solver.cim.fit_complex_images`
-        when the soil is layered. Ignored otherwise.
+        Engine configuration; ``engine.segment_length`` controls the
+        discretisation, ``engine.image_max_terms`` /
+        ``engine.image_series_tol`` the Tagg/Sunde truncation at
+        $n = 2$.
 
     Returns
     -------
     FieldResult
+        ``metadata['cim_fit_used'] = False`` and
+        ``metadata['reduces_to'] = 'mom'`` record both facts above.
     """
     if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(
@@ -240,12 +240,12 @@ def solve_bem(
             "backend='mom_sommerfeld' (full layered Green's function) "
             "or 'fem' for n >= 3 soils."
         )
-    fit = fit_complex_images(stack, n_images=n_images, n_samples=n_samples)
     ds = engine.segment_length
 
     _log.info(
-        "bem: n_layers=%d, n_images=%d, segment_length=%.3f",
-        stack.n_layers, fit.a.size, ds,
+        "bem: n_layers=%d, segment_length=%.3f, closed-form kernel "
+        "(no complex-image fit); identical reaction matrix to 'mom'",
+        stack.n_layers, ds,
     )
 
     # 1) Discretisation.
@@ -321,28 +321,14 @@ def solve_bem(
     seg_lengths = np.array([s.length for s in all_segments])
     wire_radii = np.array([s.wire_radius for s in all_segments])
 
-    if stack.n_layers >= 3:
-        z_max = seg_points[:, 2].max()
-        h_1 = float(stack.h[0])
-        if z_max >= h_1:
-            # n>=3 cross-layer is not implemented — the complex-image
-            # kernel would silently apply the upper-layer expansion
-            # below the first interface. Hard error instead of a
-            # warning followed by wrong physics. (n=2 cross-layer is
-            # handled via the _two_layer_self_kernel_factory
-            # dispatcher with allow_cross_layer=True.)
-            raise ValueError(
-                f"bem: cross-layer geometry on n_layers="
-                f"{stack.n_layers} is not supported (z_max = "
-                f"{z_max:.3f} m >= h_1 = {h_1:.3f} m). Use "
-                "backend='image_2layer' for n=2 cross-layer worlds; "
-                "for n>=3 use 'mom_sommerfeld' or thicken the upper "
-                "layer."
-            )
-
     # 3) Reaction matrix via collocation (series knobs from engine).
+    #    The n>=3 cross-layer guard that used to sit here was
+    #    unreachable behind the n>=3 rejection above and was removed in
+    #    0.15.0; n=2 cross-layer geometries are handled rigorously by
+    #    _two_layer_self_kernel_factory(allow_cross_layer=True)
+    #    (ADR-0007).
     Z = _build_Z_collocation(
-        seg_points, seg_lengths, wire_radii, stack, fit,
+        seg_points, seg_lengths, wire_radii, stack,
         max_terms=engine.image_max_terms, tol=engine.image_series_tol,
     )
 
@@ -427,8 +413,14 @@ def solve_bem(
         "n_layers": int(stack.n_layers),
         "rhos": stack.rhos.tolist(),
         "h": stack.h.tolist(),
-        "cim_n_images": int(fit.a.size),
-        "cim_rms": float(fit.rms),
+        # Honesty flags (review pass 9, F34): the reachable n <= 2
+        # paths use exact closed-form kernels, so there is no
+        # complex-image fit to report — and the reaction matrix is the
+        # one `mom` assembles, so this is not an independent check.
+        "cim_fit_used": False,
+        "cim_n_images": 0,
+        "cim_rms": None,
+        "reduces_to": "mom",
         "solver": "collocation",
         "stub": False,
         "earth_inductive_model": earth_inductive_model,

@@ -38,6 +38,11 @@ without an explicit rename; the column constants below
 (:data:`POTENTIAL_PATH_COLUMNS`, etc.) lock the schema for
 downstream consumers.
 
+The identifier columns follow the ``postprocess`` tables the writers
+wrap: an electrode row is keyed by ``name``, a cluster row by
+``cluster_root`` (the canonical member of the galvanic cluster).
+There is no ``electrode`` or ``cluster`` column.
+
 All writers use UTF-8, comma-separated, with a header row;
 floating-point values are written at full precision so the
 files round-trip without loss of accuracy.
@@ -82,17 +87,23 @@ POTENTIAL_PATH_COLUMNS: tuple[str, ...] = (
 
 #: Mandatory columns of :func:`save_electrode_table_csv` (additional
 #: columns such as ``kind`` / ``depth_m`` may appear when a
-#: ``world`` is supplied).
+#: ``world`` is supplied). The electrode is identified by ``name``
+#: and its galvanic cluster by ``cluster_root`` — the column names
+#: emitted by :func:`groundfield.postprocess.electrode_current_table`.
 ELECTRODE_TABLE_REQUIRED_COLUMNS: tuple[str, ...] = (
-    "electrode",
+    "name",
+    "cluster_root",
     "I_re",
     "I_im",
     "abs_I",
 )
 
-#: Mandatory columns of :func:`save_cluster_impedances_csv`.
+#: Mandatory columns of :func:`save_cluster_impedances_csv`. A cluster
+#: is identified by ``cluster_root``, the canonical (alphabetically
+#: first) member of the galvanic cluster, as emitted by
+#: :func:`groundfield.postprocess.cluster_current_balance`.
 CLUSTER_IMPEDANCE_REQUIRED_COLUMNS: tuple[str, ...] = (
-    "cluster",
+    "cluster_root",
     "Z_re",
     "Z_im",
     "abs_Z",
