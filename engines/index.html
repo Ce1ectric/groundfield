@@ -2517,6 +2517,42 @@ families:</p>
 <code>Conductor</code>, <code>Source</code>) and the same cluster-equipotentiality and
 sum-of-currents constraints. They differ in the kernel, the test
 function, and the discretisation domain.</p>
+<div class="admonition warning">
+<p class="admonition-title">Eight backends, six distinct computations</p>
+<p>Two entries in that map are <strong>aliases in disguise</strong>, and a
+cross-validation table must not count them twice:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Accepts</th>
+<th>Actually computes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cim</code></td>
+<td><span class="arithmatex">\(n \le 2\)</span></td>
+<td>the <code>image</code> (<span class="arithmatex">\(n = 1\)</span>) / <code>image_2layer</code> (<span class="arithmatex">\(n = 2\)</span>) closed-form kernel, bit-identical; no complex-image fit runs</td>
+</tr>
+<tr>
+<td><code>bem</code></td>
+<td><span class="arithmatex">\(n \le 2\)</span></td>
+<td>the <code>mom</code> reaction matrix and constraint solve, identical to 4e-16</td>
+</tr>
+</tbody>
+</table>
+<p>Both raise <code>NotImplementedError</code> for <span class="arithmatex">\(n \ge 3\)</span> (since 0.11.0 —
+the shared complex-image kernel was structurally incomplete,
+audit 2026-07-08 WP-E), so <strong><code>mom_sommerfeld</code> is currently the
+only engine that solves an <span class="arithmatex">\(n \ge 3\)</span> soil with the layered
+Green's function</strong>; <code>fem</code> adds an independent volume-PDE check
+with its documented equivalent-hemisphere bias.</p>
+<p>Each result records this: <code>metadata['reduces_to']</code> names the
+backend the numbers are identical to, and
+<code>metadata['cim_fit_used'] = False</code> states that no complex-image
+fit entered the answer.</p>
+</div>
 <h2 id="decision-tree">Decision tree<a class="headerlink" href="#decision-tree" title="Permanent link">&para;</a></h2>
 <p>The recommended primary engine for a given problem follows the
 soil-layer count and the desired confidence level:</p>
@@ -2527,18 +2563,26 @@ soil-layer count and the desired confidence level:</p>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>n_layers = 2 (two-layer)
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>   ├─ default              → image_2layer       (or image_nlayer / image — auto-dispatches)
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   ├─ independent kernel   → mom                (Galerkin on the same kernel)
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>   ├─ alternative weighting→ bem                (collocation, CIM kernel)
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>   └─ absolute reference   → mom_sommerfeld     (direct quadrature, slow)
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>n_layers ≥ 3 (multi-layer)
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>   ├─ primary              → cim                (complex images, closed form)
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>   ├─ alternative weighting→ bem                (collocation, same kernel)
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>   ├─ absolute reference   → mom_sommerfeld     (direct quadrature)
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>   └─ image_nlayer raises a clear ValueError —
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>     the real Stefanescu series is intentionally
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>     not implemented; ADR-0002 documents why.
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   ├─ resolution scheme    → mom                (Galerkin on the same kernel)
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>   ├─ independent kernel   → mom_sommerfeld     (direct quadrature, slow — the real cross-check)
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>   ├─ independent form     → fem                (volume PDE, ≤ 10 % hemisphere bias)
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>   └─ cim / bem run, but reproduce image_2layer / mom
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>     bit-for-bit — no independent information.
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>n_layers ≥ 3 (multi-layer)
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>   ├─ primary              → mom_sommerfeld     (full layered Green&#39;s function, direct quadrature)
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>   ├─ independent form     → fem                (volume PDE, the only cross-check available here)
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>   ├─ cim / bem raise NotImplementedError —
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>   │  the historic complex-image kernel was
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>   │  structurally incomplete (audit 2026-07-08).
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>   └─ image_nlayer raises a clear ValueError —
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>     the real Stefanescu series is intentionally
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>     not implemented; ADR-0002 documents why.
 </code></pre></div>
+<p>For <span class="arithmatex">\(n \ge 3\)</span> there is therefore exactly <strong>one</strong> production path
+(<code>mom_sommerfeld</code>) plus one independent sanity check (<code>fem</code>). If you
+need speed in that regime, reduce the stack to an equivalent two-layer
+soil first and state the reduction, rather than reaching for <code>cim</code>.</p>
 <p><code>Engine.solve</code> automatically forwards <code>backend="image"</code> to
 <code>image_2layer</code> for a <code>TwoLayerSoil</code> and to <code>image_nlayer</code> for a
 <code>MultiLayerSoil</code>, so notebooks written for the homogeneous case keep
@@ -2562,8 +2606,13 @@ working when only the soil model is swapped.</p>
 </tr>
 <tr>
 <td>closed-form image vs. <code>cim</code></td>
-<td><span class="arithmatex">\(5\,\%\)</span></td>
-<td>matrix-pencil fit accuracy at low <span class="arithmatex">\(P\)</span></td>
+<td><span class="arithmatex">\(10^{-9}\)</span></td>
+<td><strong>not a check</strong> — same kernel, same numbers (<code>cim</code> reduces to <code>image</code> / <code>image_2layer</code>)</td>
+</tr>
+<tr>
+<td><code>mom</code> vs. <code>bem</code></td>
+<td><span class="arithmatex">\(10^{-9}\)</span></td>
+<td><strong>not a check</strong> — identical reaction matrix (4e-16)</td>
 </tr>
 <tr>
 <td>closed-form image vs. <code>mom</code> / <code>bem</code></td>
@@ -2582,6 +2631,9 @@ working when only the soil model is swapped.</p>
 </tr>
 </tbody>
 </table>
+<p>The two rows marked <em>not a check</em> are regression guards on an
+identity, not evidence about the physics. Only the last two rows
+compare methodologically distinct computations.</p>
 <p>Layer-contrast monotonicity (sweeping <span class="arithmatex">\(\rho_2\)</span> at fixed <span class="arithmatex">\(\rho_1\)</span>
 must produce a monotonically increasing cluster impedance) is a
 basic physics consistency check enforced for every engine.</p>
@@ -2596,12 +2648,14 @@ order is</p>
    the family.</li>
 <li><a href="mom/"><code>mom</code></a> — Galerkin resolution scheme on the same
    kernels.</li>
-<li><a href="cim/"><code>cim</code></a> — closed-form layered Green's function via
-   complex images; the bridge from the literature on the
-   matrix-pencil method to the engine family.</li>
-<li><a href="mom_sommerfeld/"><code>mom_sommerfeld</code></a> — the absolute reference
-   engine; useful for checking the closed-form approximations.</li>
-<li><a href="bem/"><code>bem</code></a> — collocation alternative to the Galerkin MoM.</li>
+<li><a href="cim/"><code>cim</code></a> — the complex-image theory and the spectral
+   fit of <span class="arithmatex">\(\Gamma_1(\lambda)\)</span>; read it for the method, not for a
+   solver you would choose (it reduces to <code>image_2layer</code>).</li>
+<li><a href="mom_sommerfeld/"><code>mom_sommerfeld</code></a> — the reference engine, and
+   the only <span class="arithmatex">\(n \ge 3\)</span> path; useful for checking the closed-form
+   approximations.</li>
+<li><a href="bem/"><code>bem</code></a> — collocation alternative to the Galerkin MoM,
+   numerically identical to <code>mom</code> on the soils it accepts.</li>
 <li><a href="fem/"><code>fem</code></a> — the only volume-PDE engine; provides an
    independent cross-check.</li>
 <li><a href="image_nlayer/"><code>image_nlayer</code></a> — the dispatcher that ties the
@@ -2632,7 +2686,10 @@ architecture decision records:</p>
   typical study.</li>
 <li><a href="../adr/0002-engine-family/">ADR-0002</a> — the extension to eight
   backends, the cross-validation envelope above, and the rationale
-  for <em>not</em> implementing the real Stefanescu series for <span class="arithmatex">\(n \ge 3\)</span>.</li>
+  for <em>not</em> implementing the real Stefanescu series for <span class="arithmatex">\(n \ge 3\)</span>.
+  Read its <strong>amendments</strong> as well: they revoke <code>cim</code> as the primary
+  <span class="arithmatex">\(n \ge 3\)</span> engine and revoke <code>cim</code> / <code>bem</code> as independent
+  cross-checks.</li>
 </ul>
 
 

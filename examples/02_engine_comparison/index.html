@@ -2647,12 +2647,24 @@ joined by a bare-copper bond conductor — sitting on a homogeneous
 soil with <span class="arithmatex">\(\rho = 100\,\Omega\,\mathrm{m}\)</span>. The cluster has a
 single current source at 1 A, returning through remote earth. We
 evaluate <code>cluster_impedance</code> at 50 Hz on every engine.</p>
+<p>Each backend declares the soil models it accepts, and
+<code>Engine.solve</code> enforces that contract with a <code>TypeError</code> rather
+than silently reinterpreting the soil. <code>image_2layer</code> in
+particular requires a <code>TwoLayerSoil</code> instance — it will <em>not</em>
+take a <code>HomogeneousSoil</code>. The physically homogeneous limit is
+reached from the two-layer side by setting
+<span class="arithmatex">\(\rho_2 = \rho_1\)</span> and any <span class="arithmatex">\(h_1\)</span>: the reflection factor
+<span class="arithmatex">\(K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)\)</span> vanishes, every term of
+the Tagg/Sunde image series except the direct one drops out, and
+the result must reproduce <code>image</code> to machine precision. The
+comparison loop below therefore pairs each backend with a soil
+object it accepts.</p>
 <h2 id="code">Code<a class="headerlink" href="#code" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_world</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="s2">&quot;gf.World&quot;</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Two bonded rods on homogeneous soil.&quot;&quot;&quot;</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">HomogeneousSoil</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">100.0</span><span class="p">))</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">build_world</span><span class="p">(</span><span class="n">soil</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;gf.World&quot;</span><span class="p">:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Two bonded rods on the given soil model.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">soil</span><span class="p">)</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="s2">&quot;rod&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;rod_a&quot;</span><span class="p">,</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                        <span class="n">position</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span> <span class="n">length</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                        <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
@@ -2665,30 +2677,48 @@ evaluate <code>cluster_impedance</code> at 50 Hz on every engine.</p>
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">gf</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">attached_to</span><span class="o">=</span><span class="s2">&quot;rod_a&quot;</span><span class="p">,</span> <span class="n">magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
 <a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="k">return</span> <span class="n">world</span>
 <a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">backends</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">,</span> <span class="s2">&quot;image_2layer&quot;</span><span class="p">,</span> <span class="s2">&quot;mom&quot;</span><span class="p">,</span> <span class="s2">&quot;bem&quot;</span><span class="p">,</span> <span class="s2">&quot;fem&quot;</span><span class="p">]</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="k">for</span> <span class="n">backend</span> <span class="ow">in</span> <span class="n">backends</span><span class="p">:</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">world</span> <span class="o">=</span> <span class="n">build_world</span><span class="p">()</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
-<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>        <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>        <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
-<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>    <span class="p">)</span>
-<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
-<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    <span class="n">Z</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;rod_a&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">backend</span><span class="si">:</span><span class="s2">&lt;16s</span><span class="si">}</span><span class="s2"> |Z| = </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span><span class="si">:</span><span class="s2">7.3f</span><span class="si">}</span><span class="s2"> Ohm &quot;</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>          <span class="sa">f</span><span class="s2">&quot;(R = </span><span class="si">{</span><span class="n">Z</span><span class="o">.</span><span class="n">real</span><span class="si">:</span><span class="s2">6.3f</span><span class="si">}</span><span class="s2">, X = </span><span class="si">{</span><span class="n">Z</span><span class="o">.</span><span class="n">imag</span><span class="si">:</span><span class="s2">+6.3f</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">homogeneous</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">HomogeneousSoil</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="c1"># Degenerate two-layer stack: rho_2 = rho_1 =&gt; K = 0, the image</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="c1"># series collapses to the homogeneous case.</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="n">degenerate_2layer</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TwoLayerSoil</span><span class="p">(</span><span class="n">rho_1</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">rho_2</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">h_1</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="n">cases</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>    <span class="p">(</span><span class="s2">&quot;image&quot;</span><span class="p">,</span> <span class="n">homogeneous</span><span class="p">),</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>    <span class="p">(</span><span class="s2">&quot;image_2layer&quot;</span><span class="p">,</span> <span class="n">degenerate_2layer</span><span class="p">),</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>    <span class="p">(</span><span class="s2">&quot;mom&quot;</span><span class="p">,</span> <span class="n">homogeneous</span><span class="p">),</span>
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    <span class="p">(</span><span class="s2">&quot;bem&quot;</span><span class="p">,</span> <span class="n">homogeneous</span><span class="p">),</span>
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    <span class="p">(</span><span class="s2">&quot;fem&quot;</span><span class="p">,</span> <span class="n">homogeneous</span><span class="p">),</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="p">]</span>
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="k">for</span> <span class="n">backend</span><span class="p">,</span> <span class="n">soil</span> <span class="ow">in</span> <span class="n">cases</span><span class="p">:</span>
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="n">world</span> <span class="o">=</span> <span class="n">build_world</span><span class="p">(</span><span class="n">soil</span><span class="p">)</span>
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    <span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>        <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>        <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>        <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>    <span class="p">)</span>
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>    <span class="n">Z</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;rod_a&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">backend</span><span class="si">:</span><span class="s2">&lt;16s</span><span class="si">}</span><span class="s2"> |Z| = </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">Z</span><span class="p">)</span><span class="si">:</span><span class="s2">7.3f</span><span class="si">}</span><span class="s2"> Ohm &quot;</span>
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>          <span class="sa">f</span><span class="s2">&quot;(R = </span><span class="si">{</span><span class="n">Z</span><span class="o">.</span><span class="n">real</span><span class="si">:</span><span class="s2">6.3f</span><span class="si">}</span><span class="s2">, X = </span><span class="si">{</span><span class="n">Z</span><span class="o">.</span><span class="n">imag</span><span class="si">:</span><span class="s2">+6.3f</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
 </code></pre></div>
-<p><code>image_2layer</code> accepts a homogeneous soil too — the upper layer
-resistivity equals the lower one and the Tagg/Sunde series collapses
-to the homogeneous case, so the result must match <code>image</code>.</p>
 <h2 id="what-you-should-see">What you should see<a class="headerlink" href="#what-you-should-see" title="Permanent link">&para;</a></h2>
-<p>Within their validity envelopes the engines agree to better than
-1 % on this geometry. Larger residuals point at a discretisation
-that is too coarse for the highest-resolution engine; halve
-<code>segment_length</code> and re-run. <code>mom_sommerfeld</code> is the absolute
-multi-layer reference; the closed-form <code>image</code> family is faster
-for homogeneous / 2-layer problems and should be preferred in
-parameter sweeps that don't need the full Sommerfeld accuracy.</p>
+<p><code>image</code> and <code>image_2layer</code> agree bit-for-bit — that is the
+<span class="arithmatex">\(K = 0\)</span> collapse of the Tagg/Sunde series, and it is the cheapest
+available self-check on the two-layer kernel. The
+integral-equation engines (<code>mom</code>, <code>bem</code>) land within a few tenths
+of a percent of the closed-form value; the residual is the
+difference between the closed-form average-potential self-term and
+the Galerkin / collocation quadrature at this <code>segment_length</code>.
+<code>fem</code> is the outlier by a few percent, and legitimately so: it
+reduces the geometry to an axisymmetric equivalent hemisphere, so
+a two-rod cluster with a bond conductor is outside the geometry
+class it represents exactly. Halving <code>segment_length</code> shrinks the
+<code>mom</code> / <code>bem</code> residual but not the <code>fem</code> one, which is a modelling
+rather than a discretisation error.</p>
+<p><code>mom_sommerfeld</code> is the absolute multi-layer reference; the
+closed-form <code>image</code> family is faster for homogeneous / 2-layer
+problems and should be preferred in parameter sweeps that don't
+need the full Sommerfeld accuracy.</p>
 <h2 id="picking-a-backend">Picking a backend<a class="headerlink" href="#picking-a-backend" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Quick exploration, homogeneous soil → <code>image</code>.</li>

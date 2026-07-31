@@ -3021,6 +3021,7 @@ online.</p>
 \Gamma_\text{mag}^{(1)}(\lambda;\sigma_e) \;=\; \frac{u_e - \lambda}{u_e + \lambda}.
 \]</div>
 <p>Implementation:</p>
+<!-- skip-doctest: signature sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">earth_return_green_homogeneous</span><span class="p">(</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">rho</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">z_i</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">z_j</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">sigma_earth</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -3039,6 +3040,7 @@ the recursive Tagg/Sunde-style formula</p>
 (two-layer), this collapses to a closed form that the test suite
 can compare against.</p>
 <p>Implementation:</p>
+<!-- skip-doctest: signature sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">earth_return_green_layered</span><span class="p">(</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">rho</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">z_i</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">z_j</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">omega</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">layers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SoilLayer</span><span class="p">],</span>
@@ -3050,6 +3052,7 @@ function. Both share the same Sommerfeld-quadrature backend —
 only the reflection coefficient differs.</p>
 <h3 id="engine-side-switch">Engine-side switch<a class="headerlink" href="#engine-side-switch" title="Permanent link">&para;</a></h3>
 <p><code>Engine.earth_inductive_model</code> gains a third value:</p>
+<!-- skip-doctest: type-alias sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">EarthInductiveModel</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">&quot;perfect_mirror&quot;</span><span class="p">,</span>   <span class="c1"># ADR-0004</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="s2">&quot;carson_series&quot;</span><span class="p">,</span>    <span class="c1"># ADR-0005 (asymptotic per-m Carson)</span>
@@ -3262,10 +3265,26 @@ reactance.</p>
 the rigorous <strong>two-layer, buried-conductor</strong> self impedance per unit
 length in the closed Pollaczek/Sunde spectral-integral form
 <span class="arithmatex">\(Z' = j(\omega\mu_0/2\pi)[\ln(2h/\mathrm{GMR}) + 2\int_0^\infty
-e^{-2h\lambda}/(\lambda + u_\text{eff}(\lambda))\,d\lambda]\)</span>, with the
-Tagg/Sunde/Wait effective vertical wavenumber
-<span class="arithmatex">\(u_\text{eff} = u_1(u_2 + u_1\tanh u_1 h_1)/(u_1 + u_2\tanh u_1 h_1)\)</span>.
-It is earth-return only (same convention as
+e^{-2h\,u_\text{eff}(\lambda)}/(\lambda + u_\text{eff}(\lambda))\,d\lambda]\)</span>,
+with the Tagg/Sunde/Wait effective vertical wavenumber
+<span class="arithmatex">\(u_\text{eff} = u_1(u_2 + u_1\tanh u_1 h_1)/(u_1 + u_2\tanh u_1 h_1)\)</span>,
+<span class="arithmatex">\(u_i = \sqrt{\lambda^2 + j\omega\mu_0/\rho_i}\)</span>.</p>
+<div class="admonition note">
+<p class="admonition-title">Corrected in 0.15.0 (review pass 9, finding F09)</p>
+<p>Until 0.14.1 both this ADR and the implementation carried
+<span class="arithmatex">\(e^{-2h\lambda}\)</span> in the exponent — Carson's <strong>air</strong> kernel, correct
+only because <span class="arithmatex">\(\gamma_\text{air}\approx 0\)</span>. For a conductor <em>buried in
+the earth</em> the Pollaczek/Sunde form requires
+<span class="arithmatex">\(e^{-2h\,u}\)</span>. The consequence of the old exponent was a
+systematically <strong>under</strong>-estimated earth-return resistance whose
+deficit grew with frequency and with burial depth (−0.5 % at 50 Hz /
+<span class="arithmatex">\(h=1\)</span> m, −5.8 % at 1 kHz / <span class="arithmatex">\(h=3\)</span> m, −54 % at 1 MHz), and — misleading
+at the time — an <span class="arithmatex">\(R'\)</span> that sat <em>below</em> <span class="arithmatex">\(\omega\mu_0/8\)</span> and <em>fell</em>
+with depth. Both are the opposite of the correct behaviour. That
+inverted trend had been recorded as a physical nuance in the 0.14.0
+notes; it was the bug's signature.</p>
+</div>
+<p>It is earth-return only (same convention as
 <code>references.earth_return.carson_self_impedance</code>), reduces to Carson in
 the homogeneous limit, and brackets between the two homogeneous Carson
 bounds otherwise (deep-layer dominated below ~1 kHz). It is the

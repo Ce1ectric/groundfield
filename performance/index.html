@@ -2835,6 +2835,7 @@ per configuration (typical <span class="arithmatex">\(K = 20\)</span>–<span cl
 <span class="arithmatex">\(10^5\)</span> solves. That is too much for a single core but very
 tractable with parallelisation.</p>
 <h3 id="recommended-pattern">Recommended pattern<a class="headerlink" href="#recommended-pattern" title="Permanent link">&para;</a></h3>
+<!-- skip-doctest: needs optional joblib; runs 10^4 solves -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># studies/parameter_sweep.py</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">joblib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Parallel</span><span class="p">,</span> <span class="n">delayed</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>

@@ -2575,16 +2575,22 @@ parameter-sweep-friendly network. See the
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="p">},</span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">source_magnitude_A</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">gen</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TnNetworkGenerator</span><span class="p">()</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">gf</span><span class="o">.</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">))</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
-<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span>                       <span class="c1"># auto-dispatch to image_2layer</span>
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
-<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="p">)</span>
-<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
-<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;substation cluster Z =&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>      <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;trafo_ring_0&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># The config is bound to the generator instance; ``seed`` accepts an</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># int or a ``numpy.random.Generator`` and makes the stochastic axes</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="c1"># (building counts, soil draws, presence probabilities) reproducible.</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">gen</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">TnNetworkGenerator</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;image&quot;</span><span class="p">,</span>                       <span class="c1"># auto-dispatch to image_2layer</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="c1"># 1.0 m keeps this 30-house demo at a few seconds; a production</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="c1"># run uses 0.5 m or finer (see the performance guide) at roughly</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="c1"># an order of magnitude more solve time.</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">segment_length</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">],</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="p">)</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;substation cluster Z =&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>      <span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;trafo_ring_0&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
 <p>A few things happen behind the scenes:</p>
 <ul>
@@ -2614,7 +2620,9 @@ parameter-sweep-friendly network. See the
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">max_feeder_length_m</span><span class="o">=</span><span class="mf">400.0</span><span class="p">,</span>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="p">),</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="p">)</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="c1"># build() takes an optional config override, so the same generator</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># (and hence the same RNG stream) can materialise a second variant.</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gen</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
 </code></pre></div>
 <p>The substation now feeds four radial LV cables. Once a cable's
 <code>slots_per_substation</code> budget is exhausted, a new KVS is inserted
@@ -2649,10 +2657,13 @@ dropped with a <code>UserWarning</code>.</p>
 </tr>
 </tbody>
 </table>
-<p>For bit-exact reproducibility, pass an <code>np.random.default_rng(seed=...)</code>
-to <code>gen.build(cfg, rng=...)</code>. <code>gen.sample_world(rng=...)</code> returns
-both the world and the <em>resolved</em> config so the realisation can be
-persisted as JSON alongside the simulation output.</p>
+<p>For bit-exact reproducibility, hand the seed to the <em>generator</em>, not
+to <code>build</code>: <code>gf.TnNetworkGenerator(cfg, seed=42)</code> accepts an <code>int</code>
+or a ready <code>np.random.default_rng(...)</code> and owns the RNG stream for
+the whole realisation. <code>gen.sample_world(rng)</code> is the sibling entry
+point — it resolves every distribution first and returns both the
+world and the <em>resolved</em> config, so the realisation can be persisted
+as JSON alongside the simulation output.</p>
 <h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Place the substation + KVSes at user-chosen GPS / xy positions

@@ -611,6 +611,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#executable-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Executable documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pypi" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2491,6 +2502,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#executable-documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Executable documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pypi" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2547,17 +2569,45 @@ and are installed by default.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>poetry<span class="w"> </span>install<span class="w"> </span>--with<span class="w"> </span>docs
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>poetry<span class="w"> </span>run<span class="w"> </span>mkdocs<span class="w"> </span>serve
 </code></pre></div>
+<h2 id="executable-documentation">Executable documentation<a class="headerlink" href="#executable-documentation" title="Permanent link">&para;</a></h2>
+<p>Every fenced <code>python</code> block under <code>docs/</code> is executed by the test
+suite (<code>tests/test_pass9_doc_snippets.py</code>), so a snippet that has
+drifted away from the API fails CI instead of failing the reader:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>poetry<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/test_pass9_doc_snippets.py
+</code></pre></div>
+<p>All blocks of one page run <strong>in document order into one shared
+namespace</strong>, exactly as a reader would work through the page, so a
+later block may reuse the <code>world</code> or <code>result</code> built earlier on the
+same page. Snippets run on the <code>matplotlib</code> <code>Agg</code> backend, with
+<code>plt.show()</code> neutralised and the working directory redirected to a
+temporary folder — a snippet that writes CSV / VTK / JSON therefore
+cannot litter the checkout.</p>
+<p>Blocks that are <em>not</em> runnable programs opt out with an HTML comment
+on the line directly above the fence (invisible in the rendered
+page). Always state a reason:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>&lt;!-- skip-doctest: schema sketch, not runnable code --&gt;
+</code></pre></div>
+<p>Use it for schema / signature sketches (typical in the ADRs),
+snippets that need the Overpass network or another optional
+dependency, and study templates that would run for hours. A whole
+page opts out with <code>&lt;!-- skip-doctest-page: reason --&gt;</code> anywhere in
+the file. Pages that are runnable but take minutes belong in the
+<code>SLOW_PAGES</code> map of the harness and then only run with
+<code>GF_DOC_SNIPPETS_SLOW=1</code>; trimming the demo (coarser
+<code>segment_length</code>, fewer realisations) is usually the better fix,
+because a snippet too slow for CI is also too slow for the reader
+who copy-pastes it.</p>
 <h2 id="pypi">PyPI<a class="headerlink" href="#pypi" title="Permanent link">&para;</a></h2>
 <p>Once the first release is published:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>groundfield
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>pip<span class="w"> </span>install<span class="w"> </span>groundfield
 </code></pre></div>
 <h2 id="integration-with-the-sister-projects">Integration with the sister projects<a class="headerlink" href="#integration-with-the-sister-projects" title="Permanent link">&para;</a></h2>
 <p><code>groundfield</code> is designed to work alongside <code>groundinsight</code> and
 <code>groundmeas</code>. When the three projects share a Poetry environment they
 can be wired up as path dependencies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[tool.poetry.dependencies]</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">groundinsight</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;../groundinsight&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">develop</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">groundmeas</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;../groundmeas&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">develop</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[tool.poetry.dependencies]</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">groundinsight</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;../groundinsight&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">develop</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">groundmeas</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;../groundmeas&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">develop</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <p>This step is optional and is usually only relevant for
 integration-heavy development.</p>

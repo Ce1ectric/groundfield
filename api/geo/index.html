@@ -5154,6 +5154,21 @@ whether to widen its search radius or lower its
       </tbody>
     </table>
 
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>The reported site is the polygon's <strong>area centroid</strong>, not
+the centre of its oriented minimum bounding rectangle
+(OMBR); the two coincide only for outlines with a centre of
+symmetry (an L-shaped house separates them by several
+metres). Consumers that build OMBR-aligned geometry — i.e.
+footprint-driven :class:<code>FoundationElectrodeSpec</code> in
+:class:<code>~groundfield.generators.tn_network.TnNetworkGenerator</code>
+— must therefore compensate the centroid-to-OMBR-centre
+difference themselves via <code>offset_xy_m</code>. The service-drop
+/ PEN routing consumers legitimately use the centroid,
+which is why <code>generate</code> keeps returning it.</p>
+</details>
     </div>
 
 </div>

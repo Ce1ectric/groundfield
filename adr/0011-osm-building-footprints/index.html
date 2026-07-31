@@ -2915,6 +2915,7 @@ ship in a new optional Poetry dependency group:</p>
 pattern already established by the optional <code>groundinsight</code>
 dependency.</p>
 <h3 id="data-model">Data model<a class="headerlink" href="#data-model" title="Permanent link">&para;</a></h3>
+<!-- skip-doctest: schema sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">BuildingFootprint</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;A single OSM building, projected to local ENU metres.&quot;&quot;&quot;</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">polygon_xy_m</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span>     <span class="c1"># closed ring, CCW</span>
@@ -2973,6 +2974,7 @@ surface small (mock at the <code>osm.query_buildings</code> boundary).</p>
 <h3 id="generator-integration-osmbuildingplacement">Generator integration — <code>OsmBuildingPlacement</code><a class="headerlink" href="#generator-integration-osmbuildingplacement" title="Permanent link">&para;</a></h3>
 <p>A new placement variant is added to the existing
 <code>generators.placement.PlacementSpec</code> discriminated union:</p>
+<!-- skip-doctest: schema sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">OsmBuildingPlacement</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">kind</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;osm&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;osm&quot;</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">footprints</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BuildingFootprint</span><span class="p">]</span>      <span class="c1"># already projected</span>
@@ -2990,6 +2992,7 @@ only on this variant, looked up via <code>hasattr</code> in the generator.</p>
 <p><code>OsmBuildingPlacement</code> does <strong>not</strong> call Overpass itself. It is
 constructed from an explicit <code>footprints</code> list. The standard
 workflow is:</p>
+<!-- skip-doctest: sketch with elided args; needs Overpass -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">footprints</span> <span class="o">=</span> <span class="n">geo</span><span class="o">.</span><span class="n">query_and_project</span><span class="p">(</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">lat0</span><span class="o">=</span><span class="err">…</span><span class="p">,</span> <span class="n">lon0</span><span class="o">=</span><span class="err">…</span><span class="p">,</span> <span class="n">radius_m</span><span class="o">=</span><span class="err">…</span><span class="p">,</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">cache_dir</span><span class="o">=</span><span class="err">…</span><span class="p">,</span> <span class="n">projection_origin</span><span class="o">=</span><span class="p">(</span><span class="n">lat0</span><span class="p">,</span> <span class="n">lon0</span><span class="p">),</span>
@@ -3011,8 +3014,13 @@ for this realisation:</p>
 <ul>
 <li><strong><code>size_xy_m</code></strong> — sides of the oriented minimum bounding
   rectangle (Shapely's <code>minimum_rotated_rectangle</code>).</li>
-<li><strong><code>offset_xy_m</code></strong> — polygon centroid minus the site (x, y);
-  zero by construction in v1 (site = centroid).</li>
+<li><strong><code>offset_xy_m</code></strong> — the user-supplied offset <strong>plus</strong> the OMBR
+  centre expressed relative to the site (x, y). Corrected in 0.15.0
+  (review pass 9, finding F25): v1 wrote only the user offset and
+  discarded the OMBR centre, which displaced the generated rectangle
+  from the very footprint it was derived from whenever the oriented
+  bounding rectangle's centre differs from the site — i.e. for every
+  non-symmetric building outline. It is <em>not</em> zero by construction.</li>
 <li><strong>footprint orientation</strong> — angle of the OMBR principal axis.
   This is <strong>not</strong> currently a field on <code>FoundationElectrodeSpec</code>;
   Phase A adds it as <code>orientation_deg: float | None = None</code>,

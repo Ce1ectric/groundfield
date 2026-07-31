@@ -2454,6 +2454,11 @@ but every page also recaps what you need to follow it on its own.</p>
 <p>If you're brand new to the project, work through them in order:
 each one introduces a couple of new concepts and shows what to
 expect.</p>
+<p>Every snippet on these pages is executed by the test suite (see
+<a href="../installation/#executable-documentation">Executable documentation</a>),
+so what you copy is what CI ran. The only exceptions are the blocks
+marked <code>&lt;!-- skip-doctest: ... --&gt;</code> in the Markdown source — today
+that is example 08, which needs a live Overpass download.</p>
 <h2 id="pre-requisites">Pre-requisites<a class="headerlink" href="#pre-requisites" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>groundfield
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># Optional, for real OSM building extracts (examples 07, 08, 09):</span>

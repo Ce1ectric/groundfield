@@ -3063,6 +3063,7 @@ existing Sommerfeld-correction pattern.</p>
 for uniform <span class="arithmatex">\(\rho_c\)</span> is the V2 acceptance criterion.</p>
 <h3 id="api-additions">API additions<a class="headerlink" href="#api-additions" title="Permanent link">&para;</a></h3>
 <p><code>FoundationElectrodeSpec</code> (only):</p>
+<!-- skip-doctest: schema sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">concrete_rho_ohm_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">AnyDistribution</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="sd">&quot;&quot;&quot;Resistivity of the concrete encasement.</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="sd">None: wire sits directly in soil (historic behaviour, applies to</span>
@@ -3079,6 +3080,7 @@ for uniform <span class="arithmatex">\(\rho_c\)</span> is the V2 acceptance crit
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="sd">&quot;&quot;&quot;How the shell resistance enters the linear system.&quot;&quot;&quot;</span>
 </code></pre></div>
 <p><code>Conductor</code> (one new optional field, additive):</p>
+<!-- skip-doctest: schema sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">lumped_series_resistance_ohm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="sd">&quot;&quot;&quot;Optional override for the conductor&#39;s total series impedance.</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="sd">When None: the resistance is derived from ``resistivity`` and</span>
@@ -3090,6 +3092,7 @@ for uniform <span class="arithmatex">\(\rho_c\)</span> is the V2 acceptance crit
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="sd">that property and therefore pick up the override transparently.&quot;&quot;&quot;</span>
 </code></pre></div>
 <p><code>StripElectrode</code> (one new optional field, additive):</p>
+<!-- skip-doctest: schema sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">internal_impedance_per_m</span><span class="p">:</span> <span class="nb">complex</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="sd">&quot;&quot;&quot;Per-metre radial internal impedance, in Ω/m. None means no</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="sd">shell (historic). When set, the MoM/image diagonal for every</span>
@@ -3109,6 +3112,7 @@ electrode is direct-in-soil.</p>
 moisture state be sampled per realisation. A recommended default
 distribution for Monte-Carlo studies (matches the four empirical
 bands in the introduction):</p>
+<!-- skip-doctest: keyword-argument sketch, not runnable code -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">concrete_rho_ohm_m</span><span class="o">=</span><span class="n">Discrete</span><span class="p">(</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">,</span> <span class="mf">150.0</span><span class="p">,</span> <span class="mf">500.0</span><span class="p">,</span> <span class="mf">2000.0</span><span class="p">],</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.40</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.10</span><span class="p">],</span>   <span class="c1"># weighted toward earth-moist</span>

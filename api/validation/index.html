@@ -1737,6 +1737,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#deviation-metric-changed-in-0150" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deviation metric (changed in 0.15.0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vacuous-comparisons-changed-in-0150" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vacuous comparisons (changed in 0.15.0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#frequency-order-behaviour" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2508,6 +2530,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#deviation-metric-changed-in-0150" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deviation metric (changed in 0.15.0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vacuous-comparisons-changed-in-0150" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Vacuous comparisons (changed in 0.15.0)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#frequency-order-behaviour" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2614,6 +2658,50 @@ underpins ADR-0001. Given two :class:<code>Engine</code> instances and a
 cluster impedances, electrode currents and surface potentials.</p>
 <p>This is the post-solve counterpart of :mod:<code>groundfield.diagnostics</code>
 (pre-solve structural checks).</p>
+<h2 id="deviation-metric-changed-in-0150">Deviation metric (changed in 0.15.0)<a class="headerlink" href="#deviation-metric-changed-in-0150" title="Permanent link">&para;</a></h2>
+<p>For every cluster the report contains the <strong>worst pairwise relative
+deviation</strong> of the cluster impedance <span class="arithmatex">\(Z\)</span> over the compared engines,</p>
+<div class="arithmatex">\[
+\mathrm{dev}
+= \max_{i,j} \frac{|Z_i - Z_j|}{\min_k |Z_k|}
+= \frac{\max_k Z_k - \min_k Z_k}{\min_k |Z_k|} ,
+\]</div>
+<p>the second form holding whenever all <span class="arithmatex">\(Z_k\)</span> have the same sign (the
+normal case: <span class="arithmatex">\(\mathrm{Re}\{Z\} &gt; 0\)</span> for a passive grounding system).
+<code>rel_tolerance</code> is compared against this number, so two engines that
+differ by 5 % of the smaller value sit exactly on a
+<code>rel_tolerance=0.05</code> threshold. The same metric is used for the
+optional <code>sample_points</code> potential comparison, per sample point.</p>
+<p>Up to 0.14.x the deviation was measured against the ensemble <strong>mean</strong>,
+<span class="arithmatex">\(\max_k |Z_k - \bar{Z}| / |\bar{Z}|\)</span>. For two engines that is exactly
+half the true disagreement (and it shrinks further as engines are
+added), so a <code>rel_tolerance=0.05</code> gate silently admitted a spread of
+10.5 %. Consequences of the change:</p>
+<ul>
+<li>reported deviations are roughly a factor 2 larger than in 0.14.x for
+  the same world and engines — no physics changed, only the metric;</li>
+<li>a comparison that was <em>marginally</em> consistent under 0.14.x may now
+  legitimately be reported as inconsistent. Loosen <code>rel_tolerance</code> only
+  after checking which engine is the outlier;</li>
+<li>clusters for which at least one engine reports <span class="arithmatex">\(Z = 0\)</span> have an
+  undefined relative deviation and are now skipped with a note instead
+  of being silently counted as agreeing.</li>
+</ul>
+<h2 id="vacuous-comparisons-changed-in-0150">Vacuous comparisons (changed in 0.15.0)<a class="headerlink" href="#vacuous-comparisons-changed-in-0150" title="Permanent link">&para;</a></h2>
+<p>A cluster whose net injected current vanishes (<span class="arithmatex">\(\sum I = 0\)</span>: purely
+passive observer electrodes) has no defined impedance and is skipped.
+If <strong>every</strong> cluster is skipped and no <code>sample_points</code> potential has a
+usable (non-zero) reference, nothing was validated — the typical causes
+are a world without any source, or a <code>Source.attached_to</code> that does not
+match any electrode or conductor name. Such a run now reports</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>is_consistent = False
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>notes: &quot;No comparable quantity (every cluster impedance undefined, no
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        usable sample point) — comparison vacuous, nothing was
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        validated.&quot;
+</code></pre></div>
+<p>Up to 0.14.x the same situation returned <code>is_consistent=True</code> (the
+running maximum deviation never left its initial <code>0.0</code>), so a CI job
+asserting <code>report.is_consistent</code> passed green having compared nothing.</p>
 <h2 id="frequency-order-behaviour">Frequency-order behaviour<a class="headerlink" href="#frequency-order-behaviour" title="Permanent link">&para;</a></h2>
 <p>Since 0.5.0 :class:<code>Engine.frequencies</code> is order-preserving. A
 non-monotonic frequency list raises a dedicated
@@ -2660,7 +2748,7 @@ report = gf.compare_engines(
 ...     world,
 ...     engines={
 ...         "image": gf.create_engine(backend="image", segment_length=0.05),
-...         # "image_2layer": gf.create_engine(backend="image_2layer", ...),
+...         "mom": gf.create_engine(backend="mom", segment_length=0.05),
 ...     },
 ...     rel_tolerance=0.05,
 ... )
@@ -2669,6 +2757,8 @@ True</p>
 </blockquote>
 </blockquote>
 </blockquote>
+<p>At least <strong>two</strong> engines are required — a single-entry mapping raises
+<code>ValueError</code>, because one engine cannot validate itself.</p>
 </details>
 
 
@@ -2768,7 +2858,13 @@ the first frequency in :attr:<code>FieldResult.frequencies</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>{cluster_root: max relative deviation}</code>.</p>
+                <p><code>{cluster_root: worst pairwise relative deviation}</code> with
+<code>dev = (max(Z) - min(Z)) / min(|Z|)</code> over the engines — the
+largest relative disagreement between any two engines,
+referenced to the smaller of the two values (see
+:func:<code>compare_engines</code> for the change in 0.15.0). Clusters
+whose impedance is undefined for at least one engine do not
+appear here.</p>
               </div>
             </td>
           </tr>
@@ -2779,8 +2875,12 @@ the first frequency in :attr:<code>FieldResult.frequencies</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>True</code> if and only if <code>max(deviations) &lt;= rel_tolerance</code>
-and no engine returned a stub result.</p>
+                <p><code>True</code> if and only if <strong>at least one</strong> quantity was actually
+evaluated (a cluster impedance, or a sample point with a defined
+reference), every deviation is <code>&lt;= rel_tolerance</code>, and no
+engine returned a stub result. A comparison in which nothing
+could be evaluated is reported as <em>not</em> consistent — see
+:func:<code>compare_engines</code>.</p>
               </div>
             </td>
           </tr>
@@ -2834,20 +2934,7 @@ not match").</p>
 
             <details class="quote">
               <summary>Source code in <code>src/groundfield/validation.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-77"> 77</a></span>
-<span class="normal"><a href="#__codelineno-0-78"> 78</a></span>
-<span class="normal"><a href="#__codelineno-0-79"> 79</a></span>
-<span class="normal"><a href="#__codelineno-0-80"> 80</a></span>
-<span class="normal"><a href="#__codelineno-0-81"> 81</a></span>
-<span class="normal"><a href="#__codelineno-0-82"> 82</a></span>
-<span class="normal"><a href="#__codelineno-0-83"> 83</a></span>
-<span class="normal"><a href="#__codelineno-0-84"> 84</a></span>
-<span class="normal"><a href="#__codelineno-0-85"> 85</a></span>
-<span class="normal"><a href="#__codelineno-0-86"> 86</a></span>
-<span class="normal"><a href="#__codelineno-0-87"> 87</a></span>
-<span class="normal"><a href="#__codelineno-0-88"> 88</a></span>
-<span class="normal"><a href="#__codelineno-0-89"> 89</a></span>
-<span class="normal"><a href="#__codelineno-0-90"> 90</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-90"> 90</a></span>
 <span class="normal"><a href="#__codelineno-0-91"> 91</a></span>
 <span class="normal"><a href="#__codelineno-0-92"> 92</a></span>
 <span class="normal"><a href="#__codelineno-0-93"> 93</a></span>
@@ -2858,31 +2945,44 @@ not match").</p>
 <span class="normal"><a href="#__codelineno-0-98"> 98</a></span>
 <span class="normal"><a href="#__codelineno-0-99"> 99</a></span>
 <span class="normal"><a href="#__codelineno-0-100">100</a></span>
-<span class="normal"><a href="#__codelineno-0-101">101</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-77" name="__codelineno-0-77"></a><span class="k">def</span><span class="w"> </span><span class="nf">summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-0-78" name="__codelineno-0-78"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a line-oriented textual summary.&quot;&quot;&quot;</span>
-<a id="__codelineno-0-79" name="__codelineno-0-79"></a>    <span class="n">labels</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-<a id="__codelineno-0-80" name="__codelineno-0-80"></a>    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span>
-<a id="__codelineno-0-81" name="__codelineno-0-81"></a>        <span class="sa">f</span><span class="s2">&quot;Cross-engine comparison, tolerance </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rel_tolerance</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-82" name="__codelineno-0-82"></a>        <span class="sa">f</span><span class="s2">&quot;Engines: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-83" name="__codelineno-0-83"></a>        <span class="s2">&quot;&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84"></a>        <span class="s2">&quot;Cluster impedances Re{Z(f0)} in Ω:&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85"></a>    <span class="p">]</span>
-<a id="__codelineno-0-86" name="__codelineno-0-86"></a>    <span class="k">for</span> <span class="n">cluster</span><span class="p">,</span> <span class="n">by_engine</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_impedance_table</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-87" name="__codelineno-0-87"></a>        <span class="n">row</span> <span class="o">=</span> <span class="s2">&quot;  &quot;</span> <span class="o">+</span> <span class="n">cluster</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; &quot;</span>
-<a id="__codelineno-0-88" name="__codelineno-0-88"></a>        <span class="n">row</span> <span class="o">+=</span> <span class="s2">&quot; | &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">lbl</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">by_engine</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">lbl</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">))</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span>
-<a id="__codelineno-0-89" name="__codelineno-0-89"></a>                          <span class="k">for</span> <span class="n">lbl</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">)</span>
-<a id="__codelineno-0-90" name="__codelineno-0-90"></a>        <span class="n">row</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;  Δ_max = </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">deviations</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cluster</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">5.2f</span><span class="si">}</span><span class="s2"> %&quot;</span>
-<a id="__codelineno-0-91" name="__codelineno-0-91"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-<a id="__codelineno-0-92" name="__codelineno-0-92"></a>    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-93" name="__codelineno-0-93"></a>    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-94" name="__codelineno-0-94"></a>        <span class="s2">&quot;Consistent.&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_consistent</span>
-<a id="__codelineno-0-95" name="__codelineno-0-95"></a>        <span class="k">else</span> <span class="s2">&quot;INCONSISTENT — see notes.&quot;</span>
-<a id="__codelineno-0-96" name="__codelineno-0-96"></a>    <span class="p">)</span>
-<a id="__codelineno-0-97" name="__codelineno-0-97"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">notes</span><span class="p">:</span>
-<a id="__codelineno-0-98" name="__codelineno-0-98"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-99" name="__codelineno-0-99"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Notes:&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-100" name="__codelineno-0-100"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  - </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">notes</span><span class="p">)</span>
-<a id="__codelineno-0-101" name="__codelineno-0-101"></a>    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span>
+<span class="normal"><a href="#__codelineno-0-110">110</a></span>
+<span class="normal"><a href="#__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#__codelineno-0-113">113</a></span>
+<span class="normal"><a href="#__codelineno-0-114">114</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-90" name="__codelineno-0-90"></a><span class="k">def</span><span class="w"> </span><span class="nf">summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-0-91" name="__codelineno-0-91"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a line-oriented textual summary.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-92" name="__codelineno-0-92"></a>    <span class="n">labels</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+<a id="__codelineno-0-93" name="__codelineno-0-93"></a>    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-0-94" name="__codelineno-0-94"></a>        <span class="sa">f</span><span class="s2">&quot;Cross-engine comparison, tolerance </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rel_tolerance</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> %&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-95" name="__codelineno-0-95"></a>        <span class="sa">f</span><span class="s2">&quot;Engines: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-96" name="__codelineno-0-96"></a>        <span class="s2">&quot;&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-97" name="__codelineno-0-97"></a>        <span class="s2">&quot;Cluster impedances Re{Z(f0)} in Ω:&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a>    <span class="p">]</span>
+<a id="__codelineno-0-99" name="__codelineno-0-99"></a>    <span class="k">for</span> <span class="n">cluster</span><span class="p">,</span> <span class="n">by_engine</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cluster_impedance_table</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a>        <span class="n">row</span> <span class="o">=</span> <span class="s2">&quot;  &quot;</span> <span class="o">+</span> <span class="n">cluster</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="mi">12</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; &quot;</span>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a>        <span class="n">row</span> <span class="o">+=</span> <span class="s2">&quot; | &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">lbl</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">by_engine</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">lbl</span><span class="p">,</span><span class="w"> </span><span class="nb">float</span><span class="p">(</span><span class="s1">&#39;nan&#39;</span><span class="p">))</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a>                          <span class="k">for</span> <span class="n">lbl</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">)</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>        <span class="n">row</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;  Δ_max = </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">deviations</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cluster</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">5.2f</span><span class="si">}</span><span class="s2"> %&quot;</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>        <span class="s2">&quot;Consistent.&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_consistent</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>        <span class="k">else</span> <span class="s2">&quot;INCONSISTENT — see notes.&quot;</span>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a>    <span class="p">)</span>
+<a id="__codelineno-0-110" name="__codelineno-0-110"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">notes</span><span class="p">:</span>
+<a id="__codelineno-0-111" name="__codelineno-0-111"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-112" name="__codelineno-0-112"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;Notes:&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-113" name="__codelineno-0-113"></a>        <span class="n">lines</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  - </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">notes</span><span class="p">)</span>
+<a id="__codelineno-0-114" name="__codelineno-0-114"></a>    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -2972,9 +3072,15 @@ not match").</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Maximum allowed relative deviation of the cluster impedances
-(default 5 %). The tolerance applies to every cluster present
-in the result.</p>
+                <p>Maximum allowed <strong>pairwise</strong> relative deviation of the cluster
+impedances (default 5 %), i.e. the gate is</p>
+<p>.. math::</p>
+<div class="highlight"><pre><span></span><code>\max_{i,j} \frac{|Z_i - Z_j|}{\min_k |Z_k|}
+\;\le\; \texttt{rel_tolerance}
+</code></pre></div>
+<p>over the engines :math:<code>i, j, k</code>. Two engines differing by 5 %
+of the smaller value therefore sit exactly on the threshold.
+The tolerance applies to every cluster present in the result.</p>
               </div>
             </td>
             <td>
@@ -3032,23 +3138,32 @@ whose potentials will be compared. Deviations are reported in
 first frequency. Clusters with <code>Σ I = 0</code> (purely passive
 observers) have an undefined impedance and are skipped; the skip
 is recorded in <code>notes</code>.</p>
+<p><strong>Metric definition (changed in 0.15.0).</strong> The deviation is the
+full spread of the compared values normalised by the <em>smallest</em>
+magnitude among them,
+<code>dev = (max(Z) - min(Z)) / min(|Z|)</code>, which is identical to the
+worst pairwise relative deviation <code>max_ij |Z_i - Z_j| / |Z_j|</code>
+for same-sign impedances. Up to 0.14.x the deviation was measured
+against the ensemble <em>mean</em>
+(<code>max_k |Z_k - mean(Z)| / |mean(Z)|</code>), which for two engines
+reports exactly half the true disagreement and shrinks further as
+engines are added — a <code>rel_tolerance=0.05</code> gate then admitted a
+10.5 % disagreement. Reported deviations are therefore roughly
+twice as large as in 0.14.x for the same world; a comparison that
+was marginally green may now legitimately turn red.</p>
+<p><strong>Vacuous comparisons (changed in 0.15.0).</strong> A report is
+<code>is_consistent=True</code> only if at least one quantity was actually
+evaluated — a cluster impedance, or a <code>sample_points</code> potential
+with a non-zero reference. A world without sources (or with a
+misspelled <code>Source.attached_to</code>) has no defined cluster impedance
+anywhere, so nothing can be validated; such a run now yields
+<code>is_consistent=False</code> plus a "comparison vacuous" note instead of
+a false green (up to 0.14.x the running maximum deviation never left
+its initial <code>0.0</code> and passed the tolerance gate).</p>
 </details>
             <details class="quote">
               <summary>Source code in <code>src/groundfield/validation.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-104">104</a></span>
-<span class="normal"><a href="#__codelineno-0-105">105</a></span>
-<span class="normal"><a href="#__codelineno-0-106">106</a></span>
-<span class="normal"><a href="#__codelineno-0-107">107</a></span>
-<span class="normal"><a href="#__codelineno-0-108">108</a></span>
-<span class="normal"><a href="#__codelineno-0-109">109</a></span>
-<span class="normal"><a href="#__codelineno-0-110">110</a></span>
-<span class="normal"><a href="#__codelineno-0-111">111</a></span>
-<span class="normal"><a href="#__codelineno-0-112">112</a></span>
-<span class="normal"><a href="#__codelineno-0-113">113</a></span>
-<span class="normal"><a href="#__codelineno-0-114">114</a></span>
-<span class="normal"><a href="#__codelineno-0-115">115</a></span>
-<span class="normal"><a href="#__codelineno-0-116">116</a></span>
-<span class="normal"><a href="#__codelineno-0-117">117</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-117">117</a></span>
 <span class="normal"><a href="#__codelineno-0-118">118</a></span>
 <span class="normal"><a href="#__codelineno-0-119">119</a></span>
 <span class="normal"><a href="#__codelineno-0-120">120</a></span>
@@ -3169,141 +3284,304 @@ is recorded in <code>notes</code>.</p>
 <span class="normal"><a href="#__codelineno-0-235">235</a></span>
 <span class="normal"><a href="#__codelineno-0-236">236</a></span>
 <span class="normal"><a href="#__codelineno-0-237">237</a></span>
-<span class="normal"><a href="#__codelineno-0-238">238</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-104" name="__codelineno-0-104"></a><span class="k">def</span><span class="w"> </span><span class="nf">compare_engines</span><span class="p">(</span>
-<a id="__codelineno-0-105" name="__codelineno-0-105"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-106" name="__codelineno-0-106"></a>    <span class="n">engines</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;Engine&quot;</span><span class="p">],</span>
-<a id="__codelineno-0-107" name="__codelineno-0-107"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-108" name="__codelineno-0-108"></a>    <span class="n">rel_tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
-<a id="__codelineno-0-109" name="__codelineno-0-109"></a>    <span class="n">sample_points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-110" name="__codelineno-0-110"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EngineComparison</span><span class="p">:</span>
-<a id="__codelineno-0-111" name="__codelineno-0-111"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Run ``world`` through every engine and compare the results.</span>
-<a id="__codelineno-0-112" name="__codelineno-0-112"></a>
-<a id="__codelineno-0-113" name="__codelineno-0-113"></a><span class="sd">    Parameters</span>
-<a id="__codelineno-0-114" name="__codelineno-0-114"></a><span class="sd">    ----------</span>
-<a id="__codelineno-0-115" name="__codelineno-0-115"></a><span class="sd">    world</span>
-<a id="__codelineno-0-116" name="__codelineno-0-116"></a><span class="sd">        World to evaluate. **Not modified** by this function.</span>
-<a id="__codelineno-0-117" name="__codelineno-0-117"></a><span class="sd">    engines</span>
-<a id="__codelineno-0-118" name="__codelineno-0-118"></a><span class="sd">        Mapping ``label -&gt; Engine``. Must contain at least two entries.</span>
-<a id="__codelineno-0-119" name="__codelineno-0-119"></a><span class="sd">    rel_tolerance</span>
-<a id="__codelineno-0-120" name="__codelineno-0-120"></a><span class="sd">        Maximum allowed relative deviation of the cluster impedances</span>
-<a id="__codelineno-0-121" name="__codelineno-0-121"></a><span class="sd">        (default 5 %). The tolerance applies to every cluster present</span>
-<a id="__codelineno-0-122" name="__codelineno-0-122"></a><span class="sd">        in the result.</span>
-<a id="__codelineno-0-123" name="__codelineno-0-123"></a><span class="sd">    sample_points</span>
-<a id="__codelineno-0-124" name="__codelineno-0-124"></a><span class="sd">        Optional. Array of shape ``(M, 3)``: additional field points</span>
-<a id="__codelineno-0-125" name="__codelineno-0-125"></a><span class="sd">        whose potentials will be compared. Deviations are reported in</span>
-<a id="__codelineno-0-126" name="__codelineno-0-126"></a><span class="sd">        :attr:`EngineComparison.notes`.</span>
-<a id="__codelineno-0-127" name="__codelineno-0-127"></a>
-<a id="__codelineno-0-128" name="__codelineno-0-128"></a><span class="sd">    Returns</span>
-<a id="__codelineno-0-129" name="__codelineno-0-129"></a><span class="sd">    -------</span>
-<a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">    EngineComparison</span>
-<a id="__codelineno-0-131" name="__codelineno-0-131"></a><span class="sd">        Structured report (see :class:`EngineComparison`).</span>
-<a id="__codelineno-0-132" name="__codelineno-0-132"></a>
-<a id="__codelineno-0-133" name="__codelineno-0-133"></a><span class="sd">    Notes</span>
-<a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="sd">    -----</span>
-<a id="__codelineno-0-135" name="__codelineno-0-135"></a><span class="sd">    The check uses the **real part** of the cluster impedance at the</span>
-<a id="__codelineno-0-136" name="__codelineno-0-136"></a><span class="sd">    first frequency. Clusters with ``Σ I = 0`` (purely passive</span>
-<a id="__codelineno-0-137" name="__codelineno-0-137"></a><span class="sd">    observers) have an undefined impedance and are skipped; the skip</span>
-<a id="__codelineno-0-138" name="__codelineno-0-138"></a><span class="sd">    is recorded in ``notes``.</span>
-<a id="__codelineno-0-139" name="__codelineno-0-139"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-140" name="__codelineno-0-140"></a>    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">engines</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-<a id="__codelineno-0-141" name="__codelineno-0-141"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;compare_engines requires at least 2 engines.&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-142" name="__codelineno-0-142"></a>
-<a id="__codelineno-0-143" name="__codelineno-0-143"></a>    <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FieldResult</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-144" name="__codelineno-0-144"></a>        <span class="n">label</span><span class="p">:</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">engine</span> <span class="ow">in</span> <span class="n">engines</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-<a id="__codelineno-0-145" name="__codelineno-0-145"></a>    <span class="p">}</span>
-<a id="__codelineno-0-146" name="__codelineno-0-146"></a>
-<a id="__codelineno-0-147" name="__codelineno-0-147"></a>    <span class="n">cmp</span> <span class="o">=</span> <span class="n">EngineComparison</span><span class="p">(</span><span class="n">results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span> <span class="n">rel_tolerance</span><span class="o">=</span><span class="n">rel_tolerance</span><span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span>
+<span class="normal"><a href="#__codelineno-0-246">246</a></span>
+<span class="normal"><a href="#__codelineno-0-247">247</a></span>
+<span class="normal"><a href="#__codelineno-0-248">248</a></span>
+<span class="normal"><a href="#__codelineno-0-249">249</a></span>
+<span class="normal"><a href="#__codelineno-0-250">250</a></span>
+<span class="normal"><a href="#__codelineno-0-251">251</a></span>
+<span class="normal"><a href="#__codelineno-0-252">252</a></span>
+<span class="normal"><a href="#__codelineno-0-253">253</a></span>
+<span class="normal"><a href="#__codelineno-0-254">254</a></span>
+<span class="normal"><a href="#__codelineno-0-255">255</a></span>
+<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+<span class="normal"><a href="#__codelineno-0-257">257</a></span>
+<span class="normal"><a href="#__codelineno-0-258">258</a></span>
+<span class="normal"><a href="#__codelineno-0-259">259</a></span>
+<span class="normal"><a href="#__codelineno-0-260">260</a></span>
+<span class="normal"><a href="#__codelineno-0-261">261</a></span>
+<span class="normal"><a href="#__codelineno-0-262">262</a></span>
+<span class="normal"><a href="#__codelineno-0-263">263</a></span>
+<span class="normal"><a href="#__codelineno-0-264">264</a></span>
+<span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span>
+<span class="normal"><a href="#__codelineno-0-269">269</a></span>
+<span class="normal"><a href="#__codelineno-0-270">270</a></span>
+<span class="normal"><a href="#__codelineno-0-271">271</a></span>
+<span class="normal"><a href="#__codelineno-0-272">272</a></span>
+<span class="normal"><a href="#__codelineno-0-273">273</a></span>
+<span class="normal"><a href="#__codelineno-0-274">274</a></span>
+<span class="normal"><a href="#__codelineno-0-275">275</a></span>
+<span class="normal"><a href="#__codelineno-0-276">276</a></span>
+<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+<span class="normal"><a href="#__codelineno-0-278">278</a></span>
+<span class="normal"><a href="#__codelineno-0-279">279</a></span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span>
+<span class="normal"><a href="#__codelineno-0-290">290</a></span>
+<span class="normal"><a href="#__codelineno-0-291">291</a></span>
+<span class="normal"><a href="#__codelineno-0-292">292</a></span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span>
+<span class="normal"><a href="#__codelineno-0-295">295</a></span>
+<span class="normal"><a href="#__codelineno-0-296">296</a></span>
+<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+<span class="normal"><a href="#__codelineno-0-298">298</a></span>
+<span class="normal"><a href="#__codelineno-0-299">299</a></span>
+<span class="normal"><a href="#__codelineno-0-300">300</a></span>
+<span class="normal"><a href="#__codelineno-0-301">301</a></span>
+<span class="normal"><a href="#__codelineno-0-302">302</a></span>
+<span class="normal"><a href="#__codelineno-0-303">303</a></span>
+<span class="normal"><a href="#__codelineno-0-304">304</a></span>
+<span class="normal"><a href="#__codelineno-0-305">305</a></span>
+<span class="normal"><a href="#__codelineno-0-306">306</a></span>
+<span class="normal"><a href="#__codelineno-0-307">307</a></span>
+<span class="normal"><a href="#__codelineno-0-308">308</a></span>
+<span class="normal"><a href="#__codelineno-0-309">309</a></span>
+<span class="normal"><a href="#__codelineno-0-310">310</a></span>
+<span class="normal"><a href="#__codelineno-0-311">311</a></span>
+<span class="normal"><a href="#__codelineno-0-312">312</a></span>
+<span class="normal"><a href="#__codelineno-0-313">313</a></span>
+<span class="normal"><a href="#__codelineno-0-314">314</a></span>
+<span class="normal"><a href="#__codelineno-0-315">315</a></span>
+<span class="normal"><a href="#__codelineno-0-316">316</a></span>
+<span class="normal"><a href="#__codelineno-0-317">317</a></span>
+<span class="normal"><a href="#__codelineno-0-318">318</a></span>
+<span class="normal"><a href="#__codelineno-0-319">319</a></span>
+<span class="normal"><a href="#__codelineno-0-320">320</a></span>
+<span class="normal"><a href="#__codelineno-0-321">321</a></span>
+<span class="normal"><a href="#__codelineno-0-322">322</a></span>
+<span class="normal"><a href="#__codelineno-0-323">323</a></span>
+<span class="normal"><a href="#__codelineno-0-324">324</a></span>
+<span class="normal"><a href="#__codelineno-0-325">325</a></span>
+<span class="normal"><a href="#__codelineno-0-326">326</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-117" name="__codelineno-0-117"></a><span class="k">def</span><span class="w"> </span><span class="nf">compare_engines</span><span class="p">(</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a>    <span class="n">world</span><span class="p">:</span> <span class="s2">&quot;World&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-119" name="__codelineno-0-119"></a>    <span class="n">engines</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;Engine&quot;</span><span class="p">],</span>
+<a id="__codelineno-0-120" name="__codelineno-0-120"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-121" name="__codelineno-0-121"></a>    <span class="n">rel_tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+<a id="__codelineno-0-122" name="__codelineno-0-122"></a>    <span class="n">sample_points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-123" name="__codelineno-0-123"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EngineComparison</span><span class="p">:</span>
+<a id="__codelineno-0-124" name="__codelineno-0-124"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Run ``world`` through every engine and compare the results.</span>
+<a id="__codelineno-0-125" name="__codelineno-0-125"></a>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a><span class="sd">    Parameters</span>
+<a id="__codelineno-0-127" name="__codelineno-0-127"></a><span class="sd">    ----------</span>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a><span class="sd">    world</span>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a><span class="sd">        World to evaluate. **Not modified** by this function.</span>
+<a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">    engines</span>
+<a id="__codelineno-0-131" name="__codelineno-0-131"></a><span class="sd">        Mapping ``label -&gt; Engine``. Must contain at least two entries.</span>
+<a id="__codelineno-0-132" name="__codelineno-0-132"></a><span class="sd">    rel_tolerance</span>
+<a id="__codelineno-0-133" name="__codelineno-0-133"></a><span class="sd">        Maximum allowed **pairwise** relative deviation of the cluster</span>
+<a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="sd">        impedances (default 5 %), i.e. the gate is</span>
+<a id="__codelineno-0-135" name="__codelineno-0-135"></a>
+<a id="__codelineno-0-136" name="__codelineno-0-136"></a><span class="sd">        .. math::</span>
+<a id="__codelineno-0-137" name="__codelineno-0-137"></a>
+<a id="__codelineno-0-138" name="__codelineno-0-138"></a><span class="sd">            \\max_{i,j} \\frac{|Z_i - Z_j|}{\\min_k |Z_k|}</span>
+<a id="__codelineno-0-139" name="__codelineno-0-139"></a><span class="sd">            \\;\\le\\; \\texttt{rel_tolerance}</span>
+<a id="__codelineno-0-140" name="__codelineno-0-140"></a>
+<a id="__codelineno-0-141" name="__codelineno-0-141"></a><span class="sd">        over the engines :math:`i, j, k`. Two engines differing by 5 %</span>
+<a id="__codelineno-0-142" name="__codelineno-0-142"></a><span class="sd">        of the smaller value therefore sit exactly on the threshold.</span>
+<a id="__codelineno-0-143" name="__codelineno-0-143"></a><span class="sd">        The tolerance applies to every cluster present in the result.</span>
+<a id="__codelineno-0-144" name="__codelineno-0-144"></a><span class="sd">    sample_points</span>
+<a id="__codelineno-0-145" name="__codelineno-0-145"></a><span class="sd">        Optional. Array of shape ``(M, 3)``: additional field points</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146"></a><span class="sd">        whose potentials will be compared. Deviations are reported in</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a><span class="sd">        :attr:`EngineComparison.notes`.</span>
 <a id="__codelineno-0-148" name="__codelineno-0-148"></a>
-<a id="__codelineno-0-149" name="__codelineno-0-149"></a>    <span class="c1"># Detect stub backends</span>
-<a id="__codelineno-0-150" name="__codelineno-0-150"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-151" name="__codelineno-0-151"></a>        <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stub&quot;</span><span class="p">):</span>
-<a id="__codelineno-0-152" name="__codelineno-0-152"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-153" name="__codelineno-0-153"></a>                <span class="sa">f</span><span class="s2">&quot;Engine &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; returned a stub result &quot;</span>
-<a id="__codelineno-0-154" name="__codelineno-0-154"></a>                <span class="sa">f</span><span class="s2">&quot;(metadata[&#39;stub&#39;]=True). Comparison not meaningful.&quot;</span>
-<a id="__codelineno-0-155" name="__codelineno-0-155"></a>            <span class="p">)</span>
-<a id="__codelineno-0-156" name="__codelineno-0-156"></a>
-<a id="__codelineno-0-157" name="__codelineno-0-157"></a>    <span class="c1"># Frequency lists must match</span>
-<a id="__codelineno-0-158" name="__codelineno-0-158"></a>    <span class="n">freq_first</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">frequencies</span>
-<a id="__codelineno-0-159" name="__codelineno-0-159"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-160" name="__codelineno-0-160"></a>        <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">frequencies</span> <span class="o">!=</span> <span class="n">freq_first</span><span class="p">:</span>
-<a id="__codelineno-0-161" name="__codelineno-0-161"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-162" name="__codelineno-0-162"></a>                <span class="sa">f</span><span class="s2">&quot;Engine &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; has a different frequency list &quot;</span>
-<a id="__codelineno-0-163" name="__codelineno-0-163"></a>                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">frequencies</span><span class="si">}</span><span class="s2"> vs. </span><span class="si">{</span><span class="n">freq_first</span><span class="si">}</span><span class="s2">). Comparison &quot;</span>
-<a id="__codelineno-0-164" name="__codelineno-0-164"></a>                <span class="s2">&quot;uses the first frequency only.&quot;</span>
-<a id="__codelineno-0-165" name="__codelineno-0-165"></a>            <span class="p">)</span>
-<a id="__codelineno-0-166" name="__codelineno-0-166"></a>
-<a id="__codelineno-0-167" name="__codelineno-0-167"></a>    <span class="c1"># Cluster sets must be identical</span>
-<a id="__codelineno-0-168" name="__codelineno-0-168"></a>    <span class="n">cluster_keys_first</span> <span class="o">=</span> <span class="p">{</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">v</span><span class="p">))</span>
-<a id="__codelineno-0-169" name="__codelineno-0-169"></a>                          <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">clusters</span><span class="o">.</span><span class="n">values</span><span class="p">()}</span>
-<a id="__codelineno-0-170" name="__codelineno-0-170"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-171" name="__codelineno-0-171"></a>        <span class="n">keys</span> <span class="o">=</span> <span class="p">{</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">v</span><span class="p">))</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">res</span><span class="o">.</span><span class="n">clusters</span><span class="o">.</span><span class="n">values</span><span class="p">()}</span>
-<a id="__codelineno-0-172" name="__codelineno-0-172"></a>        <span class="k">if</span> <span class="n">keys</span> <span class="o">!=</span> <span class="n">cluster_keys_first</span><span class="p">:</span>
-<a id="__codelineno-0-173" name="__codelineno-0-173"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-174" name="__codelineno-0-174"></a>                <span class="sa">f</span><span class="s2">&quot;Engine &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; reports a different cluster structure. &quot;</span>
-<a id="__codelineno-0-175" name="__codelineno-0-175"></a>                <span class="s2">&quot;Cluster comparison skipped.&quot;</span>
-<a id="__codelineno-0-176" name="__codelineno-0-176"></a>            <span class="p">)</span>
-<a id="__codelineno-0-177" name="__codelineno-0-177"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">is_consistent</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-0-178" name="__codelineno-0-178"></a>            <span class="k">return</span> <span class="n">cmp</span>
-<a id="__codelineno-0-179" name="__codelineno-0-179"></a>
-<a id="__codelineno-0-180" name="__codelineno-0-180"></a>    <span class="c1"># Cluster impedances (one representative per cluster)</span>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a>    <span class="n">representative</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-182" name="__codelineno-0-182"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-183" name="__codelineno-0-183"></a>        <span class="k">for</span> <span class="n">ename</span><span class="p">,</span> <span class="n">members</span> <span class="ow">in</span> <span class="n">res</span><span class="o">.</span><span class="n">clusters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-184" name="__codelineno-0-184"></a>            <span class="n">root</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">members</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-<a id="__codelineno-0-185" name="__codelineno-0-185"></a>            <span class="n">representative</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">root</span><span class="p">)</span>
-<a id="__codelineno-0-186" name="__codelineno-0-186"></a>
-<a id="__codelineno-0-187" name="__codelineno-0-187"></a>    <span class="n">max_dev</span> <span class="o">=</span> <span class="mf">0.0</span>
-<a id="__codelineno-0-188" name="__codelineno-0-188"></a>    <span class="k">for</span> <span class="n">cluster_root</span> <span class="ow">in</span> <span class="n">representative</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-<a id="__codelineno-0-189" name="__codelineno-0-189"></a>        <span class="n">per_engine</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-<a id="__codelineno-0-190" name="__codelineno-0-190"></a>        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-191" name="__codelineno-0-191"></a>            <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-192" name="__codelineno-0-192"></a>                <span class="n">Z</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="n">cluster_root</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-<a id="__codelineno-0-193" name="__codelineno-0-193"></a>            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">):</span>
-<a id="__codelineno-0-194" name="__codelineno-0-194"></a>                <span class="k">continue</span>
-<a id="__codelineno-0-195" name="__codelineno-0-195"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">Z</span><span class="o">.</span><span class="n">real</span><span class="p">):</span>
-<a id="__codelineno-0-196" name="__codelineno-0-196"></a>                <span class="k">continue</span>
-<a id="__codelineno-0-197" name="__codelineno-0-197"></a>            <span class="n">per_engine</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">Z</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
-<a id="__codelineno-0-198" name="__codelineno-0-198"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">per_engine</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-<a id="__codelineno-0-199" name="__codelineno-0-199"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-200" name="__codelineno-0-200"></a>                <span class="sa">f</span><span class="s2">&quot;Cluster &#39;</span><span class="si">{</span><span class="n">cluster_root</span><span class="si">}</span><span class="s2">&#39;: Σ I = 0 or Z undefined — &quot;</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a>                <span class="s2">&quot;skipped.&quot;</span>
-<a id="__codelineno-0-202" name="__codelineno-0-202"></a>            <span class="p">)</span>
-<a id="__codelineno-0-203" name="__codelineno-0-203"></a>            <span class="k">continue</span>
-<a id="__codelineno-0-204" name="__codelineno-0-204"></a>        <span class="n">cmp</span><span class="o">.</span><span class="n">cluster_impedance_table</span><span class="p">[</span><span class="n">cluster_root</span><span class="p">]</span> <span class="o">=</span> <span class="n">per_engine</span>
-<a id="__codelineno-0-205" name="__codelineno-0-205"></a>        <span class="n">zs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">per_engine</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
-<a id="__codelineno-0-206" name="__codelineno-0-206"></a>        <span class="n">zmean</span> <span class="o">=</span> <span class="n">zs</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
-<a id="__codelineno-0-207" name="__codelineno-0-207"></a>        <span class="k">if</span> <span class="n">zmean</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
-<a id="__codelineno-0-208" name="__codelineno-0-208"></a>            <span class="k">continue</span>
-<a id="__codelineno-0-209" name="__codelineno-0-209"></a>        <span class="n">dev</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">zs</span> <span class="o">-</span> <span class="n">zmean</span><span class="p">))</span> <span class="o">/</span> <span class="nb">abs</span><span class="p">(</span><span class="n">zmean</span><span class="p">))</span>
-<a id="__codelineno-0-210" name="__codelineno-0-210"></a>        <span class="n">cmp</span><span class="o">.</span><span class="n">deviations</span><span class="p">[</span><span class="n">cluster_root</span><span class="p">]</span> <span class="o">=</span> <span class="n">dev</span>
-<a id="__codelineno-0-211" name="__codelineno-0-211"></a>        <span class="n">max_dev</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_dev</span><span class="p">,</span> <span class="n">dev</span><span class="p">)</span>
-<a id="__codelineno-0-212" name="__codelineno-0-212"></a>
-<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="c1"># Optional point-sample for the potential</span>
-<a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="k">if</span> <span class="n">sample_points</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
-<a id="__codelineno-0-215" name="__codelineno-0-215"></a>        <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-216" name="__codelineno-0-216"></a>            <span class="n">phi_table</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-217" name="__codelineno-0-217"></a>                <span class="n">lbl</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">potential</span><span class="p">(</span><span class="n">sample_points</span><span class="p">)</span><span class="o">.</span><span class="n">real</span>
-<a id="__codelineno-0-218" name="__codelineno-0-218"></a>                <span class="k">for</span> <span class="n">lbl</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-<a id="__codelineno-0-219" name="__codelineno-0-219"></a>            <span class="p">}</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a>            <span class="n">phis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">phi_table</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>            <span class="n">mean</span> <span class="o">=</span> <span class="n">phis</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<a id="__codelineno-0-222" name="__codelineno-0-222"></a>            <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">):</span>
-<a id="__codelineno-0-223" name="__codelineno-0-223"></a>                <span class="n">rel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">mean</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span>
-<a id="__codelineno-0-224" name="__codelineno-0-224"></a>                               <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">phis</span> <span class="o">-</span> <span class="n">mean</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">mean</span><span class="p">),</span>
-<a id="__codelineno-0-225" name="__codelineno-0-225"></a>                               <span class="mf">0.0</span><span class="p">)</span>
-<a id="__codelineno-0-226" name="__codelineno-0-226"></a>            <span class="n">sample_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rel</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="n">rel</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mf">0.0</span>
-<a id="__codelineno-0-227" name="__codelineno-0-227"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-<a id="__codelineno-0-228" name="__codelineno-0-228"></a>                <span class="sa">f</span><span class="s2">&quot;Potential point-sample at </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">sample_points</span><span class="p">)</span><span class="si">}</span><span class="s2"> points: &quot;</span>
-<a id="__codelineno-0-229" name="__codelineno-0-229"></a>                <span class="sa">f</span><span class="s2">&quot;max relative deviation = </span><span class="si">{</span><span class="n">sample_max</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> %.&quot;</span>
-<a id="__codelineno-0-230" name="__codelineno-0-230"></a>            <span class="p">)</span>
-<a id="__codelineno-0-231" name="__codelineno-0-231"></a>            <span class="n">max_dev</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_dev</span><span class="p">,</span> <span class="n">sample_max</span><span class="p">)</span>
-<a id="__codelineno-0-232" name="__codelineno-0-232"></a>        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<a id="__codelineno-0-233" name="__codelineno-0-233"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Potential sample not evaluated: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-234" name="__codelineno-0-234"></a>
-<a id="__codelineno-0-235" name="__codelineno-0-235"></a>    <span class="n">cmp</span><span class="o">.</span><span class="n">is_consistent</span> <span class="o">=</span> <span class="p">(</span><span class="n">max_dev</span> <span class="o">&lt;=</span> <span class="n">rel_tolerance</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
-<a id="__codelineno-0-236" name="__codelineno-0-236"></a>        <span class="n">n</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Engine &#39;&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;stub result&quot;</span> <span class="ow">in</span> <span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span>
-<a id="__codelineno-0-237" name="__codelineno-0-237"></a>    <span class="p">)</span>
-<a id="__codelineno-0-238" name="__codelineno-0-238"></a>    <span class="k">return</span> <span class="n">cmp</span>
+<a id="__codelineno-0-149" name="__codelineno-0-149"></a><span class="sd">    Returns</span>
+<a id="__codelineno-0-150" name="__codelineno-0-150"></a><span class="sd">    -------</span>
+<a id="__codelineno-0-151" name="__codelineno-0-151"></a><span class="sd">    EngineComparison</span>
+<a id="__codelineno-0-152" name="__codelineno-0-152"></a><span class="sd">        Structured report (see :class:`EngineComparison`).</span>
+<a id="__codelineno-0-153" name="__codelineno-0-153"></a>
+<a id="__codelineno-0-154" name="__codelineno-0-154"></a><span class="sd">    Notes</span>
+<a id="__codelineno-0-155" name="__codelineno-0-155"></a><span class="sd">    -----</span>
+<a id="__codelineno-0-156" name="__codelineno-0-156"></a><span class="sd">    The check uses the **real part** of the cluster impedance at the</span>
+<a id="__codelineno-0-157" name="__codelineno-0-157"></a><span class="sd">    first frequency. Clusters with ``Σ I = 0`` (purely passive</span>
+<a id="__codelineno-0-158" name="__codelineno-0-158"></a><span class="sd">    observers) have an undefined impedance and are skipped; the skip</span>
+<a id="__codelineno-0-159" name="__codelineno-0-159"></a><span class="sd">    is recorded in ``notes``.</span>
+<a id="__codelineno-0-160" name="__codelineno-0-160"></a>
+<a id="__codelineno-0-161" name="__codelineno-0-161"></a><span class="sd">    **Metric definition (changed in 0.15.0).** The deviation is the</span>
+<a id="__codelineno-0-162" name="__codelineno-0-162"></a><span class="sd">    full spread of the compared values normalised by the *smallest*</span>
+<a id="__codelineno-0-163" name="__codelineno-0-163"></a><span class="sd">    magnitude among them,</span>
+<a id="__codelineno-0-164" name="__codelineno-0-164"></a><span class="sd">    ``dev = (max(Z) - min(Z)) / min(|Z|)``, which is identical to the</span>
+<a id="__codelineno-0-165" name="__codelineno-0-165"></a><span class="sd">    worst pairwise relative deviation ``max_ij |Z_i - Z_j| / |Z_j|``</span>
+<a id="__codelineno-0-166" name="__codelineno-0-166"></a><span class="sd">    for same-sign impedances. Up to 0.14.x the deviation was measured</span>
+<a id="__codelineno-0-167" name="__codelineno-0-167"></a><span class="sd">    against the ensemble *mean*</span>
+<a id="__codelineno-0-168" name="__codelineno-0-168"></a><span class="sd">    (``max_k |Z_k - mean(Z)| / |mean(Z)|``), which for two engines</span>
+<a id="__codelineno-0-169" name="__codelineno-0-169"></a><span class="sd">    reports exactly half the true disagreement and shrinks further as</span>
+<a id="__codelineno-0-170" name="__codelineno-0-170"></a><span class="sd">    engines are added — a ``rel_tolerance=0.05`` gate then admitted a</span>
+<a id="__codelineno-0-171" name="__codelineno-0-171"></a><span class="sd">    10.5 % disagreement. Reported deviations are therefore roughly</span>
+<a id="__codelineno-0-172" name="__codelineno-0-172"></a><span class="sd">    twice as large as in 0.14.x for the same world; a comparison that</span>
+<a id="__codelineno-0-173" name="__codelineno-0-173"></a><span class="sd">    was marginally green may now legitimately turn red.</span>
+<a id="__codelineno-0-174" name="__codelineno-0-174"></a>
+<a id="__codelineno-0-175" name="__codelineno-0-175"></a><span class="sd">    **Vacuous comparisons (changed in 0.15.0).** A report is</span>
+<a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="sd">    ``is_consistent=True`` only if at least one quantity was actually</span>
+<a id="__codelineno-0-177" name="__codelineno-0-177"></a><span class="sd">    evaluated — a cluster impedance, or a ``sample_points`` potential</span>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    with a non-zero reference. A world without sources (or with a</span>
+<a id="__codelineno-0-179" name="__codelineno-0-179"></a><span class="sd">    misspelled ``Source.attached_to``) has no defined cluster impedance</span>
+<a id="__codelineno-0-180" name="__codelineno-0-180"></a><span class="sd">    anywhere, so nothing can be validated; such a run now yields</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="sd">    ``is_consistent=False`` plus a &quot;comparison vacuous&quot; note instead of</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a><span class="sd">    a false green (up to 0.14.x the running maximum deviation never left</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">    its initial ``0.0`` and passed the tolerance gate).</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">engines</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;compare_engines requires at least 2 engines.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a>    <span class="n">results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">FieldResult</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a>        <span class="n">label</span><span class="p">:</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">engine</span> <span class="ow">in</span> <span class="n">engines</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a>    <span class="p">}</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a>    <span class="n">cmp</span> <span class="o">=</span> <span class="n">EngineComparison</span><span class="p">(</span><span class="n">results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span> <span class="n">rel_tolerance</span><span class="o">=</span><span class="n">rel_tolerance</span><span class="p">)</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a>    <span class="c1"># Detect stub backends</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a>        <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stub&quot;</span><span class="p">):</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a>                <span class="sa">f</span><span class="s2">&quot;Engine &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; returned a stub result &quot;</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a>                <span class="sa">f</span><span class="s2">&quot;(metadata[&#39;stub&#39;]=True). Comparison not meaningful.&quot;</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a>            <span class="p">)</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="c1"># Frequency lists must match</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a>    <span class="n">freq_first</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">frequencies</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a>        <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">frequencies</span> <span class="o">!=</span> <span class="n">freq_first</span><span class="p">:</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>                <span class="sa">f</span><span class="s2">&quot;Engine &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; has a different frequency list &quot;</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a>                <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">frequencies</span><span class="si">}</span><span class="s2"> vs. </span><span class="si">{</span><span class="n">freq_first</span><span class="si">}</span><span class="s2">). Comparison &quot;</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a>                <span class="s2">&quot;uses the first frequency only.&quot;</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a>            <span class="p">)</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>    <span class="c1"># Cluster sets must be identical</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="n">cluster_keys_first</span> <span class="o">=</span> <span class="p">{</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">v</span><span class="p">))</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a>                          <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span><span class="o">.</span><span class="n">clusters</span><span class="o">.</span><span class="n">values</span><span class="p">()}</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>        <span class="n">keys</span> <span class="o">=</span> <span class="p">{</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">v</span><span class="p">))</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">res</span><span class="o">.</span><span class="n">clusters</span><span class="o">.</span><span class="n">values</span><span class="p">()}</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>        <span class="k">if</span> <span class="n">keys</span> <span class="o">!=</span> <span class="n">cluster_keys_first</span><span class="p">:</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>                <span class="sa">f</span><span class="s2">&quot;Engine &#39;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39; reports a different cluster structure. &quot;</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>                <span class="s2">&quot;Cluster comparison skipped.&quot;</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>            <span class="p">)</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">is_consistent</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>            <span class="k">return</span> <span class="n">cmp</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>    <span class="c1"># Cluster impedances (one representative per cluster)</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>    <span class="n">representative</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>        <span class="k">for</span> <span class="n">ename</span><span class="p">,</span> <span class="n">members</span> <span class="ow">in</span> <span class="n">res</span><span class="o">.</span><span class="n">clusters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>            <span class="n">root</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">members</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>            <span class="n">representative</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">root</span><span class="p">)</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="n">max_dev</span> <span class="o">=</span> <span class="mf">0.0</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>    <span class="c1"># Number of quantities for which a deviation was actually computed</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a>    <span class="c1"># (cluster impedances + sample points with a defined reference).</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a>    <span class="c1"># ``max_dev`` alone cannot distinguish &quot;everything agreed&quot; from</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>    <span class="c1"># &quot;nothing was evaluated&quot; — both leave it at 0.0.</span>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a>    <span class="n">n_compared</span> <span class="o">=</span> <span class="mi">0</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a>    <span class="k">for</span> <span class="n">cluster_root</span> <span class="ow">in</span> <span class="n">representative</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>        <span class="n">per_engine</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a>            <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a>                <span class="n">Z</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="n">cluster_root</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a>            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">):</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a>                <span class="k">continue</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">Z</span><span class="o">.</span><span class="n">real</span><span class="p">):</span>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a>                <span class="k">continue</span>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a>            <span class="n">per_engine</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">Z</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a>        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">per_engine</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+<a id="__codelineno-0-249" name="__codelineno-0-249"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a>                <span class="sa">f</span><span class="s2">&quot;Cluster &#39;</span><span class="si">{</span><span class="n">cluster_root</span><span class="si">}</span><span class="s2">&#39;: Σ I = 0 or Z undefined — &quot;</span>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a>                <span class="s2">&quot;skipped.&quot;</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a>            <span class="p">)</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a>            <span class="k">continue</span>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a>        <span class="n">cmp</span><span class="o">.</span><span class="n">cluster_impedance_table</span><span class="p">[</span><span class="n">cluster_root</span><span class="p">]</span> <span class="o">=</span> <span class="n">per_engine</span>
+<a id="__codelineno-0-255" name="__codelineno-0-255"></a>        <span class="c1"># Worst *pairwise* relative deviation, referenced to the</span>
+<a id="__codelineno-0-256" name="__codelineno-0-256"></a>        <span class="c1"># smallest magnitude among the compared impedances:</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>        <span class="c1">#   dev = max_ij |Z_i - Z_j| / min_k |Z_k|</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>        <span class="c1">#       = (max Z - min Z) / min |Z|      (same-sign Z).</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a>        <span class="c1"># Measuring against the ensemble mean instead (as up to 0.14.x)</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a>        <span class="c1"># halves the reported number for two engines and lets a 5 %</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a>        <span class="c1"># gate pass a 10.5 % disagreement.</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a>        <span class="n">zs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">per_engine</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a>        <span class="n">z_ref</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">zs</span><span class="p">)))</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a>        <span class="k">if</span> <span class="n">z_ref</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a>                <span class="sa">f</span><span class="s2">&quot;Cluster &#39;</span><span class="si">{</span><span class="n">cluster_root</span><span class="si">}</span><span class="s2">&#39;: Z = 0 for at least one &quot;</span>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a>                <span class="s2">&quot;engine — relative deviation undefined, skipped.&quot;</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a>            <span class="p">)</span>
+<a id="__codelineno-0-269" name="__codelineno-0-269"></a>            <span class="k">continue</span>
+<a id="__codelineno-0-270" name="__codelineno-0-270"></a>        <span class="n">dev</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">zs</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">zs</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="o">/</span> <span class="n">z_ref</span>
+<a id="__codelineno-0-271" name="__codelineno-0-271"></a>        <span class="n">cmp</span><span class="o">.</span><span class="n">deviations</span><span class="p">[</span><span class="n">cluster_root</span><span class="p">]</span> <span class="o">=</span> <span class="n">dev</span>
+<a id="__codelineno-0-272" name="__codelineno-0-272"></a>        <span class="n">max_dev</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_dev</span><span class="p">,</span> <span class="n">dev</span><span class="p">)</span>
+<a id="__codelineno-0-273" name="__codelineno-0-273"></a>        <span class="n">n_compared</span> <span class="o">+=</span> <span class="mi">1</span>
+<a id="__codelineno-0-274" name="__codelineno-0-274"></a>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a>    <span class="c1"># Optional point-sample for the potential</span>
+<a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="k">if</span> <span class="n">sample_points</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+<a id="__codelineno-0-277" name="__codelineno-0-277"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a>            <span class="n">phi_table</span> <span class="o">=</span> <span class="p">{</span>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a>                <span class="n">lbl</span><span class="p">:</span> <span class="n">res</span><span class="o">.</span><span class="n">potential</span><span class="p">(</span><span class="n">sample_points</span><span class="p">)</span><span class="o">.</span><span class="n">real</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a>                <span class="k">for</span> <span class="n">lbl</span><span class="p">,</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a>            <span class="p">}</span>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a>            <span class="n">phis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">phi_table</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a>            <span class="c1"># Same pairwise metric as for the cluster impedances:</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a>            <span class="c1"># spread over the smallest magnitude, per sample point.</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a>            <span class="n">spread</span> <span class="o">=</span> <span class="n">phis</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">phis</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a>            <span class="n">phi_ref</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">phis</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a>            <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">):</span>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a>                <span class="n">rel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">phi_ref</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">spread</span> <span class="o">/</span> <span class="n">phi_ref</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a>            <span class="n">n_undefined</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">phi_ref</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">))</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a>            <span class="n">sample_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rel</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="n">rel</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mf">0.0</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a>            <span class="n">note</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a>                <span class="sa">f</span><span class="s2">&quot;Potential point-sample at </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">sample_points</span><span class="p">)</span><span class="si">}</span><span class="s2"> points: &quot;</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a>                <span class="sa">f</span><span class="s2">&quot;max relative deviation = </span><span class="si">{</span><span class="n">sample_max</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> % &quot;</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a>                <span class="s2">&quot;(max pairwise, referenced to min |phi|).&quot;</span>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a>            <span class="p">)</span>
+<a id="__codelineno-0-296" name="__codelineno-0-296"></a>            <span class="k">if</span> <span class="n">n_undefined</span><span class="p">:</span>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a>                <span class="n">note</span> <span class="o">+=</span> <span class="p">(</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a>                    <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">n_undefined</span><span class="si">}</span><span class="s2"> point(s) excluded: phi = 0 for at &quot;</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a>                    <span class="s2">&quot;least one engine, relative deviation undefined.&quot;</span>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a>                <span class="p">)</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">note</span><span class="p">)</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a>            <span class="n">max_dev</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_dev</span><span class="p">,</span> <span class="n">sample_max</span><span class="p">)</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a>            <span class="n">n_compared</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">rel</span><span class="o">.</span><span class="n">size</span><span class="p">)</span> <span class="o">-</span> <span class="n">n_undefined</span>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a>        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a>            <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Potential sample not evaluated: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a>    <span class="c1"># A comparison that evaluated *nothing* has validated nothing:</span>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a>    <span class="c1"># ``max_dev`` is still its initial 0.0, which would otherwise pass</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a>    <span class="c1"># the tolerance gate and report a false green (typical cause: the</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a>    <span class="c1"># world has no source, or ``Source.attached_to`` is misspelled, so</span>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a>    <span class="c1"># every cluster carries Σ I = 0 and was skipped above).</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a>    <span class="k">if</span> <span class="n">n_compared</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>        <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a>            <span class="s2">&quot;No comparable quantity (every cluster impedance undefined, &quot;</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a>            <span class="s2">&quot;no usable sample point) — comparison vacuous, nothing was &quot;</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>            <span class="s2">&quot;validated.&quot;</span>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a>        <span class="p">)</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a>    <span class="n">cmp</span><span class="o">.</span><span class="n">is_consistent</span> <span class="o">=</span> <span class="p">(</span>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>        <span class="n">n_compared</span> <span class="o">&gt;</span> <span class="mi">0</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>        <span class="ow">and</span> <span class="p">(</span><span class="n">max_dev</span> <span class="o">&lt;=</span> <span class="n">rel_tolerance</span><span class="p">)</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>        <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>            <span class="n">n</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Engine &#39;&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;stub result&quot;</span> <span class="ow">in</span> <span class="n">n</span>
+<a id="__codelineno-0-323" name="__codelineno-0-323"></a>            <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">cmp</span><span class="o">.</span><span class="n">notes</span>
+<a id="__codelineno-0-324" name="__codelineno-0-324"></a>        <span class="p">)</span>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>    <span class="p">)</span>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a>    <span class="k">return</span> <span class="n">cmp</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

@@ -2590,7 +2590,9 @@ analytic baseline against which <code>groundmeas</code> data can be evaluated.</
 backends share the same data model (<code>World</code>, <code>Electrode</code>,
 <code>Conductor</code>, <code>Source</code>) and the same Sommerfeld representation of the
 layered Green's function — they differ only in <strong>how</strong> the integral
-is evaluated:</p>
+is evaluated. Two of the eight (<code>cim</code>, <code>bem</code>) reduce to another
+backend's computation on every soil they accept, so the eight names
+cover six distinct computations (see the note below the table):</p>
 <table>
 <thead>
 <tr>
@@ -2617,8 +2619,8 @@ is evaluated:</p>
 </tr>
 <tr>
 <td><code>cim</code></td>
-<td>any layered</td>
-<td>Complex Image Method (closed form via matrix-pencil fit of <span class="arithmatex">\(\Gamma_1(\lambda)\)</span>)</td>
+<td>homogeneous or 2-layer (<span class="arithmatex">\(n \ge 3\)</span> raises)</td>
+<td>Complex-Image entry point — reduces to the <code>image</code> / <code>image_2layer</code> kernel; no fit runs</td>
 </tr>
 <tr>
 <td><code>mom</code></td>
@@ -2627,17 +2629,17 @@ is evaluated:</p>
 </tr>
 <tr>
 <td><code>mom_sommerfeld</code></td>
-<td>any layered</td>
+<td>any layered — the only <span class="arithmatex">\(n \ge 3\)</span> integral-equation path</td>
 <td>Galerkin MoM with direct Sommerfeld quadrature (reference engine, slow)</td>
 </tr>
 <tr>
 <td><code>bem</code></td>
-<td>any layered</td>
-<td>Boundary-element collocation with the CIM kernel</td>
+<td>homogeneous or 2-layer (<span class="arithmatex">\(n \ge 3\)</span> raises)</td>
+<td>Boundary-element collocation — assembles the same matrix as <code>mom</code> (4e-16)</td>
 </tr>
 <tr>
 <td><code>fem</code></td>
-<td>any layered</td>
+<td>any layered — volume-PDE cross-check, also for <span class="arithmatex">\(n \ge 3\)</span></td>
 <td>Axisymmetric volume PDE with equivalent-hemisphere reduction</td>
 </tr>
 </tbody>
@@ -2648,11 +2650,25 @@ a vectorised sum over image sources in NumPy. For 2-layer soils
 Tagg/Sunde image series. <code>Engine.solve</code> auto-dispatches <code>"image"</code> to
 <code>image_2layer</code> / <code>image_nlayer</code> based on the soil model, so notebooks
 written for the homogeneous case keep working when the soil is
-replaced by a layered one. For <span class="arithmatex">\(n \ge 3\)</span> layers the closed-form path
-runs through <code>cim</code>; <code>mom_sommerfeld</code> is the absolute reference
-engine. The full engine theory is collected in
-<a href="../engines/">Engine theory</a>; the selection heuristic is
-documented in <a href="../adr/0002-engine-family/">ADR-0002</a>.</p>
+replaced by a layered one.</p>
+<p>For <span class="arithmatex">\(n \ge 3\)</span> layers <strong><code>mom_sommerfeld</code> is the only engine that
+evaluates the layered Green's function</strong> (with <code>fem</code> as an
+independent volume-PDE cross-check):
+<code>cim</code> and <code>bem</code> raise <code>NotImplementedError</code> for three and more layers
+(since 0.11.0 — the complex-image kernel they shared was structurally
+incomplete, audit 2026-07-08), and <code>image_nlayer</code> raises a
+<code>ValueError</code> by design.</p>
+<p>Note also that <code>cim</code> and <code>bem</code> are <strong>not independent checks</strong> on the
+soils they do accept: for <span class="arithmatex">\(n \le 2\)</span> <code>cim</code> evaluates the same
+closed-form kernel as <code>image</code> / <code>image_2layer</code> (bit-identical) and
+<code>bem</code> assembles the same reaction matrix as <code>mom</code> (relative
+difference 4e-16). Each result says so in
+<code>metadata['reduces_to']</code>. Eight backends therefore mean six distinct
+computations; genuine methodological independence comes from
+<code>mom_sommerfeld</code> (direct quadrature) and <code>fem</code> (volume PDE). The full
+engine theory is collected in <a href="../engines/">Engine theory</a>; the
+selection heuristic and its amendments are documented in
+<a href="../adr/0002-engine-family/">ADR-0002</a>.</p>
 <h2 id="modelling-assumptions">Modelling assumptions<a class="headerlink" href="#modelling-assumptions" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Quasi-static</strong> in the soil for <span class="arithmatex">\(f \lesssim 1\,\mathrm{kHz}\)</span>. The

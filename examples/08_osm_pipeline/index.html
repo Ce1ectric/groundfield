@@ -2587,6 +2587,7 @@ example runs the full pipeline on a small rural village:</p>
 <p>This pulls in <code>requests</code>, <code>shapely</code> and <code>pyproj</code>. The Overpass
 response is cached locally so subsequent runs stay offline.</p>
 <h2 id="end-to-end-code">End-to-end code<a class="headerlink" href="#end-to-end-code" title="Permanent link">&para;</a></h2>
+<!-- skip-doctest: needs the Overpass network (live OSM download) -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">groundfield</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gf</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">groundfield.generators</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrtsnetzLayout</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
@@ -2676,6 +2677,7 @@ response is cached locally so subsequent runs stay offline.</p>
   <span class="arithmatex">\(\pm I_\text{src}\)</span> within tolerance.</li>
 </ul>
 <h2 id="visualising-the-result">Visualising the result<a class="headerlink" href="#visualising-the-result" title="Permanent link">&para;</a></h2>
+<!-- skip-doctest: continues the Overpass-dependent block above -->
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Layout view: footprints, anchors, cables, service drops, probe.</span>

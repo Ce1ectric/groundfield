@@ -2588,7 +2588,7 @@ soil models with auto-dispatching backends.</p>
 <tr>
 <td><code>MultiLayerSoil</code></td>
 <td>≥ 1</td>
-<td><code>image_nlayer</code> dispatcher, <code>cim</code>, <code>mom_sommerfeld</code></td>
+<td><code>image_nlayer</code> dispatcher, <code>cim</code> (<span class="arithmatex">\(n \le 2\)</span>), <code>mom_sommerfeld</code>, <code>fem</code></td>
 </tr>
 </tbody>
 </table>
@@ -2596,7 +2596,14 @@ soil models with auto-dispatching backends.</p>
 a <code>TwoLayerSoil</code> ends up on <code>image_2layer</code>, a <code>MultiLayerSoil</code>
 with <span class="arithmatex">\(n = 1\)</span> collapses to <code>image</code>, <span class="arithmatex">\(n = 2\)</span> routes to
 <code>image_2layer</code>, <span class="arithmatex">\(n \ge 3\)</span> raises a clear <code>ValueError</code> directing
-the user to <code>cim</code> or <code>mom_sommerfeld</code>.</p>
+the user to <code>mom_sommerfeld</code> or <code>fem</code>. <code>cim</code> shares that limit:
+its closed-form self-kernel is exact for <span class="arithmatex">\(n \le 2\)</span> and rejects
+<span class="arithmatex">\(n \ge 3\)</span> with a <code>NotImplementedError</code> (see
+<a href="../../adr/0002-engine-family/">ADR-0002</a> and the
+<a href="../../engines/cim/"><code>cim</code> engine page</a>), because for three or more
+layers the reflection coefficient <span class="arithmatex">\(\Gamma_1(\lambda)\)</span> is no longer
+constant in <span class="arithmatex">\(\lambda\)</span> and the historic complex-image expansion was
+structurally incomplete.</p>
 <h2 id="two-layer-setup">Two-layer setup<a class="headerlink" href="#two-layer-setup" title="Permanent link">&para;</a></h2>
 <p>A 4 m ring earth electrode sitting in 80 Ω·m topsoil with a much
 more conductive 30 Ω·m bedrock 3 m below the surface (the
@@ -2649,25 +2656,37 @@ trumpet bounds.</p>
 at <span class="arithmatex">\(K = 0\)</span> to plotting accuracy — a useful built-in sanity check
 for the 2-layer kernel.</p>
 <h2 id="three-or-more-layers">Three or more layers<a class="headerlink" href="#three-or-more-layers" title="Permanent link">&para;</a></h2>
-<p>For <span class="arithmatex">\(n \ge 3\)</span> use <code>MultiLayerSoil</code> with the <code>cim</code> (Complex Image
-Method) or <code>mom_sommerfeld</code> backend:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">soil</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">MultiLayerSoil</span><span class="p">(</span><span class="n">layer_resistivities</span><span class="o">=</span><span class="p">[</span><span class="mf">80.0</span><span class="p">,</span> <span class="mf">30.0</span><span class="p">,</span> <span class="mf">200.0</span><span class="p">],</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>                          <span class="n">layer_thicknesses</span><span class="o">=</span><span class="p">[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">])</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">soil</span><span class="p">)</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ring_1&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>                    <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>                    <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">attached_to</span><span class="o">=</span><span class="s2">&quot;ring_1&quot;</span><span class="p">,</span> <span class="n">magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;cim&quot;</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>                          <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<p>For <span class="arithmatex">\(n \ge 3\)</span> build a <code>MultiLayerSoil</code> from explicit <code>SoilLayer</code>
+entries — one per layer, top-down, and the last one semi-infinite
+(<code>thickness=None</code>, which is the default) — and solve it with the
+<code>mom_sommerfeld</code> reference backend:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">soil</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">MultiLayerSoil</span><span class="p">(</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">layers</span><span class="o">=</span><span class="p">[</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="n">gf</span><span class="o">.</span><span class="n">SoilLayer</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">80.0</span><span class="p">,</span> <span class="n">thickness</span><span class="o">=</span><span class="mf">3.0</span><span class="p">),</span>   <span class="c1"># topsoil</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="n">gf</span><span class="o">.</span><span class="n">SoilLayer</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span> <span class="n">thickness</span><span class="o">=</span><span class="mf">5.0</span><span class="p">),</span>   <span class="c1"># moist sand</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="n">gf</span><span class="o">.</span><span class="n">SoilLayer</span><span class="p">(</span><span class="n">resistivity</span><span class="o">=</span><span class="mf">200.0</span><span class="p">),</span>                 <span class="c1"># bedrock, h = inf</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="p">],</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">)</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">world</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_world</span><span class="p">(</span><span class="n">soil</span><span class="o">=</span><span class="n">soil</span><span class="p">)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_electrode</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="s2">&quot;ring&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;ring_1&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>                    <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">),</span> <span class="n">radius</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>                    <span class="n">wire_radius</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">gf</span><span class="o">.</span><span class="n">create_source</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">attached_to</span><span class="o">=</span><span class="s2">&quot;ring_1&quot;</span><span class="p">,</span> <span class="n">magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="n">engine</span> <span class="o">=</span> <span class="n">gf</span><span class="o">.</span><span class="n">create_engine</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s2">&quot;mom_sommerfeld&quot;</span><span class="p">,</span> <span class="n">segment_length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>                          <span class="n">frequencies</span><span class="o">=</span><span class="p">[</span><span class="mf">50.0</span><span class="p">])</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="n">result</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">world</span><span class="p">)</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">cluster_impedance</span><span class="p">(</span><span class="s2">&quot;ring_1&quot;</span><span class="p">))</span>
 </code></pre></div>
-<p><code>cim</code> builds a matrix-pencil fit of the spectral Green's function
-once and re-uses it at every frequency, so the second and following
-frequency points come for free. <code>mom_sommerfeld</code> is slower but is
-the absolute multi-layer reference — use it to validate <code>cim</code> on
-new soil profiles before launching long sweeps.</p>
+<p><code>mom_sommerfeld</code> evaluates the full layered Green's function by
+direct Sommerfeld quadrature, so it carries no layer-count
+restriction and is the absolute multi-layer reference. <code>fem</code> is
+the cheap alternative for <span class="arithmatex">\(n \ge 3\)</span> (axisymmetric equivalent
+hemisphere, so useful for compact, roughly rotationally symmetric
+electrodes only). <code>cim</code> and the <code>image</code> family stay restricted to
+<span class="arithmatex">\(n \le 2\)</span>; use them for the two-layer sweeps above, where <code>cim</code>
+re-uses its spectral fit across frequencies and the second and
+following frequency points come almost for free.</p>
 <h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Confirm that the layered backends agree on a single problem

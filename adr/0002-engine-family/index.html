@@ -2066,6 +2066,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-30-the-engine-count-is-honest-now-review-pass-9-f17f34f39" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-30 — the engine count is honest now (review pass 9, F17/F34/F39)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2583,6 +2594,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#amendment-2026-07-30-the-engine-count-is-honest-now-review-pass-9-f17f34f39" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Amendment 2026-07-30 — the engine count is honest now (review pass 9, F17/F34/F39)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2614,7 +2636,7 @@
 <tbody>
 <tr>
 <td><strong>Status</strong></td>
-<td>Accepted — amended 2026-07-09 (audit WP-E, see the end of this document)</td>
+<td>Accepted — amended 2026-07-09 (audit WP-E) and 2026-07-30 (review pass 9, F17/F34/F39); see the amendments at the end of this document, which supersede the selection heuristic below</td>
 </tr>
 <tr>
 <td><strong>Date</strong></td>
@@ -2690,7 +2712,7 @@ cleanly onto the existing <code>groundfield</code> data model:</p>
 </tr>
 </tbody>
 </table>
-<p>The selection heuristic is:</p>
+<p>The selection heuristic <em>as decided in 2026-05</em> was:</p>
 <ol>
 <li><strong>Homogeneous soil</strong> → <code>image</code> (cheapest, closed form).</li>
 <li><strong>2-layer soil</strong> → <code>image_2layer</code> (auto-dispatched from
@@ -2705,6 +2727,26 @@ cleanly onto the existing <code>groundfield</code> data model:</p>
    reduction). Used as a third independent line of defence; not
    intended for general meshing.</li>
 </ol>
+<div class="admonition danger">
+<p class="admonition-title">Superseded — items 2 and 3 above are no longer valid</p>
+<p>Item 3 was revoked by the 2026-07-09 amendment (<code>cim</code>/<code>bem</code>
+reject <code>n ≥ 3</code>), and item 2 overstates the cross-check value of
+<code>cim</code>/<code>bem</code>. The heuristic <strong>in force</strong> is:</p>
+<ol>
+<li><strong>Homogeneous soil</strong> → <code>image</code>.</li>
+<li><strong>2-layer soil</strong> → <code>image_2layer</code>. Resolution cross-check with
+   <code>mom</code>; <em>independent</em> cross-check with <code>mom_sommerfeld</code>
+   (quadrature) or <code>fem</code> (volume PDE). <code>cim</code> reproduces
+   <code>image_2layer</code> bit-for-bit and <code>bem</code> reproduces <code>mom</code> to
+   4e-16 — running them adds no information.</li>
+<li><strong>3+ layer soil</strong> → <code>mom_sommerfeld</code> (the only engine that
+   evaluates the full layered Green's function in this regime),
+   cross-checked against <code>fem</code>. <code>cim</code>, <code>bem</code> raise
+   <code>NotImplementedError</code>; <code>image_nlayer</code> raises <code>ValueError</code>.</li>
+<li><strong>Volume cross-check</strong> → <code>fem</code>, as before.</li>
+</ol>
+<p>See the 2026-07-30 amendment for details.</p>
+</div>
 <h2 id="mathematical-physical-model">Mathematical / physical model<a class="headerlink" href="#mathematical-physical-model" title="Permanent link">&para;</a></h2>
 <p>All seven layered engines evaluate the same Sommerfeld integral of
 the quasi-static layered Green's function</p>
@@ -2741,19 +2783,29 @@ defined tolerances (codified in
 <td>exact reduction (e.g. <code>image_nlayer</code> → <code>image_2layer</code>)</td>
 </tr>
 <tr>
-<td>closed-form image vs. <code>mom</code> / <code>bem</code> / <code>cim</code></td>
+<td>closed-form image vs. <code>cim</code></td>
+<td>1e-9</td>
+<td>identity, not a check — <code>cim</code> <em>is</em> the closed-form kernel</td>
+</tr>
+<tr>
+<td><code>mom</code> vs. <code>bem</code></td>
+<td>1e-9</td>
+<td>identity, not a check — same reaction matrix (4e-16)</td>
+</tr>
+<tr>
+<td>closed-form image vs. <code>mom</code> / <code>bem</code></td>
 <td>5 %</td>
 <td>resolution scheme differs</td>
 </tr>
 <tr>
 <td><code>mom_sommerfeld</code> vs. closed-form layered engines</td>
 <td>5 %</td>
-<td>quadrature is the reference</td>
+<td>quadrature is the reference; the only independent kernel</td>
 </tr>
 <tr>
 <td><code>fem</code> vs. integral engines</td>
 <td>10 %</td>
-<td>equivalent-hemisphere bias</td>
+<td>equivalent-hemisphere bias; independent problem form</td>
 </tr>
 </tbody>
 </table>
@@ -2766,20 +2818,29 @@ check.</p>
 <li>Three independent methodologies (closed-form images, integral
   equation, volume PDE) are now available side by side. A bug in any
   single one is detectable through cross-comparison.</li>
-<li>For 3+ layer soils there is a clear recommended engine (<code>cim</code>)
+<li>~~For 3+ layer soils there is a clear recommended engine (<code>cim</code>)
   with an independent reference (<code>mom_sommerfeld</code>) and a second-line
-  cross-check (<code>bem</code>).</li>
+  cross-check (<code>bem</code>).~~ <em>Revoked 2026-07-09: for 3+ layers only
+  <code>mom_sommerfeld</code> (with <code>fem</code> as cross-check) remains.</em></li>
 <li><code>fem</code> adds a methodologically distinct line of defence at the cost
   of a simple equivalent-hemisphere reduction; the bias is
   documented and bounded.</li>
 </ul>
 <p><strong>Negative / open.</strong></p>
 <ul>
-<li><code>mom_sommerfeld</code> is slow (per-pair adaptive quadrature). Acceptable
-  for the cross-check role; not intended for production sweeps.</li>
-<li><code>cim</code> quality depends on the matrix-pencil fit; very hard contrasts
-  may need more images. The fit RMS is exposed in
-  <code>result.metadata["cim_rms"]</code>.</li>
+<li><code>mom_sommerfeld</code> is slow (per-pair adaptive quadrature). Since it is
+  the only <span class="arithmatex">\(n \ge 3\)</span> path, that cost is now unavoidable in that
+  regime rather than optional.</li>
+<li>~~<code>cim</code> quality depends on the matrix-pencil fit; very hard
+  contrasts may need more images. The fit RMS is exposed in
+  <code>result.metadata["cim_rms"]</code>.~~ <em>Revoked 2026-07-30: no solve path
+  evaluates the fit, and <code>cim_rms</code> is <code>None</code> with an explicit
+  <code>cim_fit_used = False</code> flag. <code>fit_complex_images</code> survives as a
+  standalone helper with honest failure reporting.</em></li>
+<li>Two of the eight backends (<code>cim</code>, <code>bem</code>) are aliases of others on
+  every soil they accept. They are kept for API stability and as
+  entry points for future complete kernels, but the eight-backend
+  count overstates the number of independent computations (six).</li>
 <li><code>fem</code> covers single-cluster worlds via the equivalent-hemisphere
   reduction. Multi-cluster volume runs would need a real 3-D mesh
   generator and a stronger FEM kernel — out of scope for typical cases.</li>
@@ -2825,6 +2886,72 @@ check.</p>
    kernel exists; use <code>mom_sommerfeld</code> or <code>fem</code> for three and more
    layers.</li>
 </ol>
+<hr />
+<h2 id="amendment-2026-07-30-the-engine-count-is-honest-now-review-pass-9-f17f34f39">Amendment 2026-07-30 — the engine count is honest now (review pass 9, F17/F34/F39)<a class="headerlink" href="#amendment-2026-07-30-the-engine-count-is-honest-now-review-pass-9-f17f34f39" title="Permanent link">&para;</a></h2>
+<p>Three corrections, all in the direction of <em>saying what the code
+does</em> rather than what the 2026-05 design intended.</p>
+<ol>
+<li>
+<p><strong><code>mom_sommerfeld</code> is the only <span class="arithmatex">\(n \ge 3\)</span> path.</strong> The
+   documentation (<code>docs/engines/index.md</code> decision tree,
+   <code>docs/engines/cim.md</code>, <code>docs/engines/bem.md</code>,
+   <code>docs/concepts.md</code> backend table) still routed multi-layer users
+   to <code>cim</code> (primary) and <code>bem</code> (alternative) nine months after both
+   started raising <code>NotImplementedError</code>, including in a runnable
+   worked example. Those pages now describe the actual behaviour:
+   <span class="arithmatex">\(n \ge 3\)</span> → <code>mom_sommerfeld</code>, with <code>fem</code> as the independent
+   volume-PDE cross-check, and <code>cim</code>/<code>bem</code> documented as
+   <code>TwoLayerSoil</code>-max.</p>
+</li>
+<li>
+<p><strong>No complex-image fit is computed on any solve path.</strong> Up to
+   0.14.1 <code>solve_cim</code> and <code>solve_bem</code> called <code>fit_complex_images</code> on
+   every solve although both reachable regimes (<span class="arithmatex">\(n \le 1\)</span> and
+   <span class="arithmatex">\(n = 2\)</span>) use exact closed-form self-kernels that ignore it. Its
+   failed result was published as
+   <code>metadata['cim_n_images'] = 0</code> / <code>['cim_rms'] = nan</code>, inviting
+   readers to judge an approximation with no influence on the answer.
+   The call is gone; the metadata carries <code>cim_fit_used: False</code>,
+   <code>cim_rms: None</code> and a new <code>reduces_to</code> key naming the backend the
+   numbers are bit-identical to (<code>image</code> / <code>image_2layer</code> for <code>cim</code>,
+   <code>mom</code> for <code>bem</code>). The unreachable <span class="arithmatex">\(n \ge 3\)</span> code — the complex-image
+   self-kernel branch, the collocation-matrix branch, the whole
+   <code>_cim_field_potential</code> helper and the two <code>n &gt;= 3</code> cross-layer
+   guards behind the <code>n &gt;= 3</code> rejection — was deleted; the remaining
+   <span class="arithmatex">\(n \ge 3\)</span> branches raise instead of computing a single-family
+   Green's function.</p>
+</li>
+<li>
+<p><strong>The fit itself reports failure.</strong> <code>fit_complex_images</code> could not
+   represent <span class="arithmatex">\(\lim_{\lambda\to\infty}\Gamma_1 = K_1\)</span> — the pole
+   filters discarded exactly the constant term (<span class="arithmatex">\(p = 1\)</span>,
+   <span class="arithmatex">\(\beta = 0\)</span>) that carries the asymptote — so its residual was of
+   order <span class="arithmatex">\(|K_1|\)</span> for every stack, silently, and for two-layer stacks
+   it returned <span class="arithmatex">\(P = 0\)</span> with <code>rms = nan</code>. It now splits <span class="arithmatex">\(K_1\)</span> off
+   analytically as a <span class="arithmatex">\(\beta = 0\)</span> image, fits only the decaying
+   remainder, re-solves the least-squares weights <em>after</em> the pole
+   filter, derives the grid step from the structure scale
+   <span class="arithmatex">\(h_{\max}\)</span> (not <span class="arithmatex">\(h_{\min}\)</span>), verifies the result on an
+   independent log-spaced grid, and warns via a dedicated
+   <code>ComplexImageFitWarning</code> when either residual exceeds <code>rms_tol</code>.
+   Measured on <span class="arithmatex">\(\rho = [100, 400, 50]\ \Omega\text{m}\)</span>,
+   <span class="arithmatex">\(h = [2, 3]\ \text{m}\)</span>: RMS <span class="arithmatex">\(0.585 \to 2.1 \cdot 10^{-13}\)</span>; on
+   a two-layer stack: <code>nan</code> <span class="arithmatex">\(\to 0\)</span> exactly.</p>
+</li>
+</ol>
+<p><strong>Consequence for cross-validation tables.</strong> A table listing
+<code>image_2layer</code>, <code>cim</code> and <code>bem</code> as three agreeing engines reports one
+computation up to three times. The independent checks are
+<code>mom_sommerfeld</code> (direct quadrature of the full layered Green's
+function) and <code>fem</code> (volume PDE).</p>
+<p><strong>Still open.</strong> Reviving a genuine complex-image engine needs (a) the
+complete layered Green's function of <code>solver/_layered.py</code> — both
+<span class="arithmatex">\(2h_1\)</span> image families and the multiple-reflection denominator — and
+(b) the now-honest fit above. Only then should <code>cim</code>/<code>bem</code> accept
+<span class="arithmatex">\(n \ge 3\)</span> again, and only then does <code>Engine</code> need to expose
+<code>n_images</code> / <code>n_samples</code> (the parameters were removed from
+<code>solve_cim</code> / <code>solve_bem</code> in 0.15.0 because <code>Engine.solve</code> could
+never reach them).</p>
 
 
 
