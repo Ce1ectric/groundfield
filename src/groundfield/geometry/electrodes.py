@@ -25,9 +25,20 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Sequence
 from typing import Literal, Union
 
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from groundfield.geometry.primitives import (
+    WireSegments,
+    _edge_wires,
+    _grid_wire_polylines,
+    _grid_wires,
+    _split_interval_at_interfaces,
+    _straight_wire,
+)
 
 __all__ = [
     "Electrode",
@@ -72,6 +83,89 @@ class _ElectrodeBase(BaseModel):
         """
         raise NotImplementedError
 
+    # ------------------------------------------------------------------
+    # Geometry queries (review pass 10, 10.79). Every electrode kind
+    # answers them itself, so solvers, diagnostics, plots and exporters
+    # no longer need an ``isinstance`` ladder over the kinds.
+    # ------------------------------------------------------------------
+
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """Discretise the electrode into straight segments.
+
+        This is the discretisation every image-family backend uses (see
+        :mod:`groundfield.geometry.primitives` for the conventions).
+
+        Parameters
+        ----------
+        ds
+            Target (maximum) segment length in m, ``> 0``.
+        layer_interfaces
+            Optional soil-layer interface depths in m (e.g. ``(h_1,)``).
+            Wires whose depth range crosses an interface are split there
+            first, so no segment straddles it. Horizontal electrodes are
+            unaffected.
+
+        Returns
+        -------
+        WireSegments
+            Midpoints, lengths and unit tangents of the segments.
+        """
+        raise NotImplementedError
+
+    def segment_count(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> int:
+        """Number of segments :meth:`segments` produces for ``ds`` (in m)."""
+        return len(self.segments(ds, layer_interfaces))
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """Exact wire geometry as polylines for drawing and export.
+
+        Parameters
+        ----------
+        n_arc
+            Number of points used to sample a closed circular wire
+            (first point repeated at the end). Straight wires are
+            returned by their end points.
+
+        Returns
+        -------
+        list[numpy.ndarray]
+            One ``(K, 3)`` array of vertices in m per connected wire
+            run.
+        """
+        raise NotImplementedError
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        """Axis-aligned bounding box of the wire geometry.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(lower, upper)`` corners ``(x, y, z)`` in m, each of shape
+            ``(3,)``.
+        """
+        pts = np.concatenate(self.wire_polylines(), axis=0)
+        return pts.min(axis=0), pts.max(axis=0)
+
+    def total_length(self) -> float:
+        """Total wire length in m (all wires of the electrode)."""
+        raise NotImplementedError
+
+    def min_feature_length(self) -> float:
+        """Smallest characteristic dimension in m.
+
+        Compared with the segment length by the pre-flight resolution
+        check: a feature shorter than ``segment_length`` is represented
+        by the discretiser's lower floor only. Rod and strip: the
+        length; ring: the circumference; polyline: the shortest edge;
+        star: the arm length; mesh: the smallest of extent and spacing;
+        grid mesh: the smaller mesh span.
+        """
+        raise NotImplementedError
+
 
 class RodElectrode(_ElectrodeBase):
     """Vertical driven rod (Tiefenerder).
@@ -93,6 +187,35 @@ class RodElectrode(_ElectrodeBase):
     @property
     def connection_point(self) -> Point3D:
         return self.position
+
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """Vertical rod: equal segments per soil layer (see base class)."""
+        x0, y0, z0 = self.position
+        head = np.array([x0, y0, 0.0])
+        tangent = np.array([0.0, 0.0, 1.0])
+        parts = []
+        for z_lo, z_hi in _split_interval_at_interfaces(
+            z0, z0 + self.length, layer_interfaces
+        ):
+            part_len = z_hi - z_lo
+            n = max(1, int(np.ceil(part_len / ds)))
+            parts.append(_straight_wire(head, tangent, z_lo, part_len / n, n))
+        return WireSegments.concatenate(parts)
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """Head and foot of the rod (see base class)."""
+        x, y, z = self.position
+        return [np.array([[x, y, z], [x, y, z + self.length]], dtype=float)]
+
+    def total_length(self) -> float:
+        """Rod length in m."""
+        return float(self.length)
+
+    def min_feature_length(self) -> float:
+        """Rod length in m."""
+        return float(self.length)
 
 
 class RingElectrode(_ElectrodeBase):
@@ -116,6 +239,60 @@ class RingElectrode(_ElectrodeBase):
         # Anchor at the first point of the ring (along +x).
         cx, cy, cz = self.center
         return (cx + self.radius, cy, cz)
+
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """Horizontal ring: ``max(8, ceil(2πr/ds))`` equal arcs (see base class).
+
+        Each arc is represented by its midpoint on the circle, its arc
+        length and the tangent there.
+        """
+        perimeter = 2.0 * np.pi * self.radius
+        n = max(8, int(np.ceil(perimeter / ds)))
+        seg_len = perimeter / n
+        cx, cy, cz = self.center
+        mids = np.empty((n, 3))
+        dirs = np.empty((n, 3))
+        for k in range(n):
+            # Scalar trigonometry, kept from the historic discretiser so
+            # the midpoints stay bit-identical across platforms.
+            phi = 2.0 * np.pi * (k + 0.5) / n
+            mids[k] = (
+                cx + self.radius * np.cos(phi),
+                cy + self.radius * np.sin(phi),
+                cz,
+            )
+            dirs[k] = (-np.sin(phi), np.cos(phi), 0.0)
+        return WireSegments(mids, np.full(n, seg_len), dirs)
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """Closed circle sampled at ``n_arc`` points (see base class)."""
+        cx, cy, cz = self.center
+        theta = np.linspace(0.0, 2.0 * np.pi, n_arc)
+        return [
+            np.column_stack(
+                [
+                    cx + self.radius * np.cos(theta),
+                    cy + self.radius * np.sin(theta),
+                    np.full_like(theta, cz),
+                ]
+            )
+        ]
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        """Exact bounding box of the circle (see base class)."""
+        cx, cy, cz = self.center
+        r = self.radius
+        return np.array([cx - r, cy - r, cz]), np.array([cx + r, cy + r, cz])
+
+    def total_length(self) -> float:
+        """Circumference ``2πr`` in m."""
+        return float(2.0 * math.pi * self.radius)
+
+    def min_feature_length(self) -> float:
+        """Circumference ``2πr`` in m."""
+        return float(2.0 * math.pi * self.radius)
 
 
 class StripElectrode(_ElectrodeBase):
@@ -184,6 +361,44 @@ class StripElectrode(_ElectrodeBase):
     @property
     def connection_point(self) -> Point3D:
         return self.start
+
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """Straight strip: equal segments along the axis (see base class).
+
+        A sloped strip whose depth range crosses a layer interface would
+        be split there first (ADR-0007 step 1); the model validator
+        keeps strips horizontal, so this only guards the invariant.
+        """
+        L = self.length
+        p0 = np.array(self.start, dtype=float)
+        p1 = np.array(self.end, dtype=float)
+        direction = (p1 - p0) / L
+        # Map interface depths to axis parameters t in [0, L].
+        t_cuts: list[float] = []
+        dz = p1[2] - p0[2]
+        if layer_interfaces and abs(dz) > 1e-12:
+            for h in layer_interfaces:
+                t_cuts.append((h - p0[2]) / dz * L)
+        parts = []
+        for t_lo, t_hi in _split_interval_at_interfaces(0.0, L, t_cuts):
+            part_len = t_hi - t_lo
+            n = max(1, int(np.ceil(part_len / ds)))
+            parts.append(_straight_wire(p0, direction, t_lo, part_len / n, n))
+        return WireSegments.concatenate(parts)
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """Start and end point (see base class)."""
+        return [np.array([list(self.start), list(self.end)], dtype=float)]
+
+    def total_length(self) -> float:
+        """Strip length in m."""
+        return float(self.length)
+
+    def min_feature_length(self) -> float:
+        """Strip length in m."""
+        return float(self.length)
 
 
 class PolylineElectrode(_ElectrodeBase):
@@ -295,6 +510,38 @@ class PolylineElectrode(_ElectrodeBase):
     def connection_point(self) -> Point3D:
         return self.vertices[0]
 
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """One strip-style chain per edge (see base class).
+
+        Every edge is discretised exactly like a :class:`StripElectrode`,
+        so a closed rectangular polyline reproduces the four perimeter
+        wires of the equivalent strip chain. Degenerate edges (zero
+        length) are skipped.
+        """
+        return _edge_wires(self.edges, ds, skip_degenerate=True)
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """The vertex chain, closed if ``closed`` (see base class)."""
+        pts = [list(v) for v in self.vertices]
+        if self.closed and len(pts) > 2:
+            pts.append(list(self.vertices[0]))
+        return [np.array(pts, dtype=float)]
+
+    def total_length(self) -> float:
+        """Sum of the edge lengths in m."""
+        return float(self.length)
+
+    def min_feature_length(self) -> float:
+        """Shortest edge in m."""
+        return float(
+            min(
+                ((ex - sx) ** 2 + (ey - sy) ** 2) ** 0.5
+                for (sx, sy, _), (ex, ey, _) in self.edges
+            )
+        )
+
 
 class StarElectrode(_ElectrodeBase):
     r"""Buried horizontal star electrode (*Sternerder*).
@@ -381,6 +628,24 @@ class StarElectrode(_ElectrodeBase):
     def connection_point(self) -> Point3D:
         return self.center
 
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """One strip-style chain per arm, centre to tip (see base class)."""
+        return _edge_wires(self.edges, ds, skip_degenerate=False)
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """One straight wire per arm (see base class)."""
+        return [np.array([list(a), list(b)], dtype=float) for a, b in self.edges]
+
+    def total_length(self) -> float:
+        """``n_arms * arm_length`` in m."""
+        return float(self.length)
+
+    def min_feature_length(self) -> float:
+        """Arm length in m."""
+        return float(self.arm_length)
+
 
 class MeshElectrode(_ElectrodeBase):
     """Rectangular mesh earth electrode (uniform spacing).
@@ -410,6 +675,43 @@ class MeshElectrode(_ElectrodeBase):
         cx, cy, cz = self.corner
         dx, dy = self.size
         return (cx + dx / 2.0, cy + dy / 2.0, cz)
+
+    def _wire_counts(self) -> tuple[int, int]:
+        """Wire positions ``(n_x_positions, n_y_positions)`` from ``spacing``."""
+        dx, dy = self.size
+        nx = max(2, int(np.round(dx / self.spacing)) + 1)
+        ny = max(2, int(np.round(dy / self.spacing)) + 1)
+        return nx, ny
+
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """Grid of wires at ``spacing`` (see base class)."""
+        cx, cy, cz = self.corner
+        dx, dy = self.size
+        nx, ny = self._wire_counts()
+        return _grid_wires(
+            cx=cx, cy=cy, cz=cz, dx=dx, dy=dy, nx_wires=ny, ny_wires=nx, ds=ds
+        )
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """Every wire of the mesh (see base class)."""
+        cx, cy, cz = self.corner
+        dx, dy = self.size
+        nx, ny = self._wire_counts()
+        return _grid_wire_polylines(
+            cx=cx, cy=cy, cz=cz, dx=dx, dy=dy, nx_wires=ny, ny_wires=nx
+        )
+
+    def total_length(self) -> float:
+        """Length of all wires in m."""
+        dx, dy = self.size
+        nx, ny = self._wire_counts()
+        return float(ny * dx + nx * dy)
+
+    def min_feature_length(self) -> float:
+        """Smallest of the two extents and the spacing, in m."""
+        return float(min(self.size[0], self.size[1], self.spacing))
 
 
 class GridMeshElectrode(_ElectrodeBase):
@@ -454,6 +756,46 @@ class GridMeshElectrode(_ElectrodeBase):
         cx, cy, cz = self.corner
         dx, dy = self.size
         return (cx + dx / 2.0, cy + dy / 2.0, cz)
+
+    def segments(
+        self, ds: float, layer_interfaces: Sequence[float] | None = None
+    ) -> WireSegments:
+        """Grid of ``n_y + 1`` by ``n_x + 1`` wires (see base class)."""
+        cx, cy, cz = self.corner
+        dx, dy = self.size
+        return _grid_wires(
+            cx=cx,
+            cy=cy,
+            cz=cz,
+            dx=dx,
+            dy=dy,
+            nx_wires=self.n_y + 1,
+            ny_wires=self.n_x + 1,
+            ds=ds,
+        )
+
+    def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
+        """Every wire of the grid (see base class)."""
+        cx, cy, cz = self.corner
+        dx, dy = self.size
+        return _grid_wire_polylines(
+            cx=cx,
+            cy=cy,
+            cz=cz,
+            dx=dx,
+            dy=dy,
+            nx_wires=self.n_y + 1,
+            ny_wires=self.n_x + 1,
+        )
+
+    def total_length(self) -> float:
+        """Length of all wires in m."""
+        dx, dy = self.size
+        return float((self.n_y + 1) * dx + (self.n_x + 1) * dy)
+
+    def min_feature_length(self) -> float:
+        """Smaller mesh span in m."""
+        return float(min(self.size[0] / self.n_x, self.size[1] / self.n_y))
 
 
 # Discriminated union used inside ``World``.

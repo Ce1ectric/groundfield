@@ -58,9 +58,6 @@ if TYPE_CHECKING:  # pragma: no cover
 # Re-exports: the implementation moved into private modules (review
 # pass 10, 10.75 / 10.79). Sibling backends, tests and user notebooks
 # import these names from ``groundfield.solver.image``; keep them here.
-from groundfield.solver._discretize import _TANGENT_X as _TANGENT_X
-from groundfield.solver._discretize import _TANGENT_Y as _TANGENT_Y
-from groundfield.solver._discretize import _TANGENT_Z as _TANGENT_Z
 from groundfield.solver._discretize import (
     _conductor_node_name as _conductor_node_name,
 )
@@ -70,20 +67,7 @@ from groundfield.solver._discretize import (
 from groundfield.solver._discretize import (
     _discretize_electrode as _discretize_electrode,
 )
-from groundfield.solver._discretize import (
-    _discretize_grid_mesh as _discretize_grid_mesh,
-)
-from groundfield.solver._discretize import _discretize_mesh as _discretize_mesh
-from groundfield.solver._discretize import (
-    _discretize_polyline as _discretize_polyline,
-)
-from groundfield.solver._discretize import _discretize_ring as _discretize_ring
-from groundfield.solver._discretize import _discretize_rod as _discretize_rod
-from groundfield.solver._discretize import _discretize_star as _discretize_star
-from groundfield.solver._discretize import _discretize_strip as _discretize_strip
 from groundfield.solver._discretize import _DistributedBranch as _DistributedBranch
-from groundfield.solver._discretize import _frozen as _frozen
-from groundfield.solver._discretize import _grid_segments as _grid_segments
 from groundfield.solver._discretize import _Segment as _Segment
 from groundfield.solver._discretize import _segments_per_wire as _segments_per_wire
 from groundfield.solver._discretize import (
