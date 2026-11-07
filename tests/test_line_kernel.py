@@ -259,3 +259,71 @@ def test_mutual_matrix_uses_the_line_kernel(soil) -> None:
     np.testing.assert_allclose(
         Z[1, 0], res.potential(np.array([[30.0, 0.0, 0.0]]))[0], rtol=1e-10
     )
+
+
+def _two_houses(soil) -> gf.World:
+    w = gf.create_world(soil=soil)
+    for k, x in enumerate((0.0, 25.0)):
+        gf.create_electrode(
+            w,
+            "grid_mesh",
+            name=f"h{k}",
+            corner=(x, 0.0, 0.8),
+            size=(10.0, 10.0),
+            n_x=2,
+            n_y=2,
+        )
+    gf.create_conductor(
+        w,
+        name="pen",
+        start="h0",
+        end="h1",
+        conductor_type="pen",
+        cross_section=50e-6,
+        coupling_to_soil="isolated",
+    )
+    gf.create_source(w, attached_to="h0", magnitude=1.0)
+    return w
+
+
+@pytest.mark.finding("10.28", "10.56")
+@pytest.mark.parametrize(
+    "soil",
+    [
+        gf.HomogeneousSoil(resistivity=RHO),
+        gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=5.0),
+    ],
+    ids=["homogeneous", "two_layer"],
+)
+def test_line_kernel_in_row_blocks_agrees_with_the_materialised_matrix(
+    monkeypatch, soil
+) -> None:
+    """Beyond the matrix budget the line corrections are applied per row
+    block; solve and field agree with the materialised path to round-off."""
+    from groundfield.solver import _kernels
+
+    w = _two_houses(soil)
+    eng = gf.Engine(segment_length=0.5, kernel="line")
+    pts = np.array([[3.0, 4.0, 0.0], [40.0, -5.0, 0.0], [12.5, 5.0, 0.0]])
+    ref = w.solve(eng)
+    monkeypatch.setattr(_kernels, "MATRIX_BUDGET_BYTES", 0)
+    monkeypatch.setattr(_kernels, "FIELD_PIECE_BYTES", 0)
+    monkeypatch.setattr(_kernels, "BLOCK_BYTES", 1 << 16)
+    blocked = w.solve(eng)
+    for name, u in ref.electrode_potentials.items():
+        np.testing.assert_allclose(blocked.electrode_potentials[name], u, rtol=1e-12)
+    np.testing.assert_allclose(blocked.potential(pts), ref.potential(pts), rtol=1e-12)
+
+
+@pytest.mark.finding("10.28")
+def test_line_result_round_trips_through_json() -> None:
+    """A stored line-kernel result evaluates the same field after loading."""
+    from groundfield.solver.result import FieldResult
+
+    res = _two_houses(gf.HomogeneousSoil(resistivity=RHO)).solve(
+        gf.Engine(segment_length=0.5, kernel="line")
+    )
+    back = FieldResult.model_validate_json(res.model_dump_json())
+    pts = np.array([[1.0, 0.0, 0.0], [5.0, 5.0, 0.8 + 0.01], [30.0, 5.0, 0.0]])
+    assert back.metadata["kernel"] == "line"
+    np.testing.assert_array_equal(back.potential(pts), res.potential(pts))
