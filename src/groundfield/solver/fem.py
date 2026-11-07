@@ -943,7 +943,7 @@ def solve_fem(
     _reject_concrete_shells(world, "fem")
     _warn_ignored_sources(world, "fem")
 
-    stack = as_layer_stack(world.soil)
+    stack = as_layer_stack(world.soil, canonical=False)
     rho_1 = float(stack.rhos[0])
     # The mesh follows the soil description (every layer interface is
     # cut into the elements). We do *not* collapse equal-ρ stacks down

@@ -85,7 +85,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
-from groundfield.solver._layered import LayerStack, as_layer_stack
+from groundfield.solver._layered import LayerStack, as_layer_stack, canonical_soil
 from groundfield.solver.image import (
     _assemble_inductance_matrix,
     _build_clusters,
@@ -448,7 +448,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
         electrode_currents=electrode_currents,
         point_sources=point_sources,
         soil_resistivity=float(stack.rhos[0]),
-        soil=world.soil,
+        soil=canonical_soil(world.soil),
         clusters=cluster_members,
         metadata=metadata,
     )

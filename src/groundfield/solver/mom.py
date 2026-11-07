@@ -64,7 +64,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import HomogeneousSoil, TwoLayerSoil
+from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
+from groundfield.solver._layered import canonical_soil
 from groundfield.solver.image import (
     _assemble_inductance_matrix,
     _build_clusters,
@@ -398,10 +399,22 @@ def solve_mom(
     """
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil)):
+    if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(
-            "Backend 'mom' currently supports HomogeneousSoil and "
-            f"TwoLayerSoil only. Got: {type(world.soil).__name__}."
+            "Backend 'mom' supports HomogeneousSoil, TwoLayerSoil and "
+            "MultiLayerSoil stacks with at most two distinct layers. "
+            f"Got: {type(world.soil).__name__}."
+        )
+    # Review pass 10, 10.48: solve the canonical soil — a MultiLayerSoil
+    # whose adjacent layers share a resistivity is a two-layer (or
+    # homogeneous) soil, and a TwoLayerSoil without contrast is
+    # homogeneous.
+    soil = canonical_soil(world.soil)
+    if isinstance(soil, MultiLayerSoil):
+        raise TypeError(
+            "Backend 'mom' supports at most two distinct soil layers; this "
+            f"MultiLayerSoil has {len(soil.layers)}. Use "
+            "backend='mom_sommerfeld' for n >= 3 soils."
         )
     _reject_concrete_shells(world, "mom")
     _warn_ignored_sources(world, "mom")
@@ -413,14 +426,14 @@ def solve_mom(
     ds = engine.segment_length
     _log.info(
         "mom: soil=%s, segment_length=%.3f",
-        type(world.soil).__name__,
+        type(soil).__name__,
         ds,
     )
 
     # 1) Discretisation — identical to the image backends; for
     #    two-layer soil segments are split at the interface
     #    (ADR-0007 step 1, audit 2026-07-08 WP-D2).
-    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
+    interfaces = (soil.h_1,) if isinstance(soil, TwoLayerSoil) else None
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
@@ -495,29 +508,27 @@ def solve_mom(
     #    *solves* the per-segment current distribution — exactly the
     #    tool to quantify the image family's uniform-leakage bias
     #    across the interface.
-    if isinstance(world.soil, TwoLayerSoil):
+    if isinstance(soil, TwoLayerSoil):
         z_max = seg_points[:, 2].max()
-        if z_max >= world.soil.h_1:
+        if z_max >= soil.h_1:
             _log.info(
                 "mom: cross-layer geometry (z_max = %.3f m >= h_1 = "
                 "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
                 z_max,
-                world.soil.h_1,
+                soil.h_1,
             )
 
     # 5) Assemble the reaction matrix Z (kernel depends on soil model).
     n_terms_used = 0
-    if isinstance(world.soil, HomogeneousSoil):
-        Z = _build_Z_homogeneous(
-            seg_points, seg_lengths, wire_radii, world.soil.resistivity
-        )
+    if isinstance(soil, HomogeneousSoil):
+        Z = _build_Z_homogeneous(seg_points, seg_lengths, wire_radii, soil.resistivity)
     else:
         # TwoLayerSoil
         Z = _build_Z_two_layer(
             seg_points,
             seg_lengths,
             wire_radii,
-            world.soil,
+            soil,
             two_layer_max_terms,
             two_layer_tol,
         )
@@ -525,8 +536,8 @@ def solve_mom(
         from groundfield.solver.image_2layer import _two_layer_image_offsets
 
         _, _, _, n_terms_used = _two_layer_image_offsets(
-            world.soil.reflection_coefficient,
-            world.soil.h_1,
+            soil.reflection_coefficient,
+            soil.h_1,
             two_layer_max_terms,
             two_layer_tol,
         )
@@ -537,8 +548,8 @@ def solve_mom(
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
 
-    if isinstance(world.soil, HomogeneousSoil):
-        rho_self = world.soil.resistivity
+    if isinstance(soil, HomogeneousSoil):
+        rho_self = soil.resistivity
         phi_kernel = lambda sc_real: _self_corrected_kernel(
             seg_points,
             seg_lengths,
@@ -548,7 +559,7 @@ def solve_mom(
         )
     else:
         self_kernel = _two_layer_self_kernel_factory(
-            world.soil,
+            soil,
             two_layer_max_terms,
             two_layer_tol,
             allow_cross_layer=True,
@@ -629,12 +640,12 @@ def solve_mom(
         )
 
     # 9) Soil-specific metadata.
-    if isinstance(world.soil, HomogeneousSoil):
-        soil_resistivity = float(world.soil.resistivity)
+    if isinstance(soil, HomogeneousSoil):
+        soil_resistivity = float(soil.resistivity)
         soil_meta: dict[str, float | int | bool] = {}
     else:
-        K = world.soil.reflection_coefficient
-        soil_resistivity = float(world.soil.rho_1)
+        K = soil.reflection_coefficient
+        soil_resistivity = float(soil.rho_1)
         converged = (
             _series_tail_bound(abs(K), n_terms_used) < two_layer_tol
             if n_terms_used
@@ -651,9 +662,9 @@ def solve_mom(
             )
         soil_meta = {
             "K": float(K),
-            "rho_1": float(world.soil.rho_1),
-            "rho_2": float(world.soil.rho_2),
-            "h_1": float(world.soil.h_1),
+            "rho_1": float(soil.rho_1),
+            "rho_2": float(soil.rho_2),
+            "h_1": float(soil.h_1),
             "n_terms_used": n_terms_used,
             "converged": bool(converged),
         }
@@ -665,7 +676,7 @@ def solve_mom(
         electrode_currents=electrode_currents,
         point_sources=point_sources,
         soil_resistivity=soil_resistivity,
-        soil=world.soil,
+        soil=soil,
         clusters=cluster_members,
         metadata={
             "world_name": world.name,
@@ -678,7 +689,7 @@ def solve_mom(
             **_carson_skin_metadata(
                 has_inductance,
                 sigma_earth_for_carson,
-                world.soil,
+                soil,
                 engine.frequencies,
             ),
             **(

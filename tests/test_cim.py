@@ -65,13 +65,16 @@ def test_cim_three_layer_rejected() -> None:
     incomplete Green's function (single image family, no multiple
     reflections); until a complete kernel exists the backend raises
     and points at mom_sommerfeld / fem.
+
+    The stack has three *distinct* resistivities: an equal-resistivity
+    stack is homogeneous after canonicalisation (10.48) and is solved,
+    see ``tests/test_layer_stack.py``.
     """
-    rho = 100.0
     multilayer = gf.MultiLayerSoil(
         layers=[
-            gf.SoilLayer(resistivity=rho, thickness=2.0),
-            gf.SoilLayer(resistivity=rho, thickness=2.0),
-            gf.SoilLayer(resistivity=rho, thickness=None),
+            gf.SoilLayer(resistivity=100.0, thickness=2.0),
+            gf.SoilLayer(resistivity=300.0, thickness=2.0),
+            gf.SoilLayer(resistivity=50.0, thickness=None),
         ]
     )
     eng = gf.create_engine(backend="cim", segment_length=SEG)

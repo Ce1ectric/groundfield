@@ -131,6 +131,7 @@ from groundfield.soil.models import (
 from groundfield.solver._layered import (
     LayerStack,
     as_layer_stack,
+    canonical_soil,
     reflection_gamma,
 )
 from groundfield.solver.image import (
@@ -947,7 +948,7 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
         electrode_currents=electrode_currents,
         point_sources=point_sources,
         soil_resistivity=float(stack.rhos[0]),
-        soil=world.soil,
+        soil=canonical_soil(world.soil),
         clusters=cluster_members,
         metadata=metadata,
     )
