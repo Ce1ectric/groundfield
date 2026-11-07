@@ -67,7 +67,7 @@
   image twice: the earth-return reactance of a 1 km PEN was 2.04× (50 Hz) and
   2.19× (1 kHz) Carson's value. The solver now builds the inductance matrix with
   `image="antiparallel"`; the 1 km PEN matches l·X′_Carson(GMR = a·e^(−1/4)) to
-  2.5e-4 (50 Hz) and 1.5e-4 (1 kHz). On R8's W3c network (30 houses, PEN Neumann)
+  7e-6 (50 Hz) and 4.2e-4 (1 kHz). On R8's W3c network (30 houses, PEN Neumann)
   the substation impedance at 1 kHz drops from 0.4288 + 0.3439j Ω to
   0.3964 + 0.2301j Ω (|Z| −17 %). Affects every `carson_series` result with an
   inductive conductor (all backends that share the inductive assembly). Golden
@@ -110,3 +110,10 @@
   characters; they are raw strings now. Tests:
   `tests/test_coupling_conventions.py::test_modules_compile_without_invalid_escape_sequences`,
   `::test_docstrings_contain_no_control_characters`.
+- **`segment_distance` with a zero-length segment (audit F04, 10.44):** a point
+  segment was measured from the start of the other segment (5.099 m instead of
+  1.0 m for a point 1 m beside the middle of a 10 m cable), so
+  `find_close_wires` / `find_close_conductors` missed a point-like bond 2 cm from
+  a cable; points now take the clamped orthogonal projection. Tests:
+  `tests/test_conductor_proximity.py::test_segment_distance_with_point_segments`,
+  `::test_point_like_bond_next_to_a_cable_is_reported`.

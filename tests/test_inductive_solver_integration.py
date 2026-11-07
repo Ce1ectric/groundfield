@@ -1,12 +1,14 @@
-"""Solver-level behaviour of the inductive stack that lands in wave 2.
+"""Solver-level behaviour of the inductive stack (review pass 10, wave 2).
 
-The coupling-side APIs exist since review pass 10 (stream COUP-1):
-``image=`` conventions, ``touching="exact"``, multi-frequency builders,
-``Conductor.resistance_model="skin"``. The solver switches to them in
-wave 2 (stream COUP-2, on top of the new solver structure); until then
-each test below is a strict ``xfail`` — it turns into a failure (XPASS)
-the moment the solver change lands, so the marker has to be removed in
-the same commit.
+The coupling-side APIs of stream COUP-1 (``image=`` conventions,
+``touching="exact"``, multi-frequency builders,
+``Conductor.resistance_model="skin"``) as the solver uses them (stream
+COUP-2): Carson's correction on its anti-parallel image baseline (10.20),
+Neumann inductance of lumped and single-segment conductors (10.24), the
+skin effect in the branch impedance (10.37), exact touching pairs and the
+image-free Sommerfeld baseline (10.46), one multi-frequency assembly per
+solve (10.60). The first eight tests were strict ``xfail`` markers of
+wave 1.
 """
 
 from __future__ import annotations
@@ -19,8 +21,6 @@ import pytest
 
 import groundfield as gf
 from groundfield.conductors import Conductor
-
-WAVE2 = pytest.mark.xfail(strict=True, reason="wave 2: solver integration")
 
 RHO_SOIL = 100.0
 RHO_AL = 2.82e-8
