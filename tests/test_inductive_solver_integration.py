@@ -117,7 +117,6 @@ def test_skin_model_raises_the_pen_resistance_at_1khz() -> None:
     assert (z_skin - z_dc).real == pytest.approx(0.5496 * r_dc, rel=1e-2)
 
 
-@WAVE2
 @pytest.mark.finding("10.60")
 def test_sommerfeld_pair_work_does_not_grow_with_the_number_of_frequencies(
     monkeypatch,
@@ -162,3 +161,42 @@ def test_sommerfeld_accepts_a_surface_crossing_conductor() -> None:
     w = _pen_world(60.0, dsl=10.0, end_z=-1.0)
     z = _series_impedance(w, "sommerfeld", [1000.0])[0]
     assert math.isfinite(z.real) and z.imag > 0.0
+
+
+@pytest.mark.finding("10.60")
+@pytest.mark.parametrize("model", ["carson_series", "sommerfeld"])
+def test_multifrequency_solve_equals_single_frequency_solves(model: str) -> None:
+    """One assembly for all frequencies; every frequency is bit-identical."""
+    w = _pen_world(60.0, dsl=10.0)
+    freqs = [0.0, 50.0, 250.0, 1000.0]
+    z_all = _series_impedance(w, model, freqs)
+    for k, f in enumerate(freqs):
+        z_one = _series_impedance(_pen_world(60.0, dsl=10.0), model, [f])[0]
+        assert z_all[k] == z_one
+
+
+@pytest.mark.finding("10.60")
+def test_branch_correction_is_built_once_for_all_frequencies() -> None:
+    """The correction object assembles the engine's frequency set at once."""
+    from groundfield.solver import _pipeline
+
+    w = _pen_world(60.0, dsl=10.0)
+    eng = gf.create_engine(
+        backend="image",
+        segment_length=0.5,
+        frequencies=[50.0, 250.0, 1000.0],
+        earth_inductive_model="sommerfeld",
+    )
+    disc = _pipeline.discretise(w, eng)
+    topo = _pipeline.build_topology(w, disc)
+    branches = _pipeline.assemble_branches(w, eng, topo)
+    correction = branches.earth_correction
+    assert correction.n_assemblies == 0
+    first = correction(2.0 * np.pi * 250.0)
+    assert correction.n_assemblies == 3  # the whole frequency set at once
+    assert correction(2.0 * np.pi * 250.0) is first
+    assert not first.flags.writeable
+    # a frequency outside the engine's set is built on demand
+    correction(2.0 * np.pi * 60.0)
+    assert correction.n_assemblies == 4
+    assert not np.any(correction(0.0))

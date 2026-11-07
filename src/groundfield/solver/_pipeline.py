@@ -366,15 +366,20 @@ def build_topology(world: World, disc: Discretisation) -> Topology:
 
 
 def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchModel:
-    """Step 4: inductance matrix and earth-return correction of the branches.
+    """Step 4: inductance matrix and frequency-dependent branch correction.
 
     ADR-0004 + ADR-0005 + ADR-0006: the partial-inductance matrix covers
     the distributed-conductor branches with ``inductance_model ==
-    "neumann"`` (lumped branches stay purely resistive). With
-    ``earth_inductive_model`` ``"carson_series"`` or ``"sommerfeld"`` a
-    closure builds the per-frequency earth-return correction.
+    "neumann"`` (lumped branches stay purely resistive), built on the
+    image baseline of the earth-return model (see
+    :mod:`groundfield.solver._inductive`). With ``earth_inductive_model``
+    ``"carson_series"`` or ``"sommerfeld"`` the returned correction
+    ``omega -> ΔZ(omega)`` holds the earth-return correction; it is
+    assembled for all frequencies of ``engine`` at once on first use
+    (review pass 10, finding 10.60) and returns the same matrix for each
+    frequency as a single-frequency assembly, bit for bit.
     """
-    model = getattr(engine, "earth_inductive_model", "perfect_mirror")
+    model = engine.earth_inductive_model
     sigma_earth: float | None = None
     layered_earth: object = None
     if model == "carson_series":
@@ -392,6 +397,8 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         earth_model=model,
         sigma_earth=sigma_earth,
         layered_earth=layered_earth,
+        # The angular frequencies exactly as the solve step forms them.
+        omegas=[2.0 * np.pi * float(f) for f in engine.frequencies],
     )
     return BranchModel(
         earth_inductive_model=model,
