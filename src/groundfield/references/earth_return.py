@@ -49,11 +49,19 @@ effect. Two features carry the physics:
   GMR = 7 mm: 0.814 mΩ/m at 50 Hz → 14.39 mΩ/m at 1 kHz, a 17.7×
   rise over a 20× frequency step).
 
-groundfield models the **external** conductor inductance only (no
-internal-flux contribution), so the comparison uses
-:math:`\mathrm{GMR}` equal to the physical wire radius; a solid round
-conductor's internal inductance (:math:`\mathrm{GMR} = a\,e^{-1/4}`) must
-be added separately if required.
+Internal-inductance convention (review pass 10, finding 10.46). The
+formulas here are **external** to the conductor for a given
+:math:`\mathrm{GMR}`. The assembled inductive stack of groundfield adds
+the DC internal inductance :math:`\mu_0/(8\pi)` per metre of a solid round
+conductor to every self term by default
+(:func:`groundfield.coupling.inductance.thin_wire_self_inductance`,
+``include_internal=True``), so a like-for-like comparison uses
+:math:`\mathrm{GMR} = a\,e^{-1/4} = 0.7788\,a`; with ``GMR = a`` the
+stack sits 2.0–2.5 % above Carson's reactance (100 Ω·m at 50 Hz to
+30 Ω·m at 1 kHz, 4 mm wire) for that reason alone. Use ``GMR = a``
+together with ``include_internal=False``. The frequency dependence of the
+internal impedance (skin effect) is
+:meth:`groundfield.conductors.Conductor.internal_impedance_per_length`.
 
 References
 ----------
@@ -77,13 +85,13 @@ __all__ = [
     "carson_mutual_impedance",
 ]
 
-MU_0 = 4.0e-7 * math.pi  # vacuum permeability, H/m
+MU_0 = 4.0e-7 * math.pi  # vacuum permeability, H/m (conventional 4*pi*1e-7)
 
 
 def _check_positive(**values: float) -> None:
     for name, value in values.items():
-        if value <= 0.0:
-            raise ValueError(f"{name} must be positive, got {value}")
+        if not (value > 0.0) or not math.isfinite(value):
+            raise ValueError(f"{name} must be positive and finite, got {value}")
 
 
 def carson_earth_return_resistance(frequency: float) -> float:
@@ -139,8 +147,11 @@ def carson_self_impedance(rho: float, frequency: float, *, gmr: float) -> comple
     frequency
         Frequency in Hz. Must be positive.
     gmr
-        Geometric mean radius of the conductor in m (the physical wire
-        radius for a thin external-inductance model). Must be positive.
+        Geometric mean radius of the conductor in m: the physical wire
+        radius :math:`a` for an external-inductance model, ``0.7788·a``
+        to include the internal inductance of a solid round conductor
+        (the convention of the assembled stack, see the module
+        docstring). Must be positive.
 
     Returns
     -------
