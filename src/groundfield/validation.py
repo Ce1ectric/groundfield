@@ -265,6 +265,21 @@ def _safe(method, arg: str) -> list[complex] | None:
         return None
 
 
+def _computation_key(engine: Engine, result: FieldResult) -> tuple[str, str]:
+    """Backend that actually ran plus the engine settings, as a hashable key.
+
+    The backend is taken from ``metadata['dispatched_to']`` (an alias
+    called directly), else ``metadata['effective_backend']`` (the
+    registry), else :attr:`FieldResult.backend`.
+    """
+    import json
+
+    md = result.metadata
+    ran = str(md.get("dispatched_to") or md.get("effective_backend") or result.backend)
+    settings = engine.model_dump(mode="json", exclude={"backend"})
+    return ran, json.dumps(settings, sort_keys=True, default=str)
+
+
 def compare_engines(
     world: "World",
     engines: dict[str, "Engine"],
@@ -347,6 +362,13 @@ def compare_engines(
     the deviation was measured against the ensemble *mean*, which for
     two engines reports half the true disagreement.
 
+    **Aliases (review pass 10, 10.76).** Engines that ran the same
+    computation — the same backend after alias resolution
+    (``metadata['dispatched_to']`` / ``['effective_backend']``) with
+    identical settings, e.g. the deprecated ``cim`` next to
+    ``image_2layer`` — are named in a note: their agreement is not an
+    independent cross-check. The verdict itself is unchanged.
+
     **Vacuous comparisons (changed in 0.15.0).** A report is
     ``is_consistent=True`` only if at least one row was evaluated. A
     world without sources (or with a misspelled ``Source.attached_to``)
@@ -381,6 +403,21 @@ def compare_engines(
     cmp = EngineComparison(
         results=results, rel_tolerance=rel_tolerance, frequencies=freqs
     )
+
+    # Review pass 10, 10.76: a deprecated alias (``cim``, ``bem``,
+    # ``image_nlayer``) runs another backend's computation; agreement with
+    # that backend at the same settings checks nothing.
+    groups: dict[tuple[str, str], list[str]] = {}
+    for label, res in results.items():
+        groups.setdefault(_computation_key(engines[label], res), []).append(label)
+    for (ran, _settings), labels in groups.items():
+        if len(labels) > 1:
+            names = ", ".join(f"'{lbl}'" for lbl in labels)
+            cmp.notes.append(
+                f"Engines {names} ran the same computation (backend '{ran}' "
+                "with identical settings); their agreement is not an "
+                "independent cross-check."
+            )
 
     # Detect stub backends
     for label, res in results.items():

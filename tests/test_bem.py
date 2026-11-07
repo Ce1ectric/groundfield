@@ -59,7 +59,8 @@ def test_bem_metadata() -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     eng = gf.create_engine(backend="bem", segment_length=SEG)
     res = eng.solve(_world(soil))
-    assert res.backend == "bem"
+    # 10.76: deprecated alias of mom; the requested name is recorded.
+    assert res.metadata["backend"] == "bem"
     # One point-matching scheme for the whole mom family (10.31);
     # v0.15.0 reported "collocation" here and "galerkin" for mom.
     assert res.metadata["solver"] == "point_matching"

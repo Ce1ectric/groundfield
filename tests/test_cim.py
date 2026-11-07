@@ -91,29 +91,31 @@ def test_cim_rod_matches_dwight() -> None:
     assert abs(Z - R_dw) / R_dw < 0.05
 
 
+@pytest.mark.finding("10.76")
 def test_cim_metadata() -> None:
-    """Result metadata exposes the fit diagnostics.
+    """``cim`` is a deprecated alias: no fit diagnostics, the image result.
 
-    For ``n_layers = 2`` the engine deliberately uses the closed-form
-    Tagg/Sunde self-kernel (the matrix-pencil fit of a constant
-    ``Γ_1 = K_1`` is ill-conditioned) and therefore reports
-    ``cim_n_images = 0``. For ``n_layers >= 3`` the genuine CIM fit
-    runs and produces ``cim_n_images >= 1``.
+    Up to 0.15.0 the result carried ``cim_n_images`` / ``cim_rms`` /
+    ``reduces_to`` describing a fit no path used. Since 10.76 the name
+    runs the image auto-dispatch; ``n >= 3`` still raises and points at
+    ``mom_sommerfeld``.
     """
     eng = gf.create_engine(backend="cim", segment_length=SEG)
 
     soil_2 = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
-    res_2 = eng.solve(_world(soil_2))
-    assert res_2.backend == "cim"
-    assert "cim_n_images" in res_2.metadata
-    assert "cim_rms" in res_2.metadata
-    assert res_2.metadata["cim_n_images"] == 0
+    with pytest.warns(DeprecationWarning, match="2027.5"):
+        res_2 = eng.solve(_world(soil_2))
+    assert res_2.metadata["backend"] == "cim"
+    assert "cim_n_images" not in res_2.metadata
+    assert "cim_rms" not in res_2.metadata
+    il2 = gf.create_engine(backend="image_2layer", segment_length=SEG)
+    assert res_2.electrode_potentials == il2.solve(_world(soil_2)).electrode_potentials
 
     soil_3 = gf.MultiLayerSoil(
         layers=[
-            gf.SoilLayer(resistivity=100.0, thickness=2.0),
-            gf.SoilLayer(resistivity=400.0, thickness=2.0),
-            gf.SoilLayer(resistivity=50.0, thickness=None),
+            gf.SoilLayer(rho=100.0, h=2.0),
+            gf.SoilLayer(rho=400.0, h=2.0),
+            gf.SoilLayer(rho=50.0, h=None),
         ]
     )
     # n >= 3 is rejected since the WP-E audit fix.
@@ -175,7 +177,9 @@ def test_cim_is_bit_identical_to_image_2layer_for_unequal_segments(
     assert res_cim.electrode_potentials == res_il2.electrode_potentials
     assert res_cim.electrode_currents == res_il2.electrode_currents
     assert res_cim.cluster_impedance("g1") == res_il2.cluster_impedance("g1")
-    assert res_cim.metadata["reduces_to"] == "image_2layer"
+    # 10.76: the alias runs image_2layer itself.
+    ran = res_cim.metadata.get("dispatched_to", res_cim.metadata["effective_backend"])
+    assert ran == "image_2layer"
 
 
 @pytest.mark.finding("10.30")

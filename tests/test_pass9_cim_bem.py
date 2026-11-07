@@ -280,7 +280,7 @@ def test_solve_cim_does_not_call_the_fit(monkeypatch) -> None:
 
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     res = gf.create_engine(backend="cim", segment_length=SEG).solve(_rod_world(soil))
-    assert res.backend == "cim"
+    assert res.metadata["backend"] == "cim"
 
 
 def test_solve_bem_does_not_call_the_fit(monkeypatch) -> None:
@@ -294,39 +294,41 @@ def test_solve_bem_does_not_call_the_fit(monkeypatch) -> None:
 
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     res = gf.create_engine(backend="bem", segment_length=SEG).solve(_ring_world(soil))
-    assert res.backend == "bem"
+    assert res.metadata["backend"] == "bem"
 
 
+@pytest.mark.finding("10.76")
 @pytest.mark.parametrize(
     "soil_kind,expected",
     [("homogeneous", "image"), ("two_layer", "image_2layer")],
 )
 def test_cim_metadata_is_honest(soil_kind: str, expected: str) -> None:
-    """No NaN fit diagnostics; explicit ``cim_fit_used`` (F34).
+    """No fit diagnostics at all; the result names the backend that ran.
 
-    Pre-fix: ``{'cim_n_images': 0, 'cim_rms': nan}`` and no statement
-    that the numbers are bit-identical to another backend.
+    Pass 9 (F34) replaced ``{'cim_n_images': 0, 'cim_rms': nan}`` by
+    ``cim_fit_used=False`` and ``reduces_to``. Since 10.76 ``cim`` is a
+    deprecated alias of the image auto-dispatch, so the result is the
+    image backend's own, without any fit keys.
     """
     soil = (
-        gf.HomogeneousSoil(resistivity=100.0)
+        gf.HomogeneousSoil(rho=100.0)
         if soil_kind == "homogeneous"
         else gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     )
     res = gf.create_engine(backend="cim", segment_length=SEG).solve(_rod_world(soil))
-    assert res.metadata["cim_fit_used"] is False
-    assert res.metadata["cim_rms"] is None
-    assert res.metadata["cim_n_images"] == 0
-    assert res.metadata["reduces_to"] == expected
+    assert not {"cim_fit_used", "cim_rms", "cim_n_images"} & set(res.metadata)
+    ran = res.metadata.get("dispatched_to", res.metadata["effective_backend"])
+    assert ran == expected
 
 
+@pytest.mark.finding("10.76")
 def test_bem_metadata_is_honest() -> None:
-    """``bem`` reports that it reproduces ``mom`` (F34)."""
+    """``bem`` is a deprecated alias of ``mom``: the result is mom's."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     res = gf.create_engine(backend="bem", segment_length=SEG).solve(_ring_world(soil))
-    assert res.metadata["cim_fit_used"] is False
-    assert res.metadata["cim_rms"] is None
-    assert res.metadata["cim_n_images"] == 0
-    assert res.metadata["reduces_to"] == "mom"
+    assert not {"cim_fit_used", "cim_rms", "cim_n_images"} & set(res.metadata)
+    assert res.metadata.get("dispatched_to", res.metadata["effective_backend"]) == "mom"
+    assert res.metadata["solver"] == "point_matching"
 
 
 def test_reduces_to_metadata_is_true() -> None:
@@ -363,43 +365,25 @@ def test_reduces_to_metadata_is_true() -> None:
     assert z_bem.real == pytest.approx(z_mom.real, rel=1e-12)
 
 
+@pytest.mark.finding("10.76")
 def test_dead_complex_image_code_is_gone() -> None:
-    """The unreachable n ≥ 3 helpers were deleted (F34).
+    """The unreachable kernel builders are gone (F34, 10.76).
 
-    ``_cim_field_potential`` had no caller anywhere in ``src/``,
-    ``tests/`` or ``docs/``; the ``fit`` argument threaded through
-    ``_cim_self_kernel_factory`` / ``_build_Z_collocation`` only fed
-    branches that ``solve_cim`` / ``solve_bem`` reject up front, and
-    ``n_images`` / ``n_samples`` on ``solve_cim`` / ``solve_bem`` were
-    unreachable through ``Engine.solve``.
+    ``_cim_field_potential`` had no caller (F34). Since 10.76 ``cim`` and
+    ``bem`` are deprecated aliases of the image auto-dispatch and of
+    ``mom``, so their own self-kernel builders
+    ``_cim_self_kernel_factory`` / ``_build_Z_collocation`` — whose
+    ``n >= 3`` branches only raised — are gone as well; ``n_images`` /
+    ``n_samples`` never reappeared on the solve functions.
     """
     assert not hasattr(cim_mod, "_cim_field_potential")
-
-    assert "fit" not in inspect.signature(cim_mod._cim_self_kernel_factory).parameters
-    assert "fit" not in inspect.signature(bem_mod._build_Z_collocation).parameters
+    assert not hasattr(cim_mod, "_cim_self_kernel_factory")
+    assert not hasattr(bem_mod, "_build_Z_collocation")
 
     for fn in (cim_mod.solve_cim, bem_mod.solve_bem):
         params = inspect.signature(fn).parameters
         assert "n_images" not in params
         assert "n_samples" not in params
-
-
-def test_n3_kernel_builders_raise_instead_of_silently_computing() -> None:
-    """The remaining n ≥ 3 branches raise (F34).
-
-    Pre-fix both builders happily produced a kernel from an incomplete
-    Green's function (single image family), reachable by any future
-    caller that skipped the front-door check.
-    """
-    stack = _three_layer_stack()
-    with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
-        cim_mod._cim_self_kernel_factory(stack)
-
-    pts = np.array([[0.0, 0.0, 0.5], [0.0, 0.0, 1.0]])
-    lengths = np.array([0.5, 0.5])
-    radii = np.array([0.005, 0.005])
-    with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
-        bem_mod._build_Z_collocation(pts, lengths, radii, stack)
 
 
 @pytest.mark.parametrize("backend", ["cim", "bem"])
