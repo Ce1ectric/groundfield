@@ -66,7 +66,10 @@ from groundfield.postprocess.safety import (
     touch_voltage_spectrum,
 )
 from groundfield.postprocess.vector_fitting import (
+    PassivityReport,
+    VectorFitQualityWarning,
     VectorFitResult,
+    check_passivity,
     fit_to_sympy,
     rho_f_from_field_result,
     vector_fit,
@@ -79,7 +82,10 @@ __all__ = [
     "plot_surface_potential",
     "world_bounds_xy",
     "VectorFitResult",
+    "VectorFitQualityWarning",
+    "PassivityReport",
     "vector_fit",
+    "check_passivity",
     "fit_to_sympy",
     "rho_f_from_field_result",
     "RhoFStandardFit",
