@@ -10,3 +10,10 @@ findings = ["10.20", "F32", "10.46"]
 reason = "carson_series assembles Carson's correction on its own anti-parallel image baseline (it was added on top of the additive image: 1.7-2.2x the earth-return reactance), and Carson's small-a series is summed to a^12 (the a^2 term of Q was missing)."
 min_rel_change = 1e-3
 max_rel_change = 1e-2
+
+[[change]]
+cases = ["cond_galvanic_neumann_sommerfeld", "defaults_mixed_cluster_inductive", "cond_isolated_pen_sommerfeld_two_layer"]
+quantities = ["*"]
+findings = ["10.46", "F52"]
+reason = "sommerfeld assembles L and the earth-return correction on the image-free baseline (image='none') instead of adding the additive image and removing it again: the same numbers to round-off (<= 4e-18 against the previous commit); surface-crossing conductors are accepted."
+max_rel_change = 1e-4

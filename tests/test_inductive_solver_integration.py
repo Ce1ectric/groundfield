@@ -149,13 +149,12 @@ def test_inductance_is_refinement_invariant_for_a_straight_conductor() -> None:
     assert z40.imag == pytest.approx(z4.imag, rel=1e-7)
 
 
-@WAVE2
 @pytest.mark.finding("10.46", "F52")
 def test_sommerfeld_accepts_a_surface_crossing_conductor() -> None:
     """With the exact (image-free) baseline a lead may leave the soil.
 
-    Today the additive image of the crossing segment is singular and the
-    solve raises; with ``image="none"`` the coupling side splits the
+    With the additive image the crossing segment is singular and the
+    solve raised; with ``image="none"`` the coupling side splits the
     segment at z = 0.
     """
     w = _pen_world(60.0, dsl=10.0, end_z=-1.0)

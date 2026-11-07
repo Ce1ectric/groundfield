@@ -32,15 +32,18 @@ conventions the three terms are assembled with:
   =========================  ==================  =======================
   ``"perfect_mirror"``       ``"additive"``      none (ADR-0004)
   ``"carson_series"``        ``"antiparallel"``  Carson $(\\omega\\mu_0/\\pi)(P + jQ)$
-  ``"sommerfeld"``           ``"additive"``      $\\Delta G - j\\omega L_\\text{img}$
+  ``"sommerfeld"``           ``"none"``          $\\Delta G = G - 1/R$ (exact)
   =========================  ==================  =======================
 
   Carson's correction is defined against the anti-parallel
   (perfect-electric-conductor) image; up to 0.15.0 the solver added it
   on top of the additive image, which gave 1.66–2.25 times the
   earth-return reactance on 100 m – 1 km lines (+41 % $|Z|$ at 1 kHz
-  on a TN network). The Sommerfeld correction removes the additive
-  image exactly (the very block the inductance matrix added).
+  on a TN network). The Sommerfeld correction is built against free
+  space: exact (no image to add and remove again; the same numbers as
+  the additive pairing to round-off) and valid for conductors that
+  cross the soil surface, which the pair integrals split at $z = 0$
+  (with an image convention such a segment is singular and raises).
 - **Internal inductance**: every self term carries the DC internal
   inductance $\\mu_0\\ell/(8\\pi)$ of a solid round conductor
   (``include_internal=True``), for distributed and lumped branches
@@ -90,7 +93,7 @@ __all__: list[str] = []
 IMAGE_OF_EARTH_MODEL: dict[str, str] = {
     "perfect_mirror": "additive",
     "carson_series": "antiparallel",
-    "sommerfeld": "additive",
+    "sommerfeld": "none",
 }
 
 #: Neumann rule for segments that share an end point or an axis

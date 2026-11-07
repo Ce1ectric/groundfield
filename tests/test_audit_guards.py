@@ -91,14 +91,57 @@ def test_buried_segment_with_image_is_sane() -> None:
     assert L[0, 0] < 1e-4
 
 
-def test_surface_pen_with_neumann_raises_via_solve() -> None:
-    """The end-to-end trap: rods with heads at z = 0, inductive PEN."""
+@pytest.mark.parametrize("model", ["perfect_mirror", "carson_series"])
+def test_surface_pen_with_neumann_raises_via_solve(model: str) -> None:
+    """The end-to-end trap: rods with heads at z = 0, inductive PEN.
+
+    Only the image conventions are singular in the surface plane; the
+    ``sommerfeld`` default assembles on the image-free baseline (review
+    pass 10, 10.46) and solves it (next test).
+    """
     w = _two_rod_world(
         z_head=0.0, discretize_segment_length=25.0, inductance_model="neumann"
     )
-    eng = gf.create_engine(backend="image", segment_length=0.5)
+    eng = gf.create_engine(
+        backend="image", segment_length=0.5, earth_inductive_model=model
+    )
     with pytest.raises(ValueError, match="soil-surface plane"):
         eng.solve(w)
+
+
+@pytest.mark.slow
+@pytest.mark.finding("10.46")
+def test_surface_pen_with_neumann_is_continuous_under_sommerfeld() -> None:
+    """A PEN in the surface plane is the limit of a buried one (sommerfeld)."""
+    from groundfield.conductors import Conductor
+
+    def series_impedance(z_pen: float) -> complex:
+        w = gf.create_world(soil=SOIL)
+        for name, x in (("g1", 0.0), ("g2", 20.0)):
+            gf.create_electrode(w, "rod", name=name, position=(x, 0.0, 0.0), length=3.0)
+        w.add_conductor(
+            Conductor(
+                name="pen",
+                start=(0.0, 0.0, z_pen),
+                end=(20.0, 0.0, z_pen),
+                start_electrode="g1",
+                end_electrode="g2",
+                cross_section=50e-6,
+                discretize_segment_length=10.0,
+                inductance_model="neumann",
+            )
+        )
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        eng = gf.create_engine(
+            backend="image", segment_length=0.5, frequencies=[1000.0]
+        )
+        res = eng.solve(w)
+        dv = res.electrode_potentials["g1"][0] - res.electrode_potentials["g2"][0]
+        return dv / res.electrode_currents["g2"][0]
+
+    z_surface = series_impedance(0.0)
+    assert np.isfinite(z_surface) and z_surface.imag > 0.0
+    assert z_surface == pytest.approx(series_impedance(1e-3), rel=1e-5)
 
 
 # ---------------------------------------------------------------------
