@@ -28,13 +28,22 @@ from groundfield.coupling.inductance import (
 
 
 def _segments_random(n: int, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
-    """``n`` random non-degenerate segments in a 100 m cube."""
+    """``n`` random non-degenerate segments in a 100 m cube.
+
+    Every segment lies entirely on one side of the soil surface
+    (buried or overhead): a segment that crosses ``z = 0`` has a
+    singular mirror image and is rejected by the image conventions
+    since review pass 10 (finding 10.46, pass-9 F52).
+    """
     rng = np.random.default_rng(seed)
     p1 = rng.uniform(-50.0, 50.0, size=(n, 3))
     p2 = p1 + rng.uniform(0.5, 5.0, size=(n, 3)) * rng.choice(
         [-1, 1],
         size=(n, 3),
     )
+    side = np.where(p1[:, 2] >= 0.0, 1.0, -1.0)
+    p1[:, 2] = side * (np.abs(p1[:, 2]) + 0.5)
+    p2[:, 2] = side * (np.abs(p2[:, 2]) + 0.5)
     return np.stack([p1, p2], axis=1), np.full(n, 0.005)
 
 
