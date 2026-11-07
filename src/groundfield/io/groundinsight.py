@@ -42,7 +42,6 @@ The exporter does not care which impedance was fitted (input
 impedance, cluster impedance or the impedance of one electrode); it
 exports the function it is given.
 
-
 Formula text
 ------------
 The formula keeps the structure of the fit (partial fractions for a
@@ -99,7 +98,6 @@ import os
 import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from importlib import metadata as _importlib_metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Sequence, Union
 
@@ -110,22 +108,6 @@ from groundfield.postprocess.rho_f_standard import (
     fit_to_sympy_standard,
 )
 from groundfield.postprocess.vector_fitting import VectorFitResult
-
-
-def _resolve_groundfield_version() -> str:
-    """Resolve the installed ``groundfield`` version without triggering
-    the package ``__init__`` (and its heavy Pydantic imports). Falls
-    back to the literal stored in ``groundfield/__init__.py`` when the
-    package is not installed (e.g. running from a source checkout
-    without ``pip install -e .``).
-    """
-    try:
-        return _importlib_metadata.version("groundfield")
-    except _importlib_metadata.PackageNotFoundError:  # pragma: no cover
-        return "unknown"
-
-
-_GROUNDFIELD_VERSION = _resolve_groundfield_version()
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import sympy
@@ -189,8 +171,22 @@ _PASSIVITY_BAND_FACTOR = 2.0
 _PASSIVITY_REL_TOL = 1e-9
 """``Re Z >= -tol * max|Z|`` counts as passive (rounding of the formula)."""
 
-
 _IO_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
+
+
+def _groundfield_version() -> str:
+    """Return ``groundfield.__version__``, the canonical version source.
+
+    Read at export time rather than from the installed distribution
+    metadata, which is missing when the package runs from a source
+    checkout and stale under an editable install after a release.
+    """
+    try:
+        import groundfield
+
+        return str(groundfield.__version__)
+    except (ImportError, AttributeError):  # pragma: no cover - defensive
+        return "unknown"
 
 
 # ---------------------------------------------------------------------
@@ -319,7 +315,7 @@ class BusTypeSpec:
 
 
 # ---------------------------------------------------------------------
-# Internal helpers
+# Internal helpers — formula text
 # ---------------------------------------------------------------------
 
 
@@ -512,7 +508,7 @@ def _metadata_from_vector_fit(
         "rho_at_fit_Ohm_m": float(rho_at_fit),
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
-        "source": f"groundfield {_GROUNDFIELD_VERSION}",
+        "source": f"groundfield {_groundfield_version()}",
         "created_at_utc": _utc_now_iso(),
     }
 
@@ -524,28 +520,29 @@ def _metadata_from_rho_f_standard(
     soil_summary: Optional[str],
 ) -> dict[str, Any]:
     """Metadata block for a standard-form rho-f export."""
+    quality = {
+        "rms_error_Ohm": float(fit.rms_error),
+        "rms_relative": float(fit.rms_relative),
+    }
+    if getattr(fit, "max_relative", None) is not None:
+        quality["max_relative"] = float(fit.max_relative)
     return {
         "fit_method": "rho_f_standard",
-        "fit_quality": {
-            "rms_error_Ohm": float(fit.rms_error),
-            "rms_relative": float(fit.rms_relative),
-        },
+        "fit_quality": quality,
         "coefficients": {
-            "k1": float(fit.k1),
-            "k2": float(fit.k2),
-            "k3": float(fit.k3),
-            "k4": float(fit.k4),
-            "k5": float(fit.k5),
+            name: float(getattr(fit, name))
+            for name in ("k0", "k1", "k2", "k3", "k4", "k5")
+            if getattr(fit, name, None) is not None
         },
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
-        "source": f"groundfield {_GROUNDFIELD_VERSION}",
+        "source": f"groundfield {_groundfield_version()}",
         "created_at_utc": _utc_now_iso(),
     }
 
 
 # ---------------------------------------------------------------------
-# Public conversion API
+# Internal helpers — passivity
 # ---------------------------------------------------------------------
 
 
@@ -691,7 +688,43 @@ def _passivity_message(name: str, report: dict[str, Any], f_fit_max: float) -> s
     )
 
 
+# ---------------------------------------------------------------------
+# Public conversion API
+# ---------------------------------------------------------------------
+
+
 FitLike = Union[RhoFStandardFit, VectorFitResult]
+
+
+def _check_rho_at_fit(fit: FitLike, rho_at_fit: Optional[float], caller: str) -> None:
+    """Validate ``rho_at_fit`` of a vector fit (finding 10.84).
+
+    Standard-form fits ignore ``rho_at_fit`` (documented behaviour).
+    """
+    if not isinstance(fit, VectorFitResult):
+        return
+    if rho_at_fit is None:
+        raise ValueError(
+            f"{caller}: rho_at_fit is required for a VectorFitResult. A vector "
+            "fit Z(f) holds for the one soil it was computed on; the BusType "
+            "records that resistivity (samples['rho_Ohm_m'], "
+            "metadata['rho_at_fit_Ohm_m']) so that it is paired with a "
+            "groundinsight Bus of the same specific_earth_resistance. Pass it "
+            f"explicitly, e.g. {caller}(fit, ..., rho_at_fit=100.0). For "
+            "layered soil pass the value the groundinsight Bus will carry "
+            "(for example the top-layer resistivity) and describe the layers "
+            "with soil_summary=...; standard-form fits (RhoFStandardFit) do "
+            "not need it."
+        )
+    try:
+        value = float(rho_at_fit)
+    except (TypeError, ValueError):
+        value = math.nan
+    if not (math.isfinite(value) and value > 0.0):
+        raise ValueError(
+            f"{caller}: rho_at_fit must be a positive, finite soil resistivity "
+            f"in Ohm m, got {rho_at_fit!r}."
+        )
 
 
 def _build_spec(
@@ -714,12 +747,7 @@ def _build_spec(
             f"unsupported fit type {type(fit).__name__}; expected "
             "RhoFStandardFit or VectorFitResult"
         )
-    if isinstance(fit, VectorFitResult) and rho_at_fit is None:
-        raise ValueError(
-            "rho_at_fit is required for VectorFitResult exports — "
-            "the resulting BusType is bound to a specific soil "
-            "resistivity, and that value goes into samples and metadata."
-        )
+    _check_rho_at_fit(fit, rho_at_fit, caller)
     if isinstance(decimals, bool) or int(decimals) != decimals or decimals < 1:
         raise ValueError(
             f"{caller}: decimals is the number of significant digits per "
@@ -834,8 +862,8 @@ def to_bustype_dict(
     Raises
     ------
     ValueError
-        If ``rho_at_fit`` is missing for a vector fit, or if the fit has
-        non-finite coefficients.
+        If ``rho_at_fit`` is missing for a vector fit or not a positive
+        finite number, or if the fit has non-finite coefficients.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
     TypeError
@@ -915,7 +943,7 @@ def save_bustype_json(
     Raises
     ------
     ValueError
-        If ``rho_at_fit`` is missing for a vector fit.
+        If ``rho_at_fit`` is missing for a vector fit or invalid.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
 
@@ -1067,7 +1095,7 @@ def to_bustype(
     Raises
     ------
     ValueError
-        If ``rho_at_fit`` is missing for a vector fit.
+        If ``rho_at_fit`` is missing for a vector fit or invalid.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
     ImportError
@@ -1138,7 +1166,7 @@ def save_bustype_to_db(
     Raises
     ------
     ValueError
-        If ``rho_at_fit`` is missing for a vector fit.
+        If ``rho_at_fit`` is missing for a vector fit or invalid.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
     ImportError

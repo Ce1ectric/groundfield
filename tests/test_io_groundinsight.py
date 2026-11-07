@@ -17,7 +17,7 @@ Covers ADR-0008's validation programme:
 
 and the export checks of the calendar release: readable formulas with
 ``decimals`` significant digits (10.73), the passivity check before
-export (10.40).
+export (10.40) and the ``rho_at_fit`` contract of vector fits (10.84).
 Tests that need ``groundinsight`` skip cleanly when it is missing.
 """
 
@@ -32,6 +32,7 @@ import warnings
 import numpy as np
 import pytest
 
+import groundfield
 from groundfield.io.groundinsight import (
     BusTypeSpec,
     NonPassiveFitError,
@@ -42,6 +43,7 @@ from groundfield.io.groundinsight import (
     fit_quality_summary,
     load_bustype_json,
     save_bustype_json,
+    save_bustype_to_db,
     to_bustype,
     to_bustype_dict,
 )
@@ -714,12 +716,132 @@ def test_standard_form_is_checked_over_its_rho_range() -> None:
 
 
 # ---------------------------------------------------------------------
-
-
+# 8. rho_at_fit contract of vector fits (10.84)
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.finding("10.84")
+@pytest.mark.parametrize(
+    "call", ["to_bustype_dict", "save_bustype_json", "to_bustype", "save_bustype_to_db"]
+)
+def test_vector_fit_without_rho_at_fit_raises_an_actionable_error(
+    call: str, tmp_path, monkeypatch
+) -> None:
+    """The documented ``save_bustype_json(fit, ...)`` call without
+    ``rho_at_fit`` fails the same way on every entry point, before any
+    file is written or ``groundinsight`` is imported."""
+    import groundfield.io.groundinsight as bridge
+
+    def no_import():
+        raise AssertionError("groundinsight imported before the arguments were checked")
+
+    monkeypatch.setattr(bridge, "_import_groundinsight", no_import)
+    fit = _make_vector_fit()
+    path = tmp_path / "vf.json"
+    kwargs = dict(name="SubstationBus", system_type="Substation", voltage_level=20)
+    calls = {
+        "to_bustype_dict": lambda: to_bustype_dict(fit, **kwargs),
+        "save_bustype_json": lambda: save_bustype_json(fit, path, **kwargs),
+        "to_bustype": lambda: to_bustype(fit, **kwargs),
+        "save_bustype_to_db": lambda: save_bustype_to_db(fit, **kwargs),
+    }
+    with pytest.raises(ValueError) as excinfo:
+        calls[call]()
+    message = str(excinfo.value)
+    assert message.startswith(f"{call}: rho_at_fit is required for a VectorFitResult")
+    assert f"{call}(fit, ..., rho_at_fit=100.0)" in message
+    assert "soil_summary" in message
+    assert not path.exists()
+
+
+@pytest.mark.finding("10.84")
+@pytest.mark.parametrize("bad", [0.0, -100.0, float("nan"), float("inf"), "abc"])
+def test_rho_at_fit_must_be_a_positive_finite_resistivity(bad) -> None:
+    with pytest.raises(ValueError, match="positive, finite soil resistivity"):
+        to_bustype_dict(
+            _make_vector_fit(),
+            name="vf",
+            system_type="LV",
+            voltage_level=0.4,
+            rho_at_fit=bad,
+        )
+
+
+@pytest.mark.finding("10.84")
+def test_documented_export_call_with_rho_at_fit_round_trips(tmp_path) -> None:
+    fit = _make_vector_fit()
+    path = save_bustype_json(
+        fit,
+        path=tmp_path / "bus_type_substation.json",
+        name="SubstationBus",
+        description="Substation grounding grid (vector-fitted, typical ref).",
+        system_type="Substation",
+        voltage_level=20,
+        rho_at_fit=100.0,
+        soil_summary="HomogeneousSoil rho=100",
+    )
+    spec = load_bustype_json(path)
+    assert spec.metadata["rho_at_fit_Ohm_m"] == 100.0
+    assert set(spec.samples["rho_Ohm_m"]) == {100.0}
+    freqs = np.array([0.0, 50.0, 1000.0])
+    np.testing.assert_allclose(
+        evaluate_spec(spec, freqs, 100.0), fit.evaluate(freqs), rtol=1e-9
+    )
+    # rho_at_fit stays ignored for standard-form fits (documented behaviour)
+    payload = to_bustype_dict(
+        _make_rho_f_fit(),
+        name="s",
+        system_type="LV",
+        voltage_level=0.4,
+        rho_at_fit=-1.0,
+    )
+    assert payload["metadata"]["fit_method"] == "rho_f_standard"
+
+
 # ---------------------------------------------------------------------
+# 9. evaluate_spec agrees with groundinsight's own evaluation
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.01")
+@pytest.mark.parametrize(
+    "which", ["standard", "vector-real", "vector-complex", "seed17"]
+)
+def test_evaluate_spec_matches_groundinsight_evaluation(
+    which: str, gi_compute_impedance
+) -> None:
+    fit = {
+        "standard": _make_rho_f_fit,
+        "vector-real": _make_vector_fit,
+        "vector-complex": _complex_vector_fit,
+        "seed17": _non_passive_vector_fit,
+    }[which]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", NonPassiveFitWarning)
+        payload = to_bustype_dict(
+            fit, name=which, system_type="TN", voltage_level=0.4, rho_at_fit=100.0
+        )
+    spec = BusTypeSpec.from_dict(payload)
+    freqs = [0.0, 5.5, 16.7, 50.0, 150.0, 1000.0]
+    for rho in (30.0, 137.0):
+        z_gf = evaluate_spec(spec, freqs, rho)
+        result = gi_compute_impedance(spec.impedance_formula, freqs, {"rho": rho})
+        z_gi = np.array([complex(result[f].real, result[f].imag) for f in freqs])
+        np.testing.assert_allclose(z_gi, z_gf, rtol=1e-9, atol=0.0)
+
+
+# ---------------------------------------------------------------------
+# 10. Provenance
+# ---------------------------------------------------------------------
+
+
+def test_bustype_metadata_records_the_running_groundfield_version() -> None:
+    """The stamp came from the distribution metadata, which reads
+    ``groundfield unknown`` from a source checkout (review R5-12)."""
+    payload = to_bustype_dict(
+        _make_rho_f_fit(), name="v", system_type="LV", voltage_level=0.4
+    )
+    assert payload["metadata"]["source"] == f"groundfield {groundfield.__version__}"
 
 
 @pytest.mark.parametrize("bad", [0, -3, 2.5, True])
