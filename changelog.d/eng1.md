@@ -11,8 +11,9 @@
   cross-layer rod (B7) is a strict xfail until 10.15 lands.
 - **`FemReductionWarning` (10.23):** `fem` names every reason why its
   equivalent-hemisphere reduction does not model the world (several
-  electrodes in a cluster, several clusters, a layer interface between the
-  electrode and its hemisphere), once per solve. Exported from
+  electrodes in a cluster, several clusters in a driven world, a layer
+  interface between the electrode and its hemisphere), once per solve.
+  Exported from
   `groundfield.solver.fem`. Test:
   `tests/test_fem.py::test_fem_warns_when_electrode_and_hemisphere_straddle_an_interface`.
 - **`compare_engines` tolerance table (10.71):** `EngineComparison.rows`
@@ -24,7 +25,8 @@
   `tests/test_compare_engines.py::test_compare_engines_tolerance_table_is_explicit`.
 - **`mom_sommerfeld` convergence metadata (10.47):** `converged` (bool,
   valid for every frequency), `converged_per_frequency`,
-  `n_unconverged_entries` and, for two-layer soil, `n_terms_used`. Test:
+  `n_unconverged_entries` and, when the two-layer diagonal is the
+  Tagg/Sunde series (every segment in the upper layer), `n_terms_used`. Test:
   `tests/test_mom_sommerfeld.py::test_solve_reports_convergence_in_the_metadata`.
 - **`ComplexImageFit.max_error` (10.49):** maximum error of the
   complex-image fit on the verification grid including λ = 0. Test:
@@ -59,11 +61,13 @@
   before choosing a kernel: `MultiLayerSoil([ρ, ρ, ρ])` is homogeneous and
   `[ρ₁, ρ₂, ρ₂]` is the two-layer soil it describes. Stacks that raised
   before now solve; `mom` accepts a `MultiLayerSoil` with at most two
-  distinct layers; `FieldResult.soil` carries the canonical soil model, so
-  `potential()` works for such stacks. Numbers move only for equal-
-  resistivity declarations whose electrodes cross the declared interface
-  (no longer split there): +0.07 % (`mom`, `bem`, `mom_sommerfeld`) and
-  +0.42 % (`cim`) for a 3 m rod through h = 2 m in `TwoLayerSoil(100, 100, 2)`.
+  distinct layers; `FieldResult.soil` carries the canonical soil model
+  (with the relative permittivity of the upper layer of each merged
+  group), so `potential()` works for such stacks. Numbers move only for
+  equal-resistivity declarations whose electrodes cross the declared
+  interface (no longer split there): +0.07 % (`mom`, `bem`,
+  `mom_sommerfeld`) and +0.42 % (`cim`) for a 3 m rod through h = 2 m in
+  `TwoLayerSoil(100, 100, 2)`.
   `fem` keeps the declared stack. Golden cases: none moved; new case
   `mom_sommerfeld_duplicated_stack`.
 - ⚠ **`fem`: the truncation sphere no longer costs radial resolution
