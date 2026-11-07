@@ -132,10 +132,14 @@ def test_single_segment_distributed_matches_lumped() -> None:
 
 
 def test_segment_length_below_wire_radius_raises() -> None:
-    """Small ring, thick wire: segment 0.039 m < a = 0.05 m."""
+    """Small ring, thick wire: segment 0.047 m < a = 0.05 m.
+
+    The ring itself (radius 0.06 m > a) is valid; a ring whose radius is
+    not longer than the wire radius is rejected at construction (10.67).
+    """
     w = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w, "ring", name="g1", center=(0.0, 0.0, 0.7), radius=0.05, wire_radius=0.05
+        w, "ring", name="g1", center=(0.0, 0.0, 0.7), radius=0.06, wire_radius=0.05
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)

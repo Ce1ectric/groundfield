@@ -26,7 +26,7 @@ from __future__ import annotations
 import math
 import warnings
 from collections.abc import Sequence
-from typing import Literal, Union
+from typing import Annotated, Literal, Union
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -51,14 +51,45 @@ __all__ = [
     "GridMeshElectrode",
 ]
 
-# 3-D coordinate (x, y, z); z axis points into the soil.
-Point3D = tuple[float, float, float]
+#: A finite float (NaN and infinities are rejected at construction).
+FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
+
+#: A finite, strictly positive float (lengths and extents in m).
+PositiveLength = Annotated[float, Field(gt=0.0, allow_inf_nan=False)]
+
+# 3-D coordinate (x, y, z) in m; z axis points into the soil.
+Point3D = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
 
 #: Edges shorter than this (metres) are treated as degenerate: a
 #: :class:`PolylineElectrode` rejects them so a duplicate vertex cannot
 #: silently collapse a segment to zero length. Set far below any physical
 #: wire radius, so only true coincidences trip it.
 _MIN_EDGE_LENGTH_M = 1e-9
+
+
+def _require_longer_than_radius(
+    electrode: "_ElectrodeBase", dimension: float, what: str
+) -> None:
+    """Reject a dimension that is not longer than the wire radius.
+
+    A thin-wire electrode must be much longer than it is thick; a
+    dimension at or below the wire radius is degenerate (and most often a
+    unit mix-up, e.g. a wire radius typed in mm). Detected at
+    construction instead of as a thin-wire error of one segment at solve
+    time (review pass 10, 10.67).
+
+    Raises
+    ------
+    ValueError
+        If ``dimension <= electrode.wire_radius``.
+    """
+    if not dimension > electrode.wire_radius:
+        raise ValueError(
+            f"{type(electrode).__name__} {electrode.name!r}: its {what} "
+            f"({dimension:g} m) is not longer than its wire_radius "
+            f"({electrode.wire_radius:g} m). All lengths are in metres; a wire "
+            "radius of 5 mm is wire_radius=0.005."
+        )
 
 
 class _ElectrodeBase(BaseModel):
@@ -71,6 +102,7 @@ class _ElectrodeBase(BaseModel):
     wire_radius: float = Field(
         default=0.005,
         gt=0.0,
+        allow_inf_nan=False,
         description="Wire radius in m (default 5 mm ≙ ⌀ 10 mm).",
     )
 
@@ -182,7 +214,12 @@ class RodElectrode(_ElectrodeBase):
 
     kind: Literal["rod"] = "rod"
     position: Point3D = Field(..., description="Head point (x, y, z) in m.")
-    length: float = Field(..., gt=0.0, description="Rod length in m.")
+    length: PositiveLength = Field(..., description="Rod length in m.")
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "RodElectrode":
+        _require_longer_than_radius(self, self.length, "length")
+        return self
 
     @property
     def connection_point(self) -> Point3D:
@@ -232,7 +269,12 @@ class RingElectrode(_ElectrodeBase):
 
     kind: Literal["ring"] = "ring"
     center: Point3D = Field(..., description="Ring centre (x, y, z) in m.")
-    radius: float = Field(..., gt=0.0, description="Ring radius in m.")
+    radius: PositiveLength = Field(..., description="Ring radius in m.")
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "RingElectrode":
+        _require_longer_than_radius(self, self.radius, "ring radius")
+        return self
 
     @property
     def connection_point(self) -> Point3D:
@@ -349,6 +391,14 @@ class StripElectrode(_ElectrodeBase):
                 "StripElectrode is horizontal: start[2] must equal end[2]. "
                 f"Got start={self.start}, end={self.end}."
             )
+        # Zero-length strips used to reach the solver and fail there as a
+        # thin-wire violation of a 0 m segment (review pass 10, 10.67).
+        if self.length <= _MIN_EDGE_LENGTH_M:
+            raise ValueError(
+                f"StripElectrode {self.name!r} has (near) zero length: start "
+                f"{self.start} and end {self.end} coincide."
+            )
+        _require_longer_than_radius(self, self.length, "length")
         return self
 
     @property
@@ -487,6 +537,7 @@ class PolylineElectrode(_ElectrodeBase):
                 UserWarning,
                 stacklevel=2,
             )
+        _require_longer_than_radius(self, self.min_feature_length(), "shortest edge")
         return self
 
     @property
@@ -583,8 +634,10 @@ class StarElectrode(_ElectrodeBase):
         description="Hub (x, y, z) in m; every arm stays at z = center[2].",
     )
     n_arms: int = Field(..., ge=2, description="Number of radial arms (>= 2).")
-    arm_length: float = Field(..., gt=0.0, description="Length L of a single arm in m.")
-    orientation_deg: float = Field(
+    arm_length: PositiveLength = Field(
+        ..., description="Length L of a single arm in m."
+    )
+    orientation_deg: FiniteFloat = Field(
         default=0.0,
         description="Azimuth of the first arm from +x in degrees.",
     )
@@ -597,6 +650,11 @@ class StarElectrode(_ElectrodeBase):
             "semantics as on :class:`StripElectrode` (ADR-0012 V2)."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "StarElectrode":
+        _require_longer_than_radius(self, self.arm_length, "arm length")
+        return self
 
     @property
     def arm_tips(self) -> list[Point3D]:
@@ -666,8 +724,17 @@ class MeshElectrode(_ElectrodeBase):
 
     kind: Literal["mesh"] = "mesh"
     corner: Point3D = Field(..., description="Corner (x, y, z) in m.")
-    size: tuple[float, float] = Field(..., description="Extent (dx, dy) in m.")
-    spacing: float = Field(default=1.0, gt=0.0, description="Mesh spacing in m.")
+    size: tuple[PositiveLength, PositiveLength] = Field(
+        ..., description="Extent (dx, dy) in m, both > 0."
+    )
+    spacing: PositiveLength = Field(default=1.0, description="Mesh spacing in m.")
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "MeshElectrode":
+        _require_longer_than_radius(
+            self, self.min_feature_length(), "smallest extent or spacing"
+        )
+        return self
 
     @property
     def connection_point(self) -> Point3D:
@@ -747,9 +814,18 @@ class GridMeshElectrode(_ElectrodeBase):
 
     kind: Literal["grid_mesh"] = "grid_mesh"
     corner: Point3D = Field(..., description="Corner (x, y, z) in m.")
-    size: tuple[float, float] = Field(..., description="Extent (dx, dy) in m.")
+    size: tuple[PositiveLength, PositiveLength] = Field(
+        ..., description="Extent (dx, dy) in m, both > 0."
+    )
     n_x: int = Field(..., ge=1, description="Number of meshes along x (≥ 1).")
     n_y: int = Field(..., ge=1, description="Number of meshes along y (≥ 1).")
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "GridMeshElectrode":
+        _require_longer_than_radius(
+            self, self.min_feature_length(), "smaller mesh span"
+        )
+        return self
 
     @property
     def connection_point(self) -> Point3D:
