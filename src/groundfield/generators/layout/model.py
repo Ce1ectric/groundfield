@@ -27,6 +27,7 @@ sibling modules of this package.
 from __future__ import annotations
 
 import math
+from collections.abc import Collection
 from typing import Optional
 
 import numpy as np
@@ -297,6 +298,7 @@ class LvNetworkLayout(
         endpoint: Optional[str] = None,
         timeout_s: Optional[int] = None,
         max_retries: int = 1,
+        exclude_building_tags: Optional[Collection[str]] = None,
         **deprecated: object,
     ) -> "LvNetworkLayout":
         """One-shot constructor: query OSM and pre-place anchors.
@@ -331,6 +333,11 @@ class LvNetworkLayout(
             Forwarded to the layout / OSM query respectively.
         cache_dir, force_refresh, endpoint, timeout_s, max_retries
             Forwarded to :func:`groundfield.geo.osm.query_and_project`.
+        exclude_building_tags
+            ``building=*`` values to drop, e.g.
+            :data:`groundfield.geo.osm.NON_SERVICE_BUILDING_TAGS`
+            (garages, sheds, carports, ...). ``None`` (default) keeps
+            every element with a ``building`` tag.
 
         Returns
         -------
@@ -381,6 +388,8 @@ class LvNetworkLayout(
             "force_refresh": force_refresh,
             "max_retries": max_retries,
         }
+        if exclude_building_tags is not None:
+            query_kwargs["exclude_building_tags"] = exclude_building_tags
         if cache_dir is not None:
             query_kwargs["cache_dir"] = cache_dir
         if endpoint is not None:
