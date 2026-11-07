@@ -416,8 +416,19 @@ class Engine(BaseModel):
           ``FieldResult.metadata["kernel"]`` records the kernel that ran.
         - ``"line"`` — every segment is a uniform line current
           (Galerkin form of the exact line-source potential, see
-          :mod:`groundfield.solver._line_kernel`): exact for straight
-          wires at any segment length.
+          :mod:`groundfield.solver._line_kernel`). In homogeneous soil it
+          is exact for straight wires at any segment length. In two-layer
+          soil the Tagg/Sunde images farther than six segment lengths and
+          the smooth part of the cross-layer correction stay in point
+          form: a straight 10 m strip deviates by up to 0.05 % from its
+          exact uniform-current resistance for ds = 0.125–2 m, not
+          monotonically in ds (point kernel: up to 22 %), and the
+          resistance of a rod through the layer interface changes by less
+          than 0.01 % per halving of ds. Cost: a solve of 16 house grids
+          (N = 1920 segments, homogeneous soil) takes 2.7 times as long
+          as with ``"point"`` when numba is installed (it is used
+          automatically) and 5.7 times without it; the extra time grows
+          with :math:`N^2`.
         - ``"point"`` — each segment's current sits at its midpoint;
           reproduces the results of releases up to 0.15.0. Its row sums
           carry an error of about :math:`-0.23/L`, so the grounding
