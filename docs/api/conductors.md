@@ -51,6 +51,7 @@ g2 = gf.create_electrode(world, "ring", name="g2",
 gf.create_conductor(
     world, name="pen_1", start=g1, end=g2,
     conductor_type="pen",
+    cross_section=95e-6,            # 95 mm² in m²; an ideal conductor cannot be discretised
     discretize_segment_length=2.0,  # split into ~20 inductive segments
 )
 ```

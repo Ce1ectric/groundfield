@@ -188,6 +188,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
     "groundfield.io.groundinsight": (
         "BusTypeSpec",
         "EvaluateSpecError",
+        "NonPassiveFitError",
+        "NonPassiveFitWarning",
         "evaluate_spec",
         "fit_quality_summary",
         "load_bustype_json",
@@ -349,6 +351,8 @@ if _typing.TYPE_CHECKING:
     from groundfield.io.groundinsight import (
         BusTypeSpec,
         EvaluateSpecError,
+        NonPassiveFitError,
+        NonPassiveFitWarning,
         evaluate_spec,
         fit_quality_summary,
         load_bustype_json,
@@ -548,6 +552,8 @@ __all__ = [
     "load_bustype_json",
     "evaluate_spec",
     "EvaluateSpecError",
+    "NonPassiveFitWarning",
+    "NonPassiveFitError",
     "fit_quality_summary",
     # Coupling / layered earth
     "LayeredEarth",

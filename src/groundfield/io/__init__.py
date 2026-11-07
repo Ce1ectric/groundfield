@@ -34,6 +34,9 @@ from groundfield.io.csv import (
 )
 from groundfield.io.groundinsight import (
     BusTypeSpec,
+    EvaluateSpecError,
+    NonPassiveFitError,
+    NonPassiveFitWarning,
     SCHEMA_NAME,
     SCHEMA_VERSION,
     evaluate_spec,
@@ -73,6 +76,9 @@ __all__ = [
     "load_bustype_json",
     "save_bustype_to_db",
     "evaluate_spec",
+    "EvaluateSpecError",
+    "NonPassiveFitWarning",
+    "NonPassiveFitError",
     "fit_quality_summary",
     "save_potential_path_csv",
     "save_electrode_table_csv",
