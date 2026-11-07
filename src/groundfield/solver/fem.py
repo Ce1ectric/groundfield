@@ -7,15 +7,20 @@ cluster, not for the electrodes. In homogeneous soil that reproduces
 the Dwight resistance of a single electrode by construction (the
 hemisphere radius is chosen from it), so the backend then checks the
 :mod:`groundfield.references.dwight1936` formulas, not the integral
-engines. It is **not** a valid cross-check when a cluster has several
-electrodes (radii summed, −35 % for a 2 m ring with three 4 m rods in
-homogeneous soil), when the world has several clusters (each solved
-alone, transfer impedances 0) or when a layer interface lies between
-the electrode's deepest point and the hemisphere radius (+1092 % for a
-3 m rod through $h_1$ = 2 m, −92 % for a 10 m ring above it); a
-:class:`FemReductionWarning` names every such reason. Conforming
-axisymmetric rod and ring models without the reduction are the planned
-replacement.
+engines. When an electrode reaches below a layer interface that its
+hemisphere does not reach — a rod through or below the top layer — the
+reduction injects the current into the wrong layer (+1092 % for a 3 m
+rod through $h_1$ = 2 m; −85 % … +3138 % over the measured contrasts)
+and the backend raises
+:class:`~groundfield.solver.registry.BackendCapabilityError` instead of
+returning a number. It is **not** a valid cross-check either when a
+cluster has several electrodes (radii summed, −35 % for a 2 m ring with
+three 4 m rods in homogeneous soil), when the world has several
+clusters (each solved alone, transfer impedances 0) or when the
+hemisphere reaches below an interface the electrode stays above (−92 %
+for a 10 m ring over $h_1$ = 2 m); a :class:`FemReductionWarning` names
+every such reason. Conforming axisymmetric rod and ring models without
+the reduction are the planned replacement.
 
 Mathematical / physical model
 -----------------------------
@@ -272,9 +277,13 @@ class FemReductionWarning(UserWarning):
       between them, transfer impedances are exactly 0, passive clusters
       report 0 V);
     * a layer interface between the electrode's deepest point and the
-      hemisphere radius (the hemisphere injects its current into a
-      different layer than the electrode: +1092 % for a 3 m rod through
-      ``h_1`` = 2 m, −92 % for a 10 m ring above it).
+      hemisphere radius, with the hemisphere reaching below it (the
+      hemisphere injects its current into a layer the electrode does
+      not touch: −92 % for a 10 m ring at 0.8 m over ``h_1`` = 2 m). The
+      opposite case — the electrode reaches below an interface its
+      hemisphere does not (+1092 % for a 3 m rod through ``h_1`` = 2 m)
+      — raises :class:`~groundfield.solver.registry.BackendCapabilityError`
+      instead (review pass 10, 10.23).
 
     Escalate with ``warnings.simplefilter("error", FemReductionWarning)``
     when ``fem`` serves as a cross-check.
@@ -333,8 +342,9 @@ def _reduction_issues(
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]
         z_deep = max(_depth_range(world.get_electrode(e))[1] for e in clusters[root])
-        lo, hi = min(z_deep, a_eq), max(z_deep, a_eq)
-        crossed = [float(d) for d in interfaces if lo < d < hi]
+        # The opposite case (the electrode reaches below an interface its
+        # hemisphere does not reach) raises, see _unreachable_layers.
+        crossed = [float(d) for d in interfaces if z_deep < d < a_eq]
         if crossed:
             reasons.append(
                 f"{label(root)}: the electrode reaches z = {z_deep:.3g} m "
@@ -344,6 +354,51 @@ def _reduction_issues(
                 "into a different layer than the electrode"
             )
     return reasons
+
+
+def _unreachable_layers(
+    world: "World",
+    clusters: dict[str, list[str]],
+    active_clusters: list[str],
+    a_eq_per_cluster: dict[str, float],
+) -> list[str]:
+    """Clusters whose electrodes reach a layer their hemisphere does not.
+
+    The equivalent hemisphere injects the cluster current from the soil
+    surface down to the radius ``a_eq``. An electrode that reaches below
+    a layer interface lying above ``a_eq`` — a rod through or entirely
+    below the top layer — injects into a layer the hemisphere never
+    touches. Against ``mom``, rods through or below a 1 … 2.5 m top layer
+    are off by +633 % to +3138 % under a conductive lower layer
+    (1000/30 Ω·m) and by −10 % to −85 % over a resistive one (100/300,
+    100/1000 Ω·m); only near-equal layers stay within a few percent
+    (100/120 Ω·m: −1.5 % to −4.1 %; review pass 10, 10.23). The check is
+    structural, independent of the contrast. Interfaces are taken from
+    the canonical layer stack (10.48), so a declared interface between
+    equal resistivities is none.
+
+    Returns
+    -------
+    list[str]
+        One description per offending cluster (empty if none).
+    """
+    interfaces = np.cumsum(as_layer_stack(world.soil).h)
+    found: list[str] = []
+    for root in active_clusters:
+        a_eq = a_eq_per_cluster[root]
+        deepest = max(
+            clusters[root], key=lambda e: _depth_range(world.get_electrode(e))[1]
+        )
+        z_deep = _depth_range(world.get_electrode(deepest))[1]
+        crossed = [float(d) for d in interfaces if a_eq < d < z_deep]
+        if crossed:
+            found.append(
+                f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
+                f"layer interface at h = {crossed[0]:.3g} m, but the "
+                f"equivalent hemisphere of its cluster ends at a_eq = "
+                f"{a_eq:.3g} m above it"
+            )
+    return found
 
 
 # ---------------------------------------------------------------------
@@ -1064,6 +1119,23 @@ def solve_fem(
         ``metadata['fem_cluster_resistance']`` the solved
         hemisphere resistance and ``metadata['fem_mesh']`` the mesh
         size actually used per cluster.
+
+    Raises
+    ------
+    BackendCapabilityError
+        If an electrode of a driven cluster reaches below a layer
+        interface that lies above the cluster's hemisphere radius
+        ``a_eq`` (rod through or below the top layer): the reduction
+        cannot represent it (review pass 10, 10.23). A subclass of
+        ``ValueError`` and ``NotImplementedError``.
+
+    Warns
+    -----
+    FemReductionWarning
+        Once per solve when the reduction misrepresents the world in a
+        way the guard above does not reject (several electrodes in a
+        cluster, several clusters, a hemisphere reaching below an
+        interface the electrode stays above).
     """
     if far_field not in ("robin", "dirichlet"):
         raise ValueError(
@@ -1121,7 +1193,7 @@ def solve_fem(
             "computation falls back to the resistive solution; switch "
             "to image / mom / cim / bem for inductive coupling."
         )
-    if getattr(engine, "earth_inductive_model", "perfect_mirror") == "carson_series":
+    if engine.earth_inductive_model == "carson_series":
         _log.warning(
             "fem: earth_inductive_model='carson_series' is ignored — "
             "the FEM backend has no inductive branch model. "
@@ -1189,8 +1261,36 @@ def solve_fem(
             equivalent_hemisphere_radius(world.get_electrode(ename), rho_top=rho_1)
             for ename in clusters[root]
         ]
-        a_eq = float(sum(a_per_electrode))
-        a_eq_per_cluster[root] = a_eq
+        a_eq_per_cluster[root] = float(sum(a_per_electrode))
+
+    # Review pass 10 (10.23, user decision pending): a reduction that is
+    # known to fail by up to +3138 % raises instead of warning — before
+    # any mesh is built.
+    unreachable = _unreachable_layers(
+        world, clusters, active_clusters, a_eq_per_cluster
+    )
+    if unreachable:
+        from groundfield.solver.registry import BackendCapabilityError
+
+        two_layers = as_layer_stack(world.soil).n_layers == 2
+        remedy = (
+            "Use backend='mom' (one current per segment) or 'image_2layer'."
+            if two_layers
+            else "No backend solves an electrode below the first interface of "
+            "a soil with three or more distinct layers yet ('mom_sommerfeld' "
+            "requires every segment in the top layer)."
+        )
+        raise BackendCapabilityError(
+            "Backend 'fem' cannot solve this world: "
+            + "; ".join(unreachable)
+            + ". The equivalent-hemisphere reduction injects the cluster "
+            "current from the soil surface, so it never reaches that layer "
+            "(rods through or below the top layer: -85 % to +3138 % against "
+            "'mom' over the contrasts 1000/30 ... 100/1000 Ohm m). " + remedy
+        )
+
+    for root in active_clusters:
+        a_eq = a_eq_per_cluster[root]
 
         # 2) Build the boundary-conforming spherical-shell mesh: the
         #    electrode surface r = a_eq and every layer interface are
