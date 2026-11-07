@@ -300,6 +300,10 @@ class _QuadratureIssue(NamedTuple):
     abs_dz: float
     z_plus: float
     grid: _PanelGrid
+    #: The oscillation budget bound (``osc_panels_required >
+    #: max_osc_panels``): the J_0 half periods are not all resolved, and
+    #: every rung of the refinement ladder shares that capped grid.
+    capped: bool = False
 
 
 def _format_convergence_warning(
@@ -312,18 +316,27 @@ def _format_convergence_warning(
 ) -> str:
     """Human-readable message for :class:`SommerfeldConvergenceWarning`."""
     grid = issue.grid
-    capped = grid.lam_covered < grid.lam_required
     where = (
         f"s = {issue.s:.4g} m, |z - z_s| = {issue.abs_dz:.4g} m, "
         f"z + z_s = {issue.z_plus:.4g} m"
     )
-    head = (
-        "mom_sommerfeld: the reflected-remainder quadrature did not "
-        f"converge. Worst pair ({where}): the last two grids of the "
-        f"refinement ladder {list(_REFINEMENTS)} still differ by "
-        f"{issue.achieved:.3e}, against a requested tolerance of "
-        f"{issue.tol:.3e} (epsabs={epsabs:.1e}, epsrel={epsrel:.1e})."
+    ladder = (
+        f"the last two grids of the refinement ladder {list(_REFINEMENTS)} "
+        f"differ by {issue.achieved:.3e}, against a requested tolerance of "
+        f"{issue.tol:.3e} (epsabs={epsabs:.1e}, epsrel={epsrel:.1e})"
     )
+    if issue.capped:
+        head = (
+            "mom_sommerfeld: the reflected-remainder quadrature did not "
+            f"converge. Worst pair ({where}): {ladder}, but every grid of "
+            "the ladder shares a capped oscillation grid, so their "
+            "agreement does not certify the value."
+        )
+    else:
+        head = (
+            "mom_sommerfeld: the reflected-remainder quadrature did not "
+            f"converge. Worst pair ({where}): {ladder}."
+        )
     if n_affected > 1:
         head += f" {n_affected} reaction-matrix entries are affected."
     cause = (
@@ -336,7 +349,7 @@ def _format_convergence_warning(
             "'max_osc_panels' (Engine.sommerfeld_max_osc_panels); "
             "runtime and memory grow linearly with it."
         )
-        if capped
+        if issue.capped
         else (
             " The oscillation grid is fully covered, so the residual "
             "error sits in the layer contrast: for |K_1| -> 1 the "
@@ -736,6 +749,7 @@ def _reflected_integral(
     grid = _PanelGrid(np.zeros(2), 0.0, 0.0, 0)
     achieved = math.inf
     tol = math.inf
+    ladder_converged = False
     for refine in _REFINEMENTS:
         grid = _panel_edges(
             lam_max,
@@ -753,13 +767,25 @@ def _reflected_integral(
             )
             achieved = abs(value - previous)
             if achieved <= tol:
+                ladder_converged = True
                 break
         previous = value
-    else:
+    # Review pass 10, 10.47: once the oscillation budget binds, every rung
+    # of the ladder uses the same capped half-period grid (the budget is
+    # spent coverage-first), so two rungs can agree although the J_0
+    # oscillation beyond ``grid.lam_covered`` was never resolved — and
+    # with the absolute floor ``epsabs`` dominating for |G| < epsabs /
+    # epsrel they did, silently (3.1e-3 error at s = 5 km over a 5 cm
+    # layer). A capped budget is therefore non-convergence by itself.
+    # ``lam_covered < lam_required`` alone is not the test: it also holds
+    # for the last, partial half period of a fully resolved grid.
+    capped = grid.osc_panels_required > max(1, int(max_osc_panels))
+    if not ladder_converged or capped:
         _log.debug(
             "mom_sommerfeld: remainder quadrature not converged to "
             "epsrel=%.1e (s=%.3g, |dz|=%.3g, z+z_s=%.3g, "
-            "achieved=%.3e > tol=%.3e, lam_covered=%.4g of %.4g)",
+            "achieved=%.3e vs tol=%.3e, lam_covered=%.4g of %.4g, "
+            "oscillation budget bound: %s)",
             epsrel,
             s,
             abs_dz,
@@ -768,6 +794,7 @@ def _reflected_integral(
             tol,
             grid.lam_covered,
             grid.lam_required,
+            capped,
         )
         issue = _QuadratureIssue(
             achieved=float(achieved),
@@ -776,6 +803,7 @@ def _reflected_integral(
             abs_dz=float(abs_dz),
             z_plus=float(z_plus),
             grid=grid,
+            capped=bool(capped),
         )
         if issues is None:
             _emit_convergence_warning(
@@ -1033,6 +1061,7 @@ def _build_Z_sommerfeld(
     max_osc_panels: int = _MAX_OSC_PANELS,
     max_terms: int = 200,
     tol: float = 1e-6,
+    issues: list[_QuadratureIssue] | None = None,
 ) -> np.ndarray:
     """N×N Sommerfeld reaction matrix.
 
@@ -1053,6 +1082,8 @@ def _build_Z_sommerfeld(
     **one** aggregated :class:`SommerfeldConvergenceWarning` naming the
     worst offender and the number of affected entries — an $O(N^2)$
     loop that warned per pair would emit thousands of distinct messages.
+    If ``issues`` is a list, the collected issues are appended to it as
+    well, so the caller can report convergence in the result metadata.
     """
     n = seg_points.shape[0]
     rho_1 = float(stack.rhos[0])
@@ -1062,7 +1093,8 @@ def _build_Z_sommerfeld(
         return _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho_1)
 
     Z = np.zeros((n, n), dtype=float)
-    issues: list[_QuadratureIssue] = []
+    collector = issues
+    issues = []
 
     # Off-diagonal: pointwise Sommerfeld evaluation.
     for i in range(n):
@@ -1119,6 +1151,8 @@ def _build_Z_sommerfeld(
             max_osc_panels=max_osc_panels,
             stacklevel=4,
         )
+        if collector is not None:
+            collector.extend(issues)
         return Z
 
     # n >= 3: homogeneous line self-potential plus a layered
@@ -1153,6 +1187,8 @@ def _build_Z_sommerfeld(
         max_osc_panels=max_osc_panels,
         stacklevel=4,
     )
+    if collector is not None:
+        collector.extend(issues)
     return Z
 
 
@@ -1329,6 +1365,7 @@ def solve_mom_sommerfeld(
 
     # 3) Z-matrix via direct Sommerfeld quadrature (series knobs for
     #    the n=2 diagonal from the engine).
+    quadrature_issues: list[_QuadratureIssue] = []
     Z = _build_Z_sommerfeld(
         seg_points,
         seg_lengths,
@@ -1340,7 +1377,40 @@ def solve_mom_sommerfeld(
         max_osc_panels=max_osc_panels,
         max_terms=engine.image_max_terms,
         tol=engine.image_series_tol,
+        issues=quadrature_issues,
     )
+    # Convergence report (review pass 10, 10.47). For n = 2 inside the
+    # upper layer the diagonal is the truncated Tagg/Sunde series, which
+    # is checked like in ``mom`` (it was silent here up to 0.15.0, R2-09).
+    series_meta: dict[str, int] = {}
+    series_converged = True
+    if stack.n_layers == 2 and float(seg_points[:, 2].max()) < float(stack.h[0]):
+        from groundfield.solver.image_2layer import (
+            SeriesTruncationWarning,
+            _series_tail_bound,
+            _two_layer_image_offsets,
+        )
+
+        k_1 = float(stack.K[0])
+        _, _, _, n_terms_used = _two_layer_image_offsets(
+            k_1, float(stack.h[0]), engine.image_max_terms, engine.image_series_tol
+        )
+        series_meta = {"n_terms_used": int(n_terms_used)}
+        if n_terms_used:
+            tail = _series_tail_bound(abs(k_1), n_terms_used)
+            series_converged = bool(tail < engine.image_series_tol)
+            if not series_converged:
+                warnings.warn(
+                    "mom_sommerfeld: the Tagg/Sunde series of the reaction-"
+                    f"matrix diagonal was truncated at max_terms="
+                    f"{engine.image_max_terms} with a remaining tail bound of "
+                    f"{tail:.2e} > tol={engine.image_series_tol:.2e} "
+                    f"(|K| = {abs(k_1):.3f}). Raise Engine.image_max_terms "
+                    "for high layer contrasts.",
+                    SeriesTruncationWarning,
+                    stacklevel=2,
+                )
+    converged = series_converged and not quadrature_issues
 
     # 4) Frequency loop (point-matching solve + Z · I_seg for phi).
     n_freq = len(engine.frequencies)
@@ -1431,6 +1501,13 @@ def solve_mom_sommerfeld(
         "solver": "point_matching",
         "stub": False,
         "earth_inductive_model": earth_inductive_model,
+        # The reaction matrix is frequency-independent, so one flag holds
+        # for every frequency; the per-frequency list is aligned with
+        # ``frequencies`` for callers that tabulate per frequency.
+        "converged": bool(converged),
+        "converged_per_frequency": [bool(converged)] * n_freq,
+        "n_unconverged_entries": len(quadrature_issues),
+        **series_meta,
     }
     if has_inductance:
         from groundfield.coupling.carson import skin_depth
