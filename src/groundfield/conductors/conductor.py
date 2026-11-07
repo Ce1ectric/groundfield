@@ -83,7 +83,7 @@ SoilCoupling = Literal[
 ]
 
 InductanceModel = Literal[
-    "neumann",  # Neumann double-line integral, perfect-mirror earth
+    "neumann",  # Neumann double-line integrals + the engine's earth-return model
 ]
 
 ResistanceModel = Literal[
@@ -219,10 +219,14 @@ class Conductor(BaseModel):
             "resistive — DC behaviour, frequency-independent. "
             '``"neumann"`` activates the Neumann double-line '
             "integral for self- and mutual-inductance between every "
-            "pair of distributed-conductor segments, using the "
-            "thin-wire self-formula and a perfect-mirror earth for "
-            "the magnetic image. The longitudinal-branch impedance "
-            "becomes $Z_b = R + j\\omega L$, evaluated per "
+            "pair of inductive branches — the segments of a distributed "
+            "conductor or, for a lumped or single-segment conductor, one "
+            "branch from start to end (review pass 10, 10.24) — with the "
+            "thin-wire self-formula (DC internal inductance included) "
+            "and the earth-return model of the engine "
+            "(``Engine.earth_inductive_model``: Sommerfeld, Carson or the "
+            "perfect mirror). The longitudinal-branch impedance becomes "
+            "$Z_b = R + j\\omega L + \\Delta Z(\\omega)$, evaluated per "
             "frequency."
         ),
     )
