@@ -263,23 +263,46 @@ def canonical_layer_stack(
     over ``[2]`` m; ``[100, 100, 100]`` becomes the homogeneous
     ``[100]``.
     """
+    groups = _canonical_groups(stack, rtol=rtol)
+    if len(groups) == stack.n_layers:
+        return stack
+    thick = [float(t) for t in stack.h] + [math.inf]
+    return LayerStack(
+        rhos=np.array([float(stack.rhos[g[0]]) for g in groups], dtype=float),
+        h=np.array([sum(thick[i] for i in g) for g in groups[:-1]], dtype=float),
+    )
+
+
+def _canonical_groups(
+    stack: LayerStack, *, rtol: float = EQUAL_RESISTIVITY_RTOL
+) -> list[list[int]]:
+    """Indices of the declared layers that form each canonical layer.
+
+    Zero-thickness layers belong to no group; a layer joins the group
+    above it when its resistivity agrees with the group's (upper)
+    resistivity to ``rtol`` (see :func:`canonical_layer_stack`).
+    """
     rhos = [float(r) for r in stack.rhos]
     thick = [float(t) for t in stack.h] + [math.inf]
-    layers = [(r, t) for r, t in zip(rhos, thick, strict=True) if t != 0.0]
-    merged: list[tuple[float, float]] = []
-    for rho, t in layers:
-        if merged and abs(rho - merged[-1][0]) <= rtol * max(
-            abs(rho), abs(merged[-1][0])
-        ):
-            merged[-1] = (merged[-1][0], merged[-1][1] + t)
-        else:
-            merged.append((rho, t))
-    if len(merged) == len(rhos):
-        return stack
-    return LayerStack(
-        rhos=np.array([r for r, _ in merged], dtype=float),
-        h=np.array([t for _, t in merged[:-1]], dtype=float),
-    )
+    groups: list[list[int]] = []
+    for i, (rho, t) in enumerate(zip(rhos, thick, strict=True)):
+        if t == 0.0:
+            continue
+        if groups:
+            top = rhos[groups[-1][0]]
+            if abs(rho - top) <= rtol * max(abs(rho), abs(top)):
+                groups[-1].append(i)
+                continue
+        groups.append([i])
+    return groups
+
+
+def _relative_permittivities(soil: SoilModel) -> list[float]:
+    """Relative permittivity of every declared layer of ``soil``."""
+    if isinstance(soil, MultiLayerSoil):
+        return [float(layer.relative_permittivity) for layer in soil.layers]
+    n = 2 if isinstance(soil, TwoLayerSoil) else 1
+    return [float(soil.relative_permittivity)] * n
 
 
 def canonical_soil(soil: SoilModel) -> SoilModel:
@@ -305,24 +328,43 @@ def canonical_soil(soil: SoilModel) -> SoilModel:
         already canonical and its type already matches that layer count
         (a ``MultiLayerSoil`` with one or two layers is mapped to the
         plain model).
+
+    Notes
+    -----
+    The relative permittivity is carried over from the upper declared
+    layer of each merged group (``TwoLayerSoil`` holds one common value:
+    that of its upper layer). No backend uses it below 1 kHz; it is
+    kept so that the result's soil does not silently fall back to the
+    default.
     """
     raw = as_layer_stack(soil, canonical=False)
     stack = canonical_layer_stack(raw)
     if stack is raw and not (isinstance(soil, MultiLayerSoil) and stack.n_layers <= 2):
         return soil
+    eps_declared = _relative_permittivities(soil)
+    eps = [eps_declared[g[0]] for g in _canonical_groups(raw)]
     if stack.n_layers == 1:
-        return HomogeneousSoil(resistivity=float(stack.rhos[0]))
+        return HomogeneousSoil(
+            resistivity=float(stack.rhos[0]), relative_permittivity=eps[0]
+        )
     if stack.n_layers == 2:
         return TwoLayerSoil(
             rho_1=float(stack.rhos[0]),
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
+            relative_permittivity=eps[0],
         )
     layers = [
-        SoilLayer(resistivity=float(r), thickness=float(t))
-        for r, t in zip(stack.rhos[:-1], stack.h, strict=True)
+        SoilLayer(resistivity=float(r), thickness=float(t), relative_permittivity=e)
+        for r, t, e in zip(stack.rhos[:-1], stack.h, eps[:-1], strict=True)
     ]
-    layers.append(SoilLayer(resistivity=float(stack.rhos[-1]), thickness=None))
+    layers.append(
+        SoilLayer(
+            resistivity=float(stack.rhos[-1]),
+            thickness=None,
+            relative_permittivity=eps[-1],
+        )
+    )
     return MultiLayerSoil(layers=layers)
 
 

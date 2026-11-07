@@ -125,6 +125,31 @@ def test_canonical_soil_builds_the_matching_soil_model() -> None:
     assert [ly.thickness for ly in four.layers] == [1.0, 6.0, None]
 
 
+@pytest.mark.finding("10.48")
+def test_canonical_soil_keeps_the_relative_permittivity() -> None:
+    """The rebuilt model does not fall back to the default eps_r = 10."""
+    flat = _layered.canonical_soil(
+        gf.TwoLayerSoil(rho_1=70.0, rho_2=70.0, h_1=3.0, relative_permittivity=25.0)
+    )
+    assert flat.relative_permittivity == 25.0
+
+    layers = [
+        gf.SoilLayer(resistivity=r, thickness=t, relative_permittivity=e)
+        for r, t, e in [
+            (100.0, 1.0, 4.0),
+            (30.0, 2.0, 15.0),
+            (30.0, 4.0, 16.0),
+            (500.0, None, 8.0),
+        ]
+    ]
+    four = _layered.canonical_soil(gf.MultiLayerSoil(layers=layers))
+    # the upper layer of each merged group keeps its value
+    assert [ly.relative_permittivity for ly in four.layers] == [4.0, 15.0, 8.0]
+    two = _layered.canonical_soil(gf.MultiLayerSoil(layers=layers[2:]))
+    assert isinstance(two, gf.TwoLayerSoil)
+    assert two.relative_permittivity == 16.0
+
+
 # ---------------------------------------------------------------------
 # the layered backends solve the canonical stack
 # ---------------------------------------------------------------------
