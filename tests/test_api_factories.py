@@ -250,6 +250,20 @@ def test_create_engine_forwards_only_explicit_arguments() -> None:
 
 
 @pytest.mark.finding("10.68")
+def test_create_engine_frequencies_are_validated_by_the_engine() -> None:
+    """A numpy array is accepted; a string or a scalar is rejected, never
+    iterated ('50' must not become [5.0, 0.0])."""
+    import numpy as np
+
+    eng = gf.create_engine(frequencies=np.array([50.0, 150.0]))
+    assert eng.frequencies == [50.0, 150.0]
+    assert gf.create_engine(frequencies=(50, 1000)).frequencies == [50.0, 1000.0]
+    for bad in ("50", 50.0):
+        with pytest.raises(ValueError, match="frequencies"):
+            gf.create_engine(frequencies=bad)  # type: ignore[arg-type]
+
+
+@pytest.mark.finding("10.68")
 def test_create_engine_accepts_the_point_kernel() -> None:
     eng = gf.create_engine(kernel="point")
     if "kernel" in gf.Engine.model_fields:

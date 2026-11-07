@@ -53,6 +53,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Literal, TypeAlias, overload
 
+import numpy as np
 import numpy.typing as npt
 
 from groundfield.boundary import BoundaryConditions
@@ -697,7 +698,12 @@ def create_engine(
     """
     options: dict[str, Any] = {"backend": backend}
     if frequencies is not None:
-        options["frequencies"] = [float(f) for f in frequencies]
+        # Only a numpy array is converted; anything else (list, tuple, but
+        # also a mistaken str or scalar) is validated by the Engine itself.
+        if isinstance(frequencies, np.ndarray):
+            options["frequencies"] = frequencies.tolist()
+        else:
+            options["frequencies"] = frequencies
     explicit = {
         "segment_length": segment_length,
         "tolerance": tolerance,
