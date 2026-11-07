@@ -108,7 +108,9 @@
 Old soil parameter names (10.69). They keep working as keyword, JSON key,
 attribute and `model_copy(update=...)` key, warn with
 `DeprecationWarning`, and will be removed in 2027.5 at the earliest.
-Passing an old and its new name together raises.
+Passing an old and its new name together raises. Type checkers already
+report the old keywords (only the canonical names are part of the typed
+signature); at run time they keep working.
 
 | Deprecated | Replacement |
 |---|---|
