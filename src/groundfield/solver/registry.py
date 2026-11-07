@@ -142,8 +142,10 @@ class BackendCapabilityError(ValueError, NotImplementedError):
     Raised by :meth:`Engine.solve` before any backend code runs. The
     message names the missing capability and the registered backends
     that can solve the world. Subclasses both :class:`ValueError` and
-    :class:`NotImplementedError`, the two types the backends raised for
-    the same situations before the registry existed.
+    :class:`NotImplementedError`, the types ``image_nlayer``, ``cim``,
+    ``bem`` and the concrete-shell guard raised for the same situations
+    before the registry existed (``mom`` raised :class:`TypeError` for
+    three or more layers).
     """
 
 
