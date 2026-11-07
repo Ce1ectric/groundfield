@@ -804,3 +804,97 @@ def case_defaults_mixed_cluster_inductive() -> Quantities:
     w, _ = _galvanic_pair("sommerfeld")
     res = w.solve(gf.create_engine(frequencies=[50.0, 1000.0]))
     return _result_quantities(res, cluster_of=("g1",), point_sources=False)
+
+
+# ---------------------------------------------------------------------
+# exact line-source kernel (review pass 10, 10.28; stream CORE-1a)
+# ---------------------------------------------------------------------
+
+
+def _line_engine(**kw: object) -> gf.Engine:
+    """Engine with the exact line-source kernel (``Engine(kernel="line")``)."""
+    return gf.Engine(kernel="line", **kw)  # type: ignore[arg-type]
+
+
+@_case
+def case_line_img_rod_hom() -> Quantities:
+    w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
+    gf.create_electrode(w, "rod", name="rod", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    res = w.solve(_line_engine(backend="image", frequencies=[50.0], segment_length=0.5))
+    probes = _with_buried(_surface_line(0.0, 20.0, 11), [(0.008, 0.0, 2.0)])
+    return _result_quantities(res, probes=probes, cluster_of=("rod",))
+
+
+@_case
+def case_line_img_mixed_cluster_hom() -> Quantities:
+    w = _mixed_cluster_world()
+    res = w.solve(
+        _line_engine(backend="image", frequencies=[0.0, 50.0], segment_length=0.5)
+    )
+    probes = _with_buried(
+        _surface_line(-20.0, 20.0, 17), [(0.0, 0.0, 0.0), (2.0, 2.0, 0.0)]
+    )
+    return _result_quantities(res, probes=probes, cluster_of=("ring", "star"))
+
+
+@_case
+def case_line_img2_ring_rods_within_layer() -> Quantities:
+    soil = gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=2.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "ring", name="ring", center=(0.0, 0.0, 0.6), radius=3.0)
+    for i, (x, y) in enumerate([(3.0, 0.0), (-3.0, 0.0)]):
+        gf.create_electrode(w, "rod", name=f"rod{i}", position=(x, y, 0.6), length=1.0)
+        _ideal_link(w, f"b{i}", "ring", f"rod{i}")
+    gf.create_source(w, attached_to="ring", magnitude=1.0)
+    res = w.solve(
+        _line_engine(backend="image_2layer", frequencies=[50.0], segment_length=0.5)
+    )
+    return _result_quantities(
+        res, probes=_surface_line(0.0, 30.0, 9), cluster_of=("ring",)
+    )
+
+
+@_case
+def case_line_img2_rod_crosslayer() -> Quantities:
+    soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=1.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="rod", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    res = w.solve(
+        _line_engine(backend="image_2layer", frequencies=[50.0], segment_length=0.5)
+    )
+    return _result_quantities(
+        res, probes=_surface_line(0.0, 20.0, 9), cluster_of=("rod",)
+    )
+
+
+@_case
+def case_line_mutual_two_layer() -> Quantities:
+    soil = gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=5.0)
+    w = gf.create_world(soil=soil)
+    anchors = [("g0", 0.0, 0.0), ("g1", 12.0, 0.0), ("g2", 6.0, 9.0)]
+    for name, x, y in anchors:
+        gf.create_electrode(w, "rod", name=name, position=(x, y, 0.5), length=3.0)
+    eng = _line_engine(backend="image", segment_length=0.5, frequencies=[50.0])
+    probes = np.array([[x, y, 0.0] for _, x, y in anchors])
+    names = [a[0] for a in anchors]
+    Z = gf.solve_mutual_matrix(w, eng, names, probes, symmetrize=False)
+    R = gf.solve_mutual_field(w, eng, names, _surface_line(-5.0, 20.0, 6))
+    return {"Z_G": np.asarray(Z, dtype=complex), "R": np.asarray(R, dtype=complex)}
+
+
+@_case
+def case_line_cond_galvanic_neumann() -> Quantities:
+    w, _ = _galvanic_pair("perfect_mirror")
+    res = w.solve(
+        _line_engine(
+            backend="image",
+            frequencies=[0.0, 50.0, 1000.0],
+            segment_length=0.5,
+            earth_inductive_model="perfect_mirror",
+        )
+    )
+    return _result_quantities(
+        res, probes=_surface_line(-5.0, 25.0, 7), cluster_of=("g1", "g2")
+    )
