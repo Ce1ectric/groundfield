@@ -1,29 +1,28 @@
 r"""PEN backbone topologies for the TN low-voltage generator.
 
 The :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
-historically wires its PEN backbone as a *star* of cable-cabinets
-around the substation: every cable cabinet (KVS) is connected to the
-substation directly and every building connects to its *nearest* KVS
-by Manhattan distance. That topology is what the older Audit-pass
-fixtures still exercise — it stays available as the default through
-:class:`StarKvsTopology`.
+historically wires its PEN backbone as a *star* of cable cabinets
+around the substation: every cable cabinet (German *KVS*) is connected
+to the substation directly and every building connects to its
+*nearest* cabinet by Manhattan distance. That topology stays the
+default (:class:`StarCabinetTopology`).
 
 This module adds a second topology that matches the typical layout
-of a German :emphasis:`TN-Ortsnetz`:
+of a German low-voltage distribution network (*TN-Ortsnetz*):
 
 * the substation feeds **N radial feeders** (LV cables), each one
   emanating along a discrete direction (north / east / south / west
   by default);
 * each feeder has a **finite slot budget** for direct building taps
   at the substation. When the slot budget is exhausted, the feeder
-  is *extended* by inserting a KVS along its axis. Each KVS comes
+  is *extended* by inserting a cabinet along its axis. Each cabinet comes
   with its own slot budget for the next batch of buildings;
 * buildings are assigned to the **angularly closest** feeder, then
   to the **distance-closest** tap point along that feeder that still
   has a free slot;
 * the feeder is :emphasis:`Manhattan-routed` in the sense that the
   trunk runs along a single axis (the feeder's discrete direction)
-  and KVSes are placed on that axis. The straight-line conductor
+  and cabinets are placed on that axis. The straight-line conductor
   between two trunk anchors is therefore already axis-aligned.
   Building service drops connect the corresponding tap anchor to
   the building's foundation centre by a single straight line.
@@ -48,10 +47,10 @@ Limitations
   full feeder length and the residual error in the longitudinal
   branch impedance stays well below 1 % at 50 Hz.
 * When :attr:`RadialTrunkTopology` is selected, the parent
-  :class:`groundfield.generators.tn_network.KvsConfig.placement`
-  and :attr:`~KvsConfig.fixed_count` / ``quote_per_100_buildings``
-  fields are ignored — the topology decides KVS count and
-  positions. The KVS *grounding* spec from ``KvsConfig.grounding``
+  :class:`groundfield.generators.tn_network.CabinetConfig.placement`
+  and :attr:`~CabinetConfig.fixed_count` / ``count_per_100_buildings``
+  fields are ignored — the topology decides cabinet count and
+  positions. The cabinet *grounding* spec from ``CabinetConfig.grounding``
   is still honoured (so the user keeps a single, central place to
   configure cabinet earthing).
 """
@@ -62,9 +61,12 @@ import math
 import warnings
 from typing import Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from groundfield.generators._compat import rename_input_keys, warn_renamed
 
 __all__ = [
+    "StarCabinetTopology",
     "StarKvsTopology",
     "RadialTrunkTopology",
     "PenTopology",
@@ -72,24 +74,42 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------
-# Star-KVS topology (default; legacy behaviour)
+# Star topology (default; legacy behaviour)
 # ---------------------------------------------------------------------
 
 
-class StarKvsTopology(BaseModel):
-    """Legacy *star* PEN topology.
+class StarCabinetTopology(BaseModel):
+    """Star PEN topology (default).
 
-    Substation feeds each KVS directly, every building taps to its
-    nearest KVS (Manhattan metric). KVS placement and count come from
-    :class:`groundfield.generators.tn_network.KvsConfig`.
+    The substation feeds each cable cabinet directly; every building
+    taps to its nearest cabinet (Manhattan metric). Cabinet placement
+    and count come from
+    :class:`groundfield.generators.tn_network.CabinetConfig`.
 
-    This is the default for backward compatibility — pre-v0.7
-    generator configurations behave bit-identically.
+    The JSON tag is ``kind="star_cabinet"``; configurations written with
+    the former tag ``"star_kvs"`` still load (with a
+    :class:`DeprecationWarning`).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["star_kvs"] = "star_kvs"
+    kind: Literal["star_cabinet", "star_kvs"] = "star_cabinet"
+
+    @field_validator("kind")
+    @classmethod
+    def _canonical_kind(cls, value: str) -> str:
+        if value == "star_kvs":
+            warn_renamed("kind='star_kvs'", "kind='star_cabinet'", stacklevel=4)
+            return "star_cabinet"
+        return value
+
+
+class StarKvsTopology(StarCabinetTopology):
+    """Deprecated alias of :class:`StarCabinetTopology`."""
+
+    def model_post_init(self, context: object, /) -> None:
+        warn_renamed("StarKvsTopology", "StarCabinetTopology", stacklevel=5)
+        super().model_post_init(context)
 
 
 # ---------------------------------------------------------------------
@@ -106,9 +126,9 @@ class RadialTrunkTopology(BaseModel):
     at 0°). Buildings are assigned to the angularly closest feeder,
     then sorted by distance from the substation along that feeder
     axis. The first :attr:`slots_per_substation` buildings tap
-    directly to the substation; once the budget is exhausted, a KVS
-    is inserted along the feeder axis and the next
-    :attr:`slots_per_kvs` buildings tap to that KVS, and so on.
+    directly to the substation; once the budget is exhausted, a cable
+    cabinet is inserted along the feeder axis and the next
+    :attr:`slots_per_cabinet` buildings tap to that cabinet, and so on.
 
     Attributes
     ----------
@@ -128,25 +148,25 @@ class RadialTrunkTopology(BaseModel):
     slots_per_substation
         Number of direct building taps each feeder may have at the
         substation. Once this many buildings have been wired, the
-        next building forces a KVS extension.
-    slots_per_kvs
-        Number of direct building taps per KVS. After the substation
-        budget is exhausted, KVSes are inserted along the feeder
+        next building forces a cabinet extension.
+    slots_per_cabinet
+        Number of direct building taps per cabinet. After the substation
+        budget is exhausted, cabinets are inserted along the feeder
         until every assigned building is wired or the feeder reaches
         :attr:`max_feeder_length_m`.
-    kvs_spacing_m
-        Step length (along the feeder axis) between adjacent KVSes
+    cabinet_spacing_m
+        Step length (along the feeder axis) between adjacent cabinets
         when the topology decides to insert a new one. Default 60 m
         matches the typical street-section length between cable
         cabinets in urban LV networks.
     name_prefix
-        Prefix used to name the inserted KVSes
-        (``f"{prefix}_{feeder_idx}_{kvs_idx}"``). Defaults to ``"kvs"``
+        Prefix used to name the inserted cabinets
+        (``f"{prefix}_f{feeder_idx}_{k}"``). Defaults to ``"kvs"``
         so the names are consistent with the legacy star topology.
 
     Notes
     -----
-    Trunk segments (substation → KVS and KVS → KVS) and service
+    Trunk segments (substation → cabinet and cabinet → cabinet) and service
     drops (tap anchor → building anchor) are realised as straight
     3D conductors between the corresponding anchor electrodes. The
     Manhattan-ness of the layout is reflected in (a) the discrete
@@ -186,23 +206,51 @@ class RadialTrunkTopology(BaseModel):
         ge=1,
         description=("Number of direct building taps per feeder at the substation."),
     )
-    slots_per_kvs: int = Field(
+    slots_per_cabinet: int = Field(
         default=8,
         ge=1,
-        description="Number of direct building taps per inserted KVS.",
+        description="Number of direct building taps per inserted cabinet.",
     )
-    kvs_spacing_m: float = Field(
+    cabinet_spacing_m: float = Field(
         default=60.0,
         gt=0.0,
         description=(
-            "Axial step length between consecutive KVSes on a feeder "
+            "Axial step length between consecutive cabinets on a feeder "
             "in m. Typical 50–80 m in urban LV networks."
         ),
     )
     name_prefix: str = Field(
         default="kvs",
-        description="Name prefix for the inserted KVSes.",
+        description="Name prefix for the inserted cabinets.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _renamed_fields(cls, data: object) -> object:
+        return rename_input_keys(
+            data,
+            {
+                "slots_per_kvs": "slots_per_cabinet",
+                "kvs_spacing_m": "cabinet_spacing_m",
+            },
+            "RadialTrunkTopology",
+        )
+
+    @property
+    def slots_per_kvs(self) -> int:
+        """Deprecated alias of :attr:`slots_per_cabinet`."""
+        warn_renamed(
+            "RadialTrunkTopology.slots_per_kvs", "RadialTrunkTopology.slots_per_cabinet"
+        )
+        return self.slots_per_cabinet
+
+    @property
+    def kvs_spacing_m(self) -> float:
+        """Deprecated alias of :attr:`cabinet_spacing_m`."""
+        warn_renamed(
+            "RadialTrunkTopology.kvs_spacing_m", "RadialTrunkTopology.cabinet_spacing_m"
+        )
+        return self.cabinet_spacing_m
 
     @field_validator("feeder_directions_deg")
     @classmethod
@@ -315,28 +363,28 @@ class RadialTrunkTopology(BaseModel):
             out.append([i for _, i in g])
         return out
 
-    def plan_feeder_kvs_positions(
+    def plan_feeder_cabinet_positions(
         self,
         substation_xy: tuple[float, float],
         feeder_idx: int,
         n_buildings_on_feeder: int,
     ) -> list[tuple[float, float]]:
-        r"""Compute KVS positions for a feeder given its building count.
+        r"""Compute cabinet positions for a feeder given its building count.
 
         The first :attr:`slots_per_substation` buildings tap directly
         to the substation. The next batch of up to
-        :attr:`slots_per_kvs` buildings shares one KVS, the batch
-        after that shares the next KVS, and so on. Each KVS sits on
+        :attr:`slots_per_cabinet` buildings shares one cabinet, the batch
+        after that shares the next cabinet, and so on. Each cabinet sits on
         the feeder axis at the smallest multiple of
-        :attr:`kvs_spacing_m` that is :math:`\ge` the projection of
+        :attr:`cabinet_spacing_m` that is :math:`\ge` the projection of
         the *first* building it serves — but we don't have that
         projection here; we approximate by stepping one
-        :attr:`kvs_spacing_m` per KVS. This keeps the layout
-        predictable (KVSes are equispaced along the street) and
+        :attr:`cabinet_spacing_m` per cabinet. This keeps the layout
+        predictable (cabinets are equispaced along the street) and
         matches typical Ortsnetz cable cabinet spacing.
 
         Positions beyond :attr:`max_feeder_length_m` are clipped to
-        :attr:`max_feeder_length_m`; if multiple KVSes would be
+        :attr:`max_feeder_length_m`; if multiple cabinets would be
         clipped to the same maximum distance, only the first is
         kept and the remaining buildings will trigger a
         :class:`UserWarning` from the caller.
@@ -347,21 +395,38 @@ class RadialTrunkTopology(BaseModel):
         remaining = max(0, n_buildings_on_feeder - self.slots_per_substation)
         if remaining <= 0:
             return []
-        n_kvs = math.ceil(remaining / self.slots_per_kvs)
+        n_cabinets = math.ceil(remaining / self.slots_per_cabinet)
         positions: list[tuple[float, float]] = []
         last_distance: Optional[float] = None
-        for k in range(n_kvs):
-            distance = (k + 1) * self.kvs_spacing_m
+        for k in range(n_cabinets):
+            distance = (k + 1) * self.cabinet_spacing_m
             if distance > self.max_feeder_length_m:
                 if last_distance is not None and last_distance >= (
                     self.max_feeder_length_m - 1e-9
                 ):
                     break
                 distance = self.max_feeder_length_m
-            kvs_xy = (sx + distance * cos_t, sy + distance * sin_t)
-            positions.append(kvs_xy)
+            cabinet_xy = (sx + distance * cos_t, sy + distance * sin_t)
+            positions.append(cabinet_xy)
             last_distance = distance
         return positions
+
+    def plan_feeder_kvs_positions(
+        self,
+        substation_xy: tuple[float, float],
+        feeder_idx: int,
+        n_buildings_on_feeder: int,
+    ) -> list[tuple[float, float]]:
+        """Deprecated alias of :meth:`plan_feeder_cabinet_positions`."""
+        warn_renamed(
+            "RadialTrunkTopology.plan_feeder_kvs_positions",
+            "RadialTrunkTopology.plan_feeder_cabinet_positions",
+        )
+        return self.plan_feeder_cabinet_positions(
+            substation_xy=substation_xy,
+            feeder_idx=feeder_idx,
+            n_buildings_on_feeder=n_buildings_on_feeder,
+        )
 
 
 # ---------------------------------------------------------------------
@@ -370,7 +435,7 @@ class RadialTrunkTopology(BaseModel):
 
 
 PenTopology = Annotated[
-    Union[StarKvsTopology, RadialTrunkTopology],
+    Union[StarCabinetTopology, RadialTrunkTopology],
     Field(discriminator="kind"),
 ]
 """JSON-serialisable union of PEN topologies.

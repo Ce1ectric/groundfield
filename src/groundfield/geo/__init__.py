@@ -46,6 +46,12 @@ from groundfield.geo.footprint import (
 )
 from groundfield.geo.osm import (
     DEFAULT_ENDPOINT,
+    DEFAULT_MAX_RESPONSE_BYTES,
+    MAX_RADIUS_M,
+    MAX_RETRIES,
+    MAX_RETRY_DELAY_S,
+    MAX_TIMEOUT_S,
+    NON_SERVICE_BUILDING_TAGS,
     OverpassError,
     build_query,
     default_cache_dir,
@@ -67,6 +73,12 @@ __all__ = [
     "Projector",
     # Overpass / OSM
     "DEFAULT_ENDPOINT",
+    "DEFAULT_MAX_RESPONSE_BYTES",
+    "MAX_RADIUS_M",
+    "MAX_RETRIES",
+    "MAX_RETRY_DELAY_S",
+    "MAX_TIMEOUT_S",
+    "NON_SERVICE_BUILDING_TAGS",
     "OverpassError",
     "build_query",
     "default_cache_dir",

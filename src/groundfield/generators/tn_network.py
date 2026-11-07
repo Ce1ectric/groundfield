@@ -15,8 +15,8 @@ Compared with the v1 prototype this generator now supports:
 * **Heterogeneous substation grounding** — ring AND/OR rods AND/OR
   strip AND/OR foundation, in any combination, each with its own
   presence probability and stochastic geometry.
-* **Heterogeneous KVS grounding** — same flexibility for cable
-  cabinets; v1 forced a single rod.
+* **Heterogeneous cable-cabinet grounding** — same flexibility for
+  cable cabinets; v1 forced a single rod.
 * **Building-type catalog** — multiple :class:`BuildingTypeSpec`
   entries with independent grounding systems. The default catalog
   ships ``residential`` / ``small_industry`` / ``medium_industry``
@@ -32,16 +32,20 @@ Lazy-resolution semantics
 :class:`TnNetworkGenerator` keeps the v1 lazy-mode build:
 
 * ``gen.build(cfg)`` resolves distributions opportunistically. Each
-  *site* (substation, every KVS, every building) draws its
+  *site* (substation, every cable cabinet, every building) draws its
   ``presence_prob`` Bernoulli and samples its geometric
   distributions independently. This is what produces a real
   per-site mix when the user supplies population-level
   distributions (e.g. ``presence_prob=0.7`` for an "additional
   rod" electrode that 70 % of houses receive).
 * ``gen.sample_world(rng)`` calls ``cfg.sample(rng)`` first, which
-  collapses every distribution to one constant — including
-  ``presence_prob``, which then becomes a deterministic
-  flag. Useful for persistable Monte-Carlo realisations.
+  collapses every :class:`Distribution` of the config tree to one
+  constant per realisation — also those inside the electrode specs of
+  a building type, so all buildings of that type share the drawn value
+  (since 2026.11; v0.15.0 left those to per-site draws, 10.53). Plain
+  population parameters stay per site: a ``presence_prob`` of ``0.7``
+  or a placement ``jitter_m`` still draws per site in the build, from
+  the same ``rng``. Useful for persistable Monte-Carlo realisations.
 
 Geometric layout
 ----------------
@@ -55,7 +59,7 @@ Geometric layout
   :class:`ExplicitPlacement` if you need a specific spatial mix.
 * Cable cabinets are placed via their own
   :class:`PlacementSpec` (defaults to a Manhattan grid along the
-  substation row). Their grounding follows :attr:`KvsConfig.grounding`.
+  substation row). Their grounding follows :attr:`CabinetConfig.grounding`.
 * PEN backbone: each cable cabinet is connected to the substation;
   each building is connected to the *nearest* cable cabinet by
   Manhattan distance.
@@ -75,12 +79,13 @@ import warnings
 from typing import Literal, Optional, Union
 
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from groundfield.api import create_conductor, create_source, create_world
+from groundfield.generators._compat import rename_input_keys, warn_renamed
 from groundfield.generators.base import (
     GeneratorConfig,
     WorldGenerator,
+    _coerce_rng,
 )
 from groundfield.generators.building import (
     BuildingTypeSpec,
@@ -88,30 +93,36 @@ from groundfield.generators.building import (
 )
 from groundfield.generators.distributions import AnyDistribution, Distribution
 from groundfield.generators.electrode_specs import (
-    ElectrodeSpec,
-    FoundationElectrodeSpec,
     RingElectrodeSpec,
     RodElectrodeSpec,
     rod_circle,
 )
 from groundfield.generators.grounding import GroundingSystemSpec
+from groundfield.generators.materialise import materialise_plan
 from groundfield.generators.measurement import (
     MeasurementLeadConfig,
     MeasurementSetupConfig,
+    lead_axis_z,
 )
 from groundfield.generators.pen_topology import (
     PenTopology,
     RadialTrunkTopology,
+    StarCabinetTopology,
     StarKvsTopology,
 )
+from groundfield.generators.plan import (
+    ConductorParameters,
+    NetworkPlan,
+    PlannedBranch,
+    PlannedMeasurement,
+    PlannedSite,
+    PlannedSource,
+)
 from groundfield.generators.placement import (
-    ExplicitPlacement,
     ManhattanGridPlacement,
     PlacementSpec,
 )
 from groundfield.generators.soil_specs import (
-    HomogeneousSoilSpec,
-    MultiLayerSoilSpec,
     SoilSpec,
     TwoLayerSoilSpec,
     materialise_soil,
@@ -121,11 +132,13 @@ from groundfield.world import World
 __all__ = [
     "PenConfig",
     "SubstationConfig",
+    "CabinetConfig",
     "KvsConfig",
     "TnNetworkConfig",
     "TnNetworkGenerator",
     "PenTopology",
     "RadialTrunkTopology",
+    "StarCabinetTopology",
     "StarKvsTopology",
 ]
 
@@ -152,93 +165,13 @@ def _override_foundation_from_footprint(
     footprint,  # ``BuildingFootprint`` — typed loosely to avoid a hard import
     site_xy: Optional[tuple[float, float]] = None,
 ) -> GroundingSystemSpec:
-    """Return a copy of ``grounding`` with every
-    :class:`FoundationElectrodeSpec` rewritten to follow the
-    polygon's oriented minimum bounding rectangle (OMBR).
+    """Shape the foundations of ``grounding`` after a footprint's OMBR.
 
-    Geometry
-    --------
-    The OMBR is the minimum-area rectangle enclosing the polygon;
-    it is fully described by its centre :math:`(c_x, c_y)`, its
-    side lengths :math:`(d_x, d_y)` and its orientation
-    :math:`\\varphi`. All three are needed: an electrode built
-    with the correct size and orientation but at the wrong centre
-    is a *translated* copy of the OMBR, and the translation is
-    non-zero for every polygon whose area centroid differs from
-    its OMBR centre — i.e. for every non-symmetric outline (an
-    L-shaped house displaces the ring by several metres).
-
-    :meth:`GroundingSystemSpec.build_at` places each electrode at
-    ``site_xy + offset_xy_m``, so the centre is restored by adding
-    :math:`(c_x, c_y) - \\text{site\\_xy}` to the user's
-    ``offset_xy_m``. The user offset therefore keeps its meaning
-    ("shift the foundation relative to the rectangle it was
-    derived from") instead of being silently redefined.
-
-    Parameters
-    ----------
-    grounding
-        Per-building :class:`GroundingSystemSpec`. The original is
-        not mutated; a new spec is returned.
-    footprint
-        :class:`groundfield.geo.footprint.BuildingFootprint` to take
-        the OMBR from. The footprint must already be projected into
-        the same local ENU frame as the rest of the world.
-    site_xy
-        The position the placement reports for this site, i.e. the
-        point ``build_at`` will treat as the origin of
-        ``offset_xy_m``. ``None`` (default) assumes the polygon
-        centroid, which is what
-        :meth:`groundfield.geo.placement.OsmBuildingPlacement.generate`
-        returns.
-
-    Returns
-    -------
-    GroundingSystemSpec
-        A spec with the foundation electrodes' ``size_xy_m``,
-        ``orientation_deg`` and ``offset_xy_m`` set from the OMBR.
-        ``presence_prob``, ``depth_m``, ``style``, ``n_x``, ``n_y``,
-        and ``wire_radius_m`` are left untouched so the rest of
-        the stochastic / configurable axes survive the override.
-
-    Notes
-    -----
-    OMBR computation requires :mod:`shapely`. The :class:`ImportError`
-    raised by
-    :meth:`BuildingFootprint.oriented_bounding_rectangle` is left
-    to propagate so the install hint
-    (``pip install groundfield[geo]``) reaches the user verbatim.
+    Kept for callers of the pre-2026.11 private helper; equivalent to
+    ``grounding.with_footprint(footprint, site_xy=site_xy, outline="ombr")``
+    (see :meth:`GroundingSystemSpec.with_footprint`).
     """
-    if not grounding.electrodes:
-        return grounding
-    (cx, cy), (dx, dy), orientation_deg = footprint.oriented_bounding_rectangle()
-    if site_xy is None:
-        site_xy = footprint.centroid_xy_m()
-    # Recentre the rectangle on the OMBR centre (F25): ``build_at``
-    # anchors every electrode at ``site_xy + offset_xy_m``.
-    recentre = (cx - site_xy[0], cy - site_xy[1])
-    rewritten: list[ElectrodeSpec] = []
-    changed = False
-    for spec in grounding.electrodes:
-        if isinstance(spec, FoundationElectrodeSpec):
-            rewritten.append(
-                spec.model_copy(
-                    update={
-                        "size_xy_m": (dx, dy),
-                        "orientation_deg": orientation_deg,
-                        "offset_xy_m": (
-                            spec.offset_xy_m[0] + recentre[0],
-                            spec.offset_xy_m[1] + recentre[1],
-                        ),
-                    }
-                )
-            )
-            changed = True
-        else:
-            rewritten.append(spec)
-    if not changed:
-        return grounding
-    return grounding.model_copy(update={"electrodes": rewritten})
+    return grounding.with_footprint(footprint, site_xy=site_xy, outline="ombr")
 
 
 # ---------------------------------------------------------------------
@@ -256,8 +189,8 @@ def _default_substation_grounding() -> GroundingSystemSpec:
     )
 
 
-def _default_kvs_grounding() -> GroundingSystemSpec:
-    """default KVS grounding: a single 1.5 m driven rod."""
+def _default_cabinet_grounding() -> GroundingSystemSpec:
+    """Default cable-cabinet grounding: a single 1.5 m driven rod."""
     return GroundingSystemSpec(
         electrodes=[
             RodElectrodeSpec(length_m=1.5, depth_m=0.0),
@@ -275,8 +208,8 @@ def _default_building_placement() -> PlacementSpec:
     )
 
 
-def _default_kvs_placement() -> PlacementSpec:
-    """Default KVS placement: a wide Manhattan strip along the substation row."""
+def _default_cabinet_placement() -> PlacementSpec:
+    """Default cabinet placement: a wide Manhattan strip along the substation row."""
     return ManhattanGridPlacement(
         spacing_x_m=40.0,
         spacing_y_m=1.0,
@@ -298,31 +231,71 @@ class SubstationConfig(GeneratorConfig):
     )
 
 
-class KvsConfig(GeneratorConfig):
-    """Cable cabinet (KVS) block — placement, count, grounding."""
+class CabinetConfig(GeneratorConfig):
+    """Cable-cabinet block (German *KVS*) — placement, count, grounding.
+
+    Attributes
+    ----------
+    placement
+        Where to place the cabinets (star topology only).
+    count_per_100_buildings
+        Number of cabinets per 100 buildings; the count is
+        ``ceil(count_per_100_buildings * n_buildings / 100)``, at least 1.
+    fixed_count
+        Optional fixed cabinet count (overrides the rate).
+    grounding
+        Grounding system of every cabinet.
+    """
 
     placement: PlacementSpec = Field(
-        default_factory=_default_kvs_placement,
+        default_factory=_default_cabinet_placement,
         description="Where to place the cable cabinets.",
     )
-    quote_per_100_buildings: Union[float, AnyDistribution] = Field(
+    count_per_100_buildings: Union[float, AnyDistribution] = Field(
         default=5.0,
         description=(
-            "Number of cable cabinets per 100 buildings. The actual KVS "
-            "count is ceil(quote * n_buildings / 100), with a floor of 1."
+            "Number of cable cabinets per 100 buildings. The actual cabinet "
+            "count is ceil(count_per_100_buildings * n_buildings / 100), "
+            "with a floor of 1."
         ),
     )
     fixed_count: Optional[Union[int, AnyDistribution]] = Field(
         default=None,
         description=(
-            "Optional: pin the number of KVS to this value, ignoring "
-            "``quote_per_100_buildings``. Useful for explicit-placement runs."
+            "Optional: pin the number of cabinets to this value, ignoring "
+            "``count_per_100_buildings``. Useful for explicit-placement runs."
         ),
     )
     grounding: GroundingSystemSpec = Field(
-        default_factory=_default_kvs_grounding,
-        description="Per-KVS grounding system.",
+        default_factory=_default_cabinet_grounding,
+        description="Per-cabinet grounding system.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _renamed_fields(cls, data: object) -> object:
+        return rename_input_keys(
+            data,
+            {"quote_per_100_buildings": "count_per_100_buildings"},
+            "CabinetConfig",
+        )
+
+    @property
+    def quote_per_100_buildings(self) -> Union[float, Distribution]:
+        """Deprecated alias of :attr:`count_per_100_buildings`."""
+        warn_renamed(
+            "CabinetConfig.quote_per_100_buildings",
+            "CabinetConfig.count_per_100_buildings",
+        )
+        return self.count_per_100_buildings
+
+
+class KvsConfig(CabinetConfig):
+    """Deprecated alias of :class:`CabinetConfig`."""
+
+    def model_post_init(self, context: object, /) -> None:
+        warn_renamed("KvsConfig", "CabinetConfig", stacklevel=5)
+        super().model_post_init(context)
 
 
 class PenConfig(GeneratorConfig):
@@ -380,7 +353,7 @@ class TnNetworkConfig(GeneratorConfig):
         (see :data:`~groundfield.generators.soil_specs.SoilSpec`).
     substation
         Substation block (position + grounding system).
-    kvs
+    cabinets
         Cable-cabinet block (placement, count, grounding).
     placement
         Building placement strategy. Default: Manhattan grid.
@@ -394,7 +367,7 @@ class TnNetworkConfig(GeneratorConfig):
         :class:`Distribution`. Buildings are placed in catalog order.
     pen
         PEN backbone configuration.
-    source_magnitude_A
+    source_magnitude_a
         Driving current at the substation cluster, in A.
     """
 
@@ -410,8 +383,8 @@ class TnNetworkConfig(GeneratorConfig):
         description="Substation block.",
     )
 
-    kvs: KvsConfig = Field(
-        default_factory=KvsConfig,
+    cabinets: CabinetConfig = Field(
+        default_factory=CabinetConfig,
         description="Cable cabinet block.",
     )
 
@@ -438,27 +411,27 @@ class TnNetworkConfig(GeneratorConfig):
     )
 
     pen_topology: PenTopology = Field(
-        default_factory=StarKvsTopology,
+        default_factory=StarCabinetTopology,
         description=(
-            "PEN backbone topology. ``StarKvsTopology`` (default) "
-            "reproduces the legacy v0.6 behaviour: every KVS is "
+            "PEN backbone topology. ``StarCabinetTopology`` (default) "
+            "reproduces the legacy v0.6 behaviour: every cabinet is "
             "wired directly to the substation and every building "
-            "taps to its nearest KVS by Manhattan distance. "
+            "taps to its nearest cabinet by Manhattan distance. "
             "``RadialTrunkTopology`` lays out the substation as a "
             "radial set of LV feeders (Manhattan-aligned) with a "
             "finite slot budget per source — once a feeder's slots "
-            "are exhausted a KVS is inserted along the trunk axis "
+            "are exhausted a cabinet is inserted along the trunk axis "
             "to host the next batch of building taps. When "
             "``RadialTrunkTopology`` is selected the parent "
-            ":attr:`KvsConfig.placement` / ``fixed_count`` / "
-            "``quote_per_100_buildings`` fields are ignored — the "
-            "topology decides KVS positions and counts — but "
-            ":attr:`KvsConfig.grounding` is still honoured for the "
+            ":attr:`CabinetConfig.placement` / ``fixed_count`` / "
+            "``count_per_100_buildings`` fields are ignored — the "
+            "topology decides cabinet positions and counts — but "
+            ":attr:`CabinetConfig.grounding` is still honoured for the "
             "earthing of every inserted cabinet."
         ),
     )
 
-    source_magnitude_A: Union[float, AnyDistribution] = Field(
+    source_magnitude_a: Union[float, AnyDistribution] = Field(
         default=1.0,
         description=(
             "Driving current at the substation cluster, in A (RMS). "
@@ -520,38 +493,88 @@ class TnNetworkConfig(GeneratorConfig):
         ),
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _renamed_fields(cls, data: object) -> object:
+        return rename_input_keys(
+            data,
+            {"kvs": "cabinets", "source_magnitude_A": "source_magnitude_a"},
+            "TnNetworkConfig",
+        )
+
+    @property
+    def kvs(self) -> CabinetConfig:
+        """Deprecated alias of :attr:`cabinets`."""
+        warn_renamed("TnNetworkConfig.kvs", "TnNetworkConfig.cabinets")
+        return self.cabinets
+
+    @property
+    def source_magnitude_A(self) -> Union[float, Distribution]:  # noqa: N802
+        """Deprecated alias of :attr:`source_magnitude_a`."""
+        warn_renamed(
+            "TnNetworkConfig.source_magnitude_A", "TnNetworkConfig.source_magnitude_a"
+        )
+        return self.source_magnitude_a
+
 
 # ---------------------------------------------------------------------
 # Generator
 # ---------------------------------------------------------------------
 
 
+def _pen_conductor(pen: PenConfig) -> ConductorParameters:
+    """Conductor parameters shared by every PEN branch of the network."""
+    return ConductorParameters(
+        conductor_type="pen",
+        wire_radius_m=pen.wire_radius_m,
+        cross_section="from_radius",
+        coupling_to_soil=pen.coupling_to_soil,
+        segment_length_m=pen.segment_length_m,
+        inductance_model=pen.inductance_model,
+    )
+
+
+def _lead_conductor(lead: MeasurementLeadConfig) -> ConductorParameters:
+    """Conductor parameters of one measurement lead."""
+    return ConductorParameters(
+        conductor_type=lead.conductor_type,
+        wire_radius_m=lead.wire_radius_m,
+        cross_section="from_radius",
+        coupling_to_soil=lead.coupling_to_soil,
+        segment_length_m=lead.segment_length_m,
+        inductance_model=lead.inductance_model,
+    )
+
+
 class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     """Generator for TN low-voltage distribution network reference worlds.
 
-    See the module docstring for the full pipeline. In one
-    sentence: build soil → build substation grounding → place
-    buildings (one per type-and-count) → build per-building
-    grounding → place cable cabinets → build per-KVS grounding
-    → wire the PEN backbone → attach the source.
+    See the module docstring for the full pipeline. In one sentence:
+    resolve soil → substation grounding → place buildings (one per
+    type-and-count) → per-building grounding → cable cabinets → wire the
+    PEN backbone → measurement set-up → source, as a
+    :class:`~groundfield.generators.plan.NetworkPlan`
+    (:meth:`plan`), then materialise the plan (:meth:`build`).
     """
 
-    def build(self, cfg: Optional[TnNetworkConfig] = None) -> World:
+    def build(
+        self,
+        cfg: Optional[TnNetworkConfig] = None,
+        *,
+        rng: Optional[Union[int, np.random.Generator]] = None,
+    ) -> World:
         """Materialise one realisation of the configured TN network.
 
-        Resolves all stochastic fields against the generator's RNG,
-        builds the substation grounding, places the configured number
-        of buildings (with per-type electrode systems), routes the PEN
-        backbone via the configured
-        :class:`~groundfield.generators.placement.Placement` strategy,
-        optionally adds a measurement setup, and returns the assembled
-        :class:`~groundfield.World` ready for ``world.solve(engine)``.
+        Equivalent to ``materialise_plan(self.plan(cfg, rng=rng))``.
 
         Parameters
         ----------
         cfg : TnNetworkConfig, optional
             Configuration overriding :attr:`cfg`. When ``None``
             (default) the generator's own ``cfg`` is used.
+        rng : int or numpy.random.Generator, optional
+            Draw the realisation from this seed / generator instead of
+            the generator's own RNG.
 
         Returns
         -------
@@ -566,25 +589,55 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             if the total building count is zero, or if a configured
             placement returns fewer positions than buildings.
         """
+        return materialise_plan(self.plan(cfg, rng=rng))
+
+    def plan(
+        self,
+        cfg: Optional[TnNetworkConfig] = None,
+        *,
+        rng: Optional[Union[int, np.random.Generator]] = None,
+    ) -> NetworkPlan:
+        """Resolve one realisation into a :class:`NetworkPlan`.
+
+        Every random decision is made here, against ``rng`` (default:
+        the generator's RNG), in a fixed order: soil, substation grounding, building
+        counts, building positions, per-building grounding, cable
+        cabinets (count, positions, groundings), measurement electrodes
+        and leads, source magnitude. Materialising the returned plan
+        draws no further random numbers.
+
+        Parameters
+        ----------
+        cfg : TnNetworkConfig, optional
+            Configuration overriding :attr:`cfg`.
+        rng : int or numpy.random.Generator, optional
+            Seed / generator of the random draws (default: the
+            generator's own RNG).
+
+        Returns
+        -------
+        NetworkPlan
+            The concrete network.
+
+        Raises
+        ------
+        ValueError
+            See :meth:`build`.
+        """
         cfg = cfg or self.cfg
-        rng = self._rng
+        rng = self._rng if rng is None else _coerce_rng(rng)
 
-        # --- Soil + world ---
         soil = materialise_soil(cfg.soil, rng)
-        world = create_world(name=cfg.name, soil=soil)
 
-        # --- Substation grounding ---
-        substation_anchor = cfg.substation.grounding.build_at(
-            world,
-            site_xy=cfg.substation.position,
-            name_prefix="trafo",
-            rng=rng,
+        substation = cfg.substation.grounding.plan_site(
+            "trafo", role="substation", position_xy=cfg.substation.position, rng=rng
         )
-        if substation_anchor is None:
+        if substation.anchor is None:
             raise ValueError(
                 "TnNetworkGenerator: substation grounding produced zero "
                 "electrodes. At least one electrode must have presence_prob > 0."
             )
+        sites: list[PlannedSite] = [substation]
 
         # --- Buildings ---
         building_assignments = self._resolve_building_counts(cfg, rng)
@@ -594,153 +647,107 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 "TnNetworkGenerator: total building count is 0. Populate "
                 "building_counts with at least one type."
             )
-
         positions = cfg.placement.generate(n_buildings, rng)
         if len(positions) != n_buildings:
             raise RuntimeError(
                 f"placement.generate returned {len(positions)} positions, "
                 f"expected {n_buildings}."
             )
-
-        # Footprint-aware placement (ADR-0011): if the configured
-        # placement exposes a ``footprint_at(i)`` hook (currently
-        # only :class:`OsmBuildingPlacement`), the per-building
-        # grounding spec is rewritten so that every
-        # :class:`FoundationElectrodeSpec` inherits ``size_xy_m``,
-        # ``orientation_deg`` *and* the centre of the polygon's
-        # oriented bounding rectangle (the centre enters as an
-        # ``offset_xy_m`` correction relative to the reported site
-        # position — see ``_override_foundation_from_footprint``).
-        # The Bernoulli on ``presence_prob`` is preserved, so the
-        # only stochastic axis the user asked for survives the
-        # override.
+        # Footprint-aware placement (ADR-0011): a placement with a
+        # ``footprint_at(i)`` hook (currently :class:`OsmBuildingPlacement`)
+        # shapes every foundation of the building after the footprint
+        # (``GroundingSystemSpec.with_footprint``, OMBR rule).
         has_footprints = hasattr(cfg.placement, "footprint_at")
-
-        building_anchors: list[tuple[str, tuple[float, float]]] = []
+        buildings: list[PlannedSite] = []
         idx = 0
-        for type_idx, (btype, count) in enumerate(building_assignments):
+        for btype, count in building_assignments:
             for k in range(count):
                 site_xy = positions[idx]
-                prefix = f"{btype.name}_{k}"
                 grounding = btype.grounding
-                if has_footprints:
-                    footprint = cfg.placement.footprint_at(idx)
-                    if footprint is not None:
-                        grounding = _override_foundation_from_footprint(
-                            grounding,
-                            footprint,
-                            site_xy,
-                        )
-                anchor = grounding.build_at(
-                    world,
-                    site_xy=site_xy,
-                    name_prefix=prefix,
-                    rng=rng,
+                footprint = cfg.placement.footprint_at(idx) if has_footprints else None
+                if footprint is not None:
+                    grounding = grounding.with_footprint(
+                        footprint, site_xy=site_xy, outline="ombr"
+                    )
+                buildings.append(
+                    grounding.plan_site(
+                        f"{btype.name}_{k}",
+                        role="building",
+                        position_xy=site_xy,
+                        rng=rng,
+                        footprint=footprint,
+                        building_type=btype.name,
+                    )
                 )
-                if anchor is not None:
-                    building_anchors.append((anchor, site_xy))
                 idx += 1
-
-        if not building_anchors:
+        sites.extend(buildings)
+        if not any(b.anchor is not None for b in buildings):
             raise ValueError(
                 "TnNetworkGenerator: every building's grounding had zero "
                 "present electrodes. Increase presence_prob."
             )
 
         # --- Cable cabinets + PEN backbone ---
-        # Two PEN topologies are supported (see ``pen_topology.py``):
-        #
-        # * ``StarKvsTopology`` (default, legacy) — KVS placement,
-        #   count and grounding come from ``cfg.kvs``; every
-        #   building taps to its nearest KVS by Manhattan distance.
-        # * ``RadialTrunkTopology`` — the substation feeds N radial
-        #   feeders with a finite slot budget per source. KVSes are
-        #   inserted along the trunk axis as needed; ``cfg.kvs``
-        #   contributes only the per-KVS *grounding* spec.
+        branches: list[PlannedBranch] = []
         if isinstance(cfg.pen_topology, RadialTrunkTopology):
-            self._build_radial_trunk(
-                world,
-                cfg,
-                substation_anchor,
-                building_anchors,
-            )
+            self._plan_radial_trunk(cfg, substation, buildings, sites, branches, rng)
         else:
-            # Star-KVS topology (default).
-            n_kvs = self._resolve_kvs_count(cfg, n_buildings, rng)
-            kvs_positions = cfg.kvs.placement.generate(n_kvs, rng)
-            kvs_anchors: list[tuple[str, tuple[float, float]]] = []
-            for k, site_xy in enumerate(kvs_positions):
-                anchor = cfg.kvs.grounding.build_at(
-                    world,
-                    site_xy=site_xy,
-                    name_prefix=f"kvs_{k}",
-                    rng=rng,
+            n_cabinets = self._resolve_cabinet_count(cfg, n_buildings, rng)
+            cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
+            cabinets = [
+                cfg.cabinets.grounding.plan_site(
+                    f"kvs_{k}", role="cabinet", position_xy=site_xy, rng=rng
                 )
-                if anchor is not None:
-                    kvs_anchors.append((anchor, site_xy))
-
-            if not kvs_anchors:
+                for k, site_xy in enumerate(cabinet_positions)
+            ]
+            sites.extend(cabinets)
+            if not any(c.anchor is not None for c in cabinets):
                 raise ValueError(
-                    "TnNetworkGenerator: every KVS grounding had zero "
+                    "TnNetworkGenerator: every cable-cabinet grounding had zero "
                     "present electrodes. Increase presence_prob or set "
                     "fixed_count > 0."
                 )
+            self._plan_star_backbone(cfg, substation, cabinets, buildings, branches)
 
-            self._build_pen_backbone(
-                world,
-                cfg,
-                substation_anchor,
-                kvs_anchors,
-                building_anchors,
-            )
-
-        # --- Optional measurement setup ---
-        # Materialise the auxiliary current electrode, the voltage
-        # probe, and (optionally) the metallic feed / probe leads.
-        # The resulting return-path anchor (or ``None`` if no
-        # measurement setup is configured) is forwarded to the
-        # source so the test current physically returns through the
-        # aux electrode.
-        return_anchor = self._build_measurement_setup(
-            world,
-            cfg,
-            substation_anchor,
-        )
+        # --- Optional measurement set-up ---
+        measurement = self._plan_measurement(cfg, substation, rng)
 
         # --- Source ---
-        # ``source_magnitude_A`` may be a Distribution; resolve lazily
-        # like every other top-level numeric field.
-        #
-        # ``cfg.source_return_to`` is the explicit user-side override
-        # for the source's ``return_to``. If it is set together with a
-        # measurement setup, warn that the auto-routed aux anchor is
-        # being overridden — make the precedence explicit rather than
-        # silent.
-        effective_return_to = return_anchor
+        # ``cfg.source_return_to`` is the explicit override of the
+        # source's ``return_to``; warn when it shadows the
+        # measurement-set-up auxiliary electrode.
+        return_to: Optional[str] = None
+        if measurement is not None:
+            return_to = measurement.auxiliary.name
         if cfg.source_return_to is not None:
-            if return_anchor is not None and cfg.source_return_to != return_anchor:
+            aux_anchor = None if measurement is None else measurement.auxiliary.anchor
+            if aux_anchor is not None and cfg.source_return_to != aux_anchor:
                 warnings.warn(
                     "TnNetworkConfig.source_return_to="
                     f"{cfg.source_return_to!r} takes precedence over "
                     "the measurement-setup auxiliary electrode "
-                    f"({return_anchor!r}). The aux electrode and any "
+                    f"({aux_anchor!r}). The aux electrode and any "
                     "metallic feed/probe leads remain in the world, "
                     "but the source's return current is routed to "
                     "the user-supplied electrode instead.",
                     UserWarning,
-                    stacklevel=2,
+                    stacklevel=3,
                 )
-            effective_return_to = cfg.source_return_to
-
-        create_source(
-            world,
-            attached_to=substation_anchor,
-            return_to=effective_return_to,
+            return_to = cfg.source_return_to
+        source = PlannedSource(
+            attached_to=substation.name,
+            return_to=return_to,
             kind=cfg.source_kind,
-            magnitude=_to_float(cfg.source_magnitude_A, rng),
+            magnitude=_to_float(cfg.source_magnitude_a, rng),
         )
-
-        return world
+        return NetworkPlan(
+            name=cfg.name,
+            soil=soil,
+            sites=sites,
+            branches=branches,
+            measurement=measurement,
+            sources=[source],
+        )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -765,10 +772,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         mapping. A config re-serialised with sorted keys, round-
         tripped through YAML, or hand-edited by moving a line
         therefore yields the *bit-identical* world for the same
-        seed (F33). Before 0.15.0 the draws followed dict insertion
-        order, so swapping two keys of an otherwise identical
-        config changed the sampled counts (e.g. seed 42:
-        ``residential`` 5 vs 30 houses).
+        seed (F33).
 
         Returns
         -------
@@ -787,8 +791,6 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     f"building_counts['{name}'] has no matching entry in "
                     f"building_types (available: {list(catalog_by_name)})."
                 )
-        # Sample in catalog order: the RNG draw ↔ building-type
-        # pairing must not depend on how the mapping was written.
         out: list[tuple[BuildingTypeSpec, int]] = []
         seen: set[str] = set()
         for btype in cfg.building_types:
@@ -800,7 +802,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 out.append((catalog_by_name[btype.name], count))
         return out
 
-    def _resolve_kvs_count(
+    def _resolve_cabinet_count(
         self,
         cfg: TnNetworkConfig,
         n_buildings: int,
@@ -808,400 +810,245 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     ) -> int:
         """Resolve the actual cable-cabinet count.
 
-        Uses ``cfg.kvs.fixed_count`` if provided; otherwise computes
-        ``ceil(quote * n_buildings / 100)`` with a floor of 1.
+        Uses ``cfg.cabinets.fixed_count`` if provided; otherwise computes
+        ``ceil(rate * n_buildings / 100)`` with a floor of 1.
         """
-        if cfg.kvs.fixed_count is not None:
-            return max(1, _to_int(cfg.kvs.fixed_count, rng))
-        quote = _to_float(cfg.kvs.quote_per_100_buildings, rng)
-        return max(1, int(math.ceil(quote * n_buildings / 100.0)))
+        if cfg.cabinets.fixed_count is not None:
+            return max(1, _to_int(cfg.cabinets.fixed_count, rng))
+        rate = _to_float(cfg.cabinets.count_per_100_buildings, rng)
+        return max(1, int(math.ceil(rate * n_buildings / 100.0)))
 
-    def _build_measurement_setup(
-        self,
-        world: World,
-        cfg: TnNetworkConfig,
-        substation_anchor: str,
-    ) -> Optional[str]:
-        """Materialise the optional measurement setup.
+    def _plan_measurement(
+        self, cfg: TnNetworkConfig, substation: PlannedSite, rng: np.random.Generator
+    ) -> Optional[PlannedMeasurement]:
+        """Resolve the optional measurement set-up.
 
-        If ``cfg.measurement`` is ``None``, this is a no-op and the
-        method returns ``None`` (which the caller forwards to
-        :func:`create_source` as ``return_to``, leaving the source
-        to return through remote earth).
-
-        Otherwise this method:
-
-        1. builds the auxiliary current electrode
-           (``cfg.measurement.injection.grounding.build_at(...)``);
-        2. builds the voltage probe
-           (``cfg.measurement.probe.grounding.build_at(...)``);
-        3. if configured, adds the metallic feed lead from the
-           substation anchor to the aux anchor;
-        4. if configured, adds the metallic probe lead from the
-           substation anchor to the probe anchor;
-        5. returns the aux anchor name, so the source's
-           ``return_to`` is wired to the auxiliary electrode.
+        Builds the auxiliary current electrode and the voltage probe
+        sites and the optional metallic feed / probe leads (each a
+        finite-impedance conductor from the substation to the remote
+        electrode). Returns ``None`` without a measurement set-up.
         """
         meas = cfg.measurement
         if meas is None:
             return None
-        rng = self._rng
-
-        # 1) Auxiliary current electrode (Hilfserder)
-        aux_anchor = meas.injection.grounding.build_at(
-            world,
-            site_xy=meas.injection.position_xy,
-            name_prefix="aux",
-            rng=rng,
+        aux = meas.injection.grounding.plan_site(
+            "aux", role="auxiliary", position_xy=meas.injection.position_xy, rng=rng
         )
-        if aux_anchor is None:
+        if aux.anchor is None:
             raise ValueError(
                 "TnNetworkGenerator: measurement.injection.grounding "
                 "produced zero electrodes. Increase presence_prob."
             )
-
-        # 2) Voltage probe (Spannungssonde)
-        probe_anchor = meas.probe.grounding.build_at(
-            world,
-            site_xy=meas.probe.position_xy,
-            name_prefix="probe",
-            rng=rng,
+        probe = meas.probe.grounding.plan_site(
+            "probe", role="probe", position_xy=meas.probe.position_xy, rng=rng
         )
-        if probe_anchor is None:
+        if probe.anchor is None:
             raise ValueError(
                 "TnNetworkGenerator: measurement.probe.grounding "
                 "produced zero electrodes. Increase presence_prob."
             )
-
-        # 3) Metallic feed lead (Stromeinspeiseleitung), optional.
+        feed_lead = probe_lead = None
         if meas.injection.feed_lead is not None:
-            self._build_measurement_lead(
-                world,
-                lead=meas.injection.feed_lead,
-                start_anchor=substation_anchor,
-                end_anchor=aux_anchor,
-                name="meas_feed_lead",
+            feed_lead = self._plan_lead(
+                meas.injection.feed_lead,
+                "meas_feed_lead",
+                substation.name,
+                aux.name,
+                rng,
             )
-
-        # 4) Metallic probe lead (Spannungs-Messleitung), optional.
         if meas.probe.lead is not None:
-            self._build_measurement_lead(
-                world,
-                lead=meas.probe.lead,
-                start_anchor=substation_anchor,
-                end_anchor=probe_anchor,
-                name="meas_probe_lead",
+            probe_lead = self._plan_lead(
+                meas.probe.lead, "meas_probe_lead", substation.name, probe.name, rng
             )
+        return PlannedMeasurement(
+            auxiliary=aux, probe=probe, feed_lead=feed_lead, probe_lead=probe_lead
+        )
 
-        return aux_anchor
-
-    def _build_measurement_lead(
+    def _plan_lead(
         self,
-        world: World,
-        *,
         lead: MeasurementLeadConfig,
-        start_anchor: str,
-        end_anchor: str,
         name: str,
-    ) -> None:
-        """Build one measurement lead as a finite-impedance ``Conductor``.
+        start: str,
+        end: str,
+        rng: np.random.Generator,
+    ) -> PlannedBranch:
+        """Resolve one measurement lead into a branch.
 
-        The wire connects two existing anchor electrodes; ``depth_m``
-        is the lead's $z$-coordinate at both endpoints (the engine
-        takes the connection points of the anchors as the actual
-        endpoints, so a lead from a deep ring electrode to a
-        surface-rod electrode has a slight diagonal — see the
-        module docstring of
-        :mod:`groundfield.generators.measurement` for the validity
-        envelope).
+        The lead runs horizontally at :func:`lead_axis_z` of its
+        (resolved) ``depth_m`` between the two anchors (F48).
         """
-        rng = self._rng
-        kwargs: dict = dict(
-            conductor_type=lead.conductor_type,
-            wire_radius=lead.wire_radius_m,
-            cross_section="from_radius",  # finite-impedance branch
-            coupling_to_soil=lead.coupling_to_soil,
-        )
-        if lead.segment_length_m is not None:
-            kwargs["discretize_segment_length"] = lead.segment_length_m
-        if lead.inductance_model is not None:
-            kwargs["inductance_model"] = lead.inductance_model
-        # ``depth_m`` is currently informational — the lead's actual
-        # endpoint depths come from the anchor electrodes' connection
-        # points. For a future, fully depth-controlled routing the
-        # builder would interpose surface-clamp electrodes; for v1
-        # we keep the simpler model and document the limitation.
-        _ = _to_float(lead.depth_m, rng)
-        create_conductor(
-            world,
+        depth = _to_float(lead.depth_m, rng)
+        return PlannedBranch(
             name=name,
-            start=start_anchor,
-            end=end_anchor,
-            **kwargs,
+            role="measurement_lead",
+            start=start,
+            end=end,
+            conductor=_lead_conductor(lead),
+            axis_z_m=lead_axis_z(depth, lead.coupling_to_soil),
         )
 
-    def _build_pen_backbone(
+    def _plan_star_backbone(
         self,
-        world: World,
         cfg: TnNetworkConfig,
-        substation_anchor: str,
-        kvs_anchors: list[tuple[str, tuple[float, float]]],
-        building_anchors: list[tuple[str, tuple[float, float]]],
+        substation: PlannedSite,
+        cabinets: list[PlannedSite],
+        buildings: list[PlannedSite],
+        branches: list[PlannedBranch],
     ) -> None:
-        """Build the PEN backbone: substation → KVS → buildings."""
-        pen = cfg.pen
-        common_kwargs: dict = dict(
-            conductor_type="pen",
-            wire_radius=pen.wire_radius_m,
-            cross_section="from_radius",
-            coupling_to_soil=pen.coupling_to_soil,
-        )
-        if pen.segment_length_m is not None:
-            common_kwargs["discretize_segment_length"] = pen.segment_length_m
-        if pen.inductance_model is not None:
-            common_kwargs["inductance_model"] = pen.inductance_model
+        """Star backbone: substation → each cabinet, building → nearest cabinet.
 
-        # Substation → each KVS
-        for kvs_name, _ in kvs_anchors:
-            create_conductor(
-                world,
-                name=f"pen_main_{kvs_name}",
-                start=substation_anchor,
-                end=kvs_name,
-                **common_kwargs,
+        The service drop of a building carries the building's lumped
+        concrete-shell resistance (ADR-0012 V1) as its series resistance.
+        """
+        conductor = _pen_conductor(cfg.pen)
+        wired = [c for c in cabinets if c.anchor is not None]
+        for cab in wired:
+            branches.append(
+                PlannedBranch(
+                    name=f"pen_main_{cab.anchor}",
+                    role="pen",
+                    start=substation.name,
+                    end=cab.name,
+                    conductor=conductor,
+                )
             )
-        # Each building → its nearest KVS (Manhattan metric). The
-        # service drop additionally carries the lumped concrete-shell
-        # resistance (ADR-0012 V1) when the building's foundation
-        # electrode was built with a concrete encasement; the
-        # registry was populated by
-        # :meth:`GroundingSystemSpec._maybe_concrete_shell` during
-        # the per-building build_at call.
-        for building_name, (bx, by) in building_anchors:
-            kvs_name, _ = min(
-                kvs_anchors,
-                key=lambda k: abs(k[1][0] - bx) + abs(k[1][1] - by),
+        for b in buildings:
+            if b.anchor is None:
+                continue
+            bx, by = b.position_xy
+            cab = min(
+                wired,
+                key=lambda c: abs(c.position_xy[0] - bx) + abs(c.position_xy[1] - by),
             )
-            extra_kwargs: dict = {}
-            shell_ohm = world.concrete_shell_corrections.get(building_name)
-            if shell_ohm is not None and shell_ohm > 0.0:
-                # Force the finite-impedance branch so the lumped
-                # series resistance is actually applied. The PEN
-                # service drop already runs in this branch by
-                # default (the PEN block sets ``cross_section`` via
-                # ``"from_radius"``) — ``lumped_series_resistance_ohm``
-                # then overrides the geometric resistance.
-                extra_kwargs["lumped_series_resistance_ohm"] = float(shell_ohm)
-            create_conductor(
-                world,
-                name=f"pen_service_{building_name}",
-                start=kvs_name,
-                end=building_name,
-                **common_kwargs,
-                **extra_kwargs,
+            branches.append(
+                PlannedBranch(
+                    name=f"pen_service_{b.anchor}",
+                    role="service_drop",
+                    start=cab.name,
+                    end=b.name,
+                    conductor=conductor,
+                    concrete_shell_of=b.name,
+                )
             )
 
-    # ------------------------------------------------------------------
-    # Radial-trunk PEN backbone (new in v0.7)
-    # ------------------------------------------------------------------
-
-    def _build_radial_trunk(
+    def _plan_radial_trunk(
         self,
-        world: World,
         cfg: TnNetworkConfig,
-        substation_anchor: str,
-        building_anchors: list[tuple[str, tuple[float, float]]],
+        substation: PlannedSite,
+        buildings: list[PlannedSite],
+        sites: list[PlannedSite],
+        branches: list[PlannedBranch],
+        rng: np.random.Generator,
     ) -> None:
-        r"""Build a radial-trunk PEN backbone.
-
-        Implements
-        :class:`~groundfield.generators.pen_topology.RadialTrunkTopology`:
+        r"""Radial-trunk backbone (:class:`RadialTrunkTopology`).
 
         1. Group every building by the angularly closest feeder out
            of the substation.
         2. Per feeder, sort the assigned buildings by their axial
            projection onto the feeder direction.
         3. Walk the sorted list, taking up to
-           :attr:`RadialTrunkTopology.slots_per_substation` taps at
-           the substation; when that budget is exhausted, instantiate
-           a KVS along the feeder axis (using
-           :attr:`KvsConfig.grounding` for its earthing system) and
-           continue with :attr:`RadialTrunkTopology.slots_per_kvs`
-           taps per KVS.
-        4. Wire the trunk (substation → KVS$_1$ → KVS$_2$ → …) and
-           the per-building service drops as straight-line PEN
-           conductors using the parameters from
-           :class:`PenConfig`.
-
-        The method is a no-op for buildings the topology decides to
-        drop (already warned at the assignment stage in
-        :meth:`RadialTrunkTopology.assign_buildings_to_feeders`).
-
-        Parameters
-        ----------
-        world
-            World being populated.
-        cfg
-            The full :class:`TnNetworkConfig` (we read
-            :attr:`cfg.pen`, :attr:`cfg.pen_topology`,
-            :attr:`cfg.kvs.grounding`, and :attr:`cfg.substation`).
-        substation_anchor
-            Anchor name of the substation cluster (the trunk roots
-            here).
-        building_anchors
-            Per-building anchor name + horizontal centre $(x, y)$,
-            in declared order (matches the ordering returned by
-            :meth:`TnNetworkGenerator.build`).
+           :attr:`RadialTrunkTopology.slots_per_substation` taps at the
+           substation; when that budget is exhausted, place a cabinet
+           along the feeder axis (grounded per :attr:`CabinetConfig.grounding`)
+           and continue with :attr:`RadialTrunkTopology.slots_per_cabinet`
+           taps per cabinet.
+        4. Wire the trunk (substation → cabinet$_1$ → cabinet$_2$ → …)
+           and the service drops as straight PEN conductors.
 
         Raises
         ------
         ValueError
-            If the topology resolves to zero PEN connections for
-            every building (every building dropped or every KVS
-            grounding produced zero electrodes), which is almost
-            always a configuration error.
+            If the topology wires no building at all.
         """
         topology = cfg.pen_topology
         assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
-        rng = self._rng
-        pen = cfg.pen
-
-        # Common kwargs for every PEN conductor (matches the
-        # star-KVS topology so the cable physics is identical).
-        common_kwargs: dict = dict(
-            conductor_type="pen",
-            wire_radius=pen.wire_radius_m,
-            cross_section="from_radius",
-            coupling_to_soil=pen.coupling_to_soil,
-        )
-        if pen.segment_length_m is not None:
-            common_kwargs["discretize_segment_length"] = pen.segment_length_m
-        if pen.inductance_model is not None:
-            common_kwargs["inductance_model"] = pen.inductance_model
-
-        substation_xy = cfg.substation.position
-        building_xys = [xy for _, xy in building_anchors]
+        conductor = _pen_conductor(cfg.pen)
+        wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
-            substation_xy=substation_xy,
-            building_positions=building_xys,
+            substation_xy=cfg.substation.position,
+            building_positions=[b.position_xy for b in wired],
         )
-
-        n_assigned = sum(len(g) for g in groups)
-        if n_assigned == 0:
+        if sum(len(g) for g in groups) == 0:
             raise ValueError(
                 "TnNetworkGenerator: RadialTrunkTopology dropped every "
                 "building (all were behind the closest feeder axis or "
                 "beyond max_feeder_length_m). Check feeder directions "
                 "and the building layout."
             )
-
-        # Per-feeder loop.
         any_service_drop = False
         for feeder_idx, building_indices in enumerate(groups):
             if not building_indices:
                 continue
-            # Plan KVS positions for this feeder. The first
-            # ``slots_per_substation`` buildings tap directly to the
-            # substation; the remaining are distributed across
-            # equispaced KVSes.
-            kvs_positions = topology.plan_feeder_kvs_positions(
-                substation_xy=substation_xy,
+            cabinet_positions = topology.plan_feeder_cabinet_positions(
+                substation_xy=cfg.substation.position,
                 feeder_idx=feeder_idx,
                 n_buildings_on_feeder=len(building_indices),
             )
-
-            # Materialise KVS clusters along the trunk and stitch
-            # them together with substation → KVS_1 → … trunk
-            # conductors.
-            tap_anchors: list[str] = [substation_anchor]
-            previous_anchor = substation_anchor
-            for k, kvs_xy in enumerate(kvs_positions):
-                kvs_name = f"{topology.name_prefix}_f{feeder_idx}_{k}"
-                kvs_anchor = cfg.kvs.grounding.build_at(
-                    world,
-                    site_xy=kvs_xy,
-                    name_prefix=kvs_name,
-                    rng=rng,
+            taps: list[PlannedSite] = [substation]
+            previous = substation
+            for k, cabinet_xy in enumerate(cabinet_positions):
+                site_name = f"{topology.name_prefix}_f{feeder_idx}_{k}"
+                cab = cfg.cabinets.grounding.plan_site(
+                    site_name, role="cabinet", position_xy=cabinet_xy, rng=rng
                 )
-                if kvs_anchor is None:
-                    # KVS earthing had zero present electrodes;
-                    # warn and let the trunk skip this slot. The
-                    # buildings that would have tapped here go to
-                    # the previous tap source until that, too, is
-                    # exhausted.
+                sites.append(cab)
+                if cab.anchor is None:
                     warnings.warn(
-                        f"RadialTrunkTopology: KVS {kvs_name!r} "
+                        f"RadialTrunkTopology: cabinet {site_name!r} "
                         "grounding produced zero electrodes "
                         "(presence_prob=0?); the next batch of "
                         "buildings falls back to the previous tap "
                         "source.",
                         UserWarning,
-                        stacklevel=2,
+                        stacklevel=3,
                     )
                     continue
-                create_conductor(
-                    world,
-                    name=f"pen_trunk_f{feeder_idx}_{k}",
-                    start=previous_anchor,
-                    end=kvs_anchor,
-                    **common_kwargs,
+                branches.append(
+                    PlannedBranch(
+                        name=f"pen_trunk_f{feeder_idx}_{k}",
+                        role="pen",
+                        start=previous.name,
+                        end=cab.name,
+                        conductor=conductor,
+                    )
                 )
-                tap_anchors.append(kvs_anchor)
-                previous_anchor = kvs_anchor
-
-            # Assign each building on this feeder to the right tap
-            # source. The first ``slots_per_substation`` buildings
-            # go to ``tap_anchors[0]`` (the substation); the next
-            # ``slots_per_kvs`` go to ``tap_anchors[1]``, and so on.
+                taps.append(cab)
+                previous = cab
             budgets = [topology.slots_per_substation] + [
-                topology.slots_per_kvs for _ in range(len(tap_anchors) - 1)
+                topology.slots_per_cabinet for _ in range(len(taps) - 1)
             ]
             tap_idx = 0
             for building_idx in building_indices:
-                # Advance through tap sources whose budget is
-                # exhausted. If every tap source is full the loop
-                # falls through and we attach the building to the
-                # *last* tap anchor — emit a UserWarning so it's
-                # not silent.
-                while tap_idx < len(tap_anchors) - 1 and budgets[tap_idx] <= 0:
+                while tap_idx < len(taps) - 1 and budgets[tap_idx] <= 0:
                     tap_idx += 1
                 if budgets[tap_idx] <= 0:
                     warnings.warn(
                         "RadialTrunkTopology: feeder "
                         f"{feeder_idx} exhausted every slot "
-                        f"(have {len(tap_anchors)} tap sources, "
+                        f"(have {len(taps)} tap sources, "
                         f"need ≥ {len(building_indices)}); "
                         "wiring remaining buildings to the last "
-                        "tap anchor. Increase slots_per_kvs or "
+                        "tap anchor. Increase slots_per_cabinet or "
                         "n_feeders.",
                         UserWarning,
-                        stacklevel=2,
+                        stacklevel=3,
                     )
                 budgets[tap_idx] = max(0, budgets[tap_idx] - 1)
-                tap_anchor = tap_anchors[tap_idx]
-                building_name, _ = building_anchors[building_idx]
-
-                extra_kwargs: dict = {}
-                shell_ohm = world.concrete_shell_corrections.get(
-                    building_name,
-                )
-                if shell_ohm is not None and shell_ohm > 0.0:
-                    extra_kwargs["lumped_series_resistance_ohm"] = float(
-                        shell_ohm,
+                b = wired[building_idx]
+                branches.append(
+                    PlannedBranch(
+                        name=f"pen_service_{b.anchor}",
+                        role="service_drop",
+                        start=taps[tap_idx].name,
+                        end=b.name,
+                        conductor=conductor,
+                        concrete_shell_of=b.name,
                     )
-                create_conductor(
-                    world,
-                    name=f"pen_service_{building_name}",
-                    start=tap_anchor,
-                    end=building_name,
-                    **common_kwargs,
-                    **extra_kwargs,
                 )
                 any_service_drop = True
-
         if not any_service_drop:
             raise ValueError(
                 "TnNetworkGenerator: RadialTrunkTopology produced "
                 "zero PEN service drops. Check feeder directions, "
-                "KVS grounding presence_prob, and slot budgets."
+                "cabinet grounding presence_prob, and slot budgets."
             )

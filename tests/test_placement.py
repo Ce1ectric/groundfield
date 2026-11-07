@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from groundfield.generators import (
     ExplicitPlacement,
@@ -58,7 +58,7 @@ def test_manhattan_grid_jitter_spreads_positions() -> None:
         spacing_y_m=20.0,
     )
     grid = p_no_jitter.generate(20, np.random.default_rng(0))
-    for (x, y), (gx, gy) in zip(pos, grid):
+    for (x, y), (gx, gy) in zip(pos, grid, strict=False):
         assert abs(x - gx) <= 2.5 + 1e-9
         assert abs(y - gy) <= 2.5 + 1e-9
 
@@ -130,3 +130,54 @@ def test_placement_json_roundtrip(p) -> None:
     restored = _Wrapper.model_validate_json(payload).p
     assert type(restored) is type(p)
     assert restored.model_dump() == p.model_dump()
+
+
+# ---------------------------------------------------------------------
+# 10.55 / F47 — jitter_m accepts a distribution
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.55")
+def test_manhattan_grid_jitter_accepts_a_distribution() -> None:
+    """``jitter_m`` is documented as ``float | Distribution``, one draw per site.
+
+    v0.15.0 raised ``TypeError: Unable to apply constraint 'ge'`` because
+    the ``ge=0`` bound sat on the union.
+    """
+    p = ManhattanGridPlacement(
+        n_per_row=4,
+        spacing_x_m=20.0,
+        spacing_y_m=20.0,
+        jitter_m=Uniform(low=1.0, high=3.0),
+    )
+    grid = ManhattanGridPlacement(n_per_row=4, spacing_x_m=20.0, spacing_y_m=20.0)
+    rng = np.random.default_rng(0)
+    pos = p.generate(8, rng)
+    ref = grid.generate(8, np.random.default_rng(0))
+    offsets = np.abs(np.subtract(pos, ref))
+    assert len(pos) == 8
+    assert offsets.max() <= 1.5  # |offset| <= high / 2
+    assert offsets.min() > 0.0
+
+
+@pytest.mark.finding("10.55")
+def test_manhattan_grid_jitter_float_bound_and_round_trip() -> None:
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        ManhattanGridPlacement(jitter_m=-1.0)
+    p = ManhattanGridPlacement(jitter_m=Uniform(low=0.5, high=2.0))
+    q = ManhattanGridPlacement.model_validate_json(p.model_dump_json())
+    assert q == p
+    assert q.generate(5, np.random.default_rng(3)) == p.generate(
+        5, np.random.default_rng(3)
+    )
+
+
+@pytest.mark.finding("10.55")
+def test_manhattan_grid_negative_jitter_draw_means_no_jitter() -> None:
+    from groundfield.generators import Normal
+
+    p = ManhattanGridPlacement(n_per_row=4, jitter_m=Normal(mean=0.0, std=1.0))
+    pos = p.generate(40, np.random.default_rng(1))
+    ref = ManhattanGridPlacement(n_per_row=4).generate(40, np.random.default_rng(1))
+    unmoved = sum(a == b for a, b in zip(pos, ref, strict=True))
+    assert 0 < unmoved < 40

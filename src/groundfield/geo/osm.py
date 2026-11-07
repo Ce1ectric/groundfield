@@ -33,21 +33,55 @@ request per the Overpass API usage policy. The default endpoint is
 the canonical ``https://overpass-api.de/api/interpreter`` mirror;
 users with their own instance can pass ``endpoint=…``.
 
-Retries with exponential backoff are performed on HTTP
-``429 Too Many Requests`` or ``504 Gateway Timeout``; the count is
-controlled by the ``max_retries`` keyword on :func:`query_buildings`
-and :func:`query_and_project` (default ``1``, matching the v0.6.0
-contract). Everything else raises immediately.
+Retries are performed on HTTP ``429 Too Many Requests``, ``503`` and
+``504 Gateway Timeout``, honouring a ``Retry-After`` header and capped
+at :data:`MAX_RETRY_DELAY_S` per wait; the count is controlled by the
+``max_retries`` keyword on :func:`query_buildings` and
+:func:`query_and_project` (default ``1``, at most :data:`MAX_RETRIES`).
+Everything else raises immediately.
+
+Safety
+------
+Requests are bounded and validated (review finding 10.05):
+
+* coordinates must be finite WGS84 values, the radius finite and at most
+  :data:`MAX_RADIUS_M`, ``timeout_s`` an integer in
+  ``[1, MAX_TIMEOUT_S]`` (it is interpolated into the query text);
+* endpoints must use ``https`` (plain ``http`` only for a local
+  instance on ``localhost``);
+* the response is streamed and capped at ``max_response_bytes``
+  (default :data:`DEFAULT_MAX_RESPONSE_BYTES`);
+* an HTTP-200 payload whose ``remark`` reports an Overpass runtime
+  error, or that is not a JSON object with an ``elements`` list, raises
+  :class:`OverpassError` and is not cached;
+* cache files are written atomically (temporary file + rename); an
+  unreadable cache file is re-fetched with a warning;
+* the cache key of a non-default endpoint includes the endpoint (the
+  default endpoint keeps the historic key, so existing caches stay
+  valid).
+
+Building tags
+-------------
+Every element with a ``building=*`` tag is a footprint unless the
+caller excludes tag values via ``exclude_building_tags`` (see
+:data:`NON_SERVICE_BUILDING_TAGS`); by default nothing is excluded.
 """
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
+import math
+import numbers
 import os
 import time
+import uuid
+import warnings
+from collections.abc import Collection
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import urlsplit
 
 from groundfield.geo.footprint import BuildingFootprint, Ring
 from groundfield.geo.projection import Projector
@@ -78,6 +112,12 @@ def _groundfield_version() -> str:
 
 __all__ = [
     "DEFAULT_ENDPOINT",
+    "DEFAULT_MAX_RESPONSE_BYTES",
+    "MAX_RADIUS_M",
+    "MAX_RETRIES",
+    "MAX_RETRY_DELAY_S",
+    "MAX_TIMEOUT_S",
+    "NON_SERVICE_BUILDING_TAGS",
     "OverpassError",
     "build_query",
     "query_buildings",
@@ -93,6 +133,46 @@ DEFAULT_ENDPOINT = "https://overpass-api.de/api/interpreter"
 DEFAULT_TIMEOUT_S = 30
 """Per-request timeout passed both to Overpass (via ``[timeout:…]``)
 and to ``requests`` as a network-side timeout."""
+
+MAX_TIMEOUT_S = 900
+"""Largest accepted ``timeout_s`` in s."""
+
+MAX_RADIUS_M = 10_000.0
+"""Largest accepted search radius in m (one LV / MV network area)."""
+
+DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+"""Default cap on the size of an Overpass response (64 MiB)."""
+
+MAX_RETRIES = 5
+"""Largest accepted ``max_retries``."""
+
+MAX_RETRY_DELAY_S = 60.0
+"""Longest wait in s between two retries (also caps ``Retry-After``)."""
+
+_RETRY_STATUSES = (429, 503, 504)
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+NON_SERVICE_BUILDING_TAGS: frozenset[str] = frozenset(
+    {
+        "carport",
+        "container",
+        "garage",
+        "garages",
+        "greenhouse",
+        "hut",
+        "no",
+        "roof",
+        "ruins",
+        "shed",
+        "shelter",
+        "tent",
+    }
+)
+"""``building=*`` values that usually have neither an LV service
+connection nor a foundation earth electrode (garages, sheds, roofs,
+ruins, ``building=no``, ...). Pass it as ``exclude_building_tags`` to
+drop such footprints; it is not applied by default."""
 
 
 def _user_agent() -> str:
@@ -201,9 +281,20 @@ def build_query(
         A deterministic Overpass-QL query. The string is
         byte-identical across runs given the same inputs, so its
         SHA-256 hash is a stable cache key.
+
+    Raises
+    ------
+    ValueError
+        For non-finite or out-of-range coordinates (latitude in
+        ``[-90, 90]``, longitude in ``[-180, 180]``), a radius outside
+        ``(0, MAX_RADIUS_M]`` or a ``timeout_s`` outside
+        ``[1, MAX_TIMEOUT_S]``.
+    TypeError
+        If ``timeout_s`` is not an integer (it is interpolated into the
+        query text, so anything else could inject Overpass QL).
     """
-    if radius_m <= 0:
-        raise ValueError(f"radius_m must be > 0, got {radius_m}.")
+    lat0_deg, lon0_deg, radius_m = _validate_area(lat0_deg, lon0_deg, radius_m)
+    timeout_s = _validate_timeout(timeout_s)
     # Float formatting kept fixed so the query string is stable
     # across platforms / locales — six decimals on lat/lon are
     # roughly 0.1 m at the equator; one decimal on radius_m is
@@ -221,14 +312,182 @@ def build_query(
     )
 
 
+def _validate_area(
+    lat0_deg: float, lon0_deg: float, radius_m: float
+) -> tuple[float, float, float]:
+    """Check the search area; return it as floats."""
+    try:
+        lat, lon, radius = float(lat0_deg), float(lon0_deg), float(radius_m)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("lat0_deg, lon0_deg and radius_m must be numbers.") from exc
+    if not (math.isfinite(lat) and -90.0 <= lat <= 90.0):
+        raise ValueError(
+            f"lat0_deg must be a finite latitude in [-90, 90], got {lat0_deg}."
+        )
+    if not (math.isfinite(lon) and -180.0 <= lon <= 180.0):
+        raise ValueError(
+            f"lon0_deg must be a finite longitude in [-180, 180], got {lon0_deg}."
+        )
+    if not (math.isfinite(radius) and 0.0 < radius <= MAX_RADIUS_M):
+        raise ValueError(
+            f"radius_m must be > 0 and <= {MAX_RADIUS_M:g} m, got {radius_m}."
+        )
+    return lat, lon, radius
+
+
+def _validate_timeout(timeout_s: object) -> int:
+    """Check ``timeout_s`` (an integer that ends up in the query text)."""
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, numbers.Integral):
+        raise TypeError(f"timeout_s must be an integer, got {timeout_s!r}.")
+    timeout_s = int(timeout_s)
+    if not 1 <= timeout_s <= MAX_TIMEOUT_S:
+        raise ValueError(f"timeout_s must be in [1, {MAX_TIMEOUT_S}], got {timeout_s}.")
+    return timeout_s
+
+
+def _validate_max_response_bytes(max_response_bytes: object) -> int:
+    if isinstance(max_response_bytes, bool) or not isinstance(
+        max_response_bytes, numbers.Integral
+    ):
+        raise TypeError(
+            f"max_response_bytes must be an integer, got {max_response_bytes!r}."
+        )
+    if max_response_bytes < 1:
+        raise ValueError(f"max_response_bytes must be >= 1, got {max_response_bytes}.")
+    return int(max_response_bytes)
+
+
+def _validate_endpoint(endpoint: str) -> str:
+    """Require ``https`` (``http`` only for a local instance)."""
+    parts = urlsplit(str(endpoint))
+    if parts.scheme == "https" and parts.hostname:
+        return str(endpoint)
+    if parts.scheme == "http" and parts.hostname in _LOOPBACK_HOSTS:
+        return str(endpoint)
+    raise ValueError(
+        f"endpoint must be an https URL (http only for localhost), got {endpoint!r}."
+    )
+
+
+def _validate_max_retries(max_retries: object) -> int:
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int):
+        raise TypeError(f"max_retries must be an integer, got {max_retries!r}.")
+    if not 0 <= max_retries <= MAX_RETRIES:
+        raise ValueError(
+            f"max_retries must be in [0, {MAX_RETRIES}], got {max_retries}."
+        )
+    return max_retries
+
+
 def _hash_query(query: str) -> str:
     """SHA-256 of the query string, used as the cache filename stem."""
     return hashlib.sha256(query.encode("utf-8")).hexdigest()
 
 
+def _cache_key(query: str, endpoint: str) -> str:
+    """Cache file stem: the query hash, plus the endpoint when not the default."""
+    if endpoint == DEFAULT_ENDPOINT:
+        return _hash_query(query)
+    return hashlib.sha256(f"{endpoint}\n{query}".encode("utf-8")).hexdigest()
+
+
+def _check_payload(payload: Any) -> dict[str, Any]:
+    """Raise :class:`OverpassError` unless ``payload`` is a usable result."""
+    if not isinstance(payload, dict):
+        raise OverpassError(
+            f"Overpass payload must be a JSON object, got {type(payload).__name__}."
+        )
+    elements = payload.get("elements", [])
+    if elements is not None and not isinstance(elements, list):
+        raise OverpassError("Overpass payload: 'elements' must be a list.")
+    remark = payload.get("remark")
+    if isinstance(remark, str) and "error" in remark.lower():
+        raise OverpassError(f"Overpass reported an error: {remark[:500]}")
+    return payload
+
+
+def _atomic_write_json(path: Path, payload: Any) -> None:
+    """Write JSON to ``path`` via a temporary file and an atomic rename.
+
+    The temporary file lives in the same directory (same file system, so
+    :func:`os.replace` is atomic) and is created with the default
+    permissions of the process, like the cache file before 2026.11.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        with tmp.open("x", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
 # ---------------------------------------------------------------------
 # HTTP layer
 # ---------------------------------------------------------------------
+
+
+def _read_capped(response: Any, max_bytes: int) -> bytes:
+    """Read a streamed body, at most ``max_bytes`` bytes."""
+    length = (getattr(response, "headers", None) or {}).get("Content-Length")
+    if length is not None:
+        try:
+            declared = int(length)
+        except (TypeError, ValueError):
+            declared = None
+        if declared is not None and declared > max_bytes:
+            raise OverpassError(
+                f"Overpass response of {declared} bytes exceeds the cap of "
+                f"{max_bytes} bytes (max_response_bytes).",
+                status_code=getattr(response, "status_code", None),
+            )
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in response.iter_content(chunk_size=65536):
+        if not chunk:
+            continue
+        total += len(chunk)
+        if total > max_bytes:
+            raise OverpassError(
+                f"Overpass response exceeds the cap of {max_bytes} bytes "
+                "(max_response_bytes).",
+                status_code=getattr(response, "status_code", None),
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _peek_body(response: Any, limit: int = 1024) -> str:
+    """First ``limit`` bytes of an error body, decoded leniently."""
+    data = b""
+    try:
+        for chunk in response.iter_content(chunk_size=limit):
+            data += chunk
+            if len(data) >= limit:
+                break
+    except Exception:  # pragma: no cover - diagnostics only
+        pass
+    return data[:limit].decode("utf-8", errors="replace")
+
+
+def _retry_delay(response: Any, attempt: int) -> float:
+    """Wait before the next attempt: ``Retry-After`` or ``2**attempt``, capped."""
+    value = (getattr(response, "headers", None) or {}).get("Retry-After")
+    if value is not None:
+        try:
+            delay = float(value)
+        except (TypeError, ValueError):
+            delay = math.nan  # HTTP-date form: use the exponential backoff
+        if math.isfinite(delay):
+            return min(max(delay, 0.0), MAX_RETRY_DELAY_S)
+        if delay == math.inf:
+            return MAX_RETRY_DELAY_S
+    return min(float(2**attempt), MAX_RETRY_DELAY_S)
 
 
 def _post_overpass(
@@ -238,46 +497,60 @@ def _post_overpass(
     timeout_s: int,
     max_retries: int = 1,
     _sleep: Any = time.sleep,
+    _transport: Any = None,
+    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
 ) -> dict[str, Any]:
     """POST ``query`` to ``endpoint`` and return the decoded JSON.
 
-    Retries up to ``max_retries`` times on ``429`` / ``504`` with
-    exponential backoff (default ``1``; the historic
-    public-API contract). All other non-2xx responses raise
-    :class:`OverpassError` immediately.
+    Retries up to ``max_retries`` times on ``429`` / ``503`` / ``504``,
+    waiting ``Retry-After`` seconds when the server sends it, else
+    ``2**attempt`` seconds, never longer than :data:`MAX_RETRY_DELAY_S`.
+    All other non-2xx responses raise :class:`OverpassError` at once. The
+    body is streamed and capped at ``max_response_bytes``.
 
-    The ``_sleep`` hook lets the test suite replace
-    :func:`time.sleep` without touching the global module state.
+    The ``_sleep`` and ``_transport`` hooks let tests replace
+    :func:`time.sleep` and :func:`requests.post`.
     """
-    requests = _import_requests()
+    _validate_endpoint(endpoint)
+    _validate_max_retries(max_retries)
+    max_response_bytes = _validate_max_response_bytes(max_response_bytes)
+    transport = _transport if _transport is not None else _import_requests().post
     headers = {
         "User-Agent": _user_agent(),
         "Accept": "application/json",
     }
     for attempt in range(max_retries + 1):
-        response = requests.post(
+        response = transport(
             endpoint,
             data={"data": query},
             headers=headers,
             timeout=timeout_s + 5,  # client side a little more lenient
+            stream=True,
         )
-        if response.status_code == 200:
-            try:
-                return response.json()
-            except ValueError as exc:
-                raise OverpassError(
-                    "Overpass returned a 200 but the body is not valid JSON.",
-                    status_code=response.status_code,
-                    body=response.text[:1024],
-                ) from exc
-        if response.status_code in (429, 504) and attempt < max_retries:
-            _sleep(2**attempt)
-            continue
-        raise OverpassError(
-            f"Overpass returned HTTP {response.status_code}.",
-            status_code=response.status_code,
-            body=response.text[:1024],
-        )
+        try:
+            status = response.status_code
+            if status == 200:
+                body = _read_capped(response, max_response_bytes)
+                try:
+                    return json.loads(body)
+                except ValueError as exc:
+                    raise OverpassError(
+                        "Overpass returned a 200 but the body is not valid JSON.",
+                        status_code=status,
+                        body=body[:1024].decode("utf-8", errors="replace"),
+                    ) from exc
+            if status in _RETRY_STATUSES and attempt < max_retries:
+                _sleep(_retry_delay(response, attempt))
+                continue
+            raise OverpassError(
+                f"Overpass returned HTTP {status}.",
+                status_code=status,
+                body=_peek_body(response),
+            )
+        finally:
+            close = getattr(response, "close", None)
+            if close is not None:
+                close()
     # Unreachable: the loop either returns or raises.
     raise OverpassError(  # pragma: no cover - defensive
         "Overpass request exhausted retries without a definitive outcome."
@@ -299,6 +572,7 @@ def query_buildings(
     timeout_s: int = DEFAULT_TIMEOUT_S,
     force_refresh: bool = False,
     max_retries: int = 1,
+    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
     _post: Any = None,
 ) -> dict[str, Any]:
     """Fetch (or load from cache) the raw Overpass response.
@@ -308,27 +582,31 @@ def query_buildings(
     lat0_deg, lon0_deg
         Centre of the buildings-in-radius lookup, WGS84 degrees.
     radius_m
-        Search radius in metres.
+        Search radius in metres, at most :data:`MAX_RADIUS_M`.
     cache_dir
         Directory in which the response is cached. Defaults to
         :func:`default_cache_dir`. Created on first write.
     endpoint
-        Overpass endpoint URL. Defaults to the canonical mirror.
+        Overpass endpoint URL (``https``; ``http`` only for
+        ``localhost``). Defaults to the canonical mirror.
     timeout_s
-        Per-query timeout passed to Overpass.
+        Per-query timeout in s passed to Overpass, an integer in
+        ``[1, MAX_TIMEOUT_S]``.
     force_refresh
         If ``True``, ignore any cached payload and re-query the
         endpoint, overwriting the cache file. Useful when the user
         knows the upstream data changed.
     max_retries
-        Number of retry attempts on ``429`` / ``504`` responses.
-        Defaults to ``1`` (one retry, matching the historic
-        behaviour). Raise to two or three for flaky cellular / VPN
-        links; set to ``0`` to disable retries entirely. Must be
-        ``>= 0``.
+        Number of retry attempts on ``429`` / ``503`` / ``504``
+        responses, in ``[0, MAX_RETRIES]``. Defaults to ``1`` (one
+        retry, matching the historic behaviour).
+    max_response_bytes
+        Cap on the response size in bytes (default
+        :data:`DEFAULT_MAX_RESPONSE_BYTES`).
     _post
-        Internal hook for tests: a callable with the same signature
-        as :func:`_post_overpass`. Production calls use the default.
+        Internal hook for tests: a callable with the signature
+        ``(query, *, endpoint, timeout_s, max_retries)``. Production
+        calls use :func:`_post_overpass`.
 
     Returns
     -------
@@ -337,33 +615,50 @@ def query_buildings(
         ``{"version": …, "generator": …, "elements": [...]}``;
         only ``elements`` is required downstream.
 
+    Raises
+    ------
+    OverpassError
+        On HTTP errors, oversized or malformed responses and payloads
+        whose ``remark`` reports an Overpass runtime error (such a
+        payload is not cached).
+    ValueError, TypeError
+        For invalid arguments (see :func:`build_query`).
+
     Notes
     -----
-    The cache filename is ``<sha256(query)>.json``; ergo two distinct
-    queries that happen to round-trip to the same string share a
-    cache file, and two semantically identical queries with
-    different float formatting do *not* — see :func:`build_query`
-    for the fixed formatting convention that guarantees stability.
+    The cache filename is ``<sha256(query)>.json`` for the default
+    endpoint and ``<sha256(endpoint + newline + query)>.json`` for any
+    other endpoint. Files are written atomically; a cache file that
+    cannot be read back is re-fetched (with a :class:`UserWarning`).
     """
-    if max_retries < 0:
-        raise ValueError(f"max_retries must be >= 0, got {max_retries}.")
+    _validate_max_retries(max_retries)
+    max_response_bytes = _validate_max_response_bytes(max_response_bytes)
+    endpoint = _validate_endpoint(endpoint)
     cache_dir = cache_dir if cache_dir is not None else default_cache_dir()
     query = build_query(lat0_deg, lon0_deg, radius_m, timeout_s=timeout_s)
-    digest = _hash_query(query)
-    path = Path(cache_dir) / f"{digest}.json"
+    path = Path(cache_dir) / f"{_cache_key(query, endpoint)}.json"
     if path.exists() and not force_refresh:
-        with path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    post = _post if _post is not None else _post_overpass
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                return _check_payload(json.load(fh))
+        except (ValueError, OverpassError) as exc:
+            warnings.warn(
+                f"Overpass cache file {path.name} is unreadable ({exc}); re-fetching.",
+                UserWarning,
+                stacklevel=2,
+            )
+    if _post is not None:
+        post = _post
+    else:
+        post = functools.partial(_post_overpass, max_response_bytes=max_response_bytes)
     payload = post(
         query,
         endpoint=endpoint,
         timeout_s=timeout_s,
         max_retries=max_retries,
     )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False)
+    _check_payload(payload)
+    _atomic_write_json(path, payload)
     return payload
 
 
@@ -399,6 +694,7 @@ def parse_overpass_payload(
     projector: Projector,
     *,
     min_area_m2: float = 0.0,
+    exclude_building_tags: Optional[Collection[str]] = None,
 ) -> list[BuildingFootprint]:
     """Convert an Overpass JSON payload into projected
     :class:`BuildingFootprint` instances.
@@ -416,6 +712,11 @@ def parse_overpass_payload(
         threshold. ``0.0`` (the default) keeps every parseable
         polygon; the placement layer may apply its own (higher)
         threshold via :class:`OsmBuildingPlacement.min_area_m2`.
+    exclude_building_tags
+        ``building=*`` values to drop (e.g.
+        :data:`NON_SERVICE_BUILDING_TAGS`). ``None`` (default) keeps
+        every element with a ``building`` tag — including garages,
+        sheds and ``building=no``.
 
     Returns
     -------
@@ -431,13 +732,21 @@ def parse_overpass_payload(
     *same* relation attached as holes. Relations without an
     ``outer`` member are skipped.
     """
+    _check_payload(payload)
     elements = payload.get("elements", []) or []
+    if not all(isinstance(e, dict) for e in elements):
+        raise OverpassError("Overpass payload: every element must be a JSON object.")
+    if isinstance(exclude_building_tags, str):
+        exclude_building_tags = (exclude_building_tags,)
+    excluded = frozenset(exclude_building_tags or ())
     by_id: dict[int, dict[str, Any]] = {
         e["id"]: e for e in elements if e.get("type") == "way" and "id" in e
     }
     out: list[BuildingFootprint] = []
 
     for el in elements:
+        if (el.get("tags") or {}).get("building") in excluded:
+            continue
         kind = el.get("type")
         if kind == "way":
             # Skip ways that belong to a multipolygon relation —
@@ -549,6 +858,9 @@ def query_and_project(
     min_area_m2: float = 0.0,
     force_refresh: bool = False,
     max_retries: int = 1,
+    exclude_building_tags: Optional[Collection[str]] = None,
+    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
+    _post: Any = None,
 ) -> tuple[list[BuildingFootprint], Projector]:
     """Run :func:`query_buildings` and :func:`parse_overpass_payload`
     end-to-end.
@@ -570,8 +882,16 @@ def query_and_project(
         ``0.0`` (keep everything; the placement layer applies its
         own threshold).
     max_retries
-        Number of retry attempts on ``429`` / ``504`` responses.
-        Forwarded to :func:`query_buildings`. Defaults to ``1``.
+        Number of retry attempts on ``429`` / ``503`` / ``504``
+        responses. Forwarded to :func:`query_buildings`. Defaults to
+        ``1``.
+    exclude_building_tags
+        Forwarded to :func:`parse_overpass_payload` (default: keep every
+        building tag).
+    max_response_bytes
+        Forwarded to :func:`query_buildings`.
+    _post
+        Test hook, forwarded to :func:`query_buildings`.
 
     Returns
     -------
@@ -590,8 +910,15 @@ def query_and_project(
         timeout_s=timeout_s,
         force_refresh=force_refresh,
         max_retries=max_retries,
+        max_response_bytes=max_response_bytes,
+        _post=_post,
     )
     if projector is None:
         projector = Projector(lat0_deg, lon0_deg)
-    footprints = parse_overpass_payload(payload, projector, min_area_m2=min_area_m2)
+    footprints = parse_overpass_payload(
+        payload,
+        projector,
+        min_area_m2=min_area_m2,
+        exclude_building_tags=exclude_building_tags,
+    )
     return footprints, projector

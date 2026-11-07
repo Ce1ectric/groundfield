@@ -24,7 +24,7 @@ from groundfield.soil.models import (
 
 
 def test_homogeneous_to_soil_with_fixed_value() -> None:
-    spec = HomogeneousSoilSpec(resistivity=200.0)
+    spec = HomogeneousSoilSpec(rho=200.0)
     soil = spec.to_soil(np.random.default_rng(0))
     assert isinstance(soil, HomogeneousSoil)
     assert soil.resistivity == 200.0
@@ -54,9 +54,9 @@ def test_two_layer_to_soil_with_distributions_is_reproducible() -> None:
 def test_multi_layer_three_layers() -> None:
     spec = MultiLayerSoilSpec(
         layers=[
-            SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
-            SoilLayerSpec(resistivity=100.0, thickness_m=5.0),
-            SoilLayerSpec(resistivity=50.0, thickness_m=None),
+            SoilLayerSpec(rho=300.0, h=2.0),
+            SoilLayerSpec(rho=100.0, h=5.0),
+            SoilLayerSpec(rho=50.0, h=None),
         ],
     )
     soil = spec.to_soil(np.random.default_rng(0))
@@ -70,8 +70,8 @@ def test_multi_layer_rejects_non_terminal_semi_infinite() -> None:
     with pytest.raises(ValidationError):
         MultiLayerSoilSpec(
             layers=[
-                SoilLayerSpec(resistivity=100.0, thickness_m=None),
-                SoilLayerSpec(resistivity=200.0, thickness_m=None),
+                SoilLayerSpec(rho=100.0, h=None),
+                SoilLayerSpec(rho=200.0, h=None),
             ],
         )
 
@@ -80,8 +80,8 @@ def test_multi_layer_rejects_finite_last_layer() -> None:
     with pytest.raises(ValidationError):
         MultiLayerSoilSpec(
             layers=[
-                SoilLayerSpec(resistivity=100.0, thickness_m=2.0),
-                SoilLayerSpec(resistivity=200.0, thickness_m=5.0),
+                SoilLayerSpec(rho=100.0, h=2.0),
+                SoilLayerSpec(rho=200.0, h=5.0),
             ],
         )
 
@@ -98,12 +98,12 @@ class _Wrapper(BaseModel):
 @pytest.mark.parametrize(
     "spec",
     [
-        HomogeneousSoilSpec(resistivity=150.0),
+        HomogeneousSoilSpec(rho=150.0),
         TwoLayerSoilSpec(rho_1=100.0, rho_2=30.0, h_1=2.0),
         MultiLayerSoilSpec(
             layers=[
-                SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
-                SoilLayerSpec(resistivity=50.0, thickness_m=None),
+                SoilLayerSpec(rho=300.0, h=2.0),
+                SoilLayerSpec(rho=50.0, h=None),
             ]
         ),
     ],
@@ -118,7 +118,7 @@ def test_soil_spec_json_roundtrip(spec) -> None:
 def test_materialise_soil_dispatcher() -> None:
     """materialise_soil dispatches on the spec type."""
     rng = np.random.default_rng(0)
-    s = materialise_soil(HomogeneousSoilSpec(resistivity=42.0), rng)
+    s = materialise_soil(HomogeneousSoilSpec(rho=42.0), rng)
     assert isinstance(s, HomogeneousSoil)
     s = materialise_soil(TwoLayerSoilSpec(rho_1=10.0, rho_2=20.0, h_1=1.0), rng)
     assert isinstance(s, TwoLayerSoil)

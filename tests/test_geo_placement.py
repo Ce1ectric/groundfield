@@ -21,6 +21,7 @@ plus the integration with :class:`TnNetworkGenerator`:
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -30,12 +31,14 @@ from groundfield.api import create_world
 from groundfield.generators.electrode_specs import FoundationElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators.placement import (
-    ExplicitPlacement,
     OsmBuildingPlacement,
     PlacementSpec,
 )
 from groundfield.geo.footprint import BuildingFootprint
 from groundfield.soil.models import TwoLayerSoil
+
+if TYPE_CHECKING:
+    from groundfield.world import World
 
 
 # ---------------------------------------------------------------------
@@ -162,7 +165,7 @@ def test_rotated_foundation_registers_perimeter_strips() -> None:
 
 def test_rotated_foundation_mesh_style_adds_internal_braces() -> None:
     """style='mesh' with n_x = n_y = 2 yields 6 wires
-    (3 longitudinal + 3 transverse) when rotated."""
+    (3 longitudinal + 3 transverse) when rotated, split at the crossings."""
     world = create_world(
         name="rot_found_mesh",
         soil=TwoLayerSoil(rho_1=100.0, rho_2=50.0, h_1=2.0),
@@ -185,9 +188,11 @@ def test_rotated_foundation_mesh_style_adds_internal_braces() -> None:
         name_prefix="house",
         rng=np.random.default_rng(0),
     )
-    strips = [e for e in world.electrodes if e.kind == "strip"]
-    # 3 long-axis wires + 3 short-axis wires.
-    assert len(strips) == 6
+    wires = [e for e in world.electrodes if e.kind in ("strip", "polyline")]
+    # 3 long-axis wires + 3 short-axis wires; every wire is crossed by
+    # one internal brace, so it is split there (10.39): 3 vertices each.
+    assert len(wires) == 6
+    assert all(e.kind == "polyline" and len(e.vertices) == 3 for e in wires)
 
 
 def test_axis_aligned_foundation_stays_grid_mesh() -> None:
@@ -251,7 +256,7 @@ def test_zero_orientation_uses_axis_aligned_path() -> None:
 
 def _build_tn_with_osm_placement(
     footprints: list[BuildingFootprint],
-) -> "groundfield.World":
+) -> "World":
     """Helper: build a tiny TN-Ortsnetz world driven by the given
     OSM footprints."""
     from groundfield.generators.building import BuildingTypeSpec

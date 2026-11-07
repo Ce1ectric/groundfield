@@ -51,7 +51,7 @@ References
 from __future__ import annotations
 
 import math
-from typing import Annotated, Any, Literal, Optional, Sequence, Union
+from typing import Annotated, Any, Literal, Optional, Union
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator

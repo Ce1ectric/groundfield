@@ -1,0 +1,21 @@
+# Expected golden-value changes of work stream GEN-1 (generators).
+# Format: tests/golden/README.md.
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/*", "I/*"]
+findings = ["10.55"]
+reason = """F48: a measurement lead runs at its configured depth. overhead_lead()
+(depth_m = 0) now lies 0.1 m above ground (SURFACE_LEAD_HEIGHT_M) instead of
+the anchor-to-anchor diagonal from z = 0.6 m (substation ring) to z = 0 (aux
+rod head); the lead's mutual inductance to the PEN changes. Measured: 2.8e-4
+(probe rod current), 5.5e-6 (substation potential) at 50 Hz, perfect_mirror."""
+min_rel_change = 1e-5
+max_rel_change = 1e-3
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["world/json"]
+findings = ["10.55"]
+reason = "F48: start/end z of meas_feed_lead and meas_probe_lead become -0.1 m."
+allow_shape_change = true

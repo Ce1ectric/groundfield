@@ -25,7 +25,6 @@ from groundfield.generators import (
     MeasurementLeadConfig,
     MeasurementProbeConfig,
     MeasurementSetupConfig,
-    Normal,
     TnNetworkConfig,
     TnNetworkGenerator,
     Uniform,
@@ -199,10 +198,10 @@ def test_galvanic_setup_solves() -> None:
 
 
 def test_source_magnitude_passthrough() -> None:
-    """``source_magnitude_A`` is forwarded to the actual ``CurrentSource``."""
+    """``source_magnitude_a`` is forwarded to the actual ``CurrentSource``."""
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
-        source_magnitude_A=5000.0,  # ~ single-phase fault current
+        source_magnitude_a=5000.0,  # ~ single-phase fault current
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     src = world.sources[0]
@@ -210,12 +209,12 @@ def test_source_magnitude_passthrough() -> None:
 
 
 def test_source_magnitude_accepts_distribution() -> None:
-    """``source_magnitude_A`` accepts a Distribution; build samples it once."""
+    """``source_magnitude_a`` accepts a Distribution; build samples it once."""
     from groundfield.generators import Discrete
 
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
-        source_magnitude_A=Discrete(values=[1.0, 5000.0]),
+        source_magnitude_a=Discrete(values=[1.0, 5000.0]),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     src = world.sources[0]
@@ -227,7 +226,7 @@ def test_source_magnitude_seed_reproduces_draw() -> None:
 
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
-        source_magnitude_A=Discrete(values=[1.0, 10.0, 100.0, 1000.0, 5000.0]),
+        source_magnitude_a=Discrete(values=[1.0, 10.0, 100.0, 1000.0, 5000.0]),
     )
     a = TnNetworkGenerator(cfg, seed=7).build().sources[0].magnitude
     b = TnNetworkGenerator(cfg, seed=7).build().sources[0].magnitude
@@ -262,3 +261,92 @@ def test_measurement_config_json_roundtrip() -> None:
     assert isinstance(restored.measurement.probe.lead, MeasurementLeadConfig)
     assert restored.measurement.injection.feed_lead.conductor_type == "bare_copper"
     assert restored.measurement.probe.lead.conductor_type == "cable_shield"
+
+
+# ---------------------------------------------------------------------
+# 10.55 / F48 — the lead depth is honoured
+# ---------------------------------------------------------------------
+
+
+def _lead_world(feed_lead: MeasurementLeadConfig) -> gf.World:
+    cfg = TnNetworkConfig(
+        building_counts={"residential": 2},
+        measurement=MeasurementSetupConfig(
+            injection=MeasurementInjectionConfig(
+                position_xy=(120.0, 0.0), feed_lead=feed_lead
+            ),
+            probe=MeasurementProbeConfig(position_xy=(50.0, 0.0)),
+        ),
+    )
+    return TnNetworkGenerator(cfg, seed=3).build()
+
+
+def _feed(world: gf.World):
+    return next(c for c in world.conductors if c.name == "meas_feed_lead")
+
+
+@pytest.mark.finding("10.55")
+def test_buried_lead_runs_at_its_depth() -> None:
+    """v0.15.0 drew ``depth_m`` and discarded it: buried and overhead
+    leads ran along the same anchor-to-anchor diagonal (0.6 m -> 0 m)."""
+    lead = _feed(_lead_world(buried_lead(depth_m=0.6)))
+    assert lead.start[2] == lead.end[2] == 0.6
+    lead3 = _feed(_lead_world(buried_lead(depth_m=3.0)))
+    assert lead3.start[2] == lead3.end[2] == 3.0
+
+
+@pytest.mark.finding("10.55")
+def test_overhead_lead_lies_above_ground() -> None:
+    from groundfield.generators.measurement import SURFACE_LEAD_HEIGHT_M
+
+    on_ground = _feed(_lead_world(overhead_lead()))
+    assert on_ground.start[2] == on_ground.end[2] == -SURFACE_LEAD_HEIGHT_M < 0.0
+    raised = _feed(_lead_world(MeasurementLeadConfig(depth_m=-1.5)))
+    assert raised.start[2] == raised.end[2] == -1.5
+
+
+@pytest.mark.finding("10.55")
+def test_lead_stays_connected_to_its_anchors() -> None:
+    world = _lead_world(buried_lead(depth_m=0.6))
+    lead = _feed(world)
+    assert (lead.start_electrode, lead.end_electrode) == ("trafo_ring_0", "aux_rod_0")
+    sub = world.get_electrode("trafo_ring_0").connection_point
+    aux = world.get_electrode("aux_rod_0").connection_point
+    assert lead.start[:2] == sub[:2] and lead.end[:2] == aux[:2]
+
+
+@pytest.mark.finding("10.55")
+def test_lead_depth_changes_the_inductive_coupling() -> None:
+    engine = gf.create_engine(
+        backend="image",
+        segment_length=2.0,
+        frequencies=[1000.0],
+        earth_inductive_model="perfect_mirror",
+    )
+    z = {}
+    for label, lead in (
+        ("buried", buried_lead(depth_m=0.6)),
+        ("overhead", overhead_lead()),
+    ):
+        res = engine.solve(_lead_world(lead))
+        z[label] = res.electrode_potentials["trafo_ring_0"][0]
+    assert abs(z["buried"] - z["overhead"]) > 1e-6 * abs(z["buried"])
+
+
+@pytest.mark.finding("10.55")
+def test_galvanic_lead_must_not_hang_in_the_air() -> None:
+    from groundfield.generators.measurement import SURFACE_LEAD_HEIGHT_M
+
+    with pytest.raises(ValueError, match="galvanic"):
+        MeasurementLeadConfig(depth_m=-1.0, coupling_to_soil="galvanic")
+    touching = _feed(_lead_world(MeasurementLeadConfig(coupling_to_soil="galvanic")))
+    assert touching.start[2] == touching.end[2] == SURFACE_LEAD_HEIGHT_M > 0.0
+
+
+@pytest.mark.finding("10.55")
+def test_distributed_lead_depth_is_drawn_once() -> None:
+    lead = MeasurementLeadConfig(
+        depth_m=Uniform(low=0.4, high=0.8), conductor_type="cable_shield"
+    )
+    feed = _feed(_lead_world(lead))
+    assert 0.4 <= feed.start[2] == feed.end[2] <= 0.8

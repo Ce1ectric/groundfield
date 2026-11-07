@@ -38,7 +38,6 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from groundfield.generators.distributions import (
-    Categorical,
     Distribution,
 )
 from groundfield.world import World
@@ -135,11 +134,14 @@ class GeneratorConfig(BaseModel):
     def sample(
         self: "GeneratorConfig", rng: Optional[Union[int, np.random.Generator]] = None
     ) -> "GeneratorConfig":
-        """Return a copy with every :class:`Distribution` field resolved.
+        """Return a copy with every :class:`Distribution` resolved.
 
-        Each distribution is replaced by exactly one ``.sample(rng)``
-        draw. Non-distribution fields are passed through unchanged.
-        Nested :class:`GeneratorConfig` instances are recursed into.
+        Each distribution anywhere in the config tree — fields of this
+        config, of nested generator configs and of the spec models they
+        hold (soil, placement, electrode, measurement specs), list items
+        and dict values (e.g. ``building_counts``) — is replaced by
+        exactly one ``.sample(rng)`` draw. Fields are visited in
+        declaration order, lists in order, dicts in sorted key order.
 
         Parameters
         ----------
@@ -150,27 +152,30 @@ class GeneratorConfig(BaseModel):
         Returns
         -------
         GeneratorConfig
-            A *resolved* config of the same concrete type, in which
-            ``has_distributions()`` is guaranteed to return ``False``
-            for any field that the base traversal can reach.
+            A *resolved* config of the same concrete type;
+            ``has_distributions()`` returns ``False``. ``self`` is
+            returned when there is nothing to resolve.
+
+        Notes
+        -----
+        Population parameters that are plain numbers stay as they are:
+        a ``presence_prob`` of ``0.5`` or a positive placement
+        ``jitter_m`` still makes per-site draws when the resolved config
+        is built (see :meth:`WorldGenerator.sample_world`).
         """
-        rng_obj = _coerce_rng(rng)
-        update: dict[str, Any] = {}
-        for name, value in self.__dict__.items():
-            new_value = _sample_value(value, rng_obj)
-            if new_value is not value:  # only set if changed
-                update[name] = new_value
-        if not update:
-            return self
-        return self.model_copy(update=update)
+        return _sample_value(self, _coerce_rng(rng))
 
 
 def _has_dist(value: Any) -> bool:
-    """Recursive distribution detector for :meth:`GeneratorConfig.has_distributions`."""
+    """Recursive distribution detector for :meth:`GeneratorConfig.has_distributions`.
+
+    Walks Pydantic models of any kind (generator configs and the spec
+    models nested in them), lists, tuples and dict values.
+    """
     if isinstance(value, Distribution):
         return True
-    if isinstance(value, GeneratorConfig):
-        return value.has_distributions()
+    if isinstance(value, BaseModel):
+        return any(_has_dist(v) for v in value.__dict__.values())
     if isinstance(value, (list, tuple)):
         return any(_has_dist(v) for v in value)
     if isinstance(value, dict):
@@ -179,15 +184,40 @@ def _has_dist(value: Any) -> bool:
 
 
 def _sample_value(value: Any, rng: np.random.Generator) -> Any:
-    """Recursive sample helper used by :meth:`GeneratorConfig.sample`."""
+    """Recursive sample helper used by :meth:`GeneratorConfig.sample`.
+
+    Every :class:`Distribution` is replaced by one draw. Pydantic models
+    are walked field by field in declaration order, lists and tuples in
+    order, dicts in **sorted key order** (so a mapping re-serialised with
+    another key order draws the same values). Objects without any
+    distribution are returned unchanged (identity preserved).
+    """
     if isinstance(value, Distribution):
         return value.sample(rng)
-    if isinstance(value, GeneratorConfig):
-        return value.sample(rng)
+    if isinstance(value, BaseModel):
+        update: dict[str, Any] = {}
+        for name, item in value.__dict__.items():
+            new_item = _sample_value(item, rng)
+            if new_item is not item:
+                update[name] = new_item
+        return value.model_copy(update=update) if update else value
     if isinstance(value, list):
-        return [_sample_value(v, rng) for v in value]
+        items = [_sample_value(v, rng) for v in value]
+        return (
+            value if all(a is b for a, b in zip(items, value, strict=True)) else items
+        )
     if isinstance(value, tuple):
-        return tuple(_sample_value(v, rng) for v in value)
+        items = [_sample_value(v, rng) for v in value]
+        if all(a is b for a, b in zip(items, value, strict=True)):
+            return value
+        return tuple(items)
+    if isinstance(value, dict):
+        resolved = {
+            key: _sample_value(value[key], rng) for key in sorted(value, key=str)
+        }
+        if all(resolved[k] is value[k] for k in value):
+            return value
+        return {key: resolved[key] for key in value}
     return value
 
 
@@ -261,19 +291,40 @@ class WorldGenerator(Generic[C]):
         Parameters
         ----------
         rng
-            Optional RNG override. ``None`` uses the generator's own
-            RNG (``self.rng``), set at construction time.
+            Optional seed or generator. When given, **every** random
+            number of the realisation is drawn from it: first the config
+            resolution, then the per-site draws of the build (presence
+            Bernoullis, placement jitter). The generator's construction
+            seed then has no influence. ``None`` uses the generator's own
+            RNG (``self.rng``) for both.
 
         Returns
         -------
         tuple[World, GeneratorConfig]
             The constructed world and the resolved config (same type
-            as ``self.cfg``). Persist the resolved config alongside
-            the result for reproducibility.
+            as ``self.cfg``, without distributions).
+
+        Notes
+        -----
+        Reproducing a realisation: ``sample_world(rng=seed)`` with the
+        same config and seed always gives the same world. The resolved
+        config alone replays the world bit-exactly with any seed when it
+        has no per-site randomness (every ``presence_prob`` 0 or 1, no
+        placement jitter); otherwise persist the seed, or the network
+        plan / world JSON.
         """
         rng_obj = self._rng if rng is None else _coerce_rng(rng)
         resolved = self.cfg.sample(rng_obj)
-        return self.build(resolved), resolved
+        # ``build`` draws from ``self._rng``; route it to ``rng_obj`` for
+        # this call (also works for subclasses whose ``build`` has no
+        # ``rng`` parameter).
+        saved = self._rng
+        self._rng = rng_obj
+        try:
+            world = self.build(resolved)
+        finally:
+            self._rng = saved
+        return world, resolved
 
     def _assert_resolved(self, cfg: C) -> None:
         """Raise :class:`ValueError` if ``cfg`` still carries distributions."""

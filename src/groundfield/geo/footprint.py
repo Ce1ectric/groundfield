@@ -326,7 +326,11 @@ class BuildingFootprint(BaseModel):
             side lengths (``dx`` along the local long axis, ``dy``
             perpendicular), and rotation of the long axis with
             respect to the world ``+x`` direction in degrees.
-            ``orientation_deg`` lies in ``[-90, 90]``.
+            ``orientation_deg`` lies in ``(-90, 90]``. For a square
+            (equal sides within a relative ``1e-9``) the axis closest to
+            ``+x`` is reported, i.e. ``orientation_deg`` lies in
+            ``(-45, 45]`` — an axis-aligned square has angle 0 whatever
+            the vertex order of the polygon.
 
         Notes
         -----
@@ -385,19 +389,38 @@ class BuildingFootprint(BaseModel):
         x2, y2 = coords[2]
         len_a = _math.hypot(x1 - x0, y1 - y0)
         len_b = _math.hypot(x2 - x1, y2 - y1)
-        if len_a >= len_b:
-            long_dx, long_dy = x1 - x0, y1 - y0
-            dx, dy = len_a, len_b
+        angle_a = _axis_angle_deg(x1 - x0, y1 - y0)
+        angle_b = _axis_angle_deg(x2 - x1, y2 - y1)
+        if abs(len_a - len_b) <= _SQUARE_RTOL * max(len_a, len_b):
+            # A square: both sides are "the long axis". Pick the axis
+            # closest to +x (ties at ±45° go to +45°), so the result does
+            # not depend on GEOS's vertex order (10.39).
+            angle = min((angle_a, angle_b), key=lambda a: (abs(a), -a))
+            dx = dy = max(len_a, len_b)
+        elif len_a > len_b:
+            angle, dx, dy = angle_a, len_a, len_b
         else:
-            long_dx, long_dy = x2 - x1, y2 - y1
-            dx, dy = len_b, len_a
-        angle = _math.degrees(_math.atan2(long_dy, long_dx))
-        # Map onto [-90, 90] so the orientation is canonical
-        # (a 180° rotation flips the rectangle onto itself).
-        while angle > 90.0:
-            angle -= 180.0
-        while angle <= -90.0:
-            angle += 180.0
+            angle, dx, dy = angle_b, len_b, len_a
         cx = sum(c[0] for c in coords[:4]) / 4.0
         cy = sum(c[1] for c in coords[:4]) / 4.0
         return ((cx, cy), (dx, dy), angle)
+
+
+_SQUARE_RTOL = 1e-9
+"""Relative side-length difference below which an OMBR counts as a square."""
+
+
+def _axis_angle_deg(ux: float, uy: float) -> float:
+    """Direction angle of the axis ``(ux, uy)`` in degrees, in ``(-90, 90]``.
+
+    An axis has no sense of direction, so angles 180° apart are the same
+    axis; the representative in ``(-90, 90]`` is returned.
+    """
+    import math as _math
+
+    angle = _math.degrees(_math.atan2(uy, ux))
+    while angle > 90.0:
+        angle -= 180.0
+    while angle <= -90.0:
+        angle += 180.0
+    return angle

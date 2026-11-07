@@ -1,9 +1,7 @@
 """Tests for the AP1 TN low-voltage distribution network generator.
 
-Tests live under the old AP1 file name (``test_tn_ortsnetz.py``)
-because the AP1 work-package keeps its German name *TN-Ortsnetz*.
-The class names follow the project-wide English convention
-(``TnNetworkGenerator`` / ``TnNetworkConfig``).
+The module was called ``test_tn_ortsnetz.py`` before the English
+naming of review pass 10 (finding 10.69).
 
 Validation programme of ADR-0009:
 
@@ -22,13 +20,11 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
 import groundfield as gf
 from groundfield.generators import (
     BuildingTypeSpec,
-    Categorical,
     Discrete,
     ExplicitPlacement,
     FoundationElectrodeSpec,
@@ -38,13 +34,12 @@ from groundfield.generators import (
     ManhattanGridPlacement,
     MultiLayerSoilSpec,
     Normal,
-    PenConfig,
     RingElectrodeSpec,
     RodElectrodeSpec,
     SoilLayerSpec,
     StripElectrodeSpec,
     SubstationConfig,
-    KvsConfig,
+    CabinetConfig,
     TnNetworkConfig,
     TnNetworkGenerator,
     TwoLayerSoilSpec,
@@ -240,7 +235,7 @@ def test_manhattan_grid_default_centred_at_origin() -> None:
 
 def test_homogeneous_soil_works() -> None:
     cfg = TnNetworkConfig(
-        soil=HomogeneousSoilSpec(resistivity=200.0),
+        soil=HomogeneousSoilSpec(rho=200.0),
         building_counts={"residential": 3},
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
@@ -252,9 +247,9 @@ def test_multi_layer_soil_works() -> None:
     cfg = TnNetworkConfig(
         soil=MultiLayerSoilSpec(
             layers=[
-                SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
-                SoilLayerSpec(resistivity=100.0, thickness_m=5.0),
-                SoilLayerSpec(resistivity=50.0, thickness_m=None),
+                SoilLayerSpec(rho=300.0, h=2.0),
+                SoilLayerSpec(rho=100.0, h=5.0),
+                SoilLayerSpec(rho=50.0, h=None),
             ]
         ),
         building_counts={"residential": 3},
@@ -314,8 +309,8 @@ def test_full_config_json_roundtrip_with_distributions() -> None:
                 ]
             ),
         ),
-        kvs=KvsConfig(
-            quote_per_100_buildings=Uniform(low=4.0, high=8.0),
+        cabinets=CabinetConfig(
+            count_per_100_buildings=Uniform(low=4.0, high=8.0),
             grounding=GroundingSystemSpec(
                 electrodes=[
                     RodElectrodeSpec(length_m=Uniform(low=1.0, high=2.0)),
@@ -331,7 +326,7 @@ def test_full_config_json_roundtrip_with_distributions() -> None:
     assert isinstance(restored.soil.rho_1, LogNormal)
     assert isinstance(restored.substation.grounding.electrodes[0], RingElectrodeSpec)
     assert isinstance(restored.substation.grounding.electrodes[0].radius_m, Normal)
-    assert isinstance(restored.kvs.quote_per_100_buildings, Uniform)
+    assert isinstance(restored.cabinets.count_per_100_buildings, Uniform)
     assert isinstance(restored.building_counts["residential"], Discrete)
 
 
@@ -340,12 +335,12 @@ def test_full_config_json_roundtrip_with_distributions() -> None:
 # ---------------------------------------------------------------------
 
 
-def test_kvs_count_follows_quote() -> None:
+def test_cabinet_count_follows_rate() -> None:
     """50 residentials, quote=10/100 → 5 KVS."""
     cfg = TnNetworkConfig(
         building_counts={"residential": 50},
-        kvs=KvsConfig(
-            quote_per_100_buildings=10.0,
+        cabinets=CabinetConfig(
+            count_per_100_buildings=10.0,
             placement=ManhattanGridPlacement(
                 spacing_x_m=40.0,
                 spacing_y_m=1.0,
@@ -360,12 +355,12 @@ def test_kvs_count_follows_quote() -> None:
     assert n_kvs_rod == 5
 
 
-def test_fixed_kvs_count_overrides_quote() -> None:
+def test_fixed_cabinet_count_overrides_rate() -> None:
     cfg = TnNetworkConfig(
         building_counts={"residential": 100},
-        kvs=KvsConfig(
+        cabinets=CabinetConfig(
             fixed_count=3,
-            quote_per_100_buildings=10.0,  # would yield 10 KVS, but ignored
+            count_per_100_buildings=10.0,  # would yield 10 KVS, but ignored
             placement=ManhattanGridPlacement(
                 spacing_x_m=40.0,
                 spacing_y_m=1.0,
