@@ -4,19 +4,19 @@ Extracts the engineering quantities of interest from the computed
 potential distribution:
 
 - earth potential rise ``U_E`` at the feed-in point,
-- touch and step voltages at arbitrary measurement points,
+- touch and step voltages (footprint-anchored), the EN 50522:2022
+  permissible touch voltage and prospective touch voltage, and the
+  true-RMS touch voltage over a fault spectrum (:mod:`.safety`),
 - potential profiles along defined paths (measurement traverses),
-- current density in the soil and current sharing onto return paths,
-- galvanic split factor per source (resistive division across
-  parallel paths; the inductive *Reduktionsfaktor* is on the
-  roadmap),
-- 2-D / 3-D field plots.
-
-Contents
---------
-plotting
-    Matplotlib helpers: contour plots in xy / xz planes, line
-    profiles, radial trumpet plots.
+- current sharing onto return paths and the galvanic split factor per
+  source (:mod:`.current_balance`; the inductive *Reduktionsfaktor* is
+  on the roadmap),
+- parameter sweeps and convergence studies (:mod:`.sweep`,
+  :mod:`.convergence`),
+- reduced rho-f models: vector fitting and the standard form
+  (:mod:`.vector_fitting`, :mod:`.rho_f_standard`),
+- 2-D / 3-D field and geometry plots (:mod:`.plotting`,
+  :mod:`.geometry_plot`).
 """
 
 from __future__ import annotations
@@ -55,10 +55,14 @@ from groundfield.postprocess.rho_f_standard import (
     rho_f_standard_from_results,
 )
 from groundfield.postprocess.safety import (
+    NEAR_FIELD_DISTANCE_M,
+    UniformCurrentFieldWarning,
+    permissible_prospective_touch_voltage_en50522,
     permissible_touch_voltage_en50522,
     step_voltage,
     touch_voltage,
     touch_voltage_envelope,
+    touch_voltage_spectrum,
 )
 from groundfield.postprocess.vector_fitting import (
     VectorFitResult,
@@ -84,7 +88,11 @@ __all__ = [
     "touch_voltage",
     "touch_voltage_envelope",
     "step_voltage",
+    "touch_voltage_spectrum",
     "permissible_touch_voltage_en50522",
+    "permissible_prospective_touch_voltage_en50522",
+    "UniformCurrentFieldWarning",
+    "NEAR_FIELD_DISTANCE_M",
     "cluster_current_balance",
     "electrode_current_table",
     "split_factor",

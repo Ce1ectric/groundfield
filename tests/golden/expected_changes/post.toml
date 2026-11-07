@@ -1,0 +1,14 @@
+# Expected golden-value changes of stream POST (post-processing).
+# See ../README.md for the format.
+
+[[change]]
+cases = ["img_mixed_cluster_hom"]
+quantities = ["safety/touch_1m"]
+findings = ["10.21"]
+reason = """Touch voltage anchored on the electrode footprint instead of the
+connection point: for the strip the feet move from above the strip (1 m from
+its start) to 1 m beyond its end (x3.2), for the star from above the first
+arm to 1 m beyond its tip (x2.1); the ring is unchanged (feet 1 m outside
+the ring on +x in both definitions)."""
+min_rel_change = 1.0
+max_rel_change = 2.0
