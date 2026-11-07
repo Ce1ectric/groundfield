@@ -421,6 +421,29 @@ def _warn_manual_counter_sources(world: World) -> None:
             )
 
 
+def _warn_concrete_shell_registry(world: World) -> None:
+    """Deprecation of ``World.concrete_shell_corrections`` (ADR-0012 V1).
+
+    The solver consumes concrete shells only as the distributed
+    per-length coefficient of the electrodes; the lumped registry is
+    read by no backend and by no ``solve_mutual_*`` call (finding 10.12).
+    """
+    if not world.concrete_shell_corrections:
+        return
+    from groundfield.solver.registry import DEPRECATION_REMOVAL, warn_external
+
+    warn_external(
+        "World.concrete_shell_corrections (the lumped ADR-0012 V1 registry, "
+        f"{len(world.concrete_shell_corrections)} entries) is deprecated and "
+        "is not read by the solver: concrete shells enter the solve only "
+        "through the per-length coefficient concrete_shell_coefficient_ohm_m "
+        "of the electrodes (ADR-0012 V2). Set that coefficient on the encased "
+        "electrodes and clear the registry (world.reset_concrete_corrections()). "
+        f"The field will be removed no earlier than {DEPRECATION_REMOVAL}.",
+        DeprecationWarning,
+    )
+
+
 def build_topology(world: World, disc: Discretisation) -> Topology:
     """Step 3: clusters, finite branches and distributed conductors.
 
@@ -479,29 +502,6 @@ def build_topology(world: World, disc: Discretisation) -> Topology:
         distributed_branches=distributed,
         n_lumped_branches=n_lumped,
         pseudo_owners=pseudo_owners,
-    )
-
-
-def _warn_concrete_shell_registry(world: World) -> None:
-    """Deprecation of ``World.concrete_shell_corrections`` (ADR-0012 V1).
-
-    The solver consumes concrete shells only as the distributed
-    per-length coefficient of the electrodes; the lumped registry is
-    read by no backend and by no ``solve_mutual_*`` call (finding 10.12).
-    """
-    if not world.concrete_shell_corrections:
-        return
-    from groundfield.solver.registry import DEPRECATION_REMOVAL, warn_external
-
-    warn_external(
-        "World.concrete_shell_corrections (the lumped ADR-0012 V1 registry, "
-        f"{len(world.concrete_shell_corrections)} entries) is deprecated and "
-        "is not read by the solver: concrete shells enter the solve only "
-        "through the per-length coefficient concrete_shell_coefficient_ohm_m "
-        "of the electrodes (ADR-0012 V2). Set that coefficient on the encased "
-        "electrodes and clear the registry (world.reset_concrete_corrections()). "
-        f"The field will be removed no earlier than {DEPRECATION_REMOVAL}.",
-        DeprecationWarning,
     )
 
 

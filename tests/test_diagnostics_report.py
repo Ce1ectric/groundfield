@@ -162,7 +162,8 @@ def test_inert_configuration_is_reported() -> None:
 
 @pytest.mark.finding("10.70")
 def test_series_truncation_is_reported_after_the_solve() -> None:
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=10.0, h_1=1.0))
+    # The rod stays in the upper layer: the Tagg/Sunde series path.
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=10.0, h_1=3.0))
     gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=2.0)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(
