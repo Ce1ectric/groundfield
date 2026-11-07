@@ -911,7 +911,7 @@ def test_standard_fit_metadata_records_k0_max_relative_and_weights() -> None:
     assert md["fit_quality"]["max_relative"] == fit.max_relative
     assert md["fit_quality"]["rms_relative"] == fit.rms_relative
     assert md["weights"] == fit.weights == "relative"
-    assert md["impedance_quantity"] == "input"
+    assert md["quantity"] == "input"
 
 
 @pytest.mark.finding("10.19")
@@ -929,7 +929,7 @@ def test_fit_metadata_records_which_impedance_was_fitted() -> None:
             voltage_level=0.4,
             rho_at_fit=100.0,
         )["metadata"]
-        assert md["impedance_quantity"] == quantity
+        assert md["quantity"] == quantity
         assert md["fit_quality"]["rms_relative"] == vf.rms_relative
     spec = BusTypeSpec.from_dict(
         to_bustype_dict(

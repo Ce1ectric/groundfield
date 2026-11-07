@@ -226,10 +226,15 @@ class BusTypeSpec:
         ``groundinsight`` side can be served immediately.
     metadata
         Free-form metadata dict; populated by the exporters with
-        the fit method, fit quality, fit-method-specific details
-        (poles/residues for vector fits, $k_1\\dots k_5$ for the
-        standard form), the passivity check (``"passivity"``), the
-        source ``groundfield`` version and a UTC timestamp.
+        the fit method, fit quality (``rms_error_Ohm``,
+        ``rms_relative``, for the standard form ``max_relative``;
+        ``null`` when unknown), the impedance the fit represents
+        (``"quantity"``: ``"input"``, ``"cluster"``, ``"electrode"``
+        or ``null`` for raw samples), fit-method-specific details
+        (poles/residues for vector fits, $k_0\\dots k_5$ and the
+        ``"weights"`` for the standard form), the passivity check
+        (``"passivity"``), the source ``groundfield`` version and a UTC
+        timestamp.
     """
 
     name: str
@@ -454,7 +459,7 @@ def _metadata_from_vector_fit(
             "rms_error_Ohm": float(fit.rms_error),
             "rms_relative": _finite_or_none(fit.rms_relative),
         },
-        "impedance_quantity": fit.quantity,
+        "quantity": fit.quantity,
         "n_poles": int(fit.poles.size),
         "poles": [{"real": float(p.real), "imag": float(p.imag)} for p in fit.poles],
         "residues": [
@@ -486,7 +491,7 @@ def _metadata_from_rho_f_standard(
         },
         "coefficients": {name: float(v) for name, v in fit.coefficients.items()},
         "weights": fit.weights,
-        "impedance_quantity": fit.quantity,
+        "quantity": fit.quantity,
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
         "source": f"groundfield {_groundfield_version()}",
@@ -1152,7 +1157,7 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
 
     Names the fit method, the rms error, the relative rms and worst
     pointwise relative error when the document records them, and the
-    impedance the fit represents (``impedance_quantity``: ``input``,
+    impedance the fit represents (``quantity``: ``input``,
     ``cluster`` or ``electrode``) when known.
     """
     md = spec.metadata
@@ -1164,6 +1169,6 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
         parts.append(f"rms_rel={fq['rms_relative']:.2%}")
     if fq.get("max_relative") is not None:
         parts.append(f"max_rel={fq['max_relative']:.2%}")
-    if md.get("impedance_quantity") is not None:
-        parts.append(f"quantity={md['impedance_quantity']}")
+    if md.get("quantity") is not None:
+        parts.append(f"quantity={md['quantity']}")
     return f"BusTypeSpec({', '.join(parts)})"
