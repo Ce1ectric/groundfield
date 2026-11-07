@@ -226,3 +226,56 @@ def test_cim_two_port_transfer_impedance_is_reciprocal(h_1, port_a, tol) -> None
     z_ba = r_a.electrode_potentials["B"][0] / r_a.electrode_currents["A"][0]
     z_ab = r_b.electrode_potentials["A"][0] / r_b.electrode_currents["B"][0]
     assert abs(z_ab - z_ba) / abs(z_ba) < tol
+
+
+# ---------------------------------------------------------------------
+# 10.49 — fit_complex_images: "converged" bounds the maximum error
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.49")
+@pytest.mark.parametrize(
+    ("rhos", "h"),
+    [
+        ([956.0, 43.9, 1081.9], [7.173, 0.695]),
+        ([2078.1, 20.2, 404.8], [0.077, 8.813]),
+        ([13.5, 60.4, 7.0, 273.6, 5.8], [0.109, 6.296, 1.002, 3.059]),
+    ],
+)
+def test_fit_converged_flag_bounds_the_maximum_error(rhos, h) -> None:
+    """v0.15.0 reported ``converged=True`` for these stacks although the
+    model missed Γ_1 by 2.4e-3 to 2.6e-3 between the fitting samples
+    (RMS 1e-11 on the samples, 9.4e-4 on the verification grid, R2-16).
+    """
+    import warnings
+
+    from groundfield.solver._layered import reflection_gamma
+
+    stack = LayerStack(rhos=np.array(rhos), h=np.array(h))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fit = fit_complex_images(stack, rms_tol=1e-3)
+    h_min = float(np.min(stack.h[1:]))
+    lam = np.concatenate([[0.0], np.logspace(-5, np.log10(1e3 / h_min), 4000)])
+    model = (np.exp(-2.0 * lam[:, None] * fit.beta[None, :]) @ fit.a).real
+    max_err = float(np.max(np.abs(model - reflection_gamma(stack, lam))))
+    assert max_err > 1e-3  # the stacks are genuinely hard for the pencil
+    assert fit.converged is False
+    assert fit.max_error > 1e-3
+
+
+@pytest.mark.finding("10.49")
+def test_fit_failure_is_reported_with_the_maximum_error() -> None:
+    from groundfield.solver.cim import ComplexImageFitWarning
+
+    stack = LayerStack(rhos=np.array([956.0, 43.9, 1081.9]), h=np.array([7.173, 0.695]))
+    with pytest.warns(ComplexImageFitWarning, match="maximum"):
+        fit_complex_images(stack)
+
+
+@pytest.mark.finding("10.49")
+def test_fit_of_an_easy_stack_still_converges() -> None:
+    stack = LayerStack(rhos=np.array([100.0, 400.0, 50.0]), h=np.array([2.0, 3.0]))
+    fit = fit_complex_images(stack)
+    assert fit.converged is True
+    assert fit.max_error <= 1e-3
