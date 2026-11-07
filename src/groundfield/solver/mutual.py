@@ -26,10 +26,15 @@ reaction matrix ``nG`` times and re-evaluates the ``nG²`` Tagg/Sunde
 field-series for the off-diagonal entries. :func:`solve_mutual_matrix`
 removes both redundancies:
 
-1. The segment reaction matrix is assembled **once** (via the existing
-   ``self_kernel`` closures, including the ADR-0012 V2 concrete shell).
+1. The segment reaction matrix is assembled **once**, directly (the
+   kernel operators' ``matrix`` method; v0.15.0 applied the kernel to an
+   ``N × N`` identity, one ``O(N³)`` product per image term — review
+   pass 10, 10.59), including the ADR-0012 V2 concrete shell.
 2. The off-diagonal probe-point kernel is built **once** and reused for
    every excitation column through a single ``Phi = K @ T`` matmul.
+
+Discretisation, topology and the branch block come from the shared
+image-family pipeline (:mod:`groundfield.solver._pipeline`).
 
 Bit-exactness
 -------------
@@ -52,6 +57,7 @@ cross-layer two-layer soils at 50 Hz and 1000 Hz.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -61,17 +67,25 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
-from groundfield.solver.image import (
-    _MIN_DISTANCE,
-    _assemble_inductance_matrix,
-    _build_clusters,
-    _build_distributed_topology,
-    _build_finite_branches,
-    _discretize_electrode,
-    _Segment,
-    _self_corrected_kernel,
-    _solve_cluster_currents,
+from groundfield.solver._kernels import (
+    HalfSpaceKernel,
+    _line_field_correction,
+    _point_field_kernel,
+    _series_field,
 )
+from groundfield.solver._line_kernel import LineSegments
+from groundfield.solver._pipeline import (
+    BranchModel,
+    Discretisation,
+    SegmentArrays,
+    Topology,
+    _segment_currents,
+    assemble_branches,
+    build_topology,
+    discretise,
+)
+from groundfield.solver._series import ImageSeries
+from groundfield.solver._topology import _solve_cluster_currents
 from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -102,16 +116,9 @@ def _probe_kernel_homogeneous(
     potential per column, because there is only a single (non-series)
     term — no intermediate summation order to preserve.
     """
-    image_sources = source_points.copy()
-    image_sources[:, 2] = -image_sources[:, 2]
-    diff_real = probe_points[:, None, :] - source_points[None, :, :]
-    diff_image = probe_points[:, None, :] - image_sources[None, :, :]
-    r_real = np.linalg.norm(diff_real, axis=2)
-    r_image = np.linalg.norm(diff_image, axis=2)
-    np.maximum(r_real, min_distance, out=r_real)
-    np.maximum(r_image, min_distance, out=r_image)
-    kernel = (1.0 / r_real) + (1.0 / r_image)
-    return (rho / (4.0 * np.pi)) * kernel
+    return (rho / (4.0 * np.pi)) * _point_field_kernel(
+        probe_points, source_points, min_distance
+    )
 
 
 def _probe_potential_two_layer(
@@ -122,6 +129,7 @@ def _probe_potential_two_layer(
     min_distance: float,
     max_terms: int = 100,
     tol: float = 1e-6,
+    line: LineSegments | None = None,
 ) -> np.ndarray:
     """Matrix form of :meth:`FieldResult._potential_two_layer`.
 
@@ -148,7 +156,6 @@ def _probe_potential_two_layer(
     phi : np.ndarray, shape (M, J)
         Complex potential per probe point and excitation column.
     """
-    K = soil.reflection_coefficient
     h_1 = soil.h_1
     rho_1 = soil.rho_1
 
@@ -185,6 +192,7 @@ def _probe_potential_two_layer(
                 min_distance,
                 max_terms,
                 tol,
+                line=None if line is None else line.subset(src_l1),
             )
         # Remaining blocks via the spectral kernel: layer-2 sources to
         # all probes, layer-1 sources to layer-2 probes.
@@ -210,42 +218,220 @@ def _probe_potential_two_layer(
             phi[~probe_l1] += G @ currents[src_l1]
         return phi
 
-    diff_xy = probe_points[:, None, 0:2] - source_points[None, :, 0:2]
-    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
-    z_field = probe_points[:, 2:3]  # (M, 1)
-    z_src = source_points[None, :, 2]  # (1, N)
-
-    def _series_for(real_currents: np.ndarray) -> np.ndarray:
-        """Core series for a real-valued ``(N, J)`` current stack."""
-        phi = np.zeros((M, J), dtype=float)
-        # n = 0 (two images, weight 1) — mirrors the scalar method's
-        # ``for sign_zs in (+1, -1): phi += (1/r) @ real_currents``.
-        for sign_zs in (+1, -1):
-            z_img = sign_zs * z_src
-            r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-            np.maximum(r, min_distance, out=r)
-            phi += (1.0 / r) @ real_currents
-        # n = 1, 2, ... — accumulate per term (``phi += K_n · acc``).
-        abs_K = abs(K)
-        for n in range(1, max_terms + 1):
-            K_n = K**n
-            acc = np.zeros((M, J), dtype=float)
-            for sign_n in (+1, -1):
-                for sign_zs in (+1, -1):
-                    z_img = sign_n * 2.0 * n * h_1 + sign_zs * z_src
-                    r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-                    np.maximum(r, min_distance, out=r)
-                    acc += (1.0 / r) @ real_currents
-            phi += K_n * acc
-            # Geometric tail bound |K|^(n+1)/(1-|K|) — consistent
-            # with the solver-side criterion in image_2layer.
-            if abs_K < 1.0 and abs_K ** (n + 1) / (1.0 - abs_K) < tol:
-                break
-        return phi
-
-    phi_re = _series_for(currents.real)
-    phi_im = _series_for(currents.imag)
+    series = ImageSeries.for_soil(soil, max_terms, tol)
+    # An all-zero imaginary part sums to exactly zero and is skipped.
+    parts = [currents.real]
+    if np.any(currents.imag):
+        parts.append(currents.imag)
+    sums = _series_field(
+        probe_points, source_points, parts, series, min_distance, line=line
+    )
+    phi_re = sums[0]
+    phi_im = sums[1] if len(sums) > 1 else np.zeros_like(phi_re)
     return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)
+
+
+# ---------------------------------------------------------------------
+# Shared preparation
+# ---------------------------------------------------------------------
+
+
+@dataclass
+class _MutualProblem:
+    """Discretised world, reaction matrix and branch block of one call."""
+
+    disc: Discretisation
+    topo: Topology
+    branches: BranchModel
+    arrays: SegmentArrays
+    soil_two_layer: TwoLayerSoil | None
+    rho_homog: float | None
+    Z_seg_full: np.ndarray
+    omega: float
+    carson_dz: np.ndarray | None
+    line: LineSegments | None = None
+
+
+def _prepare(
+    world: "World", engine: "Engine", frequency_index: int, *, where: str
+) -> _MutualProblem:
+    """Discretise, build the topology and assemble the reaction matrix.
+
+    Steps 1, 3 and 4 of the image-family pipeline, then the soil
+    dispatch of ``Engine.solve`` (``image`` → ``image_2layer`` for a
+    two-layer soil) and the full segment reaction matrix in Ω.
+    """
+    soil = world.soil
+    # 1) Discretisation + topology — identical to the live backends.
+    interfaces = (soil.h_1,) if isinstance(soil, TwoLayerSoil) else None
+    disc = discretise(world, engine, interfaces)
+    topo = build_topology(world, disc)
+    # Inductive coupling assembly (kept for parity; the catalogue probe
+    # case has no distributed conductors, so the system stays
+    # real/frequency-independent — the image no-inductance fast path).
+    branches = assemble_branches(world, engine, topo)
+    arrays = SegmentArrays.from_segments(disc.segments)
+
+    # 2) Soil-specific reaction operator — same dispatch as
+    #    ``Engine.solve`` (image -> image_2layer for TwoLayerSoil).
+    rho_homog: float | None = None
+    soil_two_layer: TwoLayerSoil | None = None
+    if isinstance(soil, TwoLayerSoil):
+        soil_two_layer = soil
+    elif isinstance(soil, MultiLayerSoil):
+        n_layers = len(soil.layers)
+        if n_layers == 1:
+            rho_homog = float(soil.layers[0].resistivity)
+        elif n_layers == 2:
+            soil_two_layer = TwoLayerSoil(
+                rho_1=float(soil.layers[0].resistivity),
+                rho_2=float(soil.layers[1].resistivity),
+                h_1=float(soil.layers[0].thickness),
+            )
+        else:
+            raise NotImplementedError(
+                f"{where} supports homogeneous and 2-layer soils; "
+                f"got MultiLayerSoil with n={n_layers} layers."
+            )
+    elif isinstance(soil, HomogeneousSoil):
+        rho_homog = float(soil.resistivity)
+    else:
+        raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
+
+    # Kernel choice of the engine (10.28): point (default) or exact line
+    # sources, for the reaction matrix and the field evaluation alike.
+    line = (
+        arrays.line_segments() if getattr(engine, "kernel", "point") == "line" else None
+    )
+    if soil_two_layer is not None:
+        # 2-layer reaction operator: feed the engine's image-series
+        # truncation, exactly like ``solve_image_2layer``.
+        z_max = float(arrays.points[:, 2].max())
+        kernel = _two_layer_self_kernel_factory(
+            soil_two_layer,
+            int(getattr(engine, "image_max_terms", 100)),
+            float(getattr(engine, "image_series_tol", 1e-6)),
+            allow_cross_layer=bool(z_max >= soil_two_layer.h_1),
+            line=line,
+        )
+    else:
+        kernel = HalfSpaceKernel(float(rho_homog), line=line)
+
+    # 3) Reaction matrix ONCE, assembled directly (10.59): the N×N
+    #    segment reaction matrix, column k is the potential of 1 A in
+    #    segment k. Reusing it for every excitation makes the diagonal
+    #    ``ph`` evaluation and the cluster-current assembly a sequence of
+    #    matvecs instead of nG full kernel calls.
+    Z_seg_full = kernel.matrix(arrays.points, arrays.lengths, arrays.radii)
+
+    omega = (
+        2.0 * np.pi * float(engine.frequencies[frequency_index])
+        if branches.has_inductance
+        else 0.0
+    )
+    carson_dz = (
+        branches.earth_correction(omega)
+        if branches.earth_correction is not None
+        else None
+    )
+    return _MutualProblem(
+        disc=disc,
+        topo=topo,
+        branches=branches,
+        arrays=arrays,
+        soil_two_layer=soil_two_layer,
+        rho_homog=rho_homog,
+        Z_seg_full=Z_seg_full,
+        omega=omega,
+        carson_dz=carson_dz,
+        line=line,
+    )
+
+
+def _unit_excitation(
+    world: "World", problem: _MutualProblem, anchor: str
+) -> tuple[dict[str, complex], np.ndarray]:
+    """Owner currents and segment currents for 1 A into ``anchor``.
+
+    Each gnode is an isolated galvanic cluster, so injecting 1 A into
+    cluster ``j`` activates only that cluster; the per-segment leakage
+    column is non-zero on cluster-``j`` segments only — exactly what
+    the historic single-source solve produced.
+
+    Raises
+    ------
+    KeyError
+        If ``anchor`` is not an electrode of ``world``.
+    """
+    disc, topo, arrays = problem.disc, problem.topo, problem.arrays
+    if anchor not in disc.owner_segments:
+        raise KeyError(f"Anchor '{anchor}' is not an electrode in world.")
+    elec_input_current = {e.name: 0j for e in world.electrodes}
+    elec_input_current[anchor] = 1.0 + 0j
+    Z_seg_full = problem.Z_seg_full
+
+    # A linear ``self_kernel``-equivalent backed by the precomputed
+    # matrix. The shell augmentation is applied on top by
+    # ``_solve_cluster_currents`` (bulk kernel, then
+    # ``phi += shell_diag · currents``), so the kernel is *bulk-only* —
+    # the same operation order as the live solver.
+    def _cached_bulk_self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
+        return Z_seg_full @ currents
+
+    has_inductance = problem.branches.has_inductance
+    elec_total = _solve_cluster_currents(
+        electrodes=world.electrodes,
+        elec_input_current=elec_input_current,
+        cluster_id=topo.cluster_id,
+        seg_points=arrays.points,
+        seg_lengths=arrays.lengths,
+        wire_radii=arrays.radii,
+        elec_to_segidx=disc.owner_segments,
+        self_kernel=_cached_bulk_self_kernel,
+        finite_branches=topo.finite_branches,
+        pseudo_owners=topo.pseudo_owners,
+        omega=problem.omega if has_inductance else 0.0,
+        inductance_matrix=problem.branches.inductance_matrix,
+        carson_correction=problem.carson_dz,
+        shell_coefficients=arrays.shell_coefficients,
+    )
+    sc = _segment_currents(elec_total, disc.owner_segments, arrays.lengths)
+    return elec_total, sc
+
+
+def _field_of_columns(
+    problem: _MutualProblem,
+    field_points: np.ndarray,
+    T: np.ndarray,
+    *,
+    min_distance: float,
+    max_terms: int,
+    tol: float,
+) -> np.ndarray:
+    """Potential at ``field_points`` of every leakage column of ``T``."""
+    seg_points = problem.arrays.points
+    if problem.soil_two_layer is not None:
+        return _probe_potential_two_layer(
+            field_points,
+            seg_points,
+            T,
+            problem.soil_two_layer,
+            min_distance,
+            max_terms=max_terms,
+            tol=tol,
+            line=problem.line,
+        )
+    K_probe = _probe_kernel_homogeneous(
+        field_points, seg_points, float(problem.rho_homog), min_distance
+    )
+    Phi = K_probe @ T.real + 1j * (K_probe @ T.imag)
+    if problem.line is not None:
+        # Line sources (10.28): far-field and near-source corrections.
+        re, im = _line_field_correction(
+            field_points, problem.line, [T.real, T.imag], min_distance
+        )
+        Phi = Phi + (float(problem.rho_homog) / (4.0 * np.pi)) * (re + 1j * im)
+    return Phi
 
 
 # ---------------------------------------------------------------------
@@ -322,14 +508,11 @@ def solve_mutual_matrix(
     Z : np.ndarray, shape (nG, nG), complex
         The mutual grounding-impedance matrix.
     """
-    from groundfield.solver.engine import Engine  # noqa: F401  (typing only)
-
     if world.soil is None:
         raise ValueError("World has no soil model.")
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
 
-    soil = world.soil
     nG = len(anchors)
     probe_points = np.asarray(probe_points, dtype=float)
     if probe_points.shape != (nG, 3):
@@ -337,235 +520,54 @@ def solve_mutual_matrix(
             f"probe_points must have shape ({nG}, 3), got {probe_points.shape}."
         )
 
-    # ------------------------------------------------------------------
-    # 1) Discretisation + topology — identical to the live backends.
-    # ------------------------------------------------------------------
-    ds = engine.segment_length
-    all_segments: list[_Segment] = []
-    elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
-    for e in world.electrodes:
-        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
-        elec_to_segidx[e.name] = list(
-            range(len(all_segments), len(all_segments) + len(segs))
-        )
-        all_segments.extend(segs)
-
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
-    finite_branches = _build_finite_branches(world.conductors, cluster_id)
-
-    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
-        world.conductors, cluster_id
-    )
-    pseudo_owners: list[str] = []
-    for s in cond_segs:
-        pn = s.electrode_name
-        elec_to_segidx[pn] = [len(all_segments)]
-        all_segments.append(s)
-        cluster_id[pn] = pn
-        pseudo_owners.append(pn)
-    for n_ in interior_nodes:
-        if n_ not in cluster_id:
-            cluster_id[n_] = n_
-            pseudo_owners.append(n_)
-            elec_to_segidx[n_] = []
-    n_lumped_branches = len(finite_branches)
-    distributed_branch_tuples = [
-        (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
-    ]
-    finite_branches = list(finite_branches) + distributed_branch_tuples
-
-    # Inductive coupling assembly (kept for parity; the catalogue probe
-    # case has no distributed conductors, so ``has_inductance`` is False
-    # and the system stays real/frequency-independent — matching the
-    # historic ``image`` / ``image_2layer`` no-inductance fast path).
-    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
-    sigma_earth_for_carson: float | None = None
-    layered_earth_for_sommerfeld: object = None
-    if earth_inductive_model == "carson_series":
-        from groundfield.coupling import resolve_earth_conductivity
-
-        sigma_earth_for_carson = resolve_earth_conductivity(soil)
-    elif earth_inductive_model == "sommerfeld":
-        from groundfield.coupling import resolve_earth_layers
-
-        layered_earth_for_sommerfeld = resolve_earth_layers(soil)
-    inductance_matrix_full, has_inductance, carson_builder = (
-        _assemble_inductance_matrix(
-            distributed_branches_objs,
-            n_lumped_branches=n_lumped_branches,
-            n_total_branches=len(finite_branches),
-            earth_model=earth_inductive_model,
-            sigma_earth=sigma_earth_for_carson,
-            layered_earth=layered_earth_for_sommerfeld,
-        )
-    )
-
-    n_segments = len(all_segments)
-    seg_points = np.array([s.midpoint for s in all_segments])  # (N, 3)
-    seg_lengths = np.array([s.length for s in all_segments])  # (N,)
-    wire_radii = np.array([s.wire_radius for s in all_segments])  # (N,)
-    seg_shell_coeffs = np.array(
-        [s.concrete_shell_coefficient_ohm_m for s in all_segments],
-        dtype=float,
-    )
-
-    # ------------------------------------------------------------------
-    # 2) Soil-specific self-kernel closure — same dispatch as
-    #    ``Engine.solve`` (image -> image_2layer for TwoLayerSoil).
-    # ------------------------------------------------------------------
-    rho_homog: float | None = None
-    soil_two_layer: TwoLayerSoil | None = None
-    if isinstance(soil, TwoLayerSoil):
-        soil_two_layer = soil
-    elif isinstance(soil, MultiLayerSoil):
-        n_layers = len(soil.layers)
-        if n_layers == 1:
-            rho_homog = float(soil.layers[0].resistivity)
-        elif n_layers == 2:
-            soil_two_layer = TwoLayerSoil(
-                rho_1=float(soil.layers[0].resistivity),
-                rho_2=float(soil.layers[1].resistivity),
-                h_1=float(soil.layers[0].thickness),
-            )
-        else:
-            raise NotImplementedError(
-                "solve_mutual_matrix supports homogeneous and 2-layer "
-                f"soils; got MultiLayerSoil with n={n_layers} layers."
-            )
-    elif isinstance(soil, HomogeneousSoil):
-        rho_homog = float(soil.resistivity)
-    else:
-        raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
-
-    if soil_two_layer is not None:
-        # 2-layer reaction-matrix self-kernel: feed the engine's
-        # image-series truncation, exactly like ``solve_image_2layer``.
-        self_max_terms = int(getattr(engine, "image_max_terms", 100))
-        self_tol = float(getattr(engine, "image_series_tol", 1e-6))
-        z_max = float(seg_points[:, 2].max())
-        cross_layer = bool(z_max >= soil_two_layer.h_1)
-        self_kernel = _two_layer_self_kernel_factory(
-            soil_two_layer,
-            self_max_terms,
-            self_tol,
-            allow_cross_layer=cross_layer,
-        )
-    else:
-        rho_for_kernel = float(rho_homog)
-
-        def self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
-            return _self_corrected_kernel(
-                seg_pts, seg_lens, wr, currents, rho_for_kernel
-            )
-
-    # ------------------------------------------------------------------
-    # 3) Reaction matrix ONCE.  ``Z_seg_full = self_kernel(eye)`` is the
-    #    N×N segment reaction matrix used by ``mom._build_Z_*``; column
-    #    k is ``self_kernel(e_k)``. Reusing it for every excitation makes
-    #    the diagonal ``ph`` evaluation and the cluster-current assembly
-    #    a sequence of matvecs instead of nG full kernel calls.
-    # ------------------------------------------------------------------
-    eye = np.eye(n_segments)
-    Z_seg_full = self_kernel(seg_points, seg_lengths, wire_radii, eye)  # (N, N)
+    problem = _prepare(world, engine, frequency_index, where="solve_mutual_matrix")
+    disc, topo, arrays = problem.disc, problem.topo, problem.arrays
+    n_segments = len(disc.segments)
+    seg_lengths = arrays.lengths
+    Z_seg_full = problem.Z_seg_full
 
     # ADR-0012 V2 shell augmentation (added to the *diagonal* of the
     # reaction matrix exactly as in ``_solve_cluster_currents`` and the
     # post-solve ``ph`` step).
     shell_diag: np.ndarray | None = None
-    if np.any(seg_shell_coeffs > 0.0):
+    if np.any(arrays.shell_coefficients > 0.0):
         with np.errstate(divide="ignore", invalid="ignore"):
             shell_diag = np.where(
                 seg_lengths > 0.0,
-                seg_shell_coeffs / seg_lengths,
+                arrays.shell_coefficients / seg_lengths,
                 0.0,
             )
 
-    # A linear ``self_kernel``-equivalent backed by the precomputed
-    # matrix: ``Z_seg_full @ currents`` reproduces ``self_kernel(...)``
-    # for the unit-current assembly inside ``_solve_cluster_currents``.
-    # The shell augmentation is applied on top (the assembly inside
-    # ``_solve_cluster_currents`` does the same: bulk kernel then
-    # ``phi += shell_diag · currents``), so we deliberately pass a
-    # *bulk-only* kernel here and let ``shell_coefficients`` re-add the
-    # shell — keeping the exact same operation order as the live solver.
-    def _cached_bulk_self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
-        return Z_seg_full @ currents
-
-    omega = (
-        2.0 * np.pi * float(engine.frequencies[frequency_index])
-        if has_inductance
-        else 0.0
-    )
-    carson_dz = (
-        carson_builder(omega)
-        if (has_inductance and carson_builder is not None)
-        else None
-    )
-
     # ------------------------------------------------------------------
-    # 4) Per-excitation leakage distribution.  Each gnode is an isolated
-    #    galvanic cluster, so injecting 1 A into cluster ``j`` activates
-    #    only that cluster; the resulting per-segment leakage column
-    #    ``sc_j`` is non-zero on cluster-``j`` segments only — exactly
-    #    what the historic single-source solve produced.
+    # 4) Per-excitation leakage distribution (one isolated gnode each).
     # ------------------------------------------------------------------
-    real_electrode_names = {e.name for e in world.electrodes}
+    real_electrode_names = [e.name for e in world.electrodes]
+    real_set = set(real_electrode_names)
     # cluster members per real electrode (== FieldResult.clusters), used
     # for the diagonal ``cluster_impedance`` average and current sum.
+    cluster_id = topo.cluster_id
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
             n
             for n in cluster_id
-            if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
+            if cluster_id[n] == cluster_id[ename] and n in real_set
         )
 
     T = np.zeros((n_segments, nG), dtype=complex)  # column j = sc_j
     Z = np.zeros((nG, nG), dtype=complex)
 
     for j, anchor_j in enumerate(anchors):
-        if anchor_j not in elec_to_segidx:
-            raise KeyError(f"Anchor '{anchor_j}' is not an electrode in world.")
-        elec_input_current = {e.name: 0j for e in world.electrodes}
-        elec_input_current[anchor_j] = 1.0 + 0j
-
-        elec_total = _solve_cluster_currents(
-            electrodes=world.electrodes,
-            elec_input_current=elec_input_current,
-            cluster_id=cluster_id,
-            seg_points=seg_points,
-            seg_lengths=seg_lengths,
-            wire_radii=wire_radii,
-            elec_to_segidx=elec_to_segidx,
-            self_kernel=_cached_bulk_self_kernel,
-            finite_branches=finite_branches,
-            pseudo_owners=pseudo_owners,
-            omega=omega if has_inductance else 0.0,
-            inductance_matrix=inductance_matrix_full if has_inductance else None,
-            carson_correction=carson_dz,
-            shell_coefficients=seg_shell_coeffs,
-        )
-
-        # Reconstruct the per-segment leakage column (image.py:1455-1463).
-        sc = np.zeros(n_segments, dtype=complex)
-        for ename, idxs in elec_to_segidx.items():
-            if not idxs:
-                continue
-            I_total = elec_total.get(ename, 0j)
-            if I_total == 0j:
-                continue
-            L_total = seg_lengths[idxs].sum()
-            sc[idxs] = I_total * seg_lengths[idxs] / L_total
+        elec_total, sc = _unit_excitation(world, problem, anchor_j)
         T[:, j] = sc
 
         # -- Diagonal Z[j, j] == cluster_impedance(anchor_j) -----------
         # Build ``ph`` (potential at every segment midpoint) exactly as
-        # the post-solve step of the live solver: bulk self-kernel on
+        # the post-solve step of the live solver: bulk reaction matrix on
         # the real and imaginary leakage, then the shell augmentation.
         members = cluster_members.get(anchor_j, [anchor_j])
         i_sum = sum(elec_total.get(m, 0j) for m in members)
-        member0_idxs = elec_to_segidx[members[0]]
+        member0_idxs = disc.owner_segments[members[0]]
         if sc.any():
             phi_re = Z_seg_full @ sc.real
             phi_im = Z_seg_full @ sc.imag
@@ -583,21 +585,14 @@ def solve_mutual_matrix(
     #    leakage column sc_j`` — the probe kernel is built ONCE and
     #    applied to all excitation columns at once.
     # ------------------------------------------------------------------
-    if soil_two_layer is not None:
-        Phi = _probe_potential_two_layer(
-            probe_points,
-            seg_points,
-            T,
-            soil_two_layer,
-            matrix_min_distance,
-            max_terms=matrix_max_terms,
-            tol=matrix_tol,
-        )  # (nG, nG): row i = probe i, col j = excitation j
-    else:
-        K_probe = _probe_kernel_homogeneous(
-            probe_points, seg_points, float(rho_homog), matrix_min_distance
-        )  # (nG, N)
-        Phi = K_probe @ T.real + 1j * (K_probe @ T.imag)
+    Phi = _field_of_columns(
+        problem,
+        probe_points,
+        T,
+        min_distance=matrix_min_distance,
+        max_terms=matrix_max_terms,
+        tol=matrix_tol,
+    )  # (nG, nG): row i = probe i, col j = excitation j
 
     for j in range(nG):
         for i in range(nG):
@@ -704,7 +699,6 @@ def solve_mutual_field(
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
 
-    soil = world.soil
     nG = len(anchors)
     field_points = np.asarray(field_points, dtype=float)
     if field_points.ndim != 2 or field_points.shape[1] != 3:
@@ -712,176 +706,20 @@ def solve_mutual_field(
             f"field_points must have shape (M, 3), got {field_points.shape}."
         )
 
-    # 1) Discretisation + topology — identical to solve_mutual_matrix.
-    ds = engine.segment_length
-    all_segments: list[_Segment] = []
-    elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
-    for e in world.electrodes:
-        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
-        elec_to_segidx[e.name] = list(
-            range(len(all_segments), len(all_segments) + len(segs))
-        )
-        all_segments.extend(segs)
+    problem = _prepare(world, engine, frequency_index, where="solve_mutual_field")
+    n_segments = len(problem.disc.segments)
 
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
-    finite_branches = _build_finite_branches(world.conductors, cluster_id)
-    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
-        world.conductors, cluster_id
-    )
-    pseudo_owners: list[str] = []
-    for s in cond_segs:
-        pn = s.electrode_name
-        elec_to_segidx[pn] = [len(all_segments)]
-        all_segments.append(s)
-        cluster_id[pn] = pn
-        pseudo_owners.append(pn)
-    for n_ in interior_nodes:
-        if n_ not in cluster_id:
-            cluster_id[n_] = n_
-            pseudo_owners.append(n_)
-            elec_to_segidx[n_] = []
-    n_lumped_branches = len(finite_branches)
-    distributed_branch_tuples = [
-        (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
-    ]
-    finite_branches = list(finite_branches) + distributed_branch_tuples
-
-    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
-    sigma_earth_for_carson: float | None = None
-    layered_earth_for_sommerfeld: object = None
-    if earth_inductive_model == "carson_series":
-        from groundfield.coupling import resolve_earth_conductivity
-
-        sigma_earth_for_carson = resolve_earth_conductivity(soil)
-    elif earth_inductive_model == "sommerfeld":
-        from groundfield.coupling import resolve_earth_layers
-
-        layered_earth_for_sommerfeld = resolve_earth_layers(soil)
-    inductance_matrix_full, has_inductance, carson_builder = (
-        _assemble_inductance_matrix(
-            distributed_branches_objs,
-            n_lumped_branches=n_lumped_branches,
-            n_total_branches=len(finite_branches),
-            earth_model=earth_inductive_model,
-            sigma_earth=sigma_earth_for_carson,
-            layered_earth=layered_earth_for_sommerfeld,
-        )
-    )
-
-    n_segments = len(all_segments)
-    seg_points = np.array([s.midpoint for s in all_segments])
-    seg_lengths = np.array([s.length for s in all_segments])
-    wire_radii = np.array([s.wire_radius for s in all_segments])
-    seg_shell_coeffs = np.array(
-        [s.concrete_shell_coefficient_ohm_m for s in all_segments], dtype=float
-    )
-
-    # 2) Soil self-kernel — same case split as solve_mutual_matrix.
-    rho_homog: float | None = None
-    soil_two_layer: TwoLayerSoil | None = None
-    if isinstance(soil, TwoLayerSoil):
-        soil_two_layer = soil
-    elif isinstance(soil, MultiLayerSoil):
-        n_layers = len(soil.layers)
-        if n_layers == 1:
-            rho_homog = float(soil.layers[0].resistivity)
-        elif n_layers == 2:
-            soil_two_layer = TwoLayerSoil(
-                rho_1=float(soil.layers[0].resistivity),
-                rho_2=float(soil.layers[1].resistivity),
-                h_1=float(soil.layers[0].thickness),
-            )
-        else:
-            raise NotImplementedError(
-                "solve_mutual_field supports homogeneous and 2-layer soils; "
-                f"got MultiLayerSoil with n={n_layers} layers."
-            )
-    elif isinstance(soil, HomogeneousSoil):
-        rho_homog = float(soil.resistivity)
-    else:
-        raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
-
-    if soil_two_layer is not None:
-        self_max_terms = int(getattr(engine, "image_max_terms", 100))
-        self_tol = float(getattr(engine, "image_series_tol", 1e-6))
-        z_max = float(seg_points[:, 2].max())
-        cross_layer = bool(z_max >= soil_two_layer.h_1)
-        self_kernel = _two_layer_self_kernel_factory(
-            soil_two_layer, self_max_terms, self_tol, allow_cross_layer=cross_layer
-        )
-    else:
-        rho_for_kernel = float(rho_homog)
-
-        def self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
-            return _self_corrected_kernel(
-                seg_pts, seg_lens, wr, currents, rho_for_kernel
-            )
-
-    eye = np.eye(n_segments)
-    Z_seg_full = self_kernel(seg_points, seg_lengths, wire_radii, eye)
-    omega = (
-        2.0 * np.pi * float(engine.frequencies[frequency_index])
-        if has_inductance
-        else 0.0
-    )
-    carson_dz = (
-        carson_builder(omega)
-        if (has_inductance and carson_builder is not None)
-        else None
-    )
-
-    def _cached_bulk_self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
-        return Z_seg_full @ currents
-
-    # 3) Per-excitation leakage columns T (no diagonal/self term needed).
+    # Per-excitation leakage columns T (no diagonal/self term needed).
     T = np.zeros((n_segments, nG), dtype=complex)
     for j, anchor_j in enumerate(anchors):
-        if anchor_j not in elec_to_segidx:
-            raise KeyError(f"Anchor '{anchor_j}' is not an electrode in world.")
-        elec_input_current = {e.name: 0j for e in world.electrodes}
-        elec_input_current[anchor_j] = 1.0 + 0j
-        elec_total = _solve_cluster_currents(
-            electrodes=world.electrodes,
-            elec_input_current=elec_input_current,
-            cluster_id=cluster_id,
-            seg_points=seg_points,
-            seg_lengths=seg_lengths,
-            wire_radii=wire_radii,
-            elec_to_segidx=elec_to_segidx,
-            self_kernel=_cached_bulk_self_kernel,
-            finite_branches=finite_branches,
-            pseudo_owners=pseudo_owners,
-            omega=omega if has_inductance else 0.0,
-            inductance_matrix=inductance_matrix_full if has_inductance else None,
-            carson_correction=carson_dz,
-            shell_coefficients=seg_shell_coeffs,
-        )
-        sc = np.zeros(n_segments, dtype=complex)
-        for ename, idxs in elec_to_segidx.items():
-            if not idxs:
-                continue
-            I_total = elec_total.get(ename, 0j)
-            if I_total == 0j:
-                continue
-            L_total = seg_lengths[idxs].sum()
-            sc[idxs] = I_total * seg_lengths[idxs] / L_total
-        T[:, j] = sc
+        _, T[:, j] = _unit_excitation(world, problem, anchor_j)
 
-    # 4) Potential at the M field points per excitation (nG) — one kernel pass.
-    if soil_two_layer is not None:
-        R = _probe_potential_two_layer(
-            field_points,
-            seg_points,
-            T,
-            soil_two_layer,
-            matrix_min_distance,
-            max_terms=matrix_max_terms,
-            tol=matrix_tol,
-        )
-    else:
-        K_probe = _probe_kernel_homogeneous(
-            field_points, seg_points, float(rho_homog), matrix_min_distance
-        )
-        R = K_probe @ T.real + 1j * (K_probe @ T.imag)
-    return R
+    # Potential at the M field points per excitation (nG) — one kernel pass.
+    return _field_of_columns(
+        problem,
+        field_points,
+        T,
+        min_distance=matrix_min_distance,
+        max_terms=matrix_max_terms,
+        tol=matrix_tol,
+    )

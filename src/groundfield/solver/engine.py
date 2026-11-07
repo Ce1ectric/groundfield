@@ -401,6 +401,27 @@ class Engine(BaseModel):
         and JSON) and mapped onto ``options["mom_sommerfeld"]``; a
         non-default value emits a :class:`DeprecationWarning`.
 
+    kernel
+        Green's-function kernel of the image family (``image``,
+        ``image_2layer`` and ``image_nlayer`` for one or two layers),
+        also used by :meth:`FieldResult.potential` and
+        :func:`~groundfield.solver.mutual.solve_mutual_matrix` /
+        ``solve_mutual_field``:
+
+        - ``"point"`` (default) — each segment's current sits at its
+          midpoint; reproduces the results of earlier releases. Its
+          row sums carry an error of about :math:`-0.23/L`, so the
+          grounding resistance converges to a value 0.9–1.9 % below the
+          exact uniform-current solution (review pass 10, 10.28).
+        - ``"line"`` — every segment is a uniform line current
+          (Galerkin form of the exact line-source potential, see
+          :mod:`groundfield.solver._line_kernel`): exact for straight
+          wires at any segment length.
+
+        The other backends use their own kernels; an explicit
+        ``"line"`` there raises
+        :class:`~groundfield.solver.registry.BackendCapabilityError`.
+
     Examples
     --------
     >>> eng = Engine(backend="fem", options={"fem": {"n_radial": 120}})
@@ -449,6 +470,14 @@ class Engine(BaseModel):
             "every layered backend (image_2layer, image_nlayer, mom, "
             "cim, bem, mom_sommerfeld) and recorded in "
             "FieldResult.metadata['series']."
+        ),
+    )
+    kernel: Literal["point", "line"] = Field(
+        default="point",
+        description=(
+            "Green's-function kernel of the image family: 'point' (midpoint "
+            "point sources, the historic default) or 'line' (exact uniform "
+            "line sources, Galerkin form)."
         ),
     )
     image_series_tol: float = Field(
