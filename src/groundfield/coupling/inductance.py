@@ -62,11 +62,15 @@ as a correction relative to this DC convention.
 
 **Touching segments** (``touching=``). The Neumann integrand is
 log-singular for segments that share an end point (bends, chain
-neighbours) or lie on one axis. ``"quadrature"`` (historic default)
-integrates them with the 16x16 Gauss–Legendre rule, which is
-accurate to about -0.3 % ... +0.8 % for such pairs; ``"exact"`` uses
-the closed forms (Grover 1946: two filaments meeting at a point;
-coaxial filaments with a gap), accurate to machine precision.
+neighbours) or lie on one axis. ``"exact"`` (the default since the
+calendar release 2026.11) uses the closed forms (Grover 1946: two
+filaments meeting at a point; coaxial filaments with a gap), accurate
+to machine precision; a straight wire split into any number of
+segments keeps the self inductance of the unsplit wire.
+``"quadrature"`` (the default up to 0.15.0, kept to reproduce old
+numbers) integrates such pairs with the 16x16 Gauss–Legendre rule,
+which is accurate to about -0.3 % ... +0.8 % for them (review pass
+10, finding 10.46).
 
 References
 ----------
@@ -109,8 +113,8 @@ MU_0 = 4.0e-7 * math.pi
 ImageConvention = Literal["none", "additive", "antiparallel"]
 
 #: Treatment of touching / coaxial segment pairs in the Neumann
-#: integral: ``"quadrature"`` (historic 16x16 Gauss–Legendre) or
-#: ``"exact"`` (closed forms).
+#: integral: ``"exact"`` (closed forms, the default) or
+#: ``"quadrature"`` (16x16 Gauss–Legendre, the default up to 0.15.0).
 TouchingRule = Literal["quadrature", "exact"]
 
 _IMAGE_CONVENTIONS: tuple[str, ...] = ("none", "additive", "antiparallel")
@@ -428,7 +432,7 @@ def neumann_mutual(
     *,
     min_distance: float = 1e-6,
     parallel_tol: float = 1e-9,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> float:
     """Neumann mutual-inductance integral between two straight segments.
 
@@ -465,8 +469,9 @@ def neumann_mutual(
         Tolerance on $||\\hat{u}_a\\cdot\\hat{u}_b| - 1|$ that
         triggers the closed-form fast path.
     touching
-        ``"quadrature"`` (default, historic) or ``"exact"`` — the
-        treatment of touching and coaxial pairs.
+        ``"exact"`` (default) or ``"quadrature"`` (the 16x16 rule, the
+        default up to 0.15.0) — the treatment of touching and coaxial
+        pairs.
 
     Returns
     -------
@@ -542,7 +547,7 @@ def perfect_mirror_self_pair_inductance(
     wire_radius: float,
     *,
     include_internal: bool = True,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> float:
     """Self-inductance contribution of a segment plus its earth image.
 
@@ -663,7 +668,7 @@ def _build_inductance_matrix_loop(
     use_image: bool | None = None,
     image: ImageConvention | None = None,
     include_internal: bool | np.ndarray = True,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> np.ndarray:
     """Reference (loop-based) implementation of :func:`build_inductance_matrix`.
 
@@ -1061,7 +1066,7 @@ def build_inductance_matrix(
     use_image: bool | None = None,
     image: ImageConvention | None = None,
     include_internal: bool | np.ndarray = True,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> np.ndarray:
     """Assemble the dense partial-inductance matrix over branches.
 
@@ -1097,9 +1102,9 @@ def build_inductance_matrix(
         (e.g. ``False`` for conductors whose internal impedance is
         supplied separately by a skin-effect model).
     touching
-        ``"quadrature"`` (default, historic) or ``"exact"``: closed
-        forms for pairs that share an end point or lie on one axis
-        (see :func:`neumann_mutual`).
+        ``"exact"`` (default): closed forms for pairs that share an end
+        point or lie on one axis; ``"quadrature"``: the 16x16 rule of
+        0.15.0 (see :func:`neumann_mutual`).
 
     Returns
     -------
@@ -1155,7 +1160,7 @@ def build_inductance_matrix(
 def _image_inductance_matrix(
     seg_endpoints: np.ndarray,
     *,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> np.ndarray:
     """Image block $L_\\text{img}$ (mirrored-endpoint image), shape (M, M).
 

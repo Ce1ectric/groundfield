@@ -15,5 +15,36 @@ max_rel_change = 1e-2
 cases = ["cond_galvanic_neumann_sommerfeld", "defaults_mixed_cluster_inductive", "cond_isolated_pen_sommerfeld_two_layer"]
 quantities = ["*"]
 findings = ["10.46", "F52"]
-reason = "sommerfeld assembles L and the earth-return correction on the image-free baseline (image='none') instead of adding the additive image and removing it again: the same numbers to round-off (<= 4e-18 against the previous commit); surface-crossing conductors are accepted."
+reason = "sommerfeld assembles L and the earth-return correction on the image-free baseline (image='none') instead of adding the additive image and removing it again: the same numbers to round-off (<= 4e-18); surface-crossing conductors are accepted. Exact touching pairs (closed forms for chain neighbours) move the 20 m lead by 3.0e-6 and the 60 m PEN by 1.4e-6 on top of COUP-1's lambda-grid change."
+min_rel_change = 1e-6
 max_rel_change = 1e-4
+
+[[change]]
+cases = ["cond_galvanic_neumann_perfect_mirror", "line_cond_galvanic_neumann", "cond_coupled_leads_open_circuit", "cond_galvanic_neumann_carson_series"]
+quantities = ["*"]
+findings = ["10.46"]
+reason = "Touching segment pairs (chain neighbours, bends) of the Neumann matrix use the closed forms instead of the 16x16 Gauss-Legendre rule (-0.3 % ... +0.8 % for such pairs): 20 m lead with 5 m segments 3.0e-6 (3.2e-6 with the line kernel), two coupled 20 m leads 1.5e-6."
+min_rel_change = 1e-6
+max_rel_change = 1e-2
+
+[[change]]
+cases = ["fit_rho_f_standard_sweep"]
+quantities = ["samples/Z"]
+findings = ["10.46"]
+reason = "Exact touching pairs on the 40 m PEN of the sweep worlds (4 segments): the sampled impedances move by 1.2e-8."
+min_rel_change = 1e-9
+max_rel_change = 1e-6
+
+[[change]]
+cases = ["fit_rho_f_standard_sweep"]
+quantities = ["eval", "bustype/eval", "coef/*"]
+findings = ["10.46"]
+reason = "Exact touching pairs: the fitted coefficients move with the samples (coef/k2 by 3.6e-4 of its own small value), far inside the 10.19 / 10.27 change of the same quantities."
+max_rel_change = 50.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/*", "I/*"]
+findings = ["10.46"]
+reason = "Exact touching pairs of the 5 m segments of the two overhead measurement leads: 4.3e-7 on the rod currents, inside the 10.55 change of the same quantities."
+max_rel_change = 1e-3

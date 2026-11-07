@@ -44,6 +44,11 @@ conventions the three terms are assembled with:
   the additive pairing to round-off) and valid for conductors that
   cross the soil surface, which the pair integrals split at $z = 0$
   (with an image convention such a segment is singular and raises).
+- **Touching segments** (10.46): chain neighbours and bends share an
+  end point, where the Neumann integrand is log-singular; the closed
+  forms (``touching="exact"``) replace the 16x16 Gauss–Legendre rule
+  (-0.3 % ... +0.8 % for such pairs), so a straight conductor keeps the
+  inductance of the unsplit wire for every discretisation.
 - **Internal inductance**: every self term carries the DC internal
   inductance $\\mu_0\\ell/(8\\pi)$ of a solid round conductor
   (``include_internal=True``), for distributed and lumped branches
@@ -98,7 +103,7 @@ IMAGE_OF_EARTH_MODEL: dict[str, str] = {
 
 #: Neumann rule for segments that share an end point or an axis
 #: (review pass 10, 10.46): closed forms instead of the 16x16 rule.
-SOLVER_TOUCHING = "quadrature"
+SOLVER_TOUCHING = "exact"
 
 
 @dataclass(frozen=True)

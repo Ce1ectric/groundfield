@@ -139,7 +139,6 @@ def test_sommerfeld_pair_work_does_not_grow_with_the_number_of_frequencies(
     assert calls["n"] == one
 
 
-@WAVE2
 @pytest.mark.finding("10.46")
 def test_inductance_is_refinement_invariant_for_a_straight_conductor() -> None:
     """Exact touching pairs: the chain sum does not drift with refinement
