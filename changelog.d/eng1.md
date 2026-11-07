@@ -24,9 +24,10 @@
   `summary()` prints the table. Test:
   `tests/test_compare_engines.py::test_compare_engines_tolerance_table_is_explicit`.
 - **`mom_sommerfeld` convergence metadata (10.47):** `converged` (bool,
-  valid for every frequency), `converged_per_frequency`,
+  true only if every frequency converged), `converged_per_frequency`,
   `n_unconverged_entries` and, when the two-layer diagonal is the
-  Tagg/Sunde series (every segment in the upper layer), `n_terms_used`. Test:
+  Tagg/Sunde series (every segment in the upper layer), `n_terms_used`.
+  Test:
   `tests/test_mom_sommerfeld.py::test_solve_reports_convergence_in_the_metadata`.
 - **`ComplexImageFit.max_error` (10.49):** maximum error of the
   complex-image fit on the verification grid including λ = 0. Test:
