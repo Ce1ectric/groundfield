@@ -1306,8 +1306,12 @@ def _tabulated_block(
     idx_b: np.ndarray,
     symmetric: bool,
     n_table: int,
-) -> None:
+) -> bool:
     """Add the corrections of all sub-segment pairs (a, b) of one block.
+
+    Returns ``False`` (and adds nothing) when the $\\lambda$ grid of the
+    block's largest distance would exceed the node budget; the caller then
+    evaluates the block pair by pair.
 
     $S(\\rho) = \\int w(\\lambda)\\,J_0(\\lambda\\rho)\\,d\\lambda$ is
     evaluated per frequency on ``n_table`` points equidistant in
@@ -1337,10 +1341,12 @@ def _tabulated_block(
     sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
     sigma_max = 1.0 / min(earth.rhos)
 
-    # Tables per frequency: cubic-spline coefficients of S(t).
+    # Lambda grids per frequency. A block whose largest distance cannot be
+    # resolved within the node budget (conductors within millimetres of
+    # the surface spanning a large network) keeps the per-pair rule, whose
+    # grids only cover each pair's own distances.
     active = [k for k, om in enumerate(omegas) if om > 0.0]
-    coeffs: dict[int, np.ndarray] = {}
-    table_key, bessel = None, None
+    grids = {}
     for k in active:
         omega = omegas[k]
         params = _grid_params(
@@ -1353,11 +1359,18 @@ def _tabulated_block(
         )
         lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
         if not resolved:
-            _warn_unresolved(params)
+            return False
+        grids[k] = (params, lambdas, lam_w)
+
+    # Tables per frequency: cubic-spline coefficients of S(t).
+    coeffs: dict[int, np.ndarray] = {}
+    table_key, bessel = None, None
+    for k in active:
+        params, lambdas, lam_w = grids[k]
         if params != table_key:
             bessel = j0(lambdas[None, :] * rho_nodes[:, None])
             table_key = params
-        s_values = bessel @ (plan.weight(lambdas, omega, earth) * lam_w)
+        s_values = bessel @ (plan.weight(lambdas, omegas[k], earth) * lam_w)
         coeffs[k] = s_values if single else _spline_coefficients(t_nodes, s_values)
 
     w2 = 0.25 * (_OUTER_GL_WEIGHTS[:, None] * _OUTER_GL_WEIGHTS[None, :])
@@ -1395,6 +1408,7 @@ def _tabulated_block(
         np.add.at(out[k], (pa[:, None], pb[None, :]), block)
         if not symmetric:
             np.add.at(out[k], (pb[:, None], pa[None, :]), block.T)
+    return True
 
 
 def _tabulated_values_none(
@@ -1412,8 +1426,10 @@ def _tabulated_values_none(
     (:class:`_SpectralTable`), and the 16x16 outer nodes of all its
     sub-segment pairs are evaluated in vectorised row chunks. Blocks with
     fewer than ``min_block_pairs`` sub-segment pairs (risers, single
-    inclined leads) use the exact per-pair evaluation instead, where a
-    table would not pay off.
+    inclined leads), where a table would not pay off, and blocks whose
+    $\\lambda$ grid cannot resolve the block's largest distance within the
+    node budget (conductors within millimetres of the surface across a
+    large network) use the exact per-pair evaluation instead.
     """
     M = seg_endpoints.shape[0]
     out = np.zeros((len(omegas), M, M), dtype=complex)
@@ -1430,10 +1446,10 @@ def _tabulated_values_none(
             z_b = float(depth[idx_b[0]])
             if idx_a.size * idx_b.size >= min_block_pairs:
                 plan = _SpectralPlan.for_pair(earth, z_a, z_b)
-                _tabulated_block(
+                if _tabulated_block(
                     out, omegas, earth, plan, sub, idx_a, idx_b, symmetric, n_table
-                )
-                continue
+                ):
+                    continue
             _exact_block(
                 out, omegas, earth, sub, seg_endpoints, idx_a, idx_b, symmetric
             )

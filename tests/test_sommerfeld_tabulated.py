@@ -162,3 +162,16 @@ def test_solve_with_an_engine_that_selects_the_tabulated_assembly() -> None:
         z_exact = np.asarray(res_exact.electrode_potentials[name])
         z_tab = np.asarray(res_tab.electrode_potentials[name])
         np.testing.assert_allclose(z_tab, z_exact, rtol=1e-6)
+
+
+@pytest.mark.slow
+def test_conductors_in_the_surface_plane_fall_back_to_the_per_pair_rule() -> None:
+    """A block whose lambda grid cannot resolve its largest distance (a line
+    at z = 0: decay length 0) keeps the per-pair rule instead of warning."""
+    eps = np.array([[[5.0 * k, 0.0, 0.0], [5.0 * (k + 1), 0.0, 0.0]] for k in range(9)])
+    kw = dict(omegas=OMEGAS[1:], earth=EARTHS["homogeneous"], image="none")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        tab = build_sommerfeld_correction_matrices(eps, method="tabulated", **kw)
+    exact = build_sommerfeld_correction_matrices(eps, **kw)
+    np.testing.assert_allclose(tab, exact, rtol=1e-12, atol=0.0)
