@@ -964,3 +964,64 @@ def case_line_cond_galvanic_neumann() -> Quantities:
     return _result_quantities(
         res, probes=_surface_line(-5.0, 25.0, 7), cluster_of=("g1", "g2")
     )
+
+
+# ---------------------------------------------------------------------
+# two-terminal sources, junction nodes, floating clusters (CORE-2a)
+# ---------------------------------------------------------------------
+
+
+@_case
+def case_src_two_terminal_rods_hom() -> Quantities:
+    w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
+    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=3.0)
+    gf.create_electrode(w, "rod", name="aux", position=(40.0, 0.0, 0.0), length=1.0)
+    gf.create_source(w, attached_to="g1", return_to="aux", magnitude=1.0)
+    res = w.solve(_engine(backend="image", frequencies=[50.0], segment_length=0.5))
+    out = _result_quantities(res, probes=_surface_line(-10.0, 50.0, 13))
+    out["Zin"] = np.asarray(res.input_impedance(), dtype=complex)
+    return out
+
+
+@_case
+def case_junction_measurement_leads_hom() -> Quantities:
+    from groundfield.api import create_junction
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
+    gf.create_electrode(w, "ring", name="st", center=(0.0, 0.0, 0.7), radius=2.0)
+    gf.create_electrode(w, "rod", name="aux", position=(100.0, 0.0, 0.0), length=1.5)
+    gf.create_electrode(w, "rod", name="probe", position=(61.8, 0.0, 0.0), length=0.5)
+    create_junction(w, name="H", position=(2.5, 0.0, -0.1))
+    create_junction(w, name="S", position=(2.5, 0.5, -0.1))
+    for name, a, b, r in (("feed", "H", "aux", 1.2), ("probe_lead", "probe", "S", 0.8)):
+        gf.create_conductor(
+            w,
+            name=name,
+            start=a,
+            end=b,
+            cross_section=50e-6,
+            lumped_series_resistance_ohm=r,
+        )
+    gf.create_source(w, attached_to="st", return_to="H", magnitude=1.0)
+    res = w.solve(_engine(backend="image", frequencies=[50.0], segment_length=1.0))
+    out = _result_quantities(res, point_sources=False)
+    for name, values in sorted(res.metadata["junction_potentials"].items()):
+        out[f"junction/{name}"] = np.asarray(values, dtype=complex)
+    return out
+
+
+@_case
+def case_floating_bonded_pair_two_layer() -> Quantities:
+    soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=30.0, h_1=4.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="src", position=(0.0, 0.0, 0.0), length=3.0)
+    gf.create_electrode(w, "ring", name="p_ring", center=(6.0, 0.0, 0.6), radius=1.5)
+    gf.create_electrode(w, "rod", name="p_rod", position=(8.5, 0.0, 0.6), length=2.0)
+    gf.create_conductor(
+        w, name="bond", start="p_ring", end="p_rod", coupling_to_soil="isolated"
+    )
+    gf.create_source(w, attached_to="src", magnitude=1.0)
+    res = w.solve(
+        _engine(backend="image_2layer", frequencies=[50.0], segment_length=0.5)
+    )
+    return _result_quantities(res, cluster_of=("src",), point_sources=False)
