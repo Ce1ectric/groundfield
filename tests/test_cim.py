@@ -119,3 +119,110 @@ def test_cim_metadata() -> None:
     # n >= 3 is rejected since the WP-E audit fix.
     with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
         eng.solve(_world(soil_3))
+
+
+# ---------------------------------------------------------------------
+# 10.30 — cim reports the length-weighted node potential like the image
+# family (the F10 fix of 0.15.0 had missed this backend)
+# ---------------------------------------------------------------------
+
+
+def _rod_world(soil, *, z0: float, length: float, name: str = "g1") -> gf.World:
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name=name, position=(0.0, 0.0, z0), length=length)
+    gf.create_source(w, attached_to=name, magnitude=1.0)
+    return w
+
+
+@pytest.mark.finding("10.30")
+@pytest.mark.parametrize(
+    ("soil", "z0", "length", "ds"),
+    [
+        # 3 m rod split at h_1 = 2 m: 5 x 0.4 m + 3 x 0.333 m segments
+        (gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0), 0.0, 3.0, 0.4),
+        # the pass-9 F10 shape: last segment 9 mm below h_1 = 5 m
+        (gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0), 0.5, 4.509, 0.5),
+        # upper layer only: a grid mesh with 3 m x 2 m cells gives
+        # 0.6 m and 0.667 m segments inside one electrode
+        (gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=6.0), None, None, 0.7),
+    ],
+)
+def test_cim_is_bit_identical_to_image_2layer_for_unequal_segments(
+    soil, z0, length, ds
+) -> None:
+    """v0.15.0: +4.10 % on the first case (71.060210 vs 68.261634 Ω)."""
+
+    def world() -> gf.World:
+        if z0 is not None:
+            return _rod_world(soil, z0=z0, length=length)
+        w = gf.create_world(soil=soil)
+        gf.create_electrode(
+            w,
+            "grid_mesh",
+            name="g1",
+            corner=(-3.0, -2.0, 0.6),
+            size=(6.0, 4.0),
+            n_x=2,
+            n_y=2,
+        )
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        return w
+
+    res_cim = gf.create_engine(backend="cim", segment_length=ds).solve(world())
+    res_il2 = gf.create_engine(backend="image_2layer", segment_length=ds).solve(world())
+    lengths = {ps.length for ps in res_cim.point_sources}
+    assert len({round(x, 9) for x in lengths}) > 1, "case must have unequal segments"
+    assert res_cim.electrode_potentials == res_il2.electrode_potentials
+    assert res_cim.electrode_currents == res_il2.electrode_currents
+    assert res_cim.cluster_impedance("g1") == res_il2.cluster_impedance("g1")
+    assert res_cim.metadata["reduces_to"] == "image_2layer"
+
+
+@pytest.mark.finding("10.30")
+@pytest.mark.parametrize(
+    ("h_1", "port_a", "tol"),
+    [
+        # grid mesh (0.6 m and 0.667 m segments) inside the upper layer:
+        # closed-form kernel, round-off level
+        (5.0, "grid", 1e-10),
+        # rod through h_1 = 2 m (split into unequal segments): cross-layer
+        # quadrature kernel
+        (2.0, "rod", 1e-7),
+    ],
+)
+def test_cim_two_port_transfer_impedance_is_reciprocal(h_1, port_a, tol) -> None:
+    """Transfer impedances from two solves agree.
+
+    Port A carries segments of unequal length, for which the unweighted
+    read-back of v0.15.0 broke reciprocity (4.0e-2 on the cross-layer
+    case, R2-03).
+    """
+    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=h_1)
+
+    def world(src: str) -> gf.World:
+        w = gf.create_world(soil=soil)
+        if port_a == "grid":
+            gf.create_electrode(
+                w,
+                "grid_mesh",
+                name="A",
+                corner=(-3.0, -2.0, 0.6),
+                size=(6.0, 4.0),
+                n_x=2,
+                n_y=2,
+            )
+        else:
+            gf.create_electrode(
+                w, "rod", name="A", position=(0.0, 0.0, 0.0), length=3.0
+            )
+        gf.create_electrode(w, "ring", name="B", center=(6.0, 0.0, 0.8), radius=1.5)
+        gf.create_source(w, attached_to=src, magnitude=1.0)
+        return w
+
+    eng = gf.create_engine(
+        backend="cim", segment_length=0.7 if port_a == "grid" else 0.4
+    )
+    r_a, r_b = eng.solve(world("A")), eng.solve(world("B"))
+    z_ba = r_a.electrode_potentials["B"][0] / r_a.electrode_currents["A"][0]
+    z_ab = r_b.electrode_potentials["A"][0] / r_b.electrode_currents["B"][0]
+    assert abs(z_ab - z_ba) / abs(z_ba) < tol

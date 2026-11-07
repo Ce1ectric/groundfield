@@ -145,6 +145,7 @@ from groundfield.solver.image import (
     _Segment,
     _solve_cluster_currents,
     _warn_ignored_sources,
+    _weighted_node_potential,
 )
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
@@ -882,7 +883,12 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        # Length-weighted (Galerkin) node potential — the reduction the
+        # multi-port matrix of _solve_cluster_currents enforces, exactly
+        # as in image / image_2layer. The plain segment mean used up to
+        # 0.15.0 (the F10 fix had missed this backend) reported +4.1 %
+        # on a rod split unevenly at h_1 and broke reciprocity (10.30).
+        u_list = _weighted_node_potential(phi_per_freq, idxs, seg_lengths, n_freq)
         i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
