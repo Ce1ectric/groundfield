@@ -20,8 +20,10 @@ from __future__ import annotations
 import ast
 import builtins
 import json
+import math
 import time
 import tracemalloc
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +36,7 @@ from groundfield.io.groundinsight import (
     EvaluateSpecError,
     evaluate_spec,
     load_bustype_json,
+    to_bustype_dict,
 )
 
 pytestmark = pytest.mark.finding("10.01")
@@ -349,6 +352,40 @@ def test_long_flat_sums_count_as_one_nesting_level() -> None:
     assert len(expr.args) == n_terms + 1
 
 
+def test_many_pole_vector_fit_exports_and_loads() -> None:
+    from groundfield.postprocess.vector_fitting import VectorFitResult
+
+    rng = np.random.default_rng(3)
+    poles, residues = [], []
+    for _ in range(20):  # 20 conjugate pairs and 20 real poles
+        p = complex(-rng.uniform(10.0, 1e4), rng.uniform(10.0, 1e4))
+        r = complex(rng.uniform(-5.0, 5.0), rng.uniform(-5.0, 5.0))
+        poles += [p, p.conjugate(), -rng.uniform(10.0, 1e4)]
+        residues += [r, r.conjugate(), rng.uniform(-5.0, 5.0)]
+    fit = VectorFitResult(
+        poles=np.array(poles),
+        residues=np.array(residues),
+        R_inf=200.0,
+        L_inf=1e-4,
+        rms_error=0.0,
+        fit_frequencies=np.array([0.0, 1000.0]),
+        fit_values=np.zeros(2, dtype=complex),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        payload = to_bustype_dict(
+            fit,
+            name="many",
+            system_type="TN",
+            voltage_level=0.4,
+            decimals=17,
+            rho_at_fit=100.0,
+        )
+    grid = np.array([0.0, 50.0, 1000.0])
+    z = evaluate_spec(BusTypeSpec.from_dict(payload), grid, 100.0)
+    np.testing.assert_allclose(z, fit.evaluate(grid), rtol=1e-12)
+
+
 def test_symbols_argument_sets_the_allowed_free_symbols() -> None:
     from groundfield.io._formula import FormulaError, parse_impedance_formula
 
@@ -408,3 +445,143 @@ def test_format_impedance_formula_validates_its_input() -> None:
         format_impedance_formula(f, significant_digits=0)
     with pytest.raises(ValueError, match="non-finite"):
         format_impedance_formula(sp.nan * f)
+
+
+# ---------------------------------------------------------------------
+# Every formula the exporters produce (R5's 384-output generator)
+# ---------------------------------------------------------------------
+
+
+def _r5_fit_set():
+    """The fit set of reviewer R5's exporter-grammar study (seeded)."""
+    from groundfield.postprocess.rho_f_standard import (
+        RhoFStandardFit,
+        fit_rho_f_standard,
+    )
+    from groundfield.postprocess.vector_fitting import VectorFitResult, vector_fit
+
+    two_pi = 2.0 * math.pi
+    fits = []
+    rng = np.random.default_rng(1)
+    f = np.geomspace(1.0, 1000.0, 30)
+    s = 1j * two_pi * f
+    for case in range(16):
+        n_true = 1 + case % 4
+        poles = -two_pi * np.geomspace(5, 3000, n_true) * rng.uniform(0.7, 1.3, n_true)
+        res = poles * rng.uniform(-3, 3, n_true)
+        z = rng.uniform(1, 50) + sum(
+            r / (s - p) for p, r in zip(poles, res, strict=True)
+        )
+        if case % 3 == 0:
+            z = z + s * rng.uniform(1e-5, 1e-3)
+        for n_poles in (1, 2, 3, 4, 6, 8):
+            try:
+                fits.append(
+                    vector_fit(
+                        f,
+                        z,
+                        n_poles=n_poles,
+                        n_iter=20,
+                        include_L_inf=(case % 3 == 0),
+                        complex_poles=bool(case % 2),
+                    )
+                )
+            except np.linalg.LinAlgError:
+                continue
+    zeros = np.zeros_like(f, dtype=complex)
+    fits.append(
+        VectorFitResult(
+            poles=np.array([-100 + 900j]),
+            residues=np.array([50 - 300j]),
+            R_inf=5.0,
+            L_inf=0.0,
+            rms_error=0.0,
+            fit_frequencies=f,
+            fit_values=zeros,
+        )
+    )
+    fits.append(
+        VectorFitResult(
+            poles=np.array([-math.pi * 100]),
+            residues=np.array([-math.sqrt(2) * 100]),
+            R_inf=math.e,
+            L_inf=0.0,
+            rms_error=0.0,
+            fit_frequencies=f,
+            fit_values=zeros,
+        )
+    )
+    for case in range(30):
+        k = rng.normal(size=5) * np.array([0.05, 1e-4, 2e-3, 1e-6, 3e-6])
+        if case % 5 == 0:
+            k[rng.integers(0, 5)] = 0.0
+        if case % 7 == 0:
+            k = k * 1e6
+        rho = np.repeat([30.0, 100.0, 300.0, 1000.0], 6)
+        ff = np.tile([0.0, 50.0, 150.0, 350.0, 650.0, 1000.0], 4)
+        z = k[0] * rho + (k[1] + 1j * k[2]) * ff + (k[3] + 1j * k[4]) * ff * rho
+        fits.append(fit_rho_f_standard(rho, ff, z))
+    fits.append(
+        RhoFStandardFit(
+            k1=0.5,
+            k2=0.0,
+            k3=0.0,
+            k4=0.0,
+            k5=0.0,
+            rms_error=0.0,
+            rms_relative=0.0,
+            sample_rho=np.ones(1),
+            sample_f=np.ones(1),
+            sample_Z=np.ones(1, dtype=complex),
+        )
+    )
+    return fits
+
+
+@pytest.mark.slow
+def test_every_exporter_output_parses_to_its_fit_and_to_the_legacy_values() -> None:
+    """All exports of R5's generator: safe parser == legacy SymPy path
+    (rtol 1e-13) and == ``fit.evaluate`` within the ``decimals`` rounding."""
+    import sympy as sp
+
+    from groundfield.postprocess.vector_fitting import VectorFitResult
+
+    bound = {6: 2e-5, 12: 1e-10, 15: 1e-13}
+    grid = np.array([0.0, 16.7, 50.0, 150.0, 1000.0, 1e4])
+    n_formulas = 0
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fits = _r5_fit_set()
+        for fit in fits:
+            for decimals in (6, 12, 15):
+                payload = to_bustype_dict(
+                    fit,
+                    name="r5",
+                    system_type="TN",
+                    voltage_level=0.4,
+                    decimals=decimals,
+                    rho_at_fit=100.0,
+                )
+                text = payload["impedance_formula"]
+                z_new = evaluate_spec(BusTypeSpec.from_dict(payload), grid, 137.0)
+                legacy = sp.sympify(text).subs(sp.Symbol("j"), sp.I)  # trusted text
+                z_old = np.broadcast_to(
+                    np.asarray(
+                        sp.lambdify(
+                            (sp.Symbol("f"), sp.Symbol("rho")), legacy, "numpy"
+                        )(grid, 137.0),
+                        dtype=complex,
+                    ),
+                    grid.shape,
+                )
+                scale = np.max(np.abs(z_old))
+                np.testing.assert_allclose(z_new, z_old, rtol=1e-13, atol=1e-13 * scale)
+                ref = (
+                    fit.evaluate(grid)
+                    if isinstance(fit, VectorFitResult)
+                    else fit.evaluate(137.0, grid)
+                )
+                deviation = np.max(np.abs(z_new - ref)) / np.max(np.abs(ref))
+                assert deviation < bound[decimals], (decimals, text)
+                n_formulas += 1
+    assert n_formulas >= 380

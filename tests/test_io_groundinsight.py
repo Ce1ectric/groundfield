@@ -1,10 +1,10 @@
-"""Tests for the ``groundfield`` → ``groundinsight`` bridge.
+"""Tests for the ``groundfield`` -> ``groundinsight`` bridge.
 
 Covers ADR-0008's validation programme:
 
-1. Symbol round-trip — the SymPy formula produced by the exporter
-   parses through ``groundinsight``'s validator and evaluates to the
-   same numbers as ``fit.evaluate(...)``.
+1. Symbol round-trip — the formula produced by the exporter parses
+   through ``groundinsight``'s evaluator and evaluates to the same
+   numbers as ``fit.evaluate(...)`` (relative 1e-9).
 2. JSON round-trip — ``save_bustype_json`` followed by
    ``load_bustype_json`` reproduces every numerical field bit-exact.
 3. Optional-dependency hygiene — the JSON path works without the
@@ -14,11 +14,15 @@ Covers ADR-0008's validation programme:
    ``RhoFStandardFit``, exports a ``BusType`` and verifies that
    ``groundinsight``'s evaluator reproduces the fit on the sample
    grid.
+
+and the export checks of the calendar release: readable formulas with
+``decimals`` significant digits (10.73).
+Tests that need ``groundinsight`` skip cleanly when it is missing.
 """
 
 from __future__ import annotations
 
-import importlib
+import ast
 import json
 import math
 import sys
@@ -41,7 +45,7 @@ from groundfield.postprocess.rho_f_standard import (
     RhoFStandardFit,
     fit_rho_f_standard,
 )
-from groundfield.postprocess.vector_fitting import vector_fit
+from groundfield.postprocess.vector_fitting import VectorFitResult, vector_fit
 
 
 # ---------------------------------------------------------------------
@@ -73,7 +77,7 @@ def _make_vector_fit():
     freqs = np.geomspace(1.0, 1000.0, 25)
     s = 2j * math.pi * freqs
     Z = np.full_like(s, complex(R_inf), dtype=complex)
-    for p, r in zip(poles, residues):
+    for p, r in zip(poles, residues, strict=True):
         Z = Z + r / (s - p)
     return vector_fit(
         freqs,
@@ -244,13 +248,26 @@ def test_load_rejects_future_schema_version(tmp_path) -> None:
 # ---------------------------------------------------------------------
 
 
-groundinsight = pytest.importorskip(
-    "groundinsight",
-    reason="groundinsight is an optional dependency for the bridge tests",
-)
+@pytest.fixture
+def groundinsight():
+    """The optional ``groundinsight`` package; skip the test without it."""
+    return pytest.importorskip(
+        "groundinsight",
+        reason="groundinsight is an optional dependency for the bridge tests",
+    )
 
 
-def test_rho_f_standard_formula_evaluates_through_groundinsight() -> None:
+@pytest.fixture
+def gi_compute_impedance(groundinsight):
+    """``groundinsight``'s own formula evaluator."""
+    try:
+        from groundinsight.utils.impedance_calculator import compute_impedance
+    except ImportError:  # pragma: no cover - other groundinsight layouts
+        pytest.skip("groundinsight has no utils.impedance_calculator")
+    return compute_impedance
+
+
+def test_rho_f_standard_formula_evaluates_through_groundinsight(groundinsight) -> None:
     """The exported formula must reproduce the fit at the sample points
     when fed through ``groundinsight.compute_impedance``."""
     from groundinsight.utils.impedance_calculator import compute_impedance
@@ -275,7 +292,7 @@ def test_rho_f_standard_formula_evaluates_through_groundinsight() -> None:
     assert rel < 1e-9, f"groundinsight evaluator drifted: rel={rel}"
 
 
-def test_to_bustype_returns_groundinsight_bustype() -> None:
+def test_to_bustype_returns_groundinsight_bustype(groundinsight) -> None:
     """The Python-API path returns a fully validated BusType."""
     from groundinsight.models.core_models import BusType
 
@@ -294,7 +311,7 @@ def test_to_bustype_returns_groundinsight_bustype() -> None:
     assert "rho" in bustype.impedance_formula
 
 
-def test_vector_fit_formula_evaluates_through_groundinsight() -> None:
+def test_vector_fit_formula_evaluates_through_groundinsight(groundinsight) -> None:
     """Vector-fit export with s -> j*2*pi*f must reproduce the fit."""
     from groundinsight.utils.impedance_calculator import compute_impedance
 
@@ -319,7 +336,7 @@ def test_vector_fit_formula_evaluates_through_groundinsight() -> None:
     assert rel < 1e-3, f"vector-fit formula drift: rel={rel}"
 
 
-def test_end_to_end_bustype_into_groundinsight_bus() -> None:
+def test_end_to_end_bustype_into_groundinsight_bus(groundinsight) -> None:
     """Build a Bus from the exported BusType and check it computes
     impedance over a frequency list without errors."""
     from groundinsight.models.core_models import Bus
@@ -426,3 +443,185 @@ def test_to_bustype_raises_clear_error_when_groundinsight_missing(
     # Python-API path must raise ImportError with a clear hint
     with pytest.raises(ImportError, match="groundinsight"):
         to_bustype(fit, name="x", system_type="LV", voltage_level=0.4)
+
+
+# ---------------------------------------------------------------------
+# 6. Readable formulas with ``decimals`` significant digits (10.73)
+# ---------------------------------------------------------------------
+
+
+def _complex_vector_fit() -> VectorFitResult:
+    """Complex pole pair (pass-9 F03 case) plus a real pole and ``L_inf``."""
+    pole, residue = complex(-34.0, 383.0), complex(391.0, -451.0)
+    freqs = np.array([0.0, 16.7, 50.0, 150.0, 400.0, 1000.0])
+    return VectorFitResult(
+        poles=np.array([pole, pole.conjugate(), -2.0 * math.pi * 700.0]),
+        residues=np.array([residue, residue.conjugate(), -2.0 * math.pi * 700.0 * 3.0]),
+        R_inf=12.0,
+        L_inf=2.5e-4,
+        rms_error=0.0,
+        fit_frequencies=freqs,
+        fit_values=np.zeros(freqs.size, dtype=complex),
+    )
+
+
+def _literals(formula: str) -> tuple[list[int], list[str]]:
+    """Integer literals and the source text of float literals."""
+    tree = ast.parse(formula, mode="eval")
+    constants = [n for n in ast.walk(tree) if isinstance(n, ast.Constant)]
+    ints = [n.value for n in constants if type(n.value) is int]
+    floats = [
+        ast.get_source_segment(formula, n) for n in constants if type(n.value) is float
+    ]
+    return ints, floats
+
+
+def _significant_digits(literal: str) -> int:
+    mantissa = literal.lower().split("e")[0].lstrip("+-").replace(".", "")
+    return max(len(mantissa.strip("0")), 1)
+
+
+@pytest.mark.finding("10.73")
+@pytest.mark.parametrize("decimals", [6, 12])
+def test_vector_fit_formula_prints_floats_not_long_rationals(decimals: int) -> None:
+    """0.15.0 rationalised every coefficient (``nsimplify``): integers of
+    11 to 254 digits instead of the promised ``decimals`` digits."""
+    formula = to_bustype_dict(
+        _complex_vector_fit(),
+        name="vf",
+        system_type="LV",
+        voltage_level=0.4,
+        decimals=decimals,
+        rho_at_fit=100.0,
+    )["impedance_formula"]
+    ints, floats = _literals(formula)
+    assert floats and all(_significant_digits(x) <= decimals for x in floats)
+    # integral coefficients print as integers, with at most ``decimals`` digits
+    assert all(len(str(abs(v)).rstrip("0")) <= decimals for v in ints), formula
+    fractions = [
+        n
+        for n in ast.walk(ast.parse(formula, mode="eval"))
+        if isinstance(n, ast.BinOp)
+        and isinstance(n.op, ast.Div)
+        and all(
+            isinstance(x, ast.Constant) and type(x.value) is int
+            for x in (n.left, n.right)
+        )
+    ]
+    assert not fractions, formula
+    assert "2*pi*f*j" in formula
+    assert "**3" not in formula and "**4" not in formula  # partial fractions kept
+
+
+@pytest.mark.finding("10.73")
+def test_coefficients_are_printed_correctly_rounded() -> None:
+    """Every coefficient is Python's correctly rounded ``.Ng`` text, which
+    is identical on every platform."""
+    k = {
+        "k1": 0.041700000000000015,
+        "k2": 1.2999999999999969e-4,
+        "k3": 2.1000000000000003e-3,
+        "k4": -2.2000000003160085e-07,
+        "k5": 3.3000000000000014e-06,
+    }
+    fit = RhoFStandardFit(
+        **k,
+        rms_error=0.0,
+        rms_relative=0.0,
+        sample_rho=np.array([30.0, 1000.0]),
+        sample_f=np.array([0.0, 1000.0]),
+        sample_Z=np.ones(2, dtype=complex),
+    )
+    formula = to_bustype_dict(
+        fit, name="std", system_type="TN", voltage_level=0.4, decimals=8
+    )["impedance_formula"]
+    _, floats = _literals(formula)
+
+    def text(value: float) -> str:
+        mantissa, sep, exponent = format(abs(value), ".8g").partition("e")
+        return f"{mantissa}e{int(exponent)}" if sep else mantissa
+
+    assert {text(v) for v in k.values()} <= set(floats), formula
+
+
+@pytest.mark.finding("10.73")
+@pytest.mark.parametrize("decimals, bound", [(6, 2e-5), (12, 1e-10), (15, 1e-13)])
+def test_round_trip_accuracy_follows_decimals(decimals: int, bound: float) -> None:
+    grid = np.concatenate([[0.0], np.geomspace(0.1, 2000.0, 200)])
+    for fit in (_make_vector_fit(), _complex_vector_fit(), _make_rho_f_fit()):
+        payload = to_bustype_dict(
+            fit,
+            name="acc",
+            system_type="LV",
+            voltage_level=0.4,
+            decimals=decimals,
+            rho_at_fit=100.0,
+        )
+        got = evaluate_spec(BusTypeSpec.from_dict(payload), grid, 137.0)
+        ref = (
+            fit.evaluate(grid)
+            if isinstance(fit, VectorFitResult)
+            else fit.evaluate(137.0, grid)
+        )
+        deviation = np.max(np.abs(got - ref)) / np.max(np.abs(ref))
+        assert deviation < bound, (type(fit).__name__, deviation)
+
+
+# ---------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad", [0, -3, 2.5, True])
+def test_decimals_must_be_a_positive_integer(bad) -> None:
+    with pytest.raises(
+        ValueError, match="decimals is the number of significant digits"
+    ):
+        to_bustype_dict(
+            _make_rho_f_fit(),
+            name="d",
+            system_type="LV",
+            voltage_level=0.4,
+            decimals=bad,
+        )
+
+
+def test_fit_with_non_finite_coefficients_cannot_be_exported() -> None:
+    fit = _complex_vector_fit()
+    broken = VectorFitResult(
+        poles=fit.poles,
+        residues=np.array([np.nan, np.nan, 1.0], dtype=complex),
+        R_inf=fit.R_inf,
+        L_inf=fit.L_inf,
+        rms_error=0.0,
+        fit_frequencies=fit.fit_frequencies,
+        fit_values=fit.fit_values,
+    )
+    with pytest.raises(ValueError, match="to_bustype_dict: cannot export the fit"):
+        to_bustype_dict(
+            broken, name="nan", system_type="LV", voltage_level=0.4, rho_at_fit=100.0
+        )
+
+
+def test_vector_fit_without_poles_warns_that_the_formula_is_constant() -> None:
+    fit = VectorFitResult(
+        poles=np.zeros(0, dtype=complex),
+        residues=np.zeros(0, dtype=complex),
+        R_inf=12.5,
+        L_inf=0.0,
+        rms_error=0.0,
+        fit_frequencies=np.array([0.0, 1000.0]),
+        fit_values=np.full(2, 12.5 + 0j),
+    )
+    with pytest.warns(UserWarning, match="does not depend on the frequency f"):
+        payload = to_bustype_dict(
+            fit, name="const", system_type="LV", voltage_level=0.4, rho_at_fit=100.0
+        )
+    assert payload["impedance_formula"] == "12.5"

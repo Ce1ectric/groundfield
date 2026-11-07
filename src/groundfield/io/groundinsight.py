@@ -35,8 +35,24 @@ Both fit families exported here are projected onto that symbol set:
   is a rational function of the Laplace variable
   $s = j\\,2\\pi f$. The export substitutes
   $s\\to j\\,2\\pi f$ symbolically so the resulting expression is
-  in ``f`` only (independent of ``rho``); the underlying soil is
-  recorded in the metadata block.
+  in ``f`` only (independent of ``rho``); the soil resistivity the
+  fit belongs to is recorded in the samples and metadata blocks.
+
+The exporter does not care which impedance was fitted (input
+impedance, cluster impedance or the impedance of one electrode); it
+exports the function it is given.
+
+
+Formula text
+------------
+The formula keeps the structure of the fit (partial fractions for a
+vector fit) and prints every floating-point coefficient once, rounded
+to ``decimals`` significant digits with Python's correctly rounded
+float formatting, so the text is identical on every platform. A
+coefficient therefore carries a relative rounding error of at most
+$\\tfrac12\\,10^{1-N}$ for $N$ = ``decimals``; with the default
+$N = 12$ the formula reproduces ``fit.evaluate`` to about
+$10^{-11}$ relative.
 
 Formula safety
 --------------
@@ -59,6 +75,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import metadata as _importlib_metadata
@@ -71,10 +89,7 @@ from groundfield.postprocess.rho_f_standard import (
     RhoFStandardFit,
     fit_to_sympy_standard,
 )
-from groundfield.postprocess.vector_fitting import (
-    VectorFitResult,
-    fit_to_sympy,
-)
+from groundfield.postprocess.vector_fitting import VectorFitResult
 
 
 def _resolve_groundfield_version() -> str:
@@ -126,6 +141,11 @@ class EvaluateSpecError(ValueError):
 SCHEMA_NAME = "groundfield.bustype"
 SCHEMA_VERSION = 1
 """Schema name and version of the JSON document produced by this module."""
+
+_FULL_PRECISION_DIGITS = 17
+"""Digits used inside SymPy before the single rounding at print time."""
+
+_IO_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
 # ---------------------------------------------------------------------
@@ -284,51 +304,115 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _render(expr: "sympy.Expr", *, decimals: int) -> str:
+    """Print ``expr`` with ``decimals`` significant digits per coefficient."""
+    from groundfield.io._formula import format_impedance_formula
+
+    return format_impedance_formula(expr, significant_digits=decimals)
+
+
+_POLE_PAIR_REL_TOL = 1e-3
+"""Relative tolerance for treating a pole as real or two poles as a pair.
+
+Same rule as :func:`groundfield.postprocess.vector_fitting.fit_to_sympy`.
+"""
+
+
+def _vector_fit_expression(fit: VectorFitResult) -> "sympy.Expr":
+    """Partial-fraction SymPy expression of a vector fit in ``f``.
+
+    With $s = 2\\pi j f$ (``j`` a symbol printed as the imaginary unit)
+
+    $$
+    Z = R_\\infty + L_\\infty s + \\sum_\\text{real} \\frac{r}{s - p}
+        + \\sum_\\text{pairs}
+          \\frac{2\\Re r\\,(s - \\Re p) - 2\\Im r\\,\\Im p}
+               {(s - \\Re p)^2 + (\\Im p)^2},
+    $$
+
+    one term per real pole or conjugate pole pair, matched and
+    symmetrised as :func:`fit_to_sympy` does (the residue at the pole
+    with positive imaginary part fixes the sign; a complex pole without
+    partner keeps a complex term). Unlike :func:`fit_to_sympy` the sum
+    is not passed through ``sympy.simplify``, which can merge the terms
+    into one high-order rational function (e.g. ``pi**4*f**4*j**4``):
+    the partial fractions stay readable and well conditioned.
+    """
+    import sympy as sp
+
+    s = 2 * sp.pi * sp.Symbol("j") * sp.Symbol("f")
+    poles = np.asarray(fit.poles, dtype=complex).ravel()
+    residues = np.asarray(fit.residues, dtype=complex).ravel()
+    tol = _POLE_PAIR_REL_TOL
+    terms = [sp.Float(float(fit.R_inf))]
+    if float(fit.L_inf) != 0.0:
+        terms.append(sp.Float(float(fit.L_inf)) * s)
+    used = np.zeros(poles.size, dtype=bool)
+    for k, (p, r) in enumerate(zip(poles, residues, strict=True)):
+        if used[k]:
+            continue
+        used[k] = True
+        if abs(p.imag) < tol * max(abs(p.real), 1.0):
+            terms.append(sp.Float(r.real) / (s - sp.Float(p.real)))
+            continue
+        partner, best = -1, math.inf
+        for k2 in range(k + 1, poles.size):
+            if used[k2]:
+                continue
+            d_real = abs(poles[k2].real - p.real) / max(abs(p.real), 1.0)
+            d_imag = abs(poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
+            if d_real < tol and d_imag < tol and d_real + d_imag < best:
+                partner, best = k2, d_real + d_imag
+        if partner < 0:  # complex pole without a conjugate partner
+            r_c = sp.Float(r.real) + sp.I * sp.Float(r.imag)
+            p_c = sp.Float(p.real) + sp.I * sp.Float(p.imag)
+            terms.append(r_c / (s - p_c))
+            continue
+        used[partner] = True
+        p2, r2 = poles[partner], residues[partner]
+        r_plus, r_minus = (r, r2) if p.imag > 0.0 else (r2, r)
+        re_p = sp.Float(0.5 * (p.real + p2.real))
+        im_p = sp.Float(0.5 * (abs(p.imag) + abs(p2.imag)))
+        re_r = sp.Float(0.5 * (r.real + r2.real))
+        im_r = sp.Float(0.5 * (r_plus.imag - r_minus.imag))
+        numerator = 2 * re_r * (s - re_p) - 2 * im_r * im_p
+        terms.append(numerator / ((s - re_p) ** 2 + im_p**2))
+    return sp.Add(*terms)
+
+
 def _vector_fit_to_formula_in_f(fit: VectorFitResult, *, decimals: int) -> str:
     """Convert a ``VectorFitResult`` to an ``impedance_formula`` string in ``f``.
 
     The vector fit is in the Laplace variable $s$; ``groundinsight``
     expects the formula in $f$ (Hz) with the imaginary unit ``j``.
-    The substitution $s \\to j\\,2\\pi f$ is done symbolically by
-    SymPy after :func:`fit_to_sympy` has produced the expression.
-
-    The output is rounded to ``decimals`` digits per coefficient (via
-    :func:`fit_to_sympy`) so the printed formula stays compact.
+    :func:`_vector_fit_expression` builds the partial fractions with
+    $s = 2\\pi j f$ at full float64 precision, and every coefficient is
+    rounded once, to ``decimals`` significant digits, when the text is
+    printed. No rationalisation takes place, so the coefficients stay
+    readable floats.
     """
-    import sympy as sp
-
-    expr_s = fit_to_sympy(fit, decimals=decimals)
-    s = sp.Symbol("s", complex=True)
-    f = sp.Symbol("f", real=True, positive=True)
-    j = sp.Symbol("j")  # ``groundinsight`` parses ``j`` as the imag. unit
-    # Symbolic substitution s -> j * 2 * pi * f. The resulting expression
-    # is real on the real-f axis only after groundinsight maps j to I.
-    expr_f = expr_s.subs(s, j * 2 * sp.pi * f)
-    # Light simplification — keeps the structure but combines obvious
-    # constants. ``simplify`` would expand and collapse rational
-    # second-order terms produced by ``fit_to_sympy``; we keep the
-    # cheaper ``nsimplify`` + ``expand_complex``-free form.
-    expr_f = sp.nsimplify(expr_f, rational=False)
-    return str(expr_f)
+    expr = _vector_fit_expression(fit)
+    text = _render(expr, decimals=decimals)  # raises on non-finite values
+    if not expr.free_symbols:
+        warnings.warn(
+            "the exported vector fit does not depend on the frequency f "
+            f"(Z = {float(fit.R_inf):g} Ohm): it has no poles and L_inf = 0.",
+            UserWarning,
+            skip_file_prefixes=(_IO_DIR,),
+        )
+    return text
 
 
 def _rho_f_standard_to_formula(fit: RhoFStandardFit, *, decimals: int) -> str:
     """Convert a ``RhoFStandardFit`` to an ``impedance_formula`` string.
 
     The standard form already has the canonical ``(rho, f)`` symbol
-    set used by ``groundinsight``; only the imaginary unit must be
-    spelled ``j`` (not ``I``) for the formula to round-trip through
-    ``validate_impedance_formula_value``.
+    set used by ``groundinsight``; the imaginary unit is printed as
+    ``j`` and every coefficient is rounded once, to ``decimals``
+    significant digits.
     """
-    import sympy as sp
-
-    expr = fit_to_sympy_standard(fit, decimals=decimals)
-    # ``fit_to_sympy_standard`` uses ``sp.I``; ``groundinsight`` accepts
-    # both ``I`` and ``j``, but the more common convention in the
-    # consuming code base is ``j``.
-    j = sp.Symbol("j")
-    expr = expr.subs(sp.I, j)
-    return str(expr)
+    expr = fit_to_sympy_standard(fit, decimals=_FULL_PRECISION_DIGITS)
+    return _render(expr, decimals=decimals)
 
 
 def _samples_from_vector_fit(
@@ -434,24 +518,45 @@ def _build_spec(
     rho_at_fit: Optional[float],
     electrode_name: Optional[str],
     soil_summary: Optional[str],
+    caller: str,
 ) -> BusTypeSpec:
     """Assemble a :class:`BusTypeSpec` from any supported fit object."""
+    if not isinstance(fit, (RhoFStandardFit, VectorFitResult)):
+        raise TypeError(
+            f"unsupported fit type {type(fit).__name__}; expected "
+            "RhoFStandardFit or VectorFitResult"
+        )
+    if isinstance(fit, VectorFitResult) and rho_at_fit is None:
+        raise ValueError(
+            "rho_at_fit is required for VectorFitResult exports — "
+            "the resulting BusType is bound to a specific soil "
+            "resistivity, and that value goes into samples and metadata."
+        )
+    if isinstance(decimals, bool) or int(decimals) != decimals or decimals < 1:
+        raise ValueError(
+            f"{caller}: decimals is the number of significant digits per "
+            f"coefficient and must be a positive integer, got {decimals!r}."
+        )
+    from groundfield.io._formula import parse_impedance_formula
+
+    try:
+        if isinstance(fit, RhoFStandardFit):
+            formula = _rho_f_standard_to_formula(fit, decimals=int(decimals))
+        else:
+            formula = _vector_fit_to_formula_in_f(fit, decimals=int(decimals))
+        # Self-check: the written formula must load with the safe parser.
+        parse_impedance_formula(formula, symbols=("f", "rho"))
+    except ValueError as exc:  # non-finite or out-of-range coefficients
+        raise ValueError(f"{caller}: cannot export the fit: {exc}") from exc
+
     if isinstance(fit, RhoFStandardFit):
-        formula = _rho_f_standard_to_formula(fit, decimals=decimals)
         samples = _samples_from_rho_f_standard(fit)
         metadata = _metadata_from_rho_f_standard(
             fit,
             electrode_name=electrode_name,
             soil_summary=soil_summary,
         )
-    elif isinstance(fit, VectorFitResult):
-        if rho_at_fit is None:
-            raise ValueError(
-                "rho_at_fit is required for VectorFitResult exports — "
-                "the resulting BusType is bound to a specific soil "
-                "resistivity, and that value goes into samples and metadata."
-            )
-        formula = _vector_fit_to_formula_in_f(fit, decimals=decimals)
+    else:
         samples = _samples_from_vector_fit(fit, rho_at_fit=rho_at_fit)
         metadata = _metadata_from_vector_fit(
             fit,
@@ -459,11 +564,7 @@ def _build_spec(
             electrode_name=electrode_name,
             soil_summary=soil_summary,
         )
-    else:
-        raise TypeError(
-            f"unsupported fit type {type(fit).__name__}; expected "
-            "RhoFStandardFit or VectorFitResult"
-        )
+
     return BusTypeSpec(
         name=str(name),
         description=description,
@@ -497,13 +598,11 @@ def to_bustype_dict(
     name, system_type, voltage_level, description
         Match the four scalar fields of ``groundinsight.BusType``.
     decimals
-        Number of significant digits to keep per coefficient when
-        rendering the SymPy formula. Default 12 — chosen so that the
-        round-trip through ``groundinsight.compute_impedance``
-        reproduces ``fit.evaluate(...)`` to better than $10^{-9}$
-        relative on typical impedance magnitudes. Reduce to 6 if
-        you want a shorter, human-readable formula at the cost of
-        ~$10^{-7}$ round-trip drift.
+        Significant digits of every floating-point coefficient of the
+        formula (1 to 17; larger values are treated as 17). Default 12:
+        the formula then reproduces ``fit.evaluate`` to about
+        $10^{-11}$ relative (ADR-0008 requires $10^{-9}$); 6 gives a
+        short formula with about $10^{-6}$ relative deviation.
     rho_at_fit
         Soil resistivity at which a :class:`VectorFitResult` was
         produced, in $\\Omega\\,\\mathrm{m}$. Required for vector fits;
@@ -527,6 +626,7 @@ def to_bustype_dict(
         rho_at_fit=rho_at_fit,
         electrode_name=electrode_name,
         soil_summary=soil_summary,
+        caller="to_bustype_dict",
     )
     return spec.to_dict()
 
@@ -667,6 +767,7 @@ def to_bustype(
         rho_at_fit=rho_at_fit,
         electrode_name=electrode_name,
         soil_summary=soil_summary,
+        caller="to_bustype",
     )
     return BusType(
         name=spec.name,
