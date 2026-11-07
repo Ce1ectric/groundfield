@@ -39,9 +39,13 @@ Lazy-resolution semantics
   distributions (e.g. ``presence_prob=0.7`` for an "additional
   rod" electrode that 70 % of houses receive).
 * ``gen.sample_world(rng)`` calls ``cfg.sample(rng)`` first, which
-  collapses every distribution to one constant — including
-  ``presence_prob``, which then becomes a deterministic
-  flag. Useful for persistable Monte-Carlo realisations.
+  collapses every :class:`Distribution` of the config tree to one
+  constant per realisation — also those inside the electrode specs of
+  a building type, so all buildings of that type share the drawn value
+  (since 2026.11; v0.15.0 left those to per-site draws, 10.53). Plain
+  population parameters stay per site: a ``presence_prob`` of ``0.7``
+  or a placement ``jitter_m`` still draws per site in the build, from
+  the same ``rng``. Useful for persistable Monte-Carlo realisations.
 
 Geometric layout
 ----------------
