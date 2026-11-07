@@ -494,7 +494,8 @@ def register_backend(
     summary
         One-line description.
     replace
-        Allow replacing an existing registration of ``name``.
+        Allow replacing an existing registration of ``name``; the name
+        keeps its position in :func:`available_backends`.
 
     Returns
     -------
@@ -551,8 +552,20 @@ def register_backend(
     if bad_kinds:
         raise ValueError(f"forward: unknown soil model kind(s) {bad_kinds}.")
 
+    if deprecated_alias_of is not None:
+        dependants = [
+            s.name for s in _REGISTRY.values() if s.deprecated_alias_of == name
+        ]
+        if dependants:
+            raise ValueError(
+                f"Backend(s) {dependants} are deprecated aliases of '{name}'; it "
+                "cannot become a deprecated alias itself."
+            )
     if replace and name in _REGISTRY:
-        unregister_backend(name)
+        # Re-assigning the key below keeps the registration order.
+        for alias in _REGISTRY[name].aliases:
+            _ALIASES.pop(alias, None)
+        _EXPERIMENTAL_WARNED.discard(name)
     spec = BackendSpec(
         name=name,
         solve_fn=solve_fn,

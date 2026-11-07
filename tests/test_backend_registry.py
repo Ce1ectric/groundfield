@@ -430,3 +430,48 @@ def test_backend_specific_metadata_is_kept() -> None:
     res = _solve_quietly(gf.Engine(segment_length=SEG), _rod_world(soil))
     assert {"K", "n_terms_used", "converged", "world_name"} <= set(res.metadata)
     assert np.isclose(res.metadata["K"], 0.5)
+
+
+def test_replacing_a_registration_keeps_its_position() -> None:
+    """How a later stream turns a built-in name into a deprecated alias."""
+    from groundfield.solver.registry import (
+        BackendCapabilities,
+        available_backends,
+        get_backend,
+        register_backend,
+    )
+
+    original = get_backend("bem")
+    order = available_backends(include_deprecated=True)
+    try:
+        register_backend(
+            "bem",
+            original.solve_fn,
+            capabilities=original.capabilities,
+            deprecated_alias_of="mom",
+            summary="deprecated alias (test)",
+            replace=True,
+        )
+        assert available_backends(include_deprecated=True) == order
+        assert "bem" not in available_backends()
+        with pytest.warns(DeprecationWarning, match="'mom'"):
+            res = gf.Engine(backend="bem", segment_length=SEG).solve(_rod_world())
+        assert res.metadata["effective_backend"] == "bem"
+        with pytest.raises(ValueError, match="deprecated aliases of 'mom'"):
+            register_backend(
+                "mom",
+                get_backend("mom").solve_fn,
+                capabilities=BackendCapabilities(soils={"homogeneous"}),
+                deprecated_alias_of="image",
+                replace=True,
+            )
+    finally:
+        register_backend(
+            "bem",
+            original.solve_fn,
+            capabilities=original.capabilities,
+            summary=original.summary,
+            replace=True,
+        )
+    assert get_backend("bem") == original
+    assert available_backends(include_deprecated=True) == order
