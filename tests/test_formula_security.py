@@ -583,5 +583,6 @@ def test_every_exporter_output_parses_to_its_fit_and_to_the_legacy_values() -> N
                 )
                 deviation = np.max(np.abs(z_new - ref)) / np.max(np.abs(ref))
                 assert deviation < bound[decimals], (decimals, text)
+                assert "passivity" in payload["metadata"]
                 n_formulas += 1
     assert n_formulas >= 380

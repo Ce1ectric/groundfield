@@ -16,7 +16,8 @@ Covers ADR-0008's validation programme:
    grid.
 
 and the export checks of the calendar release: readable formulas with
-``decimals`` significant digits (10.73).
+``decimals`` significant digits (10.73), the passivity check before
+export (10.40).
 Tests that need ``groundinsight`` skip cleanly when it is missing.
 """
 
@@ -26,12 +27,15 @@ import ast
 import json
 import math
 import sys
+import warnings
 
 import numpy as np
 import pytest
 
 from groundfield.io.groundinsight import (
     BusTypeSpec,
+    NonPassiveFitError,
+    NonPassiveFitWarning,
     SCHEMA_NAME,
     SCHEMA_VERSION,
     evaluate_spec,
@@ -311,6 +315,7 @@ def test_to_bustype_returns_groundinsight_bustype(groundinsight) -> None:
     assert "rho" in bustype.impedance_formula
 
 
+@pytest.mark.finding("10.40")
 def test_vector_fit_formula_evaluates_through_groundinsight(groundinsight) -> None:
     """Vector-fit export with s -> j*2*pi*f must reproduce the fit."""
     from groundinsight.utils.impedance_calculator import compute_impedance
@@ -332,8 +337,8 @@ def test_vector_fit_formula_evaluates_through_groundinsight(groundinsight) -> No
     )
     Z_ref = vf.evaluate(freqs)
     rel = np.max(np.abs(Z_gi_arr - Z_ref)) / np.max(np.abs(Z_ref))
-    # Vector fit was tight (rms ~ 1e-9); allow a small rendering margin.
-    assert rel < 1e-3, f"vector-fit formula drift: rel={rel}"
+    # ADR-0008 promises 1e-9; the test asserted 1e-3 up to 0.15.0 (10.40).
+    assert rel < 1e-9, f"vector-fit formula drift: rel={rel}"
 
 
 def test_end_to_end_bustype_into_groundinsight_bus(groundinsight) -> None:
@@ -568,6 +573,144 @@ def test_round_trip_accuracy_follows_decimals(decimals: int, bound: float) -> No
 
 
 # ---------------------------------------------------------------------
+# 7. Passivity check before export (10.40)
+# ---------------------------------------------------------------------
+
+
+_F_AP1 = np.array([0.0, 50, 150, 250, 350, 450, 550, 650, 750, 850, 1000.0])
+
+
+def _non_passive_vector_fit() -> VectorFitResult:
+    """Reviewer R5's seed-17 fit (``vf_inband_nonpassive.py``).
+
+    Passive RL-ladder data (Re Z >= 1.998 Ohm) at the 11 AP1 frequencies
+    with 0.1 % noise, ``vector_fit(n_poles=4)``: rms 4.4 mOhm, but a
+    spurious pole pair near 5.5 Hz gives Re Z < 0 between the 0 Hz and
+    50 Hz samples; the true value at 5.508 Hz is 2.004 + 0.037j Ohm.
+    The numbers are fixed here so the test does not depend on the
+    fitting algorithm.
+    """
+    pole = complex(-2.218572357914484, 34.821424546873004)
+    residue = complex(-4.552790445343534, 0.9021603844867948)
+    samples = np.array(
+        [
+            1.998255688080131 + 0j,
+            2.1476886946914426 + 0.17689342057817453j,
+            2.304836805475608 + 0.1785284128291197j,
+            2.3480377487910267 + 0.16538427090428054j,
+            2.381595418839029 + 0.162118405408961j,
+            2.3948138559040335 + 0.16899299075744767j,
+            2.4228301643829324 + 0.1802546725213413j,
+            2.437989165389994 + 0.1867137741730577j,
+            2.4532348663761128 + 0.18844664766278602j,
+            2.473486076408041 + 0.20526012235433289j,
+            2.494241447228108 + 0.20124058397191505j,
+        ]
+    )
+    return VectorFitResult(
+        poles=np.array(
+            [pole, pole.conjugate(), -8414.047102128188, -524.2350826056921]
+        ),
+        residues=np.array(
+            [residue, residue.conjugate(), -3108.4886146284425, -159.2253268178532]
+        ),
+        R_inf=2.739623036917992,
+        L_inf=0.0,
+        rms_error=0.004406512803036547,
+        fit_frequencies=_F_AP1,
+        fit_values=samples,
+    )
+
+
+@pytest.mark.finding("10.40")
+def test_in_band_non_passive_vector_fit_is_flagged_on_export() -> None:
+    fit = _non_passive_vector_fit()
+    with pytest.warns(
+        NonPassiveFitWarning, match="inside the fitted band 0 to 1000 Hz"
+    ):
+        payload = to_bustype_dict(
+            fit, name="seed17", system_type="TN", voltage_level=0.4, rho_at_fit=100.0
+        )
+    report = payload["metadata"]["passivity"]
+    assert report["passed"] is False
+    assert report["min_re_Z_Ohm"] == pytest.approx(-0.01937, abs=2e-4)
+    assert report["f_at_min_Hz"] == pytest.approx(5.507, abs=5e-3)
+    assert report["f_checked_Hz"] == [0.0, 2000.0]
+    # The samples are passive: the violation lies between the 0 and 50 Hz samples.
+    assert min(payload["samples"]["Z_real_Ohm"]) > 1.99
+    json.dumps(payload, allow_nan=False)  # the report is strict JSON
+
+
+@pytest.mark.finding("10.40")
+def test_require_passive_refuses_the_export(tmp_path) -> None:
+    fit = _non_passive_vector_fit()
+    kwargs = dict(name="seed17", system_type="TN", voltage_level=0.4, rho_at_fit=100.0)
+    with pytest.raises(NonPassiveFitError, match="not passive"):
+        to_bustype_dict(fit, require_passive=True, **kwargs)
+    path = tmp_path / "seed17.json"
+    with pytest.raises(NonPassiveFitError):
+        save_bustype_json(fit, path, require_passive=True, **kwargs)
+    assert not path.exists()
+    assert issubclass(NonPassiveFitError, ValueError)
+    assert issubclass(NonPassiveFitWarning, UserWarning)
+
+
+@pytest.mark.finding("10.40")
+def test_passive_fits_record_a_passed_check() -> None:
+    cases = [
+        (_make_rho_f_fit(), {}, [50.0, 1000.0]),
+        (_make_vector_fit(), {"rho_at_fit": 100.0}, [100.0, 100.0]),
+        (_complex_vector_fit(), {"rho_at_fit": 100.0}, [100.0, 100.0]),
+    ]
+    for fit, kwargs, rho_range in cases:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", NonPassiveFitWarning)
+            payload = to_bustype_dict(
+                fit, name="ok", system_type="LV", voltage_level=0.4, **kwargs
+            )
+        report = payload["metadata"]["passivity"]
+        assert report["passed"] is True
+        assert report["min_re_Z_Ohm"] > 0.0
+        assert report["f_checked_Hz"] == [0.0, 2000.0]
+        assert report["rho_checked_Ohm_m"] == rho_range
+
+
+@pytest.mark.finding("10.40")
+def test_standard_form_is_checked_over_its_rho_range() -> None:
+    # Re Z = rho (k1 + k4 f) + k2 f < 0 above f = -k1/k4 = 500 Hz.
+    fit = RhoFStandardFit(
+        k1=0.05,
+        k2=1e-4,
+        k3=2e-3,
+        k4=-1e-4,
+        k5=1e-6,
+        rms_error=0.0,
+        rms_relative=0.0,
+        sample_rho=np.array([30.0, 1000.0, 30.0, 1000.0]),
+        sample_f=np.array([0.0, 0.0, 1000.0, 1000.0]),
+        sample_Z=np.ones(4, dtype=complex),
+    )
+    with pytest.warns(NonPassiveFitWarning, match="rho = 1000 Ohm m"):
+        payload = to_bustype_dict(fit, name="neg", system_type="TN", voltage_level=0.4)
+    report = payload["metadata"]["passivity"]
+    assert report["passed"] is False
+    assert report["rho_at_min_Ohm_m"] == 1000.0
+    assert report["f_at_min_Hz"] == 2000.0
+    assert report["min_re_Z_Ohm"] == pytest.approx(1000.0 * (0.05 - 0.2) + 0.2)
+
+    # R5's example: Re Z < 0 only above 25 kHz, outside the checked band.
+    R, F, Z = [], [], []
+    for r in (30.0, 100.0, 300.0, 1000.0):
+        for f in (0.0, 50.0, 500.0, 1000.0):
+            R.append(r)
+            F.append(f)
+            Z.append(0.05 * r + 2e-3j * f + (-2e-6 + 3e-6j) * f * r)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", NonPassiveFitWarning)
+        payload = to_bustype_dict(
+            fit_rho_f_standard(R, F, Z), name="r5", system_type="TN", voltage_level=0.4
+        )
+    assert payload["metadata"]["passivity"]["passed"] is True
 
 
 # ---------------------------------------------------------------------
@@ -625,3 +768,4 @@ def test_vector_fit_without_poles_warns_that_the_formula_is_constant() -> None:
             fit, name="const", system_type="LV", voltage_level=0.4, rho_at_fit=100.0
         )
     assert payload["impedance_formula"] == "12.5"
+    assert payload["metadata"]["passivity"]["passed"] is True
