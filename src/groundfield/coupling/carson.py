@@ -57,11 +57,19 @@ paper:
    1926 series in that range is technically convergent but its
    recurrence is numerically delicate; quadrature is robust and
    converges to machine precision in $\\le 64$ nodes.
-3. **Large $a$** ($a > 5$) — Carson eqs. 36/37, asymptotic
-   expansion in inverse powers of $a$.
+3. **Large $a$** ($a > 15$) — Carson eqs. 36/37, asymptotic
+   expansion in inverse powers of $a$ up to $a^{-7}$ (for
+   $\\theta \\le 1.4$ rad; steeper angles stay on the quadrature).
 
-Every regime boundary is smoke-tested for continuity at
-$\\le 10^{-6}$ — see :mod:`tests.test_carson_coupling`.
+Accuracy against mpmath (review pass 10): the quadrature is
+machine-accurate for every $a > 0.25$; the asymptote is accurate to
+$\\le 10^{-7}$ above $a = 15$, so the large-$a$ boundary is continuous
+to that level. The small-$a$ form omits Carson's $a^2$ term of $Q$
+($-(\\pi/64)\\,a^2\\cos 2\\theta$) and rounds the constant to
+$-0.0386$: the boundary at $a = 0.25$ jumps by up to $2.9\\cdot10^{-3}$ in
+$Q$ (about 0.3 %, decaying $\\propto a^2$ below it). Changing it moves
+every ``carson_series`` result and is scheduled together with the
+``carson_series`` image-baseline fix (finding 10.20).
 
 Implementation notes
 --------------------
@@ -91,6 +99,7 @@ References
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 import numpy as np
 
@@ -104,7 +113,8 @@ __all__ = [
     "carson_parameter",
 ]
 
-# Vacuum permeability in H/m (CODATA 2018).
+# Vacuum permeability in H/m: the conventional 4*pi*1e-7 (the CODATA
+# 2018 value differs by 5.5e-10 relative).
 MU_0 = 4.0e-7 * math.pi
 
 # Carson eq. 35 leading offset for Q. Carson 1926 prints this as
@@ -112,9 +122,15 @@ MU_0 = 4.0e-7 * math.pi
 # constant γ_E = 0.57721566... → −0.0386078...
 _Q_OFFSET_SMALL_A = -0.0386
 
-# Regime boundaries (Carson 1926, p. 547).
+# Regime boundaries. Carson (1926, p. 547) switches to the asymptote at
+# a > 5; with the asymptote truncated after a^-7 that leaves jumps of up
+# to 1.6e-3 at a = 5 (review pass 10, finding 10.46). The quadrature is
+# machine-accurate for every a > 0.25 and theta, so the asymptote is
+# only used where its truncation error is below 1e-7 over
+# theta <= _ASYMPTOTE_THETA_MAX (measured against mpmath: 8.4e-8 at
+# a = 15, 1.1e-5 at a = 10).
 _REGIME_SMALL_MAX = 0.25
-_REGIME_LARGE_MIN = 5.0
+_REGIME_LARGE_MIN = 15.0
 # Above this angle the a > 5 asymptotic expansion degrades (measured
 # absolute errors up to ~2e-3 near the regime boundary at
 # theta ~ 89°); route through the oscillatory quadrature instead
@@ -302,10 +318,12 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
 
 
 def _p_q_large(a: float, theta: float) -> tuple[float, float]:
-    """Carson eqs. 36/37, asymptotic expansion for $a > 5$.
+    """Carson eqs. 36/37, asymptotic expansion (used for $a > 15$).
 
-    Truncates after the $1/a^7$ term, which matches Carson's own
-    Fig. 2/3 within plotting accuracy.
+    Truncated after the $1/a^7$ term. Measured against mpmath for
+    $\\theta \\le 1.4$ rad (review pass 10): worst absolute error
+    $1.6\\cdot 10^{-3}$ at $a = 5$, $1.1\\cdot 10^{-5}$ at $a = 10$,
+    $8.4\\cdot 10^{-8}$ at $a = 15$.
     """
     inv_a = 1.0 / a
     inv_a2 = inv_a * inv_a
@@ -325,11 +343,16 @@ def _p_q_large(a: float, theta: float) -> tuple[float, float]:
         + 3.0 * sqrt2_inv * cos_5t * inv_a5
         - 45.0 * sqrt2_inv * cos_7t * inv_a7
     )
+    # The a^-7 term of Q is +45 (review pass 10, finding 10.46; it was
+    # -45, which made the regime boundary jump by 4.5e-4 at a = 5): the
+    # Laplace-transform expansion of sqrt(mu^2 + j) - mu gives
+    # Q ~ (cos t)/(sqrt2 a) - (cos 3t)/(sqrt2 a^3)
+    #     + 3 (cos 5t)/(sqrt2 a^5) + 45 (cos 7t)/(sqrt2 a^7).
     Q = (
         sqrt2_inv * cos_t * inv_a
         - sqrt2_inv * cos_3t * inv_a3
         + 3.0 * sqrt2_inv * cos_5t * inv_a5
-        - 45.0 * sqrt2_inv * cos_7t * inv_a7
+        + 45.0 * sqrt2_inv * cos_7t * inv_a7
     )
     return P, Q
 
@@ -342,15 +365,17 @@ def carson_p_q(a: float, theta: float) -> tuple[float, float]:
 
     - $a \\le 0.25$: closed-form leading-term expansion (Carson
       eqs. 34/35).
-    - $0.25 < a \\le 5$: direct numerical quadrature of Carson's
+    - $0.25 < a \\le 15$: direct numerical quadrature of Carson's
       $J(p, q)$ (Gauss–Legendre for $\\theta \\approx 0$, QUADPACK
       Fourier integrator otherwise — audit 2026-07-08, WP-B2).
-    - $a > 5$: asymptotic expansion (Carson eqs. 36/37), except for
+    - $a > 15$: asymptotic expansion (Carson eqs. 36/37, $a^{-7}$
+      term of $Q$ with the corrected sign), except for
       $\\theta > 1.4$ rad where the expansion degrades and the
       quadrature path is used instead.
 
-    The regimes are continuous at the boundaries to within the
-    tolerances documented in ADR-0005 §5/§6.
+    The large-$a$ boundary is continuous to $\\le 10^{-7}$; the
+    small-$a$ boundary jumps by up to $2.9\\cdot 10^{-3}$ in $Q$ (see
+    the module docstring). Results are memoised on ``(a, theta)``.
 
     Parameters
     ----------
@@ -374,6 +399,20 @@ def carson_p_q(a: float, theta: float) -> tuple[float, float]:
     """
     if a < 0.0:
         raise ValueError(f"Carson parameter a must be non-negative, got {a}")
+    return _carson_p_q_cached(float(a), float(theta))
+
+
+@lru_cache(maxsize=1 << 16)
+def _carson_p_q_cached(a: float, theta: float) -> tuple[float, float]:
+    """Regime dispatch of :func:`carson_p_q`, memoised on ``(a, theta)``.
+
+    The assembled correction matrices evaluate the same ``(a, theta)``
+    many times (equal heights and repeated axis separations in
+    street-routed networks, and the self term of every segment), and
+    the oscillatory regime costs two QUADPACK calls with Python
+    integrands (review pass 10, finding 10.63). The cache returns the
+    identical floats, so results are bit-for-bit unchanged.
+    """
     if a == 0.0:
         return math.pi / 8.0, math.inf
     if a <= _REGIME_SMALL_MAX:

@@ -144,11 +144,23 @@ def test_assembled_self_reactance_matches_carson(rho, frequency) -> None:
 
 
 def test_assembled_self_resistance_converges_from_below() -> None:
-    """The earth-return **resistance** is positive, bounded above by
-    Carson's ω μ0 / 8, and grows toward it as the modelled line lengthens
-    (the finite-line truncation the docstring describes)."""
+    """The earth-return **resistance** is positive, bounded above by the
+    infinite-line Pollaczek value and grows toward it as the modelled
+    line lengthens (the finite-line truncation the docstring describes).
+
+    Review pass 10 (R3-15, finding 10.46): the bound used to be Carson's
+    ω μ0 / 8. For a *buried* line the limit is Pollaczek's R', which lies
+    above ω μ0 / 8 (here 1.031×); the old assertion only held because
+    the line is short.
+    """
     rho, frequency, radius, height = 10.0, 1000.0, 0.01, 1.0
+    from groundfield.references.pollaczek import pollaczek_self_impedance
+
+    r_limit = pollaczek_self_impedance(
+        rho, rho, 10.0, frequency, depth=height, gmr=radius
+    ).real
     r_carson = er.carson_earth_return_resistance(frequency)
+    assert r_limit > r_carson
 
     z_short = _assemble_self_per_metre(
         rho, frequency, height=height, radius=radius, half_length=100.0, n_seg=16
@@ -157,9 +169,9 @@ def test_assembled_self_resistance_converges_from_below() -> None:
         rho, frequency, height=height, radius=radius, half_length=180.0, n_seg=22
     )
 
-    # Positive (the historic kernel had the wrong sign) and below Carson.
-    assert 0.0 < z_short.real < r_carson
-    assert 0.0 < z_long.real < r_carson
+    # Positive (the historic kernel had the wrong sign), below the limit.
+    assert 0.0 < z_short.real < r_limit
+    assert 0.0 < z_long.real < r_limit
     # Monotone convergence toward the analytic value.
     assert z_long.real > z_short.real
     # A ±180 m line at 1 kHz / 10 Ω·m (δ ≈ 50 m) recovers most of it.

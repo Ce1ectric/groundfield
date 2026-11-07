@@ -125,13 +125,15 @@ def _reference_mutual(
 def test_self_uses_buried_kernel_not_carson_air_kernel(freq, depth):
     """R' and X' match the exp(-2 h u) kernel to 1e-5 relative.
 
-    Same head term (``ln(2h/GMR)``) on both sides, so the only thing
-    compared is the exponential kernel. Up to 0.14.1 the module used
-    ``exp(-2 h lam)``, which is off by -0.5 % (50 Hz / 0.7 m) to -15 %
-    (10 kHz / 3 m) in R'.
+    Up to 0.14.1 the module used ``exp(-2 h lam)``, which is off by
+    -0.5 % (50 Hz / 0.7 m) to -15 % (10 kHz / 3 m) in R'. Since review
+    pass 10 (finding 10.45) the module uses the exact ``K0`` head
+    instead of its small-argument form ``ln(2h/GMR)``, so it is compared
+    with the full textbook form (the ``"log"`` head is off by up to
+    -2.4 % in R' at 10 kHz / 3 m).
     """
     z = pollaczek_self_impedance(100.0, 100.0, 5.0, freq, depth=depth, gmr=GMR)
-    z_ref = _reference_self(100.0, freq, depth, GMR, head="log")
+    z_ref = _reference_self(100.0, freq, depth, GMR, head="k0")
     assert z.real == pytest.approx(z_ref.real, rel=1e-5)
     assert z.imag == pytest.approx(z_ref.imag, rel=1e-5)
 
@@ -196,14 +198,22 @@ def test_self_pinned_values_1khz():
     """Pinned R' (mΩ/m), rho = 30 Ω·m, 1 kHz, GMR = 150 mm² Al PEN.
 
     0.14.1 gave 0.9739 / 0.9685 / 0.9512 / 0.9348 (falling with depth,
-    all below omega*mu0/8 = 0.98696); 0.15.0 gives the values below.
+    all below omega*mu0/8 = 0.98696); 0.15.0 gave 0.9991 / 1.0036 /
+    1.0166 / 1.0267 with the small-argument ``ln`` head term. The values
+    below are the exact ``K0``-head form (review pass 10, finding 10.45),
+    reproduced by the independent ``_reference_self(head="k0")``.
     """
     got = [
         pollaczek_self_impedance(30.0, 30.0, 10.0, 1000.0, depth=d, gmr=GMR).real * 1e3
         for d in (0.7, 1.0, 2.0, 3.0)
     ]
-    expected = [0.9991, 1.0036, 1.0166, 1.0267]
-    assert got == pytest.approx(expected, abs=5e-4), got
+    expected = [0.99988, 1.00514, 1.02171, 1.03694]
+    assert got == pytest.approx(expected, abs=1e-5), got
+    ref = [
+        _reference_self(30.0, 1000.0, d, GMR, head="k0").real * 1e3
+        for d in (0.7, 1.0, 2.0, 3.0)
+    ]
+    assert got == pytest.approx(ref, rel=1e-6)
 
 
 @pytest.mark.parametrize("freq", [50.0, 1000.0])

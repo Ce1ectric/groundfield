@@ -1,12 +1,12 @@
-r"""Rigorous layered (Pollaczek/Sunde) earth-return line impedance reference.
+r"""Layered (Pollaczek/Sunde) earth-return line impedance reference.
 
-The per-unit-length **self** impedance of a conductor buried in a
-two-layer earth, in the rigorous Pollaczek/Sunde integral form. This is
-the layered, buried-conductor companion to
+The per-unit-length **self** and **mutual** impedances of conductors
+buried in a two-layer earth, as exact quasi-static spectral integrals.
+This is the layered, buried-conductor companion to
 :func:`groundfield.references.earth_return.carson_self_impedance`: where
 Carson gives the homogeneous equivalent-depth closed form, this gives the
-exact spectral integral over a stratified earth, and reduces to Carson in
-the homogeneous limit (``rho_1 == rho_2``).
+spectral integral over a stratified earth, and reduces to Pollaczek's
+homogeneous form for ``rho_1 == rho_2``.
 
 It is the analytic per-unit-length quantity that the assembled
 Sommerfeld/Pollaczek stack (``earth_inductive_model="sommerfeld"``) does
@@ -21,68 +21,90 @@ assembled stack's earth-return reactance can be benchmarked.
 
 Mathematical background
 -----------------------
-Integrating the Sommerfeld point Green's function along the conductor
-axis yields the Pollaczek self impedance of a conductor buried at depth
-:math:`h` with geometric mean radius :math:`\mathrm{GMR}`:
+A line current at depth :math:`h` in a two-layer earth (layer 1 of
+thickness :math:`h_1` and resistivity :math:`\rho_1` over a half-space
+:math:`\rho_2`, air above) has the quasi-static vector potential
+
+.. math::
+
+    A(y, z) \propto K_0(\gamma_k R)
+        + \int_0^\infty F(\lambda; z, h)\,\cos(\lambda y)\,d\lambda ,
+
+with :math:`\gamma_k^2 = j\omega\mu_0/\rho_k` of the conductor's layer and
+:math:`u_k = \sqrt{\lambda^2 + \gamma_k^2}`. The spectral amplitude
+:math:`F` follows exactly from the continuity of :math:`A` and
+:math:`\partial A/\partial z` at the soil surface and at the layer
+interface (Tsiamitros et al. 2005, Eq. 8). For a conductor in layer 1,
+with :math:`r_0 = (u_1-\lambda)/(u_1+\lambda)` and
+:math:`K = (u_1-u_2)/(u_1+u_2)`,
+
+.. math::
+
+    F = \frac{r_0 e^{-u_1(h+h')} + K e^{-u_1(2h_1-h-h')}
+              + r_0 K\bigl[e^{-u_1(2h_1-h+h')} + e^{-u_1(2h_1+h-h')}\bigr]}
+             {u_1\,\bigl(1 - r_0 K e^{-2u_1 h_1}\bigr)} ,
+
+and the per-unit-length self impedance is
 
 .. math::
 
     Z'_\text{self} = j\,\frac{\omega\mu_0}{2\pi}\left[
-        \ln\!\frac{2h}{\mathrm{GMR}}
-        + 2\int_0^\infty
-          \frac{e^{-2h\,u_\text{eff}(\lambda)}}{\lambda + u_\text{eff}(\lambda)}
-          \,d\lambda \right],
+        K_0(\gamma_1\,\mathrm{GMR}) + \int_0^\infty F(\lambda; h, h)\,d\lambda
+    \right].
 
-where the effective vertical wavenumber of the two-layer earth follows
-the Tagg/Sunde/Wait recursion
+Conductors in layer 2 and pairs in different layers use the
+corresponding generalised-reflection and transmission amplitudes (see
+:func:`_two_layer_amplitude`). For :math:`\rho_1 = \rho_2` the form
+reduces to the homogeneous Pollaczek integral
+:math:`K_0(\gamma\,\mathrm{GMR}) - K_0(2\gamma h)
++ 2\int_0^\infty e^{-2hu}/(\lambda+u)\,d\lambda`.
 
-.. math::
+Review pass 10 (finding 10.45) replaced two approximations of earlier
+releases:
 
-    u_\text{eff}(\lambda) = u_1\,
-        \frac{u_2 + u_1\tanh(u_1 h_1)}{u_1 + u_2\tanh(u_1 h_1)},
-    \qquad
-    u_i = \sqrt{\lambda^2 + j\omega\mu_0/\rho_i}.
+* the two-layer kernel used the *surface* wavenumber
+  :math:`u_\text{eff}` of the layered earth (Tagg/Sunde/Wait recursion,
+  :func:`layered_effective_wavenumber`) in the buried exponent,
+  :math:`e^{-2h u_\text{eff}}/(\lambda + u_\text{eff})` — exact only for
+  :math:`h \to 0` or :math:`\rho_1 = \rho_2`; it missed the lower-interface
+  term :math:`K e^{-2u_1(h_1-h)}`: :math:`R'` −0.13…−0.5 % in band near
+  an interface, −28.5 % at 1 MHz;
+* the head term was the small-argument form :math:`\ln(2h/\mathrm{GMR})`
+  of :math:`K_0(\gamma\,\mathrm{GMR}) - K_0(2\gamma h)`: :math:`R'`
+  −0.15 % (1 m) and −0.99 % (3 m) at 30 Ω·m, 1 kHz — more than the
+  documented "< 0.05 %".
 
-The :math:`\ln(2h/\mathrm{GMR})` term is the small-argument form of the
-perfect-mirror image :math:`K_0(\gamma\,\mathrm{GMR}) - K_0(2\gamma h)`;
-the integral is the finite-conductivity earth-return correction.
+Both are now exact at every frequency (quasi-static) for the same cost.
 
 Note the exponent: for a conductor **buried in the earth** the vertical
-decay of the reflected field is governed by :math:`u_\text{eff}(\lambda)`,
-not by :math:`\lambda`. The Laplace kernel :math:`e^{-2h\lambda}` is
-Carson's *air* kernel, valid only for a conductor above the interface
-(:math:`\gamma \to 0` in the upper half-space); using it below the
-interface systematically under-counts :math:`R'` and inverts the sign of
-its depth dependence (fixed in 0.15.0). Because the head term uses the
-small-argument form of the :math:`K_0` pair, the validity envelope is
-:math:`|\gamma|\,2h \ll 1` — comfortably satisfied over the
-50 Hz – 1 kHz band this package targets (< 0.05 % in :math:`R'` at
-:math:`h \le 1` m, ~0.4 % at :math:`h = 3` m against the full
-:math:`K_0` form), but degrading above ~10 kHz.
+decay of the reflected field is governed by :math:`u_1`, not by
+:math:`\lambda`. The Laplace kernel :math:`e^{-2h\lambda}` is Carson's
+*air* kernel, valid only for a conductor above the interface; using it
+below the interface under-counts :math:`R'` and inverts the sign of its
+depth dependence (fixed in 0.15.0, pass-9 F09).
 
-Like :mod:`groundfield.references.earth_return`, this returns the
-**earth-return** series impedance only (external inductance, no internal
-conductor resistance or internal inductance): pass ``gmr`` equal to the
-physical wire radius for a pure external model, and add the internal
-conductor impedance ``R'_\text{int} + jX'_\text{int}`` separately if
-required.
+Internal-inductance convention. Like
+:mod:`groundfield.references.earth_return`, this returns the
+**earth-return** series impedance, external to the conductor, for the
+geometric mean radius ``gmr``: pass ``gmr`` equal to the physical wire
+radius :math:`a` for a pure external model, or
+:math:`a\,e^{-1/4} = 0.7788\,a` to include the DC internal inductance
+:math:`\mu_0/(8\pi)` of a solid round conductor — the convention of the
+assembled inductive stack (``include_internal=True``, the default of
+:func:`groundfield.coupling.inductance.thin_wire_self_inductance`).
 
 Limiting cases (all covered by the regression tests):
 
-* ``rho_1 == rho_2``  →  ``u_eff = u_1``  →  homogeneous Pollaczek, which
-  matches :func:`carson_self_impedance` to well under 1 % in the reactance
-  across 50 Hz – 1 kHz; the earth-return resistance sits slightly
-  **above** :math:`\omega\mu_0/8` (Carson's low-frequency, surface-return
-  limit) and **rises** with burial depth and with frequency, because a
-  deeper conductor forces the return current through more soil (e.g.
-  ``rho = 30`` Ω·m, 1 kHz: 1.012·:math:`\omega\mu_0/8` at 0.7 m,
-  1.040·:math:`\omega\mu_0/8` at 3 m).
-* ``h_1 → ∞``  →  ``u_eff → u_1``  (upper layer only).
-* ``h_1 → 0``  →  ``u_eff → u_2``  (lower layer only).
-* two-layer  →  the reactance lies within the
+* ``rho_1 == rho_2`` — homogeneous Pollaczek, which matches
+  :func:`carson_self_impedance` to well under 1 % in the reactance across
+  50 Hz – 1 kHz; the earth-return resistance sits slightly **above**
+  :math:`\omega\mu_0/8` (Carson's low-frequency, surface-return limit) and
+  **rises** with burial depth and with frequency.
+* ``h_1 → ∞`` — upper layer only; ``h_1 → 0`` (conductor in layer 2) —
+  lower layer only.
+* two-layer — the reactance lies within the
   ``[carson(rho_1), carson(rho_2)]`` bracket, weighted toward the deeper,
-  more conductive layer at low frequency (the inductive return is
-  deep-layer dominated — a thin resistive topsoil is "seen through").
+  more conductive layer at low frequency.
 
 References
 ----------
@@ -104,6 +126,7 @@ import cmath
 import math
 
 from scipy.integrate import quad
+from scipy.special import kv
 
 from .earth_return import MU_0, _check_positive
 
@@ -120,8 +143,13 @@ def layered_effective_wavenumber(
 ) -> complex:
     r"""Effective vertical wavenumber :math:`u_\text{eff}(\lambda)` of a two-layer earth.
 
-    The Tagg/Sunde/Wait tanh-recursion surface term seen by a buried
-    conductor. Reduces to the homogeneous half-space value :math:`u_1` when
+    The Tagg/Sunde/Wait tanh-recursion surface term: the input
+    wavenumber of the layered earth seen from the **surface** (it sets the
+    surface reflection coefficient :math:`(u_\text{eff}-\lambda)/
+    (u_\text{eff}+\lambda)` of an overhead conductor). It is not the
+    exponent of a buried conductor's kernel — the self and mutual
+    impedances of this module use the exact buried amplitude since review
+    pass 10 (finding 10.45). Reduces to the homogeneous half-space value :math:`u_1` when
     ``rho_1 == rho_2``, to :math:`u_1` as ``h_1 → ∞`` and to :math:`u_2`
     as ``h_1 → 0``. Units: 1/m.
 
@@ -144,6 +172,128 @@ def layered_effective_wavenumber(
     return u1 * (u2 + u1 * t) / (u1 + u2 * t)
 
 
+def _wavenumbers(lam: float, rho_1: float, rho_2: float, omega: float) -> tuple:
+    """``(u_1, u_2)`` at the spectral variable ``lam`` (1/m)."""
+    u1 = cmath.sqrt(lam * lam + 1j * omega * MU_0 / rho_1)
+    u2 = cmath.sqrt(lam * lam + 1j * omega * MU_0 / rho_2)
+    return u1, u2
+
+
+def _two_layer_amplitude(
+    lam: float,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    omega: float,
+    depth_obs: float,
+    depth_src: float,
+) -> complex:
+    r"""Exact spectral amplitude $F(\lambda)$ of a buried line current.
+
+    Two-layer earth (layer 1 of thickness ``h_1`` over a half-space),
+    air above, quasi-static ($e^{+j\omega t}$). A line current at depth
+    $h'$ produces the primary field
+    $K_0(\gamma R) = \int_0^\infty \cos(\lambda y)\,e^{-u|z-h'|}/u\,d\lambda$
+    in its own layer; $F$ is the rest of the field at the observer depth
+    $h$, from the continuity of $A$ and $\partial A/\partial z$ at both
+    interfaces (Tsiamitros et al. 2005, Eq. 8 structure). With
+    $r_0 = (u_1-\lambda)/(u_1+\lambda)$ (air) and
+    $K = (u_1-u_2)/(u_1+u_2)$ (layer interface):
+
+    * both in layer 1,
+      $F = [r_0 e^{-u_1(h+h')} + K e^{-u_1(2d-h-h')}
+      + r_0 K(e^{-u_1(2d-h+h')} + e^{-u_1(2d+h-h')})]
+      / [u_1(1 - r_0 K e^{-2u_1 d})]$;
+    * both in layer 2, $F = R_\uparrow e^{-u_2(h+h'-2d)}/u_2$ with the
+      generalised upward reflection
+      $R_\uparrow = (-K + r_0 e^{-2u_1 d})/(1 - K r_0 e^{-2u_1 d})$;
+    * source in layer 1, observer in layer 2 (and, by reciprocity, the
+      reverse), $F = 2[e^{-u_1(d-h')} + r_0 e^{-u_1(d+h')}]
+      e^{-u_2(h-d)} / [(u_1+u_2)(1 - r_0 K e^{-2u_1 d})]$ — the full
+      field, there is no direct term.
+
+    For $\rho_1 = \rho_2$ every case collapses to the homogeneous
+    $r_0 e^{-u(h+h')}/u$.
+    """
+    u1, u2 = _wavenumbers(lam, rho_1, rho_2, omega)
+    d = h_1
+    r0 = (u1 - lam) / (u1 + lam)
+    K = (u1 - u2) / (u1 + u2)
+    E2 = cmath.exp(-2.0 * u1 * d)
+    in1_obs = depth_obs < d
+    in1_src = depth_src < d
+    if in1_obs and in1_src:
+        h, hp = depth_obs, depth_src
+        num = (
+            r0 * cmath.exp(-u1 * (h + hp))
+            + K * cmath.exp(-u1 * (2.0 * d - h - hp))
+            + r0
+            * K
+            * (
+                cmath.exp(-u1 * (2.0 * d - h + hp))
+                + cmath.exp(-u1 * (2.0 * d + h - hp))
+            )
+        )
+        return num / (u1 * (1.0 - r0 * K * E2))
+    if not in1_obs and not in1_src:
+        R_up = (-K + r0 * E2) / (1.0 - K * r0 * E2)
+        return R_up * cmath.exp(-u2 * (depth_obs + depth_src - 2.0 * d)) / u2
+    h1_pt, h2_pt = (depth_src, depth_obs) if in1_src else (depth_obs, depth_src)
+    num = cmath.exp(-u1 * (d - h1_pt)) + r0 * cmath.exp(-u1 * (d + h1_pt))
+    return 2.0 * num * cmath.exp(-u2 * (h2_pt - d)) / ((u1 + u2) * (1.0 - r0 * K * E2))
+
+
+def _spectral_integral(
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    omega: float,
+    depth_obs: float,
+    depth_src: float,
+    x: float,
+) -> complex:
+    r"""$\int_0^\infty F(\lambda)\cos(\lambda x)\,d\lambda$ (adaptive quadrature).
+
+    The integrand is smooth and decays exponentially; for horizontal
+    distances beyond the decay length the oscillatory tail is handled by
+    QUADPACK's Fourier rule. Breakpoints at the skin and layer scales
+    keep the adaptive rule on the transitions.
+    """
+
+    def part(lam: float, which: int) -> float:
+        v = _two_layer_amplitude(lam, rho_1, rho_2, h_1, omega, depth_obs, depth_src)
+        return v.real if which == 0 else v.imag
+
+    p1 = math.sqrt(omega * MU_0 / rho_1)
+    p2 = math.sqrt(omega * MU_0 / rho_2)
+    in1_obs, in1_src = depth_obs < h_1, depth_src < h_1
+    if in1_obs and in1_src:
+        decay = min(depth_obs + depth_src, 2.0 * h_1 - depth_obs - depth_src)
+    elif not in1_obs and not in1_src:
+        decay = depth_obs + depth_src - 2.0 * h_1
+    else:
+        decay = abs(depth_obs - depth_src)
+    decay = max(decay, 1e-3)
+    if x > 0.3 * decay:
+        re = quad(part, 0.0, math.inf, args=(0,), weight="cos", wvar=x, limit=400)[0]
+        im = quad(part, 0.0, math.inf, args=(1,), weight="cos", wvar=x, limit=400)[0]
+        return complex(re, im)
+
+    def part_cos(lam: float, which: int) -> float:
+        return part(lam, which) * math.cos(lam * x)
+
+    lam_split = 40.0 / decay
+    pts = sorted(
+        {s for s in (p1, p2, 1.0 / decay, 1.0 / max(h_1, 1e-9)) if 0.0 < s < lam_split}
+    )
+    kw = dict(limit=800, epsabs=1e-14, epsrel=1e-12)
+    re = quad(part_cos, 0.0, lam_split, args=(0,), points=pts or None, **kw)[0]
+    im = quad(part_cos, 0.0, lam_split, args=(1,), points=pts or None, **kw)[0]
+    re += quad(part_cos, lam_split, math.inf, args=(0,), **kw)[0]
+    im += quad(part_cos, lam_split, math.inf, args=(1,), **kw)[0]
+    return complex(re, im)
+
+
 def pollaczek_self_impedance(
     rho_1: float,
     rho_2: float,
@@ -155,10 +305,12 @@ def pollaczek_self_impedance(
 ) -> complex:
     r"""Layered Pollaczek earth-return **self** impedance per unit length (Ω/m).
 
-    Rigorous two-layer, buried-conductor series impedance
-    :math:`Z' = R' + jX'`; earth-return only (no internal-conductor
-    resistance or inductance — see the module docstring). Reduces to
-    :func:`carson_self_impedance` in the homogeneous limit.
+    Exact two-layer, buried-conductor series impedance
+    :math:`Z' = R' + jX'` (quasi-static), earth-return only — no internal
+    conductor resistance; the internal inductance is included only through
+    ``gmr`` (see the module docstring). Reduces to Pollaczek's homogeneous
+    form for ``rho_1 == rho_2`` and agrees with
+    :func:`carson_self_impedance` in the reactance.
 
     Parameters
     ----------
@@ -171,10 +323,13 @@ def pollaczek_self_impedance(
     frequency
         Frequency in Hz. Must be positive.
     depth
-        Burial depth of the conductor in m. Must be positive.
+        Burial depth of the conductor in m. Must be positive; a depth
+        ``>= h_1`` places the conductor in the lower layer.
     gmr
-        Geometric mean radius of the conductor in m (the physical wire
-        radius for a thin external-inductance model). Must be positive.
+        Geometric mean radius of the conductor in m: the physical wire
+        radius for an external-inductance model, ``0.7788·a`` to include
+        the internal inductance of a solid round conductor. Must be
+        positive.
 
     Returns
     -------
@@ -190,24 +345,13 @@ def pollaczek_self_impedance(
         gmr=gmr,
     )
     omega = 2.0 * math.pi * frequency
-
-    def integrand(lam: float, part: int) -> float:
-        ue = layered_effective_wavenumber(lam, rho_1, rho_2, h_1, omega)
-        # Buried-conductor (Pollaczek/Sunde) kernel: the vertical decay of
-        # the reflected field is governed by u_eff, not by lam. lam would be
-        # Carson's AIR kernel (gamma -> 0), which under-counts R'.
-        v = cmath.exp(-2.0 * depth * ue) / (lam + ue)
-        return v.real if part == 0 else v.imag
-
-    re, _ = quad(integrand, 0.0, math.inf, args=(0,), limit=200)
-    im, _ = quad(integrand, 0.0, math.inf, args=(1,), limit=200)
-    return (
-        1j
-        * omega
-        * MU_0
-        / (2.0 * math.pi)
-        * (math.log(2.0 * depth / gmr) + 2.0 * (re + 1j * im))
-    )
+    if rho_1 == rho_2:
+        rho_2, h_1 = rho_1, max(h_1, 1e3 * depth)  # one layer: no interface term
+    rho_k = rho_1 if depth < h_1 else rho_2
+    gamma = cmath.sqrt(1j * omega * MU_0 / rho_k)
+    head = complex(kv(0, gamma * gmr))
+    integral = _spectral_integral(rho_1, rho_2, h_1, omega, depth, depth, 0.0)
+    return 1j * omega * MU_0 / (2.0 * math.pi) * (head + integral)
 
 
 def pollaczek_mutual_impedance(
@@ -224,32 +368,25 @@ def pollaczek_mutual_impedance(
 
     The per-unit-length coupling impedance between two parallel buried
     conductors — each closing its current through the earth — over a
-    two-layer earth, in the same Pollaczek/Sunde spectral-integral form as
+    two-layer earth, in the same exact spectral form as
     :func:`pollaczek_self_impedance`:
 
     .. math::
 
         Z'_\text{M} = j\,\frac{\omega\mu_0}{2\pi}\left[
-            \ln\!\frac{D}{d}
-            + 2\int_0^\infty
-              \frac{e^{-(h_i+h_j)\,u_\text{eff}(\lambda)}}
-                   {\lambda + u_\text{eff}(\lambda)}
-              \cos(\lambda x)\,d\lambda \right],
+            K_0(\gamma_k d)
+            + \int_0^\infty F(\lambda; h_i, h_j)\cos(\lambda x)\,d\lambda
+        \right],
 
-    with the horizontal separation :math:`x`, the direct and mirror
-    distances
-
-    .. math::
-
-        d = \sqrt{x^2 + (h_i - h_j)^2}, \qquad
-        D = \sqrt{x^2 + (h_i + h_j)^2},
-
-    and the two-layer effective vertical wavenumber
-    :math:`u_\text{eff}(\lambda)` from
-    :func:`layered_effective_wavenumber`. The :math:`\ln(D/d)` term is the
-    perfect-mirror image pair (the small-argument form of
-    :math:`K_0(\gamma d) - K_0(\gamma D)`); the integral is the
-    finite-conductivity earth-return correction.
+    with the horizontal separation :math:`x`, the direct distance
+    :math:`d = \sqrt{x^2 + (h_i - h_j)^2}`, :math:`\gamma_k` of the common
+    layer and the exact two-layer amplitude :math:`F` (module docstring).
+    For two conductors in different layers there is no direct
+    :math:`K_0` term and :math:`F` is the transmitted amplitude. In the
+    homogeneous case the bracket is
+    :math:`K_0(\gamma d) - K_0(\gamma D) + 2\int_0^\infty
+    e^{-(h_i+h_j)u}/(\lambda + u)\cos(\lambda x)\,d\lambda` with
+    :math:`D = \sqrt{x^2 + (h_i + h_j)^2}`.
 
     This is the mutual (off-diagonal) counterpart of
     :func:`pollaczek_self_impedance`: the coupling that induces a voltage on
@@ -294,13 +431,11 @@ def pollaczek_mutual_impedance(
 
     Notes
     -----
-    Earth-return coupling only: quasi-static, no displacement current, and
-    (like the self) the layering enters solely through
-    :math:`u_\text{eff}`, which also governs the vertical decay in the
-    exponent — the buried-conductor kernel
-    :math:`e^{-(h_i+h_j)u_\text{eff}}`, not Carson's air kernel
-    :math:`e^{-(h_i+h_j)\lambda}`. As :math:`x \to \mathrm{GMR}` with
-    :math:`depth_i = depth_j` it recovers :func:`pollaczek_self_impedance`.
+    Earth-return coupling only: quasi-static, no displacement current. The
+    vertical decay in the soil is governed by :math:`u_1`, not by Carson's
+    air kernel :math:`e^{-(h_i+h_j)\lambda}`. As :math:`x \to \mathrm{GMR}`
+    with :math:`depth_i = depth_j` it recovers
+    :func:`pollaczek_self_impedance`.
     """
     _check_positive(
         rho_1=rho_1,
@@ -320,42 +455,16 @@ def pollaczek_mutual_impedance(
             "coincident conductors (separation == 0 and depth_i == depth_j); "
             "use pollaczek_self_impedance for the self case"
         )
-    big_d = math.hypot(x, depth_i + depth_j)
-
-    def integrand(lam: float, part: int) -> float:
-        ue = layered_effective_wavenumber(lam, rho_1, rho_2, h_1, omega)
-        # Buried-conductor (Pollaczek/Sunde) kernel: exp(-(h_i+h_j) u_eff),
-        # not Carson's air kernel exp(-(h_i+h_j) lam) — see the self impedance.
-        v = cmath.exp(-(depth_i + depth_j) * ue) / (lam + ue)
-        return v.real if part == 0 else v.imag
-
-    # Oscillatory cos(lam*x) tail. Use the weighted quadrature when the
-    # oscillation is resolved over the exponential decay length
-    # L = depth_i + depth_j (x >~ 0.3 L); for small x (cos ~ 1 over the
-    # decay, where the weighted rule is ill-conditioned) fold the cosine
-    # into the integrand and integrate plainly.
-    decay_len = depth_i + depth_j
-    if x > 0.3 * decay_len:
-        re, _ = quad(
-            integrand, 0.0, math.inf, args=(0,), weight="cos", wvar=x, limit=200
-        )
-        im, _ = quad(
-            integrand, 0.0, math.inf, args=(1,), weight="cos", wvar=x, limit=200
-        )
-    else:
-
-        def integrand_cos(lam: float, part: int) -> float:
-            return integrand(lam, part) * math.cos(lam * x)
-
-        re, _ = quad(integrand_cos, 0.0, math.inf, args=(0,), limit=200)
-        im, _ = quad(integrand_cos, 0.0, math.inf, args=(1,), limit=200)
-    return (
-        1j
-        * omega
-        * MU_0
-        / (2.0 * math.pi)
-        * (math.log(big_d / d) + 2.0 * (re + 1j * im))
-    )
+    if rho_1 == rho_2:
+        rho_2, h_1 = rho_1, max(h_1, 1e3 * max(depth_i, depth_j))
+    same_layer = (depth_i < h_1) == (depth_j < h_1)
+    head = 0.0j
+    if same_layer:
+        rho_k = rho_1 if depth_i < h_1 else rho_2
+        gamma = cmath.sqrt(1j * omega * MU_0 / rho_k)
+        head = complex(kv(0, gamma * d))
+    integral = _spectral_integral(rho_1, rho_2, h_1, omega, depth_i, depth_j, x)
+    return 1j * omega * MU_0 / (2.0 * math.pi) * (head + integral)
 
 
 def loop_impedance_conductor_earth(

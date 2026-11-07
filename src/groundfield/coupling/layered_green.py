@@ -428,14 +428,14 @@ def _hankel_contract_smooth(
 
 @lru_cache(maxsize=None)
 def _leggauss_cached(n: int):
-    """Gauss-Legendre-Knoten/Gewichte fuer feste Ordnung ``n`` (gecacht).
+    """Gauss-Legendre nodes and weights of fixed order ``n`` (cached).
 
-    ``numpy.polynomial.legendre.leggauss`` loest je Aufruf ein
-    Eigenwertproblem (O(n^3)). Im ADR-0007-Cross-Layer-Pfad wird die
-    Quadratur pro Segmentpaar mit denselben festen Ordnungen
-    (``n_log=32``, ``n_lin=96``) aufgerufen; ohne Cache dominiert der
-    wiederholte Knotenaufbau die Laufzeit. Die Rueckgabe wird nur
-    gelesen (keine In-place-Mutation), daher ist das Teilen sicher.
+    ``numpy.polynomial.legendre.leggauss`` solves an eigenvalue problem
+    (O(n^3)) on every call. The ADR-0007 cross-layer path calls the
+    quadrature once per segment pair with the same fixed orders
+    (``n_log=32``, ``n_lin=96``); without the cache, rebuilding the
+    nodes dominates the run time. Callers only read the returned
+    arrays (no in-place mutation), so sharing them is safe.
     """
     return np.polynomial.legendre.leggauss(n)
 

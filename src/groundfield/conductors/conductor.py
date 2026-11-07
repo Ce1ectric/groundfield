@@ -24,19 +24,48 @@ conductor as a branch with admittance $1/R_\\text{ser}$ in the
 nodal-analysis system that augments the multi-port grounding
 matrix (see ADR-0003).
 
-Coupling models (inductive Neumann coupling, Carson correction,
-capacitive coupling) live in :mod:`groundfield.coupling` and are
-**not yet** included here — only the resistive series impedance is.
+Coupling models (inductive Neumann coupling, Carson and Sommerfeld
+earth-return corrections) live in :mod:`groundfield.coupling`; this
+module holds the conductor's own series impedance. With
+``resistance_model="skin"`` (opt-in, review pass 10, finding 10.37) the
+internal impedance per unit length follows the exact solid-round Bessel
+solution (:func:`groundfield.conductors.skin.solid_round_internal_impedance`);
+the default ``"dc"`` keeps $\\rho L / A$ at every frequency.
+
+Input validation (review pass 10, findings 10.43 / 10.67): non-finite
+or non-positive physical values raise with the parameter name; a cross
+section above $10^{-2}\\,\\mathrm{m^2}$ warns (a value in mm² such as
+``cross_section=50`` would otherwise be a silent ideal short of
+6.7 nΩ); a distributed conductor must have a finite series resistance.
 """
 
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+import numpy as np
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
-__all__ = ["Conductor", "ConductorType", "SoilCoupling", "InductanceModel"]
+from groundfield.conductors.skin import solid_round_internal_impedance
+
+__all__ = [
+    "Conductor",
+    "ConductorType",
+    "SoilCoupling",
+    "InductanceModel",
+    "ResistanceModel",
+    "CrossSectionUnitWarning",
+    "MAX_PLAUSIBLE_CROSS_SECTION",
+]
 
 Point3D = tuple[float, float, float]
 
@@ -56,6 +85,31 @@ SoilCoupling = Literal[
 InductanceModel = Literal[
     "neumann",  # Neumann double-line integral, perfect-mirror earth
 ]
+
+ResistanceModel = Literal[
+    "dc",  # rho * L / A at every frequency (default)
+    "skin",  # exact solid-round internal impedance (Bessel solution)
+]
+
+#: Largest cross section in m² accepted without a warning (100 cm²).
+#: Real conductors stay far below it; a value in mm² does not.
+MAX_PLAUSIBLE_CROSS_SECTION = 1e-2
+
+_MU_0 = 4.0e-7 * math.pi
+
+
+class CrossSectionUnitWarning(UserWarning):
+    """A conductor cross section is implausibly large for m².
+
+    ``Conductor.cross_section`` is in m². A value above
+    :data:`MAX_PLAUSIBLE_CROSS_SECTION` almost always means the value
+    was given in mm² (``50`` instead of ``50e-6``), which turns the
+    conductor into an ideal short (series resistance in the nΩ range).
+    Silence with ``warnings.simplefilter("ignore", CrossSectionUnitWarning)``
+    when a huge cross section is intended (e.g. a deliberate near-ideal
+    bond).
+    """
+
 
 # A conductor whose series resistance is below this threshold (in Ω)
 # is treated as an *ideal* galvanic short by the solver. The threshold
@@ -118,8 +172,8 @@ class Conductor(BaseModel):
         description="Name of the electrode anchored at the end point.",
     )
     conductor_type: ConductorType = Field(default="generic")
-    wire_radius: float = Field(default=0.005, gt=0.0)
-    resistivity: float = Field(default=1.68e-8, gt=0.0)
+    wire_radius: float = Field(default=0.005, gt=0.0, allow_inf_nan=False)
+    resistivity: float = Field(default=1.68e-8, gt=0.0, allow_inf_nan=False)
     cross_section: float | Literal["from_radius"] | None = Field(
         default=None,
         description=(
@@ -132,6 +186,7 @@ class Conductor(BaseModel):
     discretize_segment_length: float | None = Field(
         default=None,
         gt=0.0,
+        allow_inf_nan=False,
         description=(
             "Maximum segment length used to *discretise* the conductor "
             "for the distributed-conductor model (ADR-0003). ``None`` "
@@ -174,6 +229,7 @@ class Conductor(BaseModel):
     lumped_series_resistance_ohm: float | None = Field(
         default=None,
         ge=0.0,
+        allow_inf_nan=False,
         description=(
             "Optional override for the conductor's total series "
             "resistance. ``None`` (default) keeps the geometric "
@@ -190,6 +246,100 @@ class Conductor(BaseModel):
             "conductor in the finite-impedance branch model."
         ),
     )
+    resistance_model: ResistanceModel = Field(
+        default="dc",
+        description=(
+            "Frequency dependence of the conductor's own series impedance "
+            '(review pass 10, finding 10.37). ``"dc"`` (default) keeps '
+            "$R = \\rho L/A$ and the uniform-current internal inductance "
+            "$\\mu_0/(8\\pi)$ per metre at every frequency. "
+            '``"skin"`` uses the exact internal impedance of a solid round '
+            "conductor with the same cross section "
+            "(:meth:`internal_impedance_per_length`): 150 mm² Al has "
+            "$R_\\text{ac}/R_\\text{dc}$ = 1.23 at 550 Hz and 1.55 at "
+            "1 kHz. Needs a finite ``cross_section`` and no "
+            "``lumped_series_resistance_ohm``. Stranded conductors are "
+            "approximated by the solid conductor of equal cross section; "
+            "tubular screens are not modelled."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_default_resistance_model(self, handler):
+        """Serialise ``resistance_model`` only when it is not ``"dc"``.
+
+        Keeps the JSON of every existing world byte-identical and loadable
+        by earlier releases (``extra="forbid"``); a ``"skin"`` conductor
+        still round-trips.
+        """
+        data = handler(self)
+        if isinstance(data, dict) and data.get("resistance_model") == "dc":
+            del data["resistance_model"]
+        return data
+
+    # ------------------------------------------------------------------
+    # validation (review pass 10, findings 10.43 / 10.67)
+    # ------------------------------------------------------------------
+
+    @field_validator("start", "end")
+    @classmethod
+    def _finite_point(cls, value: Point3D, info) -> Point3D:
+        if not all(math.isfinite(float(c)) for c in value):
+            raise ValueError(
+                f"{info.field_name} must have finite coordinates (m), got {value!r}"
+            )
+        return value
+
+    @field_validator("cross_section")
+    @classmethod
+    def _plausible_cross_section(cls, value):
+        if value is None or value == "from_radius":
+            return value
+        area = float(value)
+        if not math.isfinite(area) or area <= 0.0:
+            raise ValueError(
+                "cross_section must be a positive, finite area in m² "
+                f"(e.g. 50e-6 for 50 mm²), got {value!r}"
+            )
+        if area > MAX_PLAUSIBLE_CROSS_SECTION:
+            warnings.warn(
+                f"cross_section = {area:g} m² is larger than "
+                f"{MAX_PLAUSIBLE_CROSS_SECTION:g} m² — was it given in mm²? "
+                f"{area:g} mm² is {area * 1e-6:g} m². As given, the conductor "
+                "is practically an ideal short.",
+                CrossSectionUnitWarning,
+                stacklevel=2,
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _consistent_impedance_model(self) -> Conductor:
+        if self.discretize_segment_length is not None and self.is_ideal():
+            raise ValueError(
+                f"Conductor {self.name!r}: a distributed conductor "
+                f"(discretize_segment_length={self.discretize_segment_length:g} m) "
+                "needs a finite series resistance, but cross_section is "
+                f"{self.cross_section!r} (series resistance "
+                f"{self.series_resistance:.3g} ohm, at or below the ideal "
+                "threshold of 1e-6 ohm). Its segment chain would consist of "
+                "zero-resistance branches inside one fused cluster (a "
+                "singular system). Set cross_section in m² (e.g. 50e-6), or "
+                "drop discretize_segment_length to keep the conductor an "
+                "ideal bond."
+            )
+        if self.resistance_model == "skin":
+            if self.effective_cross_section is None:
+                raise ValueError(
+                    f"Conductor {self.name!r}: resistance_model='skin' needs a "
+                    "finite cross_section (m²)."
+                )
+            if self.lumped_series_resistance_ohm is not None:
+                raise ValueError(
+                    f"Conductor {self.name!r}: resistance_model='skin' cannot be "
+                    "combined with lumped_series_resistance_ohm (a lumped "
+                    "override has no conductor geometry)."
+                )
+        return self
 
     @property
     def length(self) -> float:
@@ -259,6 +409,90 @@ class Conductor(BaseModel):
         if self.cross_section is None:
             return True
         return self.series_resistance <= threshold
+
+    def internal_impedance_per_length(
+        self, frequency: float | np.ndarray
+    ) -> complex | np.ndarray:
+        r"""Internal series impedance per unit length in Ω/m.
+
+        The conductor's own longitudinal impedance $Z'_\text{int} =
+        R'(f) + j\omega L'_\text{int}(f)$, excluding the external
+        (thin-wire / earth-return) inductance of
+        :mod:`groundfield.coupling`.
+
+        - ``resistance_model="dc"``: $R' = R_\text{ser}/L$ and the
+          uniform-current internal inductance $\mu_0/(8\pi)$ — the
+          convention of
+          :func:`groundfield.coupling.inductance.thin_wire_self_inductance`
+          with ``include_internal=True``. An ideal conductor has
+          $R' = 0$.
+        - ``resistance_model="skin"``: the exact solid-round Bessel
+          solution for the radius $\sqrt{A/\pi}$ of the conducting
+          cross section
+          (:func:`~groundfield.conductors.skin.solid_round_internal_impedance`).
+
+        Parameters
+        ----------
+        frequency
+            Frequency in Hz (scalar or array, ``>= 0``).
+
+        Returns
+        -------
+        complex or np.ndarray
+            Internal impedance per unit length in Ω/m.
+        """
+        f = np.asarray(frequency, dtype=float)
+        if np.any(f < 0.0) or not np.all(np.isfinite(f)):
+            raise ValueError("frequency must be finite and >= 0")
+        if self.resistance_model == "skin":
+            area = self.effective_cross_section
+            assert area is not None  # guaranteed by the validator
+            return solid_round_internal_impedance(
+                frequency,
+                radius=math.sqrt(area / math.pi),
+                resistivity=self.resistivity,
+            )
+        length = self.length
+        r_per_m = self.series_resistance / length if length > 0.0 else 0.0
+        z = r_per_m + 1j * 2.0 * math.pi * f * _MU_0 / (8.0 * math.pi)
+        if np.ndim(frequency) == 0:
+            return complex(z)
+        return z
+
+    def skin_correction_per_length(
+        self, frequency: float | np.ndarray
+    ) -> complex | np.ndarray:
+        r"""Skin-effect correction to the DC convention, in Ω/m.
+
+        $\Delta Z' = Z'_\text{int}(f) - [R'_\text{dc} + j\omega\mu_0/(8\pi)]$:
+        what a solver that assembles $R_\text{dc}$ and the DC internal
+        inductance (``include_internal=True``) has to add per metre of
+        branch length. Zero for ``resistance_model="dc"``.
+
+        Parameters
+        ----------
+        frequency
+            Frequency in Hz (scalar or array, ``>= 0``).
+
+        Returns
+        -------
+        complex or np.ndarray
+            Correction per unit length in Ω/m.
+        """
+        f = np.asarray(frequency, dtype=float)
+        if np.any(f < 0.0) or not np.all(np.isfinite(f)):
+            raise ValueError("frequency must be finite and >= 0")
+        if self.resistance_model == "dc":
+            return 0j if np.ndim(frequency) == 0 else np.zeros(f.shape, dtype=complex)
+        area = self.effective_cross_section
+        assert area is not None
+        z = self.internal_impedance_per_length(frequency)
+        z_dc = self.resistivity / area + 1j * 2.0 * math.pi * f * _MU_0 / (
+            8.0 * math.pi
+        )
+        if np.ndim(frequency) == 0:
+            return complex(z - z_dc)
+        return z - z_dc
 
     @property
     def is_distributed(self) -> bool:

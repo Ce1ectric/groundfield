@@ -141,8 +141,9 @@ def loop_mutual_inductance_per_length(
     :func:`loop_self_inductance_per_length` instead).
 
     The same formula applies — with appropriate mean-geometric
-    distances $g_{ij}$ in place of the Schwerpunktabstände
-    $s_{ij}$ — to wires of finite cross section
+    distances $g_{ij}$ in place of the centroid distances
+    $s_{ij}$ (Oeding/Oswald: *Schwerpunktabstände*) — to wires of
+    finite cross section
     (Eq. 9.9 in Oeding/Oswald 2016). For circular cross sections
     with $r \\ll s$ the difference is negligible.
 
