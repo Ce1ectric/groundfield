@@ -20,7 +20,8 @@
   cubic spline in ln(ρ + z)); the outer quadrature of all segment pairs runs
   vectorised. Against a converged reference (200 instead of 24 ρ nodes per pair)
   it is closer than the per-pair rule: 1.7e-6 against 1.4e-5 of the largest
-  entry on a 10-house street network (two-layer earth: 2.7e-6 against 3.6e-6);
+  entry on a 10-house street network (two-layer earth: 2.7e-6 against 3.6e-6;
+  lines 1 cm below the surface: 8.0e-7 against 6.1e-5);
   the substation impedance agrees with the converged reference to 5e-10
   (per-pair rule 1.1e-8). On R8's W3 network a full solve with 11 frequencies
   takes 2.6 s instead of 27 s CPU (10 houses) and 7.8–9.1 s instead of 242 s
