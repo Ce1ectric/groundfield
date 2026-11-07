@@ -61,6 +61,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 __all__ = [
     "BLOCK_BYTES",
+    "DEFAULT_KERNEL",
     "FIELD_PIECE_BYTES",
     "MATRIX_BUDGET_BYTES",
     "NUMBA_MIN_WORK",
@@ -87,6 +88,12 @@ USE_NUMBA: bool = True
 #: Smallest series workload (rows × sources × images) handed to numba;
 #: below it the one-off compilation (about 1 s) would not pay off.
 NUMBA_MIN_WORK: int = 50_000_000
+
+#: Kernel an engine requests when it leaves the choice to the backend
+#: (``Engine.kernel = None``, the default since 2026.11, review pass 10,
+#: 10.28): the exact line-source kernel wherever a backend implements it
+#: (the image family), the backend's own kernel elsewhere.
+DEFAULT_KERNEL = "line"
 
 
 def _block_rows(n_cols: int) -> int:
@@ -943,12 +950,17 @@ def _line_field_correction(
         Q = field_quadrupole_rows(points[sl], line)
         for out, c in zip(outs, real_parts, strict=True):
             out[sl] += Q @ c
-    corr = [field_corrections(points, line, min_distance)]
-    if images:
-        corr.append(series_field_corrections(points, line, images, min_distance))
-    sparse = SparseCorrection.concatenate(corr)
-    if sparse.rows.size:
-        C = csr_matrix((sparse.values, (sparse.rows, sparse.cols)), shape=(m, n))
-        for out, c in zip(outs, real_parts, strict=True):
-            out += C @ c
+        # Sparse near corrections block by block as well (audit round 1,
+        # A1-numerics F02): their memory then stays bounded by the block.
+        pts = points[sl]
+        corr = [field_corrections(pts, line, min_distance)]
+        if images:
+            corr.append(series_field_corrections(pts, line, images, min_distance))
+        sparse = SparseCorrection.concatenate(corr)
+        if sparse.rows.size:
+            C = csr_matrix(
+                (sparse.values, (sparse.rows, sparse.cols)), shape=(pts.shape[0], n)
+            )
+            for out, c in zip(outs, real_parts, strict=True):
+                out[sl] += C @ c
     return outs

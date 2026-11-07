@@ -384,19 +384,61 @@ def near_pairs(
     ``obs_len`` may be zero (field points). The distance is computed as
     in :func:`quadrupole_block`, so a pair is either *near* here or
     corrected there, never both.
+
+    The search uses each segment's own radius: the pairs within
+    ``factor · L_j`` of every source ``j`` and those within
+    ``factor · L_i`` of every observer ``i``. Up to the audit of the
+    2026.11 work it searched every observer with the radius of the
+    longest segment of the whole set, so one conductor discretised at
+    50 m in a 16-house world turned a 0.8 s line solve into 29 s and
+    1.7 GiB (audit round 1, A1-numerics F02). The pair set is the same,
+    so the results are too.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        Observer and source indices of the near pairs, sorted by
+        observer, then source.
     """
     from scipy.spatial import cKDTree
 
-    if obs_mid.shape[0] == 0 or src_mid.shape[0] == 0:
-        return np.zeros(0, dtype=int), np.zeros(0, dtype=int)
-    radius = factor * max(float(np.max(obs_len, initial=0.0)), float(np.max(src_len)))
-    tree = cKDTree(src_mid)
-    hits = tree.query_ball_point(obs_mid, r=radius * (1.0 + 1e-9) + 1e-12)
-    counts = np.fromiter((len(h) for h in hits), dtype=int, count=len(hits))
-    if counts.sum() == 0:
-        return np.zeros(0, dtype=int), np.zeros(0, dtype=int)
-    i = np.repeat(np.arange(obs_mid.shape[0]), counts)
-    j = np.concatenate([np.asarray(h, dtype=int) for h in hits if len(h)])
+    empty = np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    n_obs, n_src = obs_mid.shape[0], src_mid.shape[0]
+    if n_obs == 0 or n_src == 0:
+        return empty
+    pad = 1.0 + 1e-9
+    found_i: list[np.ndarray] = []
+    found_j: list[np.ndarray] = []
+
+    def _collect(hits, query_index: np.ndarray, *, query_is_source: bool) -> None:
+        counts = np.fromiter((len(h) for h in hits), dtype=int, count=len(hits))
+        if counts.sum() == 0:
+            return
+        q = np.repeat(query_index, counts)
+        other = np.concatenate([np.asarray(h, dtype=int) for h in hits if len(h)])
+        found_i.append(other if query_is_source else q)
+        found_j.append(q if query_is_source else other)
+
+    # Pairs near a source: the observers within factor · L_j of source j.
+    _collect(
+        cKDTree(obs_mid).query_ball_point(src_mid, r=factor * src_len * pad + 1e-12),
+        np.arange(n_src),
+        query_is_source=True,
+    )
+    # Pairs near an observer segment: the sources within factor · L_i.
+    with_length = np.flatnonzero(obs_len > 0.0)
+    if with_length.size:
+        _collect(
+            cKDTree(src_mid).query_ball_point(
+                obs_mid[with_length], r=factor * obs_len[with_length] * pad + 1e-12
+            ),
+            with_length,
+            query_is_source=False,
+        )
+    if not found_i:
+        return empty
+    key = np.unique(np.concatenate(found_i) * n_src + np.concatenate(found_j))
+    i, j = key // n_src, key % n_src
     d = obs_mid[i] - src_mid[j]
     r2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
     lim = factor * np.maximum(obs_len[i], src_len[j])
