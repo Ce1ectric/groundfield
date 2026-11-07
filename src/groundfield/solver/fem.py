@@ -307,12 +307,18 @@ def _reduction_issues(
     Interfaces are taken from the canonical layer stack (10.48), so an
     interface between layers of equal resistivity is no reason.
     """
+
+    def label(root: str) -> str:
+        names = sorted(clusters[root])
+        shown = ", ".join(f"'{n}'" for n in names[:4])
+        return f"cluster {{{shown}{', ...' if len(names) > 4 else ''}}}"
+
     reasons: list[str] = []
     for root in active_clusters:
         members = clusters[root]
         if len(members) > 1:
             reasons.append(
-                f"cluster '{root}': {len(members)} electrodes are reduced to "
+                f"{label(root)}: {len(members)} electrodes are reduced to "
                 "one hemisphere whose radius is the sum of their radii, i.e. "
                 "their mutual resistance is neglected and the resistance is "
                 "biased low"
@@ -331,7 +337,7 @@ def _reduction_issues(
         crossed = [float(d) for d in interfaces if lo < d < hi]
         if crossed:
             reasons.append(
-                f"cluster '{root}': the electrode reaches z = {z_deep:.3g} m "
+                f"{label(root)}: the electrode reaches z = {z_deep:.3g} m "
                 f"but its equivalent hemisphere has the radius a_eq = "
                 f"{a_eq:.3g} m, and the layer interface at h = {crossed[0]:.3g} m "
                 "lies between the two, so the hemisphere injects its current "
