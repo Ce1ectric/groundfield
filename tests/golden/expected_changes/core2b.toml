@@ -6,7 +6,8 @@
 # --- 10.15 (F02): one owner per (electrode, layer) ----------------------
 # Rod 0.5-3.5 m through h_1 = 1 m in 100/1000 Ohm m: the rod carried one
 # current density above and below h_1. Measured: Zc / phi -46.5 % (point),
-# -47.5 % (line); probe potentials 25 % / 34 %; segment currents x4.
+# -48.2 % (line, with the reciprocal line-exact cross-layer correction of
+# 10.28); probe potentials 25 % / 34 %; segment currents x3.0 / x3.1.
 # Equal to the manual split into two bonded rods.
 
 [[change]]

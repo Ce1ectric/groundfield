@@ -686,11 +686,23 @@ class TwoLayerSeriesKernel:
     def matrix(
         self, seg_points: np.ndarray, seg_lengths: np.ndarray, wire_radii: np.ndarray
     ) -> np.ndarray:
-        """Reaction matrix in Ω (new array), bit-identical to v0.15.0's ``kernel(eye)``."""
+        """Reaction matrix in Ω (new array), bit-identical to v0.15.0's ``kernel(eye)``.
+
+        Within :data:`MATRIX_BUDGET_BYTES` the series matrix is kept for
+        later calls of the operator on the same geometry (``mom`` assembles
+        the matrix and then applies the operator: the series was built
+        twice per solve before).
+        """
         M = self.half_space.matrix(seg_points, seg_lengths, wire_radii)
-        S = self._series(seg_points)
-        S *= self.pref
-        M += S
+        if not self.fits(seg_points.shape[0]):
+            S = self._series(seg_points)
+            S *= self.pref
+            M += S
+            return M
+        S = self.series_matrix(seg_points)
+        rows = _block_rows(M.shape[0])
+        for i0 in range(0, M.shape[0], rows):
+            M[i0 : i0 + rows] += S[i0 : i0 + rows] * self.pref
         return M
 
     def __call__(
