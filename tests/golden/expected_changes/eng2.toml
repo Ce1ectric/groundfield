@@ -5,7 +5,7 @@
 #
 # No stored quantity moves, so this file declares no change:
 #
-# * 10.75 / 10.59 are bit-identical (all 42 stored cases identical under
+# * 10.75 / 10.59 are bit-identical (all 41 stored cases identical under
 #   GF_GOLDEN_STRICT=1 against the snapshot of the wave-2 base dcfa572,
 #   and 47 further snapshot results in the eng2 evidence script e01).
 # * 10.76: `cim` runs the image auto-dispatch and is bit-identical to it on
