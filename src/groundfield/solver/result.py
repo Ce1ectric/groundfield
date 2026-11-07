@@ -559,15 +559,9 @@ class FieldResult(BaseModel):
                 "FieldResult.soil_resistivity is not set — homogeneous "
                 "image-charge evaluation requires it."
             )
-        image_sources = sources.copy()
-        image_sources[:, 2] = -image_sources[:, 2]
-        diff_real = pts[:, None, :] - sources[None, :, :]
-        diff_image = pts[:, None, :] - image_sources[None, :, :]
-        r_real = np.linalg.norm(diff_real, axis=2)
-        r_image = np.linalg.norm(diff_image, axis=2)
-        np.maximum(r_real, min_distance, out=r_real)
-        np.maximum(r_image, min_distance, out=r_image)
-        kernel = (1.0 / r_real) + (1.0 / r_image)
+        from groundfield.solver._kernels import _point_field_kernel
+
+        kernel = _point_field_kernel(pts, sources, min_distance)
         return (rho / (4.0 * np.pi)) * (
             kernel @ currents.real + 1j * (kernel @ currents.imag)
         )
@@ -592,7 +586,6 @@ class FieldResult(BaseModel):
         +25 % at z = 12 m for K = +0.818, h_1 = 5 m). Pure
         upper-layer evaluations are bit-exact to the historic path.
         """
-        K = soil.reflection_coefficient
         h_1 = soil.h_1
         rho_1 = soil.rho_1
 
@@ -636,40 +629,12 @@ class FieldResult(BaseModel):
                 phi[~pts_l1] += G @ currents[src_l1]
             return phi
 
-        diff_xy = pts[:, None, 0:2] - sources[None, :, 0:2]
-        delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)
-        z_field = pts[:, 2:3]
-        z_src = sources[None, :, 2]
+        from groundfield.solver._kernels import _series_field
+        from groundfield.solver._series import ImageSeries
 
-        def _series_for(real_currents: np.ndarray) -> np.ndarray:
-            """Core series for a real-valued current distribution."""
-            phi = np.zeros(pts.shape[0], dtype=float)
-            # n = 0 (two images, weight 1)
-            for sign_zs in (+1, -1):
-                z_img = sign_zs * z_src
-                r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-                np.maximum(r, min_distance, out=r)
-                phi += (1.0 / r) @ real_currents
-            # n = 1, 2, ...
-            abs_K = abs(K)
-            for n in range(1, max_terms + 1):
-                K_n = K**n
-                acc = np.zeros(pts.shape[0], dtype=float)
-                for sign_n in (+1, -1):
-                    for sign_zs in (+1, -1):
-                        z_img = sign_n * 2.0 * n * h_1 + sign_zs * z_src
-                        r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-                        np.maximum(r, min_distance, out=r)
-                        acc += (1.0 / r) @ real_currents
-                phi += K_n * acc
-                # Geometric tail bound |K|^(n+1)/(1-|K|) — consistent
-                # with the solver-side criterion in image_2layer.
-                if abs_K < 1.0 and abs_K ** (n + 1) / (1.0 - abs_K) < tol:
-                    break
-            return phi
-
-        phi_re = _series_for(currents.real)
-        phi_im = _series_for(currents.imag)
+        series = ImageSeries.for_soil(soil, max_terms, tol)
+        phi_re = _series_field(pts, sources, currents.real, series, min_distance)
+        phi_im = _series_field(pts, sources, currents.imag, series, min_distance)
         return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)
 
     # ------------------------------------------------------------------

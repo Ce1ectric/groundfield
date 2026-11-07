@@ -16,6 +16,8 @@ from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Sequence
 
+    from groundfield.solver._series import ImageSeries
+
 __all__: list[str] = []
 
 # ---------------------------------------------------------------------
@@ -167,4 +169,97 @@ def _self_corrected_kernel(
     np.fill_diagonal(kernel, diag_direct + diag_image)
 
     phi = (rho / (4.0 * np.pi)) * (kernel @ currents)
+    return phi
+
+
+# ---------------------------------------------------------------------
+# Field kernels (potential at arbitrary points, post-solve)
+# ---------------------------------------------------------------------
+
+
+def _point_field_kernel(
+    points: np.ndarray, sources: np.ndarray, min_distance: float
+) -> np.ndarray:
+    """Unscaled half-space point kernel ``1/r + 1/r'`` at field points.
+
+    Parameters
+    ----------
+    points
+        Field points in m, shape ``(M, 3)``.
+    sources
+        Point-source positions in m, shape ``(N, 3)``, depth ``z > 0``.
+    min_distance
+        Clamp for both distances in m (field evaluations only).
+
+    Returns
+    -------
+    numpy.ndarray
+        Kernel in 1/m, shape ``(M, N)``; the potential is
+        ``rho/(4π) · kernel @ I``.
+    """
+    image_sources = sources.copy()
+    image_sources[:, 2] = -image_sources[:, 2]
+    diff_real = points[:, None, :] - sources[None, :, :]
+    diff_image = points[:, None, :] - image_sources[None, :, :]
+    r_real = np.linalg.norm(diff_real, axis=2)
+    r_image = np.linalg.norm(diff_image, axis=2)
+    np.maximum(r_real, min_distance, out=r_real)
+    np.maximum(r_image, min_distance, out=r_image)
+    return (1.0 / r_real) + (1.0 / r_image)
+
+
+def _series_field(
+    points: np.ndarray,
+    sources: np.ndarray,
+    real_currents: np.ndarray,
+    series: ImageSeries,
+    min_distance: float,
+) -> np.ndarray:
+    """Unscaled Tagg/Sunde potential of real currents at field points.
+
+    Accumulates, per series index ``n``, the four images of
+    :meth:`ImageSeries.layer_terms` before weighting them with
+    :math:`K^n` (``phi += K^n · Σ_4 (1/r) @ I``), after the ``n = 0``
+    pair. Valid for field points and sources in the upper layer.
+
+    Parameters
+    ----------
+    points
+        Field points in m, shape ``(M, 3)``.
+    sources
+        Point-source positions in m, shape ``(N, 3)``.
+    real_currents
+        Real currents in A, shape ``(N,)`` or ``(N, J)``.
+    series
+        The image series.
+    min_distance
+        Distance clamp in m.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``Σ`` of weighted ``1/r`` in A/m, shape ``(M,)`` or ``(M, J)``;
+        the potential is ``rho_1/(4π)`` times this.
+    """
+    diff_xy = points[:, None, 0:2] - sources[None, :, 0:2]
+    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)
+    z_field = points[:, 2:3]
+    z_src = sources[None, :, 2]
+    shape = (points.shape[0],) + real_currents.shape[1:]
+    phi = np.zeros(shape, dtype=float)
+    # n = 0 (two images, weight 1)
+    for term in series.surface_terms():
+        z_img = term.sign * z_src
+        r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
+        np.maximum(r, min_distance, out=r)
+        phi += (1.0 / r) @ real_currents
+    # n = 1, 2, ...
+    for quad in series.iter_layer_terms():
+        acc = np.zeros(shape, dtype=float)
+        for term in quad:
+            z_img = term.offset + term.sign * z_src
+            r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
+            np.maximum(r, min_distance, out=r)
+            acc += (1.0 / r) @ real_currents
+        phi += quad[0].weight * acc
     return phi

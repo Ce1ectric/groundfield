@@ -34,21 +34,27 @@ $K = 0$) — usable as a consistency test.
 
 Convergence
 -----------
-Series terms decay as $K^n$ (geometric). For $|K| < 1$,
-typically $n \\lesssim 50$ is enough for a relative accuracy of
-$10^{-6}$. The implementation truncates after ``max_terms``
-terms or as soon as $|K|^n < \\text{tol}$. If ``max_terms`` is
-hit without reaching the tolerance, a warning is recorded in
-``FieldResult.metadata``.
+Series terms decay as $K^n$ (geometric). The series is owned by
+:class:`~groundfield.solver._series.ImageSeries`: it stops after the
+first $n$ whose geometric tail bound $|K|^{n+1}/(1-|K|)$ falls below
+``tol``, or at ``max_terms``; ``FieldResult.metadata`` reports
+``n_terms_used`` and ``converged``, and a
+:class:`SeriesTruncationWarning` is emitted when the cap is reached.
 
-Preconditions
--------------
-- All electrodes must lie completely in the **upper layer**
-  ($z_\\text{seg} < h_1$); otherwise the backend raises a clear
-  ``ValueError``.
+Geometry
+--------
+- Electrodes inside the **upper layer** ($z_\\text{seg} < h_1$) use
+  the image series above.
+- As soon as a segment reaches the interface, every source/observer
+  pair is evaluated with the rigorous Sommerfeld kernel of ADR-0007
+  (segments are split at $h_1$ first).
 - For $|K| \\to 1$ (extreme contrasts, e.g. wet soil over rock)
-  convergence slows down significantly. The solver issues a log
-  warning in that case.
+  convergence slows down significantly; raise
+  ``Engine.image_max_terms``.
+
+The solve flow itself is the shared image-family pipeline of
+:mod:`groundfield.solver._pipeline`; this module supplies the
+two-layer Green's function.
 
 References
 ----------
@@ -60,28 +66,21 @@ References
 
 from __future__ import annotations
 
-import math
 import warnings
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import HomogeneousSoil, TwoLayerSoil
-from groundfield.solver.image import (
-    _MIN_DISTANCE,
-    _assemble_inductance_matrix,
-    _build_clusters,
-    _build_distributed_topology,
-    _build_finite_branches,
-    _check_segment_depths,
-    _discretize_electrode,
-    _require_image_separation,
-    _self_corrected_kernel,
-    _Segment,
-    _solve_cluster_currents,
-    _weighted_node_potential,
+from groundfield.soil.models import TwoLayerSoil
+from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
+from groundfield.solver._kernels import _self_corrected_kernel
+from groundfield.solver._pipeline import solve_image_family
+from groundfield.solver._series import ImageSeries
+from groundfield.solver._series import (
+    SeriesTruncationWarning as SeriesTruncationWarning,
 )
-from groundfield.solver.result import FieldResult, PointSource
+from groundfield.solver._series import _series_tail_bound as _series_tail_bound
+from groundfield.solver.result import FieldResult
 from groundfield.utils.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -93,36 +92,6 @@ __all__ = ["solve_image_2layer", "SeriesTruncationWarning"]
 _log = get_logger(__name__)
 
 
-class SeriesTruncationWarning(UserWarning):
-    """The Tagg/Sunde image series hit ``max_terms`` before ``tol``.
-
-    Emitted (in addition to the logger record) whenever a backend
-    truncates the two-layer image-charge series without reaching the
-    requested tail tolerance — typically at high layer contrast
-    (:math:`|K| \\to 1`). Silence with
-    ``warnings.simplefilter("ignore", SeriesTruncationWarning)`` or
-    raise ``Engine.image_max_terms``.
-    """
-
-
-def _series_tail_bound(abs_K: float, n: int) -> float:
-    """Upper bound of the neglected series tail after term ``n``.
-
-    The image weights are :math:`K^m`; the neglected tail is bounded
-    by the geometric remainder
-
-    .. math:: \\sum_{m > n} |K|^m = \\frac{|K|^{n+1}}{1 - |K|}.
-
-    This replaces the historic per-term test :math:`|K|^n < tol`,
-    which underestimates the remainder by the factor
-    :math:`1/(1-|K|)` — a factor 17 at the AP1 corner soil
-    :math:`|K| = 0.94`.
-    """
-    if abs_K >= 1.0:  # defensive; |K| < 1 for finite resistivities
-        return math.inf
-    return abs_K ** (n + 1) / (1.0 - abs_K)
-
-
 # ---------------------------------------------------------------------
 # 2-layer kernel
 # ---------------------------------------------------------------------
@@ -132,6 +101,9 @@ def _two_layer_image_offsets(
     K: float, h_1: float, max_terms: int, tol: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     """Generate the series coefficients for the image-charge sum.
+
+    Thin wrapper around :meth:`ImageSeries.offsets` (kept for the
+    sibling backends that import it).
 
     Returns
     -------
@@ -145,27 +117,9 @@ def _two_layer_image_offsets(
         Last evaluated $n$. ``n_terms_used == max_terms`` means
         the tolerance was not reached.
     """
-    pairs: list[tuple[float, int, float]] = [
-        (0.0, +1, 1.0),  # z = +z_src
-        (0.0, -1, 1.0),  # z = -z_src
-    ]
-
-    abs_K = abs(K)
-    n_terms_used = 0
-    for n in range(1, max_terms + 1):
-        K_n = K**n
-        # Four images per n
-        for sign_n in (+1, -1):
-            for sign_zs in (+1, -1):
-                pairs.append((sign_n * 2.0 * n * h_1, sign_zs, K_n))
-        n_terms_used = n
-        if _series_tail_bound(abs_K, n) < tol:
-            break
-
-    z_offsets = np.array([p[0] for p in pairs], dtype=float)
-    sign_zs_arr = np.array([p[1] for p in pairs], dtype=float)
-    weights_arr = np.array([p[2] for p in pairs], dtype=float)
-    return z_offsets, sign_zs_arr, weights_arr, n_terms_used
+    series = ImageSeries.from_coefficients(K, h_1, max_terms, tol)
+    z_offsets, sign_zs_arr, weights = series.offsets()
+    return z_offsets, sign_zs_arr, weights, series.n_terms
 
 
 def _two_layer_potential_kernel(
@@ -260,9 +214,8 @@ def _two_layer_self_kernel_factory(
         ``z_max < h_1``.
     """
     rho_1 = soil.rho_1
-    K = soil.reflection_coefficient
     h_1 = soil.h_1
-    abs_K = abs(K)
+    series = ImageSeries.for_soil(soil, max_terms, tol)
 
     # Cache for the (current-independent) cross-layer matrices: the
     # per-frequency and per-excitation kernel calls within one solve
@@ -303,16 +256,12 @@ def _two_layer_self_kernel_factory(
         # (N, M) — Engine B's matrix assembly passes an identity
         # matrix to obtain the full reaction matrix in one call.
         extra = np.zeros_like(phi)
-        for n in range(1, max_terms + 1):
-            K_n = K**n
-            for sign_n in (+1, -1):
-                for sign_zs in (+1, -1):
-                    z_img = sign_n * 2.0 * n * h_1 + sign_zs * z_src
-                    r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-                    np.maximum(r, _MIN_DISTANCE, out=r)
-                    extra += K_n * ((1.0 / r) @ currents)
-            if _series_tail_bound(abs_K, n) < tol:
-                break
+        for quad in series.iter_layer_terms():
+            for term in quad:
+                z_img = term.offset + term.sign * z_src
+                r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
+                np.maximum(r, _MIN_DISTANCE, out=r)
+                extra += term.weight * ((1.0 / r) @ currents)
 
         extra *= rho_1 / (4.0 * np.pi)
         return phi + extra
@@ -466,9 +415,9 @@ def _layered_green_kernel(
             continue
         z_lo = z_i - 0.5 * L_i
         delta_G = 0.0
-        for a, w_a in zip(gl3_nodes, gl3_weights):
+        for a, w_a in zip(gl3_nodes, gl3_weights, strict=True):
             z_a = z_lo + a * L_i
-            for b, w_b in zip(gl3_nodes, gl3_weights):
+            for b, w_b in zip(gl3_nodes, gl3_weights, strict=True):
                 z_b = z_lo + b * L_i
                 delta_G += (
                     w_a
@@ -515,7 +464,6 @@ def _build_phi_hom_per_source_rho(
     correct ``rho_local·1/r`` near-source behaviour in each
     column.
     """
-    n = seg_points.shape[0]
     image_points = seg_points.copy()
     image_points[:, 2] = -image_points[:, 2]
 
@@ -553,6 +501,108 @@ def _build_phi_hom_per_source_rho(
 # ---------------------------------------------------------------------
 
 
+class _TwoLayerGreen:
+    """Green's function of the two-layer soil (pipeline object).
+
+    Inside the upper layer the reaction kernel is the Tagg/Sunde image
+    series (:class:`~groundfield.solver._series.ImageSeries`); as soon
+    as a segment reaches the interface the kernel switches to the
+    rigorous Sommerfeld path of ADR-0007 for every pair.
+    """
+
+    backend = "image_2layer"
+    where = "solve_image_2layer"
+
+    def __init__(self, soil: TwoLayerSoil, max_terms: int, tol: float, ds: float):
+        self.soil = soil
+        self.max_terms = max_terms
+        self.tol = tol
+        self.ds = ds
+        self.layer_interfaces = (soil.h_1,)
+        self.soil_resistivity = float(soil.rho_1)
+        self.reference_resistivity = float(soil.rho_1)
+        self.series = ImageSeries.for_soil(soil, max_terms, tol)
+
+    def prepare(self, segments, arrays, *, stacklevel: int):  # noqa: ANN001
+        """Detect cross-layer geometry and build the reaction kernel."""
+        h_1 = self.soil.h_1
+        ds = self.ds
+        # ADR-0007: when all segments live inside the upper layer the
+        # historic Tagg/Sunde image series is used (bit-exact
+        # regression). When any segment is at or below the interface,
+        # the kernel dispatches to the rigorous Sommerfeld path.
+        z_max = arrays.points[:, 2].max()
+        cross_layer = bool(z_max >= h_1)
+        if cross_layer:
+            _log.info(
+                "image_2layer: cross-layer geometry detected "
+                "(z_max = %.3f m, h_1 = %.3f m). Using ADR-0007 "
+                "Sommerfeld fallback for all source/observer pairs.",
+                z_max,
+                h_1,
+            )
+        elif h_1 - z_max < 2.0 * ds:
+            # Audit 2026-07-08 WP-D2: within ~one segment of the
+            # interface the point-source treatment of the K-weighted
+            # nearest image (distance 2(h_1 − z)) degrades. Surface the
+            # margin so the user can refine ds or accept the bias.
+            warnings.warn(
+                f"image_2layer: deepest segment ends {h_1 - z_max:.2f} m "
+                f"above the layer interface (h_1 = {h_1:.2f} m), which is "
+                f"less than 2×segment_length ({2.0 * ds:.2f} m). The "
+                "image-series self-terms near the interface carry an "
+                "elevated discretisation error there — consider a finer "
+                "segment_length.",
+                UserWarning,
+                stacklevel=stacklevel,
+            )
+        # Tag every segment with its layer index (0 = upper, 1 = lower).
+        for s in segments:
+            s.layer_index = 0 if s.midpoint[2] < h_1 else 1
+        return _two_layer_self_kernel_factory(
+            self.soil, self.max_terms, self.tol, allow_cross_layer=cross_layer
+        )
+
+    def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
+        """Soil parameters and the series convergence report."""
+        soil = self.soil
+        K = soil.reflection_coefficient
+        n_terms_used = 0
+        if any(np.any(sc) for sc in solution.segment_currents):
+            n_terms_used = self.series.n_terms
+        converged = (
+            _series_tail_bound(abs(K), n_terms_used) < self.tol
+            if n_terms_used
+            else True
+        )
+        if not converged:
+            tail = _series_tail_bound(abs(K), n_terms_used)
+            _log.warning(
+                "image_2layer: max_terms=%d reached, series tail bound "
+                "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e. Result may be "
+                "inaccurate.",
+                self.max_terms,
+                tail,
+                self.tol,
+            )
+            warnings.warn(
+                f"image_2layer: the Tagg/Sunde image series was truncated "
+                f"at max_terms={self.max_terms} with a remaining tail bound "
+                f"of {tail:.2e} > tol={self.tol:.2e} (|K| = {abs(K):.3f}). "
+                "Raise Engine.image_max_terms for high layer contrasts.",
+                SeriesTruncationWarning,
+                stacklevel=stacklevel,
+            )
+        return {
+            "K": float(K),
+            "rho_1": float(soil.rho_1),
+            "rho_2": float(soil.rho_2),
+            "h_1": float(soil.h_1),
+            "n_terms_used": n_terms_used,
+            "converged": converged,
+        }
+
+
 def solve_image_2layer(
     world: "World",
     engine: "Engine",
@@ -562,24 +612,44 @@ def solve_image_2layer(
 ) -> FieldResult:
     """Image-charge solver for 2-layer soil (Tagg / Sunde).
 
+    Runs the shared image-family pipeline
+    (:mod:`groundfield.solver._pipeline`) with the two-layer Green's
+    function.
+
     Parameters
     ----------
     world
-        World whose ``soil`` is a :class:`TwoLayerSoil`. All electrodes
-        must lie inside the upper layer.
+        World whose ``soil`` is a :class:`TwoLayerSoil`. Electrodes in
+        the upper layer use the Tagg/Sunde series; geometries reaching
+        the interface use the ADR-0007 Sommerfeld path.
     engine
         Engine configuration. ``engine.segment_length`` controls the
         discretisation as in the homogeneous backend.
     max_terms
         Maximum number of series terms.
     tol
-        Series truncation: stop as soon as $|K|^n < \\text{tol}$.
+        Series truncation: stop as soon as the geometric tail bound
+        $|K|^{n+1}/(1-|K|)$ falls below ``tol``.
 
     Returns
     -------
     FieldResult
         Result object. :attr:`FieldResult.metadata` exposes diagnostic
-        fields (``backend``, ``K``, ``n_terms_used``, ``converged``).
+        fields (``K``, ``rho_1``, ``rho_2``, ``h_1``, ``n_terms_used``,
+        ``converged``).
+
+    Raises
+    ------
+    TypeError
+        If the soil is not a :class:`TwoLayerSoil`.
+    ValueError
+        If the world has no electrodes, or the geometry fails a
+        discretisation guard (thin wire, burial depth).
+
+    Warns
+    -----
+    SeriesTruncationWarning
+        If the series reaches ``max_terms`` before ``tol``.
     """
     if not isinstance(world.soil, TwoLayerSoil):
         raise TypeError(
@@ -590,351 +660,12 @@ def solve_image_2layer(
         raise ValueError("World contains no electrodes.")
 
     soil: TwoLayerSoil = world.soil
-    h_1 = soil.h_1
-    K = soil.reflection_coefficient
-    ds = engine.segment_length
-
     _log.info(
         "image_2layer: rho_1=%.1f, rho_2=%.1f, h_1=%.2f, K=%.4f",
         soil.rho_1,
         soil.rho_2,
-        h_1,
-        K,
+        soil.h_1,
+        soil.reflection_coefficient,
     )
-
-    # 1) Discretisation — identical to the homogeneous backend, but
-    #    with segments split at the layer interface (ADR-0007 step 1,
-    #    audit 2026-07-08 WP-D2) so no segment straddles h_1.
-    all_segments: list[_Segment] = []
-    elec_to_segidx: dict[str, list[int]] = {}
-    for e in world.electrodes:
-        segs = _discretize_electrode(e, ds, layer_interfaces=(h_1,))
-        elec_to_segidx[e.name] = list(
-            range(len(all_segments), len(all_segments) + len(segs))
-        )
-        all_segments.extend(segs)
-
-    # 2) Per-electrode input currents from sources
-    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
-    n_ignored_sources = 0
-    for src in world.sources:
-        if src.kind != "current":
-            n_ignored_sources += 1
-            continue
-        i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
-        if src.attached_to in elec_input_current:
-            elec_input_current[src.attached_to] += i_complex
-    if n_ignored_sources:
-        warnings.warn(
-            f"image_2layer: {n_ignored_sources} non-current source(s) "
-            "ignored — only CurrentSource is supported.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    # 3) Cluster building (ideal conductors only) and finite-impedance
-    #    branch list (passed into the nodal-analysis solver).
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
-    finite_branches = _build_finite_branches(world.conductors, cluster_id)
-
-    # 3b) Distributed-conductor topology (ADR-0003) + ADR-0004
-    #     inductive coupling assembly.
-    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
-        world.conductors, cluster_id
-    )
-    pseudo_owners: list[str] = []
-    for s in cond_segs:
-        pn = s.electrode_name
-        elec_to_segidx[pn] = [len(all_segments)]
-        all_segments.append(s)
-        cluster_id[pn] = pn
-        pseudo_owners.append(pn)
-    for n_ in interior_nodes:
-        if n_ not in cluster_id:
-            cluster_id[n_] = n_
-            pseudo_owners.append(n_)
-            elec_to_segidx[n_] = []
-    n_lumped_branches = len(finite_branches)
-    distributed_branch_tuples = [
-        (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
-    ]
-    finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
-    sigma_earth_for_carson: float | None = None
-    layered_earth_for_sommerfeld: object = None
-    if earth_inductive_model == "carson_series":
-        from groundfield.coupling import resolve_earth_conductivity
-
-        sigma_earth_for_carson = resolve_earth_conductivity(world.soil)
-    elif earth_inductive_model == "sommerfeld":
-        from groundfield.coupling import resolve_earth_layers
-
-        layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = (
-        _assemble_inductance_matrix(
-            distributed_branches_objs,
-            n_lumped_branches=n_lumped_branches,
-            n_total_branches=len(finite_branches),
-            earth_model=earth_inductive_model,
-            sigma_earth=sigma_earth_for_carson,
-            layered_earth=layered_earth_for_sommerfeld,
-        )
-    )
-
-    seg_points = np.array([s.midpoint for s in all_segments])
-    seg_lengths = np.array([s.length for s in all_segments])
-    wire_radii = np.array([s.wire_radius for s in all_segments])
-
-    # Burial-depth validation (audit 2026-07-28, F26/F29). The air
-    # mirror of the Tagg/Sunde series is the same perfect mirror as in
-    # the homogeneous backend, so the same finite-image-separation
-    # requirement 2 z >> a applies to every leakage segment.
-    _check_segment_depths(all_segments, where="solve_image_2layer")
-    # ADR-0012 V2: per-segment radial shell coefficient. Zero for
-    # any segment that does not belong to a concrete-encased
-    # foundation electrode — historic case preserved bit-exact.
-    seg_shell_coeffs = np.array(
-        [s.concrete_shell_coefficient_ohm_m for s in all_segments],
-        dtype=float,
-    )
-
-    # ADR-0007: detect cross-layer geometry. When all segments live
-    # inside the upper layer, the historic Tagg/Sunde image series
-    # is used (bit-exact regression). When any segment is at or
-    # below the interface, the kernel automatically dispatches to
-    # the rigorous Sommerfeld path.
-    z_max = seg_points[:, 2].max()
-    cross_layer = bool(z_max >= h_1)
-    if cross_layer:
-        _log.info(
-            "image_2layer: cross-layer geometry detected "
-            "(z_max = %.3f m, h_1 = %.3f m). Using ADR-0007 "
-            "Sommerfeld fallback for all source/observer pairs.",
-            z_max,
-            h_1,
-        )
-    elif h_1 - z_max < 2.0 * ds:
-        # Audit 2026-07-08 WP-D2: within ~one segment of the
-        # interface the point-source treatment of the K-weighted
-        # nearest image (distance 2(h_1 − z)) degrades. Surface the
-        # margin so the user can refine ds or accept the bias.
-        warnings.warn(
-            f"image_2layer: deepest segment ends {h_1 - z_max:.2f} m "
-            f"above the layer interface (h_1 = {h_1:.2f} m), which is "
-            f"less than 2×segment_length ({2.0 * ds:.2f} m). The "
-            "image-series self-terms near the interface carry an "
-            "elevated discretisation error there — consider a finer "
-            "segment_length.",
-            UserWarning,
-            stacklevel=2,
-        )
-    # Tag every segment with its layer index (0 = upper, 1 = lower).
-    for s in all_segments:
-        s.layer_index = 0 if s.midpoint[2] < h_1 else 1
-
-    # 4) Self-kernel closure and frequency loop
-    self_kernel = _two_layer_self_kernel_factory(
-        soil,
-        max_terms,
-        tol,
-        allow_cross_layer=cross_layer,
-    )
-    n_segments = len(all_segments)
-    n_freq = len(engine.frequencies)
-    omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
-    real_electrode_names = {e.name for e in world.electrodes}
-
-    # ADR-0010 Tier 1 (WP-F): the multi-port grounding matrix Z is
-    # frequency-independent — share it across the per-frequency calls.
-    _mp_cache: dict = {}
-
-    def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
-        carson_dz = (
-            carson_builder(omega)
-            if (has_inductance and carson_builder is not None)
-            else None
-        )
-        elec_total = _solve_cluster_currents(
-            electrodes=world.electrodes,
-            elec_input_current=elec_input_current,
-            cluster_id=cluster_id,
-            seg_points=seg_points,
-            seg_lengths=seg_lengths,
-            wire_radii=wire_radii,
-            elec_to_segidx=elec_to_segidx,
-            self_kernel=self_kernel,
-            finite_branches=finite_branches,
-            pseudo_owners=pseudo_owners,
-            omega=omega if has_inductance else 0.0,
-            inductance_matrix=inductance_matrix_full if has_inductance else None,
-            carson_correction=carson_dz,
-            shell_coefficients=seg_shell_coeffs,
-            multiport_cache=_mp_cache,
-        )
-        sc = np.zeros(n_segments, dtype=complex)
-        for ename, idxs in elec_to_segidx.items():
-            if not idxs:
-                continue
-            I_total = elec_total.get(ename, 0j)
-            if I_total == 0j:
-                continue
-            L_total = seg_lengths[idxs].sum()
-            sc[idxs] = I_total * seg_lengths[idxs] / L_total
-        return elec_total, sc
-
-    def _phi_batch(sc_list: list[np.ndarray]) -> list[np.ndarray]:
-        """Segment-midpoint potentials for a list of current vectors.
-
-        Stacks all real/imaginary parts into one excitation matrix so
-        the kernel's O(N²·M_series) tensors are built exactly once
-        for the whole frequency set (ADR-0010 Tier 1).
-        """
-        k = len(sc_list)
-        stacked = np.zeros((n_segments, 2 * k))
-        for m, sc in enumerate(sc_list):
-            stacked[:, m] = sc.real
-            stacked[:, k + m] = sc.imag
-        if not stacked.any():
-            return [np.zeros(n_segments, dtype=complex)] * k
-        phi = self_kernel(seg_points, seg_lengths, wire_radii, stacked)
-        # ADR-0012 V2: post-solve potential evaluation must carry the
-        # same shell augmentation as the inverse-problem assembly
-        # inside _solve_cluster_currents. Without this step the
-        # electrode_potentials and cluster_impedance ignore the shell
-        # drop and report the bare-soil values, hiding the V2 effect.
-        if np.any(seg_shell_coeffs > 0.0):
-            with np.errstate(divide="ignore", invalid="ignore"):
-                shell_diag = np.where(
-                    seg_lengths > 0.0,
-                    seg_shell_coeffs / seg_lengths,
-                    0.0,
-                )
-            phi = phi + shell_diag[:, None] * stacked
-        return [phi[:, m] + 1j * phi[:, k + m] for m in range(k)]
-
-    elec_per_freq: list[dict[str, complex]] = []
-    sc_per_freq: list[np.ndarray] = []
-    phi_per_freq: list[np.ndarray] = []
-    if has_inductance:
-        for omega in omegas:
-            et, sc = _solve_at(omega)
-            elec_per_freq.append(et)
-            sc_per_freq.append(sc)
-        phi_per_freq = _phi_batch(sc_per_freq)
-    else:
-        et, sc = _solve_at(0.0)
-        ph = _phi_batch([sc])[0]
-        elec_per_freq = [et] * n_freq
-        sc_per_freq = [sc] * n_freq
-        phi_per_freq = [ph] * n_freq
-
-    n_terms_used_self = 0
-    if any(np.any(sc) for sc in sc_per_freq):
-        _, _, _, n_terms_used_self = _two_layer_image_offsets(K, h_1, max_terms, tol)
-
-    electrode_potentials: dict[str, list[complex]] = {}
-    electrode_currents: dict[str, list[complex]] = {}
-    conductor_currents: dict[str, list[complex]] = {}
-    conductor_potentials: dict[str, list[complex]] = {}
-    for ename, idxs in elec_to_segidx.items():
-        if not idxs:
-            continue
-        # Length-weighted (Galerkin) node potential — the same
-        # reduction the multi-port matrix enforces inside
-        # _solve_cluster_currents (audit 2026-07-28, F10/F11). The
-        # rod-split-at-the-interface case of ADR-0007 is exactly where
-        # the historic unweighted mean diverged from the solved value.
-        u_list = _weighted_node_potential(phi_per_freq, idxs, seg_lengths, n_freq)
-        i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
-        if ename in real_electrode_names:
-            electrode_potentials[ename] = u_list
-            electrode_currents[ename] = i_list
-        else:
-            conductor_potentials[ename] = u_list
-            conductor_currents[ename] = i_list
-
-    # 7) Point-source list for post-processing
-    point_sources = [
-        PointSource(
-            position=tuple(seg_points[i].tolist()),
-            current=[complex(sc_per_freq[k][i]) for k in range(n_freq)],
-            electrode_name=all_segments[i].electrode_name,
-            length=float(seg_lengths[i]),
-        )
-        for i in range(n_segments)
-    ]
-
-    cluster_members: dict[str, list[str]] = {}
-    for ename in real_electrode_names:
-        cluster_members[ename] = sorted(
-            n
-            for n in cluster_id
-            if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
-        )
-
-    converged = (
-        _series_tail_bound(abs(K), n_terms_used_self) < tol
-        if n_terms_used_self
-        else True
-    )
-    if not converged:
-        tail = _series_tail_bound(abs(K), n_terms_used_self)
-        _log.warning(
-            "image_2layer: max_terms=%d reached, series tail bound "
-            "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e. Result may be "
-            "inaccurate.",
-            max_terms,
-            tail,
-            tol,
-        )
-        warnings.warn(
-            f"image_2layer: the Tagg/Sunde image series was truncated "
-            f"at max_terms={max_terms} with a remaining tail bound of "
-            f"{tail:.2e} > tol={tol:.2e} (|K| = {abs(K):.3f}). Raise "
-            "Engine.image_max_terms for high layer contrasts.",
-            SeriesTruncationWarning,
-            stacklevel=2,
-        )
-
-    metadata = {
-        "world_name": world.name,
-        "n_segments": n_segments,
-        "segment_length": ds,
-        "K": float(K),
-        "rho_1": float(soil.rho_1),
-        "rho_2": float(soil.rho_2),
-        "h_1": float(h_1),
-        "n_terms_used": n_terms_used_self,
-        "converged": converged,
-        "stub": False,
-        "earth_inductive_model": earth_inductive_model,
-    }
-    if has_inductance and sigma_earth_for_carson is not None:
-        from groundfield.coupling.carson import skin_depth
-
-        metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_earth_for_carson)
-            for f in engine.frequencies
-        }
-    elif has_inductance:
-        from groundfield.coupling.carson import skin_depth
-
-        sigma_ref = 1.0 / float(soil.rho_1)
-        metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
-        }
-    if conductor_currents:
-        metadata["conductor_node_currents"] = conductor_currents
-        metadata["conductor_node_potentials"] = conductor_potentials
-
-    return FieldResult(
-        backend="image_2layer",
-        frequencies=list(engine.frequencies),
-        electrode_potentials=electrode_potentials,
-        electrode_currents=electrode_currents,
-        point_sources=point_sources,
-        soil_resistivity=float(soil.rho_1),
-        soil=soil,
-        clusters=cluster_members,
-        metadata=metadata,
-    )
+    green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length)
+    return solve_image_family(world, engine, green, stacklevel=3)

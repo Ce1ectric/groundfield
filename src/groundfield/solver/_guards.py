@@ -300,7 +300,9 @@ def _segment_z_extent(seg: "_Segment") -> tuple[float, float]:
     return z_mid - half, z_mid + half
 
 
-def _check_segment_depths(all_segments: "list[_Segment]", *, where: str) -> None:
+def _check_segment_depths(
+    all_segments: "list[_Segment]", *, where: str, stacklevel: int = 3
+) -> None:
     """Validate the burial depth and extent of every leakage segment.
 
     Four regimes are distinguished (audit 2026-07-28, F26/F29;
@@ -386,6 +388,10 @@ def _check_segment_depths(all_segments: "list[_Segment]", *, where: str) -> None
         galvanically coupled distributed-conductor segments).
     where
         Caller name, used verbatim in the messages.
+    stacklevel
+        ``stacklevel`` of the :class:`ShallowSegmentWarning`; the
+        default points at the caller of the ``solve_*`` function that
+        calls this guard directly.
 
     Raises
     ------
@@ -475,5 +481,5 @@ def _check_segment_depths(all_segments: "list[_Segment]", *, where: str) -> None
             "stabilises, or silence this with "
             'warnings.simplefilter("ignore", ShallowSegmentWarning).',
             ShallowSegmentWarning,
-            stacklevel=3,
+            stacklevel=stacklevel,
         )

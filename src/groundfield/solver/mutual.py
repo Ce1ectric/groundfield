@@ -61,8 +61,9 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
+from groundfield.solver._kernels import _point_field_kernel, _series_field
+from groundfield.solver._series import ImageSeries
 from groundfield.solver.image import (
-    _MIN_DISTANCE,
     _assemble_inductance_matrix,
     _build_clusters,
     _build_distributed_topology,
@@ -102,16 +103,9 @@ def _probe_kernel_homogeneous(
     potential per column, because there is only a single (non-series)
     term — no intermediate summation order to preserve.
     """
-    image_sources = source_points.copy()
-    image_sources[:, 2] = -image_sources[:, 2]
-    diff_real = probe_points[:, None, :] - source_points[None, :, :]
-    diff_image = probe_points[:, None, :] - image_sources[None, :, :]
-    r_real = np.linalg.norm(diff_real, axis=2)
-    r_image = np.linalg.norm(diff_image, axis=2)
-    np.maximum(r_real, min_distance, out=r_real)
-    np.maximum(r_image, min_distance, out=r_image)
-    kernel = (1.0 / r_real) + (1.0 / r_image)
-    return (rho / (4.0 * np.pi)) * kernel
+    return (rho / (4.0 * np.pi)) * _point_field_kernel(
+        probe_points, source_points, min_distance
+    )
 
 
 def _probe_potential_two_layer(
@@ -148,7 +142,6 @@ def _probe_potential_two_layer(
     phi : np.ndarray, shape (M, J)
         Complex potential per probe point and excitation column.
     """
-    K = soil.reflection_coefficient
     h_1 = soil.h_1
     rho_1 = soil.rho_1
 
@@ -210,41 +203,13 @@ def _probe_potential_two_layer(
             phi[~probe_l1] += G @ currents[src_l1]
         return phi
 
-    diff_xy = probe_points[:, None, 0:2] - source_points[None, :, 0:2]
-    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
-    z_field = probe_points[:, 2:3]  # (M, 1)
-    z_src = source_points[None, :, 2]  # (1, N)
-
-    def _series_for(real_currents: np.ndarray) -> np.ndarray:
-        """Core series for a real-valued ``(N, J)`` current stack."""
-        phi = np.zeros((M, J), dtype=float)
-        # n = 0 (two images, weight 1) — mirrors the scalar method's
-        # ``for sign_zs in (+1, -1): phi += (1/r) @ real_currents``.
-        for sign_zs in (+1, -1):
-            z_img = sign_zs * z_src
-            r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-            np.maximum(r, min_distance, out=r)
-            phi += (1.0 / r) @ real_currents
-        # n = 1, 2, ... — accumulate per term (``phi += K_n · acc``).
-        abs_K = abs(K)
-        for n in range(1, max_terms + 1):
-            K_n = K**n
-            acc = np.zeros((M, J), dtype=float)
-            for sign_n in (+1, -1):
-                for sign_zs in (+1, -1):
-                    z_img = sign_n * 2.0 * n * h_1 + sign_zs * z_src
-                    r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-                    np.maximum(r, min_distance, out=r)
-                    acc += (1.0 / r) @ real_currents
-            phi += K_n * acc
-            # Geometric tail bound |K|^(n+1)/(1-|K|) — consistent
-            # with the solver-side criterion in image_2layer.
-            if abs_K < 1.0 and abs_K ** (n + 1) / (1.0 - abs_K) < tol:
-                break
-        return phi
-
-    phi_re = _series_for(currents.real)
-    phi_im = _series_for(currents.imag)
+    series = ImageSeries.for_soil(soil, max_terms, tol)
+    phi_re = _series_field(
+        probe_points, source_points, currents.real, series, min_distance
+    )
+    phi_im = _series_field(
+        probe_points, source_points, currents.imag, series, min_distance
+    )
     return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)
 
 
