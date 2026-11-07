@@ -50,9 +50,10 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from groundfield.solver.result import FieldResult
+from groundfield.solver.result import FieldResult, SourceRecord
 from groundfield.utils.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -135,6 +136,26 @@ EarthInductiveModel = Literal[
 ]
 
 _log = get_logger(__name__)
+
+
+def _source_records(world: "World", n_freq: int) -> list[SourceRecord]:
+    """Snapshot of ``world.sources`` for :attr:`FieldResult.sources`."""
+    records = []
+    for src in world.sources:
+        current: list[complex] = []
+        if src.kind == "current":
+            i = complex(src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg)))
+            current = [i] * n_freq
+        records.append(
+            SourceRecord(
+                name=src.name,
+                kind=src.kind,
+                attached_to=src.attached_to,
+                return_to=src.return_to,
+                current=current,
+            )
+        )
+    return records
 
 
 class Engine(BaseModel):
@@ -461,6 +482,17 @@ class Engine(BaseModel):
         for finding in check_segment_resolution(world, self):
             warnings.warn(finding, UserWarning, stacklevel=2)
 
+        # Snapshot before dispatch: the record must describe the world
+        # as the caller built it, even if a backend rewrites a source
+        # in flight (World.solve rolls such rewrites back afterwards).
+        records = _source_records(world, len(self.frequencies))
+        result = self._dispatch(world)
+        if not result.sources:
+            result.sources = records
+        return result
+
+    def _dispatch(self, world: "World") -> FieldResult:
+        """Hand ``world`` to the selected backend (see :meth:`solve`)."""
         # Auto-forwarding: ``backend="image"`` transparently picks
         # ``image_2layer`` for a 2-layer soil and ``image_nlayer`` for
         # a multilayer soil. Notebooks therefore do not need to change

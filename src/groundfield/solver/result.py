@@ -27,7 +27,7 @@ from groundfield.soil.models import (
     TwoLayerSoil,
 )
 
-__all__ = ["FieldResult", "PointSource"]
+__all__ = ["FieldResult", "PointSource", "SourceRecord"]
 
 
 # Local discriminated union of all soil types — kept here to avoid a
@@ -53,6 +53,32 @@ class PointSource(BaseModel):
     )
     electrode_name: str = Field(..., description="Owning electrode.")
     length: float = Field(..., gt=0.0, description="Represented length in m.")
+
+
+class SourceRecord(BaseModel):
+    """Snapshot of one source as it was solved.
+
+    Filled by :meth:`Engine.solve`; not instantiated directly by the
+    user. :meth:`FieldResult.input_impedance` reads it, so the result
+    stays self-contained after the world has changed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., description="Source name in the world.")
+    kind: str = Field(..., description="Source kind, e.g. ``'current'``.")
+    attached_to: str = Field(..., description="Feeding electrode / node.")
+    return_to: str | None = Field(
+        default=None,
+        description="Return electrode; ``None`` means remote earth.",
+    )
+    current: list[complex] = Field(
+        default_factory=list,
+        description=(
+            "Impressed source current per frequency in A (complex "
+            "phasor). Empty for non-current sources."
+        ),
+    )
 
 
 class FieldResult(BaseModel):
@@ -91,6 +117,13 @@ class FieldResult(BaseModel):
         ),
     )
     metadata: dict[str, Any] = Field(default_factory=dict)
+    sources: list[SourceRecord] = Field(
+        default_factory=list,
+        description=(
+            "Sources of the solved world (snapshot), used by "
+            ":meth:`input_impedance`. Empty for hand-built results."
+        ),
+    )
 
     # ------------------------------------------------------------------
     # Derived quantities
@@ -213,6 +246,37 @@ class FieldResult(BaseModel):
         members would silently under-count the cluster current
         (audit 2026-07-29).
         """
+        members, u = self._cluster_potential(electrode_name)
+        n_freq = len(u)
+        # The *denominator* runs over every member that has current
+        # data, not over ``usable``: a member without potential data
+        # cannot contribute to the weighted average, but its injected
+        # current is still part of the cluster's total. Restricting the
+        # sum to ``usable`` (0.15.0 development state) silently dropped
+        # it and returned a too-large impedance instead of the
+        # ``KeyError`` v0.14.1 raised — e.g. potentials {"a"} with
+        # currents {"a": 1 A, "b": 1 A} and cluster ["a", "b"] gave
+        # 10 V / 1 A = 10 Ω where 10 V / 2 A = 5 Ω is meant
+        # (audit 2026-07-29). Not reachable through any shipped
+        # backend, but ``FieldResult`` is public and user-constructible.
+        current_members = [
+            m
+            for m in members
+            if m in self.electrode_currents
+            and len(self.electrode_currents[m]) >= n_freq
+        ]
+        i_sum = [
+            sum(self.electrode_currents[m][k] for m in current_members)
+            for k in range(n_freq)
+        ]
+        return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i_sum)]
+
+    def _cluster_potential(self, electrode_name: str) -> tuple[list[str], list[complex]]:
+        """Members and length-weighted potential of a galvanic cluster.
+
+        Shared by :meth:`cluster_impedance` and :meth:`input_impedance`;
+        see :meth:`cluster_impedance` for the weighting.
+        """
         members = self.clusters.get(electrode_name, [electrode_name])
         if not members:
             raise KeyError(f"No cluster for '{electrode_name}'.")
@@ -250,28 +314,108 @@ class FieldResult(BaseModel):
             )
             for k in range(n_freq)
         ]
-        # The *denominator* runs over every member that has current
-        # data, not over ``usable``: a member without potential data
-        # cannot contribute to the weighted average, but its injected
-        # current is still part of the cluster's total. Restricting the
-        # sum to ``usable`` (0.15.0 development state) silently dropped
-        # it and returned a too-large impedance instead of the
-        # ``KeyError`` v0.14.1 raised — e.g. potentials {"a"} with
-        # currents {"a": 1 A, "b": 1 A} and cluster ["a", "b"] gave
-        # 10 V / 1 A = 10 Ω where 10 V / 2 A = 5 Ω is meant
-        # (audit 2026-07-29). Not reachable through any shipped
-        # backend, but ``FieldResult`` is public and user-constructible.
-        current_members = [
-            m
-            for m in members
-            if m in self.electrode_currents
-            and len(self.electrode_currents[m]) >= n_freq
+        return members, u
+
+    def input_impedance(self, source: str | None = None) -> list[complex]:
+        """Driving-point impedance seen by a current source.
+
+        Definition:
+
+        $$
+        Z_\\text{in}(f) \\;=\\;
+        \\frac{\\varphi_a(f) - \\varphi_r(f)}{I_s(f)},
+        $$
+
+        with $\\varphi_a$ the potential of the galvanic cluster the
+        source feeds (``attached_to``), $\\varphi_r$ the potential of
+        the return cluster (``return_to``; zero for a return through
+        remote earth) and $I_s$ the impressed source current. Cluster
+        potentials are the length-weighted averages used by
+        :meth:`cluster_impedance`.
+
+        This is the impedance a measurement instrument or a fault sees
+        at the feeding point. It differs from :meth:`cluster_impedance`
+        (cluster potential over the cluster's own *leakage* current)
+        as soon as part of the injected current leaves the cluster
+        through conductors (PEN, cable shields, measurement leads):
+        then the cluster impedance describes the local electrode only,
+        the input impedance the whole connected system.
+
+        Parameters
+        ----------
+        source
+            Name of the current source. May be omitted when the result
+            carries exactly one current source.
+
+        Returns
+        -------
+        list[complex]
+            Complex input impedance per frequency in ohms. Frequencies
+            with zero source current return ``nan``.
+
+        Raises
+        ------
+        ValueError
+            If the result carries no source snapshot (hand-built
+            results), no current source, or several current sources
+            and ``source`` is omitted; if the named source is not a
+            current source.
+        KeyError
+            If ``source`` is unknown, or the feeding / return electrode
+            has no potential data in this result.
+
+        Notes
+        -----
+        With several simultaneous sources the potential difference
+        includes the contribution of the other sources, so the ratio is
+        an *apparent* impedance of the named source.
+        """
+        if not self.sources:
+            raise ValueError(
+                "input_impedance needs the source snapshot of the solve; "
+                "this result carries none (hand-built FieldResult?)."
+            )
+        current_sources = [s for s in self.sources if s.kind == "current"]
+        if source is None:
+            if not current_sources:
+                raise ValueError("The result carries no current source.")
+            if len(current_sources) > 1:
+                names = ", ".join(s.name for s in current_sources)
+                raise ValueError(
+                    f"The result carries several current sources ({names}); "
+                    "pass source=<name>."
+                )
+            record = current_sources[0]
+        else:
+            by_name = {s.name: s for s in self.sources}
+            if source not in by_name:
+                known = ", ".join(sorted(by_name)) or "none"
+                raise KeyError(f"Unknown source {source!r} (known: {known}).")
+            record = by_name[source]
+            if record.kind != "current":
+                raise ValueError(
+                    f"Source {source!r} is a {record.kind!r} source; the input "
+                    "impedance is defined for current sources."
+                )
+        if record.attached_to not in self.electrode_potentials:
+            raise KeyError(
+                f"Source {record.name!r} feeds {record.attached_to!r}, which has "
+                "no potential in this result."
+            )
+        _, u_a = self._cluster_potential(record.attached_to)
+        if record.return_to is None:
+            u_r = [0j] * len(u_a)
+        else:
+            if record.return_to not in self.electrode_potentials:
+                raise KeyError(
+                    f"Source {record.name!r} returns to {record.return_to!r}, "
+                    "which has no potential in this result."
+                )
+            _, u_r = self._cluster_potential(record.return_to)
+        return [
+            (ua - ur) / ik if ik != 0 else complex("nan")
+            for ua, ur, ik in zip(u_a, u_r, record.current)
         ]
-        i_sum = [
-            sum(self.electrode_currents[m][k] for m in current_members)
-            for k in range(n_freq)
-        ]
-        return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i_sum)]
 
     # ------------------------------------------------------------------
     # Potential evaluation at arbitrary field points
