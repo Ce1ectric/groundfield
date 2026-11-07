@@ -58,15 +58,27 @@ Validity envelope
   :meth:`Engine.solve`. For 50 ρ-values × 10 h-values × 1 frequency
   list with N segments each, expect 500 dense system solves;
   budget accordingly with :func:`expected_segments`.
+* Parallelism: the combinations are independent, so
+  ``sweep(..., n_jobs=k)`` solves them in ``k`` worker processes
+  (review pass 10, 10.64). The dense LU factorisation is only
+  0.2–1.5 % of a solve (kernel assembly dominates), so a multi-threaded
+  BLAS does not parallelise a solve; separate processes do (measured
+  1.98× on 2 workers for a 20-house world). Workers run their BLAS on
+  one thread; the result is bit-identical to the serial run when the
+  calling process also runs a single-threaded BLAS (results differ at
+  the 1e-15 level between 1 and 2 BLAS threads).
 """
 
 from __future__ import annotations
 
 import cmath
+import contextlib
 import functools
 import itertools
 import math
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+import os
+import warnings
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Sequence
 
 import numpy as np
 import pandas as pd
@@ -180,6 +192,98 @@ def _resolve_response(
 
 
 # ---------------------------------------------------------------------
+# Process-pool helpers (n_jobs > 1)
+# ---------------------------------------------------------------------
+
+#: Environment variables that cap the thread count of common BLAS /
+#: OpenMP runtimes; set to "1" for the spawned worker processes.
+_BLAS_THREAD_VARS = (
+    "OPENBLAS_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
+
+
+@contextlib.contextmanager
+def _single_threaded_blas_env() -> Iterator[None]:
+    """Set the BLAS thread variables to 1 while worker processes start."""
+    saved = {k: os.environ.get(k) for k in _BLAS_THREAD_VARS}
+    try:
+        for k in _BLAS_THREAD_VARS:
+            os.environ[k] = "1"
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _worker_init() -> None:
+    """Pin the worker's BLAS to one thread (threadpoolctl when available)."""
+    try:  # pragma: no cover - optional dependency
+        from threadpoolctl import threadpool_limits
+
+        threadpool_limits(1)
+    except ImportError:
+        pass
+
+
+def _check_parallel_payload(**objects: Any) -> None:
+    """Fail early if a callable cannot reach a spawned worker process."""
+    import pickle
+
+    import __main__
+
+    for name, obj in objects.items():
+        target = getattr(obj, "func", obj)  # functools.partial
+        if getattr(target, "__module__", None) == "__main__" and not hasattr(
+            __main__, "__file__"
+        ):
+            raise TypeError(
+                f"sweep(n_jobs>1): {name} {target!r} is defined in an "
+                "interactive session (notebook); worker processes cannot "
+                "import it. Move it into a .py module next to the notebook "
+                "and import it from there, or use n_jobs=1."
+            )
+        try:
+            pickle.dumps(obj)
+        except Exception as exc:  # noqa: BLE001 - any pickling failure
+            raise TypeError(
+                f"sweep(n_jobs>1): {name} must be picklable (a module-level "
+                f"function, not a lambda or a nested function): {exc}. Use "
+                "n_jobs=1 or move it into a module."
+            ) from exc
+
+
+def _sweep_cell(
+    world_factory: Callable[..., "World"],
+    engine: Any,
+    response: Callable[["FieldResult", "World", int], dict[str, float]],
+    params: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[tuple[str, type, str, int]]]:
+    """Solve one Cartesian combination; return its rows and warnings."""
+    from groundfield.solver.engine import Engine
+
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        world = world_factory(**params)
+        eng = engine if isinstance(engine, Engine) else engine(**params)
+        result = eng.solve(world)
+        rows = []
+        for f_idx, f_hz in enumerate(result.frequencies):
+            row = dict(params)
+            row["frequency_Hz"] = float(f_hz)
+            row.update(response(result, world, f_idx))
+            rows.append(row)
+    caught = [(str(w.message), w.category, w.filename, w.lineno) for w in record]
+    return rows, caught
+
+
+# ---------------------------------------------------------------------
 # sweep
 # ---------------------------------------------------------------------
 
@@ -192,6 +296,7 @@ def sweep(
     response: Callable[["FieldResult", "World", int], dict[str, float]] | None = None,
     quantity: Quantity = "input",
     source: str | None = None,
+    n_jobs: int = 1,
 ) -> pd.DataFrame:
     """Cartesian-product parameter sweep across user-defined axes.
 
@@ -243,6 +348,16 @@ def sweep(
         Name of the current source the default response refers to; may
         be omitted when the world has exactly one current source (with
         several, v0.15.0 silently used the first one; now it raises).
+    n_jobs
+        Number of worker processes (default 1: serial, in this process).
+        ``-1`` uses every logical CPU. With ``n_jobs > 1`` the
+        combinations are solved in a process pool (``spawn`` start
+        method, BLAS pinned to one thread per worker); rows keep the
+        order of the serial run and warnings raised in the workers are
+        re-issued here. ``world_factory``, ``engine`` and ``response``
+        must then be picklable: module-level functions or an
+        :class:`Engine`, not lambdas or functions defined in a notebook
+        (put those into a small ``.py`` module).
 
     Returns
     -------
@@ -258,8 +373,19 @@ def sweep(
     ValueError
         If ``axes`` is empty or any axis is empty, ``quantity`` is
         unknown, ``quantity`` / ``source`` are combined with a custom
-        ``response``, or the default response finds several current
-        sources and ``source`` is omitted.
+        ``response``, the default response finds several current
+        sources and ``source`` is omitted, or ``n_jobs`` is 0 or below -1.
+    TypeError
+        With ``n_jobs > 1``, if a callable cannot be sent to the worker
+        processes.
+
+    Notes
+    -----
+    With ``n_jobs > 1`` the result is bit-identical to ``n_jobs=1``
+    when the calling process runs a single-threaded BLAS as well
+    (``OPENBLAS_NUM_THREADS=1``); otherwise the two agree to round-off.
+    Process start-up costs about a second per worker, so parallel runs
+    pay off for solves of a second or more.
     """
     from groundfield.solver.engine import Engine
 
@@ -271,25 +397,66 @@ def sweep(
 
     default = response is None
     response = _resolve_response(response, quantity, source, "sweep")
+    if isinstance(n_jobs, bool) or not isinstance(n_jobs, int):
+        raise ValueError(f"n_jobs must be an integer, got {n_jobs!r}.")
+    if n_jobs == -1:
+        n_jobs = os.cpu_count() or 1
+    if n_jobs < 1:
+        raise ValueError(f"n_jobs must be >= 1 or -1, got {n_jobs}.")
 
     keys = list(axes.keys())
     values_list = [list(axes[k]) for k in keys]
+    combos = [dict(zip(keys, c, strict=True)) for c in itertools.product(*values_list)]
 
     rows: list[dict[str, Any]] = []
-    for combo in itertools.product(*values_list):
-        params = dict(zip(keys, combo, strict=True))
-        world = world_factory(**params)
-        eng = engine if isinstance(engine, Engine) else engine(**params)
-        result = eng.solve(world)
-        for f_idx, f_hz in enumerate(result.frequencies):
-            row = dict(params)
-            row["frequency_Hz"] = float(f_hz)
-            row.update(response(result, world, f_idx))
-            rows.append(row)
+    if n_jobs == 1 or len(combos) == 1:
+        for params in combos:
+            world = world_factory(**params)
+            eng = engine if isinstance(engine, Engine) else engine(**params)
+            result = eng.solve(world)
+            for f_idx, f_hz in enumerate(result.frequencies):
+                row = dict(params)
+                row["frequency_Hz"] = float(f_hz)
+                row.update(response(result, world, f_idx))
+                rows.append(row)
+    else:
+        rows = _parallel_rows(world_factory, engine, response, combos, n_jobs)
     df = pd.DataFrame(rows)
     if default:
         df.attrs["impedance_quantity"] = quantity
     return df
+
+
+def _parallel_rows(
+    world_factory: Callable[..., "World"],
+    engine: Any,
+    response: Callable[["FieldResult", "World", int], dict[str, float]],
+    combos: list[dict[str, Any]],
+    n_jobs: int,
+) -> list[dict[str, Any]]:
+    """Solve ``combos`` in a process pool; rows in the order of ``combos``."""
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    _check_parallel_payload(
+        world_factory=world_factory, engine=engine, response=response
+    )
+    cell = functools.partial(_sweep_cell, world_factory, engine, response)
+    registry: dict[Any, Any] = {}
+    rows: list[dict[str, Any]] = []
+    with _single_threaded_blas_env():
+        with ProcessPoolExecutor(
+            max_workers=min(n_jobs, len(combos)),
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_worker_init,
+        ) as pool:
+            for cell_rows, caught in pool.map(cell, combos):
+                for message, category, filename, lineno in caught:
+                    warnings.warn_explicit(
+                        message, category, filename, lineno, registry=registry
+                    )
+                rows.extend(cell_rows)
+    return rows
 
 
 # ---------------------------------------------------------------------
