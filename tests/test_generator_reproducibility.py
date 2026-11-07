@@ -66,7 +66,9 @@ def _f07_config() -> TnNetworkConfig:
 def _everything_config() -> TnNetworkConfig:
     return TnNetworkConfig(
         soil=HomogeneousSoilSpec(rho=Uniform(low=50, high=500)),
-        placement=ManhattanGridPlacement(spacing_x_m=Uniform(low=20, high=40), jitter_m=1.0),
+        placement=ManhattanGridPlacement(
+            spacing_x_m=Uniform(low=20, high=40), jitter_m=1.0
+        ),
         building_types=[
             BuildingTypeSpec(
                 name="residential",
@@ -233,3 +235,54 @@ def test_mask_does_not_depend_on_the_python_hash_seed() -> None:
         assert proc.returncode == 0, proc.stderr
         outs.add(proc.stdout.strip())
     assert len(outs) == 1
+
+
+# ---------------------------------------------------------------------
+# 10.07 — MD5 marked usedforsecurity=False, digests unchanged
+# ---------------------------------------------------------------------
+
+
+def _osm_layout() -> LvNetworkLayout:
+    fps = [
+        gf.BuildingFootprint(
+            polygon_xy_m=[(i * 20, 0), (i * 20 + 8, 0), (i * 20 + 8, 8), (i * 20, 8)],
+            osm_id=4000000 + 7 * i,
+        )
+        for i in range(20)
+    ]
+    return LvNetworkLayout.from_footprints(fps, substation_xy=(0.0, 0.0))
+
+
+@pytest.mark.finding("10.07")
+def test_mask_values_are_those_of_v0150() -> None:
+    """Literal values measured on v0.15.0: stored AP1 masks stay valid."""
+    from groundfield.generators.layout.penetration import _stable_uniform
+
+    layout = _osm_layout()
+    bits = "".join("1" if m else "0" for m in layout.foundation_mask(0.3))
+    assert bits == "01101001100111001000"
+    bits = "".join("1" if m else "0" for m in layout.foundation_mask(0.3, salt=5))
+    assert bits == "10000000111010011000"
+    assert _stable_uniform(0, 123456789) == 0.061578575410906916
+    assert _stable_uniform(3, 42) == 0.2550300460565941
+
+
+@pytest.mark.finding("10.07")
+def test_mask_works_where_md5_is_blocked_for_security(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On FIPS builds ``hashlib.md5()`` raises unless ``usedforsecurity=False``."""
+    import hashlib
+
+    from groundfield.generators.layout import penetration
+
+    real_md5 = hashlib.md5
+
+    def fips_md5(data: bytes = b"", *, usedforsecurity: bool = True):
+        if usedforsecurity:
+            raise ValueError("[digital envelope routines] unsupported (FIPS mode)")
+        return real_md5(data, usedforsecurity=False)
+
+    monkeypatch.setattr(penetration.hashlib, "md5", fips_md5)
+    bits = "".join("1" if m else "0" for m in _osm_layout().foundation_mask(0.3))
+    assert bits == "01101001100111001000"

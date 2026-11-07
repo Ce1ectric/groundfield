@@ -56,10 +56,12 @@ def _stable_uniform(salt: int, key: object) -> float:
     Built on MD5 (chosen for stable cross-Python-version hashing,
     not for cryptographic strength) so the value depends only on
     the textual representation of the inputs and is reproducible
-    across runs, processes and Python versions.
+    across runs, processes and Python versions. The digest is
+    requested with ``usedforsecurity=False`` so FIPS builds of Python
+    allow it (10.07); the digest itself is unchanged.
     """
     blob = f"{salt}|{key}".encode("utf-8")
-    digest = hashlib.md5(blob).digest()[:8]
+    digest = hashlib.md5(blob, usedforsecurity=False).digest()[:8]
     n = int.from_bytes(digest, "big")
     return n / float(1 << 64)
 
