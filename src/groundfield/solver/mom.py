@@ -22,6 +22,11 @@ Method
    - diagonal $Z_{ii}$: analytic potential of the uniformly loaded
      segment at its own surface (line self-potential), plus images.
 
+   The matrix is assembled directly, entry by entry (review pass 10,
+   10.59); up to 0.15.0 it was extracted by applying the kernel to the
+   identity matrix, an $O(N^3)$ product per image term. The entries
+   are bit-identical.
+
    The basis is a pulse (one constant current per segment) and the test
    function a delta at the segment midpoint. This is **point matching**
    (collocation) with a point-source near field. It is *not* a Galerkin
@@ -50,6 +55,26 @@ Method
    every midpoint of a node equipotential) and the segment currents as
    point sources, in the same :class:`FieldResult` layout as the image
    backends.
+
+Solve flow (review pass 10, 10.75)
+----------------------------------
+The point-matching backends (``mom``, ``mom_sommerfeld`` and the
+deprecated alias ``bem``) run through the shared solve pipeline of the
+image family, :mod:`groundfield.solver._pipeline`:
+:func:`~groundfield.solver._pipeline.discretise`,
+:func:`~groundfield.solver._pipeline.inject` (impressed source
+currents), :func:`~groundfield.solver._pipeline.build_topology`
+(clusters, finite branches, distributed conductors),
+:func:`~groundfield.solver._pipeline.assemble_branches` (inductive
+branch block) and the burial-depth guard of the image family. Only the
+solve step (one unknown current per segment instead of per electrode)
+and the read-back of the node potentials are specific to the family;
+they live in :func:`solve_point_matching`. Each backend supplies a
+Green's-function object implementing the
+:class:`~groundfield.solver._pipeline.ImageGreen` protocol plus the
+reaction matrix and the segment-potential evaluation
+(:class:`_PointMatchingGreen`). Up to 0.15.0 each backend carried its own
+copy of the whole pipeline.
 
 Accuracy
 --------
@@ -80,6 +105,7 @@ Limitations
 - $n \\ge 3$ distinct soil layers: use ``mom_sommerfeld``, which
   shares this discretisation and evaluates the layered kernel by
   quadrature.
+- Point source kernel only (``Engine(kernel="point")``).
 """
 
 from __future__ import annotations
@@ -90,27 +116,35 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
+from groundfield.solver._guards import _check_segment_depths
+from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._layered import canonical_soil
-from groundfield.solver.image import (
-    _assemble_inductance_matrix,
-    _build_clusters,
-    _build_distributed_topology,
-    _build_finite_branches,
-    _discretize_electrode,
+from groundfield.solver import _pipeline
+from groundfield.solver._pipeline import (
+    SegmentArrays,
+    Solution,
     _reject_concrete_shells,
-    _Segment,
-    _self_corrected_kernel,
-    _warn_ignored_sources,
 )
-from groundfield.solver.image_2layer import (
+from groundfield.solver._series import (
+    ImageSeries,
     SeriesTruncationWarning,
     _series_tail_bound,
-    _two_layer_self_kernel_factory,
 )
+from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Callable
+
+    from groundfield.soil.models import SoilModel
+    from groundfield.solver._discretize import _Segment
+    from groundfield.solver._pipeline import (
+        BranchModel,
+        Discretisation,
+        SelfKernel,
+        Topology,
+    )
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
@@ -130,16 +164,22 @@ def _build_Z_homogeneous(
     wire_radii: np.ndarray,
     rho: float,
 ) -> np.ndarray:
-    """Full N×N reaction matrix for homogeneous soil.
+    """Full N×N reaction matrix for homogeneous soil, in Ω.
 
-    Built by feeding the identity matrix as the "currents" argument
-    of :func:`_self_corrected_kernel`: the resulting ``phi`` matrix is
-    exactly $Z$ (with the $\\rho/(4\\pi)$ prefactor and
-    the line-self-potential on the diagonal).
+    Assembled directly by :meth:`HalfSpaceKernel.matrix` (10.59):
+    $\\rho/(4\\pi)$ times the point kernel $1/r + 1/r'$ off the
+    diagonal and the line self-potential on it. Bit-identical to the
+    historic extraction ``_self_corrected_kernel(..., eye(N), rho)``
+    without its $O(N^3)$ product.
+
+    Parameters
+    ----------
+    seg_points, seg_lengths, wire_radii
+        Segment midpoints (m), lengths (m) and wire radii (m).
+    rho
+        Soil resistivity in Ω·m.
     """
-    n = seg_points.shape[0]
-    eye = np.eye(n)
-    return _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho)
+    return HalfSpaceKernel(rho).matrix(seg_points, seg_lengths, wire_radii)
 
 
 def _build_Z_two_layer(
@@ -150,20 +190,31 @@ def _build_Z_two_layer(
     max_terms: int,
     tol: float,
 ) -> np.ndarray:
-    """Full N×N reaction matrix for 2-layer soil.
+    """Full N×N reaction matrix for 2-layer soil, in Ω.
 
-    Uses the Tagg/Sunde self-kernel closure produced by
-    :func:`groundfield.solver.image_2layer._two_layer_self_kernel_factory`.
+    Assembled directly by the Tagg/Sunde reaction operator of
+    :func:`groundfield.solver.image_2layer._two_layer_self_kernel_factory`
+    (``matrix()``, 10.59; the cross-layer path of ADR-0007 when a
+    segment reaches the interface). Bit-identical to the historic
+    ``kernel(..., eye(N))`` extraction, which cost one $N \\times N$ by
+    $N \\times N$ product per image term.
+
+    Parameters
+    ----------
+    seg_points, seg_lengths, wire_radii
+        Segment midpoints (m), lengths (m) and wire radii (m).
+    soil
+        Two-layer soil.
+    max_terms, tol
+        Tagg/Sunde truncation (term count, dimensionless tail bound).
     """
-    n = seg_points.shape[0]
-    self_kernel = _two_layer_self_kernel_factory(
+    kernel = _two_layer_self_kernel_factory(
         soil,
         max_terms,
         tol,
         allow_cross_layer=True,
     )
-    eye = np.eye(n)
-    return self_kernel(seg_points, seg_lengths, wire_radii, eye)
+    return kernel.matrix(seg_points, seg_lengths, wire_radii)
 
 
 # ---------------------------------------------------------------------
@@ -534,13 +585,467 @@ _galerkin_solve = _point_matching_solve
 
 
 # ---------------------------------------------------------------------
+# Shared point-matching pipeline (10.75)
+# ---------------------------------------------------------------------
+
+
+class _PointMatchingGreen:
+    """Soil-specific part of the point-matching backends.
+
+    Implements the :class:`~groundfield.solver._pipeline.ImageGreen`
+    protocol of the shared pipeline — ``backend``, ``where``,
+    ``layer_interfaces``, ``soil_resistivity``,
+    ``reference_resistivity``, :meth:`prepare` and :meth:`metadata` —
+    and adds what the per-segment solve needs on top: the full reaction
+    matrix (:meth:`reaction_matrix`) and the segment-midpoint potentials
+    of a solved current distribution (:meth:`segment_potentials`).
+
+    Subclasses set the attributes in ``__init__`` and implement
+    :meth:`prepare`.
+
+    Attributes
+    ----------
+    backend
+        Backend label stored in :attr:`FieldResult.backend`.
+    where
+        Caller label used in warning and error messages.
+    soil
+        Canonical soil model (10.48) stored in :attr:`FieldResult.soil`.
+    layer_interfaces
+        Interface depths in m at which the discretisation splits wires,
+        or ``None``.
+    soil_resistivity
+        Upper-layer resistivity in Ω·m (:attr:`FieldResult.soil_resistivity`).
+    reference_resistivity
+        Resistivity in Ω·m of the reference skin depth reported for
+        inductive worlds without an earth-return conductivity.
+    """
+
+    backend: str
+    where: str
+    soil: SoilModel
+    layer_interfaces: tuple[float, ...] | None
+    soil_resistivity: float
+    reference_resistivity: float
+
+    def prepare(
+        self, segments: list[_Segment], arrays: SegmentArrays, *, stacklevel: int
+    ) -> SelfKernel:
+        """Reaction operator of the discretised geometry (``matrix()`` and call)."""
+        raise NotImplementedError
+
+    def reaction_matrix(self, kernel: SelfKernel, arrays: SegmentArrays) -> np.ndarray:
+        """Full ``N × N`` reaction matrix in Ω, assembled directly (10.59)."""
+        return kernel.matrix(arrays.points, arrays.lengths, arrays.radii)
+
+    def segment_potentials(
+        self,
+        kernel: SelfKernel,
+        Z: np.ndarray,
+        arrays: SegmentArrays,
+        seg_currents: np.ndarray,
+    ) -> np.ndarray:
+        """Segment-midpoint potentials in V of the segment currents ``seg_currents`` (A).
+
+        The default is the product with the assembled matrix,
+        ``Z @ Re(I) + j Z @ Im(I)``.
+        """
+        return Z @ seg_currents.real + 1j * (Z @ seg_currents.imag)
+
+    def metadata(self, solution: Solution, *, stacklevel: int) -> dict:
+        """Backend-specific metadata (may warn about the solve)."""
+        return {}
+
+
+class _MomGreen(_PointMatchingGreen):
+    """Green's function of ``mom``: the closed-form image-family kernels.
+
+    Homogeneous soil uses the half-space point kernel
+    (:class:`~groundfield.solver._kernels.HalfSpaceKernel`), two-layer
+    soil the Tagg/Sunde series, and a geometry that reaches the layer
+    interface the cross-layer kernel of ADR-0007 for every pair.
+
+    Parameters
+    ----------
+    soil
+        Canonical soil: :class:`HomogeneousSoil` or :class:`TwoLayerSoil`.
+    max_terms, tol
+        Tagg/Sunde truncation (term count, dimensionless tail bound).
+    backend
+        Label of the result (``"mom"``).
+    """
+
+    where = "mom"
+
+    def __init__(
+        self,
+        soil: HomogeneousSoil | TwoLayerSoil,
+        max_terms: int,
+        tol: float,
+        *,
+        backend: str = "mom",
+    ) -> None:
+        self.backend = backend
+        self.soil = soil
+        self.max_terms = max_terms
+        self.tol = tol
+        if isinstance(soil, TwoLayerSoil):
+            self.layer_interfaces = (soil.h_1,)
+            self.soil_resistivity = float(soil.rho_1)
+        else:
+            self.layer_interfaces = None
+            self.soil_resistivity = float(soil.rho)
+        self.reference_resistivity = self.soil_resistivity
+
+    def prepare(
+        self, segments: list[_Segment], arrays: SegmentArrays, *, stacklevel: int
+    ) -> SelfKernel:
+        """Reaction operator; the cross-layer path when a segment reaches ``h_1``."""
+        soil = self.soil
+        if isinstance(soil, HomogeneousSoil):
+            return HalfSpaceKernel(soil.rho)
+        # Cross-layer support (audit 2026-07-08, WP-D3): the shared
+        # self-kernel factory dispatches to the rigorous ADR-0007
+        # Sommerfeld path when any segment sits at or below h_1. mom is
+        # the engine that *solves* the per-segment current distribution —
+        # exactly the tool to quantify the image family's uniform-leakage
+        # bias across the interface.
+        z_max = arrays.points[:, 2].max()
+        if z_max >= soil.h_1:
+            _log.info(
+                "mom: cross-layer geometry (z_max = %.3f m >= h_1 = "
+                "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
+                z_max,
+                soil.h_1,
+            )
+        return _two_layer_self_kernel_factory(
+            soil,
+            self.max_terms,
+            self.tol,
+            allow_cross_layer=True,
+        )
+
+    def segment_potentials(
+        self,
+        kernel: SelfKernel,
+        Z: np.ndarray,
+        arrays: SegmentArrays,
+        seg_currents: np.ndarray,
+    ) -> np.ndarray:
+        """Potentials from the reaction operator itself.
+
+        The operator keeps the matrices it assembled for :meth:`reaction_matrix`
+        (one assembly per solve, 10.57), so this costs two products; the
+        values are bit-identical to ``mom`` of 0.15.0, which applied a
+        freshly built kernel to the real and imaginary parts.
+        """
+        points, lengths, radii = arrays.points, arrays.lengths, arrays.radii
+        return kernel(points, lengths, radii, seg_currents.real) + 1j * kernel(
+            points, lengths, radii, seg_currents.imag
+        )
+
+    def metadata(self, solution: Solution, *, stacklevel: int) -> dict:
+        """Soil parameters and the series convergence report (two layers)."""
+        soil = self.soil
+        if not isinstance(soil, TwoLayerSoil):
+            return {}
+        K = soil.reflection_coefficient
+        n_terms_used = ImageSeries.from_coefficients(
+            K, soil.h_1, self.max_terms, self.tol
+        ).n_terms
+        converged = (
+            _series_tail_bound(abs(K), n_terms_used) < self.tol
+            if n_terms_used
+            else True
+        )
+        if not converged:
+            warnings.warn(
+                f"mom: the Tagg/Sunde image series was truncated at "
+                f"max_terms={self.max_terms} with tail bound > "
+                f"tol={self.tol:.2e} (|K| = {abs(K):.3f}). Raise "
+                "Engine.image_max_terms for high layer contrasts.",
+                SeriesTruncationWarning,
+                stacklevel=stacklevel,
+            )
+        return {
+            "K": float(K),
+            "rho_1": float(soil.rho_1),
+            "rho_2": float(soil.rho_2),
+            "h_1": float(soil.h_1),
+            "n_terms_used": n_terms_used,
+            "converged": bool(converged),
+        }
+
+
+def _point_matching_step(
+    engine: Engine,
+    *,
+    disc: Discretisation,
+    node_currents: dict[str, complex],
+    topo: Topology,
+    branches: BranchModel,
+    Z: np.ndarray,
+    potentials: Callable[[np.ndarray], np.ndarray],
+) -> tuple[Solution, list[dict[str, complex]]]:
+    """Solve step of the point-matching family (replaces pipeline step 5).
+
+    One unknown current per segment and one potential per node
+    (:func:`_point_matching_solve`), per frequency when the branch block
+    is inductive, once otherwise.
+
+    Parameters
+    ----------
+    engine
+        Engine; ``frequencies`` in Hz.
+    disc, node_currents, topo, branches
+        Results of the pipeline steps 1–4.
+    Z
+        Reaction matrix in Ω, ``N × N``.
+    potentials
+        ``seg_currents -> segment-midpoint potentials`` of the Green's
+        function.
+
+    Returns
+    -------
+    solution
+        Segment currents (A) and potentials (V) per frequency, and the
+        leakage current per owner (A).
+    node_potentials
+        Potential in V of every solved node per frequency (also nodes
+        without leakage segments).
+    """
+    n_freq = len(engine.frequencies)
+    n_segments = len(disc.segments)
+
+    def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray, dict[str, complex]]:
+        correction = (
+            branches.earth_correction(omega)
+            if branches.earth_correction is not None
+            else None
+        )
+        sc, node_phi = _point_matching_solve(
+            Z=Z,
+            elec_input_current=node_currents,
+            cluster_id=topo.cluster_id,
+            elec_to_segidx=disc.owner_segments,
+            n_segments=n_segments,
+            finite_branches=topo.finite_branches,
+            omega=omega if branches.has_inductance else 0.0,
+            inductance_matrix=branches.inductance_matrix,
+            carson_correction=correction,
+        )
+        ph = np.zeros(n_segments, dtype=complex)
+        if sc.any():
+            ph = potentials(sc)
+        return sc, ph, node_phi
+
+    if branches.has_inductance:
+        sc_per_freq: list[np.ndarray] = []
+        phi_per_freq: list[np.ndarray] = []
+        node_phi_per_freq: list[dict[str, complex]] = []
+        for f in engine.frequencies:
+            sc, ph, node_phi = _solve_at(2.0 * np.pi * float(f))
+            sc_per_freq.append(sc)
+            phi_per_freq.append(ph)
+            node_phi_per_freq.append(node_phi)
+    else:
+        sc, ph, node_phi = _solve_at(0.0)
+        sc_per_freq = [sc] * n_freq
+        phi_per_freq = [ph] * n_freq
+        node_phi_per_freq = [node_phi] * n_freq
+    owner_currents = [
+        {
+            name: complex(sc[idxs].sum())
+            for name, idxs in disc.owner_segments.items()
+            if idxs
+        }
+        for sc in sc_per_freq
+    ]
+    return (
+        Solution(
+            owner_currents=owner_currents,
+            segment_currents=sc_per_freq,
+            segment_potentials=phi_per_freq,
+        ),
+        node_phi_per_freq,
+    )
+
+
+def _point_matching_result(
+    world: World,
+    engine: Engine,
+    *,
+    green: _PointMatchingGreen,
+    disc: Discretisation,
+    node_currents: dict[str, complex],
+    topo: Topology,
+    branches: BranchModel,
+    arrays: SegmentArrays,
+    solution: Solution,
+    metadata: dict,
+) -> FieldResult:
+    """Result step of the point-matching family (replaces pipeline step 6).
+
+    Same layout as :func:`groundfield.solver._pipeline.build_result`; the
+    node potential is the plain segment mean (point matching enforces
+    it at every midpoint), and floating clusters report an exactly zero
+    net current (10.29).
+    """
+    n_freq = len(engine.frequencies)
+    real_names = [e.name for e in world.electrodes]
+    real_set = set(real_names)
+    (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    ) = _node_results(
+        elec_to_segidx=disc.owner_segments,
+        phi_per_freq=solution.segment_potentials,
+        sc_per_freq=solution.segment_currents,
+        cluster_id=topo.cluster_id,
+        electrode_names=real_set,
+        floating=_floating_clusters(
+            node_currents, topo.cluster_id, topo.finite_branches, real_set
+        ),
+        n_freq=n_freq,
+    )
+    sc_per_freq = solution.segment_currents
+    point_sources = [
+        PointSource(
+            position=tuple(arrays.points[i].tolist()),
+            current=[complex(sc_per_freq[k][i]) for k in range(n_freq)],
+            electrode_name=disc.segments[i].electrode_name,
+            length=float(arrays.lengths[i]),
+        )
+        for i in range(len(disc.segments))
+    ]
+    cluster_id = topo.cluster_id
+    clusters = {
+        ename: sorted(
+            n
+            for n in cluster_id
+            if cluster_id[n] == cluster_id[ename] and n in real_set
+        )
+        for ename in real_names
+    }
+    metadata = dict(metadata)
+    if branches.has_inductance:
+        from groundfield.coupling.carson import skin_depth
+
+        sigma = (
+            branches.sigma_earth
+            if branches.sigma_earth is not None
+            else 1.0 / float(green.reference_resistivity)
+        )
+        metadata["penetration_depth"] = {
+            float(f): skin_depth(2.0 * np.pi * f, sigma) for f in engine.frequencies
+        }
+    if conductor_currents:
+        metadata["conductor_node_currents"] = conductor_currents
+        metadata["conductor_node_potentials"] = conductor_potentials
+    return FieldResult(
+        backend=green.backend,
+        frequencies=list(engine.frequencies),
+        electrode_potentials=electrode_potentials,
+        electrode_currents=electrode_currents,
+        point_sources=point_sources,
+        soil_resistivity=float(green.soil_resistivity),
+        soil=green.soil,
+        clusters=clusters,
+        metadata=metadata,
+    )
+
+
+def solve_point_matching(
+    world: World,
+    engine: Engine,
+    green: _PointMatchingGreen,
+    *,
+    stacklevel: int = 3,
+) -> FieldResult:
+    """Run the point-matching family through the shared solve pipeline.
+
+    Steps 1–4 of :mod:`groundfield.solver._pipeline` (discretisation,
+    source injection, topology, inductive branch block) and the
+    burial-depth guard are those of the image family; the solve and the
+    read-back are :func:`_point_matching_step` and
+    :func:`_point_matching_result` (review pass 10, 10.75).
+
+    Parameters
+    ----------
+    world
+        World with at least one electrode and a soil ``green`` accepts.
+    engine
+        Engine configuration (``segment_length`` in m, ``frequencies``
+        in Hz, ``earth_inductive_model``).
+    green
+        Soil-specific part (:class:`_PointMatchingGreen`).
+    stacklevel
+        ``stacklevel`` that makes the warnings point at the caller of
+        the backend entry point (``solve_mom`` / ``solve_mom_sommerfeld``).
+
+    Returns
+    -------
+    FieldResult
+        Node potentials (V) and leakage currents (A) per frequency, the
+        segment currents as point sources, and metadata.
+    """
+    # Steps 1-4 of the shared pipeline, called through the module so that
+    # every extension of a step (two-terminal sources and junction nodes
+    # in ``inject`` / ``build_topology``, inductive fixes in
+    # ``assemble_branches``) reaches this family unchanged.
+    disc = _pipeline.discretise(world, engine, green.layer_interfaces)
+    node_currents = _pipeline.inject(world, where=green.where, stacklevel=stacklevel)
+    topo = _pipeline.build_topology(world, disc)
+    branches = _pipeline.assemble_branches(world, engine, topo)
+    # Burial-depth validation of the galvanic image construction, as in
+    # the image family (F26/F29): segments partly above the surface are
+    # rejected, shallow ones warn (ShallowSegmentWarning).
+    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    arrays = SegmentArrays.from_segments(disc.segments)
+    kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
+    Z = green.reaction_matrix(kernel, arrays)
+    solution, _node_potentials = _point_matching_step(
+        engine,
+        disc=disc,
+        node_currents=node_currents,
+        topo=topo,
+        branches=branches,
+        Z=Z,
+        potentials=lambda sc: green.segment_potentials(kernel, Z, arrays, sc),
+    )
+    metadata = {
+        "world_name": world.name,
+        "n_segments": len(disc.segments),
+        "segment_length": engine.segment_length,
+        "solver": "point_matching",
+        "stub": False,
+        "earth_inductive_model": branches.earth_inductive_model,
+        **green.metadata(solution, stacklevel=stacklevel + 1),
+    }
+    return _point_matching_result(
+        world,
+        engine,
+        green=green,
+        disc=disc,
+        node_currents=node_currents,
+        topo=topo,
+        branches=branches,
+        arrays=arrays,
+        solution=solution,
+        metadata=metadata,
+    )
+
+
+# ---------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------
 
 
 def solve_mom(
-    world: "World",
-    engine: "Engine",
+    world: World,
+    engine: Engine,
     *,
     two_layer_max_terms: int | None = None,
     two_layer_tol: float | None = None,
@@ -554,7 +1059,7 @@ def solve_mom(
     point matching at the segment midpoints, instead of one uniform
     current per electrode) differs. Clusters without a source float
     (zero net current, 10.29). See the module docstring for the
-    accuracy of the scheme.
+    accuracy of the scheme and the shared solve flow.
 
     Parameters
     ----------
@@ -577,6 +1082,17 @@ def solve_mom(
         image backends. ``metadata['solver']`` is ``'point_matching'``
         (``'galerkin'`` up to 0.15.0, although the scheme was the
         same).
+
+    Raises
+    ------
+    ValueError
+        If the world has no electrodes, or a segment lies partly above
+        the soil surface.
+    TypeError
+        For a soil model other than the three above, or a
+        :class:`MultiLayerSoil` with three or more distinct layers.
+    NotImplementedError
+        For electrodes with a concrete-shell coefficient (ADR-0012).
     """
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
@@ -598,318 +1114,14 @@ def solve_mom(
             "backend='mom_sommerfeld' for n >= 3 soils."
         )
     _reject_concrete_shells(world, "mom")
-    _warn_ignored_sources(world, "mom")
     if two_layer_max_terms is None:
         two_layer_max_terms = engine.image_max_terms
     if two_layer_tol is None:
         two_layer_tol = engine.image_series_tol
-
-    ds = engine.segment_length
     _log.info(
         "mom: soil=%s, segment_length=%.3f",
         type(soil).__name__,
-        ds,
+        engine.segment_length,
     )
-
-    # 1) Discretisation — identical to the image backends; for
-    #    two-layer soil segments are split at the interface
-    #    (ADR-0007 step 1, audit 2026-07-08 WP-D2).
-    interfaces = (soil.h_1,) if isinstance(soil, TwoLayerSoil) else None
-    all_segments: list[_Segment] = []
-    elec_to_segidx: dict[str, list[int]] = {}
-    for e in world.electrodes:
-        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
-        elec_to_segidx[e.name] = list(
-            range(len(all_segments), len(all_segments) + len(segs))
-        )
-        all_segments.extend(segs)
-
-    # 2) Per-electrode input currents from the configured sources.
-    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
-    for src in world.sources:
-        if src.kind != "current":
-            continue
-        i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
-        if src.attached_to in elec_input_current:
-            elec_input_current[src.attached_to] += i_complex
-
-    # 3) Cluster building (ideal conductors only), finite-impedance
-    #    branch list, plus the distributed-conductor topology
-    #    (ADR-0003) — all fed into the bordered point-matching system.
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
-    finite_branches = _build_finite_branches(world.conductors, cluster_id)
-    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
-        world.conductors, cluster_id
-    )
-    for s in cond_segs:
-        pn = s.electrode_name
-        elec_to_segidx[pn] = [len(all_segments)]
-        all_segments.append(s)
-        cluster_id[pn] = pn
-    for n_ in interior_nodes:
-        if n_ not in cluster_id:
-            cluster_id[n_] = n_
-            elec_to_segidx[n_] = []
-    n_lumped_branches = len(finite_branches)
-    distributed_branch_tuples = [
-        (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
-    ]
-    finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
-    sigma_earth_for_carson: float | None = None
-    layered_earth_for_sommerfeld: object = None
-    if earth_inductive_model == "carson_series":
-        from groundfield.coupling import resolve_earth_conductivity
-
-        sigma_earth_for_carson = resolve_earth_conductivity(world.soil)
-    elif earth_inductive_model == "sommerfeld":
-        from groundfield.coupling import resolve_earth_layers
-
-        layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = (
-        _assemble_inductance_matrix(
-            distributed_branches_objs,
-            n_lumped_branches=n_lumped_branches,
-            n_total_branches=len(finite_branches),
-            earth_model=earth_inductive_model,
-            sigma_earth=sigma_earth_for_carson,
-            layered_earth=layered_earth_for_sommerfeld,
-        )
-    )
-
-    n_segments = len(all_segments)
-    seg_points = np.array([s.midpoint for s in all_segments])
-    seg_lengths = np.array([s.length for s in all_segments])
-    wire_radii = np.array([s.wire_radius for s in all_segments])
-
-    # 4) Cross-layer support (audit 2026-07-08, WP-D3): the shared
-    #    self-kernel factory dispatches to the rigorous ADR-0007
-    #    Sommerfeld path when any segment sits at or below h_1, so
-    #    the historic hard rejection is gone. mom is the engine that
-    #    *solves* the per-segment current distribution — exactly the
-    #    tool to quantify the image family's uniform-leakage bias
-    #    across the interface.
-    if isinstance(soil, TwoLayerSoil):
-        z_max = seg_points[:, 2].max()
-        if z_max >= soil.h_1:
-            _log.info(
-                "mom: cross-layer geometry (z_max = %.3f m >= h_1 = "
-                "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
-                z_max,
-                soil.h_1,
-            )
-
-    # 5) Assemble the reaction matrix Z (kernel depends on soil model).
-    n_terms_used = 0
-    if isinstance(soil, HomogeneousSoil):
-        Z = _build_Z_homogeneous(seg_points, seg_lengths, wire_radii, soil.resistivity)
-    else:
-        # TwoLayerSoil
-        Z = _build_Z_two_layer(
-            seg_points,
-            seg_lengths,
-            wire_radii,
-            soil,
-            two_layer_max_terms,
-            two_layer_tol,
-        )
-        # Approximate the term count from the same offset generator.
-        from groundfield.solver.image_2layer import _two_layer_image_offsets
-
-        _, _, _, n_terms_used = _two_layer_image_offsets(
-            soil.reflection_coefficient,
-            soil.h_1,
-            two_layer_max_terms,
-            two_layer_tol,
-        )
-
-    # 6) Frequency loop. With no inductive coupling, solve once and
-    #    replicate across frequencies; otherwise loop.
-    n_freq = len(engine.frequencies)
-    omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
-    real_electrode_names = {e.name for e in world.electrodes}
-
-    if isinstance(soil, HomogeneousSoil):
-        rho_self = soil.resistivity
-        phi_kernel = lambda sc_real: _self_corrected_kernel(
-            seg_points,
-            seg_lengths,
-            wire_radii,
-            sc_real,
-            rho_self,
-        )
-    else:
-        self_kernel = _two_layer_self_kernel_factory(
-            soil,
-            two_layer_max_terms,
-            two_layer_tol,
-            allow_cross_layer=True,
-        )
-        phi_kernel = lambda sc_real: self_kernel(
-            seg_points,
-            seg_lengths,
-            wire_radii,
-            sc_real,
-        )
-
-    def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray]:
-        carson_dz = (
-            carson_builder(omega)
-            if (has_inductance and carson_builder is not None)
-            else None
-        )
-        sc, _ = _point_matching_solve(
-            Z=Z,
-            elec_input_current=elec_input_current,
-            cluster_id=cluster_id,
-            elec_to_segidx=elec_to_segidx,
-            n_segments=n_segments,
-            finite_branches=finite_branches,
-            omega=omega if has_inductance else 0.0,
-            inductance_matrix=inductance_matrix_full if has_inductance else None,
-            carson_correction=carson_dz,
-        )
-        ph = np.zeros(n_segments, dtype=complex)
-        if sc.any():
-            ph = phi_kernel(sc.real) + 1j * phi_kernel(sc.imag)
-        return sc, ph
-
-    sc_per_freq: list[np.ndarray] = []
-    phi_per_freq: list[np.ndarray] = []
-    if has_inductance:
-        for omega in omegas:
-            sc, ph = _solve_at(omega)
-            sc_per_freq.append(sc)
-            phi_per_freq.append(ph)
-    else:
-        sc, ph = _solve_at(0.0)
-        sc_per_freq = [sc] * n_freq
-        phi_per_freq = [ph] * n_freq
-
-    # Node potentials and leakage currents; floating clusters (no
-    # source, no branch) report an exactly zero net current (10.29).
-    (
-        electrode_potentials,
-        electrode_currents,
-        conductor_potentials,
-        conductor_currents,
-    ) = _node_results(
-        elec_to_segidx=elec_to_segidx,
-        phi_per_freq=phi_per_freq,
-        sc_per_freq=sc_per_freq,
-        cluster_id=cluster_id,
-        electrode_names=real_electrode_names,
-        floating=_floating_clusters(
-            elec_input_current, cluster_id, finite_branches, real_electrode_names
-        ),
-        n_freq=n_freq,
-    )
-
-    # 8) Point-source list and cluster map for post-processing.
-    point_sources = [
-        PointSource(
-            position=tuple(seg_points[i].tolist()),
-            current=[complex(sc_per_freq[k][i]) for k in range(n_freq)],
-            electrode_name=all_segments[i].electrode_name,
-            length=float(seg_lengths[i]),
-        )
-        for i in range(n_segments)
-    ]
-    cluster_members: dict[str, list[str]] = {}
-    for ename in real_electrode_names:
-        cluster_members[ename] = sorted(
-            n
-            for n in cluster_id
-            if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
-        )
-
-    # 9) Soil-specific metadata.
-    if isinstance(soil, HomogeneousSoil):
-        soil_resistivity = float(soil.resistivity)
-        soil_meta: dict[str, float | int | bool] = {}
-    else:
-        K = soil.reflection_coefficient
-        soil_resistivity = float(soil.rho_1)
-        converged = (
-            _series_tail_bound(abs(K), n_terms_used) < two_layer_tol
-            if n_terms_used
-            else True
-        )
-        if not converged:
-            warnings.warn(
-                f"mom: the Tagg/Sunde image series was truncated at "
-                f"max_terms={two_layer_max_terms} with tail bound > "
-                f"tol={two_layer_tol:.2e} (|K| = {abs(K):.3f}). Raise "
-                "Engine.image_max_terms for high layer contrasts.",
-                SeriesTruncationWarning,
-                stacklevel=2,
-            )
-        soil_meta = {
-            "K": float(K),
-            "rho_1": float(soil.rho_1),
-            "rho_2": float(soil.rho_2),
-            "h_1": float(soil.h_1),
-            "n_terms_used": n_terms_used,
-            "converged": bool(converged),
-        }
-
-    return FieldResult(
-        backend="mom",
-        frequencies=list(engine.frequencies),
-        electrode_potentials=electrode_potentials,
-        electrode_currents=electrode_currents,
-        point_sources=point_sources,
-        soil_resistivity=soil_resistivity,
-        soil=soil,
-        clusters=cluster_members,
-        metadata={
-            "world_name": world.name,
-            "n_segments": n_segments,
-            "segment_length": ds,
-            "solver": "point_matching",
-            "stub": False,
-            "earth_inductive_model": earth_inductive_model,
-            **soil_meta,
-            **_carson_skin_metadata(
-                has_inductance,
-                sigma_earth_for_carson,
-                soil,
-                engine.frequencies,
-            ),
-            **(
-                {
-                    "conductor_node_currents": conductor_currents,
-                    "conductor_node_potentials": conductor_potentials,
-                }
-                if conductor_currents
-                else {}
-            ),
-        },
-    )
-
-
-def _carson_skin_metadata(
-    has_inductance: bool,
-    sigma_for_carson: float | None,
-    soil,
-    frequencies,
-) -> dict:
-    """Build the ``penetration_depth`` metadata block."""
-    if not has_inductance:
-        return {}
-    from groundfield.coupling.carson import skin_depth
-    from groundfield.soil.models import HomogeneousSoil, TwoLayerSoil
-
-    if sigma_for_carson is not None:
-        sigma_ref = sigma_for_carson
-    elif isinstance(soil, HomogeneousSoil):
-        sigma_ref = 1.0 / float(soil.resistivity)
-    elif isinstance(soil, TwoLayerSoil):
-        sigma_ref = 1.0 / float(soil.rho_1)
-    else:
-        return {}
-    return {
-        "penetration_depth": {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in frequencies
-        }
-    }
+    green = _MomGreen(soil, two_layer_max_terms, two_layer_tol)
+    return solve_point_matching(world, engine, green, stacklevel=3)
