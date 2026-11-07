@@ -7,23 +7,54 @@ Validates :mod:`groundfield.postprocess.safety` against:
 - physical monotonicities (U_T grows towards U_E far away from
   the electrode, |U_S| decays towards remote earth),
 - symmetry under cylindrically symmetric geometry,
-- the EN 50522:2010, Fig. B.3 anchor table for U_TP(t_F).
+- the published values of EN 50522:2022, Table B.4 (permissible touch
+  voltage U_Tp) and Table B.1 (permissible body current I_B), entered
+  here as literals,
+- the prospective (open-circuit) touch voltage of EN 50522:2022,
+  Annex B.4, and the true-RMS touch voltage over a fault spectrum.
 """
 
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 import pytest
 
 import groundfield as gf
 from groundfield.postprocess.safety import (
-    _EN50522_TP_GRID,
     permissible_touch_voltage_en50522,
     step_voltage,
     touch_voltage,
     touch_voltage_envelope,
+)
+
+# EN 50522:2022 (DIN EN 50522 (VDE 0101-2):2023-10), Table B.4: fault
+# duration t_f in s -> permissible touch voltage U_Tp in V (values rounded
+# to 5 V in the standard). Literals on purpose: the test must not read the
+# module's own table.
+_TABLE_B4 = (
+    (0.05, 725.0),
+    (0.10, 655.0),
+    (0.20, 525.0),
+    (0.50, 225.0),
+    (1.00, 115.0),
+    (2.00, 95.0),
+    (5.00, 85.0),
+    (10.00, 85.0),
+)
+# EN 50522:2022, Table B.1: fault duration t_f in s -> permissible body
+# current I_B in A (curve c2 of IEC 60479-1:2018, left hand to both feet).
+_TABLE_B1 = (
+    (0.05, 0.900),
+    (0.10, 0.800),
+    (0.20, 0.600),
+    (0.50, 0.200),
+    (1.00, 0.080),
+    (2.00, 0.060),
+    (5.00, 0.051),
+    (10.00, 0.050),
 )
 
 
@@ -196,10 +227,50 @@ def test_step_voltage_horizontal_projection_strips_z() -> None:
 # ---------------------------------------------------------------------
 
 
-def test_en50522_anchor_points_match_table() -> None:
-    """The interpolant must reproduce the table exactly at the anchors."""
-    for t, u in _EN50522_TP_GRID:
-        assert permissible_touch_voltage_en50522(t) == pytest.approx(u, rel=1e-12)
+@pytest.mark.parametrize(("t_f", "u_tp"), _TABLE_B4)
+def test_en50522_matches_table_b4_literals(t_f: float, u_tp: float) -> None:
+    """U_Tp(t_f) reproduces EN 50522:2022, Table B.4 at every tabulated t_f.
+
+    The expected values are literals transcribed from the standard (the
+    v0.15.0 test compared the interpolant with the module constant it
+    interpolates, which could never fail). Review pass 10 (10.42)
+    confirmed the module values against the standard, so this guard
+    passes on v0.15.0 as well and carries no finding marker. The
+    log-log interpolation returns an anchor to within one ulp.
+    """
+    assert permissible_touch_voltage_en50522(t_f) == pytest.approx(u_tp, rel=1e-12)
+
+
+@pytest.mark.finding("10.42")
+def test_en50522_docstrings_cite_the_current_edition() -> None:
+    """The helper cites EN 50522:2022 Table B.4, not the 2010 figure."""
+    from groundfield.postprocess import safety
+
+    for doc in (safety.__doc__, permissible_touch_voltage_en50522.__doc__):
+        assert "EN 50522:2022" in doc
+        assert "Table B.4" in doc
+        assert "Figure B.3" not in doc
+        assert "EN 50522:2010" not in doc
+        assert "low-voltage standard curve" not in doc
+
+
+@pytest.mark.finding("10.42")
+def test_en50522_long_duration_allows_80_volt() -> None:
+    """EN 50522:2022 (after Table B.4): 80 V for durations well above 10 s."""
+    assert permissible_touch_voltage_en50522(3600.0, long_duration=True) == 80.0
+    assert permissible_touch_voltage_en50522(math.inf, long_duration=True) == 80.0
+    # The default keeps the end value of Table B.4 beyond 10 s.
+    assert permissible_touch_voltage_en50522(3600.0) == 85.0
+
+
+@pytest.mark.finding("10.42")
+def test_en50522_long_duration_needs_more_than_ten_seconds() -> None:
+    with pytest.raises(ValueError, match="10 s"):
+        permissible_touch_voltage_en50522(0.5, long_duration=True)
+    with pytest.raises(ValueError, match="10 s"):
+        permissible_touch_voltage_en50522(10.0, long_duration=True)
+    with pytest.raises(ValueError, match="long_duration"):
+        permissible_touch_voltage_en50522(math.inf)
 
 
 def test_en50522_strictly_decreasing_inside_grid() -> None:
@@ -212,12 +283,8 @@ def test_en50522_strictly_decreasing_inside_grid() -> None:
 
 def test_en50522_clamped_outside_grid() -> None:
     """Outside the grid the table endpoints are returned unchanged."""
-    assert permissible_touch_voltage_en50522(1e-3) == pytest.approx(
-        _EN50522_TP_GRID[0][1], rel=1e-12
-    )
-    assert permissible_touch_voltage_en50522(1e6) == pytest.approx(
-        _EN50522_TP_GRID[-1][1], rel=1e-12
-    )
+    assert permissible_touch_voltage_en50522(1e-3) == 725.0
+    assert permissible_touch_voltage_en50522(1e6) == 85.0
 
 
 def test_en50522_rejects_invalid_time() -> None:
@@ -245,6 +312,160 @@ def test_en50522_terminal_plateau_constant() -> None:
     """Between t = 5 s and t = 10 s the standard's table is flat at 85 V."""
     for t in (5.0, 6.0, 7.5, 9.0, 10.0):
         assert permissible_touch_voltage_en50522(t) == pytest.approx(85.0, rel=1e-12)
+
+
+# ---------------------------------------------------------------------
+# permissible_prospective_touch_voltage_en50522 (EN 50522:2022, B.4)
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.52")
+@pytest.mark.parametrize(("t_f", "i_b"), _TABLE_B1)
+def test_prospective_touch_voltage_without_resistance_is_u_tp(
+    t_f: float, i_b: float
+) -> None:
+    """R_A = 0 leaves U_vTp = U_Tp (Eq. A.3 with R_H = R_F = 0)."""
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    assert u_vtp(t_f) == pytest.approx(permissible_touch_voltage_en50522(t_f))
+
+
+@pytest.mark.finding("10.52")
+@pytest.mark.parametrize(("t_f", "i_b"), _TABLE_B1)
+def test_prospective_touch_voltage_uses_table_b1_body_current(
+    t_f: float, i_b: float
+) -> None:
+    """U_vTp - U_Tp = I_B(t_f) / HF * R_A with I_B from Table B.1."""
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    r_a = 1000.0
+    u_tp = dict(_TABLE_B4)[t_f]
+    assert u_vtp(t_f, R_F1=r_a) == pytest.approx(u_tp + i_b * r_a, rel=1e-12)
+    # Hand resistance and footwear resistance add up (R_A = R_H + R_F1 + R_F2).
+    assert u_vtp(t_f, R_H=400.0, R_F1=600.0) == pytest.approx(
+        u_tp + i_b * r_a, rel=1e-12
+    )
+    # A heart-current factor below 1 raises the admissible voltage.
+    assert u_vtp(t_f, R_F1=r_a, HF=0.5) == pytest.approx(
+        u_tp + i_b / 0.5 * r_a, rel=1e-12
+    )
+
+
+@pytest.mark.finding("10.52")
+@pytest.mark.parametrize(
+    ("t_f", "r_f1", "rho_s", "expected"),
+    [
+        # Figure B.3 parameter sets of EN 50522:2022 (R_F = R_F1 + 1.5 m^-1 rho_s)
+        (0.5, 0.0, 500.0, 225.0 + 0.200 * 750.0),
+        (1.0, 1000.0, 500.0, 115.0 + 0.080 * 1750.0),
+        (2.0, 1000.0, 1000.0, 95.0 + 0.060 * 2500.0),
+        (10.0, 1000.0, 2000.0, 85.0 + 0.050 * 4000.0),
+    ],
+)
+def test_prospective_touch_voltage_figure_b3_parameter_sets(
+    t_f: float, r_f1: float, rho_s: float, expected: float
+) -> None:
+    """R_F2 = 1.5 m^-1 * rho_s is added for the surface resistivity."""
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    assert u_vtp(t_f, R_F1=r_f1, rho_s=rho_s) == pytest.approx(expected, rel=1e-12)
+
+
+@pytest.mark.finding("10.52")
+def test_prospective_touch_voltage_validates_inputs() -> None:
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    with pytest.raises(ValueError, match="R_H"):
+        u_vtp(0.5, R_H=-1.0)
+    with pytest.raises(ValueError, match="R_F1"):
+        u_vtp(0.5, R_F1=float("nan"))
+    with pytest.raises(ValueError, match="rho_s"):
+        u_vtp(0.5, rho_s=-10.0)
+    with pytest.raises(ValueError, match="HF"):
+        u_vtp(0.5, HF=0.0)
+    # Monotone in the additional resistance and in time (R_A fixed).
+    ts = np.geomspace(0.05, 10.0, 40)
+    vals = [u_vtp(float(t), R_F1=1000.0, rho_s=100.0) for t in ts]
+    assert np.all(np.diff(vals) <= 1e-9)
+    # Long-duration faults: 80 V plus the 10 s body current (50 mA) * R_A.
+    assert u_vtp(3600.0, R_F1=1000.0, long_duration=True) == pytest.approx(
+        80.0 + 0.050 * 1000.0
+    )
+
+
+# ---------------------------------------------------------------------
+# touch_voltage_spectrum (true RMS over a fault spectrum)
+# ---------------------------------------------------------------------
+
+
+def _rod_spectrum_world(frequencies: list[float]) -> tuple[gf.World, gf.FieldResult]:
+    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(world, "rod", name="g1", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(world, attached_to="g1", magnitude=2.0, phase_deg=30.0)
+    eng = gf.create_engine(backend="mom", segment_length=0.25, frequencies=frequencies)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return world, eng.solve(world)
+
+
+@pytest.mark.finding("10.52")
+def test_touch_voltage_spectrum_is_the_rms_of_the_scaled_harmonics() -> None:
+    """U_rms = sqrt(sum_k |U_T(f_k) I_k / I_src(f_k)|^2) at one foot position."""
+    from groundfield.postprocess.safety import touch_voltage_spectrum
+
+    freqs = [50.0, 150.0, 250.0]
+    currents = [100.0, 10.0 - 4.0j, 5.0]
+    world, res = _rod_spectrum_world(freqs)
+    i_src = 2.0 * np.exp(1j * math.radians(30.0))
+    per_harmonic = [
+        touch_voltage(res, world, electrode="g1", frequency_index=k) / i_src * i_k
+        for k, i_k in enumerate(currents)
+    ]
+    expected = math.sqrt(sum(abs(u) ** 2 for u in per_harmonic))
+    u_rms = touch_voltage_spectrum(res, world, electrode="g1", currents=currents)
+    assert u_rms == pytest.approx(expected, rel=1e-12)
+    # Galvanic rod: U_T per ampere is frequency independent, so the RMS is
+    # U_T(1 A) times the RMS of the current spectrum.
+    u_1a = abs(touch_voltage(res, world, electrode="g1") / i_src)
+    i_rms = math.sqrt(sum(abs(i) ** 2 for i in currents))
+    assert u_rms == pytest.approx(u_1a * i_rms, rel=1e-9)
+
+
+@pytest.mark.finding("10.52")
+def test_touch_voltage_spectrum_accepts_results_per_frequency_and_mappings() -> None:
+    from groundfield.postprocess.safety import touch_voltage_spectrum
+
+    freqs = [50.0, 250.0]
+    world, multi = _rod_spectrum_world(freqs)
+    singles = [_rod_spectrum_world([f])[1] for f in freqs]
+    a = touch_voltage_spectrum(multi, world, electrode="g1", currents=[50.0, 7.0])
+    b = touch_voltage_spectrum(singles, world, electrode="g1", currents=[50.0, 7.0])
+    c = touch_voltage_spectrum(
+        multi, world, electrode="g1", currents={250.0: 7.0, 50.0: 50.0}
+    )
+    assert b == pytest.approx(a, rel=1e-12)
+    assert c == pytest.approx(a, rel=1e-12)
+
+
+@pytest.mark.finding("10.52")
+def test_touch_voltage_spectrum_rejects_inconsistent_currents() -> None:
+    from groundfield.postprocess.safety import touch_voltage_spectrum
+
+    world, res = _rod_spectrum_world([50.0, 150.0])
+    with pytest.raises(ValueError, match="2 frequencies"):
+        touch_voltage_spectrum(res, world, electrode="g1", currents=[1.0])
+    with pytest.raises(ValueError, match="150"):
+        touch_voltage_spectrum(res, world, electrode="g1", currents={50.0: 1.0})
+    with pytest.raises(ValueError, match="finite"):
+        touch_voltage_spectrum(res, world, electrode="g1", currents=[1.0, math.nan])
 
 
 # ---------------------------------------------------------------------

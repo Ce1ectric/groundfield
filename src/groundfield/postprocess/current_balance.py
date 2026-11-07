@@ -56,20 +56,29 @@ Validity envelope
   All quantities here are complex per ``frequency_index``.
 * Cluster discovery uses :attr:`FieldResult.clusters` — the
   same map produced by every backend.
+
+Which impedance (review pass 10, 10.18)
+---------------------------------------
+The ``Z`` columns of :func:`cluster_current_balance` are **cluster
+impedances** — a cluster's potential over its own soil leakage — and
+those of :func:`electrode_current_table` are **electrode impedances**
+:math:`U_e / I_e`. Neither is the **input impedance** a source sees
+(:meth:`FieldResult.input_impedance`, the default quantity of
+:func:`groundfield.postprocess.sweep.sweep` and of the rho-f exporters).
+For one current source returning through remote earth the split factor
+links them: :math:`Z_\\text{in} = s\\,Z_c`.
 """
 
 from __future__ import annotations
 
 import cmath
 import math
-from typing import TYPE_CHECKING, Iterable, Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:  # pragma: no cover
-    import matplotlib.figure as mpl_fig
-
     from groundfield.solver.result import FieldResult
     from groundfield.sources import Source
     from groundfield.world import World
@@ -92,6 +101,17 @@ def _source_current(source: "Source") -> complex:
     return float(source.magnitude) * cmath.exp(
         1j * math.radians(float(source.phase_deg))
     )
+
+
+def _solved_source_current(
+    result: "FieldResult", source: "Source", frequency_index: int
+) -> complex:
+    """Source current of the solve: the snapshot in ``result.sources`` when
+    present (the world may have been edited since), else the world's source."""
+    for record in result.sources:
+        if record.name == source.name and record.kind == "current" and record.current:
+            return complex(record.current[frequency_index])
+    return _source_current(source)
 
 
 def _unique_clusters(result: "FieldResult") -> dict[str, list[str]]:
@@ -146,9 +166,11 @@ def cluster_current_balance(
 
     Returns one row per *unique* galvanic cluster present in the
     result. The cluster impedance is computed as
-    :math:`Z_c = U_c / I_c` with :math:`I_c = \\sum_{e \\in c} I_e`.
-    Where :math:`I_c = 0` (purely passive observer cluster) the
-    impedance columns are ``NaN``.
+    :math:`Z_c = U_c / I_c` with :math:`I_c = \\sum_{e \\in c} I_e`
+    — the cluster's potential over its **own soil leakage**, not the
+    input impedance a source sees when conductors carry current out of
+    the cluster (see the module docstring). Where :math:`I_c = 0`
+    (purely passive observer cluster) the impedance columns are ``NaN``.
 
     Parameters
     ----------
@@ -232,7 +254,9 @@ def electrode_current_table(
     For each electrode in the result the table reports the
     potential :math:`U_e` (= cluster potential), the soil-leakage
     current :math:`I_e`, the implied two-terminal impedance
-    :math:`Z_e = U_e / I_e`, and the **fractional share** of the
+    :math:`Z_e = U_e / I_e` (the electrode's own leakage impedance,
+    ``quantity="electrode"`` in the sweep / rho-f helpers), and the
+    **fractional share** of the
     cluster total :math:`s_{e \\mid c} = I_e / I_c`. The latter is
     the engineering key indicator for "of all the soil current
     leaving cluster *c*, how much physically flows through this
@@ -390,6 +414,14 @@ def split_factor(
     * The complex argument :math:`\\arg s` reveals the inductive
       content of the parallel path — a Carson- or Sommerfeld-
       corrected lead at frequency >0 produces an imaginary share.
+    * For a source returning through remote earth it links the input
+      impedance and the cluster impedance of the feeding cluster,
+      :math:`Z_\\text{in} = s\\,Z_c` (review pass 10, 10.18).
+
+    The denominator :math:`I_\\text{src}` is the source current of the
+    solve, read from the snapshot :attr:`FieldResult.sources` when the
+    result carries one (since review pass 10); otherwise from the
+    world's source.
 
     Not to be confused with the *Reduktionsfaktor*
     -----------------------------------------------
@@ -436,7 +468,7 @@ def split_factor(
         the result.
     """
     source = _resolve_source(world, source_name)
-    I_src = _source_current(source)
+    I_src = _solved_source_current(result, source, frequency_index)
     if abs(I_src) == 0.0:
         raise ValueError(
             f"Source '{source.name}' has zero magnitude — split factor is undefined."

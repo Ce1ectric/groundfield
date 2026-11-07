@@ -39,7 +39,8 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 import pandas as pd
 
-from groundfield.postprocess.sweep import _default_response
+from groundfield.postprocess._impedance import Quantity
+from groundfield.postprocess.sweep import _resolve_response
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
@@ -55,6 +56,8 @@ def convergence_study(
     *,
     segment_lengths: Sequence[float],
     response: Callable[["FieldResult", "World", int], dict[str, float]] | None = None,
+    quantity: Quantity = "input",
+    source: str | None = None,
 ) -> pd.DataFrame:
     """Solve the same world repeatedly with refining ``segment_length``.
 
@@ -76,9 +79,17 @@ def convergence_study(
         Sequence of segment lengths in metres. Must be strictly
         positive and contain at least two distinct values.
     response
-        Optional response extractor. Defaults to
-        :func:`groundfield.postprocess.sweep._default_response`
-        (cluster impedance and EPR at the source's cluster).
+        Optional response extractor ``(result, world,
+        frequency_index) -> dict``. Defaults to the impedance response
+        of :func:`groundfield.postprocess.sweep.sweep`.
+    quantity
+        Impedance of the default response: ``"input"`` (default since
+        review pass 10, 10.18; the driving-point impedance of the
+        source), ``"cluster"`` (the v0.15.0 default) or ``"electrode"``.
+        See :func:`groundfield.postprocess.sweep.sweep`.
+    source
+        Current source of the default response; may be omitted with a
+        single current source.
 
     Returns
     -------
@@ -86,7 +97,8 @@ def convergence_study(
         Long-format. Columns ``segment_length_m``,
         ``frequency_Hz``, ``n_segments`` and every key of the
         response (e.g. ``Z_re``, ``Z_im``, ``abs_Z``,
-        ``arg_Z_deg``, ``U_E_re``, ...).
+        ``arg_Z_deg``, ``U_E_re``, ...). With the default response
+        ``df.attrs["impedance_quantity"]`` records ``quantity``.
 
     Raises
     ------
@@ -94,7 +106,7 @@ def convergence_study(
         If ``segment_lengths`` is empty, contains non-positive
         values, or has fewer than two distinct values (a
         convergence study below two refinement steps is
-        meaningless).
+        meaningless); for an unknown ``quantity``.
     """
     ds_list = [float(ds) for ds in segment_lengths]
     if len(ds_list) < 2:
@@ -106,8 +118,8 @@ def convergence_study(
     if len(set(ds_list)) < 2:
         raise ValueError("segment_lengths must contain at least 2 distinct values.")
 
-    if response is None:
-        response = _default_response
+    default = response is None
+    response = _resolve_response(response, quantity, source, "convergence_study")
 
     rows: list[dict[str, Any]] = []
     for ds in ds_list:
@@ -127,6 +139,8 @@ def convergence_study(
         .sort_values(["frequency_Hz", "segment_length_m"], ascending=[True, False])
         .reset_index(drop=True)
     )
+    if default:
+        df.attrs["impedance_quantity"] = quantity
     return df
 
 

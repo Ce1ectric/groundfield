@@ -25,13 +25,26 @@ API surface
 
 Mathematical / physical content
 -------------------------------
-The default response extractor picks up the
-**cluster impedance** :math:`Z_c = U_c / I_c` at the source's
-galvanic cluster, with :math:`U_c` the cluster potential and
-:math:`I_c = \\sum_{e \\in c_\\text{src}} I_e` the net soil
-leakage. Both numerator and denominator are read from
-:class:`FieldResult` per ``frequency_index``, so the response is
-the engineering :math:`Z(\\rho_1, h_1, f)` curve that
+The default response extractor reports one impedance per
+frequency, selected by ``quantity`` (review pass 10, 10.18):
+
+* ``"input"`` (default) — the **input (driving-point) impedance**
+  :math:`Z_\\text{in} = (\\varphi_a - \\varphi_r) / I_s` of the
+  current source: what a measurement instrument or a fault sees at
+  the feeding point (:meth:`FieldResult.input_impedance`);
+* ``"cluster"`` — the **cluster impedance**
+  :math:`Z_c = \\varphi_c / \\sum_{e \\in c} I_e` of the source's
+  galvanic cluster over its own soil leakage (the default up to
+  v0.15.0);
+* ``"electrode"`` — :math:`\\varphi_e / I_e` of the feeding
+  electrode alone.
+
+As soon as conductors (PEN, shields, leads) carry part of the
+injected current away, the cluster impedance describes only the local
+electrode: for a station with three houses on a PEN it is 1.79 times
+the input impedance (1.26 times with one house, 3.09 times with eight;
+review pass 10). The response is the engineering
+:math:`Z(\\rho_1, h_1, f)` curve that
 :mod:`groundfield.postprocess.rho_f_standard` and
 :mod:`groundfield.postprocess.vector_fitting` consume.
 
@@ -46,16 +59,37 @@ Validity envelope
   :meth:`Engine.solve`. For 50 ρ-values × 10 h-values × 1 frequency
   list with N segments each, expect 500 dense system solves;
   budget accordingly with :func:`expected_segments`.
+* Parallelism: the combinations are independent, so
+  ``sweep(..., n_jobs=k)`` solves them in ``k`` worker processes
+  (review pass 10, 10.64). The dense LU factorisation is only
+  0.2–1.5 % of a solve (kernel assembly dominates), so a multi-threaded
+  BLAS does not parallelise a solve; separate processes do (measured
+  1.98× on 2 workers for a 20-house world). Workers run their BLAS on
+  one thread; the result is bit-identical to the serial run when the
+  calling process also runs a single-threaded BLAS (results differ at
+  the 1e-15 level between 1 and 2 BLAS threads).
 """
 
 from __future__ import annotations
 
 import cmath
+import contextlib
+import functools
 import itertools
 import math
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+import os
+import warnings
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Sequence
 
+import numpy as np
 import pandas as pd
+
+from groundfield.postprocess._impedance import (
+    Quantity,
+    check_quantity,
+    impedance_series,
+    select_current_source,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
@@ -70,40 +104,55 @@ __all__ = ["sweep", "plot_sweep_lines", "plot_sweep_heatmap"]
 # ---------------------------------------------------------------------
 
 
-def _default_response(
-    result: "FieldResult", world: "World", frequency_index: int
+def _impedance_response(
+    result: "FieldResult",
+    world: "World",
+    frequency_index: int,
+    *,
+    quantity: str = "input",
+    source: str | None = None,
 ) -> dict[str, float]:
-    """Cluster impedance and EPR at the source's cluster.
+    """Impedance, its denominator current and the voltage of one source.
 
-    Picks the (single) current source's cluster, sums the
-    per-electrode soil leakages and returns ``Z_c = U_c / I_c``
-    plus convenience fields.
+    Picks the current source (``source`` or the only one), reads the
+    impedance selected by ``quantity`` (see the module docstring) and
+    returns ``Z = U / I`` plus convenience fields:
 
-    Returns an empty dict when the world has no current source —
-    that signals "no scalar response to extract" to :func:`sweep`,
-    which then emits a row with only the axis values and
-    ``frequency_Hz``.
+    * ``U_E_*`` — the voltage of the quotient: the driving-point voltage
+      :math:`\\varphi_a - \\varphi_r` (= EPR for a return through
+      remote earth) for ``"input"``, the cluster potential for
+      ``"cluster"``, the electrode potential for ``"electrode"``;
+    * ``I_*`` — the impressed source current, the cluster leakage or
+      the electrode leakage;
+    * ``Z_*``, ``abs_Z``, ``arg_Z_deg`` — the impedance.
+
+    Returns an empty dict when the world has no current source — that
+    signals "no scalar response to extract" to :func:`sweep`, which then
+    emits a row with only the axis values and ``frequency_Hz``.
     """
-    current_sources = [s for s in world.sources if s.kind == "current"]
-    if not current_sources:
+    pool = result.sources or world.sources
+    src = select_current_source(
+        result, source=source, electrode_name=None, caller="sweep", sources=pool
+    )
+    if src is None:
         return {}
-    src = current_sources[0]
-    members = result.clusters.get(src.attached_to, [src.attached_to])
-    if not members:
-        return {}
-
-    U = complex(result.electrode_potentials.get(members[0], [0j])[frequency_index])
-    I = 0 + 0j
-    for m in members:
-        if m in result.electrode_currents:
-            I += complex(result.electrode_currents[m][frequency_index])
-
-    if I != 0:
-        Z = U / I
+    name = None if quantity == "input" else src.attached_to
+    z_all, i_all = impedance_series(
+        result,
+        quantity,
+        electrode_name=name,
+        source=src.name if quantity == "input" else None,
+        caller="sweep",
+    )
+    Z = complex(z_all[frequency_index])
+    I = complex(i_all[frequency_index])
+    if I != 0 and np.isfinite(Z.real) and np.isfinite(Z.imag):
+        U = Z * I
         Z_re, Z_im = Z.real, Z.imag
         abs_Z = abs(Z)
         arg_Z = math.degrees(cmath.phase(Z))
     else:
+        U = complex(result.electrode_potentials[src.attached_to][frequency_index])
         Z_re = Z_im = abs_Z = arg_Z = float("nan")
 
     return {
@@ -120,6 +169,121 @@ def _default_response(
     }
 
 
+#: Default response of :func:`sweep` and :func:`convergence_study`: the
+#: input impedance of the only current source.
+_default_response = functools.partial(_impedance_response, quantity="input")
+
+
+def _resolve_response(
+    response: Callable[["FieldResult", "World", int], dict[str, float]] | None,
+    quantity: str,
+    source: str | None,
+    caller: str,
+) -> Callable[["FieldResult", "World", int], dict[str, float]]:
+    """Default response for ``quantity`` / ``source`` or the user's one."""
+    check_quantity(quantity)
+    if response is None:
+        return functools.partial(_impedance_response, quantity=quantity, source=source)
+    if quantity != "input" or source is not None:
+        raise ValueError(
+            f"{caller}: quantity= and source= configure the default response; "
+            "they cannot be combined with a custom response."
+        )
+    return response
+
+
+# ---------------------------------------------------------------------
+# Process-pool helpers (n_jobs > 1)
+# ---------------------------------------------------------------------
+
+#: Environment variables that cap the thread count of common BLAS /
+#: OpenMP runtimes; set to "1" for the spawned worker processes.
+_BLAS_THREAD_VARS = (
+    "OPENBLAS_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+)
+
+
+@contextlib.contextmanager
+def _single_threaded_blas_env() -> Iterator[None]:
+    """Set the BLAS thread variables to 1 while worker processes start."""
+    saved = {k: os.environ.get(k) for k in _BLAS_THREAD_VARS}
+    try:
+        for k in _BLAS_THREAD_VARS:
+            os.environ[k] = "1"
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _worker_init() -> None:
+    """Pin the worker's BLAS to one thread (threadpoolctl when available)."""
+    try:  # pragma: no cover - optional dependency
+        from threadpoolctl import threadpool_limits
+
+        threadpool_limits(1)
+    except ImportError:
+        pass
+
+
+def _check_parallel_payload(**objects: Any) -> None:
+    """Fail early if a callable cannot reach a spawned worker process."""
+    import pickle
+
+    import __main__
+
+    for name, obj in objects.items():
+        target = getattr(obj, "func", obj)  # functools.partial
+        if getattr(target, "__module__", None) == "__main__" and not hasattr(
+            __main__, "__file__"
+        ):
+            raise TypeError(
+                f"sweep(n_jobs>1): {name} {target!r} is defined in an "
+                "interactive session (notebook); worker processes cannot "
+                "import it. Move it into a .py module next to the notebook "
+                "and import it from there, or use n_jobs=1."
+            )
+        try:
+            pickle.dumps(obj)
+        except Exception as exc:  # noqa: BLE001 - any pickling failure
+            raise TypeError(
+                f"sweep(n_jobs>1): {name} must be picklable (a module-level "
+                f"function, not a lambda or a nested function): {exc}. Use "
+                "n_jobs=1 or move it into a module."
+            ) from exc
+
+
+def _sweep_cell(
+    world_factory: Callable[..., "World"],
+    engine: Any,
+    response: Callable[["FieldResult", "World", int], dict[str, float]],
+    params: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[tuple[str, type, str, int]]]:
+    """Solve one Cartesian combination; return its rows and warnings."""
+    from groundfield.solver.engine import Engine
+
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        world = world_factory(**params)
+        eng = engine if isinstance(engine, Engine) else engine(**params)
+        result = eng.solve(world)
+        rows = []
+        for f_idx, f_hz in enumerate(result.frequencies):
+            row = dict(params)
+            row["frequency_Hz"] = float(f_hz)
+            row.update(response(result, world, f_idx))
+            rows.append(row)
+    caught = [(str(w.message), w.category, w.filename, w.lineno) for w in record]
+    return rows, caught
+
+
 # ---------------------------------------------------------------------
 # sweep
 # ---------------------------------------------------------------------
@@ -131,6 +295,9 @@ def sweep(
     *,
     axes: dict[str, Sequence[Any]],
     response: Callable[["FieldResult", "World", int], dict[str, float]] | None = None,
+    quantity: Quantity = "input",
+    source: str | None = None,
+    n_jobs: int = 1,
 ) -> pd.DataFrame:
     """Cartesian-product parameter sweep across user-defined axes.
 
@@ -167,21 +334,59 @@ def sweep(
     response
         Optional response extractor. Receives
         ``(result, world, frequency_index)`` and must return a
-        ``dict[str, float|complex]``. Defaults to
-        :func:`_default_response` (cluster impedance + EPR at
-        the source's cluster).
+        ``dict[str, float|complex]``. Defaults to the impedance
+        selected by ``quantity`` with the columns ``U_E_re``,
+        ``U_E_im``, ``abs_U_E``, ``I_re``, ``I_im``, ``abs_I``,
+        ``Z_re``, ``Z_im``, ``abs_Z``, ``arg_Z_deg`` (see the module
+        docstring).
+    quantity
+        Impedance of the default response: ``"input"`` (default since
+        review pass 10, 10.18) — the driving-point impedance of the
+        source; ``"cluster"`` — the source cluster's potential over its
+        own leakage (the v0.15.0 default); ``"electrode"`` — the feeding
+        electrode's own U/I. Only with the default response.
+    source
+        Name of the current source the default response refers to; may
+        be omitted when the world has exactly one current source (with
+        several, v0.15.0 silently used the first one; now it raises).
+    n_jobs
+        Number of worker processes (default 1: serial, in this process).
+        ``-1`` uses every logical CPU. With ``n_jobs > 1`` the
+        combinations are solved in a process pool (``spawn`` start
+        method, BLAS pinned to one thread per worker); rows keep the
+        order of the serial run and warnings raised in the workers are
+        re-issued here. ``world_factory``, ``engine`` and ``response``
+        must then be picklable: module-level functions or an
+        :class:`Engine`, not lambdas or functions defined in a notebook
+        (put those into a small ``.py`` module).
 
     Returns
     -------
     pandas.DataFrame
         Long-format. Columns are the axis names, ``frequency_Hz``,
         and every key returned by ``response``. One row per
-        Cartesian-product point per frequency.
+        Cartesian-product point per frequency. With the default
+        response, ``df.attrs["impedance_quantity"]`` records
+        ``quantity``.
 
     Raises
     ------
     ValueError
-        If ``axes`` is empty or any axis is empty.
+        If ``axes`` is empty or any axis is empty, ``quantity`` is
+        unknown, ``quantity`` / ``source`` are combined with a custom
+        ``response``, the default response finds several current
+        sources and ``source`` is omitted, or ``n_jobs`` is 0 or below -1.
+    TypeError
+        With ``n_jobs > 1``, if a callable cannot be sent to the worker
+        processes.
+
+    Notes
+    -----
+    With ``n_jobs > 1`` the result is bit-identical to ``n_jobs=1``
+    when the calling process runs a single-threaded BLAS as well
+    (``OPENBLAS_NUM_THREADS=1``); otherwise the two agree to round-off.
+    Process start-up costs about a second per worker, so parallel runs
+    pay off for solves of a second or more.
     """
     from groundfield.solver.engine import Engine
 
@@ -191,24 +396,68 @@ def sweep(
         if len(list(values)) == 0:
             raise ValueError(f"axis '{name}' is empty.")
 
-    if response is None:
-        response = _default_response
+    default = response is None
+    response = _resolve_response(response, quantity, source, "sweep")
+    if isinstance(n_jobs, bool) or not isinstance(n_jobs, int):
+        raise ValueError(f"n_jobs must be an integer, got {n_jobs!r}.")
+    if n_jobs == -1:
+        n_jobs = os.cpu_count() or 1
+    if n_jobs < 1:
+        raise ValueError(f"n_jobs must be >= 1 or -1, got {n_jobs}.")
 
     keys = list(axes.keys())
     values_list = [list(axes[k]) for k in keys]
+    combos = [dict(zip(keys, c, strict=True)) for c in itertools.product(*values_list)]
 
     rows: list[dict[str, Any]] = []
-    for combo in itertools.product(*values_list):
-        params = dict(zip(keys, combo))
-        world = world_factory(**params)
-        eng = engine if isinstance(engine, Engine) else engine(**params)
-        result = eng.solve(world)
-        for f_idx, f_hz in enumerate(result.frequencies):
-            row = dict(params)
-            row["frequency_Hz"] = float(f_hz)
-            row.update(response(result, world, f_idx))
-            rows.append(row)
-    return pd.DataFrame(rows)
+    if n_jobs == 1 or len(combos) == 1:
+        for params in combos:
+            world = world_factory(**params)
+            eng = engine if isinstance(engine, Engine) else engine(**params)
+            result = eng.solve(world)
+            for f_idx, f_hz in enumerate(result.frequencies):
+                row = dict(params)
+                row["frequency_Hz"] = float(f_hz)
+                row.update(response(result, world, f_idx))
+                rows.append(row)
+    else:
+        rows = _parallel_rows(world_factory, engine, response, combos, n_jobs)
+    df = pd.DataFrame(rows)
+    if default:
+        df.attrs["impedance_quantity"] = quantity
+    return df
+
+
+def _parallel_rows(
+    world_factory: Callable[..., "World"],
+    engine: Any,
+    response: Callable[["FieldResult", "World", int], dict[str, float]],
+    combos: list[dict[str, Any]],
+    n_jobs: int,
+) -> list[dict[str, Any]]:
+    """Solve ``combos`` in a process pool; rows in the order of ``combos``."""
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    _check_parallel_payload(
+        world_factory=world_factory, engine=engine, response=response
+    )
+    cell = functools.partial(_sweep_cell, world_factory, engine, response)
+    registry: dict[Any, Any] = {}
+    rows: list[dict[str, Any]] = []
+    with _single_threaded_blas_env():
+        with ProcessPoolExecutor(
+            max_workers=min(n_jobs, len(combos)),
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_worker_init,
+        ) as pool:
+            for cell_rows, caught in pool.map(cell, combos):
+                for message, category, filename, lineno in caught:
+                    warnings.warn_explicit(
+                        message, category, filename, lineno, registry=registry
+                    )
+                rows.extend(cell_rows)
+    return rows
 
 
 # ---------------------------------------------------------------------

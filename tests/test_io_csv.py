@@ -34,6 +34,14 @@ from groundfield.io.csv import (
 # ---------------------------------------------------------------------
 
 
+def read_csv_with_provenance(path):
+    """Reader of the provenance-headed CSV files (imported lazily so the
+    module still collects against releases without it)."""
+    from groundfield.io.csv import read_csv_with_provenance as _read
+
+    return _read(path)
+
+
 def _two_rod_world() -> tuple[gf.World, gf.FieldResult]:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
@@ -67,7 +75,7 @@ def test_save_potential_path_csv_roundtrip(tmp_path: Path) -> None:
         n=50,
     )
     assert out.exists()
-    df = pd.read_csv(out)
+    df = read_csv_with_provenance(out)[0]
     assert {"s", "x", "y", "z", "frequency_Hz", "phi_re", "phi_im", "abs_phi"}.issubset(
         df.columns
     )
@@ -112,7 +120,7 @@ def test_save_potential_path_csv_multi_frequency(tmp_path: Path) -> None:
         distance=5.0,
         n=20,
     )
-    df = pd.read_csv(out)
+    df = read_csv_with_provenance(out)[0]
     # 2 frequencies * 20 samples = 40 rows, both frequencies present.
     assert len(df) == 40
     assert sorted(df["frequency_Hz"].unique()) == [50.0, 200.0]
@@ -160,7 +168,9 @@ def test_save_electrode_table_csv_matches_in_memory(tmp_path: Path) -> None:
         tmp_path / "electrodes.csv",
         world=world,
     )
-    df_disk = pd.read_csv(out)
+    df_disk = read_csv_with_provenance(out)[0]
+    # The file adds the frequency column (review pass 10, 10.73).
+    assert (df_disk.pop("frequency_Hz") == result.frequencies[0]).all()
     df_mem = gf.electrode_current_table(result, world=world)
 
     pd.testing.assert_frame_equal(
@@ -173,7 +183,7 @@ def test_save_electrode_table_csv_matches_in_memory(tmp_path: Path) -> None:
 def test_save_electrode_table_csv_without_world_omits_geometry(tmp_path: Path) -> None:
     _, result = _two_rod_world()
     out = save_electrode_table_csv(result, tmp_path / "electrodes.csv")
-    df = pd.read_csv(out)
+    df = read_csv_with_provenance(out)[0]
     assert "kind" not in df.columns
     assert "depth_m" not in df.columns
 
@@ -186,7 +196,7 @@ def test_save_electrode_table_csv_without_world_omits_geometry(tmp_path: Path) -
 def test_save_cluster_impedances_csv_flattens_members(tmp_path: Path) -> None:
     _, result = _two_rod_world()
     out = save_cluster_impedances_csv(result, tmp_path / "clusters.csv")
-    df = pd.read_csv(out)
+    df = read_csv_with_provenance(out)[0]
     # The 'members' column is now a ';'-joined string.
     assert "members" in df.columns
     assert all(isinstance(v, str) for v in df["members"])
@@ -206,3 +216,71 @@ def test_top_level_exports_csv_helpers() -> None:
     }
     assert needed.issubset(set(gf.__all__))
     assert all(hasattr(gf, name) for name in needed)
+
+
+# ---------------------------------------------------------------------
+# Review pass 10, 10.73: frequency column, provenance, no silent overwrite
+# ---------------------------------------------------------------------
+
+
+def _two_freq_world() -> tuple[gf.World, gf.FieldResult]:
+    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(world, "rod", name="r#1", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(world, attached_to="r#1", magnitude=1.0)
+    eng = gf.create_engine(
+        backend="image", segment_length=0.5, frequencies=[50.0, 1000.0]
+    )
+    return world, eng.solve(world)
+
+
+@pytest.mark.finding("10.73")
+def test_tables_record_their_frequency(tmp_path: Path) -> None:
+    """R5-14: a 1 kHz table could not be told apart from a 50 Hz one."""
+    world, res = _two_freq_world()
+    p_e = save_electrode_table_csv(
+        res, tmp_path / "e.csv", world=world, frequency_index=1
+    )
+    p_c = save_cluster_impedances_csv(res, tmp_path / "c.csv", frequency_index=1)
+    for p in (p_e, p_c):
+        df, meta = read_csv_with_provenance(p)
+        assert df["frequency_Hz"].tolist() == [1000.0]
+        assert meta["frequency_Hz"] == "1000"
+        assert meta["frequency_index"] == "1"
+
+
+@pytest.mark.finding("10.73")
+def test_csv_files_carry_a_provenance_header(tmp_path: Path) -> None:
+    world, res = _two_freq_world()
+    p = save_potential_path_csv(res, tmp_path / "p.csv", start=(1.0, 0.0, 0.0), n=3)
+    lines = p.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "# groundfield csv: potential_path"
+    df, meta = read_csv_with_provenance(p)
+    assert meta["groundfield_version"] == gf.__version__
+    assert meta["backend"] == "image"
+    assert meta["frequencies_Hz"] == "50, 1000"
+    assert meta["written_utc"].endswith("Z")
+    assert len(df) == 6
+    # Electrode names containing '#' survive (no comment='#' parsing).
+    p_e = save_electrode_table_csv(res, tmp_path / "e.csv", world=world)
+    df_e, _ = read_csv_with_provenance(p_e)
+    assert df_e["name"].tolist() == ["r#1"]
+    # Plain CSV on request.
+    p_plain = save_electrode_table_csv(res, tmp_path / "plain.csv", provenance=False)
+    assert pd.read_csv(p_plain)["name"].tolist() == ["r#1"]
+
+
+@pytest.mark.finding("10.73")
+def test_csv_writers_refuse_to_overwrite(tmp_path: Path) -> None:
+    world, res = _two_freq_world()
+    target = tmp_path / "e.csv"
+    save_electrode_table_csv(res, target)
+    first = target.read_text(encoding="utf-8")
+    with pytest.raises(FileExistsError, match="overwrite=True"):
+        save_electrode_table_csv(res, target, frequency_index=1)
+    with pytest.raises(FileExistsError):
+        save_cluster_impedances_csv(res, target)
+    with pytest.raises(FileExistsError):
+        save_potential_path_csv(res, target, start=(1.0, 0.0, 0.0), n=3)
+    assert target.read_text(encoding="utf-8") == first
+    save_electrode_table_csv(res, target, frequency_index=1, overwrite=True)
+    assert "1000" in target.read_text(encoding="utf-8")

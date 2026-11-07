@@ -19,7 +19,6 @@ import pytest
 
 import groundfield as gf
 from groundfield.postprocess.vector_fitting import (
-    VectorFitResult,
     fit_to_sympy,
     rho_f_from_field_result,
     vector_fit,
@@ -34,7 +33,7 @@ from groundfield.postprocess.vector_fitting import (
 def _eval_known_Z(s, R_inf, L_inf, poles, residues):
     """Evaluate Z(s) = R_inf + L_inf*s + sum r_k/(s-p_k)."""
     Z = np.full_like(s, complex(R_inf), dtype=complex) + L_inf * s
-    for p, r in zip(poles, residues):
+    for p, r in zip(poles, residues, strict=True):
         Z = Z + r / (s - p)
     return Z
 
@@ -220,6 +219,7 @@ def test_rho_f_from_field_result_extracts_correctly() -> None:
     fit = rho_f_from_field_result(
         res,
         "g1",
+        quantity="electrode",  # hand-built result: no source snapshot (10.19)
         n_poles=1,
         n_iter=10,
         include_R_inf=True,
@@ -241,7 +241,7 @@ def test_rho_f_from_field_result_unknown_electrode_raises() -> None:
         soil_resistivity=100.0,
     )
     with pytest.raises(KeyError, match="not in result"):
-        rho_f_from_field_result(res, "nonexistent")
+        rho_f_from_field_result(res, "nonexistent", quantity="electrode")
 
 
 # ---------------------------------------------------------------------
@@ -269,7 +269,9 @@ def test_complex_residues_are_recovered() -> None:
     rel = fit.rms_error / float(np.mean(np.abs(Z)))
     assert rel < 1e-6
     # The fitted pair must carry a genuinely complex residue.
-    pair_res = [x for x, q in zip(fit.residues, fit.poles) if abs(q.imag) > 1.0]
+    pair_res = [
+        x for x, q in zip(fit.residues, fit.poles, strict=True) if abs(q.imag) > 1.0
+    ]
     assert pair_res and max(abs(x.imag) for x in pair_res) > 10.0
 
 
@@ -332,6 +334,144 @@ def test_dead_frequency_masked_with_warning() -> None:
     res = eng.solve(w)
     # Forge one dead frequency in a copy of the result arrays.
     res.electrode_currents["g1"][2] = 0j
+    # The forged dead column is an electrode current; the input impedance
+    # (default since 10.19) divides by the source current instead.
     with pytest.warns(UserWarning, match="no current"):
-        fit = rho_f_from_field_result(res, "g1", n_poles=1)
+        fit = rho_f_from_field_result(res, "g1", quantity="electrode", n_poles=1)
     assert fit.fit_frequencies.size == 5  # dead sample excluded
+
+
+# ---------------------------------------------------------------------
+# Review pass 10, 10.41: 0 Hz sample, quality warning, passivity check
+# ---------------------------------------------------------------------
+
+_F11 = np.array([0.0, 50, 150, 250, 350, 450, 550, 650, 750, 850, 1000.0])
+
+
+def _rl_ladder(seed: int, noise: float) -> np.ndarray:
+    """Passive RL-ladder data at the 11 AP1 frequencies (R5-04 family)."""
+    rng = np.random.default_rng(seed)
+    a = 2 * math.pi * np.geomspace(20.0, 5000.0, 4) * rng.uniform(0.5, 2.0, 4)
+    rk = rng.uniform(0.05, 0.5, 4)
+    s = 2j * math.pi * _F11
+    z = 2.0 + sum(r * s / (s + ak) for r, ak in zip(rk, a, strict=True))
+    return z * (1 + noise * (rng.standard_normal(11) + 1j * rng.standard_normal(11)))
+
+
+@pytest.mark.finding("10.41")
+@pytest.mark.parametrize("n_poles", [2, 3, 4])
+def test_dc_sample_with_imaginary_part_does_not_collapse_the_fit(n_poles: int) -> None:
+    """v0.15.0: 20/20 fits collapsed to Z ~ 0 (relative rms 0.99) or raised
+    LinAlgError when Im Z(0) carried 1e-3 noise."""
+    import warnings
+
+    for seed in range(20):
+        z = _rl_ladder(seed, 1e-3)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            fit = vector_fit(_F11, z, n_poles=n_poles, n_iter=30)
+        rel = fit.rms_error / np.abs(z).mean()
+        assert rel < 0.02, (seed, rel)
+        # The model is real at 0 Hz and reproduces Re Z(0).
+        z0 = fit.evaluate([0.0])[0]
+        assert z0.imag == pytest.approx(0.0, abs=1e-9)
+        assert z0.real == pytest.approx(z[0].real, rel=0.02)
+
+
+@pytest.mark.finding("10.41")
+def test_tiny_imaginary_dc_part_is_projected_silently() -> None:
+    """R5-04 regression: clean data, only Im Z(0) = 1e-6 Ohm."""
+    import warnings
+
+    z = _rl_ladder(3, 0.0)
+    z[0] += 1e-6j
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        fit = vector_fit(_F11, z, n_poles=4, n_iter=8)
+    assert fit.rms_error / np.abs(z).mean() < 1e-3
+
+
+@pytest.mark.finding("10.41")
+def test_large_imaginary_dc_part_is_reported() -> None:
+    from groundfield.postprocess.vector_fitting import VectorFitQualityWarning
+
+    z = _rl_ladder(3, 0.0)
+    z[0] += 0.05j  # 2.5 % of |Z(0)|: not a DC value
+    with pytest.warns(VectorFitQualityWarning, match="0 Hz"):
+        vector_fit(_F11, z, n_poles=4, n_iter=8)
+
+
+@pytest.mark.finding("10.41")
+def test_poor_fit_warns_and_reports_its_relative_rms() -> None:
+    from groundfield.postprocess.vector_fitting import VectorFitQualityWarning
+
+    f = np.geomspace(1.0, 1e4, 40)
+    s = 2j * math.pi * f
+    # Three lightly damped resonances cannot be fitted with one real pole.
+    z = 1.0 + sum(
+        100.0 * s / ((s + 30.0) ** 2 + (2 * math.pi * fr) ** 2)
+        for fr in (50, 500, 5000)
+    )
+    with pytest.warns(VectorFitQualityWarning, match="relative rms"):
+        fit = vector_fit(f, z, n_poles=1, n_iter=20, complex_poles=False)
+    assert fit.rms_relative == pytest.approx(fit.rms_error / np.abs(z).mean())
+    assert fit.rms_relative > 0.01
+
+
+@pytest.mark.finding("10.41")
+def test_invalid_samples_raise_value_error_not_linalg_error() -> None:
+    z = _rl_ladder(0, 0.0)
+    bad = z.copy()
+    bad[3] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        vector_fit(_F11, bad, n_poles=2)
+    with pytest.raises(ValueError, match="f > 0"):
+        vector_fit([0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0], n_poles=1)
+
+
+def _nonpassive_fit():
+    """R5-05: seed 17, 0.1 % noise, Z(0) real, 4 poles -> Re Z < 0 at 5.5 Hz."""
+    import warnings
+
+    rng = np.random.default_rng(17)
+    a = 2 * math.pi * np.geomspace(20.0, 5000.0, 4) * rng.uniform(0.5, 2.0, 4)
+    rk = rng.uniform(0.05, 0.5, 4)
+    s = 2j * math.pi * _F11
+    z = 2.0 + sum(r * s / (s + ak) for r, ak in zip(rk, a, strict=True))
+    noise = 1e-3 * (rng.standard_normal(11) + 1j * rng.standard_normal(11))
+    noise[0] = noise[0].real
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return vector_fit(_F11, z * (1 + noise), n_poles=4, n_iter=8)
+
+
+@pytest.mark.finding("10.41")
+def test_check_passivity_finds_an_in_band_violation_between_samples() -> None:
+    from groundfield.postprocess.vector_fitting import check_passivity
+
+    fit = _nonpassive_fit()
+    report = check_passivity(fit, 1000.0)
+    assert not report.passed
+    assert report.min_re_Z < -0.01  # -0.019 Ohm in the review
+    assert report.f_at_min == pytest.approx(5.508, abs=0.05)
+    dense = np.linspace(0.0, 1000.0, 400001)
+    assert report.min_re_Z <= fit.evaluate(dense).real.min() + 1e-9
+    d = report.as_dict()
+    assert d["passed"] is False and set(d) >= {"min_re_Z_Ohm", "f_at_min_Hz"}
+
+
+@pytest.mark.finding("10.41")
+def test_check_passivity_passes_a_passive_fit_and_checks_standard_forms() -> None:
+    from groundfield.postprocess.rho_f_standard import fit_rho_f_standard
+    from groundfield.postprocess.vector_fitting import check_passivity
+
+    good = vector_fit(_F11, _rl_ladder(1, 0.0), n_poles=4, n_iter=8)
+    rep = check_passivity(good)  # f_max defaults to the highest sample
+    assert rep.passed and rep.min_re_Z > 1.9 and rep.f_max == 1000.0
+    # Standard form with k4 < 0: Re Z = rho (0.05 - 2e-6 f) < 0 above 25 kHz.
+    rho = np.repeat([30.0, 100.0, 300.0, 1000.0], 4)
+    f = np.tile([0.0, 50.0, 500.0, 1000.0], 4)
+    std = fit_rho_f_standard(rho, f, 0.05 * rho + 2e-3j * f + (-2e-6 + 3e-6j) * f * rho)
+    assert check_passivity(std, 1000.0).passed
+    bad = check_passivity(std, 30e3)
+    assert not bad.passed and bad.f_at_min == 30e3 and bad.rho_at_min == 1000.0

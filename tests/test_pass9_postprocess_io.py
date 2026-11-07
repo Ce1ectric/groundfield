@@ -111,7 +111,7 @@ def test_f41_dead_dc_column_is_masked_not_zero_injected() -> None:
     """
     results = _results_with_dead_dc()
     with pytest.warns(UserWarning, match="carries no current at 5 of 35"):
-        fit = rho_f_standard_from_results(results, RHOS, "g1")
+        fit = rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
     assert fit.k1 == pytest.approx(K_TRUE["k1"], rel=1e-9), (
         "k1 must be recovered from the live samples; the pre-fix "
@@ -130,7 +130,7 @@ def test_f41_masked_samples_are_absent_from_the_diagnostics() -> None:
     """The dropped samples must not appear in ``sample_*`` either."""
     results = _results_with_dead_dc()
     with pytest.warns(UserWarning):
-        fit = rho_f_standard_from_results(results, RHOS, "g1")
+        fit = rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
     assert fit.sample_f.size == len(RHOS) * (len(FREQS) - 1) == 30
     assert not np.any(fit.sample_f == 0.0)
@@ -145,7 +145,7 @@ def test_f41_all_dead_raises_instead_of_fitting_zeros() -> None:
     """
     results = _results_with_dead_dc(all_dead=True)
     with pytest.raises(ValueError, match="carries no current at any"):
-        rho_f_standard_from_results(results, RHOS, "g1")
+        rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
 
 def test_f41_electrode_missing_from_currents_raises_helpful_keyerror() -> None:
@@ -156,7 +156,7 @@ def test_f41_electrode_missing_from_currents_raises_helpful_keyerror() -> None:
     """
     results = _results_with_dead_dc(drop_currents=True)
     with pytest.raises(KeyError, match="not in FieldResult currents"):
-        rho_f_standard_from_results(results, RHOS, "g1")
+        rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
 
 def test_f41_all_alive_sweep_is_unchanged_and_silent() -> None:
@@ -166,7 +166,7 @@ def test_f41_all_alive_sweep_is_unchanged_and_silent() -> None:
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        fit = rho_f_standard_from_results(results, RHOS, "g1")
+        fit = rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
     assert fit.sample_f.size == len(RHOS) * len(FREQS)
     for key, true_val in K_TRUE.items():
         assert getattr(fit, key) == pytest.approx(true_val, rel=1e-8)
@@ -267,18 +267,21 @@ def _solved_single_rod():
 
 def test_f46_frozen_constants_have_the_writer_column_names() -> None:
     """The constants must not promise ``electrode`` / ``cluster``."""
+    # Review pass 10 (10.73) added the frequency column to both tables.
     assert gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS == (
         "name",
         "cluster_root",
         "I_re",
         "I_im",
         "abs_I",
+        "frequency_Hz",
     )
     assert gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS == (
         "cluster_root",
         "Z_re",
         "Z_im",
         "abs_Z",
+        "frequency_Hz",
     )
     assert "electrode" not in gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS
     assert "cluster" not in gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS
@@ -301,8 +304,9 @@ def test_f46_written_csvs_satisfy_the_published_contract(tmp_path) -> None:
         (p_electrodes, gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS),
         (p_clusters, gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS),
     ):
+        # Skip the provenance comment lines (review pass 10, 10.73).
         with open(path, newline="", encoding="utf-8") as fh:
-            header = next(_csv.reader(fh))
+            header = next(_csv.reader(x for x in fh if not x.startswith("#")))
         missing = set(required) - set(header)
         assert not missing, f"{path.name} is missing {sorted(missing)}"
 
@@ -312,7 +316,7 @@ def test_f46_written_csvs_satisfy_the_published_contract(tmp_path) -> None:
         result, tmp_path / "path.csv", start=(1.0, 0.0, 0.0), distance=5.0, n=3
     )
     with open(p_path, newline="", encoding="utf-8") as fh:
-        header = next(_csv.reader(fh))
+        header = next(_csv.reader(x for x in fh if not x.startswith("#")))
     assert tuple(header) == gf_csv.POTENTIAL_PATH_COLUMNS
 
 
@@ -324,12 +328,12 @@ def test_f46_constants_are_usable_as_pandas_keys(tmp_path) -> None:
     p_electrodes = gf_csv.save_electrode_table_csv(
         result, tmp_path / "electrodes.csv", world=world
     )
-    df = pd.read_csv(p_electrodes)
+    df = pd.read_csv(p_electrodes, comment="#")
     # First entry of the tuple is the identifier column by convention.
     id_col = gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS[0]
     assert df.groupby(id_col)["abs_I"].sum().sum() > 0.0
 
     p_clusters = gf_csv.save_cluster_impedances_csv(result, tmp_path / "clusters.csv")
-    dfc = pd.read_csv(p_clusters)
+    dfc = pd.read_csv(p_clusters, comment="#")
     cluster_col = gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS[0]
     assert dfc[cluster_col].tolist() == ["r1"]

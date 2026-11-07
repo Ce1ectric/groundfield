@@ -104,7 +104,7 @@ def test_export_geometry_vtk_empty_world(tmp_path: Path) -> None:
     out = export_geometry_vtk(world, tmp_path / "empty.vtk")
     text = out.read_text(encoding="utf-8")
     assert "DATASET POLYDATA" in text
-    assert "POINTS 0 float" in text
+    assert "POINTS 0 double" in text  # double since review pass 10 (10.10)
 
 
 def test_export_geometry_vtk_role_scalar_distinguishes_electrodes_and_conductors(
@@ -200,3 +200,59 @@ def test_top_level_exports_vtk_helpers() -> None:
     needed = {"export_geometry_vtk", "export_field_vtk"}
     assert needed.issubset(set(gf.__all__))
     assert all(hasattr(gf, name) for name in needed)
+
+
+# ---------------------------------------------------------------------
+# Review pass 10, 10.10: header sanitising, double precision
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.10")
+def test_world_name_cannot_break_the_header(tmp_path: Path) -> None:
+    """R5-15: a newline in world.name produced an invalid file."""
+    world = gf.create_world(
+        soil=gf.HomogeneousSoil(resistivity=100.0),
+        name="site 4711\nDATASET STRUCTURED_POINTS\tx",
+    )
+    gf.create_electrode(world, "rod", name="r", position=(0, 0, 0.5), length=2.0)
+    lines = export_geometry_vtk(world, tmp_path / "g.vtk").read_text().splitlines()
+    assert lines[0] == "# vtk DataFile Version 3.0"
+    assert lines[1] == "groundfield geometry: site 4711 DATASET STRUCTURED_POINTS x"
+    assert lines[2] == "ASCII"
+    assert lines[3] == "DATASET POLYDATA"
+
+
+@pytest.mark.finding("10.10")
+def test_header_line_is_limited_to_256_bytes(tmp_path: Path) -> None:
+    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0), name="ä" * 400)
+    gf.create_electrode(world, "rod", name="r", position=(0, 0, 0.5), length=2.0)
+    raw = export_geometry_vtk(world, tmp_path / "g.vtk").read_bytes().split(b"\n")
+    assert len(raw[1]) <= 256
+    raw[1].decode("utf-8")  # no character cut in half
+    assert raw[2] == b"ASCII"
+
+
+@pytest.mark.finding("10.10")
+def test_points_are_double_precision_at_utm_scale(tmp_path: Path) -> None:
+    """float32 quantised UTM coordinates (y ~ 5.79e6 m) by up to 0.19 m."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(
+        world, "rod", name="r", position=(612345.678, 5791234.567, 0.5), length=2.0
+    )
+    text = export_geometry_vtk(world, tmp_path / "g.vtk").read_text()
+    lines = text.splitlines()
+    i = next(k for k, line in enumerate(lines) if line.startswith("POINTS"))
+    assert lines[i] == "POINTS 2 double"
+    x, y, z = (float(v) for v in lines[i + 1].split())
+    assert (x, y, z) == (612345.678, 5791234.567, 0.5)
+
+
+@pytest.mark.finding("10.10")
+def test_field_scalars_are_double(tmp_path: Path) -> None:
+    result = _solved_single_rod()
+    text = export_field_vtk(
+        result, tmp_path / "f.vtk", extent=(-2.0, 2.0, -2.0, 2.0), n=(3, 3)
+    ).read_text()
+    assert "SCALARS potential_re double 1" in text
+    assert "SCALARS potential_im double 1" in text
+    assert " float" not in text

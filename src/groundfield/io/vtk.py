@@ -24,6 +24,19 @@ runs prefer ``pyvista`` once you need binary I/O and unstructured
 grids; for production-grade networks at notebook scale this format is
 fast enough.
 
+Format details (review pass 10, 10.10)
+--------------------------------------
+* Coordinates and scalars are declared ``double``: ``float`` makes
+  readers store 32-bit values, which quantises UTM-scale coordinates
+  (northings of 5.2e6–6.2e6 m) by up to 0.25 m.
+* The free-text header line is sanitised: control and line-separator
+  characters in ``world.name`` become spaces, and the line is limited
+  to 256 bytes as the legacy format requires. A newline in the name
+  used to corrupt the file.
+* ``groundfield`` measures :math:`z` **downwards** (depth below the
+  soil surface). ParaView shows the world upside down; apply a
+  *Transform* filter with scale ``(1, 1, -1)`` for a conventional view.
+
 References
 ----------
 - Schroeder, W., Martin, K., Lorensen, B. (2006). *The
@@ -35,9 +48,10 @@ References
 
 from __future__ import annotations
 
+import unicodedata
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -57,6 +71,21 @@ def _ensure_path(path: str | Path) -> Path:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
+
+
+#: Maximum length in bytes of the legacy-VTK header line.
+_MAX_HEADER_BYTES = 256
+
+
+def _header_line(text: str) -> str:
+    """One legacy-VTK header line: no control characters, <= 256 bytes."""
+    cleaned = "".join(
+        " " if unicodedata.category(ch)[0] == "C" or ch in "\u2028\u2029" else ch
+        for ch in text
+    )
+    cleaned = " ".join(cleaned.split())
+    raw = cleaned.encode("utf-8")[:_MAX_HEADER_BYTES]
+    return raw.decode("utf-8", errors="ignore")
 
 
 def _polylines_for_electrode(e) -> list[np.ndarray]:
@@ -163,7 +192,8 @@ def export_geometry_vtk(world: "World", path: str | Path) -> Path:
     ----------
     world
         World to export. May be empty (the writer still produces
-        a syntactically valid header-only file).
+        a syntactically valid header-only file). Its ``name`` goes into
+        the (sanitised) header line.
     path
         Destination ``.vtk`` path. Parent directories are created
         automatically.
@@ -172,6 +202,11 @@ def export_geometry_vtk(world: "World", path: str | Path) -> Path:
     -------
     pathlib.Path
         The path the file was written to.
+
+    Notes
+    -----
+    POINTS are written as ``double``; :math:`z` is the depth below the
+    surface (positive downwards), see the module docstring.
     """
     polylines: list[np.ndarray] = []
     roles: list[int] = []
@@ -189,12 +224,12 @@ def export_geometry_vtk(world: "World", path: str | Path) -> Path:
     out = _ensure_path(path)
     buf = StringIO()
     buf.write("# vtk DataFile Version 3.0\n")
-    buf.write(f"groundfield geometry: {world.name}\n")
+    buf.write(_header_line(f"groundfield geometry: {world.name}") + "\n")
     buf.write("ASCII\n")
     buf.write("DATASET POLYDATA\n")
 
     if not polylines:
-        buf.write("POINTS 0 float\n")
+        buf.write("POINTS 0 double\n")
         out.write_text(buf.getvalue(), encoding="utf-8")
         return out
 
@@ -202,7 +237,7 @@ def export_geometry_vtk(world: "World", path: str | Path) -> Path:
     n_lines = len(polylines)
     n_line_data = n_lines + n_points  # one count + entries per line
 
-    buf.write(f"POINTS {n_points} float\n")
+    buf.write(f"POINTS {n_points} double\n")
     for poly in polylines:
         for x, y, z in poly:
             buf.write(f"{x:.17g} {y:.17g} {z:.17g}\n")
@@ -297,7 +332,11 @@ def export_field_vtk(
     buf = StringIO()
     buf.write("# vtk DataFile Version 3.0\n")
     buf.write(
-        f"groundfield potential @ z={z} m, f={result.frequencies[frequency_index]} Hz\n"
+        _header_line(
+            f"groundfield potential @ z={z} m, "
+            f"f={result.frequencies[frequency_index]} Hz"
+        )
+        + "\n"
     )
     buf.write("ASCII\n")
     buf.write("DATASET STRUCTURED_POINTS\n")
@@ -307,7 +346,7 @@ def export_field_vtk(
 
     n_pts = n_x * n_y
     buf.write(f"POINT_DATA {n_pts}\n")
-    buf.write("SCALARS potential_re float 1\n")
+    buf.write("SCALARS potential_re double 1\n")
     buf.write("LOOKUP_TABLE default\n")
     # The order in STRUCTURED_POINTS is x fastest, then y, then z.
     # numpy meshgrid with indexing='xy' gives Y[i, j], X[i, j];
@@ -316,7 +355,7 @@ def export_field_vtk(
     for v in phi.real.ravel():
         buf.write(f"{float(v):.17g}\n")
 
-    buf.write("SCALARS potential_im float 1\n")
+    buf.write("SCALARS potential_im double 1\n")
     buf.write("LOOKUP_TABLE default\n")
     for v in phi.imag.ravel():
         buf.write(f"{float(v):.17g}\n")

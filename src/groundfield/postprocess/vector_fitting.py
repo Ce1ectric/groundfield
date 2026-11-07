@@ -58,21 +58,38 @@ References
 
 from __future__ import annotations
 
-import cmath
+import dataclasses
 import math
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import numpy as np
+
+from groundfield.postprocess._impedance import Quantity, impedance_series
 
 __all__ = [
     "VectorFitResult",
     "VectorFitUnderdeterminedWarning",
     "VectorFitConvergenceWarning",
+    "VectorFitQualityWarning",
+    "PassivityReport",
     "vector_fit",
+    "check_passivity",
     "fit_to_sympy",
     "rho_f_from_field_result",
 ]
+
+
+class VectorFitQualityWarning(UserWarning):
+    """The vector fit is poor, or a sample had to be corrected.
+
+    Emitted (review pass 10, 10.41) when the relative rms error
+    ``rms_error / mean|Z|`` exceeds ``rms_tol`` (default 1 %), and when
+    the imaginary part of a 0 Hz sample exceeds 0.1 % of its magnitude
+    (it is discarded: a rational model with real coefficients is real at
+    :math:`s = 0`). Inspect ``VectorFitResult.rms_relative``; try other
+    ``n_poles``, more samples, or ``weighting="inverse_magnitude"``.
+    """
 
 
 class VectorFitConvergenceWarning(UserWarning):
@@ -127,7 +144,17 @@ class VectorFitResult:
     fit_frequencies
         Frequencies (Hz) used for the fit, kept for diagnostics.
     fit_values
-        Original $Z(s)$ values used for the fit.
+        $Z(s)$ values used for the fit (0 Hz samples projected onto
+        their real part).
+    n_iter_used, pole_shift
+        Iterations of the pole relocation and the last relative pole
+        displacement.
+    rms_relative
+        ``rms_error`` divided by the mean of $|Z|$ (dimensionless).
+    quantity
+        Impedance the samples represent when the fit was built by
+        :func:`rho_f_from_field_result` (``"input"``, ``"cluster"`` or
+        ``"electrode"``); ``None`` for raw samples.
     """
 
     poles: np.ndarray
@@ -142,13 +169,19 @@ class VectorFitResult:
     # (e.g. the groundinsight JSON bridge) source-compatible.
     n_iter_used: int = 0
     pole_shift: float = 0.0
+    # Relative rms error rms_error / mean|Z| (review pass 10, 10.41);
+    # nan for instances built by hand or by the groundinsight bridge.
+    rms_relative: float = math.nan
+    # Impedance the samples represent when built by
+    # rho_f_from_field_result ("input" / "cluster" / "electrode").
+    quantity: str | None = None
 
     def evaluate(self, frequencies: Sequence[float]) -> np.ndarray:
         """Evaluate the fitted $Z(s)$ at arbitrary frequencies."""
         s = 2j * math.pi * np.asarray(frequencies, dtype=float)
         Z = np.full_like(s, self.R_inf, dtype=complex)
         Z = Z + self.L_inf * s
-        for p, r in zip(self.poles, self.residues):
+        for p, r in zip(self.poles, self.residues, strict=True):
             Z = Z + r / (s - p)
         return Z
 
@@ -349,6 +382,19 @@ def _coeffs_to_residues(
     return residues
 
 
+def _solve_lstsq(M: np.ndarray, rhs: np.ndarray, poles: np.ndarray) -> np.ndarray:
+    """``np.linalg.lstsq`` with a clear ``ValueError`` instead of ``LinAlgError``."""
+    try:
+        sol, *_ = np.linalg.lstsq(M, rhs, rcond=None)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError(
+            f"vector_fit: least-squares solve failed ({exc}) with poles "
+            f"{np.array2string(poles, precision=4)}; reduce n_poles or check "
+            "the samples."
+        ) from exc
+    return sol
+
+
 def vector_fit(
     frequencies: Sequence[float],
     Z_values: Sequence[complex],
@@ -359,6 +405,7 @@ def vector_fit(
     include_L_inf: bool = False,
     complex_poles: bool = True,
     weighting: str = "uniform",
+    rms_tol: float = 0.01,
 ) -> VectorFitResult:
     """Fit a rational $Z(s)$ approximation to a sampled frequency response.
 
@@ -395,9 +442,37 @@ def vector_fit(
         ``1/|Z_n|``, the standard remedy when ``|Z|`` spans several
         decades and the unweighted LS would fit only the largest
         magnitudes (audit 2026-07-08, WP-B4).
+    rms_tol
+        Warn with :class:`VectorFitQualityWarning` when the relative rms
+        error ``rms_error / mean|Z|`` exceeds this value (default 0.01).
+
+    Raises
+    ------
+    ValueError
+        If the samples are not finite, no sample has ``f > 0``,
+        ``n_poles < 1``, ``weighting`` is unknown, or the least-squares
+        problem cannot be solved (instead of numpy's ``LinAlgError``).
+
+    Warns
+    -----
+    VectorFitQualityWarning
+        Relative rms above ``rms_tol``; imaginary part of a 0 Hz sample
+        above 0.1 % of its magnitude (discarded).
+    VectorFitConvergenceWarning, VectorFitUnderdeterminedWarning
+        See the warning classes.
 
     Notes
     -----
+    **0 Hz samples** (review pass 10, 10.41). The model has real
+    coefficients, so it is real at :math:`s = 0`. A 0 Hz sample with an
+    imaginary part (measured or averaged data) cannot be represented;
+    up to v0.15.0 the pole relocation then moved a pole onto the origin
+    and the fit collapsed to :math:`Z \\approx 0` at every other
+    frequency (relative rms 0.99, 20 of 20 noisy data sets) or numpy
+    raised ``LinAlgError``. The 0 Hz samples are now projected onto
+    their real part before fitting, which is bit-for-bit neutral for
+    real 0 Hz samples (all solver output).
+
     Since the 2026-07-08 audit (WP-B4) the least-squares systems use
     the **conjugate-pair real basis** (see :func:`_pair_basis`):
     complex pole pairs carry genuinely complex residues, matching
@@ -416,6 +491,31 @@ def vector_fit(
     Z = np.asarray(Z_values, dtype=complex)
     if frequencies.shape != Z.shape:
         raise ValueError("frequencies and Z_values must have the same shape")
+    if not (np.all(np.isfinite(frequencies)) and np.all(np.isfinite(Z))):
+        raise ValueError("vector_fit: frequencies and Z_values must be finite.")
+    if not np.any(frequencies > 0.0):
+        raise ValueError(
+            "vector_fit: needs at least one sample with f > 0; a pure DC "
+            "data set has no frequency dependence to fit."
+        )
+    dc = frequencies == 0.0
+    if np.any(dc) and np.any(Z[dc].imag != 0.0):
+        # A real-coefficient rational model is real at s = 0: project
+        # the 0 Hz samples onto their real part (10.41). Bit-neutral for
+        # real DC samples.
+        worst = float(np.max(np.abs(Z[dc].imag) / np.maximum(np.abs(Z[dc]), 1e-300)))
+        if worst > 1e-3:
+            import warnings as _warnings
+
+            _warnings.warn(
+                "vector_fit: the 0 Hz sample has an imaginary part of "
+                f"{worst:.2%} of its magnitude; it is discarded (the rational "
+                "model is real at f = 0). Check the DC value of the data.",
+                VectorFitQualityWarning,
+                stacklevel=2,
+            )
+        Z = Z.copy()
+        Z[dc] = Z[dc].real
     if n_poles < 1:
         raise ValueError(
             "vector_fit: n_poles must be at least 1, got "
@@ -513,7 +613,7 @@ def vector_fit(
         Aw = A * w[:, None]
         M = np.vstack([Aw.real, Aw.imag])
         rhs = np.concatenate([(w * Z).real, (w * Z).imag])
-        sol, *_ = np.linalg.lstsq(M, rhs, rcond=None)
+        sol = _solve_lstsq(M, rhs, poles)
 
         # Reconstruct the complex sigma residues from the pair basis.
         sigma_residues = _coeffs_to_residues(
@@ -525,7 +625,13 @@ def vector_fit(
         # b = ones, c = sigma_residues. (Standard Gustavsen formulation.)
         Ap = np.diag(poles)
         b = np.ones(n_poles)
-        new_poles = np.linalg.eigvals(Ap - np.outer(b, sigma_residues))
+        try:
+            new_poles = np.linalg.eigvals(Ap - np.outer(b, sigma_residues))
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(
+                f"vector_fit: pole relocation failed ({exc}); reduce n_poles or "
+                "check the samples."
+            ) from exc
         new_poles = _enforce_stability(new_poles)
         new_poles = _enforce_conjugate_symmetry(new_poles)
         # Sort for deterministic order (deepest |imag| first).
@@ -570,7 +676,7 @@ def vector_fit(
     Aw = A * w[:, None]
     M = np.vstack([Aw.real, Aw.imag])
     rhs = np.concatenate([(w * Z).real, (w * Z).imag])
-    sol, *_ = np.linalg.lstsq(M, rhs, rcond=None)
+    sol = _solve_lstsq(M, rhs, poles)
     residues = _coeffs_to_residues(sol[:n_poles], poles, structure)
     R_inf = float(sol[n_poles]) if include_R_inf else 0.0
     L_inf = float(sol[n_poles + (1 if include_R_inf else 0)]) if include_L_inf else 0.0
@@ -581,8 +687,21 @@ def vector_fit(
         + np.sum(residues[:, None] / (s[None, :] - poles[:, None]), axis=0)
     )
     rms = float(np.sqrt(np.mean(np.abs(Z_fit - Z) ** 2)))
+    rms_rel = rms / max(float(np.mean(np.abs(Z))), 1e-300)
+    if rms_rel > rms_tol:
+        import warnings as _warnings
+
+        _warnings.warn(
+            f"vector_fit: relative rms error {rms_rel:.2%} exceeds "
+            f"{rms_tol:.2%} (n_poles={n_poles}). The rational model does not "
+            "represent the samples; try another n_poles, more samples or "
+            "weighting='inverse_magnitude'.",
+            VectorFitQualityWarning,
+            stacklevel=2,
+        )
 
     return VectorFitResult(
+        rms_relative=rms_rel,
         n_iter_used=n_iter_used,
         pole_shift=pole_shift,
         poles=poles,
@@ -592,6 +711,176 @@ def vector_fit(
         rms_error=rms,
         fit_frequencies=frequencies,
         fit_values=Z,
+    )
+
+
+# ---------------------------------------------------------------------
+# Passivity check
+# ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PassivityReport:
+    """Outcome of :func:`check_passivity`.
+
+    Attributes
+    ----------
+    passed
+        ``True`` when :math:`\\Re Z \\ge 0` everywhere on the checked
+        range.
+    min_re_Z
+        Smallest :math:`\\Re Z` found, in Ω.
+    f_at_min
+        Frequency of ``min_re_Z`` in Hz.
+    f_max
+        Upper end of the checked frequency range in Hz (the range starts
+        at 0 Hz).
+    rho_at_min
+        Soil resistivity of ``min_re_Z`` in Ω·m for a standard-form fit,
+        ``None`` for a vector fit.
+    rho_range
+        Checked resistivity range in Ω·m for a standard-form fit, else
+        ``None``.
+    """
+
+    passed: bool
+    min_re_Z: float
+    f_at_min: float
+    f_max: float
+    rho_at_min: float | None = None
+    rho_range: tuple[float, float] | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        """JSON-friendly summary (e.g. for export metadata)."""
+        out: dict[str, object] = {
+            "passed": bool(self.passed),
+            "min_re_Z_Ohm": float(self.min_re_Z),
+            "f_at_min_Hz": float(self.f_at_min),
+            "f_max_Hz": float(self.f_max),
+        }
+        if self.rho_at_min is not None:
+            out["rho_at_min_Ohm_m"] = float(self.rho_at_min)
+            out["rho_range_Ohm_m"] = [float(x) for x in self.rho_range or ()]
+        return out
+
+
+def check_passivity(
+    fit,
+    f_max: float | None = None,
+    *,
+    n: int = 2001,
+    rho_range: tuple[float, float] | None = None,
+) -> PassivityReport:
+    """Check :math:`\\Re Z(f) \\ge 0` of a fitted rho-f model on a band.
+
+    A grounding impedance is passive, so its real part is non-negative
+    at every frequency. A rational fit can violate this *between* the
+    samples: review pass 10 found a 4-pole fit of passive data (rms
+    4.4 mΩ, no warning) with :math:`\\Re Z = -0.019\\,\\Omega` at
+    5.5 Hz, between the 0 Hz and 50 Hz samples (10.40 / 10.41).
+
+    Parameters
+    ----------
+    fit
+        :class:`VectorFitResult` or
+        :class:`~groundfield.postprocess.rho_f_standard.RhoFStandardFit`.
+    f_max
+        Upper end of the band in Hz (the band starts at 0 Hz). Default:
+        the highest sampled frequency of the fit.
+    n
+        Number of points of the uniform frequency grid for a vector fit
+        (``>= 2``). The grid is augmented by the pole frequencies
+        :math:`|\\Im p_k|/2\\pi` and :math:`|p_k|/2\\pi` (where the real
+        part of a rational function has its extrema) and by the sample
+        frequencies; every local minimum is refined by a bounded scalar
+        minimisation.
+    rho_range
+        ``(rho_min, rho_max)`` in Ω·m for a standard-form fit; default
+        the sampled range. :math:`\\Re Z = k_0 + k_1\\rho + k_2 f +
+        k_4 f\\rho` is bilinear, so its minimum over the box is at a
+        corner and the check is exact.
+
+    Returns
+    -------
+    PassivityReport
+
+    Raises
+    ------
+    TypeError
+        For an unsupported fit type.
+    ValueError
+        For ``f_max <= 0``, ``n < 2`` or an invalid ``rho_range``.
+
+    Notes
+    -----
+    The export bridge to groundinsight runs its own check when it writes
+    a BusType (stream SEC/IO); both are meant to be unified.
+    """
+    from groundfield.postprocess.rho_f_standard import RhoFStandardFit
+
+    if isinstance(fit, RhoFStandardFit):
+        f_top = float(np.max(fit.sample_f)) if f_max is None else float(f_max)
+        if not (f_top > 0.0) or not math.isfinite(f_top):
+            raise ValueError(f"f_max must be finite and > 0, got {f_max!r}.")
+        if rho_range is None:
+            rho_range = (float(np.min(fit.sample_rho)), float(np.max(fit.sample_rho)))
+        r_lo, r_hi = (float(x) for x in rho_range)
+        if not (0.0 <= r_lo <= r_hi) or not math.isfinite(r_hi):
+            raise ValueError(
+                f"rho_range must satisfy 0 <= min <= max, got {rho_range!r}."
+            )
+        corners = [(r, f) for r in (r_lo, r_hi) for f in (0.0, f_top)]
+        values = [float(np.real(fit.evaluate(r, f))) for r, f in corners]
+        k = int(np.argmin(values))
+        return PassivityReport(
+            passed=values[k] >= 0.0,
+            min_re_Z=values[k],
+            f_at_min=corners[k][1],
+            f_max=f_top,
+            rho_at_min=corners[k][0],
+            rho_range=(r_lo, r_hi),
+        )
+    if not isinstance(fit, VectorFitResult):
+        raise TypeError(
+            "check_passivity expects a VectorFitResult or a RhoFStandardFit, "
+            f"got {type(fit).__name__}."
+        )
+    f_top = float(np.max(fit.fit_frequencies)) if f_max is None else float(f_max)
+    if not (f_top > 0.0) or not math.isfinite(f_top):
+        raise ValueError(f"f_max must be finite and > 0, got {f_max!r}.")
+    if n < 2:
+        raise ValueError(f"n must be >= 2, got {n!r}.")
+    poles = np.asarray(fit.poles, dtype=complex)
+    extra = np.concatenate(
+        [
+            np.abs(poles.imag) / (2.0 * math.pi),
+            np.abs(poles) / (2.0 * math.pi),
+            np.asarray(fit.fit_frequencies, dtype=float),
+        ]
+    )
+    grid = np.union1d(
+        np.linspace(0.0, f_top, int(n)), extra[(extra >= 0.0) & (extra <= f_top)]
+    )
+    re = np.real(fit.evaluate(grid))
+    best_f, best_v = float(grid[int(np.argmin(re))]), float(np.min(re))
+    # Refine every local minimum of the grid (bounded scalar search).
+    from scipy.optimize import minimize_scalar
+
+    def re_z(x: float) -> float:
+        return float(np.real(fit.evaluate([x])[0]))
+
+    interior = np.flatnonzero((re[1:-1] <= re[:-2]) & (re[1:-1] <= re[2:])) + 1
+    for i in interior:
+        res = minimize_scalar(
+            re_z,
+            bounds=(float(grid[i - 1]), float(grid[i + 1])),
+            method="bounded",
+            options={"xatol": 1e-9 * max(f_top, 1.0)},
+        )
+        if float(res.fun) < best_v:
+            best_f, best_v = float(res.x), float(res.fun)
+    return PassivityReport(
+        passed=best_v >= 0.0, min_re_Z=best_v, f_at_min=best_f, f_max=f_top
     )
 
 
@@ -641,7 +930,7 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
     # real s.
     used = np.zeros(len(fit.poles), dtype=bool)
     rel_tol = 1e-3
-    for k, (p, r) in enumerate(zip(fit.poles, fit.residues)):
+    for k, (p, r) in enumerate(zip(fit.poles, fit.residues, strict=True)):
         if used[k]:
             continue
         if abs(p.imag) < rel_tol * max(abs(p.real), 1.0):
@@ -736,22 +1025,20 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
 
 def rho_f_from_field_result(
     result,
-    electrode_name: str,
+    electrode_name: str | None = None,
     *,
+    quantity: Quantity = "input",
+    source: str | None = None,
     n_poles: int = 4,
     n_iter: int = 8,
     include_R_inf: bool = True,
     include_L_inf: bool = False,
     complex_poles: bool = True,
 ) -> VectorFitResult:
-    """Fit $Z(s)$ for one electrode of a :class:`FieldResult`.
+    """Fit $Z(s)$ to the impedance of a :class:`FieldResult`.
 
-    Computes
-    $Z_k = U_k / I_k$
-    at every frequency in ``result.frequencies`` for
-    ``result.electrode_potentials[electrode_name]`` and
-    ``result.electrode_currents[electrode_name]``, then runs
-    :func:`vector_fit` on the resulting series.
+    Reads the impedance selected by ``quantity`` at every frequency in
+    ``result.frequencies`` and runs :func:`vector_fit` on the series.
 
     Parameters
     ----------
@@ -759,56 +1046,89 @@ def rho_f_from_field_result(
         :class:`groundfield.FieldResult` produced by an
         ``Engine.solve`` call with at least 4–8 frequency samples.
     electrode_name
-        Name of the electrode to extract.
+        Electrode whose impedance is fitted. Required for
+        ``quantity="cluster"`` and ``"electrode"``. With ``"input"`` it
+        is optional; when given it must belong to the cluster the source
+        feeds (and selects among several sources).
+    quantity
+        ``"input"`` (default since review pass 10, 10.19): the
+        driving-point impedance :math:`(\\varphi_a - \\varphi_r)/I_s`
+        of the current source (:meth:`FieldResult.input_impedance`) —
+        the impedance a groundinsight BusType stands for.
+        ``"cluster"``: :meth:`FieldResult.cluster_impedance` of
+        ``electrode_name``. ``"electrode"``: :math:`U_e/I_e` of the
+        named electrode alone, the quantity v0.15.0 fitted (17 % above
+        the cluster impedance for a ring with two bonded rods).
+    source
+        Current source for ``quantity="input"``; may be omitted when the
+        result carries exactly one.
     n_poles, n_iter, include_R_inf, include_L_inf, complex_poles
         Forwarded to :func:`vector_fit`.
 
     Returns
     -------
     VectorFitResult
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``quantity``; for ``"input"`` on a result without
+        source snapshot or with an ``electrode_name`` the source does not
+        feed; for ``"cluster"`` / ``"electrode"`` without
+        ``electrode_name``; if the denominator current is zero at every
+        frequency.
+    KeyError
+        If ``electrode_name`` or ``source`` is unknown.
+
+    Notes
+    -----
+    Frequencies at which the denominator current is zero (a passive
+    electrode, a dead column) are masked with a :class:`UserWarning`
+    instead of being entered as :math:`Z = 0`.
     """
-    if electrode_name not in result.electrode_potentials:
-        raise KeyError(
-            f"electrode '{electrode_name}' not in result; "
-            f"available: {list(result.electrode_potentials)}"
-        )
+    z_all, i_all = impedance_series(
+        result,
+        quantity,
+        electrode_name=electrode_name,
+        source=source,
+        caller="rho_f_from_field_result",
+    )
     freqs = np.asarray(result.frequencies, dtype=float)
-    U = np.asarray(result.electrode_potentials[electrode_name], dtype=complex)
-    I = np.asarray(result.electrode_currents[electrode_name], dtype=complex)
-    if I.shape != freqs.shape:
+    if i_all.shape != freqs.shape:
         raise ValueError(
             "Inconsistent shapes between frequencies and electrode currents"
         )
+    label = f"electrode '{electrode_name}'" if quantity != "input" else "the source"
     # Audit 2026-07-08, WP-B4 (finding N23): frequencies where the
-    # electrode carries no current (passive electrode / dead column)
+    # denominator current vanishes (passive electrode / dead column)
     # are MASKED instead of being injected as Z = 0 samples — a
     # single dead frequency used to pull the whole fit through the
     # origin silently.
-    alive = np.abs(I) > 0.0
+    alive = np.abs(i_all) > 0.0
     if not alive.any():
         raise ValueError(
-            f"rho_f_from_field_result: electrode '{electrode_name}' "
-            "carries no current at any frequency — Z = U/I is "
-            "undefined. Fit the driven electrode instead."
+            f"rho_f_from_field_result: {label} carries no current at any "
+            "frequency — Z = U/I is undefined. Fit the driven electrode "
+            "instead."
         )
     if not alive.all():
         import warnings as _warnings
 
         _warnings.warn(
-            f"rho_f_from_field_result: electrode '{electrode_name}' "
-            f"carries no current at {int((~alive).sum())} of "
-            f"{alive.size} frequencies; those samples are excluded "
-            "from the fit (historic behaviour injected Z = 0 there).",
+            f"rho_f_from_field_result: {label} carries no current at "
+            f"{int((~alive).sum())} of {alive.size} frequencies; those "
+            "samples are excluded from the fit (historic behaviour injected "
+            "Z = 0 there).",
             UserWarning,
             stacklevel=2,
         )
-    Z = U[alive] / I[alive]
-    return vector_fit(
+    fit = vector_fit(
         freqs[alive],
-        Z,
+        z_all[alive],
         n_poles=n_poles,
         n_iter=n_iter,
         include_R_inf=include_R_inf,
         include_L_inf=include_L_inf,
         complex_poles=complex_poles,
     )
+    return dataclasses.replace(fit, quantity=quantity)

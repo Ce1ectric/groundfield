@@ -10,7 +10,6 @@ halves separately.
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest
@@ -132,7 +131,126 @@ def test_rho_f_standard_from_results_synthetic() -> None:
                 soil_resistivity=r,
             )
         )
-    fit = rho_f_standard_from_results(results, rhos, "g1")
+    fit = rho_f_standard_from_results(results, rhos, "g1", quantity="electrode")
     for key, true_val in k_true.items():
         got = getattr(fit, key)
         assert abs(got - true_val) <= 1e-9 * (abs(true_val) + 1e-12)
+
+
+# ---------------------------------------------------------------------
+# Review pass 10, 10.27: constant term, relative weights, max_relative
+# ---------------------------------------------------------------------
+
+
+def _offset_samples():
+    """Two-layer-like data: R(rho -> 0) = 1.88 Ohm stays finite (R5-06)."""
+    rho = np.repeat([30.0, 100.0, 200.0, 500.0, 1000.0], 3)
+    f = np.tile([0.0, 50.0, 1000.0], 5)
+    return rho, f, 1.88 + 0.109 * rho + 0j
+
+
+def _worst(fit, rho, f, Z) -> float:
+    return float(np.max(np.abs(fit.evaluate(rho, f) - Z) / np.abs(Z)))
+
+
+@pytest.mark.finding("10.27")
+def test_constant_term_captures_a_finite_intercept() -> None:
+    rho, f, Z = _offset_samples()
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # a good fit must not warn
+        fit = fit_rho_f_standard(rho, f, Z)
+    assert _worst(fit, rho, f, Z) < 1e-12
+    assert fit.k0 == pytest.approx(1.88, rel=1e-12)
+    assert fit.k1 == pytest.approx(0.109, rel=1e-12)
+    assert fit.max_relative < 1e-12
+    assert fit.evaluate(0.0, 0.0) == pytest.approx(1.88, rel=1e-12)
+
+
+@pytest.mark.finding("10.27")
+def test_two_layer_ring_sweep_is_fitted_within_five_percent() -> None:
+    """R5-06: ring (r = 2 m, 0.8 m) in 2-layer soil rho_2 = 100, h_1 = 5 m,
+    rho_1 = 30...1000: v0.15.0 was 27 % off at rho_1 = 30 while
+    rms_relative read 2.6 %; constant term + relative weights: 3.3 %."""
+    import warnings
+
+    import groundfield as gf
+
+    rhos = [30.0, 100.0, 200.0, 500.0, 1000.0]
+    results = []
+    for rho_1 in rhos:
+        w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=rho_1, rho_2=100.0, h_1=5.0))
+        gf.create_electrode(w, "ring", name="st", center=(0, 0, 0.8), radius=2.0)
+        gf.create_source(w, attached_to="st", magnitude=1.0)
+        eng = gf.create_engine(
+            backend="image_2layer", segment_length=0.5, frequencies=[0.0, 50.0, 1000.0]
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            results.append(w.solve(eng))
+    fit = rho_f_standard_from_results(results, rhos, "st")
+    worst = _worst(fit, fit.sample_rho, fit.sample_f, fit.sample_Z)
+    assert worst < 0.05
+    assert fit.max_relative == pytest.approx(worst, rel=1e-12)
+
+
+@pytest.mark.finding("10.27")
+def test_large_pointwise_error_is_reported_and_warned() -> None:
+    from groundfield.postprocess.rho_f_standard import RhoFStandardQualityWarning
+
+    rho, f, Z = _offset_samples()
+    with pytest.warns(RhoFStandardQualityWarning, match="max_relative"):
+        fit = fit_rho_f_standard(rho, f, Z, k0=False, weights="uniform")
+    assert fit.max_relative == pytest.approx(_worst(fit, rho, f, Z), rel=1e-12)
+    assert fit.max_relative > 0.2  # 0.26 at rho = 30 (v0.15.0 form)
+    assert fit.rms_relative < 0.05  # ... while the rms figure looks fine
+
+
+@pytest.mark.finding("10.27")
+def test_v0150_form_is_reproduced_on_request() -> None:
+    """k0=False, weights='uniform' is the v0.15.0 fit, bit for bit."""
+    rhos = [50.0, 100.0, 500.0]
+    freqs = [1.0, 10.0, 100.0, 1000.0]
+    rho = np.repeat(rhos, len(freqs))
+    f = np.tile(freqs, len(rhos))
+    Z = _synthetic_Z(rho, f, 0.04, 5e-5, 1e-3, 1e-7, 3e-6) * (
+        1 + 1e-3 * np.cos(np.arange(rho.size))
+    )
+    fit = fit_rho_f_standard(rho, f, Z, k0=False, weights="uniform")
+    sol_r, *_ = np.linalg.lstsq(np.column_stack([rho, f, f * rho]), Z.real, rcond=None)
+    sol_i, *_ = np.linalg.lstsq(np.column_stack([f, f * rho]), Z.imag, rcond=None)
+    assert (fit.k1, fit.k2, fit.k4) == tuple(float(x) for x in sol_r)
+    assert (fit.k3, fit.k5) == tuple(float(x) for x in sol_i)
+    assert fit.k0 == 0.0
+
+
+@pytest.mark.finding("10.27")
+def test_sympy_export_contains_the_constant_term() -> None:
+    sp = pytest.importorskip("sympy")
+    rho, f, Z = _offset_samples()
+    Z = Z + (2e-4 + 3e-3j) * f + (1e-7 + 4e-6j) * f * rho
+    fit = fit_rho_f_standard(rho, f, Z)
+    expr = fit_to_sympy_standard(fit, decimals=15)
+    rho_sym = sp.Symbol("rho", real=True, positive=True)
+    f_sym = sp.Symbol("f", real=True, positive=True)
+    for r, ff in ((30.0, 0.0), (250.0, 400.0)):
+        val = complex(expr.subs({rho_sym: r, f_sym: ff}).evalf(20))
+        assert val == pytest.approx(complex(fit.evaluate(r, ff)), rel=1e-12)
+    assert fit.coefficients["k0"] == pytest.approx(1.88, rel=1e-9)
+
+
+@pytest.mark.finding("10.27")
+def test_fit_options_are_validated() -> None:
+    rho, f, Z = _offset_samples()
+    with pytest.raises(ValueError, match="weights"):
+        fit_rho_f_standard(rho, f, Z, weights="inverse")
+    Z0 = Z.copy()
+    Z0[0] = 0.0
+    with pytest.raises(ValueError, match="relative"):
+        fit_rho_f_standard(rho, f, Z0)
+    # Three distinct points cannot determine four real unknowns.
+    with pytest.raises(ValueError, match="rank"):
+        fit_rho_f_standard(
+            [30.0, 30.0, 100.0, 100.0], [0.0, 50.0, 0.0, 0.0], [4.0, 4.0, 11.0, 11.0]
+        )

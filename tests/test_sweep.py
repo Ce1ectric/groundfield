@@ -18,7 +18,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.figure  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
@@ -244,3 +243,70 @@ def test_top_level_exports_sweep_helpers() -> None:
     needed = {"sweep", "plot_sweep_lines", "plot_sweep_heatmap"}
     assert needed.issubset(set(gf.__all__))
     assert all(hasattr(gf, name) for name in needed)
+
+
+# ---------------------------------------------------------------------
+# Review pass 10, 10.64: sweep(n_jobs=...) in a process pool
+# ---------------------------------------------------------------------
+
+
+def _layered_rod_world(*, rho: float, h_1: float) -> gf.World:
+    """Module-level factory: picklable by reference for worker processes."""
+    world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=rho, rho_2=4 * rho, h_1=h_1))
+    gf.create_electrode(world, "rod", name="g1", position=(0.0, 0.0, 0.5), length=1.5)
+    gf.create_source(world, attached_to="g1", magnitude=1.0)
+    return world
+
+
+def _warning_world(*, rho: float) -> gf.World:
+    import warnings
+
+    warnings.warn(f"factory warning rho={rho:g}", UserWarning, stacklevel=1)
+    return _single_rod_world(rho=rho)
+
+
+def _failing_world(*, rho: float) -> gf.World:
+    if rho > 150.0:
+        raise ValueError(f"no world for rho={rho:g}")
+    return _single_rod_world(rho=rho)
+
+
+_PAR_ENGINE = gf.create_engine(
+    backend="image_2layer", segment_length=0.25, frequencies=[0.0, 50.0, 1000.0]
+)
+_PAR_AXES = {"rho": [50.0, 100.0, 500.0], "h_1": [3.0, 5.0]}
+_HOM_ENGINE = gf.create_engine(backend="image", segment_length=0.25, frequencies=[50.0])
+
+
+@pytest.mark.finding("10.64")
+def test_parallel_sweep_is_bit_identical_to_the_serial_sweep() -> None:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        serial = sweep(_layered_rod_world, _PAR_ENGINE, axes=_PAR_AXES)
+        parallel = sweep(_layered_rod_world, _PAR_ENGINE, axes=_PAR_AXES, n_jobs=2)
+    pd.testing.assert_frame_equal(serial, parallel, check_exact=True)
+    assert parallel.attrs == serial.attrs
+    assert len(parallel) == 6 * 3
+
+
+@pytest.mark.finding("10.64")
+def test_parallel_sweep_forwards_worker_warnings_and_errors() -> None:
+    with pytest.warns(UserWarning, match="factory warning rho=200"):
+        sweep(_warning_world, _HOM_ENGINE, axes={"rho": [100.0, 200.0]}, n_jobs=2)
+    with pytest.raises(ValueError, match="no world for rho=200"):
+        sweep(_failing_world, _HOM_ENGINE, axes={"rho": [100.0, 200.0]}, n_jobs=2)
+
+
+@pytest.mark.finding("10.64")
+def test_parallel_sweep_needs_importable_callables() -> None:
+    with pytest.raises(TypeError, match="picklable"):
+        sweep(
+            lambda rho: _single_rod_world(rho=rho),
+            _PAR_ENGINE,
+            axes={"rho": [1.0, 2.0]},
+            n_jobs=2,
+        )
+    with pytest.raises(ValueError, match="n_jobs"):
+        sweep(_layered_rod_world, _PAR_ENGINE, axes=_PAR_AXES, n_jobs=0)
