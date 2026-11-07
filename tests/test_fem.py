@@ -214,6 +214,17 @@ def test_fem_warns_when_clusters_are_solved_without_coupling() -> None:
 
 
 @pytest.mark.finding("10.23")
+def test_fem_does_not_warn_about_clusters_when_nothing_is_driven() -> None:
+    """Without a source every result is exactly zero; nothing is misrepresented."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(w, "ring", name="p", center=(4.0, 0, 0.8), radius=1.5)
+    res, texts = _fem_warnings(w)
+    assert texts == []
+    assert res.electrode_potentials["p"][0] == 0j
+
+
+@pytest.mark.finding("10.23")
 @pytest.mark.parametrize(
     "soil",
     [

@@ -323,7 +323,7 @@ def _reduction_issues(
                 "their mutual resistance is neglected and the resistance is "
                 "biased low"
             )
-    if len(clusters) > 1:
+    if len(clusters) > 1 and active_clusters:
         reasons.append(
             f"the world has {len(clusters)} clusters, and each is solved "
             "alone: the mutual resistance between clusters is zero, transfer "
