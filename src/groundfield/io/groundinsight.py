@@ -36,7 +36,16 @@ Both fit families exported here are projected onto that symbol set:
   $s = j\\,2\\pi f$. The export substitutes
   $s\\to j\\,2\\pi f$ symbolically so the resulting expression is
   in ``f`` only (independent of ``rho``); the soil resistivity the
-  fit belongs to is recorded in the samples and metadata blocks.
+  fit belongs to (``rho_at_fit``) is recorded in the samples and
+  metadata blocks.
+
+A ``groundinsight`` ``Bus`` carries one ``specific_earth_resistance``,
+the ``rho`` of the formula. For layered soil the convention is the
+resistivity $\\rho_1$ of the **upper layer** (``rho_1``): it is the
+parameter the standard form is fitted over in a $\\rho_1$ sweep with a
+fixed lower layer (the AP1 catalogue), so a vector fit of the same site
+passes ``rho_at_fit = rho_1`` and both kinds of BusType pair with the
+same ``Bus``. The layers themselves go into ``soil_summary``.
 
 The exporter does not care which impedance was fitted (input
 impedance, cluster impedance or the impedance of one electrode); it
@@ -423,6 +432,14 @@ def _samples_from_rho_f_standard(
     }
 
 
+def _finite_or_none(value: Any) -> Optional[float]:
+    """``float(value)``, or ``None`` when missing or not finite (strict JSON)."""
+    if value is None:
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
 def _metadata_from_vector_fit(
     fit: VectorFitResult,
     *,
@@ -435,7 +452,9 @@ def _metadata_from_vector_fit(
         "fit_method": "vector_fit",
         "fit_quality": {
             "rms_error_Ohm": float(fit.rms_error),
+            "rms_relative": _finite_or_none(fit.rms_relative),
         },
+        "impedance_quantity": fit.quantity,
         "n_poles": int(fit.poles.size),
         "poles": [{"real": float(p.real), "imag": float(p.imag)} for p in fit.poles],
         "residues": [
@@ -458,20 +477,16 @@ def _metadata_from_rho_f_standard(
     soil_summary: Optional[str],
 ) -> dict[str, Any]:
     """Metadata block for a standard-form rho-f export."""
-    quality = {
-        "rms_error_Ohm": float(fit.rms_error),
-        "rms_relative": float(fit.rms_relative),
-    }
-    if getattr(fit, "max_relative", None) is not None:
-        quality["max_relative"] = float(fit.max_relative)
     return {
         "fit_method": "rho_f_standard",
-        "fit_quality": quality,
-        "coefficients": {
-            name: float(getattr(fit, name))
-            for name in ("k0", "k1", "k2", "k3", "k4", "k5")
-            if getattr(fit, name, None) is not None
+        "fit_quality": {
+            "rms_error_Ohm": float(fit.rms_error),
+            "rms_relative": _finite_or_none(fit.rms_relative),
+            "max_relative": _finite_or_none(fit.max_relative),
         },
+        "coefficients": {name: float(v) for name, v in fit.coefficients.items()},
+        "weights": fit.weights,
+        "impedance_quantity": fit.quantity,
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
         "source": f"groundfield {_groundfield_version()}",
@@ -560,10 +575,10 @@ def _check_rho_at_fit(fit: FitLike, rho_at_fit: Optional[float], caller: str) ->
             "metadata['rho_at_fit_Ohm_m']) so that it is paired with a "
             "groundinsight Bus of the same specific_earth_resistance. Pass it "
             f"explicitly, e.g. {caller}(fit, ..., rho_at_fit=100.0). For "
-            "layered soil pass the value the groundinsight Bus will carry "
-            "(for example the top-layer resistivity) and describe the layers "
-            "with soil_summary=...; standard-form fits (RhoFStandardFit) do "
-            "not need it."
+            "layered soil the convention is the resistivity of the upper layer, "
+            "rho_1 (the soil parameter of the standard rho-f form and of rho_1 "
+            "sweeps), and the layers are described with soil_summary=...; "
+            "standard-form fits (RhoFStandardFit) do not need it."
         )
     try:
         value = float(rho_at_fit)
@@ -690,8 +705,10 @@ def to_bustype_dict(
         :class:`VectorFitResult` was computed. Required for vector
         fits (it goes into ``samples["rho_Ohm_m"]`` and
         ``metadata["rho_at_fit_Ohm_m"]``); ignored for standard-form
-        fits. For layered soil pass the value the ``groundinsight``
-        ``Bus`` will carry and describe the layers in ``soil_summary``.
+        fits. For layered soil the convention is the resistivity of the
+        upper layer, ``rho_1``, the value a ``groundinsight`` ``Bus``
+        carries as ``specific_earth_resistance`` (see the module
+        docstring); describe the layers in ``soil_summary``.
     electrode_name, soil_summary : str, optional
         Free-form metadata entries; recommended for traceability.
     require_passive : bool, optional
@@ -775,7 +792,9 @@ def save_bustype_json(
     rho_at_fit : float, optional
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
-        standard-form fits.
+        standard-form fits. For layered soil the convention is the
+        resistivity of the upper layer, ``rho_1`` (see
+        :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries.
     indent : int, optional
@@ -930,7 +949,9 @@ def to_bustype(
     rho_at_fit : float, optional
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
-        standard-form fits.
+        standard-form fits. For layered soil the convention is the
+        resistivity of the upper layer, ``rho_1`` (see
+        :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not part of the live ``BusType``).
     require_passive : bool, optional
@@ -1003,7 +1024,9 @@ def save_bustype_to_db(
     rho_at_fit : float, optional
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
-        standard-form fits.
+        standard-form fits. For layered soil the convention is the
+        resistivity of the upper layer, ``rho_1`` (see
+        :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not stored in the database).
     overwrite : bool, optional
@@ -1125,15 +1148,22 @@ def evaluate_spec(
 
 
 def fit_quality_summary(spec: BusTypeSpec) -> str:
-    """One-line human-readable summary of fit quality / kind."""
+    """One-line human-readable summary of fit quality / kind.
+
+    Names the fit method, the rms error, the relative rms and worst
+    pointwise relative error when the document records them, and the
+    impedance the fit represents (``impedance_quantity``: ``input``,
+    ``cluster`` or ``electrode``) when known.
+    """
     md = spec.metadata
     method = md.get("fit_method", "unknown")
     fq = md.get("fit_quality", {})
     rms = fq.get("rms_error_Ohm", math.nan)
-    rel = fq.get("rms_relative")
-    if rel is not None:
-        return (
-            f"BusTypeSpec(name={spec.name!r}, method={method}, "
-            f"rms={rms:.3e} Ω, rms_rel={rel:.2%})"
-        )
-    return f"BusTypeSpec(name={spec.name!r}, method={method}, rms={rms:.3e} Ω)"
+    parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms:.3e} Ω"]
+    if fq.get("rms_relative") is not None:
+        parts.append(f"rms_rel={fq['rms_relative']:.2%}")
+    if fq.get("max_relative") is not None:
+        parts.append(f"max_rel={fq['max_relative']:.2%}")
+    if md.get("impedance_quantity") is not None:
+        parts.append(f"quantity={md['impedance_quantity']}")
+    return f"BusTypeSpec({', '.join(parts)})"

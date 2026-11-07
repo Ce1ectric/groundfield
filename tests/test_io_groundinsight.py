@@ -891,3 +891,96 @@ def test_vector_fit_without_poles_warns_that_the_formula_is_constant() -> None:
         )
     assert payload["impedance_formula"] == "12.5"
     assert payload["metadata"]["passivity"]["passed"] is True
+
+
+# ---------------------------------------------------------------------
+# 11. Fit metadata: k0, max_relative, weights, impedance quantity
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.27")
+def test_standard_fit_metadata_records_k0_max_relative_and_weights() -> None:
+    import dataclasses
+
+    fit = dataclasses.replace(_make_rho_f_fit(), quantity="input")
+    md = to_bustype_dict(fit, name="std", system_type="TN", voltage_level=0.4)[
+        "metadata"
+    ]
+    assert md["coefficients"] == {k: float(v) for k, v in fit.coefficients.items()}
+    assert list(md["coefficients"]) == ["k0", "k1", "k2", "k3", "k4", "k5"]
+    assert md["fit_quality"]["max_relative"] == fit.max_relative
+    assert md["fit_quality"]["rms_relative"] == fit.rms_relative
+    assert md["weights"] == fit.weights == "relative"
+    assert md["impedance_quantity"] == "input"
+
+
+@pytest.mark.finding("10.19")
+def test_fit_metadata_records_which_impedance_was_fitted() -> None:
+    """``quantity`` of the fit (input / cluster / electrode) reaches the
+    BusType document; raw samples record ``None``."""
+    import dataclasses
+
+    vf = _make_vector_fit()
+    for quantity in ("input", "cluster", "electrode", None):
+        md = to_bustype_dict(
+            dataclasses.replace(vf, quantity=quantity),
+            name="vf",
+            system_type="TN",
+            voltage_level=0.4,
+            rho_at_fit=100.0,
+        )["metadata"]
+        assert md["impedance_quantity"] == quantity
+        assert md["fit_quality"]["rms_relative"] == vf.rms_relative
+    spec = BusTypeSpec.from_dict(
+        to_bustype_dict(
+            dataclasses.replace(_make_rho_f_fit(), quantity="cluster"),
+            name="std",
+            system_type="TN",
+            voltage_level=0.4,
+        )
+    )
+    assert "cluster" in fit_quality_summary(spec)
+
+
+@pytest.mark.finding("10.27")
+def test_metadata_of_hand_built_fits_is_strict_json() -> None:
+    """Hand-built fits carry ``max_relative`` / ``rms_relative`` = NaN; the
+    base wrote them as NaN, which is not JSON."""
+    std = RhoFStandardFit(
+        k1=0.05,
+        k2=1e-4,
+        k3=2e-3,
+        k4=1e-6,
+        k5=1e-6,
+        rms_error=0.0,
+        rms_relative=0.0,
+        sample_rho=np.array([30.0, 1000.0]),
+        sample_f=np.array([0.0, 1000.0]),
+        sample_Z=np.ones(2, dtype=complex),
+    )
+    vf = _complex_vector_fit()
+    for fit in (std, vf):
+        payload = to_bustype_dict(
+            fit, name="h", system_type="TN", voltage_level=0.4, rho_at_fit=100.0
+        )
+        json.dumps(payload, allow_nan=False)
+    assert payload["metadata"]["fit_quality"]["rms_relative"] is None
+
+
+# ---------------------------------------------------------------------
+# 12. rho_at_fit convention for layered soil (10.84)
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.84")
+def test_rho_at_fit_convention_for_layered_soil_is_the_upper_layer() -> None:
+    """The error message and the export docstrings name one convention:
+    the resistivity of the upper layer, rho_1."""
+    with pytest.raises(ValueError) as excinfo:
+        to_bustype_dict(
+            _make_vector_fit(), name="vf", system_type="TN", voltage_level=0.4
+        )
+    message = str(excinfo.value)
+    assert "upper layer" in message and "rho_1" in message
+    for func in (to_bustype_dict, save_bustype_json, to_bustype, save_bustype_to_db):
+        assert "upper layer" in func.__doc__ and "rho_1" in func.__doc__, func
