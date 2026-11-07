@@ -468,6 +468,26 @@ def test_touch_voltage_spectrum_rejects_inconsistent_currents() -> None:
         touch_voltage_spectrum(res, world, electrode="g1", currents=[1.0, math.nan])
 
 
+@pytest.mark.finding("10.52")
+def test_touch_voltage_spectrum_rejects_a_frequency_given_twice() -> None:
+    """Audit 1, L4: a frequency carried by two results was counted twice
+    (the mapping form gave sqrt(2) times the RMS: 701.6 V instead of
+    496.1 V). The harmonics of a spectrum have distinct frequencies."""
+    from groundfield.postprocess.safety import touch_voltage_spectrum
+
+    world, r50 = _rod_spectrum_world([50.0])
+    _, r_both = _rod_spectrum_world([50.0, 150.0])
+    one = touch_voltage_spectrum(r50, world, electrode="g1", currents={50.0: 100.0})
+    assert one > 0.0
+    for results, currents in (
+        ([r50, r50], {50.0: 100.0}),
+        ([r50, r50], [100.0, 100.0]),
+        ([r_both, r50], {50.0: 100.0, 150.0: 5.0}),
+    ):
+        with pytest.raises(ValueError, match="50 Hz appears more than once"):
+            touch_voltage_spectrum(results, world, electrode="g1", currents=currents)
+
+
 # ---------------------------------------------------------------------
 # Integration: top-level export
 # ---------------------------------------------------------------------

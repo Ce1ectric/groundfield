@@ -664,8 +664,9 @@ def touch_voltage_spectrum(
     ------
     ValueError
         If the currents do not match the frequencies, are not finite, a
-        result carries no source snapshot, or the source current is zero
-        at some frequency.
+        frequency appears in more than one result (it would be counted
+        twice), a result carries no source snapshot, or the source current
+        is zero at some frequency.
 
     Notes
     -----
@@ -679,6 +680,16 @@ def touch_voltage_spectrum(
         (res, k, float(f)) for res in results for k, f in enumerate(res.frequencies)
     ]
     freqs = [f for _, _, f in pairs]
+    # The harmonics of a spectrum are orthogonal only at distinct
+    # frequencies; a frequency carried by two results was counted twice
+    # (audit 1, L4).
+    ordered = sorted(freqs)
+    for lo, hi in zip(ordered, ordered[1:], strict=False):
+        if math.isclose(lo, hi, rel_tol=1e-9, abs_tol=1e-9):
+            raise ValueError(
+                f"touch_voltage_spectrum: {lo:g} Hz appears more than once among "
+                "the results; give every harmonic once."
+            )
     if isinstance(currents, Mapping):
         keys = [float(f) for f in currents]
         values = []
