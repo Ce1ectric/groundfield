@@ -5,6 +5,11 @@ a fraction :math:`p` of the houses with a foundation electrode. The mask
 is deterministic and nested in :math:`p`: house :math:`i` is equipped iff
 :math:`r_i < p`, where :math:`r_i \in [0, 1)` is a stable pseudo-random
 number derived from a key of the footprint and a salt.
+
+The key is the OSM id when the footprint has one (as in every release
+before; stored masks stay valid) and otherwise a canonical text of the
+outline (vertices rounded to 1 mm, starting at the smallest vertex), so
+the mask never depends on the order of the footprint list.
 """
 
 from __future__ import annotations
@@ -14,7 +19,35 @@ from typing import TYPE_CHECKING
 
 from groundfield.geo.footprint import BuildingFootprint
 
-__all__: list[str] = []
+__all__ = ["footprint_mask_key"]
+
+
+def footprint_mask_key(footprint: BuildingFootprint) -> object:
+    """Key of a footprint in :meth:`LvNetworkLayout.foundation_mask`.
+
+    Parameters
+    ----------
+    footprint
+        The building footprint.
+
+    Returns
+    -------
+    int or str
+        ``footprint.osm_id`` when set; otherwise ``"outline:"`` followed
+        by the exterior-ring vertices in millimetres, starting at the
+        lexicographically smallest vertex. The outline key depends only
+        on the geometry, never on the position of the footprint in a
+        list or on the Python hash seed.
+    """
+    if footprint.osm_id is not None:
+        return footprint.osm_id
+    pts = [
+        (int(round(x * 1000.0)), int(round(y * 1000.0)))
+        for x, y in footprint.polygon_xy_m
+    ]
+    start = pts.index(min(pts))
+    pts = pts[start:] + pts[:start]
+    return "outline:" + ";".join(f"{x},{y}" for x, y in pts)
 
 
 def _stable_uniform(salt: int, key: object) -> float:
@@ -47,11 +80,11 @@ class _PenetrationMixin:
         electrodes.
 
         For each footprint a stable pseudo-random number
-        :math:`r_i \in [0, 1)` is derived from the footprint's
-        ``osm_id`` (or its index as a fallback) and the user-
-        supplied ``salt``. The mask entry is ``True`` iff
-        :math:`r_i < p` where :math:`p =` ``penetration``. Two
-        properties hold:
+        :math:`r_i \in [0, 1)` is derived from the footprint's key
+        (its ``osm_id``, or its outline when it has none — see
+        :func:`footprint_mask_key`) and the user-supplied ``salt``.
+        The mask entry is ``True`` iff :math:`r_i < p` where
+        :math:`p =` ``penetration``. Three properties hold:
 
         * **Reproducible.** Calling
           ``layout.foundation_mask(0.15)`` always returns the same
@@ -62,6 +95,8 @@ class _PenetrationMixin:
           :math:`p_2 > p_1` — increasing the penetration only
           *grows* the foundation-equipped subset. This is the
           natural property for penetration-rate sweep studies.
+        * **Order-independent.** A house's entry depends on its own
+          key only, not on its position in :attr:`footprints`.
 
         Parameters
         ----------
@@ -95,8 +130,7 @@ class _PenetrationMixin:
                 f"in [0, 1], got {penetration}."
             )
         out: list[bool] = []
-        for i, fp in enumerate(self.footprints):
-            key = fp.osm_id if fp.osm_id is not None else i
-            r = _stable_uniform(salt, key)
+        for fp in self.footprints:
+            r = _stable_uniform(salt, footprint_mask_key(fp))
             out.append(r < penetration)
         return out

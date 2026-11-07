@@ -687,10 +687,10 @@ def test_foundation_mask_rejects_out_of_range() -> None:
         layout.foundation_mask(1.01)
 
 
-def test_foundation_mask_falls_back_to_index_without_osm_id() -> None:
-    """When ``osm_id`` is ``None`` the mask uses the footprint
-    index, so the assignment is still deterministic for synthetic
-    footprints."""
+def test_foundation_mask_without_osm_id_is_deterministic() -> None:
+    """When ``osm_id`` is ``None`` the mask is keyed by the outline
+    (10.53; it used to be the list index), so the assignment is
+    deterministic for synthetic footprints."""
     footprints = [
         _rect_footprint(20.0 + 25.0 * i, 0.0)  # osm_id default = 0
         for i in range(10)

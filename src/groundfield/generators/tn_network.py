@@ -81,6 +81,7 @@ from groundfield.generators._compat import rename_input_keys, warn_renamed
 from groundfield.generators.base import (
     GeneratorConfig,
     WorldGenerator,
+    _coerce_rng,
 )
 from groundfield.generators.building import (
     BuildingTypeSpec,
@@ -551,16 +552,24 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     (:meth:`plan`), then materialise the plan (:meth:`build`).
     """
 
-    def build(self, cfg: Optional[TnNetworkConfig] = None) -> World:
+    def build(
+        self,
+        cfg: Optional[TnNetworkConfig] = None,
+        *,
+        rng: Optional[Union[int, np.random.Generator]] = None,
+    ) -> World:
         """Materialise one realisation of the configured TN network.
 
-        Equivalent to ``materialise_plan(self.plan(cfg))``.
+        Equivalent to ``materialise_plan(self.plan(cfg, rng=rng))``.
 
         Parameters
         ----------
         cfg : TnNetworkConfig, optional
             Configuration overriding :attr:`cfg`. When ``None``
             (default) the generator's own ``cfg`` is used.
+        rng : int or numpy.random.Generator, optional
+            Draw the realisation from this seed / generator instead of
+            the generator's own RNG.
 
         Returns
         -------
@@ -575,13 +584,18 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             if the total building count is zero, or if a configured
             placement returns fewer positions than buildings.
         """
-        return materialise_plan(self.plan(cfg))
+        return materialise_plan(self.plan(cfg, rng=rng))
 
-    def plan(self, cfg: Optional[TnNetworkConfig] = None) -> NetworkPlan:
+    def plan(
+        self,
+        cfg: Optional[TnNetworkConfig] = None,
+        *,
+        rng: Optional[Union[int, np.random.Generator]] = None,
+    ) -> NetworkPlan:
         """Resolve one realisation into a :class:`NetworkPlan`.
 
-        Every random decision is made here, against the generator's
-        RNG, in a fixed order: soil, substation grounding, building
+        Every random decision is made here, against ``rng`` (default:
+        the generator's RNG), in a fixed order: soil, substation grounding, building
         counts, building positions, per-building grounding, cable
         cabinets (count, positions, groundings), measurement electrodes
         and leads, source magnitude. Materialising the returned plan
@@ -591,6 +605,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         ----------
         cfg : TnNetworkConfig, optional
             Configuration overriding :attr:`cfg`.
+        rng : int or numpy.random.Generator, optional
+            Seed / generator of the random draws (default: the
+            generator's own RNG).
 
         Returns
         -------
@@ -603,7 +620,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             See :meth:`build`.
         """
         cfg = cfg or self.cfg
-        rng = self._rng
+        rng = self._rng if rng is None else _coerce_rng(rng)
 
         soil = materialise_soil(cfg.soil, rng)
 
@@ -668,7 +685,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # --- Cable cabinets + PEN backbone ---
         branches: list[PlannedBranch] = []
         if isinstance(cfg.pen_topology, RadialTrunkTopology):
-            self._plan_radial_trunk(cfg, substation, buildings, sites, branches)
+            self._plan_radial_trunk(cfg, substation, buildings, sites, branches, rng)
         else:
             n_cabinets = self._resolve_cabinet_count(cfg, n_buildings, rng)
             cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
@@ -688,7 +705,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             self._plan_star_backbone(cfg, substation, cabinets, buildings, branches)
 
         # --- Optional measurement set-up ---
-        measurement = self._plan_measurement(cfg, substation)
+        measurement = self._plan_measurement(cfg, substation, rng)
 
         # --- Source ---
         # ``cfg.source_return_to`` is the explicit override of the
@@ -797,7 +814,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         return max(1, int(math.ceil(rate * n_buildings / 100.0)))
 
     def _plan_measurement(
-        self, cfg: TnNetworkConfig, substation: PlannedSite
+        self, cfg: TnNetworkConfig, substation: PlannedSite, rng: np.random.Generator
     ) -> Optional[PlannedMeasurement]:
         """Resolve the optional measurement set-up.
 
@@ -809,7 +826,6 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         meas = cfg.measurement
         if meas is None:
             return None
-        rng = self._rng
         aux = meas.injection.grounding.plan_site(
             "aux", role="auxiliary", position_xy=meas.injection.position_xy, rng=rng
         )
@@ -829,24 +845,33 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         feed_lead = probe_lead = None
         if meas.injection.feed_lead is not None:
             feed_lead = self._plan_lead(
-                meas.injection.feed_lead, "meas_feed_lead", substation.name, aux.name
+                meas.injection.feed_lead,
+                "meas_feed_lead",
+                substation.name,
+                aux.name,
+                rng,
             )
         if meas.probe.lead is not None:
             probe_lead = self._plan_lead(
-                meas.probe.lead, "meas_probe_lead", substation.name, probe.name
+                meas.probe.lead, "meas_probe_lead", substation.name, probe.name, rng
             )
         return PlannedMeasurement(
             auxiliary=aux, probe=probe, feed_lead=feed_lead, probe_lead=probe_lead
         )
 
     def _plan_lead(
-        self, lead: MeasurementLeadConfig, name: str, start: str, end: str
+        self,
+        lead: MeasurementLeadConfig,
+        name: str,
+        start: str,
+        end: str,
+        rng: np.random.Generator,
     ) -> PlannedBranch:
         """Resolve one measurement lead into a branch."""
         # ``depth_m`` is currently informational -- the lead's endpoint
         # depths come from the anchor electrodes' connection points. The
         # draw keeps the RNG stream of earlier releases.
-        _ = _to_float(lead.depth_m, self._rng)
+        _ = _to_float(lead.depth_m, rng)
         return PlannedBranch(
             name=name,
             role="measurement_lead",
@@ -906,6 +931,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         buildings: list[PlannedSite],
         sites: list[PlannedSite],
         branches: list[PlannedBranch],
+        rng: np.random.Generator,
     ) -> None:
         r"""Radial-trunk backbone (:class:`RadialTrunkTopology`).
 
@@ -929,7 +955,6 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         """
         topology = cfg.pen_topology
         assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
-        rng = self._rng
         conductor = _pen_conductor(cfg.pen)
         wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
