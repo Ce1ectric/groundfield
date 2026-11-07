@@ -206,4 +206,3 @@ profile.out
 
 # Sandbox write-permission probe (Cowork-Mount); never committed.
 test_write_repo
-

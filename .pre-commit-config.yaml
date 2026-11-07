@@ -1,0 +1,40 @@
+# Pre-commit hooks (finding 10.94). Install once per clone:
+#
+#     pipx install pre-commit        # or: python -m pip install pre-commit
+#     pre-commit install
+#
+# Run on all files with `pre-commit run --all-files`.
+#
+# The hooks mirror the blocking CI checks: ruff format, ruff check with the
+# blocking subset F, E9, B (`ruff check` without arguments reports the full
+# standard configured in pyproject.toml), nbstripout for notebooks, and file
+# hygiene. Revisions are pinned to full commit SHAs, the tag is in the
+# comment; update with `pre-commit autoupdate --freeze` and keep the ruff
+# version equal to the dev dependency in pyproject.toml.
+
+# Vendored third-party files keep their upstream bytes (see SHA256SUMS there).
+exclude: ^docs/javascripts/vendor/
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: c0f278f1254ccc8fb09676bcdb8d847e7db493e5  # frozen: v0.17.4
+    hooks:
+      - id: ruff-format
+      - id: ruff-check
+        args: [--select, "F,E9,B"]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 34071b78c181af3bf5af955c1426466e096fc3db  # frozen: 0.9.1
+    hooks:
+      - id: nbstripout
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-toml
+      - id: check-yaml
+        # mkdocs.yml uses !!python/name tags; check the syntax only.
+        args: [--unsafe]
