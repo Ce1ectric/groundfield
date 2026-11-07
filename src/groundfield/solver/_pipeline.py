@@ -263,11 +263,17 @@ class Solution:
     segment_potentials
         Segment-midpoint potentials in V, one ``(N,)`` vector per
         frequency.
+    node_potentials
+        Potential in V of every active node of the augmented system
+        (cluster roots, junctions, interior conductor nodes), one
+        mapping per frequency. Empty mappings for backends that do not
+        provide them.
     """
 
     owner_currents: list[dict[str, complex]]
     segment_currents: list[np.ndarray]
     segment_potentials: list[np.ndarray] = field(default_factory=list)
+    node_potentials: list[dict[str, complex]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------
@@ -569,16 +575,25 @@ def solve(
     the per-frequency solves (ADR-0010 Tier 1). Without inductive
     branches the whole system is frequency-independent: it is solved
     once and replicated.
+
+    Source-free components float (finding 10.29): a bonded group of
+    passive electrodes is one equipotential with zero net current, and
+    a passive network carries its equalising currents. The potential of
+    every active node (including junctions) is kept in
+    :attr:`Solution.node_potentials`.
     """
     n_freq = len(engine.frequencies)
     mp_cache: dict = {}
 
-    def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
+    def _solve_at(
+        omega: float,
+    ) -> tuple[dict[str, complex], np.ndarray, dict[str, complex]]:
         correction = (
             branches.earth_correction(omega)
             if branches.earth_correction is not None
             else None
         )
+        node_pots: dict[str, complex] = {}
         owner_currents = _solve_cluster_currents(
             electrodes=world.electrodes,
             elec_input_current=node_currents,
@@ -595,9 +610,11 @@ def solve(
             carson_correction=correction,
             shell_coefficients=arrays.shell_coefficients,
             multiport_cache=mp_cache,
+            floating=True,
+            node_potentials=node_pots,
         )
         sc = _segment_currents(owner_currents, disc.owner_segments, arrays.lengths)
-        return owner_currents, sc
+        return owner_currents, sc, node_pots
 
     def _potentials(
         owner_list: list[dict[str, complex]], sc_list: list[np.ndarray]
@@ -614,21 +631,25 @@ def solve(
     if branches.has_inductance:
         owner_per_freq: list[dict[str, complex]] = []
         sc_per_freq: list[np.ndarray] = []
+        nodes_per_freq: list[dict[str, complex]] = []
         for f in engine.frequencies:
-            et, sc = _solve_at(2.0 * np.pi * float(f))
+            et, sc, nodes = _solve_at(2.0 * np.pi * float(f))
             owner_per_freq.append(et)
             sc_per_freq.append(sc)
+            nodes_per_freq.append(nodes)
         phi_per_freq = _potentials(owner_per_freq, sc_per_freq)
     else:
-        et, sc = _solve_at(0.0)
+        et, sc, nodes = _solve_at(0.0)
         ph = _potentials([et], [sc])[0]
         owner_per_freq = [et] * n_freq
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
+        nodes_per_freq = [nodes] * n_freq
     return Solution(
         owner_currents=owner_per_freq,
         segment_currents=sc_per_freq,
         segment_potentials=phi_per_freq,
+        node_potentials=nodes_per_freq,
     )
 
 

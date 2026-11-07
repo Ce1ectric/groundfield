@@ -310,6 +310,114 @@ def _active_cluster_set(
     return active_clusters_set
 
 
+def _floating_cluster_set(
+    cluster_input: dict[str, complex],
+    finite_branches: list[tuple[str, str, float]],
+    cluster_id: dict[str, str],
+    owner_roots: list[str],
+) -> set[str]:
+    """Active nodes when source-free clusters float (finding 10.29).
+
+    Nodes (cluster roots) joined by finite branches form components. A
+    component enters the system if it is driven (carries an impressed
+    current) or if it is a *non-trivial* passive component with soil
+    contact: several leakage owners (a bonded group) or at least one
+    branch (a passive network). Such a component floats — its net
+    leakage is zero by Kirchhoff's current law, but its members exchange
+    current to stay equipotential and its branches carry their
+    equalising currents.
+
+    A passive component of a single owner without branches is left out:
+    under the uniform-current ansatz its one owner carries zero current
+    whether it is solved or not, and its potential is the incident field
+    either way. Leaving it out keeps the results of every world without
+    bonded passive groups or passive networks bit-identical.
+
+    Components without any leakage owner (no soil contact) are rejected
+    earlier, by the topology step.
+
+    Parameters
+    ----------
+    cluster_input
+        Impressed current per cluster root in A (non-zero entries only).
+    finite_branches
+        ``(node_a, node_b, R)`` per finite branch, endpoints are cluster
+        roots.
+    cluster_id
+        Cluster root per node name.
+    owner_roots
+        Cluster root of every owner with leakage segments (one entry per
+        owner).
+
+    Returns
+    -------
+    set[str]
+        Cluster roots of the active nodes.
+    """
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for root in set(cluster_id.values()):
+        find(root)
+    for a, b, _R in finite_branches:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+    n_owners: dict[str, int] = {}
+    for root in owner_roots:
+        comp = find(root)
+        n_owners[comp] = n_owners.get(comp, 0) + 1
+    with_branch = {find(a) for a, _b, _R in finite_branches}
+    driven = {find(c) for c in cluster_input}
+    active_components = {
+        comp
+        for comp in set(n_owners) | driven
+        if comp in driven or n_owners.get(comp, 0) > 1 or comp in with_branch
+    }
+    return {node for node in parent if find(node) in active_components}
+
+
+def _passive_isolated_roots(
+    system: _ActiveSystem, finite_branches: list[tuple[str, str, float]]
+) -> set[str]:
+    """Active cluster roots with neither an impressed current nor a branch.
+
+    Their net leakage is zero by Kirchhoff's current law (floating
+    bonded groups, finding 10.29).
+    """
+    linked = {a for a, _b, _R in finite_branches} | {b for _a, b, _R in finite_branches}
+    return set(system.active_clusters) - set(system.cluster_input) - linked
+
+
+def _zero_net_current(
+    elec_total: dict[str, complex],
+    system: _ActiveSystem,
+    cluster_id: dict[str, str],
+    finite_branches: list[tuple[str, str, float]],
+) -> None:
+    """Make the members of an isolated floating cluster sum to exactly 0.
+
+    The solve enforces Kirchhoff's current law to round-off; summed in
+    the member order of :attr:`FieldResult.clusters` (sorted names, the
+    left-to-right sum of :meth:`FieldResult.cluster_impedance`) the
+    last member absorbs that residue, so the cluster impedance of a
+    floating cluster is ``nan`` instead of a ratio of round-off (the
+    convention of the ``mom`` family, 10.29).
+    """
+    for root in _passive_isolated_roots(system, finite_branches):
+        members = sorted(n for n in system.active_elecs if cluster_id[n] == root)
+        if len(members) < 2:
+            continue
+        rest = sum(elec_total[m] for m in members[:-1])
+        elec_total[members[-1]] = -complex(rest)
+
+
 def _active_system(
     *,
     electrodes,
@@ -318,16 +426,29 @@ def _active_system(
     elec_to_segidx: dict[str, list[int]],
     finite_branches: list[tuple[str, str, float]],
     pseudo_owners: list[str],
+    floating: bool = False,
 ) -> _ActiveSystem | None:
     """Identify the active nodes, owners and branches of one solve.
 
     Returns ``None`` when nothing is driven (no impressed current), in
-    which case every owner carries zero current.
+    which case every owner carries zero current. With ``floating`` the
+    non-trivial source-free components float
+    (:func:`_floating_cluster_set`); without it they are left out, as up
+    to 0.15.0.
     """
     cluster_input = _cluster_input_currents(elec_input_current, cluster_id)
-    if not cluster_input and not finite_branches:
-        return None
-    active_clusters_set = _active_cluster_set(cluster_input, finite_branches)
+    if floating:
+        all_owners = [e.name for e in electrodes] + list(pseudo_owners)
+        owner_roots = [
+            cluster_id[n] for n in all_owners if len(elec_to_segidx.get(n, [])) > 0
+        ]
+        active_clusters_set = _floating_cluster_set(
+            cluster_input, finite_branches, cluster_id, owner_roots
+        )
+    else:
+        if not cluster_input and not finite_branches:
+            return None
+        active_clusters_set = _active_cluster_set(cluster_input, finite_branches)
     if not active_clusters_set:
         return None
 
@@ -611,6 +732,46 @@ def _branch_impedance_matrix(
     return A_c
 
 
+def _augmented_solution(
+    A: np.ndarray,
+    b_re: np.ndarray,
+    b_im: np.ndarray,
+    system: _ActiveSystem,
+    *,
+    omega: float,
+    inductance_matrix: np.ndarray | None,
+    carson_correction: np.ndarray | None,
+    n_finite_branches: int,
+) -> np.ndarray:
+    """Solve the augmented system; returns ``[I_e, phi_n, I_b]`` (complex).
+
+    Two paths:
+
+    (a) DC / no inductive coupling — ``Z`` and ``R_b`` are real, so the
+        real and imaginary parts of a complex source are solved with one
+        factorisation and two right-hand sides (ADR-0010 Tier 1).
+    (b) Inductive coupling active (``inductance_matrix is not None``
+        and ``omega != 0``) — the branch block becomes complex
+        (``Z_b = R + jωL``), so one complex system is solved.
+    """
+    use_inductive = (
+        inductance_matrix is not None and omega != 0.0 and system.n_branches > 0
+    )
+    if not use_inductive:
+        sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
+        return sol[:, 0] + 1j * sol[:, 1]
+    A_c = _branch_impedance_matrix(
+        A,
+        system,
+        omega=omega,
+        inductance_matrix=inductance_matrix,
+        carson_correction=carson_correction,
+        n_finite_branches=n_finite_branches,
+    )
+    b_c = b_re + 1j * b_im
+    return np.linalg.solve(A_c, b_c)
+
+
 def _owner_currents(
     A: np.ndarray,
     b_re: np.ndarray,
@@ -622,35 +783,18 @@ def _owner_currents(
     carson_correction: np.ndarray | None,
     n_finite_branches: int,
 ) -> np.ndarray:
-    """Solve the augmented system for the active owners' leakage currents.
-
-    Two paths:
-
-    (a) DC / no inductive coupling — ``Z`` and ``R_b`` are real, so the
-        real and imaginary parts of a complex source are solved with one
-        factorisation and two right-hand sides (ADR-0010 Tier 1).
-    (b) Inductive coupling active (``inductance_matrix is not None``
-        and ``omega != 0``) — the branch block becomes complex
-        (``Z_b = R + jωL``), so one complex system is solved.
-    """
-    N_a = system.n_owners
-    use_inductive = (
-        inductance_matrix is not None and omega != 0.0 and system.n_branches > 0
-    )
-    if not use_inductive:
-        sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
-        return sol[:N_a, 0] + 1j * sol[:N_a, 1]
-    A_c = _branch_impedance_matrix(
+    """Leakage currents of the active owners (see :func:`_augmented_solution`)."""
+    sol = _augmented_solution(
         A,
+        b_re,
+        b_im,
         system,
         omega=omega,
         inductance_matrix=inductance_matrix,
         carson_correction=carson_correction,
         n_finite_branches=n_finite_branches,
     )
-    b_c = b_re + 1j * b_im
-    sol = np.linalg.solve(A_c, b_c)
-    return sol[:N_a]
+    return sol[: system.n_owners]
 
 
 def _solve_cluster_currents(
@@ -670,6 +814,8 @@ def _solve_cluster_currents(
     carson_correction: np.ndarray | None = None,
     shell_coefficients: np.ndarray | None = None,
     multiport_cache: dict | None = None,
+    floating: bool = False,
+    node_potentials: dict[str, complex] | None = None,
 ) -> dict[str, complex]:
     """Distribute input currents through grounding and finite-conductor branches.
 
@@ -731,6 +877,16 @@ def _solve_cluster_currents(
     to the active region) carry zero current and are excluded from
     the linear system to keep its size minimal.
 
+    With ``floating=True`` (the image-family pipeline, finding 10.29)
+    source-free components float instead: a bonded group of passive
+    electrodes or a passive network joined by finite branches enters
+    the system with zero net impressed current, so its members share
+    one potential per cluster and exchange their equalising currents.
+    A single passive electrode without branches is still left out —
+    under the uniform-current ansatz it carries no current either way
+    (:func:`_floating_cluster_set`). The members of an isolated floating
+    cluster report currents that sum to exactly zero.
+
     Parameters
     ----------
     self_kernel
@@ -759,6 +915,14 @@ def _solve_cluster_currents(
         per-frequency calls; the first call fills it, subsequent
         calls skip the kernel assembly entirely. ``None`` (default)
         disables caching.
+    floating
+        Let source-free components float (see *Active set*). Default
+        ``False`` keeps the behaviour of 0.15.0 for the other callers
+        (``cim``, ``solve_mutual_*``).
+    node_potentials
+        Optional output mapping, filled with the potential in V of every
+        active node (cluster root, junction, conductor interior node)
+        from the solution of the augmented system.
     """
     if finite_branches is None:
         finite_branches = []
@@ -775,6 +939,7 @@ def _solve_cluster_currents(
         elec_to_segidx=elec_to_segidx,
         finite_branches=finite_branches,
         pseudo_owners=pseudo_owners,
+        floating=floating,
     )
     if system is None:
         return elec_total
@@ -792,7 +957,7 @@ def _solve_cluster_currents(
     )
     A = _augmented_matrix(Z, system, cluster_id)
     b_re, b_im = _augmented_rhs(system)
-    I_active = _owner_currents(
+    sol = _augmented_solution(
         A,
         b_re,
         b_im,
@@ -802,6 +967,12 @@ def _solve_cluster_currents(
         carson_correction=carson_correction,
         n_finite_branches=len(finite_branches),
     )
+    N_a = system.n_owners
     for i, name in enumerate(system.active_elecs):
-        elec_total[name] = complex(I_active[i])
+        elec_total[name] = complex(sol[i])
+    if floating:
+        _zero_net_current(elec_total, system, cluster_id, finite_branches)
+    if node_potentials is not None:
+        for k, root in enumerate(system.active_clusters):
+            node_potentials[root] = complex(sol[N_a + k])
     return elec_total
