@@ -274,8 +274,11 @@ class World(BaseModel):
     ) -> "FieldResult":
         """Run the simulation with the given ``Engine``.
 
-        Delegates to :meth:`Engine.solve`, so users may write either
-        ``world.solve(engine)`` or ``engine.solve(world)``.
+        Delegates to :meth:`Engine.solve`, so ``world.solve(engine)``,
+        ``engine.solve(world)`` and :func:`groundfield.run_simulation`
+        follow the same source-snapshot semantics: every :attr:`sources`
+        entry is snapshotted before the backend runs and restored on
+        exit, and the result records the sources as built.
 
         Parameters
         ----------
@@ -283,23 +286,31 @@ class World(BaseModel):
             The :class:`~groundfield.solver.engine.Engine` instance that
             drives the backend.
         snapshot_sources
-            If ``True`` (default), every :attr:`sources` entry is
-            deep-copied before the backend runs and restored on exit.
-            This defends against backends that mutate
-            ``Source.return_to`` in flight (see
-            :class:`groundfield.generators.measurement.MeasurementSetupConfig.build`).
-            Power users who have verified that their backend does not
-            mutate the source list (typical in long
-            :func:`~groundfield.engines.compare_engines` sweeps or
-            :func:`~groundfield.engines.convergence_study` runs) may set
-            ``snapshot_sources=False`` to skip the deep-copy cost.
+            Deprecated. ``True`` (default) additionally guards the
+            sources around ``engine.solve`` here, which protects against
+            :class:`Engine` subclasses that override ``solve`` and
+            mutate the world before delegating. ``False`` drops only
+            that extra guard and emits a :class:`DeprecationWarning`:
+            :meth:`Engine.solve` always takes the snapshot (it costs a
+            deep copy of a few flat models), so the opt-out saves
+            nothing. It will be removed no earlier than ``2027.5``.
+
+        Returns
+        -------
+        FieldResult
+            The result of :meth:`Engine.solve`.
+
+        Raises
+        ------
+        TypeError
+            If ``engine`` is not an :class:`Engine`.
 
         Notes
         -----
-        The default ``snapshot_sources=True`` makes the contract
-        explicit: solving never rewrites the input world. The opt-out
-        is documented in ``docs/concepts.md`` ("Engine re-use across
-        ``World.solve`` calls").
+        Solving never rewrites the input world, whichever entry point is
+        used (review finding 10.72; up to the calendar release only
+        ``World.solve`` and ``run_simulation`` restored the sources,
+        ``Engine.solve`` let a backend rewrite them).
 
         The roll-back is **identity-preserving** (since 0.15.0): the
         field values recorded in the snapshot are written back onto the
@@ -321,7 +332,8 @@ class World(BaseModel):
         mutation a no-op.
         """
         # Local import to avoid a circular dependency at module load.
-        from groundfield.solver.engine import Engine
+        from groundfield.solver.engine import Engine, _guarded_sources
+        from groundfield.solver.registry import DEPRECATION_REMOVAL, warn_external
 
         if not isinstance(engine, Engine):
             raise TypeError(
@@ -329,39 +341,20 @@ class World(BaseModel):
                 "Build one with gf.create_engine(backend='image')."
             )
         if not snapshot_sources:
-            # Caller has opted out — backends are now contractually
-            # responsible for not mutating ``self.sources``.
+            warn_external(
+                "World.solve(snapshot_sources=False) is deprecated: "
+                "Engine.solve always snapshots and restores the sources, "
+                "so the opt-out saves nothing. The argument will be "
+                f"removed no earlier than {DEPRECATION_REMOVAL}.",
+                DeprecationWarning,
+            )
             return engine.solve(self)
-        # Snapshot every source via Pydantic's deep-copy semantics so
-        # backends that mutate a source field in flight cannot leak
-        # the change back into the caller's world. Keep a reference to
-        # the live list *and* to the original objects: the roll-back
-        # below writes the recorded values back onto those objects
-        # instead of rebinding a fresh copy, so the handles returned by
-        # ``create_source`` stay attached to this world (F31).
-        source_list = self.sources
-        originals = list(source_list)
-        sources_snapshot = [s.model_copy(deep=True) for s in originals]
-        try:
+        # Engine.solve guards the sources itself; this outer guard (the
+        # same identity-preserving roll-back, F31) also covers Engine
+        # subclasses that override ``solve`` and mutate the world before
+        # delegating to it.
+        with _guarded_sources(self):
             return engine.solve(self)
-        finally:
-            for original, snapshot in zip(originals, sources_snapshot):
-                if original != snapshot:
-                    # Source models are flat (str / float / None), so a
-                    # dict update is a complete field-wise roll-back.
-                    original.__dict__.update(snapshot.__dict__)
-                    original.__pydantic_fields_set__ = set(
-                        snapshot.__pydantic_fields_set__
-                    )
-            # Undo list-level mutations (insert / remove / replace) and
-            # re-bind the original list object if a backend swapped the
-            # attribute wholesale.
-            if len(source_list) != len(originals) or any(
-                live is not original for live, original in zip(source_list, originals)
-            ):
-                source_list[:] = originals
-            if self.sources is not source_list:
-                self.sources = source_list
 
     # ------------------------------------------------------------------
     # Diagnostics

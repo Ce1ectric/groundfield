@@ -9,12 +9,12 @@ rest of the software family:
   transports — JSON file (neutral, schema-versioned) and a live
   Python ``BusType`` instance via lazy import. See
   ``docs/adr/0008-groundinsight-bridge.md``.
-* ``io.json``: serialise and deserialise a complete ``FieldStudy`` to
-  / from JSON for reproducibility and regression tests. *Reserved.*
+* ``io.results``: versioned JSON file of a :class:`FieldResult`
+  (``save_result`` / ``load_result``, format ``groundfield.result``,
+  ``schema_version`` 1) and the ``world_fingerprint`` used in the
+  provenance block of every solve.
 * ``io.vtk``: export of 3-D field results to VTK / ParaView.
-  *Reserved.*
 * ``io.csv``: lightweight export of path and point results.
-  *Reserved.*
 
 Guiding principle
 -----------------
@@ -43,12 +43,26 @@ from groundfield.io.groundinsight import (
     to_bustype,
     to_bustype_dict,
 )
+from groundfield.io.results import (
+    RESULT_FORMAT,
+    RESULT_SCHEMA_VERSION,
+    ResultFormatError,
+    load_result,
+    save_result,
+    world_fingerprint,
+)
 from groundfield.io.vtk import (
     export_field_vtk,
     export_geometry_vtk,
 )
 
 __all__ = [
+    "RESULT_FORMAT",
+    "RESULT_SCHEMA_VERSION",
+    "ResultFormatError",
+    "save_result",
+    "load_result",
+    "world_fingerprint",
     "BusTypeSpec",
     "SCHEMA_NAME",
     "SCHEMA_VERSION",
