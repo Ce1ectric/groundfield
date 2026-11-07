@@ -520,7 +520,9 @@ def _r5_fit_set():
         rho = np.repeat([30.0, 100.0, 300.0, 1000.0], 6)
         ff = np.tile([0.0, 50.0, 150.0, 350.0, 650.0, 1000.0], 4)
         z = k[0] * rho + (k[1] + 1j * k[2]) * ff + (k[3] + 1j * k[4]) * ff * rho
-        fits.append(fit_rho_f_standard(rho, ff, z))
+        # R5's generator fits with uniform weights (v0.15.0); some synthetic
+        # samples are exactly zero, which relative weights reject.
+        fits.append(fit_rho_f_standard(rho, ff, z, weights="uniform"))
     fits.append(
         RhoFStandardFit(
             k1=0.5,
