@@ -40,9 +40,12 @@ _Point3D = tuple[float, float, float]
 
 
 class PointSource(BaseModel):
-    """A discretised point current source (segment midpoint).
+    """A discretised current source (segment midpoint, length, direction).
 
-    Filled by the backend; not instantiated directly by the user.
+    Filled by the backend; not instantiated directly by the user. With
+    the point kernel the current sits at ``position``; with the line
+    kernel (``FieldResult.metadata["kernel"] == "line"``) it is spread
+    uniformly along the segment given by ``length`` and ``direction``.
     """
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
@@ -53,6 +56,16 @@ class PointSource(BaseModel):
     )
     electrode_name: str = Field(..., description="Owning electrode.")
     length: float = Field(..., gt=0.0, description="Represented length in m.")
+    direction: _Point3D | None = Field(
+        default=None,
+        description=(
+            "Unit tangent of the represented segment, which then runs from "
+            "position - length/2·direction to position + length/2·direction. "
+            "Used by the exact line-source kernel (kernel='line') of "
+            ":meth:`FieldResult.potential`. ``None`` for results written "
+            "before 2026.11 or by backends that do not record it."
+        ),
+    )
 
 
 class SourceRecord(BaseModel):
@@ -495,6 +508,7 @@ class FieldResult(BaseModel):
         # Contiguous, as before the cache: the real/imaginary views then
         # have the stride the BLAS calls of v0.15.0 saw.
         currents = np.ascontiguousarray(all_currents[:, frequency_index])
+        line = self._line_sources()
 
         # Dispatch to the kernel that matches the effective number of
         # soil layers. A ``MultiLayerSoil`` with one or two layers is
@@ -506,7 +520,7 @@ class FieldResult(BaseModel):
         # back to the homogeneous kernel.
         if isinstance(self.soil, TwoLayerSoil):
             return self._potential_two_layer(
-                pts, sources, currents, self.soil, min_distance
+                pts, sources, currents, self.soil, min_distance, line=line
             )
         if isinstance(self.soil, MultiLayerSoil):
             n = len(self.soil.layers)
@@ -519,6 +533,7 @@ class FieldResult(BaseModel):
                     currents,
                     min_distance,
                     rho_override=float(self.soil.layers[0].resistivity),
+                    line=line,
                 )
             if n == 2:
                 # Two-layer MultiLayerSoil: cast to TwoLayerSoil and
@@ -529,7 +544,7 @@ class FieldResult(BaseModel):
                     h_1=float(self.soil.layers[0].thickness),
                 )
                 return self._potential_two_layer(
-                    pts, sources, currents, two_layer, min_distance
+                    pts, sources, currents, two_layer, min_distance, line=line
                 )
             raise NotImplementedError(
                 f"FieldResult.potential: MultiLayerSoil with n={n} ≥ 3 "
@@ -544,7 +559,9 @@ class FieldResult(BaseModel):
                 "TwoLayerSoil / HomogeneousSoil for explicit field "
                 "evaluation."
             )
-        return self._potential_homogeneous(pts, sources, currents, min_distance)
+        return self._potential_homogeneous(
+            pts, sources, currents, min_distance, line=line
+        )
 
     # -- private helpers per Green's-function kind --------------------
 
@@ -573,7 +590,26 @@ class FieldResult(BaseModel):
         self._ps_cache = (ps_list, len(ps_list), sources, currents)
         return sources, currents
 
+    def _line_sources(self):
+        """Point sources as line segments when the solve used ``kernel="line"``.
 
+        Returns ``None`` for point-kernel results and for results whose
+        point sources carry no ``direction`` (then the point kernel is
+        used, as before).
+        """
+        if self.metadata.get("kernel") != "line":
+            return None
+        if any(ps.direction is None for ps in self.point_sources):
+            return None
+        from groundfield.solver._line_kernel import LineSegments
+
+        sources, _ = self._point_source_arrays()
+        return LineSegments(
+            sources,
+            np.array([ps.length for ps in self.point_sources], dtype=float),
+            np.array([ps.direction for ps in self.point_sources], dtype=float),
+            np.zeros(len(self.point_sources)),
+        )
     def _potential_homogeneous(
         self,
         pts: np.ndarray,
@@ -581,6 +617,7 @@ class FieldResult(BaseModel):
         currents: np.ndarray,
         min_distance: float,
         rho_override: float | None = None,
+        line=None,
     ) -> np.ndarray:
         rho = float(rho_override) if rho_override is not None else self.soil_resistivity
         if rho is None:
@@ -590,7 +627,7 @@ class FieldResult(BaseModel):
             )
         from groundfield.solver._kernels import _point_field
 
-        return _point_field(pts, sources, currents, rho, min_distance)
+        return _point_field(pts, sources, currents, rho, min_distance, line=line)
 
     def _potential_two_layer(
         self,
@@ -601,6 +638,7 @@ class FieldResult(BaseModel):
         min_distance: float,
         max_terms: int = 100,
         tol: float = 1e-6,
+        line=None,
     ) -> np.ndarray:
         """Tagg/Sunde series for 2-layer soil (upper-layer fast path).
 
@@ -611,6 +649,10 @@ class FieldResult(BaseModel):
         (measured uu-series error before the fix: +7 % at z = 7 m,
         +25 % at z = 12 m for K = +0.818, h_1 = 5 m). Pure
         upper-layer evaluations are bit-exact to the historic path.
+
+        With the line kernel (``line`` given) the upper-layer series
+        uses line sources; pairs involving layer 2 keep the point form
+        of the spectral kernel.
         """
         h_1 = soil.h_1
         rho_1 = soil.rho_1
@@ -632,6 +674,7 @@ class FieldResult(BaseModel):
                     min_distance,
                     max_terms,
                     tol,
+                    line=None if line is None else line.subset(src_l1),
                 )
             if (~src_l1).any():
                 G = two_layer_probe_matrix(
@@ -664,7 +707,7 @@ class FieldResult(BaseModel):
         parts = [currents.real]
         if np.any(currents.imag):
             parts.append(currents.imag)
-        sums = _series_field(pts, sources, parts, series, min_distance)
+        sums = _series_field(pts, sources, parts, series, min_distance, line=line)
         phi_re = sums[0]
         phi_im = sums[1] if len(sums) > 1 else np.zeros_like(phi_re)
         return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)

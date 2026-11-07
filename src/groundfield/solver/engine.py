@@ -51,7 +51,7 @@ import warnings
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from groundfield.solver.result import FieldResult, SourceRecord
 from groundfield.utils.logging import get_logger
@@ -137,6 +137,9 @@ EarthInductiveModel = Literal[
 
 _log = get_logger(__name__)
 
+#: Backends that implement ``Engine(kernel="line")``.
+_LINE_KERNEL_BACKENDS = frozenset({"image", "image_2layer", "image_nlayer"})
+
 
 def _source_records(world: "World", n_freq: int) -> list[SourceRecord]:
     """Snapshot of ``world.sources`` for :attr:`FieldResult.sources`."""
@@ -212,6 +215,24 @@ class Engine(BaseModel):
     image_max_terms, image_series_tol
         Controls of the Tagg / Sunde image-charge series, forwarded to
         every layered backend.
+    kernel
+        Green's-function kernel of the image family (``image``,
+        ``image_2layer`` and ``image_nlayer`` for one or two layers),
+        also used by :meth:`FieldResult.potential` and
+        :func:`~groundfield.solver.mutual.solve_mutual_matrix` /
+        ``solve_mutual_field``:
+
+        - ``"point"`` (default) — each segment's current sits at its
+          midpoint; reproduces the results of earlier releases. Its
+          row sums carry an error of about :math:`-0.23/L`, so the
+          grounding resistance converges to a value 0.9–1.9 % below the
+          exact uniform-current solution (review pass 10, 10.28).
+        - ``"line"`` — every segment is a uniform line current
+          (Galerkin form of the exact line-source potential, see
+          :mod:`groundfield.solver._line_kernel`): exact for straight
+          wires at any segment length.
+
+        The other backends use their own kernels and reject ``"line"``.
     sommerfeld_lambda_max_factor, sommerfeld_epsabs, sommerfeld_epsrel, sommerfeld_max_osc_panels
         Accuracy controls of the ``mom_sommerfeld`` reflected-remainder
         quadrature, forwarded to
@@ -260,6 +281,14 @@ class Engine(BaseModel):
             "reached. Forwarded to every layered backend "
             "(image_2layer, image_nlayer, mom, cim, bem, "
             "mom_sommerfeld)."
+        ),
+    )
+    kernel: Literal["point", "line"] = Field(
+        default="point",
+        description=(
+            "Green's-function kernel of the image family: 'point' (midpoint "
+            "point sources, the historic default) or 'line' (exact uniform "
+            "line sources, Galerkin form)."
         ),
     )
     image_series_tol: float = Field(
@@ -320,6 +349,18 @@ class Engine(BaseModel):
             "the remedy. Cost grows linearly with it."
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_kernel_backend(self) -> "Engine":
+        """Reject ``kernel="line"`` for backends without a line kernel."""
+        if self.kernel == "line" and self.backend not in _LINE_KERNEL_BACKENDS:
+            raise ValueError(
+                f"kernel='line' is implemented for the image family "
+                f"({', '.join(sorted(_LINE_KERNEL_BACKENDS))}); backend "
+                f"{self.backend!r} uses its own kernel. Use kernel='point' "
+                "with this backend."
+            )
+        return self
 
     @field_validator("frequencies")
     @classmethod

@@ -133,7 +133,7 @@ class _HalfSpaceGreen:
     """Green's function of the homogeneous half-space (pipeline object).
 
     The reaction kernel is the point source plus its mirror image in
-    the insulating soil surface, :math:`\rho/(4\pi)\,(1/r + 1/r')`,
+    the insulating soil surface, :math:`\\rho/(4\\pi)\\,(1/r + 1/r')`,
     with the analytical line self-term on the diagonal
     (:func:`_self_corrected_kernel`).
     """
@@ -142,8 +142,9 @@ class _HalfSpaceGreen:
     where = "solve_image"
     layer_interfaces = None
 
-    def __init__(self, rho: float) -> None:
+    def __init__(self, rho: float, kernel: str = "point") -> None:
         self.rho = rho
+        self.kernel = kernel
         self.soil_resistivity = float(rho)
         self.reference_resistivity = float(rho)
 
@@ -151,9 +152,11 @@ class _HalfSpaceGreen:
         """Reaction operator with the fixed resistivity ``rho``.
 
         The operator assembles its matrix once and reuses it for the
-        segment potentials after the solve (10.57).
+        segment potentials after the solve (10.57). ``kernel="line"``
+        selects the exact line-source kernel (10.28).
         """
-        return HalfSpaceKernel(self.rho)
+        line = arrays.line_segments() if self.kernel == "line" else None
+        return HalfSpaceKernel(self.rho, line=line)
 
     def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
         """No backend-specific metadata."""
@@ -198,6 +201,5 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    return solve_image_family(
-        world, engine, _HalfSpaceGreen(world.soil.resistivity), stacklevel=3
-    )
+    green = _HalfSpaceGreen(world.soil.resistivity, getattr(engine, "kernel", "point"))
+    return solve_image_family(world, engine, green, stacklevel=3)

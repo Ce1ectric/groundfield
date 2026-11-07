@@ -69,9 +69,11 @@ from groundfield.soil.models import (
 )
 from groundfield.solver._kernels import (
     HalfSpaceKernel,
+    _line_field_correction,
     _point_field_kernel,
     _series_field,
 )
+from groundfield.solver._line_kernel import LineSegments
 from groundfield.solver._pipeline import (
     BranchModel,
     Discretisation,
@@ -127,6 +129,7 @@ def _probe_potential_two_layer(
     min_distance: float,
     max_terms: int = 100,
     tol: float = 1e-6,
+    line: LineSegments | None = None,
 ) -> np.ndarray:
     """Matrix form of :meth:`FieldResult._potential_two_layer`.
 
@@ -189,6 +192,7 @@ def _probe_potential_two_layer(
                 min_distance,
                 max_terms,
                 tol,
+                line=None if line is None else line.subset(src_l1),
             )
         # Remaining blocks via the spectral kernel: layer-2 sources to
         # all probes, layer-1 sources to layer-2 probes.
@@ -219,7 +223,9 @@ def _probe_potential_two_layer(
     parts = [currents.real]
     if np.any(currents.imag):
         parts.append(currents.imag)
-    sums = _series_field(probe_points, source_points, parts, series, min_distance)
+    sums = _series_field(
+        probe_points, source_points, parts, series, min_distance, line=line
+    )
     phi_re = sums[0]
     phi_im = sums[1] if len(sums) > 1 else np.zeros_like(phi_re)
     return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)
@@ -243,6 +249,7 @@ class _MutualProblem:
     Z_seg_full: np.ndarray
     omega: float
     carson_dz: np.ndarray | None
+    line: LineSegments | None = None
 
 
 def _prepare(
@@ -291,6 +298,11 @@ def _prepare(
     else:
         raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
 
+    # Kernel choice of the engine (10.28): point (default) or exact line
+    # sources, for the reaction matrix and the field evaluation alike.
+    line = (
+        arrays.line_segments() if getattr(engine, "kernel", "point") == "line" else None
+    )
     if soil_two_layer is not None:
         # 2-layer reaction operator: feed the engine's image-series
         # truncation, exactly like ``solve_image_2layer``.
@@ -300,9 +312,10 @@ def _prepare(
             int(getattr(engine, "image_max_terms", 100)),
             float(getattr(engine, "image_series_tol", 1e-6)),
             allow_cross_layer=bool(z_max >= soil_two_layer.h_1),
+            line=line,
         )
     else:
-        kernel = HalfSpaceKernel(float(rho_homog))
+        kernel = HalfSpaceKernel(float(rho_homog), line=line)
 
     # 3) Reaction matrix ONCE, assembled directly (10.59): the N×N
     #    segment reaction matrix, column k is the potential of 1 A in
@@ -331,6 +344,7 @@ def _prepare(
         Z_seg_full=Z_seg_full,
         omega=omega,
         carson_dz=carson_dz,
+        line=line,
     )
 
 
@@ -405,11 +419,19 @@ def _field_of_columns(
             min_distance,
             max_terms=max_terms,
             tol=tol,
+            line=problem.line,
         )
     K_probe = _probe_kernel_homogeneous(
         field_points, seg_points, float(problem.rho_homog), min_distance
     )
-    return K_probe @ T.real + 1j * (K_probe @ T.imag)
+    Phi = K_probe @ T.real + 1j * (K_probe @ T.imag)
+    if problem.line is not None:
+        # Line sources (10.28): far-field and near-source corrections.
+        re, im = _line_field_correction(
+            field_points, problem.line, [T.real, T.imag], min_distance
+        )
+        Phi = Phi + (float(problem.rho_homog) / (4.0 * np.pi)) * (re + 1j * im)
+    return Phi
 
 
 # ---------------------------------------------------------------------

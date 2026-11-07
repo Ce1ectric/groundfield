@@ -42,6 +42,16 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
+from groundfield.solver._line_kernel import (
+    LineSegments,
+    SparseCorrection,
+    field_corrections,
+    field_quadrupole_rows,
+    reaction_corrections,
+    reaction_quadrupole_rows,
+    series_corrections,
+    series_field_corrections,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Sequence
@@ -264,6 +274,10 @@ class HalfSpaceKernel:
         Soil resistivity in Ω·m.
     owner_names
         Optional per-segment owner labels for the depth-guard message.
+    line
+        Segment geometry for the exact line-source kernel
+        (``Engine(kernel="line")``, :mod:`groundfield.solver._line_kernel`);
+        ``None`` (default) keeps the point kernel.
 
     Attributes
     ----------
@@ -271,13 +285,32 @@ class HalfSpaceKernel:
         Number of full matrix evaluations so far.
     """
 
-    def __init__(self, rho: float, *, owner_names: Sequence[str] | None = None):
+    def __init__(
+        self,
+        rho: float,
+        *,
+        owner_names: Sequence[str] | None = None,
+        line: LineSegments | None = None,
+    ):
         self.rho = rho
         self.pref = rho / (4.0 * np.pi)
         self.owner_names = owner_names
+        self.line = line
         self.assemblies = 0
         self._geometry: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
         self._K0: np.ndarray | None = None
+        self._line_corrections: SparseCorrection | None = None
+
+    def _corrections(self) -> SparseCorrection:
+        """Sparse line-kernel corrections (built once)."""
+        if self._line_corrections is None:
+            self._line_corrections = reaction_corrections(self.line, _MIN_DISTANCE)
+        return self._line_corrections
+
+    def _apply_line(self, rows: np.ndarray, i0: int) -> None:
+        """Turn point-kernel rows ``i0 …`` into line-kernel rows (in place)."""
+        rows += reaction_quadrupole_rows(self.line, i0, i0 + rows.shape[0])
+        self._corrections().add_to_rows(rows, i0)
 
     @staticmethod
     def fits(n_segments: int) -> bool:
@@ -305,13 +338,18 @@ class HalfSpaceKernel:
         if self._K0 is None or not self._same_geometry(
             seg_points, seg_lengths, wire_radii
         ):
-            self._K0 = _half_space_matrix(
+            K0 = _half_space_matrix(
                 seg_points,
                 seg_lengths,
                 wire_radii,
                 owner_names=self.owner_names,
                 stacklevel=4,
             )
+            if self.line is not None:
+                rows = _block_rows(K0.shape[0])
+                for i0 in range(0, K0.shape[0], rows):
+                    self._apply_line(K0[i0 : i0 + rows], i0)
+            self._K0 = K0
             self._geometry = (seg_points, seg_lengths, wire_radii)
             self.assemblies += 1
         return self._K0
@@ -361,6 +399,8 @@ class HalfSpaceKernel:
             n_close += nc
             idx = np.arange(i0, i1)
             blk[idx - i0, idx] = diag[i0:i1]
+            if self.line is not None:
+                self._apply_line(blk, i0)
             out[i0:i1] = blk @ cur
         _warn_clamped_pairs((n_close - n) // 2, 3)
         self.assemblies += 1
@@ -594,15 +634,42 @@ class TwoLayerSeriesKernel:
         Upper-layer resistivity in Ω·m.
     series
         The image series.
+    line
+        Segment geometry for the exact line-source kernel; ``None``
+        (default) keeps the point kernel.
     """
 
-    def __init__(self, rho_1: float, series: ImageSeries):
+    def __init__(
+        self, rho_1: float, series: ImageSeries, *, line: LineSegments | None = None
+    ):
         self.rho_1 = rho_1
         self.pref = rho_1 / (4.0 * np.pi)
         self.series = series
-        self.half_space = HalfSpaceKernel(rho_1)
+        self.line = line
+        self.half_space = HalfSpaceKernel(rho_1, line=line)
         self._S: np.ndarray | None = None
         self._S_points: np.ndarray | None = None
+        self._series_corrections: SparseCorrection | None = None
+
+    def _line_series(self) -> SparseCorrection:
+        """Exact-minus-point corrections of near series images (line kernel)."""
+        if self._series_corrections is None:
+            images = [
+                (term.weight, term.offset, term.sign)
+                for quad in self.series.iter_layer_terms()
+                for term in quad
+            ]
+            self._series_corrections = series_corrections(
+                self.line, images, _MIN_DISTANCE
+            )
+        return self._series_corrections
+
+    def _series(self, seg_points: np.ndarray) -> np.ndarray:
+        """``S`` (point images plus the near-image corrections of the line kernel)."""
+        S = _series_matrix(seg_points, self.series)
+        if self.line is not None:
+            self._line_series().add_to_rows(S, 0)
+        return S
 
     @property
     def assemblies(self) -> int:
@@ -622,7 +689,7 @@ class TwoLayerSeriesKernel:
     def series_matrix(self, seg_points: np.ndarray) -> np.ndarray:
         """``S`` in 1/m, assembled once per geometry and kept."""
         if self._S is None or self._S_points is not seg_points:
-            self._S = _series_matrix(seg_points, self.series)
+            self._S = self._series(seg_points)
             self._S_points = seg_points
         return self._S
 
@@ -631,7 +698,7 @@ class TwoLayerSeriesKernel:
     ) -> np.ndarray:
         """Reaction matrix in Ω (new array), bit-identical to v0.15.0's ``kernel(eye)``."""
         M = self.half_space.matrix(seg_points, seg_lengths, wire_radii)
-        S = _series_matrix(seg_points, self.series)
+        S = self._series(seg_points)
         S *= self.pref
         M += S
         return M
@@ -676,6 +743,8 @@ class TwoLayerSeriesKernel:
                 b,
                 use_numba=use_numba,
             )
+            if self.line is not None:
+                self._line_series().add_to_rows(b, i0)
             out[i0:i1] = b @ cur
         return out
 
@@ -709,9 +778,15 @@ def _point_field_kernel(
     return block
 
 
-def _field_row_blocks(n_points: int, n_sources: int) -> list[slice]:
-    """Row slices of a field evaluation: one piece up to :data:`FIELD_PIECE_BYTES`."""
-    if 8 * n_points * n_sources <= FIELD_PIECE_BYTES:
+def _field_row_blocks(
+    n_points: int, n_sources: int, *, force_blocks: bool = False
+) -> list[slice]:
+    """Row slices of a field evaluation.
+
+    One piece up to :data:`FIELD_PIECE_BYTES` (bit-identical to v0.15.0)
+    unless ``force_blocks``; row blocks of :data:`BLOCK_BYTES` beyond.
+    """
+    if not force_blocks and 8 * n_points * n_sources <= FIELD_PIECE_BYTES:
         return [slice(0, n_points)]
     rows = _block_rows(n_sources)
     return [slice(i0, min(n_points, i0 + rows)) for i0 in range(0, n_points, rows)]
@@ -723,6 +798,7 @@ def _point_field(
     currents: np.ndarray,
     rho: float,
     min_distance: float,
+    line: LineSegments | None = None,
 ) -> np.ndarray:
     """Half-space potential in V of point sources at field points.
 
@@ -743,6 +819,9 @@ def _point_field(
         Resistivity in Ω·m.
     min_distance
         Distance clamp in m.
+    line
+        Source segments for the exact line-source kernel; ``None``
+        (default) evaluates point sources.
     """
     src = _xyz(sources)
     obs_all = _xyz(points)
@@ -752,6 +831,11 @@ def _point_field(
         out[sl] = (rho / (4.0 * np.pi)) * (
             kernel @ currents.real + 1j * (kernel @ currents.imag)
         )
+    if line is not None:
+        re, im = _line_field_correction(
+            points, line, [currents.real, currents.imag], min_distance
+        )
+        out += (rho / (4.0 * np.pi)) * (re + 1j * im)
     return out
 
 
@@ -770,6 +854,7 @@ def _series_field(
     real_parts: Sequence[np.ndarray],
     series: ImageSeries,
     min_distance: float,
+    line: LineSegments | None = None,
 ) -> list[np.ndarray]:
     """Unscaled Tagg/Sunde sums of real current arrays at field points.
 
@@ -795,6 +880,9 @@ def _series_field(
         The image series.
     min_distance
         Distance clamp in m.
+    line
+        Source segments for the exact line-source kernel (images per
+        series term); ``None`` (default) evaluates point sources.
 
     Returns
     -------
@@ -835,4 +923,49 @@ def _series_field(
                 phi += weight * acc
         for out, phi in zip(outs, phis, strict=True):
             out[sl] = phi
+    if line is not None:
+        images = [
+            (term.weight, term.offset, term.sign)
+            for quad in series.iter_layer_terms()
+            for term in quad
+        ]
+        for out, corr in zip(
+            outs,
+            _line_field_correction(points, line, real_parts, min_distance, images),
+            strict=True,
+        ):
+            out += corr
+    return outs
+
+
+def _line_field_correction(
+    points: np.ndarray,
+    line: LineSegments,
+    real_parts: Sequence[np.ndarray],
+    min_distance: float,
+    images: list[tuple[float, float, float]] | None = None,
+) -> list[np.ndarray]:
+    """Line-kernel correction of point-kernel field sums (unscaled, A/m).
+
+    Adds, per real current array, the dense far-field (quadrupole) term
+    of the direct and surface-image sources and the sparse exact-minus-
+    point corrections of near sources (and of near Tagg/Sunde images
+    when ``images`` are given) — see :mod:`groundfield.solver._line_kernel`.
+    """
+    from scipy.sparse import csr_matrix
+
+    m, n = points.shape[0], line.mid.shape[0]
+    outs = [np.zeros((m,) + c.shape[1:]) for c in real_parts]
+    for sl in _field_row_blocks(m, n, force_blocks=True):
+        Q = field_quadrupole_rows(points[sl], line)
+        for out, c in zip(outs, real_parts, strict=True):
+            out[sl] += Q @ c
+    corr = [field_corrections(points, line, min_distance)]
+    if images:
+        corr.append(series_field_corrections(points, line, images, min_distance))
+    sparse = SparseCorrection.concatenate(corr)
+    if sparse.rows.size:
+        C = csr_matrix((sparse.values, (sparse.rows, sparse.cols)), shape=(m, n))
+        for out, c in zip(outs, real_parts, strict=True):
+            out += C @ c
     return outs

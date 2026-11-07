@@ -53,6 +53,7 @@ import numpy as np
 from groundfield.solver._discretize import _discretize_electrode
 from groundfield.solver._guards import _check_segment_depths
 from groundfield.solver._inductive import _assemble_inductance_matrix
+from groundfield.solver._line_kernel import LineSegments
 from groundfield.solver._topology import (
     _build_clusters,
     _build_distributed_topology,
@@ -206,16 +207,23 @@ class SegmentArrays:
         Wire radii in m, shape ``(N,)``.
     shell_coefficients
         Concrete-shell coefficients in Ω·m, shape ``(N,)`` (ADR-0012 V2).
+    directions
+        Unit tangents, shape ``(N, 3)``; ``None`` if a segment has no
+        recorded orientation.
     """
 
     points: np.ndarray
     lengths: np.ndarray
     radii: np.ndarray
     shell_coefficients: np.ndarray
+    directions: np.ndarray | None = None
 
     @classmethod
     def from_segments(cls, segments: list[_Segment]) -> SegmentArrays:
         """Stack the per-segment attributes."""
+        directions = None
+        if segments and all(s.direction is not None for s in segments):
+            directions = np.array([s.direction for s in segments], dtype=float)
         return cls(
             points=np.array([s.midpoint for s in segments]),
             lengths=np.array([s.length for s in segments]),
@@ -223,7 +231,23 @@ class SegmentArrays:
             shell_coefficients=np.array(
                 [s.concrete_shell_coefficient_ohm_m for s in segments], dtype=float
             ),
+            directions=directions,
         )
+
+    def line_segments(self) -> LineSegments:
+        """The segments as uniform line sources (``kernel="line"``).
+
+        Raises
+        ------
+        ValueError
+            If a segment has no recorded orientation.
+        """
+        if self.directions is None:
+            raise ValueError(
+                "kernel='line' needs the orientation of every segment; a "
+                "segment without a direction was discretised."
+            )
+        return LineSegments(self.points, self.lengths, self.directions, self.radii)
 
 
 @dataclass
@@ -571,12 +595,14 @@ def build_result(
             conductor_currents[ename] = i_list
 
     sc_per_freq = solution.segment_currents
+    directions = arrays.directions
     point_sources = [
         PointSource(
             position=tuple(arrays.points[i].tolist()),
             current=[complex(sc_per_freq[k][i]) for k in range(n_freq)],
             electrode_name=disc.segments[i].electrode_name,
             length=float(arrays.lengths[i]),
+            direction=None if directions is None else tuple(directions[i].tolist()),
         )
         for i in range(len(disc.segments))
     ]
@@ -676,6 +702,7 @@ def solve_image_family(
         **green.metadata(solution, stacklevel=stacklevel + 1),
         "stub": False,
         "earth_inductive_model": branches.earth_inductive_model,
+        "kernel": getattr(engine, "kernel", "point"),
     }
     return build_result(
         world,
