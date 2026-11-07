@@ -730,13 +730,16 @@ def _branch_impedance_matrix(
     """Complex augmented matrix with the inductive branch block.
 
     Augments Block 3 with ``jωL`` (ADR-0004) and the optional
-    earth-return correction ``ΔZ`` (ADR-0005 / ADR-0006): the diagonal
+    frequency-dependent branch correction ``ΔZ``: the earth-return
+    correction (ADR-0005 / ADR-0006, built against the image convention
+    of ``L``) plus the skin-effect correction of
+    ``resistance_model="skin"`` conductors on the diagonal (review pass
+    10, 10.37; see :mod:`groundfield.solver._inductive`). The diagonal
     already carries ``−R``; ``−(jωL_mm + ΔZ_mm)`` is added to it, and
     ``−(jωL_mm' + ΔZ_mm')`` is written to the off-diagonal positions of
-    branch row ``m``, branch-current column ``m'``. With an earth-return
-    model on, ``ΔZ`` is already the *full* per-pair impedance
-    contribution (per-unit-length value times the parallel-projection
-    length), so it adds with sign −1.
+    branch row ``m``, branch-current column ``m'``. ``ΔZ`` is already the
+    *full* per-branch impedance contribution (per-unit-length values
+    times lengths), so it adds with sign −1.
 
     Raises
     ------

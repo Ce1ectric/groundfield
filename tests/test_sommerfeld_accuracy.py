@@ -223,8 +223,14 @@ def test_surface_crossing_segment_is_rejected_with_the_right_message(p1, p2) -> 
 
 
 @pytest.mark.finding("10.46", "F52")
-def test_world_solve_rejects_surface_crossing_inductive_conductor() -> None:
-    """v0.15.0 solved this silently (dispatch by segment midpoint)."""
+@pytest.mark.parametrize("model", ["perfect_mirror", "carson_series"])
+def test_world_solve_rejects_surface_crossing_inductive_conductor(model) -> None:
+    """v0.15.0 solved this silently (dispatch by segment midpoint).
+
+    Only the image conventions reject it; ``sommerfeld`` assembles on the
+    image-free baseline and accepts such a conductor
+    (``tests/test_inductive_solver_integration.py``).
+    """
     w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=2.0)
     gf.create_electrode(w, "rod", name="g2", position=(20, 0, 0.5), length=2.0)
@@ -241,7 +247,12 @@ def test_world_solve_rejects_surface_crossing_inductive_conductor() -> None:
         update={"start_electrode": "g1", "end_electrode": "g2"}
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
-    eng = gf.create_engine(backend="image", segment_length=0.5, frequencies=[50.0])
+    eng = gf.create_engine(
+        backend="image",
+        segment_length=0.5,
+        frequencies=[50.0],
+        earth_inductive_model=model,
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with pytest.raises(ValueError, match="crosses the soil surface"):

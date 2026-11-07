@@ -40,17 +40,63 @@ def test_large_a_regime_is_continuous(a_boundary: float, theta: float) -> None:
 
 
 @pytest.mark.finding("10.46")
-@pytest.mark.xfail(
-    strict=True,
-    reason="wave 2: Carson's a^2 term of Q moves every carson_series result; "
-    "it ships with the carson_series image-baseline fix (10.20)",
-)
 def test_small_a_regime_is_continuous() -> None:
-    """The small-a form omits -(pi/64) a^2 cos(2 theta): 2.9e-3 jump in Q."""
-    for theta in (0.0, 1.39):
-        _, q_lo = carson_p_q(0.25 * (1.0 - 1e-9), theta)
-        _, q_hi = carson_p_q(0.25 * (1.0 + 1e-9), theta)
-        assert abs(q_hi - q_lo) < 1e-6
+    """No jump between Carson's series and the quadrature at a = 0.25.
+
+    v0.15.0 omitted the a^2 term -(pi/64) a^2 cos(2 theta) of Q (2.9e-3
+    jump), and its theta = 0 quadrature was 6.4e-6 off at a = 0.25.
+    """
+    for theta in (0.0, 0.7, 1.39):
+        p_lo, q_lo = carson_p_q(0.25 * (1.0 - 1e-9), theta)
+        p_hi, q_hi = carson_p_q(0.25 * (1.0 + 1e-9), theta)
+        # dQ/da = -1/(2a): the 5e-10 step in a alone moves Q by 1e-9.
+        assert abs(p_hi - p_lo) < 1e-8
+        assert abs(q_hi - q_lo) < 1e-8
+
+
+@pytest.mark.finding("10.46")
+@pytest.mark.parametrize("a", [0.01, 0.1, 0.2, 0.25])
+@pytest.mark.parametrize("theta", [0.0, 0.6, 1.2])
+def test_small_a_series_matches_an_independent_quadrature(a, theta) -> None:
+    """Carson's series to a^12 against mpmath (v0.15.0: up to 3.0e-3 in Q)."""
+    mp = pytest.importorskip("mpmath")
+    mp.mp.dps = 25
+    p = mp.mpf(a) * mp.cos(theta)
+    q = mp.mpf(a) * mp.sin(theta)
+
+    def f(mu):
+        return (mp.sqrt(mu * mu + 1j) - mu) * mp.exp(-p * mu) * mp.cos(q * mu)
+
+    # Doubling panels until e^{-p mu} < e^{-60}; p >= 0.0036 here, so the
+    # (slow) oscillation cos(q mu) is resolved panel by panel.
+    edges = [0.0, 0.5]
+    while p * edges[-1] < 60.0:
+        edges.append(2.0 * edges[-1])
+    ref = mp.quad(f, edges + [mp.inf])
+    P, Q = carson_p_q(a, theta)
+    assert P == pytest.approx(float(mp.re(ref)), abs=1e-12)
+    assert Q == pytest.approx(float(mp.im(ref)), abs=1e-12)
+
+
+@pytest.mark.finding("10.46")
+@pytest.mark.parametrize("a", [0.26, 0.3, 0.5, 1.0])
+def test_theta_zero_quadrature_is_at_round_off(a) -> None:
+    """The theta = 0 quadrature (self terms) against mpmath.
+
+    v0.15.0's single 64-point rule on [0, 30/p] was 6.4e-6 (a = 0.25)
+    and 2.2e-6 (a = 0.3) off.
+    """
+    mp = pytest.importorskip("mpmath")
+    mp.mp.dps = 25
+    edges = [0.0, 0.5]
+    while a * edges[-1] < 60.0:
+        edges.append(2.0 * edges[-1])
+    ref = mp.quad(
+        lambda mu: (mp.sqrt(mu * mu + 1j) - mu) * mp.exp(-a * mu), edges + [mp.inf]
+    )
+    p_quad, q_quad = _p_q_quadrature(a, 0.0)
+    assert p_quad == pytest.approx(float(mp.re(ref)), abs=1e-13)
+    assert q_quad == pytest.approx(float(mp.im(ref)), abs=1e-13)
 
 
 @pytest.mark.finding("10.63")

@@ -516,15 +516,26 @@ def build_topology(world: World, disc: Discretisation) -> Topology:
 
 
 def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchModel:
-    """Step 4: inductance matrix and earth-return correction of the branches.
+    """Step 4: inductance matrix and frequency-dependent branch correction.
 
     ADR-0004 + ADR-0005 + ADR-0006: the partial-inductance matrix covers
-    the distributed-conductor branches with ``inductance_model ==
-    "neumann"`` (lumped branches stay purely resistive). With
-    ``earth_inductive_model`` ``"carson_series"`` or ``"sommerfeld"`` a
-    closure builds the per-frequency earth-return correction.
+    every branch of a conductor with ``inductance_model == "neumann"`` —
+    the distributed chains and, since review pass 10 (finding 10.24),
+    lumped and single-segment conductors as one branch from start to
+    end — built on the image baseline of the earth-return model (see
+    :mod:`groundfield.solver._inductive`). The returned correction
+    ``omega -> ΔZ(omega)`` holds the earth-return correction
+    (``earth_inductive_model`` ``"carson_series"`` or ``"sommerfeld"``)
+    and the skin-effect correction of conductors with
+    ``resistance_model="skin"`` (finding 10.37; such a world is
+    frequency dependent even without an inductance model). It is
+    assembled for all frequencies of ``engine`` at once on first use
+    (finding 10.60) and returns the same matrix for each frequency as a
+    single-frequency assembly, bit for bit.
     """
-    model = getattr(engine, "earth_inductive_model", "perfect_mirror")
+    from groundfield.solver._inductive import branch_records
+
+    model = engine.earth_inductive_model
     sigma_earth: float | None = None
     layered_earth: object = None
     if model == "carson_series":
@@ -535,6 +546,13 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth = resolve_earth_layers(world.soil)
+    lumped, skin = branch_records(
+        world.conductors,
+        cluster_id=topo.cluster_id,
+        finite_branches=topo.finite_branches,
+        distributed_branches=topo.distributed_branches,
+        n_lumped_branches=topo.n_lumped_branches,
+    )
     L_full, has_inductance, correction = _assemble_inductance_matrix(
         topo.distributed_branches,
         n_lumped_branches=topo.n_lumped_branches,
@@ -542,6 +560,13 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         earth_model=model,
         sigma_earth=sigma_earth,
         layered_earth=layered_earth,
+        lumped_branches=lumped,
+        skin_terms=skin,
+        # The angular frequencies exactly as the solve step forms them.
+        omegas=[2.0 * np.pi * float(f) for f in engine.frequencies],
+        # Opt-in tabulated Sommerfeld assembly (10.60): an engine field
+        # requested from the engine's owner; the exact assembly otherwise.
+        sommerfeld_method=getattr(engine, "sommerfeld_assembly", "exact"),
     )
     return BranchModel(
         earth_inductive_model=model,

@@ -6,6 +6,8 @@ Geometry of R1-12: two 3 m rods (radius 8 mm) 2 mm apart interpenetrate
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -106,3 +108,39 @@ def test_input_validation() -> None:
         find_close_wires(np.zeros((1, 2, 3)) + [[0, 0, 0], [1, 0, 0]], [0.01], ["a"])
         == []
     )
+
+
+def test_segment_distance_with_point_segments() -> None:
+    """Zero-length segments (audit F04: measured from the start of the other
+    segment, 5.099 m instead of 1.0 m)."""
+    cable = (np.array([0.0, 0.0, 0.7]), np.array([10.0, 0.0, 0.7]))
+    point = np.array([5.0, 1.0, 0.7])
+    d, s, t = segment_distance(*cable, point, point)
+    assert (d[0], s[0], t[0]) == pytest.approx((1.0, 0.5, 0.0))
+    d, s, t = segment_distance(point, point, *cable)  # point first
+    assert (d[0], s[0], t[0]) == pytest.approx((1.0, 0.0, 0.5))
+    beyond = np.array([13.0, 4.0, 0.7])  # projection clamped to the end
+    d, s, _ = segment_distance(*cable, beyond, beyond)
+    assert (d[0], s[0]) == pytest.approx((5.0, 1.0))
+    d, _, _ = segment_distance(point, point, beyond, beyond)  # two points
+    assert d[0] == pytest.approx(math.hypot(8.0, 3.0))
+
+
+def test_point_like_bond_next_to_a_cable_is_reported() -> None:
+    ep = np.array(
+        [[[0.0, 0.0, 0.7], [10.0, 0.0, 0.7]], [[5.0, 0.02, 0.7], [5.0, 0.02, 0.7]]]
+    )
+    hits = find_close_wires(ep, [0.005, 0.005], ["cable", "bond"])
+    assert [(h.kind, h.distance) for h in hits] == [("close", pytest.approx(0.02))]
+
+
+def test_segment_distance_with_random_point_segments() -> None:
+    """Brute force with one segment collapsed to a point."""
+    rng = np.random.default_rng(7)
+    a1, a2, b1 = (rng.normal(size=(100, 3)) for _ in range(3))
+    d, s, t = segment_distance(a1, a2, b1, b1)
+    grid = np.linspace(0.0, 1.0, 2001)
+    pa = a1[:, None, :] + grid[None, :, None] * (a2 - a1)[:, None, :]
+    brute = np.linalg.norm(pa - b1[:, None, :], axis=-1).min(axis=1)
+    assert np.all(d <= brute + 1e-12) and np.all(brute - d <= 1e-6)
+    assert np.all(t == 0.0)

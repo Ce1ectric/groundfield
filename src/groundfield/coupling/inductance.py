@@ -1,15 +1,15 @@
-"""Self- and mutual-inductance helpers for distributed conductors.
+r"""Self- and mutual-inductance helpers for distributed conductors.
 
 This module implements the inductance physics described in ADR-0004.
 It provides three public functions:
 
 - :func:`thin_wire_self_inductance` — closed-form self-inductance of
-  a straight thin-wire segment of length $\\ell$ and radius $a$
+  a straight thin-wire segment of length $\ell$ and radius $a$
   (Grover 1946):
-  $L_\\text{self} = (\\mu_0\\,\\ell)/(2\\pi)
-   \\bigl[\\ln(2\\ell/a) - 1\\bigr]$.
+  $L_\text{self} = (\mu_0\,\ell)/(2\pi)
+   \bigl[\ln(2\ell/a) - 1\bigr]$.
 - :func:`parallel_segments_mutual` — closed-form mutual inductance
-  of two parallel coaxial segments of equal length $\\ell$ at
+  of two parallel coaxial segments of equal length $\ell$ at
   perpendicular distance $d$.
 - :func:`neumann_mutual` — generic Neumann double-line integral via
   two-point Gauss–Legendre quadrature, valid for any 3-D
@@ -62,11 +62,15 @@ as a correction relative to this DC convention.
 
 **Touching segments** (``touching=``). The Neumann integrand is
 log-singular for segments that share an end point (bends, chain
-neighbours) or lie on one axis. ``"quadrature"`` (historic default)
-integrates them with the 16x16 Gauss–Legendre rule, which is
-accurate to about -0.3 % ... +0.8 % for such pairs; ``"exact"`` uses
-the closed forms (Grover 1946: two filaments meeting at a point;
-coaxial filaments with a gap), accurate to machine precision.
+neighbours) or lie on one axis. ``"exact"`` (the default since the
+calendar release 2026.11) uses the closed forms (Grover 1946: two
+filaments meeting at a point; coaxial filaments with a gap), accurate
+to machine precision; a straight wire split into any number of
+segments keeps the self inductance of the unsplit wire.
+``"quadrature"`` (the default up to 0.15.0, kept to reproduce old
+numbers) integrates such pairs with the 16x16 Gauss–Legendre rule,
+which is accurate to about -0.3 % ... +0.8 % for them (review pass
+10, finding 10.46).
 
 References
 ----------
@@ -109,8 +113,8 @@ MU_0 = 4.0e-7 * math.pi
 ImageConvention = Literal["none", "additive", "antiparallel"]
 
 #: Treatment of touching / coaxial segment pairs in the Neumann
-#: integral: ``"quadrature"`` (historic 16x16 Gauss–Legendre) or
-#: ``"exact"`` (closed forms).
+#: integral: ``"exact"`` (closed forms, the default) or
+#: ``"quadrature"`` (16x16 Gauss–Legendre, the default up to 0.15.0).
 TouchingRule = Literal["quadrature", "exact"]
 
 _IMAGE_CONVENTIONS: tuple[str, ...] = ("none", "additive", "antiparallel")
@@ -149,7 +153,7 @@ def thin_wire_self_inductance(
     *,
     include_internal: bool = True,
 ) -> float:
-    """Closed-form self-inductance of a straight thin-wire segment.
+    r"""Closed-form self-inductance of a straight thin-wire segment.
 
     Decomposed into the **external** Grover 1946 thin-wire term and
     the **internal** contribution from the magnetic field inside the
@@ -157,10 +161,10 @@ def thin_wire_self_inductance(
     material):
 
     $$
-    L_\\text{ext} \;=\; \\frac{\\mu_0\\,\\ell}{2\\pi}
-    \\Bigl[\\ln\\!\\Bigl(\\frac{2\\ell}{a}\\Bigr) - 1\\Bigr],
-    \\qquad
-    L_\\text{int} \;=\; \\frac{\\mu_0\\,\\ell}{8\\pi}.
+    L_\text{ext} \;=\; \frac{\mu_0\,\ell}{2\pi}
+    \Bigl[\ln\!\Bigl(\frac{2\ell}{a}\Bigr) - 1\Bigr],
+    \qquad
+    L_\text{int} \;=\; \frac{\mu_0\,\ell}{8\pi}.
     $$
 
     Adding the internal term reproduces the standard Oeding/Oswald
@@ -168,19 +172,19 @@ def thin_wire_self_inductance(
     contribution of a two-wire loop. This is the package-wide
     internal-inductance convention (see the module docstring): a
     per-unit-length reference consistent with
-    ``include_internal=True`` uses $\\mathrm{GMR} = a\\,e^{-1/4}$.
+    ``include_internal=True`` uses $\mathrm{GMR} = a\,e^{-1/4}$.
     For the frequency-dependent internal impedance (skin effect) see
     :meth:`groundfield.conductors.Conductor.internal_impedance_per_length`.
 
     Parameters
     ----------
     length
-        Segment length $\\ell$ in metres.
+        Segment length $\ell$ in metres.
     wire_radius
         Wire radius $a$ in metres.
     include_internal
         ``True`` (default) — add the internal-field contribution
-        $\\mu_0 \\ell / (8\\pi)$ (uniform current, the DC limit).
+        $\mu_0 \ell / (8\pi)$ (uniform current, the DC limit).
         ``False`` — the pure external-field thin-wire formula.
 
     Returns
@@ -200,15 +204,15 @@ def thin_wire_self_inductance(
 
 
 def parallel_segments_mutual(length: float, distance: float) -> float:
-    """Closed-form mutual inductance of two parallel coaxial segments.
+    r"""Closed-form mutual inductance of two parallel coaxial segments.
 
-    For two segments of equal length $\\ell$ that share the same
+    For two segments of equal length $\ell$ that share the same
     axis direction and are placed at perpendicular distance $d$,
 
     $$
-    M_\\parallel(\\ell, d) \;=\; \\frac{\\mu_0\\,\\ell}{2\\pi}
-    \\Bigl[\\ln\\!\\Bigl(\\frac{\\ell + \\sqrt{\\ell^2 + d^2}}{d}\\Bigr)
-          - \\frac{\\sqrt{\\ell^2 + d^2} - d}{\\ell}\\Bigr].
+    M_\parallel(\ell, d) \;=\; \frac{\mu_0\,\ell}{2\pi}
+    \Bigl[\ln\!\Bigl(\frac{\ell + \sqrt{\ell^2 + d^2}}{d}\Bigr)
+          - \frac{\sqrt{\ell^2 + d^2} - d}{\ell}\Bigr].
     $$
 
     Used both as an internal closed-form fast path (when the segment
@@ -218,7 +222,7 @@ def parallel_segments_mutual(length: float, distance: float) -> float:
     Parameters
     ----------
     length
-        Segment length $\\ell$ in m (both segments have the same).
+        Segment length $\ell$ in m (both segments have the same).
     distance
         Perpendicular distance $d$ between the two parallel axes
         in m. Must be > 0.
@@ -428,7 +432,7 @@ def neumann_mutual(
     *,
     min_distance: float = 1e-6,
     parallel_tol: float = 1e-9,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> float:
     """Neumann mutual-inductance integral between two straight segments.
 
@@ -465,8 +469,9 @@ def neumann_mutual(
         Tolerance on $||\\hat{u}_a\\cdot\\hat{u}_b| - 1|$ that
         triggers the closed-form fast path.
     touching
-        ``"quadrature"`` (default, historic) or ``"exact"`` — the
-        treatment of touching and coaxial pairs.
+        ``"exact"`` (default) or ``"quadrature"`` (the 16x16 rule, the
+        default up to 0.15.0) — the treatment of touching and coaxial
+        pairs.
 
     Returns
     -------
@@ -542,7 +547,7 @@ def perfect_mirror_self_pair_inductance(
     wire_radius: float,
     *,
     include_internal: bool = True,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> float:
     """Self-inductance contribution of a segment plus its earth image.
 
@@ -663,7 +668,7 @@ def _build_inductance_matrix_loop(
     use_image: bool | None = None,
     image: ImageConvention | None = None,
     include_internal: bool | np.ndarray = True,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> np.ndarray:
     """Reference (loop-based) implementation of :func:`build_inductance_matrix`.
 
@@ -1061,7 +1066,7 @@ def build_inductance_matrix(
     use_image: bool | None = None,
     image: ImageConvention | None = None,
     include_internal: bool | np.ndarray = True,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> np.ndarray:
     """Assemble the dense partial-inductance matrix over branches.
 
@@ -1097,9 +1102,9 @@ def build_inductance_matrix(
         (e.g. ``False`` for conductors whose internal impedance is
         supplied separately by a skin-effect model).
     touching
-        ``"quadrature"`` (default, historic) or ``"exact"``: closed
-        forms for pairs that share an end point or lie on one axis
-        (see :func:`neumann_mutual`).
+        ``"exact"`` (default): closed forms for pairs that share an end
+        point or lie on one axis; ``"quadrature"``: the 16x16 rule of
+        0.15.0 (see :func:`neumann_mutual`).
 
     Returns
     -------
@@ -1155,7 +1160,7 @@ def build_inductance_matrix(
 def _image_inductance_matrix(
     seg_endpoints: np.ndarray,
     *,
-    touching: TouchingRule = "quadrature",
+    touching: TouchingRule = "exact",
 ) -> np.ndarray:
     """Image block $L_\\text{img}$ (mirrored-endpoint image), shape (M, M).
 

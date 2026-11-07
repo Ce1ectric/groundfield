@@ -3,8 +3,8 @@
 Chain neighbours and bends share an end point; the Neumann integrand is
 log-singular there and the 16x16 Gauss–Legendre rule is only accurate to
 -0.3 % ... +0.8 % (review R3-12). ``touching="exact"`` uses the closed
-forms (Grover 1946); the default ``"quadrature"`` keeps the historic
-numbers until the solver switches (wave 2).
+forms (Grover 1946) and is the default since wave 2 of the release;
+``"quadrature"`` reproduces the numbers of 0.15.0.
 
 References: a semi-analytic double integral (inner integral in closed
 form, outer adaptive quadrature), written here independently of the
@@ -85,12 +85,26 @@ def test_coaxial_pair_matches_reference(l1, l2, gap, reverse) -> None:
     assert neumann_mutual(*a, *b, touching="exact") == pytest.approx(ref, rel=1e-12)
 
 
-def test_quadrature_default_is_unchanged_and_inaccurate() -> None:
-    """The default keeps the historic quadrature (-0.21 % for neighbours)."""
+def test_quadrature_rule_is_inaccurate_for_neighbours() -> None:
+    """The historic 16x16 rule (opt-in) is -0.21 % off for neighbours."""
     a = (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 1.0]))
     b = (np.array([1.0, 0.0, 1.0]), np.array([2.0, 0.0, 1.0]))
     exact = neumann_mutual(*a, *b, touching="exact")
-    assert neumann_mutual(*a, *b) / exact - 1.0 == pytest.approx(-2.13e-3, abs=2e-5)
+    quadrature = neumann_mutual(*a, *b, touching="quadrature")
+    assert quadrature / exact - 1.0 == pytest.approx(-2.13e-3, abs=2e-5)
+
+
+def test_exact_touching_is_the_default() -> None:
+    """Closed forms by default (wave 2 of review pass 10; 0.15.0: quadrature)."""
+    a = (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 1.0]))
+    b = (np.array([1.0, 0.0, 1.0]), np.array([1.5, 0.8, 1.0]))
+    assert neumann_mutual(*a, *b) == neumann_mutual(*a, *b, touching="exact")
+    eps = np.array([[[0.0, 0, 1.0], [5.0, 0, 1.0]], [[5.0, 0, 1.0], [10.0, 0, 1.0]]])
+    radii = np.full(2, 0.004)
+    for image in ("none", "additive", "antiparallel"):
+        default = build_inductance_matrix(eps, radii, image=image)
+        exact = build_inductance_matrix(eps, radii, image=image, touching="exact")
+        assert np.array_equal(default, exact)
 
 
 @pytest.mark.parametrize("n", [2, 4, 10, 40, 200])
