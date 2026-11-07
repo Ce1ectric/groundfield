@@ -87,6 +87,9 @@ from groundfield.solver._kernels import (
 )
 from groundfield.solver._line_kernel import (
     LineSegments,
+    _point_values,
+    galerkin_pairs,
+    near_pairs,
     point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
@@ -372,6 +375,8 @@ def _layered_green_matrices(
         wire_radii,
         rho_per_segment,
         line=line,
+        transmitted_rho=2.0 * rho_1 * rho_2 / (rho_1 + rho_2),
+        lower=seg_points[:, 2] >= h_1,
     )
 
     # Step 2: layered correction. The baseline rho per source is
@@ -419,6 +424,24 @@ def _layered_green_matrices(
                 rho_baseline=rho_baseline_j,
             )
             delta_Z[np.ix_(rows, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
+
+    if line is not None:
+        # Exact line sources (10.28): the near-singular interface image
+        # of the layered correction as a Galerkin integral, the rest of
+        # it in point form (diagonal included).
+        _add_line_interface_images(
+            delta_Z,
+            line,
+            rho_per_segment,
+            seg_points[:, 2] >= h_1,
+            soil,
+        )
+        if cache is not None:
+            cache["key"] = cache_key
+            cache["phi_hom_matrix"] = phi_hom_matrix
+            cache["delta_Z"] = delta_Z
+            cache["assemblies"] = int(cache.get("assemblies", 0)) + 1
+        return phi_hom_matrix, delta_Z
 
     # Diagonal: 3×3 Gauss-Legendre along the segment axis (line-self
     # peak regularised at the wire radius). Identical segments (same
@@ -487,6 +510,87 @@ def _layered_green_kernel(
     return phi_hom_matrix @ currents + delta_Z @ currents
 
 
+def _add_line_interface_images(
+    delta_Z: np.ndarray,
+    line: LineSegments,
+    rho_per_segment: np.ndarray,
+    lower: np.ndarray,
+    soil: TwoLayerSoil,
+) -> None:
+    r"""Line-exact interface image of the layered correction, in place.
+
+    For two points in the same layer the layered correction
+    :math:`\Delta G` contains the image of the source mirrored in the
+    interface, :math:`c_j / (4\pi R')` with :math:`c_j = \rho_1 K`
+    (source in layer 1) or :math:`-\rho_2 K` (layer 2),
+    :math:`K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)`, whose distance
+    :math:`R'` vanishes as both points approach the interface. Near the
+    interface its point form misses the segment average by far more than
+    the rest of :math:`\Delta G`; here it is replaced by the Galerkin
+    integral of the segment and the mirrored source segment for every
+    pair nearer than :data:`~groundfield.solver._line_kernel.NEAR_FACTOR`
+    segment lengths. The diagonal becomes the point value of
+    :math:`\Delta G` at :math:`s = a` plus the same exchange of its
+    interface-image term (the self image of a segment touching the
+    interface is a touching collinear pair).
+
+    The image term keeps the reaction matrix symmetric: the integral of
+    segment :math:`i` against the image of :math:`j` equals that of
+    :math:`j` against the image of :math:`i`.
+
+    Parameters
+    ----------
+    delta_Z
+        Layered correction in Ω with point-form off-diagonal entries,
+        shape ``(N, N)``; modified in place (the diagonal is replaced).
+    line
+        Segment geometry.
+    rho_per_segment
+        Resistivity of the layer of each segment in Ω·m (the baseline).
+    lower
+        Whether each segment lies in the lower layer.
+    soil
+        The two-layer soil.
+    """
+    from groundfield.coupling.layered_green import (
+        two_layer_layered_correction_real_space,
+    )
+
+    rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
+    K = (rho_2 - rho_1) / (rho_2 + rho_1)
+    coeff = np.where(lower, -rho_2 * K, rho_1 * K) / (4.0 * np.pi)
+    image = line.image(2.0 * h_1, -1.0)
+
+    i, j = near_pairs(line.mid, line.length, image.mid, image.length)
+    keep = (lower[i] == lower[j]) & (i != j)
+    i, j = i[keep], j[keep]
+    if i.size:
+        exact = galerkin_pairs(line, i, image, j)
+        point = _point_values(line.mid, image.mid, i, j, _MIN_DISTANCE)
+        np.add.at(delta_Z, (i, j), coeff[j] * (exact - point))
+
+    n = line.length.shape[0]
+    diag = np.arange(n)
+    self_image = galerkin_pairs(line, diag, image, diag)
+    a = line.radius
+    d = 2.0 * np.abs(h_1 - line.mid[:, 2])
+    point_image = 1.0 / np.sqrt(a * a + d * d)
+    cache: dict = {}
+    for k in range(n):
+        key = (round(float(line.mid[k, 2]), 9), round(float(a[k]), 9), bool(lower[k]))
+        if key not in cache:
+            cache[key] = two_layer_layered_correction_real_space(
+                s=float(a[k]),
+                z=float(line.mid[k, 2]),
+                z_s=float(line.mid[k, 2]),
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
+                rho_baseline=float(rho_per_segment[k]),
+            ) / (2.0 * np.pi)
+        delta_Z[k, k] = cache[key] + coeff[k] * (self_image[k] - point_image[k])
+
+
 def _build_phi_hom_per_source_rho(
     seg_points: np.ndarray,
     seg_lengths: np.ndarray,
@@ -494,6 +598,8 @@ def _build_phi_hom_per_source_rho(
     rho_per_segment: np.ndarray,
     *,
     line: LineSegments | None = None,
+    transmitted_rho: float | None = None,
+    lower: np.ndarray | None = None,
 ) -> np.ndarray:
     """Reaction matrix for homog-with-per-source-rho soil.
 
@@ -510,6 +616,18 @@ def _build_phi_hom_per_source_rho(
     resistivity of the source segment's layer — which gives the
     correct ``rho_local·1/r`` near-source behaviour in each
     column.
+
+    With the exact line-source kernel (``line``), the difference between
+    the segment average and the point form of the direct and
+    surface-image terms is scaled, for a pair in different layers
+    (``lower[i] != lower[j]``), with ``transmitted_rho``
+    :math:`= 2\rho_1\rho_2/(\rho_1 + \rho_2)` instead of the source
+    resistivity: that is the coefficient of the transmitted direct and
+    surface-image terms of the two-layer Green's function, whose point
+    form the layered correction completes. Scaling it with the source
+    resistivity made the reaction matrix of a rod through the interface
+    3.8 % asymmetric and a two-port with it non-reciprocal by up to 4.7 %
+    (finding of stream eng2 on the 2026.11 work).
     """
     # Built component-wise in row blocks (10.56): entries bit-identical
     # to the former (N, N, 3) difference tensors, 8 instead of 96 bytes
@@ -534,19 +652,32 @@ def _build_phi_hom_per_source_rho(
     z_mid = seg_points[:, 2]
     diag_image = 1.0 / (2.0 * np.abs(z_mid))
     np.fill_diagonal(kernel, diag_direct + diag_image)
+    scale = rho_per_segment[None, :] / (4.0 * np.pi)
     if line is not None:
         # Exact line-source kernel (10.28): far-field and near-pair
-        # corrections of the direct and surface-image terms.
+        # corrections of the direct and surface-image terms, with the
+        # transmitted resistivity for pairs in different layers.
         corrections = reaction_corrections(line, _MIN_DISTANCE)
         for i0 in range(0, kernel.shape[0], rows):
             blk = kernel[i0 : i0 + rows]
-            blk += reaction_quadrupole_rows(line, i0, i0 + blk.shape[0])
-            corrections.add_to_rows(blk, i0)
+            corr = reaction_quadrupole_rows(line, i0, i0 + blk.shape[0])
+            corrections.add_to_rows(corr, i0)
+            blk += corr
+            blk *= scale
+            if transmitted_rho is not None and lower is not None:
+                cross = lower[i0 : i0 + blk.shape[0], None] != lower[None, :]
+                blk += np.where(
+                    cross,
+                    corr
+                    * ((transmitted_rho - rho_per_segment[None, :]) / (4.0 * np.pi)),
+                    0.0,
+                )
+        return kernel
 
     # Apply rho_per_segment per column (source segment), in place
     # (10.56; the product is commutative, so bit-identical):
     # M[i, j] = rho_per_segment[j] / (4π) · kernel[i, j]
-    kernel *= rho_per_segment[None, :] / (4.0 * np.pi)
+    kernel *= scale
     return kernel
 
 
