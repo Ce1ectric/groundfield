@@ -127,8 +127,17 @@ def test_point_kernel_is_the_default_and_unchanged() -> None:
 
 @pytest.mark.finding("10.28")
 def test_line_kernel_is_rejected_by_other_backends() -> None:
-    with pytest.raises(ValueError, match="kernel='line'"):
-        gf.Engine(backend="mom", kernel="line")
+    """Backends outside the image family refuse ``kernel="line"``.
+
+    The refusal may come from the engine (construction) or from a backend
+    capability check at solve time; both raise a ``ValueError`` naming
+    the kernel.
+    """
+    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=RHO))
+    gf.create_electrode(w, "rod", name="g", position=(0.0, 0.0, 0.5), length=2.0)
+    gf.create_source(w, attached_to="g", magnitude=1.0)
+    with pytest.raises(ValueError, match="line"):
+        w.solve(gf.Engine(backend="mom", kernel="line"))
 
 
 @pytest.mark.finding("10.28")

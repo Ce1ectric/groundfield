@@ -383,8 +383,16 @@ def _layered_green_matrices(
             cols = np.where(z_keys == zj_key)[0]
             z_j = float(seg_points[cols[0], 2])
             rho_baseline_j = float(rho_per_segment[cols[0]])
-            dxy = seg_points[rows][:, None, 0:2] - seg_points[cols][None, :, 0:2]
-            s_grid = np.sqrt(np.einsum("mnk,mnk->mn", dxy, dxy))
+            # Horizontal distances component-wise (10.56): bit-identical
+            # to the former (rows, cols, 2) difference tensor and
+            # ``einsum``, two instead of four ``rows × cols`` arrays.
+            s_grid = np.subtract.outer(seg_points[rows, 0], seg_points[cols, 0])
+            s_grid *= s_grid
+            dy2 = np.subtract.outer(seg_points[rows, 1], seg_points[cols, 1])
+            dy2 *= dy2
+            s_grid += dy2
+            del dy2
+            np.sqrt(s_grid, out=s_grid)
             vals = two_layer_layered_correction_group(
                 s_grid.ravel(),
                 z_i,
@@ -519,10 +527,11 @@ def _build_phi_hom_per_source_rho(
             blk += reaction_quadrupole_rows(line, i0, i0 + blk.shape[0])
             corrections.add_to_rows(blk, i0)
 
-    # Apply rho_per_segment per column (source segment).
+    # Apply rho_per_segment per column (source segment), in place
+    # (10.56; the product is commutative, so bit-identical):
     # M[i, j] = rho_per_segment[j] / (4π) · kernel[i, j]
-    M = (rho_per_segment[None, :] / (4.0 * np.pi)) * kernel
-    return M
+    kernel *= rho_per_segment[None, :] / (4.0 * np.pi)
+    return kernel
 
 
 # ---------------------------------------------------------------------

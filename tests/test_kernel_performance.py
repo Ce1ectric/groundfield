@@ -102,14 +102,27 @@ def _peak_mb(fn) -> float:
 def test_solve_memory_peak_is_bounded() -> None:
     """A 1920-segment solve stays far below 96 bytes per segment pair.
 
-    v0.15.0 peaked at 96 B·N² (354 MB here); the reaction matrix alone
-    is 8 B·N² (29.5 MB).
+    v0.15.0 peaked at 338.5 MiB here (96 B·N² = 337.5 MiB); the reaction
+    matrix alone is 8 B·N² = 28.1 MiB, the gate 16 B·N² = 56.25 MiB.
     """
     w = _houses_world(gf.HomogeneousSoil(resistivity=100.0))
     _solve(w)  # warm-up (imports, caches)
     n = 16 * 120
     peak = _peak_mb(lambda: _solve(w))
     assert peak < 16 * n * n / 2**20, f"peak {peak:.1f} MB"
+
+
+@pytest.mark.finding("10.56")
+def test_cross_layer_solve_memory_peak_is_bounded() -> None:
+    """The ADR-0007 cross-layer path (house grids below h_1) stays below
+    48 B·N²: the reaction matrix, the layered correction and the
+    distance grid of one depth group, no ``(N, N, k)`` tensors."""
+    soil = gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=0.5)
+    w = _houses_world(soil)
+    _solve(w)  # warm-up
+    n = 16 * 120
+    peak = _peak_mb(lambda: _solve(w))
+    assert peak < 48 * n * n / 2**20, f"peak {peak:.1f} MB"
 
 
 @pytest.mark.finding("10.56")
@@ -309,7 +322,8 @@ def test_direct_matrix_equals_the_identity_product() -> None:
 
 @pytest.mark.finding("10.62")
 def test_potential_on_a_large_grid_is_memory_bounded() -> None:
-    """10 000 points × 1 920 sources: v0.15.0 needed 96 B per pair (1.8 GB)."""
+    """10 000 points × 1 920 sources: v0.15.0 peaked at 1757.9 MiB here
+    (96 B per point-source pair)."""
     res = _solve(_houses_world(gf.HomogeneousSoil(resistivity=100.0)))
     g = np.linspace(-20.0, 100.0, 100)
     X, Y = np.meshgrid(g, g)
