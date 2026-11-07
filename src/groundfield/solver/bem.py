@@ -1,67 +1,53 @@
-"""Boundary-Element-Method backend (``bem``).
+"""Boundary-element entry point of the point-matching family (``bem``).
 
-Mathematical / physical model
------------------------------
-Following Colominas, Navarrina & Casteleiro (2007, 2012) we treat the
-grounding system as a **boundary** problem: the unknown is the
-leakage-current density along the wire surfaces. Discretising every
-electrode into $N$ line segments turns the boundary integral
-equation into a dense linear system
+What this backend computes
+--------------------------
+``bem`` assembles **the same** point-matching system as
+:mod:`groundfield.solver.mom` and solves it with the same routine:
+one pulse current per wire segment, the reaction matrix
+
 $$
-\\sum_{j=1}^{N}\\, Z_{ij}\\, I_j \\;=\\; \\varphi_c
-\\qquad \\forall\\,i \\in c,
+Z_{ij} \\;=\\; \\frac{\\rho_1}{4\\pi}\\, G(\\mathbf{r}_i, \\mathbf{r}_j)
+\\quad (i \\ne j),
+$$
+
+i.e. the potential at the midpoint of segment $i$ of a unit *point*
+source at the midpoint of segment $j$, the analytic line
+self-potential on the diagonal, and the constraints
+
+$$
+\\sum_{j=1}^{N} Z_{ij}\\, I_j \\;=\\; \\varphi_c
+\\quad \\forall\\, i \\in c,
 \\qquad \\sum_{j \\in c} I_j \\;=\\; I_{c,\\text{in}},
 $$
-where $c$ ranges over the galvanic clusters,
-$\\varphi_c$ is the (unknown) shared cluster potential, and the
-**reaction matrix entries**
-$$
-Z_{ij} \\;=\\;
-\\frac{1}{4\\pi}
-\\int_{\\Sigma_i} G(\\mathbf{r}_i, \\mathbf{r}'_j)\\, dS_j
-$$
-are obtained by **collocation** of $G$ at the centre of segment
-$i$ (single test point per segment), instead of the Galerkin
-average used in :mod:`groundfield.solver.mom`. Collocation is the
-historically dominant flavour of BEM in the grounding literature
-because it preserves the same accuracy on smooth electrodes while
-being roughly half the cost of the Galerkin scheme.
 
-The Green's function $G$ is the closed-form self-kernel of the
-image-charge family: $G(r) = 1/r + 1/r_{\\text{air-img}}$ for
-homogeneous soil, and the exact Tagg/Sunde series of
-:mod:`groundfield.solver.image_2layer` for a two-layer soil.
+over the galvanic clusters $c$ (a source-free cluster floats with
+$I_{c,\\text{in}} = 0$, review pass 10, 10.29). $G$ is the closed-form
+kernel of the image family: $1/r + 1/r_{\\text{air}}$ for homogeneous
+soil and the Tagg/Sunde series of
+:mod:`groundfield.solver.image_2layer` for two layers. The measured
+difference to ``mom`` is 0.0 to 2.3e-16 relative: ``bem`` and ``mom``
+are one computation under two names, and a cross-validation table must
+not count them as two engines.
 
-Differences from ``mom`` — and why they are nil in practice
------------------------------------------------------------
-*(Corrected in the 2026-07-08 audit, WP-E/P4; the last remnant of the
-complex-image story removed in 0.15.0, review pass 9 F34.)* For
-``n <= 2`` — the only regime this backend accepts — the two engines
-assemble the **identical** reaction matrix from the same kernels and
-solve it with the same constraint solver; the measured relative
-difference is 4e-16, i.e. ``bem`` reproduces ``mom`` bit-for-bit up
-to floating-point associativity. Their mutual agreement therefore
-validates the shared discretisation, **not** the physics, and a
-cross-validation table must not count them as two engines. Genuine
-methodological independence in the layered cross-checks comes from
-``mom_sommerfeld`` (direct Sommerfeld quadrature) and ``fem``
-(volume PDE). ``bem`` is kept as the collocation-flavoured entry
-point of the family. ``n >= 3`` soils are rejected — the historic
-complex-image kernel this backend shared with ``cim`` was
-structurally incomplete — and consequently **no complex-image fit is
-computed** any more: up to 0.14.1 ``solve_bem`` called
-``fit_complex_images`` on every solve and published its (failed)
-diagnostics as ``cim_n_images`` / ``cim_rms`` although no reachable
-path consumed them.
+Up to 0.15.0 this module described its matrix as a *collocation* of
+$G$ that differed from a *Galerkin* average in ``mom``. Neither half
+was true: both backends point-match at the segment midpoints with a
+point-source near field (10.31). A genuine collocation boundary-element
+method in the sense of Colominas, Navarrina & Casteleiro (2007, 2012)
+integrates the source exactly along each segment; that would raise the
+near-field coupling by about 1.6 % to 1.9 % on a 3 m rod and is not
+implemented.
 
 Validity
 --------
 - Quasi-static, $f < 1\\,\\mathrm{kHz}$.
-- ``HomogeneousSoil`` and ``TwoLayerSoil`` only (``MultiLayerSoil``
-  is accepted while it reduces to $n \\le 2$).
-- Wire radius small compared to segment length; thin-wire
-  approximation in the line self-correction (same as the other
-  segment-based engines).
+- ``HomogeneousSoil``, ``TwoLayerSoil`` and a ``MultiLayerSoil`` whose
+  canonical stack (equal adjacent layers merged, 10.48) has at most two
+  layers; $n \\ge 3$ distinct layers raise ``NotImplementedError``
+  (use ``mom_sommerfeld``). No complex-image fit is computed (F34).
+- Thin-wire approximation (wire radius small against the segment
+  length), as in every segment-based backend.
 
 References
 ----------
@@ -99,7 +85,7 @@ from groundfield.solver.image import (
 )
 from groundfield.solver.mom import (  # shared point-matching solve
     _floating_clusters,
-    _galerkin_solve,
+    _point_matching_solve,
     _node_results,
 )
 from groundfield.solver.result import FieldResult, PointSource
@@ -115,7 +101,7 @@ _log = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------
-# Z-matrix assembly via collocation
+# Z-matrix assembly (point matching, closed-form kernels)
 # ---------------------------------------------------------------------
 
 
@@ -128,7 +114,7 @@ def _build_Z_collocation(
     max_terms: int = 200,
     tol: float = 1e-6,
 ) -> np.ndarray:
-    """Collocation N×N reaction matrix.
+    """Point-matching N×N reaction matrix (identical to ``mom``'s).
 
     Strategy:
 
@@ -193,20 +179,20 @@ def _build_Z_collocation(
 
 
 def solve_bem(world: "World", engine: "Engine") -> FieldResult:
-    """Boundary-Element-Method solver (collocation, closed-form kernels).
+    """Point-matching method-of-moments solver under the name ``bem``.
 
     What actually runs
     ------------------
     - $n = 1$ → homogeneous image-charge kernel.
     - $n = 2$ → exact Tagg/Sunde series kernel.
-    - $n \\ge 3$ → :class:`NotImplementedError` (audit 2026-07-08,
-      WP-E). Use ``mom_sommerfeld`` or ``fem``.
+    - $n \\ge 3$ distinct layers → :class:`NotImplementedError`
+      (audit 2026-07-08, WP-E). Use ``mom_sommerfeld``.
 
     In both reachable regimes the assembled reaction matrix and the
-    constraint solve are the same as in ``mom`` (relative difference
-    4e-16), so this result is **not** an independent check of ``mom``
-    — see the module docstring and the ADR-0002 amendment. No
-    complex-image fit is computed (review pass 9, F34).
+    constraint solve are those of ``mom`` (relative difference 0.0 to
+    2.3e-16), so this result is **not** an independent check of
+    ``mom`` — see the module docstring. No complex-image fit is
+    computed (review pass 9, F34).
 
     Parameters
     ----------
@@ -222,7 +208,9 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
     -------
     FieldResult
         ``metadata['cim_fit_used'] = False`` and
-        ``metadata['reduces_to'] = 'mom'`` record both facts above.
+        ``metadata['reduces_to'] = 'mom'`` record both facts above;
+        ``metadata['solver']`` is ``'point_matching'`` (``'collocation'``
+        up to 0.15.0).
     """
     if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(
@@ -339,7 +327,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
         tol=engine.image_series_tol,
     )
 
-    # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).
+    # 4) Frequency loop (point-matching solve + Z · I_seg for phi).
     n_freq = len(engine.frequencies)
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
@@ -350,7 +338,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
             if (has_inductance and carson_builder is not None)
             else None
         )
-        sc, _ = _galerkin_solve(
+        sc, _ = _point_matching_solve(
             Z=Z,
             elec_input_current=elec_input_current,
             cluster_id=cluster_id,
@@ -429,7 +417,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
         "cim_n_images": 0,
         "cim_rms": None,
         "reduces_to": "mom",
-        "solver": "collocation",
+        "solver": "point_matching",
         "stub": False,
         "earth_inductive_model": earth_inductive_model,
     }

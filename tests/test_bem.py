@@ -1,10 +1,9 @@
-"""Tests for the BEM (collocation) backend.
+"""Tests for the ``bem`` backend (the point-matching system of ``mom``).
 
-Validates that the BEM solver agrees with the closed-form image
-backends on homogeneous and 2-layer soils within a 5 % envelope, that
-the collocation result is in the expected ballpark of the Galerkin
-``mom`` solver, and that single-rod results match the Sunde / Dwight
-references.
+Validates that the backend agrees with the closed-form image backends
+on homogeneous and 2-layer soils within a 5 % envelope and that
+single-rod results match the Sunde / Dwight references. ``bem`` and
+``mom`` assemble the same point-matching system (10.31).
 """
 
 from __future__ import annotations
@@ -61,4 +60,6 @@ def test_bem_metadata() -> None:
     eng = gf.create_engine(backend="bem", segment_length=SEG)
     res = eng.solve(_world(soil))
     assert res.backend == "bem"
-    assert res.metadata["solver"] == "collocation"
+    # One point-matching scheme for the whole mom family (10.31);
+    # v0.15.0 reported "collocation" here and "galerkin" for mom.
+    assert res.metadata["solver"] == "point_matching"

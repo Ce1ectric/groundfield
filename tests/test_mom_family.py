@@ -209,3 +209,42 @@ def test_passive_network_carries_its_equalising_current(backend: str) -> None:
     r_branch = 1.0
     du = res.electrode_potentials["near"][0] - res.electrode_potentials["far"][0]
     assert du == pytest.approx(-r_branch * i_near, rel=1e-9)
+
+
+# ---------------------------------------------------------------------
+# 10.31 — one point-matching scheme, documented as such
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.31")
+def test_mom_family_reports_one_point_matching_scheme() -> None:
+    """mom, bem and mom_sommerfeld assemble the same point-matching
+    system; v0.15.0 labelled it "galerkin" (mom, mom_sommerfeld) and
+    "collocation" (bem)."""
+    soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
+    labels = {
+        b: _engine(b).solve(_two_port_world(soil, "A")).metadata["solver"]
+        for b in MOM_FAMILY
+    }
+    assert set(labels.values()) == {"point_matching"}, labels
+
+
+@pytest.mark.finding("10.31")
+def test_mom_family_docstrings_describe_point_matching() -> None:
+    import groundfield.solver.bem as bem_mod
+    import groundfield.solver.mom as mom_mod
+    import groundfield.solver.mom_sommerfeld as ms_mod
+
+    for mod, solve in (
+        (mom_mod, mom_mod.solve_mom),
+        (bem_mod, bem_mod.solve_bem),
+        (ms_mod, ms_mod.solve_mom_sommerfeld),
+    ):
+        head = solve.__doc__.strip().splitlines()[0].lower()
+        assert "point-matching" in head, (mod.__name__, head)
+        assert "galerkin" not in head
+        assert "point matching" in mod.__doc__.lower().replace("-", " "), mod.__name__
+    # Claims that do not hold for the assembled system (R2-04).
+    assert "The system is symmetric" not in mom_mod.__doc__
+    assert "lies closer to the Sunde reference" not in mom_mod.__doc__
+    assert "instead of the Galerkin average used in" not in bem_mod.__doc__

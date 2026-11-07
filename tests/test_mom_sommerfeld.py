@@ -78,5 +78,6 @@ def test_mom_sommerfeld_metadata() -> None:
     eng = gf.create_engine(backend="mom_sommerfeld", segment_length=SEG)
     res = eng.solve(_world(soil))
     assert res.backend == "mom_sommerfeld"
-    assert res.metadata["solver"] == "galerkin"
+    # Point matching, like mom and bem (10.31; "galerkin" up to 0.15.0).
+    assert res.metadata["solver"] == "point_matching"
     assert "lambda_max_factor" in res.metadata

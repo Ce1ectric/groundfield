@@ -1,60 +1,85 @@
-"""Method-of-Moments backend (``mom``).
+"""Point-matching method-of-moments backend (``mom``).
 
-Independent second engine used to cross-validate the image backends
-(see ADR-0001). The ``image`` backends approximate the current
-distribution along an electrode by a *uniform per unit length*
-profile; this backend solves for the actual non-uniform per-segment
-current distribution through a Galerkin scheme.
+Resolution-scheme counterpart of the image backends (ADR-0001). The
+``image`` backends approximate the current along an electrode by a
+*uniform per unit length* profile; this backend solves for one current
+per segment, so it resolves how the current distributes along and
+between the electrodes of a cluster.
 
 Method
 ------
 1. Discretise every electrode into wire segments (same routine as the
-   image backends).
-2. Assemble the full $N \\times N$ segment-level reaction matrix
-   $Z$ using the same Green's-function kernel as the
-   corresponding image backend (so for a ``HomogeneousSoil`` world
-   ``mom`` shares its physics with ``image``; for a ``TwoLayerSoil``
-   world it shares it with ``image_2layer``). The diagonal of
-   $Z$ carries the analytical line-self-potential.
-3. Solve the linear system
+   image backends; for two-layer soil the segments are split at the
+   layer interface).
+2. Assemble the $N \\times N$ segment reaction matrix $Z$ from the
+   Green's-function kernel of the matching image backend (homogeneous:
+   point source plus air image; two-layer: Tagg/Sunde series; geometries
+   reaching below $h_1$: the cross-layer kernel of
+   :mod:`groundfield.coupling.layered_green`):
+
+   - off-diagonal $Z_{ij}$: potential at the midpoint of segment $i$
+     of a unit **point** source at the midpoint of segment $j$;
+   - diagonal $Z_{ii}$: analytic potential of the uniformly loaded
+     segment at its own surface (line self-potential), plus images.
+
+   The basis is a pulse (one constant current per segment) and the test
+   function a delta at the segment midpoint. This is **point matching**
+   (collocation) with a point-source near field. It is *not* a Galerkin
+   scheme, which would test with the basis functions, i.e. average the
+   potential over each segment and integrate the source along each
+   segment (review pass 10, 10.31).
+3. Solve the bordered system
+
    $$
    \\begin{bmatrix} Z & -C \\\\ C^{\\top} & 0 \\end{bmatrix}
    \\begin{bmatrix} I_\\text{seg} \\\\ \\varphi_c \\end{bmatrix}
-   = \\begin{bmatrix} 0 \\\\ I_\\text{in} \\end{bmatrix},
+   = \\begin{bmatrix} 0 \\\\ I_\\text{in} \\end{bmatrix}
    $$
-   where $C$ is the segment-to-cluster membership matrix.
 
-   The constraint enforces equal segment potential within each
-   galvanic cluster; the additional row sums the segment currents to
-   the input current per cluster. The system is symmetric and dense;
-   :func:`numpy.linalg.solve` handles it directly.
+   (plus one row and column per finite conductor branch), where $C$ is
+   the segment-to-node membership matrix: every segment midpoint of a
+   node sits at the node potential, and the segment currents of a node
+   add up to its injected current. $Z$ is symmetric; the bordered
+   matrix as assembled is not, and it is solved with a dense general LU
+   (:func:`numpy.linalg.solve`).
+4. Every node with galvanic contact to the soil is an unknown, also
+   when it carries no source: a source-free cluster floats with zero
+   net current (review pass 10, 10.29), which keeps transfer impedances
+   reciprocal.
+5. Report the node potentials (the segment mean; point matching makes
+   every midpoint of a node equipotential) and the segment currents as
+   point sources, in the same :class:`FieldResult` layout as the image
+   backends.
 
-4. Compute the average cluster potential and produce a
-   :class:`FieldResult` exactly like the image backends, so that
-   :func:`groundfield.compare_engines` can compare the two side by
-   side.
-
-What this means in practice
----------------------------
-- For homogeneous soil, ``mom`` agrees with ``image`` to within a few
-  per cent and lies closer to the Sunde reference (the average-
-  potential method of ``image`` carries a residual ~5 % bias from
-  the uniform-current assumption, which the Galerkin solve removes).
-- For 2-layer soil, ``mom`` and ``image_2layer`` agree within the
-  same envelope. In the limit $\\rho_2 = \\rho_1$ both engines
-  collapse onto the homogeneous solution.
+Accuracy
+--------
+- The point-source near field underestimates the coupling of adjacent
+  segments (the exact potential of a collinear neighbour at the
+  midpoint is $\\ln 3 / \\Delta s$ per unit current, the point source
+  gives $1 / \\Delta s$, i.e. $-9\\,\\%$), and the self-image of a
+  shallow segment is a point image. Both errors stay of the same order
+  as the near-field terms under refinement, so ``mom`` does not
+  converge to the thin-wire limit. On a 3 m rod (radius 8 mm,
+  100 Ω·m) it lies 1.0 % ($\\Delta s$ = 0.5 m) to 1.7 %
+  ($\\Delta s$ = 0.0625 m) below the exact thin-wire Galerkin solution
+  at the same segment length and drifts by −0.96 % over that
+  refinement ladder; the uniform-current ``image`` result is closer to
+  the exact solution at every $\\Delta s$.
+- ``mom`` is therefore a check of the uniform-current *ansatz*
+  (current sharing along a cluster, across the layer interface, between
+  passive and driven electrodes), not an accuracy reference for
+  impedances at the 1 % level.
+- For $\\rho_2 = \\rho_1$ the two-layer kernel collapses onto the
+  homogeneous one bit-exactly; a :class:`MultiLayerSoil` is solved on
+  its canonical stack (equal adjacent layers merged, 10.48) and must
+  reduce to at most two layers.
 
 Limitations
 -----------
-- Performance is $O(N^3)$ for the LU solve plus $O(N^2)$
-  for the matrix build. For typical geometries ``N`` stays well below
-  1 000, so the runtime is acceptable. Larger meshes will need a
-  preconditioned iterative solver later.
-- This backend deliberately re-uses the existing Green's-function
-  kernels rather than introducing a Sommerfeld quadrature. A truly
-  independent layered Green's function (option B in ADR-0001) would
-  give a stronger cross-check; this lighter version is the
-  pragmatic first step.
+- Dense $N \\times N$ matrix and one dense LU per inductive frequency.
+- $n \\ge 3$ distinct soil layers: use ``mom_sommerfeld``, which
+  shares this discretisation and evaluates the layered kernel by
+  quadrature.
 """
 
 from __future__ import annotations
@@ -281,7 +306,7 @@ def _node_results(
     )
 
 
-def _galerkin_solve(
+def _point_matching_solve(
     Z: np.ndarray,
     elec_input_current: dict[str, complex],
     cluster_id: dict[str, str],
@@ -292,12 +317,14 @@ def _galerkin_solve(
     inductance_matrix: np.ndarray | None = None,
     carson_correction: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict[str, complex]]:
-    """Solve the Galerkin linear system on segment level.
+    """Solve the point-matching linear system on segment level.
 
-    Augmented variant of the historic Galerkin scheme: in addition to
-    the per-segment leakage currents and the per-cluster potentials,
-    the system optionally carries one branch current per
-    finite-impedance conductor that connects two clusters.
+    In addition to the per-segment leakage currents and the per-node
+    potentials, the system carries one branch current per
+    finite-impedance conductor that connects two nodes. (Up to 0.15.0
+    this function was called ``_galerkin_solve``; the scheme is point
+    matching, see the module docstring. The old name is kept as an
+    alias.)
 
     Mathematically the linear system is
 
@@ -321,7 +348,7 @@ def _galerkin_solve(
     $B$ the branch-to-cluster incidence matrix (``+1`` at the
     branch start, ``−1`` at its end). For
     ``finite_branches in (None, [])`` the system collapses exactly to
-    the previous (N_a + K_a) × (N_a + K_a) Galerkin system.
+    the bordered (N_a + K_a) × (N_a + K_a) system of the module docstring.
 
     Unknown set (review pass 10, 10.29): *every* node of a component
     (nodes joined by finite branches) that has galvanic contact to the
@@ -502,6 +529,10 @@ def _galerkin_solve(
     return seg_currents, cluster_potential
 
 
+#: Historic name (the scheme is point matching, not Galerkin; 10.31).
+_galerkin_solve = _point_matching_solve
+
+
 # ---------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------
@@ -514,24 +545,28 @@ def solve_mom(
     two_layer_max_terms: int | None = None,
     two_layer_tol: float | None = None,
 ) -> FieldResult:
-    """Galerkin Method-of-Moments backend.
+    """Point-matching method-of-moments backend.
 
-    Supports :class:`HomogeneousSoil` and :class:`TwoLayerSoil`. The
-    Green's-function kernel is taken from the matching image backend;
-    only the resolution scheme (per-segment Galerkin instead of
-    per-electrode average potential) differs.
+    Supports :class:`HomogeneousSoil`, :class:`TwoLayerSoil` and a
+    :class:`MultiLayerSoil` whose canonical stack has at most two layers
+    (10.48). The Green's-function kernel is taken from the matching
+    image backend; only the resolution scheme (one current per segment,
+    point matching at the segment midpoints, instead of one uniform
+    current per electrode) differs. Clusters without a source float
+    (zero net current, 10.29). See the module docstring for the
+    accuracy of the scheme.
 
     Parameters
     ----------
     world
         World to evaluate.
     engine
-        Engine configuration; ``engine.segment_length`` controls the
+        Engine configuration; ``engine.segment_length`` (m) controls the
         discretisation.
     two_layer_max_terms, two_layer_tol
-        Truncation parameters for the Tagg/Sunde series, only used
-        when ``world.soil`` is a :class:`TwoLayerSoil`. ``None``
-        (default) takes ``engine.image_max_terms`` /
+        Truncation parameters for the Tagg/Sunde series (term count,
+        dimensionless tail bound), only used for two-layer soil.
+        ``None`` (default) takes ``engine.image_max_terms`` /
         ``engine.image_series_tol``, so the engine knob reaches this
         backend consistently with ``image_2layer``.
 
@@ -539,7 +574,9 @@ def solve_mom(
     -------
     FieldResult
         Result object compatible with :class:`FieldResult` from the
-        image backends. ``metadata['solver']`` is set to ``'galerkin'``.
+        image backends. ``metadata['solver']`` is ``'point_matching'``
+        (``'galerkin'`` up to 0.15.0, although the scheme was the
+        same).
     """
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
@@ -598,7 +635,7 @@ def solve_mom(
 
     # 3) Cluster building (ideal conductors only), finite-impedance
     #    branch list, plus the distributed-conductor topology
-    #    (ADR-0003) — all fed into the augmented Galerkin system.
+    #    (ADR-0003) — all fed into the bordered point-matching system.
     cluster_id = _build_clusters(world.electrodes, world.conductors)
     finite_branches = _build_finite_branches(world.conductors, cluster_id)
     cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
@@ -721,7 +758,7 @@ def solve_mom(
             if (has_inductance and carson_builder is not None)
             else None
         )
-        sc, _ = _galerkin_solve(
+        sc, _ = _point_matching_solve(
             Z=Z,
             elec_input_current=elec_input_current,
             cluster_id=cluster_id,
@@ -829,7 +866,7 @@ def solve_mom(
             "world_name": world.name,
             "n_segments": n_segments,
             "segment_length": ds,
-            "solver": "galerkin",
+            "solver": "point_matching",
             "stub": False,
             "earth_inductive_model": earth_inductive_model,
             **soil_meta,

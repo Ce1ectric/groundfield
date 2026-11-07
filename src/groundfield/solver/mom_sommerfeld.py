@@ -1,10 +1,10 @@
-"""Method-of-Moments backend with **direct Sommerfeld quadrature** (``mom_sommerfeld``).
+"""Point-matching method of moments with **direct Sommerfeld quadrature** (``mom_sommerfeld``).
 
 Mathematical / physical model
 -----------------------------
-The other layered backends (``image_nlayer``, ``cim``, ``bem``) rely
-on a *closed-form* representation of the layered Green's function
-(real image series or complex images). This backend instead evaluates
+The other layered backends (``image_2layer``, ``mom``, ``cim``,
+``bem``) rely on the *closed-form* Tagg/Sunde image series of the
+two-layer Green's function. This backend instead evaluates
 the Sommerfeld integral
 $$
 \\varphi(s, z; z_s) \\;=\\; \\frac{\\rho_1\\, I}{4\\pi}
@@ -13,12 +13,17 @@ $$
 J_0(\\lambda s)\\, d\\lambda
 $$
 **numerically**, point by point, with adaptive Gauss–Kronrod
-quadrature (``scipy.integrate.quad``). The recursive
+quadrature (see below). The recursive
 $\\Gamma_1(\\lambda)$ from
 :func:`groundfield.solver._layered.reflection_gamma` is used as is —
-no expansion, no fit. The result is therefore **independent** of the
-expansion choices in ``image_nlayer`` / ``cim`` and serves as the
-absolute reference inside the cross-engine validation.
+no expansion, no fit. The *kernel* is therefore independent of the
+series expansion of the other backends and is the only kernel for
+$n \\ge 3$ distinct layers. The *discretisation* is not independent:
+it is the point-matching scheme of :mod:`groundfield.solver.mom`, and
+for $n = 2$ the diagonal of the reaction matrix is ``mom``'s series
+diagonal. Agreement between ``mom_sommerfeld`` and ``mom`` on two-layer
+soil is a kernel test, not an independent validation of the scheme
+(review pass 10, 10.31).
 
 Quadrature strategy
 -------------------
@@ -77,23 +82,28 @@ returned $-9.47 \\cdot 10^{-5}$ where the far-field asymptote
 $G \\to (2/s)\\,\\rho_n/\\rho_1$ requires $+5 \\cdot 10^{-4}$,
 with **no** Python-level warning.
 
-The MoM resolution itself (Galerkin scheme with one constraint per
-cluster) is the same as :mod:`groundfield.solver.mom`; only the
-underlying Z-matrix kernel differs.
+The MoM resolution itself (point matching at the segment midpoints
+with a point-source near field, one constraint per node, source-free
+clusters floating) is that of :mod:`groundfield.solver.mom`; only the
+off-diagonal kernel evaluation differs. Its accuracy limits (about 1 %
+to 2 % below the exact thin-wire solution, drifting under refinement)
+are those documented there.
 
 Validity
 --------
 - Quasi-static, $f < 1\\,\\mathrm{kHz}$.
 - All segments in the **upper** layer, except for the $n = 2$
   cross-layer case, which is delegated to
-  :mod:`groundfield.coupling.layered_green`.
-- Slower than the closed-form backends but methodologically
-  independent. Use it as the **reference** in cross-engine tests on
-  layered worlds with hard contrasts: the pointwise kernel matches
-  the analytic Tagg/Sunde series to $\\lesssim 10^{-13}$ relative
-  (median $\\sim 10^{-16}$) for
-  $\\rho_2 / \\rho_1 \\in [10^{-2}, 10^{2}]$, so any deviation of
-  a closed-form backend is that backend's series / fit error.
+  :mod:`groundfield.coupling.layered_green`. The layer stack is the
+  canonical one (equal adjacent layers merged, 10.48), so a declared
+  three-layer stack with two equal layers is the $n = 2$ case.
+- Slower than the closed-form backends. Its value is the kernel: the
+  pointwise kernel matches the analytic Tagg/Sunde series to
+  $\\lesssim 10^{-13}$ relative (median $\\sim 10^{-16}$) for
+  $\\rho_2 / \\rho_1 \\in [10^{-2}, 10^{2}]$, so for $n = 2$ any
+  deviation of a closed-form backend *with the same discretisation*
+  is that backend's series error; for $n \\ge 3$ it is the only
+  kernel available.
 - Distances are floored at 1 mm (``_MIN_DISTANCE``). That floor is
   applied to the *analytic* $K_1 / \\sqrt{s^2 + d_{\\text{int}}^2}$
   interface-image term but **not** to the matching
@@ -165,7 +175,7 @@ from groundfield.solver.image import (
 )
 from groundfield.solver.mom import (  # shared point-matching solve
     _floating_clusters,
-    _galerkin_solve,
+    _point_matching_solve,
     _node_results,
 )
 from groundfield.solver.result import FieldResult, PointSource
@@ -849,28 +859,17 @@ def sommerfeld_kernel_value(
         saturates at 60 ($\\sim 10^{-26}$), so raising it beyond
         the default cannot change the result.
 
-        .. warning::
-           **The same keyword has a different meaning on the
-           delegated $n = 2$ cross-layer path.** When
-           ``stack.n_layers == 2`` and $z > h_1$ or $z_s > h_1$,
-           the call is forwarded to
-           :func:`groundfield.coupling.layered_green.two_layer_real_space_kernel`,
-           where ``lambda_max_factor`` is measured in units of
-           $1 / \\ell_{\\text{char}}$ with
-           $\\ell_{\\text{char}}$ a *geometric* characteristic
-           length (``max(h_1, s, |z ± z_s|)``-like), is **not**
-           saturated at 60, and where *raising* it degrades the
-           result: the Hankel grid there has to resolve
-           $J_0(\\lambda s)$ up to $\\lambda_{\\max}$, so a large
-           factor exhausts the node budget and triggers
-           :class:`groundfield.coupling.layered_green.SommerfeldResolutionWarning`.
-           On that path the documented remedy is to *lower* the
-           factor; on the top-layer path here it is harmless to raise
-           it. The two conventions are deliberately left unmerged —
-           the delegated backend is shared with the inductive-coupling
-           code and its calibration is validated separately — but the
-           unit difference is a real trap and is repeated at the
-           delegation site in the source.
+        On the delegated $n = 2$ cross-layer path ($z > h_1$ or
+        $z_s > h_1$, forwarded to
+        :func:`groundfield.coupling.layered_green.two_layer_real_space_kernel`)
+        the keyword is measured in units of a *geometric*
+        characteristic length instead. Since the F14 fix of 0.15.0
+        that kernel adds every image term it does not resolve back in
+        closed form, so the factor is only an upper bound there as
+        well: values from 30 to 20 000 change the delegated kernel by
+        at most 1.3e-8 and raise no warning (review pass 10; the
+        pre-0.15.0 advice to *lower* the factor on that path is
+        obsolete).
     epsabs, epsrel
         Absolute / relative thresholds of the grid-refinement
         convergence test of the remainder quadrature. ``epsrel`` is
@@ -948,18 +947,12 @@ def sommerfeld_kernel_value(
             two_layer_real_space_kernel,
         )
 
-        # NOTE (unit trap): ``lambda_max_factor`` changes meaning here.
-        # In the top-layer path below it is measured in units of
-        # 1/d_rem (the *remainder* decay length) and saturates at 60.
-        # ``two_layer_real_space_kernel`` measures it in units of
-        # 1/char_length (a geometric length) and does **not** saturate
-        # it; there a large value exhausts the Hankel node budget and
-        # raises SommerfeldResolutionWarning, so the remedy on that
-        # path is to *lower* the factor. The value is forwarded
-        # verbatim (the historic behaviour) rather than rescaled,
-        # because the delegated kernel is calibrated and validated
-        # against its own reference; see the ``lambda_max_factor``
-        # entry in this function's docstring.
+        # ``lambda_max_factor`` is measured in units of a geometric
+        # length here (1/d_rem on the top-layer path below). It is
+        # forwarded verbatim: since F14 (0.15.0) the delegated kernel
+        # adds the unresolved image terms back in closed form, so the
+        # factor is an upper bound only (30 ... 20 000 change the
+        # kernel by <= 1.3e-8, review pass 10).
         rho_1_local = float(stack.rhos[0])
         rho_2_local = float(stack.rhos[1])
         h_1_local = float(stack.h[0])
@@ -1177,14 +1170,18 @@ def solve_mom_sommerfeld(
     epsrel: float = 1e-7,
     max_osc_panels: int = _MAX_OSC_PANELS,
 ) -> FieldResult:
-    """Galerkin MoM with direct Sommerfeld quadrature for layered soil.
+    """Point-matching MoM with direct Sommerfeld quadrature for layered soil.
 
-    This is a methodologically independent backend used as the
-    reference inside :func:`groundfield.compare_engines` for layered
-    worlds with hard contrasts. Every off-diagonal reaction-matrix
+    The discretisation and the linear solve are those of ``mom`` (point
+    matching at the segment midpoints, point-source near field,
+    source-free clusters floating). Every off-diagonal reaction-matrix
     entry is one evaluation of :func:`sommerfeld_kernel_value`, i.e.
-    the closed-form direct pair plus a numerically integrated
-    reflected remainder; no image series and no fit enter the kernel.
+    the closed-form direct pair plus a numerically integrated reflected
+    remainder; no image series and no fit enter the off-diagonal
+    kernel. For $n = 2$ the diagonal is the Tagg/Sunde series diagonal
+    of ``mom``, so on two-layer soil this backend reproduces ``mom`` and
+    checks the kernel, not the scheme; for $n \\ge 3$ distinct layers it
+    is the only integral-equation backend.
 
     Parameters
     ----------
@@ -1195,10 +1192,11 @@ def solve_mom_sommerfeld(
     lambda_max_factor
         Truncation of the remainder quadrature in units of the
         remainder decay length $1 / d_{\\text{rem}}$; saturates at
-        60. See :func:`sommerfeld_kernel_value` — note the unit change
-        on the delegated $n = 2$ cross-layer path documented there.
+        60. See :func:`sommerfeld_kernel_value` for the delegated
+        $n = 2$ cross-layer path.
     epsabs, epsrel
-        Convergence thresholds of the remainder quadrature.
+        Convergence thresholds of the remainder quadrature (absolute
+        in 1/m, relative).
     max_osc_panels
         Budget for the $J_0$ half-period panel family.
 
@@ -1344,7 +1342,7 @@ def solve_mom_sommerfeld(
         tol=engine.image_series_tol,
     )
 
-    # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).
+    # 4) Frequency loop (point-matching solve + Z · I_seg for phi).
     n_freq = len(engine.frequencies)
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
@@ -1355,7 +1353,7 @@ def solve_mom_sommerfeld(
             if (has_inductance and carson_builder is not None)
             else None
         )
-        sc, _ = _galerkin_solve(
+        sc, _ = _point_matching_solve(
             Z=Z,
             elec_input_current=elec_input_current,
             cluster_id=cluster_id,
@@ -1430,7 +1428,7 @@ def solve_mom_sommerfeld(
         "epsabs": float(epsabs),
         "epsrel": float(epsrel),
         "max_osc_panels": int(max_osc_panels),
-        "solver": "galerkin",
+        "solver": "point_matching",
         "stub": False,
         "earth_inductive_model": earth_inductive_model,
     }
