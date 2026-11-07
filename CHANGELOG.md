@@ -26,7 +26,119 @@ version section when a release is cut.
 
 ## [Unreleased]
 
-_No changes yet._
+### Planned — review pass 10 (change concept, decided 2026-11-07)
+
+> **Not yet implemented.** This block records the change concept of the tenth
+> review pass (2026-11-07, against `0.15.0`) as decided on 2026-11-07. Findings
+> are referenced as `10.NN`; pass-9 identifiers (`Fxx`) are kept where an item
+> was already known. Each item moves into Added / Changed / Fixed / Security /
+> Removed below once it lands together with its test; whatever is still listed
+> here when the release is cut moves to the Roadmap instead. Items marked ⚠
+> change numerical results.
+>
+> **One release, calendar versioning.** All items below ship together in the
+> first calendar-versioned release. The version scheme changes from SemVer
+> (`0.15.0`) to CalVer `YYYY.MM.MICRO` (e.g. `2026.11.0`; month unpadded and no
+> hyphen, because PEP 440 drops leading zeros and reads `2026-11` as a
+> post-release). `MICRO` counts further releases within the same month. CalVer
+> carries no compatibility promise, so deprecations follow a written policy:
+> a deprecated name keeps working, warns with `DeprecationWarning`, and is
+> removed no earlier than two releases and six months after its announcement.
+
+- **Versioning and release tooling:** `scripts/release.py` computes the CalVer
+  version from the release date, validates everything before it writes, and
+  runs git in the repository root; tags become `vYYYY.MM.MICRO`.
+- **Security (10.01):** `evaluate_spec` passes `impedance_formula` from a
+  BusType JSON to `sympy.sympify`, which evaluates Python code. Replace it by
+  an allow-list parser that builds the SymPy expression from the AST (numbers,
+  `f`, `rho`, `j`, `pi`, `+ − * / **`, `sqrt`/`exp`/`log`, size and exponent
+  bounds) and validate on load. groundinsight (local `0.6.0`) already guards
+  its formulas; its guard is re-verified against the same attack corpus and
+  against every formula groundfield exports.
+- **Packaging (10.02, 10.11):** no top-level `scripts` package and no
+  `release` console script in the wheel (the same collision exists in
+  groundinsight); `py.typed`; `polars` dropped (never imported); `profile.out`
+  untracked; `poetry-core` bounded.
+- **Silent failures become errors (10.06, 10.43, 10.51, 10.66, 10.67):** unknown
+  `attached_to` / `return_to` names, worlds without a finite current source,
+  `magnitude=nan`, `cross_section <= 0`, non-finite resistivities, zero-length
+  geometry, an ideal conductor with `discretize_segment_length`, and
+  `VoltageSource` (currently solved to zero) raise with a named parameter and a
+  suggestion; a cross section above 1e-2 m² warns ("mm² given?"); worlds beyond
+  `HARD_LIMIT` raise before any allocation unless `max_segments` is raised;
+  inert settings warn.
+- **⚠ Two-terminal sources and measurement (F01/F30, 10.16, 10.17, 10.38):**
+  `Source.return_to` honoured by every backend through one shared injection
+  step; leakage-free junction nodes; measurement leads re-wired through them
+  (replacing the 5 cm pseudo-rods); `FieldResult.input_impedance(source)`.
+- **⚠ Cross-layer electrodes (F02, 10.15, 10.32, 10.50):** one current share per
+  electrode and layer in `image_2layer`, `cim` and `solve_mutual_*`; interface
+  slivers merged; Galerkin self-term.
+- **⚠ Concrete encasement (10.12–10.14):** one mechanism — the solver always
+  treats the concrete shell as a distributed series resistance; the lumped
+  model only converts its input. Today the lumped shell is dropped by
+  `solve_mutual_matrix`, `solve_mutual_field` and every world without a PEN
+  service drop while the inflated wire radius is kept (−3 % to −29 % on a
+  foundation's self-impedance). `OrtsnetzLayout` honours the shells. An impact
+  study on representative AP1 sites compares the old and new numbers.
+- **⚠ Exact line-source kernel (10.28):** default reaction-matrix and field
+  kernel; the point kernel converges 0.9–1.9 % below the exact uniform-current
+  solution. `Engine(kernel="point")` reproduces earlier numbers.
+- **⚠ Earth return (F32, F50, F52, 10.20, 10.24, 10.35–10.37, 10.45, 10.46):**
+  `carson_series` on the anti-parallel image baseline; Sommerfeld λ-grid
+  resolves distant pairs; exact `n >= 3` buried kernel; Neumann inductance also
+  on lumped and single-segment conductors; consistent internal-inductance
+  convention; opt-in skin effect for conductor resistance.
+- **⚠ Post-solve consistency (10.25, 10.26, 10.33, 10.34):** `FieldResult.potential`
+  and `solve_mutual_*` use the engine's series controls (today capped at 100
+  terms); length-weighted `solve_mutual_matrix` diagonal; backend check and an
+  optional reciprocal off-diagonal; line-source evaluation near conductors.
+- **⚠ Safety (F13, F51, 10.21, 10.22, 10.42, 10.52):** touch voltage over the
+  electrode footprint; uniform-current caveat; the EN 50522 anchors are
+  confirmed against EN 50522:2022 Table B.4 (DIN EN 50522:2023-10) and pinned
+  as literals in the test; docstrings cite the current edition; optional
+  body-impedance / additional-resistance model and spectrum touch voltage.
+- **⚠ Fits and export (10.18, 10.19, 10.27, 10.40, 10.41):** `quantity=` on
+  `sweep` and the rho-f helpers with the input impedance as default; passivity
+  check before export; robust vector fitting with a 0 Hz sample; standard form
+  with optional constant term and relative weights; readable exported formulas.
+- **⚠ Engines (10.23, 10.29–10.31, 10.47–10.49):** floating passive clusters in
+  the `mom` family (reciprocal transfer impedances); `cim` weighted read-back;
+  `fem` marked experimental with guards; duplicated layers merged; `cim`,
+  `bem` and `image_nlayer` become deprecated aliases; shared engine benchmark
+  suite.
+- **⚠ Generators (F07, F08, F28, F47, F48, 10.39, 10.53–10.55, 10.78):** one
+  network plan and one materialiser behind `TnNetworkGenerator` and the
+  layout builder; reproducible resolved configs; rotated mesh foundations split
+  at crossings; per-footprint foundations; lead depth honoured; bounded and
+  validated Overpass requests with atomic caching; MD5 marked
+  `usedforsecurity=False` (identical digests — stored masks stay valid).
+- **Performance (10.56–10.65):** row-chunked kernels (memory from 96 B·N² to
+  O(N)), one reaction-matrix evaluation per solve, direct matrix assembly in
+  `solve_mutual_matrix`, vectorised two-layer series (optional `numba` extra),
+  multi-frequency Sommerfeld assembly, chunked field evaluation,
+  `sweep(n_jobs=...)`, performance and memory regression tests.
+- **Architecture (10.74–10.77, 10.79–10.81):** one kernel module and one solve
+  pipeline shared by all backends; backend registry with a common metadata
+  core and provenance (F22); versioned `save_result` / `load_result` (F23);
+  nested backend options.
+- **Usability (10.68–10.73):** typed electrode factories, consistent parameter
+  names with aliases, English names for German identifiers with aliases,
+  curated namespaces (`gf.plot`, `gf.safety`, `gf.fit`),
+  `FieldResult.to_dataframe()`, complex-valued `compare_engines` over all
+  frequencies.
+- **Standards (10.80, 10.94, 10.95):** `ruff format`, ruff lint with the NumPy
+  docstring convention and a physics naming allow-list, mypy, pre-commit, CI
+  jobs for lint, types, docs and Python 3.14; tests organised by feature with a
+  `finding` marker; supply-chain hardening of the workflows (10.03, 10.04).
+- **Documentation (10.82–10.93):** tutorials / how-to / reference / explanation
+  structure, versioned tutorial notebooks executed in CI, glossary, units and
+  conventions, warnings catalogue, validation page, known limitations,
+  factories in the API reference, corrections to the 0.15.0 release notes
+  (F47, F48 and F53/F54 were listed as fixed but the code was unchanged; `cim`
+  is not bit-identical to `image_2layer` on unequal segment lengths; the F16
+  entry describes the symptom of F08), a concise changelog with a list of
+  releases that changed numbers.
 
 ---
 
