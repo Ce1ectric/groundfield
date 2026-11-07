@@ -86,13 +86,11 @@ from groundfield.solver._guards import _require_thin_wire as _require_thin_wire
 from groundfield.solver._guards import (
     _segment_owner_label as _segment_owner_label,
 )
-from groundfield.solver._guards import _segment_z_extent as _segment_z_extent
 from groundfield.solver._inductive import _CarsonBuilder as _CarsonBuilder
 from groundfield.solver._inductive import (
     _assemble_inductance_matrix as _assemble_inductance_matrix,
 )
 from groundfield.solver._kernels import HalfSpaceKernel
-from groundfield.solver._kernels import _potential_kernel as _potential_kernel
 from groundfield.solver._kernels import (
     _self_corrected_kernel as _self_corrected_kernel,
 )

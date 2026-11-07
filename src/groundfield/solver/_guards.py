@@ -283,23 +283,6 @@ def _segment_owner_label(seg: "_Segment") -> str:
     return f"electrode '{seg.electrode_name}'"
 
 
-def _segment_z_extent(seg: "_Segment") -> tuple[float, float]:
-    """Vertical extent ``(z_top, z_bottom)`` of a segment.
-
-    Uses the unit tangent ``_Segment.direction`` set by the
-    discretisers: the segment spans
-    $z_\\text{mid} \\pm \\tfrac{1}{2} L\\,|e_z|$. For a segment whose
-    direction was not recorded the extent collapses to the midpoint,
-    i.e. the caller silently degrades to the historic midpoint-only
-    check rather than guessing an orientation.
-    """
-    z_mid = float(seg.midpoint[2])
-    if seg.direction is None:
-        return z_mid, z_mid
-    half = 0.5 * float(seg.length) * abs(float(seg.direction[2]))
-    return z_mid - half, z_mid + half
-
-
 def _check_segment_depths(
     all_segments: "list[_Segment]", *, where: str, stacklevel: int = 3
 ) -> None:

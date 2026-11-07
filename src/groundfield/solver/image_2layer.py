@@ -132,65 +132,6 @@ def _two_layer_image_offsets(
     return z_offsets, sign_zs_arr, weights, series.n_terms
 
 
-def _two_layer_potential_kernel(
-    field_points: np.ndarray,
-    source_points: np.ndarray,
-    currents: np.ndarray,
-    soil: TwoLayerSoil,
-    max_terms: int,
-    tol: float,
-) -> tuple[np.ndarray, int]:
-    """Vectorised 2-layer image-charge sum at field points.
-
-    Parameters
-    ----------
-    field_points
-        Evaluation points, shape ``(M, 3)``.
-    source_points
-        Source midpoints, shape ``(N, 3)``.
-    currents
-        Real-valued current vector ``(N,)``. Complex currents must be
-        split externally and the kernel called twice.
-    soil
-        :class:`TwoLayerSoil`. ``soil.h_1`` is the upper-layer depth.
-    max_terms, tol
-        Series truncation parameters.
-
-    Returns
-    -------
-    phi : np.ndarray, shape (M,)
-        Evaluation result.
-    n_terms_used : int
-        Last evaluated $n$ (used by the caller to flag
-        convergence issues).
-    """
-    K = soil.reflection_coefficient
-    h_1 = soil.h_1
-    rho_1 = soil.rho_1
-
-    z_offsets, sign_zs_arr, weights, n_used = _two_layer_image_offsets(
-        K, h_1, max_terms, tol
-    )
-
-    # 2-D distance in (x, y) — shared across all images.
-    diff_xy = field_points[:, None, 0:2] - source_points[None, :, 0:2]
-    delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
-
-    z_field = field_points[:, 2:3]  # (M, 1)
-    z_src = source_points[None, :, 2]  # (1, N)
-
-    phi = np.zeros(field_points.shape[0], dtype=float)
-    for k in range(z_offsets.size):
-        z_img = z_offsets[k] + sign_zs_arr[k] * z_src  # (1, N)
-        r_sq = delta_sq + (z_field - z_img) ** 2  # (M, N)
-        r = np.sqrt(r_sq)
-        np.maximum(r, _MIN_DISTANCE, out=r)
-        phi += weights[k] * ((1.0 / r) @ currents)
-
-    phi *= rho_1 / (4.0 * np.pi)
-    return phi, n_used
-
-
 class _TwoLayerKernel:
     """Reaction operator of the two-layer soil (callable kernel).
 

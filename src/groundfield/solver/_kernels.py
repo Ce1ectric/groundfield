@@ -468,27 +468,6 @@ def _self_corrected_kernel(
     )
 
 
-def _potential_kernel(
-    field_points: np.ndarray,  # (M, 3)
-    source_points: np.ndarray,  # (N, 3)
-    currents: np.ndarray,  # (N,)
-    rho: float,
-) -> np.ndarray:
-    """Vectorised image-charge sum — pure point-source evaluation.
-
-    Used for **field points away from the sources** (plots, profiles).
-    Singularities are clamped at ``_MIN_DISTANCE``.
-
-    Returns
-    -------
-    phi : np.ndarray, shape (M,)
-        Potential at every field point.
-    """
-    kernel = _point_field_kernel(field_points, source_points, _MIN_DISTANCE)
-    phi = (rho / (4.0 * np.pi)) * (kernel @ currents)
-    return phi
-
-
 # ---------------------------------------------------------------------
 # Two-layer image series (n >= 1)
 # ---------------------------------------------------------------------

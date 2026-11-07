@@ -75,3 +75,30 @@ def test_augmented_solve_is_decomposed() -> None:
         "_owner_currents",
     ):
         assert callable(getattr(_topology, step)), step
+
+
+@pytest.mark.finding("10.81")
+@pytest.mark.parametrize(
+    ("module", "name"),
+    [
+        ("groundfield.solver.image", "_potential_kernel"),
+        ("groundfield.solver.image", "_segment_z_extent"),
+        ("groundfield.solver.image_2layer", "_two_layer_potential_kernel"),
+    ],
+)
+def test_dead_helpers_are_removed(module: str, name: str) -> None:
+    """Unused kernels and helpers of v0.15.0 are gone (nothing imported them)."""
+    assert not hasattr(importlib.import_module(module), name)
+
+
+@pytest.mark.finding("10.81")
+def test_empty_field_study_placeholder_is_removed() -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("groundfield.solver.field_study")
+
+
+def test_geometry_primitives_is_no_longer_a_placeholder() -> None:
+    """``geometry/primitives.py`` (empty in v0.15.0) now holds WireSegments."""
+    from groundfield.geometry import primitives
+
+    assert primitives.__all__ == ["WireSegments"]
