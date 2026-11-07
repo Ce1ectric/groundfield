@@ -67,6 +67,7 @@ from pydantic import (
 )
 
 from groundfield.solver import registry as _registry
+from groundfield.solver._kernels import DEFAULT_KERNEL
 from groundfield.solver.registry import (
     DEFAULT_IMAGE_MAX_TERMS,
     DEFAULT_IMAGE_SERIES_TOL,
@@ -86,6 +87,7 @@ __all__ = [
     "CORE_METADATA_KEYS",
     "DEFAULT_IMAGE_MAX_TERMS",
     "DEFAULT_IMAGE_SERIES_TOL",
+    "DEFAULT_KERNEL",
     "Engine",
     "Backend",
     "EarthInductiveModel",
@@ -408,19 +410,25 @@ class Engine(BaseModel):
         :func:`~groundfield.solver.mutual.solve_mutual_matrix` /
         ``solve_mutual_field``:
 
-        - ``"point"`` (default) — each segment's current sits at its
-          midpoint; reproduces the results of earlier releases. Its
-          row sums carry an error of about :math:`-0.23/L`, so the
-          grounding resistance converges to a value 0.9–1.9 % below the
-          exact uniform-current solution (review pass 10, 10.28).
+        - ``None`` (default since 2026.11) — the backend's preferred
+          kernel: ``"line"`` for the image family, the backend's own
+          kernel (``"point"``) for every other backend.
+          ``FieldResult.metadata["kernel"]`` records the kernel that ran.
         - ``"line"`` — every segment is a uniform line current
           (Galerkin form of the exact line-source potential, see
           :mod:`groundfield.solver._line_kernel`): exact for straight
           wires at any segment length.
+        - ``"point"`` — each segment's current sits at its midpoint;
+          reproduces the results of releases up to 0.15.0. Its row sums
+          carry an error of about :math:`-0.23/L`, so the grounding
+          resistance converges to a value 0.9–1.9 % below the exact
+          uniform-current solution (review pass 10, 10.28).
 
-        The other backends use their own kernels; an explicit
-        ``"line"`` there raises
-        :class:`~groundfield.solver.registry.BackendCapabilityError`.
+        An explicit ``"line"`` on a backend without the line kernel
+        raises :class:`~groundfield.solver.registry.BackendCapabilityError`.
+        The request is carried in the value: an engine rebuilt from its
+        JSON, from ``with_frequencies`` or from a result's provenance
+        block runs exactly like the original.
 
     Examples
     --------
@@ -472,12 +480,14 @@ class Engine(BaseModel):
             "FieldResult.metadata['series']."
         ),
     )
-    kernel: Literal["point", "line"] = Field(
-        default="point",
+    kernel: Literal["point", "line"] | None = Field(
+        default=None,
         description=(
-            "Green's-function kernel of the image family: 'point' (midpoint "
-            "point sources, the historic default) or 'line' (exact uniform "
-            "line sources, Galerkin form)."
+            "Green's-function kernel: None (default) lets the backend choose "
+            "its preferred kernel ('line' for the image family, the backend's "
+            "own elsewhere); 'line' (exact uniform line sources, Galerkin "
+            "form) or 'point' (midpoint point sources, the kernel of releases "
+            "up to 0.15.0) request one explicitly."
         ),
     )
     image_series_tol: float = Field(
@@ -821,12 +831,15 @@ class Engine(BaseModel):
     ) -> FieldResult:
         """Checks, dispatch and metadata core (see :meth:`solve`)."""
         _registry.emit_resolution_warnings(resolved)
-        kernel = self.kernel
+        # The kernel request is carried in the value (audit A1-03): None
+        # leaves the choice to the backend, so an engine rebuilt from JSON,
+        # with_frequencies or a provenance block runs like the original.
+        requested = self.kernel
         _registry.check_capabilities(
             resolved,
             world,
-            kernel=kernel,
-            kernel_explicit="kernel" in self.model_fields_set,
+            kernel=requested,
+            kernel_explicit=requested is not None,
         )
 
         # Pre-flight discretisation check (advisory, never raises).
@@ -847,9 +860,17 @@ class Engine(BaseModel):
         spec = resolved.spec
         options = self.backend_options(spec.name)
         kwargs = options.model_dump() if options is not None else {}
+        # The backend sees the kernel it runs with: the explicit request,
+        # else DEFAULT_KERNEL where implemented, else its own.
+        effective = _registry.effective_kernel(
+            spec, requested if requested is not None else DEFAULT_KERNEL
+        )
+        run_engine = self
+        if effective is not None and effective != requested:
+            run_engine = self.model_copy(update={"kernel": effective})
         solve_fn = spec.resolve_solve_fn()
         t0 = time.perf_counter()
-        result = solve_fn(world, self, **kwargs)
+        result = solve_fn(world, run_engine, **kwargs)
         solve_time_s = time.perf_counter() - t0
 
         if not result.sources:
@@ -858,7 +879,7 @@ class Engine(BaseModel):
         md = result.metadata
         md["backend"] = self.backend
         md["effective_backend"] = spec.name
-        md.setdefault("kernel", _registry.effective_kernel(spec, kernel))
+        md.setdefault("kernel", effective)
         md["groundfield_version"] = provenance["groundfield_version"]
         md["frequencies"] = [float(f) for f in result.frequencies]
         md["n_segments"] = int(md.get("n_segments", len(result.point_sources)))

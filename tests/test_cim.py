@@ -192,7 +192,9 @@ def test_cim_is_bit_identical_to_image_2layer_for_unequal_segments(
         return w
 
     res_cim = gf.create_engine(backend="cim", segment_length=ds).solve(world())
-    res_il2 = gf.create_engine(backend="image_2layer", segment_length=ds).solve(world())
+    res_il2 = gf.create_engine(
+        kernel="point", backend="image_2layer", segment_length=ds
+    ).solve(world())
     lengths = {ps.length for ps in res_cim.point_sources}
     assert len({round(x, 9) for x in lengths}) > 1, "case must have unequal segments"
     assert res_cim.electrode_potentials == res_il2.electrode_potentials

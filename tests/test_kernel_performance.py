@@ -81,6 +81,9 @@ def _houses_world(soil, n_side: int = 4, *, pen: bool = False) -> gf.World:
 def _solve(world: gf.World, **engine_kw) -> gf.FieldResult:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        # The bit-identity and performance gates are those of the point
+        # kernel (the default up to 0.15.0, 10.28).
+        engine_kw.setdefault("kernel", "point")
         return world.solve(gf.Engine(segment_length=0.5, **engine_kw))
 
 

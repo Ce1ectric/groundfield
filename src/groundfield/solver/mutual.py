@@ -69,6 +69,7 @@ from groundfield.soil.models import (
 )
 from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._kernels import (
+    DEFAULT_KERNEL,
     HalfSpaceKernel,
     _line_field_correction,
     _point_field_kernel,
@@ -324,7 +325,8 @@ def _prepare(
 
     # Kernel choice of the engine (10.28): point (default) or exact line
     # sources, for the reaction matrix and the field evaluation alike.
-    line = arrays.line_segments() if engine.kernel == "line" else None
+    kernel = engine.kernel if engine.kernel is not None else DEFAULT_KERNEL
+    line = arrays.line_segments() if kernel == "line" else None
     if soil_two_layer is not None:
         # 2-layer reaction operator: feed the engine's image-series
         # truncation, exactly like ``solve_image_2layer``.

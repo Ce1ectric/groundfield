@@ -46,3 +46,20 @@ findings = ["10.32"]
 reason = "Same discretisation change, line kernel: straight wires are exact at any ds."
 min_rel_change = 1e-9
 max_rel_change = 1e-6
+
+# --- 10.28: the line-source kernel is the default of the image family ----
+# Engine.kernel = None (default) lets the backend choose: the exact line
+# kernel for the image family. Measured: rod 3 m Zc +0.60 %, surface
+# potential up to 1.9 %; two-layer ring Zc +1.23 %, potential 0.10 %; two
+# rods with a galvanic conductor of 5 m segments: I 10.9 %, Zc 8.4 %, phi
+# 3.4 % (the point kernel is most biased on long segments). Every case pinned
+# to kernel="point" stays identical. coup1 also declares
+# defaults_mixed_cluster_inductive (1e-7); the bounds add up.
+
+[[change]]
+cases = ["defaults_rod_hom", "defaults_two_layer_ring_auto", "defaults_mixed_cluster_inductive"]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "Engine.kernel defaults to the backend's preferred kernel: the exact line-source kernel for the image family."
+min_rel_change = 1e-3
+max_rel_change = 0.2

@@ -118,10 +118,15 @@ def test_fine_discretisation_reference_of_a_grid() -> None:
 
 
 @pytest.mark.finding("10.28")
-def test_point_kernel_is_the_default_and_unchanged() -> None:
-    """``kernel="point"`` stays the default (the golden cases pin it)."""
-    assert gf.Engine().kernel == "point"
+def test_line_kernel_is_the_default_and_point_is_unchanged() -> None:
+    """The engine leaves the kernel to the backend: line for the image family.
+
+    Since 2026.11 (the default was ``"point"`` before); ``kernel="point"``
+    reproduces the earlier numbers (the golden cases pin it).
+    """
+    assert gf.Engine().kernel is None
     geometry, _ = _GEOMETRIES["rod"]
+    assert _resistance(geometry, 0.5, None) == _resistance(geometry, 0.5, "line")
     assert _resistance(geometry, 0.5, "point") == pytest.approx(33.095619, abs=1e-6)
 
 

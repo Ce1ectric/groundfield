@@ -443,6 +443,7 @@ def test_ring_impedance_degenerate_matches_image_and_mom() -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=1.0)
     z_image = (
         gf.create_engine(
+            kernel="point",
             backend="image",
             segment_length=SEG,
         )
@@ -479,6 +480,7 @@ def test_ring_impedance_contrast_matches_image_2layer() -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
     z_ref = (
         gf.create_engine(
+            kernel="point",
             backend="image_2layer",
             segment_length=SEG,
         )

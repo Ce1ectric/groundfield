@@ -71,7 +71,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import TwoLayerSoil
+from groundfield.soil.models import MultiLayerSoil, TwoLayerSoil
 from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._guards import (
     _MIN_DISTANCE,
@@ -79,6 +79,7 @@ from groundfield.solver._guards import (
     _require_image_separation,
 )
 from groundfield.solver._kernels import (
+    DEFAULT_KERNEL,
     TwoLayerSeriesKernel,
     _block_rows,
     _half_space_block,
@@ -554,6 +555,39 @@ def _build_phi_hom_per_source_rho(
 # ---------------------------------------------------------------------
 
 
+def _as_two_layer(soil: MultiLayerSoil) -> TwoLayerSoil:
+    """The :class:`TwoLayerSoil` of a stack with at most two distinct layers.
+
+    Adjacent layers of equal resistivity are merged first (the canonical
+    stack, review pass 10, 10.48); a stack that merges to one layer becomes
+    ``TwoLayerSoil(rho, rho, h)`` with the declared first thickness, which
+    reproduces the homogeneous result.
+
+    Raises
+    ------
+    BackendCapabilityError
+        If the stack has three or more distinct layers.
+    """
+    from groundfield.solver._layered import as_layer_stack
+    from groundfield.solver.registry import BackendCapabilityError
+
+    stack = as_layer_stack(soil)
+    if stack.n_layers == 2:
+        return TwoLayerSoil(
+            rho_1=float(stack.rhos[0]),
+            rho_2=float(stack.rhos[1]),
+            h_1=float(stack.h[0]),
+        )
+    if stack.n_layers == 1:
+        h_1 = soil.layers[0].h if soil.layers[0].h else 1.0
+        rho = float(stack.rhos[0])
+        return TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=float(h_1))
+    raise BackendCapabilityError(
+        f"Backend 'image_2layer' solves at most two distinct layers; this "
+        f"MultiLayerSoil has {stack.n_layers}. Use backend='mom_sommerfeld'."
+    )
+
+
 def _owner_interfaces(soil: TwoLayerSoil) -> tuple[float, ...]:
     """Interfaces at which electrodes get one owner per layer (10.15).
 
@@ -740,13 +774,7 @@ class _TwoLayerGreen:
             else True
         )
         if not converged:
-            _log.info(
-                "image_2layer: max_terms=%d reached, series tail bound "
-                "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e.",
-                self.max_terms,
-                _series_tail_bound(abs(K), n_terms_used),
-                self.tol,
-            )
+            # One channel only (10.70): the warning, no duplicate log record.
             self.series.warn_if_truncated("image_2layer", stacklevel=stacklevel)
         return {
             "K": float(K),
@@ -800,7 +828,12 @@ def solve_image_2layer(
     Raises
     ------
     TypeError
-        If the soil is not a :class:`TwoLayerSoil`.
+        If the soil is neither a :class:`TwoLayerSoil` nor a
+        :class:`~groundfield.soil.models.MultiLayerSoil` (which is solved
+        as the equivalent two-layer soil when its canonical stack has at
+        most two layers).
+    BackendCapabilityError
+        If a ``MultiLayerSoil`` has three or more distinct layers.
     ValueError
         If the world has no electrodes, or the geometry fails a
         discretisation guard (thin wire, burial depth).
@@ -810,6 +843,11 @@ def solve_image_2layer(
     SeriesTruncationWarning
         If the series is used and reaches ``max_terms`` before ``tol``.
     """
+    if isinstance(world.soil, MultiLayerSoil):
+        # Audit round 1, A1-numerics F09: the registry accepts a layer
+        # stack that merges to at most two layers; solve it as the
+        # equivalent TwoLayerSoil instead of raising a bare TypeError.
+        world = world.model_copy(update={"soil": _as_two_layer(world.soil)})
     if not isinstance(world.soil, TwoLayerSoil):
         raise TypeError(
             "Backend 'image_2layer' requires TwoLayerSoil. "
@@ -830,6 +868,9 @@ def solve_image_2layer(
         max_terms = engine.image_max_terms
     if tol is None:
         tol = engine.image_series_tol
+    if engine.kernel is None:
+        # The backend's preferred kernel (Engine.kernel = None, 10.28).
+        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
     green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
     if _crosses_interface(world, _owner_interfaces(soil)):
         # One owner per (electrode, layer) for rods through h_1 (10.15).

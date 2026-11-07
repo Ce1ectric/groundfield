@@ -66,7 +66,7 @@ _FAR = np.array([[100.0, 0.0, 0.0], [0.0, 200.0, 0.0], [300.0, 300.0, 0.0]])
 def test_potential_uses_the_series_controls_of_the_engine() -> None:
     soil = gf.TwoLayerSoil(**_HARD)
     engine = gf.create_engine(
-        segment_length=1.0, image_max_terms=2000, image_series_tol=1e-10
+        kernel="point", segment_length=1.0, image_max_terms=2000, image_series_tol=1e-10
     )
     res = _ring_world(soil).solve(engine)
     phi = res.potential(_FAR)
@@ -78,7 +78,7 @@ def test_potential_uses_the_series_controls_of_the_engine() -> None:
 def test_potential_without_a_series_record_uses_the_engine_defaults() -> None:
     """Results written before 2026.11 carry no record: defaults, not 100 terms."""
     soil = gf.TwoLayerSoil(**_HARD)
-    res = _ring_world(soil).solve(gf.create_engine(segment_length=1.0))
+    res = _ring_world(soil).solve(gf.create_engine(kernel="point", segment_length=1.0))
     res.metadata.pop("series", None)
     phi = res.potential(_FAR)
     ref = _reference_series(_FAR, res, soil, 5000)
@@ -100,7 +100,7 @@ def test_potential_warns_when_its_series_is_truncated() -> None:
 def test_mutual_field_uses_the_series_controls_of_the_engine() -> None:
     soil = gf.TwoLayerSoil(**_HARD)
     engine = gf.create_engine(
-        segment_length=1.0, image_max_terms=2000, image_series_tol=1e-10
+        kernel="point", segment_length=1.0, image_max_terms=2000, image_series_tol=1e-10
     )
     res = _ring_world(soil).solve(engine)
     world = gf.create_world(soil=soil)

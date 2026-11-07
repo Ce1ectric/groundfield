@@ -49,7 +49,7 @@ def test_image_vs_mom_homogeneous_consistent() -> None:
     """``image`` and ``mom`` on the same homogeneous world must match
     within 2 %."""
     soil = gf.HomogeneousSoil(resistivity=100.0)
-    eng_image = gf.create_engine(backend="image", segment_length=SEG)
+    eng_image = gf.create_engine(kernel="point", backend="image", segment_length=SEG)
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
     Z_image = eng_image.solve(_world(soil)).cluster_impedance("g1")[0].real
@@ -66,7 +66,9 @@ def test_compare_engines_image_vs_mom_homogeneous() -> None:
     report = gf.compare_engines(
         _world(soil),
         engines={
-            "image": gf.create_engine(backend="image", segment_length=SEG),
+            "image": gf.create_engine(
+                kernel="point", backend="image", segment_length=SEG
+            ),
             "mom": gf.create_engine(backend="mom", segment_length=SEG),
         },
         rel_tolerance=0.05,
@@ -113,7 +115,9 @@ def test_image_2layer_vs_mom_consistent(rho_2: float) -> None:
     """For a range of layer contrasts ``image_2layer`` and ``mom`` must
     agree within 2 %."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=rho_2, h_1=2.0)
-    eng_il2 = gf.create_engine(backend="image_2layer", segment_length=SEG)
+    eng_il2 = gf.create_engine(
+        kernel="point", backend="image_2layer", segment_length=SEG
+    )
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
     Z_il2 = eng_il2.solve(_world(soil)).cluster_impedance("g1")[0].real
@@ -134,7 +138,7 @@ def test_compare_engines_image_2layer_vs_mom_consistent() -> None:
         _world(soil),
         engines={
             "image_2layer": gf.create_engine(
-                backend="image_2layer", segment_length=SEG
+                kernel="point", backend="image_2layer", segment_length=SEG
             ),
             "mom": gf.create_engine(backend="mom", segment_length=SEG),
         },
@@ -172,8 +176,10 @@ def test_three_engines_consistent_at_K0() -> None:
     """At K=0 all three engines on the same world must collapse together."""
     rho = 100.0
     soil = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=2.0)
-    eng_image = gf.create_engine(backend="image", segment_length=SEG)
-    eng_il2 = gf.create_engine(backend="image_2layer", segment_length=SEG)
+    eng_image = gf.create_engine(kernel="point", backend="image", segment_length=SEG)
+    eng_il2 = gf.create_engine(
+        kernel="point", backend="image_2layer", segment_length=SEG
+    )
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
     # eng_image runs on the homogeneous equivalent
@@ -209,7 +215,9 @@ def test_image_vs_mom_with_cluster() -> None:
         gf.create_source(w, attached_to=g1, magnitude=10.0)
         return eng.solve(w)
 
-    r_image = _build(gf.create_engine(backend="image", segment_length=SEG))
+    r_image = _build(
+        gf.create_engine(kernel="point", backend="image", segment_length=SEG)
+    )
     r_mom = _build(gf.create_engine(backend="mom", segment_length=SEG))
 
     Z_image = r_image.cluster_impedance("g1")[0].real
@@ -233,7 +241,7 @@ def test_image_vs_mom_potential_field_consistent() -> None:
     current redistribution)."""
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = _world(soil)
-    eng_image = gf.create_engine(backend="image", segment_length=SEG)
+    eng_image = gf.create_engine(kernel="point", backend="image", segment_length=SEG)
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
     pts = np.array(

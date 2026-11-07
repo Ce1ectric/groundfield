@@ -340,11 +340,13 @@ def test_inductive_cross_engine_50hz(backend: str) -> None:
         return w
 
     eng_ref = gf.create_engine(
+        kernel="point",
         backend="image",
         segment_length=SEG,
         frequencies=[50.0],
     )
     eng = gf.create_engine(
+        kernel="point",
         backend=backend,
         segment_length=SEG,
         frequencies=[50.0],

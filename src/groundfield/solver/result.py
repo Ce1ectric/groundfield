@@ -696,25 +696,27 @@ class FieldResult(BaseModel):
                     f"Source {source!r} is a {record.kind!r} source; the input "
                     "impedance is defined for current sources."
                 )
-        if record.attached_to not in self.electrode_potentials:
-            raise KeyError(
-                f"Source {record.name!r} feeds {record.attached_to!r}, which has "
-                "no potential in this result."
-            )
-        _, u_a = self._cluster_potential(record.attached_to)
+        u_a = self._terminal_potential(record.name, "feeds", record.attached_to)
         if record.return_to is None:
             u_r = [0j] * len(u_a)
         else:
-            if record.return_to not in self.electrode_potentials:
-                raise KeyError(
-                    f"Source {record.name!r} returns to {record.return_to!r}, "
-                    "which has no potential in this result."
-                )
-            _, u_r = self._cluster_potential(record.return_to)
+            u_r = self._terminal_potential(record.name, "returns to", record.return_to)
         return [
             (ua - ur) / ik if ik != 0 else complex("nan")
             for ua, ur, ik in zip(u_a, u_r, record.current, strict=False)
         ]
+
+    def _terminal_potential(self, source: str, verb: str, node: str) -> list[complex]:
+        """Potential of a source terminal: a junction or an electrode cluster."""
+        junctions = self.metadata.get("junction_potentials") or {}
+        if node in junctions:
+            return [complex(v) for v in junctions[node]]
+        if node not in self.electrode_potentials:
+            raise KeyError(
+                f"Source {source!r} {verb} {node!r}, which has no potential in "
+                "this result."
+            )
+        return self._cluster_potential(node)[1]
 
     # ------------------------------------------------------------------
     # Potential evaluation at arbitrary field points

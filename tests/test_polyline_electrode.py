@@ -105,7 +105,7 @@ def test_polyline_ring_discretisation_converges() -> None:
         wire_radius=0.01,
     )
     gf.create_source(world, attached_to="ring", magnitude=1.0)
-    engine = gf.create_engine(backend="image", frequencies=[50.0])
+    engine = gf.create_engine(kernel="point", backend="image", frequencies=[50.0])
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # coarse ds may warn on resolution
