@@ -58,6 +58,7 @@ from groundfield.solver._topology import (
     _build_clusters,
     _build_distributed_topology,
     _build_finite_branches,
+    _check_soil_contact,
     _solve_cluster_currents,
 )
 from groundfield.solver.result import FieldResult, PointSource
@@ -331,8 +332,8 @@ def inject(world: World, *, where: str, stacklevel: int) -> dict[str, complex]:
       nodes is therefore the net current returning through remote
       earth: zero for a world of two-terminal sources only, so
       Kirchhoff's current law closes every measurement loop.
-    * The mapping has one entry per electrode (world order); nodes
-      without a source carry ``0j``. Contributions are accumulated in
+    * The mapping has one entry per electrode and junction (world
+      order, electrodes first); nodes without a source carry ``0j``. Contributions are accumulated in
       source order, so a world without ``return_to`` gets exactly the
       values of 0.15.0.
 
@@ -359,6 +360,8 @@ def inject(world: World, *, where: str, stacklevel: int) -> dict[str, complex]:
     world.check()
     _warn_manual_counter_sources(world)
     node_currents: dict[str, complex] = {e.name: 0j for e in world.electrodes}
+    for junction in world.junctions:
+        node_currents[junction.name] = 0j
     for src in world.sources:
         i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
         node_currents[src.attached_to] += i_complex
@@ -408,15 +411,25 @@ def _warn_manual_counter_sources(world: World) -> None:
 def build_topology(world: World, disc: Discretisation) -> Topology:
     """Step 3: clusters, finite branches and distributed conductors.
 
-    Electrodes joined by an *ideal* conductor share one potential
-    (cluster); conductors with a finite series resistance enter the
-    nodal system as branches. Distributed conductors (ADR-0003) add a
-    chain of branches; with ``coupling_to_soil="galvanic"`` every
-    sub-piece also leaks through a one-segment pseudo-owner, which is
-    appended to ``disc`` (its own cluster). Leakage-free interior nodes
-    of isolated chains become clusters without segments.
+    Electrodes and junctions joined by an *ideal* conductor share one
+    potential (cluster); conductors with a finite series resistance
+    enter the nodal system as branches. Distributed conductors
+    (ADR-0003) add a chain of branches; with
+    ``coupling_to_soil="galvanic"`` every sub-piece also leaks through a
+    one-segment pseudo-owner, which is appended to ``disc`` (its own
+    cluster). Leakage-free interior nodes of isolated chains become
+    clusters without segments.
+
+    Junctions (:class:`~groundfield.geometry.junction.Junction`) are
+    nodes without leakage segments: they appear in ``cluster_id`` and
+    in the branch list, take part in Kirchhoff's current law, and never
+    become owners of the multi-port matrix. A junction whose
+    subnetwork has no soil contact raises :class:`ValueError` here,
+    before any numerics run.
     """
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
+    cluster_id = _build_clusters(
+        world.electrodes, world.conductors, junctions=world.junctions
+    )
     finite_branches = _build_finite_branches(world.conductors, cluster_id)
     cond_segs, distributed, interior_nodes = _build_distributed_topology(
         world.conductors, cluster_id
@@ -440,6 +453,12 @@ def build_topology(world: World, disc: Discretisation) -> Topology:
     finite_branches = list(finite_branches) + [
         (db.node_a, db.node_b, db.R) for db in distributed
     ]
+    _check_soil_contact(
+        [j.name for j in world.junctions],
+        cluster_id,
+        finite_branches,
+        disc.owner_segments,
+    )
     return Topology(
         cluster_id=cluster_id,
         finite_branches=finite_branches,
@@ -671,7 +690,9 @@ def build_result(
     segment potentials — the reduction the multi-port matrix enforces
     (F10/F11). Conductor pseudo-nodes are reported in
     ``metadata["conductor_node_currents"]`` /
-    ``["conductor_node_potentials"]``.
+    ``["conductor_node_potentials"]``, junction potentials in
+    ``metadata["junction_potentials"]`` (V per frequency, see
+    :func:`_junction_potentials`).
     """
     n_freq = len(engine.frequencies)
     real_names = [e.name for e in world.electrodes]
@@ -733,6 +754,10 @@ def build_result(
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents
         metadata["conductor_node_potentials"] = conductor_potentials
+    if world.junctions:
+        metadata["junction_potentials"] = _junction_potentials(
+            world, disc, arrays, solution, cluster_id, n_freq
+        )
 
     return FieldResult(
         backend=green.backend,
@@ -814,6 +839,46 @@ def solve_image_family(
         cluster_id=topo.cluster_id,
         metadata=metadata,
     )
+
+
+def _junction_potentials(
+    world: World,
+    disc: Discretisation,
+    arrays: SegmentArrays,
+    solution: Solution,
+    cluster_id: dict[str, str],
+    n_freq: int,
+) -> dict[str, list[complex]]:
+    """Potential in V of every junction, one value per frequency.
+
+    A junction in an active node of the augmented system takes the
+    node potential of the solution. A junction bonded by ideal
+    conductors to a passive electrode that stays out of the system
+    (a lone passive electrode, see
+    :func:`~groundfield.solver._topology._floating_cluster_set`) shares
+    that electrode's potential: the length-weighted average of the
+    cluster's segment potentials.
+    """
+    out: dict[str, list[complex]] = {}
+    for junction in world.junctions:
+        root = cluster_id[junction.name]
+        nodes = solution.node_potentials
+        if nodes and all(root in nodes[k] for k in range(n_freq)):
+            out[junction.name] = [complex(nodes[k][root]) for k in range(n_freq)]
+            continue
+        idxs = [
+            i
+            for name, seg in disc.owner_segments.items()
+            if seg and cluster_id.get(name) == root
+            for i in seg
+        ]
+        if not idxs:  # pragma: no cover - build_topology rejects this
+            out[junction.name] = [complex("nan")] * n_freq
+            continue
+        out[junction.name] = _weighted_node_potential(
+            solution.segment_potentials, idxs, arrays.lengths, n_freq
+        )
+    return out
 
 
 # ---------------------------------------------------------------------

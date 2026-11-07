@@ -34,6 +34,8 @@ A world that a backend **cannot represent** raises
   any layer count between the merged and the declared one (the check is
   conservative: it never rejects a world the backend could solve);
 * electrodes with a concrete-shell correction (ADR-0012);
+* leakage-free junction nodes (``World.junctions``) on a backend that
+  does not build its nodal system through the shared pipeline;
 * a source kernel requested explicitly that the backend does not
   implement.
 
@@ -215,6 +217,11 @@ class BackendCapabilities:
         ``Source.return_to``. If not, a world with a return electrode
         solves with a :class:`BackendCapabilityWarning` and the current
         returns through remote earth.
+    junctions
+        Whether the backend represents leakage-free junction nodes
+        (``World.junctions``): conductors ending on them and sources
+        attached to them. A world with junctions is rejected by a
+        backend without this capability.
     kernels
         Source kernels the backend implements (``"point"``,
         ``"line"``). Empty for backends without a source kernel
@@ -226,6 +233,7 @@ class BackendCapabilities:
     concrete_shells: bool = False
     two_terminal_sources: bool = False
     kernels: frozenset[str] = frozenset({"point"})
+    junctions: bool = False
 
     def __post_init__(self) -> None:
         for name, allowed in (
@@ -838,6 +846,9 @@ def _hard_problems(
             "it does not implement the concrete-shell correction (ADR-0012) "
             f"carried by electrode(s) {shelled}"
         )
+    junctions = [j.name for j in world.junctions]
+    if junctions and not caps.junctions:
+        problems.append(f"it does not support junction nodes ({junctions})")
     if (
         kernel is not None
         and kernel_explicit
@@ -1009,6 +1020,7 @@ def _register_builtins() -> None:
             concrete_shells=True,
             two_terminal_sources=True,
             kernels=_IMAGE_KERNELS,
+            junctions=True,
         ),
         forward={"two_layer": "image_2layer", "multi_layer": "image_nlayer"},
         summary="Homogeneous soil, closed-form image-charge sum.",
@@ -1022,6 +1034,7 @@ def _register_builtins() -> None:
             concrete_shells=True,
             two_terminal_sources=True,
             kernels=_IMAGE_KERNELS,
+            junctions=True,
         ),
         summary="Two-layer soil, Tagg / Sunde image series.",
     )
@@ -1034,6 +1047,7 @@ def _register_builtins() -> None:
             concrete_shells=True,
             two_terminal_sources=True,
             kernels=_IMAGE_KERNELS,
+            junctions=True,
         ),
         summary="Layered soil routed to image (n = 1) or image_2layer (n = 2).",
     )

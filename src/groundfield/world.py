@@ -5,6 +5,8 @@ of a grounding system:
 
 - a soil model (:class:`groundfield.soil.SoilModel`),
 - one or more electrodes (:class:`groundfield.geometry.Electrode`),
+- optional leakage-free junction nodes
+  (:class:`groundfield.geometry.junction.Junction`),
 - optional connection conductors
   (:class:`groundfield.conductors.Conductor`),
 - one or more sources (:class:`groundfield.sources.Source`),
@@ -23,11 +25,12 @@ import math
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from groundfield.boundary import BoundaryConditions
 from groundfield.conductors.conductor import Conductor
 from groundfield.geometry.electrodes import Electrode, _ElectrodeBase
+from groundfield.geometry.junction import Junction
 from groundfield.soil.models import SoilModel
 from groundfield.sources import Source
 from groundfield.utils.suggest import did_you_mean
@@ -65,6 +68,16 @@ class World(BaseModel):
     name: str = Field(default="world", description="Human-readable world name.")
     soil: SoilModel | None = Field(default=None, description="Soil model.")
     electrodes: list[Electrode] = Field(default_factory=list)
+    junctions: list[Junction] = Field(
+        default_factory=list,
+        description=(
+            "Leakage-free network nodes (cable joints, instrument "
+            "terminals). They share the node namespace with the "
+            "electrodes; conductors and sources refer to them by name. "
+            "Omitted from the serialised world while empty, so worlds "
+            "without junctions keep their JSON and fingerprint."
+        ),
+    )
     conductors: list[Conductor] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
     boundary: BoundaryConditions = Field(default_factory=BoundaryConditions)
@@ -92,6 +105,19 @@ class World(BaseModel):
         ),
     )
 
+    @model_serializer(mode="wrap")
+    def _omit_empty_junctions(self, handler):  # noqa: ANN001, ANN202
+        """Serialise ``junctions`` only when the world has any.
+
+        Keeps the JSON (and :func:`~groundfield.io.world_fingerprint`) of
+        every world without junctions identical to earlier releases,
+        which also load it (``extra="forbid"``).
+        """
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("junctions"):
+            data.pop("junctions", None)
+        return data
+
     # ------------------------------------------------------------------
     # Convenience API — lookup and mutation
     # ------------------------------------------------------------------
@@ -110,12 +136,44 @@ class World(BaseModel):
                 return c
         raise KeyError(f"Conductor '{name}' not found in world.")
 
+    def get_junction(self, name: str) -> Junction:
+        """Return a junction by name."""
+        for j in self.junctions:
+            if j.name == name:
+                return j
+        raise KeyError(f"Junction '{name}' not found in world.")
+
     def add_electrode(self, electrode: _ElectrodeBase) -> _ElectrodeBase:
-        """Add an electrode and check for unique name."""
+        """Add an electrode and check for unique name.
+
+        Electrodes and junctions share one node namespace.
+        """
         if any(e.name == electrode.name for e in self.electrodes):
             raise ValueError(f"Electrode name '{electrode.name}' already taken.")
+        if any(j.name == electrode.name for j in self.junctions):
+            raise ValueError(
+                f"Electrode name '{electrode.name}' already taken by a junction."
+            )
         self.electrodes.append(electrode)
         return electrode
+
+    def add_junction(self, junction: Junction) -> Junction:
+        """Add a leakage-free junction node.
+
+        Raises
+        ------
+        ValueError
+            If the name is already taken by an electrode or a junction
+            (one node namespace).
+        """
+        if any(j.name == junction.name for j in self.junctions):
+            raise ValueError(f"Junction name '{junction.name}' already taken.")
+        if any(e.name == junction.name for e in self.electrodes):
+            raise ValueError(
+                f"Junction name '{junction.name}' already taken by an electrode."
+            )
+        self.junctions.append(junction)
+        return junction
 
     def add_conductor(self, conductor: Conductor) -> Conductor:
         """Add a conductor.
@@ -126,7 +184,7 @@ class World(BaseModel):
             If the name is already taken.
         KeyError
             If ``start_electrode`` / ``end_electrode`` names no
-            electrode of the world (review finding 10.66: such a
+            electrode or junction of the world (review finding 10.66: such a
             conductor used to drop out of the network silently). The
             message names the closest node names.
         """
@@ -146,9 +204,9 @@ class World(BaseModel):
             (a conductor is not a node), or ``attached_to`` and
             ``return_to`` are the same node.
         KeyError
-            If ``attached_to`` / ``return_to`` names no electrode of the
-            world (review finding 10.66). The message names the closest
-            node names.
+            If ``attached_to`` / ``return_to`` names no electrode or
+            junction of the world (review finding 10.66). The message
+            names the closest node names.
         """
         if any(s.name == source.name for s in self.sources):
             raise ValueError(f"Source name '{source.name}' already taken.")
@@ -162,7 +220,7 @@ class World(BaseModel):
 
     def _node_names(self) -> list[str]:
         """Names a source or a conductor end can refer to, in world order."""
-        return [e.name for e in self.electrodes]
+        return [e.name for e in self.electrodes] + [j.name for j in self.junctions]
 
     def _unknown_node(self, owner: str, field: str, name: str) -> KeyError:
         """``KeyError`` for a reference to a node that does not exist."""
@@ -173,8 +231,8 @@ class World(BaseModel):
             more = f" (+{len(nodes) - 8} more)" if len(nodes) > 8 else ""
             hint = f" Known nodes: {shown}{more}." if nodes else " It has none."
         return KeyError(
-            f"{owner}: {field}={name!r} is not an electrode of world "
-            f"{self.name!r}.{hint}"
+            f"{owner}: {field}={name!r} is not an electrode or junction of "
+            f"world {self.name!r}.{hint}"
         )
 
     def _check_conductor_ends(self, conductor: Conductor) -> None:
@@ -290,7 +348,9 @@ class World(BaseModel):
         # Local import: the solver package imports this module.
         from groundfield.solver._topology import _build_clusters
 
-        cluster_id = _build_clusters(self.electrodes, self.conductors)
+        cluster_id = _build_clusters(
+            self.electrodes, self.conductors, junctions=self.junctions
+        )
         for src in two_terminal:
             ra = cluster_id.get(src.attached_to, src.attached_to)
             rb = cluster_id.get(src.return_to, src.return_to)
@@ -545,9 +605,11 @@ class World(BaseModel):
     def summary(self) -> str:
         """Compact textual summary of the world."""
         soil_str = f"{self.soil.kind}" if self.soil is not None else "<no soil model>"
+        junctions = f"junctions={len(self.junctions)}, " if self.junctions else ""
         return (
             f"World '{self.name}': soil={soil_str}, "
             f"electrodes={len(self.electrodes)}, "
+            f"{junctions}"
             f"conductors={len(self.conductors)}, "
             f"sources={len(self.sources)}, "
             f"boundary.far_field={self.boundary.far_field}"

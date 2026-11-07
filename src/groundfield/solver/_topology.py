@@ -105,14 +105,15 @@ def _build_distributed_topology(
 # ---------------------------------------------------------------------
 
 
-def _build_clusters(electrodes, conductors) -> dict[str, str]:
-    """Union-find on electrodes: returns the cluster root per name.
+def _build_clusters(electrodes, conductors, junctions=()) -> dict[str, str]:
+    """Union-find on the nodes: returns the cluster root per name.
 
-    Only **ideal** conductors (``Conductor.is_ideal()`` returns
-    ``True``, i.e. ``cross_section is None`` or the resulting series
-    resistance is below the ideal-resistance threshold) are treated
-    as galvanic shorts and merge their two end electrodes into one
-    cluster.
+    The nodes are the electrodes and the leakage-free junctions
+    (``junctions``, default none). Only **ideal** conductors
+    (``Conductor.is_ideal()`` returns ``True``, i.e. ``cross_section
+    is None`` or the resulting series resistance is below the
+    ideal-resistance threshold) are treated as galvanic shorts and
+    merge their two end nodes into one cluster.
 
     Finite-impedance conductors are *not* used for clustering — they
     enter the solver later as branches in the nodal-analysis system
@@ -122,6 +123,8 @@ def _build_clusters(electrodes, conductors) -> dict[str, str]:
     ``start_electrode`` / ``end_electrode``) are ignored.
     """
     parent = {e.name: e.name for e in electrodes}
+    for j in junctions:
+        parent[j.name] = j.name
 
     def find(x: str) -> str:
         while parent[x] != x:
@@ -150,6 +153,53 @@ def _build_clusters(electrodes, conductors) -> dict[str, str]:
         union(a, b)
 
     return {n: find(n) for n in parent}
+
+
+def _check_soil_contact(
+    junction_names: list[str],
+    cluster_id: dict[str, str],
+    finite_branches: list[tuple[str, str, float]],
+    owner_segments: dict[str, list[int]],
+) -> None:
+    """Reject junctions whose subnetwork has no soil contact.
+
+    Nodes joined by finite branches form components; a component has
+    soil contact if one of its nodes owns a leakage segment (an
+    electrode or a galvanic conductor segment). Without junctions every
+    component contains an electrode, so only junctions can end up in a
+    component without soil contact — a floating subnetwork whose
+    potential is undefined (the augmented system would be singular).
+
+    Raises
+    ------
+    ValueError
+        Naming the junctions without soil contact.
+    """
+    if not junction_names:
+        return
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a, b, _R in finite_branches:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+    grounded = {find(cluster_id[name]) for name, idxs in owner_segments.items() if idxs}
+    floating = [j for j in junction_names if find(cluster_id[j]) not in grounded]
+    if floating:
+        raise ValueError(
+            f"Junction(s) {floating} have no soil contact: no conductor path "
+            "connects them to an electrode or to a galvanically coupled "
+            "conductor, so their potential is undefined (a floating "
+            "subnetwork). Connect them to the grounded network or remove "
+            "them."
+        )
 
 
 def _build_finite_branches(
