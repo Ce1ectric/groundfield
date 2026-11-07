@@ -47,6 +47,7 @@ from groundfield.solver._line_kernel import (
     SparseCorrection,
     field_corrections,
     field_quadrupole_rows,
+    point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
     series_corrections,
@@ -189,7 +190,10 @@ def _half_space_diagonal(
     """Self-terms of the half-space reaction matrix in 1/m.
 
     The direct part is the analytical line self-potential
-    ``2 ln(L/a)/L``; the self-image part is the point image at distance
+    ``2 ln(L/a)/L``, replaced by the Galerkin self term for segments
+    shorter than 2.99 wire radii
+    (:func:`~groundfield.solver._line_kernel.point_self_term`, review
+    pass 10, 10.32); the self-image part is the point image at distance
     ``2z`` (the ``L << 4z`` limit of the image line, see
     :class:`~groundfield.solver._guards.ShallowSegmentWarning`).
 
@@ -200,8 +204,8 @@ def _half_space_diagonal(
         above the surface or with a touching mirror image.
     """
     # phi_self_direct = rho · I / (2π·L) · ln(L/a)
-    #   ⇒ K_ii (direct part) = 2·ln(L/a) / L
-    diag_direct = 2.0 * np.log(seg_lengths / wire_radii) / seg_lengths
+    #   ⇒ K_ii (direct part) = 2·ln(L/a) / L  (Galerkin form for L < 2.99 a)
+    diag_direct = point_self_term(seg_lengths, wire_radii)
     # Guard (audit 2026-07-28, F26/F29; z <= 0 since 0.15.0): the
     # point-image form diverges as z -> 0 and used to be clamped at
     # ``_MIN_DISTANCE``, which returned a mesh-dependent, far too large

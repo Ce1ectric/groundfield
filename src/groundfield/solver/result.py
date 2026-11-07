@@ -822,16 +822,16 @@ class FieldResult(BaseModel):
                     sources,
                     currents,
                     min_distance,
-                    rho_override=float(self.soil.layers[0].resistivity),
+                    rho_override=float(self.soil.layers[0].rho),
                     line=line,
                 )
             if n == 2:
                 # Two-layer MultiLayerSoil: cast to TwoLayerSoil and
                 # reuse the Tagg/Sunde kernel.
                 two_layer = TwoLayerSoil(
-                    rho_1=float(self.soil.layers[0].resistivity),
-                    rho_2=float(self.soil.layers[1].resistivity),
-                    h_1=float(self.soil.layers[0].thickness),
+                    rho_1=float(self.soil.layers[0].rho),
+                    rho_2=float(self.soil.layers[1].rho),
+                    h_1=float(self.soil.layers[0].h),
                 )
                 return self._potential_two_layer(
                     pts, sources, currents, two_layer, min_distance, line=line

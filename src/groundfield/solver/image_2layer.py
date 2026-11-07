@@ -72,7 +72,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.soil.models import TwoLayerSoil
-from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
+from groundfield.solver._discretize import _LayerOwners
+from groundfield.solver._guards import (
+    _MIN_DISTANCE,
+    _check_segment_depths,
+    _require_image_separation,
+)
 from groundfield.solver._kernels import (
     TwoLayerSeriesKernel,
     _block_rows,
@@ -81,10 +86,20 @@ from groundfield.solver._kernels import (
 )
 from groundfield.solver._line_kernel import (
     LineSegments,
+    point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
 )
-from groundfield.solver._pipeline import solve_image_family
+from groundfield.solver._pipeline import (
+    SegmentArrays,
+    assemble_branches,
+    build_result,
+    build_topology,
+    discretise,
+    inject,
+    solve,
+    solve_image_family,
+)
 from groundfield.solver._series import ImageSeries
 from groundfield.solver._series import (
     SeriesTruncationWarning as SeriesTruncationWarning,
@@ -511,7 +526,7 @@ def _build_phi_hom_per_source_rho(
     # mirror image touches the conductor has no finite self-image
     # term, and the historic ``_MIN_DISTANCE`` clamp turned that into
     # a silently mesh-dependent, far too large impedance.
-    diag_direct = 2.0 * np.log(seg_lengths / wire_radii) / seg_lengths
+    diag_direct = point_self_term(seg_lengths, wire_radii)
     _require_image_separation(
         seg_points, wire_radii, where="_build_phi_hom_per_source_rho"
     )
@@ -537,6 +552,88 @@ def _build_phi_hom_per_source_rho(
 # ---------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------
+
+
+def _owner_interfaces(soil: TwoLayerSoil) -> tuple[float, ...]:
+    """Interfaces at which electrodes get one owner per layer (10.15).
+
+    Only an interface where the resistivity changes: ``TwoLayerSoil(rho,
+    rho, h)`` is homogeneous soil and keeps one owner per electrode, so it
+    reproduces the homogeneous backend exactly.
+    """
+    return (float(soil.h_1),) if soil.rho_1 != soil.rho_2 else ()
+
+
+def _crosses_interface(world: "World", layer_interfaces) -> bool:
+    """Whether any electrode's depth range strictly contains an interface."""
+    for e in world.electrodes:
+        lower, upper = e.bounds()
+        if any(lower[2] < h < upper[2] for h in layer_interfaces):
+            return True
+    return False
+
+
+def _solve_with_layer_owners(
+    world: "World", engine: "Engine", green: "_TwoLayerGreen", *, stacklevel: int
+) -> FieldResult:
+    """The image-family pipeline with one owner per (electrode, layer) (10.15).
+
+    The steps of :func:`~groundfield.solver._pipeline.solve_image_family`,
+    with the owner split of
+    :meth:`~groundfield.solver._discretize._LayerOwners.split` between the
+    topology and the solve and its merge before the result is built. Used
+    only for worlds with an electrode through an interface; every other
+    world runs through :func:`solve_image_family` itself.
+
+    Merge note: the pipeline step functions are shared, so changes inside
+    them reach this path as well; a step added to ``solve_image_family``
+    must be added here too (or the split / merge become a hook of
+    ``solve_image_family``).
+    """
+    disc = discretise(world, engine, green.layer_interfaces)
+    node_currents = inject(world, where=green.where, stacklevel=stacklevel)
+    topo = build_topology(world, disc)
+    owners = _LayerOwners.split(
+        disc, topo, [e.name for e in world.electrodes], _owner_interfaces(green.soil)
+    )
+    branches = assemble_branches(world, engine, topo)
+    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    arrays = SegmentArrays.from_segments(disc.segments)
+    kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
+    solution = solve(
+        world,
+        engine,
+        disc=disc,
+        node_currents=node_currents,
+        topo=topo,
+        branches=branches,
+        arrays=arrays,
+        kernel=kernel,
+    )
+    owners.merge(disc, topo, solution.owner_currents)
+    metadata = {
+        "world_name": world.name,
+        "n_segments": len(disc.segments),
+        "segment_length": engine.segment_length,
+        **green.metadata(solution, stacklevel=stacklevel + 1),
+        "stub": False,
+        "earth_inductive_model": branches.earth_inductive_model,
+        "kernel": engine.kernel,
+        "layer_owners": {
+            name: len(subs) + 1 for name, subs in owners.sub_owners.items()
+        },
+    }
+    return build_result(
+        world,
+        engine,
+        green=green,
+        disc=disc,
+        branches=branches,
+        arrays=arrays,
+        solution=solution,
+        cluster_id=topo.cluster_id,
+        metadata=metadata,
+    )
 
 
 class _TwoLayerGreen:
@@ -734,4 +831,7 @@ def solve_image_2layer(
     if tol is None:
         tol = engine.image_series_tol
     green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
+    if _crosses_interface(world, _owner_interfaces(soil)):
+        # One owner per (electrode, layer) for rods through h_1 (10.15).
+        return _solve_with_layer_owners(world, engine, green, stacklevel=3)
     return solve_image_family(world, engine, green, stacklevel=3)

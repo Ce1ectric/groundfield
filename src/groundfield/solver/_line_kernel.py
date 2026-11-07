@@ -64,7 +64,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 
-__all__ = ["NEAR_FACTOR", "LineSegments"]
+__all__ = ["NEAR_FACTOR", "SELF_TERM_CROSSOVER", "LineSegments"]
 
 #: Pairs closer than ``NEAR_FACTOR · max(L_i, L_j)`` (midpoint distance)
 #: are integrated exactly; farther pairs use the quadrupole-corrected
@@ -183,6 +183,52 @@ def line_potential_pairs(
 def galerkin_self(L: np.ndarray, a: np.ndarray) -> np.ndarray:
     """Self term ``(2/L)[arsinh(L/a) - sqrt(1 + (a/L)²) + a/L]`` in 1/m."""
     return 2.0 * (np.arcsinh(L / a) - np.sqrt(1.0 + (a / L) ** 2) + a / L) / L
+
+
+#: Ratio :math:`L/a` at which the collocation self term :math:`2\ln(L/a)/L`
+#: and the Galerkin self term :func:`galerkin_self` coincide (2.990).
+SELF_TERM_CROSSOVER: float = 2.990091615374695
+
+
+def point_self_term(L: np.ndarray, a: np.ndarray) -> np.ndarray:
+    r"""Self term of the point kernel in 1/m.
+
+    The point kernel uses the collocation form :math:`2\ln(L/a)/L`, the
+    long-segment limit of the segment's potential on its own surface.
+    It collapses for short segments (zero at :math:`L = a`, so a
+    sliver at a layer interface acts as a short: ``mom`` gave a rod whose
+    tip is 9 mm below :math:`h_1` 27 % less resistance than the same rod
+    1 mm above it, review pass 10, 10.32). Below
+    :data:`SELF_TERM_CROSSOVER` the Galerkin self term
+    :func:`galerkin_self`, valid for :math:`L \sim a`, takes over:
+
+    .. math::
+        K_{ii} = \max\Bigl(\frac{2\ln(L/a)}{L},\;
+        \frac{2}{L}\Bigl[\operatorname{arsinh}\frac{L}{a}
+        - \sqrt{1 + (a/L)^2} + \frac{a}{L}\Bigr]\Bigr).
+
+    The two terms are equal at :math:`L/a = 2.990`, so the switch is
+    continuous, and every segment with :math:`L/a \ge 2.990` keeps the
+    collocation value bit for bit.
+
+    Parameters
+    ----------
+    L
+        Segment lengths in m.
+    a
+        Wire radii in m.
+
+    Returns
+    -------
+    numpy.ndarray
+        Self terms in 1/m (the potential is :math:`\rho/(4\pi)` times
+        the term times the segment current).
+    """
+    collocation = 2.0 * np.log(L / a) / L
+    short = L < SELF_TERM_CROSSOVER * a
+    if not np.any(short):
+        return collocation
+    return np.where(short, np.maximum(collocation, galerkin_self(L, a)), collocation)
 
 
 def _g2(u: np.ndarray, d: np.ndarray) -> np.ndarray:
@@ -450,7 +496,7 @@ def reaction_corrections(segs: LineSegments, min_distance: float) -> SparseCorre
             diag,
             diag,
             galerkin_self(segs.length, segs.radius)
-            - 2.0 * np.log(segs.length / segs.radius) / segs.length,
+            - point_self_term(segs.length, segs.radius),
         )
     )
     i, j = near_pairs(segs.mid, segs.length, segs.mid, segs.length)

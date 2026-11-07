@@ -164,6 +164,162 @@ def _discretize_electrode(
 
 
 # ---------------------------------------------------------------------
+# One owner per (electrode, soil layer) — review pass 10, 10.15 (F02)
+# ---------------------------------------------------------------------
+
+
+def _layer_owner_name(electrode_name: str, layer: int) -> str:
+    """Name of the sub-owner of ``electrode_name`` in soil layer ``layer``.
+
+    The ``__layer_`` prefix is reserved like the ``__cond_`` prefix of
+    the conductor pseudo-nodes, so it cannot collide with a user name.
+    """
+    return f"__layer_{electrode_name}__L{layer}"
+
+
+@dataclass
+class _LayerOwners:
+    """Owners per (electrode, soil layer) of the electrodes that cross an interface.
+
+    The image family carries one uniform current density per owner. An
+    electrode that crosses a soil-layer interface (a rod through
+    :math:`h_1`) therefore gets one owner per layer it reaches, all in
+    the electrode's cluster: the current density may then differ above
+    and below the interface, as the physics requires (the leakage
+    density scales roughly with :math:`1/\\rho` of the layer). Up to
+    0.15.0 the whole rod carried one density, which put a 12 m rod
+    through :math:`h_1 = 5` m in 1000/30 Ω·m soil 566 % above the
+    per-segment ``mom`` solution (review pass 10, 10.15 / F02).
+
+    The electrode keeps its name for the segments of the layer of its
+    first segment; the segments in every other layer form the sub-owner
+    :func:`_layer_owner_name` (a pseudo-owner of the nodal system,
+    attached to the electrode's cluster). After the solve,
+    :meth:`merge` restores one owner per electrode: its current is the
+    sum over its owners, its segment list the original one, so the
+    reported potential is the length-weighted average over the whole
+    electrode (equal to the cluster potential).
+
+    Attributes
+    ----------
+    sub_owners
+        Sub-owner names per split electrode (the electrode itself is not
+        included).
+    segments
+        Original segment indices per split electrode.
+    """
+
+    sub_owners: dict[str, list[str]]
+    segments: dict[str, list[int]]
+
+    def __bool__(self) -> bool:
+        return bool(self.sub_owners)
+
+    def owners_of(self, electrode_name: str) -> list[str]:
+        """The electrode and its sub-owners."""
+        return [electrode_name, *self.sub_owners.get(electrode_name, [])]
+
+    def segments_of(self, electrode_name: str, owner_segments: dict) -> list[int]:
+        """All segment indices of an electrode (split or not)."""
+        if electrode_name in self.segments:
+            return self.segments[electrode_name]
+        return owner_segments[electrode_name]
+
+    def merge(self, disc, topo, owner_currents: list[dict[str, complex]]) -> None:
+        """Restore one owner per electrode after the solve (in place).
+
+        Parameters
+        ----------
+        disc, topo
+            The discretisation and topology passed to :func:`split`.
+        owner_currents
+            Owner currents per frequency; the same mapping may appear
+            several times (frequency-independent solves) and is merged
+            once.
+        """
+        for name, subs in self.sub_owners.items():
+            disc.owner_segments[name] = self.segments[name]
+            for sub in subs:
+                del disc.owner_segments[sub]
+                topo.cluster_id.pop(sub, None)
+                topo.pseudo_owners.remove(sub)
+        seen: set[int] = set()
+        for currents in owner_currents:
+            if id(currents) in seen:
+                continue
+            seen.add(id(currents))
+            for name, subs in self.sub_owners.items():
+                total = currents.get(name, 0j)
+                for sub in subs:
+                    total += currents.pop(sub, 0j)
+                currents[name] = total
+
+    @classmethod
+    def split(
+        cls,
+        disc,
+        topo,
+        electrode_names,
+        layer_interfaces,
+    ) -> _LayerOwners:
+        """Give every electrode that crosses an interface one owner per layer.
+
+        Modifies ``disc.owner_segments``, ``topo.cluster_id`` and
+        ``topo.pseudo_owners`` in place; electrodes inside one layer are
+        left untouched (bit-identical results).
+
+        Parameters
+        ----------
+        disc
+            Discretisation with ``segments`` and ``owner_segments``
+            (:class:`~groundfield.solver._pipeline.Discretisation`).
+        topo
+            Topology with ``cluster_id`` and ``pseudo_owners``
+            (:class:`~groundfield.solver._pipeline.Topology`).
+        electrode_names
+            Names of the real electrodes.
+        layer_interfaces
+            Interface depths in m; ``None`` or empty does nothing.
+
+        Returns
+        -------
+        _LayerOwners
+            The split, for :meth:`merge` after the solve.
+        """
+        owners = cls(sub_owners={}, segments={})
+        if not layer_interfaces:
+            return owners
+        bounds = np.sort(np.asarray(layer_interfaces, dtype=float))
+        for name in electrode_names:
+            idxs = disc.owner_segments.get(name, [])
+            if len(idxs) < 2:
+                continue
+            z = np.array([disc.segments[i].midpoint[2] for i in idxs], dtype=float)
+            # Segments are split at the interfaces, so the midpoint names
+            # the layer of the whole segment (z == h belongs to the layer
+            # below, as in the kernels).
+            layer = np.searchsorted(bounds, z, side="right")
+            if layer.min() == layer.max():
+                continue
+            first = int(layer[0])
+            owners.segments[name] = list(idxs)
+            disc.owner_segments[name] = [
+                i for i, lv in zip(idxs, layer, strict=True) if lv == first
+            ]
+            subs = []
+            for lv in sorted(set(layer.tolist()) - {first}):
+                sub = _layer_owner_name(name, lv)
+                disc.owner_segments[sub] = [
+                    i for i, lj in zip(idxs, layer, strict=True) if lj == lv
+                ]
+                topo.cluster_id[sub] = topo.cluster_id[name]
+                topo.pseudo_owners.append(sub)
+                subs.append(sub)
+            owners.sub_owners[name] = subs
+        return owners
+
+
+# ---------------------------------------------------------------------
 # Conductor discretisation (ADR-0003: distributed conductor model)
 # ---------------------------------------------------------------------
 

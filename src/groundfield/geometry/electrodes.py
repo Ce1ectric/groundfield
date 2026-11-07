@@ -36,6 +36,7 @@ from groundfield.geometry.primitives import (
     _edge_wires,
     _grid_wire_polylines,
     _grid_wires,
+    _segment_count,
     _split_interval_at_interfaces,
     _straight_wire,
 )
@@ -65,6 +66,51 @@ Point3D = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
 #: silently collapse a segment to zero length. Set far below any physical
 #: wire radius, so only true coincidences trip it.
 _MIN_EDGE_LENGTH_M = 1e-9
+
+#: Interface slivers (review pass 10, 10.32): an interface cut that would
+#: leave a part of a wire shorter than ``SLIVER_RADII`` wire radii (the wire
+#: diameter) is dropped; the short part joins its neighbour, whose end
+#: segment then reaches past the interface by less than one diameter and is
+#: assigned to the layer of its midpoint. A wire piece shorter than its
+#: diameter is outside the thin-wire model: up to 0.15.0 a rod whose tip lay
+#: 1 mm below an interface raised a ``ValueError`` (segment shorter than the
+#: wire radius) and one 9 mm below it acted as a short. The threshold does
+#: not scale with the segment length on purpose: a 10 cm tip in a lower
+#: layer 33 times more conductive carries a large share of the current, and
+#: merging it at ``ds = 2 m`` (``ds/10``) put the resistance 122 % too high
+#: (evidence ``e1032_sliver_threshold.py``).
+SLIVER_RADII = 2.0
+
+
+def _merge_interface_slivers(
+    parts: list[tuple[float, float]], min_length: float
+) -> list[tuple[float, float]]:
+    """Drop interface cuts that leave a part shorter than ``min_length`` (m).
+
+    Parameters
+    ----------
+    parts
+        Consecutive intervals ``(t_lo, t_hi)`` in m along the wire, as
+        returned by :func:`~groundfield.geometry.primitives._split_interval_at_interfaces`.
+    min_length
+        Shortest part in m that is kept.
+
+    Returns
+    -------
+    list of tuple
+        The intervals after dropping the cuts.
+    """
+    if len(parts) <= 1:
+        return parts
+    bounds = [parts[0][0]] + [hi for _, hi in parts]
+    kept = [bounds[0]]
+    for k in range(1, len(bounds) - 1):
+        cut = bounds[k]
+        if cut - kept[-1] < min_length or bounds[k + 1] - cut < min_length:
+            continue
+        kept.append(cut)
+    kept.append(bounds[-1])
+    return list(zip(kept[:-1], kept[1:], strict=True))
 
 
 def _require_longer_than_radius(
@@ -228,16 +274,22 @@ class RodElectrode(_ElectrodeBase):
     def segments(
         self, ds: float, layer_interfaces: Sequence[float] | None = None
     ) -> WireSegments:
-        """Vertical rod: equal segments per soil layer (see base class)."""
+        """Vertical rod: equal segments per soil layer (see base class).
+
+        A part shorter than the wire diameter at an interface is not
+        split off (see :data:`SLIVER_RADII`).
+        """
         x0, y0, z0 = self.position
         head = np.array([x0, y0, 0.0])
         tangent = np.array([0.0, 0.0, 1.0])
+        intervals = _merge_interface_slivers(
+            _split_interval_at_interfaces(z0, z0 + self.length, layer_interfaces),
+            SLIVER_RADII * self.wire_radius,
+        )
         parts = []
-        for z_lo, z_hi in _split_interval_at_interfaces(
-            z0, z0 + self.length, layer_interfaces
-        ):
+        for z_lo, z_hi in intervals:
             part_len = z_hi - z_lo
-            n = max(1, int(np.ceil(part_len / ds)))
+            n = _segment_count(part_len, ds)
             parts.append(_straight_wire(head, tangent, z_lo, part_len / n, n))
         return WireSegments.concatenate(parts)
 
@@ -291,7 +343,7 @@ class RingElectrode(_ElectrodeBase):
         length and the tangent there.
         """
         perimeter = 2.0 * np.pi * self.radius
-        n = max(8, int(np.ceil(perimeter / ds)))
+        n = _segment_count(perimeter, ds, minimum=8)
         seg_len = perimeter / n
         cx, cy, cz = self.center
         mids = np.empty((n, 3))
@@ -431,10 +483,14 @@ class StripElectrode(_ElectrodeBase):
         if layer_interfaces and abs(dz) > 1e-12:
             for h in layer_interfaces:
                 t_cuts.append((h - p0[2]) / dz * L)
+        intervals = _merge_interface_slivers(
+            _split_interval_at_interfaces(0.0, L, t_cuts),
+            SLIVER_RADII * self.wire_radius,
+        )
         parts = []
-        for t_lo, t_hi in _split_interval_at_interfaces(0.0, L, t_cuts):
+        for t_lo, t_hi in intervals:
             part_len = t_hi - t_lo
-            n = max(1, int(np.ceil(part_len / ds)))
+            n = _segment_count(part_len, ds)
             parts.append(_straight_wire(p0, direction, t_lo, part_len / n, n))
         return WireSegments.concatenate(parts)
 

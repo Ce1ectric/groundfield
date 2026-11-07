@@ -1,0 +1,48 @@
+# Stream CORE-2b (review pass 10): cross-layer physics, interface slivers,
+# post-solve series controls, mutual matrices, concrete coefficient, line
+# kernel as the default. See ../README.md for the format. Every bound below
+# was measured on stream/core2b (evidence: /home/claude/deliver/evidence/core2b/).
+
+# --- 10.15 (F02): one owner per (electrode, layer) ----------------------
+# Rod 0.5-3.5 m through h_1 = 1 m in 100/1000 Ohm m: the rod carried one
+# current density above and below h_1. Measured: Zc / phi -46.5 % (point),
+# -47.5 % (line); probe potentials 25 % / 34 %; segment currents x4.
+# Equal to the manual split into two bonded rods.
+
+[[change]]
+cases = ["img2_rod_crosslayer", "line_img2_rod_crosslayer", "mutual_three_rods_crosslayer"]
+quantities = ["*"]
+findings = ["10.15"]
+reason = "Rods through the layer interface get one uniform-current owner per layer (F02)."
+min_rel_change = 0.1
+max_rel_change = 5.0
+
+# --- 10.32: segment count tolerant to floating-point noise --------------
+# The three star arms of the mixed-cluster world are 3.0, 2.9999999999999996
+# and 3.000000000000001 m long: ceil(L/ds) gave 6 / 6 / 7 segments at ds =
+# 0.5 m, now 6 / 6 / 6. Point kernel: <= 6.9e-5 (I/star), line kernel: <=
+# 8.3e-8 (straight wires are discretisation-independent with it). The
+# touch-voltage quantity is POST's (10.21) and is not matched here.
+
+[[change]]
+cases = ["img_mixed_cluster_hom", "line_img_mixed_cluster_hom"]
+quantities = ["ps/*"]
+findings = ["10.32"]
+reason = "A star arm of 3.000000000000001 m is cut into 6 instead of 7 segments at ds = 0.5 m."
+allow_shape_change = true
+
+[[change]]
+cases = ["img_mixed_cluster_hom"]
+quantities = ["phi/*", "I/*", "Zc/*", "potential/*", "safety/step"]
+findings = ["10.32"]
+reason = "Same discretisation change, point kernel (6 instead of 7 segments on one star arm)."
+min_rel_change = 1e-6
+max_rel_change = 2e-4
+
+[[change]]
+cases = ["line_img_mixed_cluster_hom"]
+quantities = ["phi/*", "I/*", "Zc/*", "potential/*"]
+findings = ["10.32"]
+reason = "Same discretisation change, line kernel: straight wires are exact at any ds."
+min_rel_change = 1e-9
+max_rel_change = 1e-6

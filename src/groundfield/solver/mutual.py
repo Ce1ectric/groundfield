@@ -67,6 +67,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
+from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._kernels import (
     HalfSpaceKernel,
     _line_field_correction,
@@ -253,6 +254,16 @@ class _MutualProblem:
     line: LineSegments | None = None
     max_terms: int = 300
     tol: float = 1e-6
+    layer_owners: _LayerOwners | None = None
+
+
+def _layers_differ(soil) -> bool:
+    """Whether a two-layer soil has two resistivities (one owner per layer, 10.15)."""
+    if isinstance(soil, TwoLayerSoil):
+        return soil.rho_1 != soil.rho_2
+    if isinstance(soil, MultiLayerSoil) and len(soil.layers) == 2:
+        return soil.layers[0].rho != soil.layers[1].rho
+    return False
 
 
 def _prepare(
@@ -265,10 +276,20 @@ def _prepare(
     two-layer soil) and the full segment reaction matrix in Ω.
     """
     soil = world.soil
-    # 1) Discretisation + topology — identical to the live backends.
+    # 1) Discretisation + topology — identical to the live backends,
+    #    including one owner per (electrode, layer) for electrodes
+    #    through the layer interface (10.15).
     interfaces = (soil.h_1,) if isinstance(soil, TwoLayerSoil) else None
+    if isinstance(soil, MultiLayerSoil) and len(soil.layers) == 2:
+        interfaces = (float(soil.layers[0].h),)
     disc = discretise(world, engine, interfaces)
     topo = build_topology(world, disc)
+    layer_owners = _LayerOwners.split(
+        disc,
+        topo,
+        [e.name for e in world.electrodes],
+        interfaces if _layers_differ(soil) else None,
+    )
     # Inductive coupling assembly (kept for parity; the catalogue probe
     # case has no distributed conductors, so the system stays
     # real/frequency-independent — the image no-inductance fast path).
@@ -284,12 +305,12 @@ def _prepare(
     elif isinstance(soil, MultiLayerSoil):
         n_layers = len(soil.layers)
         if n_layers == 1:
-            rho_homog = float(soil.layers[0].resistivity)
+            rho_homog = float(soil.layers[0].rho)
         elif n_layers == 2:
             soil_two_layer = TwoLayerSoil(
-                rho_1=float(soil.layers[0].resistivity),
-                rho_2=float(soil.layers[1].resistivity),
-                h_1=float(soil.layers[0].thickness),
+                rho_1=float(soil.layers[0].rho),
+                rho_2=float(soil.layers[1].rho),
+                h_1=float(soil.layers[0].h),
             )
         else:
             raise NotImplementedError(
@@ -297,7 +318,7 @@ def _prepare(
                 f"got MultiLayerSoil with n={n_layers} layers."
             )
     elif isinstance(soil, HomogeneousSoil):
-        rho_homog = float(soil.resistivity)
+        rho_homog = float(soil.rho)
     else:
         raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
 
@@ -348,6 +369,7 @@ def _prepare(
         line=line,
         max_terms=int(engine.image_max_terms),
         tol=float(engine.image_series_tol),
+        layer_owners=layer_owners,
     )
 
 
@@ -573,8 +595,9 @@ def solve_mutual_matrix(
         # the post-solve step of the live solver: bulk reaction matrix on
         # the real and imaginary leakage, then the shell augmentation.
         members = cluster_members.get(anchor_j, [anchor_j])
-        i_sum = sum(elec_total.get(m, 0j) for m in members)
-        member0_idxs = disc.owner_segments[members[0]]
+        owners = problem.layer_owners
+        i_sum = sum(elec_total.get(o, 0j) for m in members for o in owners.owners_of(m))
+        member0_idxs = owners.segments_of(members[0], disc.owner_segments)
         if sc.any():
             phi_re = Z_seg_full @ sc.real
             phi_im = Z_seg_full @ sc.imag
