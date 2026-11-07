@@ -359,7 +359,7 @@ def test_cluster_impedance_uses_length_weighted_members() -> None:
 
 
 def _surface_strip_world(z: float, wire_radius: float = 0.005) -> gf.World:
-    world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
     gf.create_electrode(
         world,
         "strip",

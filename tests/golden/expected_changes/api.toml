@@ -1,0 +1,19 @@
+# Stream API (review pass 10): public API ergonomics and naming.
+#
+# Only the canonical world JSON moves, and only where a soil model with a
+# renamed field is serialised: HomogeneousSoil.resistivity -> rho and
+# SoilLayer.resistivity / thickness -> rho / h (10.69). Of the stored
+# world/json quantities only gen_layout_builder holds such a soil (the
+# mutual_* and other gen_* worlds use TwoLayerSoil, whose names rho_1,
+# rho_2, h_1 are unchanged), so the declaration is limited to it and
+# cannot mask a world change of another stream. No numerical quantity
+# changes. JSON written by v0.15.0 still loads through the deprecated
+# aliases (tests/test_soil_models.py::test_world_json_written_by_v0150_loads).
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["world/json"]
+findings = ["10.69"]
+reason = "HomogeneousSoil field 'resistivity' renamed to the literature symbol 'rho'; the canonical world JSON now writes \"rho\". String quantity: the change is reported as max_rel = inf."
+min_rel_change = 1.0
+allow_shape_change = true

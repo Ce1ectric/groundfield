@@ -1,34 +1,35 @@
 """Soil models for ``groundfield``.
 
-This subpackage describes the propagation medium "soil". Supported
-models include homogeneous, layered (two- and multi-layer) and
-frequency-dependent variants in the spirit of Visacro / Alipio. The
-models supply the effective electromagnetic parameters
-$\\rho(f)$, $\\varepsilon_r(f)$ required by the field
-solver, together with the corresponding Green's functions or
+This subpackage describes the propagation medium "soil": a horizontally
+stratified half-space below a non-conducting air half-space, described
+by the layer resistivities $\\rho_i$ (Ω·m) and thicknesses $h_i$ (m).
+Below 1 kHz the formulation is quasi-static (conduction currents only),
+so the resistivities and thicknesses are the only parameters any
+backend reads. The solver turns them into Green's functions or
 image-charge coefficients.
 
 Contents
 --------
 HomogeneousSoil
-    Uniform half-space with a single resistivity.
+    Uniform half-space with a single resistivity ``rho``.
 TwoLayerSoil
-    Upper layer of finite thickness over a semi-infinite lower layer.
+    Upper layer (``rho_1``, thickness ``h_1``) over a semi-infinite
+    lower layer (``rho_2``).
 MultiLayerSoil
     Generic multi-layer model with arbitrarily many horizontal layers.
 SoilLayer
-    Single layer used by ``MultiLayerSoil``.
+    Single layer (``rho``, thickness ``h``; ``h=None`` for the bottom
+    half-space) used by ``MultiLayerSoil``.
 SoilModel
-    Discriminated union of all supported soil types.
+    Discriminated union of all supported soil types (``kind``).
 
 Notes
 -----
 The two-layer model is the primary case (parameter space: varying
-resistivities and layer thicknesses). The other classes are extension
-points for additional soil structures.
+resistivities and layer thicknesses). Names follow the literature
+symbols; the pre-2026.11 names ``resistivity`` and ``thickness`` are
+deprecated aliases (see :mod:`groundfield.soil.models`).
 """
-
-from __future__ import annotations
 
 from groundfield.soil.models import (
     HomogeneousSoil,
