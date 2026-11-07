@@ -1,45 +1,59 @@
-[tool.poetry]
+[project]
 name = "groundfield"
 version = "0.15.0"
 description = "Numerical field computation for grounding systems (PDE / field model, coupling to groundinsight)"
-authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
+authors = [{ name = "Christian Ehlert", email = "christian.ehlert@mailbox.org" }]
 license = "MIT"
-repository = "https://github.com/Ce1ectric/groundfield"
-documentation = "https://ce1ectric.github.io/groundfield/"
+license-files = ["LICENSE"]
 readme = "README.md"
-packages = [
-    { include = "groundfield", from = "src" },
-    { include = "scripts" },
+requires-python = ">=3.12,<4.0"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic (>=2.8.2,<3.0.0)",
+    "numpy (>=2.1.0,<3.0.0)",
+    "scipy (>=1.14.1,<2.0.0)",
+    "matplotlib (>=3.9.2,<4.0.0)",
+    "sympy (>=1.13.2,<2.0.0)",
+    "pandas (>=3.0.2,<4.0.0)",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-pydantic = "^2.8.2"
-numpy = "^2.1.0"
-scipy = "^1.14.1"
-matplotlib = "^3.9.2"
-polars = "^1.5.0"
-sympy = "^1.13.2"
-pandas = "^3.0.2"
-# Optional: bridge to the sister project ``groundinsight``. When this
-# extra is installed, ``groundfield.io.groundinsight.to_bustype`` /
-# ``save_bustype_to_db`` can return a live ``BusType`` instance and
-# write into the ``groundinsight`` SQLite store. The JSON export path
-# (``save_bustype_json`` / ``load_bustype_json``) does not require
-# this extra. See ADR-0008.
-groundinsight = { version = ">=0.3", optional = true }
-# Optional dependencies for ``groundfield.geo`` (OpenStreetMap
-# building-footprint ingest via Overpass, WGS84 -> local ENU
-# projection, polygon geometry). The core install does not depend on
-# these; ``groundfield.geo`` raises a clear ``ImportError`` with an
-# install hint when called without the ``geo`` extra. See ADR-0011.
-requests = { version = "^2.32", optional = true }
-shapely = { version = "^2.0", optional = true }
-pyproj = { version = "^3.6", optional = true }
+[project.optional-dependencies]
+# Bridge to the sister project ``groundinsight``. When this extra is
+# installed, ``groundfield.io.groundinsight.to_bustype`` /
+# ``save_bustype_to_db`` can return a live ``BusType`` instance and write
+# into the ``groundinsight`` SQLite store. The JSON export path
+# (``save_bustype_json`` / ``load_bustype_json``) does not require this
+# extra. See ADR-0008.
+groundinsight = ["groundinsight (>=0.3)"]
+# ``groundfield.geo`` (OpenStreetMap building-footprint ingest via
+# Overpass, WGS84 -> local ENU projection, polygon geometry). The core
+# install does not depend on these; ``groundfield.geo`` raises a clear
+# ``ImportError`` with an install hint when called without the ``geo``
+# extra. See ADR-0011.
+geo = ["requests (>=2.32,<3.0)", "shapely (>=2.0,<3.0)", "pyproj (>=3.6,<4.0)"]
 
-[tool.poetry.extras]
-groundinsight = ["groundinsight"]
-geo = ["requests", "shapely", "pyproj"]
+[project.urls]
+Documentation = "https://ce1ectric.github.io/groundfield/"
+Repository = "https://github.com/Ce1ectric/groundfield"
+Issues = "https://github.com/Ce1ectric/groundfield/issues"
+Changelog = "https://ce1ectric.github.io/groundfield/changelog/"
+
+[tool.poetry]
+# Only the package itself goes into the wheel. Maintenance tools live in
+# ``scripts/`` and run from a checkout (``python scripts/release.py ...``);
+# they are deliberately not installed (finding 10.02).
+packages = [{ include = "groundfield", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
@@ -49,7 +63,7 @@ black = "^24.8.0"
 # ``groundinsight`` is pulled into the dev group so the bridge tests
 # in ``tests/test_io_groundinsight.py`` can run end-to-end against
 # the consumer's real Pydantic + SymPy parser. Keeps the runtime
-# dependency optional (see ``[tool.poetry.extras]``).
+# dependency optional (see ``[project.optional-dependencies]``).
 groundinsight = ">=0.3"
 # Same logic for the ``geo`` extra: pulled into dev so the OSM /
 # footprint tests in ``tests/test_geo_*.py`` run end-to-end. Keeps
@@ -66,10 +80,6 @@ mkdocs = "^1.6.1"
 mkdocs-material = "^9.5.34"
 mkdocstrings = { extras = ["python"], version = "^0.26.1" }
 pymdown-extensions = "^10.9"
-
-[tool.poetry.scripts]
-release = "scripts.release:main"
-generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -91,5 +101,5 @@ extend-exclude = ["notebooks", "site", "dist", "graphify-out", "audit*", "review
 docstring-code-format = false
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.2.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
