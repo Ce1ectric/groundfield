@@ -84,6 +84,11 @@ class World(BaseModel):
     concrete_shell_corrections: dict[str, float] = Field(
         default_factory=dict,
         description=(
+            "**Deprecated** (since 2026.11, removal no earlier than 2027.5): "
+            "the solver consumes concrete shells only as the per-length "
+            "coefficient ``concrete_shell_coefficient_ohm_m`` of the "
+            "electrodes and never reads this registry; solving a world with "
+            "entries emits a DeprecationWarning. Still loaded from JSON. "
             "Mapping from **galvanic-cluster anchor** name to the total "
             "lumped concrete-shell series resistance "
             "$R_\\text{shell,total}$ in Ω of that cluster, populated by "

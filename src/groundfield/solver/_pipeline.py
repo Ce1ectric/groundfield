@@ -289,6 +289,11 @@ def discretise(
 ) -> Discretisation:
     """Step 1: discretise every electrode of ``world``.
 
+    The predicted segment count is checked against
+    :data:`groundfield.diagnostics.HARD_LIMIT` first, from the geometry
+    alone (finding 10.06), so a unit error fails before anything of
+    the problem size is allocated.
+
     Parameters
     ----------
     world
@@ -297,7 +302,15 @@ def discretise(
         Engine; ``segment_length`` is the target segment length in m.
     layer_interfaces
         Interface depths in m at which wires are split.
+
+    Raises
+    ------
+    groundfield.diagnostics.ResourceLimitError
+        If the predicted segment count exceeds the hard limit.
     """
+    from groundfield.diagnostics import check_segment_budget
+
+    check_segment_budget(world, engine, layer_interfaces)
     ds = engine.segment_length
     segments: list[_Segment] = []
     owner_segments: dict[str, list[int]] = {}
@@ -459,12 +472,36 @@ def build_topology(world: World, disc: Discretisation) -> Topology:
         finite_branches,
         disc.owner_segments,
     )
+    _warn_concrete_shell_registry(world)
     return Topology(
         cluster_id=cluster_id,
         finite_branches=finite_branches,
         distributed_branches=distributed,
         n_lumped_branches=n_lumped,
         pseudo_owners=pseudo_owners,
+    )
+
+
+def _warn_concrete_shell_registry(world: World) -> None:
+    """Deprecation of ``World.concrete_shell_corrections`` (ADR-0012 V1).
+
+    The solver consumes concrete shells only as the distributed
+    per-length coefficient of the electrodes; the lumped registry is
+    read by no backend and by no ``solve_mutual_*`` call (finding 10.12).
+    """
+    if not world.concrete_shell_corrections:
+        return
+    from groundfield.solver.registry import DEPRECATION_REMOVAL, warn_external
+
+    warn_external(
+        "World.concrete_shell_corrections (the lumped ADR-0012 V1 registry, "
+        f"{len(world.concrete_shell_corrections)} entries) is deprecated and "
+        "is not read by the solver: concrete shells enter the solve only "
+        "through the per-length coefficient concrete_shell_coefficient_ohm_m "
+        "of the electrodes (ADR-0012 V2). Set that coefficient on the encased "
+        "electrodes and clear the registry (world.reset_concrete_corrections()). "
+        f"The field will be removed no earlier than {DEPRECATION_REMOVAL}.",
+        DeprecationWarning,
     )
 
 
