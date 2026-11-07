@@ -14,6 +14,20 @@
       "scipy": "1.18.1",
       "sha256": "45cc149875403097634d30219706e1a6169e759ce9b290b6ed29635da00bb893"
     },
+    "cim_grid_unequal_segments": {
+      "generated_utc": "2026-11-07T21:01:30+00:00",
+      "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
+      "git_describe": "v0.15.0",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf_pristine_v0150/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 7,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "cd343255396c8b4711b4df820acd54ed28dc547af75189e2e24d82fb80c0b6e5"
+    },
     "cim_rod_two_layer": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
       "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
@@ -153,6 +167,20 @@
       "python": "3.12.3",
       "scipy": "1.18.1",
       "sha256": "d13f37e9a5fedd0f0fd374251e66ed46d29da5955c106bf170bbddb9dc3cc1b4"
+    },
+    "fem_rod_two_layer_deep": {
+      "generated_utc": "2026-11-07T21:01:30+00:00",
+      "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
+      "git_describe": "v0.15.0",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf_pristine_v0150/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 3,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "ec26647ed02c326ba79042861c1adc5429cf15ce709f21b2ff7583e6f9705b1c"
     },
     "fit_rho_f_standard_sweep": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
@@ -336,6 +364,20 @@
       "scipy": "1.18.1",
       "sha256": "45cc149875403097634d30219706e1a6169e759ce9b290b6ed29635da00bb893"
     },
+    "mom_sommerfeld_duplicated_stack": {
+      "generated_utc": "2026-11-07T21:01:31+00:00",
+      "git_commit": "0939f4a3f923dde33669f4037bb82650886ce1df",
+      "git_describe": "v0.15.0-87-g0939f4a-dirty",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 7,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "535e8a20c775a057932c5a1eaf5d111409034e12395afd82c7420860228ac4e2"
+    },
     "mom_sommerfeld_rod_two_layer": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
       "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
@@ -363,6 +405,20 @@
       "python": "3.12.3",
       "scipy": "1.18.1",
       "sha256": "5d54376ee69ae708f37f945afe242e9c85bf16c2651a64bba76ec927bf4655e6"
+    },
+    "mom_two_port_passive_ring_two_layer": {
+      "generated_utc": "2026-11-07T21:01:30+00:00",
+      "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
+      "git_describe": "v0.15.0",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf_pristine_v0150/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 9,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "68ee462162caa2a4b9d6d0a0e32988c568c57cc71fb6bfefbabe05fe78987fc0"
     },
     "mutual_foundations_distributed_concrete": {
       "generated_utc": "2026-11-07T18:20:27+00:00",

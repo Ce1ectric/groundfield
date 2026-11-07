@@ -475,3 +475,15 @@ def test_replacing_a_registration_keeps_its_position() -> None:
         )
     assert get_backend("bem") == original
     assert available_backends(include_deprecated=True) == order
+
+
+@pytest.mark.finding("10.74")
+@pytest.mark.finding("10.48")
+def test_two_layer_backend_accepts_an_equal_resistivity_two_layer_soil() -> None:
+    """A two-layer soil with rho_1 == rho_2 (AP1 soil grid) stays solvable by
+    image_2layer although the canonical stack is homogeneous."""
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=5.0))
+    gf.create_electrode(w, "rod", name="r", position=(0.0, 0.0, 0.5), length=2.0)
+    gf.create_source(w, attached_to="r")
+    res = w.solve(gf.create_engine(backend="image_2layer"))
+    assert res.cluster_impedance("r")[0].real > 0.0

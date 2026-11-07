@@ -15,3 +15,32 @@
 # New cases appended to tests/golden/cases.py for the coordinator to
 # store: mom_two_port_passive_ring_two_layer, cim_grid_unequal_segments,
 # fem_rod_two_layer_deep, mom_sommerfeld_duplicated_stack.
+#
+# Coordinator, 2026-11-07: three of the four new cases run on v0.15.0 and
+# were stored from the pristine v0.15.0 tag, so the report shows what this
+# stream changes. mom_sommerfeld_duplicated_stack raises on v0.15.0 and
+# was stored from the merged code (it anchors the new behaviour, 10.48).
+
+[[change]]
+cases = ["mom_two_port_passive_ring_two_layer"]
+quantities = ["*"]
+findings = ["10.29"]
+reason = "The source-free ring floats with zero net current instead of being dropped and read back as the field at its location; transfer impedances become reciprocal."
+min_rel_change = 1e-5
+max_rel_change = 0.1
+
+[[change]]
+cases = ["cim_grid_unequal_segments"]
+quantities = ["Zc/*", "phi/*"]
+findings = ["10.30"]
+reason = "cim reads node potentials length-weighted, like image_2layer."
+min_rel_change = 1e-6
+max_rel_change = 0.05
+
+[[change]]
+cases = ["fem_rod_two_layer_deep"]
+quantities = ["Zc/*", "phi/*"]
+findings = ["10.49"]
+reason = "fem keeps its radial resolution when the truncation radius grows with the layer stack."
+min_rel_change = 1e-4
+max_rel_change = 0.02

@@ -206,11 +206,11 @@ def test_result_soil_is_the_canonical_model_so_potential_works() -> None:
 def test_genuine_three_layer_stack_is_still_rejected_where_unsupported() -> None:
     """Canonicalisation must not hide a real third layer."""
     soil = _multi([100.0, 400.0, 50.0], [2.0, 3.0])
-    for backend in ("cim", "bem"):
+    # BackendCapabilityError (registry, 10.74) subclasses NotImplementedError;
+    # for mom it replaces the TypeError of v0.15.0.
+    for backend in ("cim", "bem", "mom"):
         with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
             _z(backend, soil, length=1.5)
-    with pytest.raises(TypeError, match="mom_sommerfeld"):
-        _z("mom", soil, length=1.5)
 
 
 @pytest.mark.finding("10.48")

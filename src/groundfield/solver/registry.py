@@ -766,7 +766,8 @@ def _layer_counts(soil: SoilModel) -> tuple[int, int]:
     """Merged and declared layer counts of a soil model."""
     from groundfield.solver._layered import as_layer_stack
 
-    rhos = [float(r) for r in as_layer_stack(soil).rhos]
+    # The *declared* stack: as_layer_stack merges equal layers by default.
+    rhos = [float(r) for r in as_layer_stack(soil, canonical=False).rhos]
     merged = 1 + sum(1 for a, b in zip(rhos, rhos[1:], strict=False) if a != b)
     return merged, len(rhos)
 
