@@ -248,7 +248,7 @@ def parse_impedance_formula(
     at :data:`MAX_WORK` steps. So the time and memory a formula costs,
     accepted or rejected, are bounded by the size limits (audit 1 of the
     calendar release found sums and products inside those limits that
-    took 22 s to over 60 s).
+    took 13 s to 105 s).
     """
     names = _check_symbol_names(symbols)
     src = _normalise(text)

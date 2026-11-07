@@ -595,10 +595,10 @@ def test_every_exporter_output_parses_to_its_fit_and_to_the_legacy_values() -> N
 # (H1, H2), the power bound (L1), rational exponents (L2), work budget
 # ---------------------------------------------------------------------
 
-#: Maximal-size cases below took 22 s to more than 60 s before audit 1,
+#: Maximal-size cases below took 13 s to 105 s on the base of this release,
 #: measured in a fresh process (SymPy's global cache makes repeated
-#: in-process runs unrepresentative); they take 1 to 2 s now, Python start
-#: included. The bound leaves room for the shared container.
+#: in-process runs unrepresentative); they take at most about 2 s now.
+#: The bound leaves room for the shared container.
 HEAVY_TIME_LIMIT_S = 5.0
 _CHILD_GUARD_S = 120.0
 
@@ -676,7 +676,7 @@ def test_sum_of_fractions_with_distinct_denominators_is_rejected_quickly(
 ) -> None:
     """Audit 1, H1: every term is a 960-digit fraction inside the bounds;
     their common denominator grows with every term. The sum was bounded
-    only after SymPy had built it (22 s for 120 terms, 159 s for 222)."""
+    only after SymPy had built it (22 s for 120 terms, 105 s for 222)."""
     from groundfield.io._formula import FormulaError, parse_impedance_formula
 
     _within_documented_limits(text)
@@ -697,11 +697,11 @@ def test_long_product_chains_parse_in_bounded_time(
     make, n_factors: int, expected, monkeypatch
 ) -> None:
     """Audit 1, H2: accepted formulas whose partial product was re-evaluated
-    with ``evalf`` after every factor (2 820 and 2 863 calls; 33 s and 68 s
-    measured by the audit on the loaded container); now values are carried
-    along and long chains are multiplied pairwise. The number of ``evalf``
-    calls (SymPy's own, about one per factor) is the load-independent
-    check, the time in a fresh process the coarse one."""
+    with ``evalf`` after every factor (on the base 2 802 and 2 857 calls,
+    13 s and 55 s in a fresh process on the shared container); now values
+    are carried along and long chains are multiplied pairwise. The number
+    of ``evalf`` calls (SymPy's own, at most about one per factor) is the
+    load-independent check, the time in a fresh process the coarse one."""
     import sympy as sp
     from sympy.core.evalf import EvalfMixin
 
