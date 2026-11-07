@@ -186,3 +186,29 @@ def test_genuine_three_layer_stack_is_still_rejected_where_unsupported() -> None
             _z(backend, soil, length=1.5)
     with pytest.raises(TypeError, match="mom_sommerfeld"):
         _z("mom", soil, length=1.5)
+
+
+@pytest.mark.finding("10.48")
+@pytest.mark.parametrize(
+    ("multi", "plain"),
+    [
+        (
+            gf.MultiLayerSoil(
+                layers=[
+                    gf.SoilLayer(resistivity=100.0, thickness=2.0),
+                    gf.SoilLayer(resistivity=400.0, thickness=None),
+                ]
+            ),
+            gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0),
+        ),
+        (
+            gf.MultiLayerSoil(layers=[gf.SoilLayer(resistivity=100.0, thickness=None)]),
+            gf.HomogeneousSoil(resistivity=100.0),
+        ),
+    ],
+    ids=["two_layers", "one_layer"],
+)
+def test_mom_accepts_a_multilayer_soil_with_at_most_two_layers(multi, plain) -> None:
+    """Already-canonical MultiLayerSoil with n <= 2 maps to the plain model."""
+    assert isinstance(_layered.canonical_soil(multi), type(plain))
+    assert _z("mom", multi) == pytest.approx(_z("mom", plain), rel=1e-12, abs=0.0)

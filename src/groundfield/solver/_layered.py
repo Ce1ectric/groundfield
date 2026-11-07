@@ -299,14 +299,16 @@ def canonical_soil(soil: SoilModel) -> SoilModel:
     Returns
     -------
     SoilModel
-        ``soil`` itself when its stack is already canonical; otherwise
-        a :class:`HomogeneousSoil` ($n = 1$), :class:`TwoLayerSoil`
-        ($n = 2$) or :class:`MultiLayerSoil` ($n \\ge 3$) built from
-        the canonical stack.
+        A :class:`HomogeneousSoil` ($n = 1$), :class:`TwoLayerSoil`
+        ($n = 2$) or :class:`MultiLayerSoil` ($n \\ge 3$) of the
+        canonical stack. ``soil`` itself is returned when its stack is
+        already canonical and its type already matches that layer count
+        (a ``MultiLayerSoil`` with one or two layers is mapped to the
+        plain model).
     """
     raw = as_layer_stack(soil, canonical=False)
     stack = canonical_layer_stack(raw)
-    if stack is raw:
+    if stack is raw and not (isinstance(soil, MultiLayerSoil) and stack.n_layers <= 2):
         return soil
     if stack.n_layers == 1:
         return HomogeneousSoil(resistivity=float(stack.rhos[0]))
