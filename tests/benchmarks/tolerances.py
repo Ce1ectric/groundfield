@@ -231,7 +231,13 @@ BENCHMARKS: dict[str, Benchmark] = {
             "layer_limit_integral": Bound(
                 1e-3, _REL, "5.1e-4 (4 mm) / 2.0e-4 (4 km)", "physical limit"
             ),
-            "layer_limit_fem": Bound(1e-2, _REL, "2.1e-3 / 2.3e-4", "experimental"),
+            "layer_limit_fem": Bound(
+                1e-2,
+                _REL,
+                "2.1e-3 / 2.3e-4",
+                "experimental; h₁ = 4 mm emits FemReductionWarning (structural "
+                "interface rule, audit F01)",
+            ),
         },
     ),
     "B10": Benchmark(
