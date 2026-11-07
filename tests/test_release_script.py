@@ -629,6 +629,40 @@ def test_failed_commit_restores_the_files(repo: Repo) -> None:
     _assert_untouched(repo, before, head, tags)
 
 
+def test_crlf_files_keep_their_line_endings(tmp_path: Path) -> None:
+    """A Windows checkout (CRLF) is released without rewriting line endings."""
+    repo = _make_repo(tmp_path)
+    for rel in RELEASE_FILES:
+        text = repo.read(rel)
+        (repo.path / rel).write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+    repo.commit_all("crlf")
+
+    result = repo.run_release("calver", "--date", "2026-11-07")
+
+    assert result.returncode == 0, _output(result)
+    for rel in RELEASE_FILES:
+        raw = (repo.path / rel).read_bytes()
+        assert b"\n" not in raw.replace(b"\r\n", b""), f"{rel} has LF endings"
+    assert (
+        b'__version__ = "2026.11.0"\r\n'
+        in (repo.path / "src/groundfield/__init__.py").read_bytes()
+    )
+    changelog = (repo.path / "CHANGELOG.md").read_bytes()
+    assert b"## [Unreleased]\r\n\r\n---\r\n\r\n## [2026.11.0] - 2026-11-07\r\n" in (
+        changelog
+    )
+
+
+@pytest.mark.parametrize("args", [["calver", "--date", "2026-13-01"], [], ["bump"]])
+def test_usage_errors_exit_with_status_2(repo: Repo, args: list[str]) -> None:
+    before, head, tags = repo.snapshot(), repo.head(), repo.tags()
+
+    result = repo.run_release(*args)
+
+    assert result.returncode == 2
+    _assert_untouched(repo, before, head, tags)
+
+
 def test_release_of_the_real_project_files(tmp_path: Path) -> None:
     """The tool handles the repository's own pyproject, CITATION and CHANGELOG."""
     repo = _make_repo(tmp_path)

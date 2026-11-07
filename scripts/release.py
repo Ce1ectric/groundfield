@@ -790,9 +790,18 @@ def apply_release(plan: ReleasePlan) -> None:
         _git(plan.root, "add", "--", *rels)
         _git(plan.root, "commit", "-m", COMMIT_MESSAGE.format(tag=plan.tag))
     except (ReleaseError, OSError) as exc:
+        unrestored: list[str] = []
         for text_file in plan.files:
-            _write(plan.root, text_file, text_file.original)
+            try:
+                _write(plan.root, text_file, text_file.original)
+            except OSError:
+                unrestored.append(text_file.rel)
         _git(plan.root, "reset", "--quiet", "--", *rels, check=False)
+        if unrestored:
+            raise ReleaseError(
+                f"{exc}\ncould not restore {', '.join(unrestored)}; "
+                f"run: git checkout -- {' '.join(unrestored)}"
+            ) from exc
         raise ReleaseError(f"{exc}\nthe release files were restored") from exc
     try:
         _git(
