@@ -1,0 +1,14 @@
+# Keeps the SHA-pinned GitHub Actions (review pass 10, 10.03) current.
+# Python dependencies are refreshed deliberately via `poetry lock`
+# (numerical packages are pinned on purpose; see CHANGELOG).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
