@@ -547,26 +547,26 @@ def test_fem_uniform_rho_independent_of_declared_layer_thickness(
     )
 
 
-def test_fem_uniform_rho_sweep_is_flat_and_ordered() -> None:
-    """Across three decades of $h_1$ the spread must stay ≤ 1 %.
+@pytest.mark.finding("10.49")
+def test_fem_uniform_rho_sweep_is_flat() -> None:
+    """Across three decades of $h_1$ the spread must stay ≤ 0.1 %.
 
-    The residual drift is the *logarithmic* loss of radial resolution
-    as $r_{\\text{far}} = 30 (a_{\\text{eq}} + h_1)$ grows at fixed
-    node count — which is exactly the decoupling the fix promises: it
-    replaces a linear degradation with a logarithmic one. Measured
-    spread 0.66 % over $h_1 \\in [0.5, 100]$ m; pre-fix 112 %.
+    Up to 0.15.0 the residual drift was the *logarithmic* loss of radial
+    resolution as $r_{\\text{far}} = 30 (a_{\\text{eq}} + h_1)$ grew at
+    a fixed node count (spread 0.66 % over $h_1 \\in [0.5, 100]$ m, and
+    the sequence fell monotonically; pre-F05 112 %). Since review pass
+    10 (10.49) the radial line count grows with
+    $\\ln(r_{\\text{far}} / a_{\\text{eq}})$, so the sequence is flat
+    rather than ordered: measured spread 0.049 %, dominated by the
+    interface cut through the electrode's near field at
+    $h_1 = 0.5$ m.
     """
     values = [
         _fem(_rod_world(gf.TwoLayerSoil(rho_1=RHO, rho_2=RHO, h_1=h)))[0]
         for h in (0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 100.0)
     ]
     spread = (max(values) - min(values)) / max(values)
-    assert spread < 1.0e-2, [f"{v:.4f}" for v in values]
-    # A larger declared thickness can only cost resolution, never gain
-    # it, so the sequence is (weakly) decreasing.
-    assert all(values[i + 1] <= values[i] + 1e-9 for i in range(len(values) - 1)), [
-        f"{v:.4f}" for v in values
-    ]
+    assert spread < 1.0e-3, [f"{v:.4f}" for v in values]
 
 
 @pytest.mark.parametrize("h_1", [2.0, 5.0, 10.0])

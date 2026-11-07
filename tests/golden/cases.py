@@ -804,3 +804,69 @@ def case_defaults_mixed_cluster_inductive() -> Quantities:
     w, _ = _galvanic_pair("sommerfeld")
     res = w.solve(gf.create_engine(frequencies=[50.0, 1000.0]))
     return _result_quantities(res, cluster_of=("g1",), point_sources=False)
+
+
+# ---------------------------------------------------------------------
+# engine family, review pass 10 (stream eng1; stored by the coordinator)
+# ---------------------------------------------------------------------
+
+
+@_case
+def case_mom_two_port_passive_ring_two_layer() -> Quantities:
+    """10.29: a source-free ring floats (zero net current) next to a rod."""
+    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="A", position=(0.0, 0.0, 0.0), length=3.0)
+    gf.create_electrode(w, "ring", name="B", center=(4.0, 0.0, 0.8), radius=1.5)
+    gf.create_source(w, attached_to="A", magnitude=1.0)
+    res = w.solve(_engine(backend="mom", frequencies=[50.0], segment_length=0.5))
+    return _result_quantities(res, cluster_of=("A",))
+
+
+@_case
+def case_cim_grid_unequal_segments() -> Quantities:
+    """10.30: length-weighted read-back on 0.6 m and 0.667 m segments."""
+    soil = gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=6.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="grid",
+        corner=(-3.0, -2.0, 0.6),
+        size=(6.0, 4.0),
+        n_x=2,
+        n_y=2,
+    )
+    gf.create_source(w, attached_to="grid", magnitude=1.0)
+    res = w.solve(_engine(backend="cim", frequencies=[50.0], segment_length=0.7))
+    return _result_quantities(res, cluster_of=("grid",))
+
+
+@_case
+def case_fem_rod_two_layer_deep() -> Quantities:
+    """10.49: radial resolution kept for a 30 m top layer."""
+    soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=30.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="rod", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    res = w.solve(_engine(backend="fem", frequencies=[50.0], segment_length=0.5))
+    return _result_quantities(res, cluster_of=("rod",), point_sources=False)
+
+
+@_case
+def case_mom_sommerfeld_duplicated_stack() -> Quantities:
+    """10.48: [100, 400, 400] over [2, 3] is solved as two layers."""
+    soil = gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(resistivity=100.0, thickness=2.0),
+            gf.SoilLayer(resistivity=400.0, thickness=3.0),
+            gf.SoilLayer(resistivity=400.0, thickness=None),
+        ]
+    )
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="rod", position=(0.0, 0.0, 0.0), length=3.0)
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    res = w.solve(
+        _engine(backend="mom_sommerfeld", frequencies=[50.0], segment_length=0.5)
+    )
+    return _result_quantities(res, cluster_of=("rod",))

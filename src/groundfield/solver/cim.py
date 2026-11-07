@@ -131,6 +131,7 @@ from groundfield.soil.models import (
 from groundfield.solver._layered import (
     LayerStack,
     as_layer_stack,
+    canonical_soil,
     reflection_gamma,
 )
 from groundfield.solver.image import (
@@ -144,6 +145,7 @@ from groundfield.solver.image import (
     _Segment,
     _solve_cluster_currents,
     _warn_ignored_sources,
+    _weighted_node_potential,
 )
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
@@ -237,9 +239,16 @@ class ComplexImageFit:
         fitting window did not reach the decay band of the thinnest
         layer (large thickness spread) or when the pencil overfitted.
     converged : bool
-        Both residuals are ``<= rms_tol`` *and* the decaying remainder
-        was either numerically flat or successfully fitted. ``False``
-        means a :class:`ComplexImageFitWarning` was emitted.
+        Both residuals *and* :attr:`max_error` are ``<= rms_tol``, and
+        the decaying remainder was either numerically flat or
+        successfully fitted. ``False`` means a
+        :class:`ComplexImageFitWarning` was emitted.
+    max_error : float
+        Maximum of $|\\text{fit} - \\Gamma_1|$ over $\\lambda = 0$
+        and the verification grid. The RMS values average a localised
+        miss away: between the uniform fitting samples the model can be
+        off by more than ``rms_tol`` while both RMS values stay below it
+        (review pass 10, 10.49: 2.4e-3 against an RMS of 9.3e-4).
     """
 
     a: np.ndarray
@@ -248,6 +257,7 @@ class ComplexImageFit:
     k_inf: float = 0.0
     rms_extrapolated: float = 0.0
     converged: bool = True
+    max_error: float = 0.0
 
 
 def _empty_fit() -> ComplexImageFit:
@@ -429,12 +439,17 @@ def fit_complex_images(
         bound only — the step cap of item 1 above may stop the grid
         earlier).
     rms_tol
-        Residual (on the fitting *and* on the verification grid) above
-        which the fit counts as failed (``converged=False`` plus a
-        :class:`ComplexImageFitWarning`).
+        Error bound (dimensionless, $|\\Gamma_1| \\le 1$): the RMS
+        residual on the fitting grid, the RMS residual on the
+        verification grid *and* the maximum error on the verification
+        grid including $\\lambda = 0$ must not exceed it, otherwise the
+        fit counts as failed (``converged=False`` plus a
+        :class:`ComplexImageFitWarning`). The maximum-error gate was
+        added in review pass 10 (10.49).
     warn
         Set to ``False`` to suppress the warning in bulk sweeps;
-        ``converged`` / ``rms`` / ``rms_extrapolated`` still report the
+        ``converged`` / ``rms`` / ``rms_extrapolated`` / ``max_error``
+        still report the
         failure.
 
     Returns
@@ -517,8 +532,18 @@ def fit_complex_images(
     g_v = reflection_gamma(stack, lam_v).astype(complex)
     model_v = np.exp(-2.0 * lam_v[:, None] * beta[None, :]) @ a
     rms_wide = float(np.sqrt(np.mean(np.abs(model_v - g_v) ** 2)))
+    # Max-norm on the same grid plus lambda = 0, where the static
+    # Green's function is most sensitive (review pass 10, 10.49): an RMS
+    # gate let localised misses between the fitting samples through.
+    err_0 = abs(complex(np.sum(a)) - complex(reflection_gamma(stack, np.zeros(1))[0]))
+    max_err = float(max(np.max(np.abs(model_v - g_v)), err_0))
 
-    converged = bool(rms <= rms_tol) and bool(rms_wide <= rms_tol) and not pencil_failed
+    converged = (
+        bool(rms <= rms_tol)
+        and bool(rms_wide <= rms_tol)
+        and bool(max_err <= rms_tol)
+        and not pencil_failed
+    )
 
     _log.info(
         "cim.fit: n_images_used=%d (P_decay=%d), rms=%.2e, "
@@ -542,10 +567,15 @@ def fit_complex_images(
             )
         elif rms > rms_tol:
             reason = f"RMS residual {rms:.3e} > rms_tol {rms_tol:.3e}"
-        else:
+        elif rms_wide > rms_tol:
             reason = (
                 f"RMS residual on the verification grid "
                 f"{rms_wide:.3e} > rms_tol {rms_tol:.3e}"
+            )
+        else:
+            reason = (
+                f"maximum error on the verification grid incl. lambda = 0 "
+                f"{max_err:.3e} > rms_tol {rms_tol:.3e}"
             )
         warnings.warn(
             f"fit_complex_images: unreliable fit for an "
@@ -567,6 +597,7 @@ def fit_complex_images(
         k_inf=k_inf,
         rms_extrapolated=rms_wide,
         converged=converged,
+        max_error=max_err,
     )
 
 
@@ -881,7 +912,12 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        # Length-weighted (Galerkin) node potential — the reduction the
+        # multi-port matrix of _solve_cluster_currents enforces, exactly
+        # as in image / image_2layer. The plain segment mean used up to
+        # 0.15.0 (the F10 fix had missed this backend) reported +4.1 %
+        # on a rod split unevenly at h_1 and broke reciprocity (10.30).
+        u_list = _weighted_node_potential(phi_per_freq, idxs, seg_lengths, n_freq)
         i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
@@ -947,7 +983,7 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
         electrode_currents=electrode_currents,
         point_sources=point_sources,
         soil_resistivity=float(stack.rhos[0]),
-        soil=world.soil,
+        soil=canonical_soil(world.soil),
         clusters=cluster_members,
         metadata=metadata,
     )

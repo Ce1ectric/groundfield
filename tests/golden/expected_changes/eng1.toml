@@ -1,0 +1,17 @@
+# Stream eng1 — engine family (mom, bem, cim, fem, mom_sommerfeld,
+# _layered, validation).
+#
+# No stored golden quantity moves: every case is bit-identical under
+# GF_GOLDEN_STRICT=1 on the eng1 branch. The numerical changes of this
+# stream hit configurations that no stored case contains:
+#
+#   10.29  mom / bem / mom_sommerfeld with a source-free cluster
+#          (mom_ring_rod_hom, bem_ring_rod_hom, mom_sommerfeld_* have none)
+#   10.30  cim on unequal segment lengths (cim_rod_two_layer has equal ones)
+#   10.48  equal-resistivity layer stacks (no stored case has one)
+#   10.49  fem with a layer stack deeper than 1 m (fem_rod_hom is
+#          homogeneous)
+#
+# New cases appended to tests/golden/cases.py for the coordinator to
+# store: mom_two_port_passive_ring_two_layer, cim_grid_unequal_segments,
+# fem_rod_two_layer_deep, mom_sommerfeld_duplicated_stack.

@@ -1,60 +1,85 @@
-"""Method-of-Moments backend (``mom``).
+"""Point-matching method-of-moments backend (``mom``).
 
-Independent second engine used to cross-validate the image backends
-(see ADR-0001). The ``image`` backends approximate the current
-distribution along an electrode by a *uniform per unit length*
-profile; this backend solves for the actual non-uniform per-segment
-current distribution through a Galerkin scheme.
+Resolution-scheme counterpart of the image backends (ADR-0001). The
+``image`` backends approximate the current along an electrode by a
+*uniform per unit length* profile; this backend solves for one current
+per segment, so it resolves how the current distributes along and
+between the electrodes of a cluster.
 
 Method
 ------
 1. Discretise every electrode into wire segments (same routine as the
-   image backends).
-2. Assemble the full $N \\times N$ segment-level reaction matrix
-   $Z$ using the same Green's-function kernel as the
-   corresponding image backend (so for a ``HomogeneousSoil`` world
-   ``mom`` shares its physics with ``image``; for a ``TwoLayerSoil``
-   world it shares it with ``image_2layer``). The diagonal of
-   $Z$ carries the analytical line-self-potential.
-3. Solve the linear system
+   image backends; for two-layer soil the segments are split at the
+   layer interface).
+2. Assemble the $N \\times N$ segment reaction matrix $Z$ from the
+   Green's-function kernel of the matching image backend (homogeneous:
+   point source plus air image; two-layer: Tagg/Sunde series; geometries
+   reaching below $h_1$: the cross-layer kernel of
+   :mod:`groundfield.coupling.layered_green`):
+
+   - off-diagonal $Z_{ij}$: potential at the midpoint of segment $i$
+     of a unit **point** source at the midpoint of segment $j$;
+   - diagonal $Z_{ii}$: analytic potential of the uniformly loaded
+     segment at its own surface (line self-potential), plus images.
+
+   The basis is a pulse (one constant current per segment) and the test
+   function a delta at the segment midpoint. This is **point matching**
+   (collocation) with a point-source near field. It is *not* a Galerkin
+   scheme, which would test with the basis functions, i.e. average the
+   potential over each segment and integrate the source along each
+   segment (review pass 10, 10.31).
+3. Solve the bordered system
+
    $$
    \\begin{bmatrix} Z & -C \\\\ C^{\\top} & 0 \\end{bmatrix}
    \\begin{bmatrix} I_\\text{seg} \\\\ \\varphi_c \\end{bmatrix}
-   = \\begin{bmatrix} 0 \\\\ I_\\text{in} \\end{bmatrix},
+   = \\begin{bmatrix} 0 \\\\ I_\\text{in} \\end{bmatrix}
    $$
-   where $C$ is the segment-to-cluster membership matrix.
 
-   The constraint enforces equal segment potential within each
-   galvanic cluster; the additional row sums the segment currents to
-   the input current per cluster. The system is symmetric and dense;
-   :func:`numpy.linalg.solve` handles it directly.
+   (plus one row and column per finite conductor branch), where $C$ is
+   the segment-to-node membership matrix: every segment midpoint of a
+   node sits at the node potential, and the segment currents of a node
+   add up to its injected current. $Z$ is symmetric; the bordered
+   matrix as assembled is not, and it is solved with a dense general LU
+   (:func:`numpy.linalg.solve`).
+4. Every node with galvanic contact to the soil is an unknown, also
+   when it carries no source: a source-free cluster floats with zero
+   net current (review pass 10, 10.29), which keeps transfer impedances
+   reciprocal.
+5. Report the node potentials (the segment mean; point matching makes
+   every midpoint of a node equipotential) and the segment currents as
+   point sources, in the same :class:`FieldResult` layout as the image
+   backends.
 
-4. Compute the average cluster potential and produce a
-   :class:`FieldResult` exactly like the image backends, so that
-   :func:`groundfield.compare_engines` can compare the two side by
-   side.
-
-What this means in practice
----------------------------
-- For homogeneous soil, ``mom`` agrees with ``image`` to within a few
-  per cent and lies closer to the Sunde reference (the average-
-  potential method of ``image`` carries a residual ~5 % bias from
-  the uniform-current assumption, which the Galerkin solve removes).
-- For 2-layer soil, ``mom`` and ``image_2layer`` agree within the
-  same envelope. In the limit $\\rho_2 = \\rho_1$ both engines
-  collapse onto the homogeneous solution.
+Accuracy
+--------
+- The point-source near field underestimates the coupling of adjacent
+  segments (the exact potential of a collinear neighbour at the
+  midpoint is $\\ln 3 / \\Delta s$ per unit current, the point source
+  gives $1 / \\Delta s$, i.e. $-9\\,\\%$), and the self-image of a
+  shallow segment is a point image. Both errors stay of the same order
+  as the near-field terms under refinement, so ``mom`` does not
+  converge to the thin-wire limit. On a 3 m rod (radius 8 mm,
+  100 Ω·m) it lies 1.0 % ($\\Delta s$ = 0.5 m) to 1.7 %
+  ($\\Delta s$ = 0.0625 m) below the exact thin-wire Galerkin solution
+  at the same segment length and drifts by −0.96 % over that
+  refinement ladder; the uniform-current ``image`` result is closer to
+  the exact solution at every $\\Delta s$.
+- ``mom`` is therefore a check of the uniform-current *ansatz*
+  (current sharing along a cluster, across the layer interface, between
+  passive and driven electrodes), not an accuracy reference for
+  impedances at the 1 % level.
+- For $\\rho_2 = \\rho_1$ the two-layer kernel collapses onto the
+  homogeneous one bit-exactly; a :class:`MultiLayerSoil` is solved on
+  its canonical stack (equal adjacent layers merged, 10.48) and must
+  reduce to at most two layers.
 
 Limitations
 -----------
-- Performance is $O(N^3)$ for the LU solve plus $O(N^2)$
-  for the matrix build. For typical geometries ``N`` stays well below
-  1 000, so the runtime is acceptable. Larger meshes will need a
-  preconditioned iterative solver later.
-- This backend deliberately re-uses the existing Green's-function
-  kernels rather than introducing a Sommerfeld quadrature. A truly
-  independent layered Green's function (option B in ADR-0001) would
-  give a stronger cross-check; this lighter version is the
-  pragmatic first step.
+- Dense $N \\times N$ matrix and one dense LU per inductive frequency.
+- $n \\ge 3$ distinct soil layers: use ``mom_sommerfeld``, which
+  shares this discretisation and evaluates the layered kernel by
+  quadrature.
 """
 
 from __future__ import annotations
@@ -64,7 +89,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import HomogeneousSoil, TwoLayerSoil
+from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
+from groundfield.solver._layered import canonical_soil
 from groundfield.solver.image import (
     _assemble_inductance_matrix,
     _build_clusters,
@@ -141,11 +167,146 @@ def _build_Z_two_layer(
 
 
 # ---------------------------------------------------------------------
-# Galerkin solve
+# Point-matching solve
 # ---------------------------------------------------------------------
 
 
-def _galerkin_solve(
+def _solvable_nodes(
+    cluster_id: dict[str, str],
+    elec_to_segidx: dict[str, list[int]],
+    finite_branches: list[tuple[str, str, float]],
+) -> set[str]:
+    """Nodes that enter the linear system of the point-matching solve.
+
+    A node is a galvanic cluster root, a conductor pseudo-node or an
+    interior node of a distributed conductor. Nodes connected through
+    finite branches form components; every node of a component that
+    owns at least one leakage segment is an unknown. A component
+    without any segment (no galvanic contact to the soil anywhere)
+    would have an undetermined potential and is left out.
+
+    Parameters
+    ----------
+    cluster_id
+        Node name -> cluster root, including pseudo- and interior nodes.
+    elec_to_segidx
+        Node name -> indices of its leakage segments.
+    finite_branches
+        ``(node_a, node_b, R)`` branch list (R in Ω, unused here).
+
+    Returns
+    -------
+    set[str]
+        Cluster roots / node names of the unknown potentials.
+    """
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    nodes = set(cluster_id.values())
+    for n in nodes:
+        find(n)
+    for a, b, _R in finite_branches:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+    grounded = {find(cluster_id[name]) for name, idxs in elec_to_segidx.items() if idxs}
+    return {n for n in parent if find(n) in grounded}
+
+
+def _floating_clusters(
+    elec_input_current: dict[str, complex],
+    cluster_id: dict[str, str],
+    finite_branches: list[tuple[str, str, float]],
+    electrode_names: set[str],
+) -> set[str]:
+    """Electrode clusters with neither a source nor a finite branch.
+
+    Their net leakage current is zero by Kirchhoff's current law; the
+    reported per-electrode currents are made to sum to exactly zero (see
+    :func:`_node_results`), so :meth:`FieldResult.cluster_impedance`
+    returns ``nan`` for them instead of a ratio of round-off.
+    """
+    sourced = {cluster_id[e] for e, ic in elec_input_current.items() if ic != 0j}
+    linked = {a for a, _b, _R in finite_branches} | {b for _a, b, _R in finite_branches}
+    roots = {cluster_id[e] for e in electrode_names}
+    return roots - sourced - linked
+
+
+def _node_results(
+    *,
+    elec_to_segidx: dict[str, list[int]],
+    phi_per_freq: list[np.ndarray],
+    sc_per_freq: list[np.ndarray],
+    cluster_id: dict[str, str],
+    electrode_names: set[str],
+    floating: set[str],
+    n_freq: int,
+) -> tuple[
+    dict[str, list[complex]],
+    dict[str, list[complex]],
+    dict[str, list[complex]],
+    dict[str, list[complex]],
+]:
+    """Per-node potentials (V) and leakage currents (A) of a solve.
+
+    Point matching makes every segment midpoint of a node an
+    equipotential, so the plain segment mean is the node potential (to
+    round-off). Members of a floating cluster report currents that sum
+    to exactly zero in the member order of :attr:`FieldResult.clusters`
+    (sorted names): a single member reports ``0``; with several members
+    the last one absorbs the round-off residual of the solve.
+
+    Returns
+    -------
+    electrode_potentials, electrode_currents, conductor_potentials, conductor_currents
+        Mappings ``name -> value per frequency``.
+    """
+    electrode_potentials: dict[str, list[complex]] = {}
+    electrode_currents: dict[str, list[complex]] = {}
+    conductor_potentials: dict[str, list[complex]] = {}
+    conductor_currents: dict[str, list[complex]] = {}
+    for ename, idxs in elec_to_segidx.items():
+        if not idxs:
+            continue
+        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
+        if ename in electrode_names:
+            electrode_potentials[ename] = u_list
+            electrode_currents[ename] = i_list
+        else:
+            conductor_potentials[ename] = u_list
+            conductor_currents[ename] = i_list
+    for root in floating:
+        members = sorted(
+            n
+            for n in electrode_currents
+            if n in electrode_names and cluster_id[n] == root
+        )
+        if not members:
+            continue
+        for k in range(n_freq):
+            if len(members) == 1:
+                electrode_currents[members[0]][k] = 0j
+                continue
+            # Same left-to-right summation as FieldResult.cluster_impedance,
+            # so the cluster total is s + (-s) == 0 exactly.
+            rest = sum(electrode_currents[m][k] for m in members[:-1])
+            electrode_currents[members[-1]][k] = -complex(rest)
+    return (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    )
+
+
+def _point_matching_solve(
     Z: np.ndarray,
     elec_input_current: dict[str, complex],
     cluster_id: dict[str, str],
@@ -156,12 +317,14 @@ def _galerkin_solve(
     inductance_matrix: np.ndarray | None = None,
     carson_correction: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict[str, complex]]:
-    """Solve the Galerkin linear system on segment level.
+    """Solve the point-matching linear system on segment level.
 
-    Augmented variant of the historic Galerkin scheme: in addition to
-    the per-segment leakage currents and the per-cluster potentials,
-    the system optionally carries one branch current per
-    finite-impedance conductor that connects two clusters.
+    In addition to the per-segment leakage currents and the per-node
+    potentials, the system carries one branch current per
+    finite-impedance conductor that connects two nodes. (Up to 0.15.0
+    this function was called ``_galerkin_solve``; the scheme is point
+    matching, see the module docstring. The old name is kept as an
+    alias.)
 
     Mathematically the linear system is
 
@@ -185,20 +348,32 @@ def _galerkin_solve(
     $B$ the branch-to-cluster incidence matrix (``+1`` at the
     branch start, ``−1`` at its end). For
     ``finite_branches in (None, [])`` the system collapses exactly to
-    the previous (N_a + K_a) × (N_a + K_a) Galerkin system.
+    the bordered (N_a + K_a) × (N_a + K_a) system of the module docstring.
+
+    Unknown set (review pass 10, 10.29): *every* node of a component
+    (nodes joined by finite branches) that has galvanic contact to the
+    soil, also when the component carries no source. A source-free
+    component is a floating conductor system — its KCL rows have a zero
+    right-hand side, so its net leakage current vanishes while its
+    segment currents redistribute until its surface is an equipotential
+    at the potential the field of the other clusters imposes. Because
+    the segment matrix is symmetric, transfer impedances obtained from
+    two solves are then reciprocal. Up to 0.15.0 source-free components
+    were dropped (zero current) and their potential was read back as the
+    incident field, non-reciprocal by up to 146 %.
 
     Returns
     -------
     seg_currents : np.ndarray, shape (N,)
-        Per-segment current distribution (complex).
+        Per-segment leakage current in A (complex).
     cluster_potential : dict[cluster_root, complex]
-        Common potential per cluster (also solved as part of the
+        Common potential per node in V (also solved as part of the
         linear system).
     """
     if finite_branches is None:
         finite_branches = []
 
-    # Aggregate input current per cluster, identify the active ones.
+    # Aggregate input current per cluster.
     cluster_input: dict[str, complex] = {}
     for ename, ic in elec_input_current.items():
         if ic == 0j:
@@ -208,24 +383,22 @@ def _galerkin_solve(
 
     seg_currents = np.zeros(n_segments, dtype=complex)
     cluster_potential: dict[str, complex] = {}
-    if not cluster_input and not finite_branches:
+    if not cluster_input:
+        # No source anywhere: the (non-singular) system has the zero
+        # solution.
         return seg_currents, cluster_potential
 
-    # Active set: source clusters plus every cluster transitively
-    # reachable through a finite branch.
-    active_set: set[str] = set(cluster_input.keys())
-    if finite_branches:
-        changed = True
-        while changed:
-            changed = False
-            for a, b, _R in finite_branches:
-                if a in active_set and b not in active_set:
-                    active_set.add(b)
-                    changed = True
-                elif b in active_set and a not in active_set:
-                    active_set.add(a)
-                    changed = True
-
+    # Unknowns (review pass 10, 10.29): every node of every connected
+    # component that owns at least one leakage segment — not only the
+    # components that carry a source. A component without a source is
+    # a floating conductor system: zero net current, potential set by
+    # the field of the others, current distribution free. Up to 0.15.0
+    # such clusters were dropped and their potential read back as the
+    # mean of the incident field, which broke the reciprocity of
+    # transfer impedances (1.1 % to 146 %). For worlds in which every
+    # component carries a source the unknown set, its ordering and
+    # hence the solution are bit-identical to the historic scheme.
+    active_set = _solvable_nodes(cluster_id, elec_to_segidx, finite_branches)
     if not active_set:
         return seg_currents, cluster_potential
 
@@ -233,9 +406,8 @@ def _galerkin_solve(
     K_a = len(active_clusters)
     cluster_idx = {c: k for k, c in enumerate(active_clusters)}
 
-    # Active segments: those whose owning electrode lies in an active
-    # cluster. Passive (no input current and no branch link) clusters
-    # are excluded from the unknowns.
+    # Active segments: those whose owning node lies in the solvable set
+    # (in practice every segment).
     active_seg_indices: list[int] = []
     seg_to_active_cluster: list[int] = []
     for ename, idxs in elec_to_segidx.items():
@@ -357,6 +529,10 @@ def _galerkin_solve(
     return seg_currents, cluster_potential
 
 
+#: Historic name (the scheme is point matching, not Galerkin; 10.31).
+_galerkin_solve = _point_matching_solve
+
+
 # ---------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------
@@ -369,24 +545,28 @@ def solve_mom(
     two_layer_max_terms: int | None = None,
     two_layer_tol: float | None = None,
 ) -> FieldResult:
-    """Galerkin Method-of-Moments backend.
+    """Point-matching method-of-moments backend.
 
-    Supports :class:`HomogeneousSoil` and :class:`TwoLayerSoil`. The
-    Green's-function kernel is taken from the matching image backend;
-    only the resolution scheme (per-segment Galerkin instead of
-    per-electrode average potential) differs.
+    Supports :class:`HomogeneousSoil`, :class:`TwoLayerSoil` and a
+    :class:`MultiLayerSoil` whose canonical stack has at most two layers
+    (10.48). The Green's-function kernel is taken from the matching
+    image backend; only the resolution scheme (one current per segment,
+    point matching at the segment midpoints, instead of one uniform
+    current per electrode) differs. Clusters without a source float
+    (zero net current, 10.29). See the module docstring for the
+    accuracy of the scheme.
 
     Parameters
     ----------
     world
         World to evaluate.
     engine
-        Engine configuration; ``engine.segment_length`` controls the
+        Engine configuration; ``engine.segment_length`` (m) controls the
         discretisation.
     two_layer_max_terms, two_layer_tol
-        Truncation parameters for the Tagg/Sunde series, only used
-        when ``world.soil`` is a :class:`TwoLayerSoil`. ``None``
-        (default) takes ``engine.image_max_terms`` /
+        Truncation parameters for the Tagg/Sunde series (term count,
+        dimensionless tail bound), only used for two-layer soil.
+        ``None`` (default) takes ``engine.image_max_terms`` /
         ``engine.image_series_tol``, so the engine knob reaches this
         backend consistently with ``image_2layer``.
 
@@ -394,14 +574,28 @@ def solve_mom(
     -------
     FieldResult
         Result object compatible with :class:`FieldResult` from the
-        image backends. ``metadata['solver']`` is set to ``'galerkin'``.
+        image backends. ``metadata['solver']`` is ``'point_matching'``
+        (``'galerkin'`` up to 0.15.0, although the scheme was the
+        same).
     """
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil)):
+    if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(
-            "Backend 'mom' currently supports HomogeneousSoil and "
-            f"TwoLayerSoil only. Got: {type(world.soil).__name__}."
+            "Backend 'mom' supports HomogeneousSoil, TwoLayerSoil and "
+            "MultiLayerSoil stacks with at most two distinct layers. "
+            f"Got: {type(world.soil).__name__}."
+        )
+    # Review pass 10, 10.48: solve the canonical soil — a MultiLayerSoil
+    # whose adjacent layers share a resistivity is a two-layer (or
+    # homogeneous) soil, and a TwoLayerSoil without contrast is
+    # homogeneous.
+    soil = canonical_soil(world.soil)
+    if isinstance(soil, MultiLayerSoil):
+        raise TypeError(
+            "Backend 'mom' supports at most two distinct soil layers; this "
+            f"MultiLayerSoil has {len(soil.layers)}. Use "
+            "backend='mom_sommerfeld' for n >= 3 soils."
         )
     _reject_concrete_shells(world, "mom")
     _warn_ignored_sources(world, "mom")
@@ -413,14 +607,14 @@ def solve_mom(
     ds = engine.segment_length
     _log.info(
         "mom: soil=%s, segment_length=%.3f",
-        type(world.soil).__name__,
+        type(soil).__name__,
         ds,
     )
 
     # 1) Discretisation — identical to the image backends; for
     #    two-layer soil segments are split at the interface
     #    (ADR-0007 step 1, audit 2026-07-08 WP-D2).
-    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
+    interfaces = (soil.h_1,) if isinstance(soil, TwoLayerSoil) else None
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
@@ -441,7 +635,7 @@ def solve_mom(
 
     # 3) Cluster building (ideal conductors only), finite-impedance
     #    branch list, plus the distributed-conductor topology
-    #    (ADR-0003) — all fed into the augmented Galerkin system.
+    #    (ADR-0003) — all fed into the bordered point-matching system.
     cluster_id = _build_clusters(world.electrodes, world.conductors)
     finite_branches = _build_finite_branches(world.conductors, cluster_id)
     cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
@@ -495,29 +689,27 @@ def solve_mom(
     #    *solves* the per-segment current distribution — exactly the
     #    tool to quantify the image family's uniform-leakage bias
     #    across the interface.
-    if isinstance(world.soil, TwoLayerSoil):
+    if isinstance(soil, TwoLayerSoil):
         z_max = seg_points[:, 2].max()
-        if z_max >= world.soil.h_1:
+        if z_max >= soil.h_1:
             _log.info(
                 "mom: cross-layer geometry (z_max = %.3f m >= h_1 = "
                 "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
                 z_max,
-                world.soil.h_1,
+                soil.h_1,
             )
 
     # 5) Assemble the reaction matrix Z (kernel depends on soil model).
     n_terms_used = 0
-    if isinstance(world.soil, HomogeneousSoil):
-        Z = _build_Z_homogeneous(
-            seg_points, seg_lengths, wire_radii, world.soil.resistivity
-        )
+    if isinstance(soil, HomogeneousSoil):
+        Z = _build_Z_homogeneous(seg_points, seg_lengths, wire_radii, soil.resistivity)
     else:
         # TwoLayerSoil
         Z = _build_Z_two_layer(
             seg_points,
             seg_lengths,
             wire_radii,
-            world.soil,
+            soil,
             two_layer_max_terms,
             two_layer_tol,
         )
@@ -525,8 +717,8 @@ def solve_mom(
         from groundfield.solver.image_2layer import _two_layer_image_offsets
 
         _, _, _, n_terms_used = _two_layer_image_offsets(
-            world.soil.reflection_coefficient,
-            world.soil.h_1,
+            soil.reflection_coefficient,
+            soil.h_1,
             two_layer_max_terms,
             two_layer_tol,
         )
@@ -537,8 +729,8 @@ def solve_mom(
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
 
-    if isinstance(world.soil, HomogeneousSoil):
-        rho_self = world.soil.resistivity
+    if isinstance(soil, HomogeneousSoil):
+        rho_self = soil.resistivity
         phi_kernel = lambda sc_real: _self_corrected_kernel(
             seg_points,
             seg_lengths,
@@ -548,7 +740,7 @@ def solve_mom(
         )
     else:
         self_kernel = _two_layer_self_kernel_factory(
-            world.soil,
+            soil,
             two_layer_max_terms,
             two_layer_tol,
             allow_cross_layer=True,
@@ -566,7 +758,7 @@ def solve_mom(
             if (has_inductance and carson_builder is not None)
             else None
         )
-        sc, _ = _galerkin_solve(
+        sc, _ = _point_matching_solve(
             Z=Z,
             elec_input_current=elec_input_current,
             cluster_id=cluster_id,
@@ -594,21 +786,24 @@ def solve_mom(
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
 
-    electrode_potentials: dict[str, list[complex]] = {}
-    electrode_currents: dict[str, list[complex]] = {}
-    conductor_currents: dict[str, list[complex]] = {}
-    conductor_potentials: dict[str, list[complex]] = {}
-    for ename, idxs in elec_to_segidx.items():
-        if not idxs:
-            continue
-        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
-        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
-        if ename in real_electrode_names:
-            electrode_potentials[ename] = u_list
-            electrode_currents[ename] = i_list
-        else:
-            conductor_potentials[ename] = u_list
-            conductor_currents[ename] = i_list
+    # Node potentials and leakage currents; floating clusters (no
+    # source, no branch) report an exactly zero net current (10.29).
+    (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    ) = _node_results(
+        elec_to_segidx=elec_to_segidx,
+        phi_per_freq=phi_per_freq,
+        sc_per_freq=sc_per_freq,
+        cluster_id=cluster_id,
+        electrode_names=real_electrode_names,
+        floating=_floating_clusters(
+            elec_input_current, cluster_id, finite_branches, real_electrode_names
+        ),
+        n_freq=n_freq,
+    )
 
     # 8) Point-source list and cluster map for post-processing.
     point_sources = [
@@ -629,12 +824,12 @@ def solve_mom(
         )
 
     # 9) Soil-specific metadata.
-    if isinstance(world.soil, HomogeneousSoil):
-        soil_resistivity = float(world.soil.resistivity)
+    if isinstance(soil, HomogeneousSoil):
+        soil_resistivity = float(soil.resistivity)
         soil_meta: dict[str, float | int | bool] = {}
     else:
-        K = world.soil.reflection_coefficient
-        soil_resistivity = float(world.soil.rho_1)
+        K = soil.reflection_coefficient
+        soil_resistivity = float(soil.rho_1)
         converged = (
             _series_tail_bound(abs(K), n_terms_used) < two_layer_tol
             if n_terms_used
@@ -651,9 +846,9 @@ def solve_mom(
             )
         soil_meta = {
             "K": float(K),
-            "rho_1": float(world.soil.rho_1),
-            "rho_2": float(world.soil.rho_2),
-            "h_1": float(world.soil.h_1),
+            "rho_1": float(soil.rho_1),
+            "rho_2": float(soil.rho_2),
+            "h_1": float(soil.h_1),
             "n_terms_used": n_terms_used,
             "converged": bool(converged),
         }
@@ -665,20 +860,20 @@ def solve_mom(
         electrode_currents=electrode_currents,
         point_sources=point_sources,
         soil_resistivity=soil_resistivity,
-        soil=world.soil,
+        soil=soil,
         clusters=cluster_members,
         metadata={
             "world_name": world.name,
             "n_segments": n_segments,
             "segment_length": ds,
-            "solver": "galerkin",
+            "solver": "point_matching",
             "stub": False,
             "earth_inductive_model": earth_inductive_model,
             **soil_meta,
             **_carson_skin_metadata(
                 has_inductance,
                 sigma_earth_for_carson,
-                world.soil,
+                soil,
                 engine.frequencies,
             ),
             **(

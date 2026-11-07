@@ -1,4 +1,21 @@
-"""Finite-Element-Method backend (``fem``).
+"""Finite-element backend (``fem``) — experimental.
+
+Status (review pass 10, 10.23)
+------------------------------
+``fem`` solves the volume PDE for an **equivalent hemisphere** per
+cluster, not for the electrodes. In homogeneous soil that reproduces
+the Dwight resistance of a single electrode by construction (the
+hemisphere radius is chosen from it), so the backend then checks the
+:mod:`groundfield.references.dwight1936` formulas, not the integral
+engines. It is **not** a valid cross-check when a cluster has several
+electrodes (radii summed, −35 % for a 2 m ring with three 4 m rods in
+homogeneous soil), when the world has several clusters (each solved
+alone, transfer impedances 0) or when a layer interface lies between
+the electrode's deepest point and the hemisphere radius (+1092 % for a
+3 m rod through $h_1$ = 2 m, −92 % for a 10 m ring above it); a
+:class:`FemReductionWarning` names every such reason. Conforming
+axisymmetric rod and ring models without the reduction are the planned
+replacement.
 
 Mathematical / physical model
 -----------------------------
@@ -89,9 +106,14 @@ $\\vartheta$. Consequences:
   guarantee is *bounded* quality away from the cut, not $O(1)$
   quality everywhere.
 - The near-electrode resolution is decoupled from the outer
-  truncation: it depends on $r_{\\text{far}}$ only through
-  $\\ln r_{\\text{far}}$, so a deep soil layer no longer starves
-  the electrode of nodes.
+  truncation. At a fixed node count it would still depend on
+  $r_{\\text{far}}$ through $\\ln r_{\\text{far}}$ (−1.6 % at
+  $h_1$ = 10 km for $\\rho_2 = \\rho_1$ up to 0.15.0); since review pass
+  10 (10.49) the number of radial lines grows with
+  $\\ln(r_{\\text{far}} / a_{\\text{eq}})$ whenever a layer stack
+  deeper than 1 m stretches the domain beyond the homogeneous one, so
+  the radial step ratio, and with it the resolution, stays that of the
+  homogeneous mesh (−0.0006 % at $h_1$ = 10 km).
 - Refining $(n_{\\text{radial}}, n_{\\text{axial}})$ by
   $n \\mapsto 2n - 1$ produces *nested* FE spaces,
   $V_h \\subset V_{h/2} \\subset V$. The conductance is the
@@ -146,34 +168,33 @@ truncation sphere plus the power carried through it.
 Scope
 -----
 - **Geometry coverage.** The axisymmetric formulation captures
-  :class:`RodElectrode` (vertical rod, ``s = 0``) and
-  :class:`RingElectrode` and :class:`MeshElectrode` *as effective
-  hemispheres* — the equivalent-hemisphere radius is computed from
-  the electrode's geometric parameters before the FEM run. This is
-  the standard reduction used in research-level reference
-  comparisons (see Sunde 1968 ch. 2.1, Dwight 1936): a ring or mesh
-  electrode of effective area $A$ and effective length
-  $L$ is replaced by the hemisphere of radius
-  $a_{\\text{eq}}$ that produces the same DC resistance in
-  homogeneous soil. The replacement is exact only for hemispheres,
-  good (better than 5 %) for rings and shallow meshes, and
-  documented as a known approximation.
-- **Multi-electrode.** Multiple electrodes are aggregated into one
-  effective hemisphere centred at the centroid of the cluster — the
-  ``fem`` backend therefore reports cluster-level results rather than
-  per-electrode currents. For a single cluster (the typical
-  case) the approximation is appropriate.
+  :class:`RodElectrode`, :class:`RingElectrode`,
+  :class:`StripElectrode`, :class:`GridMeshElectrode` and
+  :class:`MeshElectrode` *as effective hemispheres* — the
+  equivalent-hemisphere radius is computed from the electrode's
+  geometric parameters before the FEM run: an electrode is replaced by
+  the hemisphere of radius $a_{\\text{eq}}$ that has the same DC
+  resistance in homogeneous soil of the top-layer resistivity (Dwight
+  1936; Sverak's formula for grids). In homogeneous soil the replacement
+  therefore reproduces the Dwight value; in layered soil the hemisphere
+  extends to the depth $a_{\\text{eq}}$, not to the electrode's depth,
+  and the result describes a different geometry. Star and polyline
+  electrodes are not reducible and raise.
+- **Multi-electrode.** The hemisphere radii of a cluster's electrodes
+  are summed, i.e. the electrodes are put in parallel without their
+  mutual resistance; the result is a lower bound of the cluster
+  resistance, and the per-electrode current split ($\\propto$ radius,
+  top-layer resistivity only) ignores the soil.
+- **Several clusters.** Each cluster is solved alone; finite branches
+  between clusters enter a nodal analysis on the cluster level, but the
+  clusters see no mutual resistance and passive clusters report 0 V.
 - **Frequency.** Quasi-static, frequency-independent.
 
-The FEM backend's purpose in the engine family is to provide a
-**volume-PDE cross-check** that does not share any code path with
-the integral-equation engines. Where it disagrees with the others on
-simple geometries by more than a few per cent, the source is the
-equivalent-hemisphere reduction described above (and documented in
-the result metadata) — *not* the discretisation: for homogeneous
-soil the solver reproduces
-$R = \\rho / (2 \\pi a_{\\text{eq}})$ to $< 1\\,\\%$ at the
-default resolution and converges to it at second order.
+What the discretisation guarantees: for homogeneous soil the solver
+reproduces $R = \\rho / (2 \\pi a_{\\text{eq}})$ to $< 1\\,\\%$ at
+the default resolution and converges to it at second order. What it
+does not: a statement about the electrodes the hemisphere replaces
+(see *Status* above).
 
 References
 ----------
@@ -194,6 +215,7 @@ References
 from __future__ import annotations
 
 import math
+import warnings
 from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
@@ -228,9 +250,100 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
-__all__ = ["solve_fem", "equivalent_hemisphere_radius"]
+__all__ = ["FemReductionWarning", "equivalent_hemisphere_radius", "solve_fem"]
 
 _log = get_logger(__name__)
+
+
+class FemReductionWarning(UserWarning):
+    """The equivalent-hemisphere reduction does not represent this world.
+
+    ``fem`` replaces every galvanic cluster by one hemisphere with the
+    Dwight resistance of its electrodes in homogeneous top-layer soil
+    and solves each cluster alone. Emitted once per solve, listing every
+    reason, when the result is therefore not the resistance of the
+    actual geometry (review pass 10, 10.23):
+
+    * a cluster with several electrodes (the hemisphere radii are summed,
+      i.e. the electrodes' mutual resistance is neglected and the
+      resistance is biased low — −35 % for a 2 m ring with three 4 m
+      rods in homogeneous soil);
+    * several clusters (each is solved alone: no mutual resistance
+      between them, transfer impedances are exactly 0, passive clusters
+      report 0 V);
+    * a layer interface between the electrode's deepest point and the
+      hemisphere radius (the hemisphere injects its current into a
+      different layer than the electrode: +1092 % for a 3 m rod through
+      ``h_1`` = 2 m, −92 % for a 10 m ring above it).
+
+    Escalate with ``warnings.simplefilter("error", FemReductionWarning)``
+    when ``fem`` serves as a cross-check.
+    """
+
+
+def _depth_range(electrode: "_ElectrodeBase") -> tuple[float, float]:
+    """Shallowest and deepest point of a fem-reducible electrode, in m."""
+    if isinstance(electrode, RodElectrode):
+        z0 = float(electrode.position[2])
+        return z0, z0 + float(electrode.length)
+    if isinstance(electrode, RingElectrode):
+        z = float(electrode.center[2])
+        return z, z
+    if isinstance(electrode, StripElectrode):
+        za, zb = float(electrode.start[2]), float(electrode.end[2])
+        return min(za, zb), max(za, zb)
+    z = float(electrode.corner[2])  # GridMeshElectrode, MeshElectrode
+    return z, z
+
+
+def _reduction_issues(
+    world: "World",
+    clusters: dict[str, list[str]],
+    active_clusters: list[str],
+    a_eq_per_cluster: dict[str, float],
+) -> list[str]:
+    """Reasons why the hemisphere reduction misrepresents ``world``.
+
+    Interfaces are taken from the canonical layer stack (10.48), so an
+    interface between layers of equal resistivity is no reason.
+    """
+
+    def label(root: str) -> str:
+        names = sorted(clusters[root])
+        shown = ", ".join(f"'{n}'" for n in names[:4])
+        return f"cluster {{{shown}{', ...' if len(names) > 4 else ''}}}"
+
+    reasons: list[str] = []
+    for root in active_clusters:
+        members = clusters[root]
+        if len(members) > 1:
+            reasons.append(
+                f"{label(root)}: {len(members)} electrodes are reduced to "
+                "one hemisphere whose radius is the sum of their radii, i.e. "
+                "their mutual resistance is neglected and the resistance is "
+                "biased low"
+            )
+    if len(clusters) > 1 and active_clusters:
+        reasons.append(
+            f"the world has {len(clusters)} clusters, and each is solved "
+            "alone: the mutual resistance between clusters is zero, transfer "
+            "impedances are exactly 0 and passive clusters report 0 V"
+        )
+    interfaces = np.cumsum(as_layer_stack(world.soil).h)
+    for root in active_clusters:
+        a_eq = a_eq_per_cluster[root]
+        z_deep = max(_depth_range(world.get_electrode(e))[1] for e in clusters[root])
+        lo, hi = min(z_deep, a_eq), max(z_deep, a_eq)
+        crossed = [float(d) for d in interfaces if lo < d < hi]
+        if crossed:
+            reasons.append(
+                f"{label(root)}: the electrode reaches z = {z_deep:.3g} m "
+                f"but its equivalent hemisphere has the radius a_eq = "
+                f"{a_eq:.3g} m, and the layer interface at h = {crossed[0]:.3g} m "
+                "lies between the two, so the hemisphere injects its current "
+                "into a different layer than the electrode"
+            )
+    return reasons
 
 
 # ---------------------------------------------------------------------
@@ -370,6 +483,9 @@ class _AxiMesh(NamedTuple):
     inner_nodes: np.ndarray
     outer_edges: np.ndarray
     r_far: float
+    #: Radial node lines actually used (``n_radial``, or more when the
+    #: truncation sphere is stretched by a deep layer stack, 10.49).
+    n_radial: int = 0
 
 
 def _layer_of_depth(z: np.ndarray, h_layers: list[float]) -> np.ndarray:
@@ -626,6 +742,20 @@ def _build_axisymmetric_mesh(
     # caller passes a tiny truncation factor.
     r_far = max(r_far, 4.0 * a_eq)
 
+    # Review pass 10, 10.49: a deep layer stack enlarges r_far through
+    # ``base_length``; at a fixed node count the geometric ladder then
+    # stretches over more decades and the near-electrode resolution
+    # falls (rho_2 = rho_1 declared as two layers: -1.6 % at
+    # h_1 = 10 km). The radial step ratio is therefore capped at that of
+    # the homogeneous domain r_ref = factor * (a_eq + 1 m): the number of
+    # radial intervals grows with ln(r_far / a_eq). Homogeneous soil and
+    # stacks with sum(h) <= 1 m keep exactly ``n_radial`` lines (and the
+    # nested-refinement property documented above).
+    r_ref = max(factor * (a_eq + 1.0), 4.0 * a_eq)
+    if r_far > r_ref:
+        stretch = math.log(r_far / a_eq) / math.log(r_ref / a_eq)
+        n_radial = int(math.ceil(1.0 + (n_radial - 1) * stretch))
+
     r_lines = np.geomspace(a_eq, r_far, n_radial)
     r_lines[0] = a_eq
     r_lines[-1] = r_far
@@ -687,6 +817,7 @@ def _build_axisymmetric_mesh(
         inner_nodes=np.asarray(inner_nodes, dtype=int),
         outer_edges=np.asarray(outer_edges, dtype=int).reshape(-1, 2),
         r_far=float(r_far),
+        n_radial=int(n_radial),
     )
 
 
@@ -867,14 +998,16 @@ def solve_fem(
     z_far_factor: float | None = None,
     far_field: str = "robin",
 ) -> FieldResult:
-    """Axisymmetric Finite-Element solver for grounding systems.
+    """Experimental axisymmetric finite-element solver (equivalent hemispheres).
 
     Reduces every cluster to its **equivalent hemisphere** at the
     cluster centroid, then solves the volume PDE on a 2-D
     axisymmetric triangular mesh. This is the only volume-PDE engine
-    in the suite and forms the third independent cross-check (next to
-    the closed-form ``image_*`` family and the integral ``mom``/``bem``
-    family).
+    in the suite, but it solves the problem of the hemisphere, not of
+    the electrodes: it is a valid cross-check only for one compact
+    electrode per world whose hemisphere stays in the electrode's own
+    layer, and it emits a :class:`FemReductionWarning` naming the
+    reason otherwise (review pass 10, 10.23; see the module docstring).
 
     The mesh conforms to the hemisphere $r = a_{\\text{eq}}$ and the
     layer interfaces $z = \\sum_{i \\le k} h_i$ (see
@@ -890,15 +1023,19 @@ def solve_fem(
     Parameters
     ----------
     world
-        World to evaluate. Must currently contain a single galvanic
-        cluster.
+        World to evaluate. Several clusters are accepted but solved
+        without mutual coupling (warning).
     engine
         Engine configuration.
     n_radial, n_axial
         Mesh resolution: node lines in the radial ($r$) and
         transverse ($\\vartheta$) direction of the spherical shell
         mesh. Refining as $n \\mapsto 2n - 1$ keeps the FE spaces
-        nested and the convergence monotone.
+        nested and the convergence monotone (homogeneous soil). A layer
+        stack deeper than 1 m adds radial lines so that the radial step
+        ratio stays that of the homogeneous mesh (10.49);
+        ``metadata['fem_mesh'][cluster]['n_radial']`` reports the count
+        used.
     r_far_factor
         Far-field truncation radius as a multiple of the
         characteristic length $a_{\\text{eq}} + \\sum h_i$. The
@@ -943,16 +1080,16 @@ def solve_fem(
     _reject_concrete_shells(world, "fem")
     _warn_ignored_sources(world, "fem")
 
-    stack = as_layer_stack(world.soil)
+    stack = as_layer_stack(world.soil, canonical=False)
     rho_1 = float(stack.rhos[0])
-    # The mesh follows the soil description (every layer interface is
-    # cut into the elements). We do *not* collapse equal-ρ stacks down
-    # to a 1-layer mesh — keeping the topology consistent across a ρ₂
-    # sweep is a stronger guarantee than reproducing the homogeneous
-    # discretisation bit-exactly. Since the mesh is graded relative to
-    # a_eq instead of the domain height, the residual ρ₂ = ρ₁ bias is
-    # only the logarithmic resolution loss of the larger r_far
-    # (< 1 % for Σh up to 100 m; see tests/test_pass9_fem.py).
+    # The mesh follows the declared soil description (every layer
+    # interface is cut into the elements). Unlike the integral backends,
+    # fem does *not* merge equal-ρ layers (10.48) — keeping the mesh
+    # topology consistent across a ρ₂ sweep is the stronger guarantee
+    # here. Since the radial line count follows ln(r_far / a_eq) (10.49)
+    # the two choices differ by at most 1e-5 at ρ₂ = ρ₁ (measured for a
+    # 1.5 m rod, h_1 = 1 m ... 10 km); the reduction guard below uses the
+    # canonical (physical) interfaces.
     h_layers = stack.h.tolist()
 
     # 1) Cluster the electrodes; build per-cluster equivalent hemispheres.
@@ -1071,6 +1208,7 @@ def solve_fem(
             "n_triangles": int(mesh.triangles.shape[0]),
             "n_electrode_nodes": int(mesh.inner_nodes.size),
             "r_far": float(mesh.r_far),
+            "n_radial": int(mesh.n_radial),
         }
 
         # 3) Unit-potential problem on the conforming hemisphere plus
@@ -1087,6 +1225,21 @@ def solve_fem(
         Z_per_cluster[root] = R_cluster
         # Hemisphere-radius distribution per electrode is reused below
         # in step 5 once the leakage current per cluster is known.
+
+    # Review pass 10, 10.23: say when the reduction does not represent
+    # the world, once per solve and with every reason.
+    reasons = _reduction_issues(world, clusters, active_clusters, a_eq_per_cluster)
+    if reasons:
+        warnings.warn(
+            "fem (experimental): the equivalent-hemisphere reduction is not "
+            "a valid model of this world — "
+            + "; ".join(reasons)
+            + ". The result is the resistance of the equivalent "
+            "hemisphere(s), not of the electrodes; use 'mom' or "
+            "'mom_sommerfeld' for these configurations.",
+            FemReductionWarning,
+            stacklevel=3,
+        )
 
     # ------------------------------------------------------------------
     # 5) Nodal analysis on the cluster level.
@@ -1160,7 +1313,7 @@ def solve_fem(
             for ename in clusters[root]
         ]
         a_total = sum(a_per_electrode_c)
-        for ename, a_e in zip(clusters[root], a_per_electrode_c):
+        for ename, a_e in zip(clusters[root], a_per_electrode_c, strict=True):
             share = a_e / a_total if a_total > 0.0 else 0.0
             electrode_currents[ename] = [I_leak * share] * n_freq
             electrode_potentials[ename] = [u_cluster] * n_freq

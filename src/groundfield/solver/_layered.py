@@ -1,9 +1,11 @@
 """Layered-soil Green's-function helpers (shared by several backends).
 
 This module collects the **physics building blocks** that are shared by
-``image_nlayer``, ``cim``, ``mom_sommerfeld`` and ``bem`` whenever they
-need to evaluate the potential of a point current source inside a
-horizontally stratified, semi-infinite half-space.
+``image_nlayer``, ``cim``, ``mom``, ``mom_sommerfeld``, ``bem`` and
+``fem`` whenever they need the layer structure of a horizontally
+stratified, semi-infinite half-space: the neutral :class:`LayerStack`
+container, its canonical form (:func:`canonical_layer_stack`) and the
+upward-looking reflection coefficient (:func:`reflection_gamma`).
 
 Mathematical / physical model
 -----------------------------
@@ -72,6 +74,26 @@ Reduction to special cases
   expansion; this is the regime where the four engines below have to
   pick a numerical strategy (see ADR-0002).
 
+Canonical layer stack
+---------------------
+The reflection coefficient only sees *contrasts*: an interface between
+two layers of equal resistivity has $K_i = 0$ and is physically absent,
+and a layer of zero thickness contributes $e^{-2\\lambda \\cdot 0} = 1$
+in the recursion, i.e. nothing. A declared stack can therefore describe
+a soil with fewer layers than it lists — ``[100, 400, 400]`` Ω·m over
+``h = [2, 3]`` m *is* the two-layer soil ``(100, 400, h_1 = 2 m)``, and
+``[ρ, ρ, ρ]`` is homogeneous. Since the backends choose their kernel by
+the layer count (closed-form series for $n \\le 2$, quadrature for
+$n \\ge 3$), the declared count must not decide: :func:`as_layer_stack`
+returns the **canonical** stack by default
+(:func:`canonical_layer_stack`), in which adjacent layers with
+resistivities equal to a relative $10^{-12}$ are merged and zero-thickness
+layers are dropped (review pass 10, 10.48). Up to 0.15.0 the literal
+stack was used, so physically two-layer or homogeneous
+``MultiLayerSoil`` declarations were rejected by ``cim`` / ``bem`` /
+``mom`` and, for electrodes below $h_1$, by ``mom_sommerfeld`` and
+``image_nlayer``.
+
 References
 ----------
 - Sunde, E. D. (1968). *Earth Conduction Effects in Transmission
@@ -90,14 +112,15 @@ References
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Iterable
 
 import numpy as np
 
 from groundfield.soil.models import (
     HomogeneousSoil,
     MultiLayerSoil,
+    SoilLayer,
     SoilModel,
     TwoLayerSoil,
 )
@@ -105,8 +128,16 @@ from groundfield.soil.models import (
 __all__ = [
     "LayerStack",
     "as_layer_stack",
+    "canonical_layer_stack",
+    "canonical_soil",
     "reflection_gamma",
 ]
+
+#: Relative tolerance below which two adjacent layer resistivities count
+#: as equal and the layers are merged by :func:`canonical_layer_stack`.
+#: Two layers that agree to 1e-12 have a reflection coefficient
+#: $|K| \le 5 \cdot 10^{-13}$, i.e. no physical interface.
+EQUAL_RESISTIVITY_RTOL = 1e-12
 
 
 # ---------------------------------------------------------------------
@@ -144,30 +175,197 @@ class LayerStack:
         return (rho[1:] - rho[:-1]) / (rho[1:] + rho[:-1])
 
 
-def as_layer_stack(soil: SoilModel) -> LayerStack:
+def as_layer_stack(soil: SoilModel, *, canonical: bool = True) -> LayerStack:
     """Cast any ``SoilModel`` to a :class:`LayerStack`.
+
+    Parameters
+    ----------
+    soil
+        Homogeneous, two-layer or multilayer soil model.
+    canonical
+        Return the canonical stack (default): adjacent layers of equal
+        resistivity merged and zero-thickness layers dropped, see
+        :func:`canonical_layer_stack`. ``False`` returns the stack
+        exactly as declared.
+
+    Returns
+    -------
+    LayerStack
+        Resistivities in Ω·m and finite thicknesses in m.
+
+    Raises
+    ------
+    TypeError
+        If ``soil`` is not one of the three soil models.
 
     Notes
     -----
     Inverse of :class:`groundfield.soil.SoilModel`: a homogeneous soil
-    becomes ``n=1``, a 2-layer soil becomes ``n=2``, and a multilayer
-    soil keeps its layer count.
+    becomes ``n=1``, a 2-layer soil ``n=2`` and a multilayer soil keeps
+    its declared layer count — before canonicalisation. Every layered
+    backend reads the canonical stack, so the kernel is chosen by the
+    number of physical interfaces, not by the number of declared layers
+    (review pass 10, 10.48).
     """
     if isinstance(soil, HomogeneousSoil):
-        return LayerStack(
+        stack = LayerStack(
             rhos=np.array([soil.resistivity], dtype=float),
             h=np.zeros(0, dtype=float),
         )
-    if isinstance(soil, TwoLayerSoil):
-        return LayerStack(
+    elif isinstance(soil, TwoLayerSoil):
+        stack = LayerStack(
             rhos=np.array([soil.rho_1, soil.rho_2], dtype=float),
             h=np.array([soil.h_1], dtype=float),
         )
-    if isinstance(soil, MultiLayerSoil):
+    elif isinstance(soil, MultiLayerSoil):
         rhos = np.array([ly.resistivity for ly in soil.layers], dtype=float)
         h = np.array([ly.thickness for ly in soil.layers[:-1]], dtype=float)
-        return LayerStack(rhos=rhos, h=h)
-    raise TypeError(f"Cannot convert {type(soil).__name__} to LayerStack.")
+        stack = LayerStack(rhos=rhos, h=h)
+    else:
+        raise TypeError(f"Cannot convert {type(soil).__name__} to LayerStack.")
+    return canonical_layer_stack(stack) if canonical else stack
+
+
+def canonical_layer_stack(
+    stack: LayerStack, *, rtol: float = EQUAL_RESISTIVITY_RTOL
+) -> LayerStack:
+    """Merge layers that the Green's function cannot tell apart.
+
+    Two rules, applied in this order:
+
+    1. A finite layer of zero thickness is dropped — its attenuation
+       factor $e^{-2 \\lambda h}$ is 1 for every $\\lambda$, so it
+       leaves $\\Gamma_1(\\lambda)$ unchanged.
+    2. Adjacent layers whose resistivities agree to the relative
+       tolerance ``rtol`` are merged into one layer whose thickness is
+       the sum of theirs (semi-infinite if the lower one is the bottom
+       half-space). The interface between them has
+       $K = (\\rho_{i+1} - \\rho_i)/(\\rho_{i+1} + \\rho_i) \\approx 0$
+       and is physically absent. The upper layer's resistivity is kept.
+
+    Parameters
+    ----------
+    stack
+        Layer stack as declared.
+    rtol
+        Relative resistivity tolerance of rule 2 (dimensionless).
+
+    Returns
+    -------
+    LayerStack
+        The canonical stack. ``stack`` itself (same object) when it is
+        already canonical, so the common case costs nothing and stays
+        bit-identical.
+
+    Examples
+    --------
+    ``[100, 400, 400]`` Ω·m over ``[2, 3]`` m becomes ``[100, 400]``
+    over ``[2]`` m; ``[100, 100, 100]`` becomes the homogeneous
+    ``[100]``.
+    """
+    groups = _canonical_groups(stack, rtol=rtol)
+    if len(groups) == stack.n_layers:
+        return stack
+    thick = [float(t) for t in stack.h] + [math.inf]
+    return LayerStack(
+        rhos=np.array([float(stack.rhos[g[0]]) for g in groups], dtype=float),
+        h=np.array([sum(thick[i] for i in g) for g in groups[:-1]], dtype=float),
+    )
+
+
+def _canonical_groups(
+    stack: LayerStack, *, rtol: float = EQUAL_RESISTIVITY_RTOL
+) -> list[list[int]]:
+    """Indices of the declared layers that form each canonical layer.
+
+    Zero-thickness layers belong to no group; a layer joins the group
+    above it when its resistivity agrees with the group's (upper)
+    resistivity to ``rtol`` (see :func:`canonical_layer_stack`).
+    """
+    rhos = [float(r) for r in stack.rhos]
+    thick = [float(t) for t in stack.h] + [math.inf]
+    groups: list[list[int]] = []
+    for i, (rho, t) in enumerate(zip(rhos, thick, strict=True)):
+        if t == 0.0:
+            continue
+        if groups:
+            top = rhos[groups[-1][0]]
+            if abs(rho - top) <= rtol * max(abs(rho), abs(top)):
+                groups[-1].append(i)
+                continue
+        groups.append([i])
+    return groups
+
+
+def _relative_permittivities(soil: SoilModel) -> list[float]:
+    """Relative permittivity of every declared layer of ``soil``."""
+    if isinstance(soil, MultiLayerSoil):
+        return [float(layer.relative_permittivity) for layer in soil.layers]
+    n = 2 if isinstance(soil, TwoLayerSoil) else 1
+    return [float(soil.relative_permittivity)] * n
+
+
+def canonical_soil(soil: SoilModel) -> SoilModel:
+    """The soil model of the canonical layer stack of ``soil``.
+
+    Backends store this model in :attr:`FieldResult.soil`, so that the
+    post-solve potential evaluation picks the kernel of the soil that
+    was actually solved (a ``MultiLayerSoil`` with three declared but
+    two physical layers is evaluated with the two-layer series instead
+    of being rejected as $n \\ge 3$).
+
+    Parameters
+    ----------
+    soil
+        Homogeneous, two-layer or multilayer soil model.
+
+    Returns
+    -------
+    SoilModel
+        A :class:`HomogeneousSoil` ($n = 1$), :class:`TwoLayerSoil`
+        ($n = 2$) or :class:`MultiLayerSoil` ($n \\ge 3$) of the
+        canonical stack. ``soil`` itself is returned when its stack is
+        already canonical and its type already matches that layer count
+        (a ``MultiLayerSoil`` with one or two layers is mapped to the
+        plain model).
+
+    Notes
+    -----
+    The relative permittivity is carried over from the upper declared
+    layer of each merged group (``TwoLayerSoil`` holds one common value:
+    that of its upper layer). No backend uses it below 1 kHz; it is
+    kept so that the result's soil does not silently fall back to the
+    default.
+    """
+    raw = as_layer_stack(soil, canonical=False)
+    stack = canonical_layer_stack(raw)
+    if stack is raw and not (isinstance(soil, MultiLayerSoil) and stack.n_layers <= 2):
+        return soil
+    eps_declared = _relative_permittivities(soil)
+    eps = [eps_declared[g[0]] for g in _canonical_groups(raw)]
+    if stack.n_layers == 1:
+        return HomogeneousSoil(
+            resistivity=float(stack.rhos[0]), relative_permittivity=eps[0]
+        )
+    if stack.n_layers == 2:
+        return TwoLayerSoil(
+            rho_1=float(stack.rhos[0]),
+            rho_2=float(stack.rhos[1]),
+            h_1=float(stack.h[0]),
+            relative_permittivity=eps[0],
+        )
+    layers = [
+        SoilLayer(resistivity=float(r), thickness=float(t), relative_permittivity=e)
+        for r, t, e in zip(stack.rhos[:-1], stack.h, eps[:-1], strict=True)
+    ]
+    layers.append(
+        SoilLayer(
+            resistivity=float(stack.rhos[-1]),
+            thickness=None,
+            relative_permittivity=eps[-1],
+        )
+    )
+    return MultiLayerSoil(layers=layers)
 
 
 # ---------------------------------------------------------------------
@@ -214,31 +412,3 @@ def reflection_gamma(stack: LayerStack, lam: np.ndarray) -> np.ndarray:
         den = 1.0 + K[i] * gamma * e
         gamma = num / den
     return gamma
-
-
-# ---------------------------------------------------------------------
-# Vectorised distance helpers — used by image_nlayer and cim
-# ---------------------------------------------------------------------
-
-
-def cylindrical_radius(field_pts: np.ndarray, source_pts: np.ndarray) -> np.ndarray:
-    """Cylindrical radius $s_{mn}$ between every (field, source) pair.
-
-    Parameters
-    ----------
-    field_pts : np.ndarray, shape (M, 3)
-    source_pts : np.ndarray, shape (N, 3)
-
-    Returns
-    -------
-    s : np.ndarray, shape (M, N)
-        $s_{mn} = \\sqrt{(x_m - x_n)^2 + (y_m - y_n)^2}$.
-    """
-    diff = field_pts[:, None, 0:2] - source_pts[None, :, 0:2]
-    return np.sqrt(np.einsum("mnk,mnk->mn", diff, diff))
-
-
-def _split_layer_thicknesses(soil: SoilModel) -> Iterable[float]:
-    """Iterate over the finite layer thicknesses of a soil model."""
-    stack = as_layer_stack(soil)
-    return list(stack.h.tolist())

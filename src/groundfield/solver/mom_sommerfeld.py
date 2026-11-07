@@ -1,10 +1,10 @@
-"""Method-of-Moments backend with **direct Sommerfeld quadrature** (``mom_sommerfeld``).
+"""Point-matching method of moments with **direct Sommerfeld quadrature** (``mom_sommerfeld``).
 
 Mathematical / physical model
 -----------------------------
-The other layered backends (``image_nlayer``, ``cim``, ``bem``) rely
-on a *closed-form* representation of the layered Green's function
-(real image series or complex images). This backend instead evaluates
+The other layered backends (``image_2layer``, ``mom``, ``cim``,
+``bem``) rely on the *closed-form* Tagg/Sunde image series of the
+two-layer Green's function. This backend instead evaluates
 the Sommerfeld integral
 $$
 \\varphi(s, z; z_s) \\;=\\; \\frac{\\rho_1\\, I}{4\\pi}
@@ -13,12 +13,17 @@ $$
 J_0(\\lambda s)\\, d\\lambda
 $$
 **numerically**, point by point, with adaptive Gauss–Kronrod
-quadrature (``scipy.integrate.quad``). The recursive
+quadrature (see below). The recursive
 $\\Gamma_1(\\lambda)$ from
 :func:`groundfield.solver._layered.reflection_gamma` is used as is —
-no expansion, no fit. The result is therefore **independent** of the
-expansion choices in ``image_nlayer`` / ``cim`` and serves as the
-absolute reference inside the cross-engine validation.
+no expansion, no fit. The *kernel* is therefore independent of the
+series expansion of the other backends and is the only kernel for
+$n \\ge 3$ distinct layers. The *discretisation* is not independent:
+it is the point-matching scheme of :mod:`groundfield.solver.mom`, and
+for $n = 2$ the diagonal of the reaction matrix is ``mom``'s series
+diagonal. Agreement between ``mom_sommerfeld`` and ``mom`` on two-layer
+soil is a kernel test, not an independent validation of the scheme
+(review pass 10, 10.31).
 
 Quadrature strategy
 -------------------
@@ -77,23 +82,28 @@ returned $-9.47 \\cdot 10^{-5}$ where the far-field asymptote
 $G \\to (2/s)\\,\\rho_n/\\rho_1$ requires $+5 \\cdot 10^{-4}$,
 with **no** Python-level warning.
 
-The MoM resolution itself (Galerkin scheme with one constraint per
-cluster) is the same as :mod:`groundfield.solver.mom`; only the
-underlying Z-matrix kernel differs.
+The MoM resolution itself (point matching at the segment midpoints
+with a point-source near field, one constraint per node, source-free
+clusters floating) is that of :mod:`groundfield.solver.mom`; only the
+off-diagonal kernel evaluation differs. Its accuracy limits (about 1 %
+to 2 % below the exact thin-wire solution, drifting under refinement)
+are those documented there.
 
 Validity
 --------
 - Quasi-static, $f < 1\\,\\mathrm{kHz}$.
 - All segments in the **upper** layer, except for the $n = 2$
   cross-layer case, which is delegated to
-  :mod:`groundfield.coupling.layered_green`.
-- Slower than the closed-form backends but methodologically
-  independent. Use it as the **reference** in cross-engine tests on
-  layered worlds with hard contrasts: the pointwise kernel matches
-  the analytic Tagg/Sunde series to $\\lesssim 10^{-13}$ relative
-  (median $\\sim 10^{-16}$) for
-  $\\rho_2 / \\rho_1 \\in [10^{-2}, 10^{2}]$, so any deviation of
-  a closed-form backend is that backend's series / fit error.
+  :mod:`groundfield.coupling.layered_green`. The layer stack is the
+  canonical one (equal adjacent layers merged, 10.48), so a declared
+  three-layer stack with two equal layers is the $n = 2$ case.
+- Slower than the closed-form backends. Its value is the kernel: the
+  pointwise kernel matches the analytic Tagg/Sunde series to
+  $\\lesssim 10^{-13}$ relative (median $\\sim 10^{-16}$) for
+  $\\rho_2 / \\rho_1 \\in [10^{-2}, 10^{2}]$, so for $n = 2$ any
+  deviation of a closed-form backend *with the same discretisation*
+  is that backend's series error; for $n \\ge 3$ it is the only
+  kernel available.
 - Distances are floored at 1 mm (``_MIN_DISTANCE``). That floor is
   applied to the *analytic* $K_1 / \\sqrt{s^2 + d_{\\text{int}}^2}$
   interface-image term but **not** to the matching
@@ -148,6 +158,7 @@ from groundfield.soil.models import (
 from groundfield.solver._layered import (
     LayerStack,
     as_layer_stack,
+    canonical_soil,
     reflection_gamma,
 )
 from groundfield.solver.image import (
@@ -162,7 +173,11 @@ from groundfield.solver.image import (
     _Segment,
     _warn_ignored_sources,
 )
-from groundfield.solver.mom import _galerkin_solve
+from groundfield.solver.mom import (  # shared point-matching solve
+    _floating_clusters,
+    _point_matching_solve,
+    _node_results,
+)
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
 
@@ -285,6 +300,10 @@ class _QuadratureIssue(NamedTuple):
     abs_dz: float
     z_plus: float
     grid: _PanelGrid
+    #: The oscillation budget bound (``osc_panels_required >
+    #: max_osc_panels``): the J_0 half periods are not all resolved, and
+    #: every rung of the refinement ladder shares that capped grid.
+    capped: bool = False
 
 
 def _format_convergence_warning(
@@ -297,18 +316,27 @@ def _format_convergence_warning(
 ) -> str:
     """Human-readable message for :class:`SommerfeldConvergenceWarning`."""
     grid = issue.grid
-    capped = grid.lam_covered < grid.lam_required
     where = (
         f"s = {issue.s:.4g} m, |z - z_s| = {issue.abs_dz:.4g} m, "
         f"z + z_s = {issue.z_plus:.4g} m"
     )
-    head = (
-        "mom_sommerfeld: the reflected-remainder quadrature did not "
-        f"converge. Worst pair ({where}): the last two grids of the "
-        f"refinement ladder {list(_REFINEMENTS)} still differ by "
-        f"{issue.achieved:.3e}, against a requested tolerance of "
-        f"{issue.tol:.3e} (epsabs={epsabs:.1e}, epsrel={epsrel:.1e})."
+    ladder = (
+        f"the last two grids of the refinement ladder {list(_REFINEMENTS)} "
+        f"differ by {issue.achieved:.3e}, against a requested tolerance of "
+        f"{issue.tol:.3e} (epsabs={epsabs:.1e}, epsrel={epsrel:.1e})"
     )
+    if issue.capped:
+        head = (
+            "mom_sommerfeld: the reflected-remainder quadrature did not "
+            f"converge. Worst pair ({where}): {ladder}, but every grid of "
+            "the ladder shares a capped oscillation grid, so their "
+            "agreement does not certify the value."
+        )
+    else:
+        head = (
+            "mom_sommerfeld: the reflected-remainder quadrature did not "
+            f"converge. Worst pair ({where}): {ladder}."
+        )
     if n_affected > 1:
         head += f" {n_affected} reaction-matrix entries are affected."
     cause = (
@@ -321,7 +349,7 @@ def _format_convergence_warning(
             "'max_osc_panels' (Engine.sommerfeld_max_osc_panels); "
             "runtime and memory grow linearly with it."
         )
-        if capped
+        if issue.capped
         else (
             " The oscillation grid is fully covered, so the residual "
             "error sits in the layer contrast: for |K_1| -> 1 the "
@@ -721,6 +749,7 @@ def _reflected_integral(
     grid = _PanelGrid(np.zeros(2), 0.0, 0.0, 0)
     achieved = math.inf
     tol = math.inf
+    ladder_converged = False
     for refine in _REFINEMENTS:
         grid = _panel_edges(
             lam_max,
@@ -738,13 +767,25 @@ def _reflected_integral(
             )
             achieved = abs(value - previous)
             if achieved <= tol:
+                ladder_converged = True
                 break
         previous = value
-    else:
+    # Review pass 10, 10.47: once the oscillation budget binds, every rung
+    # of the ladder uses the same capped half-period grid (the budget is
+    # spent coverage-first), so two rungs can agree although the J_0
+    # oscillation beyond ``grid.lam_covered`` was never resolved — and
+    # with the absolute floor ``epsabs`` dominating for |G| < epsabs /
+    # epsrel they did, silently (3.1e-3 error at s = 5 km over a 5 cm
+    # layer). A capped budget is therefore non-convergence by itself.
+    # ``lam_covered < lam_required`` alone is not the test: it also holds
+    # for the last, partial half period of a fully resolved grid.
+    capped = grid.osc_panels_required > max(1, int(max_osc_panels))
+    if not ladder_converged or capped:
         _log.debug(
             "mom_sommerfeld: remainder quadrature not converged to "
             "epsrel=%.1e (s=%.3g, |dz|=%.3g, z+z_s=%.3g, "
-            "achieved=%.3e > tol=%.3e, lam_covered=%.4g of %.4g)",
+            "achieved=%.3e vs tol=%.3e, lam_covered=%.4g of %.4g, "
+            "oscillation budget bound: %s)",
             epsrel,
             s,
             abs_dz,
@@ -753,6 +794,7 @@ def _reflected_integral(
             tol,
             grid.lam_covered,
             grid.lam_required,
+            capped,
         )
         issue = _QuadratureIssue(
             achieved=float(achieved),
@@ -761,6 +803,7 @@ def _reflected_integral(
             abs_dz=float(abs_dz),
             z_plus=float(z_plus),
             grid=grid,
+            capped=bool(capped),
         )
         if issues is None:
             _emit_convergence_warning(
@@ -844,28 +887,17 @@ def sommerfeld_kernel_value(
         saturates at 60 ($\\sim 10^{-26}$), so raising it beyond
         the default cannot change the result.
 
-        .. warning::
-           **The same keyword has a different meaning on the
-           delegated $n = 2$ cross-layer path.** When
-           ``stack.n_layers == 2`` and $z > h_1$ or $z_s > h_1$,
-           the call is forwarded to
-           :func:`groundfield.coupling.layered_green.two_layer_real_space_kernel`,
-           where ``lambda_max_factor`` is measured in units of
-           $1 / \\ell_{\\text{char}}$ with
-           $\\ell_{\\text{char}}$ a *geometric* characteristic
-           length (``max(h_1, s, |z ± z_s|)``-like), is **not**
-           saturated at 60, and where *raising* it degrades the
-           result: the Hankel grid there has to resolve
-           $J_0(\\lambda s)$ up to $\\lambda_{\\max}$, so a large
-           factor exhausts the node budget and triggers
-           :class:`groundfield.coupling.layered_green.SommerfeldResolutionWarning`.
-           On that path the documented remedy is to *lower* the
-           factor; on the top-layer path here it is harmless to raise
-           it. The two conventions are deliberately left unmerged —
-           the delegated backend is shared with the inductive-coupling
-           code and its calibration is validated separately — but the
-           unit difference is a real trap and is repeated at the
-           delegation site in the source.
+        On the delegated $n = 2$ cross-layer path ($z > h_1$ or
+        $z_s > h_1$, forwarded to
+        :func:`groundfield.coupling.layered_green.two_layer_real_space_kernel`)
+        the keyword is measured in units of a *geometric*
+        characteristic length instead. Since the F14 fix of 0.15.0
+        that kernel adds every image term it does not resolve back in
+        closed form, so the factor is only an upper bound there as
+        well: values from 30 to 20 000 change the delegated kernel by
+        at most 1.3e-8 and raise no warning (review pass 10; the
+        pre-0.15.0 advice to *lower* the factor on that path is
+        obsolete).
     epsabs, epsrel
         Absolute / relative thresholds of the grid-refinement
         convergence test of the remainder quadrature. ``epsrel`` is
@@ -943,18 +975,12 @@ def sommerfeld_kernel_value(
             two_layer_real_space_kernel,
         )
 
-        # NOTE (unit trap): ``lambda_max_factor`` changes meaning here.
-        # In the top-layer path below it is measured in units of
-        # 1/d_rem (the *remainder* decay length) and saturates at 60.
-        # ``two_layer_real_space_kernel`` measures it in units of
-        # 1/char_length (a geometric length) and does **not** saturate
-        # it; there a large value exhausts the Hankel node budget and
-        # raises SommerfeldResolutionWarning, so the remedy on that
-        # path is to *lower* the factor. The value is forwarded
-        # verbatim (the historic behaviour) rather than rescaled,
-        # because the delegated kernel is calibrated and validated
-        # against its own reference; see the ``lambda_max_factor``
-        # entry in this function's docstring.
+        # ``lambda_max_factor`` is measured in units of a geometric
+        # length here (1/d_rem on the top-layer path below). It is
+        # forwarded verbatim: since F14 (0.15.0) the delegated kernel
+        # adds the unresolved image terms back in closed form, so the
+        # factor is an upper bound only (30 ... 20 000 change the
+        # kernel by <= 1.3e-8, review pass 10).
         rho_1_local = float(stack.rhos[0])
         rho_2_local = float(stack.rhos[1])
         h_1_local = float(stack.h[0])
@@ -1035,6 +1061,7 @@ def _build_Z_sommerfeld(
     max_osc_panels: int = _MAX_OSC_PANELS,
     max_terms: int = 200,
     tol: float = 1e-6,
+    issues: list[_QuadratureIssue] | None = None,
 ) -> np.ndarray:
     """N×N Sommerfeld reaction matrix.
 
@@ -1055,6 +1082,8 @@ def _build_Z_sommerfeld(
     **one** aggregated :class:`SommerfeldConvergenceWarning` naming the
     worst offender and the number of affected entries — an $O(N^2)$
     loop that warned per pair would emit thousands of distinct messages.
+    If ``issues`` is a list, the collected issues are appended to it as
+    well, so the caller can report convergence in the result metadata.
     """
     n = seg_points.shape[0]
     rho_1 = float(stack.rhos[0])
@@ -1064,7 +1093,8 @@ def _build_Z_sommerfeld(
         return _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho_1)
 
     Z = np.zeros((n, n), dtype=float)
-    issues: list[_QuadratureIssue] = []
+    collector = issues
+    issues = []
 
     # Off-diagonal: pointwise Sommerfeld evaluation.
     for i in range(n):
@@ -1121,6 +1151,8 @@ def _build_Z_sommerfeld(
             max_osc_panels=max_osc_panels,
             stacklevel=4,
         )
+        if collector is not None:
+            collector.extend(issues)
         return Z
 
     # n >= 3: homogeneous line self-potential plus a layered
@@ -1155,6 +1187,8 @@ def _build_Z_sommerfeld(
         max_osc_panels=max_osc_panels,
         stacklevel=4,
     )
+    if collector is not None:
+        collector.extend(issues)
     return Z
 
 
@@ -1172,14 +1206,18 @@ def solve_mom_sommerfeld(
     epsrel: float = 1e-7,
     max_osc_panels: int = _MAX_OSC_PANELS,
 ) -> FieldResult:
-    """Galerkin MoM with direct Sommerfeld quadrature for layered soil.
+    """Point-matching MoM with direct Sommerfeld quadrature for layered soil.
 
-    This is a methodologically independent backend used as the
-    reference inside :func:`groundfield.compare_engines` for layered
-    worlds with hard contrasts. Every off-diagonal reaction-matrix
+    The discretisation and the linear solve are those of ``mom`` (point
+    matching at the segment midpoints, point-source near field,
+    source-free clusters floating). Every off-diagonal reaction-matrix
     entry is one evaluation of :func:`sommerfeld_kernel_value`, i.e.
-    the closed-form direct pair plus a numerically integrated
-    reflected remainder; no image series and no fit enter the kernel.
+    the closed-form direct pair plus a numerically integrated reflected
+    remainder; no image series and no fit enter the off-diagonal
+    kernel. For $n = 2$ the diagonal is the Tagg/Sunde series diagonal
+    of ``mom``, so on two-layer soil this backend reproduces ``mom`` and
+    checks the kernel, not the scheme; for $n \\ge 3$ distinct layers it
+    is the only integral-equation backend.
 
     Parameters
     ----------
@@ -1190,10 +1228,11 @@ def solve_mom_sommerfeld(
     lambda_max_factor
         Truncation of the remainder quadrature in units of the
         remainder decay length $1 / d_{\\text{rem}}$; saturates at
-        60. See :func:`sommerfeld_kernel_value` — note the unit change
-        on the delegated $n = 2$ cross-layer path documented there.
+        60. See :func:`sommerfeld_kernel_value` for the delegated
+        $n = 2$ cross-layer path.
     epsabs, epsrel
-        Convergence thresholds of the remainder quadrature.
+        Convergence thresholds of the remainder quadrature (absolute
+        in 1/m, relative).
     max_osc_panels
         Budget for the $J_0$ half-period panel family.
 
@@ -1326,6 +1365,7 @@ def solve_mom_sommerfeld(
 
     # 3) Z-matrix via direct Sommerfeld quadrature (series knobs for
     #    the n=2 diagonal from the engine).
+    quadrature_issues: list[_QuadratureIssue] = []
     Z = _build_Z_sommerfeld(
         seg_points,
         seg_lengths,
@@ -1337,9 +1377,42 @@ def solve_mom_sommerfeld(
         max_osc_panels=max_osc_panels,
         max_terms=engine.image_max_terms,
         tol=engine.image_series_tol,
+        issues=quadrature_issues,
     )
+    # Convergence report (review pass 10, 10.47). For n = 2 inside the
+    # upper layer the diagonal is the truncated Tagg/Sunde series, which
+    # is checked like in ``mom`` (it was silent here up to 0.15.0, R2-09).
+    series_meta: dict[str, int] = {}
+    series_converged = True
+    if stack.n_layers == 2 and float(seg_points[:, 2].max()) < float(stack.h[0]):
+        from groundfield.solver.image_2layer import (
+            SeriesTruncationWarning,
+            _series_tail_bound,
+            _two_layer_image_offsets,
+        )
 
-    # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).
+        k_1 = float(stack.K[0])
+        _, _, _, n_terms_used = _two_layer_image_offsets(
+            k_1, float(stack.h[0]), engine.image_max_terms, engine.image_series_tol
+        )
+        series_meta = {"n_terms_used": int(n_terms_used)}
+        if n_terms_used:
+            tail = _series_tail_bound(abs(k_1), n_terms_used)
+            series_converged = bool(tail < engine.image_series_tol)
+            if not series_converged:
+                warnings.warn(
+                    "mom_sommerfeld: the Tagg/Sunde series of the reaction-"
+                    f"matrix diagonal was truncated at max_terms="
+                    f"{engine.image_max_terms} with a remaining tail bound of "
+                    f"{tail:.2e} > tol={engine.image_series_tol:.2e} "
+                    f"(|K| = {abs(k_1):.3f}). Raise Engine.image_max_terms "
+                    "for high layer contrasts.",
+                    SeriesTruncationWarning,
+                    stacklevel=2,
+                )
+    converged = series_converged and not quadrature_issues
+
+    # 4) Frequency loop (point-matching solve + Z · I_seg for phi).
     n_freq = len(engine.frequencies)
     omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
     real_electrode_names = {e.name for e in world.electrodes}
@@ -1350,7 +1423,7 @@ def solve_mom_sommerfeld(
             if (has_inductance and carson_builder is not None)
             else None
         )
-        sc, _ = _galerkin_solve(
+        sc, _ = _point_matching_solve(
             Z=Z,
             elec_input_current=elec_input_current,
             cluster_id=cluster_id,
@@ -1378,21 +1451,24 @@ def solve_mom_sommerfeld(
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
 
-    electrode_potentials: dict[str, list[complex]] = {}
-    electrode_currents: dict[str, list[complex]] = {}
-    conductor_currents: dict[str, list[complex]] = {}
-    conductor_potentials: dict[str, list[complex]] = {}
-    for ename, idxs in elec_to_segidx.items():
-        if not idxs:
-            continue
-        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
-        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
-        if ename in real_electrode_names:
-            electrode_potentials[ename] = u_list
-            electrode_currents[ename] = i_list
-        else:
-            conductor_potentials[ename] = u_list
-            conductor_currents[ename] = i_list
+    # Node potentials and leakage currents; floating clusters (no
+    # source, no branch) report an exactly zero net current (10.29).
+    (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    ) = _node_results(
+        elec_to_segidx=elec_to_segidx,
+        phi_per_freq=phi_per_freq,
+        sc_per_freq=sc_per_freq,
+        cluster_id=cluster_id,
+        electrode_names=real_electrode_names,
+        floating=_floating_clusters(
+            elec_input_current, cluster_id, finite_branches, real_electrode_names
+        ),
+        n_freq=n_freq,
+    )
 
     point_sources = [
         PointSource(
@@ -1422,9 +1498,16 @@ def solve_mom_sommerfeld(
         "epsabs": float(epsabs),
         "epsrel": float(epsrel),
         "max_osc_panels": int(max_osc_panels),
-        "solver": "galerkin",
+        "solver": "point_matching",
         "stub": False,
         "earth_inductive_model": earth_inductive_model,
+        # The reaction matrix is frequency-independent, so one flag holds
+        # for every frequency; the per-frequency list is aligned with
+        # ``frequencies`` for callers that tabulate per frequency.
+        "converged": bool(converged),
+        "converged_per_frequency": [bool(converged)] * n_freq,
+        "n_unconverged_entries": len(quadrature_issues),
+        **series_meta,
     }
     if has_inductance:
         from groundfield.coupling.carson import skin_depth
@@ -1448,7 +1531,7 @@ def solve_mom_sommerfeld(
         electrode_currents=electrode_currents,
         point_sources=point_sources,
         soil_resistivity=float(stack.rhos[0]),
-        soil=world.soil,
+        soil=canonical_soil(world.soil),
         clusters=cluster_members,
         metadata=metadata,
     )
