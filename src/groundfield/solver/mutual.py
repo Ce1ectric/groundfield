@@ -1,64 +1,49 @@
-"""Full mutual cluster-grounding-impedance matrix in one assembly.
+"""Mutual grounding-impedance matrix and field matrix in one assembly.
 
-This module adds a **single additive entry point**
-:func:`solve_mutual_matrix` that computes the full ``nG × nG`` mutual
+:func:`solve_mutual_matrix` computes the full ``nG × nG`` mutual
 grounding-impedance matrix ``Z_G`` of a set of grounding clusters
-("gnodes") in **one** matrix assembly, instead of the historic pattern
-of one independent ``Engine.solve`` per excitation.
+("gnodes"), :func:`solve_mutual_field` the potential at arbitrary points
+per unit excitation, each in **one** matrix assembly instead of one
+``Engine.solve`` per excitation.
 
 Motivation
 ----------
-The catalogue step in ``ap1_pipeline.py`` builds ``Z_G`` via the loop
-(see ``_compute_ZG``)::
-
-    for j in range(nG):
-        world = create_world(soil); build all nG anchors
-        create_source(world, attached_to=anchors[j], magnitude=1.0)
-        res = engine.solve(world)
-        Z[j, j] = res.cluster_impedance(anchors[j])[0]          # diagonal
-        for i != j:
-            Z[i, j] = res.potential([[x_i, y_i, probe_depth]])[0]   # off-diag
-    Z = 0.5 * (Z + Z.T)
-
-Because the **world and the soil are identical across all ``j``** and
-only the *source* moves, this re-assembles the ``N × N`` segment
-reaction matrix ``nG`` times and re-evaluates the ``nG²`` Tagg/Sunde
-field-series for the off-diagonal entries. :func:`solve_mutual_matrix`
-removes both redundancies:
+The AP1 catalogue builds ``Z_G`` for every site and soil. The historic
+loop (one world per excitation, ``cluster_impedance`` on the diagonal,
+``FieldResult.potential`` at a probe point off the diagonal) assembled
+the ``N × N`` segment reaction matrix ``nG`` times. Here:
 
 1. The segment reaction matrix is assembled **once**, directly (the
    kernel operators' ``matrix`` method; v0.15.0 applied the kernel to an
    ``N × N`` identity, one ``O(N³)`` product per image term — review
    pass 10, 10.59), including the ADR-0012 V2 concrete shell.
-2. The off-diagonal probe-point kernel is built **once** and reused for
-   every excitation column through a single ``Phi = K @ T`` matmul.
+2. The leakage distribution of every excitation is a solve of the same
+   augmented nodal system as :meth:`Engine.solve`, with one owner per
+   (electrode, soil layer) for electrodes through the layer interface
+   (10.15).
+3. The off-diagonal entries are either the reaction of the leakage
+   columns (``offdiag="galerkin"``, no further kernel evaluation) or the
+   probe-point potentials (``offdiag="probe"``, one probe kernel for all
+   columns).
 
 Discretisation, topology and the branch block come from the shared
-image-family pipeline (:mod:`groundfield.solver._pipeline`).
+image-family pipeline (:mod:`groundfield.solver._pipeline`); only the
+image family is accepted (10.34).
 
-Bit-exactness
--------------
-The implementation reuses the **existing** kernel/solve primitives
-(:func:`~groundfield.solver.image._solve_cluster_currents`'s assembly
-and solve logic, :func:`~groundfield.solver.image._self_corrected_kernel`,
-the 2-layer self-kernel factory and the
-:meth:`FieldResult._potential_two_layer` / ``_potential_homogeneous``
-series) unchanged, with the **same operation order** wherever possible.
-The only structural change is that linear operators are applied to a
-matrix of stacked excitation columns rather than to one vector at a
-time. See ``solve_mutual_matrix`` for the column-by-column reduction of
-the diagonal and the off-diagonal blocks.
-
-The companion contract test (``/tmp/test_mutual_matrix.py`` during
-development) checks ``max|Z_new − Z_old| < 1e-9`` against the historic
-per-excitation method for homogeneous-limit, mid-contrast and
-cross-layer two-layer soils at 50 Hz and 1000 Hz.
+Consistency with ``Engine.solve``
+---------------------------------
+The diagonal equals :meth:`FieldResult.cluster_impedance` of a
+per-excitation solve with the same engine to round-off (10.26), probe
+off-diagonals equal :meth:`FieldResult.potential` at the probe point,
+and the columns of :func:`solve_mutual_field` equal
+``FieldResult.potential`` at the field points
+(``tests/test_mutual_matrix.py``, ``tests/test_mutual_field.py``).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -94,7 +79,10 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
-__all__ = ["solve_mutual_matrix", "solve_mutual_field"]
+__all__ = ["OffDiagonal", "solve_mutual_matrix", "solve_mutual_field"]
+
+#: Off-diagonal definition of :func:`solve_mutual_matrix` (10.34).
+OffDiagonal = Literal["probe", "galerkin"]
 
 
 # ---------------------------------------------------------------------
@@ -252,19 +240,68 @@ class _MutualProblem:
     Z_seg_full: np.ndarray
     omega: float
     carson_dz: np.ndarray | None
-    line: LineSegments | None = None
-    max_terms: int = 300
-    tol: float = 1e-6
-    layer_owners: _LayerOwners | None = None
+    line: LineSegments | None
+    max_terms: int
+    tol: float
+    layer_owners: _LayerOwners
 
 
-def _layers_differ(soil) -> bool:
+def _layers_differ(soil: TwoLayerSoil | None) -> bool:
     """Whether a two-layer soil has two resistivities (one owner per layer, 10.15)."""
-    if isinstance(soil, TwoLayerSoil):
-        return soil.rho_1 != soil.rho_2
-    if isinstance(soil, MultiLayerSoil) and len(soil.layers) == 2:
-        return soil.layers[0].rho != soil.layers[1].rho
-    return False
+    return soil is not None and soil.rho_1 != soil.rho_2
+
+
+#: Backends whose model the multi-port assembly of this module reproduces:
+#: uniform current per owner, the image-family kernels (10.34).
+_IMAGE_FAMILY = frozenset({"image", "image_2layer", "image_nlayer"})
+
+
+def _check_backend(world: "World", engine: "Engine", where: str) -> str:
+    """Check the engine's backend and return the kernel it runs (10.34).
+
+    ``solve_mutual_*`` assemble the image-family multi-port. Up to 2026.11
+    they ignored ``Engine.backend``: an engine for ``mom`` returned image
+    numbers (an 8-arm star 7.854 Ω instead of mom's 7.128 Ω). The backend
+    is resolved and checked like :meth:`Engine.solve` does (aliases, soil
+    forwarding, deprecation warnings, capability check); the sources of
+    ``world`` are ignored here as in the assembly.
+
+    Returns
+    -------
+    str
+        Kernel of the run: ``engine.kernel``, or the backend's preferred
+        kernel if the engine leaves it to the backend (``None``).
+
+    Raises
+    ------
+    BackendCapabilityError
+        If the resolved backend is not ``image``, ``image_2layer`` or
+        ``image_nlayer``, or cannot represent ``world``.
+    """
+    from groundfield.solver import registry
+
+    resolved = registry.resolve_backend(engine.backend, world)
+    registry.emit_resolution_warnings(resolved)
+    if resolved.spec.name not in _IMAGE_FAMILY:
+        raise registry.BackendCapabilityError(
+            f"{where} assembles the multi-port of the image family (uniform "
+            f"current per electrode); backend '{engine.backend}' (running "
+            f"'{resolved.spec.name}') solves a different model. Use an "
+            "engine with backend='image' (forwards to image_2layer / "
+            "image_nlayer by soil), or solve one world per excitation with "
+            "Engine.solve for the other backends."
+        )
+    requested = engine.kernel
+    registry.check_capabilities(
+        resolved,
+        world.model_copy(update={"sources": []}),
+        kernel=requested,
+        kernel_explicit=requested is not None,
+    )
+    kernel = registry.effective_kernel(
+        resolved.spec, requested if requested is not None else DEFAULT_KERNEL
+    )
+    return str(kernel)
 
 
 def _prepare(
@@ -276,20 +313,48 @@ def _prepare(
     dispatch of ``Engine.solve`` (``image`` → ``image_2layer`` for a
     two-layer soil) and the full segment reaction matrix in Ω.
     """
+    kernel_name = _check_backend(world, engine, where)
     soil = world.soil
+    # Soil dispatch of ``Engine.solve`` (image -> image_2layer /
+    # image_nlayer): a layer stack is solved through its canonical form,
+    # equal adjacent layers merged (10.48).
+    rho_homog: float | None = None
+    soil_two_layer: TwoLayerSoil | None = None
+    if isinstance(soil, TwoLayerSoil):
+        soil_two_layer = soil
+    elif isinstance(soil, MultiLayerSoil):
+        from groundfield.solver._layered import as_layer_stack
+
+        stack = as_layer_stack(soil)
+        if stack.n_layers == 1:
+            rho_homog = float(stack.rhos[0])
+        elif stack.n_layers == 2:
+            soil_two_layer = TwoLayerSoil(
+                rho_1=float(stack.rhos[0]),
+                rho_2=float(stack.rhos[1]),
+                h_1=float(stack.h[0]),
+            )
+        else:
+            raise NotImplementedError(
+                f"{where} supports homogeneous and 2-layer soils; "
+                f"got MultiLayerSoil with n={stack.n_layers} layers."
+            )
+    elif isinstance(soil, HomogeneousSoil):
+        rho_homog = float(soil.rho)
+    else:
+        raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
+
     # 1) Discretisation + topology — identical to the live backends,
     #    including one owner per (electrode, layer) for electrodes
     #    through the layer interface (10.15).
-    interfaces = (soil.h_1,) if isinstance(soil, TwoLayerSoil) else None
-    if isinstance(soil, MultiLayerSoil) and len(soil.layers) == 2:
-        interfaces = (float(soil.layers[0].h),)
+    interfaces = (soil_two_layer.h_1,) if soil_two_layer is not None else None
     disc = discretise(world, engine, interfaces)
     topo = build_topology(world, disc)
     layer_owners = _LayerOwners.split(
         disc,
         topo,
         [e.name for e in world.electrodes],
-        interfaces if _layers_differ(soil) else None,
+        interfaces if _layers_differ(soil_two_layer) else None,
     )
     # Inductive coupling assembly (kept for parity; the catalogue probe
     # case has no distributed conductors, so the system stays
@@ -297,36 +362,10 @@ def _prepare(
     branches = assemble_branches(world, engine, topo)
     arrays = SegmentArrays.from_segments(disc.segments)
 
-    # 2) Soil-specific reaction operator — same dispatch as
-    #    ``Engine.solve`` (image -> image_2layer for TwoLayerSoil).
-    rho_homog: float | None = None
-    soil_two_layer: TwoLayerSoil | None = None
-    if isinstance(soil, TwoLayerSoil):
-        soil_two_layer = soil
-    elif isinstance(soil, MultiLayerSoil):
-        n_layers = len(soil.layers)
-        if n_layers == 1:
-            rho_homog = float(soil.layers[0].rho)
-        elif n_layers == 2:
-            soil_two_layer = TwoLayerSoil(
-                rho_1=float(soil.layers[0].rho),
-                rho_2=float(soil.layers[1].rho),
-                h_1=float(soil.layers[0].h),
-            )
-        else:
-            raise NotImplementedError(
-                f"{where} supports homogeneous and 2-layer soils; "
-                f"got MultiLayerSoil with n={n_layers} layers."
-            )
-    elif isinstance(soil, HomogeneousSoil):
-        rho_homog = float(soil.rho)
-    else:
-        raise TypeError(f"Unsupported soil type {type(soil).__name__}.")
-
-    # Kernel choice of the engine (10.28): point (default) or exact line
-    # sources, for the reaction matrix and the field evaluation alike.
-    kernel = engine.kernel if engine.kernel is not None else DEFAULT_KERNEL
-    line = arrays.line_segments() if kernel == "line" else None
+    # Kernel of the run (10.28): the engine's, or the backend's preferred
+    # one (exact line sources) — for the reaction matrix and the field
+    # evaluation alike.
+    line = arrays.line_segments() if kernel_name == "line" else None
     if soil_two_layer is not None:
         # 2-layer reaction operator: feed the engine's image-series
         # truncation, exactly like ``solve_image_2layer``.
@@ -474,81 +513,133 @@ def solve_mutual_matrix(
     world: "World",
     engine: "Engine",
     anchors: list[str],
-    probe_points: np.ndarray,
+    probe_points: np.ndarray | None = None,
     *,
     frequency_index: int = 0,
     symmetrize: bool = True,
+    offdiag: OffDiagonal | None = None,
     matrix_min_distance: float = 1e-3,
     matrix_max_terms: int | None = None,
     matrix_tol: float | None = None,
 ) -> np.ndarray:
     """Full mutual grounding-impedance matrix ``Z_G`` in one assembly.
 
-    Reproduces the historic per-excitation construction (one
-    ``Engine.solve`` per gnode; diagonal from
-    :meth:`FieldResult.cluster_impedance`, off-diagonal from
-    :meth:`FieldResult.potential` at the probe points) **bit-for-bit**,
-    but assembles the segment reaction matrix and the probe-point field
-    kernel only once.
+    Column ``j`` belongs to 1 A injected into ``anchors[j]``; the other
+    clusters carry no net current. The segment reaction matrix and the
+    leakage distribution of every excitation are computed once and
+    reused for all entries.
 
-    ``world`` must already carry **all** ``nG`` grounding clusters
-    (every anchor in ``anchors`` must be a real electrode in
-    ``world``). It must **not** carry any current source — the
-    excitations are applied internally, one cluster at a time, exactly
-    as the historic loop did. Finite-impedance / distributed conductors
-    *between distinct clusters* are out of scope for the catalogue use
-    case (each gnode is an isolated galvanic cluster) and are handled
-    via the standard :func:`_solve_cluster_currents` machinery only in
-    so far as they remain confined to a single excited cluster.
+    * **Diagonal.** ``Z[j, j]`` is the cluster impedance of ``anchors[j]``,
+      the length-weighted (Galerkin) potential average over every
+      member of its cluster divided by the cluster current — the same
+      reduction as :meth:`FieldResult.cluster_impedance` after a
+      per-excitation :meth:`Engine.solve` (equal to round-off). Up to
+      2026.11 the diagonal was the unweighted mean over the
+      alphabetically first member: +0.150 % for an L-shaped footprint
+      at ds = 2 m, -3.8 … -9.1 % for a rod split at the layer interface
+      (review pass 10, 10.26).
+    * **Off-diagonal**, ``offdiag="galerkin"``: the reaction
+      ``Z[i, j] = T_iᵀ (K + S) T_j`` of the leakage columns ``T`` with
+      the reaction matrix ``K`` and the concrete-shell diagonal ``S``.
+      It is the current-weighted potential of cluster ``i`` under
+      excitation ``j`` — the off-diagonal counterpart of the diagonal,
+      reciprocal to round-off, and the matrix that reproduces a solve
+      of the clusters joined by branches (see Notes).
+    * **Off-diagonal**, ``offdiag="probe"``: the potential at
+      ``probe_points[i]`` under excitation ``j``, as
+      :meth:`FieldResult.potential` returns it after a per-excitation
+      solve. A point potential is not the potential of cluster ``i``:
+      the matrix is not reciprocal (``Z[i, j]`` and ``Z[j, i]`` differ by
+      up to 35 % in two-layer soil, review pass 10, 10.34), and
+      ``symmetrize=True`` averages that asymmetry away.
 
     Parameters
     ----------
     world
         Assembled world holding all ``nG`` grounding clusters and the
-        soil model. Sources, if any, are ignored.
+        soil model (homogeneous or two-layer, also as a
+        :class:`~groundfield.soil.MultiLayerSoil` of at most two distinct
+        layers). Sources, if any, are ignored.
     engine
-        Engine configuration. ``segment_length`` controls the
-        discretisation; ``frequencies`` selects the solved frequency
-        via ``frequency_index``; ``image_max_terms`` /
-        ``image_series_tol`` feed the 2-layer **self**-kernel (the
-        reaction-matrix assembly), exactly as ``Engine.solve`` would.
+        Engine of the image family (``backend="image"`` and its
+        aliases); ``segment_length``, ``kernel``, ``image_max_terms`` and
+        ``image_series_tol`` act exactly as in :meth:`Engine.solve`.
+        ``frequencies[frequency_index]`` is the solved frequency.
     anchors
-        Length-``nG`` list of electrode names, one per gnode. Anchor
-        ``j`` receives the unit current of excitation ``j`` and its
-        cluster supplies the diagonal entry ``Z[j, j]``.
+        Length-``nG`` list of electrode names, one per cluster ("gnode").
     probe_points
-        ``(nG, 3)`` array of off-diagonal probe coordinates: row ``i``
-        is the ``(x, y, depth)`` point at which the potential of every
-        other excitation is sampled to fill column ``i`` of the
-        off-diagonal. Mirrors ``res.potential([[x_i, y_i, depth]])``.
+        ``(nG, 3)`` array of ``(x, y, depth)`` points in m, one per
+        anchor: required for ``offdiag="probe"``, rejected for
+        ``offdiag="galerkin"``.
     frequency_index
         Index into ``engine.frequencies``. Default 0.
     symmetrize
-        If ``True`` (default) return ``0.5 · (Z + Zᵀ)`` — the historic
-        post-processing.
+        If ``True`` (default) return ``0.5 · (Z + Zᵀ)``.
+    offdiag
+        ``"galerkin"`` or ``"probe"``, see above. ``None`` (default)
+        selects ``"probe"`` when ``probe_points`` is given (the call of
+        releases up to 0.15.0) and ``"galerkin"`` otherwise.
     matrix_min_distance, matrix_max_terms, matrix_tol
-        Clamp distance in m and series controls of the **off-diagonal**
-        field evaluation. ``None`` (default) for the series controls
-        takes ``engine.image_max_terms`` / ``engine.image_series_tol``,
-        the controls :meth:`FieldResult.potential` uses after a solve
-        with the same engine (before 2026.11 they were hard-coded to
-        100 / ``1e-6``, review pass 10, 10.25).
+        Clamp distance in m and series controls of the probe-point
+        evaluation (``offdiag="probe"`` only). ``None`` (default) for the
+        series controls takes ``engine.image_max_terms`` /
+        ``engine.image_series_tol``, the controls
+        :meth:`FieldResult.potential` uses after a solve with the same
+        engine (before 2026.11 they were hard-coded to 100 / ``1e-6``,
+        review pass 10, 10.25).
 
     Returns
     -------
     Z : np.ndarray, shape (nG, nG), complex
-        The mutual grounding-impedance matrix.
+        Mutual grounding-impedance matrix in Ω.
+
+    Raises
+    ------
+    ValueError
+        If ``world`` has no soil model or no electrodes, if
+        ``probe_points`` does not fit ``offdiag``, or if ``offdiag`` is
+        unknown.
+    BackendCapabilityError
+        If the engine's backend is not the image family (a subclass of
+        ``ValueError``; up to 2026.11 the backend was ignored, 10.34).
+    KeyError
+        If an entry of ``anchors`` is not an electrode in ``world``.
+
+    Notes
+    -----
+    With the uniform current per owner of the image family, the
+    potential of a cluster is the current-weighted average of its
+    segment potentials. Hence ``T_iᵀ (K + S) T_j`` is the potential of
+    cluster ``i`` under excitation ``j`` whenever the leakage of
+    cluster ``i`` is the one its own excitation produces: exactly for
+    clusters of one owner, and to first order in the coupling for
+    bonded groups (a ring with rods, a rod through the layer interface).
+    With such a matrix ``(Y_L + Z_G⁻¹) u = i`` reproduces the solve of
+    the clusters joined by the branches ``Y_L``; with probe
+    off-diagonals it does not (evidence in the 2026.11 changelog).
     """
     if world.soil is None:
         raise ValueError("World has no soil model.")
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    if offdiag is None:
+        offdiag = "probe" if probe_points is not None else "galerkin"
+    if offdiag not in ("probe", "galerkin"):
+        raise ValueError(f"offdiag must be 'probe' or 'galerkin', got {offdiag!r}.")
 
     nG = len(anchors)
-    probe_points = np.asarray(probe_points, dtype=float)
-    if probe_points.shape != (nG, 3):
+    if offdiag == "probe":
+        if probe_points is None:
+            raise ValueError("offdiag='probe' needs probe_points of shape (nG, 3).")
+        probe_points = np.asarray(probe_points, dtype=float)
+        if probe_points.shape != (nG, 3):
+            raise ValueError(
+                f"probe_points must have shape ({nG}, 3), got {probe_points.shape}."
+            )
+    elif probe_points is not None:
         raise ValueError(
-            f"probe_points must have shape ({nG}, 3), got {probe_points.shape}."
+            "probe_points are not used with offdiag='galerkin'; pass "
+            "offdiag='probe' to sample the off-diagonal at points."
         )
 
     problem = _prepare(world, engine, frequency_index, where="solve_mutual_matrix")
@@ -569,72 +660,110 @@ def solve_mutual_matrix(
                 0.0,
             )
 
-    # ------------------------------------------------------------------
-    # 4) Per-excitation leakage distribution (one isolated gnode each).
-    # ------------------------------------------------------------------
-    real_electrode_names = [e.name for e in world.electrodes]
-    real_set = set(real_electrode_names)
-    # cluster members per real electrode (== FieldResult.clusters), used
-    # for the diagonal ``cluster_impedance`` average and current sum.
+    # Cluster members per real electrode (== FieldResult.clusters).
+    real_set = {e.name for e in world.electrodes}
     cluster_id = topo.cluster_id
     cluster_members: dict[str, list[str]] = {}
-    for ename in real_electrode_names:
+    for ename in (e.name for e in world.electrodes):
         cluster_members[ename] = sorted(
             n
             for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_set
         )
 
-    T = np.zeros((n_segments, nG), dtype=complex)  # column j = sc_j
+    T = np.zeros((n_segments, nG), dtype=complex)  # leakage column per excitation
+    PH = np.zeros((n_segments, nG), dtype=complex)  # segment potentials per excitation
     Z = np.zeros((nG, nG), dtype=complex)
-
     for j, anchor_j in enumerate(anchors):
         elec_total, sc = _unit_excitation(world, problem, anchor_j)
         T[:, j] = sc
-
-        # -- Diagonal Z[j, j] == cluster_impedance(anchor_j) -----------
-        # Build ``ph`` (potential at every segment midpoint) exactly as
-        # the post-solve step of the live solver: bulk reaction matrix on
-        # the real and imaginary leakage, then the shell augmentation.
-        members = cluster_members.get(anchor_j, [anchor_j])
-        owners = problem.layer_owners
-        i_sum = sum(elec_total.get(o, 0j) for m in members for o in owners.owners_of(m))
-        member0_idxs = owners.segments_of(members[0], disc.owner_segments)
         if sc.any():
+            # Segment potentials as in the post-solve step of the live
+            # solver: bulk reaction matrix on the real and imaginary
+            # leakage, then the shell augmentation.
             phi_re = Z_seg_full @ sc.real
             phi_im = Z_seg_full @ sc.imag
             if shell_diag is not None:
                 phi_re = phi_re + shell_diag * sc.real
                 phi_im = phi_im + shell_diag * sc.imag
-            ph_member0 = (phi_re + 1j * phi_im)[member0_idxs]
-            u_cluster = complex(np.mean(ph_member0))
-        else:
-            u_cluster = 0j
-        Z[j, j] = (u_cluster / i_sum) if i_sum != 0 else complex("nan")
+            PH[:, j] = phi_re + 1j * phi_im
+        members = cluster_members.get(anchor_j, [anchor_j])
+        Z[j, j] = _cluster_impedance(problem, members, elec_total, PH[:, j])
 
-    # ------------------------------------------------------------------
-    # 5) Off-diagonal block.  ``Z[i, j] = potential at probe_i due to the
-    #    leakage column sc_j`` — the probe kernel is built ONCE and
-    #    applied to all excitation columns at once.
-    # ------------------------------------------------------------------
-    Phi = _field_of_columns(
-        problem,
-        probe_points,
-        T,
-        min_distance=matrix_min_distance,
-        max_terms=matrix_max_terms,
-        tol=matrix_tol,
-    )  # (nG, nG): row i = probe i, col j = excitation j
-
-    for j in range(nG):
-        for i in range(nG):
-            if i == j:
-                continue
-            Z[i, j] = Phi[i, j]
+    if offdiag == "galerkin":
+        # Reaction of every pair of leakage columns (bilinear, no
+        # conjugation: reciprocity holds for the complex system too).
+        Phi = T.T @ PH
+    else:
+        Phi = _field_of_columns(
+            problem,
+            probe_points,
+            T,
+            min_distance=matrix_min_distance,
+            max_terms=matrix_max_terms,
+            tol=matrix_tol,
+        )  # (nG, nG): row i = probe i, column j = excitation j
+    off = ~np.eye(nG, dtype=bool)
+    Z[off] = Phi[off]
 
     if symmetrize:
         return 0.5 * (Z + Z.T)
     return Z
+
+
+def _cluster_impedance(
+    problem: _MutualProblem,
+    members: list[str],
+    elec_total: dict[str, complex],
+    ph: np.ndarray,
+) -> complex:
+    """Cluster impedance of one excitation, reduced like ``FieldResult``.
+
+    Mirrors :meth:`FieldResult.cluster_impedance` step by step (10.26):
+    the electrode current is the sum over its owners (one per soil layer
+    for electrodes through an interface, 10.15), the electrode potential
+    the length-weighted average over all its segments, the cluster
+    potential the electrode-length-weighted average over all members.
+
+    Parameters
+    ----------
+    problem
+        Prepared problem (discretisation and layer owners).
+    members
+        Sorted member names of the cluster.
+    elec_total
+        Owner currents of the excitation in A.
+    ph
+        Segment potentials of the excitation in V, shape ``(n_segments,)``.
+
+    Returns
+    -------
+    complex
+        Cluster impedance in Ω; ``nan`` if the cluster current is zero.
+    """
+    owners = problem.layer_owners
+    lengths = problem.arrays.lengths
+    weights: list[float] = []
+    potentials: list[complex] = []
+    i_sum: complex = 0
+    for m in members:
+        current = elec_total.get(m, 0j)
+        for sub in owners.sub_owners.get(m, []):
+            current += elec_total.get(sub, 0j)
+        i_sum = i_sum + current
+        idxs = owners.segments_of(m, problem.disc.owner_segments)
+        w = np.asarray(lengths, dtype=float)[idxs]
+        potentials.append(complex((w @ ph[idxs]) / float(w.sum())))
+        length = 0.0
+        for k in idxs:
+            length = length + float(lengths[k])
+        weights.append(length)
+    w_members = np.array(weights, dtype=float)
+    u_cluster = complex(
+        sum(float(wm) * u for wm, u in zip(w_members, potentials, strict=True))
+        / float(w_members.sum())
+    )
+    return (u_cluster / i_sum) if i_sum != 0 else complex("nan")
 
 
 def solve_mutual_field(
