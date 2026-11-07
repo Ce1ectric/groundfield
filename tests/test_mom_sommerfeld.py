@@ -349,3 +349,31 @@ def test_solve_reports_the_kernel_tabulation() -> None:
         _ring_world(gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=5.0))
     )
     assert res_2.metadata["kernel_tabulation"]["enabled"] is False
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="MomSommerfeldOptions.tabulate requested from the coordinator (eng2 "
+    "registry patch); remove this marker together with the registry patch",
+)
+@pytest.mark.finding("10.61")
+def test_engine_option_switches_the_tabulation_off() -> None:
+    """``options={"mom_sommerfeld": {"tabulate": False}}`` reaches the solver."""
+    w = gf.create_world(soil=_THREE_LAYERS)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="g1",
+        corner=(-10.0, -10.0, 0.8),
+        size=(20.0, 20.0),
+        n_x=2,
+        n_y=2,
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    eng = gf.Engine(
+        backend="mom_sommerfeld",
+        segment_length=0.5,
+        options={"mom_sommerfeld": {"tabulate": False}},
+    )
+    tab = eng.solve(w).metadata["kernel_tabulation"]
+    assert tab["enabled"] is False and tab["groups_tabulated"] == 0
