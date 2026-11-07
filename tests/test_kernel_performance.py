@@ -413,7 +413,11 @@ def _calibration_seconds() -> float:
 @pytest.mark.benchmark
 @pytest.mark.finding("10.56", "10.57")
 def test_benchmark_homogeneous_solve() -> None:
-    """1920-segment homogeneous solve; v0.15.0 took ~10 calibration units."""
+    """1920-segment homogeneous solve.
+
+    Measured back to back on 2 shared cores: this branch 0.50–0.56
+    calibration units, v0.15.0 3.6–4.3.
+    """
     w = _houses_world(gf.HomogeneousSoil(resistivity=100.0))
     _solve(w)
     unit = _calibration_seconds()
@@ -421,13 +425,17 @@ def test_benchmark_homogeneous_solve() -> None:
     _solve(w)
     ratio = (time.perf_counter() - t0) / unit
     print(f"homogeneous solve: {ratio:.2f} calibration units")
-    assert ratio < 5.0
+    assert ratio < 1.0
 
 
 @pytest.mark.benchmark
 @pytest.mark.finding("10.58")
 def test_benchmark_two_layer_solve() -> None:
-    """480-segment two-layer solve with 144 images (K = -0.67)."""
+    """480-segment two-layer solve with 144 images (K = -0.67).
+
+    Measured back to back on 2 shared cores: this branch 1.15–1.44
+    calibration units, v0.15.0 2.45–2.68.
+    """
     w = _houses_world(gf.TwoLayerSoil(rho_1=500.0, rho_2=100.0, h_1=5.0), n_side=2)
     _solve(w, image_max_terms=500)
     unit = _calibration_seconds()
@@ -435,4 +443,4 @@ def test_benchmark_two_layer_solve() -> None:
     _solve(w, image_max_terms=500)
     ratio = (time.perf_counter() - t0) / unit
     print(f"two-layer solve: {ratio:.2f} calibration units")
-    assert ratio < 10.0
+    assert ratio < 2.0
