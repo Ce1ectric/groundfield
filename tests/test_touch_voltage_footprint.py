@@ -366,3 +366,91 @@ def test_bonded_multi_electrode_cluster_warns() -> None:
         warnings.simplefilter("always")
         touch_voltage(res, w, electrode="loop")
     assert len(_caveats(record)) == 1
+
+
+# ---------------------------------------------------------------------
+# 10.79 — the footprint comes from the electrode geometry methods
+# ---------------------------------------------------------------------
+
+
+def _footprint_electrodes() -> list:
+    from groundfield.geometry.electrodes import (
+        MeshElectrode,
+        PolylineElectrode,
+        RodElectrode,
+        StarElectrode,
+        StripElectrode,
+    )
+
+    return [
+        RodElectrode(name="rod", position=(1.0, 2.0, 0.5), length=3.0),
+        StripElectrode(name="strip", start=(0.0, 30.0, 0.5), end=(9.0, 34.0, 0.5)),
+        PolylineElectrode(
+            name="open",
+            closed=False,
+            vertices=[(30.0, 30.0, 0.8), (40.0, 30.0, 0.8), (40.0, 40.0, 0.8)],
+        ),
+        PolylineElectrode(
+            name="outline",
+            vertices=[
+                (0.0, 0.0, 0.8),
+                (7.3, 0.0, 0.8),
+                (7.3, 4.1, 0.8),
+                (0.0, 6.6, 0.8),
+            ],
+        ),
+        StarElectrode(name="star", center=(40.0, 0.0, 0.6), n_arms=3, arm_length=3.0),
+        MeshElectrode(
+            name="mesh", corner=(0.1, 0.2, 0.5), size=(12.0, 9.9), spacing=2.4
+        ),
+        # 12 m / 5 and 9.9 m / 7: the discretiser's np.linspace positions
+        # differ from corner + size * k / n in the last bit.
+        GridMeshElectrode(
+            name="grid", corner=(0.0, 0.0, 0.5), size=(12.0, 9.9), n_x=5, n_y=7
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "index", [*range(6), pytest.param(6, marks=pytest.mark.finding("10.79"))]
+)
+def test_footprint_wires_are_the_electrode_wire_polylines(index: int) -> None:
+    """Bit for bit the wires the electrode reports (and the discretiser
+    uses), not a local re-implementation of each kind."""
+    from groundfield.postprocess._footprint import footprint
+
+    electrode = _footprint_electrodes()[index]
+    expected = sorted(
+        (*run[k, :2], *run[k + 1, :2])
+        for run in electrode.wire_polylines()
+        for k in range(len(run) - 1)
+    )
+    got = sorted(tuple(seg.ravel()) for seg in footprint(electrode).segments)
+    assert got == expected
+
+
+@pytest.mark.finding("10.79")
+def test_mesh_centres_lie_midway_between_the_discretiser_wires() -> None:
+    from groundfield.postprocess._footprint import mesh_centres
+
+    for electrode in _footprint_electrodes()[-2:]:
+        seg = electrode.segments(0.3)
+        along_y = np.abs(seg.directions[:, 1]) == 1.0
+        xs = np.unique(seg.midpoints[along_y, 0])
+        ys = np.unique(seg.midpoints[~along_y, 1])
+        expected = sorted(
+            (0.5 * (xs[i] + xs[i + 1]), 0.5 * (ys[j] + ys[j + 1]))
+            for i in range(xs.size - 1)
+            for j in range(ys.size - 1)
+        )
+        assert sorted(map(tuple, mesh_centres(electrode))) == expected
+
+
+def test_ring_footprint_is_the_exact_circle() -> None:
+    """Rings keep the exact circle (``wire_polylines`` samples it)."""
+    from groundfield.postprocess._footprint import footprint
+
+    ring = gf.RingElectrode(name="r", center=(2.0, 3.0, 0.8), radius=4.0)
+    fp = footprint(ring)
+    assert fp.segments.shape == (0, 2, 2)
+    np.testing.assert_array_equal(fp.circles, [[2.0, 3.0, 4.0]])

@@ -6,10 +6,12 @@ nearest wire, on a given side of the electrode (review pass 10, 10.21),
 and how far is a surface point from the wires (10.22)?
 
 Every electrode is reduced to straight wires (``segments``, a vertical
-rod becomes a point) and circles (rings). This is a local
-implementation; the electrode classes are expected to gain geometry
-methods (``wire_polylines`` and similar) in a later refactoring, at which
-point this module should delegate to them.
+rod becomes a point) and circles (rings). The wires are the ones the
+electrode reports itself through ``wire_polylines()`` (the geometry
+methods of :mod:`groundfield.geometry.electrodes`, review pass 10,
+10.79), bit for bit the wire positions of the solver's discretisation;
+only a ring keeps its exact circle, which ``wire_polylines`` samples by
+a polygon.
 
 Mathematical content
 --------------------
@@ -221,30 +223,23 @@ class Footprint:
 # ---------------------------------------------------------------------
 
 
-def _segments(pairs: list[tuple[tuple, tuple]]) -> np.ndarray:
-    if not pairs:
-        return np.zeros((0, 2, 2))
-    return np.array([[a[:2], b[:2]] for a, b in pairs], dtype=float)
-
-
-def _mesh_lines(electrode) -> tuple[np.ndarray, np.ndarray]:
-    """x positions of the transverse and y positions of the longitudinal
-    wires of a mesh / grid electrode (mirrors the discretiser)."""
-    cx, cy, _ = electrode.corner
-    dx, dy = electrode.size
-    if electrode.kind == "grid_mesh":
-        xs = cx + dx * np.arange(electrode.n_x + 1) / electrode.n_x
-        ys = cy + dy * np.arange(electrode.n_y + 1) / electrode.n_y
-    else:  # "mesh": uniform spacing, as in solver.image._discretize_mesh
-        nx = max(2, int(np.round(dx / electrode.spacing)) + 1)
-        ny = max(2, int(np.round(dy / electrode.spacing)) + 1)
-        xs = np.linspace(cx, cx + dx, nx)
-        ys = np.linspace(cy, cy + dy, ny)
-    return xs, ys
+def _wire_runs(electrode) -> list[np.ndarray]:
+    """``electrode.wire_polylines()``, or a ``TypeError`` naming the fallback."""
+    try:
+        return electrode.wire_polylines()
+    except (AttributeError, NotImplementedError):
+        raise TypeError(
+            "No horizontal footprint for electrode kind "
+            f"{getattr(electrode, 'kind', None)!r}; use anchor='connection_point'."
+        ) from None
 
 
 def footprint(electrode) -> Footprint:
     """Horizontal wire footprint of an electrode.
+
+    Every straight wire of ``electrode.wire_polylines()`` (consecutive
+    vertices of every run) projected onto the surface; a ring is its exact
+    circle.
 
     Parameters
     ----------
@@ -258,40 +253,44 @@ def footprint(electrode) -> Footprint:
     Raises
     ------
     TypeError
-        For an electrode kind this helper does not know.
+        For an object without wire geometry.
     """
-    kind = getattr(electrode, "kind", None)
-    none = np.zeros((0, 3))
-    if kind == "rod":
-        x, y, _ = electrode.position
-        return Footprint(_segments([((x, y), (x, y))]), none)
-    if kind == "ring":
+    if getattr(electrode, "kind", None) == "ring":
         cx, cy, _ = electrode.center
         return Footprint(np.zeros((0, 2, 2)), np.array([[cx, cy, electrode.radius]]))
-    if kind == "strip":
-        return Footprint(_segments([(electrode.start, electrode.end)]), none)
-    if kind in ("polyline", "star"):
-        return Footprint(_segments(list(electrode.edges)), none)
-    if kind in ("grid_mesh", "mesh"):
-        xs, ys = _mesh_lines(electrode)
-        y0, y1 = ys[0], ys[-1]
-        x0, x1 = xs[0], xs[-1]
-        pairs = [((x, y0), (x, y1)) for x in xs] + [((x0, y), (x1, y)) for y in ys]
-        return Footprint(_segments(pairs), none)
-    raise TypeError(
-        f"No horizontal footprint for electrode kind {kind!r}; use "
-        "anchor='connection_point'."
-    )
+    pairs = [
+        run[k : k + 2, :2] for run in _wire_runs(electrode) for k in range(len(run) - 1)
+    ]
+    segments = np.array(pairs, dtype=float) if pairs else np.zeros((0, 2, 2))
+    return Footprint(segments, np.zeros((0, 3)))
+
+
+def _grid_lines(electrode) -> tuple[np.ndarray, np.ndarray]:
+    """``x`` of the wires along ``y`` and ``y`` of the wires along ``x``.
+
+    Read from the wires of a mesh / grid electrode, so the positions are
+    the discretiser's.
+    """
+    xs: set[float] = set()
+    ys: set[float] = set()
+    for run in _wire_runs(electrode):
+        (x0, y0), (x1, y1) = run[0, :2], run[-1, :2]
+        if x0 == x1:
+            xs.add(float(x0))
+        if y0 == y1:
+            ys.add(float(y0))
+    return np.array(sorted(xs)), np.array(sorted(ys))
 
 
 def mesh_centres(electrode) -> np.ndarray:
     """Centres ``(M, 2)`` of the meshes of a mesh / grid electrode, in m.
 
-    Empty for every other electrode kind.
+    The midpoints between neighbouring wires, the classical position of
+    the IEEE 80 mesh voltage. Empty for every other electrode kind.
     """
     if getattr(electrode, "kind", None) not in ("grid_mesh", "mesh"):
         return np.zeros((0, 2))
-    xs, ys = _mesh_lines(electrode)
+    xs, ys = _grid_lines(electrode)
     mx = 0.5 * (xs[:-1] + xs[1:])
     my = 0.5 * (ys[:-1] + ys[1:])
     gx, gy = np.meshgrid(mx, my, indexing="ij")
