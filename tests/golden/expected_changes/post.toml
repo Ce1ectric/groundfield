@@ -31,3 +31,12 @@ reason = """The frequency coefficients were round-off level for the electrode's
 own leakage impedance; the input impedance carries the PEN's series
 inductance, so the small k2..k5 change by large factors."""
 max_rel_change = 50.0
+
+[[change]]
+cases = ["fit_rho_f_standard_sweep"]
+quantities = ["eval", "bustype/eval", "coef/*"]
+findings = ["10.27"]
+reason = """fit_rho_f_standard fits a constant term k0 and weights the samples
+by 1/|Z| by default. On this homogeneous sweep k0 is 3 mOhm and the effect is
+small; the combined move with 10.19 stays within these bounds."""
+max_rel_change = 50.0

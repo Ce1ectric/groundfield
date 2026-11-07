@@ -50,6 +50,7 @@ from groundfield.postprocess.plotting import (
 )
 from groundfield.postprocess.rho_f_standard import (
     RhoFStandardFit,
+    RhoFStandardQualityWarning,
     fit_rho_f_standard,
     fit_to_sympy_standard,
     rho_f_standard_from_results,
@@ -82,6 +83,7 @@ __all__ = [
     "fit_to_sympy",
     "rho_f_from_field_result",
     "RhoFStandardFit",
+    "RhoFStandardQualityWarning",
     "fit_rho_f_standard",
     "fit_to_sympy_standard",
     "rho_f_standard_from_results",
