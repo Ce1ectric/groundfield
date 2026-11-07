@@ -36,7 +36,6 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from scipy.special import ive
 
 __all__ = ["MU_0", "solid_round_internal_impedance"]
 
@@ -92,6 +91,9 @@ def solid_round_internal_impedance(
         out[small] = r_dc * (1.0 + z2 / 8.0 - z2 * z2 / 192.0 + z2**3 / 3072.0)
     big = ~small
     if np.any(big):
+        # Imported here: ``import groundfield`` must not load scipy.special.
+        from scipy.special import ive
+
         zb = z[big]
         out[big] = (
             k[big] * resistivity / (2.0 * math.pi * radius) * ive(0, zb) / ive(1, zb)

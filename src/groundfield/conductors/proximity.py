@@ -47,7 +47,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-from scipy.spatial import cKDTree
 
 if TYPE_CHECKING:
     from groundfield.conductors.conductor import Conductor
@@ -211,6 +210,8 @@ def find_close_wires(
     half = 0.5 * np.linalg.norm(p2 - p1, axis=1)
     thr = np.maximum(rel_threshold * 2.0 * rad.max(), abs_threshold)
     reach = 2.0 * half.max() + thr
+    from scipy.spatial import cKDTree  # lazy: keep `import groundfield` light
+
     tree = cKDTree(mid)
     pairs = tree.query_pairs(r=float(reach), output_type="ndarray")
     if pairs.size == 0:
