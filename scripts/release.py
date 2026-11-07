@@ -150,19 +150,19 @@ class ReleaseError(Exception):
 
 @dataclass
 class TextFile:
-    """A text file of the release with its original and new content.
+    r"""A text file of the release with its original and new content.
 
     Parameters
     ----------
     rel : str
         Path relative to the repository root (POSIX separators).
     original : str
-        Content with ``\\n`` line endings, as read.
+        Content with ``\n`` line endings, as read.
     newline : str
-        Line ending found in the file (``"\\n"`` or ``"\\r\\n"``); it is
+        Line ending found in the file (``"\n"`` or ``"\r\n"``); it is
         kept when the file is written back.
     updated : str
-        New content with ``\\n`` line endings.
+        New content with ``\n`` line endings.
     """
 
     rel: str
@@ -664,7 +664,7 @@ def _check_fragments(root: Path) -> None:
 
 
 def _read(root: Path, rel: str) -> TextFile:
-    """Read a release file, normalising line endings to ``\\n``."""
+    r"""Read a release file, normalising line endings to ``\n``."""
     path = root / rel
     if not path.is_file():
         raise ReleaseError(f"{rel} not found")
