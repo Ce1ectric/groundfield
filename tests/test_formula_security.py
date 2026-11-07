@@ -689,15 +689,21 @@ def test_sum_of_fractions_with_distinct_denominators_is_rejected_quickly(
 
 
 @pytest.mark.parametrize(
-    "make, expected",
-    [(_log_product, None), (_vanishing_product, 0.0)],
+    "make, n_factors, expected",
+    [(_log_product, 332, None), (_vanishing_product, 111, 0.0)],
     ids=["332-logarithms", "111-vanishing-sums"],
 )
-def test_long_product_chains_parse_in_bounded_time(make, expected) -> None:
+def test_long_product_chains_parse_in_bounded_time(
+    make, n_factors: int, expected, monkeypatch
+) -> None:
     """Audit 1, H2: accepted formulas whose partial product was re-evaluated
-    after every factor (33 s and 68 s); now values are carried along and
-    long chains are multiplied pairwise."""
+    with ``evalf`` after every factor (2 820 and 2 863 calls; 33 s and 68 s
+    measured by the audit on the loaded container); now values are carried
+    along and long chains are multiplied pairwise. The number of ``evalf``
+    calls (SymPy's own, about one per factor) is the load-independent
+    check, the time in a fresh process the coarse one."""
     import sympy as sp
+    from sympy.core.evalf import EvalfMixin
 
     from groundfield.io._formula import parse_impedance_formula
 
@@ -706,7 +712,17 @@ def test_long_product_chains_parse_in_bounded_time(make, expected) -> None:
     seconds, outcome = _parse_in_child(text)
     assert outcome == "accepted", outcome
     assert seconds < HEAVY_TIME_LIMIT_S, f"{seconds:.1f} s"
+    calls = []
+    evalf = EvalfMixin.evalf
+
+    def counting(self, *args, **kwargs):
+        calls.append(None)
+        return evalf(self, *args, **kwargs)
+
+    monkeypatch.setattr(EvalfMixin, "evalf", counting)
     expr = parse_impedance_formula(text)
+    monkeypatch.undo()
+    assert len(calls) <= 2 * n_factors, len(calls)
     assert not expr.free_symbols
     if expected is None:
         log10_value = sum(math.log10(math.log(k)) for k in range(2, 334))
