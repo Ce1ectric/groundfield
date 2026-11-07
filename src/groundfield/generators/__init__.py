@@ -93,7 +93,7 @@ from groundfield.generators.manhattan_routing import (
     route_manhattan,
     segment_intersects_box,
 )
-from groundfield.generators.ortsnetz_builder import (
+from groundfield.generators.layout import (
     AuxiliaryElectrodePlacement,
     BuildingConnection,
     KvsPlacement,

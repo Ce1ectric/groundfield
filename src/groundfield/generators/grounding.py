@@ -1,40 +1,52 @@
-"""Composable grounding-system specifications.
+r"""Composable grounding-system specifications.
 
-A :class:`GroundingSystemSpec` represents *one* electrically
-connected grounding installation: a (possibly heterogeneous) set of
-:class:`~groundfield.generators.electrode_specs.ElectrodeSpec`
-instances that together form a single galvanic cluster. The class
-is shared between
+A :class:`GroundingSystemSpec` represents *one* electrically connected
+grounding installation: a (possibly heterogeneous) set of
+:class:`~groundfield.generators.electrode_specs.ElectrodeSpec` instances
+that together form a single galvanic cluster. The class is shared between
 
-* the substation grounding (typically ring + multiple rods, optionally
-  a strip and/or a foundation electrode),
-* every cable cabinet (KVS) grounding (typically a single rod, but
-  any combination is allowed),
-* the per-house / per-building grounding (foundation, rod, mesh, or
-  any AND-combination).
+* the substation grounding (typically ring + several rods, optionally a
+  strip and/or a foundation electrode),
+* every cable cabinet grounding (typically a single rod, but any
+  combination is allowed),
+* the grounding of a house or another building (foundation, rod, mesh,
+  or any combination).
 
-The materialisation method :meth:`GroundingSystemSpec.build_at`
-takes a :class:`World`, a centre position ``(x, y)``, and a name
-prefix; for each electrode in the list it draws a Bernoulli on
-``presence_prob``, and if present, samples the geometry parameters
-and registers the corresponding electrode with the world. All
-created electrodes are then bonded together with bare-copper
-conductors so that the world treats them as one cluster.
+Two steps turn a spec into electrodes:
 
-The first present electrode is the *anchor* — the
-:meth:`build_at` method returns its name so the caller can wire
-PEN cables, current sources, etc. into the cluster.
+1. :meth:`GroundingSystemSpec.resolve_electrodes` makes every random
+   decision — one Bernoulli draw on ``presence_prob`` per electrode and
+   one draw per :class:`~groundfield.generators.distributions.Distribution`
+   field — and returns the present electrodes with concrete values
+   (:class:`~groundfield.generators.plan.PlannedElectrode`).
+2. :func:`groundfield.generators.materialise.materialise_site` creates
+   them in a world and bonds every electrode to the first present one
+   (the *anchor*) with an ideal conductor, so the site is one cluster.
+
+:meth:`GroundingSystemSpec.build_at` does both in one call.
+
+Building footprints
+-------------------
+:meth:`GroundingSystemSpec.with_footprint` derives the foundation
+geometry from a building outline. It is the one rule used by every
+front-end (``TnNetworkGenerator`` with an OSM placement and
+``LvNetworkLayout``):
+
+* ``"ombr"`` — the oriented minimum bounding rectangle (OMBR) of the
+  outline: size, orientation and centre;
+* ``"polygon"`` — the outline itself as a closed ring (DIN 18014: the
+  strip foundation runs along the building perimeter; ring-style
+  foundations only);
+* ``"spec"`` — the spec geometry unchanged.
 """
 
 from __future__ import annotations
 
-import math
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
 from pydantic import Field
 
-from groundfield.api import create_conductor, create_electrode
 from groundfield.generators.base import GeneratorConfig
 from groundfield.generators.distributions import Distribution
 from groundfield.generators.electrode_specs import (
@@ -44,11 +56,31 @@ from groundfield.generators.electrode_specs import (
     RodElectrodeSpec,
     StripElectrodeSpec,
 )
+from groundfield.generators.materialise import (
+    MIN_POLYGON_EDGE_M,
+    clean_polygon,
+    concrete_shell,
+)
+from groundfield.generators.plan import PlannedElectrode, PlannedSite
 from groundfield.world import World
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from groundfield.geo.footprint import BuildingFootprint
+
 __all__ = [
+    "FoundationOutline",
     "GroundingSystemSpec",
 ]
+
+FoundationOutline = Literal["spec", "ombr", "polygon"]
+"""How a building footprint shapes a foundation electrode.
+
+- ``"ombr"`` — oriented minimum bounding rectangle of the outline (size,
+  orientation and centre).
+- ``"polygon"`` — the outline itself (closed ring; ``style="ring"``
+  foundations only).
+- ``"spec"`` — ignore the footprint; keep the spec geometry.
+"""
 
 
 def _to_float(value: Union[float, Distribution], rng: np.random.Generator) -> float:
@@ -58,40 +90,17 @@ def _to_float(value: Union[float, Distribution], rng: np.random.Generator) -> fl
     return float(value)
 
 
-# Shortest polygon edge kept in a polygon foundation ring. Below this,
-# vertices are merged: a segment shorter than the (concrete-inflated)
-# wire radius would trip the solver's thin-wire guard, and OSM
-# footprints routinely carry centimetre-scale edges that carry no
-# physical information about the strip foundation.
-_MIN_POLY_EDGE_M = 0.5
+# Kept for callers of the pre-2026.11 private names.
+_MIN_POLY_EDGE_M = MIN_POLYGON_EDGE_M
 
 
 def _clean_polygon(
     polygon_xy: "tuple[tuple[float, float], ...]",
     *,
-    min_edge_m: float = _MIN_POLY_EDGE_M,
+    min_edge_m: float = MIN_POLYGON_EDGE_M,
 ) -> list[tuple[float, float]]:
-    """Drop duplicate / sub-``min_edge_m`` vertices from a closed ring.
-
-    Walks the ring once, keeping a vertex only when it is farther than
-    ``min_edge_m`` from the last kept one; finally checks the closing
-    edge (last → first) and drops the last vertex if that edge is too
-    short. The result is the same closed outline with every edge at
-    least ``min_edge_m`` long (up to the usual one-vertex slack of a
-    greedy pass).
-    """
-    pts = [(float(x), float(y)) for x, y in polygon_xy]
-    # An explicitly repeated closing vertex is a common OSM/GeoJSON
-    # convention — the ring closes implicitly here.
-    if len(pts) > 1 and math.dist(pts[0], pts[-1]) < 1e-9:
-        pts = pts[:-1]
-    kept: list[tuple[float, float]] = []
-    for p in pts:
-        if not kept or math.dist(kept[-1], p) >= min_edge_m:
-            kept.append(p)
-    while len(kept) >= 3 and math.dist(kept[-1], kept[0]) < min_edge_m:
-        kept.pop()
-    return kept
+    """Alias of :func:`groundfield.generators.materialise.clean_polygon`."""
+    return clean_polygon(polygon_xy, min_edge_m=min_edge_m)
 
 
 def _maybe_concrete_shell(
@@ -102,61 +111,62 @@ def _maybe_concrete_shell(
     rng: np.random.Generator,
     perimeter_m: Optional[float] = None,
 ) -> tuple[float, float, float]:
-    r"""Compute the effective wire radius, lumped shell resistance, and
-    per-segment shell coefficient for ADR-0012.
+    """Resolve the shell fields of ``spec`` and evaluate the shell.
 
-    Parameters
-    ----------
-    spec
-        Foundation electrode spec; ``concrete_rho_ohm_m`` decides
-        whether the shell model is active.
-    dx, dy
-        Side lengths of the foundation rectangle in metres (already
-        resolved from the spec or from an OSM footprint).
-    rng
-        RNG used to sample ``concrete_rho_ohm_m`` and
-        ``concrete_thickness_m`` when they are ``Distribution``.
-
-    Returns
-    -------
-    effective_radius_m : float
-        Outer radius of the concrete shell ($r_b = r_a + t$) when
-        a shell is configured, otherwise the bare wire radius
-        ``spec.wire_radius_m``.
-    shell_total_ohm : float
-        Total lumped Sunde-shell resistance in Ω used by the V1
-        ("lumped") path:
-
-        .. math::
-
-           R_\text{shell,total}\;=\;\frac{\rho_c}{2\pi\,L_\text{perim}}\,
-                                    \ln\!\frac{r_b}{r_a}.
-
-        Perimeter $L_\text{perim} = 2 (d_x + d_y)$ — internal
-        cross-braces of a ``style="mesh"`` foundation are *not*
-        encased in concrete and therefore do not contribute. When
-        ``perimeter_m`` is given (polygon foundation) it is used
-        instead of the rectangle perimeter.
-    shell_coefficient_ohm_m : float
-        Per-meter Sunde coefficient $C = \rho_c/(2\pi)\,\ln(r_b/r_a)$
-        in Ω·m, consumed by the V2 ("distributed") path. The
-        per-segment diagonal augmentation is then $C/\Delta s$ for a
-        segment of length $\Delta s$.
-
-    All three return values are zero when no shell is configured.
+    Kept for callers of the pre-2026.11 private helper; see
+    :func:`groundfield.generators.materialise.concrete_shell`.
     """
-    if spec.concrete_rho_ohm_m is None:
-        return float(spec.wire_radius_m), 0.0, 0.0
-    rho_c = _to_float(spec.concrete_rho_ohm_m, rng)
-    t = _to_float(spec.concrete_thickness_m, rng)
-    if rho_c <= 0.0 or t <= 0.0:
-        return float(spec.wire_radius_m), 0.0, 0.0
-    r_a = float(spec.wire_radius_m)
-    r_b = r_a + t
+    if spec.concrete_rho_ohm_m is not None:
+        spec = spec.model_copy(
+            update={
+                "concrete_rho_ohm_m": _to_float(spec.concrete_rho_ohm_m, rng),
+                "concrete_thickness_m": _to_float(spec.concrete_thickness_m, rng),
+            }
+        )
     perimeter = float(perimeter_m) if perimeter_m is not None else 2.0 * (dx + dy)
-    coefficient = rho_c / (2.0 * math.pi) * math.log(r_b / r_a)
-    r_shell = coefficient / perimeter if perimeter > 0.0 else 0.0
-    return r_b, float(r_shell), float(coefficient)
+    return concrete_shell(spec, perimeter_m=perimeter)
+
+
+def _resolve_spec(spec: ElectrodeSpec, rng: np.random.Generator) -> ElectrodeSpec:
+    """Draw every distribution of a present electrode spec.
+
+    The draw order per kind is part of the reproducibility contract
+    (seeded worlds of earlier releases stay identical): rod — depth,
+    length; ring — depth, radius; strip — length, orientation, depth;
+    foundation — depth, size (square foundations without polygon or
+    ``size_xy_m``), concrete resistivity and thickness (only when a
+    concrete shell is configured). Fields the realisation does not use
+    (``size_m`` of a polygon or ``size_xy_m`` foundation, the shell
+    thickness without a shell) are reset to their defaults when they
+    hold a distribution, so the result is concrete.
+    """
+    update: dict[str, object] = {"presence_prob": 1.0}
+    if isinstance(spec, RodElectrodeSpec):
+        update["depth_m"] = _to_float(spec.depth_m, rng)
+        update["length_m"] = _to_float(spec.length_m, rng)
+    elif isinstance(spec, RingElectrodeSpec):
+        update["depth_m"] = _to_float(spec.depth_m, rng)
+        update["radius_m"] = _to_float(spec.radius_m, rng)
+    elif isinstance(spec, StripElectrodeSpec):
+        update["length_m"] = _to_float(spec.length_m, rng)
+        update["orientation_deg"] = _to_float(spec.orientation_deg, rng)
+        update["depth_m"] = _to_float(spec.depth_m, rng)
+    elif isinstance(spec, FoundationElectrodeSpec):
+        update["depth_m"] = _to_float(spec.depth_m, rng)
+        if spec.polygon_xy_m is None and spec.size_xy_m is None:
+            update["size_m"] = _to_float(spec.size_m, rng)
+        elif isinstance(spec.size_m, Distribution):
+            update["size_m"] = FoundationElectrodeSpec.model_fields["size_m"].default
+        if spec.concrete_rho_ohm_m is not None:
+            update["concrete_rho_ohm_m"] = _to_float(spec.concrete_rho_ohm_m, rng)
+            update["concrete_thickness_m"] = _to_float(spec.concrete_thickness_m, rng)
+        elif isinstance(spec.concrete_thickness_m, Distribution):
+            update["concrete_thickness_m"] = FoundationElectrodeSpec.model_fields[
+                "concrete_thickness_m"
+            ].default
+    else:  # pragma: no cover - the union is closed
+        raise TypeError(f"Unknown electrode spec {type(spec).__name__}.")
+    return spec.model_copy(update=update)
 
 
 # ---------------------------------------------------------------------
@@ -171,13 +181,13 @@ class GroundingSystemSpec(GeneratorConfig):
     ----------
     electrodes
         Ordered list of electrode specs. Order matters only for the
-        choice of anchor (first *present* electrode). All present
-        electrodes are bonded into one cluster.
+        choice of anchor (first *present* electrode) and for the
+        electrode names. All present electrodes are bonded into one
+        cluster.
     bond_conductor_type
         Conductor type used to bond the electrodes together. Default
-        ``"bare_copper"`` matches the typical above-ground bonding
-        strap inside a substation pit; switch to ``"pen"`` if you
-        want the bond to be modelled like an insulated PEN cable.
+        ``"bare_copper"`` matches the typical bonding strap inside a
+        substation pit; the bond is an ideal galvanic short either way.
     """
 
     electrodes: list[ElectrodeSpec] = Field(default_factory=list, min_length=0)
@@ -185,6 +195,179 @@ class GroundingSystemSpec(GeneratorConfig):
         default="bare_copper",
         description="Conductor type used to bond the electrodes together.",
     )
+
+    # ------------------------------------------------------------------
+    # Random decisions
+    # ------------------------------------------------------------------
+
+    def resolve_electrodes(self, rng: np.random.Generator) -> list[PlannedElectrode]:
+        """Make every random decision of this grounding system.
+
+        For each electrode in list order: one draw for a distributed
+        ``presence_prob``, one Bernoulli draw when the probability is
+        below one, and — for a present electrode — one draw per
+        distribution field (see :func:`_resolve_spec` for the order).
+
+        Parameters
+        ----------
+        rng
+            Random generator.
+
+        Returns
+        -------
+        list of PlannedElectrode
+            The present electrodes with concrete values, each tagged with
+            its index in :attr:`electrodes`.
+        """
+        out: list[PlannedElectrode] = []
+        for i, spec in enumerate(self.electrodes):
+            p = _to_float(spec.presence_prob, rng)
+            if p < 1.0 and rng.random() >= p:
+                continue
+            out.append(PlannedElectrode(index=i, spec=_resolve_spec(spec, rng)))
+        return out
+
+    def plan_site(
+        self,
+        name: str,
+        *,
+        role: str,
+        position_xy: tuple[float, float],
+        rng: np.random.Generator,
+        footprint: "Optional[BuildingFootprint]" = None,
+        building_type: Optional[str] = None,
+    ) -> PlannedSite:
+        """Resolve the system into a :class:`~groundfield.generators.plan.PlannedSite`.
+
+        Parameters
+        ----------
+        name
+            Site name (electrode-name prefix).
+        role
+            Site role, see :data:`groundfield.generators.plan.SiteRole`.
+        position_xy
+            Site reference point ``(x, y)`` in m.
+        rng
+            Random generator (see :meth:`resolve_electrodes`).
+        footprint, building_type
+            Recorded on the site for information.
+
+        Returns
+        -------
+        PlannedSite
+            The concrete site.
+        """
+        return PlannedSite(
+            name=name,
+            role=role,  # type: ignore[arg-type]
+            position_xy=(float(position_xy[0]), float(position_xy[1])),
+            electrodes=self.resolve_electrodes(rng),
+            bond_conductor_type=self.bond_conductor_type,
+            footprint=footprint,
+            building_type=building_type,
+        )
+
+    # ------------------------------------------------------------------
+    # Footprint rule (shared by every front-end)
+    # ------------------------------------------------------------------
+
+    def with_footprint(
+        self,
+        footprint: "BuildingFootprint",
+        *,
+        site_xy: Optional[tuple[float, float]] = None,
+        outline: FoundationOutline = "ombr",
+    ) -> "GroundingSystemSpec":
+        r"""Return a copy whose foundation electrodes follow ``footprint``.
+
+        Parameters
+        ----------
+        footprint
+            Building outline in the world's local frame (m).
+        site_xy
+            Site position the spec will be built at, i.e. the origin of
+            every ``offset_xy_m``. ``None`` uses the polygon centroid.
+        outline
+            ``"ombr"`` (default): every
+            :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
+            takes the size :math:`(d_x, d_y)`, orientation
+            :math:`\varphi` and centre :math:`(c_x, c_y)` of the
+            outline's oriented minimum bounding rectangle; the centre
+            enters as an extra offset :math:`(c_x, c_y) - \text{site}`
+            on top of the spec's own ``offset_xy_m``. ``"polygon"``: every
+            foundation follows the outline itself (``polygon_xy_m`` =
+            exterior ring relative to ``site_xy``); only defined for
+            ``style="ring"``. ``"spec"``: return ``self`` unchanged.
+
+        Returns
+        -------
+        GroundingSystemSpec
+            A new spec (``self`` when nothing changes). Presence
+            probabilities, depths, styles, mesh counts, wire radii and
+            concrete parameters are kept.
+
+        Raises
+        ------
+        ValueError
+            For ``outline="polygon"`` with a ``style="mesh"`` foundation
+            (cross-braces are undefined on a general polygon) or an
+            unknown ``outline``.
+        ImportError
+            ``outline="ombr"`` needs :mod:`shapely` (``geo`` extra).
+        """
+        if outline == "spec" or not self.electrodes:
+            return self
+        if outline not in ("ombr", "polygon"):
+            raise ValueError(
+                f"outline must be 'spec', 'ombr' or 'polygon', got {outline!r}."
+            )
+        if site_xy is None:
+            site_xy = footprint.centroid_xy_m()
+        if outline == "ombr":
+            (cx, cy), (dx, dy), orientation_deg = (
+                footprint.oriented_bounding_rectangle()
+            )
+            # Recentre on the OMBR centre (F25): the electrode sits at
+            # ``site_xy + offset_xy_m``.
+            recentre = (cx - site_xy[0], cy - site_xy[1])
+        rewritten: list[ElectrodeSpec] = []
+        changed = False
+        for spec in self.electrodes:
+            if not isinstance(spec, FoundationElectrodeSpec):
+                rewritten.append(spec)
+                continue
+            if outline == "ombr":
+                update: dict[str, object] = {
+                    "size_xy_m": (dx, dy),
+                    "orientation_deg": orientation_deg,
+                    "offset_xy_m": (
+                        spec.offset_xy_m[0] + recentre[0],
+                        spec.offset_xy_m[1] + recentre[1],
+                    ),
+                }
+            else:
+                if spec.style != "ring":
+                    raise ValueError(
+                        "outline='polygon' needs style='ring' foundations — the "
+                        "cross-braces of style='mesh' are undefined on a general "
+                        "polygon. Use outline='ombr' or a ring-style spec."
+                    )
+                sx, sy = site_xy
+                update = {
+                    "polygon_xy_m": tuple(
+                        (float(x) - sx, float(y) - sy)
+                        for x, y in footprint.polygon_xy_m
+                    )
+                }
+            rewritten.append(spec.model_copy(update=update))
+            changed = True
+        if not changed:
+            return self
+        return self.model_copy(update={"electrodes": rewritten})
+
+    # ------------------------------------------------------------------
+    # One-call build
+    # ------------------------------------------------------------------
 
     def build_at(
         self,
@@ -195,484 +378,40 @@ class GroundingSystemSpec(GeneratorConfig):
     ) -> Optional[str]:
         """Materialise the grounding system inside ``world``.
 
+        Equivalent to :meth:`plan_site` followed by
+        :func:`groundfield.generators.materialise.materialise_site`.
+
         Parameters
         ----------
         world
             The :class:`World` to populate.
         site_xy
-            Centre position ``(x, y)`` of this site (substation
-            centre, KVS centre, building centre, …) in metres.
+            Centre position ``(x, y)`` of this site (substation centre,
+            cabinet centre, building centre, …) in m.
         name_prefix
-            Prefix used for every created electrode name. The actual
-            name is ``f"{name_prefix}_{kind}_{i}"``. Should be unique
-            within the world.
+            Prefix of every created electrode name. The actual name is
+            ``f"{name_prefix}_{kind}_{i}"`` with ``i`` the electrode's
+            index in :attr:`electrodes`. Should be unique within the
+            world.
         rng
-            Random generator used to sample ``presence_prob`` and any
-            geometric distributions.
+            Random generator used for ``presence_prob`` and every
+            distribution field.
 
         Returns
         -------
         str | None
-            The name of the *anchor* electrode (the first present
-            one). ``None`` if no electrode ended up being placed
-            (every Bernoulli failed) — the caller may want to skip
-            this site or raise.
+            The name of the *anchor* electrode (the first present one).
+            ``None`` if no electrode ended up being placed (every
+            Bernoulli draw failed) — the caller may want to skip this
+            site or raise.
         """
-        cx, cy = site_xy
-        created: list[str] = []
-        for i, spec in enumerate(self.electrodes):
-            # Bernoulli on presence
-            p = _to_float(spec.presence_prob, rng)
-            if p < 1.0 and rng.random() >= p:
-                continue
-            ex = cx + spec.offset_xy_m[0]
-            ey = cy + spec.offset_xy_m[1]
-            name = f"{name_prefix}_{spec.kind}_{i}"
-            self._build_one(world, spec, ex, ey, name, rng)
-            created.append(name)
+        from groundfield.generators.materialise import materialise_site
 
-        if not created:
-            return None
-
-        # Bond every non-anchor electrode to the anchor with a
-        # bare-copper conductor. All bonds are short — the segment
-        # length is set by the engine, not by us.
-        anchor = created[0]
-        for k, name in enumerate(created[1:], start=1):
-            create_conductor(
-                world,
-                name=f"{name_prefix}_bond_{k}",
-                start=anchor,
-                end=name,
-                conductor_type=self.bond_conductor_type,
-            )
-
-        # ADR-0012 V1 concrete shell: fold the per-electrode entries of
-        # this site onto the cluster anchor.
-        #
-        # ``_build_one`` writes ``world.concrete_shell_corrections`` under
-        # the *electrode's own* name, because that is the only name it
-        # knows. The registry's documented contract, and what both PEN
-        # consumers look up, is the **cluster anchor**. The bonds above
-        # have just made every electrode of this site one galvanic
-        # cluster, so the anchor is known here.
-        #
-        # Before 0.15.0 this fold was missing (review pass 9, finding
-        # F16): a foundation electrode that was not the first *surviving*
-        # electrode of its site — i.e. any spec list where the foundation
-        # is not index 0, or where an earlier electrode lost its
-        # ``presence_prob`` Bernoulli draw — left its shell resistance
-        # under a key no consumer ever reads, so switching concrete on
-        # had no effect at all. Measured symptom: a factor-33 change in
-        # ``concrete_rho_ohm_m`` (150 -> 5000 Ω·m) produced bit-identical
-        # impedances.
-        #
-        # The shells combine **in parallel**, not in series. Each encased
-        # electrode's $R_i = \rho_c/(2\pi L_{\text{perim},i})\ln(r_b/r_a)$
-        # is already the parallel reduction of the radial shell over that
-        # electrode's own perimeter, and each electrode leaks its share of
-        # the cluster current through its *own* shell into the soil — two
-        # independent radial paths from one equipotential conductor to
-        # earth. The equivalent lumped shell seen by the single service
-        # drop that feeds the cluster is therefore
-        # $R_\text{eq} = (\sum_i 1/R_i)^{-1}$; for two identical
-        # foundations that is $R/2$, not $2R$. (Summing them would
-        # overestimate a two-foundation building by a factor of four.)
-        conductances = 0.0
-        for name in created:
-            r_i = world.concrete_shell_corrections.pop(name, 0.0)
-            if r_i > 0.0:
-                conductances += 1.0 / r_i
-        if conductances > 0.0:
-            world.concrete_shell_corrections[anchor] = 1.0 / conductances
-
-        return anchor
-
-    # ------------------------------------------------------------------
-    # Per-kind dispatcher
-    # ------------------------------------------------------------------
-
-    def _build_one(
-        self,
-        world: World,
-        spec: ElectrodeSpec,
-        ex: float,
-        ey: float,
-        name: str,
-        rng: np.random.Generator,
-    ) -> None:
-        if isinstance(spec, RodElectrodeSpec):
-            create_electrode(
-                world,
-                "rod",
-                name=name,
-                position=(ex, ey, _to_float(spec.depth_m, rng)),
-                length=_to_float(spec.length_m, rng),
-                wire_radius=spec.wire_radius_m,
-            )
-            return
-        if isinstance(spec, RingElectrodeSpec):
-            create_electrode(
-                world,
-                "ring",
-                name=name,
-                center=(ex, ey, _to_float(spec.depth_m, rng)),
-                radius=_to_float(spec.radius_m, rng),
-                wire_radius=spec.wire_radius_m,
-            )
-            return
-        if isinstance(spec, StripElectrodeSpec):
-            length = _to_float(spec.length_m, rng)
-            angle = math.radians(_to_float(spec.orientation_deg, rng))
-            depth = _to_float(spec.depth_m, rng)
-            sx = ex - 0.5 * length * math.cos(angle)
-            sy = ey - 0.5 * length * math.sin(angle)
-            tx = ex + 0.5 * length * math.cos(angle)
-            ty = ey + 0.5 * length * math.sin(angle)
-            create_electrode(
-                world,
-                "strip",
-                name=name,
-                start=(sx, sy, depth),
-                end=(tx, ty, depth),
-                wire_radius=spec.wire_radius_m,
-            )
-            return
-        if isinstance(spec, FoundationElectrodeSpec):
-            depth = _to_float(spec.depth_m, rng)
-            if spec.polygon_xy_m is not None:
-                self._build_polygon_foundation(
-                    world,
-                    spec=spec,
-                    centre_xy=(ex, ey),
-                    depth=depth,
-                    name=name,
-                    rng=rng,
-                )
-                return
-            if spec.size_xy_m is not None:
-                dx, dy = spec.size_xy_m
-            else:
-                size = _to_float(spec.size_m, rng)
-                dx, dy = size, size
-            # ``style="ring"`` forces a perimeter-only realisation —
-            # GridMeshElectrode with n_x = n_y = 1 is exactly that
-            # (one mesh cell = the four perimeter wires).
-            if spec.style == "ring":
-                nx, ny = 1, 1
-            else:
-                nx, ny = spec.n_x, spec.n_y
-
-            # Concrete shell pre-computation (ADR-0012). When
-            # ``concrete_rho_ohm_m`` is set, the wire's effective
-            # radius for the solver is bumped to
-            # ``wire_radius_m + concrete_thickness_m`` (Sunde shell:
-            # the soil sees the concrete outer surface, not the
-            # bare wire). Then two paths split:
-            #
-            # * ``concrete_model="lumped"`` (V1, default) — the
-            #   total Sunde-shell resistance R_shell_total is
-            #   recorded in ``world.concrete_shell_corrections``
-            #   so the TN generator can inject it as a lumped
-            #   series resistor on the PEN service drop. Zero
-            #   solver-side change.
-            # * ``concrete_model="distributed"`` (V2) — every
-            #   segment of the foundation's strip electrodes
-            #   carries the per-meter Sunde coefficient
-            #   ``C = rho_c / (2 pi) * ln(r_b / r_a)``, which the
-            #   image / image_2layer self-action augments on the
-            #   MoM diagonal. The lumped registry is *not*
-            #   populated; the distributed correction subsumes it.
-            effective_radius, shell_total_ohm, shell_coeff = _maybe_concrete_shell(
-                spec, dx=dx, dy=dy, rng=rng
-            )
-            if spec.concrete_model == "lumped":
-                if shell_total_ohm > 0.0:
-                    world.concrete_shell_corrections[name] = shell_total_ohm
-                strip_shell_coefficient = 0.0
-            elif spec.concrete_model == "distributed":
-                strip_shell_coefficient = shell_coeff
-            else:  # pragma: no cover - validated by the Literal
-                raise ValueError(f"Unknown concrete_model: {spec.concrete_model!r}")
-
-            # When the distributed shell is in play the foundation
-            # is always materialised as a chain of strips (even at
-            # angle = 0), because ``GridMeshElectrode`` is one
-            # combined primitive whose segments would all share
-            # the same diagonal — the per-segment augmentation is
-            # only well-defined on individual strip primitives. For
-            # the lumped path the historic GridMesh fast-path is
-            # preserved.
-            angle_deg = spec.orientation_deg or 0.0
-            force_strip_path = strip_shell_coefficient > 0.0
-            if abs(angle_deg) < 1e-9 and not force_strip_path:
-                create_electrode(
-                    world,
-                    "grid_mesh",
-                    name=name,
-                    corner=(ex - dx / 2.0, ey - dy / 2.0, depth),
-                    size=(dx, dy),
-                    n_x=nx,
-                    n_y=ny,
-                    wire_radius=effective_radius,
-                )
-                return
-
-            # Rotated path (or strip-forced for V2): synthesise the
-            # foundation as a closed chain of axis-arbitrary
-            # :class:`StripElectrode`s in the foundation-local
-            # frame, rotate every endpoint into the world frame
-            # and bond all sub-electrodes internally.
-            self._build_rotated_foundation(
-                world,
-                spec=spec,
-                centre_xy=(ex, ey),
-                depth=depth,
-                dx=dx,
-                dy=dy,
-                n_x=nx,
-                n_y=ny,
-                angle_deg=angle_deg,
-                name=name,
-                wire_radius_override=effective_radius,
-                concrete_shell_coefficient=strip_shell_coefficient,
-            )
-            return
-        raise TypeError(
-            f"GroundingSystemSpec.build_at: unknown electrode spec "
-            f"{type(spec).__name__}."
+        site = PlannedSite(
+            name=name_prefix,
+            role="building",
+            position_xy=(site_xy[0], site_xy[1]),
+            electrodes=self.resolve_electrodes(rng),
+            bond_conductor_type=self.bond_conductor_type,
         )
-
-    # ------------------------------------------------------------------
-    # Polygon foundation electrode (real building outline)
-    # ------------------------------------------------------------------
-
-    def _build_polygon_foundation(
-        self,
-        world: World,
-        *,
-        spec: FoundationElectrodeSpec,
-        centre_xy: tuple[float, float],
-        depth: float,
-        name: str,
-        rng: np.random.Generator,
-    ) -> None:
-        r"""Build the foundation as a closed ring along the real outline.
-
-        The DIN-18014 Streifenfundament follows the building perimeter.
-        ``spec.polygon_xy_m`` carries that perimeter as vertices
-        relative to ``centre_xy``; the ring is materialised as a single
-        closed :class:`~groundfield.geometry.electrodes.PolylineElectrode`
-        — one primitive, one galvanic cluster, no internal bonds.
-
-        The concrete shell (ADR-0012) uses the **polygon** perimeter:
-
-        * ``concrete_model="lumped"`` — total Sunde resistance
-          $R_\text{shell} = C / L_\text{perim}$ into
-          ``world.concrete_shell_corrections`` (identical convention
-          to the rectangular path, only the perimeter differs);
-        * ``concrete_model="distributed"`` — the per-metre coefficient
-          $C$ rides on every segment of the ring.
-
-        Notes
-        -----
-        Very short polygon edges (OSM footprints carry the occasional
-        centimetre-scale edge) are merged away first: a vertex is
-        dropped when it sits closer than ``_MIN_POLY_EDGE_M`` to its
-        predecessor. Without this the discretiser would produce
-        segments shorter than the (concrete-inflated) wire radius and
-        trip the thin-wire guard.
-        """
-        cx, cy = centre_xy
-        verts = _clean_polygon(spec.polygon_xy_m, min_edge_m=_MIN_POLY_EDGE_M)
-        if len(verts) < 3:
-            raise ValueError(
-                f"Foundation {name!r}: polygon collapses to fewer than 3 "
-                "vertices after removing sub-centimetre edges — check the "
-                "footprint."
-            )
-        perimeter = 0.0
-        for k in range(len(verts)):
-            x0, y0 = verts[k]
-            x1, y1 = verts[(k + 1) % len(verts)]
-            perimeter += math.hypot(x1 - x0, y1 - y0)
-
-        effective_radius, shell_total_ohm, shell_coeff = _maybe_concrete_shell(
-            spec,
-            dx=0.0,
-            dy=0.0,
-            rng=rng,
-            perimeter_m=perimeter,
-        )
-        if spec.concrete_model == "lumped":
-            if shell_total_ohm > 0.0:
-                world.concrete_shell_corrections[name] = shell_total_ohm
-            ring_coeff = 0.0
-        elif spec.concrete_model == "distributed":
-            ring_coeff = shell_coeff
-        else:  # pragma: no cover - validated by the Literal
-            raise ValueError(f"Unknown concrete_model: {spec.concrete_model!r}")
-
-        create_electrode(
-            world,
-            "polyline",
-            name=name,
-            vertices=[(cx + vx, cy + vy, depth) for vx, vy in verts],
-            closed=True,
-            wire_radius=effective_radius,
-            concrete_shell_coefficient_ohm_m=ring_coeff,
-        )
-
-    # ------------------------------------------------------------------
-    # Rotated foundation electrode (Phase A of ADR-0011)
-    # ------------------------------------------------------------------
-
-    def _build_rotated_foundation(
-        self,
-        world: World,
-        *,
-        spec: FoundationElectrodeSpec,
-        centre_xy: tuple[float, float],
-        depth: float,
-        dx: float,
-        dy: float,
-        n_x: int,
-        n_y: int,
-        angle_deg: float,
-        name: str,
-        wire_radius_override: Optional[float] = None,
-        concrete_shell_coefficient: float = 0.0,
-    ) -> None:
-        r"""Build a rotated rectangular foundation as a bonded
-        Strip-electrode chain.
-
-        Parameters
-        ----------
-        world
-            Target :class:`World`.
-        spec
-            The originating :class:`FoundationElectrodeSpec`. Only
-            ``wire_radius_m`` is read out here; size, mesh density,
-            depth, and angle are passed in explicitly so the caller
-            can override them (e.g. from an OSM footprint).
-        centre_xy
-            Foundation centre in metres (already offset by the
-            grounding system's site centre and the spec's
-            ``offset_xy_m``).
-        depth
-            Burial depth in metres (positive = into soil).
-        dx, dy
-            Side lengths of the rectangle in the foundation-local
-            frame, in metres. ``dx`` is along the local long axis
-            (``angle_deg`` direction).
-        n_x, n_y
-            Mesh density: ``n_x`` cells along the local ``+x``,
-            ``n_y`` along the local ``+y``. ``(1, 1)`` produces the
-            perimeter-only ring; higher values add internal braces.
-        angle_deg
-            Rotation of the foundation's local ``+x`` axis with
-            respect to the world ``+x`` axis, in degrees.
-        name
-            Name of the *anchor* sub-electrode. The first wire (a
-            full-length perimeter strip along the local ``-y`` edge)
-            is registered with exactly this name so the surrounding
-            :meth:`build_at` bonding loop can wire PEN, sources, or
-            other electrodes to the foundation without knowing about
-            the internal decomposition. Sub-electrodes get
-            ``f"{name}_w{j}"`` (j = 1, 2, …).
-
-        Notes
-        -----
-        Physical interpretation
-        ^^^^^^^^^^^^^^^^^^^^^^^
-        For a DIN-18014 Streifenfundament, the bonded wire follows
-        the foundation outline at the strip-foundation depth. The
-        OMBR projection (see
-        :meth:`BuildingFootprint.oriented_bounding_rectangle`)
-        approximates an arbitrary building outline by a rectangle
-        whose perimeter conserves the dominant edge alignment.
-        Modelling the resulting Streifenfundament as a closed
-        chain of :class:`StripElectrode`s captures both the
-        galvanic spreading (perimeter length contributes
-        proportionally) and the inductive coupling to a parallel
-        PEN trunk (the rectangle's long axis carries most of the
-        mutual flux).
-        """
-        cos_a = math.cos(math.radians(angle_deg))
-        sin_a = math.sin(math.radians(angle_deg))
-        cx, cy = centre_xy
-        half_x = 0.5 * dx
-        half_y = 0.5 * dy
-
-        def to_world(lx: float, ly: float) -> tuple[float, float]:
-            """Rotate ``(lx, ly)`` from the foundation-local frame into
-            the world frame, then translate to ``centre_xy``."""
-            wx = cos_a * lx - sin_a * ly + cx
-            wy = sin_a * lx + cos_a * ly + cy
-            return wx, wy
-
-        # Local-frame wire endpoints (open list of (start, end) pairs).
-        # ``n_y + 1`` longitudinal wires along local +x at evenly
-        # spaced y values; ``n_x + 1`` transverse wires along local +y.
-        # For ``n_x = n_y = 1`` this is exactly the four perimeter
-        # edges; for higher counts the internal braces are added.
-        wires: list[tuple[tuple[float, float], tuple[float, float]]] = []
-        for k in range(n_y + 1):
-            ly = -half_y + k * (dy / n_y)
-            wires.append(((-half_x, ly), (half_x, ly)))
-        for k in range(n_x + 1):
-            lx = -half_x + k * (dx / n_x)
-            wires.append(((lx, -half_y), (lx, half_y)))
-
-        wire_radius = (
-            float(wire_radius_override)
-            if wire_radius_override is not None
-            else spec.wire_radius_m
-        )
-        # V2: the per-strip Sunde coefficient. Only the perimeter
-        # wires sit inside the concrete; internal cross-braces of
-        # a ``style="mesh"`` foundation typically run through the
-        # cellar floor and stay direct-in-soil. With ``n_y + 1``
-        # longitudinal wires and ``n_x + 1`` transverse wires we
-        # mark the first and last of each batch (i.e. the four
-        # perimeter edges); internal braces keep ``coeff = 0``.
-        perimeter_long_indices = {0, n_y}  # k=0 and k=n_y in the longitudinal batch
-        perimeter_trans_offset = n_y + 1
-        perimeter_trans_indices = {
-            perimeter_trans_offset + 0,
-            perimeter_trans_offset + n_x,
-        }
-        sub_names: list[str] = []
-        for j, ((lsx, lsy), (lex, ley)) in enumerate(wires):
-            sub_name = name if j == 0 else f"{name}_w{j}"
-            sx, sy = to_world(lsx, lsy)
-            tx, ty = to_world(lex, ley)
-            on_perimeter = (j < (n_y + 1) and j in perimeter_long_indices) or (
-                j >= (n_y + 1) and j in perimeter_trans_indices
-            )
-            strip_coeff = concrete_shell_coefficient if on_perimeter else 0.0
-            create_electrode(
-                world,
-                "strip",
-                name=sub_name,
-                start=(sx, sy, depth),
-                end=(tx, ty, depth),
-                wire_radius=wire_radius,
-                concrete_shell_coefficient_ohm_m=strip_coeff,
-            )
-            sub_names.append(sub_name)
-
-        # Internal bonding: every wire after the first is tied to the
-        # anchor with a bare-copper bond so the foundation registers
-        # as a single galvanic cluster on the engine side. The bond
-        # conductor is short and contributes negligibly to the
-        # foundation's spreading admittance.
-        anchor = sub_names[0]
-        for j, sn in enumerate(sub_names[1:], start=1):
-            create_conductor(
-                world,
-                name=f"{name}_bond_{j}",
-                start=anchor,
-                end=sn,
-                conductor_type=self.bond_conductor_type,
-            )
+        return materialise_site(world, site)

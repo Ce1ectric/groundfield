@@ -38,7 +38,6 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from groundfield.generators.distributions import (
-    Categorical,
     Distribution,
 )
 from groundfield.world import World
