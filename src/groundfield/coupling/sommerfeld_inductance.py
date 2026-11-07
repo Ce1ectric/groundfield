@@ -209,6 +209,14 @@ _HARD_PANEL_BUDGET = 1 << 17
 _GRADING_SPAN = 4.0
 # Number of rho interpolation nodes per segment pair (historic design).
 _N_RHO_NODES = 24
+# Oscillatory tail cap: for a pair whose outer nodes are at least
+# rho_min apart, the tail of int w(lam) J0(lam rho) beyond Lambda is
+# bounded by ~4.5 p_max^2 / (Lambda^2.5 rho_min^1.5) when |w| decays like
+# 2 p_max^2 / lam^2 (reflected weights). lambda_max is lowered to where
+# that bound falls below _TAIL_EPS * p_max (absolute, 1/m), which only
+# binds when the exponential decay length is tiny (conductors within
+# millimetres of the surface or of a layer interface).
+_TAIL_EPS = 1e-10
 
 
 @lru_cache(maxsize=None)
@@ -660,6 +668,8 @@ def _grid_params(
     rho_max: float,
     p_ref: float,
     scales: Sequence[float] = (),
+    rho_min: float = 0.0,
+    p_max: float = 0.0,
 ) -> tuple[float, float, float, float]:
     """``(lambda_break, lambda_max, rho_max, grading_top)`` of a pair grid.
 
@@ -668,9 +678,19 @@ def _grid_params(
     ``p_ref`` the skin wavenumber $\\sqrt{\\omega\\mu_0\\sigma}$ of the
     medium around the conductors (1/m) and ``scales`` further physical
     wavenumbers (other layers' skin wavenumbers, 1/thickness).
+    ``rho_min`` (m) and ``p_max`` (the largest skin wavenumber of the
+    earth, 1/m) enable the oscillatory tail cap of ``lambda_max`` for
+    weights that decay like $1/\\lambda^2$; ``p_max = 0`` disables it.
     """
     z_eff = max(z_sum, 1e-3)
     lambda_max = 30.0 / z_eff
+    if rho_min > 0.0 and p_max > 0.0:
+        # |w| <= 2 p_max^2 / lam^2 beyond 8 p_max, and the J0 oscillation
+        # bounds the tail by ~4.5 p_max^2 / (Lambda^2.5 rho_min^1.5).
+        lam_osc = (4.5 * p_max / (_TAIL_EPS * rho_min**1.5)) ** 0.4
+        lam_osc = max(lam_osc, 8.0 * max([p_max, *scales]))
+        if lam_osc * rho_min >= 10.0 and lam_osc < lambda_max:
+            lambda_max = lam_osc
     lambda_break = max(p_ref, 1.0 / z_eff, 1e-9)
     lambda_break = min(lambda_break, 0.5 * lambda_max)
     rho_max = float(rho_max)
@@ -1113,7 +1133,9 @@ def _subpair_values(
     plan = _SpectralPlan.for_pair(earth, z_a, z_b)
     t_nodes, t_grid, rho_nodes = _rho_interp_setup(rho_grid, plan.decay)
     rho_max = float(rho_grid.max() + 1e-9)
+    rho_min = float(rho_grid.min()) if plan.kind in ("same", "air") else 0.0
     sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
+    sigma_max = 1.0 / min(earth.rhos)
 
     table_key = None
     table = None
@@ -1126,6 +1148,8 @@ def _subpair_values(
             rho_max=rho_max,
             p_ref=p_ref,
             scales=plan.scales(omega, earth),
+            rho_min=rho_min,
+            p_max=math.sqrt(omega * MU_0 * sigma_max),
         )
         lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
         if not resolved:

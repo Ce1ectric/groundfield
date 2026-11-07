@@ -362,3 +362,54 @@ def test_multifrequency_matrices_are_bit_identical() -> None:
     for k, om in enumerate(omegas):
         single = build_sommerfeld_correction_matrix(eps, None, omega=om, earth=earth)
         assert np.array_equal(multi[k], single)
+
+
+@pytest.mark.finding("10.36")
+def test_conductor_on_an_interface_is_resolved_without_warnings() -> None:
+    """A PEN exactly on a layer interface has a vanishing decay length.
+
+    lambda_max = 30/z alone then forces ~10^6 nodes for distant pairs and
+    the node budget binds; the oscillatory tail bound caps lambda_max.
+    The result is continuous with the PEN 1 cm below the interface.
+    Guard for the new grid: v0.15.0 passes it only because it truncated
+    at 4096 panels without a check.
+    """
+    from groundfield.coupling.layered_green import SommerfeldResolutionWarning
+
+    on = LayeredEarth(rhos=(100.0, 30.0), thicknesses=(0.7,))
+    below = LayeredEarth(rhos=(100.0, 30.0), thicknesses=(0.69,))
+    a1, a2 = _seg(0.0, 10.0, 0.7)
+    for distance in (100.0, 400.0):
+        b1, b2 = _seg(distance, distance + 10.0, 0.7)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", SommerfeldResolutionWarning)
+            z_on = sommerfeld_pair_integral_layered(
+                a1, a2, b1, b2, omega=OMEGA_1K, earth=on
+            )
+        z_below = sommerfeld_pair_integral_layered(
+            a1, a2, b1, b2, omega=OMEGA_1K, earth=below
+        )
+        assert z_on == pytest.approx(z_below, rel=1e-3)
+
+
+@pytest.mark.finding("10.60")
+def test_multifrequency_with_frequency_dependent_grids() -> None:
+    """Deep conductors in very conductive soil: p_skin > 1/z at the higher
+    frequencies, so the lambda grid differs per frequency."""
+    from groundfield.coupling.sommerfeld_inductance import (
+        build_sommerfeld_correction_matrices,
+    )
+
+    eps = np.array(
+        [[[0.0, 0.0, 10.0], [10.0, 0.0, 10.0]], [[30.0, 0.0, 10.0], [40.0, 0.0, 10.0]]]
+    )
+    earth = LayeredEarth(rhos=(0.2,), thicknesses=())
+    omegas = [2.0 * math.pi * f for f in (5.0, 50.0, 1000.0)]
+    multi = build_sommerfeld_correction_matrices(eps, None, omegas=omegas, earth=earth)
+    for k, om in enumerate(omegas):
+        single = build_sommerfeld_correction_matrix(eps, None, omega=om, earth=earth)
+        assert np.array_equal(multi[k], single)
+    empty = build_sommerfeld_correction_matrices(
+        np.zeros((0, 2, 3)), None, omegas=omegas, earth=earth
+    )
+    assert empty.shape == (3, 0, 0)
