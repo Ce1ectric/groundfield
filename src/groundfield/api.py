@@ -77,7 +77,7 @@ from groundfield.solver.engine import Backend, EarthInductiveModel, Engine
 from groundfield.solver.result import FieldResult
 from groundfield.soil.models import SoilModel
 from groundfield.sources import CurrentSource, Source, VoltageSource
-from groundfield.utils.suggest import did_you_mean
+from groundfield.utils.suggest import did_you_mean, suggest
 from groundfield.world import World
 
 __all__ = [
@@ -182,26 +182,32 @@ def _auto_name(world: World, attr: str, prefix: str) -> str:
 
 
 def _parameters_of(cls: type[_ElectrodeBase]) -> list[str]:
-    """Keyword parameters :func:`create_electrode` accepts for ``cls``."""
-    return [f for f in cls.model_fields if f not in ("kind", "name")]
+    """Keyword parameters :func:`create_electrode` accepts for ``cls``.
+
+    Required parameters first, then the optional ones, each in field order.
+    """
+    names = [f for f in cls.model_fields if f not in ("kind", "name")]
+    return sorted(names, key=lambda f: not cls.model_fields[f].is_required())
 
 
 def _unknown_keyword_message(kind: str, unknown: list[str], allowed: list[str]) -> str:
     parts = []
     for key in unknown:
-        hint = did_you_mean(key, allowed)
-        if not hint:
-            owners = [
-                k for k, cls in _ELECTRODE_CLASSES.items() if key in _parameters_of(cls)
-            ]
-            if owners:
-                hint = " (a parameter of kind " + ", ".join(f"'{k}'" for k in owners)
-                hint += ")"
-        parts.append(f"'{key}'{hint}")
+        close = suggest(key, allowed, n=1)
+        owners = [
+            k for k, cls in _ELECTRODE_CLASSES.items() if key in _parameters_of(cls)
+        ]
+        if close:
+            parts.append(f"'{key}' (did you mean '{close[0]}'?)")
+        elif owners:
+            kinds = ", ".join(f"'{k}'" for k in owners)
+            parts.append(f"'{key}' (a parameter of kind {kinds})")
+        else:
+            parts.append(f"'{key}'")
     noun = "argument" if len(unknown) == 1 else "arguments"
     return (
         f"create_electrode(kind={kind!r}) got an unexpected keyword {noun} "
-        f"{'; '.join(parts)}. Parameters of kind {kind!r}: name, "
+        f"{', '.join(parts)}. Parameters of kind {kind!r}: name, "
         f"{', '.join(allowed)}."
     )
 

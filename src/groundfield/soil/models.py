@@ -18,13 +18,15 @@ two-layer soil the image-series coefficient is the reflection
 coefficient $K = (\\rho_2 - \\rho_1) / (\\rho_2 + \\rho_1)$.
 
 Below 1 kHz the formulation is quasi-static: the displacement current
-$\\omega \\varepsilon_0 \\varepsilon_r$ is negligible against the
-conduction current $1/\\rho$ (their ratio
+$\\omega \\varepsilon_0 \\varepsilon_r$ is neglected against the
+conduction current $1/\\rho$. Their ratio
 $\\omega \\varepsilon_0 \\varepsilon_r \\rho$ is $4.5 \\cdot 10^{-3}$ at
 1 kHz for $\\rho = 1000\\ \\Omega\\,\\mathrm{m}$ and
-$\\varepsilon_r = 81$). No backend reads ``relative_permittivity``;
-setting a non-default value therefore warns with
-:class:`~groundfield.utils.InertConfigurationWarning`.
+$\\varepsilon_r = 81$; only very resistive rock
+($\\rho = 10\\ \\mathrm{k\\Omega\\,m}$) reaches $4.5 \\cdot 10^{-2}$ at
+1 kHz, a limit of the quasi-static model itself. No backend reads
+``relative_permittivity``; setting a non-default value therefore warns
+with :class:`~groundfield.utils.InertConfigurationWarning`.
 
 Parameter names
 ---------------

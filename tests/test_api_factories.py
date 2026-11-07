@@ -113,8 +113,13 @@ def test_unknown_electrode_kind_suggests_the_closest() -> None:
 @pytest.mark.finding("10.68")
 def test_unknown_electrode_keyword_suggests_the_closest() -> None:
     world = _world()
-    with pytest.raises(TypeError, match=r"'positon'.*Did you mean 'position'"):
+    with pytest.raises(TypeError) as excinfo:
         gf.create_electrode(world, "rod", name="g1", positon=(0, 0, 0.5), length=1.0)
+    assert str(excinfo.value) == (
+        "create_electrode(kind='rod') got an unexpected keyword argument "
+        "'positon' (did you mean 'position'?). Parameters of kind 'rod': "
+        "name, position, length, wire_radius."
+    )
     assert world.electrodes == []
 
 
@@ -197,6 +202,7 @@ def test_mypy_finds_the_four_typos(tmp_path: Path) -> None:
             "--follow-imports=silent",
             "--no-error-summary",
             "--hide-error-context",
+            "--no-color-output",
             "--cache-dir",
             str(tmp_path / ".mypy_cache"),
             str(script),
