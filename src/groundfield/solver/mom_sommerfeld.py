@@ -155,34 +155,27 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
+from groundfield.solver._guards import _MIN_DISTANCE
+from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._layered import (
     LayerStack,
     as_layer_stack,
     canonical_soil,
     reflection_gamma,
 )
-from groundfield.solver.image import (
-    _MIN_DISTANCE,
-    _assemble_inductance_matrix,
-    _build_clusters,
-    _build_distributed_topology,
-    _build_finite_branches,
-    _discretize_electrode,
-    _reject_concrete_shells,
-    _self_corrected_kernel,
-    _Segment,
-    _warn_ignored_sources,
+from groundfield.solver._pipeline import _reject_concrete_shells
+from groundfield.solver._series import (
+    ImageSeries,
+    SeriesTruncationWarning,
+    _series_tail_bound,
 )
-from groundfield.solver.mom import (  # shared point-matching solve
-    _floating_clusters,
-    _point_matching_solve,
-    _node_results,
-)
-from groundfield.solver.result import FieldResult, PointSource
+from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
+from groundfield.solver.mom import _PointMatchingGreen, solve_point_matching
 from groundfield.utils.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
+    from groundfield.solver.result import FieldResult
     from groundfield.world import World
 
 __all__ = [
@@ -665,6 +658,54 @@ def _reflected_integral(
         supplied. Up to 0.15.0 this condition was only logged at
         ``DEBUG`` level.
     """
+    g_analytic, value, issue = _reflected_parts(
+        stack,
+        s,
+        abs_dz,
+        z_plus,
+        lambda_max_factor=lambda_max_factor,
+        epsabs=epsabs,
+        epsrel=epsrel,
+        reference=reference,
+        max_osc_panels=max_osc_panels,
+    )
+    if issue is not None:
+        if issues is None:
+            _emit_convergence_warning(
+                [issue],
+                epsabs=epsabs,
+                epsrel=epsrel,
+                max_osc_panels=max_osc_panels,
+                stacklevel=4,
+            )
+        else:
+            issues.append(issue)
+    return g_analytic + value
+
+
+def _reflected_parts(
+    stack: LayerStack,
+    s: float,
+    abs_dz: float,
+    z_plus: float,
+    *,
+    lambda_max_factor: float,
+    epsabs: float,
+    epsrel: float,
+    reference: float = 0.0,
+    max_osc_panels: int = _MAX_OSC_PANELS,
+) -> tuple[float, float, _QuadratureIssue | None]:
+    """Return the two parts of :func:`_reflected_integral` and its issue.
+
+    Returns ``(g_analytic, value, issue)``: the closed-form leading
+    interface reflection $K_1 / \\sqrt{s^2 + (2 h_1 - p)^2}$ (1/m), the
+    numerically integrated, exponentially decaying remainder (1/m), and
+    a :class:`_QuadratureIssue` if the refinement ladder did not converge
+    (else ``None``). ``g_analytic + value`` is the reflected kernel;
+    the remainder is the smooth part the depth-group tabulation of
+    :func:`_build_Z_sommerfeld` interpolates (10.61). Parameters as in
+    :func:`_reflected_integral`; nothing is warned here.
+    """
     h_top = float(stack.h[0])
     k_1 = float(stack.K[0])
     d_int = 2.0 * h_top - z_plus
@@ -708,8 +749,9 @@ def _reflected_integral(
 
     if k_1 == 0.0 and stack.n_layers == 2:
         # Γ_1 ≡ 0: the reflected part vanishes identically. Keeping
-        # this exact makes the ρ_1 == ρ_2 limit bit-exact.
-        return 0.0
+        # this exact makes the ρ_1 == ρ_2 limit bit-exact (``g_analytic``
+        # is +0.0 here, so the sum is the +0.0 returned up to 0.15.0).
+        return g_analytic, 0.0, None
 
     def _residual(lam: np.ndarray) -> np.ndarray:
         gamma = reflection_gamma(stack, lam)
@@ -780,6 +822,7 @@ def _reflected_integral(
     # ``lam_covered < lam_required`` alone is not the test: it also holds
     # for the last, partial half period of a fully resolved grid.
     capped = grid.osc_panels_required > max(1, int(max_osc_panels))
+    issue = None
     if not ladder_converged or capped:
         _log.debug(
             "mom_sommerfeld: remainder quadrature not converged to "
@@ -805,18 +848,7 @@ def _reflected_integral(
             grid=grid,
             capped=bool(capped),
         )
-        if issues is None:
-            _emit_convergence_warning(
-                [issue],
-                epsabs=epsabs,
-                epsrel=epsrel,
-                max_osc_panels=max_osc_panels,
-                stacklevel=4,
-            )
-        else:
-            issues.append(issue)
-
-    return g_analytic + value
+    return g_analytic, value, issue
 
 
 # ---------------------------------------------------------------------
@@ -1049,6 +1081,259 @@ def sommerfeld_kernel_value(
     return float(G_direct + G_refl)
 
 
+# ---------------------------------------------------------------------
+# Reaction matrix: grouped evaluation and depth-group tabulation
+# ---------------------------------------------------------------------
+
+#: Log-spaced table nodes per decade of horizontal distance in the first
+#: tabulation attempt of a depth group (10.61); a failed accuracy check
+#: doubles the density once. Measured on four 3- and 4-layer stacks over
+#: s = 0.3 … 300 m: largest error at the interval midpoints 1.1e-7 with 64
+#: nodes per decade and 7e-9 with 128 (32 per decade: 2.1e-6).
+_TAB_NODES_PER_DECADE = 64
+#: Smallest number of table nodes of a depth group.
+_TAB_MIN_NODES = 12
+#: Number of node intervals whose midpoint is checked against the
+#: pointwise quadrature after a table is built.
+_TAB_CHECKS = 8
+#: Accepted relative error of the interpolated kernel at the check
+#: points, measured against the whole kernel :math:`|G|`. The check
+#: points are interval midpoints, where a cubic spline's error peaks;
+#: the error of the assembled matrix stays below 1e-6 (benchmark B12).
+_TAB_TOL = 1e-7
+
+
+def _direct_kernel(s: np.ndarray, abs_dz: float, z_plus: float) -> np.ndarray:
+    """Closed-form direct pair ``1/r + 1/r_img`` in 1/m (floored at 1 mm)."""
+    r = np.maximum(np.hypot(s, abs_dz), _MIN_DISTANCE)
+    r_img = np.maximum(np.hypot(s, z_plus), _MIN_DISTANCE)
+    return 1.0 / r + 1.0 / r_img
+
+
+def _interface_kernel(stack: LayerStack, s: np.ndarray, z_plus: float) -> np.ndarray:
+    """Closed-form leading interface reflection ``K_1 / r_int`` in 1/m."""
+    d_int = 2.0 * float(stack.h[0]) - z_plus
+    return float(stack.K[0]) / np.maximum(np.hypot(s, d_int), _MIN_DISTANCE)
+
+
+def _tabulated_kernel(
+    stack: LayerStack,
+    abs_dz: float,
+    z_plus: float,
+    s_values: np.ndarray,
+    quad: dict,
+) -> tuple[np.ndarray, float, int] | None:
+    """Kernel of one depth group from a table of the quadrature remainder.
+
+    For a fixed depth pair the top-layer kernel is a function of the
+    horizontal distance $s$ alone,
+    $G(s) = G_\\text{direct}(s) + K_1/r_\\text{int}(s) + R(s)$, where only
+    the remainder $R$ needs the quadrature (:func:`_reflected_parts`).
+    $R$ is smooth and decays on the scale $d_\\text{rem}$, so it is
+    tabulated on log-spaced nodes in $[s_\\min, s_\\max]$ and
+    interpolated with a cubic spline in $\\ln s$; the two closed-form
+    terms are evaluated exactly (review pass 10, 10.61; R2-06).
+
+    The table is verified at the midpoints of :data:`_TAB_CHECKS` node
+    intervals against the pointwise quadrature; if the relative error
+    exceeds :data:`_TAB_TOL` the node density is doubled once.
+
+    Parameters
+    ----------
+    stack
+        Layer stack, ``n_layers >= 3`` (both points in the top layer).
+    abs_dz, z_plus
+        $|z - z_s|$ and $z + z_s$ of the group in m.
+    s_values
+        Distinct horizontal distances in m, sorted ascending, all > 0.
+    quad
+        Quadrature controls (``lambda_max_factor``, ``epsabs``,
+        ``epsrel``, ``max_osc_panels``).
+
+    Returns
+    -------
+    tuple or None
+        ``(G, check_error, n_evaluations)``: the kernel in 1/m at every
+        ``s_values`` entry, the largest relative error at the check
+        points and the number of quadratures spent — or ``None`` when
+        pointwise evaluation is cheaper, a node quadrature did not
+        converge, or the table failed its check twice (the caller then
+        evaluates every distance pointwise).
+    """
+    from scipy.interpolate import CubicSpline
+
+    s_lo, s_hi = float(s_values[0]), float(s_values[-1])
+    decades = math.log10(s_hi / s_lo) if s_hi > s_lo else 0.0
+
+    def remainder(s: float) -> tuple[float, float]:
+        reference = float(_direct_kernel(np.array(s), abs_dz, z_plus))
+        g_analytic, value, issue = _reflected_parts(
+            stack, s, abs_dz, z_plus, reference=reference, **quad
+        )
+        if issue is not None:
+            raise _TableFailure
+        return value, reference + g_analytic + value
+
+    evaluations = 0
+    density = _TAB_NODES_PER_DECADE
+    for _attempt in range(2):
+        n_nodes = max(_TAB_MIN_NODES, int(math.ceil(decades * density)) + 1)
+        if n_nodes + _TAB_CHECKS >= s_values.size:
+            return None
+        t_nodes = np.linspace(math.log(s_lo), math.log(s_hi), n_nodes)
+        s_nodes = np.exp(t_nodes)
+        s_nodes[0], s_nodes[-1] = s_lo, s_hi
+        try:
+            values = np.array([remainder(float(s))[0] for s in s_nodes])
+            spline = CubicSpline(t_nodes, values)
+            picks = np.unique(
+                np.linspace(0, n_nodes - 2, min(_TAB_CHECKS, n_nodes - 1)).round()
+            ).astype(int)
+            t_check = 0.5 * (t_nodes[picks] + t_nodes[picks + 1])
+            exact = [remainder(float(np.exp(t))) for t in t_check]
+        except _TableFailure:
+            return None
+        evaluations += n_nodes + len(t_check)
+        error = max(
+            abs(float(spline(t)) - v) / max(abs(g), 1e-300)
+            for t, (v, g) in zip(t_check, exact, strict=True)
+        )
+        if error <= _TAB_TOL:
+            G = (
+                _direct_kernel(s_values, abs_dz, z_plus)
+                + _interface_kernel(stack, s_values, z_plus)
+                + spline(np.log(s_values))
+            )
+            return G, float(error), evaluations
+        density *= 2
+    return None
+
+
+class _TableFailure(Exception):
+    """A table node did not converge; evaluate the group pointwise."""
+
+
+def _kernel_matrix(
+    seg_points: np.ndarray,
+    stack: LayerStack,
+    quad: dict,
+    *,
+    tabulate: bool,
+    report: dict,
+) -> tuple[np.ndarray, list[tuple[int, int, _QuadratureIssue]]]:
+    """Off-diagonal Sommerfeld kernel ``G`` (1/m) of every segment pair.
+
+    The kernel of a pair depends on the horizontal distance $s$ and the
+    two depths only, and for two points in the top layer on
+    $(|z - z_s|, z + z_s)$, i.e. symmetrically. Pairs are therefore
+    grouped by their depth classes and every distinct argument is
+    evaluated once, by exactly the scalar call
+    :func:`sommerfeld_kernel_value` of the historic pair loop — the
+    entries are bit-identical to it, and each value serves both
+    $(i, j)$ and $(j, i)$ (review pass 10, R2-06 item 2). With
+    ``tabulate`` a top-layer depth group of an $n \\ge 3$ stack with
+    many distinct distances is interpolated instead
+    (:func:`_tabulated_kernel`, 10.61).
+
+    Parameters
+    ----------
+    seg_points
+        Segment midpoints in m, shape ``(N, 3)``.
+    stack
+        Layer stack, ``n_layers >= 2``.
+    quad
+        Quadrature controls of :func:`sommerfeld_kernel_value`.
+    tabulate
+        Allow the depth-group tabulation (``n_layers >= 3`` only).
+    report
+        Updated in place: ``groups_tabulated``, ``groups_pointwise``,
+        ``table_evaluations``, ``max_check_error``.
+
+    Returns
+    -------
+    G
+        Kernel per ordered pair, shape ``(N, N)``; the diagonal is zero.
+    issues
+        ``(i, j, issue)`` for every pair whose quadrature did not
+        converge, in row-major order.
+    """
+    n = seg_points.shape[0]
+    x = seg_points[:, 0]
+    y = seg_points[:, 1]
+    z = seg_points[:, 2]
+    G = np.zeros((n, n), dtype=float)
+    issue_at: dict[tuple[int, int], _QuadratureIssue] = {}
+    z_vals, z_cls = np.unique(z, return_inverse=True)
+    members = [np.flatnonzero(z_cls == c) for c in range(z_vals.size)]
+    h_top = stack.h[0]
+    two_layer = stack.n_layers == 2
+    for ci in range(z_vals.size):
+        for cj in range(z_vals.size):
+            z_i, z_j = float(z_vals[ci]), float(z_vals[cj])
+            # The n = 2 cross-layer kernel is evaluated per ordered depth
+            # pair (it is reciprocal only up to its quadrature); every
+            # other pair is symmetric and done once for (ci, cj), ci <= cj.
+            cross = two_layer and (z_i > h_top or z_j > h_top)
+            if cj < ci and not cross:
+                continue
+            rows, cols = members[ci], members[cj]
+            dx = x[rows][:, None] - x[cols][None, :]
+            dy = y[rows][:, None] - y[cols][None, :]
+            s = np.sqrt(dx * dx + dy * dy)
+            off = rows[:, None] != cols[None, :]
+            if not off.any():
+                continue
+            s_unique, inverse = np.unique(s[off], return_inverse=True)
+            values = None
+            if tabulate and not cross and stack.n_layers >= 3:
+                positive = s_unique > 0.0
+                table = (
+                    _tabulated_kernel(
+                        stack, abs(z_i - z_j), z_i + z_j, s_unique[positive], quad
+                    )
+                    if positive.sum() > 1
+                    else None
+                )
+                if table is not None:
+                    values = np.empty(s_unique.size)
+                    values[positive] = table[0]
+                    for k in np.flatnonzero(~positive):
+                        values[k] = sommerfeld_kernel_value(
+                            stack, s=0.0, z=z_i, z_s=z_j, **quad
+                        )
+                    report["groups_tabulated"] += 1
+                    report["table_evaluations"] += table[2]
+                    report["max_check_error"] = max(report["max_check_error"], table[1])
+            group_issues: dict[int, _QuadratureIssue] = {}
+            if values is None:
+                values = np.empty(s_unique.size)
+                for k, s_k in enumerate(s_unique):
+                    found: list[_QuadratureIssue] = []
+                    values[k] = sommerfeld_kernel_value(
+                        stack, s=float(s_k), z=z_i, z_s=z_j, issues=found, **quad
+                    )
+                    if found:
+                        group_issues[k] = found[0]
+                report["groups_pointwise"] += 1
+            block = np.zeros(s.shape)
+            block[off] = values[inverse]
+            G[np.ix_(rows, cols)] = block
+            if ci != cj and not cross:
+                G[np.ix_(cols, rows)] = block.T
+            if group_issues:
+                index = np.full(s.shape, -1)
+                index[off] = inverse
+                for a, b in zip(
+                    *np.nonzero(np.isin(index, list(group_issues))), strict=True
+                ):
+                    issue = group_issues[int(index[a, b])]
+                    issue_at[(int(rows[a]), int(cols[b]))] = issue
+                    if ci != cj and not cross:
+                        issue_at[(int(cols[b]), int(rows[a]))] = issue
+    issues = [(i, j, issue_at[(i, j)]) for i, j in sorted(issue_at)]
+    return G, issues
+
+
 def _build_Z_sommerfeld(
     seg_points: np.ndarray,
     seg_lengths: np.ndarray,
@@ -1062,21 +1347,28 @@ def _build_Z_sommerfeld(
     max_terms: int = 200,
     tol: float = 1e-6,
     issues: list[_QuadratureIssue] | None = None,
+    tabulate: bool = False,
+    report: dict | None = None,
+    stacklevel: int = 4,
 ) -> np.ndarray:
-    """N×N Sommerfeld reaction matrix.
+    """N×N Sommerfeld reaction matrix in Ω.
 
-    Off-diagonal entries: pointwise Sommerfeld evaluation through
-    :func:`sommerfeld_kernel_value`. Diagonal entries: line
-    self-potential of the homogeneous bulk plus the layered-soil
-    correction. For ``n_layers == 2`` we take the closed-form
-    Tagg/Sunde self-kernel as the diagonal source (consistent with
-    the off-diagonal Sommerfeld integral, which evaluates the same
-    physics by direct quadrature). For ``n_layers >= 3`` we add the
-    *reflected remainder* of the analytic split
-    (:func:`_reflected_integral`) evaluated at ``s = 0, z = z_s``:
-    the direct $1/r$ singularity lives entirely in the analytic
-    part that the homogeneous line self-potential already accounts
-    for, so the remainder is regular point-on-source.
+    Off-diagonal entries: Sommerfeld kernel through
+    :func:`sommerfeld_kernel_value`, evaluated once per distinct
+    argument (:func:`_kernel_matrix`) or, with ``tabulate`` and
+    ``n_layers >= 3``, interpolated per depth group (10.61). Diagonal
+    entries: line self-potential of the homogeneous bulk plus the
+    layered-soil correction. For ``n_layers == 2`` the diagonal is the
+    closed-form Tagg/Sunde reaction diagonal (consistent with the
+    off-diagonal Sommerfeld integral, which evaluates the same physics
+    by direct quadrature). For ``n_layers >= 3`` the *reflected
+    remainder* of the analytic split (:func:`_reflected_integral`)
+    evaluated at ``s = 0, z = z_s`` is added: the direct $1/r$
+    singularity lives entirely in the analytic part that the
+    homogeneous line self-potential already accounts for, so the
+    remainder is regular point-on-source. Both the homogeneous and the
+    two-layer diagonal come from the directly assembled reaction
+    matrices (10.59), not from the kernel applied to the identity.
 
     Non-convergence of any single pair is collected and reported as
     **one** aggregated :class:`SommerfeldConvergenceWarning` naming the
@@ -1084,140 +1376,317 @@ def _build_Z_sommerfeld(
     loop that warned per pair would emit thousands of distinct messages.
     If ``issues`` is a list, the collected issues are appended to it as
     well, so the caller can report convergence in the result metadata.
+
+    Parameters
+    ----------
+    seg_points, seg_lengths, wire_radii
+        Segment midpoints (m), lengths (m) and wire radii (m).
+    stack
+        Canonical layer stack.
+    lambda_max_factor, epsabs, epsrel, max_osc_panels
+        Quadrature controls, see :func:`sommerfeld_kernel_value`.
+    max_terms, tol
+        Tagg/Sunde truncation of the ``n_layers == 2`` diagonal.
+    issues
+        Optional collector of the non-converged entries.
+    tabulate
+        Interpolate the reflected remainder per depth group for
+        ``n_layers >= 3`` (10.61). ``False`` (the default of this
+        private builder) evaluates every distinct pair by quadrature.
+    report
+        Optional dict, updated with the tabulation counters
+        ``groups_tabulated``, ``groups_pointwise``,
+        ``table_evaluations`` and ``max_check_error``.
+    stacklevel
+        ``stacklevel`` of the aggregated warning, counted from
+        :func:`_emit_convergence_warning`.
     """
     n = seg_points.shape[0]
     rho_1 = float(stack.rhos[0])
+    if report is None:
+        report = {}
+    for key, start in (
+        ("groups_tabulated", 0),
+        ("groups_pointwise", 0),
+        ("table_evaluations", 0),
+        ("max_check_error", 0.0),
+    ):
+        report.setdefault(key, start)
 
     if stack.n_layers <= 1:
-        eye = np.eye(n)
-        return _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho_1)
+        return HalfSpaceKernel(rho_1).matrix(seg_points, seg_lengths, wire_radii)
 
+    quad = {
+        "lambda_max_factor": lambda_max_factor,
+        "epsabs": epsabs,
+        "epsrel": epsrel,
+        "max_osc_panels": max_osc_panels,
+    }
+    G, pair_issues = _kernel_matrix(
+        seg_points, stack, quad, tabulate=bool(tabulate), report=report
+    )
+    found = [issue for _i, _j, issue in pair_issues]
+    off = ~np.eye(n, dtype=bool)
     Z = np.zeros((n, n), dtype=float)
-    collector = issues
-    issues = []
+    Z[off] = rho_1 / (4.0 * np.pi) * G[off]
 
-    # Off-diagonal: pointwise Sommerfeld evaluation.
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                continue
-            dx = seg_points[i, 0] - seg_points[j, 0]
-            dy = seg_points[i, 1] - seg_points[j, 1]
-            s_ij = float(np.sqrt(dx * dx + dy * dy))
-            G = sommerfeld_kernel_value(
-                stack,
-                s=s_ij,
-                z=float(seg_points[i, 2]),
-                z_s=float(seg_points[j, 2]),
-                lambda_max_factor=lambda_max_factor,
-                epsabs=epsabs,
-                epsrel=epsrel,
-                max_osc_panels=max_osc_panels,
-                issues=issues,
-            )
-            Z[i, j] = rho_1 / (4.0 * np.pi) * G
-
-    # Diagonal: layered self-potential.
     if stack.n_layers == 2:
-        # Closed-form Tagg/Sunde self-kernel — consistent with the
-        # off-diagonal Sommerfeld integral.
-        from groundfield.soil.models import TwoLayerSoil
-        from groundfield.solver.image_2layer import (
-            _two_layer_self_kernel_factory,
-        )
-
+        # Closed-form Tagg/Sunde reaction diagonal — consistent with the
+        # off-diagonal Sommerfeld integral. allow_cross_layer=True keeps
+        # it consistent for interface-crossing geometries as well.
         soil = TwoLayerSoil(
             rho_1=float(stack.rhos[0]),
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
         )
-        # allow_cross_layer=True keeps the diagonal consistent with
-        # the off-diagonal Sommerfeld integral for interface-crossing
-        # geometries (previously the diagonal silently fell back to
-        # the upper-layer series).
-        self_kern = _two_layer_self_kernel_factory(
+        layered = _two_layer_self_kernel_factory(
             soil,
             max_terms=max_terms,
             tol=tol,
             allow_cross_layer=True,
-        )
-        eye = np.eye(n)
-        Z_layered_diag = self_kern(seg_points, seg_lengths, wire_radii, eye)
-        np.fill_diagonal(Z, np.diag(Z_layered_diag))
-        _emit_convergence_warning(
-            issues,
-            epsabs=epsabs,
-            epsrel=epsrel,
-            max_osc_panels=max_osc_panels,
-            stacklevel=4,
-        )
-        if collector is not None:
-            collector.extend(issues)
-        return Z
+        ).matrix(seg_points, seg_lengths, wire_radii)
+        np.fill_diagonal(Z, np.diag(layered))
+    else:
+        # n >= 3: homogeneous line self-potential plus the reflected
+        # remainder at s = 0, |z - z_s| = 0, where the physical decay
+        # scale is 2·(h_1 - z_i), *not* min(h_1, z_i) as assumed before
+        # 0.15.0. Segments with the same depth and self term share one
+        # quadrature.
+        homogeneous = HalfSpaceKernel(rho_1).matrix(seg_points, seg_lengths, wire_radii)
+        diag_cache: dict[
+            tuple[float, float], tuple[float, _QuadratureIssue | None]
+        ] = {}
+        for i in range(n):
+            z_plus = 2.0 * float(seg_points[i, 2])
+            reference = 4.0 * np.pi * homogeneous[i, i] / rho_1
+            key = (z_plus, float(reference))
+            if key not in diag_cache:
+                g_analytic, value, issue = _reflected_parts(
+                    stack, 0.0, 0.0, z_plus, reference=reference, **quad
+                )
+                diag_cache[key] = (g_analytic + value, issue)
+            refl, issue = diag_cache[key]
+            if issue is not None:
+                found.append(issue)
+            layered_offset = rho_1 / (4.0 * np.pi) * refl
+            Z[i, i] = homogeneous[i, i] + layered_offset
 
-    # n >= 3: homogeneous line self-potential plus a layered
-    # reflection-only correction. The reflection-only kernel is exactly
-    # the remainder of the analytic split (the direct 1/r singularity
-    # sits entirely in the subtracted homogeneous part), so it can be
-    # evaluated at s = 0, |z - z_s| = 0 — where the physical decay
-    # scale is 2·(h_1 - z_i), *not* min(h_1, z_i) as assumed before
-    # 0.15.0.
-    eye = np.eye(n)
-    Z_homog = _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho_1)
-    for i in range(n):
-        z_i = float(seg_points[i, 2])
-        refl = _reflected_integral(
-            stack,
-            0.0,
-            0.0,
-            2.0 * z_i,
-            lambda_max_factor=lambda_max_factor,
-            epsabs=epsabs,
-            epsrel=epsrel,
-            reference=4.0 * np.pi * Z_homog[i, i] / rho_1,
-            max_osc_panels=max_osc_panels,
-            issues=issues,
-        )
-        layered_offset = rho_1 / (4.0 * np.pi) * refl
-        Z[i, i] = Z_homog[i, i] + layered_offset
     _emit_convergence_warning(
-        issues,
+        found,
         epsabs=epsabs,
         epsrel=epsrel,
         max_osc_panels=max_osc_panels,
-        stacklevel=4,
+        stacklevel=stacklevel,
     )
-    if collector is not None:
-        collector.extend(issues)
+    if issues is not None:
+        issues.extend(found)
     return Z
 
 
 # ---------------------------------------------------------------------
-# Main entry point
+# Green's function and main entry point
 # ---------------------------------------------------------------------
 
 
+class _MatrixKernel:
+    """Reaction operator of an assembled matrix ``Z`` in Ω."""
+
+    materialised = True
+
+    def __init__(self, Z: np.ndarray) -> None:
+        self.Z = Z
+
+    def matrix(
+        self, seg_points: np.ndarray, seg_lengths: np.ndarray, wire_radii: np.ndarray
+    ) -> np.ndarray:
+        """Return the assembled matrix (no copy)."""
+        return self.Z
+
+    def __call__(
+        self,
+        seg_points: np.ndarray,
+        seg_lengths: np.ndarray,
+        wire_radii: np.ndarray,
+        currents: np.ndarray,
+    ) -> np.ndarray:
+        return self.Z @ currents
+
+
+class _SommerfeldGreen(_PointMatchingGreen):
+    """Green's function of ``mom_sommerfeld``: quadrature of the layered kernel.
+
+    Parameters
+    ----------
+    soil
+        Soil model of the world; it is solved on its canonical stack
+        (10.48).
+    lambda_max_factor, epsabs, epsrel, max_osc_panels
+        Quadrature controls, see :func:`sommerfeld_kernel_value`.
+    max_terms, tol
+        Tagg/Sunde truncation of the ``n = 2`` reaction diagonal.
+    tabulate
+        Depth-group tabulation for ``n >= 3`` (10.61).
+    """
+
+    backend = "mom_sommerfeld"
+    where = "mom_sommerfeld"
+
+    def __init__(
+        self,
+        soil: HomogeneousSoil | TwoLayerSoil | MultiLayerSoil,
+        *,
+        lambda_max_factor: float,
+        epsabs: float,
+        epsrel: float,
+        max_osc_panels: int,
+        max_terms: int,
+        tol: float,
+        tabulate: bool,
+    ) -> None:
+        self.stack = as_layer_stack(soil)
+        self.soil = canonical_soil(soil)
+        stack = self.stack
+        self.layer_interfaces = (float(stack.h[0]),) if stack.n_layers >= 2 else None
+        self.soil_resistivity = float(stack.rhos[0])
+        self.reference_resistivity = self.soil_resistivity
+        self.lambda_max_factor = lambda_max_factor
+        self.epsabs = epsabs
+        self.epsrel = epsrel
+        self.max_osc_panels = max_osc_panels
+        self.max_terms = max_terms
+        self.tol = tol
+        self.tabulate = bool(tabulate) and stack.n_layers >= 3
+        self.quadrature_issues: list[_QuadratureIssue] = []
+        self.tabulation: dict = {}
+        self.z_max = 0.0
+
+    def prepare(self, segments, arrays, *, stacklevel: int):  # noqa: ANN001
+        """Assemble the Sommerfeld reaction matrix (the expensive step)."""
+        stack = self.stack
+        self.z_max = float(arrays.points[:, 2].max())
+        if stack.n_layers >= 3:
+            h_1 = float(stack.h[0])
+            if self.z_max >= h_1:
+                # ADR-0007 Phase B (n≥3): not implemented — the
+                # reflection-only diagonal correction assumes all
+                # segments in the top layer. Hard error instead of a
+                # warning followed by wrong physics.
+                raise ValueError(
+                    f"mom_sommerfeld: cross-layer geometry on "
+                    f"n_layers={stack.n_layers} is not supported "
+                    f"(z_max = {self.z_max:.3f} m >= h_1 = {h_1:.3f} m). "
+                    "Use backend='image_2layer' for n=2 cross-layer "
+                    "worlds; for n>=3 thicken the upper layer."
+                )
+        Z = _build_Z_sommerfeld(
+            arrays.points,
+            arrays.lengths,
+            arrays.radii,
+            stack,
+            lambda_max_factor=self.lambda_max_factor,
+            epsabs=self.epsabs,
+            epsrel=self.epsrel,
+            max_osc_panels=self.max_osc_panels,
+            max_terms=self.max_terms,
+            tol=self.tol,
+            issues=self.quadrature_issues,
+            tabulate=self.tabulate,
+            report=self.tabulation,
+            stacklevel=stacklevel + 2,
+        )
+        return _MatrixKernel(Z)
+
+    def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
+        """Quadrature controls and the convergence report (10.47, 10.61)."""
+        stack = self.stack
+        n_freq = len(solution.segment_currents)
+        # For n = 2 inside the upper layer the diagonal is the truncated
+        # Tagg/Sunde series, which is checked like in ``mom`` (it was
+        # silent here up to 0.15.0, R2-09).
+        series_meta: dict[str, int] = {}
+        series_converged = True
+        if stack.n_layers == 2 and self.z_max < float(stack.h[0]):
+            k_1 = float(stack.K[0])
+            n_terms_used = ImageSeries.from_coefficients(
+                k_1, float(stack.h[0]), self.max_terms, self.tol
+            ).n_terms
+            series_meta = {"n_terms_used": int(n_terms_used)}
+            if n_terms_used:
+                tail = _series_tail_bound(abs(k_1), n_terms_used)
+                series_converged = bool(tail < self.tol)
+                if not series_converged:
+                    warnings.warn(
+                        "mom_sommerfeld: the Tagg/Sunde series of the reaction-"
+                        f"matrix diagonal was truncated at max_terms="
+                        f"{self.max_terms} with a remaining tail bound of "
+                        f"{tail:.2e} > tol={self.tol:.2e} "
+                        f"(|K| = {abs(k_1):.3f}). Raise Engine.image_max_terms "
+                        "for high layer contrasts.",
+                        SeriesTruncationWarning,
+                        stacklevel=stacklevel,
+                    )
+        converged = series_converged and not self.quadrature_issues
+        return {
+            "n_layers": int(stack.n_layers),
+            "rhos": stack.rhos.tolist(),
+            "h": stack.h.tolist(),
+            "lambda_max_factor": float(self.lambda_max_factor),
+            "epsabs": float(self.epsabs),
+            "epsrel": float(self.epsrel),
+            "max_osc_panels": int(self.max_osc_panels),
+            # The reaction matrix is frequency-independent, so one flag
+            # holds for every frequency; the per-frequency list is aligned
+            # with ``frequencies`` for callers that tabulate per frequency.
+            "converged": bool(converged),
+            "converged_per_frequency": [bool(converged)] * n_freq,
+            "n_unconverged_entries": len(self.quadrature_issues),
+            **series_meta,
+            "kernel_tabulation": {
+                "enabled": bool(self.tabulate),
+                "groups_tabulated": int(self.tabulation.get("groups_tabulated", 0)),
+                "groups_pointwise": int(self.tabulation.get("groups_pointwise", 0)),
+                "table_evaluations": int(self.tabulation.get("table_evaluations", 0)),
+                "max_check_error": float(self.tabulation.get("max_check_error", 0.0)),
+            },
+        }
+
+
 def solve_mom_sommerfeld(
-    world: "World",
-    engine: "Engine",
+    world: World,
+    engine: Engine,
     *,
     lambda_max_factor: float = 200.0,
     epsabs: float = 1e-9,
     epsrel: float = 1e-7,
     max_osc_panels: int = _MAX_OSC_PANELS,
+    tabulate: bool = True,
 ) -> FieldResult:
     """Point-matching MoM with direct Sommerfeld quadrature for layered soil.
 
     The discretisation and the linear solve are those of ``mom`` (point
     matching at the segment midpoints, point-source near field,
-    source-free clusters floating). Every off-diagonal reaction-matrix
-    entry is one evaluation of :func:`sommerfeld_kernel_value`, i.e.
-    the closed-form direct pair plus a numerically integrated reflected
+    source-free clusters floating), run through the shared solve
+    pipeline (10.75). Every off-diagonal reaction-matrix entry is the
+    Sommerfeld kernel of :func:`sommerfeld_kernel_value`, i.e. the
+    closed-form direct pair plus a numerically integrated reflected
     remainder; no image series and no fit enter the off-diagonal
     kernel. For $n = 2$ the diagonal is the Tagg/Sunde series diagonal
     of ``mom``, so on two-layer soil this backend reproduces ``mom`` and
     checks the kernel, not the scheme; for $n \\ge 3$ distinct layers it
     is the only integral-equation backend.
+
+    Cost (review pass 10, 10.61): pairs that share a depth pair and a
+    horizontal distance share one quadrature, which halves the work of
+    every world and collapses it for regular geometries. For
+    $n \\ge 3$ the reflected remainder of a depth group with many
+    distinct distances is tabulated on log-spaced nodes and interpolated
+    (``tabulate=True``, the default): about $10^{-7}$ relative error of
+    the kernel at the verification points and below $10^{-6}$ on the
+    reaction matrix of the benchmark grid B12, for a cost that no longer
+    grows with the number of pairs. ``tabulate=False`` evaluates every
+    distinct pair by quadrature (the kernel reference). For $n = 2$
+    every pair is evaluated by quadrature: this backend is the kernel
+    check of the closed-form series there.
 
     Parameters
     ----------
@@ -1235,10 +1704,18 @@ def solve_mom_sommerfeld(
         in 1/m, relative).
     max_osc_panels
         Budget for the $J_0$ half-period panel family.
+    tabulate
+        Depth-group tabulation of the reflected kernel for $n \\ge 3$
+        (see above).
 
     Returns
     -------
     FieldResult
+        ``metadata['converged']`` (one bool) and
+        ``metadata['converged_per_frequency']`` report the quadrature
+        and series convergence (10.47);
+        ``metadata['kernel_tabulation']`` the tabulation counters and
+        the largest relative error at its verification points.
 
     Warns
     -----
@@ -1248,15 +1725,12 @@ def solve_mom_sommerfeld(
 
     Notes
     -----
-    The four accuracy keywords are wired to the
-    :class:`~groundfield.solver.engine.Engine` fields
-    ``sommerfeld_lambda_max_factor``, ``sommerfeld_epsabs``,
-    ``sommerfeld_epsrel`` and ``sommerfeld_max_osc_panels``. The
-    signature defaults are kept identical to those field defaults, so a
-    direct call without keywords behaves exactly like
-    :meth:`~groundfield.solver.engine.Engine.solve`. Up to 0.14.1
-    ``Engine.solve`` called this function with no keywords at all, so
-    none of the knobs was reachable through the public API.
+    The quadrature keywords are reachable through
+    ``Engine.options["mom_sommerfeld"]``
+    (:class:`~groundfield.solver.registry.MomSommerfeldOptions`); the
+    signature defaults equal the option defaults, so a direct call
+    without keywords behaves exactly like
+    :meth:`~groundfield.solver.engine.Engine.solve`.
     """
     if not isinstance(world.soil, (HomogeneousSoil, TwoLayerSoil, MultiLayerSoil)):
         raise TypeError(
@@ -1267,271 +1741,20 @@ def solve_mom_sommerfeld(
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
     _reject_concrete_shells(world, "mom_sommerfeld")
-    _warn_ignored_sources(world, "mom_sommerfeld")
-
-    stack = as_layer_stack(world.soil)
-    ds = engine.segment_length
-    _log.info(
-        "mom_sommerfeld: n_layers=%d, segment_length=%.3f, lam_max_fac=%.1f",
-        stack.n_layers,
-        ds,
-        lambda_max_factor,
-    )
-
-    # 1) Discretisation.
-    all_segments: list[_Segment] = []
-    elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (float(stack.h[0]),) if stack.n_layers >= 2 else None
-    for e in world.electrodes:
-        segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
-        elec_to_segidx[e.name] = list(
-            range(len(all_segments), len(all_segments) + len(segs))
-        )
-        all_segments.extend(segs)
-
-    # 2) Per-electrode input currents.
-    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
-    for src in world.sources:
-        if src.kind != "current":
-            continue
-        i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
-        if src.attached_to in elec_input_current:
-            elec_input_current[src.attached_to] += i_complex
-
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
-    finite_branches = _build_finite_branches(world.conductors, cluster_id)
-
-    # 2b) Distributed-conductor topology (ADR-0003) + ADR-0004
-    #     inductive coupling.
-    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
-        world.conductors, cluster_id
-    )
-    for s in cond_segs:
-        pn = s.electrode_name
-        elec_to_segidx[pn] = [len(all_segments)]
-        all_segments.append(s)
-        cluster_id[pn] = pn
-    for n_ in interior_nodes:
-        if n_ not in cluster_id:
-            cluster_id[n_] = n_
-            elec_to_segidx[n_] = []
-    n_lumped_branches = len(finite_branches)
-    distributed_branch_tuples = [
-        (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
-    ]
-    finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
-    sigma_earth_for_carson: float | None = None
-    layered_earth_for_sommerfeld: object = None
-    if earth_inductive_model == "carson_series":
-        from groundfield.coupling import resolve_earth_conductivity
-
-        sigma_earth_for_carson = resolve_earth_conductivity(world.soil)
-    elif earth_inductive_model == "sommerfeld":
-        from groundfield.coupling import resolve_earth_layers
-
-        layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = (
-        _assemble_inductance_matrix(
-            distributed_branches_objs,
-            n_lumped_branches=n_lumped_branches,
-            n_total_branches=len(finite_branches),
-            earth_model=earth_inductive_model,
-            sigma_earth=sigma_earth_for_carson,
-            layered_earth=layered_earth_for_sommerfeld,
-        )
-    )
-
-    n_segments = len(all_segments)
-    seg_points = np.array([s.midpoint for s in all_segments])
-    seg_lengths = np.array([s.length for s in all_segments])
-    wire_radii = np.array([s.wire_radius for s in all_segments])
-
-    if stack.n_layers >= 3:
-        z_max = seg_points[:, 2].max()
-        h_1 = float(stack.h[0])
-        if z_max >= h_1:
-            # ADR-0007 Phase B (n≥3): not implemented — the
-            # reflection-only diagonal correction below assumes all
-            # segments in the top layer. Hard error instead of a
-            # warning followed by wrong physics.
-            raise ValueError(
-                f"mom_sommerfeld: cross-layer geometry on "
-                f"n_layers={stack.n_layers} is not supported "
-                f"(z_max = {z_max:.3f} m >= h_1 = {h_1:.3f} m). "
-                "Use backend='image_2layer' for n=2 cross-layer "
-                "worlds; for n>=3 thicken the upper layer."
-            )
-
-    # 3) Z-matrix via direct Sommerfeld quadrature (series knobs for
-    #    the n=2 diagonal from the engine).
-    quadrature_issues: list[_QuadratureIssue] = []
-    Z = _build_Z_sommerfeld(
-        seg_points,
-        seg_lengths,
-        wire_radii,
-        stack,
+    green = _SommerfeldGreen(
+        world.soil,
         lambda_max_factor=lambda_max_factor,
         epsabs=epsabs,
         epsrel=epsrel,
         max_osc_panels=max_osc_panels,
         max_terms=engine.image_max_terms,
         tol=engine.image_series_tol,
-        issues=quadrature_issues,
+        tabulate=tabulate,
     )
-    # Convergence report (review pass 10, 10.47). For n = 2 inside the
-    # upper layer the diagonal is the truncated Tagg/Sunde series, which
-    # is checked like in ``mom`` (it was silent here up to 0.15.0, R2-09).
-    series_meta: dict[str, int] = {}
-    series_converged = True
-    if stack.n_layers == 2 and float(seg_points[:, 2].max()) < float(stack.h[0]):
-        from groundfield.solver.image_2layer import (
-            SeriesTruncationWarning,
-            _series_tail_bound,
-            _two_layer_image_offsets,
-        )
-
-        k_1 = float(stack.K[0])
-        _, _, _, n_terms_used = _two_layer_image_offsets(
-            k_1, float(stack.h[0]), engine.image_max_terms, engine.image_series_tol
-        )
-        series_meta = {"n_terms_used": int(n_terms_used)}
-        if n_terms_used:
-            tail = _series_tail_bound(abs(k_1), n_terms_used)
-            series_converged = bool(tail < engine.image_series_tol)
-            if not series_converged:
-                warnings.warn(
-                    "mom_sommerfeld: the Tagg/Sunde series of the reaction-"
-                    f"matrix diagonal was truncated at max_terms="
-                    f"{engine.image_max_terms} with a remaining tail bound of "
-                    f"{tail:.2e} > tol={engine.image_series_tol:.2e} "
-                    f"(|K| = {abs(k_1):.3f}). Raise Engine.image_max_terms "
-                    "for high layer contrasts.",
-                    SeriesTruncationWarning,
-                    stacklevel=2,
-                )
-    converged = series_converged and not quadrature_issues
-
-    # 4) Frequency loop (point-matching solve + Z · I_seg for phi).
-    n_freq = len(engine.frequencies)
-    omegas = [2.0 * np.pi * float(f) for f in engine.frequencies]
-    real_electrode_names = {e.name for e in world.electrodes}
-
-    def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray]:
-        carson_dz = (
-            carson_builder(omega)
-            if (has_inductance and carson_builder is not None)
-            else None
-        )
-        sc, _ = _point_matching_solve(
-            Z=Z,
-            elec_input_current=elec_input_current,
-            cluster_id=cluster_id,
-            elec_to_segidx=elec_to_segidx,
-            n_segments=n_segments,
-            finite_branches=finite_branches,
-            omega=omega if has_inductance else 0.0,
-            inductance_matrix=inductance_matrix_full if has_inductance else None,
-            carson_correction=carson_dz,
-        )
-        ph = np.zeros(n_segments, dtype=complex)
-        if sc.any():
-            ph = Z @ sc.real + 1j * (Z @ sc.imag)
-        return sc, ph
-
-    sc_per_freq: list[np.ndarray] = []
-    phi_per_freq: list[np.ndarray] = []
-    if has_inductance:
-        for omega in omegas:
-            sc, ph = _solve_at(omega)
-            sc_per_freq.append(sc)
-            phi_per_freq.append(ph)
-    else:
-        sc, ph = _solve_at(0.0)
-        sc_per_freq = [sc] * n_freq
-        phi_per_freq = [ph] * n_freq
-
-    # Node potentials and leakage currents; floating clusters (no
-    # source, no branch) report an exactly zero net current (10.29).
-    (
-        electrode_potentials,
-        electrode_currents,
-        conductor_potentials,
-        conductor_currents,
-    ) = _node_results(
-        elec_to_segidx=elec_to_segidx,
-        phi_per_freq=phi_per_freq,
-        sc_per_freq=sc_per_freq,
-        cluster_id=cluster_id,
-        electrode_names=real_electrode_names,
-        floating=_floating_clusters(
-            elec_input_current, cluster_id, finite_branches, real_electrode_names
-        ),
-        n_freq=n_freq,
+    _log.info(
+        "mom_sommerfeld: n_layers=%d, segment_length=%.3f, lam_max_fac=%.1f",
+        green.stack.n_layers,
+        engine.segment_length,
+        lambda_max_factor,
     )
-
-    point_sources = [
-        PointSource(
-            position=tuple(seg_points[i].tolist()),
-            current=[complex(sc_per_freq[k][i]) for k in range(n_freq)],
-            electrode_name=all_segments[i].electrode_name,
-            length=float(seg_lengths[i]),
-        )
-        for i in range(n_segments)
-    ]
-    cluster_members: dict[str, list[str]] = {}
-    for ename in real_electrode_names:
-        cluster_members[ename] = sorted(
-            n
-            for n in cluster_id
-            if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
-        )
-
-    metadata = {
-        "world_name": world.name,
-        "n_segments": n_segments,
-        "segment_length": ds,
-        "n_layers": int(stack.n_layers),
-        "rhos": stack.rhos.tolist(),
-        "h": stack.h.tolist(),
-        "lambda_max_factor": float(lambda_max_factor),
-        "epsabs": float(epsabs),
-        "epsrel": float(epsrel),
-        "max_osc_panels": int(max_osc_panels),
-        "solver": "point_matching",
-        "stub": False,
-        "earth_inductive_model": earth_inductive_model,
-        # The reaction matrix is frequency-independent, so one flag holds
-        # for every frequency; the per-frequency list is aligned with
-        # ``frequencies`` for callers that tabulate per frequency.
-        "converged": bool(converged),
-        "converged_per_frequency": [bool(converged)] * n_freq,
-        "n_unconverged_entries": len(quadrature_issues),
-        **series_meta,
-    }
-    if has_inductance:
-        from groundfield.coupling.carson import skin_depth
-
-        sigma_ref = (
-            sigma_earth_for_carson
-            if sigma_earth_for_carson is not None
-            else 1.0 / float(stack.rhos[0])
-        )
-        metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
-        }
-    if conductor_currents:
-        metadata["conductor_node_currents"] = conductor_currents
-        metadata["conductor_node_potentials"] = conductor_potentials
-
-    return FieldResult(
-        backend="mom_sommerfeld",
-        frequencies=list(engine.frequencies),
-        electrode_potentials=electrode_potentials,
-        electrode_currents=electrode_currents,
-        point_sources=point_sources,
-        soil_resistivity=float(stack.rhos[0]),
-        soil=canonical_soil(world.soil),
-        clusters=cluster_members,
-        metadata=metadata,
-    )
+    return solve_point_matching(world, engine, green, stacklevel=3)

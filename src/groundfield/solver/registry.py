@@ -55,8 +55,9 @@ share are common :class:`~groundfield.solver.engine.Engine` fields, not
 backend options: ``segment_length``, ``earth_inductive_model`` and the
 Tagg / Sunde image-series controls ``image_max_terms`` /
 ``image_series_tol`` (consumed by ``image_2layer``, ``image_nlayer``,
-``mom``, ``cim``, ``bem``, ``mom_sommerfeld`` on its delegated
-two-layer path, and by the post-solve field evaluation). Their single
+``mom``, ``mom_sommerfeld`` on its delegated two-layer path, and by the
+post-solve field evaluation; the deprecated names ``cim`` and ``bem``
+run ``image`` and ``mom``). Their single
 documented defaults are :data:`DEFAULT_IMAGE_MAX_TERMS` and
 :data:`DEFAULT_IMAGE_SERIES_TOL`.
 
@@ -67,6 +68,12 @@ that names the replacement and the earliest removal
 (:data:`DEPRECATION_REMOVAL`). The first solve with an experimental
 backend in a process emits :class:`ExperimentalBackendWarning` once.
 Neither is emitted for the internal auto-forwarding.
+
+Since review pass 10 (10.76) ``cim`` and ``bem`` are pure deprecated
+aliases of ``image`` and ``mom`` (both assembled the same system as
+their target), ``image_nlayer`` is a deprecated name of the ``image``
+auto-dispatch that keeps its own solve function, so the forwarding of
+``image`` to it stays silent, and ``fem`` is experimental.
 """
 
 from __future__ import annotations
@@ -323,6 +330,18 @@ class MomSommerfeldOptions(BackendOptions):
             "Binds only for s/d_rem >~ 1.9e4; there the backend raises a "
             "SommerfeldConvergenceWarning and raising this budget is the "
             "remedy. Cost grows linearly with it."
+        ),
+    )
+    tabulate: bool = Field(
+        default=True,
+        description=(
+            "Tabulate the reflected kernel per depth group for n >= 3 "
+            "distinct layers (review pass 10, 10.61): a cubic spline in "
+            "ln(s), checked at midpoints against the quadrature to 1e-7 of "
+            "|G|, with a fallback to the quadrature for a group whose check "
+            "fails. False evaluates every distinct pair argument by "
+            "quadrature, bit-identical to the 0.15.0 pair loop (27 times "
+            "slower for eleven foundation rings, N = 273)."
         ),
     )
 
@@ -1038,6 +1057,8 @@ def _register_builtins() -> None:
         ),
         summary="Two-layer soil, Tagg / Sunde image series.",
     )
+    # Deprecated name (10.76): requesting it warns; the forwarding of
+    # 'image' to it does not (only the requested name is checked).
     register_backend(
         "image_nlayer",
         _solve_image_nlayer,
@@ -1049,34 +1070,43 @@ def _register_builtins() -> None:
             kernels=_IMAGE_KERNELS,
             junctions=True,
         ),
+        deprecated_alias_of="image",
         summary="Layered soil routed to image (n = 1) or image_2layer (n = 2).",
     )
     register_backend(
         "cim",
-        "groundfield.solver.cim:solve_cim",
-        capabilities=BackendCapabilities(soils={"homogeneous", "two_layer"}),
-        summary="Complex-image kernel; exact image series for n <= 2.",
+        None,
+        deprecated_alias_of="image",
+        summary="Deprecated name of the image auto-dispatch (10.76).",
     )
+    # The point-matching family runs the shared inject / build_topology
+    # steps (10.75): return_to and junction nodes are honoured.
     register_backend(
         "mom",
         "groundfield.solver.mom:solve_mom",
-        capabilities=BackendCapabilities(soils={"homogeneous", "two_layer"}),
+        capabilities=BackendCapabilities(
+            soils={"homogeneous", "two_layer"},
+            two_terminal_sources=True,
+            junctions=True,
+        ),
         summary="Method of moments, point-matching collocation.",
     )
     register_backend(
         "mom_sommerfeld",
         "groundfield.solver.mom_sommerfeld:solve_mom_sommerfeld",
         capabilities=BackendCapabilities(
-            soils={"homogeneous", "two_layer", "multi_layer"}
+            soils={"homogeneous", "two_layer", "multi_layer"},
+            two_terminal_sources=True,
+            junctions=True,
         ),
         options_model=MomSommerfeldOptions,
         summary="Method of moments with Sommerfeld quadrature, any n.",
     )
     register_backend(
         "bem",
-        "groundfield.solver.bem:solve_bem",
-        capabilities=BackendCapabilities(soils={"homogeneous", "two_layer"}),
-        summary="Boundary-element collocation with the complex-image kernel.",
+        None,
+        deprecated_alias_of="mom",
+        summary="Deprecated name of 'mom' (10.76).",
     )
     register_backend(
         "fem",
@@ -1087,6 +1117,7 @@ def _register_builtins() -> None:
             kernels=(),
         ),
         options_model=FemOptions,
+        experimental=True,
         summary="Axisymmetric finite elements of an equivalent hemisphere.",
     )
 

@@ -213,7 +213,10 @@ def _component_rows(
 
     Returns ``None`` when the quantity is undefined for every engine
     (all values non-finite) or when every magnitude is zero, i.e. when
-    there is nothing to compare.
+    there is nothing to compare. A value that is non-finite, or exactly
+    zero while other engines report a non-zero value, for *some* engines
+    only gives failing rows with an infinite deviation (audit round 1,
+    F03: up to then a single zero skipped the quantity as undefined).
     """
     labels = list(per_engine)
     z = np.array([per_engine[lbl] for lbl in labels], dtype=complex)
@@ -234,9 +237,24 @@ def _component_rows(
             )
             for name, part in _COMPONENTS
         ]
-    scale = float(np.min(np.abs(z)))
-    if scale == 0.0:
+    magnitudes = np.abs(z)
+    if not magnitudes.any():
         return None
+    scale = float(np.min(magnitudes))
+    if scale == 0.0:
+        return [
+            ComparisonRow(
+                quantity=quantity,
+                frequency=frequency,
+                component=name,
+                values={lbl: float(part(v)) for lbl, v in zip(labels, z, strict=True)},
+                reference=0.0,
+                deviation=float("inf"),
+                tolerance=rel_tolerance,
+                passed=False,
+            )
+            for name, part in _COMPONENTS
+        ]
     rows = []
     for name, part in _COMPONENTS:
         c = part(z)
@@ -263,6 +281,21 @@ def _safe(method, arg: str) -> list[complex] | None:
         return [complex(v) for v in method(arg)]
     except (KeyError, IndexError, ValueError):
         return None
+
+
+def _computation_key(engine: Engine, result: FieldResult) -> tuple[str, str]:
+    """Backend that actually ran plus the engine settings, as a hashable key.
+
+    The backend is taken from ``metadata['dispatched_to']`` (an alias
+    called directly), else ``metadata['effective_backend']`` (the
+    registry), else :attr:`FieldResult.backend`.
+    """
+    import json
+
+    md = result.metadata
+    ran = str(md.get("dispatched_to") or md.get("effective_backend") or result.backend)
+    settings = engine.model_dump(mode="json", exclude={"backend"})
+    return ran, json.dumps(settings, sort_keys=True, default=str)
 
 
 def compare_engines(
@@ -336,7 +369,9 @@ def compare_engines(
     undefined for *every* engine (a purely passive cluster with
     :math:`\\sum I = 0`) is skipped with a note; a quantity that is
     non-finite for *some* engines only is a failure (up to 0.15.0 the
-    non-finite engine was dropped and the rest compared). Engines with
+    non-finite engine was dropped and the rest compared); so is a value
+    that is exactly zero for some engines only (audit round 1, F03).
+    Engines with
     different frequency lists raise instead of being compared at
     different frequencies.
 
@@ -346,6 +381,13 @@ def compare_engines(
     ``max_ij |c_i - c_j| / min |c|`` for same-sign values. Up to 0.14.x
     the deviation was measured against the ensemble *mean*, which for
     two engines reports half the true disagreement.
+
+    **Aliases (review pass 10, 10.76).** Engines that ran the same
+    computation — the same backend after alias resolution
+    (``metadata['dispatched_to']`` / ``['effective_backend']``) with
+    identical settings, e.g. the deprecated ``cim`` next to
+    ``image_2layer`` — are named in a note: their agreement is not an
+    independent cross-check. The verdict itself is unchanged.
 
     **Vacuous comparisons (changed in 0.15.0).** A report is
     ``is_consistent=True`` only if at least one row was evaluated. A
@@ -381,6 +423,21 @@ def compare_engines(
     cmp = EngineComparison(
         results=results, rel_tolerance=rel_tolerance, frequencies=freqs
     )
+
+    # Review pass 10, 10.76: a deprecated alias (``cim``, ``bem``,
+    # ``image_nlayer``) runs another backend's computation; agreement with
+    # that backend at the same settings checks nothing.
+    groups: dict[tuple[str, str], list[str]] = {}
+    for label, res in results.items():
+        groups.setdefault(_computation_key(engines[label], res), []).append(label)
+    for (ran, _settings), labels in groups.items():
+        if len(labels) > 1:
+            names = ", ".join(f"'{lbl}'" for lbl in labels)
+            cmp.notes.append(
+                f"Engines {names} ran the same computation (backend '{ran}' "
+                "with identical settings); their agreement is not an "
+                "independent cross-check."
+            )
 
     # Detect stub backends
     for label, res in results.items():
@@ -462,11 +519,19 @@ def compare_engines(
             worst = dev if worst is None else max(worst, dev)
             if not np.isfinite(dev):
                 bad = sorted(lbl for lbl, v in values.items() if not np.isfinite(v[k]))
-                cmp.notes.append(
-                    f"{quantity} at {f:g} Hz: non-finite for engine(s) "
-                    f"{', '.join(bad)} while finite for the others — counted "
-                    "as a failure."
-                )
+                if bad:
+                    cmp.notes.append(
+                        f"{quantity} at {f:g} Hz: non-finite for engine(s) "
+                        f"{', '.join(bad)} while finite for the others — counted "
+                        "as a failure."
+                    )
+                else:
+                    zero = sorted(lbl for lbl, v in values.items() if v[k] == 0)
+                    cmp.notes.append(
+                        f"{quantity} at {f:g} Hz: zero for engine(s) "
+                        f"{', '.join(zero)} while non-zero for the others — "
+                        "counted as a failure."
+                    )
         if worst is None:
             cmp.notes.append(
                 f"{quantity}: undefined for every engine (Σ I = 0 or Z = 0) — skipped."

@@ -151,6 +151,16 @@ EXPECTED_FAILURES: dict[str, dict[int, str]] = {
     "docs/examples/09_plot_gallery.md": {
         7: "ImportError: cannot import name 'plot_geometry'",
     },
+    # Review pass 10, 10.76 (stream eng2, 2026-11-07): ``bem`` and ``cim``
+    # are deprecated aliases of ``mom`` and of the image auto-dispatch; the
+    # examples print the removed ``cim_fit_used`` / ``reduces_to`` keys.
+    # Owner: docs stream (engine pages become alias notes).
+    "docs/engines/bem.md": {
+        0: "KeyError: 'cim_fit_used' (bem is a deprecated alias of mom, 10.76)",
+    },
+    "docs/engines/cim.md": {
+        0: "KeyError: 'cim_fit_used' (cim is a deprecated alias of image, 10.76)",
+    },
 }
 
 

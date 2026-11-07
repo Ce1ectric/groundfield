@@ -94,8 +94,18 @@ def _solve_quietly(engine: gf.Engine, world: gf.World) -> FieldResult:
 def test_builtin_backends_are_registered_with_their_capabilities() -> None:
     from groundfield.solver.registry import available_backends, get_backend
 
-    assert set(BUILTINS) <= set(available_backends())
-    caps = {name: get_backend(name).capabilities for name in BUILTINS}
+    assert set(BUILTINS) <= set(available_backends(include_deprecated=True))
+    # Deprecated names (10.76): cim and bem are pure aliases, image_nlayer
+    # keeps its own solve function for the image forwarding.
+    deprecated = {"cim": "image", "bem": "mom", "image_nlayer": "image"}
+    assert {n: get_backend(n).deprecated_alias_of for n in deprecated} == deprecated
+    assert not set(deprecated) & set(available_backends())
+    assert get_backend("fem").experimental
+    caps = {
+        name: get_backend(name).capabilities
+        for name in BUILTINS
+        if not get_backend(name).is_pure_alias
+    }
     # n-layer soil: only the Sommerfeld MoM and the volume FEM.
     assert {n for n, c in caps.items() if "multi_layer" in c.soils} == {
         "mom_sommerfeld",
@@ -113,6 +123,10 @@ def test_builtin_backends_are_registered_with_their_capabilities() -> None:
     # fem has no source kernel; every other backend uses one.
     assert caps["fem"].kernels == frozenset()
     assert "point" in caps["mom"].kernels
+    # The point-matching family runs the shared inject / build_topology
+    # steps (10.75): return_to and junction nodes are honoured.
+    for name in ("mom", "mom_sommerfeld"):
+        assert caps[name].two_terminal_sources and caps[name].junctions
 
 
 @pytest.mark.finding("10.74")
@@ -239,7 +253,7 @@ def test_concrete_shell_capability_error_names_the_image_family() -> None:
     )
     gf.create_source(w, attached_to="f1")
     with pytest.raises(BackendCapabilityError) as excinfo:
-        gf.Engine(backend="cim", segment_length=SEG).solve(w)
+        gf.Engine(backend="mom", segment_length=SEG).solve(w)
     msg = str(excinfo.value)
     assert "concrete-shell" in msg
     assert "'image'" in msg
@@ -463,40 +477,45 @@ def test_replacing_a_registration_keeps_its_position() -> None:
         register_backend,
     )
 
-    original = get_backend("bem")
+    from groundfield.solver.registry import unregister_backend
+
+    # A toy copy of 'mom' stands in for the built-in name (bem and cim
+    # became pure aliases this way in review pass 10, 10.76).
+    mom = get_backend("mom")
+    register_backend(
+        "toy_old_name",
+        mom.solve_fn,
+        capabilities=mom.capabilities,
+        summary="toy (test)",
+    )
     order = available_backends(include_deprecated=True)
     try:
         register_backend(
-            "bem",
-            original.solve_fn,
-            capabilities=original.capabilities,
+            "toy_old_name",
+            mom.solve_fn,
+            capabilities=mom.capabilities,
             deprecated_alias_of="mom",
             summary="deprecated alias (test)",
             replace=True,
         )
         assert available_backends(include_deprecated=True) == order
-        assert "bem" not in available_backends()
+        assert "toy_old_name" not in available_backends()
         with pytest.warns(DeprecationWarning, match="'mom'"):
-            res = gf.Engine(backend="bem", segment_length=SEG).solve(_rod_world())
-        assert res.metadata["effective_backend"] == "bem"
+            res = gf.Engine(backend="toy_old_name", segment_length=SEG).solve(
+                _rod_world()
+            )
+        assert res.metadata["effective_backend"] == "toy_old_name"
         with pytest.raises(ValueError, match="deprecated aliases of 'mom'"):
             register_backend(
                 "mom",
-                get_backend("mom").solve_fn,
+                mom.solve_fn,
                 capabilities=BackendCapabilities(soils={"homogeneous"}),
                 deprecated_alias_of="image",
                 replace=True,
             )
     finally:
-        register_backend(
-            "bem",
-            original.solve_fn,
-            capabilities=original.capabilities,
-            summary=original.summary,
-            replace=True,
-        )
-    assert get_backend("bem") == original
-    assert available_backends(include_deprecated=True) == order
+        unregister_backend("toy_old_name")
+    assert get_backend("mom") == mom
 
 
 @pytest.mark.finding("10.74")

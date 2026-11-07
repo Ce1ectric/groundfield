@@ -273,7 +273,9 @@ def _shelled_world():
     return w
 
 
-@pytest.mark.parametrize("backend", ["mom", "cim", "bem"])
+# 'cim' runs the image auto-dispatch since review pass 10 (10.76) and
+# therefore applies the correction; the deprecated 'bem' runs 'mom'.
+@pytest.mark.parametrize("backend", ["mom", "bem"])
 def test_concrete_shell_rejected_by_non_image_backends(backend: str) -> None:
     eng = gf.create_engine(backend=backend, segment_length=0.5)
     with pytest.raises(NotImplementedError, match="concrete-shell"):

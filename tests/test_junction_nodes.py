@@ -356,7 +356,7 @@ def test_backends_without_junction_support_reject_the_world() -> None:
     _lead(w, "lead", "J", "g1")
     gf.create_source(w, attached_to="J", magnitude=1.0)
     with pytest.raises(BackendCapabilityError, match=r"(?s)junction.*'image'"):
-        w.solve(gf.create_engine(backend="mom", segment_length=SEG))
+        w.solve(gf.create_engine(backend="fem", segment_length=SEG))
 
 
 @pytest.mark.xfail(

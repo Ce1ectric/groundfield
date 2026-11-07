@@ -1,0 +1,21 @@
+# Stream eng2 (review pass 10, wave 2): mom family on the shared pipeline
+# (10.75), direct reaction-matrix assembly (10.59), depth-group tabulation
+# of the mom_sommerfeld kernel (10.61), deprecated aliases cim / bem /
+# image_nlayer (10.76), fem raise guard (10.23).
+#
+# No stored quantity moves, so this file declares no change:
+#
+# * 10.75 / 10.59 are bit-identical (all 41 stored cases identical under
+#   GF_GOLDEN_STRICT=1 against the snapshot of the wave-2 base dcfa572,
+#   and 47 further snapshot results in the eng2 evidence script e01).
+# * 10.76: `cim` runs the image auto-dispatch and is bit-identical to it on
+#   `cim_rod_two_layer` and `cim_grid_unequal_segments`; `bem` runs `mom`,
+#   bit-identical on `bem_ring_rod_hom` (other worlds move by <= 3.5e-16,
+#   none of them stored). `imgN_two_layer_multilayer_rod` keeps its own
+#   solve function behind the requested alias registration.
+# * 10.61 tabulates only top-layer depth groups of n >= 3 stacks with many
+#   distinct distances; the stored three-layer case is a vertical rod
+#   (one distance per depth pair) and stays bit-identical. The new case
+#   `mom_sommerfeld_three_layer_grid_tabulated` (appended to cases.py, to
+#   be stored by the coordinator) pins the tabulated path.
+# * The fem raise guard rejects worlds no stored case contains.

@@ -176,9 +176,9 @@ BENCHMARKS: dict[str, Benchmark] = {
             "fem": Bound(
                 None,
                 _REL,
-                "+1093 %",
-                "excluded: hemisphere and rod on different sides of h₁ "
-                "(FemReductionWarning, 10.23)",
+                "raises BackendCapabilityError (v0.15.0: +1092 %, silent)",
+                "excluded: the rod reaches a layer its equivalent hemisphere "
+                "does not (10.23)",
             ),
         },
     ),
@@ -231,7 +231,13 @@ BENCHMARKS: dict[str, Benchmark] = {
             "layer_limit_integral": Bound(
                 1e-3, _REL, "5.1e-4 (4 mm) / 2.0e-4 (4 km)", "physical limit"
             ),
-            "layer_limit_fem": Bound(1e-2, _REL, "2.1e-3 / 2.3e-4", "experimental"),
+            "layer_limit_fem": Bound(
+                1e-2,
+                _REL,
+                "2.1e-3 / 2.3e-4",
+                "experimental; h₁ = 4 mm emits FemReductionWarning (structural "
+                "interface rule, audit F01)",
+            ),
         },
     ),
     "B10": Benchmark(
@@ -264,14 +270,15 @@ BENCHMARKS: dict[str, Benchmark] = {
     ),
     "B12": Benchmark(
         title="Three-layer grid",
-        case="grid of B11 in 3L[1000, 30, 200], h = [5, 10] m",
-        reference="pointwise mom_sommerfeld",
+        case="grid of B11 in 3L[1000, 30, 200], h = [5, 10] m, ds ∈ {2.5, 1.25} m",
+        reference="mom_sommerfeld with every distinct pair by quadrature (tabulate=False)",
         bounds={
             "mom_sommerfeld": Bound(
-                None,
-                "interpolated vs pointwise kernel",
-                "—",
-                "not available: needs the depth-group interpolation of 10.61",
+                1e-6,
+                "max abs(Z_ij,tab / Z_ij - 1) and abs(Z_g1,tab / Z_g1 - 1)",
+                "0 / 0 (ds = 2.5 m: no group large enough); 6.9e-9 / 1.5e-10 "
+                "(ds = 1.25 m)",
+                "depth-group tabulation of the reflected kernel (10.61)",
             ),
         },
     ),
@@ -281,13 +288,33 @@ BENCHMARKS: dict[str, Benchmark] = {
             "ring r = 2 m at 0.8 m, isolated 400 m line (95 mm², Neumann, "
             "Sommerfeld earth return) to a 3 m rod; f ∈ {50, 1000} Hz; ds = 1 m"
         ),
-        reference="compare_engines(image, mom), complex Z at every frequency",
+        reference=(
+            "compare_engines(image, mom), complex Z at every frequency; the "
+            "line's per-metre series impedance against the Pollaczek "
+            "conductor-earth loop impedance R'_dc + Z'_P (references.pollaczek, "
+            "GMR = a e^{-1/4})"
+        ),
         bounds={
             "image_vs_mom": Bound(
                 5e-2,
                 "compare_engines row deviation (Re and Im)",
                 "0.09 % (worst of 8 rows)",
                 "inductive branch shared; galvanic part differs by the ansatz",
+            ),
+            "pollaczek_x": Bound(
+                5e-3,
+                "abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz",
+                "4.1e-6",
+                "the two-length difference cancels the end effects; the 400 m "
+                "line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below "
+                "l X'_P (finite length, l / delta = 2.5 and 0.56)",
+            ),
+            "pollaczek_r": Bound(
+                2e-2,
+                "abs(R'/R'_P - 1), same difference",
+                "-1.04 %",
+                "converges from below with the length (-4.5 % for 400/800 m); "
+                "the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P",
             ),
         },
     ),

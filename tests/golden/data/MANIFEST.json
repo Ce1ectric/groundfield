@@ -504,6 +504,20 @@
       "scipy": "1.18.1",
       "sha256": "62fbae47ae88f32ca9f19ffccb52289c78c27f4fd47d3a2d241f2444ef8ff54a"
     },
+    "mom_sommerfeld_three_layer_grid_tabulated": {
+      "generated_utc": "2026-11-07T23:40:14+00:00",
+      "git_commit": "80058008172f041db7168dbe212e006203102623",
+      "git_describe": "v0.15.0-165-g8005800-dirty",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 7,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "72fee0ff369b030585930825f460c14e246cdfabe38903de346e007dcac5e671"
+    },
     "mom_sommerfeld_three_layer_rod": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
       "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",

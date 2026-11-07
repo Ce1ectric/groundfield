@@ -1025,3 +1025,36 @@ def case_floating_bonded_pair_two_layer() -> Quantities:
         _engine(backend="image_2layer", frequencies=[50.0], segment_length=0.5)
     )
     return _result_quantities(res, cluster_of=("src",), point_sources=False)
+
+
+# ---------------------------------------------------------------------
+# mom family on the shared pipeline (review pass 10; stream eng2;
+# stored by the coordinator)
+# ---------------------------------------------------------------------
+
+
+@_case
+def case_mom_sommerfeld_three_layer_grid_tabulated() -> Quantities:
+    """10.61: a grid at one depth uses the depth-group table of the kernel."""
+    soil = gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(rho=1000.0, h=5.0),
+            gf.SoilLayer(rho=30.0, h=10.0),
+            gf.SoilLayer(rho=200.0, h=None),
+        ]
+    )
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="grid",
+        corner=(-10.0, -10.0, 0.8),
+        size=(20.0, 20.0),
+        n_x=2,
+        n_y=2,
+    )
+    gf.create_source(w, attached_to="grid", magnitude=1.0)
+    res = w.solve(
+        _engine(backend="mom_sommerfeld", frequencies=[50.0], segment_length=0.5)
+    )
+    return _result_quantities(res, cluster_of=("grid",))

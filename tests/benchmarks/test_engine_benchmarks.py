@@ -405,8 +405,42 @@ def test_b11_grid_mom_sommerfeld_equals_mom(measured) -> None:
     _check(measured, "B11", "mom_sommerfeld", "ds=5", abs(z / z_mom - 1.0))
 
 
-def test_b12_three_layer_grid_interpolation() -> None:
-    pytest.skip(bound("B12", "mom_sommerfeld").note)
+@pytest.mark.parametrize("ds", [2.5, 1.25])
+def test_b12_three_layer_grid_interpolation(ds, measured) -> None:
+    """Tabulated against quadrature-only ``mom_sommerfeld`` (10.61)."""
+    from groundfield.solver._layered import as_layer_stack
+    from groundfield.solver._pipeline import SegmentArrays, discretise
+    from groundfield.solver.mom_sommerfeld import (
+        _build_Z_sommerfeld,
+        solve_mom_sommerfeld,
+    )
+
+    soil = gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(rho=1000.0, h=5.0),
+            gf.SoilLayer(rho=30.0, h=10.0),
+            gf.SoilLayer(rho=200.0, h=None),
+        ]
+    )
+    engine = gf.create_engine(backend="mom_sommerfeld", segment_length=ds)
+    disc = discretise(_grid(soil), engine, (5.0,))
+    a = SegmentArrays.from_segments(disc.segments)
+    quad = dict(
+        lambda_max_factor=200.0, epsabs=1e-9, epsrel=1e-7, max_osc_panels=200_000
+    )
+    stack = as_layer_stack(soil)
+    Z_tab = _build_Z_sommerfeld(
+        a.points, a.lengths, a.radii, stack, tabulate=True, **quad
+    )
+    Z_ref = _build_Z_sommerfeld(
+        a.points, a.lengths, a.radii, stack, tabulate=False, **quad
+    )
+    entry = float(np.max(np.abs(Z_tab / Z_ref - 1.0)))
+    _check(measured, "B12", "mom_sommerfeld", f"matrix ds={ds}", entry)
+    z_tab = solve_mom_sommerfeld(_grid(soil), engine, tabulate=True)
+    z_ref = solve_mom_sommerfeld(_grid(soil), engine, tabulate=False)
+    dev = abs(z_tab.cluster_impedance("g1")[0] / z_ref.cluster_impedance("g1")[0] - 1.0)
+    _check(measured, "B12", "mom_sommerfeld", f"Z ds={ds}", dev)
 
 
 # ---------------------------------------------------------------------
@@ -444,3 +478,64 @@ def test_b13_inductive_line_image_vs_mom(measured) -> None:
     covered = {(r.frequency, r.component) for r in rep.rows}
     assert covered == {(50.0, "Re"), (50.0, "Im"), (1000.0, "Re"), (1000.0, "Im")}
     assert rep.is_consistent, rep.summary()
+
+
+def _b13_line_world(length: float) -> gf.World:
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=2.0)
+    gf.create_electrode(w, "rod", name="far", position=(length, 0.0, 0.5), length=3.0)
+    gf.create_conductor(
+        w,
+        name="line",
+        start="g1",
+        end="far",
+        discretize_segment_length=50.0,
+        coupling_to_soil="isolated",
+        inductance_model="neumann",
+        cross_section=95e-6,
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+def _line_impedance(length: float, frequency: float) -> complex:
+    """Series impedance of the isolated line: (phi_g1 - phi_far) / I_far."""
+    engine = gf.create_engine(
+        backend="image",
+        segment_length=1.0,
+        frequencies=[frequency],
+        earth_inductive_model="sommerfeld",
+    )
+    res = engine.solve(_b13_line_world(length))
+    v1 = res.electrode_potentials["g1"][0]
+    v2 = res.electrode_potentials["far"][0]
+    return (v1 - v2) / res.electrode_currents["far"][0]
+
+
+@pytest.mark.slow
+def test_b13_line_impedance_against_pollaczek(measured) -> None:
+    """Per-metre series impedance of the B13 line against Pollaczek (1 kHz).
+
+    The line carries no leakage, so (phi_g1 - phi_far) / I_far is its
+    series impedance. The difference of a 1600 m and an 800 m line
+    cancels the end effects of a finite line; the reference is the
+    conductor-earth loop impedance R'_dc + Z'_P of an infinite buried
+    line at the mean depth (references.pollaczek).
+    """
+    from groundfield.references.pollaczek import loop_impedance_conductor_earth
+
+    frequency = 1000.0
+    z_800, z_1600 = (_line_impedance(L, frequency) for L in (800.0, 1600.0))
+    z_per_m = (z_1600 - z_800) / 800.0
+    line = _b13_line_world(800.0).conductors[0]
+    ref = loop_impedance_conductor_earth(
+        100.0,
+        100.0,
+        10.0,
+        frequency,
+        depth=0.5 * (line.start[2] + line.end[2]),
+        gmr=line.wire_radius * math.exp(-0.25),
+        r_internal=line.resistivity / line.cross_section,
+    )
+    _check(measured, "B13", "pollaczek_x", "X' 1 kHz", abs(z_per_m.imag / ref.imag - 1))
+    _check(measured, "B13", "pollaczek_r", "R' 1 kHz", abs(z_per_m.real / ref.real - 1))
