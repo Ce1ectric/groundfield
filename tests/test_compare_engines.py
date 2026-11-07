@@ -123,3 +123,137 @@ def test_compare_engines_summary_string_contains_engines_and_clusters() -> None:
     assert "fine" in text
     assert "coarse" in text
     assert "g1" in text
+
+
+# ---------------------------------------------------------------------
+# 10.71 — complex Z at every frequency, explicit tolerance table
+# ---------------------------------------------------------------------
+
+
+def _ring_and_line_world() -> gf.World:
+    """Ring with a 400 m inductive PEN-like line to a remote rod."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
+    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=2.0)
+    gf.create_electrode(w, "rod", name="far", position=(400.0, 0.0, 0.5), length=3.0)
+    gf.create_conductor(
+        w,
+        start="g1",
+        end="far",
+        discretize_segment_length=50.0,
+        coupling_to_soil="isolated",
+        inductance_model="neumann",
+        cross_section=95e-6,
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+def _earth_model_engines(*models: str) -> dict[str, gf.Engine]:
+    return {
+        m: gf.create_engine(
+            backend="image",
+            segment_length=1.0,
+            frequencies=[50.0, 1000.0],
+            earth_inductive_model=m,
+        )
+        for m in models
+    }
+
+
+@pytest.mark.finding("10.71")
+def test_compare_engines_sees_the_reactance_at_every_frequency() -> None:
+    """Perfect-mirror and Sommerfeld earth return differ in X at 1 kHz.
+
+    The input reactance at 1 kHz is 0.600 Ω (perfect mirror) against
+    0.376 Ω (Sommerfeld), while Re Z at 50 Hz agrees to 0.002 %; v0.15.0
+    compared Re Z of the clusters at the first frequency only and
+    reported the pair as consistent.
+    """
+    rep = gf.compare_engines(
+        _ring_and_line_world(),
+        _earth_model_engines("perfect_mirror", "sommerfeld"),
+        rel_tolerance=0.05,
+    )
+    assert not rep.is_consistent, rep.summary()
+    failed = [r for r in rep.rows if not r.passed]
+    assert failed, rep.summary()
+    # Only the reactance disagrees (at 50 Hz: 0.031 vs 0.020 Ω, at 1 kHz
+    # 0.600 vs 0.376 Ω); the resistances agree.
+    assert 1000.0 in {r.frequency for r in failed}
+    assert {r.component for r in failed} == {"Im"}
+    worst = max(failed, key=lambda r: r.deviation)
+    assert worst.quantity == "Z_in[source_0]"
+    assert worst.deviation > 0.5
+
+
+@pytest.mark.finding("10.71")
+def test_compare_engines_rejects_mismatched_frequency_lists() -> None:
+    """v0.15.0 compared 50 Hz with 1 kHz and reported "consistent"."""
+    with pytest.raises(ValueError, match="frequenc"):
+        gf.compare_engines(
+            _world_with_rod(),
+            {
+                "a": gf.create_engine(backend="image", frequencies=[50.0]),
+                "b": gf.create_engine(backend="image", frequencies=[1000.0]),
+            },
+        )
+
+
+class _NanEngine(gf.Engine):
+    """Engine whose cluster potential comes back as NaN."""
+
+    def solve(self, world):  # type: ignore[override]
+        res = super().solve(world)
+        n = len(res.frequencies)
+        res.electrode_potentials = {
+            name: [complex("nan")] * n for name in res.electrode_potentials
+        }
+        return res
+
+
+@pytest.mark.finding("10.71")
+def test_compare_engines_counts_a_non_finite_result_as_failure() -> None:
+    """Two engines agree, a third returns NaN: v0.15.0 dropped the NaN
+    and reported the comparison as consistent."""
+    rep = gf.compare_engines(
+        _world_with_rod(),
+        {
+            "a": gf.create_engine(backend="image", segment_length=0.05),
+            "b": gf.create_engine(backend="image", segment_length=0.05),
+            "nan": _NanEngine(backend="image", segment_length=0.05),
+        },
+        rel_tolerance=0.05,
+    )
+    assert not rep.is_consistent, rep.summary()
+    assert any("non-finite" in n and "nan" in n for n in rep.notes), rep.notes
+
+
+@pytest.mark.finding("10.71")
+def test_compare_engines_tolerance_table_is_explicit() -> None:
+    """One row per quantity, frequency and component, with its tolerance."""
+    rep = gf.compare_engines(
+        _world_with_rod(),
+        {
+            "fine": gf.create_engine(
+                backend="image", segment_length=0.05, frequencies=[0.0, 50.0, 1000.0]
+            ),
+            "coarse": gf.create_engine(
+                backend="image", segment_length=0.2, frequencies=[0.0, 50.0, 1000.0]
+            ),
+        },
+        rel_tolerance=0.05,
+    )
+    assert rep.is_consistent, rep.summary()
+    assert rep.frequencies == [0.0, 50.0, 1000.0]
+    keys = {(r.quantity, r.frequency, r.component) for r in rep.rows}
+    for q in ("Z_cluster[g1]", "Z_in[source_0]"):
+        for f in (0.0, 50.0, 1000.0):
+            for c in ("Re", "Im"):
+                assert (q, f, c) in keys, (q, f, c)
+    assert all(r.tolerance == 0.05 for r in rep.rows)
+    assert all(set(r.values) == {"fine", "coarse"} for r in rep.rows)
+    # the complex values per frequency are kept for the user
+    z = rep.impedances["Z_cluster[g1]"]["fine"]
+    assert len(z) == 3 and all(isinstance(v, complex) for v in z)
+    text = rep.summary()
+    assert "1000" in text and "Im" in text
