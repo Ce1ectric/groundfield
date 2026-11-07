@@ -209,19 +209,84 @@ def test_fem_rejects_an_electrode_below_its_hemisphere(
         solve_fem(w, eng)
 
 
+@pytest.mark.finding("10.23", "F01")
+@pytest.mark.parametrize(
+    ("electrode", "z_mom"),
+    [
+        # fem 27.39 Ω against mom 92.13 Ω (-70 %), silent on the base
+        (dict(kind="strip", start=(0.0, 0.0, 0.8), end=(10.0, 0.0, 0.8)), 92.13),
+        # fem 19.91 Ω against mom 37.73 Ω (-47 %), silent on the base
+        (dict(kind="ring", center=(0.0, 0.0, 0.8), radius=5.0), 37.73),
+    ],
+)
+def test_fem_warns_when_the_electrode_lies_below_a_thin_top_layer(
+    electrode, z_mom
+) -> None:
+    """Audit round 1, F01: the hemisphere spans the soil from the surface.
+
+    Strip and ring lie at 0.8 m, entirely below a 0.5 m top layer
+    (30/1000 Ω·m); their hemispheres (a_eq ≈ 1 … 2 m) cross the interface
+    as well, so neither the raise (electrode below a hemisphere that ends
+    above the interface) nor the old warning (interface between the
+    electrode and a_eq) applied, and fem was off by −47 … −70 % without a
+    word. The guard now covers every interface above the deeper of the
+    electrode's lowest point and ``a_eq``.
+    """
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5))
+    params = dict(electrode)
+    gf.create_electrode(w, params.pop("kind"), name="g1", **params)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res, texts = _fem_warnings(w)
+    z_fem = res.cluster_impedance("g1")[0].real
+    assert abs(z_fem / z_mom - 1.0) > 0.4, z_fem
+    assert texts, f"fem {z_fem:.2f} Ω vs mom {z_mom:.2f} Ω without FemReductionWarning"
+    assert "interface" in texts[0] and "h = 0.5" in texts[0], texts[0]
+
+
+@pytest.mark.finding("10.23", "F01")
+def test_fem_warns_when_an_interface_lies_within_the_electrode_extent() -> None:
+    """Ring r = 10 m at 0.8 m over h_1 = 5 m (1000/30 Ω·m): fem −46 %.
+
+    The interface lies below the ring and below its hemisphere
+    (a_eq = 4.6 m), but within the ring's radius: the ring's current
+    reaches the conductive layer, the compact hemisphere's much less.
+    fem returns 11.79 Ω against mom 21.89 Ω, silent on the base and after
+    the interface rule of F01 alone (eng2 evidence e07).
+    """
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0))
+    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res, texts = _fem_warnings(w)
+    assert res.cluster_impedance("g1")[0].real == pytest.approx(11.79, abs=0.01)
+    assert texts, "no FemReductionWarning"
+    assert "h = 5 m" in texts[0] and "half-extent" in texts[0], texts[0]
+
+
+def test_fem_is_silent_for_an_interface_below_the_electrode_extent() -> None:
+    """Guard: the same ring over h_1 = 20 m agrees with mom to −0.3 %."""
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=20.0))
+    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    _, texts = _fem_warnings(w)
+    assert texts == []
+
+
 def test_fem_accepts_a_hemisphere_that_reaches_the_electrode_layer() -> None:
     """Guard: a vanishing top layer is no reason to raise (B9 limit, 2e-3).
 
     A ring at 0.8 m under a 4 mm top layer lies in layer 2, but its
     hemisphere (a_eq = 1.2 m) reaches layer 2 as well; the result tends
-    to the homogeneous value of the lower layer.
+    to the homogeneous value of the lower layer. Since audit round 1
+    (F01) every interface above the electrode or its hemisphere is
+    reported, so this limit case warns although it is accurate — the
+    guard is structural, not a measure of the error.
     """
     soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=4e-3)
     w = gf.create_world(soil=soil)
     gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=2.0)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     res, texts = _fem_warnings(w)
-    assert texts == []
+    assert len(texts) == 1 and "h = 0.004" in texts[0], texts
     w_hom = gf.create_world(soil=gf.HomogeneousSoil(rho=30.0))
     gf.create_electrode(w_hom, "ring", name="g1", center=(0, 0, 0.8), radius=2.0)
     gf.create_source(w_hom, attached_to="g1", magnitude=1.0)

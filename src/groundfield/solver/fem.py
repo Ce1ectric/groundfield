@@ -16,11 +16,14 @@ and the backend raises
 returning a number. It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
 three 4 m rods in homogeneous soil), when the world has several
-clusters (each solved alone, transfer impedances 0) or when the
-hemisphere reaches below an interface the electrode stays above (−92 %
-for a 10 m ring over $h_1$ = 2 m); a :class:`FemReductionWarning` names
-every such reason. Conforming axisymmetric rod and ring models without
-the reduction are the planned replacement.
+clusters (each solved alone, transfer impedances 0) or when a layer
+interface lies above the deepest of the electrode's lowest point, the
+hemisphere radius and the electrode's horizontal half-extent (−92 % for
+a 10 m ring over $h_1$ = 2 m, −70 % for a 10 m strip at 0.8 m below
+$h_1$ = 0.5 m, −46 % for a 10 m ring over $h_1$ = 5 m); a
+:class:`FemReductionWarning` names every such reason. Conforming
+axisymmetric rod and ring models without the reduction are the planned
+replacement.
 
 Mathematical / physical model
 -----------------------------
@@ -283,7 +286,24 @@ class FemReductionWarning(UserWarning):
       opposite case — the electrode reaches below an interface its
       hemisphere does not (+1092 % for a 3 m rod through ``h_1`` = 2 m)
       — raises :class:`~groundfield.solver.registry.BackendCapabilityError`
-      instead (review pass 10, 10.23).
+      instead (review pass 10, 10.23);
+    * a layer interface above the electrode's deepest point that the
+      hemisphere, which spans the soil from the surface, crosses as well
+      (−70 % for a 10 m strip and −47 % for a ring r = 5 m, both at
+      0.8 m below ``h_1`` = 0.5 m, 30/1000 Ω·m; audit round 1, F01);
+    * a layer interface below the electrode and its hemisphere but
+      within the electrode's horizontal half-extent (ring radius, half
+      the strip length or grid diagonal): the electrode's current
+      reaches it, the compact hemisphere's much less (−46 % for a ring
+      r = 10 m at 0.8 m over ``h_1`` = 5 m, 1000/30 Ω·m; −0.3 % over
+      ``h_1`` = 20 m, where the rule is silent).
+
+    The layer rules are structural, not error estimates: a vanishing top
+    layer (``h_1`` = 4 mm, +1.6 %) is reported as well. Where none
+    applies, rings and strips measured in 1000/30, 100/1000 and
+    100/400 Ω·m deviate from ``mom`` by −7.4 … +4.3 % and a
+    20 m × 20 m grid by +8.3 … +13.4 %, of which +12.1 % is the error of
+    its formula in homogeneous soil (ring, strip, rod: +0.8 … +1.6 %).
 
     Escalate with ``warnings.simplefilter("error", FemReductionWarning)``
     when ``fem`` serves as a cross-check.
@@ -305,6 +325,19 @@ def _depth_range(electrode: "_ElectrodeBase") -> tuple[float, float]:
     return z, z
 
 
+def _horizontal_half_extent(electrode: _ElectrodeBase) -> float:
+    """Horizontal half-extent of a fem-reducible electrode, in m (rod: 0)."""
+    if isinstance(electrode, RodElectrode):
+        return 0.0
+    if isinstance(electrode, RingElectrode):
+        return float(electrode.radius)
+    if isinstance(electrode, StripElectrode):
+        (xa, ya, _), (xb, yb, _) = electrode.start, electrode.end
+        return 0.5 * math.hypot(xb - xa, yb - ya)
+    dx, dy = electrode.size  # GridMeshElectrode, MeshElectrode
+    return 0.5 * math.hypot(dx, dy)
+
+
 def _reduction_issues(
     world: "World",
     clusters: dict[str, list[str]],
@@ -313,8 +346,13 @@ def _reduction_issues(
 ) -> list[str]:
     """Reasons why the hemisphere reduction misrepresents ``world``.
 
-    Interfaces are taken from the canonical layer stack (10.48), so an
-    interface between layers of equal resistivity is no reason.
+    Every canonical interface above the deepest of the electrode's lowest
+    point ``z_deep``, the hemisphere radius ``a_eq`` (both inclusive) and
+    the horizontal half-extent (exclusive) is a reason, except those
+    between ``a_eq`` and ``z_deep``, which raise
+    (:func:`_unreachable_layers`). Interfaces are taken from the
+    canonical layer stack (10.48), so an interface between layers of
+    equal resistivity is no reason.
     """
 
     def label(root: str) -> str:
@@ -338,26 +376,59 @@ def _reduction_issues(
             "alone: the mutual resistance between clusters is zero, transfer "
             "impedances are exactly 0 and passive clusters report 0 V"
         )
-    interfaces = np.cumsum(as_layer_stack(world.soil).h)
+    interfaces = [float(d) for d in np.cumsum(as_layer_stack(world.soil).h)]
+
+    def depths(values: list[float]) -> str:
+        return ", ".join(f"{d:.3g}" for d in values)
+
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]
         z_deep = max(_depth_range(world.get_electrode(e))[1] for e in clusters[root])
-        # The opposite case (the electrode reaches below an interface its
-        # hemisphere does not reach) raises, see _unreachable_layers.
-        crossed = [float(d) for d in interfaces if z_deep < d < a_eq]
-        if crossed:
+        # The hemisphere spans the soil from the surface down to a_eq, so
+        # every interface above the deeper of z_deep and a_eq separates
+        # layers that hemisphere and electrode share differently (audit
+        # round 1, F01: only interfaces between z_deep and a_eq counted).
+        # Interfaces between a_eq and z_deep raise, see _unreachable_layers.
+        below = [d for d in interfaces if z_deep < d <= a_eq]
+        above = [d for d in interfaces if 0.0 < d <= z_deep and not a_eq < d < z_deep]
+        # An interface deeper than both but within the electrode's
+        # horizontal extent is reached by the electrode's current and much
+        # less by the compact hemisphere (-46 % for a 10 m ring over
+        # h_1 = 5 m, 1000/30 Ohm m; -0.3 % over h_1 = 20 m; eng2 e07).
+        r_ext = max(
+            _horizontal_half_extent(world.get_electrode(e)) for e in clusters[root]
+        )
+        wide = [d for d in interfaces if max(z_deep, a_eq) < d < r_ext]
+        if below:
             reasons.append(
                 f"{label(root)}: the electrode reaches z = {z_deep:.3g} m "
                 f"but its equivalent hemisphere has the radius a_eq = "
-                f"{a_eq:.3g} m, and the layer interface at h = {crossed[0]:.3g} m "
-                "lies between the two, so the hemisphere injects its current "
-                "into a different layer than the electrode"
+                f"{a_eq:.3g} m, and the layer interface at h = {depths(below)} m "
+                "lies between the two, so the hemisphere injects part of its "
+                "current into a layer the electrode does not touch"
+            )
+        if above:
+            reasons.append(
+                f"{label(root)}: the layer interface at h = {depths(above)} m "
+                f"lies above the electrode's lowest point z = {z_deep:.3g} m, "
+                "while the equivalent hemisphere spans the soil from the "
+                f"surface down to a_eq = {a_eq:.3g} m, so it shares its current "
+                "between the layers differently than the electrode"
+            )
+        if wide:
+            reasons.append(
+                f"{label(root)}: the layer interface at h = {depths(wide)} m lies "
+                f"below the electrode (z = {z_deep:.3g} m) and its equivalent "
+                f"hemisphere (a_eq = {a_eq:.3g} m) but within the electrode's "
+                f"horizontal half-extent of {r_ext:.3g} m, so the electrode's "
+                "current reaches that interface and the compact hemisphere's "
+                "much less"
             )
     return reasons
 
 
 def _unreachable_layers(
-    world: "World",
+    world: World,
     clusters: dict[str, list[str]],
     active_clusters: list[str],
     a_eq_per_cluster: dict[str, float],
@@ -1060,9 +1131,11 @@ def solve_fem(
     axisymmetric triangular mesh. This is the only volume-PDE engine
     in the suite, but it solves the problem of the hemisphere, not of
     the electrodes: it is a valid cross-check only for one compact
-    electrode per world whose hemisphere stays in the electrode's own
-    layer, and it emits a :class:`FemReductionWarning` naming the
-    reason otherwise (review pass 10, 10.23; see the module docstring).
+    electrode per world with no layer interface above the deepest of
+    its lowest point, its hemisphere radius and its horizontal
+    half-extent, and it emits a :class:`FemReductionWarning` naming the
+    reason otherwise (review pass 10, 10.23; audit round 1, F01; see the
+    module docstring).
 
     The mesh conforms to the hemisphere $r = a_{\\text{eq}}$ and the
     layer interfaces $z = \\sum_{i \\le k} h_i$ (see
@@ -1134,8 +1207,9 @@ def solve_fem(
     FemReductionWarning
         Once per solve when the reduction misrepresents the world in a
         way the guard above does not reject (several electrodes in a
-        cluster, several clusters, a hemisphere reaching below an
-        interface the electrode stays above).
+        cluster, several clusters, a layer interface above the deepest
+        of the electrode, its hemisphere and its horizontal
+        half-extent).
     """
     if far_field not in ("robin", "dirichlet"):
         raise ValueError(
