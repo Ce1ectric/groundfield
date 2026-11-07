@@ -72,6 +72,9 @@ allow_shape_change = false           # optional (discretisation changes)
 
 Undeclared changes fail. A declared change that exceeds
 `max_rel_change`, or that does not reach `min_rel_change`, fails too.
+When several declarations (of different streams) cover the same
+quantity, their bounds add up; one declaration without a bound makes
+the change unbounded.
 
 ## Commands
 

@@ -107,3 +107,15 @@ def test_noise_floor_absorbs_round_off_residuals() -> None:
     assert comps[0].status == "within_tol"
     other = harness.compare_case("some_other_case", new, old, tol=1e-9)
     assert other[0].status == "changed"
+
+
+def test_bounds_of_several_declarations_add_up() -> None:
+    old = {"x": np.array([10.0])}
+    new = {"x": np.array([11.5])}  # +15 %
+    comps = harness.compare_case("c", new, old, tol=1e-9)
+    a = _decl(source="a[0]", max_rel_change=0.1)
+    b = _decl(source="b[0]", findings=("10.98",), max_rel_change=0.1)
+    assert harness.judge(comps, [a], strict_mode=False)
+    assert not harness.judge(comps, [a, b], strict_mode=False)
+    unbounded = _decl(source="c[0]")
+    assert not harness.judge(comps, [a, unbounded], strict_mode=False)

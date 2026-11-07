@@ -420,18 +420,32 @@ def judge(
                 f"declare it in tests/golden/expected_changes/<stream>.toml"
             )
             continue
-        for d in matching:
-            if c.status in ("missing", "new") or math.isinf(c.max_rel):
-                if d.max_rel_change is not None and not d.allow_shape_change:
-                    failures.append(
-                        f"{c.case}:{c.quantity}: {c.status} {c.detail} but "
-                        f"{d.label()} bounds the change (max_rel_change) and "
-                        f"does not set allow_shape_change"
-                    )
-            elif d.max_rel_change is not None and c.max_rel > d.max_rel_change:
+        structural = c.status in ("missing", "new") or math.isinf(c.max_rel)
+        if structural:
+            if not any(d.allow_shape_change for d in matching) and all(
+                d.max_rel_change is not None for d in matching
+            ):
+                labels = ", ".join(d.label() for d in matching)
+                failures.append(
+                    f"{c.case}:{c.quantity}: {c.status} {c.detail} but "
+                    f"{labels} bound the change (max_rel_change) and none "
+                    f"sets allow_shape_change"
+                )
+            continue
+        # Several declarations may cover the same quantity (independent
+        # findings of different streams). Each contributes at most its own
+        # bound, so the effective bound is their sum; one unbounded
+        # declaration makes the change unbounded.
+        bounds = [d.max_rel_change for d in matching]
+        if all(b is not None for b in bounds):
+            limit = float(sum(bounds))
+            if c.max_rel > limit:
+                labels = ", ".join(
+                    f"{d.label()} max_rel_change={d.max_rel_change:g}" for d in matching
+                )
                 failures.append(
                     f"{c.case}:{c.quantity}: max_rel={c.max_rel:.3e} exceeds "
-                    f"{d.label()} max_rel_change={d.max_rel_change:g}"
+                    f"the declared bound {limit:g} ({labels})"
                 )
     # a declared change must actually happen where min_rel_change is set
     for d in declarations:
