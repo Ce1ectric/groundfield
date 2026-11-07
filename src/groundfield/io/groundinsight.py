@@ -38,6 +38,17 @@ Both fit families exported here are projected onto that symbol set:
   in ``f`` only (independent of ``rho``); the underlying soil is
   recorded in the metadata block.
 
+Formula safety
+--------------
+A formula read from a file is untrusted text. :func:`evaluate_spec`,
+:meth:`BusTypeSpec.from_dict` and :func:`load_bustype_json` parse it
+with an allow-list parser that builds the SymPy expression from the
+Python syntax tree and never evaluates the text: numbers, ``f``,
+``rho``, ``j`` / ``I``, ``pi``, ``E``, ``+ - * /``, ``**`` with a
+literal exponent, and ``sqrt`` / ``exp`` / ``log``, within size and
+magnitude bounds. Every formula written by the exporter satisfies this
+grammar, including those of ``groundfield`` 0.15.0 and earlier.
+
 See also
 --------
 ``docs/adr/0008-groundinsight-bridge.md`` — full design
@@ -52,7 +63,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import metadata as _importlib_metadata
 from pathlib import Path
-from typing import Any, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Union
 
 import numpy as np
 
@@ -81,6 +92,9 @@ def _resolve_groundfield_version() -> str:
 
 _GROUNDFIELD_VERSION = _resolve_groundfield_version()
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import sympy
+
 __all__ = [
     "BusTypeSpec",
     "to_bustype_dict",
@@ -88,6 +102,8 @@ __all__ = [
     "save_bustype_json",
     "load_bustype_json",
     "save_bustype_to_db",
+    "evaluate_spec",
+    "fit_quality_summary",
     "SCHEMA_NAME",
     "SCHEMA_VERSION",
     "EvaluateSpecError",
@@ -95,12 +111,15 @@ __all__ = [
 
 
 class EvaluateSpecError(ValueError):
-    """Raised when :func:`evaluate_spec` rejects a :class:`BusTypeSpec`.
+    """Raised when a :class:`BusTypeSpec` or its formula is rejected.
 
-    Subclass of :class:`ValueError` so legacy ``except ValueError`` blocks
-    keep working unchanged; downstream consumers (notably the
-    ``groundinsight`` consumer of the bridge format) can now catch the
-    typed exception instead of matching against ``str(exc)`` substrings.
+    Raised by :func:`evaluate_spec` and, for a formula outside the
+    allowed grammar, already by :meth:`BusTypeSpec.from_dict` and
+    :func:`load_bustype_json`. Subclass of :class:`ValueError` so legacy
+    ``except ValueError`` blocks keep working unchanged; downstream
+    consumers (notably the ``groundinsight`` consumer of the bridge
+    format) can catch the typed exception instead of matching against
+    ``str(exc)`` substrings.
     """
 
 
@@ -129,9 +148,10 @@ class BusTypeSpec:
         The four scalar fields that the ``groundinsight.BusType``
         Pydantic model carries.
     impedance_formula
-        The fitted ``Z(rho, f)`` expression as a SymPy-compatible
-        string. Free symbols: ``f`` (Hz), ``rho``
-        ($\\Omega\\,\\mathrm{m}$), and the imaginary unit ``j``.
+        The fitted ``Z(rho, f)`` expression as text. Free symbols:
+        ``f`` (Hz) and ``rho`` ($\\Omega\\,\\mathrm{m}$); imaginary unit
+        ``j``. Only the grammar described in the module docstring is
+        accepted when the spec is loaded or evaluated.
     samples
         Dict with the parallel tabular representation. Keys
         ``"frequency_Hz"``, ``"rho_Ohm_m"``, ``"Z_real_Ohm"``,
@@ -142,8 +162,8 @@ class BusTypeSpec:
         Free-form metadata dict; populated by the exporters with
         the fit method, fit quality, fit-method-specific details
         (poles/residues for vector fits, $k_1\\dots k_5$ for the
-        standard form), the source ``groundfield`` version and a
-        UTC timestamp.
+        standard form), the source ``groundfield`` version and a UTC
+        timestamp.
     """
 
     name: str
@@ -177,7 +197,26 @@ class BusTypeSpec:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "BusTypeSpec":
-        """Build a :class:`BusTypeSpec` from a JSON-loaded ``dict``."""
+        """Build a :class:`BusTypeSpec` from a JSON-loaded ``dict``.
+
+        Parameters
+        ----------
+        payload : dict
+            Schema-v1 document as produced by :func:`to_bustype_dict`.
+
+        Returns
+        -------
+        BusTypeSpec
+
+        Raises
+        ------
+        ValueError
+            If the schema name or version does not match.
+        EvaluateSpecError
+            If ``impedance_formula`` is missing or outside the allowed
+            formula grammar. The formula is parsed, never evaluated as
+            code; the message names the offending element.
+        """
         if payload.get("schema") != SCHEMA_NAME:
             raise ValueError(
                 f"unexpected schema name: got {payload.get('schema')!r}, "
@@ -189,13 +228,21 @@ class BusTypeSpec:
                 f"unsupported schema_version {version}; this groundfield "
                 f"build only reads v{SCHEMA_VERSION}"
             )
+        name = str(payload["name"])
+        formula = payload.get("impedance_formula")
+        if formula is None:
+            raise EvaluateSpecError(
+                f"BusType document {name!r} has no 'impedance_formula'."
+            )
+        formula = formula if isinstance(formula, str) else str(formula)
+        _parse_formula(formula, context=f"BusType document {name!r}")
         samples = payload.get("samples") or {}
         return cls(
-            name=str(payload["name"]),
+            name=name,
             description=payload.get("description"),
             system_type=str(payload["system_type"]),
             voltage_level=float(payload["voltage_level"]),
-            impedance_formula=str(payload["impedance_formula"]),
+            impedance_formula=formula,
             samples={
                 "frequency_Hz": list(samples.get("frequency_Hz", [])),
                 "rho_Ohm_m": list(samples.get("rho_Ohm_m", [])),
@@ -209,6 +256,27 @@ class BusTypeSpec:
 # ---------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------
+
+
+_GRAMMAR_HINT = (
+    "An impedance formula is an expression in f (Hz) and rho (Ohm m) built "
+    "from numbers, j (or I), pi, E, + - * /, ** with a literal exponent, "
+    "sqrt, exp and log; groundfield parses it and never runs it as code. "
+    "Formulas written by groundfield's exporter always satisfy this grammar."
+)
+
+
+def _parse_formula(text: str, *, context: str) -> "sympy.Expr":
+    """Parse ``text`` with the allow-list parser or raise :class:`EvaluateSpecError`."""
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    try:
+        return parse_impedance_formula(text, symbols=("f", "rho"))
+    except FormulaError as exc:
+        raise EvaluateSpecError(
+            f"{context}: impedance_formula is not an allowed impedance formula: "
+            f"{exc}. {_GRAMMAR_HINT}"
+        ) from exc
 
 
 def _utc_now_iso() -> str:
@@ -507,11 +575,29 @@ def save_bustype_json(
 def load_bustype_json(path: Union[str, Path]) -> BusTypeSpec:
     """Load a ``BusType`` JSON document into a :class:`BusTypeSpec`.
 
-    Validates the schema name and version. Forward-compatibility for
-    future schema versions is the explicit responsibility of this
-    function: when ``schema_version`` differs from
-    :data:`SCHEMA_VERSION`, dispatch to the appropriate loader. Today
-    only v1 exists.
+    Validates the schema name and version and parses the formula with
+    the allow-list parser (it is never evaluated as code).
+    Forward-compatibility for future schema versions is the explicit
+    responsibility of this function: when ``schema_version`` differs
+    from :data:`SCHEMA_VERSION`, dispatch to the appropriate loader.
+    Today only v1 exists.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        JSON file written by :func:`save_bustype_json`.
+
+    Returns
+    -------
+    BusTypeSpec
+
+    Raises
+    ------
+    ValueError
+        If the schema name or version does not match.
+    EvaluateSpecError
+        If ``impedance_formula`` is missing or outside the allowed
+        formula grammar.
     """
     p = Path(path)
     with p.open("r", encoding="utf-8") as fh:
@@ -640,47 +726,47 @@ def evaluate_spec(
 ) -> np.ndarray:
     """Evaluate a :class:`BusTypeSpec` at arbitrary frequencies.
 
-    Re-evaluates the stored ``impedance_formula`` with the provided
-    ``rho`` and ``f`` values, using the same SymPy-based path
-    ``groundinsight.utils.impedance_calculator`` follows. Useful for
-    cheap sanity checks that do not require ``groundinsight`` to be
-    installed.
+    Parses the stored ``impedance_formula`` with the allow-list parser
+    (see the module docstring; the text is never evaluated as code) and
+    evaluates the resulting expression with NumPy at the provided
+    ``rho`` and ``f`` values. Useful for cheap sanity checks that do
+    not require ``groundinsight`` to be installed.
 
     Parameters
     ----------
-    spec
+    spec : BusTypeSpec
         Loaded spec (e.g. from :func:`load_bustype_json`).
-    frequencies
+    frequencies : sequence of float
         Frequencies in Hz.
-    rho
+    rho : float
         Soil resistivity in $\\Omega\\,\\mathrm{m}$. Ignored if the
         formula does not depend on ``rho`` (vector-fit case).
 
     Returns
     -------
     np.ndarray
-        Complex-valued $Z$ at every requested frequency.
+        Complex-valued $Z$ in $\\Omega$ at every requested frequency.
 
     Raises
     ------
     EvaluateSpecError
         Subclass of :class:`ValueError`; raised when ``spec`` is not a
         :class:`BusTypeSpec` instance, ``impedance_formula`` is empty
-        / missing on the spec, the formula cannot be parsed by SymPy,
-        or the formula contains unrecognised free symbols (anything
-        other than ``f``, ``rho`` and ``j``). The exception is typed
-        so downstream consumers (notably ``groundinsight``) can catch
-        it without substring matching on the message. Existing
-        ``except ValueError`` blocks keep working because
+        / missing on the spec, or the formula is outside the allowed
+        grammar or its size and magnitude bounds (including unknown
+        free symbols — anything other than ``f``, ``rho``, ``j`` /
+        ``I``, ``pi`` and ``E``). The exception is typed so downstream
+        consumers (notably ``groundinsight``) can catch it without
+        substring matching on the message. Existing ``except
+        ValueError`` blocks keep working because
         :class:`EvaluateSpecError` inherits from :class:`ValueError`.
     """
     import sympy as sp
 
     # Defensive entry-point validation. Hand-rolled BusTypeSpec-like
     # dicts (e.g. constructed in a CLI helper from a YAML campaign
-    # config) routinely miss the impedance_formula; the previous
-    # implementation produced an opaque KeyError / AttributeError
-    # several frames deep in sympy. Surface the real problem here.
+    # config) routinely miss the impedance_formula; surface the real
+    # problem here instead of an opaque error deep in SymPy.
     if not isinstance(spec, BusTypeSpec):
         raise EvaluateSpecError(
             "evaluate_spec: expected a BusTypeSpec instance, got "
@@ -695,36 +781,14 @@ def evaluate_spec(
             "impedance_formula string with free symbols in "
             "{f, rho, j}."
         )
-
-    f_sym = sp.Symbol("f", real=True, positive=True)
-    rho_sym = sp.Symbol("rho", real=True, positive=True)
-    j_sym = sp.Symbol("j")
-    try:
-        parsed = sp.sympify(str(formula))
-    except (sp.SympifyError, SyntaxError, TypeError) as exc:
-        raise EvaluateSpecError(
-            "evaluate_spec: could not parse spec.impedance_formula "
-            f"({formula!r}) as a SymPy expression: {exc}. Expected "
-            "free symbols are f (Hz), rho (Ohm·m) and j (imag. unit)."
-        ) from exc
-    expr = parsed.subs(j_sym, sp.I)
-    allowed_symbols = {f_sym, rho_sym}
-    unknown = {s for s in expr.free_symbols if s.name not in {"f", "rho"}}
-    if unknown:
-        unknown_names = sorted(s.name for s in unknown)
-        raise EvaluateSpecError(
-            "evaluate_spec: spec.impedance_formula contains "
-            f"unrecognised free symbols {unknown_names!r}. Only "
-            "f (frequency in Hz), rho (resistivity in Ohm·m) and "
-            "the imaginary unit j are allowed."
-        )
-    func = sp.lambdify((f_sym, rho_sym), expr, modules=["numpy"])
+    expr = _parse_formula(
+        formula if isinstance(formula, str) else str(formula),
+        context="evaluate_spec: spec.impedance_formula",
+    )
+    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
     f_arr = np.asarray(frequencies, dtype=float)
-    out = func(f_arr, float(rho))
-    out = np.asarray(out, dtype=complex)
-    if out.ndim == 0:
-        out = np.full(f_arr.shape, complex(out), dtype=complex)
-    return out
+    out = np.asarray(func(f_arr, float(rho)), dtype=complex)
+    return np.broadcast_to(out, f_arr.shape).copy()
 
 
 def fit_quality_summary(spec: BusTypeSpec) -> str:
