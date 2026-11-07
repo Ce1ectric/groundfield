@@ -844,7 +844,21 @@ def test_bustype_metadata_records_the_running_groundfield_version() -> None:
     assert payload["metadata"]["source"] == f"groundfield {groundfield.__version__}"
 
 
-@pytest.mark.parametrize("bad", [0, -3, 2.5, True])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        0,
+        -3,
+        2.5,
+        True,
+        # the renderer's one validation rule (10.73): non-finite values and
+        # non-numbers raised OverflowError / TypeError or another message
+        *(
+            pytest.param(v, marks=pytest.mark.finding("10.73"))
+            for v in (float("inf"), float("nan"), None, "6")
+        ),
+    ],
+)
 def test_decimals_must_be_a_positive_integer(bad) -> None:
     with pytest.raises(
         ValueError, match="decimals is the number of significant digits"
@@ -856,6 +870,15 @@ def test_decimals_must_be_a_positive_integer(bad) -> None:
             voltage_level=0.4,
             decimals=bad,
         )
+
+
+@pytest.mark.finding("10.73")
+def test_decimals_may_be_a_numpy_integer() -> None:
+    fit = _make_rho_f_fit()
+    kwargs = dict(name="d", system_type="LV", voltage_level=0.4)
+    got = to_bustype_dict(fit, decimals=np.int64(8), **kwargs)
+    ref = to_bustype_dict(fit, decimals=8, **kwargs)
+    assert got["impedance_formula"] == ref["impedance_formula"]
 
 
 def test_fit_with_non_finite_coefficients_cannot_be_exported() -> None:

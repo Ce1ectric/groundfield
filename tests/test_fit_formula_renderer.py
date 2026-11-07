@@ -122,10 +122,22 @@ def test_full_precision_rendering_is_exact_partial_fractions() -> None:
 
 
 @pytest.mark.finding("10.73")
-@pytest.mark.parametrize("bad", [0, -2, 2.5, True])
+@pytest.mark.parametrize(
+    "bad", [0, -2, 2.5, True, float("inf"), float("nan"), "6", None]
+)
 def test_fit_to_sympy_rejects_invalid_decimals(bad) -> None:
     with pytest.raises(ValueError, match="significant digits"):
         fit_to_sympy(_pair_and_real_pole(), decimals=bad)
+
+
+@pytest.mark.finding("10.73")
+@pytest.mark.parametrize("digits", [np.int64(6), np.int32(6), 6.0, np.float64(6.0)])
+def test_fit_to_sympy_accepts_integral_numpy_and_float_decimals(digits) -> None:
+    """A digit count read from an array (``np.int64``) or a float that is an
+    integer counts like the ``int``; the self-check found ``np.int64(6)``
+    rejected while ``np.float64(6.0)`` was accepted."""
+    fit = _pair_and_real_pole()
+    assert fit_to_sympy(fit, decimals=digits) == fit_to_sympy(fit, decimals=6)
 
 
 def test_near_conjugate_poles_render_a_real_pair_term() -> None:

@@ -617,18 +617,20 @@ def _build_spec(
             "RhoFStandardFit or VectorFitResult"
         )
     _check_rho_at_fit(fit, rho_at_fit, caller)
-    if isinstance(decimals, bool) or int(decimals) != decimals or decimals < 1:
+    from groundfield.io._formula import _significant_digits, parse_impedance_formula
+
+    try:
+        digits = _significant_digits(decimals)
+    except ValueError:
         raise ValueError(
             f"{caller}: decimals is the number of significant digits per "
             f"coefficient and must be a positive integer, got {decimals!r}."
-        )
-    from groundfield.io._formula import parse_impedance_formula
-
+        ) from None
     try:
         if isinstance(fit, RhoFStandardFit):
-            formula = _rho_f_standard_to_formula(fit, decimals=int(decimals))
+            formula = _rho_f_standard_to_formula(fit, decimals=digits)
         else:
-            formula = _vector_fit_to_formula_in_f(fit, decimals=int(decimals))
+            formula = _vector_fit_to_formula_in_f(fit, decimals=digits)
         # Self-check: the written formula must load with the safe parser.
         expr = parse_impedance_formula(formula, symbols=("f", "rho"))
     except ValueError as exc:  # non-finite or out-of-range coefficients

@@ -81,6 +81,7 @@ from __future__ import annotations
 
 import ast
 import math
+import numbers
 import string
 import unicodedata
 from collections.abc import Iterable
@@ -864,11 +865,16 @@ class _Builder:
 
 
 def _significant_digits(significant_digits: object) -> int:
-    """Validate a significant-digit count; values above 17 count as 17."""
+    """Validate a significant-digit count; values above 17 count as 17.
+
+    Accepts integers (also NumPy's) and integral floats; rejects booleans,
+    non-finite and fractional values and counts below 1.
+    """
     if (
         isinstance(significant_digits, bool)
-        or not isinstance(significant_digits, (int, float))
-        or int(significant_digits) != significant_digits
+        or not isinstance(significant_digits, numbers.Real)
+        or not math.isfinite(significant_digits)
+        or not float(significant_digits).is_integer()
         or significant_digits < 1
     ):
         raise ValueError(
