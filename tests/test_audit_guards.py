@@ -46,13 +46,20 @@ SOIL = gf.HomogeneousSoil(resistivity=100.0)
 def _two_rod_world(*, z_head: float = 0.7, **conductor_kwargs):
     """Two 3-m rods 100 m apart, connected by one conductor."""
     w = gf.create_world(soil=SOIL)
-    g1 = gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, z_head),
-                             length=3.0, wire_radius=0.005)
-    g2 = gf.create_electrode(w, "rod", name="g2",
-                             position=(100.0, 0.0, z_head),
-                             length=3.0, wire_radius=0.005)
-    gf.create_conductor(w, name="pen", start=g1, end=g2,
-                        cross_section=50e-6, **conductor_kwargs)
+    g1 = gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, z_head), length=3.0, wire_radius=0.005
+    )
+    g2 = gf.create_electrode(
+        w,
+        "rod",
+        name="g2",
+        position=(100.0, 0.0, z_head),
+        length=3.0,
+        wire_radius=0.005,
+    )
+    gf.create_conductor(
+        w, name="pen", start=g1, end=g2, cross_section=50e-6, **conductor_kwargs
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
@@ -86,8 +93,9 @@ def test_buried_segment_with_image_is_sane() -> None:
 
 def test_surface_pen_with_neumann_raises_via_solve() -> None:
     """The end-to-end trap: rods with heads at z = 0, inductive PEN."""
-    w = _two_rod_world(z_head=0.0, discretize_segment_length=25.0,
-                       inductance_model="neumann")
+    w = _two_rod_world(
+        z_head=0.0, discretize_segment_length=25.0, inductance_model="neumann"
+    )
     eng = gf.create_engine(backend="image", segment_length=0.5)
     with pytest.raises(ValueError, match="soil-surface plane"):
         eng.solve(w)
@@ -126,8 +134,9 @@ def test_single_segment_distributed_matches_lumped() -> None:
 def test_segment_length_below_wire_radius_raises() -> None:
     """Small ring, thick wire: segment 0.039 m < a = 0.05 m."""
     w = gf.create_world(soil=SOIL)
-    gf.create_electrode(w, "ring", name="g1", center=(0.0, 0.0, 0.7),
-                        radius=0.05, wire_radius=0.05)
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0.0, 0.0, 0.7), radius=0.05, wire_radius=0.05
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)
     with pytest.raises(ValueError, match="wire_radius"):
@@ -139,8 +148,9 @@ def test_engine_solve_emits_resolution_findings_as_warnings() -> None:
     w = gf.create_world(soil=SOIL)
     # 1 m rod with a = 0.2 m: segments 0.5 m -> ratio 2.5 (< 5) but
     # still > a, so it solves — with a warning.
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0),
-                        length=1.0, wire_radius=0.2)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=1.0, wire_radius=0.2
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)
     with pytest.warns(UserWarning, match="thin-wire|resolution"):
@@ -156,8 +166,9 @@ HARD_SOIL = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=5.0)  # K = +0.94
 
 def _rod_world(soil):
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0),
-                        length=3.0, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=3.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
@@ -207,8 +218,11 @@ def test_layered_backends_agree_at_high_contrast(backend: str) -> None:
 def _shelled_world():
     w = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w, "strip", name="g1",
-        start=(0.0, 0.0, 0.7), end=(10.0, 0.0, 0.7),
+        w,
+        "strip",
+        name="g1",
+        start=(0.0, 0.0, 0.7),
+        end=(10.0, 0.0, 0.7),
         wire_radius=0.005,
         concrete_shell_coefficient_ohm_m=100.0,
     )
@@ -238,8 +252,9 @@ def _cross_layer_world():
     """Rod from 0.5 m to 7.5 m through the interface at h1 = 5 m."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=5.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5),
-                        length=7.0, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=7.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
@@ -279,10 +294,12 @@ def test_cross_layer_n2_bem_consistent_with_image_2layer() -> None:
 def test_overlapping_electrodes_warn() -> None:
     """Two coincident rods trip the clamp warning during assembly."""
     w = gf.create_world(soil=SOIL)
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0),
-                        length=3.0, wire_radius=0.005)
-    gf.create_electrode(w, "rod", name="g2", position=(0.0, 0.0, 0.0),
-                        length=3.0, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=3.0, wire_radius=0.005
+    )
+    gf.create_electrode(
+        w, "rod", name="g2", position=(0.0, 0.0, 0.0), length=3.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)
     with pytest.warns(UserWarning, match="clamp"):

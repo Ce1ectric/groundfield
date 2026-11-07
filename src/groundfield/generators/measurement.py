@@ -229,6 +229,7 @@ def neighbour_substation_grounding() -> GroundingSystemSpec:
         RingElectrodeSpec,
         rod_circle,
     )
+
     return GroundingSystemSpec(
         electrodes=[
             RingElectrodeSpec(radius_m=4.0, depth_m=0.6),

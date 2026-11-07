@@ -222,7 +222,9 @@ def test_query_buildings_accepts_max_retries() -> None:
     with tempfile.TemporaryDirectory() as td:
         cache_dir = pathlib.Path(td)
         _ = query_buildings(
-            52.5, 13.4, 100.0,
+            52.5,
+            13.4,
+            100.0,
             cache_dir=cache_dir,
             _post=fake_post,
             max_retries=3,
@@ -241,7 +243,9 @@ def test_query_buildings_rejects_negative_max_retries() -> None:
         cache_dir = pathlib.Path(td)
         with pytest.raises(ValueError, match="max_retries"):
             query_buildings(
-                52.5, 13.4, 100.0,
+                52.5,
+                13.4,
+                100.0,
                 cache_dir=cache_dir,
                 _post=fake_post,
                 max_retries=-1,
@@ -269,7 +273,9 @@ def test_query_and_project_forwards_max_retries() -> None:
         # Round-trip: a call with the historic default keeps behaviour
         # unchanged.
         _ = query_buildings(
-            52.5, 13.4, 100.0,
+            52.5,
+            13.4,
+            100.0,
             cache_dir=cache_dir,
             _post=fake_post,
         )

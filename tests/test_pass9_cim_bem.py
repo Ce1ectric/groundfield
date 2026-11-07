@@ -73,26 +73,20 @@ DOCS = Path(__file__).resolve().parents[1] / "docs"
 
 def _rod_world(soil, *, length: float = 3.0) -> gf.World:
     w = gf.create_world(soil=soil)
-    gf.create_electrode(
-        w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=length
-    )
+    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=length)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
 
 def _ring_world(soil) -> gf.World:
     w = gf.create_world(soil=soil)
-    gf.create_electrode(
-        w, "ring", name="g1", center=(0.0, 0.0, 0.8), radius=2.0
-    )
+    gf.create_electrode(w, "ring", name="g1", center=(0.0, 0.0, 0.8), radius=2.0)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
 
 def _three_layer_stack(rho_2: float = 400.0) -> LayerStack:
-    return LayerStack(
-        rhos=np.array([100.0, rho_2, 50.0]), h=np.array([2.0, 3.0])
-    )
+    return LayerStack(rhos=np.array([100.0, rho_2, 50.0]), h=np.array([2.0, 3.0]))
 
 
 # =====================================================================
@@ -119,8 +113,7 @@ def test_fit_residual_is_far_below_the_asymptote(rho_2: float) -> None:
     # Two orders of magnitude below the old |K_1| plateau is already a
     # different regime; the measured value is ~1e-13.
     assert fit.rms < 1e-2 * k_1, (
-        f"rho_2={rho_2}: rms={fit.rms:.3e} still of order "
-        f"|K_1|={k_1:.3e}"
+        f"rho_2={rho_2}: rms={fit.rms:.3e} still of order |K_1|={k_1:.3e}"
     )
     assert fit.rms < 1e-6
 
@@ -147,9 +140,7 @@ def test_fit_two_layer_is_exact_single_asymptote_image(
     assert fit.converged
 
 
-@pytest.mark.parametrize(
-    "h", [[2.0, 3.0], [0.5, 10.0], [10.0, 0.5], [1.0, 1.0]]
-)
+@pytest.mark.parametrize("h", [[2.0, 3.0], [0.5, 10.0], [10.0, 0.5], [1.0, 1.0]])
 def test_fit_reproduces_gamma_including_the_asymptote(
     h: list[float],
 ) -> None:
@@ -165,9 +156,7 @@ def test_fit_reproduces_gamma_including_the_asymptote(
     1.587 against a structure scale of 0.05, so the pencil stepped
     over the transition entirely.
     """
-    stack = LayerStack(
-        rhos=np.array([100.0, 400.0, 50.0]), h=np.array(h)
-    )
+    stack = LayerStack(rhos=np.array([100.0, 400.0, 50.0]), h=np.array(h))
     fit = fit_complex_images(stack)
     k_1 = float(stack.K[0])
 
@@ -197,9 +186,7 @@ def test_fit_never_reports_nan_residual() -> None:
         LayerStack(rhos=np.array([100.0, 400.0]), h=np.array([2.0])),
         LayerStack(rhos=np.array([100.0, 100.0]), h=np.array([2.0])),
         _three_layer_stack(),
-        LayerStack(
-            rhos=np.array([100.0, 100.0, 100.0]), h=np.array([2.0, 3.0])
-        ),
+        LayerStack(rhos=np.array([100.0, 100.0, 100.0]), h=np.array([2.0, 3.0])),
         LayerStack(
             rhos=np.array([100.0, 4000.0, 20.0, 900.0]),
             h=np.array([0.2, 0.05, 8.0]),
@@ -253,9 +240,7 @@ def test_fit_warning_can_be_suppressed_without_losing_the_flag() -> None:
     with warnings.catch_warnings(record=True) as recorded:
         warnings.simplefilter("always")
         fit = fit_complex_images(stack, n_images=1, warn=False)
-    assert not any(
-        issubclass(w.category, ComplexImageFitWarning) for w in recorded
-    )
+    assert not any(issubclass(w.category, ComplexImageFitWarning) for w in recorded)
     assert not fit.converged
 
 
@@ -267,9 +252,7 @@ def test_fit_grid_step_resolves_the_structure_scale() -> None:
     the fit had a single usable sample in the transition band and P
     collapsed to 1. Post-fix the same stack is fitted to ~1e-13.
     """
-    thin = LayerStack(
-        rhos=np.array([100.0, 400.0, 50.0]), h=np.array([0.5, 10.0])
-    )
+    thin = LayerStack(rhos=np.array([100.0, 400.0, 50.0]), h=np.array([0.5, 10.0]))
     fit = fit_complex_images(thin)
     assert fit.a.size >= 3
     assert fit.rms < 1e-6
@@ -288,35 +271,29 @@ def test_solve_cim_does_not_call_the_fit(monkeypatch) -> None:
     discretisation, so poisoning the symbol made every ``cim`` solve
     fail.
     """
+
     def _boom(*args, **kwargs):  # pragma: no cover - must not run
         raise AssertionError("fit_complex_images must not be called")
 
     monkeypatch.setattr(cim_mod, "fit_complex_images", _boom)
-    monkeypatch.setattr(
-        bem_mod, "fit_complex_images", _boom, raising=False
-    )
+    monkeypatch.setattr(bem_mod, "fit_complex_images", _boom, raising=False)
 
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
-    res = gf.create_engine(backend="cim", segment_length=SEG).solve(
-        _rod_world(soil)
-    )
+    res = gf.create_engine(backend="cim", segment_length=SEG).solve(_rod_world(soil))
     assert res.backend == "cim"
 
 
 def test_solve_bem_does_not_call_the_fit(monkeypatch) -> None:
     """``solve_bem`` must not evaluate ``fit_complex_images`` (F34)."""
+
     def _boom(*args, **kwargs):  # pragma: no cover - must not run
         raise AssertionError("fit_complex_images must not be called")
 
     monkeypatch.setattr(cim_mod, "fit_complex_images", _boom)
-    monkeypatch.setattr(
-        bem_mod, "fit_complex_images", _boom, raising=False
-    )
+    monkeypatch.setattr(bem_mod, "fit_complex_images", _boom, raising=False)
 
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
-    res = gf.create_engine(backend="bem", segment_length=SEG).solve(
-        _ring_world(soil)
-    )
+    res = gf.create_engine(backend="bem", segment_length=SEG).solve(_ring_world(soil))
     assert res.backend == "bem"
 
 
@@ -335,9 +312,7 @@ def test_cim_metadata_is_honest(soil_kind: str, expected: str) -> None:
         if soil_kind == "homogeneous"
         else gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     )
-    res = gf.create_engine(backend="cim", segment_length=SEG).solve(
-        _rod_world(soil)
-    )
+    res = gf.create_engine(backend="cim", segment_length=SEG).solve(_rod_world(soil))
     assert res.metadata["cim_fit_used"] is False
     assert res.metadata["cim_rms"] is None
     assert res.metadata["cim_n_images"] == 0
@@ -347,9 +322,7 @@ def test_cim_metadata_is_honest(soil_kind: str, expected: str) -> None:
 def test_bem_metadata_is_honest() -> None:
     """``bem`` reports that it reproduces ``mom`` (F34)."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
-    res = gf.create_engine(backend="bem", segment_length=SEG).solve(
-        _ring_world(soil)
-    )
+    res = gf.create_engine(backend="bem", segment_length=SEG).solve(_ring_world(soil))
     assert res.metadata["cim_fit_used"] is False
     assert res.metadata["cim_rms"] is None
     assert res.metadata["cim_n_images"] == 0
@@ -402,12 +375,8 @@ def test_dead_complex_image_code_is_gone() -> None:
     """
     assert not hasattr(cim_mod, "_cim_field_potential")
 
-    assert "fit" not in inspect.signature(
-        cim_mod._cim_self_kernel_factory
-    ).parameters
-    assert "fit" not in inspect.signature(
-        bem_mod._build_Z_collocation
-    ).parameters
+    assert "fit" not in inspect.signature(cim_mod._cim_self_kernel_factory).parameters
+    assert "fit" not in inspect.signature(bem_mod._build_Z_collocation).parameters
 
     for fn in (cim_mod.solve_cim, bem_mod.solve_bem):
         params = inspect.signature(fn).parameters
@@ -491,8 +460,7 @@ def test_cim_page_no_longer_advertises_multilayer() -> None:
     assert "the genuine matrix-pencil fit runs" not in text
     assert "tested up to $n = 8$" not in text
     assert (
-        "| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, or "
-        "`MultiLayerSoil` |"
+        "| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, or `MultiLayerSoil` |"
     ) not in text
     assert "it covers the $n \\ge 3$ regime" not in text
 
@@ -516,8 +484,7 @@ def test_bem_page_no_longer_advertises_multilayer() -> None:
 
     assert "($n \\ge 3$) → homogeneous self-kernel" not in text
     assert (
-        "| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, "
-        "`MultiLayerSoil` |"
+        "| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil` |"
     ) not in text
     assert "| `cim` ($n \\ge 3$) | $\\le 5\\,\\%$ |" not in text
 
@@ -531,9 +498,7 @@ def test_concepts_backend_table_matches_the_code() -> None:
     text = _read("concepts.md")
     rows = {
         m.group(1): m.group(2).strip()
-        for m in re.finditer(
-            r"^\|\s*`(\w+)`\s*\|([^|]*)\|", text, flags=re.MULTILINE
-        )
+        for m in re.finditer(r"^\|\s*`(\w+)`\s*\|([^|]*)\|", text, flags=re.MULTILINE)
     }
     assert "cim" in rows and "bem" in rows
     for backend in ("cim", "bem"):

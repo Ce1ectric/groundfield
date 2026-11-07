@@ -42,9 +42,7 @@ class _SourceBase(BaseModel):
     kind: str = Field(..., description="Discriminator for the source type.")
     attached_to: str = Field(
         ...,
-        description=(
-            "Name of the electrode or conductor where the source feeds in."
-        ),
+        description=("Name of the electrode or conductor where the source feeds in."),
     )
     return_to: str | None = Field(
         default=None,

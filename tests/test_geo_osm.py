@@ -101,8 +101,8 @@ def test_build_query_contains_expected_tokens() -> None:
     q = build_query(52.5, 13.4, 250.0, timeout_s=42)
     assert "[out:json][timeout:42]" in q
     assert "around:250.0,52.500000,13.400000" in q
-    assert "way[\"building\"]" in q
-    assert "relation[\"building\"]" in q
+    assert 'way["building"]' in q
+    assert 'relation["building"]' in q
 
 
 # ---------------------------------------------------------------------
@@ -121,10 +121,18 @@ def test_query_buildings_caches_to_disk() -> None:
     with tempfile.TemporaryDirectory() as td:
         cache_dir = pathlib.Path(td)
         p1 = query_buildings(
-            52.5, 13.4, 100.0, cache_dir=cache_dir, _post=fake_post,
+            52.5,
+            13.4,
+            100.0,
+            cache_dir=cache_dir,
+            _post=fake_post,
         )
         p2 = query_buildings(
-            52.5, 13.4, 100.0, cache_dir=cache_dir, _post=fake_post,
+            52.5,
+            13.4,
+            100.0,
+            cache_dir=cache_dir,
+            _post=fake_post,
         )
         assert calls["n"] == 1
         assert p1 == p2
@@ -146,12 +154,20 @@ def test_query_buildings_force_refresh_bypasses_cache() -> None:
     with tempfile.TemporaryDirectory() as td:
         cache_dir = pathlib.Path(td)
         first = query_buildings(
-            52.5, 13.4, 100.0, cache_dir=cache_dir, _post=fake_post,
+            52.5,
+            13.4,
+            100.0,
+            cache_dir=cache_dir,
+            _post=fake_post,
         )
         state["current"] = payload_b
         second = query_buildings(
-            52.5, 13.4, 100.0, cache_dir=cache_dir,
-            _post=fake_post, force_refresh=True,
+            52.5,
+            13.4,
+            100.0,
+            cache_dir=cache_dir,
+            _post=fake_post,
+            force_refresh=True,
         )
         assert first["elements"][0]["id"] == 1
         assert second["elements"][0]["id"] == 2
@@ -169,7 +185,8 @@ def test_parse_way_extracts_polygon_and_levels() -> None:
         "version": 0.6,
         "elements": [
             {
-                "type": "way", "id": 1,
+                "type": "way",
+                "id": 1,
                 "geometry": [
                     {"lat": 52.5000, "lon": 13.4000},
                     {"lat": 52.5001, "lon": 13.4000},
@@ -197,11 +214,13 @@ def test_parse_multipolygon_with_inner_hole() -> None:
         "version": 0.6,
         "elements": [
             {
-                "type": "relation", "id": 42,
+                "type": "relation",
+                "id": 42,
                 "tags": {"type": "multipolygon", "building": "industrial"},
                 "members": [
                     {
-                        "type": "way", "role": "outer",
+                        "type": "way",
+                        "role": "outer",
                         "geometry": [
                             {"lat": 52.500, "lon": 13.400},
                             {"lat": 52.500, "lon": 13.401},
@@ -211,7 +230,8 @@ def test_parse_multipolygon_with_inner_hole() -> None:
                         ],
                     },
                     {
-                        "type": "way", "role": "inner",
+                        "type": "way",
+                        "role": "inner",
                         "geometry": [
                             {"lat": 52.5002, "lon": 13.4002},
                             {"lat": 52.5002, "lon": 13.4008},
@@ -236,7 +256,8 @@ def test_parse_skips_features_below_min_area() -> None:
         "version": 0.6,
         "elements": [
             {
-                "type": "way", "id": 1,
+                "type": "way",
+                "id": 1,
                 "geometry": [
                     # Tiny ~ 1 m x 1 m polygon — below typical Gartenhaus.
                     {"lat": 52.50000, "lon": 13.40000},

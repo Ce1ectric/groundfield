@@ -103,8 +103,12 @@ class RodElectrodeSpec(_ElectrodeSpecBase):
     """
 
     kind: Literal["rod"] = "rod"
-    length_m: Union[float, AnyDistribution] = Field(default=1.5, description="Rod length in m.")
-    depth_m: Union[float, AnyDistribution] = Field(default=0.0, description="Rod head depth in m (0 m = surface).")
+    length_m: Union[float, AnyDistribution] = Field(
+        default=1.5, description="Rod length in m."
+    )
+    depth_m: Union[float, AnyDistribution] = Field(
+        default=0.0, description="Rod head depth in m (0 m = surface)."
+    )
     wire_radius_m: float = Field(default=0.008, description="Rod wire radius in m.")
 
 
@@ -116,8 +120,12 @@ class RingElectrodeSpec(_ElectrodeSpecBase):
     """
 
     kind: Literal["ring"] = "ring"
-    radius_m: Union[float, AnyDistribution] = Field(default=4.0, description="Ring radius in m.")
-    depth_m: Union[float, AnyDistribution] = Field(default=0.6, description="Ring depth in m.")
+    radius_m: Union[float, AnyDistribution] = Field(
+        default=4.0, description="Ring radius in m."
+    )
+    depth_m: Union[float, AnyDistribution] = Field(
+        default=0.6, description="Ring depth in m."
+    )
     wire_radius_m: float = Field(default=0.005, description="Ring wire radius in m.")
 
 
@@ -129,8 +137,12 @@ class StripElectrodeSpec(_ElectrodeSpecBase):
     """
 
     kind: Literal["strip"] = "strip"
-    length_m: Union[float, AnyDistribution] = Field(default=20.0, description="Strip length in m.")
-    depth_m: Union[float, AnyDistribution] = Field(default=0.6, description="Burial depth in m.")
+    length_m: Union[float, AnyDistribution] = Field(
+        default=20.0, description="Strip length in m."
+    )
+    depth_m: Union[float, AnyDistribution] = Field(
+        default=0.6, description="Burial depth in m."
+    )
     orientation_deg: Union[float, AnyDistribution] = Field(
         default=0.0,
         description="Rotation around the vertical axis (0° = +x).",
@@ -175,7 +187,9 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "perimeter plus internal cross-braces (default)."
         ),
     )
-    size_m: Union[float, AnyDistribution] = Field(default=10.0, description="Side length in m (square).")
+    size_m: Union[float, AnyDistribution] = Field(
+        default=10.0, description="Side length in m (square)."
+    )
     size_xy_m: Optional[tuple[float, float]] = Field(
         default=None,
         description="(dx, dy) — overrides ``size_m`` for rectangular footprints.",
@@ -202,7 +216,9 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "clamp of the solver."
         ),
     )
-    depth_m: Union[float, AnyDistribution] = Field(default=0.8, description="Burial depth in m.")
+    depth_m: Union[float, AnyDistribution] = Field(
+        default=0.8, description="Burial depth in m."
+    )
     n_x: int = Field(
         default=2,
         ge=1,
@@ -269,13 +285,13 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         default="lumped",
         description=(
             "How the Sunde-shell impedance enters the linear system. "
-            "``\"lumped\"`` (default): total shell resistance is "
+            '``"lumped"`` (default): total shell resistance is '
             "injected as a single series resistor on the PEN service "
             "drop. Zero solver-side risk; exact for the cluster "
             "impedance when current distributes uniformly along the "
             "foundation, which holds in the low-frequency range "
             "($f \\le 1\\,\\mathrm{kHz}$). "
-            "``\"distributed\"``: per-segment radial impedance is "
+            '``"distributed"``: per-segment radial impedance is '
             "added to the MoM diagonal (ADR-0012 V2). More expensive "
             "but right for non-uniform current distributions or "
             "where the surface potential right at the building "
@@ -289,8 +305,7 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             return self
         if len(self.polygon_xy_m) < 3:
             raise ValueError(
-                "polygon_xy_m needs at least 3 vertices; got "
-                f"{len(self.polygon_xy_m)}."
+                f"polygon_xy_m needs at least 3 vertices; got {len(self.polygon_xy_m)}."
             )
         if self.style != "ring":
             raise ValueError(

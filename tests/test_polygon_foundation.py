@@ -17,6 +17,7 @@ Following the real polygon removes both artefacts. The tests below pin
 4. the degenerate-edge cleanup, and
 5. clamp-freedom for two houses sharing a wall.
 """
+
 from __future__ import annotations
 
 import math
@@ -86,8 +87,9 @@ def test_polygon_ring_is_one_electrode_no_internal_bonds():
 
 def test_lumped_shell_uses_polygon_perimeter():
     """R_shell = C / L_perim with L_perim of the *polygon*."""
-    kw = dict(concrete_rho_ohm_m=100.0, concrete_thickness_m=0.05,
-              concrete_model="lumped")
+    kw = dict(
+        concrete_rho_ohm_m=100.0, concrete_thickness_m=0.05, concrete_model="lumped"
+    )
     w_rect, _ = _foundation_world({"size_xy_m": RECT_SIZE, **kw}, source=False)
     w_poly, _ = _foundation_world({"polygon_xy_m": RECT_POLY, **kw}, source=False)
     (r_rect,) = w_rect.concrete_shell_corrections.values()
@@ -101,8 +103,11 @@ def test_lumped_shell_uses_polygon_perimeter():
 
 def test_distributed_shell_rides_on_every_ring_segment():
     """A shell more resistive than the soil raises the spreading impedance."""
-    kw = dict(concrete_rho_ohm_m=500.0, concrete_thickness_m=0.05,
-              concrete_model="distributed")
+    kw = dict(
+        concrete_rho_ohm_m=500.0,
+        concrete_thickness_m=0.05,
+        concrete_model="distributed",
+    )
     world, anchor = _foundation_world({"polygon_xy_m": RECT_POLY, **kw})
     e = world.electrodes[0]
     assert e.concrete_shell_coefficient_ohm_m > 0.0
@@ -131,11 +136,13 @@ def test_transparent_shell_recovers_the_bare_ring():
 
     kw = dict(concrete_rho_ohm_m=rho, concrete_thickness_m=0.05)
     w_dist, a_dist = _foundation_world(
-        {"polygon_xy_m": RECT_POLY, "concrete_model": "distributed", **kw}, soil=soil)
+        {"polygon_xy_m": RECT_POLY, "concrete_model": "distributed", **kw}, soil=soil
+    )
     assert _z(w_dist, a_dist).real == pytest.approx(z_bare, rel=1e-5)
 
     w_lump, a_lump = _foundation_world(
-        {"polygon_xy_m": RECT_POLY, "concrete_model": "lumped", **kw}, soil=soil)
+        {"polygon_xy_m": RECT_POLY, "concrete_model": "lumped", **kw}, soil=soil
+    )
     (r_shell,) = w_lump.concrete_shell_corrections.values()
     assert _z(w_lump, a_lump).real + r_shell == pytest.approx(z_bare, rel=1e-3)
 
@@ -148,14 +155,15 @@ def test_transparent_shell_recovers_the_bare_ring():
 def test_polyline_length_and_edges():
     world, _ = _foundation_world({"polygon_xy_m": RECT_POLY}, source=False)
     e = world.electrodes[0]
-    assert len(e.edges) == 4                      # closing edge included
-    assert e.length == pytest.approx(36.0)        # 2 * (10 + 8)
+    assert len(e.edges) == 4  # closing edge included
+    assert e.length == pytest.approx(36.0)  # 2 * (10 + 8)
     assert all(v[2] == pytest.approx(0.7) for v in e.vertices)
 
 
 def test_polygon_is_placed_relative_to_site_centre():
-    world, _ = _foundation_world({"polygon_xy_m": RECT_POLY},
-                                 site_xy=(100.0, -50.0), source=False)
+    world, _ = _foundation_world(
+        {"polygon_xy_m": RECT_POLY}, site_xy=(100.0, -50.0), source=False
+    )
     xs = [v[0] for v in world.electrodes[0].vertices]
     ys = [v[1] for v in world.electrodes[0].vertices]
     assert min(xs) == pytest.approx(95.0) and max(xs) == pytest.approx(105.0)
@@ -167,8 +175,14 @@ def test_l_shaped_building_ombr_underestimates_resistance():
 
     Quantifies the systematic bias the polygon ring removes.
     """
-    l_shape = ((-5.0, -4.0), (5.0, -4.0), (5.0, 0.0),
-               (0.0, 0.0), (0.0, 4.0), (-5.0, 4.0))
+    l_shape = (
+        (-5.0, -4.0),
+        (5.0, -4.0),
+        (5.0, 0.0),
+        (0.0, 0.0),
+        (0.0, 4.0),
+        (-5.0, 4.0),
+    )
     w_poly, a_poly = _foundation_world({"polygon_xy_m": l_shape})
     w_ombr, a_ombr = _foundation_world({"size_xy_m": RECT_SIZE})  # its OMBR
     r_poly, r_ombr = _z(w_poly, a_poly).real, _z(w_ombr, a_ombr).real
@@ -182,8 +196,15 @@ def test_l_shaped_building_ombr_underestimates_resistance():
 
 
 def test_clean_polygon_merges_short_edges_and_drops_repeated_closing_vertex():
-    noisy = ((-5.0, -4.0), (-4.999, -4.0), (5.0, -4.0), (5.0, 4.0),
-             (5.0, 4.0), (-5.0, 4.0), (-5.0, -4.0))
+    noisy = (
+        (-5.0, -4.0),
+        (-4.999, -4.0),
+        (5.0, -4.0),
+        (5.0, 4.0),
+        (5.0, 4.0),
+        (-5.0, 4.0),
+        (-5.0, -4.0),
+    )
     cleaned = _clean_polygon(noisy, min_edge_m=0.5)
     assert cleaned == [(-5.0, -4.0), (5.0, -4.0), (5.0, 4.0), (-5.0, 4.0)]
 
@@ -226,10 +247,16 @@ def test_shared_wall_neighbours_do_not_hit_the_singularity_clamp():
     left = ((-8.0, -4.0), (-0.15, -4.0), (-0.15, 4.0), (-8.0, 4.0))
     right = ((0.15, -4.0), (8.0, -4.0), (8.0, 4.0), (0.15, 4.0))
     for i, poly in enumerate((left, right)):
-        spec = gf.GroundingSystemSpec(electrodes=[gf.FoundationElectrodeSpec(
-            style="ring", polygon_xy_m=poly, depth_m=0.7, wire_radius_m=0.0075)])
-        spec.build_at(world, site_xy=(0.0, 0.0), name_prefix=f"h{i}",
-                      rng=np.random.default_rng(i))
+        spec = gf.GroundingSystemSpec(
+            electrodes=[
+                gf.FoundationElectrodeSpec(
+                    style="ring", polygon_xy_m=poly, depth_m=0.7, wire_radius_m=0.0075
+                )
+            ]
+        )
+        spec.build_at(
+            world, site_xy=(0.0, 0.0), name_prefix=f"h{i}", rng=np.random.default_rng(i)
+        )
     gf.create_source(world, attached_to=world.electrodes[0].name, magnitude=1.0)
 
     eng = gf.create_engine(backend="image", segment_length=0.5, frequencies=[50.0])

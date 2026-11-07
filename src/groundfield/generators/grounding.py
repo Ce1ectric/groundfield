@@ -153,9 +153,7 @@ def _maybe_concrete_shell(
         return float(spec.wire_radius_m), 0.0, 0.0
     r_a = float(spec.wire_radius_m)
     r_b = r_a + t
-    perimeter = (
-        float(perimeter_m) if perimeter_m is not None else 2.0 * (dx + dy)
-    )
+    perimeter = float(perimeter_m) if perimeter_m is not None else 2.0 * (dx + dy)
     coefficient = rho_c / (2.0 * math.pi) * math.log(r_b / r_a)
     r_shell = coefficient / perimeter if perimeter > 0.0 else 0.0
     return r_b, float(r_shell), float(coefficient)
@@ -305,7 +303,9 @@ class GroundingSystemSpec(GeneratorConfig):
     ) -> None:
         if isinstance(spec, RodElectrodeSpec):
             create_electrode(
-                world, "rod", name=name,
+                world,
+                "rod",
+                name=name,
                 position=(ex, ey, _to_float(spec.depth_m, rng)),
                 length=_to_float(spec.length_m, rng),
                 wire_radius=spec.wire_radius_m,
@@ -313,7 +313,9 @@ class GroundingSystemSpec(GeneratorConfig):
             return
         if isinstance(spec, RingElectrodeSpec):
             create_electrode(
-                world, "ring", name=name,
+                world,
+                "ring",
+                name=name,
                 center=(ex, ey, _to_float(spec.depth_m, rng)),
                 radius=_to_float(spec.radius_m, rng),
                 wire_radius=spec.wire_radius_m,
@@ -328,7 +330,9 @@ class GroundingSystemSpec(GeneratorConfig):
             tx = ex + 0.5 * length * math.cos(angle)
             ty = ey + 0.5 * length * math.sin(angle)
             create_electrode(
-                world, "strip", name=name,
+                world,
+                "strip",
+                name=name,
                 start=(sx, sy, depth),
                 end=(tx, ty, depth),
                 wire_radius=spec.wire_radius_m,
@@ -338,8 +342,12 @@ class GroundingSystemSpec(GeneratorConfig):
             depth = _to_float(spec.depth_m, rng)
             if spec.polygon_xy_m is not None:
                 self._build_polygon_foundation(
-                    world, spec=spec, centre_xy=(ex, ey), depth=depth,
-                    name=name, rng=rng,
+                    world,
+                    spec=spec,
+                    centre_xy=(ex, ey),
+                    depth=depth,
+                    name=name,
+                    rng=rng,
                 )
                 return
             if spec.size_xy_m is not None:
@@ -375,8 +383,8 @@ class GroundingSystemSpec(GeneratorConfig):
             #   image / image_2layer self-action augments on the
             #   MoM diagonal. The lumped registry is *not*
             #   populated; the distributed correction subsumes it.
-            effective_radius, shell_total_ohm, shell_coeff = (
-                _maybe_concrete_shell(spec, dx=dx, dy=dy, rng=rng)
+            effective_radius, shell_total_ohm, shell_coeff = _maybe_concrete_shell(
+                spec, dx=dx, dy=dy, rng=rng
             )
             if spec.concrete_model == "lumped":
                 if shell_total_ohm > 0.0:
@@ -385,9 +393,7 @@ class GroundingSystemSpec(GeneratorConfig):
             elif spec.concrete_model == "distributed":
                 strip_shell_coefficient = shell_coeff
             else:  # pragma: no cover - validated by the Literal
-                raise ValueError(
-                    f"Unknown concrete_model: {spec.concrete_model!r}"
-                )
+                raise ValueError(f"Unknown concrete_model: {spec.concrete_model!r}")
 
             # When the distributed shell is in play the foundation
             # is always materialised as a chain of strips (even at
@@ -401,7 +407,9 @@ class GroundingSystemSpec(GeneratorConfig):
             force_strip_path = strip_shell_coefficient > 0.0
             if abs(angle_deg) < 1e-9 and not force_strip_path:
                 create_electrode(
-                    world, "grid_mesh", name=name,
+                    world,
+                    "grid_mesh",
+                    name=name,
                     corner=(ex - dx / 2.0, ey - dy / 2.0, depth),
                     size=(dx, dy),
                     n_x=nx,
@@ -420,8 +428,10 @@ class GroundingSystemSpec(GeneratorConfig):
                 spec=spec,
                 centre_xy=(ex, ey),
                 depth=depth,
-                dx=dx, dy=dy,
-                n_x=nx, n_y=ny,
+                dx=dx,
+                dy=dy,
+                n_x=nx,
+                n_y=ny,
                 angle_deg=angle_deg,
                 name=name,
                 wire_radius_override=effective_radius,
@@ -488,7 +498,11 @@ class GroundingSystemSpec(GeneratorConfig):
             perimeter += math.hypot(x1 - x0, y1 - y0)
 
         effective_radius, shell_total_ohm, shell_coeff = _maybe_concrete_shell(
-            spec, dx=0.0, dy=0.0, rng=rng, perimeter_m=perimeter,
+            spec,
+            dx=0.0,
+            dy=0.0,
+            rng=rng,
+            perimeter_m=perimeter,
         )
         if spec.concrete_model == "lumped":
             if shell_total_ohm > 0.0:
@@ -500,7 +514,9 @@ class GroundingSystemSpec(GeneratorConfig):
             raise ValueError(f"Unknown concrete_model: {spec.concrete_model!r}")
 
         create_electrode(
-            world, "polyline", name=name,
+            world,
+            "polyline",
+            name=name,
             vertices=[(cx + vx, cy + vy, depth) for vx, vy in verts],
             closed=True,
             wire_radius=effective_radius,
@@ -631,16 +647,14 @@ class GroundingSystemSpec(GeneratorConfig):
             sub_name = name if j == 0 else f"{name}_w{j}"
             sx, sy = to_world(lsx, lsy)
             tx, ty = to_world(lex, ley)
-            on_perimeter = (
-                j < (n_y + 1) and j in perimeter_long_indices
-            ) or (
+            on_perimeter = (j < (n_y + 1) and j in perimeter_long_indices) or (
                 j >= (n_y + 1) and j in perimeter_trans_indices
             )
-            strip_coeff = (
-                concrete_shell_coefficient if on_perimeter else 0.0
-            )
+            strip_coeff = concrete_shell_coefficient if on_perimeter else 0.0
             create_electrode(
-                world, "strip", name=sub_name,
+                world,
+                "strip",
+                name=sub_name,
                 start=(sx, sy, depth),
                 end=(tx, ty, depth),
                 wire_radius=wire_radius,

@@ -108,9 +108,7 @@ class OsmBuildingPlacement(BaseModel):
 
     @field_validator("footprints")
     @classmethod
-    def _normalise(
-        cls, value: list[BuildingFootprint]
-    ) -> list[BuildingFootprint]:
+    def _normalise(cls, value: list[BuildingFootprint]) -> list[BuildingFootprint]:
         # Defensive copy so a mutable caller list cannot mutate the
         # validated model in place. Pydantic v2 freezes by virtue of
         # ``BuildingFootprint`` being frozen, but the outer list is
@@ -126,9 +124,7 @@ class OsmBuildingPlacement(BaseModel):
         in declared order."""
         if self.min_area_m2 <= 0.0:
             return list(self.footprints)
-        return [
-            fp for fp in self.footprints if fp.area_m2() >= self.min_area_m2
-        ]
+        return [fp for fp in self.footprints if fp.area_m2() >= self.min_area_m2]
 
     # -----------------------------------------------------------------
     # PlacementSpec interface

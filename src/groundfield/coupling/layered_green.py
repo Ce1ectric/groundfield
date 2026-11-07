@@ -207,6 +207,7 @@ class SommerfeldTailTruncationWarning(UserWarning):
     the distance range, or raise the budget.
     """
 
+
 # Peak-memory budget (bytes) for the dense ``J0(lambda * s)`` Bessel
 # matrix that the Hankel contractions below would otherwise materialise
 # in one shot. For a cross-layer grounding grid the number of distance
@@ -519,8 +520,12 @@ def _primary_term_real_space(
 
 
 def _log_grid_offset(
-    z: float, z_s: float, h_1: float, floor: float = 1e-3,
-    *, d_rest: float = math.inf,
+    z: float,
+    z_s: float,
+    h_1: float,
+    floor: float = 1e-3,
+    *,
+    d_rest: float = math.inf,
 ) -> float:
     """Offset $c$ of the interpolation coordinate $t = \\ln(s + c)$.
 
@@ -696,7 +701,7 @@ def _image_generation(
     ``tests/test_two_layer.py``'s reference geometries.
     """
     q = 2.0 * h_1
-    Km = K ** m
+    Km = K**m
     if z <= h_1 and z_s <= h_1:
         S = z + z_s
         D = abs(z - z_s)
@@ -720,7 +725,10 @@ def _image_generation(
 
 
 def _image_distance_floor(
-    m: int, z: float, z_s: float, h_1: float,
+    m: int,
+    z: float,
+    z_s: float,
+    h_1: float,
 ) -> float:
     """Smallest image distance in generations $m, m+1, \\dots$
 
@@ -855,7 +863,13 @@ def _reflected_image_terms(
             break
     if rho_baseline is not None:
         for c, d in _image_generation(
-            0, z, z_s, rho_baseline, rho_baseline, h_1, 0.0,
+            0,
+            z,
+            z_s,
+            rho_baseline,
+            rho_baseline,
+            h_1,
+            0.0,
         ):
             raw.append((-c, d))
 
@@ -875,8 +889,10 @@ def _reflected_image_terms(
     near.sort()
     if not near:
         return (
-            np.empty(0, dtype=float), np.empty(0, dtype=float),
-            d_rest, budget_exhausted,
+            np.empty(0, dtype=float),
+            np.empty(0, dtype=float),
+            d_rest,
+            budget_exhausted,
         )
     dists = np.array([d for d, _ in near], dtype=float)
     coeffs = np.array([c for _, c in near], dtype=float)
@@ -884,14 +900,14 @@ def _reflected_image_terms(
 
 
 def _image_spectral_sum(
-    lambdas: np.ndarray, coeffs: np.ndarray, dists: np.ndarray,
+    lambdas: np.ndarray,
+    coeffs: np.ndarray,
+    dists: np.ndarray,
 ) -> np.ndarray:
     """$\\sum_j c_j/(2\\lambda)\\,e^{-\\lambda d_j}$ on the grid."""
     if coeffs.size == 0:
         return np.zeros_like(lambdas)
-    return (
-        np.exp(-lambdas[:, None] * dists[None, :]) @ coeffs
-    ) / (2.0 * lambdas)
+    return (np.exp(-lambdas[:, None] * dists[None, :]) @ coeffs) / (2.0 * lambdas)
 
 
 def _image_real_space_sum(
@@ -973,9 +989,7 @@ def _plan_truncation(
     lambda_max = lambda_user
     if s_far > 0.0:
         panels = min(
-            _HANKEL_PANEL_TARGET * (
-                lambda_max_factor / _HANKEL_PANEL_TARGET_AT
-            ),
+            _HANKEL_PANEL_TARGET * (lambda_max_factor / _HANKEL_PANEL_TARGET_AT),
             # Never allocate more than the historic v0.14.1 cap. Beyond
             # this the knob saturates: pushing lambda_max further can
             # only run the grid into _HANKEL_MAX_LINEAR_NODES and out of
@@ -987,8 +1001,13 @@ def _plan_truncation(
         lambda_max = min(lambda_max, lambda_cost)
     d_cut = _HANKEL_TAIL_DECAY_TARGET / lambda_max
     coeffs, dists, d_rest, exhausted = _reflected_image_terms(
-        z, z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-        rho_baseline=rho_baseline, d_cut=d_cut,
+        z,
+        z_s,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        rho_baseline=rho_baseline,
+        d_cut=d_cut,
     )
     if math.isfinite(d_rest) and d_rest > 0.0:
         lambda_max = min(
@@ -1158,9 +1177,14 @@ def _spectral_amplitudes(
 
 def _phi_from_stable_amplitudes(
     lambdas: np.ndarray,
-    A: np.ndarray, B: np.ndarray, C: np.ndarray,
-    z: float, z_s: float,
-    rho_1: float, rho_2: float, h_1: float,
+    A: np.ndarray,
+    B: np.ndarray,
+    C: np.ndarray,
+    z: float,
+    z_s: float,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
     *,
     include_primary: bool = True,
 ) -> np.ndarray:
@@ -1196,25 +1220,22 @@ def _phi_from_stable_amplitudes(
         and interface-straddling pairs).
     """
     if z <= h_1:
-        Phi = (
-            A * np.exp(-lambdas * (h_1 - z))
-            + B * np.exp(-lambdas * z)
-        )
+        Phi = A * np.exp(-lambdas * (h_1 - z)) + B * np.exp(-lambdas * z)
         if z_s <= h_1 and include_primary:
-            Phi = Phi + (rho_1 / (2.0 * lambdas)) * np.exp(
-                -lambdas * abs(z - z_s)
-            )
+            Phi = Phi + (rho_1 / (2.0 * lambdas)) * np.exp(-lambdas * abs(z - z_s))
     else:
         Phi = C * np.exp(-lambdas * (z - h_1))
         if z_s > h_1 and include_primary:
-            Phi = Phi + (rho_2 / (2.0 * lambdas)) * np.exp(
-                -lambdas * abs(z - z_s)
-            )
+            Phi = Phi + (rho_2 / (2.0 * lambdas)) * np.exp(-lambdas * abs(z - z_s))
     return Phi
 
 
 def _primary_rho(
-    z: float, z_s: float, rho_1: float, rho_2: float, h_1: float,
+    z: float,
+    z_s: float,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
 ) -> float:
     """Resistivity multiplying the primary $1/R$ term, 0 across layers.
 
@@ -1263,10 +1284,22 @@ def two_layer_spectral_kernel(
     Phi : np.ndarray, shape (n_lambda,)
     """
     A, B, _, C = _spectral_amplitudes(
-        lambdas, z_s, rho_1, rho_2, h_1,
+        lambdas,
+        z_s,
+        rho_1,
+        rho_2,
+        h_1,
     )
     return _phi_from_stable_amplitudes(
-        lambdas, A, B, C, z, z_s, rho_1, rho_2, h_1,
+        lambdas,
+        A,
+        B,
+        C,
+        z,
+        z_s,
+        rho_1,
+        rho_2,
+        h_1,
     )
 
 
@@ -1363,7 +1396,8 @@ def _hankel_lambda_grid(
     # cap is inactive and the historic break point is kept bit-exact.
     if s > 0.0:
         lambda_break = max(
-            min(lambda_break, 0.25 * math.pi / s), 1e-9,
+            min(lambda_break, 0.25 * math.pi / s),
+            1e-9,
         )
 
     # Logarithmic part [eps, lambda_break] — unchanged.
@@ -1387,14 +1421,16 @@ def _hankel_lambda_grid(
         # Tier 1: one panel per oscillation (16 nodes/oscillation).
         n_panels_target = int(math.ceil(n_osc))
         # Tier 2: the 8-nodes-per-oscillation adequacy floor.
-        n_panels_floor = int(math.ceil(
-            n_osc * _HANKEL_MIN_NODES_PER_OSCILLATION / _HANKEL_PANEL_ORDER
-        ))
+        n_panels_floor = int(
+            math.ceil(n_osc * _HANKEL_MIN_NODES_PER_OSCILLATION / _HANKEL_PANEL_ORDER)
+        )
         order = _HANKEL_PANEL_ORDER
         n_panels_soft = max(1, _HANKEL_SOFT_LINEAR_NODES // order)
         n_panels_hard = max(1, _HANKEL_MAX_LINEAR_NODES // order)
         n_panels = min(
-            n_panels_target, max(n_panels_soft, n_panels_floor), n_panels_hard,
+            n_panels_target,
+            max(n_panels_soft, n_panels_floor),
+            n_panels_hard,
         )
         nodes_per_osc = _HANKEL_PANEL_ORDER * n_panels / n_osc
         if nodes_per_osc < _HANKEL_MIN_NODES_PER_OSCILLATION:
@@ -1417,11 +1453,9 @@ def _hankel_lambda_grid(
             )
         edges = np.linspace(lambda_break, lambda_max, n_panels + 1)
         nodes_p, weights_p = _leggauss_cached(_HANKEL_PANEL_ORDER)
-        half_w = 0.5 * np.diff(edges)                       # (n_panels,)
-        centers = 0.5 * (edges[:-1] + edges[1:])            # (n_panels,)
-        lambdas_lin = (
-            centers[:, None] + half_w[:, None] * nodes_p[None, :]
-        ).ravel()
+        half_w = 0.5 * np.diff(edges)  # (n_panels,)
+        centers = 0.5 * (edges[:-1] + edges[1:])  # (n_panels,)
+        lambdas_lin = (centers[:, None] + half_w[:, None] * nodes_p[None, :]).ravel()
         weights_lin = (half_w[:, None] * weights_p[None, :]).ravel()
 
     lambdas = np.concatenate([lambdas_log, lambdas_lin])
@@ -1523,25 +1557,42 @@ def two_layer_real_space_kernel(
     """
     _validate_depths(z, z_s)
     plan = _plan_truncation(
-        z=z, z_s=z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-        rho_baseline=None, s_near=s, s_far=s,
-        lambda_max_factor=lambda_max_factor, warn_stacklevel=3,
+        z=z,
+        z_s=z_s,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        rho_baseline=None,
+        s_near=s,
+        s_far=s,
+        lambda_max_factor=lambda_max_factor,
+        warn_stacklevel=3,
     )
     lambdas, weights = _hankel_lambda_grid(
-        lambda_max=plan.lambda_max, char_length=plan.char_length, s=s,
-        n_log=n_log, n_lin=n_lin, warn_stacklevel=3,
+        lambda_max=plan.lambda_max,
+        char_length=plan.char_length,
+        s=s,
+        n_log=n_log,
+        n_lin=n_lin,
+        warn_stacklevel=3,
     )
 
     A, B, _, C = _spectral_amplitudes(lambdas, z_s, rho_1, rho_2, h_1)
     Phi_refl = _phi_from_stable_amplitudes(
-        lambdas, A, B, C, z, z_s, rho_1, rho_2, h_1,
+        lambdas,
+        A,
+        B,
+        C,
+        z,
+        z_s,
+        rho_1,
+        rho_2,
+        h_1,
         include_primary=False,
     ) - _image_spectral_sum(lambdas, plan.coeffs, plan.dists)
     integrand = Phi_refl * j0(lambdas * s) * lambdas
     total = float(np.sum(weights * integrand))
-    total += float(
-        _image_real_space_sum(plan.coeffs, plan.dists, s, plan.lambda_clamp)
-    )
+    total += float(_image_real_space_sum(plan.coeffs, plan.dists, s, plan.lambda_clamp))
 
     rho_primary = _primary_rho(z, z_s, rho_1, rho_2, h_1)
     if rho_primary == 0.0:
@@ -1619,58 +1670,108 @@ def two_layer_layered_correction_group(
         rho_baseline = rho_1
     _validate_depths(z, z_s)
     s_values = np.asarray(s_values, dtype=float)
-    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and \
-            abs(rho_baseline - rho_1) < 1e-12 * max(rho_1, 1.0):
+    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and abs(
+        rho_baseline - rho_1
+    ) < 1e-12 * max(rho_1, 1.0):
         return np.zeros(s_values.shape, dtype=float)
     s_min = float(s_values.min())
     s_max = float(s_values.max())
     plan = _plan_truncation(
-        z=z, z_s=z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-        rho_baseline=rho_baseline, s_near=s_min, s_far=s_max,
-        lambda_max_factor=lambda_max_factor, warn_stacklevel=3,
+        z=z,
+        z_s=z_s,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        rho_baseline=rho_baseline,
+        s_near=s_min,
+        s_far=s_max,
+        lambda_max_factor=lambda_max_factor,
+        warn_stacklevel=3,
     )
     lambdas, weights = _hankel_lambda_grid(
-        lambda_max=plan.lambda_max, char_length=plan.char_length, s=s_max,
-        n_log=n_log, n_lin=n_lin, warn_stacklevel=3,
+        lambda_max=plan.lambda_max,
+        char_length=plan.char_length,
+        s=s_max,
+        n_log=n_log,
+        n_lin=n_lin,
+        warn_stacklevel=3,
     )
     A, B, _, C = _spectral_amplitudes(lambdas, z_s, rho_1, rho_2, h_1)
     A_h, B_h, _, C_h = _spectral_amplitudes(
-        lambdas, z_s, rho_baseline, rho_baseline, h_1,
+        lambdas,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
     )
     Phi_lay = _phi_from_stable_amplitudes(
-        lambdas, A, B, C, z, z_s, rho_1, rho_2, h_1,
+        lambdas,
+        A,
+        B,
+        C,
+        z,
+        z_s,
+        rho_1,
+        rho_2,
+        h_1,
         include_primary=False,
     )
     Phi_hom = _phi_from_stable_amplitudes(
-        lambdas, A_h, B_h, C_h, z, z_s, rho_baseline, rho_baseline, h_1,
+        lambdas,
+        A_h,
+        B_h,
+        C_h,
+        z,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
         include_primary=False,
     )
     w_phi = (
-        Phi_lay - Phi_hom - _image_spectral_sum(
-            lambdas, plan.coeffs, plan.dists,
+        (
+            Phi_lay
+            - Phi_hom
+            - _image_spectral_sum(
+                lambdas,
+                plan.coeffs,
+                plan.dists,
+            )
         )
-    ) * weights * lambdas
+        * weights
+        * lambdas
+    )
     # The residual primary term. Zero — bit-exactly — whenever the
     # caller follows the ADR-0007 recommendation and matches
     # ``rho_baseline`` to the resistivity of the source layer.
     d_rho = _primary_rho(z, z_s, rho_1, rho_2, h_1) - _primary_rho(
-        z, z_s, rho_baseline, rho_baseline, h_1,
+        z,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
     )
     c = _log_grid_offset(z, z_s, h_1, d_rest=plan.d_rest)
     out = _hankel_contract_smooth(lambdas, s_values, w_phi, c=c)
     out = out + _image_real_space_sum(
-        plan.coeffs, plan.dists, s_values, plan.lambda_clamp,
+        plan.coeffs,
+        plan.dists,
+        s_values,
+        plan.lambda_clamp,
     )
     if d_rho == 0.0:
         return out
     return out + _primary_term_real_space(
-        d_rho, s_values, z - z_s, plan.lambda_clamp,
+        d_rho,
+        s_values,
+        z - z_s,
+        plan.lambda_clamp,
     )
 
 
 def two_layer_probe_matrix(
-    probe_points: np.ndarray,     # (M, 3)
-    source_points: np.ndarray,    # (N, 3)
+    probe_points: np.ndarray,  # (M, 3)
+    source_points: np.ndarray,  # (N, 3)
     *,
     rho_1: float,
     rho_2: float,
@@ -1739,7 +1840,9 @@ def two_layer_probe_matrix(
     G = np.zeros((M, N), dtype=float)
 
     def _group_values(
-        s_flat: np.ndarray, zm: float, zn: float,
+        s_flat: np.ndarray,
+        zm: float,
+        zn: float,
     ) -> np.ndarray:
         """Vectorised kernel over many s at one (z, z_s) pair.
 
@@ -1751,8 +1854,13 @@ def two_layer_probe_matrix(
         the reflected part plus a closed-form primary term.
         """
         plan = _plan_truncation(
-            z=zm, z_s=zn, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-            rho_baseline=None, s_near=float(s_flat.min()),
+            z=zm,
+            z_s=zn,
+            rho_1=rho_1,
+            rho_2=rho_2,
+            h_1=h_1,
+            rho_baseline=None,
+            s_near=float(s_flat.min()),
             s_far=float(s_flat.max()),
             lambda_max_factor=lambda_max_factor,
             # 4 frames: _plan_truncation -> _group_values ->
@@ -1760,27 +1868,49 @@ def two_layer_probe_matrix(
             warn_stacklevel=4,
         )
         lambdas, weights = _hankel_lambda_grid(
-            lambda_max=plan.lambda_max, char_length=plan.char_length,
-            s=float(s_flat.max()), n_log=32, n_lin=96, warn_stacklevel=4,
+            lambda_max=plan.lambda_max,
+            char_length=plan.char_length,
+            s=float(s_flat.max()),
+            n_log=32,
+            n_lin=96,
+            warn_stacklevel=4,
         )
         A, B, _, C = _spectral_amplitudes(lambdas, zn, rho_1, rho_2, h_1)
         Phi_refl = _phi_from_stable_amplitudes(
-            lambdas, A, B, C, zm, zn, rho_1, rho_2, h_1,
+            lambdas,
+            A,
+            B,
+            C,
+            zm,
+            zn,
+            rho_1,
+            rho_2,
+            h_1,
             include_primary=False,
         ) - _image_spectral_sum(lambdas, plan.coeffs, plan.dists)
         w_phi = Phi_refl * weights * lambdas
         c = _log_grid_offset(
-            zm, zn, h_1, floor=min_distance, d_rest=plan.d_rest,
+            zm,
+            zn,
+            h_1,
+            floor=min_distance,
+            d_rest=plan.d_rest,
         )
         vals = _hankel_contract_smooth(lambdas, s_flat, w_phi, c=c)
         vals = vals + _image_real_space_sum(
-            plan.coeffs, plan.dists, s_flat, plan.lambda_clamp,
+            plan.coeffs,
+            plan.dists,
+            s_flat,
+            plan.lambda_clamp,
         )
         rho_primary = _primary_rho(zm, zn, rho_1, rho_2, h_1)
         if rho_primary == 0.0:
             return vals
         return vals + _primary_term_real_space(
-            rho_primary, s_flat, zm - zn, plan.lambda_clamp,
+            rho_primary,
+            s_flat,
+            zm - zn,
+            plan.lambda_clamp,
         )
 
     # Group by the (z, z_s) pair — the kernel then depends on s only.
@@ -1792,10 +1922,7 @@ def two_layer_probe_matrix(
         for zsk in np.unique(zs_keys):
             cols = np.where(zs_keys == zsk)[0]
             zn = float(source_points[cols[0], 2])
-            dxy = (
-                probe_points[rows][:, None, 0:2]
-                - source_points[cols][None, :, 0:2]
-            )
+            dxy = probe_points[rows][:, None, 0:2] - source_points[cols][None, :, 0:2]
             s_grid = np.sqrt(np.einsum("mnk,mnk->mn", dxy, dxy))
             if abs(zm - zn) < min_distance:
                 np.maximum(s_grid, min_distance, out=s_grid)
@@ -1867,28 +1994,48 @@ def two_layer_layered_correction_real_space(
     """
     if rho_baseline is None:
         rho_baseline = rho_1
-    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and \
-            abs(rho_baseline - rho_1) < 1e-12 * max(rho_1, 1.0):
+    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and abs(
+        rho_baseline - rho_1
+    ) < 1e-12 * max(rho_1, 1.0):
         return 0.0
 
     _validate_depths(z, z_s)
     plan = _plan_truncation(
-        z=z, z_s=z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-        rho_baseline=rho_baseline, s_near=s, s_far=s,
-        lambda_max_factor=lambda_max_factor, warn_stacklevel=3,
+        z=z,
+        z_s=z_s,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        rho_baseline=rho_baseline,
+        s_near=s,
+        s_far=s,
+        lambda_max_factor=lambda_max_factor,
+        warn_stacklevel=3,
     )
     lambdas, weights = _hankel_lambda_grid(
-        lambda_max=plan.lambda_max, char_length=plan.char_length, s=s,
-        n_log=n_log, n_lin=n_lin, warn_stacklevel=3,
+        lambda_max=plan.lambda_max,
+        char_length=plan.char_length,
+        s=s,
+        n_log=n_log,
+        n_lin=n_lin,
+        warn_stacklevel=3,
     )
 
     # Layered amplitudes
     A, B, _, C = _spectral_amplitudes(
-        lambdas, z_s, rho_1, rho_2, h_1,
+        lambdas,
+        z_s,
+        rho_1,
+        rho_2,
+        h_1,
     )
     # Baseline (homog) amplitudes — both layers at rho_baseline.
     A_h, B_h, _, C_h = _spectral_amplitudes(
-        lambdas, z_s, rho_baseline, rho_baseline, h_1,
+        lambdas,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
     )
 
     # Evaluate the *reflected* Phi for both and subtract. When the
@@ -1905,28 +2052,50 @@ def two_layer_layered_correction_real_space(
     # Callers should still select rho_baseline = rho at the source
     # layer (ADR-0007 §"Phase A.1"), which makes the term vanish.
     Phi_lay = _phi_from_stable_amplitudes(
-        lambdas, A, B, C, z, z_s, rho_1, rho_2, h_1,
+        lambdas,
+        A,
+        B,
+        C,
+        z,
+        z_s,
+        rho_1,
+        rho_2,
+        h_1,
         include_primary=False,
     )
     Phi_hom = _phi_from_stable_amplitudes(
-        lambdas, A_h, B_h, C_h, z, z_s, rho_baseline, rho_baseline, h_1,
+        lambdas,
+        A_h,
+        B_h,
+        C_h,
+        z,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
         include_primary=False,
     )
-    delta_Phi = Phi_lay - Phi_hom - _image_spectral_sum(
-        lambdas, plan.coeffs, plan.dists,
+    delta_Phi = (
+        Phi_lay
+        - Phi_hom
+        - _image_spectral_sum(
+            lambdas,
+            plan.coeffs,
+            plan.dists,
+        )
     )
 
     integrand = delta_Phi * j0(lambdas * s) * lambdas
     total = float(np.sum(weights * integrand))
-    total += float(
-        _image_real_space_sum(plan.coeffs, plan.dists, s, plan.lambda_clamp)
-    )
+    total += float(_image_real_space_sum(plan.coeffs, plan.dists, s, plan.lambda_clamp))
 
     d_rho = _primary_rho(z, z_s, rho_1, rho_2, h_1) - _primary_rho(
-        z, z_s, rho_baseline, rho_baseline, h_1,
+        z,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
     )
     if d_rho == 0.0:
         return total
-    return total + float(
-        _primary_term_real_space(d_rho, s, z - z_s, plan.lambda_clamp)
-    )
+    return total + float(_primary_term_real_space(d_rho, s, z - z_s, plan.lambda_clamp))

@@ -131,7 +131,10 @@ def _build_Z_two_layer(
     """
     n = seg_points.shape[0]
     self_kernel = _two_layer_self_kernel_factory(
-        soil, max_terms, tol, allow_cross_layer=True,
+        soil,
+        max_terms,
+        tol,
+        allow_cross_layer=True,
     )
     eye = np.eye(n)
     return self_kernel(seg_points, seg_lengths, wire_radii, eye)
@@ -294,11 +297,7 @@ def _galerkin_solve(
         b_re[N_a + k] = ic.real
         b_im[N_a + k] = ic.imag
 
-    use_inductive = (
-        inductance_matrix is not None
-        and omega != 0.0
-        and M_a > 0
-    )
+    use_inductive = inductance_matrix is not None and omega != 0.0 and M_a > 0
 
     if not use_inductive:
         # DC / no-inductive fast path: A is real; one LU factorisation
@@ -306,16 +305,16 @@ def _galerkin_solve(
         sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
         sol_re, sol_im = sol[:, 0], sol[:, 1]
         I_active = sol_re[:N_a] + 1j * sol_im[:N_a]
-        phi_active = sol_re[N_a:N_a + K_a] + 1j * sol_im[N_a:N_a + K_a]
+        phi_active = sol_re[N_a : N_a + K_a] + 1j * sol_im[N_a : N_a + K_a]
     else:
         # Inductive coupling: the branch block carries jω·L, with
         # ``inductance_matrix`` covering the full ``finite_branches``
         # ordering; restrict to the active subset.
         n_total_branches = inductance_matrix.shape[0]
-        if (
-            inductance_matrix.shape != (n_total_branches, n_total_branches)
-            or n_total_branches != len(finite_branches)
-        ):
+        if inductance_matrix.shape != (
+            n_total_branches,
+            n_total_branches,
+        ) or n_total_branches != len(finite_branches):
             raise ValueError(
                 f"inductance_matrix shape {inductance_matrix.shape} does "
                 f"not match number of finite_branches "
@@ -349,7 +348,7 @@ def _galerkin_solve(
         b_c = b_re + 1j * b_im
         sol = np.linalg.solve(A_c, b_c)
         I_active = sol[:N_a]
-        phi_active = sol[N_a:N_a + K_a]
+        phi_active = sol[N_a : N_a + K_a]
 
     seg_currents[active_seg_indices_arr] = I_active
     for k, c in enumerate(active_clusters):
@@ -414,27 +413,25 @@ def solve_mom(
     ds = engine.segment_length
     _log.info(
         "mom: soil=%s, segment_length=%.3f",
-        type(world.soil).__name__, ds,
+        type(world.soil).__name__,
+        ds,
     )
 
     # 1) Discretisation — identical to the image backends; for
     #    two-layer soil segments are split at the interface
     #    (ADR-0007 step 1, audit 2026-07-08 WP-D2).
-    interfaces = (
-        (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
-    )
+    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
-        elec_to_segidx[e.name] = list(range(len(all_segments),
-                                            len(all_segments) + len(segs)))
+        elec_to_segidx[e.name] = list(
+            range(len(all_segments), len(all_segments) + len(segs))
+        )
         all_segments.extend(segs)
 
     # 2) Per-electrode input currents from the configured sources.
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     for src in world.sources:
         if src.kind != "current":
             continue
@@ -464,9 +461,7 @@ def solve_mom(
         (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
     ]
     finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -477,13 +472,15 @@ def solve_mom(
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     n_segments = len(all_segments)
@@ -504,7 +501,8 @@ def solve_mom(
             _log.info(
                 "mom: cross-layer geometry (z_max = %.3f m >= h_1 = "
                 "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
-                z_max, world.soil.h_1,
+                z_max,
+                world.soil.h_1,
             )
 
     # 5) Assemble the reaction matrix Z (kernel depends on soil model).
@@ -516,15 +514,21 @@ def solve_mom(
     else:
         # TwoLayerSoil
         Z = _build_Z_two_layer(
-            seg_points, seg_lengths, wire_radii,
-            world.soil, two_layer_max_terms, two_layer_tol,
+            seg_points,
+            seg_lengths,
+            wire_radii,
+            world.soil,
+            two_layer_max_terms,
+            two_layer_tol,
         )
         # Approximate the term count from the same offset generator.
         from groundfield.solver.image_2layer import _two_layer_image_offsets
 
         _, _, _, n_terms_used = _two_layer_image_offsets(
-            world.soil.reflection_coefficient, world.soil.h_1,
-            two_layer_max_terms, two_layer_tol,
+            world.soil.reflection_coefficient,
+            world.soil.h_1,
+            two_layer_max_terms,
+            two_layer_tol,
         )
 
     # 6) Frequency loop. With no inductive coupling, solve once and
@@ -536,20 +540,30 @@ def solve_mom(
     if isinstance(world.soil, HomogeneousSoil):
         rho_self = world.soil.resistivity
         phi_kernel = lambda sc_real: _self_corrected_kernel(
-            seg_points, seg_lengths, wire_radii, sc_real, rho_self,
+            seg_points,
+            seg_lengths,
+            wire_radii,
+            sc_real,
+            rho_self,
         )
     else:
         self_kernel = _two_layer_self_kernel_factory(
-            world.soil, two_layer_max_terms, two_layer_tol,
+            world.soil,
+            two_layer_max_terms,
+            two_layer_tol,
             allow_cross_layer=True,
         )
         phi_kernel = lambda sc_real: self_kernel(
-            seg_points, seg_lengths, wire_radii, sc_real,
+            seg_points,
+            seg_lengths,
+            wire_radii,
+            sc_real,
         )
 
     def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray]:
         carson_dz = (
-            carson_builder(omega) if (has_inductance and carson_builder is not None)
+            carson_builder(omega)
+            if (has_inductance and carson_builder is not None)
             else None
         )
         sc, _ = _galerkin_solve(
@@ -587,12 +601,8 @@ def solve_mom(
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [
-            complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)
-        ]
-        i_list = [
-            complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)
-        ]
+        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
             electrode_currents[ename] = i_list
@@ -613,7 +623,8 @@ def solve_mom(
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
-            n for n in cluster_id
+            n
+            for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
@@ -626,7 +637,8 @@ def solve_mom(
         soil_resistivity = float(world.soil.rho_1)
         converged = (
             _series_tail_bound(abs(K), n_terms_used) < two_layer_tol
-            if n_terms_used else True
+            if n_terms_used
+            else True
         )
         if not converged:
             warnings.warn(
@@ -664,7 +676,9 @@ def solve_mom(
             "earth_inductive_model": earth_inductive_model,
             **soil_meta,
             **_carson_skin_metadata(
-                has_inductance, sigma_earth_for_carson, world.soil,
+                has_inductance,
+                sigma_earth_for_carson,
+                world.soil,
                 engine.frequencies,
             ),
             **(
@@ -672,7 +686,8 @@ def solve_mom(
                     "conductor_node_currents": conductor_currents,
                     "conductor_node_potentials": conductor_potentials,
                 }
-                if conductor_currents else {}
+                if conductor_currents
+                else {}
             ),
         },
     )
@@ -700,7 +715,6 @@ def _carson_skin_metadata(
         return {}
     return {
         "penetration_depth": {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref)
-            for f in frequencies
+            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in frequencies
         }
     }

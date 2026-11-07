@@ -28,14 +28,16 @@ def _three_rod_setup():
     """Three rods, one source, one finite conductor — small but with
     every structural element of the augmented system."""
     w = gf.create_world(soil=SOIL)
-    g1 = gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0),
-                             length=3.0, wire_radius=0.005)
-    g2 = gf.create_electrode(w, "rod", name="g2", position=(10.0, 0, 0.0),
-                             length=3.0, wire_radius=0.005)
-    gf.create_electrode(w, "rod", name="g3", position=(20.0, 0, 0.0),
-                        length=3.0, wire_radius=0.005)
-    gf.create_conductor(w, name="c12", start=g1, end=g2,
-                        cross_section=50e-6)
+    g1 = gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.0), length=3.0, wire_radius=0.005
+    )
+    g2 = gf.create_electrode(
+        w, "rod", name="g2", position=(10.0, 0, 0.0), length=3.0, wire_radius=0.005
+    )
+    gf.create_electrode(
+        w, "rod", name="g3", position=(20.0, 0, 0.0), length=3.0, wire_radius=0.005
+    )
+    gf.create_conductor(w, name="c12", start=g1, end=g2, cross_section=50e-6)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
@@ -138,27 +140,37 @@ def test_multifrequency_inductive_solve_consistent() -> None:
     """Multi-frequency inductive solve: the cached-Z path must give a
     frequency-monotone, finite response and reproduce the
     single-frequency solve exactly at the matching frequency."""
+
     def build():
         w = gf.create_world(soil=SOIL)
-        g1 = gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.7),
-                                 length=3.0, wire_radius=0.005)
-        g2 = gf.create_electrode(w, "rod", name="g2",
-                                 position=(100.0, 0, 0.7),
-                                 length=3.0, wire_radius=0.005)
-        gf.create_conductor(w, name="pen", start=g1, end=g2,
-                            cross_section=50e-6,
-                            discretize_segment_length=25.0,
-                            inductance_model="neumann")
+        g1 = gf.create_electrode(
+            w, "rod", name="g1", position=(0, 0, 0.7), length=3.0, wire_radius=0.005
+        )
+        g2 = gf.create_electrode(
+            w, "rod", name="g2", position=(100.0, 0, 0.7), length=3.0, wire_radius=0.005
+        )
+        gf.create_conductor(
+            w,
+            name="pen",
+            start=g1,
+            end=g2,
+            cross_section=50e-6,
+            discretize_segment_length=25.0,
+            inductance_model="neumann",
+        )
         gf.create_source(w, attached_to="g1", magnitude=1.0)
         return w
 
     eng_multi = gf.create_engine(
-        backend="image", segment_length=0.5,
+        backend="image",
+        segment_length=0.5,
         frequencies=[50.0, 500.0, 1000.0],
     )
     res_multi = eng_multi.solve(build())
     eng_single = gf.create_engine(
-        backend="image", segment_length=0.5, frequencies=[500.0],
+        backend="image",
+        segment_length=0.5,
+        frequencies=[500.0],
     )
     res_single = eng_single.solve(build())
     i_multi = res_multi.electrode_currents["g2"][1]
@@ -190,14 +202,22 @@ def test_multiport_z_exact_reciprocity_mixed_lengths() -> None:
     # n_y=2 -> 1.0 m). With ds = 0.7 and crossing-aligned discretisation
     # the longitudinal wires get 0.667 m segments and the transverse
     # wires 0.5 m: unequal lengths inside one electrode.
-    gf.create_electrode(w, "grid_mesh", name="g1", corner=(0.0, 0.0, 0.7),
-                        size=(4.0, 2.0), n_x=2, n_y=2, wire_radius=0.005)
-    gf.create_electrode(w, "rod", name="g2", position=(10.0, 0.0, 0.0),
-                        length=3.0, wire_radius=0.005)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="g1",
+        corner=(0.0, 0.0, 0.7),
+        size=(4.0, 2.0),
+        n_x=2,
+        n_y=2,
+        wire_radius=0.005,
+    )
+    gf.create_electrode(
+        w, "rod", name="g2", position=(10.0, 0.0, 0.0), length=3.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     # A finite conductor keeps both electrodes in the active set.
-    gf.create_conductor(w, name="c", start="g1", end="g2",
-                        cross_section=50e-6)
+    gf.create_conductor(w, name="c", start="g1", end="g2", cross_section=50e-6)
 
     segs = []
     elec_to_segidx: dict[str, list[int]] = {}
@@ -224,7 +244,11 @@ def test_multiport_z_exact_reciprocity_mixed_lengths() -> None:
         wire_radii=radii,
         elec_to_segidx=elec_to_segidx,
         self_kernel=lambda p, ls, r, c: _self_corrected_kernel(
-            p, ls, r, c, RHO,
+            p,
+            ls,
+            r,
+            c,
+            RHO,
         ),
         finite_branches=branches,
         multiport_cache=cache,

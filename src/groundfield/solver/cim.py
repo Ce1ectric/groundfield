@@ -261,9 +261,7 @@ def _empty_fit() -> ComplexImageFit:
     )
 
 
-def _matrix_pencil_beta(
-    g: np.ndarray, delta: float, n_images: int
-) -> np.ndarray:
+def _matrix_pencil_beta(g: np.ndarray, delta: float, n_images: int) -> np.ndarray:
     """Recover the decay rates $\\beta_k$ of a sum of exponentials.
 
     Matrix-pencil method (Sarkar & Pereira 1995) on a uniformly
@@ -307,9 +305,9 @@ def _matrix_pencil_beta(
     rows = n_samples - L
     Y = np.zeros((rows, L + 1), dtype=complex)
     for i in range(rows):
-        Y[i, :] = g[i:i + L + 1]
+        Y[i, :] = g[i : i + L + 1]
     Y0 = Y[:, :L]
-    Y1 = Y[:, 1:L + 1]
+    Y1 = Y[:, 1 : L + 1]
 
     # SVD-based filtering: project both blocks onto the dominant
     # singular subspace of order n_images. Filter near-zero singular
@@ -520,18 +518,21 @@ def fit_complex_images(
     model_v = np.exp(-2.0 * lam_v[:, None] * beta[None, :]) @ a
     rms_wide = float(np.sqrt(np.mean(np.abs(model_v - g_v) ** 2)))
 
-    converged = (
-        bool(rms <= rms_tol)
-        and bool(rms_wide <= rms_tol)
-        and not pencil_failed
-    )
+    converged = bool(rms <= rms_tol) and bool(rms_wide <= rms_tol) and not pencil_failed
 
     _log.info(
         "cim.fit: n_images_used=%d (P_decay=%d), rms=%.2e, "
         "rms_extrapolated=%.2e, K_1=%.4f, n_layers=%d, "
         "lam=[%.3g, %.3g], delta=%.3g",
-        beta.size, beta_decay.size, rms, rms_wide, k_inf,
-        stack.n_layers, lam[0], lam[-1], delta,
+        beta.size,
+        beta_decay.size,
+        rms,
+        rms_wide,
+        k_inf,
+        stack.n_layers,
+        lam[0],
+        lam[-1],
+        delta,
     )
     if not converged and warn:
         if pencil_failed:
@@ -604,10 +605,12 @@ def _cim_self_kernel_factory(
     rho_1 = float(stack.rhos[0])
 
     if stack.n_layers <= 1:
+
         def _hom(seg_points, seg_lengths, wire_radii, currents):
             return _self_corrected_kernel(
                 seg_points, seg_lengths, wire_radii, currents, rho_1
             )
+
         return _hom
 
     if stack.n_layers == 2:
@@ -615,13 +618,17 @@ def _cim_self_kernel_factory(
         from groundfield.solver.image_2layer import (
             _two_layer_self_kernel_factory,
         )
+
         soil = TwoLayerSoil(
             rho_1=float(stack.rhos[0]),
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
         )
         return _two_layer_self_kernel_factory(
-            soil, max_terms=max_terms, tol=tol, allow_cross_layer=True,
+            soil,
+            max_terms=max_terms,
+            tol=tol,
+            allow_cross_layer=True,
         )
 
     raise NotImplementedError(
@@ -707,15 +714,14 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
     _log.info(
         "cim: n_layers=%d, closed-form self-kernel (no complex-image "
         "fit), bit-identical to backend '%s'",
-        stack.n_layers, reduces_to,
+        stack.n_layers,
+        reduces_to,
     )
 
     # 1) Discretisation.
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (
-        (float(stack.h[0]),) if stack.n_layers >= 2 else None
-    )
+    interfaces = (float(stack.h[0]),) if stack.n_layers >= 2 else None
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(
@@ -724,9 +730,7 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
         all_segments.extend(segs)
 
     # 2) Per-electrode input currents.
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     for src in world.sources:
         if src.kind != "current":
             continue
@@ -761,9 +765,7 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
         (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
     ]
     finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -774,13 +776,15 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     seg_points = np.array([s.midpoint for s in all_segments])
@@ -797,7 +801,8 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
     #    ADR-0007).
     self_kernel = _cim_self_kernel_factory(
         stack,
-        max_terms=engine.image_max_terms, tol=engine.image_series_tol,
+        max_terms=engine.image_max_terms,
+        tol=engine.image_series_tol,
     )
     n_segments = len(all_segments)
     n_freq = len(engine.frequencies)
@@ -810,7 +815,8 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
 
     def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
         carson_dz = (
-            carson_builder(omega) if (has_inductance and carson_builder is not None)
+            carson_builder(omega)
+            if (has_inductance and carson_builder is not None)
             else None
         )
         elec_total = _solve_cluster_currents(
@@ -875,9 +881,7 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [
-            complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)
-        ]
+        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
         i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
@@ -898,7 +902,8 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
-            n for n in cluster_id
+            n
+            for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
@@ -929,8 +934,7 @@ def solve_cim(world: "World", engine: "Engine") -> FieldResult:
             else 1.0 / float(stack.rhos[0])
         )
         metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref)
-            for f in engine.frequencies
+            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
         }
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents

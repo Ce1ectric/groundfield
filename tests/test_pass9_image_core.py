@@ -141,13 +141,15 @@ def test_rod_split_at_layer_interface_reports_weighted_potential() -> None:
     soil = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=5.0)
     world = gf.create_world(soil=soil)
     rod = gf.create_electrode(
-        world, "rod", name="r",
-        position=(0.0, 0.0, 0.5), length=4.509, wire_radius=0.008,
+        world,
+        "rod",
+        name="r",
+        position=(0.0, 0.0, 0.5),
+        length=4.509,
+        wire_radius=0.008,
     )
     gf.create_source(world, attached_to="r", magnitude=1.0)
-    result = gf.create_engine(
-        backend="image_2layer", segment_length=1.0
-    ).solve(world)
+    result = gf.create_engine(backend="image_2layer", segment_length=1.0).solve(world)
 
     segs = _discretize_electrode(rod, 1.0, (soil.h_1,))
     lengths = np.array([s.length for s in segs])
@@ -180,7 +182,9 @@ def test_grounding_impedance_equals_multiport_diagonal() -> None:
     rho = 150.0
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=rho))
     poly = gf.create_electrode(
-        world, "polyline", name="p",
+        world,
+        "polyline",
+        name="p",
         vertices=[(0.0, 0.0, 0.7), (3.0, 0.0, 0.7), (3.0, 1.1, 0.7)],
         wire_radius=0.006,
     )
@@ -222,15 +226,18 @@ def test_uniform_segment_lengths_unchanged() -> None:
     """
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "strip", name="s",
-        start=(0.0, 0.0, 0.5), end=(10.0, 0.0, 0.5), wire_radius=0.005,
+        world,
+        "strip",
+        name="s",
+        start=(0.0, 0.0, 0.5),
+        end=(10.0, 0.0, 0.5),
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="s", magnitude=1.0)
     result = gf.create_engine(backend="image", segment_length=0.5).solve(world)
     z = result.grounding_impedance("s")[0].real
     assert _ulps_apart(z, Z_STRIP_10M_0_14_1, budget=4), (
-        f"{z!r} is more than 4 ulps from the 0.14.1 value "
-        f"{Z_STRIP_10M_0_14_1!r}"
+        f"{z!r} is more than 4 ulps from the 0.14.1 value {Z_STRIP_10M_0_14_1!r}"
     )
 
 
@@ -241,16 +248,22 @@ def test_uniform_segment_lengths_unchanged() -> None:
 
 def _bonded_world(rod_name: str, ring_name: str) -> gf.World:
     """Rod crossing the layer interface, ideally bonded to a ring."""
-    world = gf.create_world(
-        soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+    world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0))
+    gf.create_electrode(
+        world,
+        "rod",
+        name=rod_name,
+        position=(0.0, 0.0, 0.1),
+        length=5.0,
+        wire_radius=0.008,
     )
     gf.create_electrode(
-        world, "rod", name=rod_name,
-        position=(0.0, 0.0, 0.1), length=5.0, wire_radius=0.008,
-    )
-    gf.create_electrode(
-        world, "ring", name=ring_name,
-        center=(10.0, 0.0, 0.7), radius=2.0, wire_radius=0.008,
+        world,
+        "ring",
+        name=ring_name,
+        center=(10.0, 0.0, 0.7),
+        radius=2.0,
+        wire_radius=0.008,
     )
     gf.create_conductor(world, name="bond", start=rod_name, end=ring_name)
     gf.create_source(world, attached_to=rod_name, magnitude=1.0)
@@ -268,9 +281,7 @@ def test_cluster_members_report_one_common_potential() -> None:
     nodes the model holds at one potential.
     """
     world = _bonded_world("a_rod", "b_ring")
-    result = gf.create_engine(
-        backend="image_2layer", segment_length=0.7
-    ).solve(world)
+    result = gf.create_engine(backend="image_2layer", segment_length=0.7).solve(world)
 
     potentials = np.array(
         [result.electrode_potentials[n][0] for n in ("a_rod", "b_ring")]
@@ -321,12 +332,16 @@ def test_cluster_impedance_uses_length_weighted_members() -> None:
         electrode_currents={"big": [1.0 + 0j], "small": [1.0 + 0j]},
         point_sources=[
             PointSource(
-                position=(0.0, 0.0, 0.7), current=[1.0 + 0j],
-                electrode_name="big", length=3.0,
+                position=(0.0, 0.0, 0.7),
+                current=[1.0 + 0j],
+                electrode_name="big",
+                length=3.0,
             ),
             PointSource(
-                position=(5.0, 0.0, 0.7), current=[1.0 + 0j],
-                electrode_name="small", length=1.0,
+                position=(5.0, 0.0, 0.7),
+                current=[1.0 + 0j],
+                electrode_name="small",
+                length=1.0,
             ),
         ],
         soil_resistivity=100.0,
@@ -346,8 +361,12 @@ def test_cluster_impedance_uses_length_weighted_members() -> None:
 def _surface_strip_world(z: float, wire_radius: float = 0.005) -> gf.World:
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "strip", name="tape",
-        start=(0.0, 0.0, z), end=(10.0, 0.0, z), wire_radius=wire_radius,
+        world,
+        "strip",
+        name="tape",
+        start=(0.0, 0.0, z),
+        end=(10.0, 0.0, z),
+        wire_radius=wire_radius,
     )
     gf.create_source(world, attached_to="tape", magnitude=1.0)
     return world
@@ -390,8 +409,12 @@ def test_electrode_above_the_surface_is_rejected() -> None:
     """
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "ring", name="airborne",
-        center=(0.0, 0.0, -100.0), radius=4.0, wire_radius=0.005,
+        world,
+        "ring",
+        name="airborne",
+        center=(0.0, 0.0, -100.0),
+        radius=4.0,
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="airborne", magnitude=1.0)
     with pytest.raises(ValueError, match="above the soil surface"):
@@ -406,18 +429,18 @@ def test_surface_laid_ring_is_rejected_by_two_layer_backend() -> None:
     mirror. 0.14.1 returned 164.08 Ω for this ring at ``z = 0``
     (physical limit ~11 Ω).
     """
-    world = gf.create_world(
-        soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=3.0)
-    )
+    world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=3.0))
     gf.create_electrode(
-        world, "ring", name="r",
-        center=(0.0, 0.0, 0.0), radius=4.0, wire_radius=0.005,
+        world,
+        "ring",
+        name="r",
+        center=(0.0, 0.0, 0.0),
+        radius=4.0,
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="r", magnitude=1.0)
     with pytest.raises(ValueError, match="soil surface"):
-        gf.create_engine(backend="image_2layer", segment_length=0.5).solve(
-            world
-        )
+        gf.create_engine(backend="image_2layer", segment_length=0.5).solve(world)
 
 
 def test_shared_kernel_guard_protects_every_backend() -> None:
@@ -448,7 +471,11 @@ def test_shared_kernel_guard_protects_every_backend() -> None:
     # With labels it names what the user wrote.
     with pytest.raises(ValueError, match=r"electrode 'tape'"):
         _self_corrected_kernel(
-            airborne, lengths, radii, excitation, 100.0,
+            airborne,
+            lengths,
+            radii,
+            excitation,
+            100.0,
             owner_names=["electrode 'tape'"] * 2,
         )
 
@@ -464,9 +491,7 @@ def test_shared_kernel_guard_protects_every_backend() -> None:
         ("mom_sommerfeld", gf.HomogeneousSoil(resistivity=100.0)),
     ],
 )
-def test_airborne_electrode_is_rejected_by_every_backend(
-    backend: str, soil
-) -> None:
+def test_airborne_electrode_is_rejected_by_every_backend(backend: str, soil) -> None:
     """Audit 2026-07-29: the ``z <= 0`` hole was open in 4 of 6 backends.
 
     ``_check_segment_depths`` runs from ``solve_image`` /
@@ -484,8 +509,12 @@ def test_airborne_electrode_is_rejected_by_every_backend(
     """
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "ring", name="airborne",
-        center=(0.0, 0.0, -100.0), radius=4.0, wire_radius=0.005,
+        world,
+        "ring",
+        name="airborne",
+        center=(0.0, 0.0, -100.0),
+        radius=4.0,
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="airborne", magnitude=1.0)
     with pytest.raises(ValueError, match="above the soil surface"):
@@ -505,8 +534,12 @@ def test_segment_straddling_the_surface_is_rejected() -> None:
     """
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "rod", name="poking_out",
-        position=(0.0, 0.0, -0.5), length=1.2, wire_radius=0.008,
+        world,
+        "rod",
+        name="poking_out",
+        position=(0.0, 0.0, -0.5),
+        length=1.2,
+        wire_radius=0.008,
     )
     gf.create_source(world, attached_to="poking_out", magnitude=1.0)
     with pytest.raises(ValueError, match="crosses the soil surface"):
@@ -526,24 +559,22 @@ def test_rod_driven_from_the_surface_stays_legal() -> None:
     """
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "rod", name="g1",
-        position=(0.0, 0.0, 0.0), length=1.5, wire_radius=0.008,
+        world,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.0),
+        length=1.5,
+        wire_radius=0.008,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        result = gf.create_engine(
-            backend="image", segment_length=0.05
-        ).solve(world)
+        result = gf.create_engine(backend="image", segment_length=0.05).solve(world)
     # Dwight's driven rod, rho/(2 pi L) [ln(4L/a) - 1] = 59.63 Ohm for
     # 100 Ohm-m, L = 1.5 m, a = 8 mm; the solver returns 58.489 Ohm
     # (-1.9 %, the uniform-current ansatz residual).
-    dwight = (
-        100.0 / (2.0 * np.pi * 1.5) * (np.log(4.0 * 1.5 / 0.008) - 1.0)
-    )
-    assert result.grounding_impedance("g1")[0].real == pytest.approx(
-        dwight, rel=0.05
-    )
+    dwight = 100.0 / (2.0 * np.pi * 1.5) * (np.log(4.0 * 1.5 / 0.008) - 1.0)
+    assert result.grounding_impedance("g1")[0].real == pytest.approx(dwight, rel=0.05)
 
 
 def test_depth_error_names_the_conductor_not_the_pseudo_node() -> None:
@@ -558,22 +589,35 @@ def test_depth_error_names_the_conductor_not_the_pseudo_node() -> None:
     """
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "rod", name="a",
-        position=(0.0, 0.0, 0.7), length=2.0, wire_radius=0.008,
+        world,
+        "rod",
+        name="a",
+        position=(0.0, 0.0, 0.7),
+        length=2.0,
+        wire_radius=0.008,
     )
     gf.create_electrode(
-        world, "rod", name="b",
-        position=(20.0, 0.0, 0.7), length=2.0, wire_radius=0.008,
+        world,
+        "rod",
+        name="b",
+        position=(20.0, 0.0, 0.7),
+        length=2.0,
+        wire_radius=0.008,
     )
     # Explicit endpoints put the conductor axis into the surface plane
     # while both end electrodes stay legally buried.
-    world.add_conductor(Conductor(
-        name="pen",
-        start=(0.0, 0.0, 0.0), end=(20.0, 0.0, 0.0),
-        start_electrode="a", end_electrode="b",
-        cross_section=50e-6, discretize_segment_length=5.0,
-        coupling_to_soil="galvanic",
-    ))
+    world.add_conductor(
+        Conductor(
+            name="pen",
+            start=(0.0, 0.0, 0.0),
+            end=(20.0, 0.0, 0.0),
+            start_electrode="a",
+            end_electrode="b",
+            cross_section=50e-6,
+            discretize_segment_length=5.0,
+            coupling_to_soil="galvanic",
+        )
+    )
     gf.create_source(world, attached_to="a", magnitude=1.0)
     with pytest.raises(ValueError, match=r"conductor 'pen'") as excinfo:
         gf.create_engine(backend="image", segment_length=0.5).solve(world)
@@ -601,8 +645,7 @@ def test_shallow_segment_warns_and_quantifies_the_bias() -> None:
         )
     z = result.grounding_impedance("tape")[0].real
     assert _ulps_apart(z, 35.49116014344861, budget=4), (
-        f"{z!r} is more than 4 ulps from the 0.14.1 value "
-        "35.49116014344861"
+        f"{z!r} is more than 4 ulps from the 0.14.1 value 35.49116014344861"
     )
 
 
@@ -624,8 +667,12 @@ def test_shallow_warning_states_a_bias_valid_for_the_case_it_fires_on() -> None:
     """
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "ring", name="g1",
-        center=(0.0, 0.0, 0.8), radius=25.0, wire_radius=0.005,
+        world,
+        "ring",
+        name="g1",
+        center=(0.0, 0.0, 0.8),
+        radius=25.0,
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     with pytest.warns(ShallowSegmentWarning) as record:

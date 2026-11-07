@@ -96,9 +96,7 @@ _FENCE_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<ticks>`{3,}|~{3,})(?P<info>.*)$"
 _SKIP_BLOCK_RE = re.compile(
     r"^\s*<!--\s*skip-doctest\s*(?::\s*(?P<reason>.*?))?\s*-->\s*$"
 )
-_SKIP_PAGE_RE = re.compile(
-    r"<!--\s*skip-doctest-page\s*(?::\s*(?P<reason>.*?))?\s*-->"
-)
+_SKIP_PAGE_RE = re.compile(r"<!--\s*skip-doctest-page\s*(?::\s*(?P<reason>.*?))?\s*-->")
 
 #: Pages whose snippets take minutes rather than seconds.  Skipped
 #: unless ``GF_DOC_SNIPPETS_SLOW=1``.  Keep this empty if you can:
@@ -322,8 +320,7 @@ def test_doc_snippets_execute(page: PageSnippets, snippet_sandbox) -> None:
         pytest.skip(f"page opt-out: {page.page_skip_reason or 'no reason given'}")
     if page.page in SLOW_PAGES and not os.environ.get("GF_DOC_SNIPPETS_SLOW"):
         pytest.skip(
-            f"slow page ({SLOW_PAGES[page.page]}); "
-            "set GF_DOC_SNIPPETS_SLOW=1 to run it"
+            f"slow page ({SLOW_PAGES[page.page]}); set GF_DOC_SNIPPETS_SLOW=1 to run it"
         )
 
     expected = EXPECTED_FAILURES.get(page.page, {})

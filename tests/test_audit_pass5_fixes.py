@@ -79,8 +79,9 @@ def test_vector_fit_underdetermined_warns() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", VectorFitUnderdeterminedWarning)
         vector_fit(freqs, Zs, n_poles=1, n_iter=2, complex_poles=False)
-    msgs = [w for w in caught
-            if issubclass(w.category, VectorFitUnderdeterminedWarning)]
+    msgs = [
+        w for w in caught if issubclass(w.category, VectorFitUnderdeterminedWarning)
+    ]
     assert msgs, (
         "Expected VectorFitUnderdeterminedWarning, got "
         f"{[(w.category.__name__, str(w.message)) for w in caught]!r}"
@@ -91,14 +92,13 @@ def test_vector_fit_underdetermined_warns() -> None:
 def test_vector_fit_well_determined_silent() -> None:
     """Five frequencies + n_poles=1 stays silent — sanity check."""
     freqs = np.array([50.0, 200.0, 500.0, 1000.0, 5000.0])
-    Zs = np.array(
-        [1.0 + 0.0j, 1.05 + 0.1j, 1.2 + 0.2j, 1.4 + 0.3j, 1.8 + 0.4j]
-    )
+    Zs = np.array([1.0 + 0.0j, 1.05 + 0.1j, 1.2 + 0.2j, 1.4 + 0.3j, 1.8 + 0.4j])
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", VectorFitUnderdeterminedWarning)
         vector_fit(freqs, Zs, n_poles=1, n_iter=2, complex_poles=False)
-    msgs = [w for w in caught
-            if issubclass(w.category, VectorFitUnderdeterminedWarning)]
+    msgs = [
+        w for w in caught if issubclass(w.category, VectorFitUnderdeterminedWarning)
+    ]
     assert not msgs, (
         "Did not expect VectorFitUnderdeterminedWarning at n_poles=1 with "
         f"len(freqs)=5, got {[str(w.message) for w in msgs]!r}"
@@ -115,11 +115,8 @@ def test_engine_frequency_order_warning_category() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", EngineFrequencyOrderWarning)
         Engine(backend="image", frequencies=[5000.0, 50.0])
-    matched = [w for w in caught
-               if issubclass(w.category, EngineFrequencyOrderWarning)]
-    assert matched, [
-        (w.category.__name__, str(w.message)) for w in caught
-    ]
+    matched = [w for w in caught if issubclass(w.category, EngineFrequencyOrderWarning)]
+    assert matched, [(w.category.__name__, str(w.message)) for w in caught]
     # The class inherits from UserWarning so legacy catch-alls keep working.
     assert issubclass(EngineFrequencyOrderWarning, UserWarning)
 
@@ -136,11 +133,8 @@ def test_engine_frequency_order_warning_silenceable() -> None:
         Engine(backend="image", frequencies=[5000.0, 50.0])
         Engine(backend="image", frequencies=[1000.0, 100.0, 10.0])
         Engine(backend="image", frequencies=[200.0, 100.0])
-    matched = [w for w in caught
-               if issubclass(w.category, EngineFrequencyOrderWarning)]
-    assert len(matched) == 1, [
-        (w.category.__name__, str(w.message)) for w in matched
-    ]
+    matched = [w for w in caught if issubclass(w.category, EngineFrequencyOrderWarning)]
+    assert len(matched) == 1, [(w.category.__name__, str(w.message)) for w in matched]
 
 
 # ---------------------------------------------------------------------
@@ -162,10 +156,14 @@ def test_layered_earth_precision_contract() -> None:
     earth = LayeredEarth(rhos=(rho,), thicknesses=())
 
     gamma_layered = reflection_coefficient_layered(
-        lambdas, omega=omega, earth=earth,
+        lambdas,
+        omega=omega,
+        earth=earth,
     )
     gamma_hom = reflection_coefficient_homogeneous(
-        lambdas, omega=omega, sigma_earth=1.0 / rho,
+        lambdas,
+        omega=omega,
+        sigma_earth=1.0 / rho,
     )
 
     assert gamma_layered.dtype == np.complex128
@@ -297,13 +295,24 @@ def test_world_solve_does_not_mutate_sources() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1", position=(0.0, 0.0, 0.0), length=1.5,
+        world,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.0),
+        length=1.5,
     )
     gf.create_electrode(
-        world, "rod", name="aux", position=(50.0, 0.0, 0.0), length=1.5,
+        world,
+        "rod",
+        name="aux",
+        position=(50.0, 0.0, 0.0),
+        length=1.5,
     )
     gf.create_source(
-        world, attached_to="g1", magnitude=1.0, return_to=None,
+        world,
+        attached_to="g1",
+        magnitude=1.0,
+        return_to=None,
     )
     pre_state = [s.model_dump() for s in world.sources]
 
@@ -317,8 +326,9 @@ def test_world_solve_does_not_mutate_sources() -> None:
     world.solve(eng)
     post_state = [s.model_dump() for s in world.sources]
     assert pre_state == post_state, (
-        "World.solve must not mutate sources. pre={!r}, post={!r}"
-        .format(pre_state, post_state)
+        "World.solve must not mutate sources. pre={!r}, post={!r}".format(
+            pre_state, post_state
+        )
     )
 
     # Stronger check: directly mutate a source field inside a no-op
@@ -344,8 +354,7 @@ def test_source_adapter_top_level_export() -> None:
     assert "SourceAdapter" in gf.__all__
     # The exported adapter must still validate a current-source dict.
     parsed = gf.SourceAdapter.validate_python(
-        {"name": "s1", "kind": "current",
-         "attached_to": "g1", "magnitude": 1.0}
+        {"name": "s1", "kind": "current", "attached_to": "g1", "magnitude": 1.0}
     )
     assert isinstance(parsed, gf.CurrentSource)
 
@@ -392,11 +401,7 @@ def test_release_script_rejects_hardcoded_claude_md_version(tmp_path) -> None:
     release._check_claude_md_no_hardcoded_version(tmp_path)
 
     # Bad: pasted version literal at the top.
-    bad = (
-        "# project\n"
-        '__version__ = "0.4.0"\n'
-        "## misc\n"
-    )
+    bad = '# project\n__version__ = "0.4.0"\n## misc\n'
     (tmp_path / "CLAUDE.md").write_text(bad, encoding="utf-8")
     with pytest.raises(RuntimeError) as excinfo:
         release._check_claude_md_no_hardcoded_version(tmp_path)

@@ -46,10 +46,10 @@ RHO = 100.0
 ROD_LEN = 2.0
 ROD_RADIUS = 0.0075
 SEPARATION = 30.0  # rod-to-rod distance — large compared to rod length
-                    # so that the mutual grounding impedance is negligible
-                    # but >> SEG, so the discretisation stays meaningful.
+# so that the mutual grounding impedance is negligible
+# but >> SEG, so the discretisation stays meaningful.
 PEN_CROSS_SECTION = 50.0e-6  # 50 mm² (NAYY-typical)
-PEN_RESISTIVITY = 2.82e-8     # Al at 20 °C
+PEN_RESISTIVITY = 2.82e-8  # Al at 20 °C
 
 
 def _two_rod_world(
@@ -68,17 +68,29 @@ def _two_rod_world(
         soil = gf.HomogeneousSoil(resistivity=RHO)
     w = gf.create_world(soil=soil)
     gf.create_electrode(
-        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=ROD_LEN,
+        w,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=ROD_LEN,
         wire_radius=ROD_RADIUS,
     )
     gf.create_electrode(
-        w, "rod", name="g2", position=(rod_separation, 0.0, 0.5),
-        length=ROD_LEN, wire_radius=ROD_RADIUS,
+        w,
+        "rod",
+        name="g2",
+        position=(rod_separation, 0.0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_RADIUS,
     )
     gf.create_conductor(
-        w, name="pen", start="g1", end="g2",
+        w,
+        name="pen",
+        start="g1",
+        end="g2",
         conductor_type="pen",
-        wire_radius=0.004, resistivity=pen_resistivity,
+        wire_radius=0.004,
+        resistivity=pen_resistivity,
         cross_section=cross_section,
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
@@ -86,9 +98,7 @@ def _two_rod_world(
 
 
 def _solve(world: gf.World, backend: str, **eng_kwargs) -> gf.FieldResult:
-    eng = gf.create_engine(
-        backend=backend, segment_length=SEG, **eng_kwargs
-    )
+    eng = gf.create_engine(backend=backend, segment_length=SEG, **eng_kwargs)
     return eng.solve(world)
 
 
@@ -128,7 +138,9 @@ def test_ideal_default_matches_legacy_cluster_split() -> None:
 # ---------------------------------------------------------------------
 
 
-def _expected_branch_split(R_self: float, R_b: float, I_in: float = 1.0) -> tuple[float, float]:
+def _expected_branch_split(
+    R_self: float, R_b: float, I_in: float = 1.0
+) -> tuple[float, float]:
     """Closed-form per :func:`module docstring`."""
     I_b = R_self / (2.0 * R_self + R_b) * I_in
     return I_in - I_b, I_b
@@ -147,8 +159,12 @@ def test_finite_branch_closed_form_image() -> None:
     # Get R_self from a single-rod isolated world.
     iso = gf.create_world(soil=gf.HomogeneousSoil(resistivity=RHO))
     gf.create_electrode(
-        iso, "rod", name="g1", position=(0, 0, 0.5),
-        length=ROD_LEN, wire_radius=ROD_RADIUS,
+        iso,
+        "rod",
+        name="g1",
+        position=(0, 0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_RADIUS,
     )
     gf.create_source(iso, attached_to="g1", magnitude=1.0)
     R_self = _solve(iso, "image").cluster_impedance("g1")[0].real
@@ -181,7 +197,7 @@ def test_from_radius_resolves_to_pi_r2() -> None:
     """The "from_radius" shortcut gives A = π · r²."""
     w = _two_rod_world(cross_section="from_radius")
     pen = w.get_conductor("pen")
-    expected_A = math.pi * pen.wire_radius ** 2
+    expected_A = math.pi * pen.wire_radius**2
     assert pen.effective_cross_section == pytest.approx(expected_A, rel=1e-12)
 
 
@@ -306,16 +322,30 @@ def _three_rod_chain(*, branch_cross_section: float) -> gf.World:
     w = gf.create_world(soil=soil)
     for k, x in enumerate([0.0, SEPARATION, 2 * SEPARATION]):
         gf.create_electrode(
-            w, "rod", name=f"g{k+1}", position=(x, 0.0, 0.5),
-            length=ROD_LEN, wire_radius=ROD_RADIUS,
+            w,
+            "rod",
+            name=f"g{k + 1}",
+            position=(x, 0.0, 0.5),
+            length=ROD_LEN,
+            wire_radius=ROD_RADIUS,
         )
     gf.create_conductor(
-        w, name="pen_12", start="g1", end="g2", conductor_type="pen",
-        cross_section=branch_cross_section, resistivity=PEN_RESISTIVITY,
+        w,
+        name="pen_12",
+        start="g1",
+        end="g2",
+        conductor_type="pen",
+        cross_section=branch_cross_section,
+        resistivity=PEN_RESISTIVITY,
     )
     gf.create_conductor(
-        w, name="pen_23", start="g2", end="g3", conductor_type="pen",
-        cross_section=branch_cross_section, resistivity=PEN_RESISTIVITY,
+        w,
+        name="pen_23",
+        start="g2",
+        end="g3",
+        conductor_type="pen",
+        cross_section=branch_cross_section,
+        resistivity=PEN_RESISTIVITY,
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w

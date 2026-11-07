@@ -30,7 +30,9 @@ def test_manhattan_grid_returns_n_positions() -> None:
 
 def test_manhattan_grid_centred_on_centre_xy() -> None:
     p = ManhattanGridPlacement(
-        n_per_row=2, spacing_x_m=10.0, spacing_y_m=10.0,
+        n_per_row=2,
+        spacing_x_m=10.0,
+        spacing_y_m=10.0,
         centre_xy=(100.0, 200.0),
     )
     pos = p.generate(4, np.random.default_rng(0))
@@ -42,14 +44,18 @@ def test_manhattan_grid_centred_on_centre_xy() -> None:
 
 def test_manhattan_grid_jitter_spreads_positions() -> None:
     p = ManhattanGridPlacement(
-        n_per_row=10, spacing_x_m=20.0, spacing_y_m=20.0,
+        n_per_row=10,
+        spacing_x_m=20.0,
+        spacing_y_m=20.0,
         jitter_m=5.0,
     )
     rng = np.random.default_rng(0)
     pos = p.generate(20, rng)
     # Every position is within ±2.5 m of its grid point.
     p_no_jitter = ManhattanGridPlacement(
-        n_per_row=10, spacing_x_m=20.0, spacing_y_m=20.0,
+        n_per_row=10,
+        spacing_x_m=20.0,
+        spacing_y_m=20.0,
     )
     grid = p_no_jitter.generate(20, np.random.default_rng(0))
     for (x, y), (gx, gy) in zip(pos, grid):
@@ -70,8 +76,10 @@ def test_manhattan_grid_zero_returns_empty() -> None:
 
 
 def test_manhattan_grid_accepts_distribution_for_spacing() -> None:
-    p = ManhattanGridPlacement(spacing_x_m=Uniform(low=20.0, high=30.0),
-                                spacing_y_m=Uniform(low=20.0, high=30.0))
+    p = ManhattanGridPlacement(
+        spacing_x_m=Uniform(low=20.0, high=30.0),
+        spacing_y_m=Uniform(low=20.0, high=30.0),
+    )
     pos = p.generate(5, np.random.default_rng(0))
     assert len(pos) == 5
 
@@ -111,8 +119,9 @@ class _Wrapper(BaseModel):
 @pytest.mark.parametrize(
     "p",
     [
-        ManhattanGridPlacement(spacing_x_m=20.0, spacing_y_m=15.0,
-                                n_per_row=8, jitter_m=2.0),
+        ManhattanGridPlacement(
+            spacing_x_m=20.0, spacing_y_m=15.0, n_per_row=8, jitter_m=2.0
+        ),
         ExplicitPlacement(positions=[(1.0, 2.0), (3.0, 4.0)]),
     ],
 )

@@ -113,9 +113,7 @@ def _check_frequency_values(values: list[float]) -> None:
         # quasi-static grounding studies — reject only negatives
         # and non-finite values.
         if not (f >= 0.0):
-            raise ValueError(
-                f"Engine.frequencies must be non-negative, got {f}."
-            )
+            raise ValueError(f"Engine.frequencies must be non-negative, got {f}.")
 
 
 Backend = Literal[
@@ -131,9 +129,9 @@ Backend = Literal[
 
 # ADR-0005 / ADR-0006: how the earth contributes to the inductive coupling.
 EarthInductiveModel = Literal[
-    "perfect_mirror",   # ADR-0004 default — sigma_earth -> infinity
-    "carson_series",    # ADR-0005 — Carson 1926 per-m asymptotic correction
-    "sommerfeld",       # ADR-0006 — geometric Sommerfeld kernel integration
+    "perfect_mirror",  # ADR-0004 default — sigma_earth -> infinity
+    "carson_series",  # ADR-0005 — Carson 1926 per-m asymptotic correction
+    "sommerfeld",  # ADR-0006 — geometric Sommerfeld kernel integration
 ]
 
 _log = get_logger(__name__)
@@ -229,7 +227,8 @@ class Engine(BaseModel):
     max_iterations: int = Field(default=200, gt=0)
     earth_inductive_model: EarthInductiveModel = Field(default="sommerfeld")
     image_max_terms: int = Field(
-        default=300, gt=0,
+        default=300,
+        gt=0,
         description=(
             "Maximum number of series terms of the image_2layer / "
             "image_nlayer image-charge series. High layer contrast "
@@ -243,7 +242,8 @@ class Engine(BaseModel):
         ),
     )
     image_series_tol: float = Field(
-        default=1e-6, gt=0.0,
+        default=1e-6,
+        gt=0.0,
         description=(
             "Stop tolerance for the image-charge series: iteration "
             "ends when the geometric tail bound |K|^(n+1)/(1-|K|) "
@@ -251,7 +251,8 @@ class Engine(BaseModel):
         ),
     )
     sommerfeld_lambda_max_factor: float = Field(
-        default=200.0, gt=0.0,
+        default=200.0,
+        gt=0.0,
         description=(
             "backend='mom_sommerfeld' only. Truncation of the "
             "reflected-remainder quadrature in units of 1/d_rem, the "
@@ -266,7 +267,8 @@ class Engine(BaseModel):
         ),
     )
     sommerfeld_epsabs: float = Field(
-        default=1e-9, gt=0.0,
+        default=1e-9,
+        gt=0.0,
         description=(
             "backend='mom_sommerfeld' only. Absolute threshold of the "
             "grid-refinement convergence test of the reflected-"
@@ -274,7 +276,8 @@ class Engine(BaseModel):
         ),
     )
     sommerfeld_epsrel: float = Field(
-        default=1e-7, gt=0.0,
+        default=1e-7,
+        gt=0.0,
         description=(
             "backend='mom_sommerfeld' only. Relative threshold of the "
             "grid-refinement convergence test, measured against the "
@@ -283,7 +286,8 @@ class Engine(BaseModel):
         ),
     )
     sommerfeld_max_osc_panels: int = Field(
-        default=200_000, gt=0,
+        default=200_000,
+        gt=0,
         description=(
             "backend='mom_sommerfeld' only. Budget for the half-period "
             "(pi/s) Gauss panel family that resolves the J0(lambda*s) "
@@ -437,9 +441,7 @@ class Engine(BaseModel):
             electrodes.
         """
         if world.soil is None:
-            raise ValueError(
-                "World has no soil model. Set one before calling solve()."
-            )
+            raise ValueError("World has no soil model. Set one before calling solve().")
         if not world.electrodes:
             raise ValueError("World contains no electrodes.")
 
@@ -489,8 +491,10 @@ class Engine(BaseModel):
             from groundfield.solver.image_2layer import solve_image_2layer
 
             return solve_image_2layer(
-                world, self,
-                max_terms=self.image_max_terms, tol=self.image_series_tol,
+                world,
+                self,
+                max_terms=self.image_max_terms,
+                tol=self.image_series_tol,
             )
 
         if effective_backend == "image_nlayer":
@@ -503,8 +507,10 @@ class Engine(BaseModel):
             # configuration promised by ``Engine.image_max_terms`` is
             # discarded on the multilayer path.
             return solve_image_nlayer(
-                world, self,
-                max_terms=self.image_max_terms, tol=self.image_series_tol,
+                world,
+                self,
+                max_terms=self.image_max_terms,
+                tol=self.image_series_tol,
             )
 
         if effective_backend == "cim":
@@ -529,7 +535,8 @@ class Engine(BaseModel):
             # the field defaults equal the old signature defaults, so
             # existing callers are unaffected.
             return solve_mom_sommerfeld(
-                world, self,
+                world,
+                self,
                 lambda_max_factor=self.sommerfeld_lambda_max_factor,
                 epsabs=self.sommerfeld_epsabs,
                 epsrel=self.sommerfeld_epsrel,

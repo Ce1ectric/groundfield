@@ -334,10 +334,8 @@ def _format_convergence_warning(
         )
     )
     return (
-        head
-        + " The returned value is NOT converged and, because the "
-        "integrand is oscillatory, its SIGN may be wrong."
-        + cause
+        head + " The returned value is NOT converged and, because the "
+        "integrand is oscillatory, its SIGN may be wrong." + cause
     )
 
 
@@ -460,7 +458,7 @@ def _panel_edges(
     """
     n_dec = _N_DECAY_PANELS * refine
     t = np.arange(n_dec + 1, dtype=float) / n_dec
-    edges = lam_max * t ** 2
+    edges = lam_max * t**2
 
     # Geometric family for the multiple-reflection pole.
     lam_first = lam_max / float(n_dec) ** 2
@@ -468,9 +466,7 @@ def _panel_edges(
     if 0.0 < lam_lo < lam_first:
         n_decades = math.log10(lam_first / lam_lo)
         n_pole = max(1, int(math.ceil(n_decades * _POLE_PANELS_PER_DECADE * refine)))
-        edges = np.concatenate(
-            [edges, np.geomspace(lam_lo, lam_first, n_pole + 1)]
-        )
+        edges = np.concatenate([edges, np.geomspace(lam_lo, lam_first, n_pole + 1)])
 
     lam_required = min(lam_osc, lam_max) if (s > 0.0 and lam_osc > 0.0) else 0.0
     lam_covered = lam_required
@@ -495,12 +491,13 @@ def _panel_edges(
                 _log.debug(
                     "mom_sommerfeld: oscillation panels capped at %d of "
                     "%d needed (s=%.3g, lam_osc=%.3g)",
-                    budget, n_half, s, lam_required,
+                    budget,
+                    n_half,
+                    s,
+                    lam_required,
                 )
             lam_covered = min(n_osc * step, lam_required)
-            edges = np.concatenate(
-                [edges, step * np.arange(1, n_osc + 1, dtype=float)]
-            )
+            edges = np.concatenate([edges, step * np.arange(1, n_osc + 1, dtype=float)])
     return _PanelGrid(
         edges=np.unique(np.clip(edges, 0.0, lam_max)),
         lam_covered=float(lam_covered),
@@ -674,7 +671,11 @@ def _reflected_integral(
             "reflected kernel is saturated by the floor and can be one "
             "to two orders of magnitude low. Keep segment midpoints a "
             "few millimetres clear of the layer interface.",
-            r_int, _MIN_DISTANCE, s, z_plus, h_top,
+            r_int,
+            _MIN_DISTANCE,
+            s,
+            z_plus,
+            h_top,
         )
 
     if k_1 == 0.0 and stack.n_layers == 2:
@@ -722,8 +723,12 @@ def _reflected_integral(
     tol = math.inf
     for refine in _REFINEMENTS:
         grid = _panel_edges(
-            lam_max, s, lam_osc, refine,
-            lam_pole=lam_pole, max_osc_panels=max_osc_panels,
+            lam_max,
+            s,
+            lam_osc,
+            refine,
+            lam_pole=lam_pole,
+            max_osc_panels=max_osc_panels,
         )
         value = _integrate_panels(_residual, grid.edges)
         if previous is not None:
@@ -740,8 +745,14 @@ def _reflected_integral(
             "mom_sommerfeld: remainder quadrature not converged to "
             "epsrel=%.1e (s=%.3g, |dz|=%.3g, z+z_s=%.3g, "
             "achieved=%.3e > tol=%.3e, lam_covered=%.4g of %.4g)",
-            epsrel, s, abs_dz, z_plus, achieved, tol,
-            grid.lam_covered, grid.lam_required,
+            epsrel,
+            s,
+            abs_dz,
+            z_plus,
+            achieved,
+            tol,
+            grid.lam_covered,
+            grid.lam_required,
         )
         issue = _QuadratureIssue(
             achieved=float(achieved),
@@ -754,7 +765,8 @@ def _reflected_integral(
         if issues is None:
             _emit_convergence_warning(
                 [issue],
-                epsabs=epsabs, epsrel=epsrel,
+                epsabs=epsabs,
+                epsrel=epsrel,
                 max_osc_panels=max_osc_panels,
                 stacklevel=4,
             )
@@ -916,8 +928,8 @@ def sommerfeld_kernel_value(
     """
     # Homogeneous shortcut.
     if stack.n_layers <= 1:
-        r = np.sqrt(s ** 2 + (z - z_s) ** 2)
-        r_img = np.sqrt(s ** 2 + (z + z_s) ** 2)
+        r = np.sqrt(s**2 + (z - z_s) ** 2)
+        r_img = np.sqrt(s**2 + (z + z_s) ** 2)
         return float(1.0 / max(r, _MIN_DISTANCE) + 1.0 / max(r_img, _MIN_DISTANCE))
 
     # ADR-0006 Phase B: 2-layer soil with cross-layer source/observer.
@@ -947,8 +959,12 @@ def sommerfeld_kernel_value(
         rho_2_local = float(stack.rhos[1])
         h_1_local = float(stack.h[0])
         G_phys = two_layer_real_space_kernel(
-            s=s, z=z, z_s=z_s,
-            rho_1=rho_1_local, rho_2=rho_2_local, h_1=h_1_local,
+            s=s,
+            z=z,
+            z_s=z_s,
+            rho_1=rho_1_local,
+            rho_2=rho_2_local,
+            h_1=h_1_local,
             lambda_max_factor=lambda_max_factor,
         )
         # G_phys has rho/2·(1/r + ...) structure; the existing caller
@@ -993,9 +1009,13 @@ def sommerfeld_kernel_value(
     G_direct = 1.0 / max(r, _MIN_DISTANCE) + 1.0 / max(r_img, _MIN_DISTANCE)
 
     G_refl = _reflected_integral(
-        stack, s, abs_dz, z_plus,
+        stack,
+        s,
+        abs_dz,
+        z_plus,
         lambda_max_factor=lambda_max_factor,
-        epsabs=epsabs, epsrel=epsrel,
+        epsabs=epsabs,
+        epsrel=epsrel,
         reference=G_direct,
         max_osc_panels=max_osc_panels,
         issues=issues,
@@ -1041,9 +1061,7 @@ def _build_Z_sommerfeld(
 
     if stack.n_layers <= 1:
         eye = np.eye(n)
-        return _self_corrected_kernel(
-            seg_points, seg_lengths, wire_radii, eye, rho_1
-        )
+        return _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho_1)
 
     Z = np.zeros((n, n), dtype=float)
     issues: list[_QuadratureIssue] = []
@@ -1077,6 +1095,7 @@ def _build_Z_sommerfeld(
         from groundfield.solver.image_2layer import (
             _two_layer_self_kernel_factory,
         )
+
         soil = TwoLayerSoil(
             rho_1=float(stack.rhos[0]),
             rho_2=float(stack.rhos[1]),
@@ -1087,14 +1106,20 @@ def _build_Z_sommerfeld(
         # geometries (previously the diagonal silently fell back to
         # the upper-layer series).
         self_kern = _two_layer_self_kernel_factory(
-            soil, max_terms=max_terms, tol=tol, allow_cross_layer=True,
+            soil,
+            max_terms=max_terms,
+            tol=tol,
+            allow_cross_layer=True,
         )
         eye = np.eye(n)
         Z_layered_diag = self_kern(seg_points, seg_lengths, wire_radii, eye)
         np.fill_diagonal(Z, np.diag(Z_layered_diag))
         _emit_convergence_warning(
-            issues, epsabs=epsabs, epsrel=epsrel,
-            max_osc_panels=max_osc_panels, stacklevel=4,
+            issues,
+            epsabs=epsabs,
+            epsrel=epsrel,
+            max_osc_panels=max_osc_panels,
+            stacklevel=4,
         )
         return Z
 
@@ -1110,9 +1135,13 @@ def _build_Z_sommerfeld(
     for i in range(n):
         z_i = float(seg_points[i, 2])
         refl = _reflected_integral(
-            stack, 0.0, 0.0, 2.0 * z_i,
+            stack,
+            0.0,
+            0.0,
+            2.0 * z_i,
             lambda_max_factor=lambda_max_factor,
-            epsabs=epsabs, epsrel=epsrel,
+            epsabs=epsabs,
+            epsrel=epsrel,
             reference=4.0 * np.pi * Z_homog[i, i] / rho_1,
             max_osc_panels=max_osc_panels,
             issues=issues,
@@ -1120,8 +1149,11 @@ def _build_Z_sommerfeld(
         layered_offset = rho_1 / (4.0 * np.pi) * refl
         Z[i, i] = Z_homog[i, i] + layered_offset
     _emit_convergence_warning(
-        issues, epsabs=epsabs, epsrel=epsrel,
-        max_osc_panels=max_osc_panels, stacklevel=4,
+        issues,
+        epsabs=epsabs,
+        epsrel=epsrel,
+        max_osc_panels=max_osc_panels,
+        stacklevel=4,
     )
     return Z
 
@@ -1202,15 +1234,15 @@ def solve_mom_sommerfeld(
     ds = engine.segment_length
     _log.info(
         "mom_sommerfeld: n_layers=%d, segment_length=%.3f, lam_max_fac=%.1f",
-        stack.n_layers, ds, lambda_max_factor,
+        stack.n_layers,
+        ds,
+        lambda_max_factor,
     )
 
     # 1) Discretisation.
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (
-        (float(stack.h[0]),) if stack.n_layers >= 2 else None
-    )
+    interfaces = (float(stack.h[0]),) if stack.n_layers >= 2 else None
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(
@@ -1219,9 +1251,7 @@ def solve_mom_sommerfeld(
         all_segments.extend(segs)
 
     # 2) Per-electrode input currents.
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     for src in world.sources:
         if src.kind != "current":
             continue
@@ -1251,9 +1281,7 @@ def solve_mom_sommerfeld(
         (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
     ]
     finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -1264,13 +1292,15 @@ def solve_mom_sommerfeld(
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     n_segments = len(all_segments)
@@ -1297,11 +1327,16 @@ def solve_mom_sommerfeld(
     # 3) Z-matrix via direct Sommerfeld quadrature (series knobs for
     #    the n=2 diagonal from the engine).
     Z = _build_Z_sommerfeld(
-        seg_points, seg_lengths, wire_radii, stack,
+        seg_points,
+        seg_lengths,
+        wire_radii,
+        stack,
         lambda_max_factor=lambda_max_factor,
-        epsabs=epsabs, epsrel=epsrel,
+        epsabs=epsabs,
+        epsrel=epsrel,
         max_osc_panels=max_osc_panels,
-        max_terms=engine.image_max_terms, tol=engine.image_series_tol,
+        max_terms=engine.image_max_terms,
+        tol=engine.image_series_tol,
     )
 
     # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).
@@ -1311,7 +1346,8 @@ def solve_mom_sommerfeld(
 
     def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray]:
         carson_dz = (
-            carson_builder(omega) if (has_inductance and carson_builder is not None)
+            carson_builder(omega)
+            if (has_inductance and carson_builder is not None)
             else None
         )
         sc, _ = _galerkin_solve(
@@ -1349,12 +1385,8 @@ def solve_mom_sommerfeld(
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [
-            complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)
-        ]
-        i_list = [
-            complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)
-        ]
+        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
             electrode_currents[ename] = i_list
@@ -1374,7 +1406,8 @@ def solve_mom_sommerfeld(
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
-            n for n in cluster_id
+            n
+            for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
@@ -1402,8 +1435,7 @@ def solve_mom_sommerfeld(
             else 1.0 / float(stack.rhos[0])
         )
         metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref)
-            for f in engine.frequencies
+            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
         }
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents

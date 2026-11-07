@@ -32,6 +32,7 @@ Covers the findings fixed in 0.15.0:
 The reference values below are produced by independent quadrature of the
 textbook forms, not by the module under test.
 """
+
 from __future__ import annotations
 
 import cmath
@@ -355,8 +356,7 @@ def test_earth_return_reactance_increases_with_frequency():
     though D_e ~ sqrt(rho/f) shrinks: 0.814 -> 14.39 mΩ/m from 50 Hz to
     1 kHz at 1000 Ω·m (17.7x for a 20x frequency step)."""
     xs = [
-        carson_self_impedance(1000.0, f, gmr=0.007).imag
-        for f in (50.0, 250.0, 1000.0)
+        carson_self_impedance(1000.0, f, gmr=0.007).imag for f in (50.0, 250.0, 1000.0)
     ]
     assert all(b > a for a, b in zip(xs, xs[1:])), xs
     assert xs[0] * 1e3 == pytest.approx(0.8137, abs=1e-4)

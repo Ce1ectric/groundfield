@@ -11,8 +11,7 @@ import groundfield as gf
 def _world_with_rod() -> gf.World:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.5), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     return world
 

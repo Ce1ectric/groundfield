@@ -27,8 +27,7 @@ SEG_SOMMERFELD = 0.10  # Sommerfeld quadrature is expensive — coarser segments
 
 def _world_rod(soil, *, length: float = 1.5) -> gf.World:
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0),
-                        length=length)
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=length)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 
@@ -52,7 +51,7 @@ def _world_two_rods(soil) -> gf.World:
 @pytest.mark.parametrize(
     "backend, tol",
     [
-        ("image", 0.0),         # reference
+        ("image", 0.0),  # reference
         ("image_nlayer", 1e-9),  # dispatcher → image
         ("cim", 0.05),
         ("mom", 0.05),
@@ -82,7 +81,9 @@ def test_homogeneous_single_rod_all_engines(backend: str, tol: float) -> None:
         assert Z_test == pytest.approx(Z_ref, rel=1e-9)
     else:
         rel = abs(Z_test - Z_ref) / Z_ref
-        assert rel < tol, f"{backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, Δ={rel*100:.2f}%"
+        assert rel < tol, (
+            f"{backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, Δ={rel * 100:.2f}%"
+        )
 
 
 # ---------------------------------------------------------------------
@@ -122,7 +123,7 @@ def test_two_layer_engines_agree(backend: str, tol: float, rho_2: float) -> None
         rel = abs(Z_test - Z_ref) / Z_ref
         assert rel < tol, (
             f"{backend} rho_2={rho_2}: Z={Z_test:.3f} vs {Z_ref:.3f}, "
-            f"Δ={rel*100:.2f}%"
+            f"Δ={rel * 100:.2f}%"
         )
 
 
@@ -169,7 +170,7 @@ def test_two_interconnected_rods_two_layer_engines_agree(backend: str) -> None:
     )
     rel = abs(Z_test - Z_ref) / Z_ref
     assert rel < 0.05, (
-        f"{backend}: pair Z={Z_test:.3f} vs il2={Z_ref:.3f}, Δ={rel*100:.2f}%"
+        f"{backend}: pair Z={Z_test:.3f} vs il2={Z_ref:.3f}, Δ={rel * 100:.2f}%"
     )
 
 
@@ -224,7 +225,7 @@ def test_potential_field_consistent_homogeneous() -> None:
         )
         phi = res.potential(pts).real
         rel = float(np.max(np.abs(phi - phi_ref) / np.abs(phi_ref)))
-        assert rel < 0.05, f"{backend}: max Δ = {rel*100:.2f}%"
+        assert rel < 0.05, f"{backend}: max Δ = {rel * 100:.2f}%"
 
 
 # ---------------------------------------------------------------------
@@ -235,8 +236,11 @@ def test_potential_field_consistent_homogeneous() -> None:
 def _world_strip(soil) -> gf.World:
     w = gf.create_world(soil=soil)
     gf.create_electrode(
-        w, "strip", name="g1",
-        start=(-5.0, 0.0, 0.5), end=(+5.0, 0.0, 0.5),
+        w,
+        "strip",
+        name="g1",
+        start=(-5.0, 0.0, 0.5),
+        end=(+5.0, 0.0, 0.5),
         wire_radius=0.005,
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
@@ -246,9 +250,14 @@ def _world_strip(soil) -> gf.World:
 def _world_grid_mesh(soil) -> gf.World:
     w = gf.create_world(soil=soil)
     gf.create_electrode(
-        w, "grid_mesh", name="g1",
-        corner=(-3.0, -3.0, 0.5), size=(6.0, 6.0),
-        n_x=2, n_y=2, wire_radius=0.005,
+        w,
+        "grid_mesh",
+        name="g1",
+        corner=(-3.0, -3.0, 0.5),
+        size=(6.0, 6.0),
+        n_x=2,
+        n_y=2,
+        wire_radius=0.005,
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
@@ -271,19 +280,22 @@ def test_homogeneous_strip_all_engines(backend: str, tol: float) -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     Z_ref = (
         gf.create_engine(backend="image", segment_length=SEG)
-        .solve(_world_strip(soil)).cluster_impedance("g1")[0].real
+        .solve(_world_strip(soil))
+        .cluster_impedance("g1")[0]
+        .real
     )
     Z_test = (
         gf.create_engine(backend=backend, segment_length=SEG)
-        .solve(_world_strip(soil)).cluster_impedance("g1")[0].real
+        .solve(_world_strip(soil))
+        .cluster_impedance("g1")[0]
+        .real
     )
     if tol == 0.0:
         assert Z_test == pytest.approx(Z_ref, rel=1e-9)
     else:
         rel = abs(Z_test - Z_ref) / Z_ref
         assert rel < tol, (
-            f"strip / {backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, "
-            f"Δ={rel*100:.2f}%"
+            f"strip / {backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, Δ={rel * 100:.2f}%"
         )
 
 
@@ -309,19 +321,22 @@ def test_homogeneous_grid_mesh_all_engines(backend: str, tol: float) -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     Z_ref = (
         gf.create_engine(backend="image", segment_length=SEG)
-        .solve(_world_grid_mesh(soil)).cluster_impedance("g1")[0].real
+        .solve(_world_grid_mesh(soil))
+        .cluster_impedance("g1")[0]
+        .real
     )
     Z_test = (
         gf.create_engine(backend=backend, segment_length=SEG)
-        .solve(_world_grid_mesh(soil)).cluster_impedance("g1")[0].real
+        .solve(_world_grid_mesh(soil))
+        .cluster_impedance("g1")[0]
+        .real
     )
     if tol == 0.0:
         assert Z_test == pytest.approx(Z_ref, rel=1e-9)
     else:
         rel = abs(Z_test - Z_ref) / Z_ref
         assert rel < tol, (
-            f"grid_mesh / {backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, "
-            f"Δ={rel*100:.2f}%"
+            f"grid_mesh / {backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, Δ={rel * 100:.2f}%"
         )
 
 
@@ -335,14 +350,17 @@ def test_two_layer_strip_engines_agree(backend: str) -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0)
     Z_ref = (
         gf.create_engine(backend="image_2layer", segment_length=SEG)
-        .solve(_world_strip(soil)).cluster_impedance("g1")[0].real
+        .solve(_world_strip(soil))
+        .cluster_impedance("g1")[0]
+        .real
     )
     Z_test = (
         gf.create_engine(backend=backend, segment_length=SEG)
-        .solve(_world_strip(soil)).cluster_impedance("g1")[0].real
+        .solve(_world_strip(soil))
+        .cluster_impedance("g1")[0]
+        .real
     )
     rel = abs(Z_test - Z_ref) / Z_ref
     assert rel < 0.05, (
-        f"strip 2-layer / {backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, "
-        f"Δ={rel*100:.2f}%"
+        f"strip 2-layer / {backend}: Z={Z_test:.3f} vs {Z_ref:.3f}, Δ={rel * 100:.2f}%"
     )

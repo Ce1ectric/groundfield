@@ -56,7 +56,7 @@ def test_image_vs_mom_homogeneous_consistent() -> None:
     Z_mom = eng_mom.solve(_world(soil)).cluster_impedance("g1")[0].real
 
     rel = abs(Z_image - Z_mom) / Z_mom
-    assert rel < 0.02, f"image={Z_image:.3f} vs mom={Z_mom:.3f}, Δ={rel*100:.2f}%"
+    assert rel < 0.02, f"image={Z_image:.3f} vs mom={Z_mom:.3f}, Δ={rel * 100:.2f}%"
 
 
 def test_compare_engines_image_vs_mom_homogeneous() -> None:
@@ -83,8 +83,12 @@ def test_mom_rod_matches_dwight(L: float, wire_radius: float) -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1",
-        position=(0, 0, 0.0), length=L, wire_radius=wire_radius,
+        world,
+        "rod",
+        name="g1",
+        position=(0, 0, 0.0),
+        length=L,
+        wire_radius=wire_radius,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="mom", segment_length=SEG)
@@ -92,8 +96,7 @@ def test_mom_rod_matches_dwight(L: float, wire_radius: float) -> None:
     R_dw = dw.rod(rho=100.0, length=L, radius=wire_radius)
     rel = abs(Z - R_dw) / R_dw
     assert rel < 0.05, (
-        f"L={L}, a={wire_radius}: mom={Z:.3f} vs Dwight={R_dw:.3f}, "
-        f"Δ={rel*100:.2f}%"
+        f"L={L}, a={wire_radius}: mom={Z:.3f} vs Dwight={R_dw:.3f}, Δ={rel * 100:.2f}%"
     )
 
 
@@ -119,7 +122,7 @@ def test_image_2layer_vs_mom_consistent(rho_2: float) -> None:
     rel = abs(Z_il2 - Z_mom) / Z_mom
     assert rel < 0.02, (
         f"rho_2={rho_2}: image_2layer={Z_il2:.3f} vs mom={Z_mom:.3f}, "
-        f"Δ={rel*100:.2f}%"
+        f"Δ={rel * 100:.2f}%"
     )
 
 
@@ -151,12 +154,16 @@ def test_mom_K0_equals_mom_homogeneous_exactly() -> None:
     rho = 100.0
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
-    Z_homog = eng_mom.solve(
-        _world(gf.HomogeneousSoil(resistivity=rho))
-    ).cluster_impedance("g1")[0].real
-    Z_K0 = eng_mom.solve(
-        _world(gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=2.0))
-    ).cluster_impedance("g1")[0].real
+    Z_homog = (
+        eng_mom.solve(_world(gf.HomogeneousSoil(resistivity=rho)))
+        .cluster_impedance("g1")[0]
+        .real
+    )
+    Z_K0 = (
+        eng_mom.solve(_world(gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=2.0)))
+        .cluster_impedance("g1")[0]
+        .real
+    )
 
     assert Z_K0 == pytest.approx(Z_homog, abs=1e-9)
 
@@ -170,9 +177,11 @@ def test_three_engines_consistent_at_K0() -> None:
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
     # eng_image runs on the homogeneous equivalent
-    Z_image = eng_image.solve(
-        _world(gf.HomogeneousSoil(resistivity=rho))
-    ).cluster_impedance("g1")[0].real
+    Z_image = (
+        eng_image.solve(_world(gf.HomogeneousSoil(resistivity=rho)))
+        .cluster_impedance("g1")[0]
+        .real
+    )
     Z_il2 = eng_il2.solve(_world(soil)).cluster_impedance("g1")[0].real
     Z_mom = eng_mom.solve(_world(soil)).cluster_impedance("g1")[0].real
 
@@ -194,10 +203,8 @@ def test_image_vs_mom_with_cluster() -> None:
 
     def _build(eng):
         w = gf.create_world(soil=soil)
-        g1 = gf.create_electrode(w, "rod", name="g1",
-                                 position=(0, 0, 0.0), length=1.5)
-        g2 = gf.create_electrode(w, "ring", name="g2",
-                                 center=(8.0, 0, 0.8), radius=2.0)
+        g1 = gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
+        g2 = gf.create_electrode(w, "ring", name="g2", center=(8.0, 0, 0.8), radius=2.0)
         gf.create_conductor(w, name="l1", start=g1, end=g2)
         gf.create_source(w, attached_to=g1, magnitude=10.0)
         return eng.solve(w)
@@ -229,14 +236,16 @@ def test_image_vs_mom_potential_field_consistent() -> None:
     eng_image = gf.create_engine(backend="image", segment_length=SEG)
     eng_mom = gf.create_engine(backend="mom", segment_length=SEG)
 
-    pts = np.array([
-        [2.0, 0.0, 0.0],
-        [5.0, 0.0, 0.0],
-        [10.0, 0.0, 0.0],
-        [2.0, 2.0, 0.5],
-    ])
+    pts = np.array(
+        [
+            [2.0, 0.0, 0.0],
+            [5.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0],
+            [2.0, 2.0, 0.5],
+        ]
+    )
     phi_image = eng_image.solve(world).potential(pts).real
     phi_mom = eng_mom.solve(world).potential(pts).real
 
     rel = np.max(np.abs(phi_image - phi_mom) / np.abs(phi_mom))
-    assert rel < 0.05, f"max relative deviation {rel*100:.2f}%"
+    assert rel < 0.05, f"max relative deviation {rel * 100:.2f}%"

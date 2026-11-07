@@ -44,15 +44,13 @@ from groundfield.references import dwight1936 as dw
 def test_dwight_horizontal_wire_paper_example() -> None:
     """Dwight 1936, p. 1323: horizontal wire 200 ft, 10 ft deep,
     No. 4/0, rho = 200,000 Ω·cm³ → R = 57.6 Ω."""
-    R = dw.horizontal_wire(rho=2000.0, length=30.48,
-                           radius=0.005842, depth=3.048)
+    R = dw.horizontal_wire(rho=2000.0, length=30.48, radius=0.005842, depth=3.048)
     assert R == pytest.approx(57.6, abs=0.2)
 
 
 def test_dwight_right_angle_paper_example() -> None:
     """Dwight 1936, p. 1323: right-angle wire 2 × 100 ft → R = 59.4 Ω."""
-    R = dw.right_angle_wire(rho=2000.0, arm_length=30.48,
-                            radius=0.005842, depth=3.048)
+    R = dw.right_angle_wire(rho=2000.0, arm_length=30.48, radius=0.005842, depth=3.048)
     assert R == pytest.approx(59.4, abs=0.2)
 
 
@@ -63,8 +61,9 @@ def test_dwight_right_angle_paper_example() -> None:
 def test_dwight_star_paper_examples(n_arms: int, expected: float) -> None:
     """Dwight 1936, pp. 1323-1324: 3/4/6/8-point star, same dimensions
     as the right-angle example."""
-    R = dw.n_point_star(rho=2000.0, arm_length=30.48,
-                        radius=0.005842, depth=3.048, n_arms=n_arms)
+    R = dw.n_point_star(
+        rho=2000.0, arm_length=30.48, radius=0.005842, depth=3.048, n_arms=n_arms
+    )
     assert R == pytest.approx(expected, abs=0.2)
 
 
@@ -100,15 +99,14 @@ ENG = gf.create_engine(backend="image", segment_length=0.05)
 def test_image_rod_vs_dwight(L: float, wire_radius: float) -> None:
     """Driven rod: image backend must agree with Dwight to within 10 %."""
     world = gf.create_world(soil=SOIL)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=L, wire_radius=wire_radius)
+    gf.create_electrode(
+        world, "rod", name="g1", position=(0, 0, 0.0), length=L, wire_radius=wire_radius
+    )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     Z = ENG.solve(world).cluster_impedance("g1")[0].real
     R_dw = dw.rod(rho=100.0, length=L, radius=wire_radius)
     rel = abs(Z - R_dw) / R_dw
-    assert rel < 0.10, (
-        f"image {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel*100:.1f} %"
-    )
+    assert rel < 0.10, f"image {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel * 100:.1f} %"
 
 
 @pytest.mark.parametrize(
@@ -121,12 +119,12 @@ def test_image_two_rods_vs_dwight(spacing: float) -> None:
     `two_rods_far`."""
     L, a = 1.5, 0.005
     world = gf.create_world(soil=SOIL)
-    g1 = gf.create_electrode(world, "rod", name="g1",
-                             position=(0.0, 0.0, 0.0), length=L,
-                             wire_radius=a)
-    g2 = gf.create_electrode(world, "rod", name="g2",
-                             position=(spacing, 0.0, 0.0), length=L,
-                             wire_radius=a)
+    g1 = gf.create_electrode(
+        world, "rod", name="g1", position=(0.0, 0.0, 0.0), length=L, wire_radius=a
+    )
+    g2 = gf.create_electrode(
+        world, "rod", name="g2", position=(spacing, 0.0, 0.0), length=L, wire_radius=a
+    )
     # Connect with a conductor → cluster impedance is the parallel
     # combination of both rods including mutual coupling.
     gf.create_conductor(world, name="l1", start=g1, end=g2)
@@ -137,7 +135,7 @@ def test_image_two_rods_vs_dwight(spacing: float) -> None:
     rel = abs(Z - R_dw) / R_dw
     assert rel < 0.10, (
         f"spacing={spacing}: image {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, "
-        f"Δ = {rel*100:.1f} %"
+        f"Δ = {rel * 100:.1f} %"
     )
 
 
@@ -154,8 +152,12 @@ def test_image_buried_ring_vs_dwight() -> None:
 
     world = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        world, "ring", name="g1",
-        center=(0.0, 0.0, depth), radius=radius, wire_radius=wire_radius,
+        world,
+        "ring",
+        name="g1",
+        center=(0.0, 0.0, depth),
+        radius=radius,
+        wire_radius=wire_radius,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     Z = ENG.solve(world).cluster_impedance("g1")[0].real
@@ -166,7 +168,7 @@ def test_image_buried_ring_vs_dwight() -> None:
     rel = abs(Z - R_dw) / R_dw
     assert rel < 0.15, (
         f"ring electrode: image {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, "
-        f"Δ = {rel*100:.1f} %"
+        f"Δ = {rel * 100:.1f} %"
     )
 
 
@@ -185,7 +187,9 @@ def test_image_horizontal_wire_vs_dwight(
     """
     world = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        world, "strip", name="g1",
+        world,
+        "strip",
+        name="g1",
         start=(-total_length / 2.0, 0.0, depth),
         end=(+total_length / 2.0, 0.0, depth),
         wire_radius=wire_radius,
@@ -193,13 +197,13 @@ def test_image_horizontal_wire_vs_dwight(
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     Z = ENG.solve(world).cluster_impedance("g1")[0].real
     R_dw = dw.horizontal_wire(
-        rho=100.0, length=total_length / 2.0,
-        radius=wire_radius, depth=depth,
+        rho=100.0,
+        length=total_length / 2.0,
+        radius=wire_radius,
+        depth=depth,
     )
     rel = abs(Z - R_dw) / R_dw
-    assert rel < 0.10, (
-        f"strip {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel*100:.1f} %"
-    )
+    assert rel < 0.10, f"strip {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel * 100:.1f} %"
 
 
 @pytest.mark.parametrize("n_arms", [3, 4, 6, 8])
@@ -228,8 +232,7 @@ def test_image_n_point_star_vs_dwight(n_arms: int) -> None:
     )
     rel = abs(Z - R_dw) / R_dw
     assert rel < 0.10, (
-        f"star n={n_arms}: {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, "
-        f"Δ = {rel * 100:.1f} %"
+        f"star n={n_arms}: {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel * 100:.1f} %"
     )
 
 

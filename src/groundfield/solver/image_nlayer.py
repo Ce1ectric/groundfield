@@ -154,9 +154,7 @@ def solve_image_nlayer(
     elif n == 2:
         # Forward to the closed-form Tagg/Sunde series.
         if isinstance(world.soil, TwoLayerSoil):
-            res = solve_image_2layer(
-                world, engine, max_terms=max_terms, tol=tol
-            )
+            res = solve_image_2layer(world, engine, max_terms=max_terms, tol=tol)
         else:
             # MultiLayerSoil with exactly two layers: cast to TwoLayerSoil.
             from groundfield.world import World
@@ -174,9 +172,7 @@ def solve_image_nlayer(
                 sources=list(world.sources),
                 boundary=world.boundary,
             )
-            res = solve_image_2layer(
-                tmp, engine, max_terms=max_terms, tol=tol
-            )
+            res = solve_image_2layer(tmp, engine, max_terms=max_terms, tol=tol)
     else:
         raise ValueError(
             f"image_nlayer: layer count {n} ≥ 3 is not supported by "
@@ -192,7 +188,11 @@ def solve_image_nlayer(
     res = res.model_copy(
         update={
             "backend": "image_nlayer",
-            "metadata": {**res.metadata, "n_layers": int(n), "dispatched_to": res.backend},
+            "metadata": {
+                **res.metadata,
+                "n_layers": int(n),
+                "dispatched_to": res.backend,
+            },
         }
     )
     return res

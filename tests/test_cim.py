@@ -106,11 +106,13 @@ def test_cim_metadata() -> None:
     assert "cim_rms" in res_2.metadata
     assert res_2.metadata["cim_n_images"] == 0
 
-    soil_3 = gf.MultiLayerSoil(layers=[
-        gf.SoilLayer(resistivity=100.0, thickness=2.0),
-        gf.SoilLayer(resistivity=400.0, thickness=2.0),
-        gf.SoilLayer(resistivity=50.0, thickness=None),
-    ])
+    soil_3 = gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(resistivity=100.0, thickness=2.0),
+            gf.SoilLayer(resistivity=400.0, thickness=2.0),
+            gf.SoilLayer(resistivity=50.0, thickness=None),
+        ]
+    )
     # n >= 3 is rejected since the WP-E audit fix.
     with pytest.raises(NotImplementedError, match="mom_sommerfeld"):
         eng.solve(_world(soil_3))

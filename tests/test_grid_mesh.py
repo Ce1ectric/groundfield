@@ -31,15 +31,21 @@ ENG = gf.create_engine(backend="image", segment_length=0.1)
 def test_grid_mesh_rejects_zero_meshes() -> None:
     with pytest.raises(ValueError):
         gf.GridMeshElectrode(
-            name="bad", corner=(0.0, 0.0, 0.5), size=(6.0, 6.0),
-            n_x=0, n_y=3,
+            name="bad",
+            corner=(0.0, 0.0, 0.5),
+            size=(6.0, 6.0),
+            n_x=0,
+            n_y=3,
         )
 
 
 def test_grid_mesh_connection_point_is_centre() -> None:
     g = gf.GridMeshElectrode(
-        name="g", corner=(0.0, 0.0, 0.5), size=(6.0, 4.0),
-        n_x=3, n_y=2,
+        name="g",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 4.0),
+        n_x=3,
+        n_y=2,
     )
     assert g.connection_point == (3.0, 2.0, 0.5)
 
@@ -57,10 +63,17 @@ def test_grid_mesh_segment_count_matches_legacy_mesh() -> None:
     of segments at the same midpoints for a given ``segment_length``.
     """
     legacy = gf.MeshElectrode(
-        name="m", corner=(0.0, 0.0, 0.5), size=(6.0, 6.0), spacing=2.0,
+        name="m",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 6.0),
+        spacing=2.0,
     )
     grid = gf.GridMeshElectrode(
-        name="g", corner=(0.0, 0.0, 0.5), size=(6.0, 6.0), n_x=3, n_y=3,
+        name="g",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 6.0),
+        n_x=3,
+        n_y=3,
     )
 
     segs_legacy = _discretize_electrode(legacy, ds=0.1)
@@ -73,16 +86,25 @@ def test_grid_mesh_cluster_impedance_matches_legacy_mesh() -> None:
     """The two equivalent layouts must yield the same cluster impedance."""
     w_legacy = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w_legacy, "mesh", name="g1",
-        corner=(0.0, 0.0, 0.5), size=(6.0, 6.0), spacing=2.0,
+        w_legacy,
+        "mesh",
+        name="g1",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 6.0),
+        spacing=2.0,
         wire_radius=0.005,
     )
     gf.create_source(w_legacy, attached_to="g1", magnitude=1.0)
 
     w_grid = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w_grid, "grid_mesh", name="g1",
-        corner=(0.0, 0.0, 0.5), size=(6.0, 6.0), n_x=3, n_y=3,
+        w_grid,
+        "grid_mesh",
+        name="g1",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 6.0),
+        n_x=3,
+        n_y=3,
         wire_radius=0.005,
     )
     gf.create_source(w_grid, attached_to="g1", magnitude=1.0)
@@ -108,17 +130,27 @@ def test_grid_mesh_resistance_decreases_with_refinement(n: int) -> None:
         pytest.skip("baseline run; comparison happens via the next steps")
     w_coarse = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w_coarse, "grid_mesh", name="g1",
-        corner=(0.0, 0.0, 0.5), size=(6.0, 6.0),
-        n_x=max(1, n - 1), n_y=max(1, n - 1), wire_radius=0.005,
+        w_coarse,
+        "grid_mesh",
+        name="g1",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 6.0),
+        n_x=max(1, n - 1),
+        n_y=max(1, n - 1),
+        wire_radius=0.005,
     )
     gf.create_source(w_coarse, attached_to="g1", magnitude=1.0)
 
     w_fine = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w_fine, "grid_mesh", name="g1",
-        corner=(0.0, 0.0, 0.5), size=(6.0, 6.0),
-        n_x=n, n_y=n, wire_radius=0.005,
+        w_fine,
+        "grid_mesh",
+        name="g1",
+        corner=(0.0, 0.0, 0.5),
+        size=(6.0, 6.0),
+        n_x=n,
+        n_y=n,
+        wire_radius=0.005,
     )
     gf.create_source(w_fine, attached_to="g1", magnitude=1.0)
 
@@ -139,13 +171,22 @@ def test_grid_mesh_bonded_to_rod_shares_cluster_potential() -> None:
 
     world = gf.create_world(soil=SOIL)
     grid = gf.create_electrode(
-        world, "grid_mesh", name="grid",
-        corner=(-3.0, -3.0, 0.5), size=(6.0, 6.0),
-        n_x=2, n_y=2, wire_radius=0.005,
+        world,
+        "grid_mesh",
+        name="grid",
+        corner=(-3.0, -3.0, 0.5),
+        size=(6.0, 6.0),
+        n_x=2,
+        n_y=2,
+        wire_radius=0.005,
     )
     rod = gf.create_electrode(
-        world, "rod", name="rod",
-        position=(5.0, 0.0, 0.0), length=1.5, wire_radius=0.0125,
+        world,
+        "rod",
+        name="rod",
+        position=(5.0, 0.0, 0.0),
+        length=1.5,
+        wire_radius=0.0125,
     )
     gf.create_conductor(world, name="bond", start=grid, end=rod)
     gf.create_source(world, attached_to="grid", magnitude=10.0)

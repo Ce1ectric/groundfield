@@ -238,9 +238,7 @@ _log = get_logger(__name__)
 # ---------------------------------------------------------------------
 
 
-def equivalent_hemisphere_radius(
-    electrode: "_ElectrodeBase", rho_top: float
-) -> float:
+def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) -> float:
     """Equivalent-hemisphere radius giving the same homogeneous-soil
     resistance as ``electrode``.
 
@@ -274,8 +272,10 @@ def equivalent_hemisphere_radius(
         L = electrode.length
         depth = max(electrode.start[2], 1e-3)
         R = dw.horizontal_wire(
-            rho=rho_top, length=L / 2.0,
-            radius=electrode.wire_radius, depth=depth,
+            rho=rho_top,
+            length=L / 2.0,
+            radius=electrode.wire_radius,
+            depth=depth,
         )
     elif isinstance(electrode, GridMeshElectrode):
         # Schwarz / Sverak / IEEE Std 80 (Sverak 1981) formula for a
@@ -290,8 +290,8 @@ def equivalent_hemisphere_radius(
         dx, dy = electrode.size
         depth = max(electrode.corner[2], 1e-3)
         A = dx * dy
-        n_long = electrode.n_y + 1   # longitudinal wires (one per y-row)
-        n_tran = electrode.n_x + 1   # transverse wires (one per x-column)
+        n_long = electrode.n_y + 1  # longitudinal wires (one per y-row)
+        n_tran = electrode.n_x + 1  # transverse wires (one per x-column)
         L_C = n_long * dx + n_tran * dy
         R = rho_top / L_C + (rho_top / math.sqrt(20.0 * A)) * (
             1.0 + 1.0 / (1.0 + depth * math.sqrt(20.0 / A))
@@ -506,8 +506,7 @@ def _cut_triangles_at_depth(
     # the Dirichlet condition (see the docstring).
     inner_set = set(inner_nodes.tolist())
     on_electrode = [
-        p for (ka, kb), p in edge_node.items()
-        if ka in inner_set and kb in inner_set
+        p for (ka, kb), p in edge_node.items() if ka in inner_set and kb in inner_set
     ]
     if on_electrode:
         inner_nodes = np.concatenate(
@@ -618,7 +617,8 @@ def _build_axisymmetric_mesh(
             "truncation of the spherical-shell mesh is a single radius, "
             "so the larger factor wins. Pass r_far_factor alone (and "
             "leave z_far_factor at None) to control it.",
-            float(z_far_factor), factor,
+            float(z_far_factor),
+            factor,
         )
         factor = float(z_far_factor)
     r_far = factor * base_length
@@ -669,12 +669,13 @@ def _build_axisymmetric_mesh(
                 # Interface below the truncation sphere — never
                 # crossed inside the mesh.
                 continue
-            nodes, triangles, outer_edges, inner_nodes = (
-                _cut_triangles_at_depth(
-                    nodes, triangles, outer_edges, cum,
-                    tol=1e-6 * max(cum, a_eq),
-                    inner_nodes=inner_nodes,
-                )
+            nodes, triangles, outer_edges, inner_nodes = _cut_triangles_at_depth(
+                nodes,
+                triangles,
+                outer_edges,
+                cum,
+                tol=1e-6 * max(cum, a_eq),
+                inner_nodes=inner_nodes,
             )
 
     layer_index = _layer_of_depth(nodes[triangles, 1].mean(axis=1), h_layers)
@@ -714,7 +715,7 @@ def _assemble_stiffness_axisymmetric(
     are skipped.
     """
     Nv = nodes.shape[0]
-    v = nodes[triangles]                              # (Nt, 3, 2)
+    v = nodes[triangles]  # (Nt, 3, 2)
     x = v[:, :, 0]
     y = v[:, :, 1]
     area2 = (x[:, 1] - x[:, 0]) * (y[:, 2] - y[:, 0]) - (x[:, 2] - x[:, 0]) * (
@@ -727,12 +728,14 @@ def _assemble_stiffness_axisymmetric(
     x, y, area = x[keep], y[keep], area[keep]
     tri = triangles[keep]
     inv = 1.0 / (2.0 * area)
-    b = np.stack(
-        [y[:, 1] - y[:, 2], y[:, 2] - y[:, 0], y[:, 0] - y[:, 1]], axis=1
-    ) * inv[:, None]
-    c = np.stack(
-        [x[:, 2] - x[:, 1], x[:, 0] - x[:, 2], x[:, 1] - x[:, 0]], axis=1
-    ) * inv[:, None]
+    b = (
+        np.stack([y[:, 1] - y[:, 2], y[:, 2] - y[:, 0], y[:, 0] - y[:, 1]], axis=1)
+        * inv[:, None]
+    )
+    c = (
+        np.stack([x[:, 2] - x[:, 1], x[:, 0] - x[:, 2], x[:, 1] - x[:, 0]], axis=1)
+        * inv[:, None]
+    )
     weight = (
         np.asarray(sigma_per_triangle, dtype=float)[keep]
         * area
@@ -785,8 +788,7 @@ def _assemble_far_field_robin(
     s1 = p1[:, 0]
     s2 = p2[:, 0]
     pref = (
-        2.0 * np.pi * np.asarray(sigma_per_edge, dtype=float) * length
-        / (12.0 * r_far)
+        2.0 * np.pi * np.asarray(sigma_per_edge, dtype=float) * length / (12.0 * r_far)
     )
     M_e = np.empty((outer_edges.shape[0], 2, 2))
     M_e[:, 0, 0] = pref * (3.0 * s1 + s2)
@@ -821,12 +823,8 @@ def _solve_hemisphere_conductance(
     $G_h \\ge G$ and $R_h \\le R$ for every mesh: the resistance
     converges from below and monotonically under nested refinement.
     """
-    sigma_per_triangle = np.asarray(sigma_per_layer, dtype=float)[
-        mesh.layer_index
-    ]
-    A = _assemble_stiffness_axisymmetric(
-        mesh.nodes, mesh.triangles, sigma_per_triangle
-    )
+    sigma_per_triangle = np.asarray(sigma_per_layer, dtype=float)[mesh.layer_index]
+    A = _assemble_stiffness_axisymmetric(mesh.nodes, mesh.triangles, sigma_per_triangle)
     dirichlet = np.zeros(mesh.nodes.shape[0], dtype=bool)
     dirichlet[mesh.inner_nodes] = True
     if far_field == "robin":
@@ -968,9 +966,7 @@ def solve_fem(
     # produce. Fall back to lumped branches and warn the user — for
     # quantitative distributed-conductor work pick one of the
     # integral-equation backends (image, mom, cim, bem).
-    has_distributed = any(
-        getattr(c, "is_distributed", False) for c in world.conductors
-    )
+    has_distributed = any(getattr(c, "is_distributed", False) for c in world.conductors)
     if has_distributed:
         _log.warning(
             "fem: distributed conductors detected — the FEM backend "
@@ -979,8 +975,7 @@ def solve_fem(
             "'mom', 'cim' or 'bem' for distributed-conductor results."
         )
     has_inductance = any(
-        getattr(c, "inductance_model", None) is not None
-        for c in world.conductors
+        getattr(c, "inductance_model", None) is not None for c in world.conductors
     )
     if has_inductance:
         _log.warning(
@@ -989,10 +984,7 @@ def solve_fem(
             "computation falls back to the resistive solution; switch "
             "to image / mom / cim / bem for inductive coupling."
         )
-    if (
-        getattr(engine, "earth_inductive_model", "perfect_mirror")
-        == "carson_series"
-    ):
+    if getattr(engine, "earth_inductive_model", "perfect_mirror") == "carson_series":
         _log.warning(
             "fem: earth_inductive_model='carson_series' is ignored — "
             "the FEM backend has no inductive branch model. "
@@ -1000,14 +992,13 @@ def solve_fem(
             "Carson-corrected results (ADR-0005)."
         )
     finite_branches = _build_finite_branches(
-        world.conductors, cluster_id,
+        world.conductors,
+        cluster_id,
         distributed_as_lumped=True,
     )
 
     # Per-cluster active current.
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     for src in world.sources:
         if src.kind != "current":
             continue
@@ -1068,7 +1059,8 @@ def solve_fem(
         #    electrode surface r = a_eq and every layer interface are
         #    exact mesh lines.
         mesh = _build_axisymmetric_mesh(
-            a_eq, h_layers,
+            a_eq,
+            h_layers,
             r_far_factor=r_far_factor,
             z_far_factor=z_far_factor,
             n_radial=n_radial,
@@ -1086,7 +1078,10 @@ def solve_fem(
         #    energy of the discrete solution (see
         #    _solve_hemisphere_conductance).
         G_cluster = _solve_hemisphere_conductance(
-            mesh, 1.0 / stack.rhos, h_layers, far_field=far_field,
+            mesh,
+            1.0 / stack.rhos,
+            h_layers,
+            far_field=far_field,
         )
         R_cluster = 1.0 / G_cluster if G_cluster > 0.0 else float("inf")
         Z_per_cluster[root] = R_cluster
@@ -1108,7 +1103,8 @@ def solve_fem(
     cluster_idx_map = {root: k for k, root in enumerate(active_clusters)}
     K_a = len(active_clusters)
     active_branches = [
-        (a, b, R) for (a, b, R) in finite_branches
+        (a, b, R)
+        for (a, b, R) in finite_branches
         if a in cluster_idx_map and b in cluster_idx_map
     ]
     M_a = len(active_branches)
@@ -1205,9 +1201,7 @@ def solve_fem(
             "equivalent_hemisphere_radius": {
                 k: float(v) for k, v in a_eq_per_cluster.items()
             },
-            "fem_cluster_resistance": {
-                k: float(v) for k, v in Z_per_cluster.items()
-            },
+            "fem_cluster_resistance": {k: float(v) for k, v in Z_per_cluster.items()},
             "fem_mesh": mesh_per_cluster,
             "stub": False,
             "approximation": "equivalent-hemisphere reduction per cluster",

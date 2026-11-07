@@ -199,7 +199,9 @@ def cluster_current_balance(
                 "Z_re": Z.real if np.isfinite(Z.real) else float("nan"),
                 "Z_im": Z.imag if np.isfinite(Z.imag) else float("nan"),
                 "abs_Z": (
-                    abs(Z) if (np.isfinite(Z.real) and np.isfinite(Z.imag)) else float("nan")
+                    abs(Z)
+                    if (np.isfinite(Z.real) and np.isfinite(Z.imag))
+                    else float("nan")
                 ),
                 "arg_Z_deg": (
                     math.degrees(cmath.phase(Z))
@@ -321,7 +323,9 @@ def electrode_current_table(
                 "Z_re": Z.real if np.isfinite(Z.real) else float("nan"),
                 "Z_im": Z.imag if np.isfinite(Z.imag) else float("nan"),
                 "abs_Z": (
-                    abs(Z) if (np.isfinite(Z.real) and np.isfinite(Z.imag)) else float("nan")
+                    abs(Z)
+                    if (np.isfinite(Z.real) and np.isfinite(Z.imag))
+                    else float("nan")
                 ),
                 "arg_Z_deg": (
                     math.degrees(cmath.phase(Z))
@@ -435,8 +439,7 @@ def split_factor(
     I_src = _source_current(source)
     if abs(I_src) == 0.0:
         raise ValueError(
-            f"Source '{source.name}' has zero magnitude — split factor "
-            "is undefined."
+            f"Source '{source.name}' has zero magnitude — split factor is undefined."
         )
 
     attached = source.attached_to

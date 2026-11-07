@@ -75,6 +75,7 @@ def _groundfield_version() -> str:
     except Exception:  # pragma: no cover - defensive
         return "0.0.0+unknown"
 
+
 __all__ = [
     "DEFAULT_ENDPOINT",
     "OverpassError",
@@ -93,6 +94,7 @@ DEFAULT_TIMEOUT_S = 30
 """Per-request timeout passed both to Overpass (via ``[timeout:…]``)
 and to ``requests`` as a network-side timeout."""
 
+
 def _user_agent() -> str:
     """User-Agent string sent with every Overpass request.
 
@@ -103,6 +105,7 @@ def _user_agent() -> str:
         f"groundfield/{_groundfield_version()} "
         "(+https://github.com/Ce1ectric/groundfield)"
     )
+
 
 _GEO_IMPORT_HINT = (
     "groundfield.geo requires the optional 'geo' extra. Install with "
@@ -263,13 +266,12 @@ def _post_overpass(
                 return response.json()
             except ValueError as exc:
                 raise OverpassError(
-                    "Overpass returned a 200 but the body is not "
-                    "valid JSON.",
+                    "Overpass returned a 200 but the body is not valid JSON.",
                     status_code=response.status_code,
                     body=response.text[:1024],
                 ) from exc
         if response.status_code in (429, 504) and attempt < max_retries:
-            _sleep(2 ** attempt)
+            _sleep(2**attempt)
             continue
         raise OverpassError(
             f"Overpass returned HTTP {response.status_code}.",
@@ -344,13 +346,9 @@ def query_buildings(
     for the fixed formatting convention that guarantees stability.
     """
     if max_retries < 0:
-        raise ValueError(
-            f"max_retries must be >= 0, got {max_retries}."
-        )
+        raise ValueError(f"max_retries must be >= 0, got {max_retries}.")
     cache_dir = cache_dir if cache_dir is not None else default_cache_dir()
-    query = build_query(
-        lat0_deg, lon0_deg, radius_m, timeout_s=timeout_s
-    )
+    query = build_query(lat0_deg, lon0_deg, radius_m, timeout_s=timeout_s)
     digest = _hash_query(query)
     path = Path(cache_dir) / f"{digest}.json"
     if path.exists() and not force_refresh:
@@ -595,7 +593,5 @@ def query_and_project(
     )
     if projector is None:
         projector = Projector(lat0_deg, lon0_deg)
-    footprints = parse_overpass_payload(
-        payload, projector, min_area_m2=min_area_m2
-    )
+    footprints = parse_overpass_payload(payload, projector, min_area_m2=min_area_m2)
     return footprints, projector

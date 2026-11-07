@@ -31,18 +31,23 @@ from groundfield.io.vtk import export_field_vtk, export_geometry_vtk
 def _mixed_world() -> gf.World:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil, name="mixed")
-    gf.create_electrode(world, "rod", name="rod_a",
-                        position=(0, 0, 0.5), length=1.5)
-    gf.create_electrode(world, "ring", name="ring_a",
-                        center=(10, 0, 0.8), radius=2.5)
-    gf.create_electrode(world, "strip", name="strip_a",
-                        start=(0, 5, 0.6), end=(8, 5, 0.6))
-    gf.create_electrode(world, "grid_mesh", name="mesh_a",
-                        corner=(15, -3, 0.7), size=(6, 4),
-                        n_x=3, n_y=2)
-    gf.create_conductor(world, name="bond",
-                        start="rod_a", end="ring_a",
-                        conductor_type="bare_copper")
+    gf.create_electrode(world, "rod", name="rod_a", position=(0, 0, 0.5), length=1.5)
+    gf.create_electrode(world, "ring", name="ring_a", center=(10, 0, 0.8), radius=2.5)
+    gf.create_electrode(
+        world, "strip", name="strip_a", start=(0, 5, 0.6), end=(8, 5, 0.6)
+    )
+    gf.create_electrode(
+        world,
+        "grid_mesh",
+        name="mesh_a",
+        corner=(15, -3, 0.7),
+        size=(6, 4),
+        n_x=3,
+        n_y=2,
+    )
+    gf.create_conductor(
+        world, name="bond", start="rod_a", end="ring_a", conductor_type="bare_copper"
+    )
     gf.create_source(world, attached_to="rod_a", magnitude=10.0)
     return world
 
@@ -50,8 +55,7 @@ def _mixed_world() -> gf.World:
 def _solved_single_rod() -> gf.FieldResult:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.5), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=10.0)
     eng = gf.create_engine(backend="image", segment_length=0.05)
     return eng.solve(world)
@@ -115,7 +119,7 @@ def test_export_geometry_vtk_role_scalar_distinguishes_electrodes_and_conductors
     # CELL_DATA scalar block exists; this is it. Read forward as ints
     # until we hit a non-int line or EOF.
     role_values = []
-    for l in lines[idx + 1:]:
+    for l in lines[idx + 1 :]:
         try:
             role_values.append(int(l.strip()))
         except ValueError:
@@ -132,8 +136,11 @@ def test_export_geometry_vtk_role_scalar_distinguishes_electrodes_and_conductors
 def test_export_field_vtk_structured_points_header(tmp_path: Path) -> None:
     result = _solved_single_rod()
     out = export_field_vtk(
-        result, tmp_path / "phi.vtk",
-        extent=(-10.0, 10.0, -10.0, 10.0), z=0.0, n=(20, 25),
+        result,
+        tmp_path / "phi.vtk",
+        extent=(-10.0, 10.0, -10.0, 10.0),
+        z=0.0,
+        n=(20, 25),
     )
     text = out.read_text(encoding="utf-8")
     assert "DATASET STRUCTURED_POINTS" in text
@@ -149,8 +156,10 @@ def test_export_field_vtk_payload_size(tmp_path: Path) -> None:
     result = _solved_single_rod()
     n = (12, 8)
     out = export_field_vtk(
-        result, tmp_path / "phi.vtk",
-        extent=(-5.0, 5.0, -3.0, 3.0), n=n,
+        result,
+        tmp_path / "phi.vtk",
+        extent=(-5.0, 5.0, -3.0, 3.0),
+        n=n,
     )
     text = out.read_text(encoding="utf-8")
     # Count numerical lines after each LOOKUP_TABLE default.
@@ -169,18 +178,17 @@ def test_export_field_vtk_payload_size(tmp_path: Path) -> None:
 def test_export_field_vtk_rejects_bad_extent(tmp_path: Path) -> None:
     result = _solved_single_rod()
     with pytest.raises(ValueError, match="extent"):
-        export_field_vtk(result, tmp_path / "phi.vtk",
-                         extent=(5.0, 5.0, -1.0, 1.0))
+        export_field_vtk(result, tmp_path / "phi.vtk", extent=(5.0, 5.0, -1.0, 1.0))
     with pytest.raises(ValueError, match="extent"):
-        export_field_vtk(result, tmp_path / "phi.vtk",
-                         extent=(-5.0, 5.0, 1.0, -1.0))
+        export_field_vtk(result, tmp_path / "phi.vtk", extent=(-5.0, 5.0, 1.0, -1.0))
 
 
 def test_export_field_vtk_rejects_too_few_grid_points(tmp_path: Path) -> None:
     result = _solved_single_rod()
     with pytest.raises(ValueError, match="n"):
-        export_field_vtk(result, tmp_path / "phi.vtk",
-                         extent=(-5.0, 5.0, -5.0, 5.0), n=(1, 10))
+        export_field_vtk(
+            result, tmp_path / "phi.vtk", extent=(-5.0, 5.0, -5.0, 5.0), n=(1, 10)
+        )
 
 
 # ---------------------------------------------------------------------

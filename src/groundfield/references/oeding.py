@@ -118,7 +118,11 @@ def loop_self_inductance_per_length(
 
 
 def loop_mutual_inductance_per_length(
-    *, s13: float, s14: float, s23: float, s24: float,
+    *,
+    s13: float,
+    s14: float,
+    s23: float,
+    s24: float,
 ) -> float:
     """Mutual-inductance per unit length between two two-wire loops.
 

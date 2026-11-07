@@ -89,11 +89,11 @@ def test_assignment_groups_by_quadrant() -> None:
     """
     topo = RadialTrunkTopology(n_feeders=4)
     positions = [
-        (100.0, 0.0),    # feeder 0 (east), axial proj = 100
-        (0.0, 100.0),    # feeder 1 (north)
-        (-100.0, 0.0),   # feeder 2 (west)
-        (0.0, -100.0),   # feeder 3 (south)
-        (50.0, 10.0),    # feeder 0 (close to east axis), axial proj ≈ 50
+        (100.0, 0.0),  # feeder 0 (east), axial proj = 100
+        (0.0, 100.0),  # feeder 1 (north)
+        (-100.0, 0.0),  # feeder 2 (west)
+        (0.0, -100.0),  # feeder 3 (south)
+        (50.0, 10.0),  # feeder 0 (close to east axis), axial proj ≈ 50
     ]
     groups = topo.assign_buildings_to_feeders((0.0, 0.0), positions)
     # Sorted by axial projection: 50 (idx 4) precedes 100 (idx 0).
@@ -106,7 +106,8 @@ def test_assignment_groups_by_quadrant() -> None:
 def test_assignment_drops_negative_projection() -> None:
     """A building behind its closest feeder axis is dropped + warned."""
     topo = RadialTrunkTopology(
-        n_feeders=1, feeder_directions_deg=[0.0],
+        n_feeders=1,
+        feeder_directions_deg=[0.0],
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -120,7 +121,8 @@ def test_assignment_drops_negative_projection() -> None:
 
 def test_assignment_drops_beyond_max_length() -> None:
     topo = RadialTrunkTopology(
-        n_feeders=1, feeder_directions_deg=[0.0],
+        n_feeders=1,
+        feeder_directions_deg=[0.0],
         max_feeder_length_m=100.0,
     )
     with warnings.catch_warnings(record=True) as caught:
@@ -149,7 +151,8 @@ def test_assignment_sorts_by_axial_distance() -> None:
 
 def test_plan_kvs_positions_no_extension_when_within_substation_budget() -> None:
     topo = RadialTrunkTopology(
-        n_feeders=1, feeder_directions_deg=[0.0],
+        n_feeders=1,
+        feeder_directions_deg=[0.0],
         slots_per_substation=5,
         slots_per_kvs=3,
         kvs_spacing_m=40.0,
@@ -159,7 +162,8 @@ def test_plan_kvs_positions_no_extension_when_within_substation_budget() -> None
 
 def test_plan_kvs_positions_adds_one_kvs_per_slot_overflow() -> None:
     topo = RadialTrunkTopology(
-        n_feeders=1, feeder_directions_deg=[0.0],
+        n_feeders=1,
+        feeder_directions_deg=[0.0],
         slots_per_substation=2,
         slots_per_kvs=2,
         kvs_spacing_m=40.0,
@@ -172,7 +176,8 @@ def test_plan_kvs_positions_adds_one_kvs_per_slot_overflow() -> None:
 
 def test_plan_kvs_positions_clips_to_max_length() -> None:
     topo = RadialTrunkTopology(
-        n_feeders=1, feeder_directions_deg=[0.0],
+        n_feeders=1,
+        feeder_directions_deg=[0.0],
         slots_per_substation=1,
         slots_per_kvs=1,
         kvs_spacing_m=200.0,
@@ -224,15 +229,15 @@ def _build_radial_world(n_buildings: int, **topo_kwargs) -> "gf.World":
 def test_radial_trunk_end_to_end_no_kvs_when_under_budget() -> None:
     """With slots_per_substation ≥ buildings per feeder, no KVS is created."""
     world = _build_radial_world(
-        n_buildings=8, slots_per_substation=3, slots_per_kvs=99,
+        n_buildings=8,
+        slots_per_substation=3,
+        slots_per_kvs=99,
     )
-    kvs_electrodes = [e for e in world.electrodes
-                      if e.name.startswith("kvs_f")]
+    kvs_electrodes = [e for e in world.electrodes if e.name.startswith("kvs_f")]
     # 8 buildings across 4 feeders = 2 per feeder ≤ 3 → no KVS.
     assert kvs_electrodes == []
     # Every building has its PEN service drop.
-    pen_services = [c for c in world.conductors
-                    if c.name.startswith("pen_service_")]
+    pen_services = [c for c in world.conductors if c.name.startswith("pen_service_")]
     assert len(pen_services) == 8
 
 
@@ -240,24 +245,23 @@ def test_radial_trunk_inserts_kvs_when_budget_overflows() -> None:
     """When the substation slot budget is exceeded, KVSes appear on
     the feeder and the trunk segments connect them in order."""
     world = _build_radial_world(
-        n_buildings=16, slots_per_substation=2, slots_per_kvs=2,
+        n_buildings=16,
+        slots_per_substation=2,
+        slots_per_kvs=2,
         kvs_spacing_m=50.0,
     )
     # Per feeder: 4 buildings, 2 at substation + 2 at KVS_0 → 1 KVS.
     # Total KVS clusters across 4 feeders = 4. (Each KVS gets one
     # rod electrode by the default ``_default_kvs_grounding`` factory.)
     kvs_rod_electrodes = [
-        e for e in world.electrodes
-        if e.name.startswith("kvs_f") and "_rod_0" in e.name
+        e for e in world.electrodes if e.name.startswith("kvs_f") and "_rod_0" in e.name
     ]
     assert len(kvs_rod_electrodes) == 4
     # 4 trunk segments substation → KVS, named ``pen_trunk_fX_0``.
-    trunks = [c for c in world.conductors
-              if c.name.startswith("pen_trunk_")]
+    trunks = [c for c in world.conductors if c.name.startswith("pen_trunk_")]
     assert len(trunks) == 4
     # 16 service drops.
-    services = [c for c in world.conductors
-                if c.name.startswith("pen_service_")]
+    services = [c for c in world.conductors if c.name.startswith("pen_service_")]
     assert len(services) == 16
 
 
@@ -277,7 +281,9 @@ def test_radial_trunk_solves_on_image_2layer() -> None:
     default :class:`image_2layer` backend."""
     world = _build_radial_world(n_buildings=12)
     engine = gf.create_engine(
-        backend="image_2layer", segment_length=0.5, frequencies=[50.0],
+        backend="image_2layer",
+        segment_length=0.5,
+        frequencies=[50.0],
     )
     result = engine.solve(world)
     Z = result.cluster_impedance("trafo_ring_0")
@@ -334,7 +340,8 @@ def test_radial_trunk_raises_when_all_buildings_dropped() -> None:
             positions=[(-50.0, 0.0), (-100.0, 0.0)],  # all west of subst.
         ),
         pen_topology=RadialTrunkTopology(
-            n_feeders=1, feeder_directions_deg=[0.0],  # only feeds east
+            n_feeders=1,
+            feeder_directions_deg=[0.0],  # only feeds east
         ),
     )
     gen = TnNetworkGenerator(cfg, seed=0)

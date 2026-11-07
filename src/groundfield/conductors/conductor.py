@@ -41,20 +41,20 @@ __all__ = ["Conductor", "ConductorType", "SoilCoupling", "InductanceModel"]
 Point3D = tuple[float, float, float]
 
 ConductorType = Literal[
-    "pen",            # PEN conductor in low-voltage networks
-    "cable_shield",   # cable shield
-    "bare_copper",    # bare copper wire
-    "overhead",       # overhead line / earth wire
-    "generic",        # fallback
+    "pen",  # PEN conductor in low-voltage networks
+    "cable_shield",  # cable shield
+    "bare_copper",  # bare copper wire
+    "overhead",  # overhead line / earth wire
+    "generic",  # fallback
 ]
 
 SoilCoupling = Literal[
-    "isolated",   # cable / PEN inside an insulating jacket — no leakage
-    "galvanic",   # bare copper / exposed shield — leakage along the wire
+    "isolated",  # cable / PEN inside an insulating jacket — no leakage
+    "galvanic",  # bare copper / exposed shield — leakage along the wire
 ]
 
 InductanceModel = Literal[
-    "neumann",    # Neumann double-line integral, perfect-mirror earth
+    "neumann",  # Neumann double-line integral, perfect-mirror earth
 ]
 
 # A conductor whose series resistance is below this threshold (in Ω)
@@ -125,7 +125,7 @@ class Conductor(BaseModel):
         description=(
             "Conductor cross section in m². ``None`` keeps the historic "
             "ideal-galvanic short. Set a finite value to enable the "
-            "finite-impedance branch model. ``\"from_radius\"`` resolves "
+            'finite-impedance branch model. ``"from_radius"`` resolves '
             "to π · wire_radius²."
         ),
     )
@@ -147,13 +147,13 @@ class Conductor(BaseModel):
         default="isolated",
         description=(
             "How the conductor exchanges current with the soil along its "
-            "length. ``\"isolated\"`` (default) — no leakage along the "
+            'length. ``"isolated"`` (default) — no leakage along the '
             "wire; the only earth contact is via the end electrodes. "
-            "``\"galvanic\"`` — every segment leaks current into the soil "
+            '``"galvanic"`` — every segment leaks current into the soil '
             "through the same Green's-function kernel as the electrode "
             "segments. For a buried bare-copper conductor or an exposed "
-            "cable shield, set ``\"galvanic\"``; for an insulated cable "
-            "(PEN inside NAYY) keep ``\"isolated\"``."
+            'cable shield, set ``"galvanic"``; for an insulated cable '
+            '(PEN inside NAYY) keep ``"isolated"``.'
         ),
     )
     inductance_model: InductanceModel | None = Field(
@@ -162,7 +162,7 @@ class Conductor(BaseModel):
             "Model used for the longitudinal-segment inductance "
             "(ADR-0004). ``None`` (default) keeps the system purely "
             "resistive — DC behaviour, frequency-independent. "
-            "``\"neumann\"`` activates the Neumann double-line "
+            '``"neumann"`` activates the Neumann double-line '
             "integral for self- and mutual-inductance between every "
             "pair of distributed-conductor segments, using the "
             "thin-wire self-formula and a perfect-mirror earth for "
@@ -213,7 +213,7 @@ class Conductor(BaseModel):
         if self.cross_section is None:
             return None
         if self.cross_section == "from_radius":
-            return math.pi * self.wire_radius ** 2
+            return math.pi * self.wire_radius**2
         return float(self.cross_section)
 
     @property
@@ -246,9 +246,7 @@ class Conductor(BaseModel):
             return 0.0
         return float(self.resistivity * self.length / A)
 
-    def is_ideal(
-        self, threshold: float = _IDEAL_RESISTANCE_THRESHOLD
-    ) -> bool:
+    def is_ideal(self, threshold: float = _IDEAL_RESISTANCE_THRESHOLD) -> bool:
         """Return ``True`` when the conductor acts as a galvanic short.
 
         Parameters

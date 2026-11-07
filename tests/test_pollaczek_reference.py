@@ -5,6 +5,7 @@ per-unit-length belab against the homogeneous Carson reference already in
 the repo (:func:`groundfield.references.earth_return.carson_self_impedance`),
 the two-layer limiting cases, and the input guards.
 """
+
 import math
 
 import pytest
@@ -55,7 +56,7 @@ def test_homogeneous_resistance_approaches_carson_from_above(rho, freq):
     """
     z_poll = pollaczek_self_impedance(rho, rho, 10.0, freq, depth=DEPTH, gmr=GMR)
     r_carson = 2.0 * math.pi * freq * MU_0 / 8.0
-    assert z_poll.real >= r_carson * (1.0 - 1e-9)       # never below the Carson limit
+    assert z_poll.real >= r_carson * (1.0 - 1e-9)  # never below the Carson limit
     assert z_poll.real == pytest.approx(r_carson, rel=2e-2)  # within 2 %
 
 
@@ -78,16 +79,26 @@ def test_vanishing_upper_layer_recovers_lower_resistivity(rho_1, rho_2):
     assert z_2l.imag == pytest.approx(z_lo.imag, rel=1e-3)
 
 
-@pytest.mark.parametrize("rho_1,rho_2,h_1", [
-    (1000.0, 30.0, 5.0), (30.0, 1000.0, 5.0), (100.0, 200.0, 10.0),
-    (1000.0, 30.0, 30.0), (30.0, 1000.0, 30.0),
-])
+@pytest.mark.parametrize(
+    "rho_1,rho_2,h_1",
+    [
+        (1000.0, 30.0, 5.0),
+        (30.0, 1000.0, 5.0),
+        (100.0, 200.0, 10.0),
+        (1000.0, 30.0, 30.0),
+        (30.0, 1000.0, 30.0),
+    ],
+)
 @pytest.mark.parametrize("freq", [50.0, 250.0, 1000.0])
 def test_two_layer_reactance_within_carson_bracket(rho_1, rho_2, h_1, freq):
     """The layered reactance lies within [Carson(rho_1), Carson(rho_2)]."""
     x = pollaczek_self_impedance(rho_1, rho_2, h_1, freq, depth=DEPTH, gmr=GMR).imag
-    lo, hi = sorted((carson_self_impedance(rho_1, freq, gmr=GMR).imag,
-                     carson_self_impedance(rho_2, freq, gmr=GMR).imag))
+    lo, hi = sorted(
+        (
+            carson_self_impedance(rho_1, freq, gmr=GMR).imag,
+            carson_self_impedance(rho_2, freq, gmr=GMR).imag,
+        )
+    )
     assert lo - 1e-12 <= x <= hi + 1e-12
 
 
@@ -114,11 +125,14 @@ def test_effective_wavenumber_homogeneous_is_u1():
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("kwargs", [
-    dict(rho_1=-1.0, rho_2=100.0, h_1=5.0, frequency=50.0),
-    dict(rho_1=100.0, rho_2=0.0, h_1=5.0, frequency=50.0),
-    dict(rho_1=100.0, rho_2=100.0, h_1=5.0, frequency=0.0),
-])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        dict(rho_1=-1.0, rho_2=100.0, h_1=5.0, frequency=50.0),
+        dict(rho_1=100.0, rho_2=0.0, h_1=5.0, frequency=50.0),
+        dict(rho_1=100.0, rho_2=100.0, h_1=5.0, frequency=0.0),
+    ],
+)
 def test_rejects_nonpositive_inputs(kwargs):
     with pytest.raises(ValueError):
         pollaczek_self_impedance(**kwargs, depth=DEPTH, gmr=GMR)
@@ -136,10 +150,10 @@ def test_rejects_nonpositive_depth_and_gmr():
 # termination) for real earthing conductors.
 # ---------------------------------------------------------------------------
 # IEC 60228 DC resistances (20 degC).
-R_PEN = 0.206e-3    # NAYY-J PEN, 150 mm^2 Al -> 0.206 Ohm/km
-GMR_PEN = GMR       # 0.7788*sqrt(A/pi): internal inductance folded into GMR
-R_SCR = 0.727e-3    # NA2XS2Y Cu wire screen, 25 mm^2 -> 0.727 Ohm/km
-GMR_SCR = 13.5e-3   # screen radius over the insulation (thin -> no internal L)
+R_PEN = 0.206e-3  # NAYY-J PEN, 150 mm^2 Al -> 0.206 Ohm/km
+GMR_PEN = GMR  # 0.7788*sqrt(A/pi): internal inductance folded into GMR
+R_SCR = 0.727e-3  # NA2XS2Y Cu wire screen, 25 mm^2 -> 0.727 Ohm/km
+GMR_SCR = 13.5e-3  # screen radius over the insulation (thin -> no internal L)
 DEPTH_SCR = 1.0
 
 
@@ -162,7 +176,7 @@ def test_loop_real_conductors_at_power_frequency():
     is internal-resistance dominated at power frequency; the reactance comes
     from the earth return; and the lower-resistance PEN loop is the more
     inductive (larger phase angle)."""
-    r_earth = 2.0 * math.pi * 50.0 * MU_0 / 8.0     # ~4.93e-5 Ohm/m
+    r_earth = 2.0 * math.pi * 50.0 * MU_0 / 8.0  # ~4.93e-5 Ohm/m
     z_pen = loop_impedance_conductor_earth(
         100.0, 100.0, 10.0, 50.0, depth=DEPTH, gmr=GMR_PEN, r_internal=R_PEN
     )

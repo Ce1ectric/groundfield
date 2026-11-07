@@ -211,9 +211,7 @@ def _override_foundation_from_footprint(
     """
     if not grounding.electrodes:
         return grounding
-    (cx, cy), (dx, dy), orientation_deg = (
-        footprint.oriented_bounding_rectangle()
-    )
+    (cx, cy), (dx, dy), orientation_deg = footprint.oriented_bounding_rectangle()
     if site_xy is None:
         site_xy = footprint.centroid_xy_m()
     # Recentre the rectangle on the OMBR centre (F25): ``build_at``
@@ -270,7 +268,9 @@ def _default_kvs_grounding() -> GroundingSystemSpec:
 def _default_building_placement() -> PlacementSpec:
     """default building placement: Manhattan grid 25 × 30 m, 10 per row."""
     return ManhattanGridPlacement(
-        spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=10,
+        spacing_x_m=25.0,
+        spacing_y_m=30.0,
+        n_per_row=10,
         centre_xy=(0.0, 0.0),
     )
 
@@ -278,7 +278,9 @@ def _default_building_placement() -> PlacementSpec:
 def _default_kvs_placement() -> PlacementSpec:
     """Default KVS placement: a wide Manhattan strip along the substation row."""
     return ManhattanGridPlacement(
-        spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=10,
+        spacing_x_m=40.0,
+        spacing_y_m=1.0,
+        n_per_row=10,
         centre_xy=(0.0, 0.0),
     )
 
@@ -426,8 +428,7 @@ class TnNetworkConfig(GeneratorConfig):
     building_counts: dict[str, Union[int, AnyDistribution]] = Field(
         default_factory=_default_building_counts,
         description=(
-            "Number of buildings per type. Keys must match "
-            "building_types[*].name."
+            "Number of buildings per type. Keys must match building_types[*].name."
         ),
     )
 
@@ -507,14 +508,14 @@ class TnNetworkConfig(GeneratorConfig):
     source_kind: Literal["current", "voltage"] = Field(
         default="current",
         description=(
-            "Source type at the substation. Only ``\"current\"`` "
-            "(default) and ``\"voltage\"`` are accepted — typos like "
-            "``\"voltage_\"`` are rejected at validation time with a "
+            'Source type at the substation. Only ``"current"`` '
+            '(default) and ``"voltage"`` are accepted — typos like '
+            '``"voltage_"`` are rejected at validation time with a '
             "Pydantic ``ValidationError`` rather than silently falling "
             "through to the default ``CurrentSource`` factory. "
-            "``\"current\"`` is the right "
+            '``"current"`` is the right '
             "choice for the typical fall-of-potential measurement and "
-            "for fault simulations; ``\"voltage\"`` is reserved for "
+            'for fault simulations; ``"voltage"`` is reserved for '
             "the rare multi-port tests."
         ),
     )
@@ -626,10 +627,15 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     footprint = cfg.placement.footprint_at(idx)
                     if footprint is not None:
                         grounding = _override_foundation_from_footprint(
-                            grounding, footprint, site_xy,
+                            grounding,
+                            footprint,
+                            site_xy,
                         )
                 anchor = grounding.build_at(
-                    world, site_xy=site_xy, name_prefix=prefix, rng=rng,
+                    world,
+                    site_xy=site_xy,
+                    name_prefix=prefix,
+                    rng=rng,
                 )
                 if anchor is not None:
                     building_anchors.append((anchor, site_xy))
@@ -681,7 +687,11 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 )
 
             self._build_pen_backbone(
-                world, cfg, substation_anchor, kvs_anchors, building_anchors,
+                world,
+                cfg,
+                substation_anchor,
+                kvs_anchors,
+                building_anchors,
             )
 
         # --- Optional measurement setup ---
@@ -692,7 +702,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # source so the test current physically returns through the
         # aux electrode.
         return_anchor = self._build_measurement_setup(
-            world, cfg, substation_anchor,
+            world,
+            cfg,
+            substation_anchor,
         )
 
         # --- Source ---
@@ -706,10 +718,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # silent.
         effective_return_to = return_anchor
         if cfg.source_return_to is not None:
-            if (
-                return_anchor is not None
-                and cfg.source_return_to != return_anchor
-            ):
+            if return_anchor is not None and cfg.source_return_to != return_anchor:
                 warnings.warn(
                     "TnNetworkConfig.source_return_to="
                     f"{cfg.source_return_to!r} takes precedence over "
@@ -724,7 +733,8 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             effective_return_to = cfg.source_return_to
 
         create_source(
-            world, attached_to=substation_anchor,
+            world,
+            attached_to=substation_anchor,
             return_to=effective_return_to,
             kind=cfg.source_kind,
             magnitude=_to_float(cfg.source_magnitude_A, rng),
@@ -737,7 +747,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     # ------------------------------------------------------------------
 
     def _resolve_building_counts(
-        self, cfg: TnNetworkConfig, rng: np.random.Generator,
+        self,
+        cfg: TnNetworkConfig,
+        rng: np.random.Generator,
     ) -> list[tuple[BuildingTypeSpec, int]]:
         """Resolve the (type → count) mapping into an ordered list.
 
@@ -952,8 +964,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         # Substation → each KVS
         for kvs_name, _ in kvs_anchors:
             create_conductor(
-                world, name=f"pen_main_{kvs_name}",
-                start=substation_anchor, end=kvs_name,
+                world,
+                name=f"pen_main_{kvs_name}",
+                start=substation_anchor,
+                end=kvs_name,
                 **common_kwargs,
             )
         # Each building → its nearest KVS (Manhattan metric). The
@@ -979,8 +993,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 # then overrides the geometric resistance.
                 extra_kwargs["lumped_series_resistance_ohm"] = float(shell_ohm)
             create_conductor(
-                world, name=f"pen_service_{building_name}",
-                start=kvs_name, end=building_name,
+                world,
+                name=f"pen_service_{building_name}",
+                start=kvs_name,
+                end=building_name,
                 **common_kwargs,
                 **extra_kwargs,
             )
@@ -1147,10 +1163,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 # falls through and we attach the building to the
                 # *last* tap anchor — emit a UserWarning so it's
                 # not silent.
-                while (
-                    tap_idx < len(tap_anchors) - 1
-                    and budgets[tap_idx] <= 0
-                ):
+                while tap_idx < len(tap_anchors) - 1 and budgets[tap_idx] <= 0:
                     tap_idx += 1
                 if budgets[tap_idx] <= 0:
                     warnings.warn(

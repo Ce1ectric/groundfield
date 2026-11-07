@@ -44,9 +44,7 @@ def _build_world(soil: object, length: float) -> "gf.World":
     return world
 
 
-def _reference_zg(
-    soil: object, length: float, *, symmetrize: bool
-) -> np.ndarray:
+def _reference_zg(soil: object, length: float, *, symmetrize: bool) -> np.ndarray:
     """Historic per-excitation construction of ``Z_G``."""
     names = [a[0] for a in _ANCHORS]
     nG = len(names)
@@ -74,10 +72,16 @@ def _reference_zg(
     "soil, length, label",
     [
         (gf.HomogeneousSoil(resistivity=100.0), 3.0, "homogeneous"),
-        (gf.TwoLayerSoil(rho_1=300.0, rho_2=100.0, h_1=8.0), 3.0,
-         "two-layer within-layer"),
-        (gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0), 9.0,
-         "two-layer cross-layer"),
+        (
+            gf.TwoLayerSoil(rho_1=300.0, rho_2=100.0, h_1=8.0),
+            3.0,
+            "two-layer within-layer",
+        ),
+        (
+            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0),
+            9.0,
+            "two-layer cross-layer",
+        ),
     ],
 )
 def test_mutual_matrix_matches_per_excitation(soil, length, label) -> None:
@@ -90,9 +94,7 @@ def test_mutual_matrix_matches_per_excitation(soil, length, label) -> None:
         segment_length=_SEGMENT_LENGTH,
         frequencies=_FREQUENCIES,
     )
-    Z_new = solve_mutual_matrix(
-        world, engine, [a[0] for a in _ANCHORS], _PROBE_POINTS
-    )
+    Z_new = solve_mutual_matrix(world, engine, [a[0] for a in _ANCHORS], _PROBE_POINTS)
 
     assert Z_new.shape == (3, 3)
     assert np.max(np.abs(Z_new - Z_ref)) < 1e-9, (
@@ -107,11 +109,15 @@ def test_mutual_matrix_unsymmetrized_matches_reference() -> None:
 
     world = _build_world(soil, 3.0)
     engine = gf.create_engine(
-        backend="image", segment_length=_SEGMENT_LENGTH,
+        backend="image",
+        segment_length=_SEGMENT_LENGTH,
         frequencies=_FREQUENCIES,
     )
     Z_new = solve_mutual_matrix(
-        world, engine, [a[0] for a in _ANCHORS], _PROBE_POINTS,
+        world,
+        engine,
+        [a[0] for a in _ANCHORS],
+        _PROBE_POINTS,
         symmetrize=False,
     )
     assert np.max(np.abs(Z_new - Z_ref)) < 1e-9
@@ -122,11 +128,15 @@ def test_mutual_matrix_diagonal_is_cluster_impedance() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = _build_world(soil, 3.0)
     engine = gf.create_engine(
-        backend="image", segment_length=_SEGMENT_LENGTH,
+        backend="image",
+        segment_length=_SEGMENT_LENGTH,
         frequencies=_FREQUENCIES,
     )
     Z = solve_mutual_matrix(
-        world, engine, [a[0] for a in _ANCHORS], _PROBE_POINTS,
+        world,
+        engine,
+        [a[0] for a in _ANCHORS],
+        _PROBE_POINTS,
         symmetrize=False,
     )
     # Self-impedance is real, positive and dominates its row/column.
@@ -141,7 +151,9 @@ def test_mutual_matrix_rejects_bad_probe_shape() -> None:
     engine = gf.create_engine(backend="image", frequencies=_FREQUENCIES)
     with pytest.raises(ValueError, match="probe_points must have shape"):
         solve_mutual_matrix(
-            world, engine, [a[0] for a in _ANCHORS],
+            world,
+            engine,
+            [a[0] for a in _ANCHORS],
             np.zeros((2, 3)),  # nG = 3 expected
         )
 
@@ -151,6 +163,4 @@ def test_mutual_matrix_rejects_unknown_anchor() -> None:
     world = _build_world(soil, 3.0)
     engine = gf.create_engine(backend="image", frequencies=_FREQUENCIES)
     with pytest.raises(KeyError, match="not an electrode"):
-        solve_mutual_matrix(
-            world, engine, ["g0", "g1", "ghost"], _PROBE_POINTS
-        )
+        solve_mutual_matrix(world, engine, ["g0", "g1", "ghost"], _PROBE_POINTS)

@@ -109,7 +109,10 @@ class ObstacleBox(BaseModel):
         )
 
     def rectangle_overlaps(
-        self, cx: float, cy: float, half: float,
+        self,
+        cx: float,
+        cy: float,
+        half: float,
     ) -> bool:
         """Does the square ``[cx-half, cx+half]^2`` overlap the box?"""
         return (
@@ -165,8 +168,7 @@ def segment_intersects_box(
         y_low, y_high = (y0, y1) if y0 <= y1 else (y1, y0)
         return y_low < box.y_max - tol and y_high > box.y_min + tol
     raise ValueError(
-        f"segment_intersects_box: segment ({p0}, {p1}) is not "
-        "axis-aligned."
+        f"segment_intersects_box: segment ({p0}, {p1}) is not axis-aligned."
     )
 
 
@@ -292,8 +294,7 @@ def route_manhattan(
         escape_radius_m = grid_size
     if escape_radius_m < 0.0:
         raise ValueError(
-            "route_manhattan: escape_radius_m must be >= 0, got "
-            f"{escape_radius_m}."
+            f"route_manhattan: escape_radius_m must be >= 0, got {escape_radius_m}."
         )
 
     obstacles = [o.inflated(clearance_m) for o in obstacles]
@@ -304,8 +305,12 @@ def route_manhattan(
 
     # Bounding cells: include end and every obstacle, with margin.
     margin_cells = 3
-    xs = [start[0], end[0]] + [o.x_min for o in obstacles] + [o.x_max for o in obstacles]
-    ys = [start[1], end[1]] + [o.y_min for o in obstacles] + [o.y_max for o in obstacles]
+    xs = (
+        [start[0], end[0]] + [o.x_min for o in obstacles] + [o.x_max for o in obstacles]
+    )
+    ys = (
+        [start[1], end[1]] + [o.y_min for o in obstacles] + [o.y_max for o in obstacles]
+    )
     i_min = int(math.floor((min(xs) - ox) / grid_size)) - margin_cells
     i_max = int(math.ceil((max(xs) - ox) / grid_size)) + margin_cells
     j_min = int(math.floor((min(ys) - oy) / grid_size)) - margin_cells
@@ -336,7 +341,8 @@ def route_manhattan(
     escape_r2 = escape_radius_m * escape_radius_m
 
     def _near_anchor(
-        p: tuple[float, float], anchor: tuple[float, float],
+        p: tuple[float, float],
+        anchor: tuple[float, float],
     ) -> bool:
         """Is ``p`` inside ``anchor``'s escape disk?"""
         dx = p[0] - anchor[0]
@@ -416,8 +422,10 @@ def route_manhattan(
             and j_min <= end_cell[1] + dj <= j_max
             for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1))
         )
-        offender = "start" if start_neighbours_open == 0 else (
-            "end" if end_neighbours_open == 0 else "both endpoints"
+        offender = (
+            "start"
+            if start_neighbours_open == 0
+            else ("end" if end_neighbours_open == 0 else "both endpoints")
         )
         raise RuntimeError(
             "route_manhattan: no Manhattan path from "
@@ -470,15 +478,14 @@ def route_manhattan(
                 bridge_obstacles = [
                     o
                     for o in obstacles
-                    if not (
-                        o.contains_point(*start) or o.contains_point(*end)
-                    )
+                    if not (o.contains_point(*start) or o.contains_point(*end))
                 ]
             else:
                 bridge_obstacles = obstacles
 
             def _bridge_crosses(
-                a: tuple[float, float], b: tuple[float, float],
+                a: tuple[float, float],
+                b: tuple[float, float],
             ) -> bool:
                 """Does bridge segment ``a -> b`` hit an enforced box?"""
                 if escape_radius_m > 0.0 and any(
@@ -486,20 +493,14 @@ def route_manhattan(
                     for anc in (start, end)
                 ):
                     return False
-                return any(
-                    segment_intersects_box(a, b, o)
-                    for o in bridge_obstacles
-                )
+                return any(segment_intersects_box(a, b, o) for o in bridge_obstacles)
 
             # Choose the bridge corner that does not cross an
             # obstacle. Two options: go-x-first or go-y-first.
             corner_x_first = (end[0], last[1])
             corner_y_first = (last[0], end[1])
             for corner in (corner_x_first, corner_y_first):
-                if not (
-                    _bridge_crosses(last, corner)
-                    or _bridge_crosses(corner, end)
-                ):
+                if not (_bridge_crosses(last, corner) or _bridge_crosses(corner, end)):
                     waypoints.append(corner)
                     waypoints.append(end)
                     break

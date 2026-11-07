@@ -104,12 +104,8 @@ class Projector:
         # ``always_xy=True`` keeps (lon, lat) tuple order, the more
         # common convention in GIS code; the public API of this class
         # still exposes (lat, lon) in argument names.
-        self._fwd = pyproj.Transformer.from_crs(
-            wgs84, proj4, always_xy=True
-        )
-        self._inv = pyproj.Transformer.from_crs(
-            proj4, wgs84, always_xy=True
-        )
+        self._fwd = pyproj.Transformer.from_crs(wgs84, proj4, always_xy=True)
+        self._inv = pyproj.Transformer.from_crs(proj4, wgs84, always_xy=True)
 
     # -----------------------------------------------------------------
     # Forward / inverse on single points

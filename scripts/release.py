@@ -413,9 +413,7 @@ def _update_changelog(
     heading_re = re.compile(r"^## \[Unreleased\][^\n]*\n", re.MULTILINE)
     heading_match = heading_re.search(text)
     if heading_match is None:
-        raise RuntimeError(
-            "CHANGELOG.md: '## [Unreleased]' heading not found"
-        )
+        raise RuntimeError("CHANGELOG.md: '## [Unreleased]' heading not found")
 
     # The section extends from the end of the heading line up to (but not
     # including) the next '## [' heading. Requiring the opening bracket
@@ -518,9 +516,7 @@ def _update_changelog(
                 "will be inserted in the new section"
             )
         else:
-            preview = [
-                line for line in carried_body.splitlines() if line.strip()
-            ][:6]
+            preview = [line for line in carried_body.splitlines() if line.strip()][:6]
             logger.info("[dry-run] new section preview:")
             for line in preview:
                 logger.info("[dry-run]   %s", line)

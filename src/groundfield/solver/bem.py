@@ -154,22 +154,24 @@ def _build_Z_collocation(
     eye = np.eye(n)
 
     if stack.n_layers <= 1:
-        return _self_corrected_kernel(
-            seg_points, seg_lengths, wire_radii, eye, rho_1
-        )
+        return _self_corrected_kernel(seg_points, seg_lengths, wire_radii, eye, rho_1)
 
     if stack.n_layers == 2:
         from groundfield.soil.models import TwoLayerSoil
         from groundfield.solver.image_2layer import (
             _two_layer_self_kernel_factory,
         )
+
         soil = TwoLayerSoil(
             rho_1=float(stack.rhos[0]),
             rho_2=float(stack.rhos[1]),
             h_1=float(stack.h[0]),
         )
         kern = _two_layer_self_kernel_factory(
-            soil, max_terms=max_terms, tol=tol, allow_cross_layer=True,
+            soil,
+            max_terms=max_terms,
+            tol=tol,
+            allow_cross_layer=True,
         )
         return kern(seg_points, seg_lengths, wire_radii, eye)
 
@@ -245,15 +247,14 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
     _log.info(
         "bem: n_layers=%d, segment_length=%.3f, closed-form kernel "
         "(no complex-image fit); identical reaction matrix to 'mom'",
-        stack.n_layers, ds,
+        stack.n_layers,
+        ds,
     )
 
     # 1) Discretisation.
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (
-        (float(stack.h[0]),) if stack.n_layers >= 2 else None
-    )
+    interfaces = (float(stack.h[0]),) if stack.n_layers >= 2 else None
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(
@@ -262,9 +263,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
         all_segments.extend(segs)
 
     # 2) Per-electrode input currents.
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     for src in world.sources:
         if src.kind != "current":
             continue
@@ -294,9 +293,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
         (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
     ]
     finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -307,13 +304,15 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     n_segments = len(all_segments)
@@ -328,8 +327,12 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
     #    _two_layer_self_kernel_factory(allow_cross_layer=True)
     #    (ADR-0007).
     Z = _build_Z_collocation(
-        seg_points, seg_lengths, wire_radii, stack,
-        max_terms=engine.image_max_terms, tol=engine.image_series_tol,
+        seg_points,
+        seg_lengths,
+        wire_radii,
+        stack,
+        max_terms=engine.image_max_terms,
+        tol=engine.image_series_tol,
     )
 
     # 4) Frequency loop (Galerkin solve + Z · I_seg for phi).
@@ -339,7 +342,8 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
 
     def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray]:
         carson_dz = (
-            carson_builder(omega) if (has_inductance and carson_builder is not None)
+            carson_builder(omega)
+            if (has_inductance and carson_builder is not None)
             else None
         )
         sc, _ = _galerkin_solve(
@@ -377,12 +381,8 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = [
-            complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)
-        ]
-        i_list = [
-            complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)
-        ]
+        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
             electrode_currents[ename] = i_list
@@ -402,7 +402,8 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
-            n for n in cluster_id
+            n
+            for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
@@ -434,8 +435,7 @@ def solve_bem(world: "World", engine: "Engine") -> FieldResult:
             else 1.0 / float(stack.rhos[0])
         )
         metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref)
-            for f in engine.frequencies
+            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
         }
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents

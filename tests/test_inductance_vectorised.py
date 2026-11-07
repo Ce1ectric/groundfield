@@ -32,7 +32,8 @@ def _segments_random(n: int, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
     p1 = rng.uniform(-50.0, 50.0, size=(n, 3))
     p2 = p1 + rng.uniform(0.5, 5.0, size=(n, 3)) * rng.choice(
-        [-1, 1], size=(n, 3),
+        [-1, 1],
+        size=(n, 3),
     )
     return np.stack([p1, p2], axis=1), np.full(n, 0.005)
 
@@ -48,14 +49,17 @@ def _segments_parallel_grid(n: int) -> tuple[np.ndarray, np.ndarray]:
 def _segments_mixed() -> tuple[np.ndarray, np.ndarray]:
     """Hand-picked mix: parallel, anti-parallel, vertical, oblique,
     coaxial-touching, far-distance."""
-    seg = np.array([
-        [[0.0, 0.0, 0.6], [10.0, 0.0, 0.6]],   # horizontal A
-        [[10.0, 0.0, 0.6], [0.0, 0.0, 0.6]],   # anti-parallel co-axial-ish
-        [[0.0, 1.0, 0.6], [10.0, 1.0, 0.6]],   # parallel, 1 m apart
-        [[0.0, 0.0, 0.0], [0.0, 0.0, 2.0]],    # vertical rod
-        [[0.5, 0.5, 0.0], [3.0, 4.0, 0.6]],    # oblique 3-D
-        [[20.0, 0.0, 0.6], [30.0, 0.0, 0.6]],  # far parallel
-    ], dtype=float)
+    seg = np.array(
+        [
+            [[0.0, 0.0, 0.6], [10.0, 0.0, 0.6]],  # horizontal A
+            [[10.0, 0.0, 0.6], [0.0, 0.0, 0.6]],  # anti-parallel co-axial-ish
+            [[0.0, 1.0, 0.6], [10.0, 1.0, 0.6]],  # parallel, 1 m apart
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 2.0]],  # vertical rod
+            [[0.5, 0.5, 0.0], [3.0, 4.0, 0.6]],  # oblique 3-D
+            [[20.0, 0.0, 0.6], [30.0, 0.0, 0.6]],  # far parallel
+        ],
+        dtype=float,
+    )
     return seg, np.array([0.005, 0.005, 0.005, 0.008, 0.005, 0.005])
 
 
@@ -133,9 +137,12 @@ def test_zero_segments() -> None:
 
 
 def test_zero_length_segment_raises() -> None:
-    seg = np.array([
-        [[0.0, 0.0, 0.5], [0.0, 0.0, 0.5]],   # zero-length
-    ], dtype=float)
+    seg = np.array(
+        [
+            [[0.0, 0.0, 0.5], [0.0, 0.0, 0.5]],  # zero-length
+        ],
+        dtype=float,
+    )
     radii = np.array([0.005])
     with pytest.raises(ValueError, match="positive"):
         build_inductance_matrix(seg, radii)

@@ -36,8 +36,8 @@ RHO = 100.0
 ROD_LEN = 2.0
 ROD_R = 0.0075
 SEPARATION = 30.0
-PEN_RHO = 2.82e-8         # Al
-PEN_A = 50.0e-6           # 50 mm²
+PEN_RHO = 2.82e-8  # Al
+PEN_A = 50.0e-6  # 50 mm²
 
 
 def _two_rod_world(
@@ -51,17 +51,29 @@ def _two_rod_world(
     soil = soil or gf.HomogeneousSoil(resistivity=RHO)
     w = gf.create_world(soil=soil)
     gf.create_electrode(
-        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=ROD_LEN,
+        w,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=ROD_LEN,
         wire_radius=ROD_R,
     )
     gf.create_electrode(
-        w, "rod", name="g2", position=(rod_separation, 0.0, 0.5),
-        length=ROD_LEN, wire_radius=ROD_R,
+        w,
+        "rod",
+        name="g2",
+        position=(rod_separation, 0.0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_R,
     )
     gf.create_conductor(
-        w, name="pen", start="g1", end="g2",
+        w,
+        name="pen",
+        start="g1",
+        end="g2",
         conductor_type="pen",
-        wire_radius=0.004, resistivity=PEN_RHO,
+        wire_radius=0.004,
+        resistivity=PEN_RHO,
         cross_section=cross_section,
         discretize_segment_length=discretize_segment_length,
         coupling_to_soil=coupling_to_soil,
@@ -71,9 +83,7 @@ def _two_rod_world(
 
 
 def _solve(world: gf.World, backend: str, **eng_kwargs) -> gf.FieldResult:
-    eng = gf.create_engine(
-        backend=backend, segment_length=SEG, **eng_kwargs
-    )
+    eng = gf.create_engine(backend=backend, segment_length=SEG, **eng_kwargs)
     return eng.solve(world)
 
 
@@ -174,15 +184,26 @@ def _galvanic_world(*, n_seg: int) -> gf.World:
     soil = gf.HomogeneousSoil(resistivity=RHO)
     w = gf.create_world(soil=soil)
     gf.create_electrode(
-        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=ROD_LEN,
+        w,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=ROD_LEN,
         wire_radius=ROD_R,
     )
     gf.create_electrode(
-        w, "rod", name="g2", position=(SEPARATION, 0.0, 0.5),
-        length=ROD_LEN, wire_radius=ROD_R,
+        w,
+        "rod",
+        name="g2",
+        position=(SEPARATION, 0.0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_R,
     )
     gf.create_conductor(
-        w, name="pen", start="g1", end="g2",
+        w,
+        name="pen",
+        start="g1",
+        end="g2",
         conductor_type="bare_copper",
         wire_radius=0.004,
         resistivity=PEN_RHO,
@@ -252,7 +273,9 @@ def test_galvanic_distributed_convergence_in_n_segments() -> None:
     step_1 = abs(U_8 - U_16) / U_16
     step_2 = abs(U_16 - U_32) / U_32
     assert step_1 < 0.05, f"step n=8→16: {step_1:.3f}, U_8={U_8:.3f}, U_16={U_16:.3f}"
-    assert step_2 < 0.02, f"step n=16→32: {step_2:.3f}, U_16={U_16:.3f}, U_32={U_32:.3f}"
+    assert step_2 < 0.02, (
+        f"step n=16→32: {step_2:.3f}, U_16={U_16:.3f}, U_32={U_32:.3f}"
+    )
     # The sequence should actually decrease in magnitude
     assert step_2 < step_1, (step_1, step_2)
 
@@ -301,9 +324,7 @@ def test_galvanic_distributed_cross_engine(backend: str) -> None:
     I1_ref = res_ref.electrode_currents["g1"][0].real
     I1 = res.electrode_currents["g1"][0].real
     rel = abs(I1 - I1_ref) / abs(I1_ref)
-    assert rel < 0.05, (
-        f"{backend}: I_g1_ref={I1_ref:.4f}, I_g1={I1:.4f}, rel={rel:.3f}"
-    )
+    assert rel < 0.05, f"{backend}: I_g1_ref={I1_ref:.4f}, I_g1={I1:.4f}, rel={rel:.3f}"
 
 
 def test_galvanic_distributed_fem_warns_lumped_fallback(caplog) -> None:
@@ -313,9 +334,7 @@ def test_galvanic_distributed_fem_warns_lumped_fallback(caplog) -> None:
 
     caplog.set_level(logging.WARNING, logger="groundfield.solver.fem")
     res = _solve(_galvanic_world(n_seg=4), "fem")
-    assert any("distributed conductors" in m for m in caplog.messages), (
-        caplog.messages
-    )
+    assert any("distributed conductors" in m for m in caplog.messages), caplog.messages
     # Sum of currents still conserved (FEM treats the conductor as
     # a single lumped branch — both end electrodes carry the full
     # source current between them).
@@ -336,12 +355,19 @@ def test_three_rod_chain_with_distributed_pen() -> None:
     w = gf.create_world(soil=soil)
     for k, x in enumerate([0.0, SEPARATION, 2 * SEPARATION]):
         gf.create_electrode(
-            w, "rod", name=f"g{k+1}", position=(x, 0.0, 0.5),
-            length=ROD_LEN, wire_radius=ROD_R,
+            w,
+            "rod",
+            name=f"g{k + 1}",
+            position=(x, 0.0, 0.5),
+            length=ROD_LEN,
+            wire_radius=ROD_R,
         )
     for k in range(2):
         gf.create_conductor(
-            w, name=f"pen_{k+1}{k+2}", start=f"g{k+1}", end=f"g{k+2}",
+            w,
+            name=f"pen_{k + 1}{k + 2}",
+            start=f"g{k + 1}",
+            end=f"g{k + 2}",
             conductor_type="bare_copper",
             wire_radius=0.004,
             resistivity=PEN_RHO,
@@ -351,13 +377,11 @@ def test_three_rod_chain_with_distributed_pen() -> None:
         )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     res = _solve(w, "image")
-    I_e_total = sum(
-        res.electrode_currents[f"g{k+1}"][0].real for k in range(3)
-    )
+    I_e_total = sum(res.electrode_currents[f"g{k + 1}"][0].real for k in range(3))
     cond_total = sum(
         c[0].real for c in res.metadata.get("conductor_node_currents", {}).values()
     )
     assert (I_e_total + cond_total) == pytest.approx(1.0, rel=1e-9)
     # All three rods carry positive current via the chain
     for k in range(3):
-        assert res.electrode_currents[f"g{k+1}"][0].real > 0.0
+        assert res.electrode_currents[f"g{k + 1}"][0].real > 0.0

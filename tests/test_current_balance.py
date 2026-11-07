@@ -231,10 +231,19 @@ def test_cluster_balance_columns_and_dtypes() -> None:
     _world, result = _single_rod_world()
     df = cluster_current_balance(result)
     expected = {
-        "cluster_root", "n_members", "members",
-        "U_re", "U_im", "abs_U",
-        "sum_I_re", "sum_I_im", "abs_sum_I",
-        "Z_re", "Z_im", "abs_Z", "arg_Z_deg",
+        "cluster_root",
+        "n_members",
+        "members",
+        "U_re",
+        "U_im",
+        "abs_U",
+        "sum_I_re",
+        "sum_I_im",
+        "abs_sum_I",
+        "Z_re",
+        "Z_im",
+        "abs_Z",
+        "arg_Z_deg",
     }
     assert set(df.columns) == expected
     assert (df["abs_sum_I"] >= 0).all()
@@ -327,6 +336,7 @@ def test_electrode_table_sorted_descending() -> None:
 
 def test_plot_current_sharing_smoke_by_electrode() -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.figure
 
@@ -337,6 +347,7 @@ def test_plot_current_sharing_smoke_by_electrode() -> None:
 
 def test_plot_current_sharing_smoke_by_cluster() -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.figure
 

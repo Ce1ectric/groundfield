@@ -124,12 +124,17 @@ class RhoFStandardFit:
     def coefficients(self) -> dict[str, float]:
         """Return the five coefficients as a dict."""
         return {
-            "k1": self.k1, "k2": self.k2, "k3": self.k3,
-            "k4": self.k4, "k5": self.k5,
+            "k1": self.k1,
+            "k2": self.k2,
+            "k3": self.k3,
+            "k4": self.k4,
+            "k5": self.k5,
         }
 
     def evaluate(
-        self, rho: float | np.ndarray, f: float | np.ndarray,
+        self,
+        rho: float | np.ndarray,
+        f: float | np.ndarray,
     ) -> complex | np.ndarray:
         """Evaluate the fitted $Z(\\rho, f)$ at arbitrary points."""
         rho = np.asarray(rho, dtype=float)
@@ -180,8 +185,7 @@ def fit_rho_f_standard(
         )
     if rho.size < 4:
         raise ValueError(
-            "fit_rho_f_standard needs at least 4 samples; got "
-            f"{rho.size}."
+            f"fit_rho_f_standard needs at least 4 samples; got {rho.size}."
         )
     # Identifiability: a constant rho makes the columns f and f*rho
     # proportional (k2/k4 and k3/k5 confounded); a constant f makes
@@ -207,18 +211,21 @@ def fit_rho_f_standard(
     sol_imag, *_ = np.linalg.lstsq(A_imag, Z.imag, rcond=None)
     k3, k5 = float(sol_imag[0]), float(sol_imag[1])
 
-    Z_fit = (
-        k1 * rho
-        + (k2 + 1j * k3) * f
-        + (k4 + 1j * k5) * f * rho
-    )
+    Z_fit = k1 * rho + (k2 + 1j * k3) * f + (k4 + 1j * k5) * f * rho
     rms = float(np.sqrt(np.mean(np.abs(Z_fit - Z) ** 2)))
     rms_rel = rms / max(float(np.mean(np.abs(Z))), 1e-12)
 
     return RhoFStandardFit(
-        k1=k1, k2=k2, k3=k3, k4=k4, k5=k5,
-        rms_error=rms, rms_relative=rms_rel,
-        sample_rho=rho, sample_f=f, sample_Z=Z,
+        k1=k1,
+        k2=k2,
+        k3=k3,
+        k4=k4,
+        k5=k5,
+        rms_error=rms,
+        rms_relative=rms_rel,
+        sample_rho=rho,
+        sample_f=f,
+        sample_Z=Z,
     )
 
 

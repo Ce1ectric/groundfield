@@ -144,7 +144,7 @@ def test_discrete_weighted_frequencies() -> None:
     n = len(s)
     for v, w in zip(values, weights):
         c = int(np.sum(s == v))
-        assert abs(c / n - w) < 0.02, f"weight bias for {v}: got {c/n}, expect {w}"
+        assert abs(c / n - w) < 0.02, f"weight bias for {v}: got {c / n}, expect {w}"
 
 
 def test_categorical_uniform_frequencies() -> None:
@@ -233,7 +233,8 @@ def test_categorical_rejects_duplicate_values() -> None:
 
 def test_normal_truncation_exhaustion_raises() -> None:
     """truncate band so far from the mean that 1000 attempts can't hit it."""
-    d = Normal(mean=0.0, std=1.0, truncate_low=100.0, truncate_high=110.0,
-               max_attempts=50)
+    d = Normal(
+        mean=0.0, std=1.0, truncate_low=100.0, truncate_high=110.0, max_attempts=50
+    )
     with pytest.raises(RuntimeError, match="rejection sampling exhausted"):
         d.sample(np.random.default_rng(0))

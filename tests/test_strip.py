@@ -32,23 +32,17 @@ ENG = gf.create_engine(backend="image", segment_length=0.05)
 def test_strip_rejects_non_horizontal() -> None:
     """``start[2]`` and ``end[2]`` must match — otherwise raise."""
     with pytest.raises(ValueError, match="horizontal"):
-        gf.StripElectrode(
-            name="bad", start=(0.0, 0.0, 0.5), end=(5.0, 0.0, 1.0)
-        )
+        gf.StripElectrode(name="bad", start=(0.0, 0.0, 0.5), end=(5.0, 0.0, 1.0))
 
 
 def test_strip_length_property() -> None:
-    s = gf.StripElectrode(
-        name="s", start=(0.0, 0.0, 0.5), end=(3.0, 4.0, 0.5)
-    )
+    s = gf.StripElectrode(name="s", start=(0.0, 0.0, 0.5), end=(3.0, 4.0, 0.5))
     # 3-4-5 triangle
     assert s.length == pytest.approx(5.0)
 
 
 def test_strip_connection_point_is_start() -> None:
-    s = gf.StripElectrode(
-        name="s", start=(1.0, 2.0, 0.5), end=(6.0, 2.0, 0.5)
-    )
+    s = gf.StripElectrode(name="s", start=(1.0, 2.0, 0.5), end=(6.0, 2.0, 0.5))
     assert s.connection_point == (1.0, 2.0, 0.5)
 
 
@@ -69,18 +63,18 @@ def test_image_strip_matches_dwight_horizontal_wire() -> None:
     depth = 0.5
     world = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        world, "strip", name="g1",
-        start=(-L / 2.0, 0.0, depth), end=(+L / 2.0, 0.0, depth),
+        world,
+        "strip",
+        name="g1",
+        start=(-L / 2.0, 0.0, depth),
+        end=(+L / 2.0, 0.0, depth),
         wire_radius=a,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     Z = ENG.solve(world).cluster_impedance("g1")[0].real
-    R_dw = dw.horizontal_wire(rho=100.0, length=L / 2.0,
-                              radius=a, depth=depth)
+    R_dw = dw.horizontal_wire(rho=100.0, length=L / 2.0, radius=a, depth=depth)
     rel = abs(Z - R_dw) / R_dw
-    assert rel < 0.10, (
-        f"strip {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel*100:.1f} %"
-    )
+    assert rel < 0.10, f"strip {Z:.2f} Ω vs. Dwight {R_dw:.2f} Ω, Δ = {rel * 100:.1f} %"
 
 
 # ---------------------------------------------------------------------
@@ -109,30 +103,36 @@ def test_strip_more_accurate_than_degenerate_mesh_workaround() -> None:
     # Native strip
     w1 = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w1, "strip", name="g1",
-        start=(0.0, 0.0, depth), end=(L, 0.0, depth),
+        w1,
+        "strip",
+        name="g1",
+        start=(0.0, 0.0, depth),
+        end=(L, 0.0, depth),
         wire_radius=a,
     )
     gf.create_source(w1, attached_to="g1", magnitude=1.0)
     Z_strip = ENG.solve(w1).cluster_impedance("g1")[0].real
 
-    R_dw = dw.horizontal_wire(rho=100.0, length=L / 2.0,
-                              radius=a, depth=depth)
+    R_dw = dw.horizontal_wire(rho=100.0, length=L / 2.0, radius=a, depth=depth)
     err_strip = abs(Z_strip - R_dw) / R_dw
 
     # Native primitive is well within the 10 % image-vs-Dwight envelope.
     assert err_strip < 0.10, (
         f"native strip Z = {Z_strip:.3f} Ω, Dwight = {R_dw:.3f} Ω, "
-        f"Δ = {err_strip*100:.2f} %"
+        f"Δ = {err_strip * 100:.2f} %"
     )
 
     # Degenerate mesh with eps = 1 mm (the prior workaround) is now
     # rejected by the thin-wire guard instead of solving wrongly.
     w2 = gf.create_world(soil=SOIL)
     gf.create_electrode(
-        w2, "mesh", name="g1",
-        corner=(0.0, 0.0, depth), size=(L, 1.0e-3),
-        spacing=10.0 * L, wire_radius=a,
+        w2,
+        "mesh",
+        name="g1",
+        corner=(0.0, 0.0, depth),
+        size=(L, 1.0e-3),
+        spacing=10.0 * L,
+        wire_radius=a,
     )
     gf.create_source(w2, attached_to="g1", magnitude=1.0)
     with pytest.raises(ValueError, match="wire_radius"):
@@ -153,12 +153,19 @@ def test_strip_bonded_to_ring_shares_cluster_potential() -> None:
     """
     world = gf.create_world(soil=SOIL)
     ring = gf.create_electrode(
-        world, "ring", name="ring",
-        center=(0.0, 0.0, 0.7), radius=4.0, wire_radius=0.005,
+        world,
+        "ring",
+        name="ring",
+        center=(0.0, 0.0, 0.7),
+        radius=4.0,
+        wire_radius=0.005,
     )
     strip = gf.create_electrode(
-        world, "strip", name="strip",
-        start=(0.0, 4.0, 0.7), end=(0.0, 9.0, 0.7),
+        world,
+        "strip",
+        name="strip",
+        start=(0.0, 4.0, 0.7),
+        end=(0.0, 9.0, 0.7),
         wire_radius=0.005,
     )
     gf.create_conductor(world, name="bond", start=ring, end=strip)
@@ -172,6 +179,5 @@ def test_strip_bonded_to_ring_shares_cluster_potential() -> None:
     )
 
     # And the currents add up to the source current.
-    i_total = (res.electrode_currents["ring"][0]
-               + res.electrode_currents["strip"][0])
+    i_total = res.electrode_currents["ring"][0] + res.electrode_currents["strip"][0]
     assert abs(i_total - 10.0) < 1e-9

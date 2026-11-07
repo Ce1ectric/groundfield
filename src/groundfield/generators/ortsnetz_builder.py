@@ -118,7 +118,10 @@ def _default_house_grounding() -> GroundingSystemSpec:
     return GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
-                size_m=10.0, depth_m=0.8, n_x=2, n_y=2,
+                size_m=10.0,
+                depth_m=0.8,
+                n_x=2,
+                n_y=2,
             ),
         ],
     )
@@ -157,14 +160,14 @@ def triangle_rod_grounding(
     # ``triangle_side_m / sqrt(3)``.
     r = triangle_side_m / math.sqrt(3.0)
     offsets = [
-        (r * math.cos(math.radians(a)),
-         r * math.sin(math.radians(a)))
+        (r * math.cos(math.radians(a)), r * math.sin(math.radians(a)))
         for a in (90.0, 210.0, 330.0)
     ]
     return GroundingSystemSpec(
         electrodes=[
             RodElectrodeSpec(
-                length_m=rod_length_m, depth_m=0.0,
+                length_m=rod_length_m,
+                depth_m=0.0,
                 offset_xy_m=off,
             )
             for off in offsets
@@ -278,8 +281,7 @@ class PenCable(BaseModel):
 
     def total_length_m(self) -> float:
         return sum(
-            abs(p1[0] - p0[0]) + abs(p1[1] - p0[1])
-            for p0, p1 in self.segments()
+            abs(p1[0] - p0[0]) + abs(p1[1] - p0[1]) for p0, p1 in self.segments()
         )
 
 
@@ -311,7 +313,8 @@ class BuildingConnection(BaseModel):
         return sum(
             abs(p1[0] - p0[0]) + abs(p1[1] - p0[1])
             for p0, p1 in zip(
-                self.stub_waypoints[:-1], self.stub_waypoints[1:],
+                self.stub_waypoints[:-1],
+                self.stub_waypoints[1:],
             )
         )
 
@@ -612,7 +615,9 @@ class OrtsnetzLayout(BaseModel):
         return Projector(lat0_deg=lat, lon0_deg=lon)
 
     def lat_lon_to_xy(
-        self, lat_deg: float, lon_deg: float,
+        self,
+        lat_deg: float,
+        lon_deg: float,
     ) -> tuple[float, float]:
         """Project a WGS84 ``(lat, lon)`` to the layout's local frame.
 
@@ -631,7 +636,9 @@ class OrtsnetzLayout(BaseModel):
         return projector.to_xy_m(lat_deg, lon_deg)
 
     def xy_to_lat_lon(
-        self, x_m: float, y_m: float,
+        self,
+        x_m: float,
+        y_m: float,
     ) -> tuple[float, float]:
         """Inverse projection: local frame ``(x, y)`` → WGS84.
 
@@ -746,9 +753,7 @@ class OrtsnetzLayout(BaseModel):
         if name is None:
             name = f"kvs_{len(self.kvs_placements)}"
         if any(k.name == name for k in self.kvs_placements):
-            raise ValueError(
-                f"OrtsnetzLayout.add_kvs: name {name!r} is already taken."
-            )
+            raise ValueError(f"OrtsnetzLayout.add_kvs: name {name!r} is already taken.")
         if name == self.substation_name:
             raise ValueError(
                 f"OrtsnetzLayout.add_kvs: name {name!r} clashes with "
@@ -854,8 +859,7 @@ class OrtsnetzLayout(BaseModel):
         the entire layout.
         """
         provided = sum(
-            arg is not None
-            for arg in (distance_m, position_xy, position_lat_lon)
+            arg is not None for arg in (distance_m, position_xy, position_lat_lon)
         )
         if provided != 1:
             raise ValueError(
@@ -872,8 +876,7 @@ class OrtsnetzLayout(BaseModel):
                 )
             theta = math.radians(direction_deg)
             sx, sy = self.substation_xy
-            xy = (sx + distance_m * math.cos(theta),
-                  sy + distance_m * math.sin(theta))
+            xy = (sx + distance_m * math.cos(theta), sy + distance_m * math.sin(theta))
         elif position_lat_lon is not None:
             xy = self.lat_lon_to_xy(*position_lat_lon)
         else:
@@ -901,7 +904,8 @@ class OrtsnetzLayout(BaseModel):
             grounding_spec = GroundingSystemSpec(
                 electrodes=[
                     RodElectrodeSpec(
-                        length_m=float(length_m), depth_m=depth_m,
+                        length_m=float(length_m),
+                        depth_m=depth_m,
                     ),
                 ],
             )
@@ -1022,8 +1026,7 @@ class OrtsnetzLayout(BaseModel):
                         "inline_fraction must be in [0, 1], got "
                         f"{f}."
                     )
-                xy = (sx + f * d_aux * u_inline[0],
-                      sy + f * d_aux * u_inline[1])
+                xy = (sx + f * d_aux * u_inline[0], sy + f * d_aux * u_inline[1])
             else:
                 f = float(perpendicular_fraction)
                 if not 0.0 <= f <= 1.0:
@@ -1037,8 +1040,7 @@ class OrtsnetzLayout(BaseModel):
                     u_perp = (-u_inline[1], u_inline[0])
                 else:
                     u_perp = (u_inline[1], -u_inline[0])
-                xy = (sx + f * d_aux * u_perp[0],
-                      sy + f * d_aux * u_perp[1])
+                xy = (sx + f * d_aux * u_perp[0], sy + f * d_aux * u_perp[1])
         elif position_lat_lon is not None:
             xy = self.lat_lon_to_xy(*position_lat_lon)
         else:
@@ -1171,7 +1173,8 @@ class OrtsnetzLayout(BaseModel):
             )
             phi_ref = complex(
                 result.potential(
-                    point, frequency_index=frequency_index,
+                    point,
+                    frequency_index=frequency_index,
                 )[0]
             )
 
@@ -1310,9 +1313,7 @@ class OrtsnetzLayout(BaseModel):
             :attr:`pen_cables`.
         """
         # Exactly one of {end, end_xy, end_lat_lon} must be provided.
-        provided = sum(
-            arg is not None for arg in (end, end_xy, end_lat_lon)
-        )
+        provided = sum(arg is not None for arg in (end, end_xy, end_lat_lon))
         if provided != 1:
             raise ValueError(
                 "OrtsnetzLayout.add_pen_cable: exactly one of "
@@ -1321,9 +1322,7 @@ class OrtsnetzLayout(BaseModel):
         if name is None:
             name = f"pen_{len(self.pen_cables)}"
         if any(c.name == name for c in self.pen_cables):
-            raise ValueError(
-                f"OrtsnetzLayout.add_pen_cable: name {name!r} is taken."
-            )
+            raise ValueError(f"OrtsnetzLayout.add_pen_cable: name {name!r} is taken.")
 
         start_xy = self._anchor_position(start)
         if end is not None:
@@ -1334,9 +1333,7 @@ class OrtsnetzLayout(BaseModel):
             assert end_xy is not None  # narrowing for type checkers
             end_xy_resolved = tuple(end_xy)
 
-        clearance = (
-            self.obstacle_clearance_m if clearance_m is None else clearance_m
-        )
+        clearance = self.obstacle_clearance_m if clearance_m is None else clearance_m
         obstacles = self._obstacle_boxes()
         waypoints = route_manhattan(
             start=start_xy,
@@ -1393,13 +1390,10 @@ class OrtsnetzLayout(BaseModel):
                 "OrtsnetzLayout.connect_buildings: no PEN cables "
                 "in the layout. Call ``add_pen_cable`` first."
             )
-        clearance = (
-            self.obstacle_clearance_m if clearance_m is None else clearance_m
-        )
+        clearance = self.obstacle_clearance_m if clearance_m is None else clearance_m
 
         connected_idx = (
-            {c.house_idx for c in self.connections} if only_unconnected
-            else set()
+            {c.house_idx for c in self.connections} if only_unconnected else set()
         )
 
         new_connections: list[BuildingConnection] = []
@@ -1410,13 +1404,16 @@ class OrtsnetzLayout(BaseModel):
             # Treat every *other* footprint as a stub obstacle.
             other_obstacles = [
                 self._footprint_to_box(self.footprints[j], j).inflated(clearance)
-                for j in range(len(self.footprints)) if j != i
+                for j in range(len(self.footprints))
+                if j != i
             ]
             best: Optional[BuildingConnection] = None
             best_length = math.inf
             for cable in self.pen_cables:
                 tap, stub = self._stub_to_cable(
-                    centroid, cable, other_obstacles,
+                    centroid,
+                    cable,
+                    other_obstacles,
                 )
                 if stub is None:
                     continue
@@ -1522,12 +1519,8 @@ class OrtsnetzLayout(BaseModel):
         if not self.footprints:
             return LateralCoverageResult([], [], list(self.connections))
 
-        clearance = (
-            self.obstacle_clearance_m if clearance_m is None else clearance_m
-        )
-        lat_clear = (
-            clearance if lateral_clearance_m is None else lateral_clearance_m
-        )
+        clearance = self.obstacle_clearance_m if clearance_m is None else clearance_m
+        lat_clear = clearance if lateral_clearance_m is None else lateral_clearance_m
 
         if source_anchors is None:
             source_anchors = self._anchors_connected_to_substation()
@@ -1549,22 +1542,19 @@ class OrtsnetzLayout(BaseModel):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
                 self.connect_buildings(
-                    only_unconnected=True, clearance_m=clearance,
+                    only_unconnected=True,
+                    clearance_m=clearance,
                 )
 
         def _nearest_distance(i: int) -> float:
             cx, cy = self.footprints[i].centroid_xy_m()
-            return min(
-                math.hypot(cx - px, cy - py) for _, (px, py) in nodes
-            )
+            return min(math.hypot(cx - px, cy - py) for _, (px, py) in nodes)
 
         laterals: list[str] = []
         for _ in range(max_passes):
             _tap()
             done = {c.house_idx for c in self.connections}
-            orphans = [
-                i for i in range(len(self.footprints)) if i not in done
-            ]
+            orphans = [i for i in range(len(self.footprints)) if i not in done]
             if not orphans:
                 break
             progressed = False
@@ -1578,8 +1568,10 @@ class OrtsnetzLayout(BaseModel):
                     key=lambda nd: math.hypot(cx - nd[1][0], cy - nd[1][1]),
                 )
                 end_xy = self._free_point_near_house(
-                    fp, self._anchor_position(src),
-                    clearance=lat_clear, margin_m=margin_m,
+                    fp,
+                    self._anchor_position(src),
+                    clearance=lat_clear,
+                    margin_m=margin_m,
                 )
                 if end_xy is None:
                     continue
@@ -1602,9 +1594,12 @@ class OrtsnetzLayout(BaseModel):
                 ):
                     try:
                         self.add_pen_cable(
-                            start=src, end_xy=end_xy, name=name,
+                            start=src,
+                            end_xy=end_xy,
+                            name=name,
                             min_segment_length_m=grid,
-                            clearance_m=clearance, escape_radius_m=esc,
+                            clearance_m=clearance,
+                            escape_radius_m=esc,
                         )
                         routed = True
                         break
@@ -1792,14 +1787,28 @@ class OrtsnetzLayout(BaseModel):
             for k, wp in enumerate(cable.waypoints):
                 wp_t = tuple(wp)
                 if k == 0:
-                    nodes.append((self._resolve_anchor(
-                        cable.start_anchor, substation_anchor, kvs_anchors,
-                    ), wp_t))
+                    nodes.append(
+                        (
+                            self._resolve_anchor(
+                                cable.start_anchor,
+                                substation_anchor,
+                                kvs_anchors,
+                            ),
+                            wp_t,
+                        )
+                    )
                     continue
                 if k == len(cable.waypoints) - 1 and cable.end_anchor is not None:
-                    nodes.append((self._resolve_anchor(
-                        cable.end_anchor, substation_anchor, kvs_anchors,
-                    ), wp_t))
+                    nodes.append(
+                        (
+                            self._resolve_anchor(
+                                cable.end_anchor,
+                                substation_anchor,
+                                kvs_anchors,
+                            ),
+                            wp_t,
+                        )
+                    )
                     continue
                 # Internal corner -- create a tiny rod electrode.
                 node_name = f"{cable.name}_node_{k}"
@@ -1815,9 +1824,7 @@ class OrtsnetzLayout(BaseModel):
             )
             cable_node_map[cable.name] = nodes
             # Trunk conductors between consecutive nodes.
-            for j, ((a0, _p0), (a1, _p1)) in enumerate(
-                zip(nodes[:-1], nodes[1:])
-            ):
+            for j, ((a0, _p0), (a1, _p1)) in enumerate(zip(nodes[:-1], nodes[1:])):
                 if a0 == a1:
                     continue
                 create_conductor(
@@ -1929,20 +1936,27 @@ class OrtsnetzLayout(BaseModel):
             if foundation_mask is not None:
                 # With-foundation: saturated green-grey; without: faded.
                 if foundation_mask[i]:
-                    colour = "#7fbf7f"   # has Fundamenterder
+                    colour = "#7fbf7f"  # has Fundamenterder
                     edge = "#2a6f2a"
                 else:
-                    colour = "#f4f4f4"   # no Fundamenterder
+                    colour = "#f4f4f4"  # no Fundamenterder
                     edge = "0.7"
             else:
                 colour = "0.92" if i in connected_idx else "#fde0dc"
                 edge = "0.4"
-            ax.fill(xs, ys, color=colour, edgecolor=edge,
-                    linewidth=0.6, zorder=1)
+            ax.fill(xs, ys, color=colour, edgecolor=edge, linewidth=0.6, zorder=1)
             if annotate_houses:
                 cx, cy = fp.centroid_xy_m()
-                ax.text(cx, cy, str(i), ha="center", va="center",
-                        fontsize=7, color="0.3", zorder=2)
+                ax.text(
+                    cx,
+                    cy,
+                    str(i),
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color="0.3",
+                    zorder=2,
+                )
 
         # PEN cables.
         cable_colours = {}
@@ -1952,12 +1966,10 @@ class OrtsnetzLayout(BaseModel):
             cable_colours[cable.name] = colour
             xs = [p[0] for p in cable.waypoints]
             ys = [p[1] for p in cable.waypoints]
-            ax.plot(xs, ys, color=colour, lw=2.2, zorder=4,
-                    label=f"PEN {cable.name}")
+            ax.plot(xs, ys, color=colour, lw=2.2, zorder=4, label=f"PEN {cable.name}")
             # Mark every corner.
             for x, y in cable.waypoints:
-                ax.plot(x, y, marker="o", color=colour, markersize=3,
-                        zorder=5)
+                ax.plot(x, y, marker="o", color=colour, markersize=3, zorder=5)
 
         # Service drops.
         drew_stub_label = False
@@ -1965,25 +1977,50 @@ class OrtsnetzLayout(BaseModel):
             colour = cable_colours.get(c.cable_name, "saddlebrown")
             xs = [p[0] for p in c.stub_waypoints]
             ys = [p[1] for p in c.stub_waypoints]
-            ax.plot(xs, ys, color=colour, lw=1.0, ls="--", zorder=3,
-                    label=("PEN service drop" if not drew_stub_label
-                           else None))
+            ax.plot(
+                xs,
+                ys,
+                color=colour,
+                lw=1.0,
+                ls="--",
+                zorder=3,
+                label=("PEN service drop" if not drew_stub_label else None),
+            )
             drew_stub_label = True
-            ax.plot(c.tap_point_xy[0], c.tap_point_xy[1],
-                    marker="x", color=colour, markersize=6, zorder=6)
+            ax.plot(
+                c.tap_point_xy[0],
+                c.tap_point_xy[1],
+                marker="x",
+                color=colour,
+                markersize=6,
+                zorder=6,
+            )
 
         # Substation marker.
-        ax.plot(*self.substation_xy, marker="D",
-                color="tab:orange", markersize=14, zorder=7,
-                label="Substation")
+        ax.plot(
+            *self.substation_xy,
+            marker="D",
+            color="tab:orange",
+            markersize=14,
+            zorder=7,
+            label="Substation",
+        )
 
         # KVS markers.
         for k in self.kvs_placements:
-            ax.plot(*k.position_xy, marker="s",
-                    color="tab:blue", markersize=11, zorder=7)
+            ax.plot(
+                *k.position_xy, marker="s", color="tab:blue", markersize=11, zorder=7
+            )
         if self.kvs_placements:
-            ax.plot([], [], marker="s", color="tab:blue",
-                    markersize=11, linestyle="None", label="KVS")
+            ax.plot(
+                [],
+                [],
+                marker="s",
+                color="tab:blue",
+                markersize=11,
+                linestyle="None",
+                label="KVS",
+            )
 
         # Auxiliary current electrode (Hilfserder).
         if self.auxiliary_electrode is not None:
@@ -1992,34 +2029,68 @@ class OrtsnetzLayout(BaseModel):
             ax.plot(
                 [self.substation_xy[0], aux.position_xy[0]],
                 [self.substation_xy[1], aux.position_xy[1]],
-                color="purple", lw=0.8, ls=":", zorder=2,
+                color="purple",
+                lw=0.8,
+                ls=":",
+                zorder=2,
                 label="Measurement feed (return)",
             )
-            ax.plot(*aux.position_xy, marker="v",
-                    color="purple", markersize=13, zorder=7,
-                    label=f"Auxiliary {aux.name!s} (Hilfserder)")
+            ax.plot(
+                *aux.position_xy,
+                marker="v",
+                color="purple",
+                markersize=13,
+                zorder=7,
+                label=f"Auxiliary {aux.name!s} (Hilfserder)",
+            )
 
         # Voltage probe (Spannungssonde).
         if self.voltage_probe is not None:
             probe = self.voltage_probe
-            ax.plot(*probe.position_xy, marker="*",
-                    color="lime", markersize=18, zorder=8,
-                    markeredgecolor="darkgreen", markeredgewidth=1.2,
-                    label=f"Probe {probe.name!s} (Spannungssonde)")
-        if show_unconnected and foundation_mask is None and any(
-            i not in connected_idx for i in range(len(self.footprints))
+            ax.plot(
+                *probe.position_xy,
+                marker="*",
+                color="lime",
+                markersize=18,
+                zorder=8,
+                markeredgecolor="darkgreen",
+                markeredgewidth=1.2,
+                label=f"Probe {probe.name!s} (Spannungssonde)",
+            )
+        if (
+            show_unconnected
+            and foundation_mask is None
+            and any(i not in connected_idx for i in range(len(self.footprints)))
         ):
-            ax.plot([], [], marker="s", color="#fde0dc",
-                    markersize=11, linestyle="None",
-                    label="Unconnected house")
+            ax.plot(
+                [],
+                [],
+                marker="s",
+                color="#fde0dc",
+                markersize=11,
+                linestyle="None",
+                label="Unconnected house",
+            )
         if foundation_mask is not None:
-            ax.plot([], [], marker="s", color="#7fbf7f",
-                    markersize=11, linestyle="None",
-                    label="House with Fundamenterder")
-            ax.plot([], [], marker="s", color="#f4f4f4",
-                    markeredgecolor="0.7",
-                    markersize=11, linestyle="None",
-                    label="House without Fundamenterder")
+            ax.plot(
+                [],
+                [],
+                marker="s",
+                color="#7fbf7f",
+                markersize=11,
+                linestyle="None",
+                label="House with Fundamenterder",
+            )
+            ax.plot(
+                [],
+                [],
+                marker="s",
+                color="#f4f4f4",
+                markeredgecolor="0.7",
+                markersize=11,
+                linestyle="None",
+                label="House without Fundamenterder",
+            )
 
         ax.set_aspect("equal")
         ax.set_xlabel("x / m")
@@ -2118,7 +2189,9 @@ class OrtsnetzLayout(BaseModel):
         from matplotlib.colors import LogNorm, Normalize, TwoSlopeNorm
 
         from groundfield.postprocess.plotting import (
-            _draw_electrodes, _make_grid, world_bounds_xy,
+            _draw_electrodes,
+            _make_grid,
+            world_bounds_xy,
         )
 
         # Mutual exclusion of the scaling modes -- log dominates;
@@ -2131,8 +2204,10 @@ class OrtsnetzLayout(BaseModel):
 
         x_min, x_max, y_min, y_max = world_bounds_xy(world)
         extent = (
-            x_min - padding_m, x_max + padding_m,
-            y_min - padding_m, y_max + padding_m,
+            x_min - padding_m,
+            x_max + padding_m,
+            y_min - padding_m,
+            y_max + padding_m,
         )
         A, B, flat = _make_grid("xy", extent, 0.0, n)
         phi = result.potential(flat, frequency_index=frequency_index).real
@@ -2145,16 +2220,13 @@ class OrtsnetzLayout(BaseModel):
             positive = phi_abs[phi_abs > 0]
             v_min = float(positive.min()) if positive.size else 1e-9
             v_max = float(phi_abs.max()) if phi_abs.size else 1.0
-            norm = LogNorm(vmin=max(v_min, 1e-9),
-                           vmax=max(v_max, 10 * v_min))
-            cs = ax.contourf(A, B, phi_abs, levels=levels,
-                             cmap=cmap, norm=norm)
+            norm = LogNorm(vmin=max(v_min, 1e-9), vmax=max(v_max, 10 * v_min))
+            cs = ax.contourf(A, B, phi_abs, levels=levels, cmap=cmap, norm=norm)
             cbar_label = "|φ| in V (log scale)"
         elif symmetric:
             v = float(np.max(np.abs(phi)))
             norm = Normalize(vmin=-v, vmax=v)
-            cs = ax.contourf(A, B, phi, levels=levels,
-                             cmap=cmap, norm=norm)
+            cs = ax.contourf(A, B, phi, levels=levels, cmap=cmap, norm=norm)
             cbar_label = "Potential φ in V"
         elif two_slope:
             v_neg = float(min(phi.min(), -1e-9))
@@ -2166,8 +2238,9 @@ class OrtsnetzLayout(BaseModel):
             neg_levels = np.linspace(v_neg, 0.0, n_per_side + 1)[:-1]
             pos_levels = np.linspace(0.0, v_pos, n_per_side + 1)
             level_array = np.concatenate([neg_levels, pos_levels])
-            cs = ax.contourf(A, B, phi, levels=level_array,
-                             cmap=cmap, norm=norm, extend="both")
+            cs = ax.contourf(
+                A, B, phi, levels=level_array, cmap=cmap, norm=norm, extend="both"
+            )
             cbar_label = (
                 "Potential φ in V (TwoSlopeNorm: equal colour "
                 "resolution above / below 0)"
@@ -2184,39 +2257,57 @@ class OrtsnetzLayout(BaseModel):
         ax.set_aspect("equal")
         if title is None:
             f_hz = result.frequencies[frequency_index]
-            title = (
-                f"Surface potential φ(x, y, z = 0 m), "
-                f"f = {f_hz:g} Hz"
-            )
+            title = f"Surface potential φ(x, y, z = 0 m), f = {f_hz:g} Hz"
         ax.set_title(title)
 
         if show_electrodes:
             _draw_electrodes(ax, world, "xy")
 
         # Substation marker.
-        ax.plot(*self.substation_xy, marker="D",
-                color="tab:orange", markersize=14, zorder=10,
-                markeredgecolor="black", markeredgewidth=0.8,
-                label="Substation")
+        ax.plot(
+            *self.substation_xy,
+            marker="D",
+            color="tab:orange",
+            markersize=14,
+            zorder=10,
+            markeredgecolor="black",
+            markeredgewidth=0.8,
+            label="Substation",
+        )
         # Auxiliary electrode (Hilfserder).
         if self.auxiliary_electrode is not None:
             aux = self.auxiliary_electrode
             ax.plot(
                 [self.substation_xy[0], aux.position_xy[0]],
                 [self.substation_xy[1], aux.position_xy[1]],
-                color="purple", lw=0.8, ls=":", zorder=9,
+                color="purple",
+                lw=0.8,
+                ls=":",
+                zorder=9,
             )
-            ax.plot(*aux.position_xy, marker="v",
-                    color="purple", markersize=13, zorder=10,
-                    markeredgecolor="black", markeredgewidth=0.8,
-                    label="Hilfserder")
+            ax.plot(
+                *aux.position_xy,
+                marker="v",
+                color="purple",
+                markersize=13,
+                zorder=10,
+                markeredgecolor="black",
+                markeredgewidth=0.8,
+                label="Hilfserder",
+            )
         # Voltage probe (Spannungssonde).
         if self.voltage_probe is not None:
             probe = self.voltage_probe
-            ax.plot(*probe.position_xy, marker="*",
-                    color="lime", markersize=18, zorder=11,
-                    markeredgecolor="darkgreen", markeredgewidth=1.2,
-                    label="Spannungssonde")
+            ax.plot(
+                *probe.position_xy,
+                marker="*",
+                color="lime",
+                markersize=18,
+                zorder=11,
+                markeredgecolor="darkgreen",
+                markeredgewidth=1.2,
+                label="Spannungssonde",
+            )
         ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
         return fig
 
@@ -2237,7 +2328,9 @@ class OrtsnetzLayout(BaseModel):
         )
 
     def _footprint_to_box(
-        self, fp: BuildingFootprint, idx: int,
+        self,
+        fp: BuildingFootprint,
+        idx: int,
     ) -> ObstacleBox:
         (cx, cy), (dx, dy) = fp.axis_aligned_bounding_rectangle()
         return ObstacleBox(
@@ -2249,10 +2342,7 @@ class OrtsnetzLayout(BaseModel):
         )
 
     def _obstacle_boxes(self) -> list[ObstacleBox]:
-        return [
-            self._footprint_to_box(fp, i)
-            for i, fp in enumerate(self.footprints)
-        ]
+        return [self._footprint_to_box(fp, i) for i, fp in enumerate(self.footprints)]
 
     def _anchors_connected_to_substation(self) -> list[str]:
         """Source anchors galvanically connected to the substation.
@@ -2313,7 +2403,18 @@ class OrtsnetzLayout(BaseModel):
         for extra in (0.0, 3.0, 6.0, 10.0, 16.0):
             dist = half_diag + margin_m + extra
             for ang_deg in (
-                0, 20, -20, 45, -45, 70, -70, 110, -110, 160, -160, 180,
+                0,
+                20,
+                -20,
+                45,
+                -45,
+                70,
+                -70,
+                110,
+                -110,
+                160,
+                -160,
+                180,
             ):
                 theta = math.radians(ang_deg)
                 cos_t, sin_t = math.cos(theta), math.sin(theta)
@@ -2338,9 +2439,9 @@ class OrtsnetzLayout(BaseModel):
         Returns ``(tap_point, stub_waypoints)`` or ``(None, None)``
         when no obstacle-free stub exists.
         """
-        best: Optional[
-            tuple[tuple[float, float], list[tuple[float, float]], float]
-        ] = None
+        best: Optional[tuple[tuple[float, float], list[tuple[float, float]], float]] = (
+            None
+        )
         for seg_start, seg_end in cable.segments():
             tap = _project_onto_axis_segment(centroid, seg_start, seg_end)
             stub = _manhattan_stub(centroid, tap, obstacles)
@@ -2366,9 +2467,7 @@ class OrtsnetzLayout(BaseModel):
             return substation_anchor
         if name in kvs_anchors:
             return kvs_anchors[name]
-        raise KeyError(
-            f"OrtsnetzLayout._resolve_anchor: unknown anchor {name!r}."
-        )
+        raise KeyError(f"OrtsnetzLayout._resolve_anchor: unknown anchor {name!r}.")
 
     def _insert_tap_nodes_on_cable(
         self,
@@ -2414,9 +2513,7 @@ class OrtsnetzLayout(BaseModel):
                 forward = p1[1] >= p0[1]
                 on_segment.sort(key=lambda t: t[1] if forward else -t[1])
             for tap_pos in on_segment:
-                tap_name = (
-                    f"{cable.name}_tap_{len(out)}"
-                )
+                tap_name = f"{cable.name}_tap_{len(out)}"
                 _create_pen_node(world, tap_name, tap_pos)
                 out.append((tap_name, tap_pos))
         out.append(nodes[-1])
@@ -2436,8 +2533,9 @@ class OrtsnetzLayout(BaseModel):
         tap = connection.tap_point_xy
         # Exact match first.
         for anchor, (x, y) in nodes:
-            if math.isclose(x, tap[0], abs_tol=1e-6) and \
-                    math.isclose(y, tap[1], abs_tol=1e-6):
+            if math.isclose(x, tap[0], abs_tol=1e-6) and math.isclose(
+                y, tap[1], abs_tol=1e-6
+            ):
                 return anchor
         # Fall back to nearest node (Manhattan).
         best_anchor: Optional[str] = None
@@ -2492,10 +2590,7 @@ def _manhattan_stub(
     cx, cy = centroid
     tx, ty = tap
     if math.isclose(cx, tx) or math.isclose(cy, ty):
-        if not any(
-            segment_intersects_box(centroid, tap, o)
-            for o in obstacles
-        ):
+        if not any(segment_intersects_box(centroid, tap, o) for o in obstacles):
             return [centroid, tap]
         # Single straight stub is blocked -- fall through to the
         # corner attempts.
@@ -2508,9 +2603,7 @@ def _manhattan_stub(
             corner[1], centroid[1]
         ):
             continue
-        if math.isclose(corner[0], tap[0]) and math.isclose(
-            corner[1], tap[1]
-        ):
+        if math.isclose(corner[0], tap[0]) and math.isclose(corner[1], tap[1]):
             continue
         if any(
             segment_intersects_box(seg1[0], seg1[1], o)

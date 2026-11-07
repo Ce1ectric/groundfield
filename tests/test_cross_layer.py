@@ -43,9 +43,9 @@ from groundfield.coupling.layered_green import (
 @pytest.mark.parametrize(
     "z,z_s,s",
     [
-        (0.5, 1.5, 5.0),   # cross-layer
-        (1.5, 0.5, 5.0),   # reciprocal
-        (1.5, 0.5, 0.5),   # near-source
+        (0.5, 1.5, 5.0),  # cross-layer
+        (1.5, 0.5, 5.0),  # reciprocal
+        (1.5, 0.5, 0.5),  # near-source
         (3.0, 0.5, 10.0),  # both far apart
     ],
 )
@@ -55,15 +55,19 @@ def test_homogeneous_limit_recovers_free_space(z, z_s, s) -> None:
     (the factor 1/(4π) is applied by the caller)."""
     rho = 100.0
     G = two_layer_real_space_kernel(
-        s=s, z=z, z_s=z_s, rho_1=rho, rho_2=rho, h_1=1.0,
+        s=s,
+        z=z,
+        z_s=z_s,
+        rho_1=rho,
+        rho_2=rho,
+        h_1=1.0,
     )
     r = math.hypot(s, z - z_s)
     r_img = math.hypot(s, z + z_s)
     expected = (rho / 2.0) * (1.0 / r + 1.0 / r_img)
     rel = abs(G - expected) / abs(expected)
     assert rel < 1e-2, (
-        f"Homogeneous limit mismatch: G={G}, expected={expected}, "
-        f"rel={rel:.3e}"
+        f"Homogeneous limit mismatch: G={G}, expected={expected}, rel={rel:.3e}"
     )
 
 
@@ -72,12 +76,22 @@ def test_reciprocity_cross_layer() -> None:
     horizontal distance."""
     rho_1, rho_2, h_1 = 100.0, 1000.0, 1.0
     for s in [1.0, 5.0, 20.0]:
-        for (z, z_s) in [(0.5, 1.5), (1.5, 0.5), (0.3, 2.5)]:
+        for z, z_s in [(0.5, 1.5), (1.5, 0.5), (0.3, 2.5)]:
             G_ab = two_layer_real_space_kernel(
-                s=s, z=z, z_s=z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                s=s,
+                z=z,
+                z_s=z_s,
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
             )
             G_ba = two_layer_real_space_kernel(
-                s=s, z=z_s, z_s=z, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                s=s,
+                z=z_s,
+                z_s=z,
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
             )
             rel = abs(G_ab - G_ba) / max(abs(G_ab), 1e-12)
             assert rel < 1e-3, (
@@ -96,8 +110,9 @@ def test_image_2layer_accepts_cross_layer_rod() -> None:
     the FieldResult is finite and physically sensible."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=1.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=2.0, wire_radius=0.0075)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=2.0, wire_radius=0.0075
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image_2layer", segment_length=0.5)
     res = eng.solve(w)
@@ -120,8 +135,9 @@ def test_image_2layer_regression_pure_upper_layer() -> None:
     image series is preserved bit-exact."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=2.0, wire_radius=0.0075)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=2.0, wire_radius=0.0075
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image_2layer", segment_length=0.5)
     res_a = eng.solve(w)
@@ -135,22 +151,28 @@ def test_image_2layer_homogeneous_limit_cross_layer() -> None:
     resistivity (within the Sommerfeld-quadrature tolerance)."""
     soil_layered = gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=1.0)
     w_l = gf.create_world(soil=soil_layered)
-    gf.create_electrode(w_l, "rod", name="g1", position=(0, 0, 0.5),
-                        length=2.0, wire_radius=0.0075)
+    gf.create_electrode(
+        w_l, "rod", name="g1", position=(0, 0, 0.5), length=2.0, wire_radius=0.0075
+    )
     gf.create_source(w_l, attached_to="g1", magnitude=1.0)
 
     soil_homog = gf.HomogeneousSoil(resistivity=100.0)
     w_h = gf.create_world(soil=soil_homog)
-    gf.create_electrode(w_h, "rod", name="g1", position=(0, 0, 0.5),
-                        length=2.0, wire_radius=0.0075)
+    gf.create_electrode(
+        w_h, "rod", name="g1", position=(0, 0, 0.5), length=2.0, wire_radius=0.0075
+    )
     gf.create_source(w_h, attached_to="g1", magnitude=1.0)
 
     eng_l = gf.create_engine(backend="image_2layer", segment_length=0.5)
     eng_h = gf.create_engine(backend="image", segment_length=0.5)
-    Z_l = (eng_l.solve(w_l).electrode_potentials["g1"][0]
-           / eng_l.solve(w_l).electrode_currents["g1"][0])
-    Z_h = (eng_h.solve(w_h).electrode_potentials["g1"][0]
-           / eng_h.solve(w_h).electrode_currents["g1"][0])
+    Z_l = (
+        eng_l.solve(w_l).electrode_potentials["g1"][0]
+        / eng_l.solve(w_l).electrode_currents["g1"][0]
+    )
+    Z_h = (
+        eng_h.solve(w_h).electrode_potentials["g1"][0]
+        / eng_h.solve(w_h).electrode_currents["g1"][0]
+    )
     rel = abs(Z_l - Z_h) / abs(Z_h)
     assert rel < 0.05, (
         f"Cross-layer homogeneous limit mismatch: "
@@ -164,8 +186,9 @@ def test_image_2layer_layer_index_assignment() -> None:
     we count how many have midpoint z < h_1)."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=1.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=2.0, wire_radius=0.0075)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=2.0, wire_radius=0.0075
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image_2layer", segment_length=0.5)
     res = eng.solve(w)
@@ -188,15 +211,17 @@ def test_other_layered_backends_accept_cross_layer_n2(backend) -> None:
     `_two_layer_self_kernel_factory`. n>=3 still warns."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=1.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=2.0, wire_radius=0.0075)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=2.0, wire_radius=0.0075
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend=backend, segment_length=0.5)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         res = eng.solve(w)
         cross_layer_warnings = [
-            w_ for w_ in caught
+            w_
+            for w_ in caught
             if issubclass(w_.category, UserWarning)
             and "cross-layer" in str(w_.message).lower()
         ]
@@ -205,7 +230,6 @@ def test_other_layered_backends_accept_cross_layer_n2(backend) -> None:
             f"got: {[str(w_.message) for w_ in cross_layer_warnings]}"
         )
     # And the result must be physically sensible.
-    Z = (res.electrode_potentials["g1"][0]
-         / res.electrode_currents["g1"][0])
+    Z = res.electrode_potentials["g1"][0] / res.electrode_currents["g1"][0]
     assert Z.real > 0
     assert math.isfinite(Z.real)

@@ -100,9 +100,7 @@ def _normalised(v: tuple[float, float, float]) -> np.ndarray:
     arr = np.asarray(v, dtype=float)
     n = float(np.linalg.norm(arr))
     if n <= 0.0:
-        raise ValueError(
-            f"direction must be a non-zero 3-vector, got {tuple(v)}."
-        )
+        raise ValueError(f"direction must be a non-zero 3-vector, got {tuple(v)}.")
     return arr / n
 
 
@@ -195,9 +193,7 @@ def touch_voltage(
     # Horizontal projection: enforce feet on the soil surface.
     e_h = np.array([e_hat[0], e_hat[1], 0.0])
     if float(np.linalg.norm(e_h)) <= 0.0:
-        raise ValueError(
-            f"direction has no horizontal component: {tuple(direction)}."
-        )
+        raise ValueError(f"direction has no horizontal component: {tuple(direction)}.")
     e_h = e_h / float(np.linalg.norm(e_h))
 
     feet = np.array([cp[0], cp[1], surface_z]) + distance * e_h
@@ -329,9 +325,7 @@ def step_voltage(
     e_hat = _normalised(direction)
     e_h = np.array([e_hat[0], e_hat[1], 0.0])
     if float(np.linalg.norm(e_h)) <= 0.0:
-        raise ValueError(
-            f"direction has no horizontal component: {tuple(direction)}."
-        )
+        raise ValueError(f"direction has no horizontal component: {tuple(direction)}.")
     e_h = e_h / float(np.linalg.norm(e_h))
 
     z0 = float(position[2]) if surface_z is None else float(surface_z)

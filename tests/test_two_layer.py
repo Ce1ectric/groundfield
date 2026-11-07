@@ -52,8 +52,7 @@ def test_two_layer_reduces_to_homogeneous_when_rho_equal() -> None:
     z_twolay: list[float] = []
     for soil, target in [(homog, z_homog), (twolay, z_twolay)]:
         world = gf.create_world(soil=soil)
-        gf.create_electrode(world, "rod", name="g1",
-                            position=(0, 0, 0.0), length=1.5)
+        gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
         gf.create_source(world, attached_to="g1", magnitude=1.0)
         target.append(eng.solve(world).cluster_impedance("g1")[0].real)
 
@@ -76,8 +75,7 @@ def test_compare_engines_two_layer_vs_homogeneous_close_K() -> None:
 
     def _build(soil):
         w = gf.create_world(soil=soil)
-        gf.create_electrode(w, "rod", name="g1",
-                            position=(0, 0, 0.0), length=1.5)
+        gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
         gf.create_source(w, attached_to="g1", magnitude=1.0)
         return w
 
@@ -86,9 +84,7 @@ def test_compare_engines_two_layer_vs_homogeneous_close_K() -> None:
     Z_2 = eng.solve(_build(soil_2)).cluster_impedance("g1")[0].real
 
     # |K| = 10/210 ≈ 0.048 ⇒ effect on the rod is small, < 5 %.
-    assert abs(Z_2 - Z_h) / Z_h < 0.05, (
-        f"Z_2layer={Z_2:.2f}, Z_homog={Z_h:.2f}"
-    )
+    assert abs(Z_2 - Z_h) / Z_h < 0.05, f"Z_2layer={Z_2:.2f}, Z_homog={Z_h:.2f}"
 
 
 # ---------------------------------------------------------------------
@@ -99,8 +95,8 @@ def test_compare_engines_two_layer_vs_homogeneous_close_K() -> None:
 @pytest.mark.parametrize(
     "rho_2, expected_direction",
     [
-        (10.0, "lower"),    # better lower layer → lower impedance
-        (1000.0, "higher"), # worse lower layer  → higher impedance
+        (10.0, "lower"),  # better lower layer → lower impedance
+        (1000.0, "higher"),  # worse lower layer  → higher impedance
     ],
 )
 def test_two_layer_K_sign_changes_impedance_correctly(
@@ -111,8 +107,7 @@ def test_two_layer_K_sign_changes_impedance_correctly(
 
     def _Z(soil):
         w = gf.create_world(soil=soil)
-        gf.create_electrode(w, "rod", name="g1",
-                            position=(0, 0, 0.0), length=1.5)
+        gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
         gf.create_source(w, attached_to="g1", magnitude=1.0)
         return eng.solve(w).cluster_impedance("g1")[0].real
 
@@ -134,15 +129,12 @@ def test_engine_auto_selects_image_2layer_for_two_layer_soil() -> None:
     """``backend='image'`` + ``TwoLayerSoil`` ⇒ backend == 'image_2layer'."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=200.0, h_1=2.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     result = gf.create_engine(backend="image", segment_length=0.05).solve(world)
 
     assert result.backend == "image_2layer"
-    assert result.metadata["K"] == pytest.approx(
-        soil.reflection_coefficient
-    )
+    assert result.metadata["K"] == pytest.approx(soil.reflection_coefficient)
     assert result.metadata["converged"] is True
 
 
@@ -161,14 +153,12 @@ def test_two_layer_accepts_electrode_below_layer_boundary() -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=1.0)
     world = gf.create_world(soil=soil)
     # Rod head at z=0.5, length 2 m → tip at z=2.5 — below h_1=1.0.
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.5), length=2.0)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=2.0)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)
     # No precondition error: the cross-layer path runs.
     res = eng.solve(world)
-    Z = (res.electrode_potentials["g1"][0]
-         / res.electrode_currents["g1"][0])
+    Z = res.electrode_potentials["g1"][0] / res.electrode_currents["g1"][0]
     assert Z.real > 0.0
     assert math.isfinite(Z.real)
 
@@ -182,8 +172,7 @@ def test_two_layer_series_converges_within_max_terms() -> None:
     """For moderate K the series must terminate in fewer than 100 terms."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)  # |K|≈0.67
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     res = gf.create_engine(backend="image", segment_length=0.05).solve(world)
 
@@ -204,19 +193,18 @@ def test_two_layer_image_max_terms_raises_convergence_cap() -> None:
     """
     soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=10.0)  # |K|≈0.94
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     # An explicitly low cap (the historic default 100) is too low for
     # this contrast -> not converged, visible warning.
     with pytest.warns(SeriesTruncationWarning):
-        res100 = gf.create_engine(backend="image", segment_length=0.05,
-                                  image_max_terms=100).solve(world)
+        res100 = gf.create_engine(
+            backend="image", segment_length=0.05, image_max_terms=100
+        ).solve(world)
     assert res100.metadata["converged"] is False
     # The default cap (300) converges within tolerance, using more
     # than 100 terms.
-    res_default = gf.create_engine(backend="image",
-                                   segment_length=0.05).solve(world)
+    res_default = gf.create_engine(backend="image", segment_length=0.05).solve(world)
     assert res_default.metadata["converged"] is True
     assert 100 < res_default.metadata["n_terms_used"] <= 300
 
@@ -229,16 +217,16 @@ def test_two_layer_image_max_terms_raises_convergence_cap() -> None:
 def test_two_layer_potential_decays_monotonically() -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=10.0, h_1=2.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     res = gf.create_engine(backend="image", segment_length=0.05).solve(world)
 
     xs = np.linspace(1.0, 50.0, 60)
     pts = np.column_stack([xs, np.zeros_like(xs), np.zeros_like(xs)])
     phi = res.potential(pts).real
-    assert (np.diff(phi) <= 1e-9).all(), \
+    assert (np.diff(phi) <= 1e-9).all(), (
         f"Potential not monotonic: max Δ = {np.diff(phi).max():.2e}"
+    )
 
 
 # ---------------------------------------------------------------------
@@ -255,8 +243,7 @@ def test_compare_engines_consistent_at_K_zero() -> None:
 
     def _build(soil):
         w = gf.create_world(soil=soil)
-        gf.create_electrode(w, "rod", name="g1",
-                            position=(0, 0, 0.0), length=1.5)
+        gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
         gf.create_source(w, attached_to="g1", magnitude=1.0)
         return w
 

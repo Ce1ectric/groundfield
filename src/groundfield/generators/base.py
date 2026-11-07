@@ -132,7 +132,9 @@ class GeneratorConfig(BaseModel):
                 return True
         return False
 
-    def sample(self: "GeneratorConfig", rng: Optional[Union[int, np.random.Generator]] = None) -> "GeneratorConfig":
+    def sample(
+        self: "GeneratorConfig", rng: Optional[Union[int, np.random.Generator]] = None
+    ) -> "GeneratorConfig":
         """Return a copy with every :class:`Distribution` field resolved.
 
         Each distribution is replaced by exactly one ``.sample(rng)``
@@ -224,9 +226,7 @@ class WorldGenerator(Generic[C]):
         seed: Optional[Union[int, np.random.Generator]] = None,
     ) -> None:
         if not isinstance(cfg, GeneratorConfig):
-            raise TypeError(
-                f"cfg must be a GeneratorConfig, got {type(cfg).__name__}."
-            )
+            raise TypeError(f"cfg must be a GeneratorConfig, got {type(cfg).__name__}.")
         self.cfg = cfg
         self._rng = _coerce_rng(seed)
 

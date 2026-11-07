@@ -115,7 +115,8 @@ def default_building_catalog() -> list[BuildingTypeSpec]:
                     FoundationElectrodeSpec(
                         size_m=10.0,
                         depth_m=0.8,
-                        n_x=2, n_y=2,
+                        n_x=2,
+                        n_y=2,
                     ),
                 ],
             ),
@@ -127,10 +128,14 @@ def default_building_catalog() -> list[BuildingTypeSpec]:
             grounding=GroundingSystemSpec(
                 electrodes=[
                     FoundationElectrodeSpec(
-                        size_m=12.0, depth_m=0.8, n_x=2, n_y=2,
+                        size_m=12.0,
+                        depth_m=0.8,
+                        n_x=2,
+                        n_y=2,
                     ),
                     RodElectrodeSpec(
-                        length_m=2.0, depth_m=0.0,
+                        length_m=2.0,
+                        depth_m=0.0,
                         offset_xy_m=(7.0, 0.0),
                     ),
                 ],
@@ -143,7 +148,10 @@ def default_building_catalog() -> list[BuildingTypeSpec]:
             grounding=GroundingSystemSpec(
                 electrodes=[
                     FoundationElectrodeSpec(
-                        size_m=20.0, depth_m=0.8, n_x=3, n_y=3,
+                        size_m=20.0,
+                        depth_m=0.8,
+                        n_x=3,
+                        n_y=3,
                     ),
                     *rod_circle(n=4, radius_m=12.0, length_m=2.5),
                 ],
@@ -160,16 +168,21 @@ def default_building_catalog() -> list[BuildingTypeSpec]:
                 electrodes=[
                     RingElectrodeSpec(radius_m=25.0, depth_m=0.8),
                     FoundationElectrodeSpec(
-                        size_m=30.0, depth_m=0.8, n_x=4, n_y=4,
+                        size_m=30.0,
+                        depth_m=0.8,
+                        n_x=4,
+                        n_y=4,
                     ),
                     *rod_circle(n=8, radius_m=25.0, length_m=3.0),
                     StripElectrodeSpec(
-                        length_m=40.0, depth_m=0.8,
+                        length_m=40.0,
+                        depth_m=0.8,
                         orientation_deg=0.0,
                         offset_xy_m=(0.0, 28.0),
                     ),
                     StripElectrodeSpec(
-                        length_m=40.0, depth_m=0.8,
+                        length_m=40.0,
+                        depth_m=0.8,
                         orientation_deg=0.0,
                         offset_xy_m=(0.0, -28.0),
                     ),

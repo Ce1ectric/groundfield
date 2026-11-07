@@ -346,9 +346,9 @@ def test_two_layer_attribution_matches_eq8_across_frequency(frequency) -> None:
     et = _eq8_two_layer_self(frequency, r1, r2, d, _CV["height"], _CV["radius"]).imag
     eq8_frac = (et - e2) / (e1 - e2)
 
-    assert gf_frac == pytest.approx(
-        eq8_frac, abs=0.06
-    ), f"f={frequency}: gf frac {gf_frac:.3f} vs Eq.(8) {eq8_frac:.3f}"
+    assert gf_frac == pytest.approx(eq8_frac, abs=0.06), (
+        f"f={frequency}: gf frac {gf_frac:.3f} vs Eq.(8) {eq8_frac:.3f}"
+    )
 
 
 def test_two_layer_frequency_regimes_low_vs_high() -> None:
@@ -419,8 +419,12 @@ def test_assembled_stack_matches_pollaczek_reference_two_layer() -> None:
         n_seg=30,
     )
     z_poll = pollaczek_self_impedance(
-        _CV["rho1"], _CV["rho2"], _CV["d"], f,
-        depth=_CV["height"], gmr=_CV["radius"],
+        _CV["rho1"],
+        _CV["rho2"],
+        _CV["d"],
+        f,
+        depth=_CV["height"],
+        gmr=_CV["radius"],
     )
     z_eq8 = _eq8_two_layer_self(
         f, _CV["rho1"], _CV["rho2"], _CV["d"], _CV["height"], _CV["radius"]

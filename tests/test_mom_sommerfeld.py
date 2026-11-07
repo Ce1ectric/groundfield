@@ -34,8 +34,8 @@ def test_kernel_homogeneous_closed_form() -> None:
     z = 0.5
     z_s = 1.0
     G = sommerfeld_kernel_value(stack, s=s, z=z, z_s=z_s)
-    r = float(np.sqrt(s ** 2 + (z - z_s) ** 2))
-    r_img = float(np.sqrt(s ** 2 + (z + z_s) ** 2))
+    r = float(np.sqrt(s**2 + (z - z_s) ** 2))
+    r_img = float(np.sqrt(s**2 + (z + z_s) ** 2))
     expected = 1.0 / r + 1.0 / r_img
     assert G == pytest.approx(expected, rel=1e-6)
 
@@ -46,8 +46,8 @@ def test_kernel_two_layer_K_zero() -> None:
     stack = LayerStack(rhos=np.array([rho, rho]), h=np.array([2.0]))
     s, z, z_s = 1.0, 0.5, 1.0
     G = sommerfeld_kernel_value(stack, s=s, z=z, z_s=z_s)
-    r = float(np.sqrt(s ** 2 + (z - z_s) ** 2))
-    r_img = float(np.sqrt(s ** 2 + (z + z_s) ** 2))
+    r = float(np.sqrt(s**2 + (z - z_s) ** 2))
+    r_img = float(np.sqrt(s**2 + (z + z_s) ** 2))
     expected = 1.0 / r + 1.0 / r_img
     assert G == pytest.approx(expected, rel=1e-4)
 

@@ -75,6 +75,14 @@ generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
 testpaths = ["tests"]
 addopts = "-ra"
 
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = ["notebooks", "site", "dist", "graphify-out", "audit*", "review*"]
+
+[tool.ruff.format]
+docstring-code-format = false
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

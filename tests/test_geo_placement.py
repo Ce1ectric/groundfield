@@ -43,7 +43,9 @@ from groundfield.soil.models import TwoLayerSoil
 # ---------------------------------------------------------------------
 
 
-def _rectangle(centre: tuple[float, float], size: tuple[float, float]) -> BuildingFootprint:
+def _rectangle(
+    centre: tuple[float, float], size: tuple[float, float]
+) -> BuildingFootprint:
     """Helper: axis-aligned rectangle with the requested centre/size."""
     cx, cy = centre
     dx, dy = size
@@ -70,7 +72,7 @@ def test_osm_placement_generate_returns_centroids_in_order() -> None:
 
 def test_osm_placement_filters_below_min_area() -> None:
     fps = [
-        _rectangle((0.0, 0.0), (10.0, 8.0)),   # 80 m²
+        _rectangle((0.0, 0.0), (10.0, 8.0)),  # 80 m²
         _rectangle((50.0, 0.0), (2.0, 2.0)),  # 4 m²  — dropped
     ]
     p = OsmBuildingPlacement(footprints=fps, min_area_m2=16.0)
@@ -134,13 +136,17 @@ def test_rotated_foundation_registers_perimeter_strips() -> None:
     gs = GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
-                style="ring", size_xy_m=(10.0, 6.0),
-                depth_m=0.8, orientation_deg=30.0,
+                style="ring",
+                size_xy_m=(10.0, 6.0),
+                depth_m=0.8,
+                orientation_deg=30.0,
             )
         ],
     )
     anchor = gs.build_at(
-        world, site_xy=(0.0, 0.0), name_prefix="house",
+        world,
+        site_xy=(0.0, 0.0),
+        name_prefix="house",
         rng=np.random.default_rng(0),
     )
     assert anchor == "house_foundation_0"
@@ -164,13 +170,19 @@ def test_rotated_foundation_mesh_style_adds_internal_braces() -> None:
     gs = GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
-                style="mesh", size_xy_m=(10.0, 6.0),
-                depth_m=0.8, orientation_deg=15.0, n_x=2, n_y=2,
+                style="mesh",
+                size_xy_m=(10.0, 6.0),
+                depth_m=0.8,
+                orientation_deg=15.0,
+                n_x=2,
+                n_y=2,
             )
         ],
     )
     gs.build_at(
-        world, site_xy=(0.0, 0.0), name_prefix="house",
+        world,
+        site_xy=(0.0, 0.0),
+        name_prefix="house",
         rng=np.random.default_rng(0),
     )
     strips = [e for e in world.electrodes if e.kind == "strip"]
@@ -189,12 +201,16 @@ def test_axis_aligned_foundation_stays_grid_mesh() -> None:
     gs = GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
-                style="mesh", size_xy_m=(10.0, 6.0), depth_m=0.8,
+                style="mesh",
+                size_xy_m=(10.0, 6.0),
+                depth_m=0.8,
             )
         ],
     )
     gs.build_at(
-        world, site_xy=(0.0, 0.0), name_prefix="house",
+        world,
+        site_xy=(0.0, 0.0),
+        name_prefix="house",
         rng=np.random.default_rng(0),
     )
     kinds = [e.kind for e in world.electrodes]
@@ -211,13 +227,17 @@ def test_zero_orientation_uses_axis_aligned_path() -> None:
     gs = GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
-                style="ring", size_xy_m=(10.0, 6.0),
-                depth_m=0.8, orientation_deg=0.0,
+                style="ring",
+                size_xy_m=(10.0, 6.0),
+                depth_m=0.8,
+                orientation_deg=0.0,
             )
         ],
     )
     gs.build_at(
-        world, site_xy=(0.0, 0.0), name_prefix="house",
+        world,
+        site_xy=(0.0, 0.0),
+        name_prefix="house",
         rng=np.random.default_rng(0),
     )
     kinds = [e.kind for e in world.electrodes]
@@ -247,7 +267,9 @@ def _build_tn_with_osm_placement(
         grounding=GroundingSystemSpec(
             electrodes=[
                 FoundationElectrodeSpec(
-                    style="ring", size_m=8.0, depth_m=0.8,
+                    style="ring",
+                    size_m=8.0,
+                    depth_m=0.8,
                 )
             ],
         ),
@@ -294,8 +316,7 @@ def test_tn_generator_uses_footprint_dimensions_for_each_house() -> None:
     # rotated ring foundation are the (-y) and (+y) edges, both
     # 10 m long for house A.
     house_a_strips = [
-        e for e in strips
-        if e.name.startswith("residential_0_foundation_")
+        e for e in strips if e.name.startswith("residential_0_foundation_")
     ]
     assert len(house_a_strips) == 4
     lengths_a = sorted(e.length for e in house_a_strips)
@@ -306,8 +327,7 @@ def test_tn_generator_uses_footprint_dimensions_for_each_house() -> None:
     assert lengths_a[3] == pytest.approx(10.0, abs=1e-6)
 
     house_b_strips = [
-        e for e in strips
-        if e.name.startswith("residential_1_foundation_")
+        e for e in strips if e.name.startswith("residential_1_foundation_")
     ]
     lengths_b = sorted(e.length for e in house_b_strips)
     # House B: two long sides ≈ 14 m, two short sides ≈ 8 m.

@@ -129,13 +129,23 @@ def test_layered_correction_small_radius_unchanged() -> None:
     """
     g_def = two_layer_layered_correction_real_space(1.0, 0.7, 7.0, **_PARS)
     g_ref = two_layer_layered_correction_real_space(
-        1.0, 0.7, 7.0, **_PARS, n_log=128, n_lin=384,
+        1.0,
+        0.7,
+        7.0,
+        **_PARS,
+        n_log=128,
+        n_lin=384,
     )
     assert g_def == pytest.approx(g_ref, rel=1e-10)
 
 
 def test_layered_correction_homogeneous_limit_zero() -> None:
     g = two_layer_layered_correction_real_space(
-        100.0, 0.7, 7.0, rho_1=100.0, rho_2=100.0, h_1=5.0,
+        100.0,
+        0.7,
+        7.0,
+        rho_1=100.0,
+        rho_2=100.0,
+        h_1=5.0,
     )
     assert g == 0.0

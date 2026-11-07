@@ -194,8 +194,7 @@ def save_potential_path_csv(
         for k in f_idx:
             if not (0 <= k < len(result.frequencies)):
                 raise ValueError(
-                    f"frequency index {k} out of range "
-                    f"[0, {len(result.frequencies)})."
+                    f"frequency index {k} out of range [0, {len(result.frequencies)})."
                 )
 
     s = np.linspace(0.0, float(distance), int(n))
@@ -257,9 +256,7 @@ def save_electrode_table_csv(
     """
     from groundfield.postprocess.current_balance import electrode_current_table
 
-    df = electrode_current_table(
-        result, world=world, frequency_index=frequency_index
-    )
+    df = electrode_current_table(result, world=world, frequency_index=frequency_index)
     out = _ensure_path(path)
     df.to_csv(out, index=False, float_format="%.17g")
     return out

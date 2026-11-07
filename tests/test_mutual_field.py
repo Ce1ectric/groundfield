@@ -7,6 +7,7 @@ points). It must also agree, at the node positions, with the off-diagonal block 
 :func:`solve_mutual_matrix`. Acceptance ``max|ΔR| < 1e-9`` is the pure
 BLAS-reordering residual (same kernels, same accumulation order).
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -25,14 +26,22 @@ _FREQUENCIES = [50.0]
 # Field points deliberately DECOUPLED from the anchors: more points than nodes,
 # arbitrary surface/buried positions (incl. one on a node, one far away).
 _FIELD_POINTS = np.array(
-    [[3.0, 0.0, 0.0], [8.0, 2.0, 0.0], [6.0, 9.0, 0.5], [20.0, -5.0, 0.0], [0.0, 0.0, 0.0]]
+    [
+        [3.0, 0.0, 0.0],
+        [8.0, 2.0, 0.0],
+        [6.0, 9.0, 0.5],
+        [20.0, -5.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ]
 )
 
 
 def _build_world(soil: object, length: float) -> "gf.World":
     world = gf.create_world(soil=soil)
     for name, x, y in _ANCHORS:
-        gf.create_electrode(world, "rod", name=name, position=(x, y, 0.5), length=length)
+        gf.create_electrode(
+            world, "rod", name=name, position=(x, y, 0.5), length=length
+        )
     return world
 
 
@@ -56,7 +65,10 @@ def _reference_R(soil: object, length: float) -> np.ndarray:
     [
         (gf.HomogeneousSoil(resistivity=100.0), 3.0),
         (gf.TwoLayerSoil(rho_1=200.0, rho_2=100.0, h_1=10.0), 3.0),
-        (gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0), 9.0),  # ADR-0007 cross-layer
+        (
+            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0),
+            9.0,
+        ),  # ADR-0007 cross-layer
     ],
 )
 def test_mutual_field_matches_per_excitation(soil, length):

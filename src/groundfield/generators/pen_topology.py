@@ -161,7 +161,8 @@ class RadialTrunkTopology(BaseModel):
     kind: Literal["radial_trunk"] = "radial_trunk"
 
     n_feeders: int = Field(
-        default=4, ge=1,
+        default=4,
+        ge=1,
         description="Number of radial feeders out of the substation.",
     )
     feeder_directions_deg: Optional[list[float]] = Field(
@@ -173,25 +174,26 @@ class RadialTrunkTopology(BaseModel):
         ),
     )
     max_feeder_length_m: float = Field(
-        default=500.0, gt=0.0,
+        default=500.0,
+        gt=0.0,
         description=(
             "Maximum trunk length per feeder in m. Buildings further "
             "out are dropped with a UserWarning."
         ),
     )
     slots_per_substation: int = Field(
-        default=8, ge=1,
-        description=(
-            "Number of direct building taps per feeder at the "
-            "substation."
-        ),
+        default=8,
+        ge=1,
+        description=("Number of direct building taps per feeder at the substation."),
     )
     slots_per_kvs: int = Field(
-        default=8, ge=1,
+        default=8,
+        ge=1,
         description="Number of direct building taps per inserted KVS.",
     )
     kvs_spacing_m: float = Field(
-        default=60.0, gt=0.0,
+        default=60.0,
+        gt=0.0,
         description=(
             "Axial step length between consecutive KVSes on a feeder "
             "in m. Typical 50–80 m in urban LV networks."
@@ -205,14 +207,13 @@ class RadialTrunkTopology(BaseModel):
     @field_validator("feeder_directions_deg")
     @classmethod
     def _validate_directions(
-        cls, value: Optional[list[float]],
+        cls,
+        value: Optional[list[float]],
     ) -> Optional[list[float]]:
         if value is None:
             return value
         if not all(math.isfinite(float(v)) for v in value):
-            raise ValueError(
-                "feeder_directions_deg must contain finite floats."
-            )
+            raise ValueError("feeder_directions_deg must contain finite floats.")
         return [float(v) for v in value]
 
     # -----------------------------------------------------------------
@@ -229,10 +230,7 @@ class RadialTrunkTopology(BaseModel):
         :attr:`n_feeders`).
         """
         if self.feeder_directions_deg is None:
-            return [
-                2.0 * math.pi * k / self.n_feeders
-                for k in range(self.n_feeders)
-            ]
+            return [2.0 * math.pi * k / self.n_feeders for k in range(self.n_feeders)]
         if len(self.feeder_directions_deg) != self.n_feeders:
             raise ValueError(
                 "feeder_directions_deg length "

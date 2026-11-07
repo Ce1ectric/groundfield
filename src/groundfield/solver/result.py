@@ -132,9 +132,7 @@ class FieldResult(BaseModel):
             raise KeyError(f"No current data for '{electrode_name}'.")
         u = self.electrode_potentials[electrode_name]
         i = self.electrode_currents[electrode_name]
-        return [
-            (uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i)
-        ]
+        return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i)]
 
     def cluster_impedance(self, electrode_name: str) -> list[complex]:
         """Grounding impedance of the galvanic cluster containing an electrode.
@@ -219,7 +217,8 @@ class FieldResult(BaseModel):
         if not members:
             raise KeyError(f"No cluster for '{electrode_name}'.")
         usable = [
-            m for m in members
+            m
+            for m in members
             if m in self.electrode_potentials and m in self.electrode_currents
         ]
         if not usable:
@@ -233,8 +232,8 @@ class FieldResult(BaseModel):
         # not populate ``point_sources`` (stub results).
         lengths: dict[str, float] = {}
         for ps in self.point_sources:
-            lengths[ps.electrode_name] = (
-                lengths.get(ps.electrode_name, 0.0) + float(ps.length)
+            lengths[ps.electrode_name] = lengths.get(ps.electrode_name, 0.0) + float(
+                ps.length
             )
         w = np.array([lengths.get(m, 0.0) for m in usable], dtype=float)
         if w.sum() <= 0.0:
@@ -263,7 +262,8 @@ class FieldResult(BaseModel):
         # (audit 2026-07-29). Not reachable through any shipped
         # backend, but ``FieldResult`` is public and user-constructible.
         current_members = [
-            m for m in members
+            m
+            for m in members
             if m in self.electrode_currents
             and len(self.electrode_currents[m]) >= n_freq
         ]
@@ -271,10 +271,7 @@ class FieldResult(BaseModel):
             sum(self.electrode_currents[m][k] for m in current_members)
             for k in range(n_freq)
         ]
-        return [
-            (uk / ik) if ik != 0 else complex("nan")
-            for uk, ik in zip(u, i_sum)
-        ]
+        return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i_sum)]
 
     # ------------------------------------------------------------------
     # Potential evaluation at arbitrary field points
@@ -344,9 +341,7 @@ class FieldResult(BaseModel):
         if pts.ndim == 1:
             pts = pts[None, :]
         if pts.shape[1] != 3:
-            raise ValueError(
-                f"points must have shape (M, 3), got {pts.shape}."
-            )
+            raise ValueError(f"points must have shape (M, 3), got {pts.shape}.")
 
         sources = np.array([ps.position for ps in self.point_sources])
         currents = np.array(
@@ -414,11 +409,7 @@ class FieldResult(BaseModel):
         min_distance: float,
         rho_override: float | None = None,
     ) -> np.ndarray:
-        rho = (
-            float(rho_override)
-            if rho_override is not None
-            else self.soil_resistivity
-        )
+        rho = float(rho_override) if rho_override is not None else self.soil_resistivity
         if rho is None:
             raise RuntimeError(
                 "FieldResult.soil_resistivity is not set — homogeneous "
@@ -471,20 +462,31 @@ class FieldResult(BaseModel):
             phi = np.zeros(pts.shape[0], dtype=complex)
             if pts_l1.any() and src_l1.any():
                 phi[pts_l1] += self._potential_two_layer(
-                    pts[pts_l1], sources[src_l1], currents[src_l1],
-                    soil, min_distance, max_terms, tol,
+                    pts[pts_l1],
+                    sources[src_l1],
+                    currents[src_l1],
+                    soil,
+                    min_distance,
+                    max_terms,
+                    tol,
                 )
             if (~src_l1).any():
                 G = two_layer_probe_matrix(
-                    pts, sources[~src_l1],
-                    rho_1=rho_1, rho_2=soil.rho_2, h_1=h_1,
+                    pts,
+                    sources[~src_l1],
+                    rho_1=rho_1,
+                    rho_2=soil.rho_2,
+                    h_1=h_1,
                     min_distance=min_distance,
                 )
                 phi += G @ currents[~src_l1]
             if (~pts_l1).any() and src_l1.any():
                 G = two_layer_probe_matrix(
-                    pts[~pts_l1], sources[src_l1],
-                    rho_1=rho_1, rho_2=soil.rho_2, h_1=h_1,
+                    pts[~pts_l1],
+                    sources[src_l1],
+                    rho_1=rho_1,
+                    rho_2=soil.rho_2,
+                    h_1=h_1,
                     min_distance=min_distance,
                 )
                 phi[~pts_l1] += G @ currents[src_l1]
@@ -507,7 +509,7 @@ class FieldResult(BaseModel):
             # n = 1, 2, ...
             abs_K = abs(K)
             for n in range(1, max_terms + 1):
-                K_n = K ** n
+                K_n = K**n
                 acc = np.zeros(pts.shape[0], dtype=float)
                 for sign_n in (+1, -1):
                     for sign_zs in (+1, -1):

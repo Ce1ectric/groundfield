@@ -87,9 +87,7 @@ def resolve_earth_conductivity(soil) -> float:
             stacklevel=2,
         )
         return 1.0 / float(soil.layers[0].resistivity)
-    raise TypeError(
-        f"Unsupported soil type for Carson series: {type(soil).__name__}"
-    )
+    raise TypeError(f"Unsupported soil type for Carson series: {type(soil).__name__}")
 
 
 def resolve_earth_layers(soil) -> "LayeredEarth":
@@ -122,7 +120,8 @@ def resolve_earth_layers(soil) -> "LayeredEarth":
 
     if isinstance(soil, HomogeneousSoil):
         return LayeredEarth(
-            rhos=(float(soil.resistivity),), thicknesses=(),
+            rhos=(float(soil.resistivity),),
+            thicknesses=(),
         )
     if isinstance(soil, TwoLayerSoil):
         return LayeredEarth(
@@ -131,11 +130,8 @@ def resolve_earth_layers(soil) -> "LayeredEarth":
         )
     if isinstance(soil, MultiLayerSoil):
         rhos = tuple(float(layer.resistivity) for layer in soil.layers)
-        thicknesses = tuple(
-            float(layer.thickness) for layer in soil.layers[:-1]
-        )
+        thicknesses = tuple(float(layer.thickness) for layer in soil.layers[:-1])
         return LayeredEarth(rhos=rhos, thicknesses=thicknesses)
     raise TypeError(
-        f"Unsupported soil type for Sommerfeld kernel: "
-        f"{type(soil).__name__}"
+        f"Unsupported soil type for Sommerfeld kernel: {type(soil).__name__}"
     )

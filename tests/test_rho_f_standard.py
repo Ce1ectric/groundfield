@@ -72,9 +72,15 @@ def test_rejects_single_frequency() -> None:
 def test_evaluate_at_arbitrary_points() -> None:
     """``RhoFStandardFit.evaluate`` reproduces the closed form."""
     fit = RhoFStandardFit(
-        k1=0.05, k2=1e-4, k3=2e-3, k4=2e-7, k5=5e-6,
-        rms_error=0.0, rms_relative=0.0,
-        sample_rho=np.array([100.0]), sample_f=np.array([50.0]),
+        k1=0.05,
+        k2=1e-4,
+        k3=2e-3,
+        k4=2e-7,
+        k5=5e-6,
+        rms_error=0.0,
+        rms_relative=0.0,
+        sample_rho=np.array([100.0]),
+        sample_f=np.array([50.0]),
         sample_Z=np.array([0.0 + 0.0j]),
     )
     Z = fit.evaluate(rho=200.0, f=100.0)
@@ -117,13 +123,15 @@ def test_rho_f_standard_from_results_synthetic() -> None:
     for r in rhos:
         Z = _synthetic_Z(r, np.array(freqs), **k_true)
         I = np.ones_like(Z, dtype=complex)
-        results.append(FieldResult(
-            backend="image",
-            frequencies=freqs,
-            electrode_potentials={"g1": list(Z)},
-            electrode_currents={"g1": list(I)},
-            soil_resistivity=r,
-        ))
+        results.append(
+            FieldResult(
+                backend="image",
+                frequencies=freqs,
+                electrode_potentials={"g1": list(Z)},
+                electrode_currents={"g1": list(I)},
+                soil_resistivity=r,
+            )
+        )
     fit = rho_f_standard_from_results(results, rhos, "g1")
     for key, true_val in k_true.items():
         got = getattr(fit, key)

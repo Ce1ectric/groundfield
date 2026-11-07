@@ -178,8 +178,7 @@ class World(BaseModel):
         non_default = {
             k: v
             for k, v in kwargs.items()
-            if k in _DEFAULT_BOUNDARY_VALUES
-            and v != _DEFAULT_BOUNDARY_VALUES[k]
+            if k in _DEFAULT_BOUNDARY_VALUES and v != _DEFAULT_BOUNDARY_VALUES[k]
         }
         if non_default:
             warnings.warn(
@@ -358,8 +357,7 @@ class World(BaseModel):
             # re-bind the original list object if a backend swapped the
             # attribute wholesale.
             if len(source_list) != len(originals) or any(
-                live is not original
-                for live, original in zip(source_list, originals)
+                live is not original for live, original in zip(source_list, originals)
             ):
                 source_list[:] = originals
             if self.sources is not source_list:
@@ -371,9 +369,7 @@ class World(BaseModel):
 
     def summary(self) -> str:
         """Compact textual summary of the world."""
-        soil_str = (
-            f"{self.soil.kind}" if self.soil is not None else "<no soil model>"
-        )
+        soil_str = f"{self.soil.kind}" if self.soil is not None else "<no soil model>"
         return (
             f"World '{self.name}': soil={soil_str}, "
             f"electrodes={len(self.electrodes)}, "

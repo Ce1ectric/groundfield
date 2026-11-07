@@ -150,8 +150,7 @@ def create_electrode(
     }
     if kind not in cls_map:
         raise ValueError(
-            f"Unknown electrode kind '{kind}'. "
-            f"Allowed: {sorted(cls_map.keys())}."
+            f"Unknown electrode kind '{kind}'. Allowed: {sorted(cls_map.keys())}."
         )
     electrode = cls_map[kind](name=name, **params)
     world.add_electrode(electrode)
@@ -172,9 +171,7 @@ def _resolve_point(world: World, point: _PointLike) -> tuple[float, float, float
     # Assume iterable of length 3
     p = tuple(point)
     if len(p) != 3:
-        raise ValueError(
-            f"Point must be (x, y, z), got {p!r} of length {len(p)}."
-        )
+        raise ValueError(f"Point must be (x, y, z), got {p!r} of length {len(p)}.")
     return (float(p[0]), float(p[1]), float(p[2]))
 
 

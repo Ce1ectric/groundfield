@@ -184,7 +184,9 @@ def test_galvanic_setup_solves() -> None:
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     engine = gf.create_engine(
-        backend="image_2layer", segment_length=1.0, frequencies=[50.0],
+        backend="image_2layer",
+        segment_length=1.0,
+        frequencies=[50.0],
     )
     res = engine.solve(world)
     Z = res.cluster_impedance("trafo_ring_0")[0]
@@ -210,6 +212,7 @@ def test_source_magnitude_passthrough() -> None:
 def test_source_magnitude_accepts_distribution() -> None:
     """``source_magnitude_A`` accepts a Distribution; build samples it once."""
     from groundfield.generators import Discrete
+
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
         source_magnitude_A=Discrete(values=[1.0, 5000.0]),
@@ -221,6 +224,7 @@ def test_source_magnitude_accepts_distribution() -> None:
 
 def test_source_magnitude_seed_reproduces_draw() -> None:
     from groundfield.generators import Discrete
+
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
         source_magnitude_A=Discrete(values=[1.0, 10.0, 100.0, 1000.0, 5000.0]),
@@ -254,9 +258,7 @@ def test_measurement_config_json_roundtrip() -> None:
     restored = TnNetworkConfig.model_validate_json(payload)
     assert restored.measurement is not None
     assert restored.measurement.injection.position_xy == (150.0, 5.0)
-    assert isinstance(restored.measurement.injection.feed_lead,
-                      MeasurementLeadConfig)
-    assert isinstance(restored.measurement.probe.lead,
-                      MeasurementLeadConfig)
+    assert isinstance(restored.measurement.injection.feed_lead, MeasurementLeadConfig)
+    assert isinstance(restored.measurement.probe.lead, MeasurementLeadConfig)
     assert restored.measurement.injection.feed_lead.conductor_type == "bare_copper"
     assert restored.measurement.probe.lead.conductor_type == "cable_shield"

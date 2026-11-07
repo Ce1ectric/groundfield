@@ -113,14 +113,17 @@ def _neumann_loop_self_per_length(L: float, d: float, r: float) -> float:
 @pytest.mark.parametrize(
     "wire_length,distance,radius,tolerance",
     [
-        (100.0, 0.5, 0.005, 0.005),     # 30 m AP1 PEN run, ≤ 0.5 %
-        (1000.0, 0.5, 0.005, 0.001),    # very long wire, ≤ 0.1 %
-        (500.0, 1.0, 0.01, 0.001),      # MV cable separation, ≤ 0.1 %
-        (100.0, 0.2, 0.0075, 0.005),    # close pair, finite length
+        (100.0, 0.5, 0.005, 0.005),  # 30 m AP1 PEN run, ≤ 0.5 %
+        (1000.0, 0.5, 0.005, 0.001),  # very long wire, ≤ 0.1 %
+        (500.0, 1.0, 0.01, 0.001),  # MV cable separation, ≤ 0.1 %
+        (100.0, 0.2, 0.0075, 0.005),  # close pair, finite length
     ],
 )
 def test_neumann_loop_self_matches_oeding(
-    wire_length: float, distance: float, radius: float, tolerance: float,
+    wire_length: float,
+    distance: float,
+    radius: float,
+    tolerance: float,
 ) -> None:
     """The Neumann partial-inductance combination converges to the
     Oeding 9.13c per-unit-length result at long-wire lengths."""
@@ -129,8 +132,8 @@ def test_neumann_loop_self_matches_oeding(
     rel = abs(L_num - L_oeding) / L_oeding
     assert rel < tolerance, (
         f"L={wire_length}, d={distance}, r={radius}: "
-        f"Oeding={L_oeding*1e6:.4f} µH/m, Neumann={L_num*1e6:.4f} µH/m, "
-        f"rel={rel*100:.3f}%"
+        f"Oeding={L_oeding * 1e6:.4f} µH/m, Neumann={L_num * 1e6:.4f} µH/m, "
+        f"rel={rel * 100:.3f}%"
     )
 
 
@@ -148,8 +151,7 @@ def test_neumann_loop_self_converges_at_one_over_L() -> None:
     for i in range(len(errors) - 1):
         ratio = errors[i] / errors[i + 1]
         assert ratio > 9.5, (
-            f"convergence too slow: L={lengths[i]}→{lengths[i+1]}, "
-            f"ratio={ratio:.2f}"
+            f"convergence too slow: L={lengths[i]}→{lengths[i + 1]}, ratio={ratio:.2f}"
         )
 
 
@@ -160,8 +162,10 @@ def test_neumann_loop_self_converges_at_one_over_L() -> None:
 
 def _neumann_loop_mutual_per_length(
     L: float,
-    pos1: tuple[float, float], pos2: tuple[float, float],
-    pos3: tuple[float, float], pos4: tuple[float, float],
+    pos1: tuple[float, float],
+    pos2: tuple[float, float],
+    pos3: tuple[float, float],
+    pos4: tuple[float, float],
 ) -> float:
     """Loop-loop mutual inductance per unit length, evaluated by
     summing partial mutuals between every wire pair.
@@ -169,12 +173,14 @@ def _neumann_loop_mutual_per_length(
     All four wires run along the z-axis from 0 to L; ``pos*`` are
     the (x, y) cross-sectional coordinates.
     """
+
     def M(p, q):
         a1 = np.array([p[0], p[1], 0.0])
         a2 = np.array([p[0], p[1], L])
         b1 = np.array([q[0], q[1], 0.0])
         b2 = np.array([q[0], q[1], L])
         return neumann_mutual(a1, a2, b1, b2)
+
     M13 = M(pos1, pos3)
     M14 = M(pos1, pos4)
     M23 = M(pos2, pos3)
@@ -195,15 +201,22 @@ def test_neumann_loop_mutual_matches_oeding() -> None:
     s23 = math.dist(pos2, pos3)
     s24 = math.dist(pos2, pos4)
     M_oeding = oeding.loop_mutual_inductance_per_length(
-        s13=s13, s14=s14, s23=s23, s24=s24,
+        s13=s13,
+        s14=s14,
+        s23=s23,
+        s24=s24,
     )
     M_num = _neumann_loop_mutual_per_length(
-        100.0, pos1, pos2, pos3, pos4,
+        100.0,
+        pos1,
+        pos2,
+        pos3,
+        pos4,
     )
     rel = abs(M_num - M_oeding) / abs(M_oeding)
     assert rel < 0.001, (
-        f"Oeding={M_oeding*1e6:.4f} µH/m, Neumann={M_num*1e6:.4f} µH/m, "
-        f"rel={rel*100:.3f}%"
+        f"Oeding={M_oeding * 1e6:.4f} µH/m, Neumann={M_num * 1e6:.4f} µH/m, "
+        f"rel={rel * 100:.3f}%"
     )
 
 
@@ -227,15 +240,22 @@ def test_neumann_loop_mutual_offset_geometry() -> None:
     s23 = math.dist(pos2, pos3)
     s24 = math.dist(pos2, pos4)
     M_oeding = oeding.loop_mutual_inductance_per_length(
-        s13=s13, s14=s14, s23=s23, s24=s24,
+        s13=s13,
+        s14=s14,
+        s23=s23,
+        s24=s24,
     )
     M_num = _neumann_loop_mutual_per_length(
-        5000.0, pos1, pos2, pos3, pos4,
+        5000.0,
+        pos1,
+        pos2,
+        pos3,
+        pos4,
     )
     rel = abs(M_num - M_oeding) / abs(M_oeding)
     assert rel < 0.001, (
-        f"Oeding={M_oeding*1e6:.4f} µH/m, Neumann={M_num*1e6:.4f} µH/m, "
-        f"rel={rel*100:.3f}%"
+        f"Oeding={M_oeding * 1e6:.4f} µH/m, Neumann={M_num * 1e6:.4f} µH/m, "
+        f"rel={rel * 100:.3f}%"
     )
 
 
@@ -252,7 +272,10 @@ def test_neumann_loop_mutual_offset_converges() -> None:
     s23 = math.dist(pos2, pos3)
     s24 = math.dist(pos2, pos4)
     M_oeding = oeding.loop_mutual_inductance_per_length(
-        s13=s13, s14=s14, s23=s23, s24=s24,
+        s13=s13,
+        s14=s14,
+        s23=s23,
+        s24=s24,
     )
     M_500 = _neumann_loop_mutual_per_length(500.0, pos1, pos2, pos3, pos4)
     M_5000 = _neumann_loop_mutual_per_length(5000.0, pos1, pos2, pos3, pos4)
@@ -268,6 +291,9 @@ def test_oeding_mutual_zero_when_loops_far_aligned() -> None:
     # 1↔3 and 2↔4 are symmetric: place 3 and 4 in equal-distance
     # arrangement so that s13·s24 = s14·s23.
     M_oeding = oeding.loop_mutual_inductance_per_length(
-        s13=2.0, s14=2.0, s23=2.0, s24=2.0,
+        s13=2.0,
+        s14=2.0,
+        s23=2.0,
+        s24=2.0,
     )
     assert M_oeding == pytest.approx(0.0, abs=1e-15)

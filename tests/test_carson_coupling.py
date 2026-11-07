@@ -64,11 +64,11 @@ def test_carson_p_q_matches_published_values(ex) -> None:
     err_Q = abs(Q - ex.Q_expected)
     rel_P = err_P / max(abs(ex.P_expected), 1e-12)
     rel_Q = err_Q / max(abs(ex.Q_expected), 1e-12)
-    assert (err_P <= ex.abs_tolerance or rel_P <= ex.rel_tolerance), (
+    assert err_P <= ex.abs_tolerance or rel_P <= ex.rel_tolerance, (
         f"{ex.name}: P expected {ex.P_expected}, got {P} "
         f"(abs={err_P:.3e}, rel={rel_P:.3e})"
     )
-    assert (err_Q <= ex.abs_tolerance or rel_Q <= ex.rel_tolerance), (
+    assert err_Q <= ex.abs_tolerance or rel_Q <= ex.rel_tolerance, (
         f"{ex.name}: Q expected {ex.Q_expected}, got {Q} "
         f"(abs={err_Q:.3e}, rel={rel_Q:.3e})"
     )
@@ -103,12 +103,10 @@ def test_continuity_small_to_quadrature(theta: float) -> None:
     P_small, Q_small = _p_q_small(0.249, theta)
     P_quad, Q_quad = _p_q_quadrature(0.251, theta)
     assert abs(P_small - P_quad) <= 0.01 * max(abs(P_quad), 0.5), (
-        f"P discontinuity at a=0.25 for theta={theta}: "
-        f"small={P_small}, quad={P_quad}"
+        f"P discontinuity at a=0.25 for theta={theta}: small={P_small}, quad={P_quad}"
     )
     assert abs(Q_small - Q_quad) <= 0.01 * max(abs(Q_quad), 0.5), (
-        f"Q discontinuity at a=0.25 for theta={theta}: "
-        f"small={Q_small}, quad={Q_quad}"
+        f"Q discontinuity at a=0.25 for theta={theta}: small={Q_small}, quad={Q_quad}"
     )
 
 
@@ -243,14 +241,25 @@ def _galvanic_world(
     """Two-rod world with a galvanic distributed PEN conductor between."""
     soil = gf.HomogeneousSoil(resistivity=RHO_SOIL)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
-    gf.create_electrode(w, "rod", name="g2", position=(SEPARATION, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+    )
+    gf.create_electrode(
+        w,
+        "rod",
+        name="g2",
+        position=(SEPARATION, 0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_R,
+    )
     gf.create_conductor(
-        w, name="pen", start="g1", end="g2",
+        w,
+        name="pen",
+        start="g1",
+        end="g2",
         conductor_type="bare_copper",
-        wire_radius=0.004, resistivity=PEN_RHO,
+        wire_radius=0.004,
+        resistivity=PEN_RHO,
         cross_section=PEN_A,
         discretize_segment_length=SEPARATION / n_seg + 1e-9,
         coupling_to_soil="galvanic",
@@ -258,7 +267,8 @@ def _galvanic_world(
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(
-        backend="image", segment_length=SEG,
+        backend="image",
+        segment_length=SEG,
         frequencies=list(frequencies) if frequencies else [50.0],
         earth_inductive_model=earth_inductive_model,
     )
@@ -291,18 +301,19 @@ def test_engine_carson_increases_real_part() -> None:
     magnitude with Carson active is *not the same* as with the
     perfect mirror, and the difference is dominated by the Carson
     earth-return resistance."""
-    w_p, eng_p = _galvanic_world(n_seg=4, earth_inductive_model="perfect_mirror",
-                                  frequencies=[50.0])
-    w_c, eng_c = _galvanic_world(n_seg=4, earth_inductive_model="carson_series",
-                                  frequencies=[50.0])
+    w_p, eng_p = _galvanic_world(
+        n_seg=4, earth_inductive_model="perfect_mirror", frequencies=[50.0]
+    )
+    w_c, eng_c = _galvanic_world(
+        n_seg=4, earth_inductive_model="carson_series", frequencies=[50.0]
+    )
     res_p = eng_p.solve(w_p)
     res_c = eng_c.solve(w_c)
     # The two solutions must differ — Carson is doing something.
     I_p = res_p.electrode_currents["g1"][0]
     I_c = res_c.electrode_currents["g1"][0]
     assert abs(I_p - I_c) > 1e-9, (
-        f"Carson should change the source-electrode current. "
-        f"Got I_p={I_p}, I_c={I_c}"
+        f"Carson should change the source-electrode current. Got I_p={I_p}, I_c={I_c}"
     )
 
 
@@ -310,16 +321,22 @@ def test_engine_carson_dc_reproducibility() -> None:
     """At $\\omega = 0$ the Carson correction is short-circuited;
     the inductive and Carson-active solutions agree with the DC
     reference."""
-    w_p, _ = _galvanic_world(n_seg=4, earth_inductive_model="perfect_mirror",
-                              frequencies=[0.0])
-    w_c, _ = _galvanic_world(n_seg=4, earth_inductive_model="carson_series",
-                              frequencies=[0.0])
+    w_p, _ = _galvanic_world(
+        n_seg=4, earth_inductive_model="perfect_mirror", frequencies=[0.0]
+    )
+    w_c, _ = _galvanic_world(
+        n_seg=4, earth_inductive_model="carson_series", frequencies=[0.0]
+    )
     eng_p = gf.create_engine(
-        backend="image", segment_length=SEG, frequencies=[0.0],
+        backend="image",
+        segment_length=SEG,
+        frequencies=[0.0],
         earth_inductive_model="perfect_mirror",
     )
     eng_c = gf.create_engine(
-        backend="image", segment_length=SEG, frequencies=[0.0],
+        backend="image",
+        segment_length=SEG,
+        frequencies=[0.0],
         earth_inductive_model="carson_series",
     )
     res_p = eng_p.solve(w_p)
@@ -335,7 +352,8 @@ def test_field_result_exposes_penetration_depth() -> None:
     exposes the skin depth at every frequency for every Carson-aware
     engine."""
     w, eng = _galvanic_world(
-        n_seg=4, earth_inductive_model="carson_series",
+        n_seg=4,
+        earth_inductive_model="carson_series",
         frequencies=[50.0, 500.0],
     )
     res = eng.solve(w)
@@ -360,14 +378,25 @@ def test_two_layer_soil_emits_warning_under_carson() -> None:
     layer (image_2layer's precondition)."""
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
-    gf.create_electrode(w, "rod", name="g2", position=(SEPARATION, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+    )
+    gf.create_electrode(
+        w,
+        "rod",
+        name="g2",
+        position=(SEPARATION, 0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_R,
+    )
     gf.create_conductor(
-        w, name="pen", start="g1", end="g2",
+        w,
+        name="pen",
+        start="g1",
+        end="g2",
         conductor_type="bare_copper",
-        wire_radius=0.004, resistivity=PEN_RHO,
+        wire_radius=0.004,
+        resistivity=PEN_RHO,
         cross_section=PEN_A,
         discretize_segment_length=10.0,
         coupling_to_soil="galvanic",
@@ -375,7 +404,9 @@ def test_two_layer_soil_emits_warning_under_carson() -> None:
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(
-        backend="image", segment_length=SEG, frequencies=[50.0],
+        backend="image",
+        segment_length=SEG,
+        frequencies=[50.0],
         earth_inductive_model="carson_series",
     )
     with pytest.warns(UserWarning, match="upper-layer rho_1"):
@@ -433,8 +464,11 @@ def test_pen_1km_mutual_impedance_carson_vs_perfect_mirror_at_50hz() -> None:
     omega = 2.0 * math.pi * 50.0
     sigma = 1.0 / 100.0
     Z_per_m = carson_mutual_correction(
-        omega=omega, height_i=0.6, height_j=0.6,
-        horizontal_distance=50.0, sigma_earth=sigma,
+        omega=omega,
+        height_i=0.6,
+        height_j=0.6,
+        horizontal_distance=50.0,
+        sigma_earth=sigma,
     )
     R_per_km = Z_per_m.real * 1000.0
     # Tleis 2008 §3.4 textbook value at f=50 Hz, rho=100, h=0.6, d=50:
@@ -442,8 +476,8 @@ def test_pen_1km_mutual_impedance_carson_vs_perfect_mirror_at_50hz() -> None:
     expected_R = omega * MU_0 / 8.0 * 1000.0  # Tleis low-frequency limit
     rel = abs(R_per_km - expected_R) / expected_R
     assert rel < 0.1, (
-        f"Carson R_g/km = {R_per_km*1000:.2f} mΩ/km, "
-        f"expected ≈ {expected_R*1000:.2f} mΩ/km, rel={rel:.3f}"
+        f"Carson R_g/km = {R_per_km * 1000:.2f} mΩ/km, "
+        f"expected ≈ {expected_R * 1000:.2f} mΩ/km, rel={rel:.3f}"
     )
 
 
@@ -457,16 +491,22 @@ def test_cross_engine_carson_consistency_at_50hz(backend: str) -> None:
     """All distributed-capable backends (image, mom, cim, bem) must
     agree on the source-electrode current with Carson active at 50 Hz
     to within 5 % of the image reference."""
-    w_ref, _ = _galvanic_world(n_seg=4, earth_inductive_model="carson_series",
-                                frequencies=[50.0])
-    w_be, _ = _galvanic_world(n_seg=4, earth_inductive_model="carson_series",
-                                frequencies=[50.0])
+    w_ref, _ = _galvanic_world(
+        n_seg=4, earth_inductive_model="carson_series", frequencies=[50.0]
+    )
+    w_be, _ = _galvanic_world(
+        n_seg=4, earth_inductive_model="carson_series", frequencies=[50.0]
+    )
     eng_ref = gf.create_engine(
-        backend="image", segment_length=SEG, frequencies=[50.0],
+        backend="image",
+        segment_length=SEG,
+        frequencies=[50.0],
         earth_inductive_model="carson_series",
     )
     eng_be = gf.create_engine(
-        backend=backend, segment_length=SEG, frequencies=[50.0],
+        backend=backend,
+        segment_length=SEG,
+        frequencies=[50.0],
         earth_inductive_model="carson_series",
     )
     res_ref = eng_ref.solve(w_ref)

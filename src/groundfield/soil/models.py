@@ -98,8 +98,7 @@ class SoilLayer(BaseModel):
         default=None,
         gt=0.0,
         description=(
-            "Layer thickness in m. ``None`` for the semi-infinite "
-            "bottom layer."
+            "Layer thickness in m. ``None`` for the semi-infinite bottom layer."
         ),
     )
     relative_permittivity: float = Field(default=10.0, gt=0.0)
@@ -120,13 +119,10 @@ class MultiLayerSoil(_SoilBase):
         for layer in self.layers[:-1]:
             if layer.thickness is None:
                 raise ValueError(
-                    "Only the last layer may be semi-infinite "
-                    "(thickness=None)."
+                    "Only the last layer may be semi-infinite (thickness=None)."
                 )
         if self.layers[-1].thickness is not None:
-            raise ValueError(
-                "The last layer must be semi-infinite (thickness=None)."
-            )
+            raise ValueError("The last layer must be semi-infinite (thickness=None).")
         return self
 
 

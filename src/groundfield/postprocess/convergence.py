@@ -102,13 +102,9 @@ def convergence_study(
             f"segment_lengths must contain at least 2 values, got {len(ds_list)}."
         )
     if any(not (ds > 0) for ds in ds_list):
-        raise ValueError(
-            f"segment_lengths must be strictly positive, got {ds_list}."
-        )
+        raise ValueError(f"segment_lengths must be strictly positive, got {ds_list}.")
     if len(set(ds_list)) < 2:
-        raise ValueError(
-            "segment_lengths must contain at least 2 distinct values."
-        )
+        raise ValueError("segment_lengths must contain at least 2 distinct values.")
 
     if response is None:
         response = _default_response
@@ -126,9 +122,11 @@ def convergence_study(
             }
             row.update(response(result, world, f_idx))
             rows.append(row)
-    df = pd.DataFrame(rows).sort_values(
-        ["frequency_Hz", "segment_length_m"], ascending=[True, False]
-    ).reset_index(drop=True)
+    df = (
+        pd.DataFrame(rows)
+        .sort_values(["frequency_Hz", "segment_length_m"], ascending=[True, False])
+        .reset_index(drop=True)
+    )
     return df
 
 
@@ -181,8 +179,10 @@ def plot_convergence(
         for f_hz, sub in df.groupby("frequency_Hz"):
             sub = sub.sort_values("segment_length_m", ascending=False)
             ax.plot(
-                sub["segment_length_m"], sub[response],
-                marker="o", label=f"f = {f_hz:g} Hz",
+                sub["segment_length_m"],
+                sub[response],
+                marker="o",
+                label=f"f = {f_hz:g} Hz",
             )
         ax.legend()
     else:
@@ -191,7 +191,10 @@ def plot_convergence(
 
     if reference is not None:
         ax.axhline(
-            float(reference), ls="--", color="k", alpha=0.6,
+            float(reference),
+            ls="--",
+            color="k",
+            alpha=0.6,
             label=f"reference = {reference:g}",
         )
         # Re-render legend so the reference line appears even in

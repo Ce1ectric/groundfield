@@ -49,7 +49,11 @@ def _build(electrodes, *, rho_c: float | None) -> tuple[gf.World, str | None]:
 
 
 FOUNDATION = FoundationElectrodeSpec(
-    size_m=10.0, style="ring", n_x=1, n_y=1, concrete_thickness_m=0.05,
+    size_m=10.0,
+    style="ring",
+    n_x=1,
+    n_y=1,
+    concrete_thickness_m=0.05,
 )
 ROD = RodElectrodeSpec(length_m=1.5, wire_radius_m=0.008)
 

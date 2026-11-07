@@ -159,7 +159,10 @@ class VectorFitResult:
 
 
 def _initial_poles(
-    frequencies: np.ndarray, n_poles: int, *, complex_conj: bool = True,
+    frequencies: np.ndarray,
+    n_poles: int,
+    *,
+    complex_conj: bool = True,
 ) -> np.ndarray:
     """Initial pole placement for vector fitting.
 
@@ -284,7 +287,9 @@ def _pole_pair_structure(poles: np.ndarray) -> list[tuple]:
 
 
 def _pair_basis(
-    s: np.ndarray, poles: np.ndarray, structure: list[tuple],
+    s: np.ndarray,
+    poles: np.ndarray,
+    structure: list[tuple],
 ) -> np.ndarray:
     """Real-coefficient partial-fraction basis (Gustavsen pair form).
 
@@ -325,7 +330,9 @@ def _pair_basis(
 
 
 def _coeffs_to_residues(
-    coeffs: np.ndarray, poles: np.ndarray, structure: list[tuple],
+    coeffs: np.ndarray,
+    poles: np.ndarray,
+    structure: list[tuple],
 ) -> np.ndarray:
     """Map the real pair-basis coefficients back to complex residues."""
     residues = np.zeros(poles.size, dtype=complex)
@@ -408,9 +415,7 @@ def vector_fit(
     frequencies = np.asarray(frequencies, dtype=float)
     Z = np.asarray(Z_values, dtype=complex)
     if frequencies.shape != Z.shape:
-        raise ValueError(
-            "frequencies and Z_values must have the same shape"
-        )
+        raise ValueError("frequencies and Z_values must have the same shape")
     if n_poles < 1:
         raise ValueError(
             "vector_fit: n_poles must be at least 1, got "
@@ -491,7 +496,7 @@ def vector_fit(
     pole_shift = float("inf")
     for _ in range(max(1, n_iter)):
         structure = _pole_pair_structure(poles)
-        basis = _pair_basis(s, poles, structure)      # (N, n_poles)
+        basis = _pair_basis(s, poles, structure)  # (N, n_poles)
         A = np.zeros((s.size, n_poles + extras + n_poles), dtype=complex)
         A[:, :n_poles] = basis
         col = n_poles
@@ -501,7 +506,7 @@ def vector_fit(
         if include_L_inf:
             A[:, col] = s
             col += 1
-        A[:, col:col + n_poles] = -Z[:, None] * basis
+        A[:, col : col + n_poles] = -Z[:, None] * basis
 
         # Solve with real-imag stacking (least-squares), optionally
         # row-weighted.
@@ -512,7 +517,9 @@ def vector_fit(
 
         # Reconstruct the complex sigma residues from the pair basis.
         sigma_residues = _coeffs_to_residues(
-            sol[n_poles + extras:], poles, structure,
+            sol[n_poles + extras :],
+            poles,
+            structure,
         )
         # New poles: eigenvalues of A_p - b·c^T where A_p = diag(poles),
         # b = ones, c = sigma_residues. (Standard Gustavsen formulation.)
@@ -526,10 +533,10 @@ def vector_fit(
         new_poles = new_poles[sorted_idx]
         n_iter_used += 1
         scale = float(np.max(np.abs(poles))) or 1.0
-        pole_shift = float(
-            np.max(np.abs(np.sort_complex(new_poles)
-                          - np.sort_complex(poles)))
-        ) / scale
+        pole_shift = (
+            float(np.max(np.abs(np.sort_complex(new_poles) - np.sort_complex(poles))))
+            / scale
+        )
         poles = new_poles
         if pole_shift < 1e-8:
             break
@@ -639,9 +646,7 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
             continue
         if abs(p.imag) < rel_tol * max(abs(p.real), 1.0):
             # Effectively real pole
-            expr = expr + sp.Float(r.real, decimals) / (
-                s - sp.Float(p.real, decimals)
-            )
+            expr = expr + sp.Float(r.real, decimals) / (s - sp.Float(p.real, decimals))
             used[k] = True
             continue
         # Look for the conjugate (loose tolerance, opposite-sign imag)
@@ -669,7 +674,9 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
         p2 = fit.poles[conj_idx]
         r2 = fit.residues[conj_idx]
         Re_p_avg = 0.5 * (p.real + p2.real)
-        Im_p_avg = 0.5 * (abs(p.imag) + abs(p2.imag))  # use positive imag for the canonical pair
+        Im_p_avg = 0.5 * (
+            abs(p.imag) + abs(p2.imag)
+        )  # use positive imag for the canonical pair
         Re_r_avg = 0.5 * (r.real + r2.real)
         # The canonical pair is written with ``Im(p) = +Im_p_avg``, so
         # the canonical residue is the one sitting at the *positive*
@@ -692,7 +699,7 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
         Re_r_sym = sp.Float(Re_r_avg, decimals)
         Im_r_sym = sp.Float(Im_r_avg, decimals)
         num = 2 * Re_r_sym * (s - Re_p_sym) - 2 * Im_r_sym * Im_p_sym
-        den = (s - Re_p_sym) ** 2 + Im_p_sym ** 2
+        den = (s - Re_p_sym) ** 2 + Im_p_sym**2
         expr = expr + num / den
 
     expr = sp.simplify(expr)
@@ -797,8 +804,11 @@ def rho_f_from_field_result(
         )
     Z = U[alive] / I[alive]
     return vector_fit(
-        freqs[alive], Z,
-        n_poles=n_poles, n_iter=n_iter,
-        include_R_inf=include_R_inf, include_L_inf=include_L_inf,
+        freqs[alive],
+        Z,
+        n_poles=n_poles,
+        n_iter=n_iter,
+        include_R_inf=include_R_inf,
+        include_L_inf=include_L_inf,
         complex_poles=complex_poles,
     )

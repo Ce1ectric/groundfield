@@ -65,7 +65,9 @@ def test_default_config_builds_and_solves_minimal() -> None:
     world = gen.build()
 
     engine = gf.create_engine(
-        backend="image_2layer", segment_length=0.5, frequencies=[50.0],
+        backend="image_2layer",
+        segment_length=0.5,
+        frequencies=[50.0],
     )
     result = engine.solve(world)
     Z = result.cluster_impedance("trafo_ring_0")
@@ -86,10 +88,8 @@ def test_substation_with_ring_rods_strip_foundation() -> None:
             electrodes=[
                 RingElectrodeSpec(radius_m=4.0, depth_m=0.6),
                 *rod_circle(n=4, radius_m=2.0, length_m=2.5),
-                StripElectrodeSpec(length_m=20.0, depth_m=0.6,
-                                   orientation_deg=45.0),
-                FoundationElectrodeSpec(size_m=8.0, depth_m=0.8,
-                                        n_x=2, n_y=2),
+                StripElectrodeSpec(length_m=20.0, depth_m=0.6, orientation_deg=45.0),
+                FoundationElectrodeSpec(size_m=8.0, depth_m=0.8, n_x=2, n_y=2),
             ],
         ),
     )
@@ -114,14 +114,15 @@ def test_substation_presence_prob_can_drop_electrodes() -> None:
         ),
     )
     cfg = TnNetworkConfig(
-        substation=substation, building_counts={"residential": 3},
+        substation=substation,
+        building_counts={"residential": 3},
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    n_trafo_strip = sum(1 for e in world.electrodes
-                        if e.name.startswith("trafo_strip_"))
+    n_trafo_strip = sum(
+        1 for e in world.electrodes if e.name.startswith("trafo_strip_")
+    )
     assert n_trafo_strip == 0
-    n_trafo_ring = sum(1 for e in world.electrodes
-                       if e.name.startswith("trafo_ring_"))
+    n_trafo_ring = sum(1 for e in world.electrodes if e.name.startswith("trafo_ring_"))
     assert n_trafo_ring == 1
 
 
@@ -134,16 +135,20 @@ def test_multiple_building_types_each_get_configured_grounding() -> None:
     catalog = [
         BuildingTypeSpec(
             name="residential",
-            grounding=GroundingSystemSpec(electrodes=[
-                FoundationElectrodeSpec(size_m=10.0),
-            ]),
+            grounding=GroundingSystemSpec(
+                electrodes=[
+                    FoundationElectrodeSpec(size_m=10.0),
+                ]
+            ),
         ),
         BuildingTypeSpec(
             name="industry",
-            grounding=GroundingSystemSpec(electrodes=[
-                FoundationElectrodeSpec(size_m=20.0, n_x=3, n_y=3),
-                *rod_circle(n=4, radius_m=12.0),
-            ]),
+            grounding=GroundingSystemSpec(
+                electrodes=[
+                    FoundationElectrodeSpec(size_m=20.0, n_x=3, n_y=3),
+                    *rod_circle(n=4, radius_m=12.0),
+                ]
+            ),
         ),
     ]
     cfg = TnNetworkConfig(
@@ -152,14 +157,23 @@ def test_multiple_building_types_each_get_configured_grounding() -> None:
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     # 5 residential foundations
-    n_res = sum(1 for e in world.electrodes
-                if e.name.startswith("residential_") and e.name.endswith("_foundation_0"))
+    n_res = sum(
+        1
+        for e in world.electrodes
+        if e.name.startswith("residential_") and e.name.endswith("_foundation_0")
+    )
     assert n_res == 5
     # 2 industry buildings × (1 foundation + 4 rods) = 10 industry electrodes
-    n_ind_foundation = sum(1 for e in world.electrodes
-                           if e.name.startswith("industry_") and "foundation_" in e.name)
-    n_ind_rod = sum(1 for e in world.electrodes
-                    if e.name.startswith("industry_") and "_rod_" in e.name)
+    n_ind_foundation = sum(
+        1
+        for e in world.electrodes
+        if e.name.startswith("industry_") and "foundation_" in e.name
+    )
+    n_ind_rod = sum(
+        1
+        for e in world.electrodes
+        if e.name.startswith("industry_") and "_rod_" in e.name
+    )
     assert n_ind_foundation == 2
     assert n_ind_rod == 8
 
@@ -185,23 +199,34 @@ def test_explicit_placement_honoured() -> None:
         building_counts={"residential": 3},
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    foundations = [e for e in world.electrodes if "_foundation_" in e.name
-                   and e.name.startswith("residential_")]
+    foundations = [
+        e
+        for e in world.electrodes
+        if "_foundation_" in e.name and e.name.startswith("residential_")
+    ]
     assert len(foundations) == 3
-    centres = sorted(((e.corner[0] + e.size[0] / 2.0,
-                       e.corner[1] + e.size[1] / 2.0) for e in foundations))
+    centres = sorted(
+        (
+            (e.corner[0] + e.size[0] / 2.0, e.corner[1] + e.size[1] / 2.0)
+            for e in foundations
+        )
+    )
     assert centres == sorted(positions)
 
 
 def test_manhattan_grid_default_centred_at_origin() -> None:
     cfg = TnNetworkConfig(
         building_counts={"residential": 4},
-        placement=ManhattanGridPlacement(spacing_x_m=10.0, spacing_y_m=10.0,
-                                          n_per_row=2),
+        placement=ManhattanGridPlacement(
+            spacing_x_m=10.0, spacing_y_m=10.0, n_per_row=2
+        ),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    foundations = [e for e in world.electrodes if "_foundation_" in e.name
-                   and e.name.startswith("residential_")]
+    foundations = [
+        e
+        for e in world.electrodes
+        if "_foundation_" in e.name and e.name.startswith("residential_")
+    ]
     cx = sum(e.corner[0] + e.size[0] / 2.0 for e in foundations) / len(foundations)
     cy = sum(e.corner[1] + e.size[1] / 2.0 for e in foundations) / len(foundations)
     assert math.isclose(cx, 0.0, abs_tol=1e-9)
@@ -225,11 +250,13 @@ def test_homogeneous_soil_works() -> None:
 
 def test_multi_layer_soil_works() -> None:
     cfg = TnNetworkConfig(
-        soil=MultiLayerSoilSpec(layers=[
-            SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
-            SoilLayerSpec(resistivity=100.0, thickness_m=5.0),
-            SoilLayerSpec(resistivity=50.0, thickness_m=None),
-        ]),
+        soil=MultiLayerSoilSpec(
+            layers=[
+                SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
+                SoilLayerSpec(resistivity=100.0, thickness_m=5.0),
+                SoilLayerSpec(resistivity=50.0, thickness_m=None),
+            ]
+        ),
         building_counts={"residential": 3},
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
@@ -247,15 +274,17 @@ def test_seed_reproduces_world_bit_exact() -> None:
         building_counts={"residential": 5},
         soil=TwoLayerSoilSpec(
             rho_1=LogNormal(mu=5.0, sigma=0.5),
-            rho_2=50.0, h_1=5.0,
+            rho_2=50.0,
+            h_1=5.0,
         ),
     )
     g1 = TnNetworkGenerator(cfg, seed=42)
     g2 = TnNetworkGenerator(cfg, seed=42)
     w1 = g1.build()
     w2 = g2.build()
-    engine = gf.create_engine(backend="image_2layer", segment_length=1.0,
-                              frequencies=[50.0])
+    engine = gf.create_engine(
+        backend="image_2layer", segment_length=1.0, frequencies=[50.0]
+    )
     Z1 = engine.solve(w1).cluster_impedance("trafo_ring_0")[0]
     Z2 = engine.solve(w2).cluster_impedance("trafo_ring_0")[0]
     assert Z1 == Z2
@@ -274,18 +303,24 @@ def test_full_config_json_roundtrip_with_distributions() -> None:
             h_1=Discrete(values=[5.0, 10.0, 30.0]),
         ),
         substation=SubstationConfig(
-            grounding=GroundingSystemSpec(electrodes=[
-                RingElectrodeSpec(radius_m=Normal(mean=4.0, std=0.4,
-                                                  truncate_low=2.5,
-                                                  truncate_high=6.0)),
-                *rod_circle(n=4, radius_m=2.0, length_m=2.5),
-            ]),
+            grounding=GroundingSystemSpec(
+                electrodes=[
+                    RingElectrodeSpec(
+                        radius_m=Normal(
+                            mean=4.0, std=0.4, truncate_low=2.5, truncate_high=6.0
+                        )
+                    ),
+                    *rod_circle(n=4, radius_m=2.0, length_m=2.5),
+                ]
+            ),
         ),
         kvs=KvsConfig(
             quote_per_100_buildings=Uniform(low=4.0, high=8.0),
-            grounding=GroundingSystemSpec(electrodes=[
-                RodElectrodeSpec(length_m=Uniform(low=1.0, high=2.0)),
-            ]),
+            grounding=GroundingSystemSpec(
+                electrodes=[
+                    RodElectrodeSpec(length_m=Uniform(low=1.0, high=2.0)),
+                ]
+            ),
         ),
         building_counts={"residential": Discrete(values=[5, 10])},
     )
@@ -294,10 +329,8 @@ def test_full_config_json_roundtrip_with_distributions() -> None:
     # Spot-check: every distribution survives via discriminated union
     assert isinstance(restored.soil, TwoLayerSoilSpec)
     assert isinstance(restored.soil.rho_1, LogNormal)
-    assert isinstance(restored.substation.grounding.electrodes[0],
-                      RingElectrodeSpec)
-    assert isinstance(restored.substation.grounding.electrodes[0].radius_m,
-                      Normal)
+    assert isinstance(restored.substation.grounding.electrodes[0], RingElectrodeSpec)
+    assert isinstance(restored.substation.grounding.electrodes[0].radius_m, Normal)
     assert isinstance(restored.kvs.quote_per_100_buildings, Uniform)
     assert isinstance(restored.building_counts["residential"], Discrete)
 
@@ -314,13 +347,16 @@ def test_kvs_count_follows_quote() -> None:
         kvs=KvsConfig(
             quote_per_100_buildings=10.0,
             placement=ManhattanGridPlacement(
-                spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=10,
+                spacing_x_m=40.0,
+                spacing_y_m=1.0,
+                n_per_row=10,
             ),
         ),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    n_kvs_rod = sum(1 for e in world.electrodes
-                    if e.name.startswith("kvs_") and "_rod_" in e.name)
+    n_kvs_rod = sum(
+        1 for e in world.electrodes if e.name.startswith("kvs_") and "_rod_" in e.name
+    )
     assert n_kvs_rod == 5
 
 
@@ -331,13 +367,16 @@ def test_fixed_kvs_count_overrides_quote() -> None:
             fixed_count=3,
             quote_per_100_buildings=10.0,  # would yield 10 KVS, but ignored
             placement=ManhattanGridPlacement(
-                spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=5,
+                spacing_x_m=40.0,
+                spacing_y_m=1.0,
+                n_per_row=5,
             ),
         ),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    n_kvs_rod = sum(1 for e in world.electrodes
-                    if e.name.startswith("kvs_") and "_rod_" in e.name)
+    n_kvs_rod = sum(
+        1 for e in world.electrodes if e.name.startswith("kvs_") and "_rod_" in e.name
+    )
     assert n_kvs_rod == 3
 
 
@@ -355,9 +394,11 @@ def test_zero_buildings_raises() -> None:
 def test_substation_with_zero_present_electrodes_raises() -> None:
     cfg = TnNetworkConfig(
         substation=SubstationConfig(
-            grounding=GroundingSystemSpec(electrodes=[
-                RodElectrodeSpec(length_m=1.5, presence_prob=0.0),
-            ]),
+            grounding=GroundingSystemSpec(
+                electrodes=[
+                    RodElectrodeSpec(length_m=1.5, presence_prob=0.0),
+                ]
+            ),
         ),
         building_counts={"residential": 3},
     )
@@ -372,6 +413,7 @@ def test_substation_with_zero_present_electrodes_raises() -> None:
 
 def test_deprecated_module_alias_still_imports() -> None:
     import warnings
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         from groundfield.generators.tn_ortsnetz import (  # noqa: F401

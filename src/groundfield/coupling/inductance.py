@@ -103,8 +103,8 @@ def thin_wire_self_inductance(
     """
     if length <= 0.0 or wire_radius <= 0.0:
         raise ValueError("length and wire_radius must be positive")
-    L_ext = (MU_0 * length) / (2.0 * math.pi) * (
-        math.log(2.0 * length / wire_radius) - 1.0
+    L_ext = (
+        (MU_0 * length) / (2.0 * math.pi) * (math.log(2.0 * length / wire_radius) - 1.0)
     )
     if not include_internal:
         return L_ext
@@ -144,8 +144,10 @@ def parallel_segments_mutual(length: float, distance: float) -> float:
     if length <= 0.0 or distance <= 0.0:
         raise ValueError("length and distance must be positive")
     s = math.hypot(length, distance)
-    return (MU_0 * length) / (2.0 * math.pi) * (
-        math.log((length + s) / distance) - (s - distance) / length
+    return (
+        (MU_0 * length)
+        / (2.0 * math.pi)
+        * (math.log((length + s) / distance) - (s - distance) / length)
     )
 
 
@@ -168,8 +170,10 @@ _GL_NODES, _GL_WEIGHTS = np.polynomial.legendre.leggauss(16)
 
 
 def _parallel_filaments_mutual(
-    p1_a: np.ndarray, p2_a: np.ndarray,
-    p1_b: np.ndarray, p2_b: np.ndarray,
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
     *,
     parallel_tol: float = 1e-9,
 ) -> float | None:
@@ -235,15 +239,19 @@ def _parallel_filaments_mutual(
     def F(x: float, d: float) -> float:
         return x * math.asinh(x / d) - math.hypot(x, d)
 
-    M = (MU_0 / (4.0 * math.pi)) * sigma * (
-        F(s_b2, d) - F(s_b2 - la, d) - F(s_b1, d) + F(s_b1 - la, d)
+    M = (
+        (MU_0 / (4.0 * math.pi))
+        * sigma
+        * (F(s_b2, d) - F(s_b2 - la, d) - F(s_b1, d) + F(s_b1 - la, d))
     )
     return M
 
 
 def neumann_mutual(
-    p1_a: np.ndarray, p2_a: np.ndarray,
-    p1_b: np.ndarray, p2_b: np.ndarray,
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
     *,
     min_distance: float = 1e-6,
     parallel_tol: float = 1e-9,
@@ -292,7 +300,11 @@ def neumann_mutual(
 
     # Fast path: parallel filaments with closed form.
     M_par = _parallel_filaments_mutual(
-        p1_a, p2_a, p1_b, p2_b, parallel_tol=parallel_tol,
+        p1_a,
+        p2_a,
+        p1_b,
+        p2_b,
+        parallel_tol=parallel_tol,
     )
     if M_par is not None:
         return M_par
@@ -363,7 +375,8 @@ def perfect_mirror_self_pair_inductance(
     p1 = np.asarray(p1, dtype=float)
     p2 = np.asarray(p2, dtype=float)
     L_self = thin_wire_self_inductance(
-        float(np.linalg.norm(p2 - p1)), wire_radius,
+        float(np.linalg.norm(p2 - p1)),
+        wire_radius,
     )
     p1_img = _mirror(p1)
     p2_img = _mirror(p2)
@@ -399,7 +412,9 @@ def _build_inductance_matrix_loop(
         # Diagonal — self plus image
         if use_image:
             L[i, i] = perfect_mirror_self_pair_inductance(
-                p1_i, p2_i, wire_radii[i],
+                p1_i,
+                p2_i,
+                wire_radii[i],
             )
         else:
             li = float(np.linalg.norm(p2_i - p1_i))
@@ -423,8 +438,12 @@ def _build_inductance_matrix_loop(
 
 
 def _parallel_filaments_mutual_batch(
-    p1_a: np.ndarray, ua_a: np.ndarray, la_a: float,
-    p1_b: np.ndarray, ub_b: np.ndarray, lb_b: np.ndarray,
+    p1_a: np.ndarray,
+    ua_a: np.ndarray,
+    la_a: float,
+    p1_b: np.ndarray,
+    ub_b: np.ndarray,
+    lb_b: np.ndarray,
     dots: np.ndarray,
     *,
     parallel_tol: float = 1e-9,
@@ -460,14 +479,14 @@ def _parallel_filaments_mutual_batch(
     # parallel — numerical noise on dots can pass the test even when
     # the segments are skew). We re-check via the perp-component test
     # used in the loop version.
-    rel1 = p1_b - p1_a[None, :]                                  # (K, 3)
-    rel2 = (p1_b + ub_b * lb_b[:, None]) - p1_a[None, :]          # (K, 3) — this is p2_b - p1_a
+    rel1 = p1_b - p1_a[None, :]  # (K, 3)
+    rel2 = (p1_b + ub_b * lb_b[:, None]) - p1_a[None, :]  # (K, 3) — this is p2_b - p1_a
     # Project onto ua_a; the "perpendicular component" is rel - (rel·ua)·ua.
-    s1 = rel1 @ ua_a                                              # (K,)
-    s2 = rel2 @ ua_a                                              # (K,)
-    perp1 = rel1 - s1[:, None] * ua_a[None, :]                    # (K, 3)
-    perp2 = rel2 - s2[:, None] * ua_a[None, :]                    # (K, 3)
-    delta_perp = np.linalg.norm(perp2 - perp1, axis=1)            # (K,)
+    s1 = rel1 @ ua_a  # (K,)
+    s2 = rel2 @ ua_a  # (K,)
+    perp1 = rel1 - s1[:, None] * ua_a[None, :]  # (K, 3)
+    perp2 = rel2 - s2[:, None] * ua_a[None, :]  # (K, 3)
+    delta_perp = np.linalg.norm(perp2 - perp1, axis=1)  # (K,)
     skew_mask = delta_perp > parallel_tol
     parallel_mask = near_parallel & ~skew_mask
 
@@ -476,7 +495,7 @@ def _parallel_filaments_mutual_batch(
 
     # Distance d (constant along the parallel pair). When d == 0 the
     # closed form diverges and the caller must use the quadrature.
-    d = np.linalg.norm(perp1, axis=1)                              # (K,)
+    d = np.linalg.norm(perp1, axis=1)  # (K,)
     coaxial = d == 0.0
     parallel_mask &= ~coaxial
     if not parallel_mask.any():
@@ -484,9 +503,9 @@ def _parallel_filaments_mutual_batch(
 
     # For anti-parallel b we swap (s1, s2) so that beta_1 < beta_2
     # holds for both orientations.
-    sigma = np.where(dots > 0.0, 1.0, -1.0)                        # (K,)
-    s_b1 = np.where(sigma > 0.0, s1, s2)                           # (K,)
-    s_b2 = np.where(sigma > 0.0, s2, s1)                           # (K,)
+    sigma = np.where(dots > 0.0, 1.0, -1.0)  # (K,)
+    s_b1 = np.where(sigma > 0.0, s1, s2)  # (K,)
+    s_b2 = np.where(sigma > 0.0, s2, s1)  # (K,)
 
     # F(x, d) = x * arcsinh(x / d) - sqrt(x^2 + d^2)
     def F(x: np.ndarray, d_loc: np.ndarray) -> np.ndarray:
@@ -499,8 +518,8 @@ def _parallel_filaments_mutual_batch(
     F_b2_minus_la = F(s_b2 - la_a, d_safe)
     F_b1 = F(s_b1, d_safe)
     F_b1_minus_la = F(s_b1 - la_a, d_safe)
-    M_par = (MU_0 / (4.0 * math.pi)) * sigma * (
-        F_b2 - F_b2_minus_la - F_b1 + F_b1_minus_la
+    M_par = (
+        (MU_0 / (4.0 * math.pi)) * sigma * (F_b2 - F_b2_minus_la - F_b1 + F_b1_minus_la)
     )
     M_out[parallel_mask] = M_par[parallel_mask]
     valid[parallel_mask] = True
@@ -508,8 +527,14 @@ def _parallel_filaments_mutual_batch(
 
 
 def _neumann_quadrature_batch(
-    p1_a: np.ndarray, da_a: np.ndarray, la_a: float, ua_a: np.ndarray,
-    p1_b: np.ndarray, db_b: np.ndarray, lb_b: np.ndarray, ub_b: np.ndarray,
+    p1_a: np.ndarray,
+    da_a: np.ndarray,
+    la_a: float,
+    ua_a: np.ndarray,
+    p1_b: np.ndarray,
+    db_b: np.ndarray,
+    lb_b: np.ndarray,
+    ub_b: np.ndarray,
     dots: np.ndarray,
     *,
     min_distance: float = 1e-6,
@@ -525,21 +550,20 @@ def _neumann_quadrature_batch(
     if K == 0:
         return np.zeros(0, dtype=float)
 
-    s_nodes = 0.5 * (_GL_NODES + 1.0)         # (16,)
-    w_nodes = 0.5 * _GL_WEIGHTS                # (16,)
+    s_nodes = 0.5 * (_GL_NODES + 1.0)  # (16,)
+    w_nodes = 0.5 * _GL_WEIGHTS  # (16,)
 
     # Quadrature points along a and along each b
-    pts_a = p1_a[None, :] + s_nodes[:, None] * da_a[None, :]   # (16, 3)
-    pts_b = (p1_b[:, None, :]
-             + s_nodes[None, :, None] * db_b[:, None, :])      # (K, 16, 3)
+    pts_a = p1_a[None, :] + s_nodes[:, None] * da_a[None, :]  # (16, 3)
+    pts_b = p1_b[:, None, :] + s_nodes[None, :, None] * db_b[:, None, :]  # (K, 16, 3)
 
     # diff[k, i, j, :] = pts_a[i, :] - pts_b[k, j, :]
-    diff = pts_a[None, :, None, :] - pts_b[:, None, :, :]      # (K, 16, 16, 3)
-    r = np.linalg.norm(diff, axis=-1)                          # (K, 16, 16)
+    diff = pts_a[None, :, None, :] - pts_b[:, None, :, :]  # (K, 16, 16, 3)
+    r = np.linalg.norm(diff, axis=-1)  # (K, 16, 16)
     np.maximum(r, min_distance, out=r)
     inv_r = 1.0 / r
     # integral[k] = sum_{i,j} w_i * w_j * inv_r[k, i, j]
-    integrals = np.einsum("i,j,kij->k", w_nodes, w_nodes, inv_r)   # (K,)
+    integrals = np.einsum("i,j,kij->k", w_nodes, w_nodes, inv_r)  # (K,)
 
     M = (MU_0 / (4.0 * math.pi)) * dots * la_a * lb_b * integrals
     # Pairs with dot == 0 contribute nothing (handled by ``dots`` factor).
@@ -547,8 +571,8 @@ def _neumann_quadrature_batch(
 
 
 def build_inductance_matrix(
-    seg_endpoints: np.ndarray,        # shape (M, 2, 3): each branch's [start, end]
-    wire_radii: np.ndarray,           # shape (M,)
+    seg_endpoints: np.ndarray,  # shape (M, 2, 3): each branch's [start, end]
+    wire_radii: np.ndarray,  # shape (M,)
     *,
     use_image: bool = True,
 ) -> np.ndarray:
@@ -597,13 +621,13 @@ def build_inductance_matrix(
 
     # Pre-compute per-segment quantities that the loop would
     # otherwise rebuild on every call.
-    p1 = seg_endpoints[:, 0, :].astype(float, copy=False)        # (M, 3)
-    p2 = seg_endpoints[:, 1, :].astype(float, copy=False)        # (M, 3)
-    da = p2 - p1                                                  # (M, 3)
-    la = np.linalg.norm(da, axis=1)                               # (M,)
+    p1 = seg_endpoints[:, 0, :].astype(float, copy=False)  # (M, 3)
+    p2 = seg_endpoints[:, 1, :].astype(float, copy=False)  # (M, 3)
+    da = p2 - p1  # (M, 3)
+    la = np.linalg.norm(da, axis=1)  # (M,)
     if (la <= 0.0).any():
         raise ValueError("segment lengths must be positive")
-    ua = da / la[:, None]                                         # (M, 3)
+    ua = da / la[:, None]  # (M, 3)
 
     # Mirrored endpoints (for the image contribution). Mirror by
     # flipping z; same shape and tangent direction up to a sign — the
@@ -632,8 +656,10 @@ def build_inductance_matrix(
                 "conductor (e.g. z = 0.7 m) or disable the image "
                 "term with use_image=False."
             )
-        p1_img = p1.copy(); p1_img[:, 2] = -p1_img[:, 2]
-        p2_img = p2.copy(); p2_img[:, 2] = -p2_img[:, 2]
+        p1_img = p1.copy()
+        p1_img[:, 2] = -p1_img[:, 2]
+        p2_img = p2.copy()
+        p2_img[:, 2] = -p2_img[:, 2]
         da_img = p2_img - p1_img
         la_img = np.linalg.norm(da_img, axis=1)
         ua_img = da_img / la_img[:, None]
@@ -643,7 +669,9 @@ def build_inductance_matrix(
     for i in range(M):
         if use_image:
             L[i, i] = perfect_mirror_self_pair_inductance(
-                p1[i], p2[i], wire_radii[i],
+                p1[i],
+                p2[i],
+                wire_radii[i],
             )
         else:
             L[i, i] = thin_wire_self_inductance(la[i], wire_radii[i])
@@ -653,55 +681,78 @@ def build_inductance_matrix(
         slc = slice(i + 1, M)
         K = M - i - 1
 
-        ua_a = ua[i]                                              # (3,)
+        ua_a = ua[i]  # (3,)
         la_a = float(la[i])
-        da_a = da[i]                                              # (3,)
-        p1_a = p1[i]                                              # (3,)
+        da_a = da[i]  # (3,)
+        p1_a = p1[i]  # (3,)
 
-        ua_b = ua[slc]                                            # (K, 3)
-        ub_b = ua_b   # alias for clarity below
-        la_b = la[slc]                                            # (K,)
-        db_b = da[slc]                                            # (K, 3)
-        p1_b = p1[slc]                                            # (K, 3)
+        ua_b = ua[slc]  # (K, 3)
+        ub_b = ua_b  # alias for clarity below
+        la_b = la[slc]  # (K,)
+        db_b = da[slc]  # (K, 3)
+        p1_b = p1[slc]  # (K, 3)
 
         # Pairwise dots between segment i and each j > i
-        dots = ub_b @ ua_a                                        # (K,)
+        dots = ub_b @ ua_a  # (K,)
 
         # ---- Primary contribution: a vs. b ----
         # Closed form for parallel pairs, quadrature for the rest.
         M_par, par_mask = _parallel_filaments_mutual_batch(
-            p1_a, ua_a, la_a, p1_b, ub_b, la_b, dots,
+            p1_a,
+            ua_a,
+            la_a,
+            p1_b,
+            ub_b,
+            la_b,
+            dots,
         )
         M_pri = np.where(par_mask, M_par, 0.0)
         npar_mask = ~par_mask
         if npar_mask.any():
             ks = np.where(npar_mask)[0]
             M_quad = _neumann_quadrature_batch(
-                p1_a, da_a, la_a, ua_a,
-                p1_b[ks], db_b[ks], la_b[ks], ub_b[ks],
+                p1_a,
+                da_a,
+                la_a,
+                ua_a,
+                p1_b[ks],
+                db_b[ks],
+                la_b[ks],
+                ub_b[ks],
                 dots[ks],
             )
             M_pri[ks] = M_quad
 
         # ---- Image contribution: a vs. mirror(b) ----
         if use_image:
-            ua_b_img = ua_img[slc]                                # (K, 3)
-            la_b_img = la_img[slc]                                # (K,)
-            db_b_img = (p2_img[slc] - p1_img[slc])                # (K, 3)
-            p1_b_img = p1_img[slc]                                # (K, 3)
-            dots_img = ua_b_img @ ua_a                            # (K,)
+            ua_b_img = ua_img[slc]  # (K, 3)
+            la_b_img = la_img[slc]  # (K,)
+            db_b_img = p2_img[slc] - p1_img[slc]  # (K, 3)
+            p1_b_img = p1_img[slc]  # (K, 3)
+            dots_img = ua_b_img @ ua_a  # (K,)
 
             M_par_img, par_mask_img = _parallel_filaments_mutual_batch(
-                p1_a, ua_a, la_a,
-                p1_b_img, ua_b_img, la_b_img, dots_img,
+                p1_a,
+                ua_a,
+                la_a,
+                p1_b_img,
+                ua_b_img,
+                la_b_img,
+                dots_img,
             )
             M_img = np.where(par_mask_img, M_par_img, 0.0)
             npar_mask_img = ~par_mask_img
             if npar_mask_img.any():
                 ks = np.where(npar_mask_img)[0]
                 M_quad_img = _neumann_quadrature_batch(
-                    p1_a, da_a, la_a, ua_a,
-                    p1_b_img[ks], db_b_img[ks], la_b_img[ks], ua_b_img[ks],
+                    p1_a,
+                    da_a,
+                    la_a,
+                    ua_a,
+                    p1_b_img[ks],
+                    db_b_img[ks],
+                    la_b_img[ks],
+                    ua_b_img[ks],
                     dots_img[ks],
                 )
                 M_img[ks] = M_quad_img
@@ -719,8 +770,8 @@ def build_inductance_matrix(
 
 
 def build_carson_correction_matrix(
-    seg_endpoints: np.ndarray,        # shape (M, 2, 3)
-    wire_radii: np.ndarray,           # shape (M,)
+    seg_endpoints: np.ndarray,  # shape (M, 2, 3)
+    wire_radii: np.ndarray,  # shape (M,)
     *,
     omega: float,
     sigma_earth: float,

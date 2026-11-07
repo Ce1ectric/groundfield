@@ -159,8 +159,12 @@ def test_ombr_handles_l_shape() -> None:
     its area is 96 m² (vs. the L's actual area of 80 m²).
     """
     l_shape = [
-        (0.0, 0.0), (12.0, 0.0), (12.0, 4.0),
-        (8.0, 4.0), (8.0, 8.0), (0.0, 8.0),
+        (0.0, 0.0),
+        (12.0, 0.0),
+        (12.0, 4.0),
+        (8.0, 4.0),
+        (8.0, 8.0),
+        (0.0, 8.0),
     ]
     fp = BuildingFootprint(polygon_xy_m=l_shape)
     _, (dx, dy), angle_deg = fp.oriented_bounding_rectangle()

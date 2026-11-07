@@ -39,8 +39,12 @@ def _single_rod_world(*, rho: float = 100.0, length: float = 1.5) -> gf.World:
     soil = gf.HomogeneousSoil(resistivity=rho)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1",
-        position=(0.0, 0.0, 0.5), length=length, wire_radius=0.005,
+        world,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=length,
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     return world
@@ -57,7 +61,9 @@ def test_sweep_row_count_matches_cartesian_product() -> None:
     L_values = [1.0, 1.5, 2.0]
     freqs = [50.0, 200.0]
     eng = gf.create_engine(
-        backend="image", segment_length=0.1, frequencies=freqs,
+        backend="image",
+        segment_length=0.1,
+        frequencies=freqs,
     )
     df = sweep(
         world_factory=lambda **p: _single_rod_world(rho=p["rho"], length=p["length"]),
@@ -78,10 +84,18 @@ def test_sweep_default_response_columns_present() -> None:
         axes={"rho": [100.0, 200.0]},
     )
     expected = {
-        "U_E_re", "U_E_im", "abs_U_E",
-        "I_re", "I_im", "abs_I",
-        "Z_re", "Z_im", "abs_Z", "arg_Z_deg",
-        "rho", "frequency_Hz",
+        "U_E_re",
+        "U_E_im",
+        "abs_U_E",
+        "I_re",
+        "I_im",
+        "abs_I",
+        "Z_re",
+        "Z_im",
+        "abs_Z",
+        "arg_Z_deg",
+        "rho",
+        "frequency_Hz",
     }
     assert expected.issubset(set(df.columns))
 
@@ -119,6 +133,7 @@ def test_sweep_engine_factory_runs_per_combination() -> None:
 
 def test_sweep_custom_response_extractor() -> None:
     """A user-supplied response replaces the default extractor."""
+
     def my_response(result, world, f_idx):
         return {"answer": 42.0}
 
@@ -161,7 +176,9 @@ def test_sweep_rejects_empty_axis_value_list() -> None:
 
 def _demo_df() -> pd.DataFrame:
     eng = gf.create_engine(
-        backend="image", segment_length=0.1, frequencies=[50.0, 200.0],
+        backend="image",
+        segment_length=0.1,
+        frequencies=[50.0, 200.0],
     )
     return sweep(
         world_factory=lambda **p: _single_rod_world(rho=p["rho"], length=p["length"]),
@@ -182,8 +199,9 @@ def test_plot_sweep_lines_smoke_single_curve() -> None:
 def test_plot_sweep_lines_smoke_multi_curve() -> None:
     df = _demo_df()
     df = df[df["frequency_Hz"] == 50.0]
-    fig = plot_sweep_lines(df, x="rho", y="abs_Z", color="length",
-                           log_x=True, log_y=True)
+    fig = plot_sweep_lines(
+        df, x="rho", y="abs_Z", color="length", log_x=True, log_y=True
+    )
     assert isinstance(fig, matplotlib.figure.Figure)
     plt.close(fig)
 
@@ -196,8 +214,9 @@ def test_plot_sweep_lines_rejects_unknown_column() -> None:
 
 def test_plot_sweep_heatmap_smoke() -> None:
     df = _demo_df()
-    fig = plot_sweep_heatmap(df, x="rho", y="length", response="abs_Z",
-                             frequency_Hz=50.0)
+    fig = plot_sweep_heatmap(
+        df, x="rho", y="length", response="abs_Z", frequency_Hz=50.0
+    )
     assert isinstance(fig, matplotlib.figure.Figure)
     plt.close(fig)
 
@@ -205,8 +224,9 @@ def test_plot_sweep_heatmap_smoke() -> None:
 def test_plot_sweep_heatmap_rejects_invalid_frequency() -> None:
     df = _demo_df()
     with pytest.raises(ValueError, match="No rows match"):
-        plot_sweep_heatmap(df, x="rho", y="length", response="abs_Z",
-                           frequency_Hz=999.0)
+        plot_sweep_heatmap(
+            df, x="rho", y="length", response="abs_Z", frequency_Hz=999.0
+        )
 
 
 def test_plot_sweep_heatmap_rejects_unknown_column() -> None:

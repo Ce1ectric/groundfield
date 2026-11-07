@@ -86,8 +86,10 @@ def test_perpendicular_segments_have_zero_mutual() -> None:
     """Crossing perpendicular segments — the dot product kills the
     Neumann integral."""
     M = neumann_mutual(
-        np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0]),
-        np.array([0.5, -0.5, 0.0]), np.array([0.5, +0.5, 0.0]),
+        np.array([0.0, 0.0, 0.0]),
+        np.array([1.0, 0.0, 0.0]),
+        np.array([0.5, -0.5, 0.0]),
+        np.array([0.5, +0.5, 0.0]),
     )
     assert abs(M) < 1e-12
 
@@ -117,19 +119,31 @@ PEN_RHO = 2.82e-8
 PEN_A = 50.0e-6
 
 
-def _galvanic_world(*, n_seg: int, inductance_model: str | None = None,
-                    frequencies=None) -> tuple[gf.World, gf.Engine]:
+def _galvanic_world(
+    *, n_seg: int, inductance_model: str | None = None, frequencies=None
+) -> tuple[gf.World, gf.Engine]:
     """Two-rod world with a galvanic distributed conductor."""
     soil = gf.HomogeneousSoil(resistivity=RHO_SOIL)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
-    gf.create_electrode(w, "rod", name="g2", position=(SEPARATION, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+    )
+    gf.create_electrode(
+        w,
+        "rod",
+        name="g2",
+        position=(SEPARATION, 0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_R,
+    )
     gf.create_conductor(
-        w, name="pen", start="g1", end="g2",
+        w,
+        name="pen",
+        start="g1",
+        end="g2",
         conductor_type="bare_copper",
-        wire_radius=0.004, resistivity=PEN_RHO,
+        wire_radius=0.004,
+        resistivity=PEN_RHO,
         cross_section=PEN_A,
         discretize_segment_length=SEPARATION / n_seg + 1e-9,
         coupling_to_soil="galvanic",
@@ -137,7 +151,8 @@ def _galvanic_world(*, n_seg: int, inductance_model: str | None = None,
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(
-        backend="image", segment_length=SEG,
+        backend="image",
+        segment_length=SEG,
         frequencies=list(frequencies) if frequencies else [50.0],
     )
     return w, eng
@@ -161,12 +176,9 @@ def test_inductance_neumann_matches_resistive_at_omega_zero() -> None:
     """At $\\omega = 0$ the inductive system collapses to the
     resistive solution. We hand the engine ``frequencies=[0.0]``
     while keeping ``inductance_model="neumann"``."""
-    w_r, _ = _galvanic_world(n_seg=4, inductance_model=None,
-                              frequencies=[0.0])
-    w_i, _ = _galvanic_world(n_seg=4, inductance_model="neumann",
-                              frequencies=[0.0])
-    eng = gf.create_engine(backend="image", segment_length=SEG,
-                            frequencies=[0.0])
+    w_r, _ = _galvanic_world(n_seg=4, inductance_model=None, frequencies=[0.0])
+    w_i, _ = _galvanic_world(n_seg=4, inductance_model="neumann", frequencies=[0.0])
+    eng = gf.create_engine(backend="image", segment_length=SEG, frequencies=[0.0])
     res_r = eng.solve(w_r)
     res_i = eng.solve(w_i)
     for ename in ("g1", "g2"):
@@ -188,10 +200,12 @@ def test_inductance_introduces_phase_shift() -> None:
     """At 50 Hz with an inductive PEN the source-electrode current
     becomes complex (non-zero imaginary part). At DC the imaginary
     part is zero."""
-    w_dc, eng_dc = _galvanic_world(n_seg=8, inductance_model="neumann",
-                                    frequencies=[1e-9])
-    w_ac, eng_ac = _galvanic_world(n_seg=8, inductance_model="neumann",
-                                    frequencies=[50.0])
+    w_dc, eng_dc = _galvanic_world(
+        n_seg=8, inductance_model="neumann", frequencies=[1e-9]
+    )
+    w_ac, eng_ac = _galvanic_world(
+        n_seg=8, inductance_model="neumann", frequencies=[50.0]
+    )
     res_dc = eng_dc.solve(w_dc)
     res_ac = eng_ac.solve(w_ac)
     I_dc = res_dc.electrode_currents["g1"][0]
@@ -212,27 +226,46 @@ def _coupled_leads_world(*, freq: float) -> gf.World:
     soil = gf.HomogeneousSoil(resistivity=RHO_SOIL)
     w = gf.create_world(soil=soil)
     # Source loop: rod g1 → conductor → rod g2
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
-    gf.create_electrode(w, "rod", name="g2", position=(20.0, 0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+    )
+    gf.create_electrode(
+        w, "rod", name="g2", position=(20.0, 0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+    )
     gf.create_conductor(
-        w, name="src_lead",
-        start="g1", end="g2", conductor_type="bare_copper",
-        wire_radius=0.004, resistivity=PEN_RHO, cross_section=PEN_A,
+        w,
+        name="src_lead",
+        start="g1",
+        end="g2",
+        conductor_type="bare_copper",
+        wire_radius=0.004,
+        resistivity=PEN_RHO,
+        cross_section=PEN_A,
         discretize_segment_length=2.5,
         coupling_to_soil="galvanic",
         inductance_model="neumann",
     )
     # Measurement loop: rod m1 → conductor → rod m2, parallel to src
-    gf.create_electrode(w, "rod", name="m1", position=(0, 1.0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
-    gf.create_electrode(w, "rod", name="m2", position=(20.0, 1.0, 0.5),
-                        length=ROD_LEN, wire_radius=ROD_R)
+    gf.create_electrode(
+        w, "rod", name="m1", position=(0, 1.0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+    )
+    gf.create_electrode(
+        w,
+        "rod",
+        name="m2",
+        position=(20.0, 1.0, 0.5),
+        length=ROD_LEN,
+        wire_radius=ROD_R,
+    )
     gf.create_conductor(
-        w, name="meas_lead",
-        start="m1", end="m2", conductor_type="bare_copper",
-        wire_radius=0.004, resistivity=PEN_RHO, cross_section=PEN_A,
+        w,
+        name="meas_lead",
+        start="m1",
+        end="m2",
+        conductor_type="bare_copper",
+        wire_radius=0.004,
+        resistivity=PEN_RHO,
+        cross_section=PEN_A,
         discretize_segment_length=2.5,
         coupling_to_soil="galvanic",
         inductance_model="neumann",
@@ -248,19 +281,15 @@ def test_coupled_leads_open_circuit_voltage_scales_with_frequency() -> None:
     """
     w_50 = _coupled_leads_world(freq=50.0)
     w_500 = _coupled_leads_world(freq=500.0)
-    eng_50 = gf.create_engine(backend="image", segment_length=SEG,
-                               frequencies=[50.0])
-    eng_500 = gf.create_engine(backend="image", segment_length=SEG,
-                                frequencies=[500.0])
+    eng_50 = gf.create_engine(backend="image", segment_length=SEG, frequencies=[50.0])
+    eng_500 = gf.create_engine(backend="image", segment_length=SEG, frequencies=[500.0])
     res_50 = eng_50.solve(w_50)
     res_500 = eng_500.solve(w_500)
     dU_50 = abs(
-        res_50.electrode_potentials["m1"][0]
-        - res_50.electrode_potentials["m2"][0]
+        res_50.electrode_potentials["m1"][0] - res_50.electrode_potentials["m2"][0]
     )
     dU_500 = abs(
-        res_500.electrode_potentials["m1"][0]
-        - res_500.electrode_potentials["m2"][0]
+        res_500.electrode_potentials["m1"][0] - res_500.electrode_potentials["m2"][0]
     )
     # The 500 Hz drop must be larger than the 50 Hz drop — the
     # inductive contribution dominates at higher frequency.
@@ -279,17 +308,30 @@ INDUCTIVE_BACKENDS = ["image", "mom", "cim", "bem"]
 def test_inductive_cross_engine_50hz(backend: str) -> None:
     """Every distributed-capable backend agrees on the source-rod
     current at 50 Hz to within 5 % of the image reference."""
+
     def make_world():
         soil = gf.HomogeneousSoil(resistivity=RHO_SOIL)
         w = gf.create_world(soil=soil)
-        gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5),
-                            length=ROD_LEN, wire_radius=ROD_R)
-        gf.create_electrode(w, "rod", name="g2", position=(SEPARATION, 0, 0.5),
-                            length=ROD_LEN, wire_radius=ROD_R)
+        gf.create_electrode(
+            w, "rod", name="g1", position=(0, 0, 0.5), length=ROD_LEN, wire_radius=ROD_R
+        )
+        gf.create_electrode(
+            w,
+            "rod",
+            name="g2",
+            position=(SEPARATION, 0, 0.5),
+            length=ROD_LEN,
+            wire_radius=ROD_R,
+        )
         gf.create_conductor(
-            w, name="pen", start="g1", end="g2",
+            w,
+            name="pen",
+            start="g1",
+            end="g2",
             conductor_type="bare_copper",
-            wire_radius=0.004, resistivity=PEN_RHO, cross_section=PEN_A,
+            wire_radius=0.004,
+            resistivity=PEN_RHO,
+            cross_section=PEN_A,
             discretize_segment_length=SEPARATION / 8 + 1e-9,
             coupling_to_soil="galvanic",
             inductance_model="neumann",
@@ -298,10 +340,14 @@ def test_inductive_cross_engine_50hz(backend: str) -> None:
         return w
 
     eng_ref = gf.create_engine(
-        backend="image", segment_length=SEG, frequencies=[50.0],
+        backend="image",
+        segment_length=SEG,
+        frequencies=[50.0],
     )
     eng = gf.create_engine(
-        backend=backend, segment_length=SEG, frequencies=[50.0],
+        backend=backend,
+        segment_length=SEG,
+        frequencies=[50.0],
     )
     res_ref = eng_ref.solve(make_world())
     res = eng.solve(make_world())
@@ -318,7 +364,9 @@ def test_fem_warns_on_inductance_model() -> None:
 
     w, _ = _galvanic_world(n_seg=4, inductance_model="neumann")
     eng = gf.create_engine(
-        backend="fem", segment_length=SEG, frequencies=[50.0],
+        backend="fem",
+        segment_length=SEG,
+        frequencies=[50.0],
     )
     # Use caplog if available; otherwise just check the result exists
     res = eng.solve(w)

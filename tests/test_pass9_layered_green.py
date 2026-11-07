@@ -144,15 +144,14 @@ def _closed_form_terms(z, z_s, rho_1, rho_2, h_1, n_gen):
     if (z <= h_1) == (z_s <= h_1):
         out.append((rho_1 if z_s <= h_1 else rho_2, abs(z - z_s)))
     for m in range(n_gen):
-        Km = K ** m
+        Km = K**m
         if z <= h_1 and z_s <= h_1:
             S, D = z + z_s, abs(z - z_s)
             if m == 0:
                 out.append((rho_1, S))
             else:
                 c = rho_1 * Km
-                out += [(c, m * q + S), (c, m * q + D),
-                        (c, m * q - D), (c, m * q - S)]
+                out += [(c, m * q + S), (c, m * q + D), (c, m * q - D), (c, m * q - S)]
         elif z > h_1 and z_s > h_1:
             S = z + z_s
             if m == 0:
@@ -167,7 +166,15 @@ def _closed_form_terms(z, z_s, rho_1, rho_2, h_1, n_gen):
 
 
 def _closed_form_kernel(
-    s, z, z_s, *, rho_1, rho_2, h_1, n_gen=4000, r_min=0.0,
+    s,
+    z,
+    z_s,
+    *,
+    rho_1,
+    rho_2,
+    h_1,
+    n_gen=4000,
+    r_min=0.0,
 ):
     """Full kernel $G(s, z, z_s)$ from :func:`_closed_form_terms`."""
     s = np.asarray(s, dtype=float)
@@ -178,7 +185,15 @@ def _closed_form_kernel(
 
 
 def _closed_form_correction(
-    s, z, z_s, *, rho_1, rho_2, h_1, rho_baseline=None, n_gen=4000,
+    s,
+    z,
+    z_s,
+    *,
+    rho_1,
+    rho_2,
+    h_1,
+    rho_baseline=None,
+    n_gen=4000,
     r_min=0.0,
 ):
     """Layered minus homogeneous baseline, differenced **term by term**.
@@ -194,7 +209,12 @@ def _closed_form_correction(
     for c, d in _closed_form_terms(z, z_s, rho_1, rho_2, h_1, n_gen):
         merged[round(d, 12)] = merged.get(round(d, 12), 0.0) + c
     for c, d in _closed_form_terms(
-        z, z_s, rho_baseline, rho_baseline, h_1, n_gen,
+        z,
+        z_s,
+        rho_baseline,
+        rho_baseline,
+        h_1,
+        n_gen,
     ):
         merged[round(d, 12)] = merged.get(round(d, 12), 0.0) - c
     s = np.asarray(s, dtype=float)
@@ -215,23 +235,26 @@ def test_closed_form_reference_matches_the_spectral_kernel() -> None:
     """
     lambdas = np.logspace(-4.0, 2.0, 60)
     for z, z_s, rho_1, rho_2, h_1 in (
-        (0.5, 0.5, 100.0, 1000.0, 5.0),      # uu
-        (0.0, 0.0, 100.0, 1000.0, 5.0),      # uu, surface pair
-        (5.0, 5.0, 100.0, 1000.0, 5.0),      # uu, at the interface
-        (6.0, 6.0, 100.0, 1000.0, 5.0),      # ll
+        (0.5, 0.5, 100.0, 1000.0, 5.0),  # uu
+        (0.0, 0.0, 100.0, 1000.0, 5.0),  # uu, surface pair
+        (5.0, 5.0, 100.0, 1000.0, 5.0),  # uu, at the interface
+        (6.0, 6.0, 100.0, 1000.0, 5.0),  # ll
         (5.0005, 5.0005, 100.0, 1000.0, 5.0),  # ll, just below h_1
-        (2.0, 8.0, 100.0, 1000.0, 5.0),      # cross-layer
-        (8.0, 2.0, 100.0, 1000.0, 5.0),      # cross-layer, reciprocal
-        (0.7, 0.7, 1000.0, 30.0, 5.0),       # K < 0
-        (6.0, 6.0, 100.0, 10000.0, 6.096),   # K = +0.98
+        (2.0, 8.0, 100.0, 1000.0, 5.0),  # cross-layer
+        (8.0, 2.0, 100.0, 1000.0, 5.0),  # cross-layer, reciprocal
+        (0.7, 0.7, 1000.0, 30.0, 5.0),  # K < 0
+        (6.0, 6.0, 100.0, 10000.0, 6.096),  # K = +0.98
     ):
         phi = lg.two_layer_spectral_kernel(
-            lambdas, z, z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+            lambdas,
+            z,
+            z_s,
+            rho_1=rho_1,
+            rho_2=rho_2,
+            h_1=h_1,
         )
         terms = _closed_form_terms(z, z_s, rho_1, rho_2, h_1, n_gen=4000)
-        series = sum(
-            c / (2.0 * lambdas) * np.exp(-lambdas * d) for c, d in terms
-        )
+        series = sum(c / (2.0 * lambdas) * np.exp(-lambdas * d) for c, d in terms)
         rel = np.abs(series - phi) / np.abs(phi)
         assert rel.max() < 1e-12, (z, z_s, rho_2, rel.max())
 
@@ -250,12 +273,20 @@ def test_lambda_max_factor_never_flips_the_sign() -> None:
     """
     kw = dict(rho_baseline=1000.0, **_SOIL)
     reference = two_layer_layered_correction_real_space(
-        200.0, 6.0, 6.0, lambda_max_factor=200.0, **kw,
+        200.0,
+        6.0,
+        6.0,
+        lambda_max_factor=200.0,
+        **kw,
     )
     assert reference < 0.0
     for factor in (2000.0, 4000.0, 6000.0, 8000.0):
         value = two_layer_layered_correction_real_space(
-            200.0, 6.0, 6.0, lambda_max_factor=factor, **kw,
+            200.0,
+            6.0,
+            6.0,
+            lambda_max_factor=factor,
+            **kw,
         )
         assert value < 0.0, (factor, value)
         assert value == pytest.approx(reference, rel=1e-6), factor
@@ -269,13 +300,20 @@ def test_default_grid_resolves_remote_radii() -> None:
     Reference: adaptive per-period QUADPACK of the spectral difference.
     """
     corr = two_layer_layered_correction_real_space(
-        6000.0, 0.7, 0.7, **_SOIL,
+        6000.0,
+        0.7,
+        0.7,
+        **_SOIL,
     )
     assert corr == pytest.approx(0.1499885467, rel=1e-5)
     # Independent of the truncation knob (the integrand is < 1e-13 well
     # before lambda_max in either case).
     corr_refined = two_layer_layered_correction_real_space(
-        6000.0, 0.7, 0.7, lambda_max_factor=400.0, **_SOIL,
+        6000.0,
+        0.7,
+        0.7,
+        lambda_max_factor=400.0,
+        **_SOIL,
     )
     assert corr == pytest.approx(corr_refined, rel=1e-5)
 
@@ -284,10 +322,20 @@ def test_thin_top_layer_at_one_km_is_resolved() -> None:
     """h_1 = 1 m raises lambda_max fivefold; s = 1 km then needs
     31 831 panels. v0.14.1 returned 0.98836860 (−1.15 %)."""
     value = two_layer_real_space_kernel(
-        1000.0, 0.7, 0.7, rho_1=100.0, rho_2=1000.0, h_1=1.0,
+        1000.0,
+        0.7,
+        0.7,
+        rho_1=100.0,
+        rho_2=1000.0,
+        h_1=1.0,
     )
     refined = two_layer_real_space_kernel(
-        1000.0, 0.7, 0.7, rho_1=100.0, rho_2=1000.0, h_1=1.0,
+        1000.0,
+        0.7,
+        0.7,
+        rho_1=100.0,
+        rho_2=1000.0,
+        h_1=1.0,
         lambda_max_factor=400.0,
     )
     assert value == pytest.approx(refined, rel=1e-5)
@@ -302,22 +350,28 @@ def test_panel_count_scales_with_oscillation_content() -> None:
     delivered 2.74 nodes per oscillation for the last case below.
     """
     for lambda_max, char_length, s in (
-        (40.0, 5.0, 200.0),        # n_osc ~ 1273  (historically fine)
-        (200.0, 5.0, 200.0),       # n_osc ~ 6366  (at the old cap)
-        (40.0, 6000.0, 200.0),     # n_osc ~ 38197 (historically broken)
-        (200.0, 1.0, 1000.0),      # n_osc ~ 31831 (thin top layer)
+        (40.0, 5.0, 200.0),  # n_osc ~ 1273  (historically fine)
+        (200.0, 5.0, 200.0),  # n_osc ~ 6366  (at the old cap)
+        (40.0, 6000.0, 200.0),  # n_osc ~ 38197 (historically broken)
+        (200.0, 1.0, 1000.0),  # n_osc ~ 31831 (thin top layer)
     ):
         with warnings.catch_warnings():
             warnings.simplefilter("error", SommerfeldResolutionWarning)
             lambdas, _ = lg._hankel_lambda_grid(
-                lambda_max=lambda_max, char_length=char_length, s=s,
-                n_log=32, n_lin=96,
+                lambda_max=lambda_max,
+                char_length=char_length,
+                s=s,
+                n_log=32,
+                n_lin=96,
             )
         n_osc = lambda_max * s / (2.0 * math.pi)
         n_linear = lambdas.size - 32
         nodes_per_osc = n_linear / n_osc
         assert nodes_per_osc >= lg._HANKEL_MIN_NODES_PER_OSCILLATION - 0.01, (
-            lambda_max, char_length, s, nodes_per_osc,
+            lambda_max,
+            char_length,
+            s,
+            nodes_per_osc,
         )
 
 
@@ -326,7 +380,11 @@ def test_soft_budget_keeps_the_historic_full_resolution() -> None:
     kept, so results the 4096-panel cap resolved adequately are
     unchanged (16 nodes per oscillation)."""
     lambdas, _ = lg._hankel_lambda_grid(
-        lambda_max=40.0, char_length=5.0, s=200.0, n_log=32, n_lin=96,
+        lambda_max=40.0,
+        char_length=5.0,
+        s=200.0,
+        n_log=32,
+        n_lin=96,
     )
     n_osc = 40.0 * 200.0 / (2.0 * math.pi)
     n_linear = lambdas.size - 32
@@ -350,8 +408,11 @@ def test_exhausted_node_budget_warns_and_names_the_parameter() -> None:
     """
     with pytest.warns(SommerfeldResolutionWarning) as record:
         lg._hankel_lambda_grid(
-            lambda_max=2.0e6, char_length=5.0, s=2000.0,
-            n_log=32, n_lin=96,
+            lambda_max=2.0e6,
+            char_length=5.0,
+            s=2000.0,
+            n_log=32,
+            n_lin=96,
         )
     message = str(record[0].message)
     assert "lambda_max_factor" in message
@@ -366,13 +427,21 @@ def test_absurd_lambda_max_factor_no_longer_degrades_the_grid() -> None:
     return the converged value, silently.
     """
     reference = two_layer_layered_correction_real_space(
-        200.0, 6.0, 6.0, rho_baseline=1000.0, **_SOIL,
+        200.0,
+        6.0,
+        6.0,
+        rho_baseline=1000.0,
+        **_SOIL,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         value = two_layer_layered_correction_real_space(
-            200.0, 6.0, 6.0, rho_baseline=1000.0,
-            lambda_max_factor=5.0e4, **_SOIL,
+            200.0,
+            6.0,
+            6.0,
+            rho_baseline=1000.0,
+            lambda_max_factor=5.0e4,
+            **_SOIL,
         )
     assert value == pytest.approx(reference, rel=1e-9)
 
@@ -385,7 +454,12 @@ def test_production_scale_group_emits_no_resolution_warning() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error", SommerfeldResolutionWarning)
         two_layer_layered_correction_group(
-            s_values, 0.7, 0.7, rho_1=1000.0, rho_2=30.0, h_1=5.0,
+            s_values,
+            0.7,
+            0.7,
+            rho_1=1000.0,
+            rho_2=30.0,
+            h_1=5.0,
             rho_baseline=1000.0,
         )
 
@@ -418,7 +492,12 @@ def test_full_kernel_homogeneous_limit_is_machine_accurate(s) -> None:
     """
     rho, z = 100.0, 0.5
     got = two_layer_real_space_kernel(
-        s, z, z, rho_1=rho, rho_2=rho, h_1=5.0,
+        s,
+        z,
+        z,
+        rho_1=rho,
+        rho_2=rho,
+        h_1=5.0,
     )
     want = 0.5 * rho * (1.0 / s + 1.0 / math.hypot(s, 2.0 * z))
     assert got == pytest.approx(want, rel=1e-8)
@@ -433,12 +512,19 @@ def test_full_kernel_is_smooth_in_s() -> None:
     documented 1e-4 interpolation tolerance unreachable.
     """
     s = np.linspace(9.5, 10.5, 61)
-    values = np.array([
-        two_layer_real_space_kernel(
-            float(x), 0.5, 0.5, rho_1=300.0, rho_2=100.0, h_1=6.096,
-        )
-        for x in s
-    ])
+    values = np.array(
+        [
+            two_layer_real_space_kernel(
+                float(x),
+                0.5,
+                0.5,
+                rho_1=300.0,
+                rho_2=100.0,
+                h_1=6.096,
+            )
+            for x in s
+        ]
+    )
     assert np.all(np.diff(values) < 0.0)
     # And convex (no sign change of the second difference).
     assert np.all(np.diff(values, 2) > 0.0)
@@ -453,7 +539,9 @@ def test_full_kernel_converges_in_lambda_max_factor() -> None:
     base = two_layer_real_space_kernel(*args, **kw)
     for factor in (400.0, 1000.0):
         assert two_layer_real_space_kernel(
-            *args, lambda_max_factor=factor, **kw,
+            *args,
+            lambda_max_factor=factor,
+            **kw,
         ) == pytest.approx(base, rel=1e-7)
 
 
@@ -474,7 +562,10 @@ def test_interpolated_branch_matches_exact_branch() -> None:
 
     exact = two_layer_layered_correction_group(query, 6.0, 6.0, **kw)
     padded = two_layer_layered_correction_group(
-        np.concatenate([query, padding]), 6.0, 6.0, **kw,
+        np.concatenate([query, padding]),
+        6.0,
+        6.0,
+        **kw,
     )[: query.size]
 
     rel = np.abs(padded - exact) / np.maximum(np.abs(exact), 1e-12)
@@ -493,10 +584,12 @@ def test_group_matches_scalar_over_a_400m_span() -> None:
     s_values = np.linspace(0.0, 400.0, 400)
     kw = dict(rho_1=1000.0, rho_2=30.0, h_1=5.0, rho_baseline=1000.0)
     grouped = two_layer_layered_correction_group(s_values, 0.7, 0.7, **kw)
-    scalar = np.array([
-        two_layer_layered_correction_real_space(float(x), 0.7, 0.7, **kw)
-        for x in s_values
-    ])
+    scalar = np.array(
+        [
+            two_layer_layered_correction_real_space(float(x), 0.7, 0.7, **kw)
+            for x in s_values
+        ]
+    )
     rel = np.abs(grouped - scalar) / np.maximum(np.abs(scalar), 1e-12)
     assert rel.max() < 1e-4, (s_values[int(rel.argmax())], rel.max())
 
@@ -508,12 +601,17 @@ def test_group_matches_scalar_for_a_lower_layer_pair() -> None:
     got 17 % wrong at s = 6 m."""
     s_values = np.linspace(0.0, 200.0, 200)
     grouped = two_layer_layered_correction_group(
-        s_values, 6.0, 6.0, **_SOIL,
+        s_values,
+        6.0,
+        6.0,
+        **_SOIL,
     )
-    scalar = np.array([
-        two_layer_layered_correction_real_space(float(x), 6.0, 6.0, **_SOIL)
-        for x in s_values
-    ])
+    scalar = np.array(
+        [
+            two_layer_layered_correction_real_space(float(x), 6.0, 6.0, **_SOIL)
+            for x in s_values
+        ]
+    )
     rel = np.abs(grouped - scalar) / np.maximum(np.abs(scalar), 1e-12)
     assert rel.max() < 1e-4, (s_values[int(rel.argmax())], rel.max())
 
@@ -528,10 +626,12 @@ def test_probe_matrix_meets_its_documented_tolerance() -> None:
     kw = dict(rho_1=300.0, rho_2=100.0, h_1=6.096)
 
     grouped = two_layer_probe_matrix(probes, sources, **kw)
-    per_pair = np.vstack([
-        two_layer_probe_matrix(probes[i:i + 1], sources, **kw)
-        for i in range(probes.shape[0])
-    ])
+    per_pair = np.vstack(
+        [
+            two_layer_probe_matrix(probes[i : i + 1], sources, **kw)
+            for i in range(probes.shape[0])
+        ]
+    )
     rel = np.abs(grouped - per_pair) / np.maximum(np.abs(per_pair), 1e-30)
     assert rel.max() < 1e-4, rel.max()
 
@@ -547,7 +647,8 @@ def test_interp_node_count_scales_with_the_dynamic_range() -> None:
     # ~12 nodes per e-fold over the wide range.
     span = math.log(10000.0) - math.log(1.0)
     assert wide == pytest.approx(
-        lg._HANKEL_INTERP_NODES_PER_LN * span, rel=0.05,
+        lg._HANKEL_INTERP_NODES_PER_LN * span,
+        rel=0.05,
     )
 
 
@@ -569,11 +670,17 @@ def test_log_grid_offset_picks_the_nearest_image_distance() -> None:
     # of what is actually interpolated — not the 1 mm floor, which would
     # spend half the nodes on an s-range where nothing happens.
     assert lg._log_grid_offset(
-        5.0, 5.0, 5.0, d_rest=10.0,
+        5.0,
+        5.0,
+        5.0,
+        d_rest=10.0,
     ) == pytest.approx(10.0)
     # ...and it is never *lowered* by d_rest.
     assert lg._log_grid_offset(
-        0.5, 8.0, 6.096, d_rest=1.0,
+        0.5,
+        8.0,
+        6.096,
+        d_rest=1.0,
     ) == pytest.approx(7.5)
 
 
@@ -582,7 +689,12 @@ def test_homogeneous_limit_of_the_group_is_exactly_zero() -> None:
     correction for any group size and any branch."""
     s_values = np.linspace(0.0, 400.0, 500)
     out = two_layer_layered_correction_group(
-        s_values, 0.7, 3.0, rho_1=120.0, rho_2=120.0, h_1=5.0,
+        s_values,
+        0.7,
+        3.0,
+        rho_1=120.0,
+        rho_2=120.0,
+        h_1=5.0,
     )
     assert np.array_equal(out, np.zeros_like(out))
 
@@ -630,7 +742,8 @@ def test_interface_depth_pair_is_truncation_bounded(s: float) -> None:
 
 
 @pytest.mark.parametrize(
-    "z", [5.0005, 5.0015, 5.005, 5.015, 5.05, 5.0 + 1e-6, 4.9999, 4.99],
+    "z",
+    [5.0005, 5.0015, 5.005, 5.015, 5.05, 5.0 + 1e-6, 4.9999, 4.99],
 )
 def test_near_interface_pair_does_not_degrade_under_refinement(
     z: float,
@@ -696,12 +809,18 @@ def test_extreme_contrast_group_meets_the_documented_kernel_tolerance(
 @pytest.mark.parametrize(
     "z,s",
     [
-        (0.0, 10.0), (0.05, 10.0), (5.0, 1.0), (5.0005, 1.0),
-        (6.0, 200.0), (0.7, 4000.0), (0.7, 20000.0),
+        (0.0, 10.0),
+        (0.05, 10.0),
+        (5.0, 1.0),
+        (5.0005, 1.0),
+        (6.0, 200.0),
+        (0.7, 4000.0),
+        (0.7, 20000.0),
     ],
 )
 def test_lambda_max_factor_is_inert_over_five_orders(
-    z: float, s: float,
+    z: float,
+    s: float,
 ) -> None:
     """The public knob must not change the answer — in either direction.
 
@@ -713,7 +832,11 @@ def test_lambda_max_factor_is_inert_over_five_orders(
     """
     values = [
         two_layer_real_space_kernel(
-            s, z, z, lambda_max_factor=f, **_SOIL,
+            s,
+            z,
+            z,
+            lambda_max_factor=f,
+            **_SOIL,
         )
         for f in (30.0, 100.0, 200.0, 1000.0, 10000.0, 30000.0)
     ]
@@ -727,7 +850,8 @@ def test_lambda_max_factor_is_inert_over_five_orders(
 @pytest.mark.parametrize("s", [1000.0, 4000.0, 20000.0])
 @pytest.mark.parametrize("h_1", [1.0, 5.0])
 def test_kilometre_spans_are_accurate_and_bounded_in_cost(
-    s: float, h_1: float,
+    s: float,
+    h_1: float,
 ) -> None:
     """Remote injection (AP1) — accuracy *and* the panel-cost bound.
 
@@ -744,13 +868,23 @@ def test_kilometre_spans_are_accurate_and_bounded_in_cost(
     assert got == pytest.approx(want, rel=1e-6), (s, h_1, got, want)
 
     plan = lg._plan_truncation(
-        z=0.7, z_s=0.7, rho_1=100.0, rho_2=1000.0, h_1=h_1,
-        rho_baseline=None, s_near=s, s_far=s, lambda_max_factor=200.0,
+        z=0.7,
+        z_s=0.7,
+        rho_1=100.0,
+        rho_2=1000.0,
+        h_1=h_1,
+        rho_baseline=None,
+        s_near=s,
+        s_far=s,
+        lambda_max_factor=200.0,
         warn_stacklevel=3,
     )
     lambdas, _ = lg._hankel_lambda_grid(
-        lambda_max=plan.lambda_max, char_length=plan.char_length, s=s,
-        n_log=32, n_lin=96,
+        lambda_max=plan.lambda_max,
+        char_length=plan.char_length,
+        s=s,
+        n_log=32,
+        n_lin=96,
     )
     # One panel per J0 period at the *capped* lambda_max, i.e. at most
     # _HANKEL_PANEL_TARGET panels — v0.14.1 allowed 4096 and 0.15.0.dev
@@ -770,9 +904,16 @@ def test_panel_cost_target_scales_with_the_knob() -> None:
     """
     plans = [
         lg._plan_truncation(
-            z=0.7, z_s=0.7, rho_1=100.0, rho_2=1000.0, h_1=5.0,
-            rho_baseline=None, s_near=4000.0, s_far=4000.0,
-            lambda_max_factor=f, warn_stacklevel=3,
+            z=0.7,
+            z_s=0.7,
+            rho_1=100.0,
+            rho_2=1000.0,
+            h_1=5.0,
+            rho_baseline=None,
+            s_near=4000.0,
+            s_far=4000.0,
+            lambda_max_factor=f,
+            warn_stacklevel=3,
         )
         for f in (200.0, 800.0)
     ]
@@ -795,13 +936,28 @@ def test_every_retained_image_term_is_decayed_at_lambda_max() -> None:
     """
     for h_1 in (0.5, 1.0, 5.0, 6.096):
         for rho_2 in (1.0, 30.0, 1000.0, 10000.0):
-            for z in (0.0, 1e-6, 0.7, h_1 - 1e-6, h_1, h_1 + 1e-6,
-                      h_1 + 0.05, 2.0 * h_1):
+            for z in (
+                0.0,
+                1e-6,
+                0.7,
+                h_1 - 1e-6,
+                h_1,
+                h_1 + 1e-6,
+                h_1 + 0.05,
+                2.0 * h_1,
+            ):
                 for s in (0.0, 1.0, 90.0, 4000.0):
                     plan = lg._plan_truncation(
-                        z=z, z_s=z, rho_1=100.0, rho_2=rho_2, h_1=h_1,
-                        rho_baseline=None, s_near=s, s_far=s,
-                        lambda_max_factor=200.0, warn_stacklevel=3,
+                        z=z,
+                        z_s=z,
+                        rho_1=100.0,
+                        rho_2=rho_2,
+                        h_1=h_1,
+                        rho_baseline=None,
+                        s_near=s,
+                        s_far=s,
+                        lambda_max_factor=200.0,
+                        warn_stacklevel=3,
                     )
                     assert (
                         plan.d_rest * plan.lambda_max
@@ -821,8 +977,13 @@ def test_image_split_never_skips_the_degenerate_generation() -> None:
     # z = z_s = h_1: gen 0 sits at 2 h_1 = 10 m, gen 1 contains d = 0.
     assert lg._image_distance_floor(0, 5.0, 5.0, 5.0) == 0.0
     coeffs, dists, d_rest, exhausted = lg._reflected_image_terms(
-        5.0, 5.0, rho_1=100.0, rho_2=1000.0, h_1=5.0,
-        rho_baseline=None, d_cut=0.75,
+        5.0,
+        5.0,
+        rho_1=100.0,
+        rho_2=1000.0,
+        h_1=5.0,
+        rho_baseline=None,
+        d_cut=0.75,
     )
     assert not exhausted
     assert dists.min() == pytest.approx(0.0)
@@ -840,8 +1001,13 @@ def test_image_terms_cancel_for_a_matched_baseline() -> None:
     would be a catastrophic-cancellation trap.
     """
     coeffs, dists, _, _ = lg._reflected_image_terms(
-        0.0, 0.0, rho_1=100.0, rho_2=1000.0, h_1=5.0,
-        rho_baseline=100.0, d_cut=1.0,
+        0.0,
+        0.0,
+        rho_1=100.0,
+        rho_2=1000.0,
+        h_1=5.0,
+        rho_baseline=100.0,
+        d_cut=1.0,
     )
     assert coeffs.size == 0 and dists.size == 0
 
@@ -859,7 +1025,12 @@ def test_tail_truncation_warns_when_the_term_budget_is_exhausted(
     monkeypatch.setattr(lg, "_HANKEL_IMAGE_TERM_BUDGET", 4)
     with pytest.warns(SommerfeldTailTruncationWarning) as record:
         two_layer_real_space_kernel(
-            2000.0, 0.2, 0.2, rho_1=100.0, rho_2=10000.0, h_1=0.4,
+            2000.0,
+            0.2,
+            0.2,
+            rho_1=100.0,
+            rho_2=10000.0,
+            h_1=0.4,
         )
     message = str(record[0].message)
     assert "lambda_max_factor" in message
@@ -872,17 +1043,27 @@ def test_tail_truncation_warns_when_the_term_budget_is_exhausted(
         lambda: two_layer_real_space_kernel(1.0, -0.1, 0.5, **_SOIL),
         lambda: two_layer_real_space_kernel(1.0, 0.5, -0.1, **_SOIL),
         lambda: two_layer_layered_correction_real_space(
-            0.0075, -1.759, -1.759, **_SOIL,
+            0.0075,
+            -1.759,
+            -1.759,
+            **_SOIL,
         ),
         lambda: two_layer_layered_correction_group(
-            np.array([1.0, 2.0]), -1.0, 1.0, **_SOIL,
+            np.array([1.0, 2.0]),
+            -1.0,
+            1.0,
+            **_SOIL,
         ),
         lambda: two_layer_probe_matrix(
-            np.array([[0.0, 0.0, -1.0]]), np.array([[1.0, 0.0, 0.5]]),
+            np.array([[0.0, 0.0, -1.0]]),
+            np.array([[1.0, 0.0, 0.5]]),
             **_SOIL,
         ),
         lambda: two_layer_real_space_kernel(
-            1.0, float("nan"), 0.5, **_SOIL,
+            1.0,
+            float("nan"),
+            0.5,
+            **_SOIL,
         ),
     ],
 )
@@ -914,14 +1095,21 @@ def test_warning_stacklevel_points_at_the_caller(monkeypatch) -> None:
     calls = [
         lambda: two_layer_real_space_kernel(2000.0, 0.2, 0.2, **thin),
         lambda: two_layer_layered_correction_real_space(
-            2000.0, 0.2, 0.2, **thin,
+            2000.0,
+            0.2,
+            0.2,
+            **thin,
         ),
         lambda: two_layer_layered_correction_group(
-            np.linspace(1.0, 2000.0, 100), 0.2, 0.2, **thin,
+            np.linspace(1.0, 2000.0, 100),
+            0.2,
+            0.2,
+            **thin,
         ),
         lambda: two_layer_probe_matrix(
             np.array([[0.0, 0.0, 0.2], [2000.0, 0.0, 0.2]]),
-            np.array([[1.0, 0.0, 0.2]]), **thin,
+            np.array([[1.0, 0.0, 0.2]]),
+            **thin,
         ),
     ]
     for i, call in enumerate(calls):
@@ -951,7 +1139,10 @@ def test_group_is_independent_of_the_matmul_chunk_budget(monkeypatch) -> None:
                 reference = out
             else:
                 np.testing.assert_allclose(
-                    out, reference, rtol=1e-11, atol=1e-11,
+                    out,
+                    reference,
+                    rtol=1e-11,
+                    atol=1e-11,
                 )
 
 
@@ -968,11 +1159,15 @@ def test_branch_switch_is_not_observable(n_pairs: int, z: float) -> None:
     s_values = np.linspace(0.0, 200.0, n_pairs)
     got = two_layer_layered_correction_group(s_values, z, z, **_SOIL)
     want = _closed_form_correction(
-        s_values, z, z,
+        s_values,
+        z,
+        z,
         r_min=1.0 / (200.0 / max(min(5.0, 2.0 * z + 1e-9), 1e-3)),
         **_SOIL,
     )
     scale = np.abs(want).max()
     assert np.abs(got - want).max() / scale < 1e-5, (
-        n_pairs, z, np.abs(got - want).max() / scale,
+        n_pairs,
+        z,
+        np.abs(got - want).max() / scale,
     )

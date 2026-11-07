@@ -87,7 +87,7 @@ __all__ = ["solve_mutual_matrix", "solve_mutual_field"]
 
 
 def _probe_kernel_homogeneous(
-    probe_points: np.ndarray,   # (M, 3)
+    probe_points: np.ndarray,  # (M, 3)
     source_points: np.ndarray,  # (N, 3)
     rho: float,
     min_distance: float,
@@ -115,9 +115,9 @@ def _probe_kernel_homogeneous(
 
 
 def _probe_potential_two_layer(
-    probe_points: np.ndarray,    # (M, 3)
-    source_points: np.ndarray,   # (N, 3)
-    currents: np.ndarray,        # (N, J) complex or real
+    probe_points: np.ndarray,  # (M, 3)
+    source_points: np.ndarray,  # (N, 3)
+    currents: np.ndarray,  # (N, J) complex or real
     soil: TwoLayerSoil,
     min_distance: float,
     max_terms: int = 100,
@@ -178,22 +178,33 @@ def _probe_potential_two_layer(
         # uu block — fast image series on the sub-arrays.
         if probe_l1.any() and src_l1.any():
             phi[probe_l1] += _probe_potential_two_layer(
-                probe_points[probe_l1], source_points[src_l1],
-                currents[src_l1], soil, min_distance, max_terms, tol,
+                probe_points[probe_l1],
+                source_points[src_l1],
+                currents[src_l1],
+                soil,
+                min_distance,
+                max_terms,
+                tol,
             )
         # Remaining blocks via the spectral kernel: layer-2 sources to
         # all probes, layer-1 sources to layer-2 probes.
         if (~src_l1).any():
             G = two_layer_probe_matrix(
-                probe_points, source_points[~src_l1],
-                rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                probe_points,
+                source_points[~src_l1],
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
                 min_distance=min_distance,
             )
             phi += G @ currents[~src_l1]
         if (~probe_l1).any() and src_l1.any():
             G = two_layer_probe_matrix(
-                probe_points[~probe_l1], source_points[src_l1],
-                rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                probe_points[~probe_l1],
+                source_points[src_l1],
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
                 min_distance=min_distance,
             )
             phi[~probe_l1] += G @ currents[src_l1]
@@ -201,8 +212,8 @@ def _probe_potential_two_layer(
 
     diff_xy = probe_points[:, None, 0:2] - source_points[None, :, 0:2]
     delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
-    z_field = probe_points[:, 2:3]      # (M, 1)
-    z_src = source_points[None, :, 2]   # (1, N)
+    z_field = probe_points[:, 2:3]  # (M, 1)
+    z_src = source_points[None, :, 2]  # (1, N)
 
     def _series_for(real_currents: np.ndarray) -> np.ndarray:
         """Core series for a real-valued ``(N, J)`` current stack."""
@@ -217,7 +228,7 @@ def _probe_potential_two_layer(
         # n = 1, 2, ... — accumulate per term (``phi += K_n · acc``).
         abs_K = abs(K)
         for n in range(1, max_terms + 1):
-            K_n = K ** n
+            K_n = K**n
             acc = np.zeros((M, J), dtype=float)
             for sign_n in (+1, -1):
                 for sign_zs in (+1, -1):
@@ -323,8 +334,7 @@ def solve_mutual_matrix(
     probe_points = np.asarray(probe_points, dtype=float)
     if probe_points.shape != (nG, 3):
         raise ValueError(
-            f"probe_points must have shape ({nG}, 3), got "
-            f"{probe_points.shape}."
+            f"probe_points must have shape ({nG}, 3), got {probe_points.shape}."
         )
 
     # ------------------------------------------------------------------
@@ -333,9 +343,7 @@ def solve_mutual_matrix(
     ds = engine.segment_length
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (
-        (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
-    )
+    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
         elec_to_segidx[e.name] = list(
@@ -346,8 +354,8 @@ def solve_mutual_matrix(
     cluster_id = _build_clusters(world.electrodes, world.conductors)
     finite_branches = _build_finite_branches(world.conductors, cluster_id)
 
-    cond_segs, distributed_branches_objs, interior_nodes = (
-        _build_distributed_topology(world.conductors, cluster_id)
+    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
+        world.conductors, cluster_id
     )
     pseudo_owners: list[str] = []
     for s in cond_segs:
@@ -371,9 +379,7 @@ def solve_mutual_matrix(
     # case has no distributed conductors, so ``has_inductance`` is False
     # and the system stays real/frequency-independent — matching the
     # historic ``image`` / ``image_2layer`` no-inductance fast path).
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -396,8 +402,8 @@ def solve_mutual_matrix(
     )
 
     n_segments = len(all_segments)
-    seg_points = np.array([s.midpoint for s in all_segments])   # (N, 3)
-    seg_lengths = np.array([s.length for s in all_segments])     # (N,)
+    seg_points = np.array([s.midpoint for s in all_segments])  # (N, 3)
+    seg_lengths = np.array([s.length for s in all_segments])  # (N,)
     wire_radii = np.array([s.wire_radius for s in all_segments])  # (N,)
     seg_shell_coeffs = np.array(
         [s.concrete_shell_coefficient_ohm_m for s in all_segments],
@@ -440,7 +446,9 @@ def solve_mutual_matrix(
         z_max = float(seg_points[:, 2].max())
         cross_layer = bool(z_max >= soil_two_layer.h_1)
         self_kernel = _two_layer_self_kernel_factory(
-            soil_two_layer, self_max_terms, self_tol,
+            soil_two_layer,
+            self_max_terms,
+            self_tol,
             allow_cross_layer=cross_layer,
         )
     else:
@@ -700,24 +708,26 @@ def solve_mutual_field(
     nG = len(anchors)
     field_points = np.asarray(field_points, dtype=float)
     if field_points.ndim != 2 or field_points.shape[1] != 3:
-        raise ValueError(f"field_points must have shape (M, 3), got {field_points.shape}.")
+        raise ValueError(
+            f"field_points must have shape (M, 3), got {field_points.shape}."
+        )
 
     # 1) Discretisation + topology — identical to solve_mutual_matrix.
     ds = engine.segment_length
     all_segments: list[_Segment] = []
     elec_to_segidx: dict[str, list[int]] = {}
-    interfaces = (
-        (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
-    )
+    interfaces = (world.soil.h_1,) if isinstance(world.soil, TwoLayerSoil) else None
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=interfaces)
-        elec_to_segidx[e.name] = list(range(len(all_segments), len(all_segments) + len(segs)))
+        elec_to_segidx[e.name] = list(
+            range(len(all_segments), len(all_segments) + len(segs))
+        )
         all_segments.extend(segs)
 
     cluster_id = _build_clusters(world.electrodes, world.conductors)
     finite_branches = _build_finite_branches(world.conductors, cluster_id)
-    cond_segs, distributed_branches_objs, interior_nodes = (
-        _build_distributed_topology(world.conductors, cluster_id)
+    cond_segs, distributed_branches_objs, interior_nodes = _build_distributed_topology(
+        world.conductors, cluster_id
     )
     pseudo_owners: list[str] = []
     for s in cond_segs:
@@ -732,7 +742,9 @@ def solve_mutual_field(
             pseudo_owners.append(n_)
             elec_to_segidx[n_] = []
     n_lumped_branches = len(finite_branches)
-    distributed_branch_tuples = [(db.node_a, db.node_b, db.R) for db in distributed_branches_objs]
+    distributed_branch_tuples = [
+        (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
+    ]
     finite_branches = list(finite_branches) + distributed_branch_tuples
 
     earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
@@ -740,17 +752,21 @@ def solve_mutual_field(
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
         from groundfield.coupling import resolve_earth_conductivity
+
         sigma_earth_for_carson = resolve_earth_conductivity(soil)
     elif earth_inductive_model == "sommerfeld":
         from groundfield.coupling import resolve_earth_layers
+
         layered_earth_for_sommerfeld = resolve_earth_layers(soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     n_segments = len(all_segments)
@@ -798,15 +814,21 @@ def solve_mutual_field(
         rho_for_kernel = float(rho_homog)
 
         def self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
-            return _self_corrected_kernel(seg_pts, seg_lens, wr, currents, rho_for_kernel)
+            return _self_corrected_kernel(
+                seg_pts, seg_lens, wr, currents, rho_for_kernel
+            )
 
     eye = np.eye(n_segments)
     Z_seg_full = self_kernel(seg_points, seg_lengths, wire_radii, eye)
     omega = (
-        2.0 * np.pi * float(engine.frequencies[frequency_index]) if has_inductance else 0.0
+        2.0 * np.pi * float(engine.frequencies[frequency_index])
+        if has_inductance
+        else 0.0
     )
     carson_dz = (
-        carson_builder(omega) if (has_inductance and carson_builder is not None) else None
+        carson_builder(omega)
+        if (has_inductance and carson_builder is not None)
+        else None
     )
 
     def _cached_bulk_self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
@@ -849,8 +871,13 @@ def solve_mutual_field(
     # 4) Potential at the M field points per excitation (nG) — one kernel pass.
     if soil_two_layer is not None:
         R = _probe_potential_two_layer(
-            field_points, seg_points, T, soil_two_layer,
-            matrix_min_distance, max_terms=matrix_max_terms, tol=matrix_tol,
+            field_points,
+            seg_points,
+            T,
+            soil_two_layer,
+            matrix_min_distance,
+            max_terms=matrix_max_terms,
+            tol=matrix_tol,
         )
     else:
         K_probe = _probe_kernel_homogeneous(

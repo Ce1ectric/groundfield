@@ -153,7 +153,7 @@ def _two_layer_image_offsets(
     abs_K = abs(K)
     n_terms_used = 0
     for n in range(1, max_terms + 1):
-        K_n = K ** n
+        K_n = K**n
         # Four images per n
         for sign_n in (+1, -1):
             for sign_zs in (+1, -1):
@@ -212,13 +212,13 @@ def _two_layer_potential_kernel(
     diff_xy = field_points[:, None, 0:2] - source_points[None, :, 0:2]
     delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)  # (M, N)
 
-    z_field = field_points[:, 2:3]    # (M, 1)
+    z_field = field_points[:, 2:3]  # (M, 1)
     z_src = source_points[None, :, 2]  # (1, N)
 
     phi = np.zeros(field_points.shape[0], dtype=float)
     for k in range(z_offsets.size):
-        z_img = z_offsets[k] + sign_zs_arr[k] * z_src        # (1, N)
-        r_sq = delta_sq + (z_field - z_img) ** 2              # (M, N)
+        z_img = z_offsets[k] + sign_zs_arr[k] * z_src  # (1, N)
+        r_sq = delta_sq + (z_field - z_img) ** 2  # (M, N)
         r = np.sqrt(r_sq)
         np.maximum(r, _MIN_DISTANCE, out=r)
         phi += weights[k] * ((1.0 / r) @ currents)
@@ -228,8 +228,11 @@ def _two_layer_potential_kernel(
 
 
 def _two_layer_self_kernel_factory(
-    soil: TwoLayerSoil, max_terms: int, tol: float,
-    *, allow_cross_layer: bool = False,
+    soil: TwoLayerSoil,
+    max_terms: int,
+    tol: float,
+    *,
+    allow_cross_layer: bool = False,
 ):
     """Build a self-action closure for the 2-layer case.
 
@@ -275,8 +278,12 @@ def _two_layer_self_kernel_factory(
         z_max = float(seg_points[:, 2].max())
         if allow_cross_layer and z_max >= h_1:
             return _layered_green_kernel(
-                seg_points, seg_lengths, wire_radii, currents,
-                soil=soil, cache=_cross_cache,
+                seg_points,
+                seg_lengths,
+                wire_radii,
+                currents,
+                soil=soil,
+                cache=_cross_cache,
             )
 
         # n = 0: identical to the homogeneous self-kernel with rho = rho_1
@@ -297,7 +304,7 @@ def _two_layer_self_kernel_factory(
         # matrix to obtain the full reaction matrix in one call.
         extra = np.zeros_like(phi)
         for n in range(1, max_terms + 1):
-            K_n = K ** n
+            K_n = K**n
             for sign_n in (+1, -1):
                 for sign_zs in (+1, -1):
                     z_img = sign_n * 2.0 * n * h_1 + sign_zs * z_src
@@ -376,7 +383,9 @@ def _layered_green_kernel(
     # from a rho mismatch). For pure-upper-layer worlds this
     # collapses to the historic rho_1 baseline.
     rho_per_segment = np.where(
-        seg_points[:, 2] < h_1, rho_1, rho_2,
+        seg_points[:, 2] < h_1,
+        rho_1,
+        rho_2,
     )
 
     # Both matrices below are independent of ``currents`` — reuse
@@ -384,11 +393,9 @@ def _layered_green_kernel(
     # one solve (keyed by the geometry buffer).
     cache_key = None
     if cache is not None:
-        cache_key = (n, hash(seg_points.tobytes()),
-                     hash(seg_lengths.tobytes()))
+        cache_key = (n, hash(seg_points.tobytes()), hash(seg_lengths.tobytes()))
         if cache.get("key") == cache_key:
-            return cache["phi_hom_matrix"] @ currents \
-                + cache["delta_Z"] @ currents
+            return cache["phi_hom_matrix"] @ currents + cache["delta_Z"] @ currents
 
     # Step 1: build phi_hom matrix that uses rho_at_source(j) for
     # each column (source segment). This generalises
@@ -396,7 +403,10 @@ def _layered_green_kernel(
     # self formula with rho_local(i), and off-diagonal entries use
     # the point-source 1/r + 1/r_image formula with rho_local(j).
     phi_hom_matrix = _build_phi_hom_per_source_rho(
-        seg_points, seg_lengths, wire_radii, rho_per_segment,
+        seg_points,
+        seg_lengths,
+        wire_radii,
+        rho_per_segment,
     )
     phi_hom = phi_hom_matrix @ currents
 
@@ -425,19 +435,18 @@ def _layered_green_kernel(
             cols = np.where(z_keys == zj_key)[0]
             z_j = float(seg_points[cols[0], 2])
             rho_baseline_j = float(rho_per_segment[cols[0]])
-            dxy = (
-                seg_points[rows][:, None, 0:2]
-                - seg_points[cols][None, :, 0:2]
-            )
+            dxy = seg_points[rows][:, None, 0:2] - seg_points[cols][None, :, 0:2]
             s_grid = np.sqrt(np.einsum("mnk,mnk->mn", dxy, dxy))
             vals = two_layer_layered_correction_group(
-                s_grid.ravel(), z_i, z_j,
-                rho_1=rho_1, rho_2=rho_2, h_1=h_1,
+                s_grid.ravel(),
+                z_i,
+                z_j,
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
                 rho_baseline=rho_baseline_j,
             )
-            delta_Z[np.ix_(rows, cols)] = (
-                vals.reshape(s_grid.shape) / (2.0 * np.pi)
-            )
+            delta_Z[np.ix_(rows, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
 
     # Diagonal: 3×3 Gauss-Legendre along the segment axis (line-self
     # peak regularised at the wire radius). Identical segments (same
@@ -451,8 +460,7 @@ def _layered_green_kernel(
         L_i = float(seg_lengths[i])
         a_i = float(wire_radii[i])
         rho_baseline_i = float(rho_per_segment[i])
-        key = (round(z_i, 9), round(L_i, 9), round(a_i, 9),
-               round(rho_baseline_i, 9))
+        key = (round(z_i, 9), round(L_i, 9), round(a_i, 9), round(rho_baseline_i, 9))
         if key in diag_cache:
             delta_Z[i, i] = diag_cache[key]
             continue
@@ -462,10 +470,18 @@ def _layered_green_kernel(
             z_a = z_lo + a * L_i
             for b, w_b in zip(gl3_nodes, gl3_weights):
                 z_b = z_lo + b * L_i
-                delta_G += w_a * w_b * two_layer_layered_correction_real_space(
-                    s=a_i, z=z_a, z_s=z_b,
-                    rho_1=rho_1, rho_2=rho_2, h_1=h_1,
-                    rho_baseline=rho_baseline_i,
+                delta_G += (
+                    w_a
+                    * w_b
+                    * two_layer_layered_correction_real_space(
+                        s=a_i,
+                        z=z_a,
+                        z_s=z_b,
+                        rho_1=rho_1,
+                        rho_2=rho_2,
+                        h_1=h_1,
+                        rho_baseline=rho_baseline_i,
+                    )
                 )
         diag_cache[key] = delta_G / (2.0 * np.pi)
         delta_Z[i, i] = diag_cache[key]
@@ -580,7 +596,10 @@ def solve_image_2layer(
 
     _log.info(
         "image_2layer: rho_1=%.1f, rho_2=%.1f, h_1=%.2f, K=%.4f",
-        soil.rho_1, soil.rho_2, h_1, K,
+        soil.rho_1,
+        soil.rho_2,
+        h_1,
+        K,
     )
 
     # 1) Discretisation — identical to the homogeneous backend, but
@@ -590,14 +609,13 @@ def solve_image_2layer(
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds, layer_interfaces=(h_1,))
-        elec_to_segidx[e.name] = list(range(len(all_segments),
-                                            len(all_segments) + len(segs)))
+        elec_to_segidx[e.name] = list(
+            range(len(all_segments), len(all_segments) + len(segs))
+        )
         all_segments.extend(segs)
 
     # 2) Per-electrode input currents from sources
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     n_ignored_sources = 0
     for src in world.sources:
         if src.kind != "current":
@@ -641,9 +659,7 @@ def solve_image_2layer(
         (db.node_a, db.node_b, db.R) for db in distributed_branches_objs
     ]
     finite_branches = list(finite_branches) + distributed_branch_tuples
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -654,13 +670,15 @@ def solve_image_2layer(
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     seg_points = np.array([s.midpoint for s in all_segments])
@@ -692,7 +710,8 @@ def solve_image_2layer(
             "image_2layer: cross-layer geometry detected "
             "(z_max = %.3f m, h_1 = %.3f m). Using ADR-0007 "
             "Sommerfeld fallback for all source/observer pairs.",
-            z_max, h_1,
+            z_max,
+            h_1,
         )
     elif h_1 - z_max < 2.0 * ds:
         # Audit 2026-07-08 WP-D2: within ~one segment of the
@@ -715,7 +734,10 @@ def solve_image_2layer(
 
     # 4) Self-kernel closure and frequency loop
     self_kernel = _two_layer_self_kernel_factory(
-        soil, max_terms, tol, allow_cross_layer=cross_layer,
+        soil,
+        max_terms,
+        tol,
+        allow_cross_layer=cross_layer,
     )
     n_segments = len(all_segments)
     n_freq = len(engine.frequencies)
@@ -728,7 +750,8 @@ def solve_image_2layer(
 
     def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
         carson_dz = (
-            carson_builder(omega) if (has_inductance and carson_builder is not None)
+            carson_builder(omega)
+            if (has_inductance and carson_builder is not None)
             else None
         )
         elec_total = _solve_cluster_currents(
@@ -807,9 +830,7 @@ def solve_image_2layer(
 
     n_terms_used_self = 0
     if any(np.any(sc) for sc in sc_per_freq):
-        _, _, _, n_terms_used_self = _two_layer_image_offsets(
-            K, h_1, max_terms, tol
-        )
+        _, _, _, n_terms_used_self = _two_layer_image_offsets(K, h_1, max_terms, tol)
 
     electrode_potentials: dict[str, list[complex]] = {}
     electrode_currents: dict[str, list[complex]] = {}
@@ -823,9 +844,7 @@ def solve_image_2layer(
         # _solve_cluster_currents (audit 2026-07-28, F10/F11). The
         # rod-split-at-the-interface case of ADR-0007 is exactly where
         # the historic unweighted mean diverged from the solved value.
-        u_list = _weighted_node_potential(
-            phi_per_freq, idxs, seg_lengths, n_freq
-        )
+        u_list = _weighted_node_potential(phi_per_freq, idxs, seg_lengths, n_freq)
         i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
@@ -848,13 +867,15 @@ def solve_image_2layer(
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
-            n for n in cluster_id
+            n
+            for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
     converged = (
         _series_tail_bound(abs(K), n_terms_used_self) < tol
-        if n_terms_used_self else True
+        if n_terms_used_self
+        else True
     )
     if not converged:
         tail = _series_tail_bound(abs(K), n_terms_used_self)
@@ -862,7 +883,9 @@ def solve_image_2layer(
             "image_2layer: max_terms=%d reached, series tail bound "
             "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e. Result may be "
             "inaccurate.",
-            max_terms, tail, tol,
+            max_terms,
+            tail,
+            tol,
         )
         warnings.warn(
             f"image_2layer: the Tagg/Sunde image series was truncated "
@@ -898,8 +921,7 @@ def solve_image_2layer(
 
         sigma_ref = 1.0 / float(soil.rho_1)
         metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref)
-            for f in engine.frequencies
+            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
         }
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents

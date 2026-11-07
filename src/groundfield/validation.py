@@ -91,21 +91,21 @@ class EngineComparison:
         """Return a line-oriented textual summary."""
         labels = list(self.results.keys())
         lines = [
-            f"Cross-engine comparison, tolerance {self.rel_tolerance*100:.1f} %",
+            f"Cross-engine comparison, tolerance {self.rel_tolerance * 100:.1f} %",
             f"Engines: {', '.join(labels)}",
             "",
             "Cluster impedances Re{Z(f0)} in Ω:",
         ]
         for cluster, by_engine in self.cluster_impedance_table.items():
             row = "  " + cluster.ljust(12) + " "
-            row += " | ".join(f"{lbl}: {by_engine.get(lbl, float('nan')):.3f}"
-                              for lbl in labels)
-            row += f"  Δ_max = {self.deviations.get(cluster, 0)*100:5.2f} %"
+            row += " | ".join(
+                f"{lbl}: {by_engine.get(lbl, float('nan')):.3f}" for lbl in labels
+            )
+            row += f"  Δ_max = {self.deviations.get(cluster, 0) * 100:5.2f} %"
             lines.append(row)
         lines.append("")
         lines.append(
-            "Consistent." if self.is_consistent
-            else "INCONSISTENT — see notes."
+            "Consistent." if self.is_consistent else "INCONSISTENT — see notes."
         )
         if self.notes:
             lines.append("")
@@ -210,8 +210,9 @@ def compare_engines(
             )
 
     # Cluster sets must be identical
-    cluster_keys_first = {tuple(sorted(v))
-                          for v in next(iter(results.values())).clusters.values()}
+    cluster_keys_first = {
+        tuple(sorted(v)) for v in next(iter(results.values())).clusters.values()
+    }
     for label, res in results.items():
         keys = {tuple(sorted(v)) for v in res.clusters.values()}
         if keys != cluster_keys_first:
@@ -247,8 +248,7 @@ def compare_engines(
             per_engine[label] = float(Z.real)
         if len(per_engine) < 2:
             cmp.notes.append(
-                f"Cluster '{cluster_root}': Σ I = 0 or Z undefined — "
-                "skipped."
+                f"Cluster '{cluster_root}': Σ I = 0 or Z undefined — skipped."
             )
             continue
         cmp.cluster_impedance_table[cluster_root] = per_engine
@@ -276,8 +276,7 @@ def compare_engines(
     if sample_points is not None and len(results) >= 2:
         try:
             phi_table = {
-                lbl: res.potential(sample_points).real
-                for lbl, res in results.items()
+                lbl: res.potential(sample_points).real for lbl, res in results.items()
             }
             phis = np.stack(list(phi_table.values()))
             # Same pairwise metric as for the cluster impedances:
@@ -290,7 +289,7 @@ def compare_engines(
             sample_max = float(rel.max()) if rel.size else 0.0
             note = (
                 f"Potential point-sample at {len(sample_points)} points: "
-                f"max relative deviation = {sample_max*100:.2f} % "
+                f"max relative deviation = {sample_max * 100:.2f} % "
                 "(max pairwise, referenced to min |phi|)."
             )
             if n_undefined:
@@ -318,9 +317,6 @@ def compare_engines(
     cmp.is_consistent = (
         n_compared > 0
         and (max_dev <= rel_tolerance)
-        and not any(
-            n.startswith("Engine '") and "stub result" in n
-            for n in cmp.notes
-        )
+        and not any(n.startswith("Engine '") and "stub result" in n for n in cmp.notes)
     )
     return cmp

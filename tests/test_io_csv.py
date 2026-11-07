@@ -43,8 +43,9 @@ def _two_rod_world() -> tuple[gf.World, gf.FieldResult]:
     g2 = gf.create_electrode(
         world, "rod", name="g2", position=(5.0, 0.0, 0.5), length=1.5
     )
-    gf.create_conductor(world, name="bond", start=g1, end=g2,
-                        conductor_type="bare_copper")
+    gf.create_conductor(
+        world, name="bond", start=g1, end=g2, conductor_type="bare_copper"
+    )
     gf.create_source(world, name="src", attached_to=g1, magnitude=10.0)
     eng = gf.create_engine(backend="image", segment_length=0.05)
     return world, eng.solve(world)
@@ -58,9 +59,12 @@ def _two_rod_world() -> tuple[gf.World, gf.FieldResult]:
 def test_save_potential_path_csv_roundtrip(tmp_path: Path) -> None:
     _, result = _two_rod_world()
     out = save_potential_path_csv(
-        result, tmp_path / "phi.csv",
-        start=(1.0, 0.0, 0.0), direction=(1.0, 0.0, 0.0),
-        distance=20.0, n=50,
+        result,
+        tmp_path / "phi.csv",
+        start=(1.0, 0.0, 0.0),
+        direction=(1.0, 0.0, 0.0),
+        distance=20.0,
+        n=50,
     )
     assert out.exists()
     df = pd.read_csv(out)
@@ -80,7 +84,11 @@ def test_save_potential_path_csv_creates_parent_directories(tmp_path: Path) -> N
     _, result = _two_rod_world()
     nested = tmp_path / "a" / "b" / "c" / "phi.csv"
     out = save_potential_path_csv(
-        result, nested, start=(1, 0, 0), distance=5.0, n=10,
+        result,
+        nested,
+        start=(1, 0, 0),
+        distance=5.0,
+        n=10,
     )
     assert out.exists()
 
@@ -88,16 +96,21 @@ def test_save_potential_path_csv_creates_parent_directories(tmp_path: Path) -> N
 def test_save_potential_path_csv_multi_frequency(tmp_path: Path) -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.5), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(
-        backend="image", segment_length=0.1, frequencies=[50.0, 200.0],
+        backend="image",
+        segment_length=0.1,
+        frequencies=[50.0, 200.0],
     )
     result = eng.solve(world)
 
     out = save_potential_path_csv(
-        result, tmp_path / "phi.csv", start=(1, 0, 0), distance=5.0, n=20,
+        result,
+        tmp_path / "phi.csv",
+        start=(1, 0, 0),
+        distance=5.0,
+        n=20,
     )
     df = pd.read_csv(out)
     # 2 frequencies * 20 samples = 40 rows, both frequencies present.
@@ -108,19 +121,31 @@ def test_save_potential_path_csv_multi_frequency(tmp_path: Path) -> None:
 def test_save_potential_path_csv_rejects_invalid_args(tmp_path: Path) -> None:
     _, result = _two_rod_world()
     with pytest.raises(ValueError, match="distance"):
-        save_potential_path_csv(result, tmp_path / "f.csv",
-                                start=(0, 0, 0), distance=0.0, n=10)
+        save_potential_path_csv(
+            result, tmp_path / "f.csv", start=(0, 0, 0), distance=0.0, n=10
+        )
     with pytest.raises(ValueError, match="n"):
-        save_potential_path_csv(result, tmp_path / "f.csv",
-                                start=(0, 0, 0), distance=5.0, n=1)
+        save_potential_path_csv(
+            result, tmp_path / "f.csv", start=(0, 0, 0), distance=5.0, n=1
+        )
     with pytest.raises(ValueError, match="direction"):
-        save_potential_path_csv(result, tmp_path / "f.csv",
-                                start=(0, 0, 0), direction=(0, 0, 0),
-                                distance=5.0, n=10)
+        save_potential_path_csv(
+            result,
+            tmp_path / "f.csv",
+            start=(0, 0, 0),
+            direction=(0, 0, 0),
+            distance=5.0,
+            n=10,
+        )
     with pytest.raises(ValueError, match="out of range"):
-        save_potential_path_csv(result, tmp_path / "f.csv",
-                                start=(0, 0, 0), distance=5.0, n=10,
-                                frequency_indices=[0, 99])
+        save_potential_path_csv(
+            result,
+            tmp_path / "f.csv",
+            start=(0, 0, 0),
+            distance=5.0,
+            n=10,
+            frequency_indices=[0, 99],
+        )
 
 
 # ---------------------------------------------------------------------
@@ -131,13 +156,16 @@ def test_save_potential_path_csv_rejects_invalid_args(tmp_path: Path) -> None:
 def test_save_electrode_table_csv_matches_in_memory(tmp_path: Path) -> None:
     world, result = _two_rod_world()
     out = save_electrode_table_csv(
-        result, tmp_path / "electrodes.csv", world=world,
+        result,
+        tmp_path / "electrodes.csv",
+        world=world,
     )
     df_disk = pd.read_csv(out)
     df_mem = gf.electrode_current_table(result, world=world)
 
     pd.testing.assert_frame_equal(
-        df_disk.reset_index(drop=True), df_mem.reset_index(drop=True),
+        df_disk.reset_index(drop=True),
+        df_mem.reset_index(drop=True),
         check_dtype=False,  # CSV roundtrip can shift int64 <-> float64
     )
 

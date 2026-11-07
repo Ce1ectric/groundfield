@@ -100,10 +100,12 @@ class _Wrapper(BaseModel):
     [
         HomogeneousSoilSpec(resistivity=150.0),
         TwoLayerSoilSpec(rho_1=100.0, rho_2=30.0, h_1=2.0),
-        MultiLayerSoilSpec(layers=[
-            SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
-            SoilLayerSpec(resistivity=50.0, thickness_m=None),
-        ]),
+        MultiLayerSoilSpec(
+            layers=[
+                SoilLayerSpec(resistivity=300.0, thickness_m=2.0),
+                SoilLayerSpec(resistivity=50.0, thickness_m=None),
+            ]
+        ),
     ],
 )
 def test_soil_spec_json_roundtrip(spec) -> None:

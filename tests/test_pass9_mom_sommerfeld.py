@@ -117,8 +117,13 @@ def _homogeneous_pair(s: float, z: float, z_s: float) -> float:
 
 
 def _tagg_series(
-    rho_1: float, rho_2: float, h_1: float,
-    s: float, z: float, z_s: float, m_max: int = 20_000,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    s: float,
+    z: float,
+    z_s: float,
+    m_max: int = 20_000,
 ) -> float:
     """Exact two-layer kernel as the Tagg / Sunde image series.
 
@@ -132,7 +137,7 @@ def _tagg_series(
     total = 1.0 / np.hypot(s, d_z) + 1.0 / np.hypot(s, p)
     for m in range(1, m_max + 1):
         two_mh = 2.0 * m * h_1
-        term = k_1 ** m * (
+        term = k_1**m * (
             1.0 / np.hypot(s, two_mh - d_z)
             + 1.0 / np.hypot(s, two_mh + d_z)
             + 1.0 / np.hypot(s, two_mh - p)
@@ -145,8 +150,13 @@ def _tagg_series(
 
 
 def _tagg_reflected_series(
-    rho_1: float, rho_2: float, h_1: float,
-    s: float, z: float, z_s: float, m_max: int = 200_000,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    s: float,
+    z: float,
+    z_s: float,
+    m_max: int = 200_000,
 ) -> float:
     """Exact *reflected* part only ($m \\ge 1$ image families).
 
@@ -161,7 +171,7 @@ def _tagg_reflected_series(
     total = 0.0
     for m in range(1, m_max + 1):
         two_mh = 2.0 * m * h_1
-        term = k_1 ** m * (
+        term = k_1**m * (
             1.0 / np.hypot(s, two_mh - d_z)
             + 1.0 / np.hypot(s, two_mh + d_z)
             + 1.0 / np.hypot(s, two_mh - p)
@@ -176,8 +186,11 @@ def _tagg_reflected_series(
 def _ring_world(soil) -> gf.World:
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "ring", name="g1",
-        center=(0.0, 0.0, RING_DEPTH), radius=RING_RADIUS,
+        world,
+        "ring",
+        name="g1",
+        center=(0.0, 0.0, RING_DEPTH),
+        radius=RING_RADIUS,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     return world
@@ -199,12 +212,15 @@ def _ring_world(soil) -> gf.World:
         (5.0, 2.0, 0.8, 0.8),
         (5.0, 5.0, 0.8, 0.8),
         (5.0, 20.0, 0.8, 0.8),
-        (2.0, 30.0, 1.9, 1.999),   # both points at the interface
+        (2.0, 30.0, 1.9, 1.999),  # both points at the interface
         (2.0, 0.02, 1.0, 1.5),
     ],
 )
 def test_degenerate_stack_reproduces_lipschitz_pair(
-    h_1: float, s: float, z: float, z_s: float,
+    h_1: float,
+    s: float,
+    z: float,
+    z_s: float,
 ) -> None:
     """F04: for $\\rho_1 = \\rho_2$ the kernel is the exact pair.
 
@@ -232,7 +248,9 @@ def test_degenerate_stack_kernel_is_positive() -> None:
 @pytest.mark.parametrize("h_1", [1.0, 2.0, 5.0])
 @pytest.mark.parametrize("s", [0.05, 0.5, 2.0, 20.0, 50.0])
 def test_two_layer_kernel_matches_tagg_series(
-    rho_2: float, h_1: float, s: float,
+    rho_2: float,
+    h_1: float,
+    s: float,
 ) -> None:
     """F04: real contrast — kernel equals the exact image series."""
     stack = LayerStack(rhos=np.array([100.0, rho_2]), h=np.array([h_1]))
@@ -322,7 +340,11 @@ def test_lambda_max_factor_is_stable() -> None:
     exact = _tagg_series(100.0, 500.0, 2.0, 2.0, 0.8, 0.8)
     values = [
         sommerfeld_kernel_value(
-            stack, s=2.0, z=0.8, z_s=0.8, lambda_max_factor=factor,
+            stack,
+            s=2.0,
+            z=0.8,
+            z_s=0.8,
+            lambda_max_factor=factor,
         )
         for factor in (50.0, 100.0, 200.0, 400.0, 2000.0, 20000.0)
     ]
@@ -335,7 +357,9 @@ def test_lambda_max_factor_is_stable() -> None:
 @pytest.mark.parametrize(("z", "z_s"), [(0.8, 0.8), (0.8, 1.2), (1.99, 1.99)])
 @pytest.mark.parametrize("s", [0.5, 5.0, 50.0])
 def test_n3_kernel_reduces_to_two_layer_series(
-    s: float, z: float, z_s: float,
+    s: float,
+    z: float,
+    z_s: float,
 ) -> None:
     """F04 on the $n \\ge 3$ path: $\\rho_2 = \\rho_3$.
 
@@ -346,7 +370,8 @@ def test_n3_kernel_reduces_to_two_layer_series(
     $n \\ge 3$.
     """
     stack = LayerStack(
-        rhos=np.array([100.0, 1000.0, 1000.0]), h=np.array([2.0, 5.0]),
+        rhos=np.array([100.0, 1000.0, 1000.0]),
+        h=np.array([2.0, 5.0]),
     )
     got = sommerfeld_kernel_value(stack, s=s, z=z, z_s=z_s)
     expected = _tagg_series(100.0, 1000.0, 2.0, s, z, z_s)
@@ -376,11 +401,17 @@ def test_n3_diagonal_reflected_integral_near_interface(z: float) -> None:
     from groundfield.solver.mom_sommerfeld import _reflected_integral
 
     stack = LayerStack(
-        rhos=np.array([100.0, 1000.0, 1000.0]), h=np.array([2.0, 5.0]),
+        rhos=np.array([100.0, 1000.0, 1000.0]),
+        h=np.array([2.0, 5.0]),
     )
     got = _reflected_integral(
-        stack, 0.0, 0.0, 2.0 * z,
-        lambda_max_factor=200.0, epsabs=1e-9, epsrel=1e-7,
+        stack,
+        0.0,
+        0.0,
+        2.0 * z,
+        lambda_max_factor=200.0,
+        epsabs=1e-9,
+        epsrel=1e-7,
         reference=1.0 / (2.0 * z),
     )
     expected = _tagg_reflected_series(100.0, 1000.0, 2.0, 0.0, z, z)
@@ -390,7 +421,8 @@ def test_n3_diagonal_reflected_integral_near_interface(z: float) -> None:
 def test_cross_layer_misuse_raises_for_n3() -> None:
     """The top-layer form is rejected instead of silently diverging."""
     stack = LayerStack(
-        rhos=np.array([100.0, 500.0, 50.0]), h=np.array([2.0, 3.0]),
+        rhos=np.array([100.0, 500.0, 50.0]),
+        h=np.array([2.0, 3.0]),
     )
     with pytest.raises(ValueError, match="z_s"):
         sommerfeld_kernel_value(stack, s=1.0, z=3.5, z_s=3.5)
@@ -409,15 +441,30 @@ def test_ring_impedance_degenerate_matches_image_and_mom() -> None:
     1.575051 Ω (-5.07 %) and needed ~150 s.
     """
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=1.0)
-    z_image = gf.create_engine(
-        backend="image", segment_length=SEG,
-    ).solve(_ring_world(soil)).cluster_impedance("g1")[0]
-    z_mom = gf.create_engine(
-        backend="mom", segment_length=SEG,
-    ).solve(_ring_world(soil)).cluster_impedance("g1")[0]
-    z_som = gf.create_engine(
-        backend="mom_sommerfeld", segment_length=SEG,
-    ).solve(_ring_world(soil)).cluster_impedance("g1")[0]
+    z_image = (
+        gf.create_engine(
+            backend="image",
+            segment_length=SEG,
+        )
+        .solve(_ring_world(soil))
+        .cluster_impedance("g1")[0]
+    )
+    z_mom = (
+        gf.create_engine(
+            backend="mom",
+            segment_length=SEG,
+        )
+        .solve(_ring_world(soil))
+        .cluster_impedance("g1")[0]
+    )
+    z_som = (
+        gf.create_engine(
+            backend="mom_sommerfeld",
+            segment_length=SEG,
+        )
+        .solve(_ring_world(soil))
+        .cluster_impedance("g1")[0]
+    )
     assert z_som.real == pytest.approx(z_image.real, rel=1e-9)
     assert z_som.real == pytest.approx(z_mom.real, rel=1e-9)
 
@@ -430,12 +477,22 @@ def test_ring_impedance_contrast_matches_image_2layer() -> None:
     after the fix the two agree to ~4e-8 in ~1 s.
     """
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
-    z_ref = gf.create_engine(
-        backend="image_2layer", segment_length=SEG,
-    ).solve(_ring_world(soil)).cluster_impedance("g1")[0]
-    z_som = gf.create_engine(
-        backend="mom_sommerfeld", segment_length=SEG,
-    ).solve(_ring_world(soil)).cluster_impedance("g1")[0]
+    z_ref = (
+        gf.create_engine(
+            backend="image_2layer",
+            segment_length=SEG,
+        )
+        .solve(_ring_world(soil))
+        .cluster_impedance("g1")[0]
+    )
+    z_som = (
+        gf.create_engine(
+            backend="mom_sommerfeld",
+            segment_length=SEG,
+        )
+        .solve(_ring_world(soil))
+        .cluster_impedance("g1")[0]
+    )
     assert z_som.real == pytest.approx(z_ref.real, rel=1e-4)
 
 
@@ -469,7 +526,11 @@ def test_multilayer_reduces_to_two_layer_solve() -> None:
     def _rod_world(soil):
         world = gf.create_world(soil=soil)
         gf.create_electrode(
-            world, "rod", name="g1", position=(0.0, 0.0, 0.0), length=2.8,
+            world,
+            "rod",
+            name="g1",
+            position=(0.0, 0.0, 0.0),
+            length=2.8,
         )
         gf.create_source(world, attached_to="g1", magnitude=1.0)
         return world
@@ -521,7 +582,10 @@ _CORNER_CASES = [
 
 @pytest.mark.parametrize(("h_2", "z", "s", "warns"), _CORNER_CASES)
 def test_thin_layer_kernel_is_never_negative(
-    h_2: float, z: float, s: float, warns: bool,
+    h_2: float,
+    z: float,
+    s: float,
+    warns: bool,
 ) -> None:
     """F04 second pass: no sign flip where the asymptote says positive.
 
@@ -548,7 +612,9 @@ def test_thin_layer_kernel_is_never_negative(
     [(h_2, z, s) for h_2, z, s, warns in _CORNER_CASES if warns],
 )
 def test_unresolved_oscillation_raises_a_warning(
-    h_2: float, z: float, s: float,
+    h_2: float,
+    z: float,
+    s: float,
 ) -> None:
     """F04 second pass: non-convergence must be loud.
 
@@ -581,12 +647,16 @@ def test_in_envelope_evaluations_do_not_warn() -> None:
         for rho_2 in (20.0, 200.0, 1000.0):
             for h_1 in (1.0, 2.0, 5.0):
                 stack = LayerStack(
-                    rhos=np.array([100.0, rho_2]), h=np.array([h_1]),
+                    rhos=np.array([100.0, rho_2]),
+                    h=np.array([h_1]),
                 )
                 for s in (0.05, 0.5, 5.0, 50.0, 200.0):
                     for frac in (0.2, 0.6, 1.0):
                         sommerfeld_kernel_value(
-                            stack, s=s, z=frac * h_1, z_s=frac * h_1,
+                            stack,
+                            s=s,
+                            z=frac * h_1,
+                            z_s=frac * h_1,
                         )
 
 
@@ -606,11 +676,14 @@ def test_thin_layer_corner_converges_when_budget_is_raised() -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             value = sommerfeld_kernel_value(
-                stack, s=200.0, z=2.0, z_s=2.0, max_osc_panels=cap,
+                stack,
+                s=200.0,
+                z=2.0,
+                z_s=2.0,
+                max_osc_panels=cap,
             )
         n = sum(
-            1 for c in caught
-            if issubclass(c.category, SommerfeldConvergenceWarning)
+            1 for c in caught if issubclass(c.category, SommerfeldConvergenceWarning)
         )
         return value, n
 
@@ -645,19 +718,27 @@ def test_oscillation_coverage_never_shrinks_under_refinement() -> None:
     lam_max, lam_osc, s = 60.0 / d_rem, 34.0 / d_rem, 2000.0
     covered = [
         _panel_edges(
-            lam_max, s, lam_osc, refine, max_osc_panels=200_000,
+            lam_max,
+            s,
+            lam_osc,
+            refine,
+            max_osc_panels=200_000,
         ).lam_covered
         for refine in _REFINEMENTS
     ]
     assert covered[0] > 0.0
-    assert covered == sorted(covered), covered   # non-decreasing
+    assert covered == sorted(covered), covered  # non-decreasing
     # Budget-bound case: coverage is refinement-independent, not 1/8.
     assert covered[-1] == pytest.approx(covered[0])
 
     # And when the budget does *not* bind, coverage is always complete.
     covered_ok = [
         _panel_edges(
-            lam_max, 50.0, lam_osc, refine, max_osc_panels=200_000,
+            lam_max,
+            50.0,
+            lam_osc,
+            refine,
+            max_osc_panels=200_000,
         ).lam_covered
         for refine in _REFINEMENTS
     ]
@@ -682,13 +763,15 @@ def test_matrix_assembly_aggregates_into_one_warning() -> None:
 
     with pytest.warns(SommerfeldConvergenceWarning) as record:
         Z = _build_Z_sommerfeld(
-            seg_points, seg_lengths, wire_radii, stack,
-            lambda_max_factor=200.0, epsabs=1e-9, epsrel=1e-7,
+            seg_points,
+            seg_lengths,
+            wire_radii,
+            stack,
+            lambda_max_factor=200.0,
+            epsabs=1e-9,
+            epsrel=1e-7,
         )
-    hits = [
-        r for r in record
-        if issubclass(r.category, SommerfeldConvergenceWarning)
-    ]
+    hits = [r for r in record if issubclass(r.category, SommerfeldConvergenceWarning)]
     assert len(hits) == 1
     assert "2 reaction-matrix entries are affected" in str(hits[0].message)
     assert np.isfinite(Z).all()
@@ -700,8 +783,13 @@ def test_matrix_assembly_aggregates_into_one_warning() -> None:
 
 
 def _resummed_two_layer_kernel(
-    rho_1: float, rho_2: float, h_1: float,
-    s: float, z: float, z_s: float, m_max: int = 2_000_000,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    s: float,
+    z: float,
+    z_s: float,
+    m_max: int = 2_000_000,
 ) -> float:
     """Tagg / Sunde series with an analytic tail — usable at $|K| \\to 1$.
 
@@ -720,8 +808,10 @@ def _resummed_two_layer_kernel(
     m = np.arange(1, m_max + 1, dtype=float)
     two_mh = 2.0 * m * h_1
     g = (
-        1.0 / np.hypot(s, two_mh - d_z) + 1.0 / np.hypot(s, two_mh + d_z)
-        + 1.0 / np.hypot(s, two_mh - p) + 1.0 / np.hypot(s, two_mh + p)
+        1.0 / np.hypot(s, two_mh - d_z)
+        + 1.0 / np.hypot(s, two_mh + d_z)
+        + 1.0 / np.hypot(s, two_mh - p)
+        + 1.0 / np.hypot(s, two_mh + p)
     )
     k_m = np.exp(m * math.log(k_1))
     head = float((k_m * g).sum())
@@ -735,12 +825,13 @@ def _resummed_two_layer_kernel(
     [
         (1.0e2, -2.2e-16),
         (1.0e4, -1.5e-13),
-        (1.0e6, -3.4e-4),    # was returned after a failed convergence test
-        (1.0e8, -5.2e-2),    # ... and logged at DEBUG only
+        (1.0e6, -3.4e-4),  # was returned after a failed convergence test
+        (1.0e8, -5.2e-2),  # ... and logged at DEBUG only
     ],
 )
 def test_extreme_contrast_resolves_the_multiplier_pole(
-    contrast: float, before: float,
+    contrast: float,
+    before: float,
 ) -> None:
     """The $|K_1| \\to 1$ error-control claim now holds.
 
@@ -758,13 +849,19 @@ def test_extreme_contrast_resolves_the_multiplier_pole(
     documentation; the assertion is that we are now well below it.
     """
     stack = LayerStack(
-        rhos=np.array([100.0, 100.0 * contrast]), h=np.array([2.0]),
+        rhos=np.array([100.0, 100.0 * contrast]),
+        h=np.array([2.0]),
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error", SommerfeldConvergenceWarning)
         got = sommerfeld_kernel_value(stack, s=0.5, z=0.8, z_s=0.8)
     exact = _resummed_two_layer_kernel(
-        100.0, 100.0 * contrast, 2.0, 0.5, 0.8, 0.8,
+        100.0,
+        100.0 * contrast,
+        2.0,
+        0.5,
+        0.8,
+        0.8,
     )
     assert got == pytest.approx(exact, rel=1e-9)
     # ``max(..., 1e-10)`` absorbs the round-off of the resummed
@@ -810,7 +907,8 @@ def test_engine_lambda_max_factor_changes_the_solve_result() -> None:
 
     def _impedance(factor: float) -> float:
         engine = gf.Engine(
-            backend="mom_sommerfeld", segment_length=SEG,
+            backend="mom_sommerfeld",
+            segment_length=SEG,
             sommerfeld_lambda_max_factor=factor,
         )
         with warnings.catch_warnings():
@@ -843,10 +941,18 @@ def test_raising_lambda_max_factor_moves_towards_the_reference(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SommerfeldConvergenceWarning)
         got = sommerfeld_kernel_value(
-            stack, s=2.0, z=0.8, z_s=0.8, lambda_max_factor=factor,
+            stack,
+            s=2.0,
+            z=0.8,
+            z_s=0.8,
+            lambda_max_factor=factor,
         )
         coarser = sommerfeld_kernel_value(
-            stack, s=2.0, z=0.8, z_s=0.8, lambda_max_factor=0.5 * factor,
+            stack,
+            s=2.0,
+            z=0.8,
+            z_s=0.8,
+            lambda_max_factor=0.5 * factor,
         )
     assert abs(got - exact) <= abs(coarser - exact)
     if factor >= 20.0:

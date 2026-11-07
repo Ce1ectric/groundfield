@@ -60,8 +60,7 @@ _RHO_1, _RHO_2, _H_1 = 1000.0, 10.0, 5.0
 def _rod_world(soil) -> World:
     """3 m vertical rod fed with 1 A, one cluster named ``g1``."""
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     return world
 
@@ -78,9 +77,7 @@ def _multilayer_world() -> World:
 
 
 def _two_layer_world() -> World:
-    return _rod_world(
-        gf.TwoLayerSoil(rho_1=_RHO_1, rho_2=_RHO_2, h_1=_H_1)
-    )
+    return _rod_world(gf.TwoLayerSoil(rho_1=_RHO_1, rho_2=_RHO_2, h_1=_H_1))
 
 
 def _Z(result: FieldResult) -> float:
@@ -101,10 +98,14 @@ def test_image_nlayer_honours_engine_image_max_terms() -> None:
     and returned bit-identical impedances.
     """
     engine_lo = gf.create_engine(
-        backend="image", image_max_terms=50, image_series_tol=1e-9,
+        backend="image",
+        image_max_terms=50,
+        image_series_tol=1e-9,
     )
     engine_hi = gf.create_engine(
-        backend="image", image_max_terms=3000, image_series_tol=1e-9,
+        backend="image",
+        image_max_terms=3000,
+        image_series_tol=1e-9,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SeriesTruncationWarning)
@@ -128,13 +129,14 @@ def test_image_nlayer_converges_to_two_layer_reference() -> None:
     truncation error of the image series.
     """
     engine = gf.create_engine(
-        backend="image", image_max_terms=3000, image_series_tol=1e-9,
+        backend="image",
+        image_max_terms=3000,
+        image_series_tol=1e-9,
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         z_multi = _Z(engine.solve(_multilayer_world()))
-    truncation = [w for w in caught
-                  if issubclass(w.category, SeriesTruncationWarning)]
+    truncation = [w for w in caught if issubclass(w.category, SeriesTruncationWarning)]
     assert not truncation, (
         "image_nlayer still truncates despite image_max_terms=3000: "
         f"{[str(w.message) for w in truncation]}"
@@ -157,10 +159,14 @@ def test_image_nlayer_series_tol_is_forwarded() -> None:
     truncates and must show up as a different Z.
     """
     engine_loose = gf.create_engine(
-        backend="image", image_max_terms=3000, image_series_tol=1e-1,
+        backend="image",
+        image_max_terms=3000,
+        image_series_tol=1e-1,
     )
     engine_tight = gf.create_engine(
-        backend="image", image_max_terms=3000, image_series_tol=1e-12,
+        backend="image",
+        image_max_terms=3000,
+        image_series_tol=1e-12,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SeriesTruncationWarning)
@@ -313,8 +319,7 @@ def test_deviation_equals_true_pairwise_disagreement() -> None:
     """A fabricated 6 % disagreement must be reported as 6 %."""
     report = _known_disagreement_report(1.06, rel_tolerance=0.05)
     assert report.deviations["g1"] == pytest.approx(0.06, rel=1e-9), (
-        "deviation is not the pairwise relative difference: "
-        f"{report.deviations!r}"
+        f"deviation is not the pairwise relative difference: {report.deviations!r}"
     )
 
 
@@ -344,9 +349,7 @@ def test_deviation_is_about_twice_the_old_mean_referenced_value() -> None:
     which is precisely the regime the tolerance gate lives in.
     """
     report = _known_disagreement_report(1.06, rel_tolerance=0.05)
-    zs = np.asarray(
-        list(report.cluster_impedance_table["g1"].values()), dtype=float
-    )
+    zs = np.asarray(list(report.cluster_impedance_table["g1"].values()), dtype=float)
     old_metric = float(np.max(np.abs(zs - zs.mean())) / abs(zs.mean()))
     new_metric = report.deviations["g1"]
     assert new_metric == pytest.approx(
@@ -397,8 +400,7 @@ def test_sample_point_note_states_the_metric() -> None:
 def test_source_free_world_is_not_consistent() -> None:
     """Nothing comparable must never report a green result."""
     world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
 
     report = gf.compare_engines(
         world,
@@ -424,8 +426,7 @@ def test_source_free_world_with_sample_points_is_not_consistent() -> None:
     agreement.
     """
     world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
 
     report = gf.compare_engines(
         world,
@@ -448,8 +449,7 @@ def test_misspelled_attached_to_is_not_consistent() -> None:
     every cluster with sum(I) = 0, so no impedance is defined.
     """
     world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
     world.sources.append(
         gf.CurrentSource(name="s_typo", attached_to="g_typo", magnitude=1.0)
     )

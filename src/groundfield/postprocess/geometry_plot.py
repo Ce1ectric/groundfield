@@ -201,9 +201,7 @@ def world_bounds_3d(
 # ---------------------------------------------------------------------
 
 
-def _project_2d(
-    point: tuple[float, float, float], plane: str
-) -> tuple[float, float]:
+def _project_2d(point: tuple[float, float, float], plane: str) -> tuple[float, float]:
     if plane == "xy":
         return point[0], point[1]
     if plane == "xz":
@@ -215,14 +213,19 @@ def _draw_conductor_2d(ax, c: "Conductor", plane: str) -> None:
     color, linestyle, linewidth = _conductor_style(c)
     p1 = _project_2d(c.start, plane)
     p2 = _project_2d(c.end, plane)
-    ax.plot([p1[0], p2[0]], [p1[1], p2[1]],
-            color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.9,
-            zorder=3, label="_nolegend_")
+    ax.plot(
+        [p1[0], p2[0]],
+        [p1[1], p2[1]],
+        color=color,
+        linestyle=linestyle,
+        linewidth=linewidth,
+        alpha=0.9,
+        zorder=3,
+        label="_nolegend_",
+    )
 
 
-def _draw_source_2d(
-    ax, source: "Source", world: "World", plane: str
-) -> None:
+def _draw_source_2d(ax, source: "Source", world: "World", plane: str) -> None:
     """Draw a source as a red star at its anchor; arrow to return_to if any."""
     try:
         anchor_e = world.get_electrode(source.attached_to)
@@ -231,9 +234,17 @@ def _draw_source_2d(
         # the marker; the conductor itself is already visible.
         return
     a = _project_2d(anchor_e.connection_point, plane)
-    ax.plot(a[0], a[1], marker="*", color="#cc0000", markersize=12,
-            markeredgecolor="black", linewidth=0, zorder=5,
-            label="_nolegend_")
+    ax.plot(
+        a[0],
+        a[1],
+        marker="*",
+        color="#cc0000",
+        markersize=12,
+        markeredgecolor="black",
+        linewidth=0,
+        zorder=5,
+        label="_nolegend_",
+    )
     if getattr(source, "return_to", None):
         try:
             ret_e = world.get_electrode(source.return_to)
@@ -242,15 +253,23 @@ def _draw_source_2d(
         b = _project_2d(ret_e.connection_point, plane)
         ax.annotate(
             "",
-            xy=b, xytext=a,
-            arrowprops={"arrowstyle": "->", "color": "#cc0000",
-                        "alpha": 0.6, "linewidth": 1.0,
-                        "shrinkA": 6, "shrinkB": 6},
+            xy=b,
+            xytext=a,
+            arrowprops={
+                "arrowstyle": "->",
+                "color": "#cc0000",
+                "alpha": 0.6,
+                "linewidth": 1.0,
+                "shrinkA": 6,
+                "shrinkB": 6,
+            },
             zorder=4,
         )
 
 
-def _build_legend(ax, world: "World", show_conductors: bool, show_sources: bool) -> None:
+def _build_legend(
+    ax, world: "World", show_conductors: bool, show_sources: bool
+) -> None:
     """Build a synthetic legend covering the conductor types and source marker."""
     handles = []
     labels = []
@@ -268,9 +287,17 @@ def _build_legend(ax, world: "World", show_conductors: bool, show_sources: bool)
             labels.append("dashed: isolated")
     if show_sources and world.sources:
         from matplotlib.lines import Line2D
+
         handles.append(
-            Line2D([], [], marker="*", color="#cc0000", markersize=10,
-                   markeredgecolor="black", linewidth=0)
+            Line2D(
+                [],
+                [],
+                marker="*",
+                color="#cc0000",
+                markersize=10,
+                markeredgecolor="black",
+                linewidth=0,
+            )
         )
         labels.append("source")
     if handles:
@@ -351,16 +378,20 @@ def plot_world(
         x_min, x_max, y_min, y_max, z_min, z_max = bounds
         if plane == "xy":
             extent = (
-                x_min - padding_m, x_max + padding_m,
-                y_min - padding_m, y_max + padding_m,
+                x_min - padding_m,
+                x_max + padding_m,
+                y_min - padding_m,
+                y_max + padding_m,
             )
         elif plane == "xz":
             # In z, "padding" should not push the surface (z=0)
             # below the soil — but z<0 (overhead) is legitimate.
             # We pad symmetrically and rely on plot inversion.
             extent = (
-                x_min - padding_m, x_max + padding_m,
-                z_min - padding_m, z_max + padding_m,
+                x_min - padding_m,
+                x_max + padding_m,
+                z_min - padding_m,
+                z_max + padding_m,
             )
         else:
             raise ValueError(f"plane must be 'xy' or 'xz', got {plane!r}.")
@@ -373,8 +404,9 @@ def plot_world(
     # 1. Surface line for the xz view — emphasises the soil
     #    boundary at z = 0.
     if plane == "xz":
-        ax.axhline(0.0, color="#666666", linestyle=":", linewidth=0.8,
-                   alpha=0.7, zorder=1)
+        ax.axhline(
+            0.0, color="#666666", linestyle=":", linewidth=0.8, alpha=0.7, zorder=1
+        )
 
     # 2. Conductors first (so electrodes draw on top).
     if show_conductors:
@@ -396,9 +428,13 @@ def plot_world(
             cp = e.connection_point
             x, y = _project_2d(cp, plane)
             ax.annotate(
-                e.name, (x, y),
-                textcoords="offset points", xytext=(5, 5),
-                fontsize=7, alpha=0.85, zorder=6,
+                e.name,
+                (x, y),
+                textcoords="offset points",
+                xytext=(5, 5),
+                fontsize=7,
+                alpha=0.85,
+                zorder=6,
             )
 
     ax.set_xlim(extent[0], extent[1])
@@ -452,10 +488,12 @@ def _draw_electrode_3d(ax, e) -> None:
     elif isinstance(e, RingElectrode):
         cx, cy, cz = e.center
         theta = np.linspace(0, 2 * np.pi, 64)
-        ax.plot(cx + e.radius * np.cos(theta),
-                cy + e.radius * np.sin(theta),
-                np.full_like(theta, cz),
-                **kw)
+        ax.plot(
+            cx + e.radius * np.cos(theta),
+            cy + e.radius * np.sin(theta),
+            np.full_like(theta, cz),
+            **kw,
+        )
     elif isinstance(e, StripElectrode):
         sx, sy, sz = e.start
         ex, ey, ez = e.end
@@ -471,12 +509,24 @@ def _draw_electrode_3d(ax, e) -> None:
         if isinstance(e, GridMeshElectrode):
             for k in range(1, e.n_x):
                 xk = cx + dx * k / e.n_x
-                ax.plot([xk, xk], [cy, cy + dy], [cz, cz],
-                        color="k", linewidth=0.7, alpha=0.5)
+                ax.plot(
+                    [xk, xk],
+                    [cy, cy + dy],
+                    [cz, cz],
+                    color="k",
+                    linewidth=0.7,
+                    alpha=0.5,
+                )
             for k in range(1, e.n_y):
                 yk = cy + dy * k / e.n_y
-                ax.plot([cx, cx + dx], [yk, yk], [cz, cz],
-                        color="k", linewidth=0.7, alpha=0.5)
+                ax.plot(
+                    [cx, cx + dx],
+                    [yk, yk],
+                    [cz, cz],
+                    color="k",
+                    linewidth=0.7,
+                    alpha=0.5,
+                )
     elif isinstance(e, PolylineElectrode):
         vx = [v[0] for v in e.vertices]
         vy = [v[1] for v in e.vertices]
@@ -503,7 +553,10 @@ def _draw_conductor_3d(ax, c: "Conductor") -> None:
         [c.start[0], c.end[0]],
         [c.start[1], c.end[1]],
         [c.start[2], c.end[2]],
-        color=color, linestyle=linestyle, linewidth=linewidth, alpha=0.9,
+        color=color,
+        linestyle=linestyle,
+        linewidth=linewidth,
+        alpha=0.9,
     )
 
 
@@ -513,10 +566,18 @@ def _draw_source_3d(ax, source: "Source", world: "World") -> None:
     except KeyError:
         return
     cp = anchor_e.connection_point
-    ax.scatter([cp[0]], [cp[1]], [cp[2]],
-               marker="*", color="#cc0000", s=140,
-               edgecolor="black", linewidth=0.5,
-               depthshade=False, zorder=10)
+    ax.scatter(
+        [cp[0]],
+        [cp[1]],
+        [cp[2]],
+        marker="*",
+        color="#cc0000",
+        s=140,
+        edgecolor="black",
+        linewidth=0.5,
+        depthshade=False,
+        zorder=10,
+    )
 
 
 def plot_world_3d(
@@ -571,13 +632,12 @@ def plot_world_3d(
     # Optional surface plane at z = 0.
     if show_surface and (world.electrodes or world.conductors):
         pad = 5.0
-        xs = np.array([[x_min - pad, x_max + pad],
-                       [x_min - pad, x_max + pad]])
-        ys = np.array([[y_min - pad, y_min - pad],
-                       [y_max + pad, y_max + pad]])
+        xs = np.array([[x_min - pad, x_max + pad], [x_min - pad, x_max + pad]])
+        ys = np.array([[y_min - pad, y_min - pad], [y_max + pad, y_max + pad]])
         zs = np.zeros_like(xs)
-        ax.plot_surface(xs, ys, zs, color="#cccccc", alpha=0.25,
-                        edgecolor="none", linewidth=0)
+        ax.plot_surface(
+            xs, ys, zs, color="#cccccc", alpha=0.25, edgecolor="none", linewidth=0
+        )
 
     if show_conductors:
         for c in world.conductors:

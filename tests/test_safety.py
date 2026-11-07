@@ -140,9 +140,7 @@ def test_envelope_matches_pointwise_touch_voltage() -> None:
 def test_envelope_rejects_too_few_angles() -> None:
     world, result = _single_rod_world()
     with pytest.raises(ValueError, match="n_angles"):
-        touch_voltage_envelope(
-            result, world, electrode="g1", distance=1.0, n_angles=2
-        )
+        touch_voltage_envelope(result, world, electrode="g1", distance=1.0, n_angles=2)
 
 
 # ---------------------------------------------------------------------
@@ -160,9 +158,7 @@ def test_step_voltage_decays_to_remote_earth() -> None:
         step_voltage(result, position=(10.0, 0.0, 0.0), step=1.0, direction=(1, 0, 0))
     )
     U_S_far = abs(
-        step_voltage(
-            result, position=(100.0, 0.0, 0.0), step=1.0, direction=(1, 0, 0)
-        )
+        step_voltage(result, position=(100.0, 0.0, 0.0), step=1.0, direction=(1, 0, 0))
     )
     assert U_S_close > U_S_mid > U_S_far
     # 100 m away from a 1.5 m rod, |U_S| over 1 m must be tiny.

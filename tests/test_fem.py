@@ -98,15 +98,12 @@ def test_fem_two_rod_cluster() -> None:
         return eng.solve(world).cluster_impedance("g1")[0].real
 
     w_single = gf.create_world(soil=soil)
-    gf.create_electrode(w_single, "rod", name="g1",
-                        position=(0, 0, 0.0), length=1.5)
+    gf.create_electrode(w_single, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
     gf.create_source(w_single, attached_to="g1", magnitude=1.0)
 
     w_pair = gf.create_world(soil=soil)
-    gf.create_electrode(w_pair, "rod", name="g1",
-                        position=(0, 0, 0.0), length=1.5)
-    gf.create_electrode(w_pair, "rod", name="g2",
-                        position=(8, 0, 0.0), length=1.5)
+    gf.create_electrode(w_pair, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
+    gf.create_electrode(w_pair, "rod", name="g2", position=(8, 0, 0.0), length=1.5)
     gf.create_conductor(w_pair, name="bond", start="g1", end="g2")
     gf.create_source(w_pair, attached_to="g1", magnitude=1.0)
 

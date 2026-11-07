@@ -107,9 +107,16 @@ def _default_response(
         Z_re = Z_im = abs_Z = arg_Z = float("nan")
 
     return {
-        "U_E_re": U.real, "U_E_im": U.imag, "abs_U_E": abs(U),
-        "I_re": I.real, "I_im": I.imag, "abs_I": abs(I),
-        "Z_re": Z_re, "Z_im": Z_im, "abs_Z": abs_Z, "arg_Z_deg": arg_Z,
+        "U_E_re": U.real,
+        "U_E_im": U.imag,
+        "abs_U_E": abs(U),
+        "I_re": I.real,
+        "I_im": I.imag,
+        "abs_I": abs(I),
+        "Z_re": Z_re,
+        "Z_im": Z_im,
+        "abs_Z": abs_Z,
+        "arg_Z_deg": arg_Z,
     }
 
 
@@ -321,9 +328,7 @@ def plot_sweep_heatmap(
 
     for col in (x, y, response):
         if col not in df.columns:
-            raise KeyError(
-                f"column '{col}' not in DataFrame; have: {list(df.columns)}"
-            )
+            raise KeyError(f"column '{col}' not in DataFrame; have: {list(df.columns)}")
 
     sub = df
     if frequency_Hz is not None and "frequency_Hz" in df.columns:
@@ -341,8 +346,10 @@ def plot_sweep_heatmap(
         origin="lower",
         aspect="auto",
         extent=(
-            float(pivot.columns.min()), float(pivot.columns.max()),
-            float(pivot.index.min()), float(pivot.index.max()),
+            float(pivot.columns.min()),
+            float(pivot.columns.max()),
+            float(pivot.index.min()),
+            float(pivot.index.max()),
         ),
         cmap=cmap,
         interpolation="nearest",

@@ -57,8 +57,9 @@ def _synthetic_Z(rho, f):
     )
 
 
-def _results_with_dead_dc(dead_frequencies=(0.0,), *, all_dead=False,
-                          drop_currents=False):
+def _results_with_dead_dc(
+    dead_frequencies=(0.0,), *, all_dead=False, drop_currents=False
+):
     """Build FieldResult-like objects for the rho sweep.
 
     Samples whose frequency is listed in ``dead_frequencies`` carry
@@ -182,7 +183,7 @@ def _bullet(doc: str, marker: str) -> str:
     for i, line in enumerate(lines):
         if marker in line:
             block = [line]
-            for nxt in lines[i + 1:]:
+            for nxt in lines[i + 1 :]:
                 if nxt.strip().startswith("- ") or not nxt.strip():
                     break
                 block.append(nxt)
@@ -202,16 +203,22 @@ def test_f56_module_docstring_assigns_k2_and_k3_correctly() -> None:
     k3_bullet = _bullet(doc, "$k_3\\,f$")
 
     assert "resistive" in k2_bullet and "inductive" not in k2_bullet, k2_bullet
-    assert ("reactive" in k3_bullet or "inductance" in k3_bullet), k3_bullet
+    assert "reactive" in k3_bullet or "inductance" in k3_bullet, k3_bullet
     assert "purely-resistive" not in k3_bullet, k3_bullet
 
 
 def test_f56_code_agrees_with_the_documented_split() -> None:
     """The implementation puts k2/k4 in Re Z and k3/k5 in Im Z."""
     fit = rfs.RhoFStandardFit(
-        k1=0.0, k2=1.0, k3=2.0, k4=0.0, k5=0.0,
-        rms_error=0.0, rms_relative=0.0,
-        sample_rho=np.array([1.0]), sample_f=np.array([1.0]),
+        k1=0.0,
+        k2=1.0,
+        k3=2.0,
+        k4=0.0,
+        k5=0.0,
+        rms_error=0.0,
+        rms_relative=0.0,
+        sample_rho=np.array([1.0]),
+        sample_f=np.array([1.0]),
         sample_Z=np.array([0.0 + 0.0j]),
     )
     Z = complex(fit.evaluate(rho=100.0, f=1.0))
@@ -251,12 +258,8 @@ def _solved_single_rod():
 
     world = gf.World(
         soil=HomogeneousSoil(resistivity=100.0),
-        electrodes=[
-            RodElectrode(name="r1", position=(0.0, 0.0, 0.0), length=3.0)
-        ],
-        sources=[
-            CurrentSource(name="s1", attached_to="r1", magnitude=100.0)
-        ],
+        electrodes=[RodElectrode(name="r1", position=(0.0, 0.0, 0.0), length=3.0)],
+        sources=[CurrentSource(name="s1", attached_to="r1", magnitude=100.0)],
     )
     result = gf.Engine(frequencies=[50.0], backend="image").solve(world)
     return world, result
@@ -265,10 +268,17 @@ def _solved_single_rod():
 def test_f46_frozen_constants_have_the_writer_column_names() -> None:
     """The constants must not promise ``electrode`` / ``cluster``."""
     assert gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS == (
-        "name", "cluster_root", "I_re", "I_im", "abs_I",
+        "name",
+        "cluster_root",
+        "I_re",
+        "I_im",
+        "abs_I",
     )
     assert gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS == (
-        "cluster_root", "Z_re", "Z_im", "abs_Z",
+        "cluster_root",
+        "Z_re",
+        "Z_im",
+        "abs_Z",
     )
     assert "electrode" not in gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS
     assert "cluster" not in gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS
@@ -285,9 +295,7 @@ def test_f46_written_csvs_satisfy_the_published_contract(tmp_path) -> None:
     p_electrodes = gf_csv.save_electrode_table_csv(
         result, tmp_path / "electrodes.csv", world=world
     )
-    p_clusters = gf_csv.save_cluster_impedances_csv(
-        result, tmp_path / "clusters.csv"
-    )
+    p_clusters = gf_csv.save_cluster_impedances_csv(result, tmp_path / "clusters.csv")
 
     for path, required in (
         (p_electrodes, gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS),
@@ -321,9 +329,7 @@ def test_f46_constants_are_usable_as_pandas_keys(tmp_path) -> None:
     id_col = gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS[0]
     assert df.groupby(id_col)["abs_I"].sum().sum() > 0.0
 
-    p_clusters = gf_csv.save_cluster_impedances_csv(
-        result, tmp_path / "clusters.csv"
-    )
+    p_clusters = gf_csv.save_cluster_impedances_csv(result, tmp_path / "clusters.csv")
     dfc = pd.read_csv(p_clusters)
     cluster_col = gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS[0]
     assert dfc[cluster_col].tolist() == ["r1"]

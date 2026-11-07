@@ -182,8 +182,12 @@ def pollaczek_self_impedance(
         Earth-return series impedance :math:`R' + jX'` in Ω/m.
     """
     _check_positive(
-        rho_1=rho_1, rho_2=rho_2, h_1=h_1, frequency=frequency,
-        depth=depth, gmr=gmr,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        frequency=frequency,
+        depth=depth,
+        gmr=gmr,
     )
     omega = 2.0 * math.pi * frequency
 
@@ -198,7 +202,10 @@ def pollaczek_self_impedance(
     re, _ = quad(integrand, 0.0, math.inf, args=(0,), limit=200)
     im, _ = quad(integrand, 0.0, math.inf, args=(1,), limit=200)
     return (
-        1j * omega * MU_0 / (2.0 * math.pi)
+        1j
+        * omega
+        * MU_0
+        / (2.0 * math.pi)
         * (math.log(2.0 * depth / gmr) + 2.0 * (re + 1j * im))
     )
 
@@ -296,8 +303,12 @@ def pollaczek_mutual_impedance(
     :math:`depth_i = depth_j` it recovers :func:`pollaczek_self_impedance`.
     """
     _check_positive(
-        rho_1=rho_1, rho_2=rho_2, h_1=h_1, frequency=frequency,
-        depth_i=depth_i, depth_j=depth_j,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        frequency=frequency,
+        depth_i=depth_i,
+        depth_j=depth_j,
     )
     if separation < 0.0:
         raise ValueError(f"separation must be non-negative, got {separation}")
@@ -325,18 +336,24 @@ def pollaczek_mutual_impedance(
     # into the integrand and integrate plainly.
     decay_len = depth_i + depth_j
     if x > 0.3 * decay_len:
-        re, _ = quad(integrand, 0.0, math.inf, args=(0,), weight="cos",
-                     wvar=x, limit=200)
-        im, _ = quad(integrand, 0.0, math.inf, args=(1,), weight="cos",
-                     wvar=x, limit=200)
+        re, _ = quad(
+            integrand, 0.0, math.inf, args=(0,), weight="cos", wvar=x, limit=200
+        )
+        im, _ = quad(
+            integrand, 0.0, math.inf, args=(1,), weight="cos", wvar=x, limit=200
+        )
     else:
+
         def integrand_cos(lam: float, part: int) -> float:
             return integrand(lam, part) * math.cos(lam * x)
 
         re, _ = quad(integrand_cos, 0.0, math.inf, args=(0,), limit=200)
         im, _ = quad(integrand_cos, 0.0, math.inf, args=(1,), limit=200)
     return (
-        1j * omega * MU_0 / (2.0 * math.pi)
+        1j
+        * omega
+        * MU_0
+        / (2.0 * math.pi)
         * (math.log(big_d / d) + 2.0 * (re + 1j * im))
     )
 
@@ -427,12 +444,21 @@ def loop_impedance_conductor_earth(
     (0.255, 0.758)
     """
     _check_positive(
-        rho_1=rho_1, rho_2=rho_2, h_1=h_1, frequency=frequency,
-        depth=depth, gmr=gmr,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        frequency=frequency,
+        depth=depth,
+        gmr=gmr,
     )
     if r_internal < 0.0:
         raise ValueError(f"r_internal must be non-negative, got {r_internal}")
     z_earth = pollaczek_self_impedance(
-        rho_1, rho_2, h_1, frequency, depth=depth, gmr=gmr,
+        rho_1,
+        rho_2,
+        h_1,
+        frequency,
+        depth=depth,
+        gmr=gmr,
     )
     return complex(r_internal, 0.0) + z_earth

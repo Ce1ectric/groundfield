@@ -287,18 +287,17 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
     from scipy.integrate import quad
 
     def _f_re(mu: float) -> float:
-        return (math.sqrt(0.5 * (math.hypot(mu * mu, 1.0) + mu * mu))
-                - mu) * math.exp(-p * mu)
+        return (math.sqrt(0.5 * (math.hypot(mu * mu, 1.0) + mu * mu)) - mu) * math.exp(
+            -p * mu
+        )
 
     def _f_im(mu: float) -> float:
         # Im sqrt(mu^2 + j) = 1 / (2 · Re sqrt(mu^2 + j))
         re = math.sqrt(0.5 * (math.hypot(mu * mu, 1.0) + mu * mu))
         return 0.5 / re * math.exp(-p * mu)
 
-    P = quad(_f_re, 0.0, np.inf, weight="cos", wvar=q,
-             limit=200, limlst=200)[0]
-    Q = quad(_f_im, 0.0, np.inf, weight="cos", wvar=q,
-             limit=200, limlst=200)[0]
+    P = quad(_f_re, 0.0, np.inf, weight="cos", wvar=q, limit=200, limlst=200)[0]
+    Q = quad(_f_im, 0.0, np.inf, weight="cos", wvar=q, limit=200, limlst=200)[0]
     return P, Q
 
 
@@ -558,5 +557,5 @@ def deri_semlyen_correction(
     D = math.hypot(height_i - height_j, horizontal_distance)
     if D == 0.0:
         D = 1e-9
-    D_prime = np.sqrt((height_i + height_j + 2.0 * p) ** 2 + horizontal_distance ** 2)
+    D_prime = np.sqrt((height_i + height_j + 2.0 * p) ** 2 + horizontal_distance**2)
     return complex(1j * omega * MU_0 / (2.0 * math.pi) * np.log(D_prime / D))

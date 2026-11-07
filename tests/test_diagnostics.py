@@ -60,7 +60,10 @@ def _mixed_world() -> gf.World:
         n_y=2,
     )
     gf.create_conductor(
-        world, name="bond", start=g_rod, end="ring_a",
+        world,
+        name="bond",
+        start=g_rod,
+        end="ring_a",
         conductor_type="bare_copper",
     )
     # A second, distributed PEN conductor.
@@ -87,7 +90,10 @@ def test_world_statistics_basic_counts() -> None:
     stats = world_statistics(_mixed_world())
     assert stats["n_electrodes"] == 4
     assert stats["n_electrodes_by_kind"] == {
-        "rod": 1, "ring": 1, "strip": 1, "grid_mesh": 1,
+        "rod": 1,
+        "ring": 1,
+        "strip": 1,
+        "grid_mesh": 1,
     }
     assert stats["n_conductors"] == 2
     assert stats["n_conductors_by_type"] == {"bare_copper": 1, "pen": 1}
@@ -174,9 +180,7 @@ def test_expected_segments_ring_matches_solver() -> None:
 def test_expected_segments_strip_matches_solver() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(
-        world, "strip", name="g1", start=(0, 0, 0.6), end=(10, 0, 0.6)
-    )
+    gf.create_electrode(world, "strip", name="g1", start=(0, 0, 0.6), end=(10, 0, 0.6))
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.3)
 
@@ -242,7 +246,10 @@ def test_expected_segments_galvanic_distributed_conductor_counts() -> None:
     g1 = gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.0)
     g2 = gf.create_electrode(world, "rod", name="g2", position=(20, 0, 0.5), length=1.0)
     gf.create_conductor(
-        world, name="bare_trunk", start=g1, end=g2,
+        world,
+        name="bare_trunk",
+        start=g1,
+        end=g2,
         conductor_type="bare_copper",
         cross_section=50e-6,
         coupling_to_soil="galvanic",
@@ -288,7 +295,11 @@ def test_check_segment_resolution_clean_world_returns_empty() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1", position=(0, 0, 0.5), length=1.5,
+        world,
+        "rod",
+        name="g1",
+        position=(0, 0, 0.5),
+        length=1.5,
         wire_radius=0.005,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
@@ -300,8 +311,12 @@ def test_check_segment_resolution_thin_wire_warning() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1", position=(0, 0, 0.5), length=1.5,
-        wire_radius=0.05,            # bigger wire
+        world,
+        "rod",
+        name="g1",
+        position=(0, 0, 0.5),
+        length=1.5,
+        wire_radius=0.05,  # bigger wire
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.05)  # ratio = 1.0
@@ -317,11 +332,12 @@ def test_check_segment_resolution_distributed_conductor_warning() -> None:
     gf.create_conductor(
         world,
         name="bad_pen",
-        start="g1", end="g2",
+        start="g1",
+        end="g2",
         conductor_type="pen",
         cross_section=50e-6,
-        wire_radius=0.05,                  # 5 cm radius
-        discretize_segment_length=0.1,     # ratio = 2 < 5
+        wire_radius=0.05,  # 5 cm radius
+        discretize_segment_length=0.1,  # ratio = 2 < 5
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)
@@ -334,9 +350,9 @@ def test_check_segment_resolution_electrode_smaller_than_segment_warning() -> No
     'smaller than one segment' warning."""
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.5), length=0.3,
-                        wire_radius=0.005)
+    gf.create_electrode(
+        world, "rod", name="g1", position=(0, 0, 0.5), length=0.3, wire_radius=0.005
+    )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=1.0)
     msgs = check_segment_resolution(world, eng)
@@ -354,7 +370,8 @@ def test_check_segment_resolution_budget_warning() -> None:
         name="big",
         corner=(0, 0, 0.7),
         size=(100.0, 100.0),
-        n_x=20, n_y=20,
+        n_x=20,
+        n_y=20,
     )
     gf.create_source(world, attached_to="big", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.5)

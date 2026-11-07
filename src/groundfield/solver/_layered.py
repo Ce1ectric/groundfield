@@ -165,13 +165,9 @@ def as_layer_stack(soil: SoilModel) -> LayerStack:
         )
     if isinstance(soil, MultiLayerSoil):
         rhos = np.array([ly.resistivity for ly in soil.layers], dtype=float)
-        h = np.array(
-            [ly.thickness for ly in soil.layers[:-1]], dtype=float
-        )
+        h = np.array([ly.thickness for ly in soil.layers[:-1]], dtype=float)
         return LayerStack(rhos=rhos, h=h)
-    raise TypeError(
-        f"Cannot convert {type(soil).__name__} to LayerStack."
-    )
+    raise TypeError(f"Cannot convert {type(soil).__name__} to LayerStack.")
 
 
 # ---------------------------------------------------------------------

@@ -85,8 +85,7 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
             else:  # xz
                 # Side view: cannot pick out the y-slice without the
                 # slice y-value. Draw the projected width at depth cz.
-                ax.plot([cx - e.radius, cx + e.radius], [cz, cz],
-                        "k-", linewidth=1.5)
+                ax.plot([cx - e.radius, cx + e.radius], [cz, cz], "k-", linewidth=1.5)
         elif isinstance(e, StripElectrode):
             sx, sy, sz = e.start
             ex, ey, ez = e.end
@@ -99,18 +98,24 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
             dx, dy = e.size
             if plane == "xy":
                 # Outer rectangle …
-                ax.plot([cx, cx + dx, cx + dx, cx, cx],
-                        [cy, cy, cy + dy, cy + dy, cy], "k-", linewidth=1.5)
+                ax.plot(
+                    [cx, cx + dx, cx + dx, cx, cx],
+                    [cy, cy, cy + dy, cy + dy, cy],
+                    "k-",
+                    linewidth=1.5,
+                )
                 # … plus inner mesh wires for GridMeshElectrode.
                 if isinstance(e, GridMeshElectrode):
                     for k in range(1, e.n_x):
                         x_k = cx + dx * k / e.n_x
-                        ax.plot([x_k, x_k], [cy, cy + dy],
-                                "k-", linewidth=0.7, alpha=0.6)
+                        ax.plot(
+                            [x_k, x_k], [cy, cy + dy], "k-", linewidth=0.7, alpha=0.6
+                        )
                     for k in range(1, e.n_y):
                         y_k = cy + dy * k / e.n_y
-                        ax.plot([cx, cx + dx], [y_k, y_k],
-                                "k-", linewidth=0.7, alpha=0.6)
+                        ax.plot(
+                            [cx, cx + dx], [y_k, y_k], "k-", linewidth=0.7, alpha=0.6
+                        )
             else:
                 ax.plot([cx, cx + dx], [cz, cz], "k-", linewidth=1.5)
         elif isinstance(e, PolylineElectrode):
@@ -126,11 +131,9 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
         elif isinstance(e, StarElectrode):
             for start, end in e.edges:
                 if plane == "xy":
-                    ax.plot([start[0], end[0]], [start[1], end[1]],
-                            "k-", linewidth=1.8)
+                    ax.plot([start[0], end[0]], [start[1], end[1]], "k-", linewidth=1.8)
                 else:  # xz
-                    ax.plot([start[0], end[0]], [start[2], end[2]],
-                            "k-", linewidth=1.8)
+                    ax.plot([start[0], end[0]], [start[2], end[2]], "k-", linewidth=1.8)
 
 
 def _make_grid(
@@ -223,8 +226,7 @@ def plot_potential_contour(
         # ``np.ptp(arr)``, not ``arr.ptp()`` — the ndarray method was
         # removed in NumPy 2.0, and the project requires numpy >= 2.1.
         pad = max(5.0, 0.5 * (np.ptp(ax) + np.ptp(bx)))
-        extent = (ax.min() - pad, ax.max() + pad,
-                  bx.min() - pad, bx.max() + pad)
+        extent = (ax.min() - pad, ax.max() + pad, bx.min() - pad, bx.max() + pad)
 
     fixed = z if plane == "xy" else y
     A, B, flat = _make_grid(plane, extent, fixed, n)
@@ -236,13 +238,21 @@ def plot_potential_contour(
     if log:
         # Drop non-positive values, otherwise the log scale breaks.
         phi_plot = np.where(phi > 0, phi, np.nan)
-        cs = axx.contourf(A, B, phi_plot, levels=levels, cmap=cmap,
-                          locator=__import__("matplotlib.ticker",
-                                             fromlist=["LogLocator"]).LogLocator())
+        cs = axx.contourf(
+            A,
+            B,
+            phi_plot,
+            levels=levels,
+            cmap=cmap,
+            locator=__import__(
+                "matplotlib.ticker", fromlist=["LogLocator"]
+            ).LogLocator(),
+        )
     else:
         cs = axx.contourf(A, B, phi, levels=levels, cmap=cmap)
-    contours = axx.contour(A, B, phi, levels=levels, colors="k",
-                           linewidths=0.4, alpha=0.5)
+    contours = axx.contour(
+        A, B, phi, levels=levels, colors="k", linewidths=0.4, alpha=0.5
+    )
     axx.clabel(contours, inline=True, fontsize=7, fmt="%.0f")
 
     cbar = fig.colorbar(cs, ax=axx)
@@ -251,15 +261,17 @@ def plot_potential_contour(
     if plane == "xy":
         axx.set_xlabel("x in m")
         axx.set_ylabel("y in m")
-        axx.set_title(f"Potential φ(x, y, z={z:g} m), "
-                      f"f={result.frequencies[frequency_index]} Hz")
+        axx.set_title(
+            f"Potential φ(x, y, z={z:g} m), f={result.frequencies[frequency_index]} Hz"
+        )
         axx.set_aspect("equal")
     else:
         axx.set_xlabel("x in m")
         axx.set_ylabel("z in m (depth)")
         axx.invert_yaxis()  # soil downwards
-        axx.set_title(f"Potential φ(x, y={y:g} m, z), "
-                      f"f={result.frequencies[frequency_index]} Hz")
+        axx.set_title(
+            f"Potential φ(x, y={y:g} m, z), f={result.frequencies[frequency_index]} Hz"
+        )
 
     if world is not None:
         _draw_electrodes(axx, world, plane)
@@ -318,9 +330,11 @@ def plot_potential_profile(
     fig, ax = plt.subplots(figsize=(7, 4))
     for z_d in depths:
         pts = np.column_stack(
-            [start[0] + s * direction_arr[0],
-             start[1] + s * direction_arr[1],
-             np.full_like(s, z_d)]
+            [
+                start[0] + s * direction_arr[0],
+                start[1] + s * direction_arr[1],
+                np.full_like(s, z_d),
+            ]
         )
         phi = result.potential(pts, frequency_index=frequency_index).real
         ax.plot(s, phi, label=f"z = {z_d:g} m")
@@ -328,8 +342,7 @@ def plot_potential_profile(
     ax.set_xlabel("distance s along profile in m")
     ax.set_ylabel("Potential φ in V")
     ax.set_title(
-        f"Potential profile from {start}, "
-        f"f = {result.frequencies[frequency_index]} Hz"
+        f"Potential profile from {start}, f = {result.frequencies[frequency_index]} Hz"
     )
     ax.grid(True, alpha=0.3)
     ax.legend()
@@ -509,8 +522,10 @@ def plot_surface_potential(
     if extent is None:
         x_min, x_max, y_min, y_max = world_bounds_xy(world)
         extent = (
-            x_min - padding_m, x_max + padding_m,
-            y_min - padding_m, y_max + padding_m,
+            x_min - padding_m,
+            x_max + padding_m,
+            y_min - padding_m,
+            y_max + padding_m,
         )
 
     A, B, flat = _make_grid("xy", extent, z, n)
@@ -539,15 +554,17 @@ def plot_surface_potential(
         cbar_label = "Potential φ in V"
 
     if show_contour_lines and not log:
-        contours = ax.contour(A, B, phi, levels=levels, colors="k",
-                              linewidths=0.4, alpha=0.4)
+        contours = ax.contour(
+            A, B, phi, levels=levels, colors="k", linewidths=0.4, alpha=0.4
+        )
         ax.clabel(contours, inline=True, fontsize=7, fmt="%.0f")
     elif show_contour_lines and log:
         # Log mode: contour lines on the absolute value, fewer levels
         # so labels stay legible.
         n_lines = max(5, levels // 3)
-        contours = ax.contour(A, B, np.abs(phi), levels=n_lines,
-                              colors="k", linewidths=0.4, alpha=0.4)
+        contours = ax.contour(
+            A, B, np.abs(phi), levels=n_lines, colors="k", linewidths=0.4, alpha=0.4
+        )
 
     cbar = fig.colorbar(cs, ax=ax)
     cbar.set_label(cbar_label)
@@ -557,10 +574,7 @@ def plot_surface_potential(
     ax.set_aspect("equal")
     if title is None:
         f_hz = result.frequencies[frequency_index]
-        title = (
-            f"Surface potential φ(x, y, z = {z:g} m), "
-            f"f = {f_hz:g} Hz"
-        )
+        title = f"Surface potential φ(x, y, z = {z:g} m), f = {f_hz:g} Hz"
     ax.set_title(title)
 
     if show_electrodes:
@@ -614,9 +628,7 @@ def plot_potential_radial(
 
     if isinstance(around, str):
         if world is None:
-            raise ValueError(
-                "When 'around' is an electrode name, 'world' is required."
-            )
+            raise ValueError("When 'around' is an electrode name, 'world' is required.")
         cp = world.get_electrode(around).connection_point
         x0, y0 = cp[0], cp[1]
         label_origin = around
@@ -627,9 +639,7 @@ def plot_potential_radial(
     rs = np.linspace(0.1 if not log_x else 0.05, r_max, n)
     fig, ax = plt.subplots(figsize=(7, 4))
     for z_d in depths:
-        pts = np.column_stack(
-            [x0 + rs, np.full_like(rs, y0), np.full_like(rs, z_d)]
-        )
+        pts = np.column_stack([x0 + rs, np.full_like(rs, y0), np.full_like(rs, z_d)])
         phi = result.potential(pts, frequency_index=frequency_index).real
         ax.plot(rs, phi, label=f"z = {z_d:g} m")
 

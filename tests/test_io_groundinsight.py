@@ -58,13 +58,10 @@ def _make_rho_f_fit() -> RhoFStandardFit:
     rho = rho.ravel()
     f = f.ravel()
     k1, k2, k3, k4, k5 = 0.040, 1.5e-4, 0.0, 1.0e-6, 2.5e-7
-    Z = (
-        k1 * rho
-        + (k2 + 1j * k3) * f
-        + (k4 + 1j * k5) * f * rho
+    Z = k1 * rho + (k2 + 1j * k3) * f + (k4 + 1j * k5) * f * rho
+    Z = Z + (
+        rng.normal(scale=1e-6, size=Z.shape) + 1j * rng.normal(scale=1e-6, size=Z.shape)
     )
-    Z = Z + (rng.normal(scale=1e-6, size=Z.shape)
-             + 1j * rng.normal(scale=1e-6, size=Z.shape))
     return fit_rho_f_standard(rho, f, Z)
 
 
@@ -72,16 +69,20 @@ def _make_vector_fit():
     """A simple two-real-pole vector fit at fixed soil."""
     R_inf = 25.0
     poles = [-2.0 * math.pi * 50.0, -2.0 * math.pi * 500.0]
-    residues = [-2.0 * math.pi * 50.0 * 8.0,
-                -2.0 * math.pi * 500.0 * 3.0]
+    residues = [-2.0 * math.pi * 50.0 * 8.0, -2.0 * math.pi * 500.0 * 3.0]
     freqs = np.geomspace(1.0, 1000.0, 25)
     s = 2j * math.pi * freqs
     Z = np.full_like(s, complex(R_inf), dtype=complex)
     for p, r in zip(poles, residues):
         Z = Z + r / (s - p)
     return vector_fit(
-        freqs, Z, n_poles=2, n_iter=10,
-        include_R_inf=True, include_L_inf=False, complex_poles=False,
+        freqs,
+        Z,
+        n_poles=2,
+        n_iter=10,
+        include_R_inf=True,
+        include_L_inf=False,
+        complex_poles=False,
     )
 
 
@@ -94,7 +95,9 @@ def test_to_bustype_dict_has_schema_v1() -> None:
     fit = _make_rho_f_fit()
     payload = to_bustype_dict(
         fit,
-        name="t1", system_type="LV", voltage_level=0.4,
+        name="t1",
+        system_type="LV",
+        voltage_level=0.4,
         electrode_name="trafo_ring",
         soil_summary="2-layer rho_1 sweep, rho_2=20, h_1=2.0",
     )
@@ -123,7 +126,10 @@ def test_vector_fit_export_requires_rho_at_fit() -> None:
     vf = _make_vector_fit()
     with pytest.raises(ValueError, match="rho_at_fit"):
         to_bustype_dict(
-            vf, name="vf", system_type="LV", voltage_level=0.4,
+            vf,
+            name="vf",
+            system_type="LV",
+            voltage_level=0.4,
         )
 
 
@@ -132,8 +138,12 @@ def test_vector_fit_export_renders_in_f() -> None:
 
     vf = _make_vector_fit()
     payload = to_bustype_dict(
-        vf, name="vf", system_type="LV", voltage_level=0.4,
-        rho_at_fit=100.0, electrode_name="rod_1",
+        vf,
+        name="vf",
+        system_type="LV",
+        voltage_level=0.4,
+        rho_at_fit=100.0,
+        electrode_name="rod_1",
         soil_summary="HomogeneousSoil rho=100",
     )
     formula = payload["impedance_formula"]
@@ -159,8 +169,11 @@ def test_json_roundtrip_preserves_payload(tmp_path) -> None:
     fit = _make_rho_f_fit()
     path = tmp_path / "bustype.json"
     save_bustype_json(
-        fit, path,
-        name="house", system_type="LV", voltage_level=0.4,
+        fit,
+        path,
+        name="house",
+        system_type="LV",
+        voltage_level=0.4,
         description="single-family house, AP1 reference",
         electrode_name="rod_1",
     )
@@ -173,10 +186,12 @@ def test_json_roundtrip_preserves_payload(tmp_path) -> None:
     # Bit-exact numerical round-trip on the samples
     payload = json.loads(path.read_text(encoding="utf-8"))
     np.testing.assert_array_equal(
-        spec.samples["frequency_Hz"], payload["samples"]["frequency_Hz"],
+        spec.samples["frequency_Hz"],
+        payload["samples"]["frequency_Hz"],
     )
     np.testing.assert_array_equal(
-        spec.samples["Z_real_Ohm"], payload["samples"]["Z_real_Ohm"],
+        spec.samples["Z_real_Ohm"],
+        payload["samples"]["Z_real_Ohm"],
     )
     # Formula round-trip is verbatim
     assert spec.impedance_formula == payload["impedance_formula"]
@@ -184,24 +199,42 @@ def test_json_roundtrip_preserves_payload(tmp_path) -> None:
 
 def test_load_rejects_unknown_schema(tmp_path) -> None:
     path = tmp_path / "bad.json"
-    path.write_text(json.dumps({
-        "schema": "something.else", "schema_version": 1,
-        "name": "x", "system_type": "LV", "voltage_level": 0.4,
-        "impedance_formula": "1.0",
-        "samples": {}, "metadata": {},
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "something.else",
+                "schema_version": 1,
+                "name": "x",
+                "system_type": "LV",
+                "voltage_level": 0.4,
+                "impedance_formula": "1.0",
+                "samples": {},
+                "metadata": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="schema name"):
         load_bustype_json(path)
 
 
 def test_load_rejects_future_schema_version(tmp_path) -> None:
     path = tmp_path / "future.json"
-    path.write_text(json.dumps({
-        "schema": SCHEMA_NAME, "schema_version": SCHEMA_VERSION + 99,
-        "name": "x", "system_type": "LV", "voltage_level": 0.4,
-        "impedance_formula": "1.0",
-        "samples": {}, "metadata": {},
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "schema": SCHEMA_NAME,
+                "schema_version": SCHEMA_VERSION + 99,
+                "name": "x",
+                "system_type": "LV",
+                "voltage_level": 0.4,
+                "impedance_formula": "1.0",
+                "samples": {},
+                "metadata": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="schema_version"):
         load_bustype_json(path)
 
@@ -224,7 +257,10 @@ def test_rho_f_standard_formula_evaluates_through_groundinsight() -> None:
 
     fit = _make_rho_f_fit()
     payload = to_bustype_dict(
-        fit, name="t", system_type="LV", voltage_level=0.4,
+        fit,
+        name="t",
+        system_type="LV",
+        voltage_level=0.4,
     )
     formula = payload["impedance_formula"]
 
@@ -232,9 +268,7 @@ def test_rho_f_standard_formula_evaluates_through_groundinsight() -> None:
     f_grid = sorted(set(fit.sample_f.tolist()))
     rho_test = float(np.unique(fit.sample_rho)[0])
     Z_gi = compute_impedance(formula, f_grid, {"rho": rho_test})
-    Z_gi_arr = np.array([
-        complex(Z_gi[f].real, Z_gi[f].imag) for f in f_grid
-    ])
+    Z_gi_arr = np.array([complex(Z_gi[f].real, Z_gi[f].imag) for f in f_grid])
     # fit.evaluate reproduces Z(rho_test, f) from the same coefficients
     Z_ref = fit.evaluate(rho_test, np.asarray(f_grid))
     rel = np.max(np.abs(Z_gi_arr - Z_ref)) / np.max(np.abs(Z_ref))
@@ -247,7 +281,10 @@ def test_to_bustype_returns_groundinsight_bustype() -> None:
 
     fit = _make_rho_f_fit()
     bustype = to_bustype(
-        fit, name="t2", system_type="LV", voltage_level=0.4,
+        fit,
+        name="t2",
+        system_type="LV",
+        voltage_level=0.4,
     )
     assert isinstance(bustype, BusType)
     assert bustype.name == "t2"
@@ -263,16 +300,19 @@ def test_vector_fit_formula_evaluates_through_groundinsight() -> None:
 
     vf = _make_vector_fit()
     payload = to_bustype_dict(
-        vf, name="vf2", system_type="LV", voltage_level=0.4,
+        vf,
+        name="vf2",
+        system_type="LV",
+        voltage_level=0.4,
         rho_at_fit=100.0,
     )
     formula = payload["impedance_formula"]
 
     freqs = vf.fit_frequencies.tolist()
     Z_gi = compute_impedance(formula, freqs, {"rho": 100.0})
-    Z_gi_arr = np.array([
-        complex(Z_gi[float(f)].real, Z_gi[float(f)].imag) for f in freqs
-    ])
+    Z_gi_arr = np.array(
+        [complex(Z_gi[float(f)].real, Z_gi[float(f)].imag) for f in freqs]
+    )
     Z_ref = vf.evaluate(freqs)
     rel = np.max(np.abs(Z_gi_arr - Z_ref)) / np.max(np.abs(Z_ref))
     # Vector fit was tight (rms ~ 1e-9); allow a small rendering margin.
@@ -286,12 +326,16 @@ def test_end_to_end_bustype_into_groundinsight_bus() -> None:
 
     fit = _make_rho_f_fit()
     bustype = to_bustype(
-        fit, name="ap1_house", system_type="LV", voltage_level=0.4,
+        fit,
+        name="ap1_house",
+        system_type="LV",
+        voltage_level=0.4,
     )
     rho_for_bus = 100.0
     freqs = [50.0, 100.0, 1000.0]
     bus = Bus(
-        name="bus_1", type=bustype,
+        name="bus_1",
+        type=bustype,
         impedance={f: 0.0 + 0.0j for f in freqs},
         specific_earth_resistance=rho_for_bus,
     )
@@ -313,7 +357,10 @@ def test_end_to_end_bustype_into_groundinsight_bus() -> None:
 def test_evaluate_spec_matches_fit_evaluate() -> None:
     fit = _make_rho_f_fit()
     payload = to_bustype_dict(
-        fit, name="t3", system_type="LV", voltage_level=0.4,
+        fit,
+        name="t3",
+        system_type="LV",
+        voltage_level=0.4,
     )
     spec = BusTypeSpec.from_dict(payload)
     f_test = np.array([10.0, 100.0, 1000.0])
@@ -326,7 +373,10 @@ def test_evaluate_spec_matches_fit_evaluate() -> None:
 def test_fit_quality_summary_is_human_readable() -> None:
     fit = _make_rho_f_fit()
     payload = to_bustype_dict(
-        fit, name="t4", system_type="LV", voltage_level=0.4,
+        fit,
+        name="t4",
+        system_type="LV",
+        voltage_level=0.4,
     )
     spec = BusTypeSpec.from_dict(payload)
     summary = fit_quality_summary(spec)
@@ -347,9 +397,9 @@ def test_to_bustype_raises_clear_error_when_groundinsight_missing(
     Python-API path raises a clear ImportError; the JSON path keeps
     working."""
     # Make import groundinsight fail.
-    real_import = __builtins__["__import__"] if isinstance(
-        __builtins__, dict
-    ) else __import__
+    real_import = (
+        __builtins__["__import__"] if isinstance(__builtins__, dict) else __import__
+    )
 
     def fake_import(name, *args, **kwargs):
         if name == "groundinsight" or name.startswith("groundinsight."):
@@ -367,7 +417,10 @@ def test_to_bustype_raises_clear_error_when_groundinsight_missing(
     fit = _make_rho_f_fit()
     # JSON path stays functional
     payload = to_bustype_dict(
-        fit, name="x", system_type="LV", voltage_level=0.4,
+        fit,
+        name="x",
+        system_type="LV",
+        voltage_level=0.4,
     )
     assert payload["schema"] == SCHEMA_NAME
     # Python-API path must raise ImportError with a clear hint

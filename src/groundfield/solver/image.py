@@ -132,9 +132,7 @@ class ShallowSegmentWarning(UserWarning):
     """
 
 
-def _require_thin_wire(
-    seg_len: float, wire_radius: float, electrode_name: str
-) -> None:
+def _require_thin_wire(seg_len: float, wire_radius: float, electrode_name: str) -> None:
     """Reject segment lengths at or below the wire radius.
 
     The analytical line self-term on the reaction-matrix diagonal is
@@ -359,9 +357,7 @@ def _segment_z_extent(seg: "_Segment") -> tuple[float, float]:
     return z_mid - half, z_mid + half
 
 
-def _check_segment_depths(
-    all_segments: "list[_Segment]", *, where: str
-) -> None:
+def _check_segment_depths(all_segments: "list[_Segment]", *, where: str) -> None:
     """Validate the burial depth and extent of every leakage segment.
 
     Four regimes are distinguished (audit 2026-07-28, F26/F29;
@@ -467,10 +463,12 @@ def _check_segment_depths(
     # |e_z| of the segment tangent: 0 for a horizontal segment, 1 for a
     # vertical one. Unknown direction is treated as horizontal, which
     # makes the extent check a no-op for that segment.
-    vertical_fraction = np.array([
-        0.0 if s.direction is None else abs(float(s.direction[2]))
-        for s in all_segments
-    ])
+    vertical_fraction = np.array(
+        [
+            0.0 if s.direction is None else abs(float(s.direction[2]))
+            for s in all_segments
+        ]
+    )
 
     # Regimes 1 + 2 — midpoint checks, shared with every backend.
     _require_image_separation(
@@ -597,12 +595,8 @@ def _weighted_node_potential(
     w_sum = float(w.sum())
     if w_sum <= 0.0:
         # Defensive only: segment lengths are positive by construction.
-        return [
-            complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)
-        ]
-    return [
-        complex((w @ phi_per_freq[k][idxs]) / w_sum) for k in range(n_freq)
-    ]
+        return [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+    return [complex((w @ phi_per_freq[k][idxs]) / w_sum) for k in range(n_freq)]
 
 
 def _warn_ignored_sources(world, backend: str) -> None:
@@ -639,9 +633,9 @@ def _reject_concrete_shells(world, backend: str) -> None:
         ``concrete_shell_coefficient_ohm_m``.
     """
     shelled = [
-        e.name for e in world.electrodes
-        if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0)
-        != 0.0
+        e.name
+        for e in world.electrodes
+        if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0) != 0.0
     ]
     if shelled:
         raise NotImplementedError(
@@ -715,7 +709,9 @@ class _Segment:
 
 
 def _split_interval_at_interfaces(
-    t0: float, t1: float, interfaces,
+    t0: float,
+    t1: float,
+    interfaces,
 ) -> list[tuple[float, float]]:
     """Partition ``[t0, t1]`` at every interior interface value.
 
@@ -725,16 +721,15 @@ def _split_interval_at_interfaces(
     kernel evaluates up to ``ds/2`` of wire length with the wrong
     layer resistivity.
     """
-    cuts = sorted(
-        t for t in (interfaces or ())
-        if t0 + 1e-12 < t < t1 - 1e-12
-    )
+    cuts = sorted(t for t in (interfaces or ()) if t0 + 1e-12 < t < t1 - 1e-12)
     bounds = [t0, *cuts, t1]
     return [(bounds[k], bounds[k + 1]) for k in range(len(bounds) - 1)]
 
 
 def _discretize_rod(
-    electrode: RodElectrode, ds: float, layer_interfaces=None,
+    electrode: RodElectrode,
+    ds: float,
+    layer_interfaces=None,
 ) -> list[_Segment]:
     """Vertical driven rod into N equally long segments per layer.
 
@@ -745,7 +740,9 @@ def _discretize_rod(
     x0, y0, z0 = electrode.position
     segs: list[_Segment] = []
     parts = _split_interval_at_interfaces(
-        z0, z0 + electrode.length, layer_interfaces,
+        z0,
+        z0 + electrode.length,
+        layer_interfaces,
     )
     for z_lo, z_hi in parts:
         part_len = z_hi - z_lo
@@ -779,25 +776,27 @@ def _discretize_ring(electrode: RingElectrode, ds: float) -> list[_Segment]:
         segs.append(
             _Segment(
                 midpoint=np.array(
-                    [cx + electrode.radius * np.cos(phi),
-                     cy + electrode.radius * np.sin(phi),
-                     cz],
+                    [
+                        cx + electrode.radius * np.cos(phi),
+                        cy + electrode.radius * np.sin(phi),
+                        cz,
+                    ],
                     dtype=float,
                 ),
                 length=seg_len,
                 electrode_name=electrode.name,
                 wire_radius=electrode.wire_radius,
                 # Horizontal arc chord: |e_z| = 0.
-                direction=np.array(
-                    [-np.sin(phi), np.cos(phi), 0.0], dtype=float
-                ),
+                direction=np.array([-np.sin(phi), np.cos(phi), 0.0], dtype=float),
             )
         )
     return segs
 
 
 def _discretize_strip(
-    electrode: StripElectrode, ds: float, layer_interfaces=None,
+    electrode: StripElectrode,
+    ds: float,
+    layer_interfaces=None,
 ) -> list[_Segment]:
     """Straight strip into N equally long segments along its axis.
 
@@ -841,7 +840,9 @@ def _discretize_strip(
 
 
 def _discretize_polyline(
-    electrode: "PolylineElectrode", ds: float, layer_interfaces=None,
+    electrode: "PolylineElectrode",
+    ds: float,
+    layer_interfaces=None,
 ) -> list[_Segment]:
     """Polyline (open or closed) — one strip-style chain per edge.
 
@@ -887,7 +888,9 @@ def _discretize_polyline(
 
 
 def _discretize_star(
-    electrode: "StarElectrode", ds: float, layer_interfaces=None,
+    electrode: "StarElectrode",
+    ds: float,
+    layer_interfaces=None,
 ) -> list[_Segment]:
     """n-arm star (*Sternerder*) — one strip-style chain per radial arm.
 
@@ -1022,16 +1025,20 @@ def _discretize_mesh(electrode: MeshElectrode, ds: float) -> list[_Segment]:
     nx = max(2, int(np.round(dx / spacing)) + 1)
     ny = max(2, int(np.round(dy / spacing)) + 1)
     return _grid_segments(
-        cx=cx, cy=cy, cz=cz, dx=dx, dy=dy,
-        nx_wires=ny, ny_wires=nx,
-        ds=ds, electrode_name=electrode.name,
+        cx=cx,
+        cy=cy,
+        cz=cz,
+        dx=dx,
+        dy=dy,
+        nx_wires=ny,
+        ny_wires=nx,
+        ds=ds,
+        electrode_name=electrode.name,
         wire_radius=electrode.wire_radius,
     )
 
 
-def _discretize_grid_mesh(
-    electrode: GridMeshElectrode, ds: float
-) -> list[_Segment]:
+def _discretize_grid_mesh(electrode: GridMeshElectrode, ds: float) -> list[_Segment]:
     """Mesh earth electrode with explicit n_x × n_y meshes.
 
     The grid has ``n_x + 1`` transverse and ``n_y + 1`` longitudinal
@@ -1040,16 +1047,23 @@ def _discretize_grid_mesh(
     cx, cy, cz = electrode.corner
     dx, dy = electrode.size
     return _grid_segments(
-        cx=cx, cy=cy, cz=cz, dx=dx, dy=dy,
+        cx=cx,
+        cy=cy,
+        cz=cz,
+        dx=dx,
+        dy=dy,
         nx_wires=electrode.n_y + 1,
         ny_wires=electrode.n_x + 1,
-        ds=ds, electrode_name=electrode.name,
+        ds=ds,
+        electrode_name=electrode.name,
         wire_radius=electrode.wire_radius,
     )
 
 
 def _discretize_electrode(
-    electrode: "_ElectrodeBase", ds: float, layer_interfaces=None,
+    electrode: "_ElectrodeBase",
+    ds: float,
+    layer_interfaces=None,
 ) -> list[_Segment]:
     """Dispatch to the per-primitive discretiser.
 
@@ -1077,9 +1091,7 @@ def _discretize_electrode(
         return _discretize_grid_mesh(electrode, ds)
     if isinstance(electrode, MeshElectrode):
         return _discretize_mesh(electrode, ds)
-    raise TypeError(
-        f"Image backend does not know {type(electrode).__name__}."
-    )
+    raise TypeError(f"Image backend does not know {type(electrode).__name__}.")
 
 
 # ---------------------------------------------------------------------
@@ -1226,38 +1238,40 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
         Rs = [R_seg / 2.0] + [R_seg] * (n - 1) + [R_seg / 2.0]
         chain_nodes = [start_node] + midpoint_nodes + [end_node]
         for k, (pa, pb) in enumerate(branch_endpoints):
-            branches.append(_DistributedBranch(
-                node_a=chain_nodes[k],
-                node_b=chain_nodes[k + 1],
-                R=Rs[k],
-                p_a=pa,
-                p_b=pb,
-                wire_radius=conductor.wire_radius,
-                inductive=inductive,
-            ))
+            branches.append(
+                _DistributedBranch(
+                    node_a=chain_nodes[k],
+                    node_b=chain_nodes[k + 1],
+                    R=Rs[k],
+                    p_a=pa,
+                    p_b=pb,
+                    wire_radius=conductor.wire_radius,
+                    inductive=inductive,
+                )
+            )
     else:
         # ``isolated``: no leakage along the wire. Interior nodes are
         # anonymous; the chain is a series of n branches between the
         # two end clusters. The interior nodes do not appear in the
         # Z-matrix but participate in KCL (every interior node carries
         # zero leakage by construction).
-        interior_nodes = [
-            f"__cond_{conductor.name}__node_{k}" for k in range(1, n)
-        ]
+        interior_nodes = [f"__cond_{conductor.name}__node_{k}" for k in range(1, n)]
         nodes_chain = [start_node, *interior_nodes, end_node]
         # Geometric endpoints follow the conductor axis at the
         # sub-segment boundaries.
         node_positions = [p0 + (k * seg_len) * direction for k in range(n + 1)]
         for k in range(n):
-            branches.append(_DistributedBranch(
-                node_a=nodes_chain[k],
-                node_b=nodes_chain[k + 1],
-                R=R_seg,
-                p_a=node_positions[k],
-                p_b=node_positions[k + 1],
-                wire_radius=conductor.wire_radius,
-                inductive=inductive,
-            ))
+            branches.append(
+                _DistributedBranch(
+                    node_a=nodes_chain[k],
+                    node_b=nodes_chain[k + 1],
+                    R=R_seg,
+                    p_a=node_positions[k],
+                    p_b=node_positions[k + 1],
+                    wire_radius=conductor.wire_radius,
+                    inductive=inductive,
+                )
+            )
 
     return segments, branches
 
@@ -1389,7 +1403,8 @@ def _assemble_inductance_matrix(
 
         def _carson_at(omega: float) -> np.ndarray:
             dZ_full = np.zeros(
-                (n_total_snapshot, n_total_snapshot), dtype=complex,
+                (n_total_snapshot, n_total_snapshot),
+                dtype=complex,
             )
             if omega <= 0.0:
                 return dZ_full
@@ -1421,7 +1436,8 @@ def _assemble_inductance_matrix(
 
         def _sommerfeld_at(omega: float) -> np.ndarray:
             dZ_full = np.zeros(
-                (n_total_snapshot, n_total_snapshot), dtype=complex,
+                (n_total_snapshot, n_total_snapshot),
+                dtype=complex,
             )
             if omega <= 0.0:
                 return dZ_full
@@ -1501,11 +1517,17 @@ def _build_distributed_topology(
         for db in brs:
             ra = cluster_id.get(db.node_a, db.node_a)
             rb = cluster_id.get(db.node_b, db.node_b)
-            branches.append(_DistributedBranch(
-                node_a=ra, node_b=rb,
-                R=db.R, p_a=db.p_a, p_b=db.p_b,
-                wire_radius=db.wire_radius, inductive=db.inductive,
-            ))
+            branches.append(
+                _DistributedBranch(
+                    node_a=ra,
+                    node_b=rb,
+                    R=db.R,
+                    p_a=db.p_a,
+                    p_b=db.p_b,
+                    wire_radius=db.wire_radius,
+                    inductive=db.inductive,
+                )
+            )
             if db.node_a not in cluster_id:
                 interior_nodes.add(db.node_a)
             if db.node_b not in cluster_id:
@@ -1521,7 +1543,7 @@ def _build_distributed_topology(
 def _potential_kernel(
     field_points: np.ndarray,  # (M, 3)
     source_points: np.ndarray,  # (N, 3)
-    currents: np.ndarray,       # (N,)
+    currents: np.ndarray,  # (N,)
     rho: float,
 ) -> np.ndarray:
     """Vectorised image-charge sum — pure point-source evaluation.
@@ -1550,10 +1572,10 @@ def _potential_kernel(
 
 
 def _self_corrected_kernel(
-    seg_points: np.ndarray,    # (N, 3)
-    seg_lengths: np.ndarray,   # (N,)
-    wire_radii: np.ndarray,    # (N,)
-    currents: np.ndarray,      # (N,)
+    seg_points: np.ndarray,  # (N, 3)
+    seg_lengths: np.ndarray,  # (N,)
+    wire_radii: np.ndarray,  # (N,)
+    currents: np.ndarray,  # (N,)
     rho: float,
     *,
     owner_names: "Sequence[str] | None" = None,
@@ -1956,9 +1978,9 @@ def _solve_cluster_currents(
     # to the system only via KCL (Block 2), not via Block 1.
     all_owners = [e.name for e in electrodes] + list(pseudo_owners)
     active_elecs = [
-        n for n in all_owners
-        if cluster_id[n] in active_clusters_set
-        and len(elec_to_segidx.get(n, [])) > 0
+        n
+        for n in all_owners
+        if cluster_id[n] in active_clusters_set and len(elec_to_segidx.get(n, [])) > 0
     ]
     N_a = len(active_elecs)
 
@@ -2016,9 +2038,7 @@ def _solve_cluster_currents(
             L_j = seg_lengths[idxs_j].sum()
             # uniform per unit length, Σ = 1 A
             excitation[idxs_j, j] = seg_lengths[idxs_j] / L_j
-        phi_all = self_kernel(
-            seg_points, seg_lengths, wire_radii, excitation
-        )
+        phi_all = self_kernel(seg_points, seg_lengths, wire_radii, excitation)
         if shell_diag is not None:
             phi_all = phi_all + shell_diag[:, None] * excitation
         # Row reduction: **length-weighted** average of the segment
@@ -2104,11 +2124,7 @@ def _solve_cluster_currents(
         b_re[N_a + k] = ic.real
         b_im[N_a + k] = ic.imag
 
-    use_inductive = (
-        inductance_matrix is not None
-        and omega != 0.0
-        and M_a > 0
-    )
+    use_inductive = inductance_matrix is not None and omega != 0.0 and M_a > 0
 
     if not use_inductive:
         # Multi-RHS solve: one LU factorisation for both the real and
@@ -2123,8 +2139,7 @@ def _solve_cluster_currents(
         n_total_branches = inductance_matrix.shape[0]
         if inductance_matrix.shape != (n_total_branches, n_total_branches):
             raise ValueError(
-                f"inductance_matrix must be square, got "
-                f"{inductance_matrix.shape}."
+                f"inductance_matrix must be square, got {inductance_matrix.shape}."
             )
         if n_total_branches != len(finite_branches):
             raise ValueError(
@@ -2208,14 +2223,13 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     elec_to_segidx: dict[str, list[int]] = {}
     for e in world.electrodes:
         segs = _discretize_electrode(e, ds)
-        elec_to_segidx[e.name] = list(range(len(all_segments),
-                                            len(all_segments) + len(segs)))
+        elec_to_segidx[e.name] = list(
+            range(len(all_segments), len(all_segments) + len(segs))
+        )
         all_segments.extend(segs)
 
     # 2) Per-electrode input currents from the configured sources
-    elec_input_current: dict[str, complex] = {
-        e.name: 0j for e in world.electrodes
-    }
+    elec_input_current: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     n_ignored_sources = 0
     for src in world.sources:
         if src.kind != "current":
@@ -2277,9 +2291,7 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     # stay purely resistive and contribute zero entries). When
     # ``engine.earth_inductive_model == "carson_series"`` we also
     # receive a closure that builds dZ_carson(omega) per frequency.
-    earth_inductive_model = getattr(
-        engine, "earth_inductive_model", "perfect_mirror"
-    )
+    earth_inductive_model = getattr(engine, "earth_inductive_model", "perfect_mirror")
     sigma_earth_for_carson: float | None = None
     layered_earth_for_sommerfeld: object = None
     if earth_inductive_model == "carson_series":
@@ -2290,18 +2302,20 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth_for_sommerfeld = resolve_earth_layers(world.soil)
-    inductance_matrix_full, has_inductance, carson_builder = _assemble_inductance_matrix(
-        distributed_branches_objs,
-        n_lumped_branches=n_lumped_branches,
-        n_total_branches=len(finite_branches),
-        earth_model=earth_inductive_model,
-        sigma_earth=sigma_earth_for_carson,
-        layered_earth=layered_earth_for_sommerfeld,
+    inductance_matrix_full, has_inductance, carson_builder = (
+        _assemble_inductance_matrix(
+            distributed_branches_objs,
+            n_lumped_branches=n_lumped_branches,
+            n_total_branches=len(finite_branches),
+            earth_model=earth_inductive_model,
+            sigma_earth=sigma_earth_for_carson,
+            layered_earth=layered_earth_for_sommerfeld,
+        )
     )
 
     n_segments = len(all_segments)
     seg_points = np.array([s.midpoint for s in all_segments])  # (N, 3)
-    seg_lengths = np.array([s.length for s in all_segments])    # (N,)
+    seg_lengths = np.array([s.length for s in all_segments])  # (N,)
 
     # 3c) Burial-depth validation (audit 2026-07-28, F26/F29): the
     #     galvanic image construction needs a finite image separation
@@ -2343,7 +2357,8 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
             Per-segment current distribution (uniform per unit length).
         """
         carson_dz = (
-            carson_builder(omega) if (has_inductance and carson_builder is not None)
+            carson_builder(omega)
+            if (has_inductance and carson_builder is not None)
             else None
         )
         elec_total = _solve_cluster_currents(
@@ -2390,7 +2405,11 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
         if not stacked.any():
             return [np.zeros(n_segments, dtype=complex)] * k
         phi = _self_corrected_kernel(
-            seg_points, seg_lengths, wire_radii, stacked, rho,
+            seg_points,
+            seg_lengths,
+            wire_radii,
+            stacked,
+            rho,
         )
         # ADR-0012 V2: same shell augmentation as in
         # _solve_cluster_currents so electrode_potentials /
@@ -2431,9 +2450,7 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     for ename, idxs in elec_to_segidx.items():
         if not idxs:
             continue
-        u_list = _weighted_node_potential(
-            phi_per_freq, idxs, seg_lengths, n_freq
-        )
+        u_list = _weighted_node_potential(phi_per_freq, idxs, seg_lengths, n_freq)
         i_list = [elec_per_freq[k][ename] for k in range(n_freq)]
         if ename in real_electrode_names:
             electrode_potentials[ename] = u_list
@@ -2458,7 +2475,8 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
     cluster_members: dict[str, list[str]] = {}
     for ename in real_electrode_names:
         cluster_members[ename] = sorted(
-            n for n in cluster_id
+            n
+            for n in cluster_id
             if cluster_id[n] == cluster_id[ename] and n in real_electrode_names
         )
 
@@ -2489,8 +2507,7 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
 
         sigma_ref = 1.0 / float(world.soil.resistivity)
         metadata["penetration_depth"] = {
-            float(f): skin_depth(2.0 * np.pi * f, sigma_ref)
-            for f in engine.frequencies
+            float(f): skin_depth(2.0 * np.pi * f, sigma_ref) for f in engine.frequencies
         }
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents

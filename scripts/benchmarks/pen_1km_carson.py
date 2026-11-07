@@ -75,29 +75,52 @@ def _build_world(
     rod_len = 2.0
     rod_r = 0.0075
     # Source PEN
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5),
-                        length=rod_len, wire_radius=rod_r)
-    gf.create_electrode(w, "rod", name="g2", position=(length, 0.0, 0.5),
-                        length=rod_len, wire_radius=rod_r)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=rod_len, wire_radius=rod_r
+    )
+    gf.create_electrode(
+        w,
+        "rod",
+        name="g2",
+        position=(length, 0.0, 0.5),
+        length=rod_len,
+        wire_radius=rod_r,
+    )
     gf.create_conductor(
-        w, name="src_pen", start="g1", end="g2",
+        w,
+        name="src_pen",
+        start="g1",
+        end="g2",
         conductor_type="bare_copper",
         wire_radius=0.004,
-        resistivity=2.82e-8,         # copper
-        cross_section=50.0e-6,       # 50 mm² (typical NS PEN)
+        resistivity=2.82e-8,  # copper
+        cross_section=50.0e-6,  # 50 mm² (typical NS PEN)
         discretize_segment_length=seg,
         coupling_to_soil="galvanic",
         inductance_model="neumann",
     )
     if separation > 0.0:
-        gf.create_electrode(w, "rod", name="m1",
-                            position=(0.0, separation, 0.5),
-                            length=rod_len, wire_radius=rod_r)
-        gf.create_electrode(w, "rod", name="m2",
-                            position=(length, separation, 0.5),
-                            length=rod_len, wire_radius=rod_r)
+        gf.create_electrode(
+            w,
+            "rod",
+            name="m1",
+            position=(0.0, separation, 0.5),
+            length=rod_len,
+            wire_radius=rod_r,
+        )
+        gf.create_electrode(
+            w,
+            "rod",
+            name="m2",
+            position=(length, separation, 0.5),
+            length=rod_len,
+            wire_radius=rod_r,
+        )
         gf.create_conductor(
-            w, name="meas_pen", start="m1", end="m2",
+            w,
+            name="meas_pen",
+            start="m1",
+            end="m2",
             conductor_type="bare_copper",
             wire_radius=0.004,
             resistivity=2.82e-8,
@@ -116,8 +139,13 @@ def _build_world(
 
 
 def textbook_self_impedance_per_m(
-    *, omega: float, depth: float, wire_radius: float,
-    rho_material: float, cross_section: float, sigma_earth: float,
+    *,
+    omega: float,
+    depth: float,
+    wire_radius: float,
+    rho_material: float,
+    cross_section: float,
+    sigma_earth: float,
 ) -> complex:
     """Per-m self-impedance of a horizontal buried PEN.
 
@@ -145,8 +173,12 @@ def textbook_self_impedance_per_m(
 
 
 def textbook_mutual_impedance_per_m(
-    *, omega: float, depth_i: float, depth_j: float,
-    horizontal_distance: float, sigma_earth: float,
+    *,
+    omega: float,
+    depth_i: float,
+    depth_j: float,
+    horizontal_distance: float,
+    sigma_earth: float,
 ) -> complex:
     """Per-m mutual impedance between two parallel buried wires.
 
@@ -164,7 +196,11 @@ def textbook_mutual_impedance_per_m(
         D = 1e-9
     L_per_m_perfect = (MU_0 / (2.0 * math.pi)) * math.log(D_prime / D)
     Z_carson = carson_mutual_correction(
-        omega, depth_i, depth_j, horizontal_distance, sigma_earth,
+        omega,
+        depth_i,
+        depth_j,
+        horizontal_distance,
+        sigma_earth,
     )
     return complex(Z_carson.real, omega * L_per_m_perfect + Z_carson.imag)
 
@@ -178,8 +214,13 @@ _BACKENDS = ("image", "mom", "cim", "bem")
 
 
 def run_cross_engine_table(
-    *, length: float, separation: float, depth: float,
-    rho_earth: float, seg: float, frequencies: list[float],
+    *,
+    length: float,
+    separation: float,
+    depth: float,
+    rho_earth: float,
+    seg: float,
+    frequencies: list[float],
 ) -> str:
     """Build the Markdown table comparing engines and theory."""
     sigma = 1.0 / rho_earth
@@ -190,9 +231,7 @@ def run_cross_engine_table(
         f"- Length: **{length:.0f} m**, depth: **{depth:.2f} m**, "
         f"separation: **{separation:.0f} m**"
     )
-    out.append(
-        f"- Earth: ρ = {rho_earth:.0f} Ω·m  →  σ = {sigma:.4f} S/m"
-    )
+    out.append(f"- Earth: ρ = {rho_earth:.0f} Ω·m  →  σ = {sigma:.4f} S/m")
     out.append("")
     out.append("Skin depth δ(ω) = √(2/(ω·μ₀·σ)):")
     out.append("")
@@ -219,10 +258,17 @@ def run_cross_engine_table(
         cells = [backend]
         for f in frequencies:
             try:
-                w = _build_world(length=length, separation=separation,
-                                 depth=depth, rho_earth=rho_earth, seg=seg)
+                w = _build_world(
+                    length=length,
+                    separation=separation,
+                    depth=depth,
+                    rho_earth=rho_earth,
+                    seg=seg,
+                )
                 eng = gf.create_engine(
-                    backend=backend, segment_length=seg, frequencies=[f],
+                    backend=backend,
+                    segment_length=seg,
+                    frequencies=[f],
                     earth_inductive_model="carson_series",
                 )
                 t0 = time.perf_counter()
@@ -234,9 +280,7 @@ def run_cross_engine_table(
                     cells.append("(I = 0)")
                 else:
                     Z = U / I
-                    cells.append(
-                        f"{Z.real:.4f} + j {Z.imag:.4f} Ω ({dt:.2f} s)"
-                    )
+                    cells.append(f"{Z.real:.4f} + j {Z.imag:.4f} Ω ({dt:.2f} s)")
             except Exception as exc:  # noqa: BLE001 — informational
                 cells.append(f"err: {exc.__class__.__name__}")
         out.append("| " + " | ".join(cells) + " |")
@@ -248,15 +292,28 @@ def run_cross_engine_table(
     out.append("|---:|---|---|")
     for f in frequencies:
         omega = 2.0 * math.pi * f
-        Z_self = textbook_self_impedance_per_m(
-            omega=omega, depth=depth, wire_radius=0.004,
-            rho_material=2.82e-8, cross_section=50.0e-6, sigma_earth=sigma,
-        ) * 1000.0
+        Z_self = (
+            textbook_self_impedance_per_m(
+                omega=omega,
+                depth=depth,
+                wire_radius=0.004,
+                rho_material=2.82e-8,
+                cross_section=50.0e-6,
+                sigma_earth=sigma,
+            )
+            * 1000.0
+        )
         if separation > 0.0:
-            Z_12 = textbook_mutual_impedance_per_m(
-                omega=omega, depth_i=depth, depth_j=depth,
-                horizontal_distance=separation, sigma_earth=sigma,
-            ) * 1000.0
+            Z_12 = (
+                textbook_mutual_impedance_per_m(
+                    omega=omega,
+                    depth_i=depth,
+                    depth_j=depth,
+                    horizontal_distance=separation,
+                    sigma_earth=sigma,
+                )
+                * 1000.0
+            )
             mut_cell = f"{Z_12.real:.4f} + j {Z_12.imag:.4f}"
         else:
             mut_cell = "—"
@@ -264,9 +321,11 @@ def run_cross_engine_table(
             f"| {f:.1f} | {Z_self.real:.4f} + j {Z_self.imag:.4f} | {mut_cell} |"
         )
     out.append("")
-    out.append("> Closed-form decomposition: "
-               "$Z' = R_\\text{dc} + j\\omega L_\\text{perfect mirror} + "
-               "\\Delta Z_\\text{Carson}(\\omega, h_i, h_j, d, \\sigma)$.")
+    out.append(
+        "> Closed-form decomposition: "
+        "$Z' = R_\\text{dc} + j\\omega L_\\text{perfect mirror} + "
+        "\\Delta Z_\\text{Carson}(\\omega, h_i, h_j, d, \\sigma)$."
+    )
     out.append("> See ADR-0005 for the derivation and limitations.")
 
     return "\n".join(out)
@@ -287,14 +346,19 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--rho", type=float, default=100.0)
     p.add_argument("--seg", type=float, default=50.0)
     p.add_argument(
-        "--frequencies", type=float, nargs="+",
+        "--frequencies",
+        type=float,
+        nargs="+",
         default=[50.0, 150.0, 500.0, 1000.0],
     )
     args = p.parse_args(argv)
 
     md = run_cross_engine_table(
-        length=args.length, separation=args.separation,
-        depth=args.depth, rho_earth=args.rho, seg=args.seg,
+        length=args.length,
+        separation=args.separation,
+        depth=args.depth,
+        rho_earth=args.rho,
+        seg=args.seg,
         frequencies=list(args.frequencies),
     )
     print(md)

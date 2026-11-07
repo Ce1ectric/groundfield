@@ -37,8 +37,12 @@ def _single_rod_world(*, rho: float = 100.0, length: float = 1.5) -> gf.World:
     soil = gf.HomogeneousSoil(resistivity=rho)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1",
-        position=(0.0, 0.0, 0.5), length=length, wire_radius=0.005,
+        world,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=length,
+        wire_radius=0.005,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     return world
@@ -70,7 +74,9 @@ def test_convergence_study_approaches_sunde() -> None:
     world = _single_rod_world(rho=rho, length=L)
     eng = gf.create_engine(backend="image", segment_length=0.5)
     df = convergence_study(
-        world, eng, segment_lengths=[0.5, 0.2, 0.1, 0.05, 0.02],
+        world,
+        eng,
+        segment_lengths=[0.5, 0.2, 0.1, 0.05, 0.02],
     )
 
     df = df.sort_values("segment_length_m", ascending=False).reset_index(drop=True)
@@ -79,13 +85,11 @@ def test_convergence_study_approaches_sunde() -> None:
     rel_err = abs(Zs[-1] - R_sunde) / R_sunde
     assert rel_err < 0.05, (
         f"Z_finest = {Zs[-1]:.3f} Ω, R_sunde = {R_sunde:.3f} Ω, "
-        f"rel error = {rel_err*100:.1f} %"
+        f"rel error = {rel_err * 100:.1f} %"
     )
     # And the error must decrease monotonically with refinement.
     rel_errs = np.abs(Zs - R_sunde) / R_sunde
-    assert (np.diff(rel_errs) <= 1e-6).all(), (
-        f"convergence is not monotone: {rel_errs}"
-    )
+    assert (np.diff(rel_errs) <= 1e-6).all(), f"convergence is not monotone: {rel_errs}"
 
 
 def test_convergence_study_does_not_mutate_engine() -> None:
@@ -119,7 +123,9 @@ def test_convergence_study_multi_frequency() -> None:
     """rows = len(segment_lengths) * len(frequencies)."""
     world = _single_rod_world()
     eng = gf.create_engine(
-        backend="image", segment_length=0.5, frequencies=[50.0, 200.0],
+        backend="image",
+        segment_length=0.5,
+        frequencies=[50.0, 200.0],
     )
     df = convergence_study(world, eng, segment_lengths=[0.2, 0.1, 0.05])
     assert len(df) == 3 * 2
@@ -143,7 +149,9 @@ def test_plot_convergence_smoke_single_frequency() -> None:
 def test_plot_convergence_smoke_multi_frequency() -> None:
     world = _single_rod_world()
     eng = gf.create_engine(
-        backend="image", segment_length=0.5, frequencies=[50.0, 200.0],
+        backend="image",
+        segment_length=0.5,
+        frequencies=[50.0, 200.0],
     )
     df = convergence_study(world, eng, segment_lengths=[0.5, 0.2, 0.1])
     fig = plot_convergence(df, response="abs_Z")

@@ -57,10 +57,8 @@ def _pollaczek_mutual_per_m(omega, sigma, x, h1, h2):
         return val.real if part == "re" else val.imag
 
     J = (
-        2.0 * quad(lambda t: _f(t, "re") * math.cos(t * x), 0, np.inf,
-                   limit=400)[0]
-        + 2j * quad(lambda t: _f(t, "im") * math.cos(t * x), 0, np.inf,
-                    limit=400)[0]
+        2.0 * quad(lambda t: _f(t, "re") * math.cos(t * x), 0, np.inf, limit=400)[0]
+        + 2j * quad(lambda t: _f(t, "im") * math.cos(t * x), 0, np.inf, limit=400)[0]
     )
     return 1j * omega * MU_0 / (2 * np.pi) * (kv(0, g * d) - kv(0, g * D) + J)
 
@@ -81,9 +79,12 @@ def test_buried_pair_reproduces_pollaczek_mutual() -> None:
     a = np.array([[-0.5, 0.0, h], [0.5, 0.0, h]])
     dz = sum(
         sommerfeld_pair_integral_homogeneous(
-            a[0], a[1],
-            np.array([edges[k], x, h]), np.array([edges[k + 1], x, h]),
-            omega=omega, sigma_earth=sigma,
+            a[0],
+            a[1],
+            np.array([edges[k], x, h]),
+            np.array([edges[k + 1], x, h]),
+            omega=omega,
+            sigma_earth=sigma,
         )
         for k in range(len(edges) - 1)
     )
@@ -92,8 +93,7 @@ def test_buried_pair_reproduces_pollaczek_mutual() -> None:
         for k in range(len(edges) - 1)
     ]
     eps = np.stack([a] + segs)
-    L = build_inductance_matrix(eps, np.full(len(eps), 0.005),
-                                use_image=True)
+    L = build_inductance_matrix(eps, np.full(len(eps), 0.005), use_image=True)
     z_pkg = 1j * omega * L[0, 1:].sum() + dz
 
     z_ref = _pollaczek_mutual_per_m(omega, sigma, x, h, h)
@@ -123,7 +123,12 @@ def test_sigma_infinite_overhead_recovers_pec_anti_image() -> None:
     omega = 2 * np.pi * 50.0
     a, b = _parallel_pair(z=-10.0)
     dz = sommerfeld_pair_integral_homogeneous(
-        a[0], a[1], b[0], b[1], omega=omega, sigma_earth=1e9,
+        a[0],
+        a[1],
+        b[0],
+        b[1],
+        omega=omega,
+        sigma_earth=1e9,
     )
     eps = np.stack([a, b])
     radii = np.array([0.005, 0.005])
@@ -140,7 +145,12 @@ def test_sigma_zero_cancels_the_additive_mirror() -> None:
     for z in (+0.7, -10.0):  # buried and overhead
         a, b = _parallel_pair(z=z)
         dz = sommerfeld_pair_integral_homogeneous(
-            a[0], a[1], b[0], b[1], omega=omega, sigma_earth=1e-12,
+            a[0],
+            a[1],
+            b[0],
+            b[1],
+            omega=omega,
+            sigma_earth=1e-12,
         )
         eps = np.stack([a, b])
         radii = np.array([0.005, 0.005])
@@ -160,11 +170,13 @@ def _carson_total_straight_wire(n_seg: int, omega: float) -> complex:
     all segments in series (uniform current) → scalar total."""
     edges = np.linspace(0.0, 100.0, n_seg + 1)
     eps = np.array(
-        [[[edges[k], 0.0, 0.7], [edges[k + 1], 0.0, 0.7]]
-         for k in range(n_seg)]
+        [[[edges[k], 0.0, 0.7], [edges[k + 1], 0.0, 0.7]] for k in range(n_seg)]
     )
     dz = build_carson_correction_matrix(
-        eps, np.full(n_seg, 0.005), omega=omega, sigma_earth=0.01,
+        eps,
+        np.full(n_seg, 0.005),
+        omega=omega,
+        sigma_earth=0.01,
     )
     return complex(dz.sum())
 
@@ -189,15 +201,15 @@ def test_carson_matrix_parallel_wires_tiling() -> None:
     def cross_sum(n_a: int, n_b: int) -> complex:
         ea = np.linspace(0.0, 100.0, n_a + 1)
         eb = np.linspace(0.0, 100.0, n_b + 1)
-        segs = (
-            [[[ea[k], 0.0, 0.7], [ea[k + 1], 0.0, 0.7]]
-             for k in range(n_a)]
-            + [[[eb[k], 8.0, 0.7], [eb[k + 1], 8.0, 0.7]]
-               for k in range(n_b)]
-        )
+        segs = [[[ea[k], 0.0, 0.7], [ea[k + 1], 0.0, 0.7]] for k in range(n_a)] + [
+            [[eb[k], 8.0, 0.7], [eb[k + 1], 8.0, 0.7]] for k in range(n_b)
+        ]
         eps = np.array(segs)
         dz = build_carson_correction_matrix(
-            eps, np.full(n_a + n_b, 0.005), omega=omega, sigma_earth=sigma,
+            eps,
+            np.full(n_a + n_b, 0.005),
+            omega=omega,
+            sigma_earth=sigma,
         )
         return complex(dz[:n_a, n_a:].sum())
 
@@ -210,21 +222,31 @@ def test_carson_solver_level_mesh_convergence() -> None:
     """End-to-end: the branch current with carson_series active is
     invariant under PEN refinement (the audit measured a drift by a
     factor ~2.5 between dsl = 50 m and 6.25 m)."""
+
     def run(dsl: float) -> complex:
         w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-        g1 = gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.7),
-                                 length=3.0, wire_radius=0.005)
-        g2 = gf.create_electrode(w, "rod", name="g2",
-                                 position=(100.0, 0, 0.7),
-                                 length=3.0, wire_radius=0.005)
-        gf.create_conductor(w, name="pen", start=g1, end=g2,
-                            cross_section=50e-6,
-                            discretize_segment_length=dsl,
-                            inductance_model="neumann")
+        g1 = gf.create_electrode(
+            w, "rod", name="g1", position=(0, 0, 0.7), length=3.0, wire_radius=0.005
+        )
+        g2 = gf.create_electrode(
+            w, "rod", name="g2", position=(100.0, 0, 0.7), length=3.0, wire_radius=0.005
+        )
+        gf.create_conductor(
+            w,
+            name="pen",
+            start=g1,
+            end=g2,
+            cross_section=50e-6,
+            discretize_segment_length=dsl,
+            inductance_model="neumann",
+        )
         gf.create_source(w, attached_to="g1", magnitude=1.0)
-        eng = gf.create_engine(backend="image", segment_length=0.5,
-                               frequencies=[1000.0],
-                               earth_inductive_model="carson_series")
+        eng = gf.create_engine(
+            backend="image",
+            segment_length=0.5,
+            frequencies=[1000.0],
+            earth_inductive_model="carson_series",
+        )
         return eng.solve(w).electrode_currents["g2"][0]
 
     i_coarse = run(50.0)

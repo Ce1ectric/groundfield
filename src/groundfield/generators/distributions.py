@@ -126,8 +126,7 @@ class Uniform(Distribution):
     def _check_bounds(self) -> "Uniform":
         if not (self.high > self.low):
             raise ValueError(
-                f"Uniform: high must exceed low (got low={self.low}, "
-                f"high={self.high})"
+                f"Uniform: high must exceed low (got low={self.low}, high={self.high})"
             )
         return self
 

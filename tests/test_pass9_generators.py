@@ -89,9 +89,7 @@ def _footprint(polygon, osm_id=1):
 def _counts_config(pairs) -> TnNetworkConfig:
     """Config whose ``building_counts`` keys follow ``pairs`` order."""
     return TnNetworkConfig(
-        building_counts={
-            name: Discrete(values=list(values)) for name, values in pairs
-        },
+        building_counts={name: Discrete(values=list(values)) for name, values in pairs},
     )
 
 
@@ -164,8 +162,7 @@ def test_f33_unknown_type_error_is_order_independent() -> None:
 def _foundation_grounding(offset=(0.0, 0.0)) -> GroundingSystemSpec:
     return GroundingSystemSpec(
         electrodes=[
-            FoundationElectrodeSpec(size_m=10.0, n_x=2, n_y=2,
-                                    offset_xy_m=offset),
+            FoundationElectrodeSpec(size_m=10.0, n_x=2, n_y=2, offset_xy_m=offset),
         ],
     )
 
@@ -178,7 +175,9 @@ def _foundation_grounding(offset=(0.0, 0.0)) -> GroundingSystemSpec:
     ],
 )
 def test_f25_offset_recentres_on_ombr(
-    polygon, expected_centre, expected_shift,
+    polygon,
+    expected_centre,
+    expected_shift,
 ) -> None:
     """``offset_xy_m`` compensates centroid -> OMBR-centre offset.
 
@@ -202,9 +201,7 @@ def test_f25_offset_recentres_on_ombr(
         centroid[1] + foundation.offset_xy_m[1],
     )
     assert placed == pytest.approx(expected_centre)
-    assert math.hypot(*foundation.offset_xy_m) == pytest.approx(
-        expected_shift
-    )
+    assert math.hypot(*foundation.offset_xy_m) == pytest.approx(expected_shift)
 
 
 def test_f25_user_offset_is_preserved_not_overwritten() -> None:
@@ -213,7 +210,8 @@ def test_f25_user_offset_is_preserved_not_overwritten() -> None:
     centroid = fp.centroid_xy_m()
     user = (1.5, -2.5)
     spec = _override_foundation_from_footprint(
-        _foundation_grounding(offset=user), fp,
+        _foundation_grounding(offset=user),
+        fp,
     )
     off = spec.electrodes[0].offset_xy_m
     assert (centroid[0] + off[0], centroid[1] + off[1]) == pytest.approx(
@@ -225,7 +223,9 @@ def test_f25_explicit_site_xy_is_honoured() -> None:
     """Passing the site position removes the centroid assumption."""
     fp = _footprint(L_SHAPE)
     spec = _override_foundation_from_footprint(
-        _foundation_grounding(), fp, (10.0, 11.0),
+        _foundation_grounding(),
+        fp,
+        (10.0, 11.0),
     )
     assert spec.electrodes[0].offset_xy_m == pytest.approx((0.0, 0.0))
 
@@ -234,9 +234,7 @@ def test_f25_symmetric_footprint_needs_no_shift() -> None:
     """For a rectangle, centroid == OMBR centre -> zero offset."""
     fp = _footprint([(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (0.0, 10.0)])
     spec = _override_foundation_from_footprint(_foundation_grounding(), fp)
-    assert spec.electrodes[0].offset_xy_m == pytest.approx(
-        (0.0, 0.0), abs=1e-9
-    )
+    assert spec.electrodes[0].offset_xy_m == pytest.approx((0.0, 0.0), abs=1e-9)
 
 
 def test_f25_built_world_foundation_sits_on_the_ombr() -> None:
@@ -251,7 +249,8 @@ def test_f25_built_world_foundation_sits_on_the_ombr() -> None:
     fp = _footprint(L_SHAPE)
     catalog = [
         BuildingTypeSpec(
-            name="residential", grounding=_foundation_grounding(),
+            name="residential",
+            grounding=_foundation_grounding(),
         ),
     ]
     cfg = TnNetworkConfig(
@@ -409,10 +408,6 @@ def test_f42_bridge_error_message_mentions_escape_radius() -> None:
 def test_f42_route_is_deterministic() -> None:
     """Repeated calls return the identical polyline (no RNG, no sets)."""
     kwargs = dict(grid_size=10.0, clearance_m=0.5, escape_radius_m=25.0)
-    first = route_manhattan(
-        BRIDGE_START, BRIDGE_END, [BRIDGE_OBSTACLE], **kwargs
-    )
-    second = route_manhattan(
-        BRIDGE_START, BRIDGE_END, [BRIDGE_OBSTACLE], **kwargs
-    )
+    first = route_manhattan(BRIDGE_START, BRIDGE_END, [BRIDGE_OBSTACLE], **kwargs)
+    second = route_manhattan(BRIDGE_START, BRIDGE_END, [BRIDGE_OBSTACLE], **kwargs)
     assert first == second

@@ -79,9 +79,11 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
         cx, cy, cz = e.center
         theta = np.linspace(0.0, 2.0 * np.pi, 64)
         ring = np.column_stack(
-            [cx + e.radius * np.cos(theta),
-             cy + e.radius * np.sin(theta),
-             np.full_like(theta, cz)]
+            [
+                cx + e.radius * np.cos(theta),
+                cy + e.radius * np.sin(theta),
+                np.full_like(theta, cz),
+            ]
         )
         return [ring]
     if isinstance(e, StripElectrode):
@@ -93,8 +95,7 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
         return [np.array(pts, dtype=float)]
     if isinstance(e, StarElectrode):
         return [
-            np.array([list(start), list(end)], dtype=float)
-            for start, end in e.edges
+            np.array([list(start), list(end)], dtype=float) for start, end in e.edges
         ]
     if isinstance(e, GridMeshElectrode):
         cx, cy, cz = e.corner
@@ -116,16 +117,22 @@ def _polylines_for_electrode(e) -> list[np.ndarray]:
         # require us to mirror the discretiser; not worth the
         # complexity for an on-disk visualisation).
         rect = np.array(
-            [[cx, cy, cz], [cx + dx, cy, cz],
-             [cx + dx, cy + dy, cz], [cx, cy + dy, cz],
-             [cx, cy, cz]],
+            [
+                [cx, cy, cz],
+                [cx + dx, cy, cz],
+                [cx + dx, cy + dy, cz],
+                [cx, cy + dy, cz],
+                [cx, cy, cz],
+            ],
             dtype=float,
         )
         return [rect]
     return []  # pragma: no cover - defensive
 
 
-def _format_lines_block(polylines: list[np.ndarray], pad: int = 0) -> tuple[list[np.ndarray], list[list[int]], int]:
+def _format_lines_block(
+    polylines: list[np.ndarray], pad: int = 0
+) -> tuple[list[np.ndarray], list[list[int]], int]:
     """Return ``(points, line_indices, total_n_points)`` for VTK LINES."""
     points: list[np.ndarray] = []
     lines: list[list[int]] = []
@@ -270,8 +277,7 @@ def export_field_vtk(
     x_min, x_max, y_min, y_max = extent
     if x_max <= x_min or y_max <= y_min:
         raise ValueError(
-            f"extent must satisfy x_max > x_min and y_max > y_min, "
-            f"got {extent!r}."
+            f"extent must satisfy x_max > x_min and y_max > y_min, got {extent!r}."
         )
     n_x, n_y = n
     if n_x < 2 or n_y < 2:
@@ -280,9 +286,7 @@ def export_field_vtk(
     xs = np.linspace(float(x_min), float(x_max), int(n_x))
     ys = np.linspace(float(y_min), float(y_max), int(n_y))
     X, Y = np.meshgrid(xs, ys, indexing="xy")
-    pts = np.column_stack(
-        [X.ravel(), Y.ravel(), np.full(X.size, float(z))]
-    )
+    pts = np.column_stack([X.ravel(), Y.ravel(), np.full(X.size, float(z))])
     phi = result.potential(pts, frequency_index=frequency_index)
     phi = phi.reshape(X.shape)
 
@@ -293,8 +297,7 @@ def export_field_vtk(
     buf = StringIO()
     buf.write("# vtk DataFile Version 3.0\n")
     buf.write(
-        f"groundfield potential @ z={z} m, "
-        f"f={result.frequencies[frequency_index]} Hz\n"
+        f"groundfield potential @ z={z} m, f={result.frequencies[frequency_index]} Hz\n"
     )
     buf.write("ASCII\n")
     buf.write("DATASET STRUCTURED_POINTS\n")

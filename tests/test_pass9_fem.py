@@ -101,8 +101,12 @@ def _rod_world(soil) -> gf.World:
     """Single-rod world used as the reference geometry."""
     w = gf.create_world(soil=soil)
     gf.create_electrode(
-        w, "rod", name="g1", position=(0.0, 0.0, 0.0),
-        length=ROD_LENGTH, wire_radius=ROD_RADIUS,
+        w,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.0),
+        length=ROD_LENGTH,
+        wire_radius=ROD_RADIUS,
     )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
@@ -161,10 +165,20 @@ def test_fem_homogeneous_matches_analytic_hemisphere() -> None:
     [
         ("rod", dict(position=(0.0, 0.0, 0.0), length=1.5, wire_radius=0.005)),
         ("ring", dict(center=(0.0, 0.0, -0.8), radius=5.0, wire_radius=0.006)),
-        ("strip", dict(start=(0.0, 0.0, -0.7), end=(20.0, 0.0, -0.7),
-                       wire_radius=0.005)),
-        ("grid_mesh", dict(corner=(0.0, 0.0, -0.7), size=(20.0, 20.0),
-                           n_x=3, n_y=3, wire_radius=0.005)),
+        (
+            "strip",
+            dict(start=(0.0, 0.0, -0.7), end=(20.0, 0.0, -0.7), wire_radius=0.005),
+        ),
+        (
+            "grid_mesh",
+            dict(
+                corner=(0.0, 0.0, -0.7),
+                size=(20.0, 20.0),
+                n_x=3,
+                n_y=3,
+                wire_radius=0.005,
+            ),
+        ),
     ],
 )
 def test_fem_analytic_hemisphere_across_geometries(kind: str, kwargs) -> None:
@@ -208,9 +222,9 @@ def test_fem_refinement_converges_monotonically_second_order() -> None:
     # (a) one-sided from below at every level
     assert all(e < 0.0 for e in errors), errors
     # (b) strictly shrinking
-    assert all(
-        abs(errors[i + 1]) < abs(errors[i]) for i in range(len(errors) - 1)
-    ), errors
+    assert all(abs(errors[i + 1]) < abs(errors[i]) for i in range(len(errors) - 1)), (
+        errors
+    )
     # (c) observed order of convergence ≈ 2 (measured 1.97 / 1.99)
     orders = [
         math.log(abs(errors[i]) / abs(errors[i + 1]), 2.0)
@@ -307,17 +321,16 @@ def _assert_electrode_is_closed(mesh, a_eq: float) -> None:
     #     leftover violated.
     bnd = _boundary_edges(mesh.triangles)
     on_elec = bnd[
-        (r[bnd[:, 0]] <= a_eq * (1.0 + tol))
-        & (r[bnd[:, 1]] <= a_eq * (1.0 + tol))
+        (r[bnd[:, 0]] <= a_eq * (1.0 + tol)) & (r[bnd[:, 1]] <= a_eq * (1.0 + tol))
     ]
     assert on_elec.shape[0] > 0
     bad = [
-        (int(ia), int(ib)) for ia, ib in on_elec
+        (int(ia), int(ib))
+        for ia, ib in on_elec
         if int(ia) not in inner or int(ib) not in inner
     ]
     assert not bad, (
-        f"{len(bad)} electrode boundary edges have a non-Dirichlet "
-        f"endpoint: {bad[:5]}"
+        f"{len(bad)} electrode boundary edges have a non-Dirichlet endpoint: {bad[:5]}"
     )
 
     # (d) those edges form a single open path covering the whole
@@ -342,15 +355,15 @@ A_EQ_ROD = 0.2463023
 @pytest.mark.parametrize(
     "h_layers",
     [
-        [],                                  # no cut at all
-        [0.05],                              # 0.20 a_eq — cuts a chord
-        [0.1],                               # 0.41 a_eq — cuts a chord
-        [0.5 * A_EQ_ROD],                    # exactly on a node depth
-        [A_EQ_ROD],                          # exactly at the pole
-        [2.0 * A_EQ_ROD],                    # below the electrode
-        [0.05, 0.1],                         # two cuts inside a_eq
-        [0.1, 0.5],                          # one inside, one below
-        [0.02, 0.03, 0.05, 1.0],             # three inside
+        [],  # no cut at all
+        [0.05],  # 0.20 a_eq — cuts a chord
+        [0.1],  # 0.41 a_eq — cuts a chord
+        [0.5 * A_EQ_ROD],  # exactly on a node depth
+        [A_EQ_ROD],  # exactly at the pole
+        [2.0 * A_EQ_ROD],  # below the electrode
+        [0.05, 0.1],  # two cuts inside a_eq
+        [0.1, 0.5],  # one inside, one below
+        [0.02, 0.03, 0.05, 1.0],  # three inside
     ],
 )
 def test_fem_electrode_boundary_is_closed_under_interface_cuts(h_layers) -> None:
@@ -415,7 +428,11 @@ def test_fem_electrode_closed_for_a_large_mesh_electrode(h_1: float) -> None:
 
     w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=RHO))
     gf.create_electrode(
-        w, "mesh", name="g1", corner=(0.0, 0.0, -0.7), size=(100.0, 100.0),
+        w,
+        "mesh",
+        name="g1",
+        corner=(0.0, 0.0, -0.7),
+        size=(100.0, 100.0),
         wire_radius=0.005,
     )
     a_eq = equivalent_hemisphere_radius(w.get_electrode("g1"), rho_top=RHO)
@@ -547,9 +564,9 @@ def test_fem_uniform_rho_sweep_is_flat_and_ordered() -> None:
     assert spread < 1.0e-2, [f"{v:.4f}" for v in values]
     # A larger declared thickness can only cost resolution, never gain
     # it, so the sequence is (weakly) decreasing.
-    assert all(
-        values[i + 1] <= values[i] + 1e-9 for i in range(len(values) - 1)
-    ), [f"{v:.4f}" for v in values]
+    assert all(values[i + 1] <= values[i] + 1e-9 for i in range(len(values) - 1)), [
+        f"{v:.4f}" for v in values
+    ]
 
 
 @pytest.mark.parametrize("h_1", [2.0, 5.0, 10.0])
@@ -596,7 +613,9 @@ def test_fem_two_layer_contrast_is_ordered_around_homogeneous(
     R_low, _ = _fem(_rod_world(gf.TwoLayerSoil(rho_1=RHO, rho_2=10.0, h_1=5.0)))
     R_high, _ = _fem(_rod_world(gf.TwoLayerSoil(rho_1=RHO, rho_2=400.0, h_1=5.0)))
     assert R_low < homogeneous_reference < R_high, (
-        R_low, homogeneous_reference, R_high
+        R_low,
+        homogeneous_reference,
+        R_high,
     )
 
 
@@ -640,9 +659,7 @@ def test_fem_grounded_truncation_is_biased_low_and_selectable() -> None:
     """
     world = _rod_world(gf.HomogeneousSoil(resistivity=RHO))
     R_robin, R_exact = _fem(world, r_far_factor=10.0, z_far_factor=10.0)
-    R_dir, _ = _fem(
-        world, r_far_factor=10.0, z_far_factor=10.0, far_field="dirichlet"
-    )
+    R_dir, _ = _fem(world, r_far_factor=10.0, z_far_factor=10.0, far_field="dirichlet")
     assert R_dir < R_robin < R_exact
     # a_eq / r_far = 1/10 of the way; measured -2.1 % against -0.14 %.
     assert (R_exact - R_dir) / R_exact > 5.0 * (R_exact - R_robin) / R_exact
@@ -734,9 +751,17 @@ def test_fem_z_far_factor_override_is_announced(caplog) -> None:
 @pytest.mark.parametrize(
     "h_layers",
     [
-        [], [2.0], [0.2463023], [1e-3], [0.7, 12.0], [100.0], [5.0, 5.0, 5.0],
+        [],
+        [2.0],
+        [0.2463023],
+        [1e-3],
+        [0.7, 12.0],
+        [100.0],
+        [5.0, 5.0, 5.0],
         # interface depths that cut *through* the electrode polyline
-        [0.05], [0.1], [0.05, 0.1, 3.0],
+        [0.05],
+        [0.1],
+        [0.05, 0.1, 3.0],
     ],
 )
 def test_fem_mesh_is_conforming_and_closes_the_domain(h_layers) -> None:
@@ -819,9 +844,7 @@ def test_fem_interface_cut_slivers_are_bounded_and_harmless() -> None:
 
     def build(h_layers: list[float]):
         base = a_eq + (sum(h_layers) if h_layers else 1.0)
-        return _build_axisymmetric_mesh(
-            a_eq, list(h_layers), r_far_factor=r_far / base
-        )
+        return _build_axisymmetric_mesh(a_eq, list(h_layers), r_far_factor=r_far / base)
 
     def quality(mesh) -> tuple[float, float, int]:
         v = mesh.nodes[mesh.triangles]
@@ -834,16 +857,16 @@ def test_fem_interface_cut_slivers_are_bounded_and_harmless() -> None:
             + (v[:, [1, 2, 0], 1] - v[:, [0, 1, 2], 1]) ** 2
         ).sum(axis=1)
         ok = area > 0.0
-        return float((per[ok] / area[ok]).max()), float(area[ok].min()), int(
-            (~ok).sum()
+        return (
+            float((per[ok] / area[ok]).max()),
+            float(area[ok].min()),
+            int((~ok).sum()),
         )
 
     base_mesh = build([])
     q_uncut, _, _ = quality(base_mesh)
     assert q_uncut < 25.0, q_uncut  # O(1) — this part of the claim holds
-    R_uncut = 1.0 / _solve_hemisphere_conductance(
-        base_mesh, np.array([1.0 / RHO]), []
-    )
+    R_uncut = 1.0 / _solve_hemisphere_conductance(base_mesh, np.array([1.0 / RHO]), [])
 
     depths = [
         float(z + eps * max(z, a_eq))
@@ -856,10 +879,12 @@ def test_fem_interface_cut_slivers_are_bounded_and_harmless() -> None:
     for d in depths:
         mesh = build([d])
         q, a_min, nz = quality(mesh)
-        worst_q, worst_area, n_zero = max(worst_q, q), min(worst_area, a_min), n_zero + nz
-        R = 1.0 / _solve_hemisphere_conductance(
-            mesh, np.full(2, 1.0 / RHO), [d]
+        worst_q, worst_area, n_zero = (
+            max(worst_q, q),
+            min(worst_area, a_min),
+            n_zero + nz,
         )
+        R = 1.0 / _solve_hemisphere_conductance(mesh, np.full(2, 1.0 / RHO), [d])
         rels.append((R - R_exact) / R_exact)
     # the slivers are real (so the docs may not claim O(1) everywhere)
     assert worst_q > 100.0 * q_uncut, worst_q
@@ -886,9 +911,7 @@ def test_fem_layer_interfaces_are_mesh_conforming(h_layers) -> None:
     mesh = _build_axisymmetric_mesh(a_eq, list(h_layers))
     z = mesh.nodes[mesh.triangles, 1]
     for depth in np.cumsum(h_layers):
-        straddling = (z < depth - 1e-12).any(axis=1) & (z > depth + 1e-12).any(
-            axis=1
-        )
+        straddling = (z < depth - 1e-12).any(axis=1) & (z > depth + 1e-12).any(axis=1)
         assert not straddling.any(), (
             f"{int(straddling.sum())} triangles cross z = {depth}"
         )
@@ -923,8 +946,10 @@ def test_fem_conductance_equals_injected_current() -> None:
         mesh.nodes, mesh.triangles, np.full(mesh.triangles.shape[0], sigma)
     )
     A = A + _assemble_far_field_robin(
-        mesh.nodes, mesh.outer_edges,
-        np.full(mesh.outer_edges.shape[0], sigma), mesh.r_far,
+        mesh.nodes,
+        mesh.outer_edges,
+        np.full(mesh.outer_edges.shape[0], sigma),
+        mesh.r_far,
     )
     dirichlet = np.zeros(mesh.nodes.shape[0], dtype=bool)
     dirichlet[mesh.inner_nodes] = True
@@ -949,8 +974,10 @@ def test_fem_metadata_reports_the_mesh_actually_used() -> None:
     provenance to reproduce it.
     """
     res = solve_fem(
-        _rod_world(gf.HomogeneousSoil(resistivity=RHO)), _engine(),
-        n_radial=29, n_axial=19,
+        _rod_world(gf.HomogeneousSoil(resistivity=RHO)),
+        _engine(),
+        n_radial=29,
+        n_axial=19,
     )
     assert res.metadata["far_field"] == "robin"
     assert res.metadata["n_radial"] == 29

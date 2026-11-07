@@ -42,14 +42,19 @@ def _eval_known_Z(s, R_inf, L_inf, poles, residues):
 def test_vector_fit_recovers_single_real_pole() -> None:
     """A single real-pole RC response: Z(s) = R + r/(s+a)."""
     R_inf = 30.0
-    poles = [-2.0 * math.pi * 100.0]   # corner at 100 Hz
+    poles = [-2.0 * math.pi * 100.0]  # corner at 100 Hz
     residues = [-2.0 * math.pi * 100.0 * 50.0]  # 50 Ω contribution at DC
     freqs = np.geomspace(1.0, 1000.0, 30)
     s = 2j * math.pi * freqs
     Z = _eval_known_Z(s, R_inf, 0.0, poles, residues)
     fit = vector_fit(
-        freqs, Z, n_poles=1, n_iter=10,
-        include_R_inf=True, include_L_inf=False, complex_poles=False,
+        freqs,
+        Z,
+        n_poles=1,
+        n_iter=10,
+        include_R_inf=True,
+        include_L_inf=False,
+        complex_poles=False,
     )
     assert fit.rms_error < 1e-6, f"RMS too large: {fit.rms_error}"
     assert abs(fit.R_inf - R_inf) / R_inf < 1e-3
@@ -65,8 +70,12 @@ def test_vector_fit_recovers_two_real_poles() -> None:
     s = 2j * math.pi * freqs
     Z = _eval_known_Z(s, R_inf, 0.0, poles, residues)
     fit = vector_fit(
-        freqs, Z, n_poles=2, n_iter=12,
-        include_R_inf=True, complex_poles=False,
+        freqs,
+        Z,
+        n_poles=2,
+        n_iter=12,
+        include_R_inf=True,
+        complex_poles=False,
     )
     assert fit.rms_error < 1e-3, f"RMS too large: {fit.rms_error}"
 
@@ -82,8 +91,12 @@ def test_vector_fit_complex_pole_pair() -> None:
     s = 2j * math.pi * freqs
     Z = _eval_known_Z(s, R_inf, 0.0, poles, residues)
     fit = vector_fit(
-        freqs, Z, n_poles=2, n_iter=15,
-        include_R_inf=True, complex_poles=True,
+        freqs,
+        Z,
+        n_poles=2,
+        n_iter=15,
+        include_R_inf=True,
+        complex_poles=True,
     )
     # Allow looser bound for complex poles (harder to recover)
     assert fit.rms_error / np.mean(np.abs(Z)) < 0.05, (
@@ -106,8 +119,12 @@ def test_evaluate_reproduces_input_within_rms() -> None:
     s = 2j * math.pi * freqs
     Z = _eval_known_Z(s, R_inf, 0.0, poles, residues)
     fit = vector_fit(
-        freqs, Z, n_poles=1, n_iter=10,
-        include_R_inf=True, complex_poles=False,
+        freqs,
+        Z,
+        n_poles=1,
+        n_iter=10,
+        include_R_inf=True,
+        complex_poles=False,
     )
     Z_eval = fit.evaluate(freqs)
     assert np.max(np.abs(Z_eval - Z)) < 10.0 * fit.rms_error
@@ -129,15 +146,18 @@ def test_fit_to_sympy_real_pole_round_trip() -> None:
     s = 2j * math.pi * freqs
     Z = _eval_known_Z(s, R_inf, 0.0, poles, residues)
     fit = vector_fit(
-        freqs, Z, n_poles=1, n_iter=10,
-        include_R_inf=True, complex_poles=False,
+        freqs,
+        Z,
+        n_poles=1,
+        n_iter=10,
+        include_R_inf=True,
+        complex_poles=False,
     )
     expr = fit_to_sympy(fit)
     s_sym = sp.Symbol("s", complex=True)
-    Z_eval_sympy = np.array([
-        complex(expr.subs(s_sym, complex(2j * math.pi * f)).evalf())
-        for f in freqs
-    ])
+    Z_eval_sympy = np.array(
+        [complex(expr.subs(s_sym, complex(2j * math.pi * f)).evalf()) for f in freqs]
+    )
     Z_eval_native = fit.evaluate(freqs)
     rel_err = np.max(np.abs(Z_eval_sympy - Z_eval_native) / np.abs(Z_eval_native))
     assert rel_err < 1e-4, f"SymPy/native round-trip mismatch: rel={rel_err}"
@@ -156,8 +176,12 @@ def test_fit_to_sympy_complex_pole_pair_real_expression() -> None:
     s = 2j * math.pi * freqs
     Z = _eval_known_Z(s, 0.0, 0.0, poles, residues)
     fit = vector_fit(
-        freqs, Z, n_poles=2, n_iter=15,
-        include_R_inf=True, complex_poles=True,
+        freqs,
+        Z,
+        n_poles=2,
+        n_iter=15,
+        include_R_inf=True,
+        complex_poles=True,
     )
     expr = fit_to_sympy(fit)
     # Substituting a real s should give a (numerically) real value.
@@ -194,8 +218,12 @@ def test_rho_f_from_field_result_extracts_correctly() -> None:
         soil_resistivity=100.0,
     )
     fit = rho_f_from_field_result(
-        res, "g1", n_poles=1, n_iter=10,
-        include_R_inf=True, complex_poles=False,
+        res,
+        "g1",
+        n_poles=1,
+        n_iter=10,
+        include_R_inf=True,
+        complex_poles=False,
     )
     assert fit.rms_error < 1e-3
     assert abs(fit.R_inf - R_inf) / R_inf < 1e-3
@@ -230,8 +258,8 @@ def test_complex_residues_are_recovered() -> None:
     synthetic target was unfittable then (audit finding N2/WP-B4).
     """
     p = complex(-80.0, 2 * np.pi * 300.0)
-    r = complex(3.0, 40.0)          # deliberately large Im(r)
-    p2 = -2 * np.pi * 40.0          # one real pole
+    r = complex(3.0, 40.0)  # deliberately large Im(r)
+    p2 = -2 * np.pi * 40.0  # one real pole
     r2 = 25.0
     freqs = np.linspace(10.0, 1000.0, 60)
     s = 2j * np.pi * freqs
@@ -241,8 +269,7 @@ def test_complex_residues_are_recovered() -> None:
     rel = fit.rms_error / float(np.mean(np.abs(Z)))
     assert rel < 1e-6
     # The fitted pair must carry a genuinely complex residue.
-    pair_res = [x for x, q in zip(fit.residues, fit.poles)
-                if abs(q.imag) > 1.0]
+    pair_res = [x for x, q in zip(fit.residues, fit.poles) if abs(q.imag) > 1.0]
     assert pair_res and max(abs(x.imag) for x in pair_res) > 10.0
 
 
@@ -254,8 +281,8 @@ def test_convergence_diagnostics_exposed() -> None:
     Z = 10.0 + (2000.0) / (s + 500.0)
     fit = vector_fit(freqs, Z, n_poles=1, n_iter=25)
     assert fit.n_iter_used >= 1
-    assert fit.pole_shift < 1e-8          # converged (early break)
-    assert fit.n_iter_used < 25           # did not run blind to the cap
+    assert fit.pole_shift < 1e-8  # converged (early break)
+    assert fit.n_iter_used < 25  # did not run blind to the cap
     assert fit.poles[0].real == pytest.approx(-500.0, rel=1e-6)
 
 
@@ -276,8 +303,7 @@ def test_inverse_magnitude_weighting_redistributes_the_error() -> None:
     s = 2j * np.pi * freqs
     Z = 0.05 + 500.0 / (s + 30.0) + 800.0 / (s + 2.0 * np.pi * 800.0)
     fit_u = vector_fit(freqs, Z, n_poles=1, n_iter=25)
-    fit_w = vector_fit(freqs, Z, n_poles=1, n_iter=25,
-                       weighting="inverse_magnitude")
+    fit_w = vector_fit(freqs, Z, n_poles=1, n_iter=25, weighting="inverse_magnitude")
     d_u = fit_u.evaluate(freqs) - Z
     d_w = fit_w.evaluate(freqs) - Z
     rel_u = float(np.sqrt(np.mean((np.abs(d_u) / np.abs(Z)) ** 2)))
@@ -294,12 +320,15 @@ def test_inverse_magnitude_weighting_redistributes_the_error() -> None:
 def test_dead_frequency_masked_with_warning() -> None:
     """Zero-current frequencies are masked (not fitted as Z = 0)."""
     w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0),
-                        length=3.0, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0, 0, 0.0), length=3.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
-    eng = gf.create_engine(backend="image", segment_length=0.5,
-                           frequencies=[10.0, 50.0, 100.0, 500.0,
-                                        800.0, 1000.0])
+    eng = gf.create_engine(
+        backend="image",
+        segment_length=0.5,
+        frequencies=[10.0, 50.0, 100.0, 500.0, 800.0, 1000.0],
+    )
     res = eng.solve(w)
     # Forge one dead frequency in a copy of the result arrays.
     res.electrode_currents["g1"][2] = 0j

@@ -90,9 +90,15 @@ class TwoLayerSoilSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["two_layer"] = "two_layer"
-    rho_1: Union[float, AnyDistribution] = Field(default=100.0, description="Upper-layer ρ in Ω·m.")
-    rho_2: Union[float, AnyDistribution] = Field(default=100.0, description="Lower-layer ρ in Ω·m.")
-    h_1: Union[float, AnyDistribution] = Field(default=5.0, description="Upper-layer thickness in m.")
+    rho_1: Union[float, AnyDistribution] = Field(
+        default=100.0, description="Upper-layer ρ in Ω·m."
+    )
+    rho_2: Union[float, AnyDistribution] = Field(
+        default=100.0, description="Lower-layer ρ in Ω·m."
+    )
+    h_1: Union[float, AnyDistribution] = Field(
+        default=5.0, description="Upper-layer thickness in m."
+    )
     relative_permittivity: float = Field(default=10.0, gt=0.0)
 
     def to_soil(self, rng: np.random.Generator) -> TwoLayerSoil:
@@ -113,7 +119,9 @@ class SoilLayerSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    resistivity: Union[float, AnyDistribution] = Field(default=100.0, description="ρ in Ω·m.")
+    resistivity: Union[float, AnyDistribution] = Field(
+        default=100.0, description="ρ in Ω·m."
+    )
     thickness_m: Optional[Union[float, AnyDistribution]] = Field(
         default=5.0,
         description="Layer thickness in m, or None for the semi-infinite bottom layer.",

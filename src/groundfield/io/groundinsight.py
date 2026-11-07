@@ -216,9 +216,7 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _vector_fit_to_formula_in_f(
-    fit: VectorFitResult, *, decimals: int
-) -> str:
+def _vector_fit_to_formula_in_f(fit: VectorFitResult, *, decimals: int) -> str:
     """Convert a ``VectorFitResult`` to an ``impedance_formula`` string in ``f``.
 
     The vector fit is in the Laplace variable $s$; ``groundinsight``
@@ -246,9 +244,7 @@ def _vector_fit_to_formula_in_f(
     return str(expr_f)
 
 
-def _rho_f_standard_to_formula(
-    fit: RhoFStandardFit, *, decimals: int
-) -> str:
+def _rho_f_standard_to_formula(fit: RhoFStandardFit, *, decimals: int) -> str:
     """Convert a ``RhoFStandardFit`` to an ``impedance_formula`` string.
 
     The standard form already has the canonical ``(rho, f)`` symbol
@@ -268,7 +264,9 @@ def _rho_f_standard_to_formula(
 
 
 def _samples_from_vector_fit(
-    fit: VectorFitResult, *, rho_at_fit: float,
+    fit: VectorFitResult,
+    *,
+    rho_at_fit: float,
 ) -> dict[str, list[float]]:
     """Build the ``samples`` block from a vector fit (single rho)."""
     f = np.asarray(fit.fit_frequencies, dtype=float)
@@ -308,9 +306,7 @@ def _metadata_from_vector_fit(
             "rms_error_Ohm": float(fit.rms_error),
         },
         "n_poles": int(fit.poles.size),
-        "poles": [
-            {"real": float(p.real), "imag": float(p.imag)} for p in fit.poles
-        ],
+        "poles": [{"real": float(p.real), "imag": float(p.imag)} for p in fit.poles],
         "residues": [
             {"real": float(r.real), "imag": float(r.imag)} for r in fit.residues
         ],
@@ -713,10 +709,7 @@ def evaluate_spec(
         ) from exc
     expr = parsed.subs(j_sym, sp.I)
     allowed_symbols = {f_sym, rho_sym}
-    unknown = {
-        s for s in expr.free_symbols
-        if s.name not in {"f", "rho"}
-    }
+    unknown = {s for s in expr.free_symbols if s.name not in {"f", "rho"}}
     if unknown:
         unknown_names = sorted(s.name for s in unknown)
         raise EvaluateSpecError(
@@ -746,7 +739,4 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
             f"BusTypeSpec(name={spec.name!r}, method={method}, "
             f"rms={rms:.3e} Ω, rms_rel={rel:.2%})"
         )
-    return (
-        f"BusTypeSpec(name={spec.name!r}, method={method}, "
-        f"rms={rms:.3e} Ω)"
-    )
+    return f"BusTypeSpec(name={spec.name!r}, method={method}, rms={rms:.3e} Ω)"

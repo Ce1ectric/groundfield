@@ -63,20 +63,26 @@ def _mixed_world() -> gf.World:
     )
     # Two conductors with different conductor_type and coupling.
     gf.create_conductor(
-        world, name="bond", start=g_rod, end=g_ring,
+        world,
+        name="bond",
+        start=g_rod,
+        end=g_ring,
         conductor_type="bare_copper",
     )
     gf.create_conductor(
         world,
         name="pen_overhead",
-        start=(-5.0, 0.0, -0.2),       # above ground
+        start=(-5.0, 0.0, -0.2),  # above ground
         end=(20.0, 0.0, -0.2),
         conductor_type="pen",
         cross_section=50e-6,
         coupling_to_soil="isolated",
     )
     gf.create_source(
-        world, name="src", attached_to=g_rod, magnitude=10.0,
+        world,
+        name="src",
+        attached_to=g_rod,
+        magnitude=10.0,
         return_to=g_ring,
     )
     return world
@@ -113,9 +119,7 @@ def test_world_bounds_3d_covers_all_electrode_extents() -> None:
 def test_world_bounds_3d_includes_rod_foot() -> None:
     """The rod's lower end (head + length) must be in the box."""
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(
-        world, "rod", name="g1", position=(0.0, 0.0, 0.5), length=2.0
-    )
+    gf.create_electrode(world, "rod", name="g1", position=(0.0, 0.0, 0.5), length=2.0)
     bounds = world_bounds_3d(world)
     assert bounds[5] == pytest.approx(2.5)
 
@@ -130,7 +134,10 @@ def test_world_bounds_3d_includes_conductor_endpoints() -> None:
         world, "rod", name="g2", position=(2.0, 0.0, 0.5), length=1.0
     )
     gf.create_conductor(
-        world, name="lead", start=(-50.0, 0.0, -0.3), end=g1,
+        world,
+        name="lead",
+        start=(-50.0, 0.0, -0.3),
+        end=g1,
         conductor_type="overhead",
     )
     bounds = world_bounds_3d(world)
@@ -215,8 +222,11 @@ def test_plot_world_annotate_electrodes_adds_text() -> None:
     fig = plot_world(world, annotate_electrodes=True)
     ax = fig.axes[0]
     # Each electrode contributes one annotation; mixed world has 4.
-    n_text = sum(1 for child in ax.get_children()
-                 if isinstance(child, matplotlib.text.Annotation))
+    n_text = sum(
+        1
+        for child in ax.get_children()
+        if isinstance(child, matplotlib.text.Annotation)
+    )
     assert n_text >= len(world.electrodes)
     plt.close(fig)
 
@@ -238,10 +248,19 @@ def _polyline_world() -> gf.World:
     """World holding a single closed, L-shaped ``PolylineElectrode``."""
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "polyline", name="foundation",
-        vertices=[(-5.0, -4.0, 0.7), (5.0, -4.0, 0.7), (5.0, 0.0, 0.7),
-                  (0.0, 0.0, 0.7), (0.0, 4.0, 0.7), (-5.0, 4.0, 0.7)],
-        closed=True, wire_radius=0.0075,
+        world,
+        "polyline",
+        name="foundation",
+        vertices=[
+            (-5.0, -4.0, 0.7),
+            (5.0, -4.0, 0.7),
+            (5.0, 0.0, 0.7),
+            (0.0, 0.0, 0.7),
+            (0.0, 4.0, 0.7),
+            (-5.0, 4.0, 0.7),
+        ],
+        closed=True,
+        wire_radius=0.0075,
     )
     return world
 

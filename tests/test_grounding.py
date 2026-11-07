@@ -81,8 +81,9 @@ def test_rod_circle_places_n_rods_on_circle() -> None:
 
 def test_rod_circle_angles_evenly_spaced() -> None:
     rods = rod_circle(n=8, radius_m=3.0)
-    angles = sorted(math.atan2(r.offset_xy_m[1], r.offset_xy_m[0]) % (2 * math.pi)
-                    for r in rods)
+    angles = sorted(
+        math.atan2(r.offset_xy_m[1], r.offset_xy_m[0]) % (2 * math.pi) for r in rods
+    )
     diffs = np.diff(angles)
     assert np.allclose(diffs, np.full_like(diffs, 2 * math.pi / 8), atol=1e-9)
 
@@ -112,8 +113,7 @@ def test_grounding_system_build_creates_electrodes_and_bonds() -> None:
     )
     world = _world_with_homogeneous_soil()
     rng = np.random.default_rng(0)
-    anchor = grounding.build_at(world, site_xy=(0.0, 0.0),
-                                name_prefix="trafo", rng=rng)
+    anchor = grounding.build_at(world, site_xy=(0.0, 0.0), name_prefix="trafo", rng=rng)
     assert anchor is not None
     # 1 ring + 4 rods = 5 electrodes
     assert len(world.electrodes) == 5
@@ -131,8 +131,9 @@ def test_grounding_system_offset_translates_electrode() -> None:
         ],
     )
     world = _world_with_homogeneous_soil()
-    grounding.build_at(world, site_xy=(10.0, 20.0),
-                       name_prefix="house_0", rng=np.random.default_rng(0))
+    grounding.build_at(
+        world, site_xy=(10.0, 20.0), name_prefix="house_0", rng=np.random.default_rng(0)
+    )
     rod = next(e for e in world.electrodes if e.name.startswith("house_0_"))
     # Position = site + offset
     assert math.isclose(rod.position[0], 13.0, rel_tol=1e-9)
@@ -144,13 +145,13 @@ def test_grounding_system_presence_prob_bernoulli() -> None:
     grounding = GroundingSystemSpec(
         electrodes=[
             RodElectrodeSpec(length_m=1.0, presence_prob=1.0),
-            RodElectrodeSpec(length_m=1.0, presence_prob=0.0,
-                             offset_xy_m=(5.0, 0.0)),
+            RodElectrodeSpec(length_m=1.0, presence_prob=0.0, offset_xy_m=(5.0, 0.0)),
         ],
     )
     world = _world_with_homogeneous_soil()
-    grounding.build_at(world, site_xy=(0.0, 0.0),
-                       name_prefix="b0", rng=np.random.default_rng(0))
+    grounding.build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="b0", rng=np.random.default_rng(0)
+    )
     # Only the present rod ends up in the world.
     assert len(world.electrodes) == 1
 
@@ -162,9 +163,9 @@ def test_grounding_system_returns_none_when_all_absent() -> None:
         ],
     )
     world = _world_with_homogeneous_soil()
-    anchor = grounding.build_at(world, site_xy=(0.0, 0.0),
-                                name_prefix="b0",
-                                rng=np.random.default_rng(0))
+    anchor = grounding.build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="b0", rng=np.random.default_rng(0)
+    )
     assert anchor is None
     assert len(world.electrodes) == 0
 
@@ -173,13 +174,15 @@ def test_grounding_system_strip_orientation() -> None:
     """A strip with orientation_deg=90 lies along the y axis."""
     grounding = GroundingSystemSpec(
         electrodes=[
-            StripElectrodeSpec(length_m=10.0, orientation_deg=90.0,
-                               offset_xy_m=(0.0, 0.0)),
+            StripElectrodeSpec(
+                length_m=10.0, orientation_deg=90.0, offset_xy_m=(0.0, 0.0)
+            ),
         ],
     )
     world = _world_with_homogeneous_soil()
-    grounding.build_at(world, site_xy=(0.0, 0.0),
-                       name_prefix="b0", rng=np.random.default_rng(0))
+    grounding.build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="b0", rng=np.random.default_rng(0)
+    )
     strip = world.electrodes[0]
     sx, sy, _ = strip.start
     ex, ey, _ = strip.end
@@ -194,13 +197,15 @@ def test_foundation_ring_style_uses_perimeter_only() -> None:
     """``style='ring'`` produces a GridMeshElectrode with n_x=n_y=1."""
     grounding = GroundingSystemSpec(
         electrodes=[
-            FoundationElectrodeSpec(size_m=10.0, style="ring",
-                                    n_x=4, n_y=4),  # n_x/n_y must be ignored
+            FoundationElectrodeSpec(
+                size_m=10.0, style="ring", n_x=4, n_y=4
+            ),  # n_x/n_y must be ignored
         ],
     )
     world = _world_with_homogeneous_soil()
-    grounding.build_at(world, site_xy=(0.0, 0.0),
-                       name_prefix="house_0", rng=np.random.default_rng(0))
+    grounding.build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="house_0", rng=np.random.default_rng(0)
+    )
     e = world.electrodes[0]
     assert e.kind == "grid_mesh"
     assert e.n_x == 1
@@ -211,13 +216,13 @@ def test_foundation_mesh_style_honours_n_x_n_y() -> None:
     """``style='mesh'`` (default) keeps the configured n_x / n_y."""
     grounding = GroundingSystemSpec(
         electrodes=[
-            FoundationElectrodeSpec(size_m=10.0, style="mesh",
-                                    n_x=3, n_y=4),
+            FoundationElectrodeSpec(size_m=10.0, style="mesh", n_x=3, n_y=4),
         ],
     )
     world = _world_with_homogeneous_soil()
-    grounding.build_at(world, site_xy=(0.0, 0.0),
-                       name_prefix="house_0", rng=np.random.default_rng(0))
+    grounding.build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="house_0", rng=np.random.default_rng(0)
+    )
     e = world.electrodes[0]
     assert e.n_x == 3
     assert e.n_y == 4

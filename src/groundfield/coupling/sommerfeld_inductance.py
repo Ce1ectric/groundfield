@@ -190,7 +190,10 @@ class LayeredEarth:
 
 
 def reflection_coefficient_homogeneous(
-    lambdas: np.ndarray, *, omega: float, sigma_earth: float,
+    lambdas: np.ndarray,
+    *,
+    omega: float,
+    sigma_earth: float,
 ) -> np.ndarray:
     """Magnetic reflection coefficient for a homogeneous half-space.
 
@@ -221,7 +224,10 @@ def reflection_coefficient_homogeneous(
 
 
 def reflection_coefficient_layered(
-    lambdas: np.ndarray, *, omega: float, earth: LayeredEarth,
+    lambdas: np.ndarray,
+    *,
+    omega: float,
+    earth: LayeredEarth,
 ) -> np.ndarray:
     """Magnetic reflection coefficient for an $n$-layer earth.
 
@@ -260,7 +266,9 @@ def reflection_coefficient_layered(
     n = earth.n_layers
     if n == 1:
         return reflection_coefficient_homogeneous(
-            lambdas, omega=omega, sigma_earth=1.0 / earth.rhos[0],
+            lambdas,
+            omega=omega,
+            sigma_earth=1.0 / earth.rhos[0],
         )
     # Standard recursive multilayer surface reflection (WP-D2 fix,
     # 2026-07-20). Vertical wavenumbers with ``u[0]`` the air (quasi-
@@ -295,7 +303,11 @@ def reflection_coefficient_layered(
 
 
 def _build_lambda_grid(
-    *, z_sum: float, rho_max: float, omega: float, sigma_top: float,
+    *,
+    z_sum: float,
+    rho_max: float,
+    omega: float,
+    sigma_top: float,
     n_panels_per_oscillation: int = 8,
     n_log_nodes: int = 64,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -389,8 +401,11 @@ def _build_lambda_grid(
 
 def earth_return_correction_homogeneous(
     *,
-    rho: float, z_i: float, z_j: float,
-    omega: float, sigma_earth: float,
+    rho: float,
+    z_i: float,
+    z_j: float,
+    omega: float,
+    sigma_earth: float,
 ) -> complex:
     """σ-dependent earth-return correction beyond the additive mirror.
 
@@ -463,25 +478,30 @@ def earth_return_correction_homogeneous(
     else:
         direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
     lambdas, weights = _build_lambda_grid(
-        z_sum=z_sum, rho_max=max(rho, 1e-6),
-        omega=omega, sigma_top=sigma_earth,
+        z_sum=z_sum,
+        rho_max=max(rho, 1e-6),
+        omega=omega,
+        sigma_top=sigma_earth,
     )
     Gamma = reflection_coefficient_homogeneous(
-        lambdas, omega=omega, sigma_earth=sigma_earth,
+        lambdas,
+        omega=omega,
+        sigma_earth=sigma_earth,
     )
     u1 = np.sqrt(lambdas * lambdas + gamma2)
     decay = np.exp(-u1 * z_sum)
     bessel = j0(lambdas * rho)
-    reflected = complex(
-        np.sum(weights * (lambdas / u1) * Gamma * decay * bessel)
-    )
+    reflected = complex(np.sum(weights * (lambdas / u1) * Gamma * decay * bessel))
     return complex(direct) - 1.0 / max(R_mir, 1e-9) + reflected
 
 
 def earth_return_correction_layered(
     *,
-    rho: float, z_i: float, z_j: float,
-    omega: float, earth: LayeredEarth,
+    rho: float,
+    z_i: float,
+    z_j: float,
+    omega: float,
+    earth: LayeredEarth,
 ) -> complex:
     """Layered-earth analogue of :func:`earth_return_correction_homogeneous`.
 
@@ -495,8 +515,11 @@ def earth_return_correction_layered(
         return 0.0 + 0.0j
     if earth.n_layers == 1:
         return earth_return_correction_homogeneous(
-            rho=rho, z_i=z_i, z_j=z_j,
-            omega=omega, sigma_earth=1.0 / earth.rhos[0],
+            rho=rho,
+            z_i=z_i,
+            z_j=z_j,
+            omega=omega,
+            sigma_earth=1.0 / earth.rhos[0],
         )
     z_sum = z_i + z_j
     if z_sum <= 0.0:
@@ -511,16 +534,16 @@ def earth_return_correction_layered(
     else:
         direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
     lambdas, weights = _build_lambda_grid(
-        z_sum=z_sum, rho_max=max(rho, 1e-6),
-        omega=omega, sigma_top=sigma_top,
+        z_sum=z_sum,
+        rho_max=max(rho, 1e-6),
+        omega=omega,
+        sigma_top=sigma_top,
     )
     Gamma = reflection_coefficient_layered(lambdas, omega=omega, earth=earth)
     u1 = np.sqrt(lambdas * lambdas + gamma2)
     decay = np.exp(-u1 * z_sum)
     bessel = j0(lambdas * rho)
-    reflected = complex(
-        np.sum(weights * (lambdas / u1) * Gamma * decay * bessel)
-    )
+    reflected = complex(np.sum(weights * (lambdas / u1) * Gamma * decay * bessel))
     return complex(direct) - 1.0 / max(R_mir, 1e-9) + reflected
 
 
@@ -532,7 +555,7 @@ def earth_return_correction_layered(
 def _spectral_rho_interp(
     rho_grid: np.ndarray,
     z_ref: float,
-    spectral_weights: np.ndarray,   # (nλ,) complex — kernel × λ-weights
+    spectral_weights: np.ndarray,  # (nλ,) complex — kernel × λ-weights
     lambdas: np.ndarray,
     *,
     n_nodes: int = 24,
@@ -562,8 +585,7 @@ def _spectral_rho_interp(
     rho_nodes = np.exp(t_nodes) - z_off
     # Exact evaluation at the nodes: (n_nodes, nλ) — small.
     s_nodes = (
-        j0(lambdas[None, :] * np.maximum(rho_nodes, 0.0)[:, None])
-        @ spectral_weights
+        j0(lambdas[None, :] * np.maximum(rho_nodes, 0.0)[:, None]) @ spectral_weights
     )
     t_grid = np.log(rho_grid + z_off)
     s_re = np.interp(t_grid.ravel(), t_nodes, s_nodes.real)
@@ -611,10 +633,10 @@ def _two_layer_reflected_weight(
 
 
 def _pollaczek_inner_kernel(
-    rho_grid: np.ndarray,      # (16, 16) horizontal distances
-    dz_grid: np.ndarray,       # (16, 16) signed z_a - z_b
-    depth_a: np.ndarray,       # (16,)   |z| along segment a
-    depth_b: np.ndarray,       # (16,)   |z| along segment b
+    rho_grid: np.ndarray,  # (16, 16) horizontal distances
+    dz_grid: np.ndarray,  # (16, 16) signed z_a - z_b
+    depth_a: np.ndarray,  # (16,)   |z| along segment a
+    depth_b: np.ndarray,  # (16,)   |z| along segment b
     buried_a: bool,
     buried_b: bool,
     *,
@@ -642,23 +664,25 @@ def _pollaczek_inner_kernel(
     gamma = np.sqrt(gamma2)
     u1 = np.sqrt(lambdas * lambdas + gamma2)
 
-    ha = depth_a[:, None]                     # (16, 1)
-    hb = depth_b[None, :]                     # (1, 16)
+    ha = depth_a[:, None]  # (16, 1)
+    hb = depth_b[None, :]  # (1, 16)
 
     if buried_a and buried_b:
         z_sum = ha + hb
         z_ref = float(z_sum.mean())
         # Closed-form mirror dedup −1/R' (mirror at z = −h_b).
-        R_mir = np.sqrt(rho_grid ** 2 + z_sum ** 2)
+        R_mir = np.sqrt(rho_grid**2 + z_sum**2)
         inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
         # Closed-form direct-term attenuation (e^{−γR} − 1)/R —
         # smooth at R → 0 (limit −γ); carries the earth-return
         # resistance of the buried path.
-        R3 = np.sqrt(rho_grid ** 2 + dz_grid ** 2)
+        R3 = np.sqrt(rho_grid**2 + dz_grid**2)
         small = R3 < 1e-9
         R3_safe = np.where(small, 1.0, R3)
         direct = np.where(
-            small, -gamma, (np.exp(-gamma * R3_safe) - 1.0) / R3_safe,
+            small,
+            -gamma,
+            (np.exp(-gamma * R3_safe) - 1.0) / R3_safe,
         )
         inner = inner + direct
         # Reflected remainder. For a homogeneous earth (or n≥3, still
@@ -675,14 +699,21 @@ def _pollaczek_inner_kernel(
             and max(h_a, h_b) < float(earth.thicknesses[0])
         ):
             spectral_w = _two_layer_reflected_weight(
-                lambdas, u1, omega=omega, earth=earth,
-                h_a=h_a, h_b=h_b, lambda_weights=lambda_weights,
+                lambdas,
+                u1,
+                omega=omega,
+                earth=earth,
+                h_a=h_a,
+                h_b=h_b,
+                lambda_weights=lambda_weights,
             )
         else:
-            spectral_w = (lambdas / u1) * Gamma * np.exp(-u1 * z_ref) \
-                * lambda_weights
+            spectral_w = (lambdas / u1) * Gamma * np.exp(-u1 * z_ref) * lambda_weights
         inner = inner + _spectral_rho_interp(
-            rho_grid, z_ref, spectral_w, lambdas,
+            rho_grid,
+            z_ref,
+            spectral_w,
+            lambdas,
         )
         return inner
 
@@ -690,11 +721,14 @@ def _pollaczek_inner_kernel(
         # Overhead pair — Carson geometry: air-side reflection −Γ.
         z_sum = ha + hb
         z_ref = float(z_sum.mean())
-        R_mir = np.sqrt(rho_grid ** 2 + z_sum ** 2)
+        R_mir = np.sqrt(rho_grid**2 + z_sum**2)
         inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
         spectral_w = -Gamma * np.exp(-lambdas * z_ref) * lambda_weights
         inner = inner + _spectral_rho_interp(
-            rho_grid, z_ref, spectral_w, lambdas,
+            rho_grid,
+            z_ref,
+            spectral_w,
+            lambdas,
         )
         return inner
 
@@ -708,25 +742,29 @@ def _pollaczek_inner_kernel(
     H_ref = float(H_g.mean())
     # Mirror dedup: the ADR-0004 mirror of the buried segment sits at
     # −h, i.e. on the air side → mirror distance carries |h − H|.
-    R_mir = np.sqrt(rho_grid ** 2 + (h_g - H_g) ** 2)
+    R_mir = np.sqrt(rho_grid**2 + (h_g - H_g) ** 2)
     inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
     # Transmitted kernel minus the free-space direct term (the
     # direct 1/R lives in the Neumann matrix): both decay with
     # (h + H), so the remainder is integrable on the shared grid.
     spectral_w = (
-        (2.0 * lambdas / (u1 + lambdas))
-        * np.exp(-u1 * h_ref - lambdas * H_ref)
+        (2.0 * lambdas / (u1 + lambdas)) * np.exp(-u1 * h_ref - lambdas * H_ref)
         - np.exp(-lambdas * (h_ref + H_ref))
     ) * lambda_weights
     inner = inner + _spectral_rho_interp(
-        rho_grid, h_ref + H_ref, spectral_w, lambdas,
+        rho_grid,
+        h_ref + H_ref,
+        spectral_w,
+        lambdas,
     )
     return inner
 
 
 def _pollaczek_pair_integral(
-    p1_a: np.ndarray, p2_a: np.ndarray,
-    p1_b: np.ndarray, p2_b: np.ndarray,
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
     *,
     omega: float,
     sigma_top: float,
@@ -781,15 +819,25 @@ def _pollaczek_pair_integral(
     z_sum_worst = max(float(z_sum_grid.min()), 1e-3)
     rho_max = float(rho_grid.max() + 1e-9)
     lambdas, lambda_weights = _build_lambda_grid(
-        z_sum=z_sum_worst, rho_max=rho_max,
-        omega=omega, sigma_top=sigma_top,
+        z_sum=z_sum_worst,
+        rho_max=rho_max,
+        omega=omega,
+        sigma_top=sigma_top,
     )
     Gamma = gamma_provider(lambdas)
 
     inner = _pollaczek_inner_kernel(
-        rho_grid, dz_grid, depth_a, depth_b, buried_a, buried_b,
-        omega=omega, sigma_top=sigma_top,
-        lambdas=lambdas, lambda_weights=lambda_weights, Gamma=Gamma,
+        rho_grid,
+        dz_grid,
+        depth_a,
+        depth_b,
+        buried_a,
+        buried_b,
+        omega=omega,
+        sigma_top=sigma_top,
+        lambdas=lambdas,
+        lambda_weights=lambda_weights,
+        Gamma=Gamma,
         earth=earth,
     )
 
@@ -801,10 +849,13 @@ def _pollaczek_pair_integral(
 
 
 def sommerfeld_pair_integral_homogeneous(
-    p1_a: np.ndarray, p2_a: np.ndarray,
-    p1_b: np.ndarray, p2_b: np.ndarray,
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
     *,
-    omega: float, sigma_earth: float,
+    omega: float,
+    sigma_earth: float,
 ) -> complex:
     """Integrate the σ-dependent magnetic Green function over a segment pair.
 
@@ -845,20 +896,30 @@ def sommerfeld_pair_integral_homogeneous(
 
     def _gamma(lambdas: np.ndarray) -> np.ndarray:
         return reflection_coefficient_homogeneous(
-            lambdas, omega=omega, sigma_earth=sigma_earth,
+            lambdas,
+            omega=omega,
+            sigma_earth=sigma_earth,
         )
 
     return _pollaczek_pair_integral(
-        p1_a, p2_a, p1_b, p2_b,
-        omega=omega, sigma_top=sigma_earth, gamma_provider=_gamma,
+        p1_a,
+        p2_a,
+        p1_b,
+        p2_b,
+        omega=omega,
+        sigma_top=sigma_earth,
+        gamma_provider=_gamma,
     )
 
 
 def sommerfeld_pair_integral_layered(
-    p1_a: np.ndarray, p2_a: np.ndarray,
-    p1_b: np.ndarray, p2_b: np.ndarray,
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
     *,
-    omega: float, earth: LayeredEarth,
+    omega: float,
+    earth: LayeredEarth,
 ) -> complex:
     """Layered-earth analogue of :func:`sommerfeld_pair_integral_homogeneous`.
 
@@ -870,8 +931,12 @@ def sommerfeld_pair_integral_layered(
     """
     if earth.n_layers == 1:
         return sommerfeld_pair_integral_homogeneous(
-            p1_a, p2_a, p1_b, p2_b,
-            omega=omega, sigma_earth=1.0 / earth.rhos[0],
+            p1_a,
+            p2_a,
+            p1_b,
+            p2_b,
+            omega=omega,
+            sigma_earth=1.0 / earth.rhos[0],
         )
     if omega <= 0.0:
         return 0.0 + 0.0j
@@ -879,12 +944,19 @@ def sommerfeld_pair_integral_layered(
 
     def _gamma(lambdas: np.ndarray) -> np.ndarray:
         return reflection_coefficient_layered(
-            lambdas, omega=omega, earth=earth,
+            lambdas,
+            omega=omega,
+            earth=earth,
         )
 
     return _pollaczek_pair_integral(
-        p1_a, p2_a, p1_b, p2_b,
-        omega=omega, sigma_top=sigma_top, gamma_provider=_gamma,
+        p1_a,
+        p2_a,
+        p1_b,
+        p2_b,
+        omega=omega,
+        sigma_top=sigma_top,
+        gamma_provider=_gamma,
         earth=earth,
     )
 
@@ -895,8 +967,8 @@ def sommerfeld_pair_integral_layered(
 
 
 def build_sommerfeld_correction_matrix(
-    seg_endpoints: np.ndarray,        # shape (M, 2, 3)
-    wire_radii: np.ndarray,           # shape (M,) — currently unused but kept for API parity
+    seg_endpoints: np.ndarray,  # shape (M, 2, 3)
+    wire_radii: np.ndarray,  # shape (M,) — currently unused but kept for API parity
     *,
     omega: float,
     earth: LayeredEarth,
@@ -952,8 +1024,12 @@ def build_sommerfeld_correction_matrix(
             p1_j = seg_endpoints[j, 0]
             p2_j = seg_endpoints[j, 1]
             val = sommerfeld_pair_integral_layered(
-                p1_i, p2_i, p1_j, p2_j,
-                omega=omega, earth=earth,
+                p1_i,
+                p2_i,
+                p1_j,
+                p2_j,
+                omega=omega,
+                earth=earth,
             )
             dZ[i, j] = dZ[j, i] = val
     return dZ

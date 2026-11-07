@@ -168,8 +168,12 @@ def test_bustype_spec_roundtrip_with_negative_residue_imag():
 def _solved_world():
     world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(
-        world, "rod", name="g1", position=(0.0, 0.0, 0.5),
-        length=3.0, wire_radius=0.01,
+        world,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=3.0,
+        wire_radius=0.01,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     return world, gf.create_engine(backend="image").solve(world)
@@ -195,9 +199,10 @@ def test_plot_potential_contour_xz_without_extent():
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     world, result = _solved_world()
-    assert gf.plot_potential_contour(
-        result, world=world, plane="xz", y=0.0, n=12
-    ) is not None
+    assert (
+        gf.plot_potential_contour(result, world=world, plane="xz", y=0.0, n=12)
+        is not None
+    )
 
 
 # ---------------------------------------------------------------------

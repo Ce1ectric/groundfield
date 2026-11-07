@@ -92,7 +92,7 @@ def two_rods_far(rho: float, length: float, radius: float, spacing: float) -> fl
         raise ValueError("spacing must be positive.")
     s = spacing
     R_self = rho / (4.0 * math.pi * length) * (math.log(4.0 * length / radius) - 1.0)
-    series = 1.0 - (length ** 2) / (3.0 * s ** 2) + 2.0 * (length ** 4) / (5.0 * s ** 4)
+    series = 1.0 - (length**2) / (3.0 * s**2) + 2.0 * (length**4) / (5.0 * s**4)
     R_mutual = rho / (4.0 * math.pi * s) * series
     return R_self + R_mutual
 
@@ -114,8 +114,8 @@ def two_rods_close(rho: float, length: float, radius: float, spacing: float) -> 
         + math.log(4.0 * length / s)
         - 2.0
         + s / (2.0 * length)
-        - s ** 2 / (16.0 * length ** 2)
-        + s ** 4 / (512.0 * length ** 4)
+        - s**2 / (16.0 * length**2)
+        + s**4 / (512.0 * length**4)
     )
     return rho / (4.0 * math.pi * length) * inner
 
@@ -125,9 +125,7 @@ def two_rods_close(rho: float, length: float, radius: float, spacing: float) -> 
 # ---------------------------------------------------------------------
 
 
-def horizontal_wire(
-    rho: float, length: float, radius: float, depth: float
-) -> float:
+def horizontal_wire(rho: float, length: float, radius: float, depth: float) -> float:
     """Buried horizontal wire of total length $2L$, Table I.
     $$
     R = \\frac{\\rho}{4\\pi L}
@@ -152,8 +150,8 @@ def horizontal_wire(
         + math.log(4.0 * length / s)
         - 2.0
         + s / (2.0 * length)
-        - s ** 2 / (16.0 * length ** 2)
-        + s ** 4 / (512.0 * length ** 4)
+        - s**2 / (16.0 * length**2)
+        + s**4 / (512.0 * length**4)
     )
     return rho / (4.0 * math.pi * length) * inner
 
@@ -263,8 +261,8 @@ def buried_ring(
     D = ring_diameter
     d = wire_diameter
     s = 2.0 * depth
-    return rho / (2.0 * math.pi ** 2 * D) * (
-        math.log(8.0 * D / d) + math.log(4.0 * D / s)
+    return (
+        rho / (2.0 * math.pi**2 * D) * (math.log(8.0 * D / d) + math.log(4.0 * D / s))
     )
 
 
@@ -335,12 +333,12 @@ def horizontal_strip(
     s = 2.0 * depth
     inner = (
         math.log(4.0 * L / a)
-        + (a ** 2 - math.pi * a * b) / (2.0 * (a + b) ** 2)
+        + (a**2 - math.pi * a * b) / (2.0 * (a + b) ** 2)
         + math.log(4.0 * L / s)
         - 1.0
         + s / (2.0 * L)
-        - s ** 2 / (16.0 * L ** 2)
-        + s ** 4 / (512.0 * L ** 4)
+        - s**2 / (16.0 * L**2)
+        + s**4 / (512.0 * L**4)
     )
     return rho / (4.0 * math.pi * L) * inner
 
@@ -365,8 +363,10 @@ def horizontal_round_plate(rho: float, radius: float, depth: float) -> float:
     s = 2.0 * depth
     a = radius
     R_self = rho / (8.0 * a)
-    R_image = rho / (4.0 * math.pi * s) * (
-        1.0 - 7.0 * a ** 2 / (12.0 * s ** 2) + 33.0 * a ** 4 / (40.0 * s ** 4)
+    R_image = (
+        rho
+        / (4.0 * math.pi * s)
+        * (1.0 - 7.0 * a**2 / (12.0 * s**2) + 33.0 * a**4 / (40.0 * s**4))
     )
     return R_self + R_image
 
@@ -399,8 +399,10 @@ def vertical_round_plate(rho: float, radius: float, depth: float) -> float:
     a = radius
     R_self = rho / (8.0 * a)
     # Series Eq. (38): (1 + 7 a^2 / (24 s^2) + 99 a^4 / (320 s^4))
-    R_image = rho / (4.0 * math.pi * s) * (
-        1.0 + 7.0 * a ** 2 / (24.0 * s ** 2) + 99.0 * a ** 4 / (320.0 * s ** 4)
+    R_image = (
+        rho
+        / (4.0 * math.pi * s)
+        * (1.0 + 7.0 * a**2 / (24.0 * s**2) + 99.0 * a**4 / (320.0 * s**4))
     )
     return R_self + R_image
 

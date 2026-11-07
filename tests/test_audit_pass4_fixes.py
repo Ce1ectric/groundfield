@@ -82,8 +82,7 @@ def test_source_union_invalid_kind_raises() -> None:
 
     with pytest.raises(ValidationError) as excinfo:
         SourceAdapter.validate_python(
-            {"name": "x", "kind": "no-such-kind",
-             "attached_to": "g1", "magnitude": 1.0}
+            {"name": "x", "kind": "no-such-kind", "attached_to": "g1", "magnitude": 1.0}
         )
     # The discriminator surfaces the bad ``kind`` value explicitly.
     assert "kind" in str(excinfo.value)
@@ -109,8 +108,11 @@ def test_set_boundary_conditions_warns_on_revert() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", UserWarning)
         world.set_boundary_conditions(surface="neumann")
-        revert_msgs = [str(w.message) for w in caught
-                       if "reverted to the default" in str(w.message)]
+        revert_msgs = [
+            str(w.message)
+            for w in caught
+            if "reverted to the default" in str(w.message)
+        ]
         assert revert_msgs, (
             "Expected a UserWarning on revert, got: "
             f"{[str(w.message) for w in caught]!r}"
@@ -128,9 +130,9 @@ def test_engine_frequencies_preserve_order_and_warn() -> None:
         warnings.simplefilter("always", UserWarning)
         eng = Engine(backend="image", frequencies=[5000.0, 50.0])
     assert eng.frequencies == [5000.0, 50.0]
-    assert any(
-        "not strictly increasing" in str(w.message) for w in caught
-    ), [str(w.message) for w in caught]
+    assert any("not strictly increasing" in str(w.message) for w in caught), [
+        str(w.message) for w in caught
+    ]
 
 
 def test_engine_with_frequencies_preserve_order() -> None:
@@ -172,14 +174,13 @@ def test_tn_network_source_return_to_override_warns() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", UserWarning)
         world = gen.build()
-    msgs = [str(w.message) for w in caught
-            if "source_return_to" in str(w.message)]
+    msgs = [str(w.message) for w in caught if "source_return_to" in str(w.message)]
     assert msgs, [str(w.message) for w in caught]
 
     # The created source carries the user-specified return_to.
-    assert any(
-        s.return_to == "user-specified-electrode" for s in world.sources
-    ), [s.return_to for s in world.sources]
+    assert any(s.return_to == "user-specified-electrode" for s in world.sources), [
+        s.return_to for s in world.sources
+    ]
 
 
 # ---------------------------------------------------------------------
@@ -205,7 +206,14 @@ def test_vector_fit_rejects_zero_poles() -> None:
 def test_io_csv_column_schema_locked() -> None:
     """The frozen column tuples document the writer convention."""
     assert gf_csv.POTENTIAL_PATH_COLUMNS == (
-        "s", "x", "y", "z", "frequency_Hz", "phi_re", "phi_im", "abs_phi",
+        "s",
+        "x",
+        "y",
+        "z",
+        "frequency_Hz",
+        "phi_re",
+        "phi_im",
+        "abs_phi",
     )
     # Magnitude columns differ per quantity by design (phi / I / Z).
     assert "abs_phi" in gf_csv.POTENTIAL_PATH_COLUMNS

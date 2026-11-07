@@ -77,8 +77,10 @@ def test_full_notebook_workflow() -> None:
     I_total = result.electrode_currents["g1"][0] + result.electrode_currents["g2"][0]
     assert I_total.real == pytest.approx(10.0)
     assert sorted(result.clusters["g1"]) == ["g1", "g2"]
-    assert abs(result.electrode_potentials["g1"][0]
-               - result.electrode_potentials["g2"][0]) < 1e-9
+    assert (
+        abs(result.electrode_potentials["g1"][0] - result.electrode_potentials["g2"][0])
+        < 1e-9
+    )
     # The result must contain the discretised point sources.
     assert len(result.point_sources) > 0
 
@@ -135,8 +137,12 @@ def test_image_rod_matches_sunde(L: float, wire_radius: float) -> None:
     soil = gf.HomogeneousSoil(resistivity=rho)
     world = gf.create_world(soil=soil)
     gf.create_electrode(
-        world, "rod", name="g1",
-        position=(0.0, 0.0, 0.5), length=L, wire_radius=wire_radius,
+        world,
+        "rod",
+        name="g1",
+        position=(0.0, 0.0, 0.5),
+        length=L,
+        wire_radius=wire_radius,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image", segment_length=0.05)
@@ -172,8 +178,7 @@ def test_image_neighbour_induces_potential() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
-    gf.create_electrode(world, "ring", name="g2",
-                        center=(8.0, 0, 0.8), radius=2.0)
+    gf.create_electrode(world, "ring", name="g2", center=(8.0, 0, 0.8), radius=2.0)
     gf.create_source(world, attached_to="g1", magnitude=10.0)
     result = gf.create_engine(backend="image", segment_length=0.05).solve(world)
 
@@ -189,8 +194,7 @@ def test_image_no_conductor_no_current_in_g2() -> None:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
-    gf.create_electrode(world, "ring", name="g2",
-                        center=(8.0, 0, 0.8), radius=2.0)
+    gf.create_electrode(world, "ring", name="g2", center=(8.0, 0, 0.8), radius=2.0)
     gf.create_source(world, attached_to="g1", magnitude=10.0)
     res = gf.create_engine(backend="image", segment_length=0.05).solve(world)
 
@@ -204,10 +208,8 @@ def test_image_conductor_creates_cluster_and_splits_current() -> None:
     """With a connection: shared cluster, split current, equal potentials."""
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    g1 = gf.create_electrode(world, "rod", name="g1",
-                             position=(0, 0, 0.5), length=1.5)
-    g2 = gf.create_electrode(world, "ring", name="g2",
-                             center=(8.0, 0, 0.8), radius=2.0)
+    g1 = gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
+    g2 = gf.create_electrode(world, "ring", name="g2", center=(8.0, 0, 0.8), radius=2.0)
     gf.create_conductor(world, name="l1", start=g1, end=g2)
     gf.create_source(world, attached_to=g1, magnitude=10.0)
 
@@ -238,17 +240,16 @@ def test_image_cluster_impedance_lower_than_single() -> None:
 
     # Rod alone
     w_solo = gf.create_world(soil=soil)
-    gf.create_electrode(w_solo, "rod", name="g1",
-                        position=(0, 0, 0.5), length=1.5)
+    gf.create_electrode(w_solo, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
     gf.create_source(w_solo, attached_to="g1", magnitude=1.0)
     Z_solo = eng.solve(w_solo).cluster_impedance("g1")[0].real
 
     # Rod + ring connected
     w_pair = gf.create_world(soil=soil)
-    g1 = gf.create_electrode(w_pair, "rod", name="g1",
-                             position=(0, 0, 0.5), length=1.5)
-    g2 = gf.create_electrode(w_pair, "ring", name="g2",
-                             center=(8.0, 0, 0.8), radius=2.0)
+    g1 = gf.create_electrode(w_pair, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
+    g2 = gf.create_electrode(
+        w_pair, "ring", name="g2", center=(8.0, 0, 0.8), radius=2.0
+    )
     gf.create_conductor(w_pair, name="l1", start=g1, end=g2)
     gf.create_source(w_pair, attached_to=g1, magnitude=1.0)
     Z_pair = eng.solve(w_pair).cluster_impedance("g1")[0].real
@@ -263,8 +264,7 @@ def test_image_cluster_impedance_solo_equals_grounding_impedance() -> None:
     """For a single-electrode cluster both impedances coincide."""
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
-    gf.create_electrode(world, "rod", name="g1",
-                        position=(0, 0, 0.5), length=1.5)
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
     gf.create_source(world, attached_to="g1", magnitude=2.0)
     res = gf.create_engine(backend="image", segment_length=0.05).solve(world)
 
@@ -328,8 +328,7 @@ def _make_demo_result() -> tuple[gf.World, gf.FieldResult]:
     soil = gf.HomogeneousSoil(resistivity=100.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
-    gf.create_electrode(world, "ring", name="g2",
-                        center=(8.0, 0, 0.8), radius=2.0)
+    gf.create_electrode(world, "ring", name="g2", center=(8.0, 0, 0.8), radius=2.0)
     gf.create_source(world, attached_to="g1", magnitude=10.0)
     eng = gf.create_engine(backend="image", segment_length=0.1)
     return world, eng.solve(world)
@@ -337,36 +336,51 @@ def _make_demo_result() -> tuple[gf.World, gf.FieldResult]:
 
 def test_plot_potential_contour_xy_runs() -> None:
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_potential_contour(
-        result, world=world, plane="xy", z=0.0,
-        extent=(-5, 15, -5, 5), n=40,
+        result,
+        world=world,
+        plane="xy",
+        z=0.0,
+        extent=(-5, 15, -5, 5),
+        n=40,
     )
     assert fig is not None and len(fig.axes) >= 1
 
 
 def test_plot_potential_contour_xz_runs() -> None:
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_potential_contour(
-        result, world=world, plane="xz", y=0.0,
-        extent=(-5, 15, 0, 4), n=40,
+        result,
+        world=world,
+        plane="xz",
+        y=0.0,
+        extent=(-5, 15, 0, 4),
+        n=40,
     )
     assert fig is not None
 
 
 def test_plot_potential_radial_runs() -> None:
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_potential_radial(
-        result, around="g1", world=world,
-        r_max=20.0, n=80, depths=[0.0, 0.5, 1.5],
+        result,
+        around="g1",
+        world=world,
+        r_max=20.0,
+        n=80,
+        depths=[0.0, 0.5, 1.5],
     )
     # Expect: one line per depth.
     assert len(fig.axes[0].lines) == 3
@@ -374,12 +388,17 @@ def test_plot_potential_radial_runs() -> None:
 
 def test_plot_potential_profile_runs() -> None:
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_potential_profile(
-        result, start=(-2.0, 0.0, 0.0), direction=(1, 0, 0),
-        distance=15.0, n=50, depths=[0.0, 1.0],
+        result,
+        start=(-2.0, 0.0, 0.0),
+        direction=(1, 0, 0),
+        distance=15.0,
+        n=50,
+        depths=[0.0, 1.0],
     )
     assert len(fig.axes[0].lines) == 2
 
@@ -403,12 +422,16 @@ def test_world_bounds_xy_covers_all_electrodes() -> None:
 def test_plot_surface_potential_runs_and_uses_world_bounds() -> None:
     """Default extent comes from the world bounds + padding."""
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_surface_potential(
-        result, world,
-        z=0.0, padding_m=10.0, n=40,
+        result,
+        world,
+        z=0.0,
+        padding_m=10.0,
+        n=40,
     )
     assert fig is not None
     ax = fig.axes[0]
@@ -425,12 +448,17 @@ def test_plot_surface_potential_runs_and_uses_world_bounds() -> None:
 def test_plot_surface_potential_log_mode_runs() -> None:
     """Log scale path executes without error."""
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_surface_potential(
-        result, world,
-        z=0.0, padding_m=10.0, n=40, log=True,
+        result,
+        world,
+        z=0.0,
+        padding_m=10.0,
+        n=40,
+        log=True,
     )
     assert fig is not None
 
@@ -438,12 +466,15 @@ def test_plot_surface_potential_log_mode_runs() -> None:
 def test_plot_surface_potential_explicit_extent_overrides_default() -> None:
     """An explicit ``extent`` argument wins over the world bounds."""
     import matplotlib
+
     matplotlib.use("Agg")
 
     world, result = _make_demo_result()
     fig = gf.plot_surface_potential(
-        result, world,
-        extent=(-100.0, 100.0, -50.0, 50.0), n=40,
+        result,
+        world,
+        extent=(-100.0, 100.0, -50.0, 50.0),
+        n=40,
     )
     ax = fig.axes[0]
     assert ax.get_xlim()[0] <= -99.0

@@ -74,11 +74,7 @@ def _runtime_dependency_names(pyproject: Path) -> list[str]:
         implicit ``python`` entry.
     """
     data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    deps = (
-        data.get("tool", {})
-        .get("poetry", {})
-        .get("dependencies", {})
-    )
+    deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
     return sorted(
         (name for name in deps if name.lower() != "python"),
         key=str.lower,
@@ -101,7 +97,9 @@ def _license_identifier(meta: metadata.PackageMetadata) -> str:
     expression = meta.get("License-Expression")
     if expression:
         return expression
-    classifiers = [c for c in meta.get_all("Classifier") or [] if c.startswith("License")]
+    classifiers = [
+        c for c in meta.get_all("Classifier") or [] if c.startswith("License")
+    ]
     if classifiers:
         return ", ".join(c.split(" :: ")[-1] for c in classifiers)
     lic = meta.get("License")

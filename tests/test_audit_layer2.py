@@ -34,8 +34,9 @@ SOIL = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0)  # K = +0.818
 
 def _rod_world(soil, *, z0=0.5, length=2.0, ds_engine=0.25):
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, z0),
-                        length=length, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, z0), length=length, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image_2layer", segment_length=ds_engine)
     return eng.solve(w)
@@ -54,10 +55,12 @@ def test_potential_continuous_across_interface() -> None:
     the mismatch at depth was in the +7 %…+25 % range."""
     res = _rod_world(SOIL)
     eps = 0.02
-    pts = np.array([
-        [10.0, 0.0, SOIL.h_1 - eps],
-        [10.0, 0.0, SOIL.h_1 + eps],
-    ])
+    pts = np.array(
+        [
+            [10.0, 0.0, SOIL.h_1 - eps],
+            [10.0, 0.0, SOIL.h_1 + eps],
+        ]
+    )
     phi = res.potential(pts).real
     assert phi[1] == pytest.approx(phi[0], rel=5e-3)
 
@@ -80,8 +83,9 @@ def test_layer2_probe_homogeneous_limit() -> None:
     phi = res.potential(pts).real
     # Homogeneous reference: same world in HomogeneousSoil.
     w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5),
-                        length=2.0, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=2.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     res_h = gf.create_engine(backend="image", segment_length=0.25).solve(w)
     phi_h = res_h.potential(pts).real
@@ -115,8 +119,9 @@ def test_interface_margin_warning() -> None:
     """Deepest segment ending just above h_1 triggers the advisory."""
     w = gf.create_world(soil=SOIL)
     # Rod from 0.5 to 4.7 m — 0.3 m above h_1 = 5 with ds = 0.5.
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5),
-                        length=4.2, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=4.2, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image_2layer", segment_length=0.5)
     with pytest.warns(UserWarning, match="interface"):
@@ -131,8 +136,9 @@ def test_interface_margin_warning() -> None:
 def _cross_layer_world():
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=5.0)
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5),
-                        length=7.0, wire_radius=0.005)
+    gf.create_electrode(
+        w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=7.0, wire_radius=0.005
+    )
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     return w
 

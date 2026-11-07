@@ -65,12 +65,14 @@ def test_v2_distributed_matches_sunde_closed_form_on_isolated_strip() -> None:
             name="bare",
             soil=gf.TwoLayerSoil(rho_1=150.0, rho_2=30.0, h_1=4.0),
         )
-        w_bare.add_electrode(StripElectrode(
-            name="s",
-            start=(-L / 2, 0.0, 0.8),
-            end=(L / 2, 0.0, 0.8),
-            wire_radius=0.055,
-        ))
+        w_bare.add_electrode(
+            StripElectrode(
+                name="s",
+                start=(-L / 2, 0.0, 0.8),
+                end=(L / 2, 0.0, 0.8),
+                wire_radius=0.055,
+            )
+        )
         gf.create_source(w_bare, attached_to="s", magnitude=1.0)
         z_bare = _solve_z(w_bare)
 
@@ -78,13 +80,15 @@ def test_v2_distributed_matches_sunde_closed_form_on_isolated_strip() -> None:
             name="shell",
             soil=gf.TwoLayerSoil(rho_1=150.0, rho_2=30.0, h_1=4.0),
         )
-        w_shell.add_electrode(StripElectrode(
-            name="s",
-            start=(-L / 2, 0.0, 0.8),
-            end=(L / 2, 0.0, 0.8),
-            wire_radius=0.055,
-            concrete_shell_coefficient_ohm_m=C,
-        ))
+        w_shell.add_electrode(
+            StripElectrode(
+                name="s",
+                start=(-L / 2, 0.0, 0.8),
+                end=(L / 2, 0.0, 0.8),
+                wire_radius=0.055,
+                concrete_shell_coefficient_ohm_m=C,
+            )
+        )
         gf.create_source(w_shell, attached_to="s", magnitude=1.0)
         z_shell = _solve_z(w_shell)
 
@@ -105,18 +109,31 @@ def test_v2_zero_coefficient_is_no_op() -> None:
     ``np.any(... > 0)`` short-circuit in the solver skips the
     augmentation entirely."""
     L = 10.0
-    w0 = gf.create_world(name="w0", soil=gf.TwoLayerSoil(rho_1=150., rho_2=30., h_1=4.))
-    w0.add_electrode(StripElectrode(
-        name="s", start=(-L/2, 0, 0.8), end=(L/2, 0, 0.8),
-        wire_radius=0.055,
-    ))
+    w0 = gf.create_world(
+        name="w0", soil=gf.TwoLayerSoil(rho_1=150.0, rho_2=30.0, h_1=4.0)
+    )
+    w0.add_electrode(
+        StripElectrode(
+            name="s",
+            start=(-L / 2, 0, 0.8),
+            end=(L / 2, 0, 0.8),
+            wire_radius=0.055,
+        )
+    )
     gf.create_source(w0, attached_to="s", magnitude=1.0)
 
-    w_zero = gf.create_world(name="w_zero", soil=gf.TwoLayerSoil(rho_1=150., rho_2=30., h_1=4.))
-    w_zero.add_electrode(StripElectrode(
-        name="s", start=(-L/2, 0, 0.8), end=(L/2, 0, 0.8),
-        wire_radius=0.055, concrete_shell_coefficient_ohm_m=0.0,
-    ))
+    w_zero = gf.create_world(
+        name="w_zero", soil=gf.TwoLayerSoil(rho_1=150.0, rho_2=30.0, h_1=4.0)
+    )
+    w_zero.add_electrode(
+        StripElectrode(
+            name="s",
+            start=(-L / 2, 0, 0.8),
+            end=(L / 2, 0, 0.8),
+            wire_radius=0.055,
+            concrete_shell_coefficient_ohm_m=0.0,
+        )
+    )
     gf.create_source(w_zero, attached_to="s", magnitude=1.0)
 
     assert _solve_z(w0) == pytest.approx(_solve_z(w_zero), abs=1e-12)
@@ -130,11 +147,18 @@ def test_v2_insulating_concrete_dominates_impedance() -> None:
     contribution becomes negligible)."""
     L = 10.0
     C = 5000.0
-    w = gf.create_world(name="w", soil=gf.TwoLayerSoil(rho_1=150., rho_2=30., h_1=4.))
-    w.add_electrode(StripElectrode(
-        name="s", start=(-L/2, 0, 0.8), end=(L/2, 0, 0.8),
-        wire_radius=0.055, concrete_shell_coefficient_ohm_m=C,
-    ))
+    w = gf.create_world(
+        name="w", soil=gf.TwoLayerSoil(rho_1=150.0, rho_2=30.0, h_1=4.0)
+    )
+    w.add_electrode(
+        StripElectrode(
+            name="s",
+            start=(-L / 2, 0, 0.8),
+            end=(L / 2, 0, 0.8),
+            wire_radius=0.055,
+            concrete_shell_coefficient_ohm_m=C,
+        )
+    )
     gf.create_source(w, attached_to="s", magnitude=1.0)
     z = _solve_z(w)
     # C / L = 500 Ω; bulk-soil contribution roughly 7-12 Ω.
@@ -164,7 +188,9 @@ def test_v1_lumped_resistance_recorded_in_world() -> None:
         grounding=GroundingSystemSpec(
             electrodes=[
                 FoundationElectrodeSpec(
-                    style="ring", size_xy_m=dx_dy, depth_m=0.8,
+                    style="ring",
+                    size_xy_m=dx_dy,
+                    depth_m=0.8,
                     concrete_rho_ohm_m=rho_c,
                     concrete_thickness_m=t,
                     concrete_model="lumped",
@@ -174,7 +200,7 @@ def test_v1_lumped_resistance_recorded_in_world() -> None:
     )
     cfg = TnNetworkConfig(
         name="t1",
-        soil=TwoLayerSoilSpec(rho_1=150., rho_2=30., h_1=4.),
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
         substation=SubstationConfig(position=(40.0, -25.0)),
         placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
         building_types=[residential],
@@ -200,7 +226,9 @@ def test_v1_pen_service_drop_carries_lumped_resistance() -> None:
         grounding=GroundingSystemSpec(
             electrodes=[
                 FoundationElectrodeSpec(
-                    style="ring", size_xy_m=(10.0, 10.0), depth_m=0.8,
+                    style="ring",
+                    size_xy_m=(10.0, 10.0),
+                    depth_m=0.8,
                     concrete_rho_ohm_m=5000.0,
                     concrete_thickness_m=0.05,
                     concrete_model="lumped",
@@ -210,7 +238,7 @@ def test_v1_pen_service_drop_carries_lumped_resistance() -> None:
     )
     cfg = TnNetworkConfig(
         name="t2",
-        soil=TwoLayerSoilSpec(rho_1=150., rho_2=30., h_1=4.),
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
         substation=SubstationConfig(position=(40.0, -25.0)),
         placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
         building_types=[residential],
@@ -222,16 +250,14 @@ def test_v1_pen_service_drop_carries_lumped_resistance() -> None:
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     bond = next(
-        c for c in world.conductors
+        c
+        for c in world.conductors
         if c.name == "pen_service_residential_0_foundation_0"
     )
     assert bond.lumped_series_resistance_ohm is not None
     assert bond.lumped_series_resistance_ohm > 0.0
-    assert (
-        bond.lumped_series_resistance_ohm
-        == pytest.approx(
-            world.concrete_shell_corrections["residential_0_foundation_0"]
-        )
+    assert bond.lumped_series_resistance_ohm == pytest.approx(
+        world.concrete_shell_corrections["residential_0_foundation_0"]
     )
 
 
@@ -250,7 +276,9 @@ def test_distributed_model_does_not_use_lumped_registry() -> None:
         grounding=GroundingSystemSpec(
             electrodes=[
                 FoundationElectrodeSpec(
-                    style="ring", size_xy_m=(10.0, 10.0), depth_m=0.8,
+                    style="ring",
+                    size_xy_m=(10.0, 10.0),
+                    depth_m=0.8,
                     concrete_rho_ohm_m=5000.0,
                     concrete_thickness_m=0.05,
                     concrete_model="distributed",
@@ -260,7 +288,7 @@ def test_distributed_model_does_not_use_lumped_registry() -> None:
     )
     cfg = TnNetworkConfig(
         name="t3",
-        soil=TwoLayerSoilSpec(rho_1=150., rho_2=30., h_1=4.),
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
         substation=SubstationConfig(position=(40.0, -25.0)),
         placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
         building_types=[residential],
@@ -275,8 +303,7 @@ def test_distributed_model_does_not_use_lumped_registry() -> None:
     assert world.concrete_shell_corrections == {}
     # Strips carry the per-meter Sunde coefficient
     strips = [
-        e for e in world.electrodes
-        if e.kind == "strip" and "foundation" in e.name
+        e for e in world.electrodes if e.kind == "strip" and "foundation" in e.name
     ]
     assert len(strips) == 4
     expected_coeff = 5000.0 / (2.0 * math.pi) * math.log(0.055 / 0.005)
@@ -295,7 +322,9 @@ def test_concrete_fields_json_roundtrip() -> None:
     """A spec with stochastic ``concrete_rho_ohm_m`` must round-trip
     through Pydantic's JSON adapter."""
     spec = FoundationElectrodeSpec(
-        style="ring", size_xy_m=(10.0, 10.0), depth_m=0.8,
+        style="ring",
+        size_xy_m=(10.0, 10.0),
+        depth_m=0.8,
         concrete_rho_ohm_m=Discrete(
             values=[50.0, 150.0, 500.0, 2000.0],
             weights=[0.25, 0.40, 0.25, 0.10],
@@ -308,7 +337,7 @@ def test_concrete_fields_json_roundtrip() -> None:
     assert restored.concrete_model == "distributed"
     assert restored.concrete_thickness_m == 0.05
     assert isinstance(restored.concrete_rho_ohm_m, Discrete)
-    assert list(restored.concrete_rho_ohm_m.values) == [50., 150., 500., 2000.]
+    assert list(restored.concrete_rho_ohm_m.values) == [50.0, 150.0, 500.0, 2000.0]
 
 
 def test_stochastic_moisture_samples_per_realisation() -> None:
@@ -323,7 +352,9 @@ def test_stochastic_moisture_samples_per_realisation() -> None:
         grounding=GroundingSystemSpec(
             electrodes=[
                 FoundationElectrodeSpec(
-                    style="ring", size_xy_m=(10.0, 10.0), depth_m=0.8,
+                    style="ring",
+                    size_xy_m=(10.0, 10.0),
+                    depth_m=0.8,
                     concrete_rho_ohm_m=discrete,
                     concrete_thickness_m=0.05,
                     concrete_model="lumped",
@@ -333,7 +364,7 @@ def test_stochastic_moisture_samples_per_realisation() -> None:
     )
     cfg = TnNetworkConfig(
         name="t4",
-        soil=TwoLayerSoilSpec(rho_1=150., rho_2=30., h_1=4.),
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
         substation=SubstationConfig(position=(40.0, -25.0)),
         placement=ExplicitPlacement(
             positions=[(0.0, 10.0), (20.0, 10.0), (40.0, 10.0)],
@@ -373,7 +404,9 @@ def test_substation_ring_and_kvs_rod_are_never_concrete_encased() -> None:
         grounding=GroundingSystemSpec(
             electrodes=[
                 FoundationElectrodeSpec(
-                    style="ring", size_xy_m=(10.0, 10.0), depth_m=0.8,
+                    style="ring",
+                    size_xy_m=(10.0, 10.0),
+                    depth_m=0.8,
                     concrete_rho_ohm_m=5000.0,
                     concrete_thickness_m=0.05,
                     concrete_model="lumped",
@@ -383,7 +416,7 @@ def test_substation_ring_and_kvs_rod_are_never_concrete_encased() -> None:
     )
     cfg = TnNetworkConfig(
         name="t5",
-        soil=TwoLayerSoilSpec(rho_1=150., rho_2=30., h_1=4.),
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
         substation=SubstationConfig(position=(40.0, -25.0)),
         placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
         building_types=[residential],
@@ -402,9 +435,7 @@ def test_substation_ring_and_kvs_rod_are_never_concrete_encased() -> None:
     for e in world.electrodes:
         if e.kind == "strip":
             on_foundation = "foundation" in e.name
-            assert (e.concrete_shell_coefficient_ohm_m == 0.0) == (
-                not on_foundation
-            )
+            assert (e.concrete_shell_coefficient_ohm_m == 0.0) == (not on_foundation)
 
 
 # ---------------------------------------------------------------------
@@ -417,8 +448,8 @@ def _rotated_rectangle(centre, size, angle_deg):
     dx, dy = size
     a = math.radians(angle_deg)
     c, s = math.cos(a), math.sin(a)
-    local = [(-dx/2,-dy/2), (dx/2,-dy/2), (dx/2,dy/2), (-dx/2,dy/2)]
-    return [(c*x - s*y + cx, s*x + c*y + cy) for x, y in local]
+    local = [(-dx / 2, -dy / 2), (dx / 2, -dy / 2), (dx / 2, dy / 2), (-dx / 2, dy / 2)]
+    return [(c * x - s * y + cx, s * x + c * y + cy) for x, y in local]
 
 
 def test_osm_pipeline_with_dry_concrete_drastically_increases_z_system() -> None:
@@ -439,7 +470,7 @@ def test_osm_pipeline_with_dry_concrete_drastically_increases_z_system() -> None
     ]
     common_cfg_kwargs = dict(
         name="osm_concrete",
-        soil=TwoLayerSoilSpec(rho_1=150., rho_2=30., h_1=4.),
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
         substation=SubstationConfig(position=(40.0, -25.0)),
         placement=OsmBuildingPlacement(footprints=buildings, min_area_m2=16.0),
         building_counts={"residential": 5},
@@ -455,7 +486,9 @@ def test_osm_pipeline_with_dry_concrete_drastically_increases_z_system() -> None
             grounding=GroundingSystemSpec(
                 electrodes=[
                     FoundationElectrodeSpec(
-                        style="ring", size_m=10.0, depth_m=0.8,
+                        style="ring",
+                        size_m=10.0,
+                        depth_m=0.8,
                         concrete_rho_ohm_m=rho_c,
                         concrete_thickness_m=0.05,
                         concrete_model="lumped",
@@ -466,8 +499,10 @@ def test_osm_pipeline_with_dry_concrete_drastically_increases_z_system() -> None
         cfg = TnNetworkConfig(building_types=[residential], **common_cfg_kwargs)
         world = TnNetworkGenerator(cfg, seed=0).build()
         eng = gf.create_engine(
-            backend="image_2layer", segment_length=0.5,
-            frequencies=[50.0], earth_inductive_model="perfect_mirror",
+            backend="image_2layer",
+            segment_length=0.5,
+            frequencies=[50.0],
+            earth_inductive_model="perfect_mirror",
         )
         return eng.solve(world).electrode_potentials["trafo_ring_0"][0].real
 
