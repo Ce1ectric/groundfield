@@ -12,14 +12,48 @@ A :class:`FieldResult` is the unified return value of
 - ``soil_resistivity`` and ``soil`` — provide the parameters needed to
   evaluate the appropriate Green's function (homogeneous or 2-layer)
   inside :meth:`potential`.
+- ``sources`` — the source snapshot of the solve, read by
+  :meth:`FieldResult.input_impedance`.
+- ``metadata`` — the core keys every backend reports (see
+  :data:`groundfield.solver.engine.CORE_METADATA_KEYS`), including the
+  ``provenance`` block, plus backend-specific keys.
+
+Serialisation
+-------------
+``model_dump_json`` / ``model_validate_json`` round-trip a result
+losslessly and produce standard JSON (no ``NaN`` / ``Infinity``
+tokens). Values that JSON cannot express in ``metadata`` are written as
+single-key tagged objects and restored on validation:
+
+* ``{"$float": "inf" | "-inf" | "nan"}`` — non-finite float;
+* ``{"$complex": [re, im]}`` — complex number;
+* ``{"$tuple": [...]}`` — tuple;
+* ``{"$dict": [[key, value], ...]}`` — mapping with non-string keys
+  (e.g. ``penetration_depth`` keyed by frequency) or with a key that
+  looks like a tag;
+* ``{"$ndarray": {"dtype": ..., "shape": [...], "data": [...]}}`` —
+  numpy array (bool, integer, float, complex or string dtype).
+
+numpy scalars are stored as the equal Python scalar. The tag names are
+reserved: a metadata value that is a single-key mapping with one of the
+keys above is decoded on validation. The versioned file format around
+this JSON is :func:`groundfield.io.save_result` /
+:func:`groundfield.io.load_result`.
 """
 
 from __future__ import annotations
 
-from typing import Any, Union
+import functools
+import hashlib
+import json
+import math
+import platform
+import sys
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from groundfield.soil.models import (
     HomogeneousSoil,
@@ -27,7 +61,19 @@ from groundfield.soil.models import (
     TwoLayerSoil,
 )
 
-__all__ = ["FieldResult", "PointSource", "SourceRecord"]
+if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
+    import pandas as pd
+
+    from groundfield.solver.engine import Engine
+    from groundfield.world import World
+
+__all__ = [
+    "FieldResult",
+    "PointSource",
+    "SourceRecord",
+    "solve_provenance",
+    "world_fingerprint",
+]
 
 
 # Local discriminated union of all soil types — kept here to avoid a
@@ -81,10 +127,207 @@ class SourceRecord(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------
+# Provenance
+# ---------------------------------------------------------------------
+
+
+def world_fingerprint(world: World) -> str:
+    """SHA-256 fingerprint of the canonical JSON of a world.
+
+    The canonical form is ``json.dumps(world.model_dump(mode="json"),
+    sort_keys=True, separators=(",", ":"))``. Pydantic writes floats in
+    their shortest round-trip form, so equal worlds give equal
+    fingerprints, also after a JSON round trip of the world. The
+    fingerprint depends on the world schema of the installed version:
+    renamed or added model fields change it.
+
+    Parameters
+    ----------
+    world
+        The world to fingerprint.
+
+    Returns
+    -------
+    str
+        ``"sha256:"`` followed by 64 hexadecimal digits.
+    """
+    canonical = json.dumps(
+        world.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+    )
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _package_version(module_name: str) -> str:
+    """Version of an imported module, else of its installed distribution."""
+    module = sys.modules.get(module_name)
+    version = getattr(module, "__version__", None)
+    if version:
+        return str(version)
+    try:
+        from importlib.metadata import version as dist_version
+
+        return dist_version(module_name)
+    except Exception:  # noqa: BLE001 - provenance must never break a solve
+        return "unknown"
+
+
+@functools.lru_cache(maxsize=1)
+def _environment() -> tuple[tuple[str, str], ...]:
+    """Versions and platform of this process (constant per process)."""
+    import pydantic
+
+    from groundfield import __version__
+
+    return (
+        ("groundfield_version", str(__version__)),
+        ("python", platform.python_version()),
+        ("numpy", str(np.__version__)),
+        ("scipy", _package_version("scipy")),
+        ("pydantic", str(pydantic.VERSION)),
+        ("platform", platform.platform()),
+    )
+
+
+def solve_provenance(world: World, engine: Engine) -> dict[str, Any]:
+    """Provenance block of a solve (without the timestamp).
+
+    :meth:`Engine.solve <groundfield.solver.engine.Engine.solve>` calls
+    this before the backend runs and adds ``solved_at_utc`` when it
+    returns; the block is stored as ``FieldResult.metadata["provenance"]``.
+
+    Parameters
+    ----------
+    world
+        The world as built by the caller.
+    engine
+        The engine configuration.
+
+    Returns
+    -------
+    dict
+        ``groundfield_version``, ``python``, ``numpy``, ``scipy``,
+        ``pydantic``, ``platform``, ``engine`` (the JSON dump of the
+        engine) and ``world_fingerprint`` (see :func:`world_fingerprint`).
+    """
+    block: dict[str, Any] = dict(_environment())
+    block["engine"] = engine.model_dump(mode="json")
+    block["world_fingerprint"] = world_fingerprint(world)
+    return block
+
+
+# ---------------------------------------------------------------------
+# Lossless JSON codec of the metadata
+# ---------------------------------------------------------------------
+
+_TAG_FLOAT = "$float"
+_TAG_COMPLEX = "$complex"
+_TAG_TUPLE = "$tuple"
+_TAG_DICT = "$dict"
+_TAG_NDARRAY = "$ndarray"
+_TAGS = frozenset({_TAG_FLOAT, _TAG_COMPLEX, _TAG_TUPLE, _TAG_DICT, _TAG_NDARRAY})
+
+
+def _encode_float(value: float) -> Any:
+    if math.isfinite(value):
+        return value
+    if math.isnan(value):
+        return {_TAG_FLOAT: "nan"}
+    return {_TAG_FLOAT: "inf" if value > 0 else "-inf"}
+
+
+def _encode_metadata(value: Any, path: str) -> Any:
+    """Encode a metadata value into standard-JSON-compatible data."""
+    if isinstance(value, np.ndarray):
+        if value.dtype.kind not in "biufcU":
+            raise TypeError(
+                f"{path}: numpy arrays of dtype {value.dtype} cannot be "
+                "stored losslessly in FieldResult.metadata."
+            )
+        data = [
+            _encode_metadata(item, f"{path}[{i}]")
+            for i, item in enumerate(value.ravel().tolist())
+        ]
+        return {
+            _TAG_NDARRAY: {
+                "dtype": value.dtype.str,
+                "shape": list(value.shape),
+                "data": data,
+            }
+        }
+    if isinstance(value, np.generic):
+        value = value.item()
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return _encode_float(value)
+    if isinstance(value, complex):
+        return {_TAG_COMPLEX: [_encode_float(value.real), _encode_float(value.imag)]}
+    if isinstance(value, tuple):
+        return {
+            _TAG_TUPLE: [
+                _encode_metadata(v, f"{path}[{i}]") for i, v in enumerate(value)
+            ]
+        }
+    if isinstance(value, list):
+        return [_encode_metadata(v, f"{path}[{i}]") for i, v in enumerate(value)]
+    if isinstance(value, Mapping):
+        plain = all(isinstance(k, str) for k in value) and not (
+            len(value) == 1 and next(iter(value)) in _TAGS
+        )
+        if plain:
+            return {k: _encode_metadata(v, f"{path}[{k!r}]") for k, v in value.items()}
+        return {
+            _TAG_DICT: [
+                [
+                    _encode_metadata(k, f"{path} key"),
+                    _encode_metadata(v, f"{path}[{k!r}]"),
+                ]
+                for k, v in value.items()
+            ]
+        }
+    raise TypeError(
+        f"{path}: cannot store a {type(value).__name__} losslessly in "
+        "FieldResult.metadata; use None, bool, int, float, complex, str, "
+        "lists, tuples, mappings, numpy scalars or numpy arrays."
+    )
+
+
+def _decode_metadata(value: Any) -> Any:
+    """Inverse of :func:`_encode_metadata`."""
+    if isinstance(value, list):
+        return [_decode_metadata(v) for v in value]
+    if not isinstance(value, dict):
+        return value
+    if len(value) == 1:
+        tag, body = next(iter(value.items()))
+        if tag == _TAG_FLOAT and isinstance(body, str):
+            return float(body)
+        if tag == _TAG_COMPLEX and isinstance(body, list) and len(body) == 2:
+            return complex(_decode_metadata(body[0]), _decode_metadata(body[1]))
+        if tag == _TAG_TUPLE and isinstance(body, list):
+            return tuple(_decode_metadata(v) for v in body)
+        if tag == _TAG_DICT and isinstance(body, list):
+            return {
+                _decode_metadata(pair[0]): _decode_metadata(pair[1]) for pair in body
+            }
+        if tag == _TAG_NDARRAY and isinstance(body, dict):
+            items = [_decode_metadata(v) for v in body["data"]]
+            dtype = np.dtype(body["dtype"])
+            return np.array(items, dtype=dtype).reshape(tuple(body["shape"]))
+    return {k: _decode_metadata(v) for k, v in value.items()}
+
+
 class FieldResult(BaseModel):
     """Result of a field computation."""
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+        # Non-finite floats in typed fields become "Infinity" / "NaN"
+        # strings, so the JSON stays standard and round-trips exactly.
+        ser_json_inf_nan="strings",
+    )
 
     backend: str
     frequencies: list[float]
@@ -116,7 +359,16 @@ class FieldResult(BaseModel):
             "``[name]``."
         ),
     )
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Core keys of every solve (groundfield.solver.engine."
+            "CORE_METADATA_KEYS, including the provenance block) plus "
+            "backend-specific keys. Serialised losslessly (tagged JSON "
+            "objects for non-finite floats, complex numbers, tuples, "
+            "non-string keys and numpy arrays)."
+        ),
+    )
     sources: list[SourceRecord] = Field(
         default_factory=list,
         description=(
@@ -124,6 +376,21 @@ class FieldResult(BaseModel):
             ":meth:`input_impedance`. Empty for hand-built results."
         ),
     )
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _restore_metadata(cls, value: Any) -> Any:
+        """Decode the tagged JSON objects written by the serialiser."""
+        if not isinstance(value, dict):
+            return value
+        if len(value) == 1 and _TAG_DICT in value:
+            return _decode_metadata(value)
+        return {k: _decode_metadata(v) for k, v in value.items()}
+
+    @field_serializer("metadata", when_used="json")
+    def _store_metadata(self, value: dict[str, Any]) -> Any:
+        """Encode the metadata losslessly into standard JSON data."""
+        return _encode_metadata(value, "metadata")
 
     # ------------------------------------------------------------------
     # Derived quantities
@@ -271,7 +538,9 @@ class FieldResult(BaseModel):
         ]
         return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i_sum)]
 
-    def _cluster_potential(self, electrode_name: str) -> tuple[list[str], list[complex]]:
+    def _cluster_potential(
+        self, electrode_name: str
+    ) -> tuple[list[str], list[complex]]:
         """Members and length-weighted potential of a galvanic cluster.
 
         Shared by :meth:`cluster_impedance` and :meth:`input_impedance`;
@@ -671,6 +940,164 @@ class FieldResult(BaseModel):
         phi_re = _series_for(currents.real)
         phi_im = _series_for(currents.imag)
         return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)
+
+    # ------------------------------------------------------------------
+    # Tables
+    # ------------------------------------------------------------------
+
+    def to_dataframe(self, table: str = "electrodes") -> pd.DataFrame:
+        """Tidy table of the result, one row per frequency and object.
+
+        Parameters
+        ----------
+        table
+            ``"electrodes"`` (default): one row per frequency and
+            electrode with the columns
+
+            * ``frequency_hz`` — frequency in Hz;
+            * ``electrode`` — electrode name;
+            * ``cluster`` — galvanic cluster, labelled by its
+              alphabetically first member (see :attr:`clusters`);
+            * ``potential_v`` — electrode potential in V (complex);
+            * ``current_a`` — leakage current of the electrode into the
+              soil in A (complex);
+            * ``cluster_impedance_ohm`` — :meth:`cluster_impedance` of
+              the electrode's cluster in Ω (complex), the cluster
+              potential over the cluster's own leakage current.
+
+            ``"sources"``: one row per frequency and recorded source
+            with ``frequency_hz``, ``source``, ``kind``,
+            ``attached_to``, ``return_to``, ``current_a`` (impressed
+            current in A, complex) and ``input_impedance_ohm``
+            (:meth:`input_impedance` in Ω, complex), the impedance seen
+            at the feeding point.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The table; rows ordered by frequency, then by electrode /
+            source in result order. Values that the result does not
+            carry (hand-built results) are ``nan``.
+
+        Raises
+        ------
+        ValueError
+            If ``table`` is not ``"electrodes"`` or ``"sources"``.
+        ImportError
+            If pandas is not installed (it is imported on first use).
+
+        Examples
+        --------
+        >>> df = result.to_dataframe()                       # doctest: +SKIP
+        >>> df.pivot(index="frequency_hz", columns="electrode",
+        ...          values="potential_v").abs()             # doctest: +SKIP
+        """
+        if table not in ("electrodes", "sources"):
+            raise ValueError(
+                f"Unknown table {table!r}; choose 'electrodes' or 'sources'."
+            )
+        try:
+            import pandas as pd
+        except ImportError as exc:  # pragma: no cover - pandas is a dependency
+            raise ImportError(
+                "FieldResult.to_dataframe needs pandas (pip install pandas)."
+            ) from exc
+        if table == "sources":
+            return self._source_frame(pd)
+        return self._electrode_frame(pd)
+
+    def _electrode_frame(self, pd: Any) -> Any:
+        nan = complex("nan")
+        names = list(self.electrode_potentials)
+        names += [n for n in self.electrode_currents if n not in names]
+        labels: dict[str, str] = {}
+        z_cluster: dict[str, list[complex]] = {}
+        for name in names:
+            members = self.clusters.get(name) or [name]
+            label = members[0]
+            labels[name] = label
+            if label not in z_cluster:
+                try:
+                    z_cluster[label] = list(self.cluster_impedance(name))
+                except (KeyError, ValueError, ZeroDivisionError):
+                    z_cluster[label] = []
+
+        def _at(values: list[complex] | None, k: int) -> complex:
+            return complex(values[k]) if values is not None and k < len(values) else nan
+
+        rows: dict[str, list[Any]] = {
+            "frequency_hz": [],
+            "electrode": [],
+            "cluster": [],
+            "potential_v": [],
+            "current_a": [],
+            "cluster_impedance_ohm": [],
+        }
+        for k, f in enumerate(self.frequencies):
+            for name in names:
+                rows["frequency_hz"].append(float(f))
+                rows["electrode"].append(name)
+                rows["cluster"].append(labels[name])
+                rows["potential_v"].append(_at(self.electrode_potentials.get(name), k))
+                rows["current_a"].append(_at(self.electrode_currents.get(name), k))
+                rows["cluster_impedance_ohm"].append(_at(z_cluster[labels[name]], k))
+        return pd.DataFrame(
+            {
+                "frequency_hz": pd.Series(rows["frequency_hz"], dtype=float),
+                "electrode": pd.Series(rows["electrode"], dtype=object),
+                "cluster": pd.Series(rows["cluster"], dtype=object),
+                "potential_v": pd.Series(rows["potential_v"], dtype=complex),
+                "current_a": pd.Series(rows["current_a"], dtype=complex),
+                "cluster_impedance_ohm": pd.Series(
+                    rows["cluster_impedance_ohm"], dtype=complex
+                ),
+            }
+        )
+
+    def _source_frame(self, pd: Any) -> Any:
+        nan = complex("nan")
+        z_in: dict[str, list[complex]] = {}
+        for record in self.sources:
+            if record.kind != "current":
+                continue
+            try:
+                z_in[record.name] = list(self.input_impedance(record.name))
+            except (KeyError, ValueError, ZeroDivisionError):
+                pass
+        rows: dict[str, list[Any]] = {
+            "frequency_hz": [],
+            "source": [],
+            "kind": [],
+            "attached_to": [],
+            "return_to": [],
+            "current_a": [],
+            "input_impedance_ohm": [],
+        }
+        for k, f in enumerate(self.frequencies):
+            for record in self.sources:
+                z = z_in.get(record.name, [])
+                rows["frequency_hz"].append(float(f))
+                rows["source"].append(record.name)
+                rows["kind"].append(record.kind)
+                rows["attached_to"].append(record.attached_to)
+                rows["return_to"].append(record.return_to)
+                rows["current_a"].append(
+                    complex(record.current[k]) if k < len(record.current) else nan
+                )
+                rows["input_impedance_ohm"].append(complex(z[k]) if k < len(z) else nan)
+        return pd.DataFrame(
+            {
+                "frequency_hz": pd.Series(rows["frequency_hz"], dtype=float),
+                "source": pd.Series(rows["source"], dtype=object),
+                "kind": pd.Series(rows["kind"], dtype=object),
+                "attached_to": pd.Series(rows["attached_to"], dtype=object),
+                "return_to": pd.Series(rows["return_to"], dtype=object),
+                "current_a": pd.Series(rows["current_a"], dtype=complex),
+                "input_impedance_ohm": pd.Series(
+                    rows["input_impedance_ohm"], dtype=complex
+                ),
+            }
+        )
 
     # ------------------------------------------------------------------
     # Diagnostics
