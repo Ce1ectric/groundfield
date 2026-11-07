@@ -96,6 +96,7 @@ from groundfield.geometry.electrodes import (
     StarElectrode,
     StripElectrode,
 )
+from groundfield.geometry.junction import Junction
 from groundfield.soil.models import (
     HomogeneousSoil,
     MultiLayerSoil,
@@ -117,6 +118,7 @@ from groundfield.api import (
     create_conductor,
     create_electrode,
     create_engine,
+    create_junction,
     create_source,
     create_world,
     run_simulation,
@@ -278,7 +280,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
     ),
     "groundfield.solver.fem": ("FemReductionWarning",),
     "groundfield.diagnostics": (
+        "Diagnostic",
+        "DiagnosticsReport",
+        "DiagnosticsWarning",
+        "ResourceLimitError",
         "check_segment_resolution",
+        "diagnose",
         "expected_segments",
         "world_statistics",
     ),
@@ -433,7 +440,12 @@ if _typing.TYPE_CHECKING:
     )
     from groundfield.solver.fem import FemReductionWarning
     from groundfield.diagnostics import (
+        Diagnostic,
+        DiagnosticsReport,
+        DiagnosticsWarning,
+        ResourceLimitError,
         check_segment_resolution,
+        diagnose,
         expected_segments,
         world_statistics,
     )
@@ -487,6 +499,7 @@ __all__ = [
     "StarElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
+    "Junction",
     "Conductor",
     "ConductorType",
     "Source",
@@ -507,6 +520,7 @@ __all__ = [
     "create_electrode",
     "create_conductor",
     "create_source",
+    "create_junction",
     "create_engine",
     "run_simulation",
     # Plots
@@ -642,6 +656,11 @@ __all__ = [
     "world_statistics",
     "expected_segments",
     "check_segment_resolution",
+    "diagnose",
+    "DiagnosticsReport",
+    "Diagnostic",
+    "DiagnosticsWarning",
+    "ResourceLimitError",
 ]
 
 

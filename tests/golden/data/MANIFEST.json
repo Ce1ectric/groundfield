@@ -210,6 +210,20 @@
       "scipy": "1.18.1",
       "sha256": "61e3cdbd81986155cccc8a921676cc6da933384bc8289095e87240d2226b93ff"
     },
+    "floating_bonded_pair_two_layer": {
+      "generated_utc": "2026-11-07T22:43:31+00:00",
+      "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
+      "git_describe": "v0.15.0",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf_pristine_v0150/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 7,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "e2c29ad011583dc456ee62984bf4278b4ee331432e6db69f5de822c9ab854e40"
+    },
     "gen_layout_builder": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
       "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
@@ -349,6 +363,20 @@
       "python": "3.12.3",
       "scipy": "1.18.1",
       "sha256": "f49998ee2ea8a1aa73e51bb4e3a69706507b782b0ad847714c46f0a87e736b3d"
+    },
+    "junction_measurement_leads_hom": {
+      "generated_utc": "2026-11-07T22:43:32+00:00",
+      "git_commit": "c0ae6cc8a24102c42de38a83bd210ff2d012e596",
+      "git_describe": "v0.15.0-128-gc0ae6cc-dirty",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 8,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "7df5d9499b84d365da30e793759c360d5d134b5fbf016d8829dbcf29f15f5e3d"
     },
     "line_cond_galvanic_neumann": {
       "generated_utc": "2026-11-07T21:25:46+00:00",
@@ -573,6 +601,20 @@
       "python": "3.12.3",
       "scipy": "1.18.1",
       "sha256": "306cbd023286752396e2bef8c2d45b528f75bc43afcb0dcbc06ea4d04c854d39"
+    },
+    "src_two_terminal_rods_hom": {
+      "generated_utc": "2026-11-07T22:43:32+00:00",
+      "git_commit": "c0ae6cc8a24102c42de38a83bd210ff2d012e596",
+      "git_describe": "v0.15.0-128-gc0ae6cc-dirty",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 10,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "eafe780ec64957f6070d5bc84975634313eac98399260c18fc24fa42dfa9de4d"
     }
   }
 }

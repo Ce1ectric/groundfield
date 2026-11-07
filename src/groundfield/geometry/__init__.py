@@ -37,6 +37,7 @@ from groundfield.geometry.electrodes import (
     StarElectrode,
     StripElectrode,
 )
+from groundfield.geometry.junction import Junction
 from groundfield.geometry.primitives import WireSegments
 
 __all__ = [
@@ -48,5 +49,6 @@ __all__ = [
     "StarElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
+    "Junction",
     "WireSegments",
 ]

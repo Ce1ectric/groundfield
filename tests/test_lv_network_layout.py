@@ -856,17 +856,17 @@ def test_to_world_rejects_mismatched_foundation_mask() -> None:
         layout.to_world(foundation_mask=[True, False, True])
 
 
+@pytest.mark.finding("10.16")
 def test_to_world_wires_source_return_through_aux() -> None:
-    """When an auxiliary electrode is configured the layout adds the
-    substation-side source AND an opposite-sign return source at
-    the aux anchor so the measurement loop is physically closed.
+    """When an auxiliary electrode is configured, the layout's single
+    source returns its current through the aux anchor (``return_to``).
 
-    The v0.7 image solver only consumes :attr:`Source.attached_to`;
-    :attr:`Source.return_to` is recorded for documentation but not
-    honoured by the engine. The extra ``phase_deg=180`` source is
-    the workaround that makes the engine see the test current
-    leaving via the Hilfserder. With the v0.7 default geometry the
-    aux anchor is ``aux_rod_0`` (first rod of the 3-rod triangle).
+    Up to v0.15.0 the solver ignored :attr:`Source.return_to`, and the
+    layout closed the loop with an extra ``phase_deg=180`` source on the
+    aux electrode. Since the solver honours ``return_to`` (10.16) that
+    counter-source would count the return current twice, so the layout
+    no longer adds it. With the default geometry the aux anchor is
+    ``aux_rod_0`` (first rod of the 3-rod triangle).
     """
     fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
     layout = LvNetworkLayout.from_footprints(
@@ -881,19 +881,12 @@ def test_to_world_wires_source_return_through_aux() -> None:
     # The triangle creates 3 rod electrodes, all prefixed ``aux_``.
     aux_rod_electrodes = [e for e in world.electrodes if e.name.startswith("aux_rod_")]
     assert len(aux_rod_electrodes) == 3
-    # Two sources -- substation injection + aux return.
-    assert len(world.sources) == 2
-    sub_source = next(s for s in world.sources if s.attached_to == "substation_ring_0")
-    aux_source = next(s for s in world.sources if s.attached_to == "aux_rod_0")
-    # The substation source still records the aux as its (logical)
-    # return_to (= the first present aux electrode) even though the
-    # solver ignores it.
+    # One two-terminal source: substation injection, return via the aux.
+    assert len(world.sources) == 1
+    (sub_source,) = world.sources
+    assert sub_source.attached_to == "substation_ring_0"
     assert sub_source.return_to == "aux_rod_0"
     assert math.isclose(sub_source.phase_deg, 0.0)
-    # The auxiliary return source is the same magnitude but
-    # 180 deg out of phase.
-    assert math.isclose(aux_source.magnitude, sub_source.magnitude)
-    assert math.isclose(aux_source.phase_deg, 180.0)
 
 
 def test_to_world_remote_return_when_no_aux() -> None:

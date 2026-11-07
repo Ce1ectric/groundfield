@@ -41,3 +41,27 @@ same current in). The reference is 0, so the harness reports the absolute
 change (2.28e-2 A) as max_rel."""
 min_rel_change = 1e-2
 max_rel_change = 5e-2
+
+# Coordinator, 2026-11-08: floating_bonded_pair_two_layer runs on v0.15.0 and
+# was stored from the pristine tag, so the report shows the image-family half
+# of 10.29 (a bonded, source-free rod + ring pair floats with zero net
+# current instead of being dropped and read back as the incident field).
+
+[[change]]
+cases = ["floating_bonded_pair_two_layer"]
+quantities = ["phi/p_*", "I/p_*"]
+findings = ["10.29"]
+reason = """The source-free pair is one equipotential with zero net current: its
+potentials move to the common floating value (+9 % ring, +61 % rod) and the
+members exchange an equalising current of about 10 mA (reference 0, so the
+harness reports the absolute change as max_rel)."""
+min_rel_change = 1e-3
+max_rel_change = 0.7
+
+[[change]]
+cases = ["floating_bonded_pair_two_layer"]
+quantities = ["phi/src", "Zc/src"]
+findings = ["10.29"]
+reason = "Back-reaction of the floating pair on the driven rod (-0.016 %)."
+min_rel_change = 1e-5
+max_rel_change = 1e-3

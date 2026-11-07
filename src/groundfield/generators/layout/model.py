@@ -729,9 +729,9 @@ class LvNetworkLayout(
                 )
             )
 
-        # 7. Sources. ``Source.return_to`` is not yet honoured by the
-        #    solver, so with an auxiliary electrode the loop is closed by
-        #    an explicit counter-source (same magnitude, 180 deg) on it.
+        # 7. Sources. With an auxiliary electrode the source takes its
+        #    current back there (``Source.return_to``, honoured by the
+        #    solver since 2026.11, finding 10.16).
         sources: list[PlannedSource] = []
         if include_source:
             sources.append(
@@ -743,15 +743,6 @@ class LvNetworkLayout(
                     magnitude=source_magnitude_a,
                 )
             )
-            if measurement is not None:
-                sources.append(
-                    PlannedSource(
-                        name=f"{measurement.auxiliary.anchor}_return",
-                        attached_to=measurement.auxiliary.name,
-                        magnitude=source_magnitude_a,
-                        phase_deg=180.0,
-                    )
-                )
 
         return NetworkPlan(
             name=name,
