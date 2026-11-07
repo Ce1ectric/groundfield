@@ -75,14 +75,14 @@ def _series_impedance(w: gf.World, model: str, freqs: list[float]) -> np.ndarray
     return (v1 - v2) / i2
 
 
-@WAVE2
 @pytest.mark.finding("10.20", "F32")
 @pytest.mark.parametrize("freq", [50.0, 1000.0])
 def test_carson_series_reactance_matches_carson(freq: float) -> None:
     """1 km isolated PEN: X = l * X'_Carson(GMR = a e^{-1/4}) within 1 %.
 
     v0.15.0: 2.04x (50 Hz) and 2.19x (1 kHz) — Carson's correction on
-    top of the additive image (one-line fix: image="antiparallel").
+    top of the additive image (the solver now assembles it on the
+    anti-parallel image, Carson's own baseline).
     """
     from groundfield.references.earth_return import carson_self_impedance
 

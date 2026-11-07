@@ -1,10 +1,17 @@
 """Carson 1926 correction for the earth-return path.
 
-This module implements the magnetic-image correction described in
-ADR-0005. It complements the perfect-mirror Neumann assembly from
-ADR-0004 (in :mod:`groundfield.coupling.inductance`) with the
-finite-conductivity contribution that Carson 1926 derived for a
-homogeneous, semi-infinite, conductive half-space.
+This module implements the earth-return correction described in
+ADR-0005: the finite-conductivity contribution that Carson 1926
+derived for a homogeneous, semi-infinite, conductive half-space. It is
+defined against the **anti-parallel** (perfect-electric-conductor)
+image of the Neumann inductance matrix
+(``build_inductance_matrix(image="antiparallel")`` in
+:mod:`groundfield.coupling.inductance`): the complete per-metre series
+impedance of a wire at height $h$ is
+$j\\omega(\\mu_0/2\\pi)\\ln(2h/\\mathrm{GMR}) + \\Delta Z_\\text{Carson}$.
+Up to 0.15.0 the solver added it on top of the additive
+("perfect-mirror") image instead, which double-counts the image
+(review pass 10, finding 10.20 / F32).
 
 Mathematical background
 -----------------------
@@ -49,27 +56,32 @@ Three evaluation regimes
 We follow Carson's own discussion in section III of the original
 paper:
 
-1. **Small $a$** ($a \\le 0.25$) — Carson eqs. 34/35,
-   leading-term form. Closed form, only $\\sin / \\cos / \\ln$.
-2. **Intermediate $a$** ($0.25 < a \\le 5$) — direct
-   **numerical quadrature** of Carson's $J(p, q)$ via
-   Gauss–Legendre on a truncated interval. The original Carson
+1. **Small $a$** ($a \\le 0.25$) — Carson's convergent series
+   (eqs. 34/35), summed to order $a^{12}$ with the exact constants
+   $c_2 = 5/4 + \\ln 2 - \\gamma_E$ and
+   $Q_0 = \\tfrac12(\\tfrac12 - \\gamma_E)$. Closed form, only
+   $\\sin / \\cos / \\ln$.
+2. **Intermediate $a$** ($0.25 < a \\le 15$) — direct
+   **numerical quadrature** of Carson's $J(p, q)$: a composite,
+   geometrically graded Gauss–Legendre rule for $\\theta \\approx 0$
+   and QUADPACK's Fourier integrator otherwise. The original Carson
    1926 series in that range is technically convergent but its
-   recurrence is numerically delicate; quadrature is robust and
-   converges to machine precision in $\\le 64$ nodes.
+   recurrence is numerically delicate; quadrature is robust.
 3. **Large $a$** ($a > 15$) — Carson eqs. 36/37, asymptotic
    expansion in inverse powers of $a$ up to $a^{-7}$ (for
    $\\theta \\le 1.4$ rad; steeper angles stay on the quadrature).
 
-Accuracy against mpmath (review pass 10): the quadrature is
-machine-accurate for every $a > 0.25$; the asymptote is accurate to
-$\\le 10^{-7}$ above $a = 15$, so the large-$a$ boundary is continuous
-to that level. The small-$a$ form omits Carson's $a^2$ term of $Q$
-($-(\\pi/64)\\,a^2\\cos 2\\theta$) and rounds the constant to
-$-0.0386$: the boundary at $a = 0.25$ jumps by up to $2.9\\cdot10^{-3}$ in
-$Q$ (about 0.3 %, decaying $\\propto a^2$ below it). Changing it moves
-every ``carson_series`` result and is scheduled together with the
-``carson_series`` image-baseline fix (finding 10.20).
+Accuracy against mpmath (review pass 10): the series and the
+quadrature are accurate to round-off for $a \\le 0.25$ and
+$a > 0.25$ respectively, the asymptote to
+$\\le 10^{-7}$ above $a = 15$; both regime boundaries are continuous to
+those levels. Until the calendar release 2026.11 the small-$a$ form
+kept only the leading terms (no $a^2$ term $-(\\pi/64)\\,a^2\\cos 2\\theta$
+of $Q$, constant rounded to $-0.0386$, $P$ and $Q$ off by up to
+$2.4\\cdot 10^{-4}$ and $3.0\\cdot 10^{-3}$ at $a = 0.25$) and the
+$\\theta = 0$ quadrature used 64 nodes on $[0, 30/p]$ ($6\\cdot 10^{-6}$
+off at $a = 0.25$): the boundary at $a = 0.25$ jumped by up to
+$2.9\\cdot 10^{-3}$ in $Q$ (findings 10.46, 10.20).
 
 Implementation notes
 --------------------
@@ -117,10 +129,46 @@ __all__ = [
 # 2018 value differs by 5.5e-10 relative).
 MU_0 = 4.0e-7 * math.pi
 
-# Carson eq. 35 leading offset for Q. Carson 1926 prints this as
-# "-0.0386"; the exact closed form is (1/2)·(1/2 − γ_E) with Euler's
-# constant γ_E = 0.57721566... → −0.0386078...
-_Q_OFFSET_SMALL_A = -0.0386
+# Euler's constant γ_E.
+_EULER_GAMMA = 0.5772156649015329
+# Carson eq. 35 constant of Q. Carson 1926 prints it as "-0.0386"; the
+# exact closed form is (1/2)·(1/2 − γ_E) = −0.0386078... (review pass
+# 10, finding 10.46).
+_Q_OFFSET_SMALL_A = 0.5 * (0.5 - _EULER_GAMMA)
+# Carson's c_2 = 5/4 + ln 2 − γ_E = 1.3659315... (printed as 1.3659315;
+# the leading-term form of earlier releases used 0.6728 + ln 2).
+_C2_SMALL_A = 1.25 + math.log(2.0) - _EULER_GAMMA
+# Highest power of a summed in the small-a series: order 12 is at
+# round-off for every a <= 0.25 and theta (order 8 leaves 3e-13, order
+# 10 2e-16 at a = 0.25; measured against a composite Gauss–Legendre
+# rule and mpmath).
+_SMALL_A_ORDER = 12
+
+
+def _small_a_coefficients(order: int) -> tuple[dict, dict, dict]:
+    """Carson's series coefficients $b_i$, $c_i$, $d_i$ up to ``order``.
+
+    $b_1 = \\sqrt2/6$, $b_2 = 1/16$,
+    $|b_i| = |b_{i-2}|/(i(i+2))$ with the sign of $b_i$ equal to
+    $+1$ for $i = 1..4$, $-1$ for $i = 5..8$, $+1$ for $i = 9..12$,
+    and so on; $c_2$ as above, $c_i = c_{i-2} + 1/i + 1/(i+2)$;
+    $d_i = (\\pi/4)\\,b_i$ (Carson 1926; EMTP Theory Book, sec. 4.1.4).
+    Reading the sign as a factor of the recursion instead
+    ($b_i = b_{i-2}\\,s_i/(i(i+2))$) flips $b_7$, $b_8$, ... and is
+    $10^{-9}$ off at $a = 0.25$ (review pass 10, evidence e03).
+    """
+    b = {1: math.sqrt(2.0) / 6.0, 2: 1.0 / 16.0}
+    for i in range(3, order + 1):
+        sign = 1.0 if ((i - 1) // 4) % 2 == 0 else -1.0
+        b[i] = sign * abs(b[i - 2]) / (i * (i + 2))
+    c = {2: _C2_SMALL_A}
+    for i in range(4, order + 1, 2):
+        c[i] = c[i - 2] + 1.0 / i + 1.0 / (i + 2)
+    d = {i: 0.25 * math.pi * bi for i, bi in b.items()}
+    return b, c, d
+
+
+_B_SMALL_A, _C_SMALL_A, _D_SMALL_A = _small_a_coefficients(_SMALL_A_ORDER)
 
 # Regime boundaries. Carson (1926, p. 547) switches to the asymptote at
 # a > 5; with the asymptote truncated after a^-7 that leaves jumps of up
@@ -137,12 +185,27 @@ _REGIME_LARGE_MIN = 15.0
 # (audit 2026-07-08, WP-B2).
 _ASYMPTOTE_THETA_MAX = 1.4  # rad, ~80.2°
 
-# Gauss–Legendre quadrature nodes for the intermediate regime.
-# 64 nodes are sufficient for machine-precision evaluation of
-# Carson's integral over the typical parameter range; the marginal
-# cost vs. 32 nodes is negligible compared with the surrounding
-# linear-system solve.
-_GL_NODES_64, _GL_WEIGHTS_64 = np.polynomial.legendre.leggauss(64)
+# Gauss–Legendre nodes of the composite theta = 0 rule of the
+# intermediate regime: 32 nodes per panel, panels [0, 1/2], [1/2, 1],
+# [1, 2], ... doubling up to the truncation point (round-off against
+# mpmath for every a > 0.25; review pass 10, finding 10.46).
+_GL_NODES_32, _GL_WEIGHTS_32 = np.polynomial.legendre.leggauss(32)
+
+
+def _graded_rule(mu_max: float) -> tuple[np.ndarray, np.ndarray]:
+    """Composite Gauss–Legendre nodes and weights on $[0, \\mu_\\max]$.
+
+    Panels $[0, 1/2]$, $[1/2, 1]$, $[1, 2]$, ... doubling until they
+    cover ``mu_max``, 32 nodes each.
+    """
+    edges = [0.0, 0.5]
+    while edges[-1] < mu_max:
+        edges.append(2.0 * edges[-1])
+    lo = np.asarray(edges[:-1])[:, None]
+    half = 0.5 * (np.asarray(edges[1:])[:, None] - lo)
+    mu = (lo + half * (_GL_NODES_32[None, :] + 1.0)).ravel()
+    w = (half * _GL_WEIGHTS_32[None, :]).ravel()
+    return mu, w
 
 
 # ---------------------------------------------------------------------
@@ -208,33 +271,56 @@ def carson_parameter(distance: float, omega: float, sigma_earth: float) -> float
 
 
 def _p_q_small(a: float, theta: float) -> tuple[float, float]:
-    """Carson eqs. 34/35, leading-term small-$a$ form.
+    """Carson eqs. 34/35, the convergent small-$a$ series.
 
-    Truncation accuracy (measured against adaptive quadrature of the
-    full integral, audit 2026-07-08): $|\\Delta Q| \\approx
-    3 \\cdot 10^{-3}$ absolute at $a = 0.25$ (the dropped
-    $a^2$-term of the Q series), decaying $\\propto a^2$;
-    $|\\Delta P| \\le 10^{-4}$ over the whole $a \\le 0.25$ range.
-    Adequate for the per-metre correction because the prefactor
-    $\\omega\\mu_0/\\pi$ keeps the absolute impedance error in the
-    µΩ/m range at $f \\le 1$ kHz.
+    $$
+    P = \\frac{\\pi}{8} - b_1 a\\cos\\theta
+        + b_2\\bigl[(c_2 - \\ln a)\\,a^2\\cos 2\\theta
+        + \\theta\\,a^2\\sin 2\\theta\\bigr] + b_3 a^3\\cos 3\\theta
+        - d_4 a^4\\cos 4\\theta - \\dots,
+    $$
+    $$
+    Q = Q_0 + \\tfrac12\\ln\\frac{2}{a} + b_1 a\\cos\\theta
+        - d_2 a^2\\cos 2\\theta + b_3 a^3\\cos 3\\theta
+        - b_4\\bigl[(c_4 - \\ln a)\\,a^4\\cos 4\\theta
+        + \\theta\\,a^4\\sin 4\\theta\\bigr] + \\dots,
+    $$
+
+    the pattern repeating with period four in the power $i$ of $a$
+    (coefficients: :func:`_small_a_coefficients`), summed to
+    $a^{12}$. Accurate to round-off for $a \\le 0.25$ (review pass 10,
+    finding 10.46). The leading-term form of earlier releases (no
+    $a^2$ term of $Q$, constants rounded) was off by up to
+    $2.4\\cdot 10^{-4}$ in $P$ and $3.0\\cdot 10^{-3}$ in $Q$ at
+    $a = 0.25$.
     """
     if a == 0.0:
         return math.pi / 8.0, math.inf
-    cos_th = math.cos(theta)
-    cos_2th = math.cos(2.0 * theta)
-    sin_2th = math.sin(2.0 * theta)
-    P = (
-        math.pi / 8.0
-        - a * cos_th / (3.0 * math.sqrt(2.0))
-        + (a * a / 16.0) * cos_2th * (0.6728 + math.log(2.0 / a))
-        + (a * a / 16.0) * theta * sin_2th
-    )
-    Q = (
-        _Q_OFFSET_SMALL_A
-        + 0.5 * math.log(2.0 / a)
-        + a * cos_th / (3.0 * math.sqrt(2.0))
-    )
+    b, c, d = _B_SMALL_A, _C_SMALL_A, _D_SMALL_A
+    log_a = math.log(a)
+    P = math.pi / 8.0
+    Q = _Q_OFFSET_SMALL_A + 0.5 * math.log(2.0 / a)
+    a_i = 1.0
+    for i in range(1, _SMALL_A_ORDER + 1):
+        a_i *= a
+        cos_i = math.cos(i * theta)
+        kind = i % 4
+        if kind == 1:
+            P -= b[i] * a_i * cos_i
+            Q += b[i] * a_i * cos_i
+        elif kind == 3:
+            P += b[i] * a_i * cos_i
+            Q += b[i] * a_i * cos_i
+        elif kind == 2:
+            P += b[i] * (
+                (c[i] - log_a) * a_i * cos_i + theta * a_i * math.sin(i * theta)
+            )
+            Q -= d[i] * a_i * cos_i
+        else:
+            P -= d[i] * a_i * cos_i
+            Q -= b[i] * (
+                (c[i] - log_a) * a_i * cos_i + theta * a_i * math.sin(i * theta)
+            )
     return P, Q
 
 
@@ -253,10 +339,15 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
     Two evaluation paths (audit 2026-07-08, finding N3):
 
     - **Non-oscillatory** ($q \\approx 0$, i.e.
-      $\\theta \\approx 0$, the self-correction geometry): 64-point
-      Gauss–Legendre on the truncated interval $[0, 30/p]$
-      ($e^{-p\\mu_\\max} \\le 10^{-13}$). Machine-accurate here,
-      verified against adaptive references.
+      $\\theta \\approx 0$, the self-correction geometry): composite
+      32-point Gauss–Legendre on the panels $[0, 1/2]$, $[1/2, 1]$,
+      $[1, 2]$, ... doubling up to $40/p$ ($e^{-p\\mu_\\max} \\le
+      4\\cdot 10^{-18}$), so the structure of
+      $\\sqrt{\\mu^2 + j}$ near $\\mu \\approx 1$ and the slow
+      $1/(2\\mu)$ decay are both resolved: round-off against mpmath
+      for every $a > 0.25$. The single 64-point rule on $[0, 30/p]$
+      of earlier releases was $6\\cdot 10^{-6}$ off at $a = 0.25$
+      and $2\\cdot 10^{-6}$ at $a = 0.3$ (review pass 10, 10.46).
     - **Oscillatory** ($q > 0$): QUADPACK's Fourier integrator
       (``scipy.integrate.quad`` with ``weight='cos'``), designed for
       $\\int_0^\\infty f(\\mu)\\cos(q\\mu)\\,d\\mu$ with slowly
@@ -287,11 +378,9 @@ def _p_q_quadrature(a: float, theta: float) -> tuple[float, float]:
     q = a * math.sin(theta)
 
     if q <= 1e-9 * max(a, 1.0):
-        # theta ~ 0: pure exponential decay, no oscillation.
-        mu_max = 30.0 / p
-        half = 0.5 * mu_max
-        mu = half * (_GL_NODES_64 + 1.0)
-        w = half * _GL_WEIGHTS_64
+        # theta ~ 0: pure exponential decay, no oscillation. Composite
+        # graded Gauss–Legendre (see the docstring).
+        mu, w = _graded_rule(40.0 / p)
         # sqrt(mu^2 + j) with j = imaginary unit. numpy gives the
         # principal branch automatically.
         sqrt_term = np.sqrt(mu * mu + 1j)
@@ -363,8 +452,8 @@ def carson_p_q(a: float, theta: float) -> tuple[float, float]:
     Dispatches to the appropriate regime based on the magnitude of
     $a$:
 
-    - $a \\le 0.25$: closed-form leading-term expansion (Carson
-      eqs. 34/35).
+    - $a \\le 0.25$: Carson's convergent series (eqs. 34/35) to
+      order $a^{12}$.
     - $0.25 < a \\le 15$: direct numerical quadrature of Carson's
       $J(p, q)$ (Gauss–Legendre for $\\theta \\approx 0$, QUADPACK
       Fourier integrator otherwise — audit 2026-07-08, WP-B2).
@@ -373,9 +462,9 @@ def carson_p_q(a: float, theta: float) -> tuple[float, float]:
       $\\theta > 1.4$ rad where the expansion degrades and the
       quadrature path is used instead.
 
-    The large-$a$ boundary is continuous to $\\le 10^{-7}$; the
-    small-$a$ boundary jumps by up to $2.9\\cdot 10^{-3}$ in $Q$ (see
-    the module docstring). Results are memoised on ``(a, theta)``.
+    The small-$a$ boundary is continuous to round-off, the large-$a$
+    boundary to $\\le 10^{-7}$ (see the module docstring). Results are
+    memoised on ``(a, theta)``.
 
     Parameters
     ----------

@@ -1,0 +1,12 @@
+# Stream COUP-2 — solver side of the inductive stack (review pass 10, wave 2).
+#
+# Every bound below was measured on this branch against the stored
+# v0.15.0 values (evidence: golden_report_*.json of the stream).
+
+[[change]]
+cases = ["cond_galvanic_neumann_carson_series"]
+quantities = ["*"]
+findings = ["10.20", "F32", "10.46"]
+reason = "carson_series assembles Carson's correction on its own anti-parallel image baseline (it was added on top of the additive image: 1.7-2.2x the earth-return reactance), and Carson's small-a series is summed to a^12 (the a^2 term of Q was missing)."
+min_rel_change = 1e-3
+max_rel_change = 1e-2
