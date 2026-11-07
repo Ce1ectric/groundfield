@@ -1,39 +1,37 @@
 """Numerical computation core (``Engine``).
 
 An ``Engine`` bundles **everything that is purely numerical**: the
-chosen backend (image, MoM, FEM, ...), the frequency list, mesh
-resolution and convergence tolerances. It is deliberately separated
-from the ``World``, so that the same physical configuration can be
-run against different backends.
+chosen backend (image, MoM, FEM, ...), the frequency list, the
+discretisation and the backend settings. It is deliberately separated
+from the ``World``, so that the same physical configuration can be run
+against different backends.
 
-The available backends fall into three families:
+Backends are registered in :mod:`groundfield.solver.registry`, which
+records for each name the solve function, the declared capabilities
+(soil layer counts, conductor models, concrete shells, two-terminal
+sources, source kernels) and the backend-specific options model. The
+built-in backends fall into three families:
 
 *Closed-form / image-charge.*
 ``image`` is the homogeneous-soil image-charge sum (closed form,
 uniform current per unit length, cheapest backend). ``image_2layer``
-implements the Tagg / Sunde geometric series for 2-layer soil with
-convergence $|K|^n$ and is auto-selected for a
-:class:`TwoLayerSoil`. ``image_nlayer`` is the general n-layer
-image-series expansion of $\\Gamma_1(\\lambda)$ (see
-:mod:`groundfield.solver.image_nlayer`); it reduces to ``image`` for
-``n = 1`` and to ``image_2layer`` for ``n = 2``. ``cim`` is the
-Complex-Image-Method approximation of the layered Green's function
-via matrix-pencil fit (see :mod:`groundfield.solver.cim`); it stays
-closed-form and its cost is independent of the layer count once
-fitted.
+implements the Tagg / Sunde geometric series for two-layer soil with
+convergence $|K|^n$. ``image_nlayer`` routes a layered soil with one or
+two layers to ``image`` / ``image_2layer`` and rejects three or more
+layers. ``cim`` evaluates the same image series for $n \\le 2$ (its
+complex-image fit is not used on any solve path, see
+:mod:`groundfield.solver.cim`).
 
-*Integral equation.* ``mom`` is the Galerkin Method-of-Moments using
-the closed-form layered kernels above (Tagg / Sunde for ``n = 2``,
-homogeneous for ``n = 1``). ``mom_sommerfeld`` is the Galerkin MoM
-with direct numerical Sommerfeld quadrature of the layered Green's
-function — slow but methodologically independent and used as the
-reference engine in the layered cross-check. ``bem`` is the
-Boundary-Element collocation solver using the CIM kernel.
+*Integral equation.* ``mom`` solves for the segment currents by point
+matching (collocation) with the closed-form kernels above;
+``mom_sommerfeld`` does the same with direct numerical Sommerfeld
+quadrature of the layered Green's function and is the only integral
+backend for $n \\ge 3$ layers. ``bem`` is the collocation solver on the
+``cim`` kernel.
 
-*Volume PDE.* ``fem`` is the axisymmetric finite-element solver
-(volume form) with the equivalent-hemisphere reduction described in
-:mod:`groundfield.solver.fem`; it is the only volume-PDE engine in
-the suite and serves as a third-line cross-check.
+*Volume PDE.* ``fem`` is the axisymmetric finite-element solver with
+the equivalent-hemisphere reduction described in
+:mod:`groundfield.solver.fem`.
 
 Notes
 -----
@@ -43,28 +41,99 @@ Notes
 ``"image_nlayer"`` if it holds a :class:`MultiLayerSoil`. Notebooks
 written for the homogeneous case therefore keep working when the soil
 is replaced by a layered one.
+
+Every result carries the metadata core :data:`CORE_METADATA_KEYS`,
+filled here for all backends, next to the backend-specific keys.
 """
 
 from __future__ import annotations
 
+import time
 import warnings
-from typing import TYPE_CHECKING, Literal
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
-from groundfield.solver.result import FieldResult, SourceRecord
+from groundfield.solver import registry as _registry
+from groundfield.solver.registry import (
+    DEFAULT_IMAGE_MAX_TERMS,
+    DEFAULT_IMAGE_SERIES_TOL,
+    DEPRECATION_REMOVAL,
+    BackendOptions,
+    BackendOptionsWarning,
+    MomSommerfeldOptions,
+    warn_external,
+)
+from groundfield.solver.result import FieldResult, SourceRecord, solve_provenance
 from groundfield.utils.logging import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.world import World
 
 __all__ = [
+    "CORE_METADATA_KEYS",
+    "DEFAULT_IMAGE_MAX_TERMS",
+    "DEFAULT_IMAGE_SERIES_TOL",
     "Engine",
     "Backend",
     "EarthInductiveModel",
     "EngineFrequencyOrderWarning",
 ]
+
+#: Metadata keys that :meth:`Engine.solve` writes into every result.
+#:
+#: ``backend``
+#:     Backend name as requested (``Engine.backend``).
+#: ``effective_backend``
+#:     Registered backend that ran, after alias resolution and the
+#:     auto-forwarding by soil model.
+#: ``kernel``
+#:     Source kernel used (``"point"`` / ``"line"``); ``None`` for
+#:     backends without a source kernel (``fem``).
+#: ``groundfield_version``
+#:     Version of the package that solved.
+#: ``frequencies``
+#:     Frequencies in Hz, in solve order.
+#: ``n_segments``
+#:     Number of current-carrying source segments (``0`` for ``fem``).
+#: ``soil_kind``
+#:     ``kind`` of the soil model (``"homogeneous"``, ``"two_layer"``,
+#:     ``"multi_layer"``).
+#: ``earth_inductive_model``
+#:     Earth model of the inductive coupling.
+#: ``solve_time_s``
+#:     Wall time of the backend call in s.
+#: ``series``
+#:     Image-series controls of the engine, ``{"max_terms", "tol"}``,
+#:     for the post-solve field evaluation.
+#: ``provenance``
+#:     Versions, platform, engine configuration, world fingerprint and
+#:     UTC timestamp (see :func:`groundfield.solver.result.solve_provenance`).
+CORE_METADATA_KEYS: tuple[str, ...] = (
+    "backend",
+    "effective_backend",
+    "kernel",
+    "groundfield_version",
+    "frequencies",
+    "n_segments",
+    "soil_kind",
+    "earth_inductive_model",
+    "solve_time_s",
+    "series",
+    "provenance",
+)
 
 
 class EngineFrequencyOrderWarning(UserWarning):
@@ -117,6 +186,8 @@ def _check_frequency_values(values: list[float]) -> None:
             raise ValueError(f"Engine.frequencies must be non-negative, got {f}.")
 
 
+#: Names of the built-in backends (for type hints; the registry is the
+#: authority at runtime and also accepts registered third-party names).
 Backend = Literal[
     "image",
     "image_2layer",
@@ -136,6 +207,25 @@ EarthInductiveModel = Literal[
 ]
 
 _log = get_logger(__name__)
+
+# Flat ``mom_sommerfeld`` fields of 0.15.0 and their option names.
+_LEGACY_SOMMERFELD_FIELDS: dict[str, str] = {
+    "sommerfeld_lambda_max_factor": "lambda_max_factor",
+    "sommerfeld_epsabs": "epsabs",
+    "sommerfeld_epsrel": "epsrel",
+    "sommerfeld_max_osc_panels": "max_osc_panels",
+}
+
+# Inert fields (no backend reads them) and their defaults.
+_INERT_DEFAULTS: dict[str, float] = {"tolerance": 1e-6, "max_iterations": 200}
+
+
+def _inert_message(name: str) -> str:
+    return (
+        f"Engine.{name} has no effect: no backend reads it. The field is "
+        f"deprecated and will be removed no earlier than "
+        f"{DEPRECATION_REMOVAL}; remove the argument."
+    )
 
 
 def _source_records(world: "World", n_freq: int) -> list[SourceRecord]:
@@ -158,24 +248,101 @@ def _source_records(world: "World", n_freq: int) -> list[SourceRecord]:
     return records
 
 
+_GUARDED_WORLDS: ContextVar[frozenset[int]] = ContextVar(
+    "groundfield_guarded_worlds", default=frozenset()
+)
+
+
+@contextmanager
+def _guarded_sources(world: "World") -> Iterator[None]:
+    """Restore ``world.sources`` after a solve, preserving object identity.
+
+    Shared by every solve entry point (:meth:`Engine.solve`,
+    :meth:`World.solve <groundfield.world.World.solve>` and, through it,
+    :func:`groundfield.api.run_simulation`), so they follow one
+    source-snapshot semantics (review finding 10.72):
+
+    * field values a backend rewrites in flight are written back onto
+      the very objects the caller holds (handles returned by
+      ``create_source`` stay attached);
+    * list-level changes (insert, remove, replace) are undone and the
+      original list object is re-bound if the attribute was replaced.
+
+    Source models are flat (str / float / None), so a ``__dict__``
+    update is a complete field-wise roll-back. A guard nested inside an
+    active guard of the same world (``World.solve`` around
+    ``Engine.solve``) is a no-op, so the snapshot is taken once.
+    """
+    active = _GUARDED_WORLDS.get()
+    if id(world) in active:
+        yield
+        return
+    source_list = world.sources
+    originals = list(source_list)
+    snapshots = [s.model_copy(deep=True) for s in originals]
+    token = _GUARDED_WORLDS.set(active | {id(world)})
+    try:
+        yield
+    finally:
+        _GUARDED_WORLDS.reset(token)
+        for original, snapshot in zip(originals, snapshots, strict=True):
+            if original != snapshot:
+                original.__dict__.update(snapshot.__dict__)
+                original.__pydantic_fields_set__ = set(snapshot.__pydantic_fields_set__)
+        if len(source_list) != len(originals) or any(
+            live is not original
+            for live, original in zip(source_list, originals, strict=True)
+        ):
+            source_list[:] = originals
+        if world.sources is not source_list:
+            world.sources = source_list
+
+
+def _legacy_sommerfeld_property(option: str) -> property:
+    """Deprecated read / write access ``Engine.sommerfeld_<option>``."""
+    flat = f"sommerfeld_{option}"
+    message = (
+        f"Engine.{flat} is deprecated; use Engine.options['mom_sommerfeld']"
+        f".{option} (or Engine.backend_options('mom_sommerfeld').{option}). "
+        f"It will be removed no earlier than {DEPRECATION_REMOVAL}."
+    )
+
+    def getter(self: "Engine") -> Any:
+        warn_external(message, DeprecationWarning)
+        return getattr(self.backend_options("mom_sommerfeld"), option)
+
+    def setter(self: "Engine", value: Any) -> None:
+        warn_external(message, DeprecationWarning)
+        current = self.backend_options("mom_sommerfeld")
+        updated = MomSommerfeldOptions.model_validate(
+            {**current.model_dump(), option: value}
+        )
+        self.options = {**self.options, "mom_sommerfeld": updated}
+
+    return property(getter, setter, doc=f"Deprecated alias of the option ``{option}``.")
+
+
 class Engine(BaseModel):
     """Configuration of the numerical kernel.
 
     Attributes
     ----------
     backend
-        Numerical method. One of ``image``, ``image_2layer``,
-        ``image_nlayer``, ``cim``, ``mom``, ``mom_sommerfeld``,
-        ``bem``, ``fem``. See the module docstring above for the
-        family overview, and ADR-0002 for the selection heuristic.
+        Numerical method, a name registered in
+        :mod:`groundfield.solver.registry`. Built in: ``image``,
+        ``image_2layer``, ``image_nlayer``, ``cim``, ``mom``,
+        ``mom_sommerfeld``, ``bem``, ``fem``. See the module docstring
+        above for the family overview, and ADR-0002 for the selection
+        heuristic. An unknown name raises with the closest registered
+        one as suggestion.
     frequencies
         Frequency list in Hz. Default ``[50.0]``.
     segment_length
         Maximum segment length used to discretise the geometry, in m.
-    tolerance
-        Relative convergence threshold for iterative solvers.
-    max_iterations
-        Maximum iterations for iterative solvers.
+    tolerance, max_iterations
+        **Deprecated, no effect** (no backend reads them). A non-default
+        value warns; both fields will be removed no earlier than
+        ``2027.5``.
     earth_inductive_model
         How the earth contributes to the inductive coupling between
         distributed-conductor segments (only effective when at least
@@ -210,27 +377,40 @@ class Engine(BaseModel):
           since 0.13.0** — the rigorous choice whenever a quantitative
           ``Z(f)`` matters.
     image_max_terms, image_series_tol
-        Controls of the Tagg / Sunde image-charge series, forwarded to
-        every layered backend.
-    sommerfeld_lambda_max_factor, sommerfeld_epsabs, sommerfeld_epsrel, sommerfeld_max_osc_panels
-        Accuracy controls of the ``mom_sommerfeld`` reflected-remainder
-        quadrature, forwarded to
-        :func:`groundfield.solver.mom_sommerfeld.solve_mom_sommerfeld`
-        (new in 0.15.0 — up to 0.14.x that backend was called with no
-        keywords at all, so none of these was reachable through the
-        public API). The defaults reproduce the previous behaviour
-        exactly. ``sommerfeld_max_osc_panels`` is the escape hatch for
-        the corner in which the backend raises
-        :class:`~groundfield.solver.mom_sommerfeld.SommerfeldConvergenceWarning`.
-        Not exposed through :func:`groundfield.create_engine`; construct
-        the engine directly, e.g.
-        ``gf.Engine(backend="mom_sommerfeld",
-        sommerfeld_max_osc_panels=2_000_000)``.
+        Controls of the Tagg / Sunde image-charge series (maximum
+        number of terms; stop tolerance on the geometric tail bound
+        $|K|^{n+1}/(1-|K|)$, dimensionless). Common to every layered
+        backend that evaluates the series (``image_2layer``,
+        ``image_nlayer``, ``mom``, ``cim``, ``bem``, the delegated
+        two-layer path of ``mom_sommerfeld``) and recorded in
+        ``FieldResult.metadata["series"]`` for the post-solve field
+        evaluation. Defaults: :data:`DEFAULT_IMAGE_MAX_TERMS` (300) and
+        :data:`DEFAULT_IMAGE_SERIES_TOL` (1e-6).
+    options
+        Backend-specific settings, keyed by backend name and validated
+        against the backend's options model:
+        ``{"mom_sommerfeld": MomSommerfeldOptions(...)}`` (quadrature
+        accuracy) and ``{"fem": FemOptions(...)}`` (mesh and
+        truncation). Plain mappings are accepted and validated; unknown
+        option names raise with a suggestion. Options for a backend
+        other than the selected one (or one it forwards to) emit
+        :class:`~groundfield.solver.registry.BackendOptionsWarning`.
+        The 0.15.0 flat fields ``sommerfeld_lambda_max_factor``,
+        ``sommerfeld_epsabs``, ``sommerfeld_epsrel`` and
+        ``sommerfeld_max_osc_panels`` are still accepted (constructor
+        and JSON) and mapped onto ``options["mom_sommerfeld"]``; a
+        non-default value emits a :class:`DeprecationWarning`.
+
+    Examples
+    --------
+    >>> eng = Engine(backend="fem", options={"fem": {"n_radial": 120}})
+    >>> eng.backend_options().n_radial
+    120
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    backend: Backend = Field(default="image")
+    backend: str = Field(default="image")
     frequencies: list[float] = Field(
         default_factory=lambda: [50.0],
         description=(
@@ -244,26 +424,35 @@ class Engine(BaseModel):
         ),
     )
     segment_length: float = Field(default=0.5, gt=0.0)
-    tolerance: float = Field(default=1e-6, gt=0.0)
-    max_iterations: int = Field(default=200, gt=0)
+    tolerance: float = Field(
+        default=_INERT_DEFAULTS["tolerance"],
+        gt=0.0,
+        deprecated=_inert_message("tolerance"),
+    )
+    max_iterations: int = Field(
+        default=int(_INERT_DEFAULTS["max_iterations"]),
+        gt=0,
+        deprecated=_inert_message("max_iterations"),
+    )
     earth_inductive_model: EarthInductiveModel = Field(default="sommerfeld")
     image_max_terms: int = Field(
-        default=300,
+        default=DEFAULT_IMAGE_MAX_TERMS,
         gt=0,
         description=(
-            "Maximum number of series terms of the image_2layer / "
-            "image_nlayer image-charge series. High layer contrast "
-            "(|K| close to 1) needs more terms to bring the geometric "
-            "tail bound |K|^(n+1)/(1-|K|) below image_series_tol. The "
-            "default 300 covers |K| = 0.94 (AP1 corner soils); the "
-            "solver emits a SeriesTruncationWarning when the cap is "
-            "reached. Forwarded to every layered backend "
-            "(image_2layer, image_nlayer, mom, cim, bem, "
-            "mom_sommerfeld)."
+            "Maximum number of series terms of the Tagg / Sunde "
+            "image-charge series. High layer contrast (|K| close to 1) "
+            "needs more terms to bring the geometric tail bound "
+            "|K|^(n+1)/(1-|K|) below image_series_tol. The default 300 "
+            "covers the AP1 corner soil rho_1 = 1000 / rho_2 = 30 Ohm m "
+            "(|K| = 0.94, 277 terms); the solver emits a "
+            "SeriesTruncationWarning when the cap is reached. Common to "
+            "every layered backend (image_2layer, image_nlayer, mom, "
+            "cim, bem, mom_sommerfeld) and recorded in "
+            "FieldResult.metadata['series']."
         ),
     )
     image_series_tol: float = Field(
-        default=1e-6,
+        default=DEFAULT_IMAGE_SERIES_TOL,
         gt=0.0,
         description=(
             "Stop tolerance for the image-charge series: iteration "
@@ -271,55 +460,153 @@ class Engine(BaseModel):
             "falls below this value."
         ),
     )
-    sommerfeld_lambda_max_factor: float = Field(
-        default=200.0,
-        gt=0.0,
+    options: dict[str, SerializeAsAny[BackendOptions]] = Field(
+        default_factory=dict,
         description=(
-            "backend='mom_sommerfeld' only. Truncation of the "
-            "reflected-remainder quadrature in units of 1/d_rem, the "
-            "decay length of the remainder. The discarded tail is "
-            "bounded by exp(-lambda_max_factor), and the factor "
-            "saturates at 60 (~1e-26), so raising it above the default "
-            "cannot change the top-layer result. Note the *different* "
-            "unit convention on the delegated n=2 cross-layer path "
-            "(units of 1/char_length, uncapped, where raising it "
-            "degrades the answer) documented in "
-            "mom_sommerfeld.sommerfeld_kernel_value."
+            "Backend-specific settings keyed by backend name, validated "
+            "against the backend's registered options model "
+            "(mom_sommerfeld: MomSommerfeldOptions, fem: FemOptions)."
         ),
     )
-    sommerfeld_epsabs: float = Field(
-        default=1e-9,
-        gt=0.0,
-        description=(
-            "backend='mom_sommerfeld' only. Absolute threshold of the "
-            "grid-refinement convergence test of the reflected-"
-            "remainder quadrature."
-        ),
-    )
-    sommerfeld_epsrel: float = Field(
-        default=1e-7,
-        gt=0.0,
-        description=(
-            "backend='mom_sommerfeld' only. Relative threshold of the "
-            "grid-refinement convergence test, measured against the "
-            "magnitude of the whole kernel. Missing it raises a "
-            "SommerfeldConvergenceWarning."
-        ),
-    )
-    sommerfeld_max_osc_panels: int = Field(
-        default=200_000,
-        gt=0,
-        description=(
-            "backend='mom_sommerfeld' only. Budget for the half-period "
-            "(pi/s) Gauss panel family that resolves the J0(lambda*s) "
-            "oscillation of the reflected remainder. Binds only for "
-            "s/d_rem >~ 1.9e4 (a centimetre-thin intermediate layer "
-            "with a kilometre-scale horizontal separation); there the "
-            "coverage is incomplete, the solver raises a "
-            "SommerfeldConvergenceWarning and raising this budget is "
-            "the remedy. Cost grows linearly with it."
-        ),
-    )
+
+    # Deprecated flat access to the mom_sommerfeld options (0.15.0 API).
+    sommerfeld_lambda_max_factor = _legacy_sommerfeld_property("lambda_max_factor")
+    sommerfeld_epsabs = _legacy_sommerfeld_property("epsabs")
+    sommerfeld_epsrel = _legacy_sommerfeld_property("epsrel")
+    sommerfeld_max_osc_panels = _legacy_sommerfeld_property("max_osc_panels")
+
+    # ------------------------------------------------------------------
+    # Validation of backend, options and legacy fields
+    # ------------------------------------------------------------------
+
+    @model_validator(mode="before")
+    @classmethod
+    def _map_legacy_fields(cls, data: Any) -> Any:
+        """Map the 0.15.0 flat ``sommerfeld_*`` fields onto ``options``.
+
+        A flat value equal to the 0.15.0 default carries no information
+        and is dropped silently, so engine JSON written by 0.15.0 loads
+        without warnings. A non-default value is moved into
+        ``options["mom_sommerfeld"]`` and emits a
+        :class:`DeprecationWarning`.
+        """
+        if not isinstance(data, Mapping):
+            return data
+        flat = {k: data[k] for k in _LEGACY_SOMMERFELD_FIELDS if k in data}
+        if not flat:
+            return data
+        data = {k: v for k, v in data.items() if k not in _LEGACY_SOMMERFELD_FIELDS}
+        defaults = MomSommerfeldOptions()
+        given = {
+            _LEGACY_SOMMERFELD_FIELDS[k]: v
+            for k, v in flat.items()
+            if v != getattr(defaults, _LEGACY_SOMMERFELD_FIELDS[k])
+        }
+        if not given:
+            return data
+        options = dict(data.get("options") or {})
+        nested = options.get("mom_sommerfeld", {})
+        if isinstance(nested, BaseModel):
+            nested = nested.model_dump(exclude_unset=True)
+        if not isinstance(nested, Mapping):
+            raise ValueError(
+                "Engine.options['mom_sommerfeld'] must be a mapping or a "
+                f"MomSommerfeldOptions, got {type(nested).__name__}."
+            )
+        clash = sorted(k for k in given if k in nested and nested[k] != given[k])
+        if clash:
+            raise ValueError(
+                f"mom_sommerfeld option(s) {clash} given twice (flat "
+                "sommerfeld_* field and Engine.options) with different values."
+            )
+        options["mom_sommerfeld"] = {**nested, **given}
+        data["options"] = options
+        names = ", ".join(f"sommerfeld_{k}" for k in sorted(given))
+        warn_external(
+            f"Engine field(s) {names} are deprecated; pass "
+            "options={'mom_sommerfeld': {...}} (or a MomSommerfeldOptions) "
+            "instead. The flat fields will be removed no earlier than "
+            f"{DEPRECATION_REMOVAL}.",
+            DeprecationWarning,
+        )
+        return data
+
+    @field_validator("backend")
+    @classmethod
+    def _validate_backend(cls, value: str) -> str:
+        """Accept registered names and aliases only (with a suggestion)."""
+        _registry.get_backend(value)
+        return value
+
+    @field_validator("tolerance", "max_iterations")
+    @classmethod
+    def _warn_inert(cls, value: float, info: ValidationInfo) -> float:
+        """Warn when an inert field carries a non-default value (10.51)."""
+        if value != _INERT_DEFAULTS[info.field_name]:
+            warn_external(_inert_message(info.field_name), DeprecationWarning)
+        return value
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _validate_options(cls, value: Any) -> Any:
+        """Validate every entry against its backend's options model."""
+        if value is None:
+            return {}
+        if not isinstance(value, Mapping):
+            raise ValueError(
+                "Engine.options must be a mapping backend name -> options, "
+                f"got {type(value).__name__}."
+            )
+        out: dict[str, BackendOptions] = {}
+        for key, entry in value.items():
+            canonical, options = _registry.validate_options_entry(key, entry)
+            if canonical in out:
+                raise ValueError(
+                    f"Engine.options configures backend '{canonical}' twice "
+                    f"(key {key!r} is an alias)."
+                )
+            out[canonical] = options
+        return out
+
+    @model_validator(mode="after")
+    def _warn_foreign_options(self) -> "Engine":
+        """Options for a backend that cannot run are ignored: warn."""
+        if self.options:
+            reachable = _registry.reachable_backends(self.backend)
+            for key in self.options:
+                if key not in reachable:
+                    warn_external(
+                        f"Engine.options['{key}'] configures backend '{key}', "
+                        f"but the selected backend is '{self.backend}'; these "
+                        "options are ignored.",
+                        BackendOptionsWarning,
+                    )
+        return self
+
+    def backend_options(self, name: str | None = None) -> BackendOptions | None:
+        """Options a backend runs with: the stored entry or the defaults.
+
+        Parameters
+        ----------
+        name
+            Backend name or alias. Default: :attr:`backend`.
+
+        Returns
+        -------
+        BackendOptions or None
+            The validated options model of the backend, or ``None`` for
+            a backend without backend-specific options.
+        """
+        key = _registry.options_key(self.backend if name is None else name)
+        model = _registry.get_backend(key).options_model
+        if model is None:
+            return None
+        stored = self.options.get(key)
+        return stored if stored is not None else model()
+
+    # ------------------------------------------------------------------
+    # Frequencies
+    # ------------------------------------------------------------------
 
     @field_validator("frequencies")
     @classmethod
@@ -337,7 +624,7 @@ class Engine(BaseModel):
         # Strict-monotone-increasing detection. Use a tolerance-free
         # comparison: explicit duplicates are also flagged because they
         # silently double-evaluate the kernel at the same frequency.
-        non_monotonic = any(b <= a for a, b in zip(value, value[1:]))
+        non_monotonic = any(b <= a for a, b in zip(value, value[1:], strict=False))
         if non_monotonic:
             # Deliberately *stable* message text — the per-call list
             # literal is logged at debug level so users can still find
@@ -434,14 +721,20 @@ class Engine(BaseModel):
     def solve(self, world: "World") -> FieldResult:
         """Run the simulation with the configured backend.
 
-        Dispatches the assembled ``world`` to the backend selected by
-        :attr:`backend`. When ``backend == "image"`` the backend is
-        auto-forwarded to ``"image_2layer"`` for a
+        Resolves :attr:`backend` in the registry, checks the backend's
+        declared capabilities against ``world`` and runs it. When
+        ``backend == "image"`` the backend is auto-forwarded to
+        ``"image_2layer"`` for a
         :class:`~groundfield.soil.models.TwoLayerSoil` and to
         ``"image_nlayer"`` for a
         :class:`~groundfield.soil.models.MultiLayerSoil`, so notebooks
         written for the homogeneous case keep working when the soil
         model is replaced.
+
+        The sources of ``world`` are snapshotted before the backend runs
+        and restored afterwards onto the caller's objects, exactly as in
+        :meth:`World.solve <groundfield.world.World.solve>`: solving
+        never rewrites the input world, whichever entry point is used.
 
         Parameters
         ----------
@@ -453,24 +746,60 @@ class Engine(BaseModel):
         -------
         FieldResult
             Container with per-frequency potentials, currents, cluster
-            impedances and post-processing metadata.
+            impedances, the source snapshot and metadata: the core keys
+            :data:`CORE_METADATA_KEYS` (including the provenance block)
+            plus the backend-specific keys.
 
         Raises
         ------
         ValueError
-            If ``world.soil`` is unset, or ``world`` contains no
-            electrodes.
+            If ``world.soil`` is unset, ``world`` contains no electrodes,
+            or :attr:`backend` is not registered.
+        BackendCapabilityError
+            If the backend cannot represent the world (soil layer count,
+            concrete-shell electrodes, explicitly requested kernel). The
+            message names the registered backends that can.
+
+        Warns
+        -----
+        BackendCapabilityWarning
+            If the backend solves the world with a documented
+            simplification (reduced conductor model, ignored
+            ``return_to``).
+        DeprecationWarning
+            If :attr:`backend` is a deprecated alias.
+        ExperimentalBackendWarning
+            On the first solve with an experimental backend in a process.
         """
         if world.soil is None:
             raise ValueError("World has no soil model. Set one before calling solve().")
         if not world.electrodes:
             raise ValueError("World contains no electrodes.")
 
+        resolved = _registry.resolve_backend(self.backend, world)
         _log.info(
-            "Engine.solve: backend=%s, n_electrodes=%d, n_freq=%d",
+            "Engine.solve: backend=%s (running %s), n_electrodes=%d, n_freq=%d",
             self.backend,
+            resolved.spec.name,
             len(world.electrodes),
             len(self.frequencies),
+        )
+        with _guarded_sources(world):
+            return self._run(world, resolved)
+
+    def _run(
+        self, world: "World", resolved: "_registry.ResolvedBackend"
+    ) -> FieldResult:
+        """Checks, dispatch and metadata core (see :meth:`solve`)."""
+        _registry.emit_resolution_warnings(resolved)
+        # ``Engine.kernel`` is added by the line-kernel work (10.28); until
+        # then no kernel is requested and the backends use their own.
+        kernel = getattr(self, "kernel", None)
+        _registry.check_capabilities(
+            resolved,
+            world,
+            kernel=kernel,
+            kernel_explicit="kernel" in self.model_fields_set,
         )
 
         # Pre-flight discretisation check (advisory, never raises).
@@ -480,135 +809,46 @@ class Engine(BaseModel):
         from groundfield.diagnostics import check_segment_resolution
 
         for finding in check_segment_resolution(world, self):
-            warnings.warn(finding, UserWarning, stacklevel=2)
+            warn_external(finding, UserWarning)
 
-        # Snapshot before dispatch: the record must describe the world
-        # as the caller built it, even if a backend rewrites a source
-        # in flight (World.solve rolls such rewrites back afterwards).
+        # Snapshot before dispatch: the record and the fingerprint
+        # describe the world as the caller built it, even if a backend
+        # rewrites a source in flight (rolled back by _guarded_sources).
         records = _source_records(world, len(self.frequencies))
-        result = self._dispatch(world)
+        provenance = solve_provenance(world, self)
+
+        spec = resolved.spec
+        options = self.backend_options(spec.name)
+        kwargs = options.model_dump() if options is not None else {}
+        solve_fn = spec.resolve_solve_fn()
+        t0 = time.perf_counter()
+        result = solve_fn(world, self, **kwargs)
+        solve_time_s = time.perf_counter() - t0
+
         if not result.sources:
             result.sources = records
+        provenance["solved_at_utc"] = _utc_now()
+        md = result.metadata
+        md["backend"] = self.backend
+        md["effective_backend"] = spec.name
+        md.setdefault("kernel", _registry.effective_kernel(spec, kernel))
+        md["groundfield_version"] = provenance["groundfield_version"]
+        md["frequencies"] = [float(f) for f in result.frequencies]
+        md["n_segments"] = int(md.get("n_segments", len(result.point_sources)))
+        md["soil_kind"] = str(world.soil.kind)
+        md.setdefault("earth_inductive_model", self.earth_inductive_model)
+        md["solve_time_s"] = float(solve_time_s)
+        md["series"] = {
+            "max_terms": int(self.image_max_terms),
+            "tol": float(self.image_series_tol),
+        }
+        md["provenance"] = provenance
         return result
 
-    def _dispatch(self, world: "World") -> FieldResult:
-        """Hand ``world`` to the selected backend (see :meth:`solve`)."""
-        # Auto-forwarding: ``backend="image"`` transparently picks
-        # ``image_2layer`` for a 2-layer soil and ``image_nlayer`` for
-        # a multilayer soil. Notebooks therefore do not need to change
-        # the backend string when the soil model changes.
-        from groundfield.soil.models import MultiLayerSoil, TwoLayerSoil
 
-        effective_backend = self.backend
-        if effective_backend == "image":
-            if isinstance(world.soil, TwoLayerSoil):
-                effective_backend = "image_2layer"
-                _log.info(
-                    "Engine.solve: TwoLayerSoil detected, "
-                    "switching automatically to 'image_2layer'."
-                )
-            elif isinstance(world.soil, MultiLayerSoil):
-                effective_backend = "image_nlayer"
-                _log.info(
-                    "Engine.solve: MultiLayerSoil detected, "
-                    "switching automatically to 'image_nlayer'."
-                )
+def _utc_now() -> str:
+    """Current UTC time as ISO 8601 with a ``Z`` suffix."""
+    from datetime import datetime, timezone
 
-        if effective_backend == "image":
-            from groundfield.solver.image import solve_image
-
-            return solve_image(world, self)
-
-        if effective_backend == "image_2layer":
-            from groundfield.solver.image_2layer import solve_image_2layer
-
-            return solve_image_2layer(
-                world,
-                self,
-                max_terms=self.image_max_terms,
-                tol=self.image_series_tol,
-            )
-
-        if effective_backend == "image_nlayer":
-            from groundfield.solver.image_nlayer import solve_image_nlayer
-
-            # ``image_nlayer`` re-dispatches to ``solve_image_2layer``
-            # for n = 2, so the series controls must be forwarded here
-            # as well — otherwise the backend silently falls back to
-            # its own signature defaults (200, 1e-6) and the engine
-            # configuration promised by ``Engine.image_max_terms`` is
-            # discarded on the multilayer path.
-            return solve_image_nlayer(
-                world,
-                self,
-                max_terms=self.image_max_terms,
-                tol=self.image_series_tol,
-            )
-
-        if effective_backend == "cim":
-            from groundfield.solver.cim import solve_cim
-
-            return solve_cim(world, self)
-
-        if effective_backend == "mom":
-            from groundfield.solver.mom import solve_mom
-
-            return solve_mom(world, self)
-
-        if effective_backend == "mom_sommerfeld":
-            from groundfield.solver.mom_sommerfeld import solve_mom_sommerfeld
-
-            # Up to 0.14.x this call passed no keywords, so the backend
-            # fell back to its own signature defaults and the accuracy
-            # knobs of the *reference* engine were unreachable from the
-            # public API — a user who hit the non-converged corner had
-            # nothing to tighten. Forwarded following the
-            # ``image_max_terms`` / ``image_series_tol`` precedent above;
-            # the field defaults equal the old signature defaults, so
-            # existing callers are unaffected.
-            return solve_mom_sommerfeld(
-                world,
-                self,
-                lambda_max_factor=self.sommerfeld_lambda_max_factor,
-                epsabs=self.sommerfeld_epsabs,
-                epsrel=self.sommerfeld_epsrel,
-                max_osc_panels=self.sommerfeld_max_osc_panels,
-            )
-
-        if effective_backend == "bem":
-            from groundfield.solver.bem import solve_bem
-
-            return solve_bem(world, self)
-
-        if effective_backend == "fem":
-            from groundfield.solver.fem import solve_fem
-
-            return solve_fem(world, self)
-
-        raise ValueError(f"Unknown backend '{self.backend}'.")
-
-    # ------------------------------------------------------------------
-    # Stub for backends that are not implemented yet
-    # ------------------------------------------------------------------
-
-    def _stub_result(self, world: "World") -> FieldResult:
-        """Placeholder result for backends that are not implemented yet."""
-        _log.warning(
-            "Backend '%s' is not implemented yet — returning stub.",
-            self.backend,
-        )
-        n_freq = len(self.frequencies)
-        potentials = {e.name: [complex(1.0, 0.0)] * n_freq for e in world.electrodes}
-        currents = {e.name: [complex(0.0, 0.0)] * n_freq for e in world.electrodes}
-        return FieldResult(
-            backend=self.backend,
-            frequencies=list(self.frequencies),
-            electrode_potentials=potentials,
-            electrode_currents=currents,
-            metadata={
-                "stub": True,
-                "world_name": world.name,
-                "n_conductors": len(world.conductors),
-                "n_sources": len(world.sources),
-            },
-        )
+    stamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    return stamp.replace("+00:00", "Z")

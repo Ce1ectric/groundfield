@@ -1,0 +1,9 @@
+# Stream CORE-1b (backend registry, metadata core, engine options,
+# provenance, persistence, solve entry points).
+#
+# No golden quantity may move: the registry dispatch calls every backend
+# with the same arguments as the former if-chain, and the metadata core,
+# the provenance block and the serialisation do not touch numbers.
+# Verified with GF_GOLDEN_STRICT=1 (all quantities bit-identical).
+#
+# Intentionally no [[change]] entries.
