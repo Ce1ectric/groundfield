@@ -278,14 +278,36 @@ def test_explicit_kernel_request_is_checked_against_the_backend() -> None:
         unregister_backend("toy_point_only")
 
 
-@pytest.mark.finding("10.74")
+@pytest.mark.finding("10.74", "10.16")
 def test_two_terminal_source_warns_when_the_backend_ignores_return_to() -> None:
-    from groundfield.solver.registry import BackendCapabilityWarning
+    """A backend that does not declare ``two_terminal_sources`` warns.
+
+    The image family honours ``return_to`` since 10.16 and stays
+    silent; a toy backend without the capability stands in for the
+    backends that still return the current through remote earth.
+    """
+    from groundfield.solver.registry import (
+        BackendCapabilities,
+        BackendCapabilityWarning,
+        register_backend,
+        unregister_backend,
+    )
 
     w = _rod_world()
     gf.create_electrode(w, "rod", name="aux", position=(80.0, 0.0, 0.5), length=1.0)
     w.sources[0].return_to = "aux"
-    with pytest.warns(BackendCapabilityWarning, match="return_to"):
+    register_backend(
+        "toy_one_terminal",
+        "groundfield.solver.image:solve_image",
+        capabilities=BackendCapabilities(soils={"homogeneous"}),
+    )
+    try:
+        with pytest.warns(BackendCapabilityWarning, match="return_to"):
+            gf.Engine(backend="toy_one_terminal", segment_length=SEG).solve(w)
+    finally:
+        unregister_backend("toy_one_terminal")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", BackendCapabilityWarning)
         gf.Engine(segment_length=SEG).solve(w)
 
 

@@ -1,0 +1,18 @@
+# Expected golden-value changes of work stream CORE-2a (two-terminal
+# sources, junction nodes, floating clusters, guards, diagnostics).
+# Format: tests/golden/README.md.
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/*", "I/*"]
+findings = ["10.16"]
+reason = """Source.return_to is honoured: the generator's source injects +1 A at the
+substation and takes it back at aux_rod_0, so the leakage currents now sum to
+0 (3.9e-15 A) instead of 1 A. The generator wires the feed lead from the
+substation straight to the auxiliary electrode (the 10.17 topology that GEN-2
+re-wires through junctions), so the lead closes the loop metallically: the
+substation potential falls from 1.5008 V to 4.15e-3 V (|.|) and every leakage
+current by 99.95 %; I(aux_rod_0) goes from +2.41e-2 A to -5.2e-4-2.49e-3j A
+(max_rel 1.03). Evidence: deliver/evidence/core2a/e01_golden_measurement_case.out"""
+min_rel_change = 0.5
+max_rel_change = 1.1

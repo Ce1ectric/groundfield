@@ -305,20 +305,98 @@ def discretise(
 
 
 def inject(world: World, *, where: str, stacklevel: int) -> dict[str, complex]:
-    """Step 2: impressed current per electrode in A (complex phasor).
+    """Step 2: impressed current per node in A (complex phasor).
 
-    Current sources add ``magnitude·exp(j·phase)`` to the electrode they
-    are attached to; other source kinds are skipped with a warning.
+    The one shared injection step of every backend on the pipeline
+    (review findings 10.16 and 10.66; up to 0.15.0 seven backends
+    carried a copy of this loop, none of which read ``return_to``).
+
+    Contract
+    --------
+    * The world is validated first (:meth:`World.check
+      <groundfield.world.World.check>`): every source terminal names an
+      electrode or junction, the world has at least one current source,
+      no source has magnitude 0, no voltage source is present and no
+      two-terminal source is short-circuited by an ideal bond. Errors
+      are raised before any numerics run.
+    * A current source with phasor
+      $I = |I|\\,e^{j\\varphi}$ adds $+I$ to ``attached_to`` and, if
+      ``return_to`` is set, $-I$ to ``return_to``. The sum over all
+      nodes is therefore the net current returning through remote
+      earth: zero for a world of two-terminal sources only, so
+      Kirchhoff's current law closes every measurement loop.
+    * The mapping has one entry per electrode (world order); nodes
+      without a source carry ``0j``. Contributions are accumulated in
+      source order, so a world without ``return_to`` gets exactly the
+      values of 0.15.0.
+
+    Parameters
+    ----------
+    world
+        The world to be solved.
+    where
+        Caller label for messages (kept for the step signature).
+    stacklevel
+        ``stacklevel`` of warnings emitted here (kept for the step
+        signature).
+
+    Returns
+    -------
+    dict[str, complex]
+        Impressed current per node name in A.
+
+    Raises
+    ------
+    KeyError, ValueError, NotImplementedError
+        See :meth:`World.check <groundfield.world.World.check>`.
     """
+    world.check()
+    _warn_manual_counter_sources(world)
     node_currents: dict[str, complex] = {e.name: 0j for e in world.electrodes}
     for src in world.sources:
-        if src.kind != "current":
-            continue
         i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
-        if src.attached_to in node_currents:
-            node_currents[src.attached_to] += i_complex
-    _warn_ignored_sources(world, where, stacklevel=stacklevel + 1)
+        node_currents[src.attached_to] += i_complex
+        if src.return_to is not None:
+            node_currents[src.return_to] -= i_complex
     return node_currents
+
+
+def _warn_manual_counter_sources(world: World) -> None:
+    """Warn about the 0.15.0 workaround for the inert ``return_to``.
+
+    Before ``return_to`` was honoured (finding 10.16), a measurement
+    loop was closed by hand with a second source of the same magnitude
+    and a phase shifted by 180° at the return electrode. Together with
+    an honoured ``return_to`` that source counts the return current
+    twice (``-2 I`` at the auxiliary electrode). The pattern — a
+    one-terminal source at the ``return_to`` node of a two-terminal
+    source with equal magnitude and opposite phase — is reported once
+    per solve.
+    """
+    from groundfield.solver.registry import warn_external
+
+    two_terminal = [s for s in world.sources if s.return_to is not None]
+    for src in two_terminal:
+        for other in world.sources:
+            if other is src or other.return_to is not None:
+                continue
+            if other.attached_to != src.return_to:
+                continue
+            if not np.isclose(abs(other.magnitude), abs(src.magnitude), rtol=1e-9):
+                continue
+            i_src = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
+            i_other = other.magnitude * np.exp(1j * np.deg2rad(other.phase_deg))
+            if abs(i_src + i_other) > 1e-9 * abs(i_src):
+                continue
+            warn_external(
+                f"Source {other.name!r} at {other.attached_to!r} looks like the "
+                f"manual counter-source of source {src.name!r} (same magnitude, "
+                "opposite phase). Since 2026.11 Source.return_to is honoured, so "
+                f"{src.name!r} already takes its current back at "
+                f"{src.return_to!r} and the return current is now counted "
+                "twice. Remove the counter-source.",
+                UserWarning,
+            )
 
 
 def build_topology(world: World, disc: Discretisation) -> Topology:
@@ -702,7 +780,7 @@ def solve_image_family(
         **green.metadata(solution, stacklevel=stacklevel + 1),
         "stub": False,
         "earth_inductive_model": branches.earth_inductive_model,
-        "kernel": getattr(engine, "kernel", "point"),
+        "kernel": engine.kernel,
     }
     return build_result(
         world,

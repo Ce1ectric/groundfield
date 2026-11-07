@@ -19,6 +19,7 @@ applied to the world via ``world.solve(engine)``.
 
 from __future__ import annotations
 
+import math
 import warnings
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,7 @@ from groundfield.conductors.conductor import Conductor
 from groundfield.geometry.electrodes import Electrode, _ElectrodeBase
 from groundfield.soil.models import SoilModel
 from groundfield.sources import Source
+from groundfield.utils.suggest import did_you_mean
 
 # Boundary-condition values that the v0.2.0 integral / image-charge
 # backends actually implement implicitly. Anything else is accepted on
@@ -116,18 +118,191 @@ class World(BaseModel):
         return electrode
 
     def add_conductor(self, conductor: Conductor) -> Conductor:
-        """Add a conductor."""
+        """Add a conductor.
+
+        Raises
+        ------
+        ValueError
+            If the name is already taken.
+        KeyError
+            If ``start_electrode`` / ``end_electrode`` names no
+            electrode of the world (review finding 10.66: such a
+            conductor used to drop out of the network silently). The
+            message names the closest node names.
+        """
         if any(c.name == conductor.name for c in self.conductors):
             raise ValueError(f"Conductor name '{conductor.name}' already taken.")
+        self._check_conductor_ends(conductor)
         self.conductors.append(conductor)
         return conductor
 
     def add_source(self, source: Source) -> Source:
-        """Add a source."""
+        """Add a source.
+
+        Raises
+        ------
+        ValueError
+            If the name is already taken, the source feeds a conductor
+            (a conductor is not a node), or ``attached_to`` and
+            ``return_to`` are the same node.
+        KeyError
+            If ``attached_to`` / ``return_to`` names no electrode of the
+            world (review finding 10.66). The message names the closest
+            node names.
+        """
         if any(s.name == source.name for s in self.sources):
             raise ValueError(f"Source name '{source.name}' already taken.")
+        self._check_source_terminals(source)
         self.sources.append(source)
         return source
+
+    # ------------------------------------------------------------------
+    # Validation of the cross references (review finding 10.66)
+    # ------------------------------------------------------------------
+
+    def _node_names(self) -> list[str]:
+        """Names a source or a conductor end can refer to, in world order."""
+        return [e.name for e in self.electrodes]
+
+    def _unknown_node(self, owner: str, field: str, name: str) -> KeyError:
+        """``KeyError`` for a reference to a node that does not exist."""
+        nodes = self._node_names()
+        hint = did_you_mean(name, nodes, n=3, cutoff=0.5)
+        if not hint:
+            shown = ", ".join(repr(n) for n in nodes[:8])
+            more = f" (+{len(nodes) - 8} more)" if len(nodes) > 8 else ""
+            hint = f" Known nodes: {shown}{more}." if nodes else " It has none."
+        return KeyError(
+            f"{owner}: {field}={name!r} is not an electrode of world "
+            f"{self.name!r}.{hint}"
+        )
+
+    def _check_conductor_ends(self, conductor: Conductor) -> None:
+        nodes = set(self._node_names())
+        for field in ("start_electrode", "end_electrode"):
+            name = getattr(conductor, field)
+            if name is not None and name not in nodes:
+                raise self._unknown_node(f"Conductor {conductor.name!r}", field, name)
+
+    def _check_source_terminals(self, source: Source) -> None:
+        nodes = set(self._node_names())
+        conductors = {c.name for c in self.conductors}
+        owner = f"Source {source.name!r}"
+        for field in ("attached_to", "return_to"):
+            name = getattr(source, field)
+            if name is None or name in nodes:
+                continue
+            if name in conductors:
+                raise ValueError(
+                    f"{owner}: {field}={name!r} names a conductor, not a "
+                    "node. A source feeds a node of the network: attach it "
+                    "to an electrode, or create a junction at the conductor "
+                    "end (gf.create_junction) and connect the conductor and "
+                    "the source to it. Up to 0.15.0 a source on a conductor "
+                    "injected nothing."
+                )
+            raise self._unknown_node(owner, field, name)
+        if source.return_to is not None and source.return_to == source.attached_to:
+            raise ValueError(
+                f"{owner}: attached_to and return_to are the same node "
+                f"{source.attached_to!r}, so the source drives no current. "
+                "Set return_to=None to return through remote earth."
+            )
+
+    def check(self, *, require_source: bool = True) -> None:
+        """Validate the cross references and the excitation of the world.
+
+        Called by every solve through :meth:`solve` and by the shared
+        injection step of the solver pipeline, so a world edited after
+        its objects were created, or loaded from JSON, is checked before
+        any numerics run (review finding 10.66; up to 0.15.0 each of the
+        cases below solved silently to zero currents or ``nan``
+        impedances).
+
+        Parameters
+        ----------
+        require_source
+            Require at least one electrode and at least one current
+            source (default ``True``, the state a world must be in to be
+            solved). ``False`` checks only the references of a world
+            that is still being assembled.
+
+        Raises
+        ------
+        KeyError
+            A source terminal or a conductor end names no node of the
+            world; the message names the closest node names.
+        ValueError
+            A source feeds a conductor or returns to its own node; both
+            terminals of a source are bonded into one galvanic cluster by
+            ideal conductors (the source is short-circuited); a current
+            source has magnitude 0 or a non-finite magnitude / phase; the
+            world has no electrode or no current source (with
+            ``require_source``).
+        NotImplementedError
+            The world contains a :class:`~groundfield.sources.VoltageSource`:
+            no backend implements impressed voltages.
+        """
+        if require_source and self.soil is None:
+            raise ValueError("World has no soil model. Set one before calling solve().")
+        if require_source and not self.electrodes:
+            raise ValueError("World contains no electrodes.")
+        for c in self.conductors:
+            self._check_conductor_ends(c)
+        n_current = 0
+        for src in self.sources:
+            self._check_source_terminals(src)
+            if src.kind != "current":
+                raise NotImplementedError(
+                    f"Source {src.name!r} is a {type(src).__name__}; no "
+                    "backend implements impressed voltages (up to 0.15.0 it "
+                    "solved to all-zero potentials). Use a CurrentSource: the "
+                    "problem is linear, so a voltage U at the feeding point "
+                    "is the current I = U / Z_in, with Z_in = "
+                    "result.input_impedance() of a 1 A solve."
+                )
+            magnitude = float(src.magnitude)
+            phase = float(src.phase_deg)
+            if not (math.isfinite(magnitude) and math.isfinite(phase)):
+                raise ValueError(
+                    f"Source {src.name!r}: magnitude ({magnitude!r} A) and "
+                    f"phase_deg ({phase!r}) must be finite."
+                )
+            if magnitude == 0.0:
+                raise ValueError(
+                    f"Source {src.name!r} has magnitude 0 A: it injects "
+                    "nothing. Remove it or give it a non-zero magnitude."
+                )
+            n_current += 1
+        self._check_short_circuited_sources()
+        if require_source and n_current == 0:
+            raise ValueError(
+                f"World {self.name!r} has no current source, so every "
+                "potential and current would be zero and every impedance "
+                "nan. Add one with gf.create_source(world, attached_to=...)."
+            )
+
+    def _check_short_circuited_sources(self) -> None:
+        """Reject a two-terminal source whose terminals share a cluster."""
+        two_terminal = [s for s in self.sources if s.return_to is not None]
+        if not two_terminal:
+            return
+        # Local import: the solver package imports this module.
+        from groundfield.solver._topology import _build_clusters
+
+        cluster_id = _build_clusters(self.electrodes, self.conductors)
+        for src in two_terminal:
+            ra = cluster_id.get(src.attached_to, src.attached_to)
+            rb = cluster_id.get(src.return_to, src.return_to)
+            if ra == rb:
+                raise ValueError(
+                    f"Source {src.name!r}: attached_to={src.attached_to!r} "
+                    f"and return_to={src.return_to!r} are bonded into one "
+                    "galvanic cluster by ideal conductors, so the source is "
+                    "short-circuited and drives no current through the "
+                    "soil. Give the bond a finite cross_section, or return "
+                    "the current elsewhere."
+                )
 
     def set_boundary_conditions(self, **kwargs: Any) -> BoundaryConditions:
         """Update individual fields of the boundary configuration.
@@ -304,6 +479,9 @@ class World(BaseModel):
         ------
         TypeError
             If ``engine`` is not an :class:`Engine`.
+        KeyError, ValueError, NotImplementedError
+            If the world fails :meth:`check` (dangling source or
+            conductor references, no current source, voltage sources).
 
         Notes
         -----
@@ -340,6 +518,10 @@ class World(BaseModel):
                 f"Expected an Engine, got {type(engine).__name__}. "
                 "Build one with gf.create_engine(backend='image')."
             )
+        # Central validation for every backend (10.66); the shared
+        # injection step of the solver pipeline repeats it for callers
+        # of Engine.solve.
+        self.check()
         if not snapshot_sources:
             warn_external(
                 "World.solve(snapshot_sources=False) is deprecated: "

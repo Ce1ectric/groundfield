@@ -199,5 +199,5 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    green = _HalfSpaceGreen(world.soil.resistivity, getattr(engine, "kernel", "point"))
+    green = _HalfSpaceGreen(world.soil.rho, engine.kernel)
     return solve_image_family(world, engine, green, stacklevel=3)
