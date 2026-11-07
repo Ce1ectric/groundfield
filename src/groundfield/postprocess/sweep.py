@@ -41,9 +41,10 @@ frequency, selected by ``quantity`` (review pass 10, 10.18):
 
 As soon as conductors (PEN, shields, leads) carry part of the
 injected current away, the cluster impedance describes only the local
-electrode: for a station with three houses on a PEN it is 1.85 times
-the input impedance (review pass 10, R5-02). The response is the
-engineering :math:`Z(\\rho_1, h_1, f)` curve that
+electrode: for a station with three houses on a PEN it is 1.79 times
+the input impedance (1.26 times with one house, 3.09 times with eight;
+review pass 10). The response is the engineering
+:math:`Z(\\rho_1, h_1, f)` curve that
 :mod:`groundfield.postprocess.rho_f_standard` and
 :mod:`groundfield.postprocess.vector_fitting` consume.
 

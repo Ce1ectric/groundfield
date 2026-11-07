@@ -287,3 +287,31 @@ def test_split_factor_uses_the_solved_source_current() -> None:
     assert gf.split_factor(res, w, frequency_index=1) == pytest.approx(
         s_before, rel=1e-15
     )
+
+
+@pytest.mark.finding("10.19")
+def test_fits_record_which_impedance_they_represent() -> None:
+    from groundfield.postprocess.rho_f_standard import fit_rho_f_standard
+
+    res = _solve(_chain_world())
+    rhos = [50.0, 200.0]
+    results = [_solve(_chain_world(r)) for r in rhos]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        assert rho_f_from_field_result(res, n_poles=1).quantity == "input"
+        assert (
+            rho_f_from_field_result(
+                res, "station", quantity="cluster", n_poles=1
+            ).quantity
+            == "cluster"
+        )
+        assert rho_f_standard_from_results(results, rhos).quantity == "input"
+        assert (
+            rho_f_standard_from_results(
+                results, rhos, "station", quantity="electrode"
+            ).quantity
+            == "electrode"
+        )
+    rho = np.repeat([30.0, 100.0], 2)
+    raw = fit_rho_f_standard(rho, np.tile([0.0, 50.0], 2), 0.1 * rho + 0j)
+    assert raw.quantity is None

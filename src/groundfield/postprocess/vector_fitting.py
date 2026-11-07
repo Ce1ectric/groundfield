@@ -58,6 +58,7 @@ References
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from dataclasses import dataclass
 from typing import Sequence
@@ -150,6 +151,10 @@ class VectorFitResult:
         displacement.
     rms_relative
         ``rms_error`` divided by the mean of $|Z|$ (dimensionless).
+    quantity
+        Impedance the samples represent when the fit was built by
+        :func:`rho_f_from_field_result` (``"input"``, ``"cluster"`` or
+        ``"electrode"``); ``None`` for raw samples.
     """
 
     poles: np.ndarray
@@ -167,6 +172,9 @@ class VectorFitResult:
     # Relative rms error rms_error / mean|Z| (review pass 10, 10.41);
     # nan for instances built by hand or by the groundinsight bridge.
     rms_relative: float = math.nan
+    # Impedance the samples represent when built by
+    # rho_f_from_field_result ("input" / "cluster" / "electrode").
+    quantity: str | None = None
 
     def evaluate(self, frequencies: Sequence[float]) -> np.ndarray:
         """Evaluate the fitted $Z(s)$ at arbitrary frequencies."""
@@ -1049,8 +1057,8 @@ def rho_f_from_field_result(
         the impedance a groundinsight BusType stands for.
         ``"cluster"``: :meth:`FieldResult.cluster_impedance` of
         ``electrode_name``. ``"electrode"``: :math:`U_e/I_e` of the
-        named electrode alone, the quantity v0.15.0 fitted (on a ring
-        with two bonded rods 19 % above the cluster impedance, R7-02).
+        named electrode alone, the quantity v0.15.0 fitted (17 % above
+        the cluster impedance for a ring with two bonded rods).
     source
         Current source for ``quantity="input"``; may be omitted when the
         result carries exactly one.
@@ -1114,7 +1122,7 @@ def rho_f_from_field_result(
             UserWarning,
             stacklevel=2,
         )
-    return vector_fit(
+    fit = vector_fit(
         freqs[alive],
         z_all[alive],
         n_poles=n_poles,
@@ -1123,3 +1131,4 @@ def rho_f_from_field_result(
         include_L_inf=include_L_inf,
         complex_poles=complex_poles,
     )
+    return dataclasses.replace(fit, quantity=quantity)

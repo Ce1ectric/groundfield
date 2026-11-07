@@ -93,6 +93,7 @@ References
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import warnings
 from dataclasses import dataclass
@@ -157,6 +158,10 @@ class RhoFStandardFit:
         hand-built instances.
     weights
         Weighting used in the fit, ``"uniform"`` or ``"relative"``.
+    quantity
+        Impedance the samples represent when the fit was built by
+        :func:`rho_f_standard_from_results` (``"input"``, ``"cluster"``
+        or ``"electrode"``); ``None`` for raw samples.
     """
 
     k1: float
@@ -172,6 +177,7 @@ class RhoFStandardFit:
     k0: float = 0.0
     max_relative: float = math.nan
     weights: str = "uniform"
+    quantity: str | None = None
 
     @property
     def coefficients(self) -> dict[str, float]:
@@ -482,7 +488,7 @@ def rho_f_standard_from_results(
             UserWarning,
             stacklevel=2,
         )
-    return fit_rho_f_standard(
+    fit = fit_rho_f_standard(
         rho_arr,
         f_arr,
         Z_arr,
@@ -490,6 +496,7 @@ def rho_f_standard_from_results(
         weights=weights,
         max_relative_tol=max_relative_tol,
     )
+    return dataclasses.replace(fit, quantity=quantity)
 
 
 def fit_to_sympy_standard(fit: RhoFStandardFit, *, decimals: int = 6):

@@ -28,7 +28,7 @@ Format details (review pass 10, 10.10)
 --------------------------------------
 * Coordinates and scalars are declared ``double``: ``float`` makes
   readers store 32-bit values, which quantises UTM-scale coordinates
-  (y ≈ 5.8e6 m) by up to 0.19 m.
+  (northings of 5.2e6–6.2e6 m) by up to 0.25 m.
 * The free-text header line is sanitised: control and line-separator
   characters in ``world.name`` become spaces, and the line is limited
   to 256 bytes as the legacy format requires. A newline in the name
