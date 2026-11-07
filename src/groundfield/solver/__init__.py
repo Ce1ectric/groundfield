@@ -40,18 +40,45 @@ reduction step.
 
 from __future__ import annotations
 
-from groundfield.solver.engine import Backend, Engine
+from groundfield.solver.engine import CORE_METADATA_KEYS, Backend, Engine
 from groundfield.solver.image import ShallowSegmentWarning, solve_image
 from groundfield.solver.image_2layer import solve_image_2layer
 from groundfield.solver.mom import solve_mom
 from groundfield.solver.mutual import solve_mutual_field, solve_mutual_matrix
-from groundfield.solver.result import FieldResult, PointSource
+from groundfield.solver.registry import (
+    BackendCapabilities,
+    BackendCapabilityError,
+    BackendCapabilityWarning,
+    BackendOptions,
+    BackendOptionsWarning,
+    ExperimentalBackendWarning,
+    FemOptions,
+    MomSommerfeldOptions,
+    available_backends,
+    get_backend,
+    register_backend,
+)
+from groundfield.solver.result import FieldResult, PointSource, SourceRecord
 
 __all__ = [
     "Engine",
     "Backend",
     "FieldResult",
     "PointSource",
+    "SourceRecord",
+    # backend registry (10.74)
+    "register_backend",
+    "get_backend",
+    "available_backends",
+    "BackendCapabilities",
+    "BackendCapabilityError",
+    "BackendCapabilityWarning",
+    "BackendOptions",
+    "BackendOptionsWarning",
+    "ExperimentalBackendWarning",
+    "MomSommerfeldOptions",
+    "FemOptions",
+    "CORE_METADATA_KEYS",
     "ShallowSegmentWarning",
     "solve_image",
     "solve_image_2layer",

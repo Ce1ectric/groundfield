@@ -135,10 +135,13 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "world_bounds_xy",
     ),
     "groundfield.postprocess.safety": (
+        "UniformCurrentFieldWarning",
+        "permissible_prospective_touch_voltage_en50522",
         "permissible_touch_voltage_en50522",
         "step_voltage",
         "touch_voltage",
         "touch_voltage_envelope",
+        "touch_voltage_spectrum",
     ),
     "groundfield.postprocess.current_balance": (
         "cluster_current_balance",
@@ -161,18 +164,23 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "plot_convergence",
     ),
     "groundfield.postprocess.vector_fitting": (
+        "PassivityReport",
+        "VectorFitQualityWarning",
         "VectorFitResult",
+        "check_passivity",
         "fit_to_sympy",
         "rho_f_from_field_result",
         "vector_fit",
     ),
     "groundfield.postprocess.rho_f_standard": (
         "RhoFStandardFit",
+        "RhoFStandardQualityWarning",
         "fit_rho_f_standard",
         "fit_to_sympy_standard",
         "rho_f_standard_from_results",
     ),
     "groundfield.io.csv": (
+        "read_csv_with_provenance",
         "save_cluster_impedances_csv",
         "save_electrode_table_csv",
         "save_potential_path_csv",
@@ -188,6 +196,17 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "to_bustype_dict",
     ),
     "groundfield.coupling.sommerfeld_inductance": ("LayeredEarth",),
+    "groundfield.io.results": (
+        "ResultFormatError",
+        "load_result",
+        "save_result",
+    ),
+    "groundfield.solver.result": ("world_fingerprint",),
+    "groundfield.solver.registry": (
+        "BackendCapabilityError",
+        "ExperimentalBackendWarning",
+        "available_backends",
+    ),
     "groundfield.io.vtk": (
         "export_field_vtk",
         "export_geometry_vtk",
@@ -266,10 +285,13 @@ if _typing.TYPE_CHECKING:
         world_bounds_xy,
     )
     from groundfield.postprocess.safety import (
+        UniformCurrentFieldWarning,
+        permissible_prospective_touch_voltage_en50522,
         permissible_touch_voltage_en50522,
         step_voltage,
         touch_voltage,
         touch_voltage_envelope,
+        touch_voltage_spectrum,
     )
     from groundfield.postprocess.current_balance import (
         cluster_current_balance,
@@ -292,18 +314,34 @@ if _typing.TYPE_CHECKING:
         plot_convergence,
     )
     from groundfield.postprocess.vector_fitting import (
+        PassivityReport,
+        VectorFitQualityWarning,
         VectorFitResult,
+        check_passivity,
         fit_to_sympy,
         rho_f_from_field_result,
         vector_fit,
     )
+    from groundfield.io.results import (
+        ResultFormatError,
+        load_result,
+        save_result,
+    )
+    from groundfield.solver.result import world_fingerprint
+    from groundfield.solver.registry import (
+        BackendCapabilityError,
+        ExperimentalBackendWarning,
+        available_backends,
+    )
     from groundfield.postprocess.rho_f_standard import (
         RhoFStandardFit,
+        RhoFStandardQualityWarning,
         fit_rho_f_standard,
         fit_to_sympy_standard,
         rho_f_standard_from_results,
     )
     from groundfield.io.csv import (
+        read_csv_with_provenance,
         save_cluster_impedances_csv,
         save_electrode_table_csv,
         save_potential_path_csv,
@@ -445,6 +483,9 @@ __all__ = [
     "FieldResult",
     "solve_mutual_matrix",
     "solve_mutual_field",
+    "available_backends",
+    "BackendCapabilityError",
+    "ExperimentalBackendWarning",
     # Factories
     "create_world",
     "create_electrode",
@@ -461,8 +502,11 @@ __all__ = [
     # Safety (touch / step voltage)
     "touch_voltage",
     "touch_voltage_envelope",
+    "touch_voltage_spectrum",
     "step_voltage",
     "permissible_touch_voltage_en50522",
+    "permissible_prospective_touch_voltage_en50522",
+    "UniformCurrentFieldWarning",
     # Current sharing
     "cluster_current_balance",
     "electrode_current_table",
@@ -483,10 +527,19 @@ __all__ = [
     "vector_fit",
     "fit_to_sympy",
     "rho_f_from_field_result",
+    "check_passivity",
+    "PassivityReport",
+    "VectorFitQualityWarning",
     "RhoFStandardFit",
     "fit_rho_f_standard",
     "fit_to_sympy_standard",
     "rho_f_standard_from_results",
+    "RhoFStandardQualityWarning",
+    # IO / results (versioned JSON, 10.77)
+    "save_result",
+    "load_result",
+    "world_fingerprint",
+    "ResultFormatError",
     # IO / groundinsight bridge
     "BusTypeSpec",
     "to_bustype_dict",
@@ -502,6 +555,7 @@ __all__ = [
     "save_potential_path_csv",
     "save_electrode_table_csv",
     "save_cluster_impedances_csv",
+    "read_csv_with_provenance",
     # IO / VTK
     "export_geometry_vtk",
     "export_field_vtk",

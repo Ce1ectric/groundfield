@@ -270,7 +270,9 @@ def _is_numeric(a: np.ndarray) -> bool:
     return a.dtype.kind in "fc"
 
 
-def compare_arrays(old: np.ndarray, new: np.ndarray) -> tuple[str, float, float, float, str]:
+def compare_arrays(
+    old: np.ndarray, new: np.ndarray
+) -> tuple[str, float, float, float, str]:
     """Return ``(status_hint, max_rel, max_abs, ref_scale, detail)``."""
     if old.shape != new.shape:
         return "shape", math.inf, math.inf, 0.0, f"shape {old.shape} -> {new.shape}"
@@ -310,6 +312,24 @@ def compare_arrays(old: np.ndarray, new: np.ndarray) -> tuple[str, float, float,
     return "exact", math.inf, math.inf, 0.0, detail
 
 
+def noise_floor(case: str, quantity: str) -> float:
+    """Absolute noise floor of a quantity (``0.0`` if none is registered).
+
+    Residual-type quantities (e.g. the rms error of an exact fit) are pure
+    round-off; their *relative* change across numpy versions or BLAS
+    builds is meaningless. ``tests.golden.cases.NOISE_FLOORS`` maps
+    ``case -> {quantity pattern: absolute floor}``; a deviation below the
+    floor counts as ``within_tol``.
+    """
+    from tests.golden.cases import NOISE_FLOORS
+
+    floors = NOISE_FLOORS.get(case, {})
+    return max(
+        (v for pat, v in floors.items() if fnmatch.fnmatchcase(quantity, pat)),
+        default=0.0,
+    )
+
+
 def compare_case(
     name: str,
     current: dict[str, np.ndarray],
@@ -326,10 +346,14 @@ def compare_case(
         if key not in stored:
             out.append(Comparison(name, key, "new", math.inf, math.inf, 0.0))
             continue
-        hint, max_rel, max_abs, scale, detail = compare_arrays(stored[key], current[key])
+        hint, max_rel, max_abs, scale, detail = compare_arrays(
+            stored[key], current[key]
+        )
         if hint == "identical":
             status = "identical"
-        elif hint == "numeric" and max_rel <= tol:
+        elif hint == "numeric" and (
+            max_rel <= tol or max_abs <= noise_floor(name, key)
+        ):
             status = "within_tol"
         else:
             status = "changed"

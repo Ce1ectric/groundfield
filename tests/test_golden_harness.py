@@ -98,3 +98,12 @@ def test_repository_declarations_parse() -> None:
     for d in harness.load_declarations():
         assert d.reason.strip(), d.source
         assert d.cases and d.quantities, d.source
+
+
+def test_noise_floor_absorbs_round_off_residuals() -> None:
+    old = {"rms": np.array(1.3e-13)}
+    new = {"rms": np.array(2.4e-10)}
+    comps = harness.compare_case("fit_vector_fit_synthetic", new, old, tol=1e-9)
+    assert comps[0].status == "within_tol"
+    other = harness.compare_case("some_other_case", new, old, tol=1e-9)
+    assert other[0].status == "changed"

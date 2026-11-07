@@ -17,14 +17,18 @@ The objects are the same as the flat top-level names
 
 from groundfield.postprocess.rho_f_standard import (
     RhoFStandardFit,
+    RhoFStandardQualityWarning,
     fit_rho_f_standard,
     fit_to_sympy_standard,
     rho_f_standard_from_results,
 )
 from groundfield.postprocess.vector_fitting import (
+    PassivityReport,
     VectorFitConvergenceWarning,
+    VectorFitQualityWarning,
     VectorFitResult,
     VectorFitUnderdeterminedWarning,
+    check_passivity,
     fit_to_sympy,
     rho_f_from_field_result,
     vector_fit,
@@ -38,9 +42,13 @@ __all__ = [
     "rho_f_from_field_result",
     "VectorFitConvergenceWarning",
     "VectorFitUnderdeterminedWarning",
+    "VectorFitQualityWarning",
+    "check_passivity",
+    "PassivityReport",
     # standard form Z(rho, f)
     "RhoFStandardFit",
     "fit_rho_f_standard",
     "fit_to_sympy_standard",
     "rho_f_standard_from_results",
+    "RhoFStandardQualityWarning",
 ]

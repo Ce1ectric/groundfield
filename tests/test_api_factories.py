@@ -308,3 +308,12 @@ def test_run_simulation_has_world_solve_semantics(monkeypatch) -> None:
         "world",
         "engine",
     }
+
+
+@pytest.mark.finding("10.74")
+def test_create_engine_forwards_backend_options() -> None:
+    eng = gf.create_engine(
+        backend="mom_sommerfeld", options={"mom_sommerfeld": {"epsabs": 1e-7}}
+    )
+    assert eng.backend_options().epsabs == 1e-7
+    assert gf.create_engine().options == gf.Engine().options

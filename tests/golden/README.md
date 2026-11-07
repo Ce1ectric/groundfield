@@ -79,6 +79,9 @@ feeds the numbers-change block of the CHANGELOG.
 
 * Deterministic, fast (well under two seconds), public API only.
 * Append-only: never change an existing case, add a new one.
+* Residual-type quantities that are pure round-off (e.g. the rms of an
+  exact fit) get an absolute noise floor in `NOISE_FLOORS`; a deviation
+  below the floor counts as `within_tol`.
 * Engines are built with `_engine()`, which pins `kernel="point"` as
   soon as the engine offers a `kernel` option. The `defaults_*` cases
   use plain defaults and record every user-visible change of a

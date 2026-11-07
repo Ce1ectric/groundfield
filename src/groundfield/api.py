@@ -50,7 +50,7 @@ valid name ("did you mean …?").
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, TypeAlias, overload
 
 import numpy as np
@@ -629,6 +629,7 @@ def create_engine(
     image_max_terms: int | None = None,
     image_series_tol: float | None = None,
     kernel: KernelKind | None = None,
+    options: Mapping[str, Any] | None = None,
 ) -> Engine:
     """Create a configured :class:`~groundfield.Engine`.
 
@@ -683,6 +684,11 @@ def create_engine(
         ``"point"`` reproduces the results of earlier releases,
         ``"line"`` integrates each segment as a uniform line source.
         ``None`` keeps the engine default.
+    options
+        Backend-specific settings, keyed by backend name, e.g.
+        ``{"mom_sommerfeld": {"epsabs": 1e-8}}`` or option models such as
+        :class:`~groundfield.solver.MomSommerfeldOptions`; forwarded to
+        :attr:`Engine.options <groundfield.Engine.options>`.
 
     Returns
     -------
@@ -696,14 +702,16 @@ def create_engine(
     ValueError
         A value the engine rejects.
     """
-    options: dict[str, Any] = {"backend": backend}
+    engine_kwargs: dict[str, Any] = {"backend": backend}
+    if options is not None:
+        engine_kwargs["options"] = dict(options)
     if frequencies is not None:
         # Only a numpy array is converted; anything else (list, tuple, but
         # also a mistaken str or scalar) is validated by the Engine itself.
         if isinstance(frequencies, np.ndarray):
-            options["frequencies"] = frequencies.tolist()
+            engine_kwargs["frequencies"] = frequencies.tolist()
         else:
-            options["frequencies"] = frequencies
+            engine_kwargs["frequencies"] = frequencies
     explicit = {
         "segment_length": segment_length,
         "tolerance": tolerance,
@@ -712,10 +720,10 @@ def create_engine(
         "image_max_terms": image_max_terms,
         "image_series_tol": image_series_tol,
     }
-    options.update({k: v for k, v in explicit.items() if v is not None})
+    engine_kwargs.update({k: v for k, v in explicit.items() if v is not None})
     if kernel is not None:
         if "kernel" in Engine.model_fields:
-            options["kernel"] = kernel
+            engine_kwargs["kernel"] = kernel
         elif kernel != "point":
             # Transitional: an engine without the ``kernel`` option only
             # has the point kernel.
@@ -723,7 +731,7 @@ def create_engine(
                 f"kernel={kernel!r} is not available in this build; only "
                 "the point kernel is."
             )
-    return Engine(**options)
+    return Engine(**engine_kwargs)
 
 
 # ---------------------------------------------------------------------

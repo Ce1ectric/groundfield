@@ -27,6 +27,7 @@ bridge.
 from __future__ import annotations
 
 from groundfield.io.csv import (
+    read_csv_with_provenance,
     save_cluster_impedances_csv,
     save_electrode_table_csv,
     save_potential_path_csv,
@@ -76,6 +77,7 @@ __all__ = [
     "save_potential_path_csv",
     "save_electrode_table_csv",
     "save_cluster_impedances_csv",
+    "read_csv_with_provenance",
     "export_geometry_vtk",
     "export_field_vtk",
 ]

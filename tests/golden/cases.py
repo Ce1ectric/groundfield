@@ -57,6 +57,14 @@ Quantities = dict[str, np.ndarray]
 
 CASES: dict[str, Callable[[], Quantities]] = {}
 
+#: Absolute noise floors of residual-type quantities (see
+#: :func:`tests.golden.harness.noise_floor`): ``case -> {pattern: floor}``.
+#: The rms error of an exact synthetic vector fit is pure round-off
+#: (1.3e-13 ohm with numpy 2.5, 2.4e-10 ohm with numpy 2.4).
+NOISE_FLOORS: dict[str, dict[str, float]] = {
+    "fit_vector_fit_synthetic": {"rms": 1e-8},
+}
+
 
 def _case(func: Callable[[], Quantities]) -> Callable[[], Quantities]:
     """Register ``func`` under its name (without the ``case_`` prefix)."""
@@ -172,9 +180,7 @@ def _mixed_cluster_world() -> gf.World:
     w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
     gf.create_electrode(w, "ring", name="ring", center=(0.0, 0.0, 0.8), radius=4.0)
     for i, (x, y) in enumerate([(4.0, 0.0), (0.0, 4.0), (-4.0, 0.0), (0.0, -4.0)]):
-        gf.create_electrode(
-            w, "rod", name=f"rod{i}", position=(x, y, 0.8), length=2.0
-        )
+        gf.create_electrode(w, "rod", name=f"rod{i}", position=(x, y, 0.8), length=2.0)
     gf.create_electrode(
         w, "strip", name="strip", start=(4.5, 0.0, 0.8), end=(14.0, 0.0, 0.8)
     )
@@ -204,9 +210,7 @@ def _mixed_cluster_world() -> gf.World:
 @_case
 def case_img_mixed_cluster_hom() -> Quantities:
     w = _mixed_cluster_world()
-    res = w.solve(
-        _engine(backend="image", frequencies=[0.0, 50.0], segment_length=0.5)
-    )
+    res = w.solve(_engine(backend="image", frequencies=[0.0, 50.0], segment_length=0.5))
     probes = _with_buried(
         _surface_line(-20.0, 20.0, 17), [(0.0, 0.0, 0.0), (2.0, 2.0, 0.0)]
     )
@@ -275,9 +279,7 @@ def case_img2_ring_rods_within_layer() -> Quantities:
     w = gf.create_world(soil=soil)
     gf.create_electrode(w, "ring", name="ring", center=(0.0, 0.0, 0.6), radius=3.0)
     for i, (x, y) in enumerate([(3.0, 0.0), (-3.0, 0.0)]):
-        gf.create_electrode(
-            w, "rod", name=f"rod{i}", position=(x, y, 0.6), length=1.0
-        )
+        gf.create_electrode(w, "rod", name=f"rod{i}", position=(x, y, 0.6), length=1.0)
         _ideal_link(w, f"b{i}", "ring", f"rod{i}")
     gf.create_source(w, attached_to="ring", magnitude=1.0)
     res = w.solve(
@@ -543,9 +545,7 @@ def _foundation_pair_world(concrete_model: str) -> tuple[gf.World, list[str]]:
 def _make_mutual_case(concrete_model: str) -> Callable[[], Quantities]:
     def case() -> Quantities:
         w, anchors = _foundation_pair_world(concrete_model)
-        eng = _engine(
-            backend="image", segment_length=2.0, image_max_terms=500
-        )
+        eng = _engine(backend="image", segment_length=2.0, image_max_terms=500)
         probes = np.array([(0.0, 0.0, 0.0), (30.0, 0.0, 0.0)])
         Z = gf.solve_mutual_matrix(w, eng, anchors, probes)
         field = _with_buried(_surface_line(-10.0, 40.0, 11), [(15.0, 5.0, 0.0)])
@@ -611,9 +611,7 @@ def case_gen_tn_measurement_overhead_leads() -> Quantities:
             injection=MeasurementInjectionConfig(
                 position_xy=(150.0, 0.0), feed_lead=overhead_lead()
             ),
-            probe=MeasurementProbeConfig(
-                position_xy=(50.0, 0.0), lead=overhead_lead()
-            ),
+            probe=MeasurementProbeConfig(position_xy=(50.0, 0.0), lead=overhead_lead()),
         ),
     )
     w = TnNetworkGenerator(cfg, seed=0).build()
@@ -742,7 +740,9 @@ def case_fit_rho_f_standard_sweep() -> Quantities:
 
 @_case
 def case_safety_en50522_curve() -> Quantities:
-    t = np.concatenate([np.geomspace(0.05, 10.0, 25), [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]])
+    t = np.concatenate(
+        [np.geomspace(0.05, 10.0, 25), [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]]
+    )
     return {
         "U_Tp": np.array([gf.permissible_touch_voltage_en50522(float(x)) for x in t])
     }
