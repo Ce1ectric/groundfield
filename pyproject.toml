@@ -73,7 +73,14 @@ generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --strict-markers"
+markers = [
+    "finding(id): links a test to a review finding, e.g. finding('10.15'); select with --finding",
+    "slow: long-running test; deselect with -m 'not slow'",
+    "network: needs network access (Overpass / OSM); skipped unless --run-network",
+    "benchmark: performance benchmark; skipped unless --run-benchmark",
+    "golden: golden-value regression test (tests/golden)",
+]
 
 [tool.ruff]
 line-length = 88
