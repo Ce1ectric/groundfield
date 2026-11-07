@@ -499,6 +499,30 @@ def rho_f_standard_from_results(
     return dataclasses.replace(fit, quantity=quantity)
 
 
+def _standard_expression(fit: RhoFStandardFit, rho, f):
+    """Standard-form SymPy expression at full precision (one renderer, 10.73).
+
+    Builds :math:`k_0 + k_1\\rho + (k_2 + j k_3) f + (k_4 + j k_5) f\\rho`
+    term by term with float64-precision coefficients (``j`` is
+    :data:`sympy.I`), the constant term only when it is non-zero. Used by
+    :func:`fit_to_sympy_standard` and by the ``groundinsight`` exporter,
+    which round every coefficient once.
+    """
+    import sympy as sp
+
+    def num(value: float) -> sp.Float:
+        return sp.Float(float(value))
+
+    expr = (
+        num(fit.k1) * rho
+        + (num(fit.k2) + sp.I * num(fit.k3)) * f
+        + (num(fit.k4) + sp.I * num(fit.k5)) * f * rho
+    )
+    if fit.k0 != 0.0:
+        expr = num(fit.k0) + expr
+    return expr
+
+
 def fit_to_sympy_standard(fit: RhoFStandardFit, *, decimals: int = 6):
     """Convert a :class:`RhoFStandardFit` to a SymPy expression.
 
@@ -510,8 +534,9 @@ def fit_to_sympy_standard(fit: RhoFStandardFit, *, decimals: int = 6):
                       \\;+\\; (k_4 + j k_5)\\,f\\,\\rho,
     $$
 
-    the constant term only when it is non-zero. The expression is
-    suitable for direct insertion into
+    the constant term only when it is non-zero. The expression is built
+    term by term by the renderer the ``groundinsight`` exporter uses
+    (review pass 10, 10.73) and is suitable for direct insertion into
     ``groundinsight.BusType.impedance_formula``.
 
     Parameters
@@ -519,24 +544,24 @@ def fit_to_sympy_standard(fit: RhoFStandardFit, *, decimals: int = 6):
     fit
         Standard-form fit.
     decimals
-        Number of significant digits of the coefficients
-        (``sympy.Float`` precision).
+        Significant digits of every coefficient (1 to 17; larger values
+        count as 17). Each coefficient is correctly rounded **once**, so
+        its relative error is at most :math:`\\tfrac12\\,10^{1-N}` for
+        :math:`N` = ``decimals``.
 
     Returns
     -------
     sympy.Expr
+
+    Raises
+    ------
+    ValueError
+        If ``decimals`` is not a positive integer.
     """
     import sympy as sp
 
+    from groundfield.io._formula import round_coefficients
+
     rho = sp.Symbol("rho", real=True, positive=True)
     f = sp.Symbol("f", real=True, positive=True)
-    j = sp.I
-    k1 = sp.Float(fit.k1, decimals)
-    k2 = sp.Float(fit.k2, decimals)
-    k3 = sp.Float(fit.k3, decimals)
-    k4 = sp.Float(fit.k4, decimals)
-    k5 = sp.Float(fit.k5, decimals)
-    expr = k1 * rho + (k2 + j * k3) * f + (k4 + j * k5) * f * rho
-    if fit.k0 != 0.0:
-        expr = sp.Float(fit.k0, decimals) + expr
-    return sp.simplify(expr)
+    return round_coefficients(_standard_expression(fit, rho, f), decimals)

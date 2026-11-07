@@ -889,109 +889,161 @@ def check_passivity(
 # ---------------------------------------------------------------------
 
 
-def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
-    """Convert a :class:`VectorFitResult` to a SymPy expression.
+_POLE_PAIR_REL_TOL = 1e-3
+"""Relative tolerance of the renderer's pole pairing.
 
-    The resulting expression is
+A pole with ``|Im p| < tol * max(|Re p|, 1)`` is rendered as a real pole;
+two poles whose real parts and negated imaginary parts agree within
+``tol`` (relative to ``max(|.|, 1)``) are rendered as one conjugate pair.
+"""
+
+
+def _partial_fractions(fit: VectorFitResult, s):
+    """Partial-fraction SymPy expression of a vector fit, at full precision.
+
+    The one renderer of vector fits (review pass 10, 10.73), used by
+    :func:`fit_to_sympy` (``s`` a symbol) and by the ``groundinsight``
+    exporter (``s = 2*pi*j*f``):
+
+    .. math::
+
+        Z = R_\\infty + L_\\infty s + \\sum_\\text{real} \\frac{r}{s - p}
+            + \\sum_\\text{pairs}
+              \\frac{2\\Re r\\,(s - \\Re p) - 2\\Im r\\,\\Im p}
+                   {(s - \\Re p)^2 + (\\Im p)^2},
+
+    one term per real pole or conjugate pole pair. Poles are paired with
+    :data:`_POLE_PAIR_REL_TOL`; a matched pair is symmetrised (averaged
+    real parts and ``|Im|``, the residue at the pole with positive
+    imaginary part fixes the sign of ``Im r``), so the pair term is real
+    for real ``s``. A complex pole without partner keeps a complex term.
+    The sum is not simplified: ``sympy.simplify`` would merge the terms
+    into one rational function of high degree (``s**4`` over ``s**3`` for
+    a pair, a real pole and :math:`L_\\infty`), which is hard to read and
+    badly conditioned.
+
+    Parameters
+    ----------
+    fit
+        The vector fit.
+    s
+        SymPy symbol or expression substituted for the Laplace variable.
+
+    Returns
+    -------
+    sympy.Expr
+        Sum of the terms; every number is a float64-precision
+        :class:`sympy.Float` (round with
+        :func:`groundfield.io._formula.round_coefficients`).
+    """
+    import sympy as sp
+
+    poles = np.asarray(fit.poles, dtype=complex).ravel()
+    residues = np.asarray(fit.residues, dtype=complex).ravel()
+    tol = _POLE_PAIR_REL_TOL
+    terms = [sp.Float(float(fit.R_inf))]
+    if float(fit.L_inf) != 0.0:
+        terms.append(sp.Float(float(fit.L_inf)) * s)
+    used = np.zeros(poles.size, dtype=bool)
+    for k, (p, r) in enumerate(zip(poles, residues, strict=True)):
+        if used[k]:
+            continue
+        used[k] = True
+        if abs(p.imag) < tol * max(abs(p.real), 1.0):
+            terms.append(sp.Float(r.real) / (s - sp.Float(p.real)))
+            continue
+        partner, best = -1, math.inf
+        for k2 in range(k + 1, poles.size):
+            if used[k2]:
+                continue
+            d_real = abs(poles[k2].real - p.real) / max(abs(p.real), 1.0)
+            d_imag = abs(poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
+            if d_real < tol and d_imag < tol and d_real + d_imag < best:
+                partner, best = k2, d_real + d_imag
+        if partner < 0:  # complex pole without a conjugate partner
+            r_c = sp.Float(r.real) + sp.I * sp.Float(r.imag)
+            p_c = sp.Float(p.real) + sp.I * sp.Float(p.imag)
+            terms.append(r_c / (s - p_c))
+            continue
+        used[partner] = True
+        p2, r2 = poles[partner], residues[partner]
+        # The pair is written with Im p > 0; the residue at that pole
+        # fixes the sign of Im r (an abs()-based average lost it before
+        # 0.14.1, see CHANGELOG 0.14.1).
+        r_plus, r_minus = (r, r2) if p.imag > 0.0 else (r2, r)
+        re_p = sp.Float(0.5 * (p.real + p2.real))
+        im_p = sp.Float(0.5 * (abs(p.imag) + abs(p2.imag)))
+        re_r = sp.Float(0.5 * (r.real + r2.real))
+        im_r = sp.Float(0.5 * (r_plus.imag - r_minus.imag))
+        numerator = 2 * re_r * (s - re_p) - 2 * im_r * im_p
+        terms.append(numerator / ((s - re_p) ** 2 + im_p**2))
+    return sp.Add(*terms)
+
+
+def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
+    """Convert a :class:`VectorFitResult` to a SymPy expression in ``s``.
+
+    The expression is the partial-fraction form of the fit,
 
     $$
     Z(s) \\;=\\; R_\\infty \\;+\\; L_\\infty \\cdot s \\;+\\;
-    \\sum_k\\,\\frac{r_k}{s - p_k}.
+    \\sum_k\\,\\frac{r_k}{s - p_k},
     $$
 
-    Complex-conjugate pole/residue pairs are combined into a single
-    real second-order term to keep the formula compact and
-    interpretable for ``groundinsight``:
+    with every complex-conjugate pole/residue pair combined into one
+    real second-order term,
 
     $$
     \\frac{r}{s - p} + \\frac{r^*}{s - p^*}
     \\;=\\; \\frac{2\\,\\Re(r)\\,(s - \\Re(p)) -
                   2\\,\\Im(r)\\,\\Im(p)}
-                 {(s - \\Re(p))^2 + \\Im(p)^2}.
+                 {(s - \\Re(p))^2 + \\Im(p)^2},
     $$
 
-    The coefficients are rounded to ``decimals`` digits to keep
-    the printed formula readable.
+    so the expression is real for real ``s``. It is built by the renderer
+    the ``groundinsight`` exporter uses (one term per real pole or pole
+    pair; review pass 10, 10.73) and is not simplified: up to the
+    calendar release ``sympy.simplify`` merged the terms into one rational
+    function of degree four over three.
 
-    Returns a :class:`sympy.Expr`. Free symbol: ``s``.
+    Parameters
+    ----------
+    fit
+        The vector fit.
+    decimals
+        Significant digits of every floating-point coefficient (1 to 17;
+        larger values count as 17). Each coefficient is the full-precision
+        value correctly rounded **once** to ``decimals`` digits, so its
+        relative error is at most :math:`\\tfrac12\\,10^{1-N}` for
+        :math:`N` = ``decimals``. Evaluated with :func:`sympy.lambdify`
+        on reviewer R5's 98 vector fits (0 to 2 kHz), the worst deviation
+        from :meth:`VectorFitResult.evaluate`, relative to
+        :math:`\\max|Z|`, is :math:`4.0\\cdot10^{-6}` at the default
+        6 digits and :math:`4.8\\cdot10^{-12}` at 12.
+
+    Returns
+    -------
+    sympy.Expr
+        Expression in the free symbol ``s`` (``sympy.Symbol("s",
+        complex=True)``).
+
+    Raises
+    ------
+    ValueError
+        If ``decimals`` is not a positive integer.
+
+    Warns
+    -----
+    UserWarning
+        If the expression does not depend on ``s`` (a fit without poles
+        and with :math:`L_\\infty = 0`).
     """
     import sympy as sp
 
+    from groundfield.io._formula import round_coefficients
+
     s = sp.Symbol("s", complex=True)
-    expr = sp.Float(fit.R_inf, decimals)
-    if fit.L_inf != 0.0:
-        expr = expr + sp.Float(fit.L_inf, decimals) * s
-
-    # Bucket poles into real and complex-conjugate pairs. Vector
-    # fitting's eigenvalue solve does not return exactly mirrored
-    # imaginary parts; we use a loose relative tolerance and
-    # **symmetrise** the matched pair (taking the average of |Im|)
-    # so the resulting expression is rigorously real-valued for
-    # real s.
-    used = np.zeros(len(fit.poles), dtype=bool)
-    rel_tol = 1e-3
-    for k, (p, r) in enumerate(zip(fit.poles, fit.residues, strict=True)):
-        if used[k]:
-            continue
-        if abs(p.imag) < rel_tol * max(abs(p.real), 1.0):
-            # Effectively real pole
-            expr = expr + sp.Float(r.real, decimals) / (s - sp.Float(p.real, decimals))
-            used[k] = True
-            continue
-        # Look for the conjugate (loose tolerance, opposite-sign imag)
-        conj_idx = -1
-        best_score = float("inf")
-        for k2 in range(k + 1, len(fit.poles)):
-            if used[k2]:
-                continue
-            d_real = abs(fit.poles[k2].real - p.real) / max(abs(p.real), 1.0)
-            d_imag = abs(fit.poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
-            score = d_real + d_imag
-            if d_real < rel_tol and d_imag < rel_tol and score < best_score:
-                conj_idx = k2
-                best_score = score
-        if conj_idx < 0:
-            # No conjugate found — fall back to a single complex term
-            expr = expr + sp.nsimplify(r, rational=False) / (
-                s - sp.nsimplify(p, rational=False)
-            )
-            used[k] = True
-            continue
-        # Symmetrise: take averages so the pair is exactly conjugate.
-        used[k] = True
-        used[conj_idx] = True
-        p2 = fit.poles[conj_idx]
-        r2 = fit.residues[conj_idx]
-        Re_p_avg = 0.5 * (p.real + p2.real)
-        Im_p_avg = 0.5 * (
-            abs(p.imag) + abs(p2.imag)
-        )  # use positive imag for the canonical pair
-        Re_r_avg = 0.5 * (r.real + r2.real)
-        # The canonical pair is written with ``Im(p) = +Im_p_avg``, so
-        # the canonical residue is the one sitting at the *positive*
-        # imaginary pole; its partner carries the negated imaginary
-        # part. Symmetrise by averaging ``Im(r_+)`` against
-        # ``-Im(r_-)`` — this keeps the *sign* of the canonical
-        # residue, which an ``abs()``-based average destroys whenever
-        # ``Im(r_+) < 0`` (the pre-0.14.1 defect: the exported
-        # expression then disagreed with the fit it claims to
-        # represent, see CHANGELOG 0.14.1).
-        if p.imag > 0.0:
-            r_plus, r_minus = r, r2
-        else:
-            r_plus, r_minus = r2, r
-        Im_r_avg = 0.5 * (r_plus.imag - r_minus.imag)
-        # Real second-order term:
-        # 2·Re(r)·(s - Re(p)) - 2·Im(r)·Im(p)  /  (s - Re(p))² + Im(p)²
-        Re_p_sym = sp.Float(Re_p_avg, decimals)
-        Im_p_sym = sp.Float(Im_p_avg, decimals)
-        Re_r_sym = sp.Float(Re_r_avg, decimals)
-        Im_r_sym = sp.Float(Im_r_avg, decimals)
-        num = 2 * Re_r_sym * (s - Re_p_sym) - 2 * Im_r_sym * Im_p_sym
-        den = (s - Re_p_sym) ** 2 + Im_p_sym**2
-        expr = expr + num / den
-
-    expr = sp.simplify(expr)
+    expr = round_coefficients(_partial_fractions(fit, s), decimals)
 
     # Defensive guard: every rho-f formula must depend on ``s``. A
     # constant Z(rho, f) silently breaks the groundinsight BusType

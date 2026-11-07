@@ -18,7 +18,10 @@ which executes nothing, checks the syntax tree against an allow-list
 and **builds** the SymPy expression node by node.
 :func:`format_impedance_formula` is the inverse direction: it renders a
 SymPy expression in the same grammar with a fixed number of significant
-digits per coefficient.
+digits per coefficient. :func:`round_coefficients` applies the same
+rounding to the expression itself; it is the rounding step of the one
+formula renderer that ``fit_to_sympy``, ``fit_to_sympy_standard`` and
+the ``groundinsight`` exporter share (review pass 10, 10.73).
 
 Grammar
 -------
@@ -78,6 +81,7 @@ __all__ = [
     "FormulaError",
     "parse_impedance_formula",
     "format_impedance_formula",
+    "round_coefficients",
     "MAX_CHARS",
     "MAX_NODES",
     "MAX_DEPTH",
@@ -605,6 +609,78 @@ class _Builder:
 # ---------------------------------------------------------------------
 
 
+def _significant_digits(significant_digits: object) -> int:
+    """Validate a significant-digit count; values above 17 count as 17."""
+    if (
+        isinstance(significant_digits, bool)
+        or not isinstance(significant_digits, (int, float))
+        or int(significant_digits) != significant_digits
+        or significant_digits < 1
+    ):
+        raise ValueError(
+            "the number of significant digits must be a positive integer, "
+            f"got {significant_digits!r}"
+        )
+    return min(int(significant_digits), _MAX_SIGNIFICANT_DIGITS)
+
+
+def _rounded_text(value: float, digits: int) -> str:
+    """``value`` correctly rounded to ``digits`` significant digits, as text.
+
+    The one rounding rule of the formula renderer: Python's
+    ``format(value, ".Ng")`` (identical on every platform), exponents
+    without padding (``1e-7``), integral values without a decimal point.
+    """
+    text = format(value, f".{digits}g")
+    mantissa, sep, exponent = text.partition("e")
+    return f"{mantissa}e{int(exponent)}" if sep else text
+
+
+def round_coefficients(expr: sp.Expr, significant_digits: int) -> sp.Expr:
+    r"""Round every floating-point number of ``expr`` once.
+
+    Parameters
+    ----------
+    expr : sympy.Expr
+        Expression whose :class:`sympy.Float` atoms carry full float64
+        precision (as built by the rho-f renderers).
+    significant_digits : int
+        Significant digits $N$ per coefficient, 1 to 17 (larger values
+        count as 17).
+
+    Returns
+    -------
+    sympy.Expr
+        The same expression with every finite float replaced by its
+        value correctly rounded to $N$ significant digits (the rule of
+        :func:`format_impedance_formula`), stored as a SymPy float of $N$
+        digits, so the expression prints compactly. A coefficient then
+        carries a relative rounding error of at most
+        $\tfrac12\,10^{1-N}$; integers, rationals, ``pi`` and ``E`` are
+        left exact. Non-finite floats are left unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``significant_digits`` is not a positive integer.
+
+    Notes
+    -----
+    Rounding happens once, from the full-precision value; printing the
+    result with :func:`format_impedance_formula` at the same number of
+    digits (up to 15) reproduces the text of the full-precision
+    expression, because every decimal of at most 15 digits survives the
+    conversion to float64.
+    """
+    digits = _significant_digits(significant_digits)
+    mapping = {}
+    for atom in expr.atoms(sp.Float):
+        value = float(atom)
+        if math.isfinite(value):
+            mapping[atom] = sp.Float(_rounded_text(value, digits), digits)
+    return expr.xreplace(mapping)
+
+
 class _FormulaPrinter(StrPrinter):
     """String printer for the impedance-formula grammar.
 
@@ -624,9 +700,7 @@ class _FormulaPrinter(StrPrinter):
                 f"cannot render a non-finite coefficient ({value}) in an "
                 "impedance formula"
             )
-        text = format(value, f".{self._digits}g")
-        mantissa, sep, exponent = text.partition("e")
-        return f"{mantissa}e{int(exponent)}" if sep else text
+        return _rounded_text(value, self._digits)
 
     def _print_ImaginaryUnit(self, expr: sp.Expr) -> str:  # noqa: N802
         return "j"
@@ -661,15 +735,10 @@ def format_impedance_formula(expr: sp.Expr, *, significant_digits: int = 12) -> 
     Raises
     ------
     ValueError
-        If ``significant_digits`` is smaller than 1, or a coefficient is
-        not finite.
+        If ``significant_digits`` is not a positive integer, or a
+        coefficient is not finite.
     """
-    digits = int(significant_digits)
-    if digits != significant_digits or digits < 1:
-        raise ValueError(
-            f"significant_digits must be a positive integer, got {significant_digits!r}"
-        )
-    digits = min(digits, _MAX_SIGNIFICANT_DIGITS)
+    digits = _significant_digits(significant_digits)
     if expr.has(sp.nan, sp.zoo, sp.oo, -sp.oo):
         raise ValueError(
             "cannot render a non-finite coefficient (nan / oo) in an impedance formula"

@@ -45,13 +45,16 @@ exports the function it is given.
 Formula text
 ------------
 The formula keeps the structure of the fit (partial fractions for a
-vector fit) and prints every floating-point coefficient once, rounded
-to ``decimals`` significant digits with Python's correctly rounded
-float formatting, so the text is identical on every platform. A
-coefficient therefore carries a relative rounding error of at most
-$\\tfrac12\\,10^{1-N}$ for $N$ = ``decimals``; with the default
-$N = 12$ the formula reproduces ``fit.evaluate`` to about
-$10^{-11}$ relative.
+vector fit, the standard form term by term) and prints every
+floating-point coefficient once, rounded to ``decimals`` significant
+digits with Python's correctly rounded float formatting, so the text is
+identical on every platform. The expression comes from the same
+renderer as :func:`~groundfield.postprocess.vector_fitting.fit_to_sympy`
+and :func:`~groundfield.postprocess.rho_f_standard.fit_to_sympy_standard`
+(one pole-pairing rule, no ``sympy.simplify``). A coefficient therefore
+carries a relative rounding error of at most $\\tfrac12\\,10^{1-N}$ for
+$N$ = ``decimals``; with the default $N = 12$ the formula reproduces
+``fit.evaluate`` to about $10^{-11}$ relative.
 
 Formula safety
 --------------
@@ -103,10 +106,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Union
 
 import numpy as np
 
-from groundfield.postprocess.rho_f_standard import (
-    RhoFStandardFit,
-    fit_to_sympy_standard,
-)
+from groundfield.postprocess.rho_f_standard import RhoFStandardFit
 from groundfield.postprocess.vector_fitting import VectorFitResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -161,9 +161,6 @@ class NonPassiveFitError(ValueError):
 SCHEMA_NAME = "groundfield.bustype"
 SCHEMA_VERSION = 1
 """Schema name and version of the JSON document produced by this module."""
-
-_FULL_PRECISION_DIGITS = 17
-"""Digits used inside SymPy before the single rounding at print time."""
 
 _PASSIVITY_BAND_FACTOR = 2.0
 """The passivity check covers 0 Hz to this factor times the highest fitted frequency."""
@@ -352,87 +349,24 @@ def _render(expr: "sympy.Expr", *, decimals: int) -> str:
     return format_impedance_formula(expr, significant_digits=decimals)
 
 
-_POLE_PAIR_REL_TOL = 1e-3
-"""Relative tolerance for treating a pole as real or two poles as a pair.
-
-Same rule as :func:`groundfield.postprocess.vector_fitting.fit_to_sympy`.
-"""
-
-
-def _vector_fit_expression(fit: VectorFitResult) -> "sympy.Expr":
-    """Partial-fraction SymPy expression of a vector fit in ``f``.
-
-    With $s = 2\\pi j f$ (``j`` a symbol printed as the imaginary unit)
-
-    $$
-    Z = R_\\infty + L_\\infty s + \\sum_\\text{real} \\frac{r}{s - p}
-        + \\sum_\\text{pairs}
-          \\frac{2\\Re r\\,(s - \\Re p) - 2\\Im r\\,\\Im p}
-               {(s - \\Re p)^2 + (\\Im p)^2},
-    $$
-
-    one term per real pole or conjugate pole pair, matched and
-    symmetrised as :func:`fit_to_sympy` does (the residue at the pole
-    with positive imaginary part fixes the sign; a complex pole without
-    partner keeps a complex term). Unlike :func:`fit_to_sympy` the sum
-    is not passed through ``sympy.simplify``, which can merge the terms
-    into one high-order rational function (e.g. ``pi**4*f**4*j**4``):
-    the partial fractions stay readable and well conditioned.
-    """
-    import sympy as sp
-
-    s = 2 * sp.pi * sp.Symbol("j") * sp.Symbol("f")
-    poles = np.asarray(fit.poles, dtype=complex).ravel()
-    residues = np.asarray(fit.residues, dtype=complex).ravel()
-    tol = _POLE_PAIR_REL_TOL
-    terms = [sp.Float(float(fit.R_inf))]
-    if float(fit.L_inf) != 0.0:
-        terms.append(sp.Float(float(fit.L_inf)) * s)
-    used = np.zeros(poles.size, dtype=bool)
-    for k, (p, r) in enumerate(zip(poles, residues, strict=True)):
-        if used[k]:
-            continue
-        used[k] = True
-        if abs(p.imag) < tol * max(abs(p.real), 1.0):
-            terms.append(sp.Float(r.real) / (s - sp.Float(p.real)))
-            continue
-        partner, best = -1, math.inf
-        for k2 in range(k + 1, poles.size):
-            if used[k2]:
-                continue
-            d_real = abs(poles[k2].real - p.real) / max(abs(p.real), 1.0)
-            d_imag = abs(poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
-            if d_real < tol and d_imag < tol and d_real + d_imag < best:
-                partner, best = k2, d_real + d_imag
-        if partner < 0:  # complex pole without a conjugate partner
-            r_c = sp.Float(r.real) + sp.I * sp.Float(r.imag)
-            p_c = sp.Float(p.real) + sp.I * sp.Float(p.imag)
-            terms.append(r_c / (s - p_c))
-            continue
-        used[partner] = True
-        p2, r2 = poles[partner], residues[partner]
-        r_plus, r_minus = (r, r2) if p.imag > 0.0 else (r2, r)
-        re_p = sp.Float(0.5 * (p.real + p2.real))
-        im_p = sp.Float(0.5 * (abs(p.imag) + abs(p2.imag)))
-        re_r = sp.Float(0.5 * (r.real + r2.real))
-        im_r = sp.Float(0.5 * (r_plus.imag - r_minus.imag))
-        numerator = 2 * re_r * (s - re_p) - 2 * im_r * im_p
-        terms.append(numerator / ((s - re_p) ** 2 + im_p**2))
-    return sp.Add(*terms)
-
-
 def _vector_fit_to_formula_in_f(fit: VectorFitResult, *, decimals: int) -> str:
     """Convert a ``VectorFitResult`` to an ``impedance_formula`` string in ``f``.
 
     The vector fit is in the Laplace variable $s$; ``groundinsight``
-    expects the formula in $f$ (Hz) with the imaginary unit ``j``.
-    :func:`_vector_fit_expression` builds the partial fractions with
-    $s = 2\\pi j f$ at full float64 precision, and every coefficient is
+    expects the formula in $f$ (Hz) with the imaginary unit ``j``. The
+    partial fractions come from the renderer that
+    :func:`~groundfield.postprocess.vector_fitting.fit_to_sympy` uses,
+    with $s = 2\\pi j f$ at full float64 precision; every coefficient is
     rounded once, to ``decimals`` significant digits, when the text is
     printed. No rationalisation takes place, so the coefficients stay
     readable floats.
     """
-    expr = _vector_fit_expression(fit)
+    import sympy as sp
+
+    from groundfield.postprocess.vector_fitting import _partial_fractions
+
+    s = 2 * sp.pi * sp.Symbol("j") * sp.Symbol("f")
+    expr = _partial_fractions(fit, s)
     text = _render(expr, decimals=decimals)  # raises on non-finite values
     if not expr.free_symbols:
         warnings.warn(
@@ -448,11 +382,16 @@ def _rho_f_standard_to_formula(fit: RhoFStandardFit, *, decimals: int) -> str:
     """Convert a ``RhoFStandardFit`` to an ``impedance_formula`` string.
 
     The standard form already has the canonical ``(rho, f)`` symbol
-    set used by ``groundinsight``; the imaginary unit is printed as
-    ``j`` and every coefficient is rounded once, to ``decimals``
-    significant digits.
+    set used by ``groundinsight``. The expression comes from the renderer
+    that :func:`~groundfield.postprocess.rho_f_standard.fit_to_sympy_standard`
+    uses; the imaginary unit is printed as ``j`` and every coefficient is
+    rounded once, to ``decimals`` significant digits.
     """
-    expr = fit_to_sympy_standard(fit, decimals=_FULL_PRECISION_DIGITS)
+    import sympy as sp
+
+    from groundfield.postprocess.rho_f_standard import _standard_expression
+
+    expr = _standard_expression(fit, sp.Symbol("rho"), sp.Symbol("f"))
     return _render(expr, decimals=decimals)
 
 
