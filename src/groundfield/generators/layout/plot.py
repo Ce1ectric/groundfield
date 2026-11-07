@@ -59,7 +59,7 @@ class _PlotMixin:
             self.footprints,
         ):
             raise ValueError(
-                "OrtsnetzLayout.plot: foundation_mask length "
+                "LvNetworkLayout.plot: foundation_mask length "
                 f"{len(foundation_mask)} does not match footprints "
                 f"count {len(self.footprints)}."
             )
@@ -71,10 +71,10 @@ class _PlotMixin:
             if foundation_mask is not None:
                 # With-foundation: saturated green-grey; without: faded.
                 if foundation_mask[i]:
-                    colour = "#7fbf7f"  # has Fundamenterder
+                    colour = "#7fbf7f"  # has a foundation electrode
                     edge = "#2a6f2a"
                 else:
-                    colour = "#f4f4f4"  # no Fundamenterder
+                    colour = "#f4f4f4"  # no foundation electrode
                     edge = "0.7"
             else:
                 colour = "0.92" if i in connected_idx else "#fde0dc"
@@ -141,12 +141,12 @@ class _PlotMixin:
             label="Substation",
         )
 
-        # KVS markers.
-        for k in self.kvs_placements:
+        # Cable-cabinet markers.
+        for k in self.cabinet_placements:
             ax.plot(
                 *k.position_xy, marker="s", color="tab:blue", markersize=11, zorder=7
             )
-        if self.kvs_placements:
+        if self.cabinet_placements:
             ax.plot(
                 [],
                 [],
@@ -154,10 +154,10 @@ class _PlotMixin:
                 color="tab:blue",
                 markersize=11,
                 linestyle="None",
-                label="KVS",
+                label="Cable cabinet",
             )
 
-        # Auxiliary current electrode (Hilfserder).
+        # Auxiliary current electrode.
         if self.auxiliary_electrode is not None:
             aux = self.auxiliary_electrode
             # Dotted return-current line from substation to aux.
@@ -176,10 +176,10 @@ class _PlotMixin:
                 color="purple",
                 markersize=13,
                 zorder=7,
-                label=f"Auxiliary {aux.name!s} (Hilfserder)",
+                label=f"Auxiliary electrode {aux.name!s}",
             )
 
-        # Voltage probe (Spannungssonde).
+        # Voltage probe.
         if self.voltage_probe is not None:
             probe = self.voltage_probe
             ax.plot(
@@ -190,7 +190,7 @@ class _PlotMixin:
                 zorder=8,
                 markeredgecolor="darkgreen",
                 markeredgewidth=1.2,
-                label=f"Probe {probe.name!s} (Spannungssonde)",
+                label=f"Voltage probe {probe.name!s}",
             )
         if (
             show_unconnected
@@ -214,7 +214,7 @@ class _PlotMixin:
                 color="#7fbf7f",
                 markersize=11,
                 linestyle="None",
-                label="House with Fundamenterder",
+                label="House with foundation electrode",
             )
             ax.plot(
                 [],
@@ -224,13 +224,13 @@ class _PlotMixin:
                 markeredgecolor="0.7",
                 markersize=11,
                 linestyle="None",
-                label="House without Fundamenterder",
+                label="House without foundation electrode",
             )
 
         ax.set_aspect("equal")
         ax.set_xlabel("x / m")
         ax.set_ylabel("y / m")
-        ax.set_title("TN-Ortsnetz layout (Manhattan PEN routing)")
+        ax.set_title("LV network layout (Manhattan PEN routing)")
         ax.legend(loc="upper right", fontsize=8)
         ax.grid(True, alpha=0.3)
         return ax
@@ -253,11 +253,11 @@ class _PlotMixin:
         title: Optional[str] = None,
     ):
         r"""Surface-potential pseudo-colour plot with measurement
-        markers (substation + Hilfserder + Spannungssonde).
+        markers (substation, auxiliary electrode, voltage probe).
 
         Renders $\varphi(x, y, z=0)$ on a regular grid sized to the
         world bounding box plus ``padding_m`` and overlays the
-        substation, Hilfserder and Spannungssonde markers plus a
+        substation, auxiliary-electrode and voltage-probe markers plus a
         dotted return-current line. Three colour-axis modes are
         supported:
 
@@ -265,7 +265,7 @@ class _PlotMixin:
           :class:`matplotlib.colors.TwoSlopeNorm` centred at
           $\varphi = 0$ so the colour resolution above and below
           zero is balanced regardless of the actual range. Ideal
-          for the fall-of-potential setup, where the Hilfserder
+          for the fall-of-potential setup, where the auxiliary electrode
           sits at a strongly negative potential (e.g. -10 V) and
           the substation + foundations together rise to only a
           few volts -- on a single linear scale the positive
@@ -405,7 +405,7 @@ class _PlotMixin:
             markeredgewidth=0.8,
             label="Substation",
         )
-        # Auxiliary electrode (Hilfserder).
+        # Auxiliary electrode.
         if self.auxiliary_electrode is not None:
             aux = self.auxiliary_electrode
             ax.plot(
@@ -424,9 +424,9 @@ class _PlotMixin:
                 zorder=10,
                 markeredgecolor="black",
                 markeredgewidth=0.8,
-                label="Hilfserder",
+                label="Auxiliary electrode",
             )
-        # Voltage probe (Spannungssonde).
+        # Voltage probe.
         if self.voltage_probe is not None:
             probe = self.voltage_probe
             ax.plot(
@@ -437,7 +437,7 @@ class _PlotMixin:
                 zorder=11,
                 markeredgecolor="darkgreen",
                 markeredgewidth=1.2,
-                label="Spannungssonde",
+                label="Voltage probe",
             )
         ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
         return fig

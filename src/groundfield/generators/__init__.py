@@ -24,9 +24,14 @@ The framework is organised in five composable spec layers:
 * :mod:`~groundfield.generators.building` — :class:`BuildingTypeSpec`
   bundles a name with a grounding system and an optional plot size.
 
-The first concrete generator,
-:class:`~groundfield.generators.tn_network.TnNetworkGenerator`,
-composes all of the above into a TN low-voltage network.
+Two front-ends compose these layers into a TN low-voltage network:
+:class:`~groundfield.generators.tn_network.TnNetworkGenerator`
+(stochastic population parameters) and
+:class:`~groundfield.generators.layout.LvNetworkLayout` (real footprints
+and routed PEN cables). Both produce a pure-data
+:class:`~groundfield.generators.plan.NetworkPlan`; one materialiser
+(:func:`~groundfield.generators.materialise.materialise_plan`) turns
+every plan into a :class:`groundfield.World`.
 
 See ``docs/adr/0009-world-generators.md`` for the design rationale
 and the validation programme.
@@ -96,18 +101,34 @@ from groundfield.generators.manhattan_routing import (
 from groundfield.generators.layout import (
     AuxiliaryElectrodePlacement,
     BuildingConnection,
+    CabinetPlacement,
     KvsPlacement,
+    LateralCoverageResult,
+    LvNetworkLayout,
     OrtsnetzLayout,
     PenCable,
     VoltageProbePlacement,
     triangle_rod_grounding,
 )
+from groundfield.generators.materialise import materialise_plan
 from groundfield.generators.pen_topology import (
     PenTopology,
     RadialTrunkTopology,
+    StarCabinetTopology,
     StarKvsTopology,
 )
+from groundfield.generators.plan import (
+    ConductorParameters,
+    NetworkPlan,
+    PlannedBranch,
+    PlannedElectrode,
+    PlannedJunction,
+    PlannedMeasurement,
+    PlannedSite,
+    PlannedSource,
+)
 from groundfield.generators.tn_network import (
+    CabinetConfig,
     KvsConfig,
     PenConfig,
     SubstationConfig,
@@ -167,22 +188,38 @@ __all__ = [
     "TnNetworkConfig",
     "TnNetworkGenerator",
     "SubstationConfig",
-    "KvsConfig",
+    "CabinetConfig",
     "PenConfig",
     # PEN topologies
     "PenTopology",
-    "StarKvsTopology",
+    "StarCabinetTopology",
     "RadialTrunkTopology",
-    # Manhattan routing + Ortsnetz builder
+    # Manhattan routing + LV network layout builder
     "ObstacleBox",
     "route_manhattan",
     "segment_intersects_box",
     "merge_collinear_waypoints",
-    "OrtsnetzLayout",
+    "LvNetworkLayout",
     "PenCable",
-    "KvsPlacement",
+    "CabinetPlacement",
     "AuxiliaryElectrodePlacement",
     "VoltageProbePlacement",
     "BuildingConnection",
+    "LateralCoverageResult",
     "triangle_rod_grounding",
+    # Network plan + materialiser
+    "NetworkPlan",
+    "PlannedSite",
+    "PlannedElectrode",
+    "PlannedJunction",
+    "PlannedBranch",
+    "PlannedMeasurement",
+    "PlannedSource",
+    "ConductorParameters",
+    "materialise_plan",
+    # Deprecated aliases (removal no earlier than 2027.5)
+    "KvsConfig",
+    "StarKvsTopology",
+    "OrtsnetzLayout",
+    "KvsPlacement",
 ]

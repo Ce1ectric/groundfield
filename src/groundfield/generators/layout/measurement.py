@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from groundfield.generators._compat import DeprecatedKeyDict, take_renamed_kwargs
 from groundfield.generators.electrode_specs import RodElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 
@@ -37,11 +38,11 @@ def triangle_rod_grounding(
     rod_length_m: float = 0.5,
     triangle_side_m: float = 0.5,
 ) -> GroundingSystemSpec:
-    r"""Default Hilfserder geometry: three parallel vertical rods in
+    r"""Default auxiliary-electrode geometry: three parallel vertical rods in
     an equilateral triangle.
 
     Real-world fall-of-potential test sets use a *bundle* of rods
-    rather than a single Tiefenerder so the auxiliary's own
+    rather than a single driven rod so the auxiliary's own
     spreading resistance stays well below the substation's. Three
     0.5 m rods at the corners of a 0.5 m equilateral triangle give
     roughly a third of the single-rod impedance.
@@ -67,7 +68,7 @@ def triangle_rod_grounding(
 
 
 def _default_aux_grounding() -> GroundingSystemSpec:
-    """Project default for the Hilfserder: 3 × 0.5 m rods in a
+    """Project default for the auxiliary electrode: 3 × 0.5 m rods in a
     0.5 m equilateral triangle (parallel-bonded)."""
     return triangle_rod_grounding(rod_length_m=0.5, triangle_side_m=0.5)
 
@@ -77,19 +78,19 @@ class AuxiliaryElectrodePlacement(BaseModel):
     potential measurement of the substation grounding.
 
     The auxiliary electrode closes the test-current loop. It is
-    materialised in :meth:`OrtsnetzLayout.to_world` via
+    materialised in :meth:`LvNetworkLayout.to_world` via
     :meth:`GroundingSystemSpec.build_at`, giving the user full
     control over its geometry (single rod, ring, mesh, foundation,
     or any combination). The default is a *bundle of three 0.5 m
     rods in a 0.5 m equilateral triangle, parallel-bonded* —
-    matching real-world Hilfserder practice and yielding a
+    matching real-world practice and yielding a
     spreading resistance roughly a third of a single rod.
 
-    During :meth:`OrtsnetzLayout.to_world` the layout adds a
+    During :meth:`LvNetworkLayout.to_world` the layout adds a
     second :class:`CurrentSource` with ``phase_deg=180`` at the
     anchor electrode so the engine's potential field develops the
     expected dipole pattern (positive trumpet at the substation,
-    negative trumpet at the Hilfserder).
+    negative trumpet at the auxiliary electrode).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -99,7 +100,7 @@ class AuxiliaryElectrodePlacement(BaseModel):
     grounding: GroundingSystemSpec = Field(
         default_factory=_default_aux_grounding,
         description=(
-            "Per-Hilfserder grounding system spec. Default is a "
+            "Auxiliary-electrode grounding system spec. Default is a "
             "3 × 0.5 m rod triangle (0.5 m side); override for "
             "single-rod or other custom geometries."
         ),
@@ -114,9 +115,9 @@ class VoltageProbePlacement(BaseModel):
     modelled as a pure *sampling point* in 3-D space: an ideal
     voltmeter has infinite input impedance, so a physical probe
     rod would carry zero current and therefore must not perturb
-    the engine's potential field. In :meth:`OrtsnetzLayout.to_world`
+    the engine's potential field. In :meth:`LvNetworkLayout.to_world`
     no rod electrode is created for the probe; in
-    :meth:`OrtsnetzLayout.measured_grounding_impedance` the field
+    :meth:`LvNetworkLayout.measured_grounding_impedance` the field
     is sampled at :attr:`position_xy` via
     :meth:`FieldResult.potential`.
     """
@@ -140,7 +141,7 @@ class _MeasurementMixin:
     if TYPE_CHECKING:  # pragma: no cover - attributes of the layout model
         substation_name: str
         substation_xy: tuple[float, float]
-        kvs_placements: list["CabinetPlacement"]
+        cabinet_placements: list["CabinetPlacement"]
         auxiliary_electrode: Optional[AuxiliaryElectrodePlacement]
         voltage_probe: Optional[VoltageProbePlacement]
 
@@ -196,13 +197,13 @@ class _MeasurementMixin:
             triangle: ``aux_rod_0`` / ``aux_rod_1`` / ``aux_rod_2``.
         grounding
             :class:`GroundingSystemSpec` to use for the
-            Hilfserder. ``None`` (default) selects the project
+            auxiliary electrode. ``None`` (default) selects the project
             default (3 × 0.5 m rods in a 0.5 m equilateral
             triangle, parallel-bonded), which matches typical
             field-deployment practice.
         length_m
             Convenience override: when ``grounding`` is ``None`` and
-            ``length_m`` is given, the Hilfserder collapses to a
+            ``length_m`` is given, the auxiliary electrode collapses to a
             *single* rod of that length (legacy v0.7 behaviour).
             Ignored when ``grounding`` is set explicitly.
         depth_m
@@ -219,7 +220,7 @@ class _MeasurementMixin:
         ValueError
             If no positioning kind is given, if more than one is
             given, or if ``name`` clashes with the substation or
-            an existing KVS.
+            an existing cabinet.
         RuntimeError
             From :meth:`lat_lon_to_xy` when
             ``position_lat_lon`` is set but the layout has no
@@ -238,7 +239,7 @@ class _MeasurementMixin:
         )
         if provided != 1:
             raise ValueError(
-                "OrtsnetzLayout.add_auxiliary_electrode: exactly one "
+                "LvNetworkLayout.add_auxiliary_electrode: exactly one "
                 "of ``distance_m``, ``position_xy`` or "
                 "``position_lat_lon`` must be set."
             )
@@ -246,7 +247,7 @@ class _MeasurementMixin:
         if distance_m is not None:
             if distance_m <= 0.0:
                 raise ValueError(
-                    "OrtsnetzLayout.add_auxiliary_electrode: "
+                    "LvNetworkLayout.add_auxiliary_electrode: "
                     f"distance_m must be > 0, got {distance_m}."
                 )
             theta = math.radians(direction_deg)
@@ -260,13 +261,13 @@ class _MeasurementMixin:
 
         if name == self.substation_name:
             raise ValueError(
-                f"OrtsnetzLayout.add_auxiliary_electrode: name "
+                f"LvNetworkLayout.add_auxiliary_electrode: name "
                 f"{name!r} clashes with the substation name."
             )
-        if any(k.name == name for k in self.kvs_placements):
+        if any(k.name == name for k in self.cabinet_placements):
             raise ValueError(
-                f"OrtsnetzLayout.add_auxiliary_electrode: name "
-                f"{name!r} clashes with an existing KVS."
+                f"LvNetworkLayout.add_auxiliary_electrode: name "
+                f"{name!r} clashes with an existing cabinet."
             )
 
         # Resolve the grounding spec. Priority:
@@ -317,7 +318,7 @@ class _MeasurementMixin:
         * ``inline_fraction`` — along the substation → aux axis,
           at a fraction :math:`f` of the aux distance
           (:math:`f = 0` is the substation, :math:`f = 1` is the
-          Hilfserder, :math:`f = 0.5` is the midpoint, which is
+          auxiliary electrode, :math:`f = 0.5` is the midpoint, which is
           the standard "50 % rule"). Requires
           :meth:`add_auxiliary_electrode` to have been called.
         * ``perpendicular_fraction`` (with ``perpendicular_side``
@@ -335,7 +336,7 @@ class _MeasurementMixin:
         Examples
         --------
         Classic 50 % inline probe between substation and a 200 m
-        east Hilfserder:
+        east auxiliary electrode:
 
         >>> layout.add_auxiliary_electrode(distance_m=200.0,
         ...                                direction_deg=0.0)
@@ -360,20 +361,20 @@ class _MeasurementMixin:
         )
         if provided != 1:
             raise ValueError(
-                "OrtsnetzLayout.add_voltage_probe: exactly one of "
+                "LvNetworkLayout.add_voltage_probe: exactly one of "
                 "``inline_fraction``, ``perpendicular_fraction``, "
                 "``position_xy`` or ``position_lat_lon`` must be set."
             )
         if perpendicular_side not in ("left", "right"):
             raise ValueError(
-                "OrtsnetzLayout.add_voltage_probe: perpendicular_side "
+                "LvNetworkLayout.add_voltage_probe: perpendicular_side "
                 f"must be 'left' or 'right', got {perpendicular_side!r}."
             )
 
         if inline_fraction is not None or perpendicular_fraction is not None:
             if self.auxiliary_electrode is None:
                 raise RuntimeError(
-                    "OrtsnetzLayout.add_voltage_probe: the inline / "
+                    "LvNetworkLayout.add_voltage_probe: the inline / "
                     "perpendicular fractions need an auxiliary "
                     "electrode -- call ``add_auxiliary_electrode`` "
                     "first."
@@ -384,7 +385,7 @@ class _MeasurementMixin:
             d_aux = math.hypot(*d_vec)
             if d_aux <= 0.0:
                 raise RuntimeError(
-                    "OrtsnetzLayout.add_voltage_probe: the auxiliary "
+                    "LvNetworkLayout.add_voltage_probe: the auxiliary "
                     "electrode coincides with the substation -- the "
                     "fractional placement is undefined."
                 )
@@ -393,7 +394,7 @@ class _MeasurementMixin:
                 f = float(inline_fraction)
                 if not 0.0 <= f <= 1.0:
                     raise ValueError(
-                        "OrtsnetzLayout.add_voltage_probe: "
+                        "LvNetworkLayout.add_voltage_probe: "
                         "inline_fraction must be in [0, 1], got "
                         f"{f}."
                     )
@@ -402,7 +403,7 @@ class _MeasurementMixin:
                 f = float(perpendicular_fraction)
                 if not 0.0 <= f <= 1.0:
                     raise ValueError(
-                        "OrtsnetzLayout.add_voltage_probe: "
+                        "LvNetworkLayout.add_voltage_probe: "
                         "perpendicular_fraction must be in [0, 1], "
                         f"got {f}."
                     )
@@ -420,20 +421,20 @@ class _MeasurementMixin:
 
         if name == self.substation_name:
             raise ValueError(
-                f"OrtsnetzLayout.add_voltage_probe: name {name!r} "
+                f"LvNetworkLayout.add_voltage_probe: name {name!r} "
                 "clashes with the substation name."
             )
-        if any(k.name == name for k in self.kvs_placements):
+        if any(k.name == name for k in self.cabinet_placements):
             raise ValueError(
-                f"OrtsnetzLayout.add_voltage_probe: name {name!r} "
-                "clashes with an existing KVS."
+                f"LvNetworkLayout.add_voltage_probe: name {name!r} "
+                "clashes with an existing cabinet."
             )
         if (
             self.auxiliary_electrode is not None
             and name == self.auxiliary_electrode.name
         ):
             raise ValueError(
-                f"OrtsnetzLayout.add_voltage_probe: name {name!r} "
+                f"LvNetworkLayout.add_voltage_probe: name {name!r} "
                 "clashes with the auxiliary electrode."
             )
 
@@ -449,9 +450,10 @@ class _MeasurementMixin:
         result: object,
         *,
         frequency_index: int = 0,
-        source_magnitude_A: float = 1.0,
+        source_magnitude_a: float = 1.0,
         probe_xy: Optional[tuple[float, float]] = None,
         probe_depth_m: float = 0.0,
+        **deprecated: float,
     ) -> complex:
         r"""Compute the simulated fall-of-potential measurement reading.
 
@@ -470,7 +472,7 @@ class _MeasurementMixin:
         ----------
         result
             :class:`FieldResult` from :meth:`Engine.solve`.
-        frequency_index, source_magnitude_A
+        frequency_index, source_magnitude_a
             Pick the frequency and the test-current normalisation.
         probe_xy
             Optional explicit probe position in local ENU metres
@@ -490,9 +492,15 @@ class _MeasurementMixin:
             If no auxiliary electrode is configured (the
             measurement loop is then physically open).
         """
+        renamed = take_renamed_kwargs(
+            "LvNetworkLayout.measured_grounding_impedance",
+            deprecated,
+            {"source_magnitude_A": "source_magnitude_a"},
+        )
+        source_magnitude_a = renamed.get("source_magnitude_a", source_magnitude_a)
         if self.auxiliary_electrode is None:
             raise RuntimeError(
-                "OrtsnetzLayout.measured_grounding_impedance: no "
+                "LvNetworkLayout.measured_grounding_impedance: no "
                 "auxiliary electrode is configured. Call "
                 "``add_auxiliary_electrode`` first."
             )
@@ -501,7 +509,7 @@ class _MeasurementMixin:
         electrode_potentials = getattr(result, "electrode_potentials", None)
         if electrode_potentials is None:
             raise TypeError(
-                "OrtsnetzLayout.measured_grounding_impedance: "
+                "LvNetworkLayout.measured_grounding_impedance: "
                 "``result`` does not look like a FieldResult."
             )
         sub_anchor: Optional[str] = None
@@ -512,7 +520,7 @@ class _MeasurementMixin:
                 break
         if sub_anchor is None:
             raise RuntimeError(
-                "OrtsnetzLayout.measured_grounding_impedance: no "
+                "LvNetworkLayout.measured_grounding_impedance: no "
                 "electrode with prefix "
                 f"{self.substation_name!r} found in the result. "
                 "Did you re-run ``to_world`` before solving?"
@@ -545,15 +553,16 @@ class _MeasurementMixin:
                 )[0]
             )
 
-        return (phi_sub - phi_ref) / source_magnitude_A
+        return (phi_sub - phi_ref) / source_magnitude_a
 
     def verify_current_balance(
         self,
         result: object,
         *,
         frequency_index: int = 0,
-        source_magnitude_A: float = 1.0,
+        source_magnitude_a: float = 1.0,
         tolerance: float = 0.02,
+        **deprecated: float,
     ) -> dict:
         r"""Plausibility check: sum of leakage currents must close the
         measurement loop.
@@ -565,7 +574,7 @@ class _MeasurementMixin:
           PEN-bonded foundations (because the PEN cables are
           finite-impedance branches that share the substation
           potential);
-        * a negative ``-I`` injection at the Hilfserder cluster.
+        * a negative ``-I`` injection at the auxiliary-electrode cluster.
 
         Per Kirchhoff the *total* leakage current at every other
         electrode must vanish:
@@ -575,17 +584,26 @@ class _MeasurementMixin:
             ,\qquad
             \sum_e I_e^\text{(aux side)} \approx -I_\text{src}
 
-        Returns a dict with the two sums and a boolean ``ok`` flag
+        Returns a dict with the two sums (``positive_side_a``,
+        ``auxiliary_side_a``, in A) and a boolean ``ok`` flag
         indicating that both sums match :math:`\pm I_\text{src}`
-        within ``tolerance`` (default 2 % of the test current).
+        within ``tolerance`` (default 2 % of the test current). The
+        former upper-case keys (``positive_side_A``, ...) stay readable
+        with a :class:`DeprecationWarning`.
 
         The "positive side" is every electrode whose name does *not*
         start with the auxiliary's name prefix; the "aux side" is
         every electrode whose name *does* start with that prefix.
         """
+        renamed = take_renamed_kwargs(
+            "LvNetworkLayout.verify_current_balance",
+            deprecated,
+            {"source_magnitude_A": "source_magnitude_a"},
+        )
+        source_magnitude_a = renamed.get("source_magnitude_a", source_magnitude_a)
         if self.auxiliary_electrode is None:
             raise RuntimeError(
-                "OrtsnetzLayout.verify_current_balance: no auxiliary "
+                "LvNetworkLayout.verify_current_balance: no auxiliary "
                 "electrode is configured. The measurement loop is "
                 "physically open; current balance is undefined."
             )
@@ -599,19 +617,21 @@ class _MeasurementMixin:
                 neg_sum += i
             else:
                 pos_sum += i
-        expected_pos = +source_magnitude_A
-        expected_neg = -source_magnitude_A
+        expected_pos = +source_magnitude_a
+        expected_neg = -source_magnitude_a
         err_pos = abs(pos_sum - expected_pos)
         err_neg = abs(neg_sum - expected_neg)
-        tol_abs = tolerance * source_magnitude_A
+        tol_abs = tolerance * source_magnitude_a
         ok = (err_pos <= tol_abs) and (err_neg <= tol_abs)
-        return {
-            "positive_side_A": pos_sum,
-            "auxiliary_side_A": neg_sum,
-            "expected_positive_A": expected_pos,
-            "expected_auxiliary_A": expected_neg,
-            "abs_error_positive_A": err_pos,
-            "abs_error_auxiliary_A": err_neg,
-            "tolerance_A": tol_abs,
+        values = {
+            "positive_side_a": pos_sum,
+            "auxiliary_side_a": neg_sum,
+            "expected_positive_a": expected_pos,
+            "expected_auxiliary_a": expected_neg,
+            "abs_error_positive_a": err_pos,
+            "abs_error_auxiliary_a": err_neg,
+            "tolerance_a": tol_abs,
             "ok": ok,
         }
+        old_keys = {k[:-2] + "_A": k for k in values if k.endswith("_a")}
+        return DeprecatedKeyDict(values, old_keys, "verify_current_balance()")

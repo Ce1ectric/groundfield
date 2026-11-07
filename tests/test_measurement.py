@@ -199,10 +199,10 @@ def test_galvanic_setup_solves() -> None:
 
 
 def test_source_magnitude_passthrough() -> None:
-    """``source_magnitude_A`` is forwarded to the actual ``CurrentSource``."""
+    """``source_magnitude_a`` is forwarded to the actual ``CurrentSource``."""
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
-        source_magnitude_A=5000.0,  # ~ single-phase fault current
+        source_magnitude_a=5000.0,  # ~ single-phase fault current
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     src = world.sources[0]
@@ -210,12 +210,12 @@ def test_source_magnitude_passthrough() -> None:
 
 
 def test_source_magnitude_accepts_distribution() -> None:
-    """``source_magnitude_A`` accepts a Distribution; build samples it once."""
+    """``source_magnitude_a`` accepts a Distribution; build samples it once."""
     from groundfield.generators import Discrete
 
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
-        source_magnitude_A=Discrete(values=[1.0, 5000.0]),
+        source_magnitude_a=Discrete(values=[1.0, 5000.0]),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     src = world.sources[0]
@@ -227,7 +227,7 @@ def test_source_magnitude_seed_reproduces_draw() -> None:
 
     cfg = TnNetworkConfig(
         building_counts={"residential": 3},
-        source_magnitude_A=Discrete(values=[1.0, 10.0, 100.0, 1000.0, 5000.0]),
+        source_magnitude_a=Discrete(values=[1.0, 10.0, 100.0, 1000.0, 5000.0]),
     )
     a = TnNetworkGenerator(cfg, seed=7).build().sources[0].magnitude
     b = TnNetworkGenerator(cfg, seed=7).build().sources[0].magnitude

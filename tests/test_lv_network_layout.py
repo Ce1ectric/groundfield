@@ -1,4 +1,4 @@
-"""Tests for the imperative TN-Ortsnetz layout builder.
+"""Tests for the imperative LV network layout builder (``LvNetworkLayout``).
 
 Covers
 ------
@@ -6,7 +6,7 @@ Covers
   obstacle avoidance, unreachable failure, min-segment-length
   preservation after collinear merging.
 * :func:`segment_intersects_box` and the merge helper.
-* :class:`OrtsnetzLayout` end-to-end pipeline: OSM-style
+* :class:`LvNetworkLayout` end-to-end pipeline: OSM-style
   footprint ingest, substation placement, KVS placement, PEN
   cable routing through a sparse obstacle field, building →
   cable connection, materialisation to :class:`World`, plotting.
@@ -24,13 +24,8 @@ import pytest
 
 import groundfield as gf
 from groundfield.generators import (
-    AuxiliaryElectrodePlacement,
-    BuildingConnection,
-    KvsPlacement,
     ObstacleBox,
-    OrtsnetzLayout,
-    PenCable,
-    VoltageProbePlacement,
+    LvNetworkLayout,
     merge_collinear_waypoints,
     route_manhattan,
     segment_intersects_box,
@@ -111,7 +106,7 @@ def test_route_manhattan_segments_are_axis_aligned() -> None:
         obstacles=[],
         grid_size=10.0,
     )
-    for (x0, y0), (x1, y1) in zip(out[:-1], out[1:]):
+    for (x0, y0), (x1, y1) in zip(out[:-1], out[1:], strict=False):
         assert math.isclose(x0, x1) or math.isclose(y0, y1), (
             f"diagonal segment {(x0, y0)} -> {(x1, y1)}"
         )
@@ -136,7 +131,7 @@ def test_route_manhattan_detours_around_obstacle() -> None:
     # straight line through the obstacle).
     assert len(out) >= 3
     # No segment touches the inflated box interior.
-    for p0, p1 in zip(out[:-1], out[1:]):
+    for p0, p1 in zip(out[:-1], out[1:], strict=False):
         assert not segment_intersects_box(p0, p1, blocking.inflated(0.5))
 
 
@@ -225,7 +220,7 @@ def test_route_manhattan_error_message_names_offending_anchor() -> None:
 
 
 def test_add_pen_cable_forwards_escape_radius() -> None:
-    """``OrtsnetzLayout.add_pen_cable`` forwards ``escape_radius_m``
+    """``LvNetworkLayout.add_pen_cable`` forwards ``escape_radius_m``
     so users can relax routing when an anchor is wedged into a
     dense foundation cluster.
 
@@ -240,7 +235,7 @@ def test_add_pen_cable_forwards_escape_radius() -> None:
         _rect_footprint(0.0, +2.0, dx=1.0, dy=1.0, osm_id=3),
         _rect_footprint(0.0, -2.0, dx=1.0, dy=1.0, osm_id=4),
     ]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
         obstacle_clearance_m=0.2,
@@ -275,58 +270,58 @@ def test_route_manhattan_min_segment_length_after_merge() -> None:
     # After merging, every interior leg must be at least the grid
     # size (the trailing bridge to ``end`` is exempt because it
     # only fires when ``end`` doesn't align with the grid).
-    for (x0, y0), (x1, y1) in zip(out[:-1], out[1:]):
+    for (x0, y0), (x1, y1) in zip(out[:-1], out[1:], strict=False):
         length = abs(x1 - x0) + abs(y1 - y0)
         assert length >= 10.0 - 1e-9
 
 
 # ---------------------------------------------------------------------
-# OrtsnetzLayout: KVS placement, naming
+# LvNetworkLayout: KVS placement, naming
 # ---------------------------------------------------------------------
 
 
-def test_add_kvs_autogenerates_unique_names() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+def test_add_cabinet_autogenerates_unique_names() -> None:
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
-    n0 = layout.add_kvs((100.0, 0.0))
-    n1 = layout.add_kvs((200.0, 0.0))
+    n0 = layout.add_cabinet((100.0, 0.0))
+    n1 = layout.add_cabinet((200.0, 0.0))
     assert n0 != n1
-    assert [k.name for k in layout.kvs_placements] == [n0, n1]
+    assert [k.name for k in layout.cabinet_placements] == [n0, n1]
 
 
-def test_add_kvs_rejects_duplicate_names() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+def test_add_cabinet_rejects_duplicate_names() -> None:
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
-    layout.add_kvs((100.0, 0.0), name="my_kvs")
+    layout.add_cabinet((100.0, 0.0), name="my_kvs")
     with pytest.raises(ValueError, match="already taken"):
-        layout.add_kvs((200.0, 0.0), name="my_kvs")
+        layout.add_cabinet((200.0, 0.0), name="my_kvs")
 
 
-def test_add_kvs_rejects_substation_name() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+def test_add_cabinet_rejects_substation_name() -> None:
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
         substation_name="trafo",
     )
     with pytest.raises(ValueError, match="substation"):
-        layout.add_kvs((100.0, 0.0), name="trafo")
+        layout.add_cabinet((100.0, 0.0), name="trafo")
 
 
 # ---------------------------------------------------------------------
-# OrtsnetzLayout: PEN cable routing
+# LvNetworkLayout: PEN cable routing
 # ---------------------------------------------------------------------
 
 
-def test_add_pen_cable_substation_to_kvs() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+def test_add_pen_cable_substation_to_cabinet() -> None:
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
-    layout.add_kvs((100.0, 0.0), name="kvs_a")
+    layout.add_cabinet((100.0, 0.0), name="kvs_a")
     cable = layout.add_pen_cable(start="substation", end="kvs_a")
     assert cable.start_anchor == "substation"
     assert cable.end_anchor == "kvs_a"
@@ -337,13 +332,13 @@ def test_add_pen_cable_substation_to_kvs() -> None:
 
 
 def test_add_pen_cable_requires_one_endpoint_spec() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
     with pytest.raises(ValueError, match="exactly one"):
         layout.add_pen_cable(start="substation")
-    layout.add_kvs((100.0, 0.0), name="kvs_a")
+    layout.add_cabinet((100.0, 0.0), name="kvs_a")
     with pytest.raises(ValueError, match="exactly one"):
         layout.add_pen_cable(
             start="substation",
@@ -354,7 +349,7 @@ def test_add_pen_cable_requires_one_endpoint_spec() -> None:
 
 def test_add_pen_cable_routes_around_house() -> None:
     house = _rect_footprint(50.0, 0.0, dx=10.0, dy=10.0)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [house],
         substation_xy=(0.0, 0.0),
     )
@@ -370,12 +365,12 @@ def test_add_pen_cable_routes_around_house() -> None:
     obstacle_box = layout._obstacle_boxes()[0].inflated(
         layout.obstacle_clearance_m,
     )
-    for p0, p1 in zip(cable.waypoints[:-1], cable.waypoints[1:]):
+    for p0, p1 in zip(cable.waypoints[:-1], cable.waypoints[1:], strict=False):
         assert not segment_intersects_box(p0, p1, obstacle_box)
 
 
 def test_add_pen_cable_rejects_duplicate_name() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -389,11 +384,11 @@ def test_add_pen_cable_rejects_duplicate_name() -> None:
 
 
 # ---------------------------------------------------------------------
-# OrtsnetzLayout: building → cable connection
+# LvNetworkLayout: building → cable connection
 # ---------------------------------------------------------------------
 
 
-def _simple_bus_layout(n_houses: int = 6) -> OrtsnetzLayout:
+def _simple_bus_layout(n_houses: int = 6) -> LvNetworkLayout:
     """A bus topology with houses lined up north and south of the
     substation-to-end cable on y = 0.
     """
@@ -402,7 +397,7 @@ def _simple_bus_layout(n_houses: int = 6) -> OrtsnetzLayout:
         cx = 20.0 + 25.0 * i
         cy = 18.0 if i % 2 == 0 else -18.0
         footprints.append(_rect_footprint(cx, cy, dx=10.0, dy=10.0, osm_id=i))
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         footprints,
         substation_xy=(0.0, 0.0),
     )
@@ -427,7 +422,7 @@ def test_connect_buildings_picks_closest_cable_when_two_present() -> None:
     # a south-side house.
     fp_south = _rect_footprint(60.0, -25.0, osm_id=0)
     fp_north = _rect_footprint(60.0, 60.0, osm_id=1)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [fp_south, fp_north],
         substation_xy=(0.0, 0.0),
     )
@@ -436,7 +431,7 @@ def test_connect_buildings_picks_closest_cable_when_two_present() -> None:
         end_xy=(120.0, 0.0),
         name="north_bus",
     )
-    layout.add_kvs((0.0, 80.0), name="kvs_north")
+    layout.add_cabinet((0.0, 80.0), name="kvs_north")
     layout.add_pen_cable(
         start="kvs_north",
         end_xy=(120.0, 80.0),
@@ -457,7 +452,7 @@ def test_connect_buildings_skips_unreachable_and_warns() -> None:
     target = _rect_footprint(50.0, 30.0, dx=8.0, dy=8.0, osm_id=0)
     blocker_n = _rect_footprint(50.0, 50.0, dx=80.0, dy=8.0, osm_id=1)
     blocker_s = _rect_footprint(50.0, 10.0, dx=80.0, dy=8.0, osm_id=2)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [target, blocker_n, blocker_s],
         substation_xy=(0.0, 0.0),
         obstacle_clearance_m=1.0,
@@ -477,7 +472,7 @@ def test_connect_buildings_skips_unreachable_and_warns() -> None:
 
 def test_connect_buildings_requires_existing_cable() -> None:
     fp = _rect_footprint(20.0, 18.0, osm_id=0)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [fp],
         substation_xy=(0.0, 0.0),
     )
@@ -486,7 +481,7 @@ def test_connect_buildings_requires_existing_cable() -> None:
 
 
 # ---------------------------------------------------------------------
-# OrtsnetzLayout: materialisation
+# LvNetworkLayout: materialisation
 # ---------------------------------------------------------------------
 
 
@@ -515,7 +510,7 @@ def test_to_world_runs_without_source_when_disabled() -> None:
 
 
 def test_pen_cable_length_matches_manhattan_distance() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -536,12 +531,12 @@ def test_pen_cable_length_matches_manhattan_distance() -> None:
 def test_layout_without_frame_origin_rejects_lat_lon() -> None:
     """A layout without ``frame_origin_lat_lon`` cannot consume
     ``position_lat_lon`` / ``end_lat_lon`` arguments."""
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
     with pytest.raises(RuntimeError, match="frame_origin_lat_lon"):
-        layout.add_kvs(position_lat_lon=(51.9136, 10.8432))
+        layout.add_cabinet(position_lat_lon=(51.9136, 10.8432))
     with pytest.raises(RuntimeError, match="frame_origin_lat_lon"):
         layout.add_pen_cable(
             start="substation",
@@ -553,39 +548,39 @@ def test_layout_with_frame_origin_accepts_lat_lon_anchors() -> None:
     """When ``frame_origin_lat_lon`` is set, the layout projects
     lat / lon arguments through it automatically."""
     origin = (51.9136, 10.8432)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
         frame_origin_lat_lon=origin,
     )
     # KVS placed ~50 m east of the origin → x ≈ +50, y ≈ 0.
     delta_lon = 50.0 / (111_320.0 * math.cos(math.radians(origin[0])))
-    kvs_name = layout.add_kvs(
+    kvs_name = layout.add_cabinet(
         position_lat_lon=(origin[0], origin[1] + delta_lon),
     )
-    placement = next(k for k in layout.kvs_placements if k.name == kvs_name)
+    placement = next(k for k in layout.cabinet_placements if k.name == kvs_name)
     assert math.isclose(placement.position_xy[0], 50.0, abs_tol=1.0)
     assert abs(placement.position_xy[1]) < 1.0
 
 
-def test_add_kvs_rejects_both_position_kinds() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+def test_add_cabinet_rejects_both_position_kinds() -> None:
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
         frame_origin_lat_lon=(51.9136, 10.8432),
     )
     with pytest.raises(ValueError, match="exactly one"):
-        layout.add_kvs(
+        layout.add_cabinet(
             position_xy=(50.0, 0.0),
             position_lat_lon=(51.9136, 10.8432),
         )
     with pytest.raises(ValueError, match="exactly one"):
-        layout.add_kvs()  # neither provided
+        layout.add_cabinet()  # neither provided
 
 
 def test_add_pen_cable_lat_lon_end_projects_through_frame() -> None:
     origin = (51.9136, 10.8432)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
         frame_origin_lat_lon=origin,
@@ -603,7 +598,7 @@ def test_lat_lon_round_trip_via_layout_projector() -> None:
     """``lat_lon_to_xy`` ∘ ``xy_to_lat_lon`` is the identity (within
     a millimetre)."""
     origin = (51.9136, 10.8432)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
         frame_origin_lat_lon=origin,
@@ -621,13 +616,13 @@ def test_lat_lon_round_trip_via_layout_projector() -> None:
 # ---------------------------------------------------------------------
 
 
-def _layout_with_osm_ids(n: int = 12) -> OrtsnetzLayout:
+def _layout_with_osm_ids(n: int = 12) -> LvNetworkLayout:
     """Synthetic layout with distinct, stable osm_id values."""
     footprints = [
         _rect_footprint(20.0 + 25.0 * i, 18.0 if i % 2 == 0 else -18.0, osm_id=1000 + i)
         for i in range(n)
     ]
-    return OrtsnetzLayout.from_footprints(
+    return LvNetworkLayout.from_footprints(
         footprints,
         substation_xy=(0.0, 0.0),
     )
@@ -652,7 +647,7 @@ def test_foundation_mask_is_nested_in_penetration() -> None:
     for p1, p2 in [(0.10, 0.25), (0.25, 0.50), (0.50, 0.90)]:
         m1 = layout.foundation_mask(p1)
         m2 = layout.foundation_mask(p2)
-        for b1, b2 in zip(m1, m2):
+        for b1, b2 in zip(m1, m2, strict=False):
             # b1 implies b2
             assert (not b1) or b2
 
@@ -661,7 +656,7 @@ def test_foundation_mask_rough_fraction_matches_penetration() -> None:
     """On a larger sample the realised fraction tracks p within a
     few percent — the assignment is uniform, not adversarial."""
     footprints = [_rect_footprint(0.0, 5.0 * i, osm_id=10_000 + i) for i in range(200)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         footprints,
         substation_xy=(0.0, 0.0),
     )
@@ -705,7 +700,7 @@ def test_foundation_mask_falls_back_to_index_without_osm_id() -> None:
         BuildingFootprint(polygon_xy_m=fp.polygon_xy_m, building_use="residential")
         for fp in footprints
     ]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         footprints,
         substation_xy=(0.0, 0.0),
     )
@@ -746,7 +741,7 @@ def test_plot_rejects_mismatched_foundation_mask_length() -> None:
 def test_add_auxiliary_electrode_distance_and_direction() -> None:
     """``distance_m`` + ``direction_deg`` places the electrode along
     a ray from the substation."""
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(10.0, 20.0),
     )
@@ -765,7 +760,7 @@ def test_add_auxiliary_electrode_distance_and_direction() -> None:
 
 
 def test_add_auxiliary_electrode_explicit_xy() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -775,7 +770,7 @@ def test_add_auxiliary_electrode_explicit_xy() -> None:
 
 
 def test_add_auxiliary_electrode_rejects_negative_distance() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -786,7 +781,7 @@ def test_add_auxiliary_electrode_rejects_negative_distance() -> None:
 
 
 def test_add_auxiliary_electrode_rejects_multiple_positions() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -800,22 +795,22 @@ def test_add_auxiliary_electrode_rejects_multiple_positions() -> None:
 
 
 def test_add_auxiliary_electrode_name_clash() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
         substation_name="trafo",
     )
     with pytest.raises(ValueError, match="substation"):
         layout.add_auxiliary_electrode(distance_m=200.0, name="trafo")
-    layout.add_kvs((100.0, 0.0), name="kvs_a")
-    with pytest.raises(ValueError, match="KVS"):
+    layout.add_cabinet((100.0, 0.0), name="kvs_a")
+    with pytest.raises(ValueError, match="cabinet"):
         layout.add_auxiliary_electrode(distance_m=200.0, name="kvs_a")
 
 
 def test_add_auxiliary_electrode_replaces_previous() -> None:
     """Calling add_auxiliary_electrode twice replaces the placement
     (only one aux in v1)."""
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -833,7 +828,7 @@ def test_to_world_skips_houses_without_foundation() -> None:
         _rect_footprint(30.0, 20.0, osm_id=1),
         _rect_footprint(60.0, 20.0, osm_id=2),
     ]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -851,7 +846,7 @@ def test_to_world_skips_houses_without_foundation() -> None:
 
 def test_to_world_rejects_mismatched_foundation_mask() -> None:
     fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -874,7 +869,7 @@ def test_to_world_wires_source_return_through_aux() -> None:
     aux anchor is ``aux_rod_0`` (first rod of the 3-rod triangle).
     """
     fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -906,7 +901,7 @@ def test_to_world_remote_return_when_no_aux() -> None:
     earth return (``return_to=None``), preserving the pre-v0.7
     behaviour. Only one source is created (no return source)."""
     fps = [_rect_footprint(30.0, 20.0, osm_id=1)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -930,10 +925,9 @@ def test_engine_sees_opposite_currents_at_sub_and_aux() -> None:
     to the connected foundations. That's why we sum over *every*
     non-aux electrode.
     """
-    import groundfield as gf
 
     fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i) for i in range(2)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -943,7 +937,7 @@ def test_engine_sees_opposite_currents_at_sub_and_aux() -> None:
 
     world = layout.to_world(
         soil=gf.HomogeneousSoil(resistivity=100.0),
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
         seed=0,
     )
     engine = gf.create_engine(
@@ -1000,7 +994,7 @@ def test_plot_includes_auxiliary_marker() -> None:
 def test_add_voltage_probe_inline_fraction_midpoint() -> None:
     """``inline_fraction=0.5`` puts the probe at the midpoint of the
     substation -> aux axis."""
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1015,7 +1009,7 @@ def test_add_voltage_probe_inline_fraction_midpoint() -> None:
 def test_add_voltage_probe_perpendicular_left_and_right() -> None:
     """``perpendicular_fraction=0.5`` + side selects north / south
     when the aux points east."""
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1037,7 +1031,7 @@ def test_add_voltage_probe_perpendicular_left_and_right() -> None:
 
 
 def test_add_voltage_probe_requires_aux_for_fraction_modes() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1048,7 +1042,7 @@ def test_add_voltage_probe_requires_aux_for_fraction_modes() -> None:
 
 
 def test_add_voltage_probe_explicit_xy_works_without_aux() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1058,7 +1052,7 @@ def test_add_voltage_probe_explicit_xy_works_without_aux() -> None:
 
 
 def test_add_voltage_probe_rejects_multiple_positions() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1073,7 +1067,7 @@ def test_add_voltage_probe_rejects_multiple_positions() -> None:
 
 
 def test_add_voltage_probe_rejects_invalid_fractions() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1087,7 +1081,7 @@ def test_add_voltage_probe_rejects_invalid_fractions() -> None:
 
 
 def test_add_voltage_probe_rejects_invalid_side() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1104,7 +1098,7 @@ def test_voltage_probe_is_not_materialised_as_electrode() -> None:
     physical rod for it (so it doesn't perturb the potential field).
     """
     fp = _rect_footprint(30.0, 0.0, osm_id=1)
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [fp],
         substation_xy=(0.0, 0.0),
     )
@@ -1128,10 +1122,9 @@ def test_measured_grounding_impedance_with_and_without_probe() -> None:
     fall-of-potential reading with and without a probe. The probe
     reading is *lower* than the remote-earth reading because the
     probe is at a finite, positive potential."""
-    import groundfield as gf
 
     fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i) for i in range(4)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -1141,7 +1134,7 @@ def test_measured_grounding_impedance_with_and_without_probe() -> None:
 
     world = layout.to_world(
         soil=gf.HomogeneousSoil(resistivity=100.0),
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
         seed=0,
     )
     engine = gf.create_engine(
@@ -1154,7 +1147,7 @@ def test_measured_grounding_impedance_with_and_without_probe() -> None:
     # Without a probe: remote-earth reference.
     z_remote = layout.measured_grounding_impedance(
         result,
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
     )
     assert math.isfinite(abs(z_remote))
     assert abs(z_remote) > 0.0
@@ -1165,14 +1158,14 @@ def test_measured_grounding_impedance_with_and_without_probe() -> None:
     layout.add_voltage_probe(inline_fraction=0.5)
     z_probe = layout.measured_grounding_impedance(
         result,
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
     )
     assert math.isfinite(abs(z_probe))
     assert abs(z_probe) < abs(z_remote) + 1e-9
 
 
 def test_measured_grounding_impedance_requires_aux() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1185,10 +1178,9 @@ def test_measured_grounding_impedance_probe_xy_override() -> None:
     from a single solve, overriding ``self.voltage_probe`` for
     that call only. Two different probe positions give two
     different impedance readings on the same field result."""
-    import groundfield as gf
 
     fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i) for i in range(2)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -1199,7 +1191,7 @@ def test_measured_grounding_impedance_probe_xy_override() -> None:
 
     world = layout.to_world(
         soil=gf.HomogeneousSoil(resistivity=100.0),
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
         seed=0,
     )
     engine = gf.create_engine(
@@ -1230,10 +1222,9 @@ def test_measured_grounding_impedance_probe_xy_override() -> None:
 def test_verify_current_balance_closes_the_loop() -> None:
     """End-to-end Kirchhoff check: positive-side leakage sums to
     +I_src and the Hilfserder bundle to -I_src."""
-    import groundfield as gf
 
     fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i) for i in range(3)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -1243,7 +1234,7 @@ def test_verify_current_balance_closes_the_loop() -> None:
 
     world = layout.to_world(
         soil=gf.HomogeneousSoil(resistivity=100.0),
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
         seed=0,
     )
     engine = gf.create_engine(
@@ -1255,17 +1246,17 @@ def test_verify_current_balance_closes_the_loop() -> None:
 
     balance = layout.verify_current_balance(
         result,
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
     )
     assert balance["ok"], balance
     # Positive side sums to +1 A (substation + KVS + foundations).
-    assert abs(balance["positive_side_A"].real - 1.0) < 0.02
+    assert abs(balance["positive_side_a"].real - 1.0) < 0.02
     # Auxiliary side sums to -1 A.
-    assert abs(balance["auxiliary_side_A"].real + 1.0) < 0.02
+    assert abs(balance["auxiliary_side_a"].real + 1.0) < 0.02
 
 
 def test_verify_current_balance_requires_aux() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [],
         substation_xy=(0.0, 0.0),
     )
@@ -1280,10 +1271,9 @@ def test_plot_surface_potential_two_slope_runs() -> None:
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import groundfield as gf
 
     fps = [_rect_footprint(20.0 + 25.0 * i, 18.0, osm_id=10 + i) for i in range(2)]
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         fps,
         substation_xy=(0.0, 0.0),
     )
@@ -1294,7 +1284,7 @@ def test_plot_surface_potential_two_slope_runs() -> None:
 
     world = layout.to_world(
         soil=gf.HomogeneousSoil(resistivity=100.0),
-        source_magnitude_A=1.0,
+        source_magnitude_a=1.0,
         seed=0,
     )
     engine = gf.create_engine(
@@ -1367,7 +1357,7 @@ def test_connect_all_buildings_connects_isolated_house() -> None:
         _rect_footprint(100.0, 0.0, dx=20.0, dy=60.0, osm_id=2),  # blocker wall
         _rect_footprint(200.0, 0.0, dx=10.0, dy=10.0, osm_id=3),  # far house
     ]
-    layout = OrtsnetzLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
+    layout = LvNetworkLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
     layout.add_pen_cable(start="substation", end_xy=(40.0, 0.0))  # short feeder
 
     with warnings.catch_warnings():
@@ -1387,20 +1377,20 @@ def test_connect_all_buildings_without_cables_lays_laterals_from_substation() ->
         _rect_footprint(30.0, 0.0, dx=10.0, dy=10.0, osm_id=1),
         _rect_footprint(-30.0, 20.0, dx=10.0, dy=10.0, osm_id=2),
     ]
-    layout = OrtsnetzLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
+    layout = LvNetworkLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
     result = layout.connect_all_buildings()
     assert {c.house_idx for c in layout.connections} == {0, 1}
     assert result.islands == []
     assert len(result.laterals) >= 1
 
 
-def test_anchors_connected_to_substation_excludes_stranded_kvs() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+def test_anchors_connected_to_substation_excludes_stranded_cabinet() -> None:
+    layout = LvNetworkLayout.from_footprints(
         [_rect_footprint(40.0, 0.0)],
         substation_xy=(0.0, 0.0),
     )
-    layout.add_kvs(position_xy=(60.0, 0.0), name="kvs_wired")
-    layout.add_kvs(position_xy=(-60.0, 0.0), name="kvs_stranded")
+    layout.add_cabinet(position_xy=(60.0, 0.0), name="kvs_wired")
+    layout.add_cabinet(position_xy=(-60.0, 0.0), name="kvs_stranded")
     layout.add_pen_cable(start="substation", end="kvs_wired")
     anchors = layout._anchors_connected_to_substation()
     assert anchors[0] == "substation"
@@ -1409,7 +1399,7 @@ def test_anchors_connected_to_substation_excludes_stranded_kvs() -> None:
 
 
 def test_connect_all_buildings_empty_source_anchors_raises() -> None:
-    layout = OrtsnetzLayout.from_footprints(
+    layout = LvNetworkLayout.from_footprints(
         [_rect_footprint(40.0, 0.0)],
         substation_xy=(0.0, 0.0),
     )

@@ -99,7 +99,7 @@ def test_rod_circle_rejects_invalid_n() -> None:
 
 
 def _world_with_homogeneous_soil() -> "gf.World":
-    soil = HomogeneousSoilSpec(resistivity=100.0).to_soil(np.random.default_rng(0))
+    soil = HomogeneousSoilSpec(rho=100.0).to_soil(np.random.default_rng(0))
     return gf.create_world(name="test", soil=soil)
 
 

@@ -22,7 +22,12 @@ from groundfield.generators.layout.measurement import (
     VoltageProbePlacement,
     triangle_rod_grounding,
 )
-from groundfield.generators.layout.model import KvsPlacement, OrtsnetzLayout
+from groundfield.generators.layout.model import (
+    CabinetPlacement,
+    KvsPlacement,
+    LvNetworkLayout,
+    OrtsnetzLayout,
+)
 from groundfield.generators.layout.routing import (
     BuildingConnection,
     LateralCoverageResult,
@@ -32,10 +37,13 @@ from groundfield.generators.layout.routing import (
 __all__ = [
     "AuxiliaryElectrodePlacement",
     "BuildingConnection",
-    "KvsPlacement",
+    "CabinetPlacement",
     "LateralCoverageResult",
-    "OrtsnetzLayout",
+    "LvNetworkLayout",
     "PenCable",
     "VoltageProbePlacement",
     "triangle_rod_grounding",
+    # Deprecated aliases (removal no earlier than 2027.5)
+    "KvsPlacement",
+    "OrtsnetzLayout",
 ]

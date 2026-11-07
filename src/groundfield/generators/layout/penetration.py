@@ -44,7 +44,7 @@ class _PenetrationMixin:
         salt: int = 0,
     ) -> list[bool]:
         r"""Deterministic per-house Bernoulli mask for foundation
-        electrodes (`Fundamenterder`).
+        electrodes.
 
         For each footprint a stable pseudo-random number
         :math:`r_i \in [0, 1)` is derived from the footprint's
@@ -91,7 +91,7 @@ class _PenetrationMixin:
         """
         if not 0.0 <= penetration <= 1.0:
             raise ValueError(
-                "OrtsnetzLayout.foundation_mask: penetration must be "
+                "LvNetworkLayout.foundation_mask: penetration must be "
                 f"in [0, 1], got {penetration}."
             )
         out: list[bool] = []

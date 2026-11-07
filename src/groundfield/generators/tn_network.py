@@ -15,8 +15,8 @@ Compared with the v1 prototype this generator now supports:
 * **Heterogeneous substation grounding** — ring AND/OR rods AND/OR
   strip AND/OR foundation, in any combination, each with its own
   presence probability and stochastic geometry.
-* **Heterogeneous KVS grounding** — same flexibility for cable
-  cabinets; v1 forced a single rod.
+* **Heterogeneous cable-cabinet grounding** — same flexibility for
+  cable cabinets; v1 forced a single rod.
 * **Building-type catalog** — multiple :class:`BuildingTypeSpec`
   entries with independent grounding systems. The default catalog
   ships ``residential`` / ``small_industry`` / ``medium_industry``
@@ -32,7 +32,7 @@ Lazy-resolution semantics
 :class:`TnNetworkGenerator` keeps the v1 lazy-mode build:
 
 * ``gen.build(cfg)`` resolves distributions opportunistically. Each
-  *site* (substation, every KVS, every building) draws its
+  *site* (substation, every cable cabinet, every building) draws its
   ``presence_prob`` Bernoulli and samples its geometric
   distributions independently. This is what produces a real
   per-site mix when the user supplies population-level
@@ -55,7 +55,7 @@ Geometric layout
   :class:`ExplicitPlacement` if you need a specific spatial mix.
 * Cable cabinets are placed via their own
   :class:`PlacementSpec` (defaults to a Manhattan grid along the
-  substation row). Their grounding follows :attr:`KvsConfig.grounding`.
+  substation row). Their grounding follows :attr:`CabinetConfig.grounding`.
 * PEN backbone: each cable cabinet is connected to the substation;
   each building is connected to the *nearest* cable cabinet by
   Manhattan distance.
@@ -75,8 +75,9 @@ import warnings
 from typing import Literal, Optional, Union
 
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_validator
 
+from groundfield.generators._compat import rename_input_keys, warn_renamed
 from groundfield.generators.base import (
     GeneratorConfig,
     WorldGenerator,
@@ -100,6 +101,7 @@ from groundfield.generators.measurement import (
 from groundfield.generators.pen_topology import (
     PenTopology,
     RadialTrunkTopology,
+    StarCabinetTopology,
     StarKvsTopology,
 )
 from groundfield.generators.plan import (
@@ -124,11 +126,13 @@ from groundfield.world import World
 __all__ = [
     "PenConfig",
     "SubstationConfig",
+    "CabinetConfig",
     "KvsConfig",
     "TnNetworkConfig",
     "TnNetworkGenerator",
     "PenTopology",
     "RadialTrunkTopology",
+    "StarCabinetTopology",
     "StarKvsTopology",
 ]
 
@@ -179,8 +183,8 @@ def _default_substation_grounding() -> GroundingSystemSpec:
     )
 
 
-def _default_kvs_grounding() -> GroundingSystemSpec:
-    """default KVS grounding: a single 1.5 m driven rod."""
+def _default_cabinet_grounding() -> GroundingSystemSpec:
+    """Default cable-cabinet grounding: a single 1.5 m driven rod."""
     return GroundingSystemSpec(
         electrodes=[
             RodElectrodeSpec(length_m=1.5, depth_m=0.0),
@@ -198,8 +202,8 @@ def _default_building_placement() -> PlacementSpec:
     )
 
 
-def _default_kvs_placement() -> PlacementSpec:
-    """Default KVS placement: a wide Manhattan strip along the substation row."""
+def _default_cabinet_placement() -> PlacementSpec:
+    """Default cabinet placement: a wide Manhattan strip along the substation row."""
     return ManhattanGridPlacement(
         spacing_x_m=40.0,
         spacing_y_m=1.0,
@@ -221,31 +225,71 @@ class SubstationConfig(GeneratorConfig):
     )
 
 
-class KvsConfig(GeneratorConfig):
-    """Cable cabinet (KVS) block — placement, count, grounding."""
+class CabinetConfig(GeneratorConfig):
+    """Cable-cabinet block (German *KVS*) — placement, count, grounding.
+
+    Attributes
+    ----------
+    placement
+        Where to place the cabinets (star topology only).
+    count_per_100_buildings
+        Number of cabinets per 100 buildings; the count is
+        ``ceil(count_per_100_buildings * n_buildings / 100)``, at least 1.
+    fixed_count
+        Optional fixed cabinet count (overrides the rate).
+    grounding
+        Grounding system of every cabinet.
+    """
 
     placement: PlacementSpec = Field(
-        default_factory=_default_kvs_placement,
+        default_factory=_default_cabinet_placement,
         description="Where to place the cable cabinets.",
     )
-    quote_per_100_buildings: Union[float, AnyDistribution] = Field(
+    count_per_100_buildings: Union[float, AnyDistribution] = Field(
         default=5.0,
         description=(
-            "Number of cable cabinets per 100 buildings. The actual KVS "
-            "count is ceil(quote * n_buildings / 100), with a floor of 1."
+            "Number of cable cabinets per 100 buildings. The actual cabinet "
+            "count is ceil(count_per_100_buildings * n_buildings / 100), "
+            "with a floor of 1."
         ),
     )
     fixed_count: Optional[Union[int, AnyDistribution]] = Field(
         default=None,
         description=(
-            "Optional: pin the number of KVS to this value, ignoring "
-            "``quote_per_100_buildings``. Useful for explicit-placement runs."
+            "Optional: pin the number of cabinets to this value, ignoring "
+            "``count_per_100_buildings``. Useful for explicit-placement runs."
         ),
     )
     grounding: GroundingSystemSpec = Field(
-        default_factory=_default_kvs_grounding,
-        description="Per-KVS grounding system.",
+        default_factory=_default_cabinet_grounding,
+        description="Per-cabinet grounding system.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _renamed_fields(cls, data: object) -> object:
+        return rename_input_keys(
+            data,
+            {"quote_per_100_buildings": "count_per_100_buildings"},
+            "CabinetConfig",
+        )
+
+    @property
+    def quote_per_100_buildings(self) -> Union[float, Distribution]:
+        """Deprecated alias of :attr:`count_per_100_buildings`."""
+        warn_renamed(
+            "CabinetConfig.quote_per_100_buildings",
+            "CabinetConfig.count_per_100_buildings",
+        )
+        return self.count_per_100_buildings
+
+
+class KvsConfig(CabinetConfig):
+    """Deprecated alias of :class:`CabinetConfig`."""
+
+    def model_post_init(self, context: object, /) -> None:
+        warn_renamed("KvsConfig", "CabinetConfig", stacklevel=5)
+        super().model_post_init(context)
 
 
 class PenConfig(GeneratorConfig):
@@ -303,7 +347,7 @@ class TnNetworkConfig(GeneratorConfig):
         (see :data:`~groundfield.generators.soil_specs.SoilSpec`).
     substation
         Substation block (position + grounding system).
-    kvs
+    cabinets
         Cable-cabinet block (placement, count, grounding).
     placement
         Building placement strategy. Default: Manhattan grid.
@@ -317,7 +361,7 @@ class TnNetworkConfig(GeneratorConfig):
         :class:`Distribution`. Buildings are placed in catalog order.
     pen
         PEN backbone configuration.
-    source_magnitude_A
+    source_magnitude_a
         Driving current at the substation cluster, in A.
     """
 
@@ -333,8 +377,8 @@ class TnNetworkConfig(GeneratorConfig):
         description="Substation block.",
     )
 
-    kvs: KvsConfig = Field(
-        default_factory=KvsConfig,
+    cabinets: CabinetConfig = Field(
+        default_factory=CabinetConfig,
         description="Cable cabinet block.",
     )
 
@@ -361,27 +405,27 @@ class TnNetworkConfig(GeneratorConfig):
     )
 
     pen_topology: PenTopology = Field(
-        default_factory=StarKvsTopology,
+        default_factory=StarCabinetTopology,
         description=(
-            "PEN backbone topology. ``StarKvsTopology`` (default) "
-            "reproduces the legacy v0.6 behaviour: every KVS is "
+            "PEN backbone topology. ``StarCabinetTopology`` (default) "
+            "reproduces the legacy v0.6 behaviour: every cabinet is "
             "wired directly to the substation and every building "
-            "taps to its nearest KVS by Manhattan distance. "
+            "taps to its nearest cabinet by Manhattan distance. "
             "``RadialTrunkTopology`` lays out the substation as a "
             "radial set of LV feeders (Manhattan-aligned) with a "
             "finite slot budget per source — once a feeder's slots "
-            "are exhausted a KVS is inserted along the trunk axis "
+            "are exhausted a cabinet is inserted along the trunk axis "
             "to host the next batch of building taps. When "
             "``RadialTrunkTopology`` is selected the parent "
-            ":attr:`KvsConfig.placement` / ``fixed_count`` / "
-            "``quote_per_100_buildings`` fields are ignored — the "
-            "topology decides KVS positions and counts — but "
-            ":attr:`KvsConfig.grounding` is still honoured for the "
+            ":attr:`CabinetConfig.placement` / ``fixed_count`` / "
+            "``count_per_100_buildings`` fields are ignored — the "
+            "topology decides cabinet positions and counts — but "
+            ":attr:`CabinetConfig.grounding` is still honoured for the "
             "earthing of every inserted cabinet."
         ),
     )
 
-    source_magnitude_A: Union[float, AnyDistribution] = Field(
+    source_magnitude_a: Union[float, AnyDistribution] = Field(
         default=1.0,
         description=(
             "Driving current at the substation cluster, in A (RMS). "
@@ -442,6 +486,29 @@ class TnNetworkConfig(GeneratorConfig):
             "the rare multi-port tests."
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _renamed_fields(cls, data: object) -> object:
+        return rename_input_keys(
+            data,
+            {"kvs": "cabinets", "source_magnitude_A": "source_magnitude_a"},
+            "TnNetworkConfig",
+        )
+
+    @property
+    def kvs(self) -> CabinetConfig:
+        """Deprecated alias of :attr:`cabinets`."""
+        warn_renamed("TnNetworkConfig.kvs", "TnNetworkConfig.cabinets")
+        return self.cabinets
+
+    @property
+    def source_magnitude_A(self) -> Union[float, Distribution]:  # noqa: N802
+        """Deprecated alias of :attr:`source_magnitude_a`."""
+        warn_renamed(
+            "TnNetworkConfig.source_magnitude_A", "TnNetworkConfig.source_magnitude_a"
+        )
+        return self.source_magnitude_a
 
 
 # ---------------------------------------------------------------------
@@ -603,18 +670,18 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         if isinstance(cfg.pen_topology, RadialTrunkTopology):
             self._plan_radial_trunk(cfg, substation, buildings, sites, branches)
         else:
-            n_kvs = self._resolve_kvs_count(cfg, n_buildings, rng)
-            kvs_positions = cfg.kvs.placement.generate(n_kvs, rng)
+            n_cabinets = self._resolve_cabinet_count(cfg, n_buildings, rng)
+            cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
             cabinets = [
-                cfg.kvs.grounding.plan_site(
+                cfg.cabinets.grounding.plan_site(
                     f"kvs_{k}", role="cabinet", position_xy=site_xy, rng=rng
                 )
-                for k, site_xy in enumerate(kvs_positions)
+                for k, site_xy in enumerate(cabinet_positions)
             ]
             sites.extend(cabinets)
             if not any(c.anchor is not None for c in cabinets):
                 raise ValueError(
-                    "TnNetworkGenerator: every KVS grounding had zero "
+                    "TnNetworkGenerator: every cable-cabinet grounding had zero "
                     "present electrodes. Increase presence_prob or set "
                     "fixed_count > 0."
                 )
@@ -649,7 +716,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             attached_to=substation.name,
             return_to=return_to,
             kind=cfg.source_kind,
-            magnitude=_to_float(cfg.source_magnitude_A, rng),
+            magnitude=_to_float(cfg.source_magnitude_a, rng),
         )
         return NetworkPlan(
             name=cfg.name,
@@ -713,7 +780,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 out.append((catalog_by_name[btype.name], count))
         return out
 
-    def _resolve_kvs_count(
+    def _resolve_cabinet_count(
         self,
         cfg: TnNetworkConfig,
         n_buildings: int,
@@ -721,13 +788,13 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     ) -> int:
         """Resolve the actual cable-cabinet count.
 
-        Uses ``cfg.kvs.fixed_count`` if provided; otherwise computes
-        ``ceil(quote * n_buildings / 100)`` with a floor of 1.
+        Uses ``cfg.cabinets.fixed_count`` if provided; otherwise computes
+        ``ceil(rate * n_buildings / 100)`` with a floor of 1.
         """
-        if cfg.kvs.fixed_count is not None:
-            return max(1, _to_int(cfg.kvs.fixed_count, rng))
-        quote = _to_float(cfg.kvs.quote_per_100_buildings, rng)
-        return max(1, int(math.ceil(quote * n_buildings / 100.0)))
+        if cfg.cabinets.fixed_count is not None:
+            return max(1, _to_int(cfg.cabinets.fixed_count, rng))
+        rate = _to_float(cfg.cabinets.count_per_100_buildings, rng)
+        return max(1, int(math.ceil(rate * n_buildings / 100.0)))
 
     def _plan_measurement(
         self, cfg: TnNetworkConfig, substation: PlannedSite
@@ -849,8 +916,8 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         3. Walk the sorted list, taking up to
            :attr:`RadialTrunkTopology.slots_per_substation` taps at the
            substation; when that budget is exhausted, place a cabinet
-           along the feeder axis (grounded per :attr:`KvsConfig.grounding`)
-           and continue with :attr:`RadialTrunkTopology.slots_per_kvs`
+           along the feeder axis (grounded per :attr:`CabinetConfig.grounding`)
+           and continue with :attr:`RadialTrunkTopology.slots_per_cabinet`
            taps per cabinet.
         4. Wire the trunk (substation → cabinet$_1$ → cabinet$_2$ → …)
            and the service drops as straight PEN conductors.
@@ -880,22 +947,22 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         for feeder_idx, building_indices in enumerate(groups):
             if not building_indices:
                 continue
-            kvs_positions = topology.plan_feeder_kvs_positions(
+            cabinet_positions = topology.plan_feeder_cabinet_positions(
                 substation_xy=cfg.substation.position,
                 feeder_idx=feeder_idx,
                 n_buildings_on_feeder=len(building_indices),
             )
             taps: list[PlannedSite] = [substation]
             previous = substation
-            for k, kvs_xy in enumerate(kvs_positions):
+            for k, cabinet_xy in enumerate(cabinet_positions):
                 site_name = f"{topology.name_prefix}_f{feeder_idx}_{k}"
-                cab = cfg.kvs.grounding.plan_site(
-                    site_name, role="cabinet", position_xy=kvs_xy, rng=rng
+                cab = cfg.cabinets.grounding.plan_site(
+                    site_name, role="cabinet", position_xy=cabinet_xy, rng=rng
                 )
                 sites.append(cab)
                 if cab.anchor is None:
                     warnings.warn(
-                        f"RadialTrunkTopology: KVS {site_name!r} "
+                        f"RadialTrunkTopology: cabinet {site_name!r} "
                         "grounding produced zero electrodes "
                         "(presence_prob=0?); the next batch of "
                         "buildings falls back to the previous tap "
@@ -916,7 +983,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 taps.append(cab)
                 previous = cab
             budgets = [topology.slots_per_substation] + [
-                topology.slots_per_kvs for _ in range(len(taps) - 1)
+                topology.slots_per_cabinet for _ in range(len(taps) - 1)
             ]
             tap_idx = 0
             for building_idx in building_indices:
@@ -929,7 +996,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         f"(have {len(taps)} tap sources, "
                         f"need ≥ {len(building_indices)}); "
                         "wiring remaining buildings to the last "
-                        "tap anchor. Increase slots_per_kvs or "
+                        "tap anchor. Increase slots_per_cabinet or "
                         "n_feeders.",
                         UserWarning,
                         stacklevel=3,
@@ -951,5 +1018,5 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             raise ValueError(
                 "TnNetworkGenerator: RadialTrunkTopology produced "
                 "zero PEN service drops. Check feeder directions, "
-                "KVS grounding presence_prob, and slot budgets."
+                "cabinet grounding presence_prob, and slot budgets."
             )

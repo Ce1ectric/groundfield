@@ -12,12 +12,12 @@ Covers
   topology: every assigned building has a service-drop conductor,
   the trunk segments substation → KVS$_k$ exist, and the substation
   cluster is the source's attachment point.
-* The legacy :class:`StarKvsTopology` is the default and reproduces
+* The legacy :class:`StarCabinetTopology` is the default and reproduces
   the historic per-building "nearest KVS" wiring.
 * Switching topology on the *same* :class:`TnNetworkConfig` produces
   different worlds (sanity for the discriminated union).
 
-Tests live alongside the existing ``test_tn_ortsnetz.py`` so the
+Tests live alongside the existing ``test_tn_network.py`` so the
 AP1 topology suite stays grouped in one folder.
 """
 
@@ -32,7 +32,7 @@ import groundfield as gf
 from groundfield.generators import (
     ExplicitPlacement,
     RadialTrunkTopology,
-    StarKvsTopology,
+    StarCabinetTopology,
     TnNetworkConfig,
     TnNetworkGenerator,
 )
@@ -43,11 +43,11 @@ from groundfield.generators import (
 # ---------------------------------------------------------------------
 
 
-def test_default_topology_is_star_kvs() -> None:
+def test_default_topology_is_star_cabinet() -> None:
     """Pre-v0.7 configs keep the legacy star topology by default."""
     cfg = TnNetworkConfig(building_counts={"residential": 3})
-    assert isinstance(cfg.pen_topology, StarKvsTopology)
-    assert cfg.pen_topology.kind == "star_kvs"
+    assert isinstance(cfg.pen_topology, StarCabinetTopology)
+    assert cfg.pen_topology.kind == "star_cabinet"
 
 
 def test_radial_trunk_explicit_directions_length_mismatch_rejected() -> None:
@@ -71,7 +71,7 @@ def test_radial_trunk_auto_distributed_directions() -> None:
     assert len(angles) == 4
     # 0°, 90°, 180°, 270° in radians
     expected = [0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0]
-    for got, exp in zip(angles, expected):
+    for got, exp in zip(angles, expected, strict=False):
         assert math.isclose(got, exp, abs_tol=1e-12)
 
 
@@ -149,43 +149,43 @@ def test_assignment_sorts_by_axial_distance() -> None:
 # ---------------------------------------------------------------------
 
 
-def test_plan_kvs_positions_no_extension_when_within_substation_budget() -> None:
+def test_plan_cabinet_positions_no_extension_when_within_substation_budget() -> None:
     topo = RadialTrunkTopology(
         n_feeders=1,
         feeder_directions_deg=[0.0],
         slots_per_substation=5,
-        slots_per_kvs=3,
-        kvs_spacing_m=40.0,
+        slots_per_cabinet=3,
+        cabinet_spacing_m=40.0,
     )
-    assert topo.plan_feeder_kvs_positions((0.0, 0.0), 0, 5) == []
+    assert topo.plan_feeder_cabinet_positions((0.0, 0.0), 0, 5) == []
 
 
-def test_plan_kvs_positions_adds_one_kvs_per_slot_overflow() -> None:
+def test_plan_cabinet_positions_adds_one_cabinet_per_slot_overflow() -> None:
     topo = RadialTrunkTopology(
         n_feeders=1,
         feeder_directions_deg=[0.0],
         slots_per_substation=2,
-        slots_per_kvs=2,
-        kvs_spacing_m=40.0,
+        slots_per_cabinet=2,
+        cabinet_spacing_m=40.0,
         max_feeder_length_m=500.0,
     )
-    # 2 (subst) + 2 (kvs_0) + 2 (kvs_1) = 6 buildings → 2 KVSes
-    positions = topo.plan_feeder_kvs_positions((0.0, 0.0), 0, 6)
+    # 2 (subst) + 2 (cabinet 0) + 2 (cabinet 1) = 6 buildings → 2 cabinets
+    positions = topo.plan_feeder_cabinet_positions((0.0, 0.0), 0, 6)
     assert positions == [(40.0, 0.0), (80.0, 0.0)]
 
 
-def test_plan_kvs_positions_clips_to_max_length() -> None:
+def test_plan_cabinet_positions_clips_to_max_length() -> None:
     topo = RadialTrunkTopology(
         n_feeders=1,
         feeder_directions_deg=[0.0],
         slots_per_substation=1,
-        slots_per_kvs=1,
-        kvs_spacing_m=200.0,
+        slots_per_cabinet=1,
+        cabinet_spacing_m=200.0,
         max_feeder_length_m=300.0,
     )
     # 1 + 3 KVSes worth of buildings → KVSes at 200, 300 (clipped),
     # third one would be at 600 → > max → dropped.
-    positions = topo.plan_feeder_kvs_positions((0.0, 0.0), 0, 4)
+    positions = topo.plan_feeder_cabinet_positions((0.0, 0.0), 0, 4)
     assert positions == [(200.0, 0.0), (300.0, 0.0)]
 
 
@@ -218,20 +218,20 @@ def _build_radial_world(n_buildings: int, **topo_kwargs) -> "gf.World":
         pen_topology=RadialTrunkTopology(
             n_feeders=4,
             slots_per_substation=topo_kwargs.pop("slots_per_substation", 4),
-            slots_per_kvs=topo_kwargs.pop("slots_per_kvs", 4),
-            kvs_spacing_m=topo_kwargs.pop("kvs_spacing_m", 60.0),
+            slots_per_cabinet=topo_kwargs.pop("slots_per_cabinet", 4),
+            cabinet_spacing_m=topo_kwargs.pop("cabinet_spacing_m", 60.0),
             **topo_kwargs,
         ),
     )
     return TnNetworkGenerator(cfg, seed=123).build()
 
 
-def test_radial_trunk_end_to_end_no_kvs_when_under_budget() -> None:
+def test_radial_trunk_end_to_end_no_cabinet_when_under_budget() -> None:
     """With slots_per_substation ≥ buildings per feeder, no KVS is created."""
     world = _build_radial_world(
         n_buildings=8,
         slots_per_substation=3,
-        slots_per_kvs=99,
+        slots_per_cabinet=99,
     )
     kvs_electrodes = [e for e in world.electrodes if e.name.startswith("kvs_f")]
     # 8 buildings across 4 feeders = 2 per feeder ≤ 3 → no KVS.
@@ -241,18 +241,18 @@ def test_radial_trunk_end_to_end_no_kvs_when_under_budget() -> None:
     assert len(pen_services) == 8
 
 
-def test_radial_trunk_inserts_kvs_when_budget_overflows() -> None:
+def test_radial_trunk_inserts_cabinet_when_budget_overflows() -> None:
     """When the substation slot budget is exceeded, KVSes appear on
     the feeder and the trunk segments connect them in order."""
     world = _build_radial_world(
         n_buildings=16,
         slots_per_substation=2,
-        slots_per_kvs=2,
-        kvs_spacing_m=50.0,
+        slots_per_cabinet=2,
+        cabinet_spacing_m=50.0,
     )
     # Per feeder: 4 buildings, 2 at substation + 2 at KVS_0 → 1 KVS.
     # Total KVS clusters across 4 feeders = 4. (Each KVS gets one
-    # rod electrode by the default ``_default_kvs_grounding`` factory.)
+    # rod electrode by the default ``_default_cabinet_grounding`` factory.)
     kvs_rod_electrodes = [
         e for e in world.electrodes if e.name.startswith("kvs_f") and "_rod_0" in e.name
     ]
@@ -303,8 +303,8 @@ def test_topology_json_round_trip_preserves_radial_trunk() -> None:
             n_feeders=3,
             feeder_directions_deg=[0.0, 120.0, 240.0],
             slots_per_substation=2,
-            slots_per_kvs=2,
-            kvs_spacing_m=45.0,
+            slots_per_cabinet=2,
+            cabinet_spacing_m=45.0,
             max_feeder_length_m=300.0,
             name_prefix="cabinet",
         ),
@@ -314,7 +314,7 @@ def test_topology_json_round_trip_preserves_radial_trunk() -> None:
     assert isinstance(restored.pen_topology, RadialTrunkTopology)
     assert restored.pen_topology.n_feeders == 3
     assert restored.pen_topology.feeder_directions_deg == [0.0, 120.0, 240.0]
-    assert restored.pen_topology.kvs_spacing_m == 45.0
+    assert restored.pen_topology.cabinet_spacing_m == 45.0
     assert restored.pen_topology.name_prefix == "cabinet"
 
 
@@ -322,7 +322,7 @@ def test_topology_json_round_trip_default_is_star() -> None:
     cfg = TnNetworkConfig(building_counts={"residential": 3})
     payload = cfg.model_dump_json()
     restored = TnNetworkConfig.model_validate_json(payload)
-    assert isinstance(restored.pen_topology, StarKvsTopology)
+    assert isinstance(restored.pen_topology, StarCabinetTopology)
 
 
 # ---------------------------------------------------------------------

@@ -30,8 +30,13 @@ import math
 from typing import Optional
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from groundfield.generators._compat import (
+    rename_input_keys,
+    take_renamed_kwargs,
+    warn_renamed,
+)
 from groundfield.generators.electrode_specs import (
     FoundationElectrodeSpec,
     RingElectrodeSpec,
@@ -67,8 +72,8 @@ from groundfield.soil.models import HomogeneousSoil, SoilModel
 from groundfield.world import World
 
 __all__ = [
-    "KvsPlacement",
-    "OrtsnetzLayout",
+    "CabinetPlacement",
+    "LvNetworkLayout",
 ]
 
 
@@ -79,7 +84,7 @@ __all__ = [
 
 
 def _default_substation_grounding() -> GroundingSystemSpec:
-    """Ring (4 m) + 4 rods on a 2 m inner circle (`Tiefenerder`)."""
+    """Ring (4 m) + 4 driven rods on a 2 m inner circle."""
     return GroundingSystemSpec(
         electrodes=[
             RingElectrodeSpec(radius_m=4.0, depth_m=0.6),
@@ -88,7 +93,7 @@ def _default_substation_grounding() -> GroundingSystemSpec:
     )
 
 
-def _default_kvs_grounding() -> GroundingSystemSpec:
+def _default_cabinet_grounding() -> GroundingSystemSpec:
     """Single 1.5 m driven rod."""
     return GroundingSystemSpec(
         electrodes=[RodElectrodeSpec(length_m=1.5, depth_m=0.0)],
@@ -96,7 +101,7 @@ def _default_kvs_grounding() -> GroundingSystemSpec:
 
 
 def _default_house_grounding() -> GroundingSystemSpec:
-    """10 m foundation electrode with a 2x2 mesh (`Fundamenterder`)."""
+    """10 m foundation electrode with a 2 x 2 mesh."""
     return GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
@@ -114,8 +119,16 @@ def _default_house_grounding() -> GroundingSystemSpec:
 # ---------------------------------------------------------------------
 
 
-class KvsPlacement(BaseModel):
-    """One user-placed cable cabinet."""
+class CabinetPlacement(BaseModel):
+    """One user-placed cable cabinet (German *KVS*).
+
+    Attributes
+    ----------
+    name
+        Cabinet name; also the name of its grounding site.
+    position_xy
+        Cabinet position ``(x, y)`` in m.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -123,15 +136,23 @@ class KvsPlacement(BaseModel):
     position_xy: tuple[float, float]
 
 
+class KvsPlacement(CabinetPlacement):
+    """Deprecated alias of :class:`CabinetPlacement`."""
+
+    def model_post_init(self, context: object, /) -> None:
+        warn_renamed("KvsPlacement", "CabinetPlacement", stacklevel=5)
+        super().model_post_init(context)
+
+
 # ---------------------------------------------------------------------
 # Layout builder
 # ---------------------------------------------------------------------
 
 
-class OrtsnetzLayout(
+class LvNetworkLayout(
     _RoutingMixin, _MeasurementMixin, _PenetrationMixin, _PlotMixin, BaseModel
 ):
-    r"""Imperative TN-Ortsnetz layout builder.
+    r"""Imperative LV network layout builder.
 
     The builder is constructed empty (no buildings, no substation,
     no cables) and filled up by calling its methods in the order
@@ -139,9 +160,9 @@ class OrtsnetzLayout(
     returns the new object (or its key) so the calls can be
     chained or stored:
 
-    >>> layout = OrtsnetzLayout.from_footprints(footprints,
+    >>> layout = LvNetworkLayout.from_footprints(footprints,
     ...                                         substation_xy=(0, 0))
-    >>> kvs_1 = layout.add_kvs((120, 0))
+    >>> cabinet_1 = layout.add_cabinet((120, 0))
     >>> cable = layout.add_pen_cable(start="substation",
     ...                              end_xy=(250, 0))
     >>> layout.connect_buildings()
@@ -158,9 +179,9 @@ class OrtsnetzLayout(
     substation_name
         Substation anchor id used everywhere else (default
         ``"substation"``).
-    kvs_placements
-        Optional pre-populated KVS list. Most callers leave this
-        empty and use :meth:`add_kvs`.
+    cabinet_placements
+        Optional pre-populated cabinet list. Most callers leave this
+        empty and use :meth:`add_cabinet`.
     pen_cables
         Optional pre-populated PEN cables. Most callers leave
         this empty and use :meth:`add_pen_cable` /
@@ -179,7 +200,7 @@ class OrtsnetzLayout(
     footprints: list[BuildingFootprint]
     substation_xy: tuple[float, float]
     substation_name: str = "substation"
-    kvs_placements: list[KvsPlacement] = Field(default_factory=list)
+    cabinet_placements: list[CabinetPlacement] = Field(default_factory=list)
     pen_cables: list[PenCable] = Field(default_factory=list)
     connections: list[BuildingConnection] = Field(default_factory=list)
     auxiliary_electrode: Optional[AuxiliaryElectrodePlacement] = Field(
@@ -214,9 +235,24 @@ class OrtsnetzLayout(
             "that the footprints and the substation are expressed in. "
             "Set automatically by :meth:`from_osm`; pass it explicitly "
             "when constructing the layout from already-projected data "
-            "if you want to add KVS or PEN endpoints via lat/lon later."
+            "if you want to add cabinets or PEN endpoints via lat/lon later."
         ),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _renamed_fields(cls, data: object) -> object:
+        return rename_input_keys(
+            data, {"kvs_placements": "cabinet_placements"}, "LvNetworkLayout"
+        )
+
+    @property
+    def kvs_placements(self) -> list[CabinetPlacement]:
+        """Deprecated alias of :attr:`cabinet_placements`."""
+        warn_renamed(
+            "LvNetworkLayout.kvs_placements", "LvNetworkLayout.cabinet_placements"
+        )
+        return self.cabinet_placements
 
     @classmethod
     def from_footprints(
@@ -227,12 +263,12 @@ class OrtsnetzLayout(
         substation_name: str = "substation",
         obstacle_clearance_m: float = 1.0,
         frame_origin_lat_lon: Optional[tuple[float, float]] = None,
-    ) -> "OrtsnetzLayout":
+    ) -> "LvNetworkLayout":
         """Build an empty layout from a list of footprints.
 
         ``frame_origin_lat_lon`` is optional; pass it when the
         footprints were projected by an external pipeline and you
-        still want to add KVS / PEN endpoints by lat / lon later.
+        still want to add cabinets / PEN endpoints by lat / lon later.
         """
         return cls(
             footprints=list(footprints),
@@ -251,8 +287,8 @@ class OrtsnetzLayout(
         radius_m: float,
         substation_lat_lon: Optional[tuple[float, float]] = None,
         substation_xy: Optional[tuple[float, float]] = None,
-        kvs_lat_lons: Optional[list[tuple[float, float]]] = None,
-        kvs_xys: Optional[list[tuple[float, float]]] = None,
+        cabinet_lat_lons: Optional[list[tuple[float, float]]] = None,
+        cabinet_xys: Optional[list[tuple[float, float]]] = None,
         substation_name: str = "substation",
         obstacle_clearance_m: float = 1.0,
         min_area_m2: float = 16.0,
@@ -261,7 +297,8 @@ class OrtsnetzLayout(
         endpoint: Optional[str] = None,
         timeout_s: Optional[int] = None,
         max_retries: int = 1,
-    ) -> "OrtsnetzLayout":
+        **deprecated: object,
+    ) -> "LvNetworkLayout":
         """One-shot constructor: query OSM and pre-place anchors.
 
         Parameters
@@ -281,13 +318,13 @@ class OrtsnetzLayout(
         substation_xy
             Substation location in already-projected metres.
             Mutually exclusive with ``substation_lat_lon``.
-        kvs_lat_lons
-            Optional list of KVS locations in WGS84 ``(lat, lon)``.
+        cabinet_lat_lons
+            Optional list of cabinet locations in WGS84 ``(lat, lon)``.
             Each entry is projected and appended to
-            :attr:`kvs_placements`. Names are auto-generated.
-        kvs_xys
-            Optional list of KVS locations in already-projected
-            metres. Mutually exclusive with ``kvs_lat_lons``.
+            :attr:`cabinet_placements`. Names are auto-generated.
+        cabinet_xys
+            Optional list of cabinet locations in already-projected
+            metres. Mutually exclusive with ``cabinet_lat_lons``.
         substation_name
             Anchor id for the substation. Default ``"substation"``.
         obstacle_clearance_m, min_area_m2
@@ -297,23 +334,23 @@ class OrtsnetzLayout(
 
         Returns
         -------
-        OrtsnetzLayout
+        LvNetworkLayout
             Layout with footprints loaded, projector seeded, and
-            substation / KVS pre-placed. Routing and connections
+            substation / cabinets pre-placed. Routing and connections
             are still up to the caller.
 
         Examples
         --------
         Build the layout for Mulmke (Heudeber / Nordharz) in a
         300 m radius around the village centre, with the
-        substation at a chosen lat / lon and two KVS along the
+        substation at a chosen lat / lon and two cabinets along the
         main road:
 
-        >>> layout = OrtsnetzLayout.from_osm(
+        >>> layout = LvNetworkLayout.from_osm(
         ...     center_lat_deg=51.9136, center_lon_deg=10.8432,
         ...     radius_m=300.0,
         ...     substation_lat_lon=(51.9138, 10.8418),
-        ...     kvs_lat_lons=[
+        ...     cabinet_lat_lons=[
         ...         (51.9133, 10.8445),
         ...         (51.9140, 10.8460),
         ...     ],
@@ -321,14 +358,21 @@ class OrtsnetzLayout(
         """
         from groundfield.geo.osm import query_and_project
 
+        renamed = take_renamed_kwargs(
+            "LvNetworkLayout.from_osm",
+            deprecated,
+            {"kvs_lat_lons": "cabinet_lat_lons", "kvs_xys": "cabinet_xys"},
+        )
+        cabinet_lat_lons = renamed.get("cabinet_lat_lons", cabinet_lat_lons)  # type: ignore[assignment]
+        cabinet_xys = renamed.get("cabinet_xys", cabinet_xys)  # type: ignore[assignment]
         if substation_lat_lon is not None and substation_xy is not None:
             raise ValueError(
-                "OrtsnetzLayout.from_osm: substation_lat_lon and "
+                "LvNetworkLayout.from_osm: substation_lat_lon and "
                 "substation_xy are mutually exclusive."
             )
-        if kvs_lat_lons is not None and kvs_xys is not None:
+        if cabinet_lat_lons is not None and cabinet_xys is not None:
             raise ValueError(
-                "OrtsnetzLayout.from_osm: kvs_lat_lons and kvs_xys "
+                "LvNetworkLayout.from_osm: cabinet_lat_lons and cabinet_xys "
                 "are mutually exclusive."
             )
 
@@ -366,12 +410,12 @@ class OrtsnetzLayout(
             frame_origin_lat_lon=(center_lat_deg, center_lon_deg),
         )
 
-        if kvs_lat_lons:
-            for lat, lon in kvs_lat_lons:
-                layout.add_kvs(position_lat_lon=(lat, lon))
-        elif kvs_xys:
-            for xy in kvs_xys:
-                layout.add_kvs(position_xy=xy)
+        if cabinet_lat_lons:
+            for lat, lon in cabinet_lat_lons:
+                layout.add_cabinet(position_lat_lon=(lat, lon))
+        elif cabinet_xys:
+            for xy in cabinet_xys:
+                layout.add_cabinet(position_xy=xy)
 
         return layout
 
@@ -403,7 +447,7 @@ class OrtsnetzLayout(
         projector = self.projector
         if projector is None:
             raise RuntimeError(
-                "OrtsnetzLayout.lat_lon_to_xy: layout has no "
+                "LvNetworkLayout.lat_lon_to_xy: layout has no "
                 "frame_origin_lat_lon. Build via ``from_osm`` or "
                 "pass ``frame_origin_lat_lon`` to ``from_footprints`` "
                 "to enable lat / lon based placement."
@@ -422,12 +466,12 @@ class OrtsnetzLayout(
         projector = self.projector
         if projector is None:
             raise RuntimeError(
-                "OrtsnetzLayout.xy_to_lat_lon: layout has no "
+                "LvNetworkLayout.xy_to_lat_lon: layout has no "
                 "frame_origin_lat_lon. Build via ``from_osm`` first."
             )
         return projector.to_lat_lon(x_m, y_m)
 
-    def add_kvs(
+    def add_cabinet(
         self,
         position_xy: Optional[tuple[float, float]] = None,
         *,
@@ -442,42 +486,57 @@ class OrtsnetzLayout(
         :attr:`frame_origin_lat_lon`; if no frame origin is set, a
         :class:`RuntimeError` is raised.
 
-        Returns the assigned KVS name (auto-generated when ``name``
+        Returns the assigned cabinet name (auto-generated when ``name``
         is ``None``). The returned name is what callers pass to
         :meth:`add_pen_cable` as ``start=...``.
         """
         if (position_xy is None) == (position_lat_lon is None):
             raise ValueError(
-                "OrtsnetzLayout.add_kvs: exactly one of "
+                "LvNetworkLayout.add_cabinet: exactly one of "
                 "``position_xy`` and ``position_lat_lon`` must be set."
             )
         if position_lat_lon is not None:
             position_xy = self.lat_lon_to_xy(*position_lat_lon)
         if name is None:
-            name = f"kvs_{len(self.kvs_placements)}"
-        if any(k.name == name for k in self.kvs_placements):
-            raise ValueError(f"OrtsnetzLayout.add_kvs: name {name!r} is already taken.")
+            name = f"kvs_{len(self.cabinet_placements)}"
+        if any(k.name == name for k in self.cabinet_placements):
+            raise ValueError(
+                f"LvNetworkLayout.add_cabinet: name {name!r} is already taken."
+            )
         if name == self.substation_name:
             raise ValueError(
-                f"OrtsnetzLayout.add_kvs: name {name!r} clashes with "
+                f"LvNetworkLayout.add_cabinet: name {name!r} clashes with "
                 "the substation name."
             )
         assert position_xy is not None
-        self.kvs_placements.append(
-            KvsPlacement(name=name, position_xy=tuple(position_xy)),
+        self.cabinet_placements.append(
+            CabinetPlacement(name=name, position_xy=tuple(position_xy)),
         )
         return name
+
+    def add_kvs(
+        self,
+        position_xy: Optional[tuple[float, float]] = None,
+        *,
+        position_lat_lon: Optional[tuple[float, float]] = None,
+        name: Optional[str] = None,
+    ) -> str:
+        """Deprecated alias of :meth:`add_cabinet`."""
+        warn_renamed("LvNetworkLayout.add_kvs", "LvNetworkLayout.add_cabinet")
+        return self.add_cabinet(
+            position_xy, position_lat_lon=position_lat_lon, name=name
+        )
 
     def _anchor_position(self, name: str) -> tuple[float, float]:
         if name == self.substation_name:
             return tuple(self.substation_xy)
-        for k in self.kvs_placements:
+        for k in self.cabinet_placements:
             if k.name == name:
                 return tuple(k.position_xy)
         raise KeyError(
-            f"OrtsnetzLayout: anchor {name!r} is unknown. "
+            f"LvNetworkLayout: anchor {name!r} is unknown. "
             f"Known anchors: [{self.substation_name!r}] + "
-            f"{[k.name for k in self.kvs_placements]!r}."
+            f"{[k.name for k in self.cabinet_placements]!r}."
         )
 
     # ------------------------------------------------------------------
@@ -490,14 +549,15 @@ class OrtsnetzLayout(
         name: str = "ortsnetz_layout",
         soil: Optional[SoilModel] = None,
         substation_grounding: Optional[GroundingSystemSpec] = None,
-        kvs_grounding: Optional[GroundingSystemSpec] = None,
+        cabinet_grounding: Optional[GroundingSystemSpec] = None,
         house_grounding: Optional[GroundingSystemSpec] = None,
         pen_wire_radius_m: float = 0.005,
         pen_segment_length_m: Optional[float] = 5.0,
         include_source: bool = True,
-        source_magnitude_A: float = 1.0,
+        source_magnitude_a: float = 1.0,
         seed: int = 0,
         foundation_mask: Optional[list[bool]] = None,
+        **deprecated: object,
     ) -> NetworkPlan:
         """Resolve the layout into a :class:`~groundfield.generators.plan.NetworkPlan`.
 
@@ -522,11 +582,21 @@ class OrtsnetzLayout(
             If the substation, a cabinet or the auxiliary electrode
             grounding produces zero electrodes.
         """
+        renamed = take_renamed_kwargs(
+            "LvNetworkLayout.plan",
+            deprecated,
+            {
+                "kvs_grounding": "cabinet_grounding",
+                "source_magnitude_A": "source_magnitude_a",
+            },
+        )
+        cabinet_grounding = renamed.get("cabinet_grounding", cabinet_grounding)  # type: ignore[assignment]
+        source_magnitude_a = renamed.get("source_magnitude_a", source_magnitude_a)  # type: ignore[assignment]
         if foundation_mask is not None and len(foundation_mask) != len(
             self.footprints,
         ):
             raise ValueError(
-                "OrtsnetzLayout.to_world: foundation_mask length "
+                "LvNetworkLayout.to_world: foundation_mask length "
                 f"{len(foundation_mask)} does not match footprints "
                 f"count {len(self.footprints)}."
             )
@@ -542,20 +612,20 @@ class OrtsnetzLayout(
         )
         if substation.anchor is None:
             raise RuntimeError(
-                "OrtsnetzLayout.to_world: substation grounding "
+                "LvNetworkLayout.to_world: substation grounding "
                 "produced zero electrodes."
             )
         sites: list[PlannedSite] = [substation]
 
         # 2. Cable-cabinet groundings.
-        kvs_spec = kvs_grounding or _default_kvs_grounding()
-        for k in self.kvs_placements:
-            cabinet = kvs_spec.plan_site(
+        cabinet_spec = cabinet_grounding or _default_cabinet_grounding()
+        for k in self.cabinet_placements:
+            cabinet = cabinet_spec.plan_site(
                 k.name, role="cabinet", position_xy=k.position_xy, rng=rng
             )
             if cabinet.anchor is None:
                 raise RuntimeError(
-                    "OrtsnetzLayout.to_world: KVS "
+                    "LvNetworkLayout.to_world: cabinet "
                     f"{k.name!r} grounding produced zero electrodes."
                 )
             sites.append(cabinet)
@@ -586,7 +656,7 @@ class OrtsnetzLayout(
             )
             if aux_site.anchor is None:
                 raise RuntimeError(
-                    "OrtsnetzLayout.to_world: auxiliary electrode "
+                    "LvNetworkLayout.to_world: auxiliary electrode "
                     "grounding produced zero electrodes "
                     f"({aux.name!r}). Increase presence_prob."
                 )
@@ -653,7 +723,7 @@ class OrtsnetzLayout(
                     return_to=None
                     if measurement is None
                     else measurement.auxiliary.name,
-                    magnitude=source_magnitude_A,
+                    magnitude=source_magnitude_a,
                 )
             )
             if measurement is not None:
@@ -661,7 +731,7 @@ class OrtsnetzLayout(
                     PlannedSource(
                         name=f"{measurement.auxiliary.anchor}_return",
                         attached_to=measurement.auxiliary.name,
-                        magnitude=source_magnitude_A,
+                        magnitude=source_magnitude_a,
                         phase_deg=180.0,
                     )
                 )
@@ -682,14 +752,15 @@ class OrtsnetzLayout(
         name: str = "ortsnetz_layout",
         soil: Optional[SoilModel] = None,
         substation_grounding: Optional[GroundingSystemSpec] = None,
-        kvs_grounding: Optional[GroundingSystemSpec] = None,
+        cabinet_grounding: Optional[GroundingSystemSpec] = None,
         house_grounding: Optional[GroundingSystemSpec] = None,
         pen_wire_radius_m: float = 0.005,
         pen_segment_length_m: Optional[float] = 5.0,
         include_source: bool = True,
-        source_magnitude_A: float = 1.0,
+        source_magnitude_a: float = 1.0,
         seed: int = 0,
         foundation_mask: Optional[list[bool]] = None,
+        **deprecated: object,
     ) -> World:
         """Materialise the layout into a :class:`groundfield.World`.
 
@@ -705,7 +776,7 @@ class OrtsnetzLayout(
             World name.
         soil
             Soil model; default homogeneous 100 Ω·m.
-        substation_grounding, kvs_grounding, house_grounding
+        substation_grounding, cabinet_grounding, house_grounding
             Grounding specs of the substation, every cabinet and every
             house (defaults: ring + 4 rods, one 1.5 m rod, 10 m 2 × 2
             foundation mesh).
@@ -717,7 +788,7 @@ class OrtsnetzLayout(
         include_source
             Add the current source at the substation (and, with an
             auxiliary electrode, the counter-source on it).
-        source_magnitude_A
+        source_magnitude_a
             Source current in A.
         seed
             Seed of the random draws in the grounding specs.
@@ -732,17 +803,27 @@ class OrtsnetzLayout(
         World
             The materialised network.
         """
+        renamed = take_renamed_kwargs(
+            "LvNetworkLayout.to_world",
+            deprecated,
+            {
+                "kvs_grounding": "cabinet_grounding",
+                "source_magnitude_A": "source_magnitude_a",
+            },
+        )
+        cabinet_grounding = renamed.get("cabinet_grounding", cabinet_grounding)  # type: ignore[assignment]
+        source_magnitude_a = renamed.get("source_magnitude_a", source_magnitude_a)  # type: ignore[assignment]
         return materialise_plan(
             self.plan(
                 name=name,
                 soil=soil,
                 substation_grounding=substation_grounding,
-                kvs_grounding=kvs_grounding,
+                cabinet_grounding=cabinet_grounding,
                 house_grounding=house_grounding,
                 pen_wire_radius_m=pen_wire_radius_m,
                 pen_segment_length_m=pen_segment_length_m,
                 include_source=include_source,
-                source_magnitude_A=source_magnitude_A,
+                source_magnitude_a=source_magnitude_a,
                 seed=seed,
                 foundation_mask=foundation_mask,
             )
@@ -790,10 +871,10 @@ class OrtsnetzLayout(
     def _resolve_anchor(self, name: str) -> str:
         """Validate that ``name`` is the substation or a cabinet (a plan site)."""
         if name == self.substation_name or any(
-            k.name == name for k in self.kvs_placements
+            k.name == name for k in self.cabinet_placements
         ):
             return name
-        raise KeyError(f"OrtsnetzLayout._resolve_anchor: unknown anchor {name!r}.")
+        raise KeyError(f"LvNetworkLayout._resolve_anchor: unknown anchor {name!r}.")
 
     def _insert_tap_nodes_on_cable(
         self,
@@ -872,6 +953,14 @@ class OrtsnetzLayout(
                 best_dist = d
                 best_anchor = anchor
         return best_anchor
+
+
+class OrtsnetzLayout(LvNetworkLayout):
+    """Deprecated alias of :class:`LvNetworkLayout`."""
+
+    def model_post_init(self, context: object, /) -> None:
+        warn_renamed("OrtsnetzLayout", "LvNetworkLayout", stacklevel=5)
+        super().model_post_init(context)
 
 
 # ---------------------------------------------------------------------

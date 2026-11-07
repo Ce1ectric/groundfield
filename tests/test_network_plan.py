@@ -26,6 +26,7 @@ from groundfield.generators import (
     Discrete,
     FoundationElectrodeSpec,
     GroundingSystemSpec,
+    LvNetworkLayout,
     ManhattanGridPlacement,
     MeasurementInjectionConfig,
     MeasurementProbeConfig,
@@ -57,8 +58,12 @@ def _canonical(world: gf.World) -> str:
 
 def _tn_configs() -> dict[str, TnNetworkConfig]:
     stochastic = TnNetworkConfig(
-        soil=TwoLayerSoilSpec(rho_1=Uniform(low=80.0, high=300.0), rho_2=500.0, h_1=2.0),
-        placement=ManhattanGridPlacement(spacing_x_m=Uniform(low=20, high=30), jitter_m=2.0),
+        soil=TwoLayerSoilSpec(
+            rho_1=Uniform(low=80.0, high=300.0), rho_2=500.0, h_1=2.0
+        ),
+        placement=ManhattanGridPlacement(
+            spacing_x_m=Uniform(low=20, high=30), jitter_m=2.0
+        ),
         building_types=[
             BuildingTypeSpec(
                 name="residential",
@@ -139,7 +144,9 @@ def test_tn_plan_is_concrete() -> None:
 
 def test_planned_electrode_rejects_distributions_and_absent_electrodes() -> None:
     with pytest.raises(ValueError, match="distribution"):
-        PlannedElectrode(index=0, spec=RodElectrodeSpec(length_m=Uniform(low=1, high=2)))
+        PlannedElectrode(
+            index=0, spec=RodElectrodeSpec(length_m=Uniform(low=1, high=2))
+        )
     with pytest.raises(ValueError, match="presence_prob"):
         PlannedElectrode(index=0, spec=RodElectrodeSpec(presence_prob=0.5))
 
@@ -161,7 +168,8 @@ def test_build_at_equals_plan_site_then_materialise_site() -> None:
         electrodes=[
             RodElectrodeSpec(length_m=Uniform(low=1, high=3), presence_prob=0.5),
             FoundationElectrodeSpec(
-                size_m=Uniform(low=8, high=12), concrete_rho_ohm_m=Uniform(low=50, high=500)
+                size_m=Uniform(low=8, high=12),
+                concrete_rho_ohm_m=Uniform(low=50, high=500),
             ),
             RodElectrodeSpec(length_m=2.0, offset_xy_m=(3.0, 0.0)),
         ]
@@ -171,7 +179,10 @@ def test_build_at_equals_plan_site_then_materialise_site() -> None:
         anchor_a = spec.build_at(w_a, (1.0, 2.0), "s", np.random.default_rng(seed))
         w_b = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
         site = spec.plan_site(
-            "s", role="building", position_xy=(1.0, 2.0), rng=np.random.default_rng(seed)
+            "s",
+            role="building",
+            position_xy=(1.0, 2.0),
+            rng=np.random.default_rng(seed),
         )
         anchor_b = materialise_site(w_b, site)
         assert anchor_a == anchor_b == site.anchor
@@ -182,7 +193,9 @@ def test_absent_electrode_keeps_its_index_in_the_name() -> None:
     spec = GroundingSystemSpec(
         electrodes=[RodElectrodeSpec(presence_prob=0.0), RodElectrodeSpec(length_m=2.0)]
     )
-    site = spec.plan_site("h", role="building", position_xy=(0.0, 0.0), rng=np.random.default_rng(0))
+    site = spec.plan_site(
+        "h", role="building", position_xy=(0.0, 0.0), rng=np.random.default_rng(0)
+    )
     assert [p.index for p in site.electrodes] == [1]
     assert site.anchor == "h_rod_1"
 
@@ -200,7 +213,9 @@ def test_materialising_draws_no_random_numbers() -> None:
 # ---------------------------------------------------------------------
 
 
-def _house(cx: float, cy: float, oid: int, w: float = 10.0, h: float = 8.0) -> gf.BuildingFootprint:
+def _house(
+    cx: float, cy: float, oid: int, w: float = 10.0, h: float = 8.0
+) -> gf.BuildingFootprint:
     return gf.BuildingFootprint(
         polygon_xy_m=[
             (cx - w / 2, cy - h / 2),
@@ -212,14 +227,13 @@ def _house(cx: float, cy: float, oid: int, w: float = 10.0, h: float = 8.0) -> g
     )
 
 
-def _layout():
-    from groundfield.generators import layout as layout_pkg
-
-    cls = getattr(layout_pkg, "LvNetworkLayout", None) or layout_pkg.OrtsnetzLayout
-    fps = [_house(30.0 + 25.0 * (i // 2), 18.0 if i % 2 == 0 else -18.0, 500 + i) for i in range(8)]
-    lay = cls.from_footprints(fps, substation_xy=(0.0, 0.0))
-    add_cabinet = getattr(lay, "add_cabinet", None) or lay.add_kvs
-    cab = add_cabinet((80.0, 0.0))
+def _layout() -> LvNetworkLayout:
+    fps = [
+        _house(30.0 + 25.0 * (i // 2), 18.0 if i % 2 == 0 else -18.0, 500 + i)
+        for i in range(8)
+    ]
+    lay = LvNetworkLayout.from_footprints(fps, substation_xy=(0.0, 0.0))
+    cab = lay.add_cabinet((80.0, 0.0))
     lay.add_pen_cable(start="substation", end=cab, min_segment_length_m=8.0)
     lay.add_pen_cable(start=cab, end_xy=(160.0, 0.0), min_segment_length_m=8.0)
     lay.connect_all_buildings()

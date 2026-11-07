@@ -52,19 +52,19 @@ class PenCable(BaseModel):
         Unique cable id used for diagnostics, ``to_world`` naming
         and plot legends.
     start_anchor
-        Name of the anchor (substation or KVS) the cable roots at.
+        Name of the anchor (substation or cable cabinet) the cable roots at.
     waypoints
         Ordered list of $(x, y)$ corners. The first entry equals
         the start anchor's position and consecutive entries differ
         in exactly one coordinate (Manhattan).
     end_anchor
-        Optional name of the anchor (KVS) the cable terminates at.
+        Optional name of the anchor (cable cabinet) the cable terminates at.
         ``None`` when the cable runs to free coordinates (a
         :emphasis:`stub end` used as a tap for nearby houses but
         not for further trunking).
     grid_size_m
         The grid size used when this cable was routed -- kept on
-        the model so :meth:`OrtsnetzLayout.connect_buildings` can
+        the model so :meth:`LvNetworkLayout.connect_buildings` can
         align stubs with the trunk.
     """
 
@@ -91,7 +91,7 @@ class BuildingConnection(BaseModel):
     Attributes
     ----------
     house_idx
-        Index into :attr:`OrtsnetzLayout.footprints`.
+        Index into :attr:`LvNetworkLayout.footprints`.
     cable_name
         Name of the :class:`PenCable` the stub taps into.
     stub_waypoints
@@ -121,7 +121,7 @@ class BuildingConnection(BaseModel):
 
 
 class LateralCoverageResult(NamedTuple):
-    """Outcome of :meth:`OrtsnetzLayout.connect_all_buildings`.
+    """Outcome of :meth:`LvNetworkLayout.connect_all_buildings`.
 
     Attributes
     ----------
@@ -134,7 +134,7 @@ class LateralCoverageResult(NamedTuple):
         obstacle-free service stub exists even after adding a lateral. An
         empty list means full coverage.
     connections
-        Snapshot of :attr:`OrtsnetzLayout.connections` after the pass (the
+        Snapshot of :attr:`LvNetworkLayout.connections` after the pass (the
         tap from every connected house to its serving cable).
     """
 
@@ -155,7 +155,7 @@ class _RoutingMixin:
         footprints: list[BuildingFootprint]
         substation_name: str
         substation_xy: tuple[float, float]
-        kvs_placements: list["CabinetPlacement"]
+        cabinet_placements: list["CabinetPlacement"]
         pen_cables: list[PenCable]
         connections: list[BuildingConnection]
         obstacle_clearance_m: float
@@ -181,7 +181,7 @@ class _RoutingMixin:
         """Add a PEN cable routed Manhattan-style.
 
         Exactly one of ``end``, ``end_xy`` or ``end_lat_lon`` must
-        be set. When ``end`` is the name of another anchor (KVS)
+        be set. When ``end`` is the name of another anchor (a cabinet)
         the cable terminates there and the receiving cabinet is
         recorded as :attr:`PenCable.end_anchor`. When ``end_xy`` or
         ``end_lat_lon`` is set, the cable's last waypoint is the
@@ -194,7 +194,7 @@ class _RoutingMixin:
         ----------
         start
             Name of an anchor present in this layout
-            (``substation_name`` or the name of a KVS).
+            (``substation_name`` or the name of a cabinet).
         end_xy
             Free $(x, y)$ endpoint coordinate in metres.
         end
@@ -229,13 +229,13 @@ class _RoutingMixin:
         provided = sum(arg is not None for arg in (end, end_xy, end_lat_lon))
         if provided != 1:
             raise ValueError(
-                "OrtsnetzLayout.add_pen_cable: exactly one of "
+                "LvNetworkLayout.add_pen_cable: exactly one of "
                 "``end``, ``end_xy`` or ``end_lat_lon`` must be set."
             )
         if name is None:
             name = f"pen_{len(self.pen_cables)}"
         if any(c.name == name for c in self.pen_cables):
-            raise ValueError(f"OrtsnetzLayout.add_pen_cable: name {name!r} is taken.")
+            raise ValueError(f"LvNetworkLayout.add_pen_cable: name {name!r} is taken.")
 
         start_xy = self._anchor_position(start)
         if end is not None:
@@ -296,7 +296,7 @@ class _RoutingMixin:
 
         if not self.pen_cables:
             raise RuntimeError(
-                "OrtsnetzLayout.connect_buildings: no PEN cables "
+                "LvNetworkLayout.connect_buildings: no PEN cables "
                 "in the layout. Call ``add_pen_cable`` first."
             )
         clearance = self.obstacle_clearance_m if clearance_m is None else clearance_m
@@ -340,7 +340,7 @@ class _RoutingMixin:
                     )
             if best is None:
                 warnings.warn(
-                    f"OrtsnetzLayout.connect_buildings: house {i} "
+                    f"LvNetworkLayout.connect_buildings: house {i} "
                     f"(centroid {centroid}) cannot be tapped to any "
                     "existing cable without crossing another "
                     "footprint. Add another PEN cable or reduce "
@@ -378,7 +378,7 @@ class _RoutingMixin:
         2. For every still-unconnected house (farthest from any source node
            first), route an obstacle-avoiding PEN *lateral*
            (:meth:`add_pen_cable`, full Manhattan A\*) from the nearest
-           connected source node (substation or a KVS) to a free point just
+           connected source node (substation or a cabinet) to a free point just
            outside the house, then re-tap. Re-tapping frequently connects
            neighbouring houses to the same new lateral for free.
         3. Repeat until no house remains or no further progress is made.
@@ -391,9 +391,9 @@ class _RoutingMixin:
         ----------
         source_anchors
             Names of the nodes laterals may originate from. ``None`` (the
-            default) uses the substation plus every KVS galvanically
+            default) uses the substation plus every cabinet galvanically
             connected to it through the existing PEN-cable graph (see
-            :meth:`_anchors_connected_to_substation`), so a stranded KVS is
+            :meth:`_anchors_connected_to_substation`), so a stranded cabinet is
             never used as a source and cannot create an isolated
             sub-network.
         max_passes
@@ -436,7 +436,7 @@ class _RoutingMixin:
         nodes = [(a, self._anchor_position(a)) for a in source_anchors]
         if not nodes:
             raise RuntimeError(
-                "OrtsnetzLayout.connect_all_buildings: no source anchor to "
+                "LvNetworkLayout.connect_all_buildings: no source anchor to "
                 "originate laterals from. Pass ``source_anchors`` or route "
                 "a PEN cable from the substation first."
             )
@@ -549,11 +549,11 @@ class _RoutingMixin:
         Walks the node graph induced by PEN cables whose *both* endpoints
         are named anchors (``start_anchor`` / ``end_anchor``) and returns
         the connected component containing the substation, ordered
-        substation-first then KVS in placement order. A KVS reachable only
+        substation-first then cabinets in placement order. A cabinet reachable only
         through a free-ended cable (e.g. a trunk tail) is *not* included.
         """
         adjacency: dict[str, set[str]] = {self.substation_name: set()}
-        for k in self.kvs_placements:
+        for k in self.cabinet_placements:
             adjacency.setdefault(k.name, set())
         for cable in self.pen_cables:
             a, b = cable.start_anchor, cable.end_anchor
@@ -569,7 +569,7 @@ class _RoutingMixin:
                     seen.add(neighbour)
                     stack.append(neighbour)
         return [self.substation_name] + [
-            k.name for k in self.kvs_placements if k.name in seen
+            k.name for k in self.cabinet_placements if k.name in seen
         ]
 
     def _free_point_near_house(
