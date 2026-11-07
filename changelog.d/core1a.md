@@ -13,7 +13,9 @@
   `kernel="point"`, which reproduces earlier numbers; backends outside the image
   family reject `kernel="line"`. Results record `metadata["kernel"]`;
   `PointSource` gains an optional `direction` (results written before this
-  release load unchanged and are evaluated with the point kernel).
+  release load unchanged and are evaluated with the point kernel). For 16 house
+  grids (1 920 segments) a solve with the line kernel takes about 2.5× the time
+  of the point kernel with `numba` installed and about 5× without.
   Test: `tests/test_line_kernel.py`.
 - **Geometry queries on the electrode models (10.79):** every electrode kind
   provides `segments(ds, layer_interfaces=None)`, `segment_count(ds)`,
@@ -23,11 +25,13 @@
   bit-identical to the previous discretiser), so diagnostics, plots and exports
   can use the same conventions instead of their own `isinstance` ladders.
   Test: `tests/test_electrode_geometry.py`.
-- **Optional compiled two-layer series (10.58):** when `numba` is installed the
-  Tagg/Sunde series matrix is accumulated by a compiled kernel that gives the
-  same matrix bit for bit, about 3× faster than the numpy path on one core
-  (1 200 segments, 148 images). Test:
-  `tests/test_kernel_performance.py::test_numba_series_kernel_is_bit_identical`.
+- **Optional compiled kernels (10.58, 10.28):** when `numba` is installed the
+  Tagg/Sunde series matrix and the far-field term of the line kernel are
+  evaluated by compiled kernels that give the same matrices bit for bit: the
+  series about 3× faster than the numpy path on one core (1 200 segments,
+  148 images), the far-field term about 5× (1 920 segments). Tests:
+  `tests/test_kernel_performance.py::test_numba_series_kernel_is_bit_identical`,
+  `tests/test_line_kernel.py::test_numba_far_field_block_is_bit_identical`.
 
 ### Changed
 
