@@ -81,3 +81,51 @@ def test_image_and_use_image_are_exclusive_and_validated() -> None:
         build_inductance_matrix(eps, [0.005], use_image=False),
         build_inductance_matrix(eps, [0.005], image="none"),
     )
+
+
+_PACKAGES = ("coupling", "conductors", "references")
+
+
+def _sources():
+    from pathlib import Path
+
+    import groundfield
+
+    root = Path(groundfield.__file__).resolve().parent
+    for package in _PACKAGES:
+        yield from sorted((root / package).glob("*.py"))
+
+
+@pytest.mark.finding("10.95")
+def test_modules_compile_without_invalid_escape_sequences() -> None:
+    """Audit A1-12: '\\D', '\;' in non-raw docstrings of coupling.inductance
+    raised SyntaxWarning (SyntaxError under ``python -W error``)."""
+    import warnings
+
+    offenders = []
+    for path in _sources():
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            compile(path.read_text(encoding="utf-8"), str(path), "exec")
+        offenders += [f"{path.name}:{w.lineno}" for w in caught]
+    assert not offenders
+
+
+@pytest.mark.finding("10.95")
+def test_docstrings_contain_no_control_characters() -> None:
+    """A LaTeX command such as '\\text' or '\\rho' in a non-raw docstring is
+    a valid escape (TAB, CR) and silently corrupts the rendered formula."""
+    import ast
+
+    offenders = []
+    for path in _sources():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(
+                node,
+                (ast.Module, ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef),
+            ):
+                doc = ast.get_docstring(node, clean=False) or ""
+                if re.search(r"[\t\r\x07\x08\x0b\x0c]", doc):
+                    offenders.append(f"{path.name}:{getattr(node, 'lineno', 1)}")
+    assert not offenders

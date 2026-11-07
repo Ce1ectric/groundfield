@@ -1,15 +1,15 @@
-"""Self- and mutual-inductance helpers for distributed conductors.
+r"""Self- and mutual-inductance helpers for distributed conductors.
 
 This module implements the inductance physics described in ADR-0004.
 It provides three public functions:
 
 - :func:`thin_wire_self_inductance` — closed-form self-inductance of
-  a straight thin-wire segment of length $\\ell$ and radius $a$
+  a straight thin-wire segment of length $\ell$ and radius $a$
   (Grover 1946):
-  $L_\\text{self} = (\\mu_0\\,\\ell)/(2\\pi)
-   \\bigl[\\ln(2\\ell/a) - 1\\bigr]$.
+  $L_\text{self} = (\mu_0\,\ell)/(2\pi)
+   \bigl[\ln(2\ell/a) - 1\bigr]$.
 - :func:`parallel_segments_mutual` — closed-form mutual inductance
-  of two parallel coaxial segments of equal length $\\ell$ at
+  of two parallel coaxial segments of equal length $\ell$ at
   perpendicular distance $d$.
 - :func:`neumann_mutual` — generic Neumann double-line integral via
   two-point Gauss–Legendre quadrature, valid for any 3-D
@@ -153,7 +153,7 @@ def thin_wire_self_inductance(
     *,
     include_internal: bool = True,
 ) -> float:
-    """Closed-form self-inductance of a straight thin-wire segment.
+    r"""Closed-form self-inductance of a straight thin-wire segment.
 
     Decomposed into the **external** Grover 1946 thin-wire term and
     the **internal** contribution from the magnetic field inside the
@@ -161,10 +161,10 @@ def thin_wire_self_inductance(
     material):
 
     $$
-    L_\\text{ext} \;=\; \\frac{\\mu_0\\,\\ell}{2\\pi}
-    \\Bigl[\\ln\\!\\Bigl(\\frac{2\\ell}{a}\\Bigr) - 1\\Bigr],
-    \\qquad
-    L_\\text{int} \;=\; \\frac{\\mu_0\\,\\ell}{8\\pi}.
+    L_\text{ext} \;=\; \frac{\mu_0\,\ell}{2\pi}
+    \Bigl[\ln\!\Bigl(\frac{2\ell}{a}\Bigr) - 1\Bigr],
+    \qquad
+    L_\text{int} \;=\; \frac{\mu_0\,\ell}{8\pi}.
     $$
 
     Adding the internal term reproduces the standard Oeding/Oswald
@@ -172,19 +172,19 @@ def thin_wire_self_inductance(
     contribution of a two-wire loop. This is the package-wide
     internal-inductance convention (see the module docstring): a
     per-unit-length reference consistent with
-    ``include_internal=True`` uses $\\mathrm{GMR} = a\\,e^{-1/4}$.
+    ``include_internal=True`` uses $\mathrm{GMR} = a\,e^{-1/4}$.
     For the frequency-dependent internal impedance (skin effect) see
     :meth:`groundfield.conductors.Conductor.internal_impedance_per_length`.
 
     Parameters
     ----------
     length
-        Segment length $\\ell$ in metres.
+        Segment length $\ell$ in metres.
     wire_radius
         Wire radius $a$ in metres.
     include_internal
         ``True`` (default) — add the internal-field contribution
-        $\\mu_0 \\ell / (8\\pi)$ (uniform current, the DC limit).
+        $\mu_0 \ell / (8\pi)$ (uniform current, the DC limit).
         ``False`` — the pure external-field thin-wire formula.
 
     Returns
@@ -204,15 +204,15 @@ def thin_wire_self_inductance(
 
 
 def parallel_segments_mutual(length: float, distance: float) -> float:
-    """Closed-form mutual inductance of two parallel coaxial segments.
+    r"""Closed-form mutual inductance of two parallel coaxial segments.
 
-    For two segments of equal length $\\ell$ that share the same
+    For two segments of equal length $\ell$ that share the same
     axis direction and are placed at perpendicular distance $d$,
 
     $$
-    M_\\parallel(\\ell, d) \;=\; \\frac{\\mu_0\\,\\ell}{2\\pi}
-    \\Bigl[\\ln\\!\\Bigl(\\frac{\\ell + \\sqrt{\\ell^2 + d^2}}{d}\\Bigr)
-          - \\frac{\\sqrt{\\ell^2 + d^2} - d}{\\ell}\\Bigr].
+    M_\parallel(\ell, d) \;=\; \frac{\mu_0\,\ell}{2\pi}
+    \Bigl[\ln\!\Bigl(\frac{\ell + \sqrt{\ell^2 + d^2}}{d}\Bigr)
+          - \frac{\sqrt{\ell^2 + d^2} - d}{\ell}\Bigr].
     $$
 
     Used both as an internal closed-form fast path (when the segment
@@ -222,7 +222,7 @@ def parallel_segments_mutual(length: float, distance: float) -> float:
     Parameters
     ----------
     length
-        Segment length $\\ell$ in m (both segments have the same).
+        Segment length $\ell$ in m (both segments have the same).
     distance
         Perpendicular distance $d$ between the two parallel axes
         in m. Must be > 0.
