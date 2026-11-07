@@ -163,7 +163,11 @@ from groundfield.solver.image import (
     _Segment,
     _warn_ignored_sources,
 )
-from groundfield.solver.mom import _galerkin_solve
+from groundfield.solver.mom import (  # shared point-matching solve
+    _floating_clusters,
+    _galerkin_solve,
+    _node_results,
+)
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
 
@@ -1379,21 +1383,24 @@ def solve_mom_sommerfeld(
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
 
-    electrode_potentials: dict[str, list[complex]] = {}
-    electrode_currents: dict[str, list[complex]] = {}
-    conductor_currents: dict[str, list[complex]] = {}
-    conductor_potentials: dict[str, list[complex]] = {}
-    for ename, idxs in elec_to_segidx.items():
-        if not idxs:
-            continue
-        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
-        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
-        if ename in real_electrode_names:
-            electrode_potentials[ename] = u_list
-            electrode_currents[ename] = i_list
-        else:
-            conductor_potentials[ename] = u_list
-            conductor_currents[ename] = i_list
+    # Node potentials and leakage currents; floating clusters (no
+    # source, no branch) report an exactly zero net current (10.29).
+    (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    ) = _node_results(
+        elec_to_segidx=elec_to_segidx,
+        phi_per_freq=phi_per_freq,
+        sc_per_freq=sc_per_freq,
+        cluster_id=cluster_id,
+        electrode_names=real_electrode_names,
+        floating=_floating_clusters(
+            elec_input_current, cluster_id, finite_branches, real_electrode_names
+        ),
+        n_freq=n_freq,
+    )
 
     point_sources = [
         PointSource(

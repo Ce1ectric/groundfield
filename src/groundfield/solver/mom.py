@@ -142,8 +142,143 @@ def _build_Z_two_layer(
 
 
 # ---------------------------------------------------------------------
-# Galerkin solve
+# Point-matching solve
 # ---------------------------------------------------------------------
+
+
+def _solvable_nodes(
+    cluster_id: dict[str, str],
+    elec_to_segidx: dict[str, list[int]],
+    finite_branches: list[tuple[str, str, float]],
+) -> set[str]:
+    """Nodes that enter the linear system of the point-matching solve.
+
+    A node is a galvanic cluster root, a conductor pseudo-node or an
+    interior node of a distributed conductor. Nodes connected through
+    finite branches form components; every node of a component that
+    owns at least one leakage segment is an unknown. A component
+    without any segment (no galvanic contact to the soil anywhere)
+    would have an undetermined potential and is left out.
+
+    Parameters
+    ----------
+    cluster_id
+        Node name -> cluster root, including pseudo- and interior nodes.
+    elec_to_segidx
+        Node name -> indices of its leakage segments.
+    finite_branches
+        ``(node_a, node_b, R)`` branch list (R in Ω, unused here).
+
+    Returns
+    -------
+    set[str]
+        Cluster roots / node names of the unknown potentials.
+    """
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    nodes = set(cluster_id.values())
+    for n in nodes:
+        find(n)
+    for a, b, _R in finite_branches:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+    grounded = {find(cluster_id[name]) for name, idxs in elec_to_segidx.items() if idxs}
+    return {n for n in parent if find(n) in grounded}
+
+
+def _floating_clusters(
+    elec_input_current: dict[str, complex],
+    cluster_id: dict[str, str],
+    finite_branches: list[tuple[str, str, float]],
+    electrode_names: set[str],
+) -> set[str]:
+    """Electrode clusters with neither a source nor a finite branch.
+
+    Their net leakage current is zero by Kirchhoff's current law; the
+    reported per-electrode currents are made to sum to exactly zero (see
+    :func:`_node_results`), so :meth:`FieldResult.cluster_impedance`
+    returns ``nan`` for them instead of a ratio of round-off.
+    """
+    sourced = {cluster_id[e] for e, ic in elec_input_current.items() if ic != 0j}
+    linked = {a for a, _b, _R in finite_branches} | {b for _a, b, _R in finite_branches}
+    roots = {cluster_id[e] for e in electrode_names}
+    return roots - sourced - linked
+
+
+def _node_results(
+    *,
+    elec_to_segidx: dict[str, list[int]],
+    phi_per_freq: list[np.ndarray],
+    sc_per_freq: list[np.ndarray],
+    cluster_id: dict[str, str],
+    electrode_names: set[str],
+    floating: set[str],
+    n_freq: int,
+) -> tuple[
+    dict[str, list[complex]],
+    dict[str, list[complex]],
+    dict[str, list[complex]],
+    dict[str, list[complex]],
+]:
+    """Per-node potentials (V) and leakage currents (A) of a solve.
+
+    Point matching makes every segment midpoint of a node an
+    equipotential, so the plain segment mean is the node potential (to
+    round-off). Members of a floating cluster report currents that sum
+    to exactly zero in the member order of :attr:`FieldResult.clusters`
+    (sorted names): a single member reports ``0``; with several members
+    the last one absorbs the round-off residual of the solve.
+
+    Returns
+    -------
+    electrode_potentials, electrode_currents, conductor_potentials, conductor_currents
+        Mappings ``name -> value per frequency``.
+    """
+    electrode_potentials: dict[str, list[complex]] = {}
+    electrode_currents: dict[str, list[complex]] = {}
+    conductor_potentials: dict[str, list[complex]] = {}
+    conductor_currents: dict[str, list[complex]] = {}
+    for ename, idxs in elec_to_segidx.items():
+        if not idxs:
+            continue
+        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
+        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
+        if ename in electrode_names:
+            electrode_potentials[ename] = u_list
+            electrode_currents[ename] = i_list
+        else:
+            conductor_potentials[ename] = u_list
+            conductor_currents[ename] = i_list
+    for root in floating:
+        members = sorted(
+            n
+            for n in electrode_currents
+            if n in electrode_names and cluster_id[n] == root
+        )
+        if not members:
+            continue
+        for k in range(n_freq):
+            if len(members) == 1:
+                electrode_currents[members[0]][k] = 0j
+                continue
+            # Same left-to-right summation as FieldResult.cluster_impedance,
+            # so the cluster total is s + (-s) == 0 exactly.
+            rest = sum(electrode_currents[m][k] for m in members[:-1])
+            electrode_currents[members[-1]][k] = -complex(rest)
+    return (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    )
 
 
 def _galerkin_solve(
@@ -188,18 +323,30 @@ def _galerkin_solve(
     ``finite_branches in (None, [])`` the system collapses exactly to
     the previous (N_a + K_a) × (N_a + K_a) Galerkin system.
 
+    Unknown set (review pass 10, 10.29): *every* node of a component
+    (nodes joined by finite branches) that has galvanic contact to the
+    soil, also when the component carries no source. A source-free
+    component is a floating conductor system — its KCL rows have a zero
+    right-hand side, so its net leakage current vanishes while its
+    segment currents redistribute until its surface is an equipotential
+    at the potential the field of the other clusters imposes. Because
+    the segment matrix is symmetric, transfer impedances obtained from
+    two solves are then reciprocal. Up to 0.15.0 source-free components
+    were dropped (zero current) and their potential was read back as the
+    incident field, non-reciprocal by up to 146 %.
+
     Returns
     -------
     seg_currents : np.ndarray, shape (N,)
-        Per-segment current distribution (complex).
+        Per-segment leakage current in A (complex).
     cluster_potential : dict[cluster_root, complex]
-        Common potential per cluster (also solved as part of the
+        Common potential per node in V (also solved as part of the
         linear system).
     """
     if finite_branches is None:
         finite_branches = []
 
-    # Aggregate input current per cluster, identify the active ones.
+    # Aggregate input current per cluster.
     cluster_input: dict[str, complex] = {}
     for ename, ic in elec_input_current.items():
         if ic == 0j:
@@ -209,24 +356,22 @@ def _galerkin_solve(
 
     seg_currents = np.zeros(n_segments, dtype=complex)
     cluster_potential: dict[str, complex] = {}
-    if not cluster_input and not finite_branches:
+    if not cluster_input:
+        # No source anywhere: the (non-singular) system has the zero
+        # solution.
         return seg_currents, cluster_potential
 
-    # Active set: source clusters plus every cluster transitively
-    # reachable through a finite branch.
-    active_set: set[str] = set(cluster_input.keys())
-    if finite_branches:
-        changed = True
-        while changed:
-            changed = False
-            for a, b, _R in finite_branches:
-                if a in active_set and b not in active_set:
-                    active_set.add(b)
-                    changed = True
-                elif b in active_set and a not in active_set:
-                    active_set.add(a)
-                    changed = True
-
+    # Unknowns (review pass 10, 10.29): every node of every connected
+    # component that owns at least one leakage segment — not only the
+    # components that carry a source. A component without a source is
+    # a floating conductor system: zero net current, potential set by
+    # the field of the others, current distribution free. Up to 0.15.0
+    # such clusters were dropped and their potential read back as the
+    # mean of the incident field, which broke the reciprocity of
+    # transfer impedances (1.1 % to 146 %). For worlds in which every
+    # component carries a source the unknown set, its ordering and
+    # hence the solution are bit-identical to the historic scheme.
+    active_set = _solvable_nodes(cluster_id, elec_to_segidx, finite_branches)
     if not active_set:
         return seg_currents, cluster_potential
 
@@ -234,9 +379,8 @@ def _galerkin_solve(
     K_a = len(active_clusters)
     cluster_idx = {c: k for k, c in enumerate(active_clusters)}
 
-    # Active segments: those whose owning electrode lies in an active
-    # cluster. Passive (no input current and no branch link) clusters
-    # are excluded from the unknowns.
+    # Active segments: those whose owning node lies in the solvable set
+    # (in practice every segment).
     active_seg_indices: list[int] = []
     seg_to_active_cluster: list[int] = []
     for ename, idxs in elec_to_segidx.items():
@@ -605,21 +749,24 @@ def solve_mom(
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
 
-    electrode_potentials: dict[str, list[complex]] = {}
-    electrode_currents: dict[str, list[complex]] = {}
-    conductor_currents: dict[str, list[complex]] = {}
-    conductor_potentials: dict[str, list[complex]] = {}
-    for ename, idxs in elec_to_segidx.items():
-        if not idxs:
-            continue
-        u_list = [complex(np.mean(phi_per_freq[k][idxs])) for k in range(n_freq)]
-        i_list = [complex(sc_per_freq[k][idxs].sum()) for k in range(n_freq)]
-        if ename in real_electrode_names:
-            electrode_potentials[ename] = u_list
-            electrode_currents[ename] = i_list
-        else:
-            conductor_potentials[ename] = u_list
-            conductor_currents[ename] = i_list
+    # Node potentials and leakage currents; floating clusters (no
+    # source, no branch) report an exactly zero net current (10.29).
+    (
+        electrode_potentials,
+        electrode_currents,
+        conductor_potentials,
+        conductor_currents,
+    ) = _node_results(
+        elec_to_segidx=elec_to_segidx,
+        phi_per_freq=phi_per_freq,
+        sc_per_freq=sc_per_freq,
+        cluster_id=cluster_id,
+        electrode_names=real_electrode_names,
+        floating=_floating_clusters(
+            elec_input_current, cluster_id, finite_branches, real_electrode_names
+        ),
+        n_freq=n_freq,
+    )
 
     # 8) Point-source list and cluster map for post-processing.
     point_sources = [
