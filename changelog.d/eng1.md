@@ -71,7 +71,7 @@
   with ln(r_far / a_eq), so the radial step ratio stays that of the
   homogeneous mesh. Layered `fem` results move up by +0.16 % (h₁ = 5 m),
   +0.41 % (30 m), +1.07 % (1 km) and +1.64 % (10 km) for a 1.5 m rod with
-  ρ₂ = ρ₁ (from −0.16 % … −1.62 % to within ±0.001 % of the homogeneous
+  ρ₂ = ρ₁ (from −0.16 % … −1.62 % to within ±0.005 % of the homogeneous
   value); homogeneous soil and stacks with Σh ≤ 1 m are unchanged.
   `metadata["fem_mesh"][cluster]["n_radial"]` reports the count used.
   Affected: every layered `fem` result. Golden cases: `fem_rod_hom`
