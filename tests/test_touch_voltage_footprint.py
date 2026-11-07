@@ -162,7 +162,7 @@ def test_grid_envelope_includes_the_mesh_centres() -> None:
     u_centres = _ue(res, "g1") - res.potential(feet[24:])
     np.testing.assert_allclose(env[24:], u_centres, rtol=1e-12)
     without = touch_voltage_envelope(
-        res, w, electrode="g1", n_angles=24, mesh_centres=False
+        res, w, electrode="g1", n_angles=24, interior=False
     )
     assert without[1].shape == (24,)
 
@@ -216,7 +216,7 @@ def test_connection_point_anchor_reproduces_v0150() -> None:
         electrode="g1",
         n_angles=8,
         anchor="connection_point",
-        mesh_centres=False,
+        interior=False,
     )
     feet = np.column_stack([10.0 + np.cos(angles), 10.0 + np.sin(angles), np.zeros(8)])
     np.testing.assert_allclose(env, _ue(res, "g1") - res.potential(feet), rtol=1e-12)
@@ -269,7 +269,7 @@ def test_envelope_feet_keep_the_requested_distance_from_every_wire(
             electrode=name,
             distance=distance,
             n_angles=36,
-            mesh_centres=False,
+            interior=False,
             return_points=True,
         )
         d = [_dist_to_segments(p[:2], segs) for p in feet]

@@ -295,3 +295,102 @@ def mesh_centres(electrode) -> np.ndarray:
     my = 0.5 * (ys[:-1] + ys[1:])
     gx, gy = np.meshgrid(mx, my, indexing="ij")
     return np.column_stack([gx.ravel(), gy.ravel()])
+
+
+# ---------------------------------------------------------------------
+# interior of closed loops (envelope, 10.21)
+# ---------------------------------------------------------------------
+
+#: Candidate grid (per axis) of the interior search of a closed polyline.
+_INTERIOR_GRID = 33
+
+
+def _inside_polygon(points: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """Even-odd test of ``points`` ``(M, 2)`` against ``polygon`` ``(K, 2)``."""
+    x = points[:, 0][:, None]
+    y = points[:, 1][:, None]
+    x0, y0 = polygon[:, 0][None, :], polygon[:, 1][None, :]
+    x1, y1 = np.roll(polygon[:, 0], -1)[None, :], np.roll(polygon[:, 1], -1)[None, :]
+    crosses = (y0 > y) != (y1 > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        x_cut = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+    return (crosses & (x < x_cut)).sum(axis=1) % 2 == 1
+
+
+def _area_centroid(polygon: np.ndarray) -> np.ndarray:
+    """Area centroid of a simple polygon (vertex mean if it has no area).
+
+    Computed relative to the first vertex, so UTM-scale coordinates do not
+    cancel in the shoelace products.
+    """
+    origin = polygon[0]
+    local = polygon - origin
+    x, y = local[:, 0], local[:, 1]
+    xn, yn = np.roll(x, -1), np.roll(y, -1)
+    cross = x * yn - xn * y
+    area = 0.5 * cross.sum()
+    if abs(area) <= 1e-12 * max(1.0, float(np.ptp(local, axis=0).max()) ** 2):
+        return polygon.mean(axis=0)
+    return origin + np.array(
+        [
+            ((x + xn) * cross).sum() / (6.0 * area),
+            ((y + yn) * cross).sum() / (6.0 * area),
+        ]
+    )
+
+
+def _loop_centre(electrode) -> np.ndarray:
+    """Point inside a closed polyline that lies farthest from its wires.
+
+    The candidates are a regular grid over the bounding box of the wires
+    (:meth:`bounds`) and the area centroid; among the candidates inside
+    the polygon the one with the largest distance to the wires wins, ties
+    going to the candidate closest to the centroid (for a rectangle its
+    centre). Shape ``(1, 2)``, or ``(0, 2)`` if no candidate lies inside.
+    """
+    polygon = np.asarray(electrode.vertices, dtype=float)[:, :2]
+    lower, upper = electrode.bounds()
+    gx = np.linspace(lower[0], upper[0], _INTERIOR_GRID)
+    gy = np.linspace(lower[1], upper[1], _INTERIOR_GRID)
+    centroid = _area_centroid(polygon)
+    grid = np.column_stack([a.ravel() for a in np.meshgrid(gx, gy, indexing="ij")])
+    candidates = np.vstack([centroid[None, :], grid])
+    candidates = candidates[_inside_polygon(candidates, polygon)]
+    if not len(candidates):
+        return np.zeros((0, 2))
+    d = footprint(electrode).distance(candidates)
+    extent = float(max(upper[0] - lower[0], upper[1] - lower[1], 1.0))
+    best = candidates[d >= d.max() - 1e-9 * extent]
+    k = int(np.argmin(np.hypot(*(best - centroid).T)))
+    return best[k : k + 1]
+
+
+def interior_points(electrode, *, outlines: bool) -> np.ndarray:
+    """Centre of every closed mesh of an electrode, ``(M, 2)`` in m.
+
+    The interior positions of the touch-voltage envelope (review pass 10,
+    10.21), the analogue of the IEEE 80 mesh voltage: the mesh centres of a
+    ``mesh`` / ``grid_mesh`` electrode, the centre of a ``ring``, and,
+    with ``outlines=True``, the point of a closed ``polyline`` farthest
+    from its wires (:func:`_loop_centre`). Empty for every other shape.
+
+    Parameters
+    ----------
+    electrode
+        Any electrode of :mod:`groundfield.geometry.electrodes`.
+    outlines
+        Include closed polylines (building outlines) as well.
+    """
+    kind = getattr(electrode, "kind", None)
+    if kind in ("grid_mesh", "mesh"):
+        return mesh_centres(electrode)
+    if kind == "ring":
+        return np.array([electrode.center[:2]], dtype=float)
+    if (
+        outlines
+        and kind == "polyline"
+        and electrode.closed
+        and len(electrode.vertices) > 2
+    ):
+        return _loop_centre(electrode)
+    return np.zeros((0, 2))
