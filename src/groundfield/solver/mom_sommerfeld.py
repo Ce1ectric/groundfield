@@ -1659,7 +1659,7 @@ def solve_mom_sommerfeld(
     epsabs: float = 1e-9,
     epsrel: float = 1e-7,
     max_osc_panels: int = _MAX_OSC_PANELS,
-    tabulate: bool = False,
+    tabulate: bool = True,
 ) -> FieldResult:
     """Point-matching MoM with direct Sommerfeld quadrature for layered soil.
 
@@ -1675,11 +1675,18 @@ def solve_mom_sommerfeld(
     checks the kernel, not the scheme; for $n \\ge 3$ distinct layers it
     is the only integral-equation backend.
 
-    Cost: pairs that share a depth pair and a horizontal distance share
-    one quadrature, which halves the work of every world and collapses
-    it for regular geometries. ``tabulate=True`` interpolates the
-    reflected remainder of large depth groups for $n \ge 3$ (see
-    :func:`_build_Z_sommerfeld`).
+    Cost (review pass 10, 10.61): pairs that share a depth pair and a
+    horizontal distance share one quadrature, which halves the work of
+    every world and collapses it for regular geometries. For
+    $n \\ge 3$ the reflected remainder of a depth group with many
+    distinct distances is tabulated on log-spaced nodes and interpolated
+    (``tabulate=True``, the default): about $10^{-7}$ relative error of
+    the kernel at the verification points and below $10^{-6}$ on the
+    reaction matrix of the benchmark grid B12, for a cost that no longer
+    grows with the number of pairs. ``tabulate=False`` evaluates every
+    distinct pair by quadrature (the kernel reference). For $n = 2$
+    every pair is evaluated by quadrature: this backend is the kernel
+    check of the closed-form series there.
 
     Parameters
     ----------
@@ -1699,7 +1706,7 @@ def solve_mom_sommerfeld(
         Budget for the $J_0$ half-period panel family.
     tabulate
         Depth-group tabulation of the reflected kernel for $n \\ge 3$
-        (off by default).
+        (see above).
 
     Returns
     -------

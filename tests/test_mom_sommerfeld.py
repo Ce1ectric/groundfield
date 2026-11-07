@@ -216,3 +216,136 @@ def test_solve_flags_a_truncated_two_layer_diagonal() -> None:
     with pytest.warns(SeriesTruncationWarning):
         res = eng.solve(w)
     assert res.metadata["converged"] is False
+
+
+# ---------------------------------------------------------------------
+# 10.61 — one quadrature per distinct pair argument; depth-group tables
+# ---------------------------------------------------------------------
+
+_THREE_LAYERS = gf.MultiLayerSoil(
+    layers=[
+        gf.SoilLayer(rho=1000.0, h=5.0),
+        gf.SoilLayer(rho=30.0, h=10.0),
+        gf.SoilLayer(rho=200.0, h=None),
+    ]
+)
+
+
+def _grid_arrays(size: float, n_mesh: int, ds: float):
+    """Segment arrays of a square grid mesh at 0.8 m (the B11/B12 layout)."""
+    from groundfield.solver._pipeline import SegmentArrays, discretise
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    half = 0.5 * size
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="g1",
+        corner=(-half, -half, 0.8),
+        size=(size, size),
+        n_x=n_mesh,
+        n_y=n_mesh,
+    )
+    disc = discretise(w, gf.create_engine(segment_length=ds), None)
+    return SegmentArrays.from_segments(disc.segments)
+
+
+_QUAD = dict(lambda_max_factor=200.0, epsabs=1e-9, epsrel=1e-7, max_osc_panels=200_000)
+
+
+@pytest.mark.finding("10.61")
+def test_one_quadrature_per_distinct_pair_argument(monkeypatch) -> None:
+    """A ring at one depth needs one quadrature per distinct distance.
+
+    v0.15.0 integrated every ordered pair (N(N-1) remainder quadratures,
+    about 0.6 ms each, R2-06); the kernel of a pair depends only on the
+    distance and the two depths, and is symmetric for two top-layer
+    points.
+    """
+    from groundfield.solver import mom_sommerfeld as ms
+
+    calls = {"n": 0}
+    original = ms._integrate_panels
+
+    def count(func, edges):
+        calls["n"] += 1
+        return original(func, edges)
+
+    monkeypatch.setattr(ms, "_integrate_panels", count)
+    w = gf.create_world(soil=_THREE_LAYERS)
+    gf.create_electrode(w, "ring", name="g1", center=(0.0, 0.0, 0.8), radius=2.0)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res = gf.Engine(backend="mom_sommerfeld", segment_length=0.25).solve(w)
+    n = res.metadata["n_segments"]
+    assert n >= 48
+    # Every quadrature runs at least two refinement rungs, so the pair loop
+    # of v0.15.0 integrated at least 2 N (N - 1) times (5100 here). Ring
+    # distances repeat up to round-off: 176 integrations remain.
+    assert calls["n"] <= 0.1 * 2 * n * (n - 1), (calls["n"], n)
+
+
+@pytest.mark.finding("10.61")
+def test_tabulated_reaction_matrix_is_within_1e_6_of_the_quadrature() -> None:
+    """Depth-group tables reproduce the pointwise matrix to 1e-6 (B12 criterion)."""
+    from groundfield.solver._layered import as_layer_stack
+    from groundfield.solver.mom_sommerfeld import _build_Z_sommerfeld
+
+    a = _grid_arrays(20.0, 2, 0.5)
+    stack = as_layer_stack(_THREE_LAYERS)
+    report: dict = {}
+    Z_tab = _build_Z_sommerfeld(
+        a.points, a.lengths, a.radii, stack, tabulate=True, report=report, **_QUAD
+    )
+    Z_ref = _build_Z_sommerfeld(
+        a.points, a.lengths, a.radii, stack, tabulate=False, **_QUAD
+    )
+    assert report["groups_tabulated"] == 1
+    assert 0.0 < report["max_check_error"] <= 1e-7
+    assert np.max(np.abs(Z_tab / Z_ref - 1.0)) <= 1e-6
+    # The diagonal never comes from a table.
+    assert np.array_equal(np.diag(Z_tab), np.diag(Z_ref))
+
+
+@pytest.mark.finding("10.61")
+def test_a_table_that_fails_its_check_is_not_used(monkeypatch) -> None:
+    """A group whose table misses the check tolerance is evaluated pointwise."""
+    from groundfield.solver import mom_sommerfeld as ms
+    from groundfield.solver._layered import as_layer_stack
+
+    monkeypatch.setattr(ms, "_TAB_TOL", 0.0)
+    a = _grid_arrays(20.0, 2, 0.5)
+    stack = as_layer_stack(_THREE_LAYERS)
+    report: dict = {}
+    Z = ms._build_Z_sommerfeld(
+        a.points, a.lengths, a.radii, stack, tabulate=True, report=report, **_QUAD
+    )
+    Z_ref = ms._build_Z_sommerfeld(
+        a.points, a.lengths, a.radii, stack, tabulate=False, **_QUAD
+    )
+    assert report["groups_tabulated"] == 0
+    assert np.array_equal(Z, Z_ref)
+
+
+@pytest.mark.finding("10.61")
+def test_solve_reports_the_kernel_tabulation() -> None:
+    w = gf.create_world(soil=_THREE_LAYERS)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="g1",
+        corner=(-10.0, -10.0, 0.8),
+        size=(20.0, 20.0),
+        n_x=2,
+        n_y=2,
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res = gf.Engine(backend="mom_sommerfeld", segment_length=0.5).solve(w)
+    tab = res.metadata["kernel_tabulation"]
+    assert tab["enabled"] is True
+    assert tab["groups_tabulated"] == 1
+    assert 0.0 < tab["max_check_error"] <= 1e-7
+    # Two layers: the kernel check of the series is never tabulated.
+    res_2 = gf.Engine(backend="mom_sommerfeld", segment_length=1.0).solve(
+        _ring_world(gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=5.0))
+    )
+    assert res_2.metadata["kernel_tabulation"]["enabled"] is False
