@@ -234,6 +234,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "MultiLayerSoilSpec",
         "Normal",
         "ObstacleBox",
+        "LvNetworkLayout",
+        "NetworkPlan",
         "OrtsnetzLayout",
         "OsmBuildingPlacement",
         "PenCable",
@@ -241,6 +243,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "RadialTrunkTopology",
         "RingElectrodeSpec",
         "RodElectrodeSpec",
+        "StarCabinetTopology",
         "StarKvsTopology",
         "StripElectrodeSpec",
         "TnNetworkConfig",
@@ -251,6 +254,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "WorldGenerator",
         "buried_lead",
         "default_building_catalog",
+        "materialise_plan",
         "neighbour_substation_grounding",
         "overhead_lead",
         "rod_circle",
@@ -268,9 +272,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
     ),
     "groundfield.references": ("dwight1936",),
     "groundfield.validation": (
+        "ComparisonRow",
         "EngineComparison",
         "compare_engines",
     ),
+    "groundfield.solver.fem": ("FemReductionWarning",),
     "groundfield.diagnostics": (
         "check_segment_resolution",
         "expected_segments",
@@ -386,6 +392,8 @@ if _typing.TYPE_CHECKING:
         MultiLayerSoilSpec,
         Normal,
         ObstacleBox,
+        LvNetworkLayout,
+        NetworkPlan,
         OrtsnetzLayout,
         OsmBuildingPlacement,
         PenCable,
@@ -393,6 +401,7 @@ if _typing.TYPE_CHECKING:
         RadialTrunkTopology,
         RingElectrodeSpec,
         RodElectrodeSpec,
+        StarCabinetTopology,
         StarKvsTopology,
         StripElectrodeSpec,
         TnNetworkConfig,
@@ -403,6 +412,7 @@ if _typing.TYPE_CHECKING:
         WorldGenerator,
         buried_lead,
         default_building_catalog,
+        materialise_plan,
         neighbour_substation_grounding,
         overhead_lead,
         rod_circle,
@@ -417,9 +427,11 @@ if _typing.TYPE_CHECKING:
     )
     from groundfield.references import dwight1936
     from groundfield.validation import (
+        ComparisonRow,
         EngineComparison,
         compare_engines,
     )
+    from groundfield.solver.fem import FemReductionWarning
     from groundfield.diagnostics import (
         check_segment_resolution,
         expected_segments,
@@ -579,9 +591,13 @@ __all__ = [
     "TnNetworkConfig",
     "TnNetworkGenerator",
     "PenTopology",
+    "StarCabinetTopology",
     "StarKvsTopology",
     "RadialTrunkTopology",
+    "LvNetworkLayout",
     "OrtsnetzLayout",
+    "NetworkPlan",
+    "materialise_plan",
     "PenCable",
     "ObstacleBox",
     # Spec layer
@@ -619,6 +635,8 @@ __all__ = [
     "dwight1936",
     # Cross-engine
     "compare_engines",
+    "ComparisonRow",
+    "FemReductionWarning",
     "EngineComparison",
     # Pre-solve diagnostics
     "world_statistics",
