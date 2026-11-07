@@ -23,7 +23,6 @@ import pytest
 
 import groundfield as gf
 from groundfield.io.csv import (
-    read_csv_with_provenance,
     save_cluster_impedances_csv,
     save_electrode_table_csv,
     save_potential_path_csv,
@@ -33,6 +32,14 @@ from groundfield.io.csv import (
 # ---------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------
+
+
+def read_csv_with_provenance(path):
+    """Reader of the provenance-headed CSV files (imported lazily so the
+    module still collects against releases without it)."""
+    from groundfield.io.csv import read_csv_with_provenance as _read
+
+    return _read(path)
 
 
 def _two_rod_world() -> tuple[gf.World, gf.FieldResult]:
@@ -229,8 +236,6 @@ def _two_freq_world() -> tuple[gf.World, gf.FieldResult]:
 @pytest.mark.finding("10.73")
 def test_tables_record_their_frequency(tmp_path: Path) -> None:
     """R5-14: a 1 kHz table could not be told apart from a 50 Hz one."""
-    from groundfield.io.csv import read_csv_with_provenance
-
     world, res = _two_freq_world()
     p_e = save_electrode_table_csv(
         res, tmp_path / "e.csv", world=world, frequency_index=1
@@ -245,8 +250,6 @@ def test_tables_record_their_frequency(tmp_path: Path) -> None:
 
 @pytest.mark.finding("10.73")
 def test_csv_files_carry_a_provenance_header(tmp_path: Path) -> None:
-    from groundfield.io.csv import read_csv_with_provenance
-
     world, res = _two_freq_world()
     p = save_potential_path_csv(res, tmp_path / "p.csv", start=(1.0, 0.0, 0.0), n=3)
     lines = p.read_text(encoding="utf-8").splitlines()
