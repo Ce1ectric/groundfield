@@ -176,7 +176,7 @@ BENCHMARKS: dict[str, Benchmark] = {
             "fem": Bound(
                 None,
                 _REL,
-                "+1092 %",
+                "+1093 %",
                 "excluded: hemisphere and rod on different sides of h₁ "
                 "(FemReductionWarning, 10.23)",
             ),
