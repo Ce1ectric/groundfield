@@ -398,11 +398,12 @@ def touch_voltage_envelope(
     corners and arm tips). Inside a closed loop the surface potential
     sags, so the touch voltage there can exceed every value on that curve
     (a 20 m × 20 m perimeter loop at 0.5 m depth, 100 Ω·m, 100 A: 158 V
-    in the centre against at most 141 V 1 m outside). The envelope therefore also evaluates the
-    centre of every closed mesh, the analogue of the *mesh voltage* of
-    IEEE Std 80 (the worst touch voltage inside a mesh of a grid, near
-    the mesh centre); see ``interior``. The maximum of ``|U_T|`` is the
-    conservative envelope used in safety verification.
+    in the centre against at most 141 V 1 m outside). The envelope
+    therefore also evaluates the centre of every closed mesh, the
+    analogue of the *mesh voltage* of IEEE Std 80 (the worst touch
+    voltage inside a mesh of a grid, near the mesh centre); see
+    ``interior``. The maximum of ``|U_T|`` is the conservative envelope
+    used in safety verification.
 
     Parameters
     ----------
@@ -469,7 +470,7 @@ def touch_voltage_envelope(
     dirs = np.column_stack([np.cos(angles), np.sin(angles)])
     feet_xy = _feet_xy(world, electrode, dirs, distance, anchor, result)
     if interior is not False:
-        wires = foundation_wires(world, electrode, result.clusters)
+        wires = foundation_wires(world, electrode, getattr(result, "clusters", None))
         inner = interior_points_of(wires, outlines=bool(interior))
         if len(inner):
             ref = footprint_of(wires).reference_point
