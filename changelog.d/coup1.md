@@ -19,7 +19,8 @@
   geometry, λ grid and the Bessel table are built once per segment pair. Each
   frequency is bit-identical to the single-frequency builder. On the inductive
   PEN branches of a 2-house street network (34 branches, 11 frequencies) the
-  Sommerfeld assembly is 4.8–6.7× faster than eleven single-frequency calls.
+  Sommerfeld assembly takes 1.5 s CPU against 7.6 s for eleven single-frequency
+  calls and 31.8 s in 0.15.0.
   Carson's `P`, `Q` are memoised on `(a, θ)` (bit-identical; 9130 → 2321
   evaluations and 3.9× less CPU time on a 10-house network).
   Tests: `tests/test_sommerfeld_accuracy.py::test_multifrequency_matrices_are_bit_identical`,
