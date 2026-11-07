@@ -172,9 +172,7 @@ def _mixed_cluster_world() -> gf.World:
     w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
     gf.create_electrode(w, "ring", name="ring", center=(0.0, 0.0, 0.8), radius=4.0)
     for i, (x, y) in enumerate([(4.0, 0.0), (0.0, 4.0), (-4.0, 0.0), (0.0, -4.0)]):
-        gf.create_electrode(
-            w, "rod", name=f"rod{i}", position=(x, y, 0.8), length=2.0
-        )
+        gf.create_electrode(w, "rod", name=f"rod{i}", position=(x, y, 0.8), length=2.0)
     gf.create_electrode(
         w, "strip", name="strip", start=(4.5, 0.0, 0.8), end=(14.0, 0.0, 0.8)
     )
@@ -204,9 +202,7 @@ def _mixed_cluster_world() -> gf.World:
 @_case
 def case_img_mixed_cluster_hom() -> Quantities:
     w = _mixed_cluster_world()
-    res = w.solve(
-        _engine(backend="image", frequencies=[0.0, 50.0], segment_length=0.5)
-    )
+    res = w.solve(_engine(backend="image", frequencies=[0.0, 50.0], segment_length=0.5))
     probes = _with_buried(
         _surface_line(-20.0, 20.0, 17), [(0.0, 0.0, 0.0), (2.0, 2.0, 0.0)]
     )
@@ -275,9 +271,7 @@ def case_img2_ring_rods_within_layer() -> Quantities:
     w = gf.create_world(soil=soil)
     gf.create_electrode(w, "ring", name="ring", center=(0.0, 0.0, 0.6), radius=3.0)
     for i, (x, y) in enumerate([(3.0, 0.0), (-3.0, 0.0)]):
-        gf.create_electrode(
-            w, "rod", name=f"rod{i}", position=(x, y, 0.6), length=1.0
-        )
+        gf.create_electrode(w, "rod", name=f"rod{i}", position=(x, y, 0.6), length=1.0)
         _ideal_link(w, f"b{i}", "ring", f"rod{i}")
     gf.create_source(w, attached_to="ring", magnitude=1.0)
     res = w.solve(
@@ -543,9 +537,7 @@ def _foundation_pair_world(concrete_model: str) -> tuple[gf.World, list[str]]:
 def _make_mutual_case(concrete_model: str) -> Callable[[], Quantities]:
     def case() -> Quantities:
         w, anchors = _foundation_pair_world(concrete_model)
-        eng = _engine(
-            backend="image", segment_length=2.0, image_max_terms=500
-        )
+        eng = _engine(backend="image", segment_length=2.0, image_max_terms=500)
         probes = np.array([(0.0, 0.0, 0.0), (30.0, 0.0, 0.0)])
         Z = gf.solve_mutual_matrix(w, eng, anchors, probes)
         field = _with_buried(_surface_line(-10.0, 40.0, 11), [(15.0, 5.0, 0.0)])
@@ -611,9 +603,7 @@ def case_gen_tn_measurement_overhead_leads() -> Quantities:
             injection=MeasurementInjectionConfig(
                 position_xy=(150.0, 0.0), feed_lead=overhead_lead()
             ),
-            probe=MeasurementProbeConfig(
-                position_xy=(50.0, 0.0), lead=overhead_lead()
-            ),
+            probe=MeasurementProbeConfig(position_xy=(50.0, 0.0), lead=overhead_lead()),
         ),
     )
     w = TnNetworkGenerator(cfg, seed=0).build()
@@ -742,7 +732,9 @@ def case_fit_rho_f_standard_sweep() -> Quantities:
 
 @_case
 def case_safety_en50522_curve() -> Quantities:
-    t = np.concatenate([np.geomspace(0.05, 10.0, 25), [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]])
+    t = np.concatenate(
+        [np.geomspace(0.05, 10.0, 25), [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10]]
+    )
     return {
         "U_Tp": np.array([gf.permissible_touch_voltage_en50522(float(x)) for x in t])
     }
@@ -804,3 +796,69 @@ def case_defaults_mixed_cluster_inductive() -> Quantities:
     w, _ = _galvanic_pair("sommerfeld")
     res = w.solve(gf.create_engine(frequencies=[50.0, 1000.0]))
     return _result_quantities(res, cluster_of=("g1",), point_sources=False)
+
+
+# ---------------------------------------------------------------------
+# engine family, review pass 10 (stream eng1; stored by the coordinator)
+# ---------------------------------------------------------------------
+
+
+@_case
+def case_mom_two_port_passive_ring_two_layer() -> Quantities:
+    """10.29: a source-free ring floats (zero net current) next to a rod."""
+    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="A", position=(0.0, 0.0, 0.0), length=3.0)
+    gf.create_electrode(w, "ring", name="B", center=(4.0, 0.0, 0.8), radius=1.5)
+    gf.create_source(w, attached_to="A", magnitude=1.0)
+    res = w.solve(_engine(backend="mom", frequencies=[50.0], segment_length=0.5))
+    return _result_quantities(res, cluster_of=("A",))
+
+
+@_case
+def case_cim_grid_unequal_segments() -> Quantities:
+    """10.30: length-weighted read-back on 0.6 m and 0.667 m segments."""
+    soil = gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=6.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="grid",
+        corner=(-3.0, -2.0, 0.6),
+        size=(6.0, 4.0),
+        n_x=2,
+        n_y=2,
+    )
+    gf.create_source(w, attached_to="grid", magnitude=1.0)
+    res = w.solve(_engine(backend="cim", frequencies=[50.0], segment_length=0.7))
+    return _result_quantities(res, cluster_of=("grid",))
+
+
+@_case
+def case_fem_rod_two_layer_deep() -> Quantities:
+    """10.49: radial resolution kept for a 30 m top layer."""
+    soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=30.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="rod", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    res = w.solve(_engine(backend="fem", frequencies=[50.0], segment_length=0.5))
+    return _result_quantities(res, cluster_of=("rod",), point_sources=False)
+
+
+@_case
+def case_mom_sommerfeld_duplicated_stack() -> Quantities:
+    """10.48: [100, 400, 400] over [2, 3] is solved as two layers."""
+    soil = gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(resistivity=100.0, thickness=2.0),
+            gf.SoilLayer(resistivity=400.0, thickness=3.0),
+            gf.SoilLayer(resistivity=400.0, thickness=None),
+        ]
+    )
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="rod", position=(0.0, 0.0, 0.0), length=3.0)
+    gf.create_source(w, attached_to="rod", magnitude=1.0)
+    res = w.solve(
+        _engine(backend="mom_sommerfeld", frequencies=[50.0], segment_length=0.5)
+    )
+    return _result_quantities(res, cluster_of=("rod",))
