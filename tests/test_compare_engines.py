@@ -228,6 +228,68 @@ def test_compare_engines_counts_a_non_finite_result_as_failure() -> None:
     assert any("non-finite" in n and "nan" in n for n in rep.notes), rep.notes
 
 
+class _ZeroEngine(gf.Engine):
+    """Engine whose result reports 0 V at electrode 'g1' (a broken backend)."""
+
+    def solve(self, world):  # type: ignore[override]
+        res = super().solve(world)
+        res.electrode_potentials["g1"] = [0j] * len(res.frequencies)
+        return res
+
+
+def _two_rod_world() -> gf.World:
+    """Two separately driven rods: one cluster stays comparable."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=3.0)
+    gf.create_electrode(world, "rod", name="h", position=(50, 0, 0.5), length=3.0)
+    gf.create_source(world, attached_to="g1", magnitude=1.0)
+    gf.create_source(world, attached_to="h", magnitude=1.0)
+    return world
+
+
+@pytest.mark.finding("10.71", "F03")
+def test_compare_engines_counts_a_zero_of_one_engine_as_failure() -> None:
+    """One engine reports 0 Ω, the other 34.3 Ω (audit round 1, F03).
+
+    The base of the calendar release skipped a quantity as soon as the
+    *smallest* magnitude was zero, noted it as "undefined for every
+    engine" and — the second rod agreeing — reported the comparison as
+    consistent.
+    """
+    rep = gf.compare_engines(
+        _two_rod_world(),
+        {
+            "image": gf.create_engine(backend="image", segment_length=0.05),
+            "zero": _ZeroEngine(backend="image", segment_length=0.05),
+        },
+        rel_tolerance=0.05,
+    )
+    z = {lbl: v[0] for lbl, v in rep.impedances["Z_cluster[g1]"].items()}
+    assert abs(z["image"]) > 30.0 and z["zero"] == 0j
+    assert not rep.is_consistent, rep.summary()
+    failed = [r for r in rep.rows if not r.passed]
+    assert {r.quantity for r in failed} >= {"Z_cluster[g1]"}
+    assert all(r.deviation == float("inf") for r in failed)
+    assert any("zero for engine(s) zero" in n for n in rep.notes), rep.notes
+    assert not any("undefined for every engine" in n for n in rep.notes), rep.notes
+
+
+def test_compare_engines_skips_a_quantity_that_is_zero_for_every_engine() -> None:
+    """Guard: all magnitudes zero is still "nothing to compare" (F03)."""
+    rep = gf.compare_engines(
+        _world_with_rod(),
+        {
+            "a": _ZeroEngine(backend="image", segment_length=0.05),
+            "b": _ZeroEngine(backend="image", segment_length=0.05),
+        },
+        rel_tolerance=0.05,
+    )
+    assert "Z_cluster[g1]" not in {r.quantity for r in rep.rows}
+    assert any(
+        n.startswith("Z_cluster[g1]: undefined for every engine") for n in rep.notes
+    ), rep.notes
+
+
 @pytest.mark.finding("10.71")
 def test_compare_engines_tolerance_table_is_explicit() -> None:
     """One row per quantity, frequency and component, with its tolerance."""

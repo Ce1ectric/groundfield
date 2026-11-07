@@ -213,7 +213,10 @@ def _component_rows(
 
     Returns ``None`` when the quantity is undefined for every engine
     (all values non-finite) or when every magnitude is zero, i.e. when
-    there is nothing to compare.
+    there is nothing to compare. A value that is non-finite, or exactly
+    zero while other engines report a non-zero value, for *some* engines
+    only gives failing rows with an infinite deviation (audit round 1,
+    F03: up to then a single zero skipped the quantity as undefined).
     """
     labels = list(per_engine)
     z = np.array([per_engine[lbl] for lbl in labels], dtype=complex)
@@ -234,9 +237,24 @@ def _component_rows(
             )
             for name, part in _COMPONENTS
         ]
-    scale = float(np.min(np.abs(z)))
-    if scale == 0.0:
+    magnitudes = np.abs(z)
+    if not magnitudes.any():
         return None
+    scale = float(np.min(magnitudes))
+    if scale == 0.0:
+        return [
+            ComparisonRow(
+                quantity=quantity,
+                frequency=frequency,
+                component=name,
+                values={lbl: float(part(v)) for lbl, v in zip(labels, z, strict=True)},
+                reference=0.0,
+                deviation=float("inf"),
+                tolerance=rel_tolerance,
+                passed=False,
+            )
+            for name, part in _COMPONENTS
+        ]
     rows = []
     for name, part in _COMPONENTS:
         c = part(z)
@@ -351,7 +369,9 @@ def compare_engines(
     undefined for *every* engine (a purely passive cluster with
     :math:`\\sum I = 0`) is skipped with a note; a quantity that is
     non-finite for *some* engines only is a failure (up to 0.15.0 the
-    non-finite engine was dropped and the rest compared). Engines with
+    non-finite engine was dropped and the rest compared); so is a value
+    that is exactly zero for some engines only (audit round 1, F03).
+    Engines with
     different frequency lists raise instead of being compared at
     different frequencies.
 
@@ -499,11 +519,19 @@ def compare_engines(
             worst = dev if worst is None else max(worst, dev)
             if not np.isfinite(dev):
                 bad = sorted(lbl for lbl, v in values.items() if not np.isfinite(v[k]))
-                cmp.notes.append(
-                    f"{quantity} at {f:g} Hz: non-finite for engine(s) "
-                    f"{', '.join(bad)} while finite for the others — counted "
-                    "as a failure."
-                )
+                if bad:
+                    cmp.notes.append(
+                        f"{quantity} at {f:g} Hz: non-finite for engine(s) "
+                        f"{', '.join(bad)} while finite for the others — counted "
+                        "as a failure."
+                    )
+                else:
+                    zero = sorted(lbl for lbl, v in values.items() if v[k] == 0)
+                    cmp.notes.append(
+                        f"{quantity} at {f:g} Hz: zero for engine(s) "
+                        f"{', '.join(zero)} while non-zero for the others — "
+                        "counted as a failure."
+                    )
         if worst is None:
             cmp.notes.append(
                 f"{quantity}: undefined for every engine (Σ I = 0 or Z = 0) — skipped."
