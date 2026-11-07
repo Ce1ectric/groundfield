@@ -20,9 +20,13 @@
   cubic spline in ln(ρ + z)); the outer quadrature of all segment pairs runs
   vectorised. Against a converged reference (200 instead of 24 ρ nodes per pair)
   it is closer than the per-pair rule: 1.7e-6 against 1.4e-5 of the largest
-  entry on a 10-house street network (two-layer earth: 2.7e-6 against 3.6e-6).
-  On R8's W3 network (30 houses, 249 inductive branches, 11 frequencies) a full
-  solve takes 9.1 s instead of 242 s CPU. The solver selects it through the
+  entry on a 10-house street network (two-layer earth: 2.7e-6 against 3.6e-6);
+  the substation impedance agrees with the converged reference to 5e-10
+  (per-pair rule 1.1e-8). On R8's W3 network a full solve with 11 frequencies
+  takes 2.6 s instead of 27 s CPU (10 houses) and 7.8–9.1 s instead of 242 s
+  (30 houses, 249 inductive branches; impedances equal to 3e-8). Blocks whose
+  λ grid cannot be resolved (conductors in the surface plane across a large
+  network) keep the per-pair rule. The solver selects it through the
   engine attribute `sommerfeld_assembly` (`"exact"` when absent); the default
   stays the per-pair assembly. Tests: `tests/test_sommerfeld_tabulated.py`.
 
@@ -36,7 +40,8 @@
   reproduces 0.15.0. A straight conductor keeps the inductance of the unsplit
   wire for every discretisation. Every result with an inductive conductor moves:
   1.2e-6 (50 Hz) and 2.3e-5 (1 kHz) on the substation impedance of R8's 2-house
-  street network, ≤ 3.2e-6 in the golden cases
+  street network (1.2e-4 at 1 kHz on the 30-house network, together with the
+  lumped-branch fix below), ≤ 3.2e-6 in the golden cases
   `cond_galvanic_neumann_perfect_mirror`, `cond_galvanic_neumann_carson_series`,
   `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive`,
   `line_cond_galvanic_neumann`, `cond_coupled_leads_open_circuit`,
@@ -55,9 +60,11 @@
   (2 houses), 137–141 s → 27–28 s (10 houses); Carson matrices of W3c
   (30 houses): 4.4 s → 2.4 s. Full solves (with the wave-1 gains): W3, 2 houses
   35.3 s in 0.15.0 → 2.1 s; W3, 30 houses about 3 600 s (review estimate) →
-  242 s; W3c, 30 houses 16.4 s → 3.4 s. Golden cases: none.
+  242 s; W3c, 30 houses 16.4 s → 3.3 s. The correction keeps at most 256 MiB
+  of matrices (longer sweeps are assembled in chunks). Golden cases: none.
   Tests: `tests/test_inductive_solver_integration.py::test_sommerfeld_pair_work_does_not_grow_with_the_number_of_frequencies`,
-  `::test_branch_correction_is_built_once_for_all_frequencies`.
+  `::test_branch_correction_is_built_once_for_all_frequencies`,
+  `::test_branch_correction_memory_bound_keeps_the_numbers`.
 
 ### Fixed
 
@@ -69,7 +76,7 @@
   `image="antiparallel"`; the 1 km PEN matches l·X′_Carson(GMR = a·e^(−1/4)) to
   7e-6 (50 Hz) and 4.2e-4 (1 kHz). On R8's W3c network (30 houses, PEN Neumann)
   the substation impedance at 1 kHz drops from 0.4288 + 0.3439j Ω to
-  0.3964 + 0.2301j Ω (|Z| −17 %). Affects every `carson_series` result with an
+  0.3964 + 0.2301j Ω (|Z| −16.6 %). Affects every `carson_series` result with an
   inductive conductor (all backends that share the inductive assembly). Golden
   case: `cond_galvanic_neumann_carson_series` (6.0e-3).
   Test: `tests/test_inductive_solver_integration.py::test_carson_series_reactance_matches_carson`.
