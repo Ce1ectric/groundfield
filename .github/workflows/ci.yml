@@ -1,52 +1,209 @@
 name: CI
 
+# Supply-chain rules (finding 10.03): least-privilege permissions per job,
+# third-party actions pinned to full commit SHAs (tag in the comment),
+# checkout without persisted credentials, tool versions pinned.
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly: dependency audit and bit-rot check (finding 10.04).
+    - cron: "23 4 * * 1"
+  # Test gate of the release workflow (.github/workflows/release.yml).
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+# A new push to a pull request cancels its running checks. Pushes to main,
+# scheduled runs and the release gate queue instead (the "ci-" prefix keeps
+# the group distinct from the calling release workflow).
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  POETRY_VERSION: "2.4.3"
+  POETRY_VIRTUALENVS_IN_PROJECT: "true"
+  RUFF_VERSION: "0.17.4"
 
 jobs:
-  test:
-    name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.12", "3.13"]
-
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: ${{ matrix.python-version }}
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff and Poetry
+        run: python -m pip install "ruff==${RUFF_VERSION}" "poetry==${POETRY_VERSION}"
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Lint, blocking subset (F, E9, B)
+        run: ruff check --select F,E9,B --output-format github .
+
+      - name: Lint, full standard (report only)
+        run: ruff check --statistics --exit-zero .
+
+      - name: Check that poetry.lock matches pyproject.toml
+        run: poetry check --lock
+
+  types:
+    name: Types (mypy, non-blocking)
+    runs-on: ubuntu-latest
+    # Non-blocking until the post-release cleanup pass (finding 10.94).
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Cache Poetry virtualenv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+        run: python -m pip install "poetry==${POETRY_VERSION}"
 
       - name: Install project
         run: poetry install --no-interaction --with dev
 
-      - name: Run pytest with coverage
-        run: poetry run pytest --cov=groundfield --cov-report=xml --cov-report=term
+      - name: Type check
+        run: poetry run mypy
 
-      - name: Upload coverage artifact
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python-version }}
+        id: python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: python -m pip install "poetry==${POETRY_VERSION}"
+
+      - name: Cache virtualenv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install project
+        run: poetry install --no-interaction --with dev
+
+      - name: Run tests (parallel, with coverage)
+        run: poetry run pytest -n auto --cov=groundfield --cov-report=term --cov-report=xml
+
+      - name: Build the wheel and check its contents
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        run: |
+          poetry build --format wheel --output dist
+          GF_WHEEL="$(ls dist/*.whl)" poetry run pytest -q -p no:cacheprovider tests/test_packaging.py
+
+      - name: Upload coverage report
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
+
+  docs:
+    name: Docs (mkdocs build --strict)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        id: python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: python -m pip install "poetry==${POETRY_VERSION}"
+
+      - name: Cache virtualenv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .venv
+          key: venv-docs-${{ runner.os }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install project with the docs group
+        run: poetry install --no-interaction --only main,docs
+
+      - name: Build the documentation
+        run: poetry run mkdocs build --strict --site-dir site
+
+  audit:
+    name: Supply-chain audit (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install audit tools
+        run: >-
+          python -m pip install
+          "poetry==${POETRY_VERSION}"
+          "poetry-plugin-export==1.10.1"
+          "pip-audit==2.10.1"
+          "zizmor==1.32.0"
+
+      - name: Audit the locked dependencies (pip-audit)
+        run: |
+          poetry export --format requirements.txt --all-groups --all-extras \
+            --without-hashes --output locked-requirements.txt
+          pip-audit --requirement locked-requirements.txt --no-deps --disable-pip \
+            --progress-spinner off
+
+      - name: Audit the workflows (zizmor)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --format plain .github/workflows
