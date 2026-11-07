@@ -325,3 +325,29 @@ def test_skin_effect_is_frequency_dependent() -> None:
     r_dc = RHO_AL * 300.0 / A_150
     ratio = 1.0 + (z_skin - z_dc).real / r_dc
     np.testing.assert_allclose(ratio, [1.0556, 1.2308, 1.5496], atol=5e-4)
+
+
+@pytest.mark.finding("10.60")
+def test_branch_correction_memory_bound_keeps_the_numbers(monkeypatch) -> None:
+    """With a tiny memory budget every frequency is assembled on its own and
+    evicted matrices are rebuilt: the same matrices, bit for bit."""
+    from groundfield.solver import _inductive, _pipeline
+
+    w = _pen_world(60.0, dsl=10.0)
+    eng = gf.create_engine(
+        backend="image",
+        segment_length=0.5,
+        frequencies=[50.0, 250.0, 1000.0],
+        earth_inductive_model="sommerfeld",
+    )
+    disc = _pipeline.discretise(w, eng)
+    topo = _pipeline.build_topology(w, disc)
+    omegas = [2.0 * np.pi * f for f in eng.frequencies]
+    full = [
+        _pipeline.assemble_branches(w, eng, topo).earth_correction(om) for om in omegas
+    ]
+    monkeypatch.setattr(_inductive, "_CACHE_BYTES", 1)
+    small = _pipeline.assemble_branches(w, eng, topo).earth_correction
+    for om, ref in zip(omegas + omegas, full + full, strict=True):
+        assert np.array_equal(small(om), ref)
+    assert small.n_assemblies == 6  # one at a time, and rebuilt after eviction

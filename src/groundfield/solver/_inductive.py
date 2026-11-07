@@ -109,6 +109,11 @@ IMAGE_OF_EARTH_MODEL: dict[str, str] = {
 #: (review pass 10, 10.46): closed forms instead of the 16x16 rule.
 SOLVER_TOUCHING = "exact"
 
+#: Memory bound in bytes of the multi-frequency branch correction: matrices
+#: of one assembly plus the cached ones (W3, 30 houses: about 2 MB per
+#: frequency, so all 11 frequencies of a sweep fit many times over).
+_CACHE_BYTES = 256 * 2**20
+
 
 @dataclass(frozen=True)
 class BranchGeometry:
@@ -240,11 +245,19 @@ class _BranchCorrection:
         self._batch = tuple(batch)
         self._cache: dict[float, np.ndarray] = {}
         self._zero: np.ndarray | None = None
+        self._n_built = 0
+        # Frequencies per assembly and cached matrices are bounded so that
+        # a long frequency sweep over a large network stays within
+        # _CACHE_BYTES (the (n_f, M, M) earth matrices of one assembly plus
+        # the cached full matrices); evicted frequencies are rebuilt on
+        # demand, bit-identically.
+        per_frequency = 16 * (self._n**2 + self._seg.shape[0] ** 2)
+        self._max_batch = max(1, _CACHE_BYTES // max(per_frequency, 1))
 
     @property
     def n_assemblies(self) -> int:
-        """Number of frequencies built so far (diagnostics)."""
-        return len(self._cache)
+        """Number of frequencies assembled so far (diagnostics)."""
+        return self._n_built
 
     def __call__(self, omega: float) -> np.ndarray:
         """Correction matrix over all finite branches at ``omega`` (rad/s)."""
@@ -256,8 +269,17 @@ class _BranchCorrection:
             return self._zero
         out = self._cache.get(omega)
         if out is None:
-            pending = [om for om in self._batch if om not in self._cache]
-            self._build(pending if omega in pending else [omega])
+            if omega in self._batch:
+                # this frequency and the next uncached ones of the solve
+                start = self._batch.index(omega)
+                order = self._batch[start:] + self._batch[:start]
+                pending = [om for om in order if om not in self._cache]
+                chunk = pending[: self._max_batch]
+            else:
+                chunk = [omega]
+            while self._cache and len(self._cache) + len(chunk) > self._max_batch:
+                self._cache.pop(next(iter(self._cache)))  # oldest first
+            self._build(chunk)
             out = self._cache[omega]
         return out
 
@@ -302,6 +324,7 @@ class _BranchCorrection:
                 full[term.index, term.index] += term.correction(frequency)
             full.setflags(write=False)
             self._cache[omega] = full
+        self._n_built += len(omegas)
 
 
 def _assemble_inductance_matrix(
