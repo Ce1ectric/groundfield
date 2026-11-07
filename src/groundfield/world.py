@@ -240,8 +240,11 @@ class World(BaseModel):
             f"world {self.name!r}.{hint}"
         )
 
-    def _check_conductor_ends(self, conductor: Conductor) -> None:
-        nodes = set(self._node_names())
+    def _check_conductor_ends(
+        self, conductor: Conductor, nodes: set[str] | None = None
+    ) -> None:
+        if nodes is None:
+            nodes = set(self._node_names())
         for field in ("start_electrode", "end_electrode"):
             name = getattr(conductor, field)
             if name is not None and name not in nodes:
@@ -310,8 +313,9 @@ class World(BaseModel):
             raise ValueError("World has no soil model. Set one before calling solve().")
         if require_source and not self.electrodes:
             raise ValueError("World contains no electrodes.")
+        nodes = set(self._node_names())
         for c in self.conductors:
-            self._check_conductor_ends(c)
+            self._check_conductor_ends(c, nodes)
         n_current = 0
         for src in self.sources:
             self._check_source_terminals(src)

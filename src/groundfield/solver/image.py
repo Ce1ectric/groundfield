@@ -33,9 +33,14 @@ Further properties of this backend:
   $f < 1\\,\\mathrm{kHz}$ the backend returns the same real
   solution per frequency. Complex extensions (Carson,
   frequency-dependent soil) come in later backends.
-* Multiple electrodes: each electrode has its own total current
-  (sum of the current sources attached to it). An electrode without a
-  source carries zero current and acts purely as a passive observer.
+* Multiple electrodes: each electrode has its own total current.
+  Sources inject at the node they are attached to and, with
+  ``return_to``, take the current back at a second node (two-terminal
+  sources). Electrodes bonded by ideal conductors share one potential.
+  A source-free cluster floats with zero net current: a lone passive
+  electrode carries no current (uniform-current ansatz) and reports the
+  incident potential, a bonded group of passive electrodes exchanges
+  current to stay one equipotential.
 
 References
 ----------

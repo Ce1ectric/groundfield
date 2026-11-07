@@ -8,16 +8,21 @@ the Green's-function object handed to :func:`solve_image_family`
 1. :func:`discretise` — electrodes into leakage segments
    (:meth:`~groundfield.geometry.electrodes.RodElectrode.segments` and
    siblings), split at the soil-layer interfaces the Green's function
-   asks for.
-2. :func:`inject` — impressed source currents per electrode.
-   **Extension point (CORE-2):** two-terminal sources (``return_to``)
-   and leakage-free junction nodes are added here; the step returns the
-   impressed current per node, which the topology step attaches to the
+   asks for. The predicted segment count is checked against
+   :data:`groundfield.diagnostics.HARD_LIMIT` first (10.06).
+2. :func:`inject` — the one shared injection step (10.16, 10.66): the
+   world is validated (:meth:`World.check
+   <groundfield.world.World.check>`), then every current source adds
+   $+I$ at ``attached_to`` and, with ``return_to``, $-I$ at
+   ``return_to``. Returns the impressed current per node name —
+   electrodes and junctions — which the topology step attaches to the
    clusters.
-3. :func:`build_topology` — clusters of ideally bonded electrodes,
-   lumped finite-impedance branches and the distributed-conductor
-   chains (ADR-0003), whose galvanic segments join the leakage
-   segments as one-segment pseudo-owners.
+3. :func:`build_topology` — clusters of ideally bonded electrodes and
+   junctions, lumped finite-impedance branches and the
+   distributed-conductor chains (ADR-0003), whose galvanic segments
+   join the leakage segments as one-segment pseudo-owners. Junctions
+   are nodes without leakage segments; a junction subnetwork without
+   soil contact is rejected here.
 4. :func:`assemble_branches` — the frequency-dependent branch block:
    partial inductances (ADR-0004) and the earth-return correction
    closure (Carson series ADR-0005, Sommerfeld ADR-0006).
@@ -26,19 +31,24 @@ the Green's-function object handed to :func:`solve_image_family`
    conductors, skin effect) belong here.
 5. :func:`solve` — per frequency, the augmented nodal system of
    :mod:`groundfield.solver._topology` with the multi-port matrix built
-   from the Green's function's reaction kernel; then the segment
-   currents (uniform per unit length per owner) and the segment
-   potentials.
+   from the Green's function's reaction kernel; source-free components
+   float with zero net current (10.29); then the segment currents
+   (uniform per unit length per owner), the segment potentials and the
+   potential of every active node (:attr:`Solution.node_potentials`).
 6. :func:`build_result` — node potentials (length-weighted, F10/F11),
    point sources, clusters and metadata as a
-   :class:`~groundfield.solver.result.FieldResult`.
+   :class:`~groundfield.solver.result.FieldResult`; junction potentials
+   in ``metadata["junction_potentials"]``.
 
 The Green's-function object (:class:`ImageGreen`) supplies the backend
 name, the layer interfaces, the reaction kernel and the
 backend-specific metadata. **Extension point (ENG):** the ``mom``
 family can be ported by providing a Green's-function object whose
 ``solve`` replaces the uniform-current owner model with per-segment
-currents; steps 1–4 and 6 are shared as they are.
+currents; steps 1–4 and 6 are shared as they are. A backend that runs
+steps 2 and 3 honours ``return_to`` and junctions and should declare
+``two_terminal_sources`` and ``junctions`` in its registry
+capabilities.
 """
 
 from __future__ import annotations
