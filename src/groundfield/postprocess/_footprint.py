@@ -435,7 +435,19 @@ def foundation_wires(world, name: str, clusters=None) -> list:
     cluster = clusters.get(name) if clusters else None
     if cluster is not None:
         members = [e for e in members if e.name in cluster]
+    # The generator's wires are strips and open polylines; any other
+    # member means the names only look alike.
+    if len(members) > 1 and not all(_is_open_wire(e) for e in members):
+        return [world.get_electrode(name)]
     return members
+
+
+def _is_open_wire(electrode) -> bool:
+    """A strip, or a polyline that is not closed into a loop."""
+    kind = getattr(electrode, "kind", None)
+    if kind == "strip":
+        return True
+    return kind == "polyline" and not (electrode.closed and len(electrode.vertices) > 2)
 
 
 def footprint_of(electrodes) -> Footprint:

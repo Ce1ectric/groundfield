@@ -585,3 +585,10 @@ def test_wire_suffix_without_a_bonded_root_is_an_ordinary_electrode() -> None:
     clusters = {"y": ["y"], "y_w1": ["y_w1"]}  # not bonded
     assert [e.name for e in foundation_wires(w, "y", clusters)] == ["y"]
     assert [e.name for e in foundation_wires(w, "y")] == ["y", "y_w1"]
+    # A grid bonded to a rod that happens to be called ``g_w1`` stays a grid.
+    gf.create_electrode(
+        w, "grid_mesh", name="g", corner=(30, 0, 0.5), size=(10, 10), n_x=2, n_y=2
+    )
+    gf.create_electrode(w, "rod", name="g_w1", position=(45.0, 0.0, 0.5), length=3.0)
+    assert [e.name for e in foundation_wires(w, "g")] == ["g"]
+    assert [e.name for e in foundation_wires(w, "g_w1")] == ["g_w1"]
