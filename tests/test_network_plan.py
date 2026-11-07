@@ -261,11 +261,11 @@ def test_layout_plan_structure() -> None:
     assert len(drops) == len(lay.connections)
     assert all(b.start in junction_names | {"substation", "kvs_0"} for b in drops)
     assert {b.cable for b in pen} == {c.name for c in lay.pen_cables}
-    # The open measurement loop is closed by a counter-source on the
-    # auxiliary electrode until the solver honours ``return_to``.
+    # One two-terminal source closes the measurement loop through the
+    # auxiliary electrode (``return_to``, honoured since 10.16).
     assert plan.measurement is not None
-    assert [s.phase_deg for s in plan.sources] == [0.0, 180.0]
-    assert plan.sources[1].attached_to == plan.measurement.auxiliary.name
+    assert [s.phase_deg for s in plan.sources] == [0.0]
+    assert plan.sources[0].return_to is not None
 
 
 def test_layout_masked_houses_are_not_in_the_plan() -> None:
