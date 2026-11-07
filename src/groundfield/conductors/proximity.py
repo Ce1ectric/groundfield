@@ -109,8 +109,12 @@ def segment_distance(
 
     Closest points $p_a(s) = p_{1,a} + s\,d_a$ and
     $p_b(t) = p_{1,b} + t\,d_b$ with $s, t \in [0, 1]$, by the standard
-    clamped two-segment algorithm (parallel segments handled
-    explicitly).
+    clamped two-segment algorithm (Ericson 2005, sec. 5.1.9). Parallel
+    segments and zero-length segments (points) are handled explicitly:
+    the distance of a point to a segment is that of its orthogonal
+    projection, clamped to the segment (audit of review pass 10, F04:
+    a point-like second segment was measured from the start of the
+    first one).
 
     Parameters
     ----------
@@ -149,6 +153,17 @@ def segment_distance(
         t = np.clip(t, 0.0, 1.0)
         s = np.where(t_lo, np.clip(-c / np.where(a > 0.0, a, 1.0), 0.0, 1.0), s)
         s = np.where(t_hi, np.clip((b - c) / np.where(a > 0.0, a, 1.0), 0.0, 1.0), s)
+        # Degenerate segments: a point against a segment is the clamped
+        # projection; two points are their distance.
+        scale = np.maximum(np.maximum(a, e), 1e-300)
+        point_a = a <= 1e-24 * scale
+        point_b = e <= 1e-24 * scale
+        s = np.where(point_b, np.clip(-c / np.where(a > 0.0, a, 1.0), 0.0, 1.0), s)
+        t = np.where(point_b, 0.0, t)
+        s = np.where(point_a, 0.0, s)
+        t = np.where(
+            point_a & ~point_b, np.clip(f / np.where(e > 0.0, e, 1.0), 0.0, 1.0), t
+        )
     ca = p1_a + s[:, None] * d1
     cb = p1_b + t[:, None] * d2
     dist = np.linalg.norm(ca - cb, axis=1)
