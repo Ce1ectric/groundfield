@@ -262,21 +262,21 @@ def test_cluster_balance_single_rod() -> None:
     assert abs(row["Z_im"]) < 1e-9
 
 
+@pytest.mark.finding("10.16")
 def test_cluster_balance_two_separate_clusters() -> None:
-    """Source cluster + aux cluster — both rows present, currents sum
-    to the source magnitude.
+    """Source cluster + aux cluster — both rows present, leakages sum
+    to the net injection.
 
-    The image backend treats ``return_to`` as informational; the
-    injected current dissipates via the Dirichlet far-field boundary,
-    so KCL across all cluster leakages must equal the net injection
-    (here +10 A at the source cluster).
+    The source returns its current at ``g_aux`` (``return_to`` is
+    honoured since 10.16), so the net injection is zero and the two
+    cluster leakages cancel; up to 0.15.0 the current returned through
+    remote earth and the leakages summed to +10 A.
     """
     _world, result = _two_separate_clusters_with_metallic_loop(current=10.0)
     df = cluster_current_balance(result)
     assert len(df) == 2
     total = df["sum_I_re"].sum() + 1j * df["sum_I_im"].sum()
-    assert total.real == pytest.approx(10.0, abs=1e-3)
-    assert abs(total.imag) < 1e-3
+    assert abs(total) < 1e-9
 
 
 def test_cluster_balance_sorted_descending() -> None:

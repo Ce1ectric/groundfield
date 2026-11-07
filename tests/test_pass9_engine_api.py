@@ -185,7 +185,8 @@ class _FieldMutatingEngine(Engine):
 
     def solve(self, world: World) -> FieldResult:  # type: ignore[override]
         world.sources[0].magnitude = 12345.0
-        world.sources[0].return_to = "somewhere_else"
+        # A valid edit: since 10.66 a return_to naming no node raises.
+        world.sources[0].phase_deg = 45.0
         return super().solve(world)
 
 
@@ -246,7 +247,7 @@ def test_world_solve_still_rolls_back_field_mutation() -> None:
 
     assert src is world.sources[0]
     assert src.magnitude == pytest.approx(1.0)
-    assert src.return_to is None
+    assert src.phase_deg == 0.0
 
 
 def test_world_solve_rolls_back_list_mutation_preserving_identity() -> None:
@@ -397,71 +398,47 @@ def test_sample_point_note_states_the_metric() -> None:
 # ----------------------------------------------------------------------
 
 
-def test_source_free_world_is_not_consistent() -> None:
-    """Nothing comparable must never report a green result."""
-    world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
+@pytest.mark.finding("10.66")
+@pytest.mark.parametrize(
+    "sample_points", [None, np.array([[2.0, 0.0, 0.0], [5.0, 0.0, 0.0]])]
+)
+def test_source_free_world_is_not_compared(sample_points) -> None:
+    """Nothing comparable must never report a green result.
 
-    report = gf.compare_engines(
-        world,
-        engines={
-            "image": gf.create_engine(backend="image", segment_length=0.1),
-            "mom": gf.create_engine(backend="mom", segment_length=0.1),
-        },
-        rel_tolerance=0.05,
-    )
-
-    assert report.deviations == {}
-    assert not report.is_consistent, report.summary()
-    assert any("vacuous" in n for n in report.notes), report.notes
-    assert "INCONSISTENT" in report.summary()
-
-
-def test_source_free_world_with_sample_points_is_not_consistent() -> None:
-    """Zero-potential sample points do not rescue a vacuous comparison.
-
-    Without a source every potential is identically zero, so the
-    relative deviation is undefined at every sample point too — the
-    report must stay red rather than counting "0 % deviation" as
-    agreement.
+    Up to 0.15.0 a source-free world solved to all-zero potentials and
+    the comparison had to detect the vacuous result (F36). Since 10.66
+    the solve itself rejects it, before any engine runs.
     """
     world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
 
-    report = gf.compare_engines(
-        world,
-        engines={
-            "image": gf.create_engine(backend="image", segment_length=0.1),
-            "mom": gf.create_engine(backend="mom", segment_length=0.1),
-        },
-        rel_tolerance=0.05,
-        sample_points=np.array([[2.0, 0.0, 0.0], [5.0, 0.0, 0.0]]),
-    )
-    assert not report.is_consistent, report.summary()
-    assert any("excluded" in n for n in report.notes), report.notes
-    assert any("vacuous" in n for n in report.notes), report.notes
+    with pytest.raises(ValueError, match="no current source"):
+        gf.compare_engines(
+            world,
+            engines={
+                "image": gf.create_engine(backend="image", segment_length=0.1),
+                "mom": gf.create_engine(backend="mom", segment_length=0.1),
+            },
+            rel_tolerance=0.05,
+            sample_points=sample_points,
+        )
 
 
-def test_misspelled_attached_to_is_not_consistent() -> None:
-    """The same guard catches a source that feeds nothing.
-
-    ``Source.attached_to`` pointing at a name that does not exist leaves
-    every cluster with sum(I) = 0, so no impedance is defined.
-    """
+@pytest.mark.finding("10.66")
+def test_misspelled_attached_to_is_not_compared() -> None:
+    """A source that feeds no node is rejected with the closest name."""
     world = gf.create_world(soil=HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
     world.sources.append(
         gf.CurrentSource(name="s_typo", attached_to="g_typo", magnitude=1.0)
     )
 
-    report = gf.compare_engines(
-        world,
-        engines={
-            "coarse": gf.create_engine(backend="image", segment_length=0.4),
-            "fine": gf.create_engine(backend="image", segment_length=0.1),
-        },
-        rel_tolerance=0.05,
-    )
-    if report.deviations:
-        pytest.skip("world does define a cluster impedance; guard not exercised")
-    assert not report.is_consistent, report.summary()
+    with pytest.raises(KeyError, match="g_typo"):
+        gf.compare_engines(
+            world,
+            engines={
+                "coarse": gf.create_engine(backend="image", segment_length=0.4),
+                "fine": gf.create_engine(backend="image", segment_length=0.1),
+            },
+            rel_tolerance=0.05,
+        )

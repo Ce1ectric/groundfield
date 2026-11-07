@@ -8,16 +8,21 @@ the Green's-function object handed to :func:`solve_image_family`
 1. :func:`discretise` — electrodes into leakage segments
    (:meth:`~groundfield.geometry.electrodes.RodElectrode.segments` and
    siblings), split at the soil-layer interfaces the Green's function
-   asks for.
-2. :func:`inject` — impressed source currents per electrode.
-   **Extension point (CORE-2):** two-terminal sources (``return_to``)
-   and leakage-free junction nodes are added here; the step returns the
-   impressed current per node, which the topology step attaches to the
+   asks for. The predicted segment count is checked against
+   :data:`groundfield.diagnostics.HARD_LIMIT` first (10.06).
+2. :func:`inject` — the one shared injection step (10.16, 10.66): the
+   world is validated (:meth:`World.check
+   <groundfield.world.World.check>`), then every current source adds
+   $+I$ at ``attached_to`` and, with ``return_to``, $-I$ at
+   ``return_to``. Returns the impressed current per node name —
+   electrodes and junctions — which the topology step attaches to the
    clusters.
-3. :func:`build_topology` — clusters of ideally bonded electrodes,
-   lumped finite-impedance branches and the distributed-conductor
-   chains (ADR-0003), whose galvanic segments join the leakage
-   segments as one-segment pseudo-owners.
+3. :func:`build_topology` — clusters of ideally bonded electrodes and
+   junctions, lumped finite-impedance branches and the
+   distributed-conductor chains (ADR-0003), whose galvanic segments
+   join the leakage segments as one-segment pseudo-owners. Junctions
+   are nodes without leakage segments; a junction subnetwork without
+   soil contact is rejected here.
 4. :func:`assemble_branches` — the frequency-dependent branch block:
    partial inductances (ADR-0004) and the earth-return correction
    closure (Carson series ADR-0005, Sommerfeld ADR-0006).
@@ -26,19 +31,24 @@ the Green's-function object handed to :func:`solve_image_family`
    conductors, skin effect) belong here.
 5. :func:`solve` — per frequency, the augmented nodal system of
    :mod:`groundfield.solver._topology` with the multi-port matrix built
-   from the Green's function's reaction kernel; then the segment
-   currents (uniform per unit length per owner) and the segment
-   potentials.
+   from the Green's function's reaction kernel; source-free components
+   float with zero net current (10.29); then the segment currents
+   (uniform per unit length per owner), the segment potentials and the
+   potential of every active node (:attr:`Solution.node_potentials`).
 6. :func:`build_result` — node potentials (length-weighted, F10/F11),
    point sources, clusters and metadata as a
-   :class:`~groundfield.solver.result.FieldResult`.
+   :class:`~groundfield.solver.result.FieldResult`; junction potentials
+   in ``metadata["junction_potentials"]``.
 
 The Green's-function object (:class:`ImageGreen`) supplies the backend
 name, the layer interfaces, the reaction kernel and the
 backend-specific metadata. **Extension point (ENG):** the ``mom``
 family can be ported by providing a Green's-function object whose
 ``solve`` replaces the uniform-current owner model with per-segment
-currents; steps 1–4 and 6 are shared as they are.
+currents; steps 1–4 and 6 are shared as they are. A backend that runs
+steps 2 and 3 honours ``return_to`` and junctions and should declare
+``two_terminal_sources`` and ``junctions`` in its registry
+capabilities.
 """
 
 from __future__ import annotations
@@ -58,6 +68,7 @@ from groundfield.solver._topology import (
     _build_clusters,
     _build_distributed_topology,
     _build_finite_branches,
+    _check_soil_contact,
     _solve_cluster_currents,
 )
 from groundfield.solver.result import FieldResult, PointSource
@@ -263,11 +274,17 @@ class Solution:
     segment_potentials
         Segment-midpoint potentials in V, one ``(N,)`` vector per
         frequency.
+    node_potentials
+        Potential in V of every active node of the augmented system
+        (cluster roots, junctions, interior conductor nodes), one
+        mapping per frequency. Empty mappings for backends that do not
+        provide them.
     """
 
     owner_currents: list[dict[str, complex]]
     segment_currents: list[np.ndarray]
     segment_potentials: list[np.ndarray] = field(default_factory=list)
+    node_potentials: list[dict[str, complex]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------
@@ -282,6 +299,11 @@ def discretise(
 ) -> Discretisation:
     """Step 1: discretise every electrode of ``world``.
 
+    The predicted segment count is checked against
+    :data:`groundfield.diagnostics.HARD_LIMIT` first, from the geometry
+    alone (finding 10.06), so a unit error fails before anything of
+    the problem size is allocated.
+
     Parameters
     ----------
     world
@@ -290,7 +312,15 @@ def discretise(
         Engine; ``segment_length`` is the target segment length in m.
     layer_interfaces
         Interface depths in m at which wires are split.
+
+    Raises
+    ------
+    groundfield.diagnostics.ResourceLimitError
+        If the predicted segment count exceeds the hard limit.
     """
+    from groundfield.diagnostics import check_segment_budget
+
+    check_segment_budget(world, engine, layer_interfaces)
     ds = engine.segment_length
     segments: list[_Segment] = []
     owner_segments: dict[str, list[int]] = {}
@@ -305,34 +335,147 @@ def discretise(
 
 
 def inject(world: World, *, where: str, stacklevel: int) -> dict[str, complex]:
-    """Step 2: impressed current per electrode in A (complex phasor).
+    """Step 2: impressed current per node in A (complex phasor).
 
-    Current sources add ``magnitude·exp(j·phase)`` to the electrode they
-    are attached to; other source kinds are skipped with a warning.
+    The one shared injection step of every backend on the pipeline
+    (review findings 10.16 and 10.66; up to 0.15.0 seven backends
+    carried a copy of this loop, none of which read ``return_to``).
+
+    Contract
+    --------
+    * The world is validated first (:meth:`World.check
+      <groundfield.world.World.check>`): every source terminal names an
+      electrode or junction, the world has at least one current source,
+      no source has magnitude 0, no voltage source is present and no
+      two-terminal source is short-circuited by an ideal bond. Errors
+      are raised before any numerics run.
+    * A current source with phasor
+      $I = |I|\\,e^{j\\varphi}$ adds $+I$ to ``attached_to`` and, if
+      ``return_to`` is set, $-I$ to ``return_to``. The sum over all
+      nodes is therefore the net current returning through remote
+      earth: zero for a world of two-terminal sources only, so
+      Kirchhoff's current law closes every measurement loop.
+    * The mapping has one entry per electrode and junction (world
+      order, electrodes first); nodes without a source carry ``0j``. Contributions are accumulated in
+      source order, so a world without ``return_to`` gets exactly the
+      values of 0.15.0.
+
+    Parameters
+    ----------
+    world
+        The world to be solved.
+    where
+        Caller label for messages (kept for the step signature).
+    stacklevel
+        ``stacklevel`` of warnings emitted here (kept for the step
+        signature).
+
+    Returns
+    -------
+    dict[str, complex]
+        Impressed current per node name in A.
+
+    Raises
+    ------
+    KeyError, ValueError, NotImplementedError
+        See :meth:`World.check <groundfield.world.World.check>`.
     """
+    world.check()
+    _warn_manual_counter_sources(world)
     node_currents: dict[str, complex] = {e.name: 0j for e in world.electrodes}
+    for junction in world.junctions:
+        node_currents[junction.name] = 0j
     for src in world.sources:
-        if src.kind != "current":
-            continue
         i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
-        if src.attached_to in node_currents:
-            node_currents[src.attached_to] += i_complex
-    _warn_ignored_sources(world, where, stacklevel=stacklevel + 1)
+        node_currents[src.attached_to] += i_complex
+        if src.return_to is not None:
+            node_currents[src.return_to] -= i_complex
     return node_currents
+
+
+def _warn_manual_counter_sources(world: World) -> None:
+    """Warn about the 0.15.0 workaround for the inert ``return_to``.
+
+    Before ``return_to`` was honoured (finding 10.16), a measurement
+    loop was closed by hand with a second source of the same magnitude
+    and a phase shifted by 180° at the return electrode. Together with
+    an honoured ``return_to`` that source counts the return current
+    twice (``-2 I`` at the auxiliary electrode). The pattern — a
+    one-terminal source at the ``return_to`` node of a two-terminal
+    source with equal magnitude and opposite phase — is reported once
+    per solve.
+    """
+    from groundfield.solver.registry import warn_external
+
+    two_terminal = [s for s in world.sources if s.return_to is not None]
+    for src in two_terminal:
+        for other in world.sources:
+            if other is src or other.return_to is not None:
+                continue
+            if other.attached_to != src.return_to:
+                continue
+            if not np.isclose(abs(other.magnitude), abs(src.magnitude), rtol=1e-9):
+                continue
+            i_src = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
+            i_other = other.magnitude * np.exp(1j * np.deg2rad(other.phase_deg))
+            if abs(i_src + i_other) > 1e-9 * abs(i_src):
+                continue
+            warn_external(
+                f"Source {other.name!r} at {other.attached_to!r} looks like the "
+                f"manual counter-source of source {src.name!r} (same magnitude, "
+                "opposite phase). Since 2026.11 Source.return_to is honoured, so "
+                f"{src.name!r} already takes its current back at "
+                f"{src.return_to!r} and the return current is now counted "
+                "twice. Remove the counter-source.",
+                UserWarning,
+            )
+
+
+def _warn_concrete_shell_registry(world: World) -> None:
+    """Deprecation of ``World.concrete_shell_corrections`` (ADR-0012 V1).
+
+    The solver consumes concrete shells only as the distributed
+    per-length coefficient of the electrodes; the lumped registry is
+    read by no backend and by no ``solve_mutual_*`` call (finding 10.12).
+    """
+    if not world.concrete_shell_corrections:
+        return
+    from groundfield.solver.registry import DEPRECATION_REMOVAL, warn_external
+
+    warn_external(
+        "World.concrete_shell_corrections (the lumped ADR-0012 V1 registry, "
+        f"{len(world.concrete_shell_corrections)} entries) is deprecated and "
+        "is not read by the solver: concrete shells enter the solve only "
+        "through the per-length coefficient concrete_shell_coefficient_ohm_m "
+        "of the electrodes (ADR-0012 V2). Set that coefficient on the encased "
+        "electrodes and clear the registry (world.reset_concrete_corrections()). "
+        f"The field will be removed no earlier than {DEPRECATION_REMOVAL}.",
+        DeprecationWarning,
+    )
 
 
 def build_topology(world: World, disc: Discretisation) -> Topology:
     """Step 3: clusters, finite branches and distributed conductors.
 
-    Electrodes joined by an *ideal* conductor share one potential
-    (cluster); conductors with a finite series resistance enter the
-    nodal system as branches. Distributed conductors (ADR-0003) add a
-    chain of branches; with ``coupling_to_soil="galvanic"`` every
-    sub-piece also leaks through a one-segment pseudo-owner, which is
-    appended to ``disc`` (its own cluster). Leakage-free interior nodes
-    of isolated chains become clusters without segments.
+    Electrodes and junctions joined by an *ideal* conductor share one
+    potential (cluster); conductors with a finite series resistance
+    enter the nodal system as branches. Distributed conductors
+    (ADR-0003) add a chain of branches; with
+    ``coupling_to_soil="galvanic"`` every sub-piece also leaks through a
+    one-segment pseudo-owner, which is appended to ``disc`` (its own
+    cluster). Leakage-free interior nodes of isolated chains become
+    clusters without segments.
+
+    Junctions (:class:`~groundfield.geometry.junction.Junction`) are
+    nodes without leakage segments: they appear in ``cluster_id`` and
+    in the branch list, take part in Kirchhoff's current law, and never
+    become owners of the multi-port matrix. A junction whose
+    subnetwork has no soil contact raises :class:`ValueError` here,
+    before any numerics run.
     """
-    cluster_id = _build_clusters(world.electrodes, world.conductors)
+    cluster_id = _build_clusters(
+        world.electrodes, world.conductors, junctions=world.junctions
+    )
     finite_branches = _build_finite_branches(world.conductors, cluster_id)
     cond_segs, distributed, interior_nodes = _build_distributed_topology(
         world.conductors, cluster_id
@@ -356,6 +499,13 @@ def build_topology(world: World, disc: Discretisation) -> Topology:
     finite_branches = list(finite_branches) + [
         (db.node_a, db.node_b, db.R) for db in distributed
     ]
+    _check_soil_contact(
+        [j.name for j in world.junctions],
+        cluster_id,
+        finite_branches,
+        disc.owner_segments,
+    )
+    _warn_concrete_shell_registry(world)
     return Topology(
         cluster_id=cluster_id,
         finite_branches=finite_branches,
@@ -491,16 +641,25 @@ def solve(
     the per-frequency solves (ADR-0010 Tier 1). Without inductive
     branches the whole system is frequency-independent: it is solved
     once and replicated.
+
+    Source-free components float (finding 10.29): a bonded group of
+    passive electrodes is one equipotential with zero net current, and
+    a passive network carries its equalising currents. The potential of
+    every active node (including junctions) is kept in
+    :attr:`Solution.node_potentials`.
     """
     n_freq = len(engine.frequencies)
     mp_cache: dict = {}
 
-    def _solve_at(omega: float) -> tuple[dict[str, complex], np.ndarray]:
+    def _solve_at(
+        omega: float,
+    ) -> tuple[dict[str, complex], np.ndarray, dict[str, complex]]:
         correction = (
             branches.earth_correction(omega)
             if branches.earth_correction is not None
             else None
         )
+        node_pots: dict[str, complex] = {}
         owner_currents = _solve_cluster_currents(
             electrodes=world.electrodes,
             elec_input_current=node_currents,
@@ -517,9 +676,11 @@ def solve(
             carson_correction=correction,
             shell_coefficients=arrays.shell_coefficients,
             multiport_cache=mp_cache,
+            floating=True,
+            node_potentials=node_pots,
         )
         sc = _segment_currents(owner_currents, disc.owner_segments, arrays.lengths)
-        return owner_currents, sc
+        return owner_currents, sc, node_pots
 
     def _potentials(
         owner_list: list[dict[str, complex]], sc_list: list[np.ndarray]
@@ -536,21 +697,25 @@ def solve(
     if branches.has_inductance:
         owner_per_freq: list[dict[str, complex]] = []
         sc_per_freq: list[np.ndarray] = []
+        nodes_per_freq: list[dict[str, complex]] = []
         for f in engine.frequencies:
-            et, sc = _solve_at(2.0 * np.pi * float(f))
+            et, sc, nodes = _solve_at(2.0 * np.pi * float(f))
             owner_per_freq.append(et)
             sc_per_freq.append(sc)
+            nodes_per_freq.append(nodes)
         phi_per_freq = _potentials(owner_per_freq, sc_per_freq)
     else:
-        et, sc = _solve_at(0.0)
+        et, sc, nodes = _solve_at(0.0)
         ph = _potentials([et], [sc])[0]
         owner_per_freq = [et] * n_freq
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
+        nodes_per_freq = [nodes] * n_freq
     return Solution(
         owner_currents=owner_per_freq,
         segment_currents=sc_per_freq,
         segment_potentials=phi_per_freq,
+        node_potentials=nodes_per_freq,
     )
 
 
@@ -572,7 +737,9 @@ def build_result(
     segment potentials — the reduction the multi-port matrix enforces
     (F10/F11). Conductor pseudo-nodes are reported in
     ``metadata["conductor_node_currents"]`` /
-    ``["conductor_node_potentials"]``.
+    ``["conductor_node_potentials"]``, junction potentials in
+    ``metadata["junction_potentials"]`` (V per frequency, see
+    :func:`_junction_potentials`).
     """
     n_freq = len(engine.frequencies)
     real_names = [e.name for e in world.electrodes]
@@ -634,6 +801,10 @@ def build_result(
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents
         metadata["conductor_node_potentials"] = conductor_potentials
+    if world.junctions:
+        metadata["junction_potentials"] = _junction_potentials(
+            world, disc, arrays, solution, cluster_id, n_freq
+        )
 
     return FieldResult(
         backend=green.backend,
@@ -702,7 +873,7 @@ def solve_image_family(
         **green.metadata(solution, stacklevel=stacklevel + 1),
         "stub": False,
         "earth_inductive_model": branches.earth_inductive_model,
-        "kernel": getattr(engine, "kernel", "point"),
+        "kernel": engine.kernel,
     }
     return build_result(
         world,
@@ -715,6 +886,46 @@ def solve_image_family(
         cluster_id=topo.cluster_id,
         metadata=metadata,
     )
+
+
+def _junction_potentials(
+    world: World,
+    disc: Discretisation,
+    arrays: SegmentArrays,
+    solution: Solution,
+    cluster_id: dict[str, str],
+    n_freq: int,
+) -> dict[str, list[complex]]:
+    """Potential in V of every junction, one value per frequency.
+
+    A junction in an active node of the augmented system takes the
+    node potential of the solution. A junction bonded by ideal
+    conductors to a passive electrode that stays out of the system
+    (a lone passive electrode, see
+    :func:`~groundfield.solver._topology._floating_cluster_set`) shares
+    that electrode's potential: the length-weighted average of the
+    cluster's segment potentials.
+    """
+    out: dict[str, list[complex]] = {}
+    for junction in world.junctions:
+        root = cluster_id[junction.name]
+        nodes = solution.node_potentials
+        if nodes and all(root in nodes[k] for k in range(n_freq)):
+            out[junction.name] = [complex(nodes[k][root]) for k in range(n_freq)]
+            continue
+        idxs = [
+            i
+            for name, seg in disc.owner_segments.items()
+            if seg and cluster_id.get(name) == root
+            for i in seg
+        ]
+        if not idxs:  # pragma: no cover - build_topology rejects this
+            out[junction.name] = [complex("nan")] * n_freq
+            continue
+        out[junction.name] = _weighted_node_potential(
+            solution.segment_potentials, idxs, arrays.lengths, n_freq
+        )
+    return out
 
 
 # ---------------------------------------------------------------------

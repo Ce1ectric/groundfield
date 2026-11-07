@@ -1,0 +1,43 @@
+# Expected golden-value changes of work stream CORE-2a (two-terminal
+# sources, junction nodes, floating clusters, guards, diagnostics).
+# Format: tests/golden/README.md.
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/*", "I/*"]
+findings = ["10.16"]
+reason = """Source.return_to is honoured: the generator's source injects +1 A at the
+substation and takes it back at aux_rod_0, so the leakage currents now sum to
+0 (3.9e-15 A) instead of 1 A. The generator wires the feed lead from the
+substation straight to the auxiliary electrode (the 10.17 topology that GEN-2
+re-wires through junctions), so the lead closes the loop metallically: the
+substation potential falls from 1.5008 V to 4.15e-3 V (|.|) and every leakage
+current by 99.95 %; I(aux_rod_0) goes from +2.41e-2 A to -5.2e-4-2.49e-3j A
+(max_rel 1.03). Evidence: deliver/evidence/core2a/e01_golden_measurement_case.out"""
+min_rel_change = 0.5
+max_rel_change = 1.1
+
+[[change]]
+cases = ["cond_coupled_leads_open_circuit"]
+quantities = ["phi/*", "I/g*"]
+findings = ["10.29"]
+reason = """Source-free clusters float in the image family. The measurement network
+(rods m1, m2 and the galvanic meas_lead between them, 1 m beside the source
+lead) has no source and used to be dropped, so m1/m2 read back the incident
+field (2.990 V) with zero current. As a floating network it settles at the
+average incident potential of the lead: phi(m1) 2.990 -> 4.261 V (+42.5 %);
+its back-reaction moves the driven side by -0.89 % (phi) and -3.8 % (I).
+Evidence: deliver/evidence/core2a/e03_golden_coupled_leads.out"""
+min_rel_change = 5e-3
+max_rel_change = 0.45
+
+[[change]]
+cases = ["cond_coupled_leads_open_circuit"]
+quantities = ["I/m*"]
+findings = ["10.29"]
+reason = """The floating measurement network carries its equalising current: I(m1)
+and I(m2) go from exactly 0 to +2.28e-2 A each (the galvanic lead takes the
+same current in). The reference is 0, so the harness reports the absolute
+change (2.28e-2 A) as max_rel."""
+min_rel_change = 1e-2
+max_rel_change = 5e-2

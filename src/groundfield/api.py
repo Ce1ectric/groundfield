@@ -14,6 +14,7 @@ caller writes:
 ...                            conductor_type="bare_copper")
 >>> src = gf.create_source(world, name="s1", attached_to="g1",
 ...                        magnitude=10.0)
+>>> j = gf.create_junction(world, name="J1", position=(10.0, 0.0, 0.5))
 >>> eng = gf.create_engine(backend="image", frequencies=[50.0])
 >>> result = gf.run_simulation(world, eng)        # or world.solve(eng)
 
@@ -21,10 +22,10 @@ Conventions
 -----------
 - Every ``create_*`` function **registers** the new object in the
   ``World`` and returns it.
-- ``start`` / ``end`` of a conductor may be electrodes, electrode
-  names, or coordinate tuples.
+- ``start`` / ``end`` of a conductor may be electrodes, junctions,
+  their names, or coordinate tuples.
 - Names are auto-generated when omitted (``electrode_0``,
-  ``conductor_0``, ``source_0``).
+  ``conductor_0``, ``source_0``, ``junction_0``).
 - Coordinates are in metres with ``z`` pointing downwards (``z > 0`` is
   in the soil).
 
@@ -74,6 +75,7 @@ from groundfield.geometry.electrodes import (
     StripElectrode,
     _ElectrodeBase,
 )
+from groundfield.geometry.junction import Junction
 from groundfield.solver.engine import Backend, EarthInductiveModel, Engine
 from groundfield.solver.result import FieldResult
 from groundfield.soil.models import SoilModel
@@ -85,6 +87,7 @@ __all__ = [
     "create_world",
     "create_electrode",
     "create_conductor",
+    "create_junction",
     "create_source",
     "create_engine",
     "run_simulation",
@@ -111,9 +114,9 @@ KernelKind: TypeAlias = Literal["point", "line"]
 #: A point ``(x, y, z)`` in m: a tuple, a list or a numpy array.
 PointLike: TypeAlias = Sequence[float] | npt.NDArray[Any]
 
-#: A conductor end: an electrode, the name of a registered electrode, or a
-#: point ``(x, y, z)`` in m.
-ConductorEnd: TypeAlias = PointLike | Electrode | str
+#: A conductor end: an electrode or junction, the name of a registered
+#: electrode or junction, or a point ``(x, y, z)`` in m.
+ConductorEnd: TypeAlias = PointLike | Electrode | Junction | str
 
 _ELECTRODE_CLASSES: dict[str, type[_ElectrodeBase]] = {
     "rod": RodElectrode,
@@ -396,12 +399,27 @@ def _get_electrode(world: World, name: str) -> Electrode:
         ) from None
 
 
+def _get_node(world: World, name: str) -> Electrode | Junction:
+    """Electrode or junction ``name`` with a "did you mean" hint on a miss."""
+    for e in world.electrodes:
+        if e.name == name:
+            return e
+    for j in world.junctions:
+        if j.name == name:
+            return j
+    known = [e.name for e in world.electrodes] + [j.name for j in world.junctions]
+    hint = did_you_mean(name, known, n=3)
+    raise KeyError(
+        f"No electrode or junction {name!r} in world {world.name!r}.{hint}"
+    ) from None
+
+
 def _resolve_point(world: World, point: ConductorEnd) -> tuple[float, float, float]:
-    """Resolve an electrode / name / tuple to a coordinate triple."""
-    if isinstance(point, _ElectrodeBase):
+    """Resolve an electrode / junction / name / tuple to a coordinate triple."""
+    if isinstance(point, (_ElectrodeBase, Junction)):
         return point.connection_point
     if isinstance(point, str):
-        return _get_electrode(world, point).connection_point
+        return _get_node(world, point).connection_point
     # Assume iterable of length 3
     p = tuple(point)
     if len(p) != 3:
@@ -431,8 +449,10 @@ def create_conductor(
     world
         Target world.
     start, end
-        Start and end point. Each may be an electrode, the name of a
-        registered electrode, or a coordinate tuple ``(x, y, z)`` in m.
+        Start and end point. Each may be an electrode or a junction
+        (:func:`create_junction`), the name of a registered electrode or
+        junction, or a coordinate tuple ``(x, y, z)`` in m. A conductor
+        joins the network only if both ends are nodes.
     name
         Optional unique name. Auto-generated (``conductor_<n>``) when
         ``None``.
@@ -477,8 +497,8 @@ def create_conductor(
     Raises
     ------
     KeyError
-        ``start`` or ``end`` names an electrode that does not exist
-        (with the closest names).
+        ``start`` or ``end`` names an electrode or junction that does
+        not exist (with the closest names).
     """
     if name is None:
         name = _auto_name(world, "conductors", "conductor")
@@ -486,10 +506,10 @@ def create_conductor(
     e = _resolve_point(world, end)
 
     def _electrode_name(p: ConductorEnd) -> str | None:
-        if isinstance(p, _ElectrodeBase):
+        if isinstance(p, (_ElectrodeBase, Junction)):
             return p.name
         if isinstance(p, str):
-            return _get_electrode(world, p).name
+            return _get_node(world, p).name
         return None
 
     cond = Conductor(
@@ -520,12 +540,12 @@ def create_conductor(
 def create_source(
     world: World,
     *,
-    attached_to: str | Electrode | Conductor,
+    attached_to: str | Electrode | Junction,
     name: str | None = ...,
     kind: Literal["current"] = ...,
     magnitude: float = ...,
     phase_deg: float = ...,
-    return_to: str | Electrode | None = ...,
+    return_to: str | Electrode | Junction | None = ...,
 ) -> CurrentSource: ...
 
 
@@ -533,24 +553,24 @@ def create_source(
 def create_source(
     world: World,
     *,
-    attached_to: str | Electrode | Conductor,
+    attached_to: str | Electrode | Junction,
     name: str | None = ...,
     kind: Literal["voltage"],
     magnitude: float = ...,
     phase_deg: float = ...,
-    return_to: str | Electrode | None = ...,
+    return_to: str | Electrode | Junction | None = ...,
 ) -> VoltageSource: ...
 
 
 def create_source(
     world: World,
     *,
-    attached_to: str | Electrode | Conductor,
+    attached_to: str | Electrode | Junction,
     name: str | None = None,
     kind: SourceKind = "current",
     magnitude: float = 1.0,
     phase_deg: float = 0.0,
-    return_to: str | Electrode | None = None,
+    return_to: str | Electrode | Junction | None = None,
 ) -> Source:
     """Create a source and register it with ``world``.
 
@@ -559,19 +579,27 @@ def create_source(
     world
         Target world.
     attached_to
-        Electrode or conductor (or its name) the source feeds into.
+        Node the source feeds: an electrode or a junction
+        (:func:`create_junction`), or its name.
     name
         Optional unique name. Auto-generated (``source_<n>``) when
         ``None``.
     kind
         ``"current"`` (default) or ``"voltage"`` (:data:`SourceKind`).
+        No backend implements voltage sources: a world containing one
+        raises :class:`NotImplementedError` when solved.
     magnitude
-        Amplitude in A (current source) or V (voltage source), RMS.
+        Amplitude in A (current source) or V (voltage source), RMS;
+        finite. A source of magnitude 0 is rejected when the world is
+        solved.
     phase_deg
-        Phase angle in degrees.
+        Phase angle in degrees; finite.
     return_to
-        Optional return / auxiliary electrode. ``None`` means return
-        through the remote earth.
+        Optional second terminal (electrode or junction, or its name):
+        the source injects $+I$ at ``attached_to`` and $-I$ at
+        ``return_to`` (auxiliary electrode of a fall-of-potential
+        measurement, return conductor end). ``None`` (default) returns
+        the current through remote earth.
 
     Returns
     -------
@@ -581,7 +609,13 @@ def create_source(
     Raises
     ------
     ValueError
-        Unknown ``kind`` (with the closest valid kind).
+        Unknown ``kind`` (with the closest valid kind); ``attached_to``
+        names a conductor (a conductor is not a node — put a junction
+        at its end); ``attached_to`` and ``return_to`` are the same
+        node; non-finite ``magnitude`` / ``phase_deg``.
+    KeyError
+        ``attached_to`` / ``return_to`` names no electrode or junction
+        of ``world`` (with the closest names).
     """
     cls = _SOURCE_CLASSES.get(kind)
     if cls is None:
@@ -611,6 +645,73 @@ def create_source(
     )
     world.add_source(src)
     return src
+
+
+# ---------------------------------------------------------------------
+# Junctions
+# ---------------------------------------------------------------------
+
+
+def create_junction(
+    world: World,
+    *,
+    position: PointLike,
+    name: str | None = None,
+) -> Junction:
+    """Create a leakage-free junction node and register it with ``world``.
+
+    A junction is a node of the conductor network without soil contact:
+    conductors can start or end there (:func:`create_conductor`) and
+    sources can attach to it (:func:`create_source`), but it injects no
+    current into the soil. Its potential follows from Kirchhoff's
+    current law and Ohm's law along the conductors; solved results
+    report it in ``result.metadata["junction_potentials"][name]`` (V per
+    frequency). Use it for cable joints and for the terminals of a
+    measuring instrument (see :class:`~groundfield.geometry.junction.Junction`).
+
+    Parameters
+    ----------
+    world
+        Target world.
+    position
+        Location ``(x, y, z)`` in m (``z`` positive downwards; a point
+        above the surface is allowed). Conductors ending on the junction
+        use it as their end point.
+    name
+        Optional unique node name (electrodes and junctions share one
+        namespace). Auto-generated (``junction_<n>``) when ``None``.
+
+    Returns
+    -------
+    Junction
+        The registered junction.
+
+    Raises
+    ------
+    ValueError
+        The name is already taken by an electrode or junction, or the
+        position is not finite.
+
+    Notes
+    -----
+    A junction must be connected through conductors to an electrode or
+    to a galvanically coupled conductor; a subnetwork without soil
+    contact has an undefined potential and is rejected when solved.
+    Only backends that declare the ``junctions`` capability (the image
+    family) accept worlds with junctions.
+    """
+    if name is None:
+        taken = {e.name for e in world.electrodes} | {j.name for j in world.junctions}
+        n = 0
+        while f"junction_{n}" in taken:
+            n += 1
+        name = f"junction_{n}"
+    p = tuple(position)
+    if len(p) != 3:
+        raise ValueError(f"position must be (x, y, z), got {p!r} of length {len(p)}.")
+    junction = Junction(name=name, position=(float(p[0]), float(p[1]), float(p[2])))
+    world.add_junction(junction)
+    return junction
 
 
 # ---------------------------------------------------------------------

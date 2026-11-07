@@ -168,7 +168,9 @@ def test_tn_network_source_return_to_override_warns() -> None:
             injection=MeasurementInjectionConfig(),
             probe=MeasurementProbeConfig(),
         ),
-        source_return_to="user-specified-electrode",
+        # An electrode of the generated world other than the aux anchor:
+        # since 10.66 a return_to that names no node raises at build time.
+        source_return_to="probe_rod_0",
     )
     gen = TnNetworkGenerator(cfg=cfg, seed=42)
     with warnings.catch_warnings(record=True) as caught:
@@ -178,9 +180,24 @@ def test_tn_network_source_return_to_override_warns() -> None:
     assert msgs, [str(w.message) for w in caught]
 
     # The created source carries the user-specified return_to.
-    assert any(s.return_to == "user-specified-electrode" for s in world.sources), [
+    assert any(s.return_to == "probe_rod_0" for s in world.sources), [
         s.return_to for s in world.sources
     ]
+
+
+@pytest.mark.finding("10.66")
+def test_tn_network_unknown_source_return_to_raises() -> None:
+    """A ``source_return_to`` naming no electrode fails at build time."""
+    from groundfield.generators.tn_network import (
+        TnNetworkConfig,
+        TnNetworkGenerator,
+    )
+
+    cfg = TnNetworkConfig(source_return_to="user-specified-electrode")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(KeyError, match="user-specified-electrode"):
+            TnNetworkGenerator(cfg=cfg, seed=42).build()
 
 
 # ---------------------------------------------------------------------
