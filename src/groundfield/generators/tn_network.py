@@ -98,6 +98,7 @@ from groundfield.generators.materialise import materialise_plan
 from groundfield.generators.measurement import (
     MeasurementLeadConfig,
     MeasurementSetupConfig,
+    lead_axis_z,
 )
 from groundfield.generators.pen_topology import (
     PenTopology,
@@ -867,17 +868,19 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         end: str,
         rng: np.random.Generator,
     ) -> PlannedBranch:
-        """Resolve one measurement lead into a branch."""
-        # ``depth_m`` is currently informational -- the lead's endpoint
-        # depths come from the anchor electrodes' connection points. The
-        # draw keeps the RNG stream of earlier releases.
-        _ = _to_float(lead.depth_m, rng)
+        """Resolve one measurement lead into a branch.
+
+        The lead runs horizontally at :func:`lead_axis_z` of its
+        (resolved) ``depth_m`` between the two anchors (F48).
+        """
+        depth = _to_float(lead.depth_m, rng)
         return PlannedBranch(
             name=name,
             role="measurement_lead",
             start=start,
             end=end,
             conductor=_lead_conductor(lead),
+            axis_z_m=lead_axis_z(depth, lead.coupling_to_soil),
         )
 
     def _plan_star_backbone(

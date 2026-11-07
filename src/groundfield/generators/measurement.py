@@ -54,17 +54,23 @@ Validity envelope
   ``build()``. The straight-line model is adequate for the typical
   questions ("how strong is the inductive coupling between the
   feed lead and the parallel measurement lead?").
-* The leads' depth is the wire's $z$-coordinate at both ends; the
-  wire interpolates linearly (so a 200 m long lead from
-  ``z = 0`` to ``z = 0.6 m`` is in fact a slight diagonal — for
-  typical distances this is below the geometry resolution).
+* Lead height: :attr:`MeasurementLeadConfig.depth_m` is the
+  :math:`z` coordinate of the lead axis (positive into the soil,
+  negative above ground). The lead runs horizontally at that depth
+  between the horizontal positions of the two anchor electrodes and is
+  electrically connected to both; the short vertical risers to the
+  electrode heads are not modelled. ``depth_m = 0`` ("on the surface")
+  would put the wire into the soil-surface plane, where source and
+  image coincide; such a lead is placed :data:`SURFACE_LEAD_HEIGHT_M`
+  above the ground (isolated lead) or below it (galvanic lead, which
+  must touch the soil).
 """
 
 from __future__ import annotations
 
 from typing import Optional, Union
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from groundfield.generators.base import GeneratorConfig
 from groundfield.generators.distributions import AnyDistribution
@@ -72,6 +78,8 @@ from groundfield.generators.electrode_specs import RodElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 
 __all__ = [
+    "SURFACE_LEAD_HEIGHT_M",
+    "lead_axis_z",
     "MeasurementLeadConfig",
     "MeasurementInjectionConfig",
     "MeasurementProbeConfig",
@@ -88,17 +96,55 @@ __all__ = [
 # ---------------------------------------------------------------------
 
 
+SURFACE_LEAD_HEIGHT_M = 0.1
+"""Distance in m of a lead "on the surface" (``depth_m = 0``) from the ground plane.
+
+A wire exactly in the soil-surface plane is singular for the image
+kernels (source and image coincide), and the Sommerfeld earth-return
+kernel degrades for :math:`|z|` below about ten wire radii. 0.1 m keeps a
+5 mm lead clear of both; the earth-return impedance of a surface lead is
+insensitive to the exact height while it is small against the skin depth
+(hundreds of metres below 1 kHz)."""
+
+
+def lead_axis_z(depth_m: float, coupling_to_soil: str = "isolated") -> float:
+    """:math:`z` coordinate in m of a measurement lead's axis.
+
+    Parameters
+    ----------
+    depth_m
+        Configured depth in m: positive into the soil, negative above
+        ground, ``0`` on the surface.
+    coupling_to_soil
+        ``"isolated"`` or ``"galvanic"``.
+
+    Returns
+    -------
+    float
+        ``depth_m``; for ``depth_m == 0`` the lead lies
+        :data:`SURFACE_LEAD_HEIGHT_M` above the ground (isolated) or
+        below it (galvanic: the bare wire touches the soil).
+    """
+    if depth_m != 0.0:
+        return float(depth_m)
+    if coupling_to_soil == "galvanic":
+        return SURFACE_LEAD_HEIGHT_M
+    return -SURFACE_LEAD_HEIGHT_M
+
+
 class MeasurementLeadConfig(GeneratorConfig):
     """One physical measurement lead (current feed or voltage probe).
 
     A measurement lead is a finite-impedance :class:`Conductor` that
     connects two anchor electrodes (typically the substation cluster
-    and the auxiliary or probe cluster). Two routing variants are
-    common in typical studies and selectable via :attr:`depth_m`:
+    and the auxiliary or probe cluster). It runs horizontally at
+    :math:`z` = :attr:`depth_m` (see :func:`lead_axis_z`) between the
+    horizontal positions of the two anchors. Typical variants:
 
-    * ``depth_m = 0.0`` — overhead at the surface. The classical
-      default case for the Stromeinspeiseleitung of a
-      fall-of-potential measurement.
+    * ``depth_m = 0.0`` — laid out on the ground (the classical feed
+      lead of a fall-of-potential measurement); modelled
+      :data:`SURFACE_LEAD_HEIGHT_M` above the surface.
+    * ``depth_m < 0.0`` — strung above ground at height ``-depth_m``.
     * ``depth_m > 0.0`` (e.g. 0.6 m) — buried cable. Used when the
       study models a permanently installed measurement infrastructure
       or a measurement that uses an existing buried PEN cable as
@@ -115,8 +161,9 @@ class MeasurementLeadConfig(GeneratorConfig):
     depth_m: Union[float, AnyDistribution] = Field(
         default=0.0,
         description=(
-            "Lead depth in m. ``0`` = overhead at the surface; "
-            "positive values bury the lead like a cable."
+            "z of the lead axis in m: positive values bury the lead like "
+            "a cable, negative values string it above ground, 0 lays it "
+            "on the surface (see lead_axis_z)."
         ),
     )
     wire_radius_m: float = Field(default=0.005, description="Wire radius in m.")
@@ -154,6 +201,20 @@ class MeasurementLeadConfig(GeneratorConfig):
         ),
     )
 
+    @model_validator(mode="after")
+    def _galvanic_lead_in_soil(self) -> "MeasurementLeadConfig":
+        if (
+            self.coupling_to_soil == "galvanic"
+            and isinstance(self.depth_m, (int, float))
+            and self.depth_m < 0.0
+        ):
+            raise ValueError(
+                "MeasurementLeadConfig: a galvanic lead leaks current into the "
+                f"soil and cannot hang in the air (depth_m={self.depth_m}); use "
+                "depth_m >= 0 or coupling_to_soil='isolated'."
+            )
+        return self
+
 
 # ---------------------------------------------------------------------
 # Helpers — common lead presets
@@ -168,8 +229,9 @@ def overhead_lead(
 ) -> MeasurementLeadConfig:
     """Convenience factory for an overhead bare-copper measurement lead.
 
-    Surface routing (``depth_m=0``), bare copper, isolated soil
-    coupling, Neumann inductance enabled.
+    Laid out on the ground (``depth_m=0``, modelled
+    :data:`SURFACE_LEAD_HEIGHT_M` above the surface), bare copper,
+    isolated soil coupling, Neumann inductance enabled.
     """
     return MeasurementLeadConfig(
         depth_m=0.0,

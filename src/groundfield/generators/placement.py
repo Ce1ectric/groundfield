@@ -78,7 +78,9 @@ class ManhattanGridPlacement(BaseModel):
     the whole grid). Per-site ``jitter_m`` adds an additional
     uniform offset in the box
     $[-\\text{jitter}/2, +\\text{jitter}/2]^2$ to each grid point —
-    sample once per site.
+    sample once per site. ``jitter_m`` may itself be a
+    :class:`Distribution`; it is then drawn once per site (a draw
+    :math:`\\le 0` means no jitter for that site).
 
     Notes
     -----
@@ -104,12 +106,12 @@ class ManhattanGridPlacement(BaseModel):
         default=(0.0, 0.0),
         description="Centre of the grid in m.",
     )
-    jitter_m: Union[float, AnyDistribution] = Field(
+    jitter_m: Union[Annotated[float, Field(ge=0.0)], AnyDistribution] = Field(
         default=0.0,
-        ge=0.0,
         description=(
             "Per-site uniform jitter amplitude in m (full width of the "
-            "box). 0 disables."
+            "box). 0 disables. A distribution is drawn once per site; a "
+            "non-positive draw leaves that site on its grid point."
         ),
     )
 
