@@ -220,6 +220,7 @@ def test_rho_f_from_field_result_extracts_correctly() -> None:
     fit = rho_f_from_field_result(
         res,
         "g1",
+        quantity="electrode",  # hand-built result: no source snapshot (10.19)
         n_poles=1,
         n_iter=10,
         include_R_inf=True,
@@ -241,7 +242,7 @@ def test_rho_f_from_field_result_unknown_electrode_raises() -> None:
         soil_resistivity=100.0,
     )
     with pytest.raises(KeyError, match="not in result"):
-        rho_f_from_field_result(res, "nonexistent")
+        rho_f_from_field_result(res, "nonexistent", quantity="electrode")
 
 
 # ---------------------------------------------------------------------
@@ -332,6 +333,8 @@ def test_dead_frequency_masked_with_warning() -> None:
     res = eng.solve(w)
     # Forge one dead frequency in a copy of the result arrays.
     res.electrode_currents["g1"][2] = 0j
+    # The forged dead column is an electrode current; the input impedance
+    # (default since 10.19) divides by the source current instead.
     with pytest.warns(UserWarning, match="no current"):
-        fit = rho_f_from_field_result(res, "g1", n_poles=1)
+        fit = rho_f_from_field_result(res, "g1", quantity="electrode", n_poles=1)
     assert fit.fit_frequencies.size == 5  # dead sample excluded

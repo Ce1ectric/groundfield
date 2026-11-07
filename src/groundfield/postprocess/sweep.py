@@ -25,13 +25,25 @@ API surface
 
 Mathematical / physical content
 -------------------------------
-The default response extractor picks up the
-**cluster impedance** :math:`Z_c = U_c / I_c` at the source's
-galvanic cluster, with :math:`U_c` the cluster potential and
-:math:`I_c = \\sum_{e \\in c_\\text{src}} I_e` the net soil
-leakage. Both numerator and denominator are read from
-:class:`FieldResult` per ``frequency_index``, so the response is
-the engineering :math:`Z(\\rho_1, h_1, f)` curve that
+The default response extractor reports one impedance per
+frequency, selected by ``quantity`` (review pass 10, 10.18):
+
+* ``"input"`` (default) — the **input (driving-point) impedance**
+  :math:`Z_\\text{in} = (\\varphi_a - \\varphi_r) / I_s` of the
+  current source: what a measurement instrument or a fault sees at
+  the feeding point (:meth:`FieldResult.input_impedance`);
+* ``"cluster"`` — the **cluster impedance**
+  :math:`Z_c = \\varphi_c / \\sum_{e \\in c} I_e` of the source's
+  galvanic cluster over its own soil leakage (the default up to
+  v0.15.0);
+* ``"electrode"`` — :math:`\\varphi_e / I_e` of the feeding
+  electrode alone.
+
+As soon as conductors (PEN, shields, leads) carry part of the
+injected current away, the cluster impedance describes only the local
+electrode: for a station with three houses on a PEN it is 1.85 times
+the input impedance (review pass 10, R5-02). The response is the
+engineering :math:`Z(\\rho_1, h_1, f)` curve that
 :mod:`groundfield.postprocess.rho_f_standard` and
 :mod:`groundfield.postprocess.vector_fitting` consume.
 
@@ -51,11 +63,20 @@ Validity envelope
 from __future__ import annotations
 
 import cmath
+import functools
 import itertools
 import math
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
+import numpy as np
 import pandas as pd
+
+from groundfield.postprocess._impedance import (
+    Quantity,
+    check_quantity,
+    impedance_series,
+    select_current_source,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
@@ -70,40 +91,55 @@ __all__ = ["sweep", "plot_sweep_lines", "plot_sweep_heatmap"]
 # ---------------------------------------------------------------------
 
 
-def _default_response(
-    result: "FieldResult", world: "World", frequency_index: int
+def _impedance_response(
+    result: "FieldResult",
+    world: "World",
+    frequency_index: int,
+    *,
+    quantity: str = "input",
+    source: str | None = None,
 ) -> dict[str, float]:
-    """Cluster impedance and EPR at the source's cluster.
+    """Impedance, its denominator current and the voltage of one source.
 
-    Picks the (single) current source's cluster, sums the
-    per-electrode soil leakages and returns ``Z_c = U_c / I_c``
-    plus convenience fields.
+    Picks the current source (``source`` or the only one), reads the
+    impedance selected by ``quantity`` (see the module docstring) and
+    returns ``Z = U / I`` plus convenience fields:
 
-    Returns an empty dict when the world has no current source —
-    that signals "no scalar response to extract" to :func:`sweep`,
-    which then emits a row with only the axis values and
-    ``frequency_Hz``.
+    * ``U_E_*`` — the voltage of the quotient: the driving-point voltage
+      :math:`\\varphi_a - \\varphi_r` (= EPR for a return through
+      remote earth) for ``"input"``, the cluster potential for
+      ``"cluster"``, the electrode potential for ``"electrode"``;
+    * ``I_*`` — the impressed source current, the cluster leakage or
+      the electrode leakage;
+    * ``Z_*``, ``abs_Z``, ``arg_Z_deg`` — the impedance.
+
+    Returns an empty dict when the world has no current source — that
+    signals "no scalar response to extract" to :func:`sweep`, which then
+    emits a row with only the axis values and ``frequency_Hz``.
     """
-    current_sources = [s for s in world.sources if s.kind == "current"]
-    if not current_sources:
+    pool = result.sources or world.sources
+    src = select_current_source(
+        result, source=source, electrode_name=None, caller="sweep", sources=pool
+    )
+    if src is None:
         return {}
-    src = current_sources[0]
-    members = result.clusters.get(src.attached_to, [src.attached_to])
-    if not members:
-        return {}
-
-    U = complex(result.electrode_potentials.get(members[0], [0j])[frequency_index])
-    I = 0 + 0j
-    for m in members:
-        if m in result.electrode_currents:
-            I += complex(result.electrode_currents[m][frequency_index])
-
-    if I != 0:
-        Z = U / I
+    name = None if quantity == "input" else src.attached_to
+    z_all, i_all = impedance_series(
+        result,
+        quantity,
+        electrode_name=name,
+        source=src.name if quantity == "input" else None,
+        caller="sweep",
+    )
+    Z = complex(z_all[frequency_index])
+    I = complex(i_all[frequency_index])
+    if I != 0 and np.isfinite(Z.real) and np.isfinite(Z.imag):
+        U = Z * I
         Z_re, Z_im = Z.real, Z.imag
         abs_Z = abs(Z)
         arg_Z = math.degrees(cmath.phase(Z))
     else:
+        U = complex(result.electrode_potentials[src.attached_to][frequency_index])
         Z_re = Z_im = abs_Z = arg_Z = float("nan")
 
     return {
@@ -120,6 +156,29 @@ def _default_response(
     }
 
 
+#: Default response of :func:`sweep` and :func:`convergence_study`: the
+#: input impedance of the only current source.
+_default_response = functools.partial(_impedance_response, quantity="input")
+
+
+def _resolve_response(
+    response: Callable[["FieldResult", "World", int], dict[str, float]] | None,
+    quantity: str,
+    source: str | None,
+    caller: str,
+) -> Callable[["FieldResult", "World", int], dict[str, float]]:
+    """Default response for ``quantity`` / ``source`` or the user's one."""
+    check_quantity(quantity)
+    if response is None:
+        return functools.partial(_impedance_response, quantity=quantity, source=source)
+    if quantity != "input" or source is not None:
+        raise ValueError(
+            f"{caller}: quantity= and source= configure the default response; "
+            "they cannot be combined with a custom response."
+        )
+    return response
+
+
 # ---------------------------------------------------------------------
 # sweep
 # ---------------------------------------------------------------------
@@ -131,6 +190,8 @@ def sweep(
     *,
     axes: dict[str, Sequence[Any]],
     response: Callable[["FieldResult", "World", int], dict[str, float]] | None = None,
+    quantity: Quantity = "input",
+    source: str | None = None,
 ) -> pd.DataFrame:
     """Cartesian-product parameter sweep across user-defined axes.
 
@@ -167,21 +228,38 @@ def sweep(
     response
         Optional response extractor. Receives
         ``(result, world, frequency_index)`` and must return a
-        ``dict[str, float|complex]``. Defaults to
-        :func:`_default_response` (cluster impedance + EPR at
-        the source's cluster).
+        ``dict[str, float|complex]``. Defaults to the impedance
+        selected by ``quantity`` with the columns ``U_E_re``,
+        ``U_E_im``, ``abs_U_E``, ``I_re``, ``I_im``, ``abs_I``,
+        ``Z_re``, ``Z_im``, ``abs_Z``, ``arg_Z_deg`` (see the module
+        docstring).
+    quantity
+        Impedance of the default response: ``"input"`` (default since
+        review pass 10, 10.18) — the driving-point impedance of the
+        source; ``"cluster"`` — the source cluster's potential over its
+        own leakage (the v0.15.0 default); ``"electrode"`` — the feeding
+        electrode's own U/I. Only with the default response.
+    source
+        Name of the current source the default response refers to; may
+        be omitted when the world has exactly one current source (with
+        several, v0.15.0 silently used the first one; now it raises).
 
     Returns
     -------
     pandas.DataFrame
         Long-format. Columns are the axis names, ``frequency_Hz``,
         and every key returned by ``response``. One row per
-        Cartesian-product point per frequency.
+        Cartesian-product point per frequency. With the default
+        response, ``df.attrs["impedance_quantity"]`` records
+        ``quantity``.
 
     Raises
     ------
     ValueError
-        If ``axes`` is empty or any axis is empty.
+        If ``axes`` is empty or any axis is empty, ``quantity`` is
+        unknown, ``quantity`` / ``source`` are combined with a custom
+        ``response``, or the default response finds several current
+        sources and ``source`` is omitted.
     """
     from groundfield.solver.engine import Engine
 
@@ -191,15 +269,15 @@ def sweep(
         if len(list(values)) == 0:
             raise ValueError(f"axis '{name}' is empty.")
 
-    if response is None:
-        response = _default_response
+    default = response is None
+    response = _resolve_response(response, quantity, source, "sweep")
 
     keys = list(axes.keys())
     values_list = [list(axes[k]) for k in keys]
 
     rows: list[dict[str, Any]] = []
     for combo in itertools.product(*values_list):
-        params = dict(zip(keys, combo))
+        params = dict(zip(keys, combo, strict=True))
         world = world_factory(**params)
         eng = engine if isinstance(engine, Engine) else engine(**params)
         result = eng.solve(world)
@@ -208,7 +286,10 @@ def sweep(
             row["frequency_Hz"] = float(f_hz)
             row.update(response(result, world, f_idx))
             rows.append(row)
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    if default:
+        df.attrs["impedance_quantity"] = quantity
+    return df
 
 
 # ---------------------------------------------------------------------

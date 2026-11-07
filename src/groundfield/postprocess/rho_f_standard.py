@@ -74,6 +74,8 @@ from typing import Sequence
 
 import numpy as np
 
+from groundfield.postprocess._impedance import Quantity, impedance_series
+
 __all__ = [
     "RhoFStandardFit",
     "fit_rho_f_standard",
@@ -232,9 +234,12 @@ def fit_rho_f_standard(
 def rho_f_standard_from_results(
     results: Sequence,
     rhos: Sequence[float],
-    electrode_name: str,
+    electrode_name: str | None = None,
+    *,
+    quantity: Quantity = "input",
+    source: str | None = None,
 ) -> RhoFStandardFit:
-    """Build the (ρ, f, Z) sample table from a list of FieldResults.
+    """Build the (ρ, f, Z) sample table from a list of FieldResults and fit.
 
     Use case: parametric soil-resistivity sweep. Run one
     ``Engine.solve`` per soil resistivity, collect the FieldResults
@@ -247,10 +252,22 @@ def rho_f_standard_from_results(
         List of :class:`groundfield.FieldResult` (one per
         $\\rho$ value).
     rhos
-        Soil-resistivity parameter $\\rho$ corresponding to each
+        Soil-resistivity parameter $\\rho$ in Ω·m corresponding to each
         FieldResult (same length).
     electrode_name
-        Name of the electrode to extract.
+        Electrode whose impedance is fitted; required for
+        ``quantity="cluster"`` and ``"electrode"``, optional for
+        ``"input"`` (see
+        :func:`groundfield.postprocess.vector_fitting.rho_f_from_field_result`).
+    quantity
+        ``"input"`` (default since review pass 10, 10.19): the
+        driving-point impedance of the current source.
+        ``"cluster"``: the cluster impedance of ``electrode_name``.
+        ``"electrode"``: :math:`U_e/I_e` of the named electrode, the
+        quantity v0.15.0 fitted.
+    source
+        Current source for ``quantity="input"``; may be omitted with a
+        single current source.
 
     Returns
     -------
@@ -261,21 +278,20 @@ def rho_f_standard_from_results(
     ValueError
         If ``results`` and ``rhos`` differ in length, if the
         per-electrode arrays of a result do not match its
-        ``frequencies``, or if the electrode carries no current at
-        *any* $(\\rho, f)$ sample (then $Z = U/I$ is nowhere
-        defined).
+        ``frequencies``, if the denominator current is zero at *every*
+        $(\\rho, f)$ sample (then $Z = U/I$ is nowhere defined), or for
+        an invalid ``quantity`` / ``electrode_name`` combination.
     KeyError
         If ``electrode_name`` is absent from a result's
         ``electrode_potentials`` or ``electrode_currents``.
 
     Notes
     -----
-    Samples at which the electrode carries **no current** are
+    Samples at which the denominator current is **zero** are
     *masked out* rather than entered as $Z = 0$: a vanishing current
-    means the driving-point impedance is undefined, not zero, and a
-    single injected zero row pulls the least-squares plane through
-    the origin (a 1-in-7 dead DC column biases $k_1$ by tens of
-    percent). Masking mirrors
+    means the impedance is undefined, not zero, and a single injected
+    zero row pulls the least-squares plane through the origin (a 1-in-7
+    dead DC column biases $k_1$ by tens of percent). Masking mirrors
     :func:`groundfield.postprocess.vector_fitting.rho_f_from_field_result`;
     a :class:`UserWarning` reports how many samples were dropped.
     """
@@ -289,51 +305,40 @@ def rho_f_standard_from_results(
     Z_arr: list[complex] = []
     n_dead = 0
     n_total = 0
-    for res, rho_val in zip(results, rhos):
-        if electrode_name not in res.electrode_potentials:
-            raise KeyError(
-                f"electrode '{electrode_name}' not in FieldResult "
-                f"potentials; available: {list(res.electrode_potentials)}"
-            )
-        if electrode_name not in res.electrode_currents:
-            raise KeyError(
-                f"electrode '{electrode_name}' not in FieldResult "
-                f"currents; available: {list(res.electrode_currents)}"
-            )
-        U = np.asarray(res.electrode_potentials[electrode_name], dtype=complex)
-        I = np.asarray(res.electrode_currents[electrode_name], dtype=complex)
+    for res, rho_val in zip(results, rhos, strict=True):
+        z_all, i_all = impedance_series(
+            res,
+            quantity,
+            electrode_name=electrode_name,
+            source=source,
+            caller="rho_f_standard_from_results",
+        )
         f_local = np.asarray(res.frequencies, dtype=float)
-        if U.shape != f_local.shape or I.shape != f_local.shape:
-            raise ValueError(
-                "rho_f_standard_from_results: inconsistent shapes for "
-                f"electrode '{electrode_name}': frequencies={f_local.shape}, "
-                f"potentials={U.shape}, currents={I.shape}."
-            )
         # Review pass 9 (finding F41), mirroring the earlier fix N23 in
         # vector_fitting.rho_f_from_field_result: frequencies at which
-        # the electrode carries no current are MASKED, not injected as
+        # the denominator current vanishes are MASKED, not injected as
         # Z = 0 samples, which used to drag the fit toward the origin.
-        alive = np.abs(I) > 0.0
+        alive = np.abs(i_all) > 0.0
         n_total += int(alive.size)
         n_dead += int((~alive).sum())
         rho_arr.extend([float(rho_val)] * int(alive.sum()))
         f_arr.extend(f_local[alive].tolist())
-        Z_arr.extend((U[alive] / I[alive]).tolist())
+        Z_arr.extend(z_all[alive].tolist())
 
+    label = f"electrode '{electrode_name}'" if quantity != "input" else "the source"
     if not Z_arr:
         raise ValueError(
-            f"rho_f_standard_from_results: electrode '{electrode_name}' "
-            f"carries no current at any of the {n_total} (rho, f) samples "
-            "— Z = U/I is undefined. Fit the driven electrode instead."
+            f"rho_f_standard_from_results: {label} carries no current at any "
+            f"of the {n_total} (rho, f) samples — Z = U/I is undefined. Fit "
+            "the driven electrode instead."
         )
     if n_dead:
         import warnings as _warnings
 
         _warnings.warn(
-            f"rho_f_standard_from_results: electrode '{electrode_name}' "
-            f"carries no current at {n_dead} of {n_total} (rho, f) "
-            "samples; those samples are excluded from the fit "
-            "(historic behaviour injected Z = 0 there).",
+            f"rho_f_standard_from_results: {label} carries no current at "
+            f"{n_dead} of {n_total} (rho, f) samples; those samples are "
+            "excluded from the fit (historic behaviour injected Z = 0 there).",
             UserWarning,
             stacklevel=2,
         )

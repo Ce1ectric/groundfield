@@ -58,12 +58,13 @@ References
 
 from __future__ import annotations
 
-import cmath
 import math
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import numpy as np
+
+from groundfield.postprocess._impedance import Quantity, impedance_series
 
 __all__ = [
     "VectorFitResult",
@@ -148,7 +149,7 @@ class VectorFitResult:
         s = 2j * math.pi * np.asarray(frequencies, dtype=float)
         Z = np.full_like(s, self.R_inf, dtype=complex)
         Z = Z + self.L_inf * s
-        for p, r in zip(self.poles, self.residues):
+        for p, r in zip(self.poles, self.residues, strict=True):
             Z = Z + r / (s - p)
         return Z
 
@@ -641,7 +642,7 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
     # real s.
     used = np.zeros(len(fit.poles), dtype=bool)
     rel_tol = 1e-3
-    for k, (p, r) in enumerate(zip(fit.poles, fit.residues)):
+    for k, (p, r) in enumerate(zip(fit.poles, fit.residues, strict=True)):
         if used[k]:
             continue
         if abs(p.imag) < rel_tol * max(abs(p.real), 1.0):
@@ -736,22 +737,20 @@ def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
 
 def rho_f_from_field_result(
     result,
-    electrode_name: str,
+    electrode_name: str | None = None,
     *,
+    quantity: Quantity = "input",
+    source: str | None = None,
     n_poles: int = 4,
     n_iter: int = 8,
     include_R_inf: bool = True,
     include_L_inf: bool = False,
     complex_poles: bool = True,
 ) -> VectorFitResult:
-    """Fit $Z(s)$ for one electrode of a :class:`FieldResult`.
+    """Fit $Z(s)$ to the impedance of a :class:`FieldResult`.
 
-    Computes
-    $Z_k = U_k / I_k$
-    at every frequency in ``result.frequencies`` for
-    ``result.electrode_potentials[electrode_name]`` and
-    ``result.electrode_currents[electrode_name]``, then runs
-    :func:`vector_fit` on the resulting series.
+    Reads the impedance selected by ``quantity`` at every frequency in
+    ``result.frequencies`` and runs :func:`vector_fit` on the series.
 
     Parameters
     ----------
@@ -759,53 +758,85 @@ def rho_f_from_field_result(
         :class:`groundfield.FieldResult` produced by an
         ``Engine.solve`` call with at least 4–8 frequency samples.
     electrode_name
-        Name of the electrode to extract.
+        Electrode whose impedance is fitted. Required for
+        ``quantity="cluster"`` and ``"electrode"``. With ``"input"`` it
+        is optional; when given it must belong to the cluster the source
+        feeds (and selects among several sources).
+    quantity
+        ``"input"`` (default since review pass 10, 10.19): the
+        driving-point impedance :math:`(\\varphi_a - \\varphi_r)/I_s`
+        of the current source (:meth:`FieldResult.input_impedance`) —
+        the impedance a groundinsight BusType stands for.
+        ``"cluster"``: :meth:`FieldResult.cluster_impedance` of
+        ``electrode_name``. ``"electrode"``: :math:`U_e/I_e` of the
+        named electrode alone, the quantity v0.15.0 fitted (on a ring
+        with two bonded rods 19 % above the cluster impedance, R7-02).
+    source
+        Current source for ``quantity="input"``; may be omitted when the
+        result carries exactly one.
     n_poles, n_iter, include_R_inf, include_L_inf, complex_poles
         Forwarded to :func:`vector_fit`.
 
     Returns
     -------
     VectorFitResult
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``quantity``; for ``"input"`` on a result without
+        source snapshot or with an ``electrode_name`` the source does not
+        feed; for ``"cluster"`` / ``"electrode"`` without
+        ``electrode_name``; if the denominator current is zero at every
+        frequency.
+    KeyError
+        If ``electrode_name`` or ``source`` is unknown.
+
+    Notes
+    -----
+    Frequencies at which the denominator current is zero (a passive
+    electrode, a dead column) are masked with a :class:`UserWarning`
+    instead of being entered as :math:`Z = 0`.
     """
-    if electrode_name not in result.electrode_potentials:
-        raise KeyError(
-            f"electrode '{electrode_name}' not in result; "
-            f"available: {list(result.electrode_potentials)}"
-        )
+    z_all, i_all = impedance_series(
+        result,
+        quantity,
+        electrode_name=electrode_name,
+        source=source,
+        caller="rho_f_from_field_result",
+    )
     freqs = np.asarray(result.frequencies, dtype=float)
-    U = np.asarray(result.electrode_potentials[electrode_name], dtype=complex)
-    I = np.asarray(result.electrode_currents[electrode_name], dtype=complex)
-    if I.shape != freqs.shape:
+    if i_all.shape != freqs.shape:
         raise ValueError(
             "Inconsistent shapes between frequencies and electrode currents"
         )
+    label = f"electrode '{electrode_name}'" if quantity != "input" else "the source"
     # Audit 2026-07-08, WP-B4 (finding N23): frequencies where the
-    # electrode carries no current (passive electrode / dead column)
+    # denominator current vanishes (passive electrode / dead column)
     # are MASKED instead of being injected as Z = 0 samples — a
     # single dead frequency used to pull the whole fit through the
     # origin silently.
-    alive = np.abs(I) > 0.0
+    alive = np.abs(i_all) > 0.0
     if not alive.any():
         raise ValueError(
-            f"rho_f_from_field_result: electrode '{electrode_name}' "
-            "carries no current at any frequency — Z = U/I is "
-            "undefined. Fit the driven electrode instead."
+            f"rho_f_from_field_result: {label} carries no current at any "
+            "frequency — Z = U/I is undefined. Fit the driven electrode "
+            "instead."
         )
     if not alive.all():
         import warnings as _warnings
 
         _warnings.warn(
-            f"rho_f_from_field_result: electrode '{electrode_name}' "
-            f"carries no current at {int((~alive).sum())} of "
-            f"{alive.size} frequencies; those samples are excluded "
-            "from the fit (historic behaviour injected Z = 0 there).",
+            f"rho_f_from_field_result: {label} carries no current at "
+            f"{int((~alive).sum())} of {alive.size} frequencies; those "
+            "samples are excluded from the fit (historic behaviour injected "
+            "Z = 0 there).",
             UserWarning,
             stacklevel=2,
         )
-    Z = U[alive] / I[alive]
     return vector_fit(
         freqs[alive],
-        Z,
+        z_all[alive],
         n_poles=n_poles,
         n_iter=n_iter,
         include_R_inf=include_R_inf,

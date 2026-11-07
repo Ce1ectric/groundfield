@@ -62,8 +62,6 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover
-    import matplotlib.figure as mpl_fig
-
     from groundfield.conductors.conductor import Conductor
     from groundfield.sources import Source
     from groundfield.world import World

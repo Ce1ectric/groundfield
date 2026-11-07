@@ -111,7 +111,7 @@ def test_f41_dead_dc_column_is_masked_not_zero_injected() -> None:
     """
     results = _results_with_dead_dc()
     with pytest.warns(UserWarning, match="carries no current at 5 of 35"):
-        fit = rho_f_standard_from_results(results, RHOS, "g1")
+        fit = rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
     assert fit.k1 == pytest.approx(K_TRUE["k1"], rel=1e-9), (
         "k1 must be recovered from the live samples; the pre-fix "
@@ -130,7 +130,7 @@ def test_f41_masked_samples_are_absent_from_the_diagnostics() -> None:
     """The dropped samples must not appear in ``sample_*`` either."""
     results = _results_with_dead_dc()
     with pytest.warns(UserWarning):
-        fit = rho_f_standard_from_results(results, RHOS, "g1")
+        fit = rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
     assert fit.sample_f.size == len(RHOS) * (len(FREQS) - 1) == 30
     assert not np.any(fit.sample_f == 0.0)
@@ -145,7 +145,7 @@ def test_f41_all_dead_raises_instead_of_fitting_zeros() -> None:
     """
     results = _results_with_dead_dc(all_dead=True)
     with pytest.raises(ValueError, match="carries no current at any"):
-        rho_f_standard_from_results(results, RHOS, "g1")
+        rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
 
 def test_f41_electrode_missing_from_currents_raises_helpful_keyerror() -> None:
@@ -156,7 +156,7 @@ def test_f41_electrode_missing_from_currents_raises_helpful_keyerror() -> None:
     """
     results = _results_with_dead_dc(drop_currents=True)
     with pytest.raises(KeyError, match="not in FieldResult currents"):
-        rho_f_standard_from_results(results, RHOS, "g1")
+        rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
 
 
 def test_f41_all_alive_sweep_is_unchanged_and_silent() -> None:
@@ -166,7 +166,7 @@ def test_f41_all_alive_sweep_is_unchanged_and_silent() -> None:
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        fit = rho_f_standard_from_results(results, RHOS, "g1")
+        fit = rho_f_standard_from_results(results, RHOS, "g1", quantity="electrode")
     assert fit.sample_f.size == len(RHOS) * len(FREQS)
     for key, true_val in K_TRUE.items():
         assert getattr(fit, key) == pytest.approx(true_val, rel=1e-8)

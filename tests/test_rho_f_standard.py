@@ -132,7 +132,7 @@ def test_rho_f_standard_from_results_synthetic() -> None:
                 soil_resistivity=r,
             )
         )
-    fit = rho_f_standard_from_results(results, rhos, "g1")
+    fit = rho_f_standard_from_results(results, rhos, "g1", quantity="electrode")
     for key, true_val in k_true.items():
         got = getattr(fit, key)
         assert abs(got - true_val) <= 1e-9 * (abs(true_val) + 1e-12)

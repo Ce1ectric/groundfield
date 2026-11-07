@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING, Iterable, Literal
 import numpy as np
 
 if TYPE_CHECKING:  # pragma: no cover
-    import matplotlib.figure as mpl_fig
-
     from groundfield.solver.result import FieldResult
     from groundfield.world import World
 

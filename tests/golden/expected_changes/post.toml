@@ -12,3 +12,22 @@ arm to 1 m beyond its tip (x2.1); the ring is unchanged (feet 1 m outside
 the ring on +x in both definitions)."""
 min_rel_change = 1.0
 max_rel_change = 2.0
+
+[[change]]
+cases = ["fit_rho_f_standard_sweep"]
+quantities = ["eval", "bustype/eval", "coef/k1"]
+findings = ["10.19"]
+reason = """rho_f_standard_from_results fits the input impedance of the source
+(default quantity='input') instead of U/I of the named electrode: the station
+rod and the house rod on the PEN act in parallel, the fitted model halves."""
+min_rel_change = 0.3
+max_rel_change = 1.0
+
+[[change]]
+cases = ["fit_rho_f_standard_sweep"]
+quantities = ["coef/k2", "coef/k3", "coef/k4", "coef/k5"]
+findings = ["10.19"]
+reason = """The frequency coefficients were round-off level for the electrode's
+own leakage impedance; the input impedance carries the PEN's series
+inductance, so the small k2..k5 change by large factors."""
+max_rel_change = 50.0
