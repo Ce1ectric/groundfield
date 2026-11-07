@@ -466,8 +466,10 @@ def test_check_passivity_passes_a_passive_fit_and_checks_standard_forms() -> Non
     from groundfield.postprocess.vector_fitting import check_passivity
 
     good = vector_fit(_F11, _rl_ladder(1, 0.0), n_poles=4, n_iter=8)
-    rep = check_passivity(good)  # f_max defaults to the highest sample
-    assert rep.passed and rep.min_re_Z > 1.9 and rep.f_max == 1000.0
+    # f_max defaults to twice the highest sample, the band of the export
+    # check (one passivity check, 10.40).
+    rep = check_passivity(good)
+    assert rep.passed and rep.min_re_Z > 1.9 and rep.f_max == 2000.0
     # Standard form with k4 < 0: Re Z = rho (0.05 - 2e-6 f) < 0 above 25 kHz.
     rho = np.repeat([30.0, 100.0, 300.0, 1000.0], 4)
     f = np.tile([0.0, 50.0, 500.0, 1000.0], 4)

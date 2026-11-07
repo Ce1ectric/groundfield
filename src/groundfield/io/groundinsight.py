@@ -77,13 +77,18 @@ $$
 $$
 
 A fit can violate this between its samples (a spurious resonance) or
-beyond them. Before a ``BusType`` is built the exported formula is
-evaluated on a dense grid from 0 to twice the highest fitted frequency
+beyond them. Before a ``BusType`` is built the exported formula (what
+``groundinsight`` will evaluate, coefficients rounded) goes through
+:func:`~groundfield.postprocess.vector_fitting.check_passivity`, the one
+passivity check of the package, over its default band from 0 Hz to
+twice the highest fitted frequency: for a vector fit a dense grid
 (linear and logarithmic points, the samples and the midpoints between
-them, and for a vector fit points around every pole), for the standard
-form on the fitted range of ``rho``, and the grid minima are refined
-with a bounded scalar minimisation. The result is stored in
-``metadata["passivity"]``; a violation emits
+them, points around every pole) whose lowest minima are refined by a
+bounded scalar minimisation; for the standard form, whose real part is
+bilinear in $(\\rho, f)$, the four corners of the fitted range of
+``rho`` times the band, which is exact. The report
+(:meth:`~groundfield.postprocess.vector_fitting.PassivityReport.as_dict`)
+is stored in ``metadata["passivity"]``; a violation emits
 :class:`NonPassiveFitWarning`, or raises :class:`NonPassiveFitError`
 with ``require_passive=True``.
 
@@ -107,7 +112,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Union
 import numpy as np
 
 from groundfield.postprocess.rho_f_standard import RhoFStandardFit
-from groundfield.postprocess.vector_fitting import VectorFitResult
+from groundfield.postprocess.vector_fitting import PassivityReport, VectorFitResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import sympy
@@ -161,12 +166,6 @@ class NonPassiveFitError(ValueError):
 SCHEMA_NAME = "groundfield.bustype"
 SCHEMA_VERSION = 1
 """Schema name and version of the JSON document produced by this module."""
-
-_PASSIVITY_BAND_FACTOR = 2.0
-"""The passivity check covers 0 Hz to this factor times the highest fitted frequency."""
-
-_PASSIVITY_REL_TOL = 1e-9
-"""``Re Z >= -tol * max|Z|`` counts as passive (rounding of the formula)."""
 
 _IO_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
@@ -485,142 +484,53 @@ def _metadata_from_rho_f_standard(
 # ---------------------------------------------------------------------
 
 
-def _passivity_frequency_grid(
-    f_samples: np.ndarray, f_hi: float, poles: np.ndarray
-) -> np.ndarray:
-    """Frequencies (Hz) at which the passivity check evaluates ``Re Z``.
+def _formula_evaluator(expr: "sympy.Expr"):
+    """NumPy evaluator ``(f, rho) -> Z`` of a parsed impedance formula."""
+    import sympy as sp
 
-    Linear and logarithmic points over ``[0, f_hi]``, the samples and
-    the midpoints between them, and for every pole $p = -\\alpha \\pm
-    j\\beta$ points $(\\beta + t\\,\\alpha)/2\\pi$, $|t| \\le 8$, which
-    resolve resonances narrower than any fixed grid.
-    """
-    parts = [np.array([0.0, f_hi])]
-    if f_hi > 0.0:
-        parts += [np.linspace(0.0, f_hi, 2001), np.geomspace(f_hi * 1e-6, f_hi, 601)]
-    samples = np.unique(f_samples)
-    parts += [samples, 0.5 * (samples[1:] + samples[:-1])]
-    t = np.linspace(-8.0, 8.0, 161)
-    for p in np.asarray(poles, dtype=complex).ravel():
-        width = max(abs(p.real), 1e-9 * max(abs(p), 1.0))
-        parts.append((abs(p.imag) + width * t) / (2.0 * math.pi))
-    grid = np.concatenate(parts)
-    grid = grid[np.isfinite(grid) & (grid >= 0.0) & (grid <= f_hi)]
-    return np.unique(grid)
+    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
+
+    def evaluate(f: Any, rho: Any) -> np.ndarray:
+        return np.asarray(func(f, rho), dtype=complex)
+
+    return evaluate
 
 
 def _passivity_report(
-    expr: "sympy.Expr",
-    fit: Union[RhoFStandardFit, VectorFitResult],
-    *,
-    rho_at_fit: Optional[float],
-) -> dict[str, Any]:
-    """Check ``Re Z >= 0`` of the exported formula; see the module docstring."""
-    import sympy as sp
-    from scipy.optimize import minimize_scalar
+    expr: "sympy.Expr", fit: FitLike, *, rho_at_fit: Optional[float]
+) -> PassivityReport:
+    """Run :func:`~groundfield.postprocess.vector_fitting.check_passivity` on the formula.
 
-    f_sym, rho_sym = sp.Symbol("f"), sp.Symbol("rho")
-    func = sp.lambdify((f_sym, rho_sym), expr, modules=["numpy"])
+    The one passivity check of the package, evaluated on the exported
+    formula (what groundinsight computes) instead of the fit object, over
+    its default band (see the module docstring).
+    """
+    from groundfield.postprocess import vector_fitting
 
-    if isinstance(fit, RhoFStandardFit):
-        f_samples = np.asarray(fit.sample_f, dtype=float)
-        rho_samples = np.asarray(fit.sample_rho, dtype=float)
-        poles = np.zeros(0, dtype=complex)
-    else:
-        f_samples = np.asarray(fit.fit_frequencies, dtype=float)
-        rho_samples = np.array([float(rho_at_fit)])
-        poles = np.asarray(fit.poles, dtype=complex)
-    f_samples = f_samples[np.isfinite(f_samples) & (f_samples >= 0.0)]
-    f_fit_max = float(f_samples.max()) if f_samples.size else 0.0
-    f_hi = _PASSIVITY_BAND_FACTOR * f_fit_max
-    f_grid = _passivity_frequency_grid(f_samples, f_hi, poles)
-
-    rho_samples = rho_samples[np.isfinite(rho_samples)]
-    rho_lo, rho_hi = float(rho_samples.min()), float(rho_samples.max())
-    if rho_sym in expr.free_symbols and rho_hi > rho_lo:
-        inner = (
-            np.geomspace(rho_lo, rho_hi, 9)
-            if rho_lo > 0.0
-            else np.linspace(rho_lo, rho_hi, 9)
-        )
-        rho_grid = np.unique(np.concatenate([inner, rho_samples]))
-    else:
-        rho_grid = np.array([rho_lo])
-
-    def evaluate(f: Any, rho: Any) -> np.ndarray:
-        shape = np.broadcast(np.asarray(f), np.asarray(rho)).shape
-        with np.errstate(all="ignore"):
-            out = np.asarray(func(f, rho), dtype=complex)
-        return np.broadcast_to(out, shape)
-
-    Z = evaluate(f_grid[None, :], rho_grid[:, None])
-    report: dict[str, Any] = {
-        "passed": True,
-        "min_re_Z_Ohm": None,
-        "f_at_min_Hz": None,
-        "rho_at_min_Ohm_m": None,
-        "f_checked_Hz": [0.0, f_hi],
-        "rho_checked_Ohm_m": [float(rho_grid.min()), float(rho_grid.max())],
-        "n_points": int(Z.size),
-    }
-    finite = np.isfinite(Z)
-    if not finite.all():
-        i_r, i_f = np.argwhere(~finite)[0]
-        report.update(
-            passed=False,
-            f_at_min_Hz=float(f_grid[i_f]),
-            rho_at_min_Ohm_m=float(rho_grid[i_r]),
-        )
-        return report
-
-    re = Z.real
-    i_r, i_f = np.unravel_index(int(np.argmin(re)), re.shape)
-    best_re, best_f, rho_worst = float(re[i_r, i_f]), float(f_grid[i_f]), rho_grid[i_r]
-    row = re[i_r]
-    interior = (row[1:-1] <= row[:-2]) & (row[1:-1] <= row[2:])
-    minima = list(np.flatnonzero(interior) + 1) + [0, row.size - 1]
-    for i in sorted(set(minima), key=lambda k: row[k])[:10]:
-        lo, hi = f_grid[max(i - 1, 0)], f_grid[min(i + 1, row.size - 1)]
-        if hi <= lo:
-            continue
-        res = minimize_scalar(
-            lambda x: float(evaluate(x, rho_worst).real),
-            bounds=(float(lo), float(hi)),
-            method="bounded",
-            options={"xatol": 1e-9 * max(float(hi), 1.0)},
-        )
-        if res.fun < best_re:
-            best_re, best_f = float(res.fun), float(res.x)
-    scale = float(np.max(np.abs(Z))) if Z.size else 0.0
-    report.update(
-        passed=bool(best_re >= -_PASSIVITY_REL_TOL * scale),
-        min_re_Z_Ohm=best_re,
-        f_at_min_Hz=best_f,
-        rho_at_min_Ohm_m=float(rho_worst),
+    return vector_fitting._check_passivity(
+        fit,
+        evaluate=_formula_evaluator(expr),
+        rho_at_fit=None if isinstance(fit, RhoFStandardFit) else rho_at_fit,
     )
-    return report
 
 
-def _passivity_message(name: str, report: dict[str, Any], f_fit_max: float) -> str:
+def _passivity_message(name: str, report: PassivityReport, f_fit_max: float) -> str:
     """Actionable text for :class:`NonPassiveFitWarning` / :class:`NonPassiveFitError`."""
-    f_at = report["f_at_min_Hz"]
+    f_at = report.f_at_min
     where = "inside" if f_at <= f_fit_max else "above"
     rho_text = (
-        f", rho = {report['rho_at_min_Ohm_m']:.6g} Ohm m"
-        if report["rho_checked_Ohm_m"][0] != report["rho_checked_Ohm_m"][1]
+        f", rho = {report.rho_at_min:.6g} Ohm m"
+        if report.rho_range is not None and report.rho_range[0] != report.rho_range[1]
         else ""
     )
-    if report["min_re_Z_Ohm"] is None:
+    if not math.isfinite(report.min_re_Z):
         what = f"is not finite at f = {f_at:.6g} Hz{rho_text}"
     else:
-        what = (
-            f"has Re Z = {report['min_re_Z_Ohm']:.4g} Ohm at f = {f_at:.6g} Hz"
-            f"{rho_text}"
-        )
+        what = f"has Re Z = {report.min_re_Z:.4g} Ohm at f = {f_at:.6g} Hz{rho_text}"
     return (
         f"BusType {name!r}: the exported impedance formula is not passive: it "
         f"{what}, {where} the fitted band 0 to {f_fit_max:g} Hz (checked from "
-        f"0 to {report['f_checked_Hz'][1]:g} Hz). A passive grounding impedance "
+        f"0 to {report.f_max:g} Hz). A passive grounding impedance "
         "has Re Z >= 0 at every frequency. Refit (for a vector fit try another "
         "n_poles or more frequency samples), or pass require_passive=True to "
         "refuse such exports."
@@ -725,8 +635,8 @@ def _build_spec(
         )
 
     passivity = _passivity_report(expr, fit, rho_at_fit=rho_at_fit)
-    metadata["passivity"] = passivity
-    if not passivity["passed"]:
+    metadata["passivity"] = passivity.as_dict()
+    if not passivity.passed:
         message = _passivity_message(str(name), passivity, f_fit_max)
         if require_passive:
             raise NonPassiveFitError(message)
