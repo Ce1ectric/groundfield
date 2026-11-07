@@ -42,6 +42,11 @@ groundinsight = ["groundinsight (>=0.3)"]
 # ``ImportError`` with an install hint when called without the ``geo``
 # extra. See ADR-0011.
 geo = ["requests (>=2.32,<3.0)", "shapely (>=2.0,<3.0)", "pyproj (>=3.6,<4.0)"]
+# Compiled kernels (review pass 10, 10.28 / 10.58): the two-layer image
+# series and the far field of the exact line-source kernel run 2-3x faster
+# with numba. Optional: every kernel falls back to numpy with identical
+# results.
+fast = ["numba (>=0.60)"]
 
 [project.urls]
 Documentation = "https://ce1ectric.github.io/groundfield/"

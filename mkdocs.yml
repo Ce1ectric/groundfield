@@ -43,6 +43,9 @@ theme:
     - search.share
   icon:
     repo: fontawesome/brands/github
+  # No Google Fonts: system fonts, no request to fonts.googleapis.com
+  # from the reader's browser (GDPR).
+  font: false
 
 markdown_extensions:
   - admonition

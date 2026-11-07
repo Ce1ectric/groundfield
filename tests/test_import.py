@@ -1,7 +1,8 @@
 """Smoke test for the freshly created package.
 
 This test ensures that ``groundfield`` is importable and that the
-version string matches the SemVer core stored in ``pyproject.toml``.
+version string is a valid PEP 440 release (calendar versioning
+``YYYY.MM.MICRO`` since 2026.11, SemVer before).
 It exists so the CI pipeline scaffold has something green to show
 from the first commit.
 """
@@ -13,10 +14,11 @@ import re
 import groundfield
 
 
-def test_package_version_is_semver() -> None:
-    """``groundfield.__version__`` must satisfy a SemVer core."""
+def test_package_version_is_pep440() -> None:
+    """``groundfield.__version__`` is a PEP 440 version with three release
+    components, optionally a pre-release (``2026.11.0``, ``2026.11.0rc1``)."""
     assert re.match(
-        r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$",
+        r"^\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?$",
         groundfield.__version__,
     ), groundfield.__version__
 
