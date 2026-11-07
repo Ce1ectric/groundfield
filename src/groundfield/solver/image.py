@@ -91,6 +91,7 @@ from groundfield.solver._inductive import _CarsonBuilder as _CarsonBuilder
 from groundfield.solver._inductive import (
     _assemble_inductance_matrix as _assemble_inductance_matrix,
 )
+from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._kernels import _potential_kernel as _potential_kernel
 from groundfield.solver._kernels import (
     _self_corrected_kernel as _self_corrected_kernel,
@@ -147,13 +148,12 @@ class _HalfSpaceGreen:
         self.reference_resistivity = float(rho)
 
     def prepare(self, segments, arrays, *, stacklevel: int):  # noqa: ANN001
-        """Reaction kernel with the fixed resistivity ``rho``."""
-        rho = self.rho
+        """Reaction operator with the fixed resistivity ``rho``.
 
-        def _homogeneous_self(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
-            return _self_corrected_kernel(seg_pts, seg_lens, wr, currents, rho)
-
-        return _homogeneous_self
+        The operator assembles its matrix once and reuses it for the
+        segment potentials after the solve (10.57).
+        """
+        return HalfSpaceKernel(self.rho)
 
     def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
         """No backend-specific metadata."""

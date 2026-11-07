@@ -427,6 +427,29 @@ def _segment_potentials(
     return [phi[:, m] + 1j * phi[:, k + m] for m in range(k)]
 
 
+def _reused_potentials(
+    mp_cache: dict, owner_list: list[dict[str, complex]], n_segments: int
+) -> list[np.ndarray]:
+    """Segment potentials from the stored ``K·E`` of the multi-port assembly.
+
+    Every segment-current vector of the solve is ``E @ I_active`` (uniform
+    per unit length per owner), so ``K @ sc = (K·E) @ I_active`` — the
+    concrete-shell term is part of ``K·E`` already. Used when the
+    reaction matrix was too large to keep (10.57); the result differs
+    from a second kernel evaluation by BLAS round-off only.
+    """
+    phi_all = mp_cache["phi_all"]
+    names = mp_cache["active_elecs"]
+    out = []
+    for owner_currents in owner_list:
+        i_active = np.array([owner_currents.get(n, 0j) for n in names], dtype=complex)
+        if not i_active.any():
+            out.append(np.zeros(n_segments, dtype=complex))
+            continue
+        out.append(phi_all @ i_active.real + 1j * (phi_all @ i_active.imag))
+    return out
+
+
 def solve(
     world: World,
     engine: Engine,
@@ -474,6 +497,18 @@ def solve(
         sc = _segment_currents(owner_currents, disc.owner_segments, arrays.lengths)
         return owner_currents, sc
 
+    def _potentials(
+        owner_list: list[dict[str, complex]], sc_list: list[np.ndarray]
+    ) -> list[np.ndarray]:
+        # One reaction-matrix evaluation per solve (10.57): an operator
+        # that keeps its matrix is simply applied again (the products
+        # of v0.15.0, bit-identical); beyond the matrix budget the
+        # segment potentials follow from the stored K·E of the
+        # multi-port assembly instead of a second evaluation.
+        if getattr(kernel, "materialised", True) or "phi_all" not in mp_cache:
+            return _segment_potentials(kernel, arrays, sc_list)
+        return _reused_potentials(mp_cache, owner_list, arrays.lengths.shape[0])
+
     if branches.has_inductance:
         owner_per_freq: list[dict[str, complex]] = []
         sc_per_freq: list[np.ndarray] = []
@@ -481,10 +516,10 @@ def solve(
             et, sc = _solve_at(2.0 * np.pi * float(f))
             owner_per_freq.append(et)
             sc_per_freq.append(sc)
-        phi_per_freq = _segment_potentials(kernel, arrays, sc_per_freq)
+        phi_per_freq = _potentials(owner_per_freq, sc_per_freq)
     else:
         et, sc = _solve_at(0.0)
-        ph = _segment_potentials(kernel, arrays, [sc])[0]
+        ph = _potentials([et], [sc])[0]
         owner_per_freq = [et] * n_freq
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq

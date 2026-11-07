@@ -73,7 +73,12 @@ import numpy as np
 
 from groundfield.soil.models import TwoLayerSoil
 from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
-from groundfield.solver._kernels import _self_corrected_kernel
+from groundfield.solver._kernels import (
+    TwoLayerSeriesKernel,
+    _block_rows,
+    _half_space_block,
+    _xyz,
+)
 from groundfield.solver._pipeline import solve_image_family
 from groundfield.solver._series import ImageSeries
 from groundfield.solver._series import (
@@ -181,21 +186,103 @@ def _two_layer_potential_kernel(
     return phi, n_used
 
 
+class _TwoLayerKernel:
+    """Reaction operator of the two-layer soil (callable kernel).
+
+    Inside the upper layer the operator is
+    :class:`~groundfield.solver._kernels.TwoLayerSeriesKernel` (half-space
+    part with :math:`\rho_1` plus the Tagg/Sunde images, assembled once
+    per geometry). With ``allow_cross_layer`` and a segment at or below
+    the interface it switches to the ADR-0007 Sommerfeld path for every
+    pair (:func:`_layered_green_kernel`, whose matrices are cached too).
+    Called with ``(seg_points, seg_lengths, wire_radii, currents)`` it
+    returns the segment-midpoint potentials in V.
+    """
+
+    def __init__(
+        self,
+        soil: TwoLayerSoil,
+        max_terms: int,
+        tol: float,
+        *,
+        allow_cross_layer: bool = False,
+    ) -> None:
+        self.soil = soil
+        self.allow_cross_layer = allow_cross_layer
+        self.series = ImageSeries.for_soil(soil, max_terms, tol)
+        self.in_layer = TwoLayerSeriesKernel(soil.rho_1, self.series)
+        # Cache for the (current-independent) cross-layer matrices: the
+        # per-frequency and per-excitation kernel calls within one solve
+        # share the identical geometry, so phi_hom_matrix and delta_Z
+        # are assembled once (audit 2026-07-08, WP-D performance note).
+        self._cross_cache: dict = {}
+
+    def _cross_layer(self, seg_points: np.ndarray) -> bool:
+        # ADR-0007: when the geometry crosses the layer interface the
+        # Sommerfeld kernel from coupling.layered_green is used for every
+        # source/observer pair; pure-upper-layer geometries keep the
+        # Tagg/Sunde image series.
+        return self.allow_cross_layer and float(seg_points[:, 2].max()) >= self.soil.h_1
+
+    @property
+    def materialised(self) -> bool:
+        """Whether repeated calls reuse stored matrices."""
+        return bool(self._cross_cache) or self.in_layer.materialised
+
+    @property
+    def assemblies(self) -> int:
+        """Number of full reaction-matrix evaluations so far."""
+        return self.in_layer.assemblies + int(self._cross_cache.get("assemblies", 0))
+
+    def matrix(
+        self, seg_points: np.ndarray, seg_lengths: np.ndarray, wire_radii: np.ndarray
+    ) -> np.ndarray:
+        """Reaction matrix in Ω, bit-identical to v0.15.0's ``kernel(eye)``."""
+        if self._cross_layer(seg_points):
+            phi_hom_matrix, delta_Z = _layered_green_matrices(
+                seg_points,
+                seg_lengths,
+                wire_radii,
+                soil=self.soil,
+                cache=self._cross_cache,
+            )
+            return phi_hom_matrix + delta_Z
+        return self.in_layer.matrix(seg_points, seg_lengths, wire_radii)
+
+    def __call__(
+        self,
+        seg_points: np.ndarray,
+        seg_lengths: np.ndarray,
+        wire_radii: np.ndarray,
+        currents: np.ndarray,
+    ) -> np.ndarray:
+        if self._cross_layer(seg_points):
+            return _layered_green_kernel(
+                seg_points,
+                seg_lengths,
+                wire_radii,
+                currents,
+                soil=self.soil,
+                cache=self._cross_cache,
+            )
+        return self.in_layer(seg_points, seg_lengths, wire_radii, currents)
+
+
 def _two_layer_self_kernel_factory(
     soil: TwoLayerSoil,
     max_terms: int,
     tol: float,
     *,
     allow_cross_layer: bool = False,
-):
-    """Build a self-action closure for the 2-layer case.
+) -> _TwoLayerKernel:
+    """Build the self-action operator for the 2-layer case.
 
     The $n = 0$ direct contribution of a segment onto itself is
     handled by the analytical line-self correction (same as the
-    homogeneous backend, but with $\\rho_1$ as prefactor). The
-    image terms with $n \\ge 1$ are at least $2 h_1$ away
-    from the segments, so the point-source approximation is good
-    enough.
+    homogeneous backend, but with $\rho_1$ as prefactor). The
+    image terms with $n \ge 1$ are at least $2(h_1 - z)$ away
+    from the segments, so the point-source approximation is used for
+    them.
 
     Parameters
     ----------
@@ -205,79 +292,29 @@ def _two_layer_self_kernel_factory(
     allow_cross_layer
         When ``True`` (ADR-0007) the kernel transparently dispatches
         to the rigorous Sommerfeld-quadrature path in
-        :mod:`groundfield.coupling.layered_green` for any pair of
-        source/observer points that crosses the layer interface.
-        Pairs that stay in the upper layer continue to use the fast
-        Tagg/Sunde image series. When ``False`` (default, kept for
-        bit-exact regression) the kernel uses only the image series
-        and the caller must enforce the precondition
-        ``z_max < h_1``.
+        :mod:`groundfield.coupling.layered_green` as soon as a segment
+        reaches the interface. When ``False`` (default) the kernel uses
+        only the image series and the caller must enforce the
+        precondition ``z_max < h_1``.
+
+    Returns
+    -------
+    _TwoLayerKernel
+        Callable ``(seg_points, seg_lengths, wire_radii, currents) ->
+        phi`` with a ``matrix(...)`` method for the full reaction
+        matrix.
     """
-    rho_1 = soil.rho_1
-    h_1 = soil.h_1
-    series = ImageSeries.for_soil(soil, max_terms, tol)
-
-    # Cache for the (current-independent) cross-layer matrices: the
-    # per-frequency and per-excitation kernel calls within one solve
-    # share the identical geometry, so phi_hom_matrix and delta_Z are
-    # assembled once (audit 2026-07-08, WP-D performance note).
-    _cross_cache: dict = {}
-
-    def _self_kernel(seg_points, seg_lengths, wire_radii, currents):
-        # ADR-0007: when the geometry crosses the layer interface we
-        # dispatch the Sommerfeld kernel from coupling.layered_green
-        # for every source/observer pair. Pure-upper-layer geometries
-        # keep the historic fast image-series path bit-exact.
-        z_max = float(seg_points[:, 2].max())
-        if allow_cross_layer and z_max >= h_1:
-            return _layered_green_kernel(
-                seg_points,
-                seg_lengths,
-                wire_radii,
-                currents,
-                soil=soil,
-                cache=_cross_cache,
-            )
-
-        # n = 0: identical to the homogeneous self-kernel with rho = rho_1
-        phi = _self_corrected_kernel(
-            seg_points, seg_lengths, wire_radii, currents, rho_1
-        )
-
-        # n >= 1: image terms are far from the segments — point-source
-        # approximation suffices.
-        diff_xy = seg_points[:, None, 0:2] - seg_points[None, :, 0:2]
-        delta_sq = np.einsum("mnk,mnk->mn", diff_xy, diff_xy)
-        z_field = seg_points[:, 2:3]
-        z_src = seg_points[None, :, 2]
-
-        # ``extra`` must match the shape of ``phi``, which depends on
-        # whether ``currents`` is a 1-D vector (N,) or a 2-D matrix
-        # (N, M) — Engine B's matrix assembly passes an identity
-        # matrix to obtain the full reaction matrix in one call.
-        extra = np.zeros_like(phi)
-        for quad in series.iter_layer_terms():
-            for term in quad:
-                z_img = term.offset + term.sign * z_src
-                r = np.sqrt(delta_sq + (z_field - z_img) ** 2)
-                np.maximum(r, _MIN_DISTANCE, out=r)
-                extra += term.weight * ((1.0 / r) @ currents)
-
-        extra *= rho_1 / (4.0 * np.pi)
-        return phi + extra
-
-    return _self_kernel
+    return _TwoLayerKernel(soil, max_terms, tol, allow_cross_layer=allow_cross_layer)
 
 
-def _layered_green_kernel(
+def _layered_green_matrices(
     seg_points: np.ndarray,
     seg_lengths: np.ndarray,
     wire_radii: np.ndarray,
-    currents,
     *,
     soil: TwoLayerSoil,
     cache: dict | None = None,
-):
+) -> tuple[np.ndarray, np.ndarray]:
     """ADR-0007 cross-layer fallback using the rigorous Sommerfeld kernel.
 
     Computes ``phi`` at every segment midpoint by decomposing into
@@ -344,7 +381,7 @@ def _layered_green_kernel(
     if cache is not None:
         cache_key = (n, hash(seg_points.tobytes()), hash(seg_lengths.tobytes()))
         if cache.get("key") == cache_key:
-            return cache["phi_hom_matrix"] @ currents + cache["delta_Z"] @ currents
+            return cache["phi_hom_matrix"], cache["delta_Z"]
 
     # Step 1: build phi_hom matrix that uses rho_at_source(j) for
     # each column (source segment). This generalises
@@ -357,7 +394,6 @@ def _layered_green_kernel(
         wire_radii,
         rho_per_segment,
     )
-    phi_hom = phi_hom_matrix @ currents
 
     # Step 2: layered correction. The baseline rho per source is
     # rho_at_source(j). For the diagonal (i = j) we still need to
@@ -439,7 +475,28 @@ def _layered_green_kernel(
         cache["key"] = cache_key
         cache["phi_hom_matrix"] = phi_hom_matrix
         cache["delta_Z"] = delta_Z
-    return phi_hom + delta_Z @ currents
+        cache["assemblies"] = int(cache.get("assemblies", 0)) + 1
+    return phi_hom_matrix, delta_Z
+
+
+def _layered_green_kernel(
+    seg_points: np.ndarray,
+    seg_lengths: np.ndarray,
+    wire_radii: np.ndarray,
+    currents,
+    *,
+    soil: TwoLayerSoil,
+    cache: dict | None = None,
+):
+    """ADR-0007 cross-layer reaction kernel: ``(Φ_hom + ΔZ) · currents``.
+
+    See :func:`_layered_green_matrices` for the decomposition; the two
+    matrices are taken from ``cache`` when the geometry is unchanged.
+    """
+    phi_hom_matrix, delta_Z = _layered_green_matrices(
+        seg_points, seg_lengths, wire_radii, soil=soil, cache=cache
+    )
+    return phi_hom_matrix @ currents + delta_Z @ currents
 
 
 def _build_phi_hom_per_source_rho(
@@ -464,18 +521,16 @@ def _build_phi_hom_per_source_rho(
     correct ``rho_local·1/r`` near-source behaviour in each
     column.
     """
-    image_points = seg_points.copy()
-    image_points[:, 2] = -image_points[:, 2]
-
-    diff_real = seg_points[:, None, :] - seg_points[None, :, :]
-    diff_image = seg_points[:, None, :] - image_points[None, :, :]
-    r_real = np.linalg.norm(diff_real, axis=2)
-    r_image = np.linalg.norm(diff_image, axis=2)
-    np.maximum(r_real, _MIN_DISTANCE, out=r_real)
-    np.maximum(r_image, _MIN_DISTANCE, out=r_image)
-
-    # Off-diagonal kernel: 1/r + 1/r_image.
-    kernel = (1.0 / r_real) + (1.0 / r_image)
+    # Built component-wise in row blocks (10.56): entries bit-identical
+    # to the former (N, N, 3) difference tensors, 8 instead of 96 bytes
+    # per segment pair. Off-diagonal: 1/r + 1/r_image.
+    kernel = np.empty((seg_points.shape[0], seg_points.shape[0]))
+    xyz = _xyz(seg_points)
+    rows = _block_rows(seg_points.shape[0])
+    for i0 in range(0, seg_points.shape[0], rows):
+        i1 = min(seg_points.shape[0], i0 + rows)
+        obs = (xyz[0][i0:i1], xyz[1][i0:i1], xyz[2][i0:i1])
+        _half_space_block(obs, xyz, _MIN_DISTANCE, out=kernel[i0:i1])
 
     # Diagonal: line-self + image-point. The image term is guarded
     # instead of clamped (audit 2026-07-28, F26/F29): a segment whose

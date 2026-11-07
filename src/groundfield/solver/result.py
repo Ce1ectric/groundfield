@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any, Union
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from groundfield.soil.models import (
     HomogeneousSoil,
@@ -124,6 +124,10 @@ class FieldResult(BaseModel):
             ":meth:`input_impedance`. Empty for hand-built results."
         ),
     )
+    # Private, not serialised: numpy arrays of ``point_sources`` for
+    # :meth:`potential` (10.65), keyed by the identity and length of the
+    # list (see ``_point_source_arrays``).
+    _ps_cache: tuple | None = PrivateAttr(default=None)
 
     # ------------------------------------------------------------------
     # Derived quantities
@@ -487,11 +491,10 @@ class FieldResult(BaseModel):
         if pts.shape[1] != 3:
             raise ValueError(f"points must have shape (M, 3), got {pts.shape}.")
 
-        sources = np.array([ps.position for ps in self.point_sources])
-        currents = np.array(
-            [ps.current[frequency_index] for ps in self.point_sources],
-            dtype=complex,
-        )
+        sources, all_currents = self._point_source_arrays()
+        # Contiguous, as before the cache: the real/imaginary views then
+        # have the stride the BLAS calls of v0.15.0 saw.
+        currents = np.ascontiguousarray(all_currents[:, frequency_index])
 
         # Dispatch to the kernel that matches the effective number of
         # soil layers. A ``MultiLayerSoil`` with one or two layers is
@@ -545,6 +548,32 @@ class FieldResult(BaseModel):
 
     # -- private helpers per Green's-function kind --------------------
 
+    def _point_source_arrays(self) -> tuple[np.ndarray, np.ndarray]:
+        """Positions ``(N, 3)`` in m and currents ``(N, n_freq)`` in A.
+
+        Built once and cached privately (10.65): converting the pydantic
+        :class:`PointSource` list cost 0.75 of 0.99 ms per single-point
+        :meth:`potential` call at N = 3687. The cache is keyed by the
+        identity and the length of :attr:`point_sources`, so assigning a
+        new list or appending invalidates it; the list is otherwise
+        treated as read-only after the solve (in-place edits of single
+        :class:`PointSource` objects are not detected).
+        """
+        ps_list = self.point_sources
+        cache = self._ps_cache
+        if cache is not None and cache[0] is ps_list and cache[1] == len(ps_list):
+            return cache[2], cache[3]
+        sources = np.array([ps.position for ps in ps_list])
+        # Backends store one current per frequency for every source; a
+        # hand-built ragged list is cut to the shortest entry.
+        n_freq = min((len(ps.current) for ps in ps_list), default=0)
+        currents = np.array(
+            [ps.current[:n_freq] for ps in ps_list], dtype=complex
+        ).reshape(len(ps_list), n_freq)
+        self._ps_cache = (ps_list, len(ps_list), sources, currents)
+        return sources, currents
+
+
     def _potential_homogeneous(
         self,
         pts: np.ndarray,
@@ -559,12 +588,9 @@ class FieldResult(BaseModel):
                 "FieldResult.soil_resistivity is not set — homogeneous "
                 "image-charge evaluation requires it."
             )
-        from groundfield.solver._kernels import _point_field_kernel
+        from groundfield.solver._kernels import _point_field
 
-        kernel = _point_field_kernel(pts, sources, min_distance)
-        return (rho / (4.0 * np.pi)) * (
-            kernel @ currents.real + 1j * (kernel @ currents.imag)
-        )
+        return _point_field(pts, sources, currents, rho, min_distance)
 
     def _potential_two_layer(
         self,
@@ -633,8 +659,14 @@ class FieldResult(BaseModel):
         from groundfield.solver._series import ImageSeries
 
         series = ImageSeries.for_soil(soil, max_terms, tol)
-        phi_re = _series_field(pts, sources, currents.real, series, min_distance)
-        phi_im = _series_field(pts, sources, currents.imag, series, min_distance)
+        # An all-zero imaginary part (galvanic solves) sums to exactly
+        # zero and is skipped.
+        parts = [currents.real]
+        if np.any(currents.imag):
+            parts.append(currents.imag)
+        sums = _series_field(pts, sources, parts, series, min_distance)
+        phi_re = sums[0]
+        phi_im = sums[1] if len(sums) > 1 else np.zeros_like(phi_re)
         return (rho_1 / (4.0 * np.pi)) * (phi_re + 1j * phi_im)
 
     # ------------------------------------------------------------------
