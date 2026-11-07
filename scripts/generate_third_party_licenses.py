@@ -1,7 +1,8 @@
 """Generate ``THIRD_PARTY_NOTICES.md`` from the installed distributions.
 
-This script enumerates every Poetry runtime dependency declared under
-``[tool.poetry.dependencies]`` in ``pyproject.toml``, looks the
+This script enumerates every runtime dependency declared in
+``pyproject.toml`` (``[project] dependencies`` and the extras in
+``[project.optional-dependencies]``), looks the
 distribution up in the current environment via
 ``importlib.metadata`` and collects name, version, license identifier,
 project URL and the license text shipped with the wheel. The collected
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import sys
 import tomllib
 from importlib import metadata
@@ -59,8 +61,16 @@ def _repo_root() -> Path:
     raise FileNotFoundError("pyproject.toml not found in any parent directory")
 
 
+_REQUIREMENT_NAME_RE = re.compile(r"^\s*([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)")
+
+
 def _runtime_dependency_names(pyproject: Path) -> list[str]:
-    """Return the PyPI package names declared as Poetry runtime dependencies.
+    """Return the PyPI package names of the runtime dependencies.
+
+    The runtime dependencies are ``[project] dependencies`` plus every
+    extra in ``[project.optional-dependencies]`` (PEP 621). Legacy
+    ``[tool.poetry.dependencies]`` entries are read as well, so the
+    script also works on older checkouts.
 
     Parameters
     ----------
@@ -70,15 +80,23 @@ def _runtime_dependency_names(pyproject: Path) -> list[str]:
     Returns
     -------
     list[str]
-        Dependency names, sorted case-insensitively, excluding the
-        implicit ``python`` entry.
+        Distinct dependency names, sorted case-insensitively, excluding
+        the implicit ``python`` entry of the legacy table.
     """
     data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-    return sorted(
-        (name for name in deps if name.lower() != "python"),
-        key=str.lower,
-    )
+    project = data.get("project", {})
+    requirements = list(project.get("dependencies", []))
+    for extra in project.get("optional-dependencies", {}).values():
+        requirements.extend(extra)
+    names: set[str] = set()
+    for requirement in requirements:
+        match = _REQUIREMENT_NAME_RE.match(requirement)
+        if match is None:
+            raise ValueError(f"cannot parse requirement {requirement!r}")
+        names.add(match.group(1))
+    legacy = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
+    names.update(name for name in legacy if name.lower() != "python")
+    return sorted(names, key=str.lower)
 
 
 def _license_identifier(meta: metadata.PackageMetadata) -> str:
@@ -186,8 +204,9 @@ def _render_report(names: list[str]) -> str:
         "",
         "This file lists the third-party Python distributions that groundfield",
         "depends on at runtime, together with their license information. The list is",
-        "generated automatically from the Poetry runtime dependencies declared in",
-        "``pyproject.toml`` and the metadata of the currently installed distributions.",
+        "generated automatically from the runtime dependencies (including extras)",
+        "declared in ``pyproject.toml`` and the metadata of the currently installed",
+        "distributions.",
         "",
     ]
 

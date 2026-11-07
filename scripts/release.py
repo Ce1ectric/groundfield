@@ -1,547 +1,539 @@
-"""Release automation for groundfield.
+"""Release tool for groundfield (calendar versioning).
 
-This script bumps the project version in every location where it is
-recorded (``pyproject.toml``, ``src/groundfield/__init__.py`` and
-``CITATION.cff``), rolls the ``[Unreleased]`` section of ``CHANGELOG.md``
-into a new dated version section, creates a conventional-commit release
-commit, tags it as ``vX.Y.Z`` and pushes both the branch and the tag.
-The PyPI publishing itself is handled by the GitHub Actions workflow
-which triggers on the ``v*`` tag via OIDC Trusted Publishing.
+groundfield uses calendar versioning ``YYYY.MM.MICRO`` in its PEP 440
+form: the month is not zero-padded and there is no hyphen (``2026.11.0``,
+``2027.1.0``), because PEP 440 drops leading zeros and reads ``2026-11``
+as a post-release. ``MICRO`` counts the earlier releases of the same
+month, so ``2026.11.1`` is the second release of November 2026. Git tags
+carry a ``v`` prefix (``v2026.11.0``).
 
 Usage
 -----
-Invoke via the Poetry script entry point::
+The tool is not installed with the package (no console script and no
+top-level ``scripts`` package in the wheel, finding 10.02). Run it with
+the project's Python from any directory; it always operates on the
+repository that contains it::
 
-    poetry run release patch
-    poetry run release minor
-    poetry run release major
-    poetry run release set 1.2.3
+    python scripts/release.py calver                    # version from today
+    python scripts/release.py calver --date 2026-11-07  # explicit date
+    python scripts/release.py set 2026.11.0rc1          # explicit version
+    python scripts/release.py calver --dry-run          # validate, show plan
 
-Options
--------
+``calver``
+    Derive the version from the release date (default: today) and the
+    existing ``vYYYY.M.MICRO`` tags.
+``set VERSION``
+    Use an explicit version: canonical PEP 440, of the form
+    ``YYYY.M.MICRO`` with an optional pre-, post- or dev-release suffix
+    (``2026.11.0rc1``), sorting above the current version. This also
+    finalises a pre-release (``2026.11.0rc1`` -> ``2026.11.0``).
+``--date YYYY-MM-DD``
+    Release date for the version (``calver``), the changelog heading
+    and ``date-released`` in ``CITATION.cff``.
 ``--dry-run``
-    Print the intended changes without modifying any file or calling git.
-``--no-push``
-    Create the commit and the tag locally but do not push.
-``--allow-dirty``
-    Allow uncommitted changes in the working tree. By default the script
-    refuses to run if ``git status --porcelain`` reports any entries.
-``--allow-empty-changelog``
-    Proceed even if the ``[Unreleased]`` section of ``CHANGELOG.md`` is
-    empty. A housekeeping note will be inserted in the new version
-    section instead.
-``--date``
-    Override the release date written into ``CHANGELOG.md``. Defaults
-    to today in ISO-8601 form (``YYYY-MM-DD``).
+    Run every check and print the plan; write nothing, call no git
+    command that changes the repository.
 
-Notes
------
-The script expects to be run from the repository root, which is
-automatically derived from the location of ``pyproject.toml``. Semantic
-versioning is enforced: only ``MAJOR.MINOR.PATCH`` strings (with optional
-pre-release suffix) are accepted, and ``set`` refuses to move the version
-backwards.
+Procedure
+---------
+1. Validate everything before anything is written (finding 10.09): the
+   repository root is the git top level, the working tree is clean
+   (untracked files included), ``HEAD`` is on a branch, the version in
+   ``pyproject.toml`` (``[project] version``),
+   ``src/groundfield/__init__.py`` (``__version__``) and
+   ``CITATION.cff`` (``version``) agree, the new version is valid and
+   sorts above the current one, its tag does not exist, ``CHANGELOG.md``
+   has a non-empty ``## [Unreleased]`` block and no section for the new
+   version, ``changelog.d/`` holds no unmerged fragments, and
+   ``CLAUDE.md`` does not hard-code a version (review pass 5).
+2. Write the new version into the three files (and ``date-released``),
+   and turn ``## [Unreleased]`` into ``## [X] - YYYY-MM-DD`` below a
+   fresh empty ``## [Unreleased]``; the link references at the end of the
+   changelog are updated.
+3. Commit the four files as ``chore(release): vX`` and create the
+   annotated tag ``vX``. Git always runs in the repository root. If the
+   commit fails (for example a rejecting pre-commit hook), the files are
+   restored and the index is reset.
 
-``CHANGELOG.md`` is optional — if it does not exist, the changelog step
-is skipped silently. If it exists, the script looks for a heading of the
-exact form ``## [Unreleased]`` and the next heading beginning with
-``## [`` to locate the section boundaries. Unrelated top-level headings
-such as ``## Roadmap`` are therefore safe to keep elsewhere in the file.
+The tool never pushes. Publish with ``git push origin <branch>`` and
+``git push origin vX``; the tag starts the release workflow (tests,
+tag/version check, build, PyPI trusted publishing).
+
+Requirements: Python >= 3.12 and the ``packaging`` distribution (a
+dependency of pytest, present in the development environment).
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime as _datetime
+import datetime as dt
 import logging
+import os
 import re
 import subprocess
 import sys
+import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger("groundfield.release")
+try:
+    from packaging.version import InvalidVersion, Version
+except ModuleNotFoundError as exc:  # pragma: no cover - environment guard
+    raise SystemExit(
+        "scripts/release.py needs the 'packaging' distribution (pip install packaging)"
+    ) from exc
 
+logger = logging.getLogger("groundfield.release")
 
 # --- constants ---------------------------------------------------------------
 
+PYPROJECT = "pyproject.toml"
+INIT_FILE = "src/groundfield/__init__.py"
+CITATION = "CITATION.cff"
+CHANGELOG = "CHANGELOG.md"
+FRAGMENT_DIR = "changelog.d"
 
-SEMVER_RE = re.compile(
-    r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)"
-    r"(?:-(?P<pre>[0-9A-Za-z.-]+))?$"
+TAG_PREFIX = "v"
+COMMIT_MESSAGE = "chore(release): {tag}"
+TAG_MESSAGE = "groundfield {version}"
+# Keep a Changelog heading form ``## [X] - YYYY-MM-DD``.
+HEADING_SEPARATOR = " - "
+
+# Canonical PEP 440 calendar version: YYYY.M.MICRO plus an optional
+# pre-, post- or dev-release suffix. No leading zeros, no local part.
+_NUMBER = r"(?:0|[1-9]\d*)"
+CALVER_RE = re.compile(
+    rf"^(?P<year>[1-9]\d{{3}})\.(?P<month>[1-9]|1[0-2])\.(?P<micro>{_NUMBER})"
+    rf"(?:(?:a|b|rc){_NUMBER})?(?:\.post{_NUMBER})?(?:\.dev{_NUMBER})?$"
 )
 
-
-# Lower-cased strings that mark an '[Unreleased]' section as effectively
-# empty. The section is also considered empty if it only contains
-# whitespace or horizontal-rule separators after the '[Unreleased]' heading.
-_EMPTY_UNRELEASED_MARKERS: frozenset[str] = frozenset(
-    {
-        "",
-        "_no changes yet._",
-        "_nothing yet._",
-        "nothing yet.",
-        "nothing yet",
-    }
+# Lower-cased placeholder lines that do not count as changelog content.
+_PLACEHOLDERS = frozenset(
+    {"_no changes yet._", "_nothing yet._", "nothing yet.", "nothing yet", "---"}
 )
 
+_UNRELEASED_HEADING_RE = re.compile(r"^## \[Unreleased\][^\n]*\n", re.MULTILINE)
+_LEVEL2_HEADING_RE = re.compile(r"^## ", re.MULTILINE)
+_LINK_REFERENCE_RE = re.compile(r"^\[[^\]\n]+\]:[ \t]", re.MULTILINE)
+_UNRELEASED_LINK_RE = re.compile(
+    r"^\[Unreleased\]:[ \t]+(?P<base>\S+/compare/)\S+?\.\.\.HEAD[ \t]*$",
+    re.MULTILINE,
+)
+_INIT_VERSION_RE = re.compile(r'^__version__\s*=\s*"(?P<version>[^"]*)"', re.M)
+_CITATION_VERSION_RE = re.compile(
+    r"^version:[ \t]*(?P<quote>[\"']?)(?P<version>[^\"'\s#]+)(?P=quote)"
+    r"[ \t]*(?:#[^\n]*)?$",
+    re.MULTILINE,
+)
+_CITATION_DATE_RE = re.compile(r"^date-released:[^\n]*$", re.MULTILINE)
+_TOML_TABLE_RE = re.compile(r"^\[(?P<name>[^\[\]\n]+)\][ \t]*(?:#[^\n]*)?$", re.M)
+_TOML_VERSION_RE = re.compile(r'^version[ \t]*=[ \t]*"(?P<version>[^"]*)"', re.M)
 
-# CLAUDE.md must NOT hard-code a __version__ literal. The guard regex
-# flags any line that looks like ``__version__ = "<X.Y.Z>"`` or
-# ``version = "<X.Y.Z>"`` inside the project's CLAUDE.md so a
-# contributor who manually refreshes the file is caught at release
-# time instead of letting a stale literal drift undetected.
+# CLAUDE.md must not hard-code a version literal (review pass 5): flag any
+# line that looks like ``__version__ = "<X.Y.Z>"`` or ``version: X.Y.Z``.
 _CLAUDE_HARDCODED_VERSION_RE = re.compile(
     r"""(?mx)
     ^[^\n]*                              # leading prose / list marker
     (?:__version__|version)              # the field name
     \s*[:=]\s*                           # ':' or '='
     ['"]?
-    (?P<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)
+    (?P<version>\d+\.\d+\.\d+(?:[-.]?[0-9A-Za-z.-]+)?)
     ['"]?
     """
 )
 
 
-@dataclass(frozen=True)
-class VersionLocation:
-    """Description of a file in which the project version is recorded.
+class ReleaseError(Exception):
+    """A check failed; nothing has been written."""
+
+
+@dataclass
+class TextFile:
+    r"""A text file of the release with its original and new content.
 
     Parameters
     ----------
-    path : Path
-        File containing the version string.
-    pattern : re.Pattern[str]
-        Regex that matches the current version line; the version itself
-        must be captured in a named group called ``version``.
-    template : str
-        ``str.format``-compatible template used to rewrite the line with
-        the new version. The new version is provided as ``{version}``.
+    rel : str
+        Path relative to the repository root (POSIX separators).
+    original : str
+        Content with ``\n`` line endings, as read.
+    newline : str
+        Line ending found in the file (``"\n"`` or ``"\r\n"``); it is
+        kept when the file is written back.
+    updated : str
+        New content with ``\n`` line endings.
     """
 
-    path: Path
-    pattern: re.Pattern[str]
-    template: str
+    rel: str
+    original: str
+    newline: str
+    updated: str = ""
 
 
-# --- helpers -----------------------------------------------------------------
-
-
-def _repo_root() -> Path:
-    """Return the repository root (the directory containing pyproject.toml).
-
-    Returns
-    -------
-    Path
-        Absolute path to the repository root.
-
-    Raises
-    ------
-    FileNotFoundError
-        If no ``pyproject.toml`` can be found walking up from this file.
-    """
-    here = Path(__file__).resolve()
-    for parent in (here, *here.parents):
-        candidate = parent / "pyproject.toml"
-        if candidate.is_file():
-            return parent
-    raise FileNotFoundError("pyproject.toml not found in any parent directory")
-
-
-def _version_locations(root: Path) -> list[VersionLocation]:
-    """List every file in which the project version is tracked.
+@dataclass(frozen=True)
+class ReleasePlan:
+    """Everything the release will change, computed before any write.
 
     Parameters
     ----------
     root : Path
         Repository root.
-
-    Returns
-    -------
-    list[VersionLocation]
-        All files that are kept in lockstep by this script.
-    """
-    return [
-        VersionLocation(
-            path=root / "pyproject.toml",
-            pattern=re.compile(
-                r'^version\s*=\s*"(?P<version>[^"]+)"',
-                flags=re.MULTILINE,
-            ),
-            template='version = "{version}"',
-        ),
-        VersionLocation(
-            path=root / "src" / "groundfield" / "__init__.py",
-            pattern=re.compile(
-                r'^__version__\s*=\s*"(?P<version>[^"]+)"',
-                flags=re.MULTILINE,
-            ),
-            template='__version__ = "{version}"',
-        ),
-        VersionLocation(
-            path=root / "CITATION.cff",
-            pattern=re.compile(
-                r'^version:\s*"?(?P<version>[^\s"]+)"?',
-                flags=re.MULTILINE,
-            ),
-            template='version: "{version}"',
-        ),
-    ]
-
-
-def _parse_semver(version: str) -> tuple[int, int, int, str | None]:
-    """Parse a semantic version string.
-
-    Parameters
-    ----------
-    version : str
-        Version of the form ``MAJOR.MINOR.PATCH`` optionally followed by a
-        pre-release suffix (``-rc.1``, ``-beta.2`` ...).
-
-    Returns
-    -------
-    tuple[int, int, int, str | None]
-        Major, minor, patch and optional pre-release component.
-
-    Raises
-    ------
-    ValueError
-        If ``version`` does not conform to the accepted pattern.
-    """
-    match = SEMVER_RE.match(version)
-    if not match:
-        raise ValueError(f"invalid semver string: {version!r}")
-    return (
-        int(match["major"]),
-        int(match["minor"]),
-        int(match["patch"]),
-        match["pre"],
-    )
-
-
-def _bump(current: str, kind: str) -> str:
-    """Return a new version obtained by bumping ``current``.
-
-    Parameters
-    ----------
     current : str
-        Current version.
-    kind : str
-        Bump kind: ``"major"``, ``"minor"`` or ``"patch"``.
-
-    Returns
-    -------
-    str
-        New version string, always without pre-release suffix because a
-        release bump drops any existing suffix.
-
-    Raises
-    ------
-    ValueError
-        If ``kind`` is unknown.
+        Version recorded in the three version files.
+    version : str
+        New version (canonical PEP 440).
+    date : datetime.date
+        Release date.
+    branch : str
+        Branch that receives the release commit.
+    files : tuple[TextFile, ...]
+        Files to rewrite, in commit order.
     """
-    major, minor, patch, _ = _parse_semver(current)
-    if kind == "major":
-        return f"{major + 1}.0.0"
-    if kind == "minor":
-        return f"{major}.{minor + 1}.0"
-    if kind == "patch":
-        return f"{major}.{minor}.{patch + 1}"
-    raise ValueError(f"unknown bump kind: {kind!r}")
+
+    root: Path
+    current: str
+    version: str
+    date: dt.date
+    branch: str
+    files: tuple[TextFile, ...]
+
+    @property
+    def tag(self) -> str:
+        """Git tag of the release (``vX``)."""
+        return f"{TAG_PREFIX}{self.version}"
 
 
-def _is_newer(old: str, new: str) -> bool:
-    """Return ``True`` if ``new`` is strictly newer than ``old``.
-
-    Parameters
-    ----------
-    old : str
-        Previous version.
-    new : str
-        Candidate version.
-
-    Returns
-    -------
-    bool
-        ``True`` iff the semver-tuple of ``new`` compares greater than
-        ``old``. Pre-release suffixes are ignored for this comparison.
-    """
-    om, oi, op, _ = _parse_semver(old)
-    nm, ni, np_, _ = _parse_semver(new)
-    return (nm, ni, np_) > (om, oi, op)
+# --- versions ----------------------------------------------------------------
 
 
-def _read_current_version(location: VersionLocation) -> str:
-    """Return the version string recorded in ``location``.
-
-    Parameters
-    ----------
-    location : VersionLocation
-        File to inspect.
-
-    Returns
-    -------
-    str
-        Current version string.
-
-    Raises
-    ------
-    RuntimeError
-        If the file does not contain the expected pattern.
-    """
-    text = location.path.read_text(encoding="utf-8")
-    match = location.pattern.search(text)
-    if match is None:
-        raise RuntimeError(
-            f"version pattern not found in {location.path}; file is out of sync"
-        )
-    return match["version"]
-
-
-def _write_new_version(location: VersionLocation, new_version: str) -> None:
-    """Replace the version string in ``location`` with ``new_version``.
-
-    Parameters
-    ----------
-    location : VersionLocation
-        File to rewrite.
-    new_version : str
-        Version to write.
-    """
-    text = location.path.read_text(encoding="utf-8")
-    replacement = location.template.format(version=new_version)
-    updated, count = location.pattern.subn(replacement, text, count=1)
-    if count != 1:
-        raise RuntimeError(
-            f"failed to update version in {location.path} (matches: {count})"
-        )
-    location.path.write_text(updated, encoding="utf-8")
-    logger.info("updated %s -> %s", location.path.name, new_version)
-
-
-def _parse_iso_date(value: str) -> _datetime.date:
-    """Parse an ISO-8601 date string for the ``--date`` CLI option.
+def validate_release_version(value: str) -> str:
+    """Validate a version for a new release.
 
     Parameters
     ----------
     value : str
-        Date in ``YYYY-MM-DD`` format.
+        Candidate version, e.g. ``"2026.11.0"`` or ``"2026.11.0rc1"``.
 
     Returns
     -------
-    datetime.date
-        Parsed calendar date.
+    str
+        ``value`` unchanged.
 
     Raises
     ------
-    argparse.ArgumentTypeError
-        If ``value`` is not a valid ISO-8601 date.
+    ReleaseError
+        If ``value`` is not valid PEP 440, not in canonical form, carries
+        a local part, or is not of the form ``YYYY.M.MICRO`` with an
+        optional pre-, post- or dev-release suffix.
     """
     try:
-        return _datetime.date.fromisoformat(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            f"invalid ISO-8601 date {value!r}: {exc}"
-        ) from exc
+        parsed = Version(value)
+    except InvalidVersion as exc:
+        raise ReleaseError(f"{value!r} is not a valid PEP 440 version") from exc
+    if parsed.local is not None:
+        raise ReleaseError(f"{value!r} has a local version part; PyPI rejects it")
+    canonical = str(parsed)
+    if canonical != value:
+        raise ReleaseError(
+            f"{value!r} is not the canonical PEP 440 form; use {canonical!r}"
+        )
+    if CALVER_RE.match(value) is None:
+        raise ReleaseError(
+            f"{value!r} is not a calendar version YYYY.M.MICRO "
+            "(month without leading zero, optional aN/bN/rcN, .postN, .devN)"
+        )
+    return value
 
 
-def _update_changelog(
-    root: Path,
-    new_version: str,
-    release_date: _datetime.date,
-    *,
-    allow_empty: bool,
-    dry_run: bool,
-) -> bool:
-    """Roll the ``[Unreleased]`` block into a new dated version section.
-
-    The function is idempotent relative to the structure of the file: it
-    finds the ``## [Unreleased]`` heading and the first subsequent
-    heading of the form ``## [...]`` (which scopes the match to version
-    sections and ignores unrelated top-level headings like
-    ``## Roadmap``), extracts the body in between, and rewrites the file
-    so that:
-
-    * a fresh empty ``## [Unreleased]`` stub remains at the top,
-    * a new ``## [vX.Y.Z] — YYYY-MM-DD`` section carries the old body,
-    * the ``[Unreleased]: .../compare/v<old>...HEAD`` link reference is
-      updated to point to ``v<new>``,
-    * a new ``[<new>]: .../releases/tag/v<new>`` link reference is
-      inserted directly below it.
+def calver_version(date: dt.date, tags: Iterable[str]) -> str:
+    """Return the calendar version of a release on ``date``.
 
     Parameters
     ----------
-    root : Path
-        Repository root (directory containing ``CHANGELOG.md``).
-    new_version : str
-        Version string to assign to the new section (without the leading
-        ``v`` prefix).
-    release_date : datetime.date
-        Calendar date to stamp on the new section.
-    allow_empty : bool
-        Proceed even if ``[Unreleased]`` is empty. When ``True``, a
-        housekeeping note is inserted into the new section.
-    dry_run : bool
-        When ``True``, the intended changes are logged but the file is
-        not modified.
+    date : datetime.date
+        Release date.
+    tags : Iterable[str]
+        Existing git tags. Only final releases ``vYYYY.M.MICRO`` of the
+        same month count; pre-, post- and dev-releases are ignored.
 
     Returns
     -------
-    bool
-        ``True`` if ``CHANGELOG.md`` was found and processed (so the
-        caller should stage it); ``False`` if no ``CHANGELOG.md`` exists
-        and the step was skipped.
+    str
+        ``YYYY.M.MICRO`` where ``MICRO`` is the number of earlier releases
+        in that month (one more than the highest existing ``MICRO``, so a
+        deleted tag never makes a number be reused).
+    """
+    micros: list[int] = []
+    for tag in tags:
+        if not tag.startswith(TAG_PREFIX):
+            continue
+        try:
+            parsed = Version(tag[len(TAG_PREFIX) :])
+        except InvalidVersion:
+            continue
+        if parsed.is_prerelease or parsed.is_postrelease or parsed.local:
+            continue
+        if len(parsed.release) == 3 and parsed.release[:2] == (date.year, date.month):
+            micros.append(parsed.release[2])
+    micro = max(micros) + 1 if micros else 0
+    return f"{date.year}.{date.month}.{micro}"
+
+
+# --- file transformations ----------------------------------------------------
+
+
+def _load_toml(text: str) -> dict[str, object]:
+    """Parse ``pyproject.toml``, turning syntax errors into release errors."""
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ReleaseError(f"{PYPROJECT} is not valid TOML: {exc}") from exc
+
+
+def _pyproject_version_table(text: str) -> str:
+    """Return the table that holds the project version in ``pyproject.toml``."""
+    data: dict = _load_toml(text)
+    if "version" in data.get("project", {}):
+        return "project"
+    if "version" in data.get("tool", {}).get("poetry", {}):
+        return "tool.poetry"
+    raise ReleaseError(f"{PYPROJECT}: no [project] version found")
+
+
+def read_pyproject_version(text: str) -> str:
+    """Return the project version recorded in ``pyproject.toml``.
+
+    Parameters
+    ----------
+    text : str
+        File content.
+
+    Returns
+    -------
+    str
+        ``[project] version`` (or ``[tool.poetry] version`` for legacy
+        metadata).
+    """
+    data: dict = _load_toml(text)
+    table = _pyproject_version_table(text)
+    if table == "project":
+        return str(data["project"]["version"])
+    return str(data["tool"]["poetry"]["version"])
+
+
+def bump_pyproject(text: str, version: str) -> str:
+    """Replace the project version in ``pyproject.toml``.
+
+    Only the ``version`` key of the ``[project]`` table (or of
+    ``[tool.poetry]`` for legacy metadata) changes; ``version`` keys of
+    other tables stay untouched.
+
+    Parameters
+    ----------
+    text : str
+        File content.
+    version : str
+        New version.
+
+    Returns
+    -------
+    str
+        Updated content.
+    """
+    table = _pyproject_version_table(text)
+    headers = list(_TOML_TABLE_RE.finditer(text))
+    start = next(
+        (h.end() for h in headers if h["name"].replace(" ", "") == table), None
+    )
+    if start is None:
+        raise ReleaseError(f"{PYPROJECT}: table [{table}] not found")
+    end = next((h.start() for h in headers if h.start() > start), len(text))
+    body, count = _TOML_VERSION_RE.subn(
+        f'version = "{version}"', text[start:end], count=1
+    )
+    if count != 1:
+        raise ReleaseError(f"{PYPROJECT}: no version line in [{table}]")
+    updated = text[:start] + body + text[end:]
+    if read_pyproject_version(updated) != version:  # pragma: no cover - guard
+        raise ReleaseError(f"{PYPROJECT}: version rewrite failed")
+    return updated
+
+
+def read_init_version(text: str) -> str:
+    """Return ``__version__`` from ``src/groundfield/__init__.py``.
+
+    Parameters
+    ----------
+    text : str
+        File content.
+
+    Returns
+    -------
+    str
+        The version literal.
+    """
+    matches = _INIT_VERSION_RE.findall(text)
+    if len(matches) != 1:
+        raise ReleaseError(f"{INIT_FILE}: expected one __version__ line")
+    return str(matches[0])
+
+
+def bump_init(text: str, version: str) -> str:
+    """Replace ``__version__`` in ``src/groundfield/__init__.py``.
+
+    Parameters
+    ----------
+    text : str
+        File content.
+    version : str
+        New version.
+
+    Returns
+    -------
+    str
+        Updated content.
+    """
+    read_init_version(text)
+    return _INIT_VERSION_RE.sub(f'__version__ = "{version}"', text, count=1)
+
+
+def read_citation_version(text: str) -> str:
+    """Return the top-level ``version`` of ``CITATION.cff``.
+
+    Parameters
+    ----------
+    text : str
+        File content.
+
+    Returns
+    -------
+    str
+        The version string.
+    """
+    matches = list(_CITATION_VERSION_RE.finditer(text))
+    if len(matches) != 1:
+        raise ReleaseError(f"{CITATION}: expected one top-level 'version:' line")
+    return matches[0]["version"]
+
+
+def bump_citation(text: str, version: str, date: dt.date) -> str:
+    """Set ``version`` and ``date-released`` in ``CITATION.cff``.
+
+    Parameters
+    ----------
+    text : str
+        File content.
+    version : str
+        New version.
+    date : datetime.date
+        Release date; ``date-released`` is inserted after ``version`` if
+        it is missing.
+
+    Returns
+    -------
+    str
+        Updated content.
+    """
+    read_citation_version(text)
+    version_line = f'version: "{version}"'
+    date_line = f'date-released: "{date.isoformat()}"'
+    updated = _CITATION_VERSION_RE.sub(version_line, text, count=1)
+    if _CITATION_DATE_RE.search(updated):
+        return _CITATION_DATE_RE.sub(date_line, updated, count=1)
+    return updated.replace(version_line, f"{version_line}\n{date_line}", 1)
+
+
+def _has_content(body: str) -> bool:
+    """Return ``True`` if a changelog block holds more than placeholders."""
+    return any(
+        line.strip() and line.strip().lower() not in _PLACEHOLDERS
+        for line in body.splitlines()
+    )
+
+
+def roll_changelog(text: str, version: str, date: dt.date) -> str:
+    """Turn ``## [Unreleased]`` into the section of a new release.
+
+    The body of ``## [Unreleased]`` (up to the next level-2 heading, or
+    the link references at the end) becomes ``## [version] - date`` below
+    a fresh, empty ``## [Unreleased]``; sections are separated by ``---``.
+    The ``[Unreleased]: .../compare/vOLD...HEAD`` link reference is moved
+    to the new tag and a ``[version]: .../releases/tag/vX`` reference is
+    added below it.
+
+    Parameters
+    ----------
+    text : str
+        Content of ``CHANGELOG.md``.
+    version : str
+        New version.
+    date : datetime.date
+        Release date.
+
+    Returns
+    -------
+    str
+        Updated content.
 
     Raises
     ------
-    RuntimeError
-        If ``CHANGELOG.md`` is present but has no ``[Unreleased]``
-        heading, or if no version heading follows the ``[Unreleased]``
-        section, or if the file has a broken structure.
-    ValueError
-        If the ``[Unreleased]`` section is empty and ``allow_empty`` is
-        ``False``.
+    ReleaseError
+        If there is no ``## [Unreleased]`` heading, the block is empty, or
+        a section for ``version`` already exists.
     """
-    path = root / "CHANGELOG.md"
-    if not path.is_file():
-        logger.info("no CHANGELOG.md found; skipping changelog update")
-        return False
-
-    text = path.read_text(encoding="utf-8")
-
-    # Find the '## [Unreleased]' heading line.
-    heading_re = re.compile(r"^## \[Unreleased\][^\n]*\n", re.MULTILINE)
-    heading_match = heading_re.search(text)
-    if heading_match is None:
-        raise RuntimeError("CHANGELOG.md: '## [Unreleased]' heading not found")
-
-    # The section extends from the end of the heading line up to (but not
-    # including) the next '## [' heading. Requiring the opening bracket
-    # scopes the match to version sections and avoids accidental matches
-    # on headings such as '## Roadmap'.
-    body_start = heading_match.end()
-    next_heading_re = re.compile(r"^## \[", re.MULTILINE)
-    next_match = next_heading_re.search(text, body_start)
-    if next_match is None:
-        raise RuntimeError(
-            "CHANGELOG.md: no version section follows '[Unreleased]'; "
-            "refusing to rewrite the file"
+    heading = _UNRELEASED_HEADING_RE.search(text)
+    if heading is None:
+        raise ReleaseError(f"{CHANGELOG}: no '## [Unreleased]' heading")
+    if re.search(rf"^## \[{re.escape(version)}\]", text, re.MULTILINE):
+        raise ReleaseError(f"{CHANGELOG}: a section [{version}] already exists")
+    start = heading.end()
+    candidates = [len(text)]
+    for pattern in (_LEVEL2_HEADING_RE, _LINK_REFERENCE_RE):
+        match = pattern.search(text, start)
+        if match is not None:
+            candidates.append(match.start())
+    end = min(candidates)
+    body = text[start:end].strip("\n")
+    if not _has_content(body):
+        raise ReleaseError(
+            f"{CHANGELOG}: the '[Unreleased]' block is empty; add release "
+            "notes before cutting the release"
         )
-    body_end = next_match.start()
-    raw_body = text[body_start:body_end]
-
-    # Trim a trailing horizontal-rule divider (``---``) which acts as a
-    # visual separator; a new one is emitted by the replacement.
-    body_without_divider = re.sub(
-        r"\n---[ \t]*\n\s*$", "\n", raw_body, flags=re.MULTILINE
+    body = re.sub(r"(?:\n[ \t]*)*\n---[ \t]*$", "", body).strip("\n")
+    section = (
+        "## [Unreleased]\n\n---\n\n"
+        f"## [{version}]{HEADING_SEPARATOR}{date.isoformat()}\n\n"
+        f"{body}\n\n---\n\n"
     )
-    stripped = body_without_divider.strip()
-    is_empty = stripped.lower() in _EMPTY_UNRELEASED_MARKERS
+    updated = text[: heading.start()] + section + text[end:]
 
-    if is_empty and not allow_empty:
-        raise ValueError(
-            "CHANGELOG.md: the '[Unreleased]' section is empty. "
-            "Add release notes under '[Unreleased]' before cutting the "
-            "release, or pass '--allow-empty-changelog' to proceed "
-            "without notes."
-        )
-
-    if is_empty:
-        carried_body = "_Housekeeping release; no user-visible changes._\n"
-    else:
-        # Preserve verbatim body, trim surrounding whitespace, then
-        # normalise to exactly one trailing newline before the divider.
-        carried_body = stripped + "\n"
-
-    date_str = release_date.isoformat()
-    replacement = (
-        "## [Unreleased]\n"
-        "\n"
-        "_No changes yet._\n"
-        "\n"
-        "---\n"
-        "\n"
-        f"## [{new_version}] \u2014 {date_str}\n"
-        "\n"
-        f"{carried_body}"
-        "\n"
-        "---\n"
-        "\n"
-    )
-    updated = text[: heading_match.start()] + replacement + text[body_end:]
-
-    # Update the link references at the bottom. The '[Unreleased]' link
-    # has the form
-    #   [Unreleased]: https://.../compare/v<prev>...HEAD
-    # We rewrite it to target v<new> and insert a new
-    #   [<new>]: https://.../releases/tag/v<new>
-    # line directly below it.
-    link_re = re.compile(
-        r"^\[Unreleased\]:\s+"
-        r"(?P<base>https?://\S+/compare/)"
-        r"v(?P<prev>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)"
-        r"(?P<suffix>\.\.\.HEAD)\s*$",
-        re.MULTILINE,
-    )
-    link_match = link_re.search(updated)
-    if link_match is None:
+    link = _UNRELEASED_LINK_RE.search(updated)
+    if link is None:
         logger.warning(
-            "CHANGELOG.md: '[Unreleased]' link reference not found; "
-            "version-compare links at the bottom of the file were not "
-            "touched — please update them by hand"
+            "%s: no '[Unreleased]: .../compare/...HEAD' link reference; "
+            "link references not updated",
+            CHANGELOG,
         )
-    else:
-        base = link_match["base"]
-        tag_base = base.replace("/compare/", "/releases/tag/")
-        new_unreleased_line = (
-            f"[Unreleased]: {base}v{new_version}{link_match['suffix']}"
-        )
-        new_version_line = f"[{new_version}]: {tag_base}v{new_version}"
-        updated = link_re.sub(
-            f"{new_unreleased_line}\n{new_version_line}",
-            updated,
-            count=1,
-        )
-
-    if dry_run:
-        logger.info(
-            "[dry-run] would rewrite CHANGELOG.md: move '[Unreleased]' "
-            "to '[%s] \u2014 %s'",
-            new_version,
-            date_str,
-        )
-        if is_empty:
-            logger.info(
-                "[dry-run] '[Unreleased]' is empty; a housekeeping note "
-                "will be inserted in the new section"
-            )
-        else:
-            preview = [line for line in carried_body.splitlines() if line.strip()][:6]
-            logger.info("[dry-run] new section preview:")
-            for line in preview:
-                logger.info("[dry-run]   %s", line)
-        return True
-
-    path.write_text(updated, encoding="utf-8")
-    logger.info(
-        "updated CHANGELOG.md: moved '[Unreleased]' to '[%s] \u2014 %s'",
-        new_version,
-        date_str,
+        return updated
+    base = link["base"]
+    tag_url = base.replace("/compare/", "/releases/tag/")
+    replacement = (
+        f"[Unreleased]: {base}{TAG_PREFIX}{version}...HEAD\n"
+        f"[{version}]: {tag_url}{TAG_PREFIX}{version}"
     )
-    return True
+    return updated[: link.start()] + replacement + updated[link.end() :]
+
+
+# --- repository checks -------------------------------------------------------
 
 
 def _check_claude_md_no_hardcoded_version(root: Path) -> None:
     """Refuse the release if ``CLAUDE.md`` hard-codes a version literal.
 
-    The "Version (do not hard-code in this file)" convention is
-    documented but, without a guard, a contributor who manually
-    pasted a fresh ``__version__ = "0.4.0"`` line into ``CLAUDE.md``
-    could leave it drifting undetected. This guard scans the file
-    at release time and raises a :class:`RuntimeError` if a
-    hard-coded literal is detected, with a pointer to the canonical
-    sources (``pyproject.toml`` / ``src/groundfield/__init__.py`` /
-    ``CITATION.cff``).
+    ``CLAUDE.md`` (local, not committed) must defer to the canonical
+    version sources. Lines inside fenced code blocks and the "do not
+    hard-code" reminder itself are ignored.
 
     Parameters
     ----------
@@ -556,62 +548,69 @@ def _check_claude_md_no_hardcoded_version(root: Path) -> None:
     path = root / "CLAUDE.md"
     if not path.is_file():
         return
-    text = path.read_text(encoding="utf-8")
-    # Skip code-fence blocks (```), in-line snippets in fenced blocks,
-    # and the explicit "do not hard-code" reminder paragraph. We scan
-    # line-by-line so we can drop lines inside a fenced block.
     in_fence = False
     offenders: list[tuple[int, str]] = []
-    for lineno, line in enumerate(text.splitlines(), start=1):
-        stripped = line.strip()
-        if stripped.startswith("```"):
+    for lineno, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if line.strip().startswith("```"):
             in_fence = not in_fence
             continue
-        if in_fence:
+        if in_fence or "do not hard-code" in line.lower():
             continue
-        # Skip the warning paragraph itself.
-        if "do not hard-code" in line.lower():
-            continue
-        match = _CLAUDE_HARDCODED_VERSION_RE.search(line)
-        if match is not None:
+        if _CLAUDE_HARDCODED_VERSION_RE.search(line) is not None:
             offenders.append((lineno, line.rstrip()))
     if offenders:
-        lines = "\n".join(f"  CLAUDE.md:{n}: {ln}" for n, ln in offenders)
+        lines = "\n".join(f"  CLAUDE.md:{n}: {text}" for n, text in offenders)
         raise RuntimeError(
             "CLAUDE.md hard-codes a version literal:\n"
             f"{lines}\n"
-            "Remove the literal — the canonical sources are "
-            "pyproject.toml, src/groundfield/__init__.py:__version__ "
-            "and CITATION.cff. scripts/release.py keeps these three "
-            "in sync; CLAUDE.md must defer to them."
+            "Remove the literal - the canonical sources are pyproject.toml, "
+            "src/groundfield/__init__.py:__version__ and CITATION.cff, which "
+            "scripts/release.py keeps in sync; CLAUDE.md must defer to them."
         )
 
 
-def _run_git(args: list[str], *, dry_run: bool) -> None:
-    """Run a git command, honouring ``dry_run``.
+def _git(root: Path, *args: str, check: bool = True) -> str:
+    """Run git in the repository root and return its standard output.
 
     Parameters
     ----------
-    args : list[str]
-        Arguments passed to ``git`` (without the ``git`` prefix).
-    dry_run : bool
-        When ``True`` the command is only logged, not executed.
+    root : Path
+        Repository root; always the working directory of git (10.09).
+    *args : str
+        Arguments after ``git``.
+    check : bool
+        Raise :class:`ReleaseError` on a non-zero exit status.
 
-    Raises
-    ------
-    subprocess.CalledProcessError
-        If git exits with a non-zero status.
+    Returns
+    -------
+    str
+        Standard output without surrounding whitespace.
     """
-    command = ["git", *args]
-    if dry_run:
-        logger.info("[dry-run] %s", " ".join(command))
-        return
-    logger.info("$ %s", " ".join(command))
-    subprocess.run(command, check=True)
+    result = subprocess.run(
+        ["git", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise ReleaseError(f"git {' '.join(args)} failed: {detail}")
+    return result.stdout.strip()
 
 
-def _git_clean(root: Path) -> bool:
-    """Return ``True`` if the working tree has no uncommitted changes.
+def _git_ok(root: Path, *args: str) -> bool:
+    """Return ``True`` if a git command exits with status 0."""
+    result = subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, text=True, check=False
+    )
+    return result.returncode == 0
+
+
+def _check_repository(root: Path) -> str:
+    """Check the git state and return the current branch.
 
     Parameters
     ----------
@@ -620,195 +619,306 @@ def _git_clean(root: Path) -> bool:
 
     Returns
     -------
-    bool
-        Working tree status.
+    str
+        Name of the checked-out branch.
+
+    Raises
+    ------
+    ReleaseError
+        If ``root`` is not the top level of a git work tree, the tree is
+        not clean (untracked files included) or ``HEAD`` is detached.
     """
-    result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
+    try:
+        toplevel = _git(root, "rev-parse", "--show-toplevel")
+    except (ReleaseError, OSError) as exc:
+        raise ReleaseError(f"{root} is not a git work tree: {exc}") from exc
+    if Path(toplevel).resolve() != root.resolve():
+        raise ReleaseError(f"{root} is not the top level of its git repository")
+    status = _git(root, "status", "--porcelain")
+    if status:
+        shown = "\n".join(f"  {line}" for line in status.splitlines()[:20])
+        raise ReleaseError(
+            "the working tree is not clean; commit or stash first:\n" + shown
+        )
+    branch = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    if not branch:
+        raise ReleaseError("HEAD is detached; check out the release branch first")
+    return branch
+
+
+def _check_fragments(root: Path) -> None:
+    """Refuse the release while ``changelog.d/`` holds unmerged fragments."""
+    folder = root / FRAGMENT_DIR
+    if not folder.is_dir():
+        return
+    fragments = sorted(
+        p.relative_to(root).as_posix()
+        for p in folder.glob("*.md")
+        if p.name.lower() != "readme.md"
     )
-    return result.stdout.strip() == ""
+    if fragments:
+        raise ReleaseError(
+            "unmerged changelog fragments; merge them into [Unreleased] of "
+            f"{CHANGELOG} and delete them: " + ", ".join(fragments)
+        )
 
 
-# --- CLI ---------------------------------------------------------------------
+def _read(root: Path, rel: str) -> TextFile:
+    r"""Read a release file, normalising line endings to ``\n``."""
+    path = root / rel
+    if not path.is_file():
+        raise ReleaseError(f"{rel} not found")
+    raw = path.read_bytes().decode("utf-8")
+    newline = "\r\n" if "\r\n" in raw else "\n"
+    return TextFile(rel=rel, original=raw.replace("\r\n", "\n"), newline=newline)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    """Build the argparse parser for the release CLI.
+def _write(root: Path, text_file: TextFile, content: str) -> None:
+    """Write a release file atomically, keeping its line endings."""
+    path = root / text_file.rel
+    tmp = path.with_name(path.name + ".release-tmp")
+    with open(tmp, "w", encoding="utf-8", newline=text_file.newline) as handle:
+        handle.write(content)
+    os.replace(tmp, path)
+
+
+# --- plan and apply ----------------------------------------------------------
+
+
+def plan_release(
+    root: Path, command: str, version: str | None, date: dt.date
+) -> ReleasePlan:
+    """Run every check and compute the new file contents.
+
+    Nothing is written. The order of the checks puts the cheap,
+    user-actionable ones first.
+
+    Parameters
+    ----------
+    root : Path
+        Repository root.
+    command : {"calver", "set"}
+        How the new version is determined.
+    version : str or None
+        Explicit version for ``"set"``.
+    date : datetime.date
+        Release date.
 
     Returns
     -------
-    argparse.ArgumentParser
-        Fully configured parser.
+    ReleasePlan
+        The validated plan.
+
+    Raises
+    ------
+    ReleaseError
+        If any check fails.
     """
+    branch = _check_repository(root)
+    try:
+        _check_claude_md_no_hardcoded_version(root)
+    except RuntimeError as exc:
+        raise ReleaseError(str(exc)) from exc
+    _check_fragments(root)
+
+    pyproject = _read(root, PYPROJECT)
+    init = _read(root, INIT_FILE)
+    citation = _read(root, CITATION)
+    changelog = _read(root, CHANGELOG)
+    found = {
+        PYPROJECT: read_pyproject_version(pyproject.original),
+        INIT_FILE: read_init_version(init.original),
+        CITATION: read_citation_version(citation.original),
+    }
+    if len(set(found.values())) != 1:
+        listing = "\n".join(f"  {rel}: {value}" for rel, value in found.items())
+        raise ReleaseError(f"the version files disagree:\n{listing}")
+    current = found[PYPROJECT]
+    try:
+        current_version = Version(current)
+    except InvalidVersion as exc:
+        raise ReleaseError(f"current version {current!r} is not PEP 440") from exc
+
+    tags = _git(root, "tag", "--list").split()
+    if command == "calver":
+        new = calver_version(date, tags)
+    elif version is not None:
+        new = version
+    else:  # pragma: no cover - argparse requires VERSION for 'set'
+        raise ReleaseError("'set' needs a VERSION")
+    validate_release_version(new)
+    if Version(new) <= current_version:
+        raise ReleaseError(
+            f"the new version {new} does not sort above the current version {current}"
+        )
+    tag = f"{TAG_PREFIX}{new}"
+    if _git_ok(root, "rev-parse", "--quiet", "--verify", f"refs/tags/{tag}"):
+        raise ReleaseError(f"tag {tag} already exists")
+
+    pyproject.updated = bump_pyproject(pyproject.original, new)
+    init.updated = bump_init(init.original, new)
+    citation.updated = bump_citation(citation.original, new, date)
+    changelog.updated = roll_changelog(changelog.original, new, date)
+    return ReleasePlan(
+        root=root,
+        current=current,
+        version=new,
+        date=date,
+        branch=branch,
+        files=(pyproject, init, citation, changelog),
+    )
+
+
+def apply_release(plan: ReleasePlan) -> None:
+    """Write the files, commit them and create the annotated tag.
+
+    Parameters
+    ----------
+    plan : ReleasePlan
+        Validated plan from :func:`plan_release`.
+
+    Raises
+    ------
+    ReleaseError
+        If writing, committing or tagging fails. When the commit fails,
+        the files are restored and the index is reset first.
+    """
+    rels = [f.rel for f in plan.files]
+    try:
+        for text_file in plan.files:
+            _write(plan.root, text_file, text_file.updated)
+        _git(plan.root, "add", "--", *rels)
+        _git(plan.root, "commit", "-m", COMMIT_MESSAGE.format(tag=plan.tag))
+    except (ReleaseError, OSError) as exc:
+        unrestored: list[str] = []
+        for text_file in plan.files:
+            try:
+                _write(plan.root, text_file, text_file.original)
+            except OSError:
+                unrestored.append(text_file.rel)
+        _git(plan.root, "reset", "--quiet", "--", *rels, check=False)
+        if unrestored:
+            raise ReleaseError(
+                f"{exc}\ncould not restore {', '.join(unrestored)}; "
+                f"run: git checkout -- {' '.join(unrestored)}"
+            ) from exc
+        raise ReleaseError(f"{exc}\nthe release files were restored") from exc
+    try:
+        _git(
+            plan.root,
+            "tag",
+            "--annotate",
+            plan.tag,
+            "-m",
+            TAG_MESSAGE.format(version=plan.version),
+        )
+    except ReleaseError as exc:
+        raise ReleaseError(
+            f"{exc}\nthe release commit exists but the tag is missing; create "
+            f"it with: git tag --annotate {plan.tag} -m "
+            f"'{TAG_MESSAGE.format(version=plan.version)}'"
+        ) from exc
+
+
+def _repo_root() -> Path:
+    """Return the repository that contains this script."""
+    root = Path(__file__).resolve().parent.parent
+    if not (root / PYPROJECT).is_file():
+        raise ReleaseError(f"{root} has no {PYPROJECT}; is the script in scripts/?")
+    return root
+
+
+def _parse_date(value: str) -> dt.date:
+    """Parse ``--date`` (``YYYY-MM-DD``)."""
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid date {value!r}: {exc}") from exc
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
     parser = argparse.ArgumentParser(
-        prog="release",
-        description="Bump groundfield version, commit, tag and push.",
-    )
-    parser.add_argument(
-        "kind",
-        choices=("major", "minor", "patch", "set"),
-        help="semver bump kind; 'set' requires an explicit VERSION argument",
-    )
-    parser.add_argument(
-        "version",
-        nargs="?",
-        default=None,
-        help="explicit version when KIND is 'set'",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print actions without modifying files or calling git",
-    )
-    parser.add_argument(
-        "--no-push",
-        action="store_true",
-        help="create commit and tag locally but do not push",
-    )
-    parser.add_argument(
-        "--allow-dirty",
-        action="store_true",
-        help="proceed even if the working tree has uncommitted changes",
-    )
-    parser.add_argument(
-        "--allow-empty-changelog",
-        action="store_true",
-        help=(
-            "proceed even if the '[Unreleased]' section of CHANGELOG.md "
-            "is empty; a housekeeping note will be inserted in its place"
+        prog="python scripts/release.py",
+        description=(
+            "Cut a calendar-versioned groundfield release: validate, bump the "
+            "version files, roll the changelog, commit and tag. Never pushes."
         ),
     )
-    parser.add_argument(
-        "--date",
-        type=_parse_iso_date,
-        default=None,
-        metavar="YYYY-MM-DD",
-        help="explicit release date for CHANGELOG.md (default: today)",
+    commands = parser.add_subparsers(dest="command", required=True)
+    calver = commands.add_parser(
+        "calver", help="version YYYY.M.MICRO from the release date and the tags"
     )
+    explicit = commands.add_parser(
+        "set", help="explicit PEP 440 calendar version, e.g. 2026.11.0rc1"
+    )
+    explicit.add_argument("version", help="new version")
+    for sub in (calver, explicit):
+        sub.add_argument(
+            "--date",
+            type=_parse_date,
+            default=None,
+            metavar="YYYY-MM-DD",
+            help="release date (default: today)",
+        )
+        sub.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="run every check and print the plan without changing anything",
+        )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Entry point of the release script.
+    """Run the release tool.
 
     Parameters
     ----------
-    argv : list[str] | None
-        Command-line arguments. When ``None``, ``sys.argv[1:]`` is used.
+    argv : list[str] or None
+        Command-line arguments; ``sys.argv[1:]`` when ``None``.
 
     Returns
     -------
     int
-        Process exit code.
+        Exit status: 0 on success, 1 if a check or a git step failed
+        (argparse exits with 2 on usage errors).
     """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(message)s",
-    )
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = _build_parser().parse_args(argv)
-
-    root = _repo_root()
-    locations = _version_locations(root)
-
-    # Consistency check: every location must report the same current version.
-    current_versions = {loc.path: _read_current_version(loc) for loc in locations}
-    distinct = set(current_versions.values())
-    if len(distinct) != 1:
-        for path, version in current_versions.items():
-            logger.error("  %s: %s", path, version)
-        logger.error("version drift detected; aborting")
-        return 2
-    current = distinct.pop()
-    logger.info("current version: %s", current)
-
-    # Determine the new version.
-    if args.kind == "set":
-        if args.version is None:
-            logger.error("'set' requires a VERSION argument")
-            return 2
-        try:
-            _parse_semver(args.version)
-        except ValueError as exc:
-            logger.error("%s", exc)
-            return 2
-        new_version = args.version
-        if not _is_newer(current, new_version):
-            logger.error(
-                "refusing to set version backwards: %s -> %s",
-                current,
-                new_version,
-            )
-            return 2
-    else:
-        new_version = _bump(current, args.kind)
-    logger.info("new version:     %s", new_version)
-
-    if not args.allow_dirty and not _git_clean(root):
-        logger.error(
-            "working tree is dirty; commit or stash changes, or pass --allow-dirty"
-        )
-        return 2
-
-    # CLAUDE.md hard-coded version guard. Refuse the release before
-    # we touch any file so the working tree stays clean if the
-    # contributor needs to neutralise the literal.
+    date = args.date if args.date is not None else dt.date.today()
     try:
-        _check_claude_md_no_hardcoded_version(root)
-    except RuntimeError as exc:
-        logger.error("%s", exc)
-        return 2
+        root = _repo_root()
+        plan = plan_release(root, args.command, getattr(args, "version", None), date)
+    except ReleaseError as exc:
+        logger.error("release aborted, nothing was changed: %s", exc)
+        return 1
 
-    # Rewrite files.
-    for location in locations:
-        if args.dry_run:
-            logger.info(
-                "[dry-run] would update %s: %s -> %s",
-                location.path.name,
-                current,
-                new_version,
-            )
-        else:
-            _write_new_version(location, new_version)
-
-    # Roll the '[Unreleased]' block of CHANGELOG.md into a new dated
-    # version section. Failures raise and abort the release before any
-    # git operations are performed, leaving the working tree untouched
-    # except for the version-string files (which are still easy to
-    # revert with 'git checkout --').
-    release_date = args.date if args.date is not None else _datetime.date.today()
-    try:
-        changelog_updated = _update_changelog(
-            root,
-            new_version,
-            release_date,
-            allow_empty=args.allow_empty_changelog,
-            dry_run=args.dry_run,
+    heading = f"## [{plan.version}]{HEADING_SEPARATOR}{plan.date.isoformat()}"
+    logger.info("repository:      %s (branch %s)", plan.root, plan.branch)
+    logger.info("current version: %s", plan.current)
+    logger.info("new version:     %s (%s)", plan.version, args.command)
+    logger.info("files:           %s", ", ".join(f.rel for f in plan.files))
+    logger.info("changelog:       '## [Unreleased]' becomes '%s'", heading)
+    if args.dry_run:
+        logger.info(
+            "[dry-run] would commit '%s' and tag '%s'; nothing was changed",
+            COMMIT_MESSAGE.format(tag=plan.tag),
+            plan.tag,
         )
-    except (RuntimeError, ValueError) as exc:
-        logger.error("%s", exc)
-        return 2
-
-    # Stage, commit, tag, push.
-    rel_paths = [str(loc.path.relative_to(root)) for loc in locations]
-    if changelog_updated:
-        rel_paths.append("CHANGELOG.md")
-    _run_git(["add", *rel_paths], dry_run=args.dry_run)
-    commit_message = f"chore(release): v{new_version}"
-    _run_git(["commit", "-m", commit_message], dry_run=args.dry_run)
-    tag = f"v{new_version}"
-    _run_git(["tag", "-a", tag, "-m", commit_message], dry_run=args.dry_run)
-
-    if args.no_push:
-        logger.info("skipping push (--no-push)")
-    else:
-        _run_git(["push"], dry_run=args.dry_run)
-        _run_git(["push", "origin", tag], dry_run=args.dry_run)
-
-    logger.info("release %s complete", tag)
+        return 0
+    try:
+        apply_release(plan)
+    except ReleaseError as exc:
+        logger.error("release failed: %s", exc)
+        return 1
+    logger.info(
+        "release %s committed and tagged on branch %s. Nothing was pushed; "
+        "publish with:\n    git push origin %s\n    git push origin %s",
+        plan.tag,
+        plan.branch,
+        plan.branch,
+        plan.tag,
+    )
     return 0
 
 

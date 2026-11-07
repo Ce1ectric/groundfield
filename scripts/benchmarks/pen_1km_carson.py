@@ -39,7 +39,6 @@ import argparse
 import math
 import time
 
-import numpy as np
 
 import groundfield as gf
 from groundfield.coupling.carson import (
@@ -225,7 +224,7 @@ def run_cross_engine_table(
     """Build the Markdown table comparing engines and theory."""
     sigma = 1.0 / rho_earth
     out = []
-    out.append(f"# 1 km PEN benchmark (Carson on)")
+    out.append("# 1 km PEN benchmark (Carson on)")
     out.append("")
     out.append(
         f"- Length: **{length:.0f} m**, depth: **{depth:.2f} m**, "

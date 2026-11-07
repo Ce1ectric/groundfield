@@ -1,0 +1,28 @@
+MathJax 3.2.2 (Apache-2.0, see LICENSE), vendored for the
+documentation site (finding 10.08: no third-party JavaScript at page load).
+
+Source:    https://registry.npmjs.org/mathjax/-/mathjax-3.2.2.tgz
+Integrity: sha512-Bt+SSVU8eBG27zChVewOicYs7Xsdt40qm4+UpHyX7k0/O9NliPc+x77k1/FEsPsjKPZGJvtRZM1vO+geW0OhGw==
+           (npm registry dist.integrity, verified against the downloaded
+           tarball; dist.shasum c754d7b46a679d7f3fa03543d6b8bf124ddf9f6b)
+
+Files are byte-identical copies of the tarball's package/ directory:
+  es5/tex-mml-chtml.js                -> tex-mml-chtml.js
+                                         (sha384-Wuix6BuhrWbjDBs24bXrjf4ZQ5aFeFWBuKkFekO2t8xFU0iNaLQfp2K6/1Nxveei)
+  es5/output/chtml/fonts/woff-v2/*    -> output/chtml/fonts/woff-v2/
+                                         (web fonts, loaded on demand)
+  es5/input/tex/extensions/*          -> input/tex/extensions/
+                                         (TeX packages, autoloaded on demand)
+  LICENSE                             -> LICENSE
+60 files, 2036740 bytes. SHA256SUMS lists every file;
+tests/test_docs_assets.py checks them. MathJax finds the fonts and
+extensions relative to the location of tex-mml-chtml.js.
+
+Not vendored: the accessibility explorer and speech rule engine (es5/a11y,
+es5/sre, about 4.3 MB), loaded only when a reader enables "Explorer" or
+speech in the MathJax context menu; assistive MathML for screen readers is
+part of tex-mml-chtml.js and works.
+
+Update: download the new tarball from the npm registry, verify its
+dist.integrity, rerun this import, update MATHJAX_322_SRI in
+tests/test_docs_assets.py and the version in mkdocs.yml comments.

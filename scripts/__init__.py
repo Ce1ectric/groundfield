@@ -1,6 +1,7 @@
-"""Automation and release scripts for ``groundfield``.
+"""Maintenance and release tools for ``groundfield``.
 
-These scripts are not part of the runtime API. They are invoked via
-``poetry run`` and support release, license-report, and similar dev
-tasks.
+These tools are not part of the package: they are neither shipped in the
+wheel nor installed as commands (finding 10.02). Run them from a checkout
+of the repository, for example ``python scripts/release.py calver`` or
+``python -m scripts.benchmarks.pen_1km_carson`` from the repository root.
 """

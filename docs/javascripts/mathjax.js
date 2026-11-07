@@ -1,4 +1,5 @@
-// MathJax 3 configuration for groundinsight.
+// MathJax 3 configuration for the groundfield documentation. MathJax 3.2.2
+// itself is vendored in javascripts/vendor/mathjax/ (see mkdocs.yml).
 //
 // We need to cover two sources of math in the site:
 //   * Markdown pages processed by pymdownx.arithmatex (generic mode) which
@@ -30,11 +31,30 @@ window.MathJax = {
 };
 
 // MkDocs Material uses an instant-loading router that swaps the document body
-// without a full page reload. Re-typeset whenever the document has changed.
+// without a full page reload; document$ emits the first page and every page
+// reached by instant navigation. MathJax typesets the first page itself during
+// startup, so the first emission is skipped. Later pages are typeset through
+// MathJax.startup.promise, which serialises the calls: two concurrent typeset
+// runs (startup typeset waiting for an autoloaded extension such as
+// \boldsymbol, plus a second typesetPromise) collide in MathJax 3.2 with
+// "Cannot read properties of null (reading 'replaceChild')".
 if (typeof document$ !== "undefined") {
+  let firstDocument = true;
   document$.subscribe(() => {
-    if (window.MathJax && window.MathJax.typesetPromise) {
-      window.MathJax.typesetPromise();
+    if (firstDocument) {
+      firstDocument = false;
+      return;
     }
+    const mathjax = window.MathJax;
+    if (!mathjax || !mathjax.startup || !mathjax.startup.promise) {
+      return;
+    }
+    mathjax.startup.promise = mathjax.startup.promise
+      .then(() => {
+        mathjax.typesetClear();
+        mathjax.texReset();
+        return mathjax.typesetPromise();
+      })
+      .catch((error) => console.error("MathJax typesetting failed:", error));
   });
 }

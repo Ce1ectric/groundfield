@@ -198,7 +198,11 @@ graphify-out/
 # audit reports
 audit*
 
+# Profiler output (cProfile / pstats dumps carry local paths; finding 10.11)
+profile.out
+*.prof
+*.pstats
+
 
 # Sandbox write-permission probe (Cowork-Mount); never committed.
 test_write_repo
-

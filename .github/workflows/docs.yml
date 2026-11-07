@@ -1,42 +1,50 @@
 name: Docs
 
+# Deploys the documentation to GitHub Pages (gh-pages branch). The strict
+# build on pull requests runs in ci.yml (job "docs").
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+env:
+  POETRY_VERSION: "2.4.3"
+  POETRY_VIRTUALENVS_IN_PROJECT: "true"
 
 jobs:
-  build-and-deploy:
+  deploy:
     name: Build and deploy MkDocs site
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # mkdocs gh-deploy pushes the gh-pages branch
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # mkdocs gh-deploy pushes gh-pages with the job token, so the
+          # credential must persist for this job. The job uploads no
+          # artifacts, so the credential cannot leak through one.
+          persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        id: python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+        run: python -m pip install "poetry==${POETRY_VERSION}"
 
-      - name: Cache Poetry virtualenv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-docs-${{ runner.os }}-py3.12-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install project with docs group
-        run: poetry install --no-interaction --with docs
+      - name: Install project with the docs group
+        run: poetry install --no-interaction --only main,docs
 
       - name: Deploy to GitHub Pages
         run: poetry run mkdocs gh-deploy --force --clean --verbose

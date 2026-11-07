@@ -1,55 +1,75 @@
-[tool.poetry]
+[project]
 name = "groundfield"
 version = "0.15.0"
 description = "Numerical field computation for grounding systems (PDE / field model, coupling to groundinsight)"
-authors = ["Christian Ehlert <christian.ehlert@mailbox.org>"]
+authors = [{ name = "Christian Ehlert", email = "christian.ehlert@mailbox.org" }]
 license = "MIT"
-repository = "https://github.com/Ce1ectric/groundfield"
-documentation = "https://ce1ectric.github.io/groundfield/"
+license-files = ["LICENSE"]
 readme = "README.md"
-packages = [
-    { include = "groundfield", from = "src" },
-    { include = "scripts" },
+requires-python = ">=3.12,<4.0"
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic (>=2.8.2,<3.0.0)",
+    "numpy (>=2.1.0,<3.0.0)",
+    "scipy (>=1.14.1,<2.0.0)",
+    "matplotlib (>=3.9.2,<4.0.0)",
+    "sympy (>=1.13.2,<2.0.0)",
+    "pandas (>=3.0.2,<4.0.0)",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-pydantic = "^2.8.2"
-numpy = "^2.1.0"
-scipy = "^1.14.1"
-matplotlib = "^3.9.2"
-polars = "^1.5.0"
-sympy = "^1.13.2"
-pandas = "^3.0.2"
-# Optional: bridge to the sister project ``groundinsight``. When this
-# extra is installed, ``groundfield.io.groundinsight.to_bustype`` /
-# ``save_bustype_to_db`` can return a live ``BusType`` instance and
-# write into the ``groundinsight`` SQLite store. The JSON export path
-# (``save_bustype_json`` / ``load_bustype_json``) does not require
-# this extra. See ADR-0008.
-groundinsight = { version = ">=0.3", optional = true }
-# Optional dependencies for ``groundfield.geo`` (OpenStreetMap
-# building-footprint ingest via Overpass, WGS84 -> local ENU
-# projection, polygon geometry). The core install does not depend on
-# these; ``groundfield.geo`` raises a clear ``ImportError`` with an
-# install hint when called without the ``geo`` extra. See ADR-0011.
-requests = { version = "^2.32", optional = true }
-shapely = { version = "^2.0", optional = true }
-pyproj = { version = "^3.6", optional = true }
+[project.optional-dependencies]
+# Bridge to the sister project ``groundinsight``. When this extra is
+# installed, ``groundfield.io.groundinsight.to_bustype`` /
+# ``save_bustype_to_db`` can return a live ``BusType`` instance and write
+# into the ``groundinsight`` SQLite store. The JSON export path
+# (``save_bustype_json`` / ``load_bustype_json``) does not require this
+# extra. See ADR-0008.
+groundinsight = ["groundinsight (>=0.3)"]
+# ``groundfield.geo`` (OpenStreetMap building-footprint ingest via
+# Overpass, WGS84 -> local ENU projection, polygon geometry). The core
+# install does not depend on these; ``groundfield.geo`` raises a clear
+# ``ImportError`` with an install hint when called without the ``geo``
+# extra. See ADR-0011.
+geo = ["requests (>=2.32,<3.0)", "shapely (>=2.0,<3.0)", "pyproj (>=3.6,<4.0)"]
 
-[tool.poetry.extras]
-groundinsight = ["groundinsight"]
-geo = ["requests", "shapely", "pyproj"]
+[project.urls]
+Documentation = "https://ce1ectric.github.io/groundfield/"
+Repository = "https://github.com/Ce1ectric/groundfield"
+Issues = "https://github.com/Ce1ectric/groundfield/issues"
+Changelog = "https://ce1ectric.github.io/groundfield/changelog/"
+
+[tool.poetry]
+# Only the package itself goes into the wheel. Maintenance tools live in
+# ``scripts/`` and run from a checkout (``python scripts/release.py ...``);
+# they are deliberately not installed (finding 10.02).
+packages = [{ include = "groundfield", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
-pytest = "^8.3.2"
+# >= 9.0.3: fixes the two advisories of 8.4.2 (finding 10.04).
+pytest = "^9.0.3"
 pytest-cov = "^5.0.0"
-black = "^24.8.0"
+pytest-xdist = "^3.8.0"
+# Formatter / linter and type checker, pinned exactly so that local runs,
+# pre-commit (.pre-commit-config.yaml) and CI agree (finding 10.94). black
+# is gone: the code base is formatted with `ruff format`.
+ruff = "0.17.4"
+mypy = "2.4.1"
 # ``groundinsight`` is pulled into the dev group so the bridge tests
 # in ``tests/test_io_groundinsight.py`` can run end-to-end against
 # the consumer's real Pydantic + SymPy parser. Keeps the runtime
-# dependency optional (see ``[tool.poetry.extras]``).
+# dependency optional (see ``[project.optional-dependencies]``).
 groundinsight = ">=0.3"
 # Same logic for the ``geo`` extra: pulled into dev so the OSM /
 # footprint tests in ``tests/test_geo_*.py`` run end-to-end. Keeps
@@ -65,11 +85,8 @@ optional = true
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.5.34"
 mkdocstrings = { extras = ["python"], version = "^0.26.1" }
-pymdown-extensions = "^10.9"
-
-[tool.poetry.scripts]
-release = "scripts.release:main"
-generate-third-party-licenses = "scripts.generate_third_party_licenses:main"
+# >= 11.0.1: fixes the six advisories of 10.21.2 (finding 10.04).
+pymdown-extensions = ">=11.0.1,<13"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -89,7 +106,99 @@ extend-exclude = ["notebooks", "site", "dist", "graphify-out", "audit*", "review
 
 [tool.ruff.format]
 docstring-code-format = false
+# Format Python sources only; code blocks in Markdown (README, docs,
+# CHANGELOG) keep their hand-written layout.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# The project standard (finding 10.94): pyflakes, pycodestyle, isort,
+# bugbear, pyupgrade, NumPy docstrings, PEP 8 naming with a physics
+# allow-list, McCabe complexity. `ruff check` reports all of it; CI and
+# pre-commit block on the subset `--select F,E9,B` until the cleanup pass
+# after the calendar release has fixed the rest.
+select = ["F", "E", "W", "I", "B", "UP", "D", "N", "C901"]
+ignore = [
+    # Formatter conflicts (ruff documentation, "Conflicting lint rules").
+    "W191",
+    "D206",
+    "D300",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: no docstring requirement; physics names in fixtures and helpers.
+"tests/**" = ["D", "N802", "N803", "N806"]
+# Notebooks (versioned tutorials): no docstrings, imports per cell, long
+# output-oriented lines, physics names, bare expressions for display.
+"**/*.ipynb" = ["D", "E402", "E501", "N803", "N806", "B018"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.isort]
+known-first-party = ["groundfield"]
+
+[tool.ruff.lint.pep8-naming]
+# Physics and matrix symbols follow the literature (R, L, Z_G, Y_G, R_edge,
+# K, U, I, Phi, ...). This allow-list takes `ruff check --select N` on src/
+# from 380 findings to 2 (review pass 10, R6).
+extend-ignore-names = [
+    "[A-Z]",
+    "[A-Z][0-9]",
+    "[A-Z]_*",
+    "[A-Z][a-z]",
+    "[A-Z][a-z]_*",
+    "_[A-Z]*",
+    "*_[A-Z]",
+    "*_[A-Z]_*",
+    "*_[A-Z][a-z]",
+    "Phi*",
+    "Gamma*",
+    "Lambda*",
+    "Sigma*",
+    "Delta*",
+    "Omega*",
+    "abs_[A-Z]*",
+    "arg_[A-Z]*",
+    "sum_[A-Z]*",
+    "d[A-Z]*",
+    "delta_[A-Z]*",
+    "n[A-Z]*",
+    "[A-Z][A-Z]*_*",
+    "[A-Z]w",
+    "Nv",
+]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/groundfield"]
+plugins = ["pydantic.mypy"]
+warn_unused_configs = true
+warn_redundant_casts = true
+# Not strict yet (finding 10.94: 110 errors in default mode on v0.15.0);
+# the cleanup pass after the calendar release tightens this module by
+# module, starting with the public layer.
+
+[[tool.mypy.overrides]]
+# Third-party packages without inline types or installed stubs
+# (scipy-stubs, pandas-stubs and types-shapely are not dependencies).
+module = [
+    "groundinsight.*",
+    "mpl_toolkits.*",
+    "pandas.*",
+    "scipy.*",
+    "shapely.*",
+    "sympy.*",
+]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+# Unknown keyword arguments to models (typos) are type errors.
+init_forbid_extra = true
+warn_required_dynamic_aliases = true
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.2.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
