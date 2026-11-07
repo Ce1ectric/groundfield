@@ -202,6 +202,18 @@ def test_registry_lists_the_deprecated_names_as_aliases() -> None:
 
 
 @REGISTRY_PATCH
+@pytest.mark.finding("10.75")
+@pytest.mark.parametrize("name", ["mom", "mom_sommerfeld"])
+def test_mom_family_declares_two_terminal_sources_and_junctions(name) -> None:
+    """The ported mom family runs the shared inject / build_topology steps."""
+    from groundfield.solver.registry import get_backend
+
+    caps = get_backend(name).capabilities
+    assert caps.two_terminal_sources
+    assert caps.junctions
+
+
+@REGISTRY_PATCH
 @pytest.mark.finding("10.76")
 def test_fem_is_registered_as_experimental() -> None:
     from groundfield.solver.registry import get_backend
@@ -227,7 +239,7 @@ def test_image_nlayer_name_warns_while_the_image_dispatch_does_not() -> None:
 # The requested registry patch, applied in a fixture
 # ---------------------------------------------------------------------
 
-_PATCHED = ("image_nlayer", "cim", "bem", "fem")
+_PATCHED = ("mom", "mom_sommerfeld", "image_nlayer", "cim", "bem", "fem")
 
 
 def apply_requested_registry_patch() -> None:
@@ -240,8 +252,26 @@ def apply_requested_registry_patch() -> None:
     ``image`` forwards ``MultiLayerSoil`` worlds to it. ``fem`` becomes
     experimental.
     """
+    from dataclasses import replace
+
     from groundfield.solver import registry as r
 
+    # mom and mom_sommerfeld run the shared inject / build_topology steps
+    # (10.75): two-terminal sources and junction nodes (CORE-2a flags,
+    # present once CORE-2a is merged).
+    flags = {"two_terminal_sources": True}
+    if "junctions" in r.BackendCapabilities.__dataclass_fields__:
+        flags["junctions"] = True
+    for name in ("mom", "mom_sommerfeld"):
+        spec = r.get_backend(name)
+        r.register_backend(
+            name,
+            spec.solve_fn,
+            capabilities=replace(spec.capabilities, **flags),
+            options_model=spec.options_model,
+            summary=spec.summary,
+            replace=True,
+        )
     nlayer = r.get_backend("image_nlayer")
     r.register_backend(
         "image_nlayer",

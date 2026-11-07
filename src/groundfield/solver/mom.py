@@ -116,10 +116,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
+from groundfield.solver import _pipeline
 from groundfield.solver._guards import _check_segment_depths
 from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._layered import canonical_soil
-from groundfield.solver import _pipeline
 from groundfield.solver._pipeline import (
     SegmentArrays,
     Solution,
@@ -645,7 +645,7 @@ class _PointMatchingGreen:
         arrays: SegmentArrays,
         seg_currents: np.ndarray,
     ) -> np.ndarray:
-        """Segment-midpoint potentials in V of the segment currents ``seg_currents`` (A).
+        """Segment-midpoint potentials (V) of the segment currents ``seg_currents`` (A).
 
         The default is the product with the assembled matrix,
         ``Z @ Re(I) + j Z @ Im(I)``.
@@ -882,14 +882,18 @@ def _point_matching_result(
     branches: BranchModel,
     arrays: SegmentArrays,
     solution: Solution,
+    node_potentials: list[dict[str, complex]],
     metadata: dict,
 ) -> FieldResult:
-    """Result step of the point-matching family (replaces pipeline step 6).
+    """Build the result of the point-matching family (pipeline step 6).
 
     Same layout as :func:`groundfield.solver._pipeline.build_result`; the
     node potential is the plain segment mean (point matching enforces
     it at every midpoint), and floating clusters report an exactly zero
-    net current (10.29).
+    net current (10.29). Junctions (leakage-free nodes, 10.38) report
+    the potential of their node in the solved system in
+    ``metadata["junction_potentials"]`` (V per frequency), as the image
+    family does.
     """
     n_freq = len(engine.frequencies)
     real_names = [e.name for e in world.electrodes]
@@ -944,6 +948,17 @@ def _point_matching_result(
     if conductor_currents:
         metadata["conductor_node_currents"] = conductor_currents
         metadata["conductor_node_potentials"] = conductor_potentials
+    # Junction nodes arrive with the two-terminal / junction work of the
+    # pipeline (CORE-2a, 10.38); worlds of earlier versions have none.
+    junctions = getattr(world, "junctions", ())
+    if junctions:
+        metadata["junction_potentials"] = {
+            j.name: [
+                complex(node_potentials[k].get(cluster_id[j.name], complex("nan")))
+                for k in range(n_freq)
+            ]
+            for j in junctions
+        }
     return FieldResult(
         backend=green.backend,
         frequencies=list(engine.frequencies),
@@ -1006,7 +1021,7 @@ def solve_point_matching(
     arrays = SegmentArrays.from_segments(disc.segments)
     kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
     Z = green.reaction_matrix(kernel, arrays)
-    solution, _node_potentials = _point_matching_step(
+    solution, node_potentials = _point_matching_step(
         engine,
         disc=disc,
         node_currents=node_currents,
@@ -1034,6 +1049,7 @@ def solve_point_matching(
         branches=branches,
         arrays=arrays,
         solution=solution,
+        node_potentials=node_potentials,
         metadata=metadata,
     )
 

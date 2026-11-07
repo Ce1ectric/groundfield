@@ -73,7 +73,7 @@ __all__ = ["solve_bem"]
 
 
 def solve_bem(world: World, engine: Engine) -> FieldResult:
-    """Deprecated point-matching method-of-moments solver (alias of ``mom``).
+    """Run the point-matching ``mom`` solver under the deprecated name ``bem``.
 
     Runs :func:`groundfield.solver.mom.solve_mom` (review pass 10,
     10.76); ``bem`` assembled the identical point-matching system, see

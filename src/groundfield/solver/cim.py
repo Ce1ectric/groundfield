@@ -80,7 +80,7 @@ on a reachable path either — for $n = 1$ it evaluated the homogeneous
 image kernel and for $n = 2$ the exact Tagg/Sunde series of
 :mod:`groundfield.solver.image_2layer`, i.e. it reproduced ``image`` and
 ``image_2layer`` (bit for bit since the length-weighted read-back of
-10.30), and it rejected $n \ge 3$ because the historic complex-image
+10.30), and it rejected $n \\ge 3$ because the historic complex-image
 expansion approximated an *incomplete* Green's function (single image
 family, no multiple reflections — see :mod:`groundfield.solver._layered`;
 audit 2026-07-08, WP-E).
@@ -96,15 +96,15 @@ reported as ``metadata['cim_n_images']`` / ``['cim_rms']`` (review
 pass 9, F34); 0.15.0 replaced them by ``cim_fit_used: False`` and
 ``reduces_to``, which the alias no longer needs.
 
-A future complete $n \ge 3$ complex-image kernel would be a new
+A future complete $n \\ge 3$ complex-image kernel would be a new
 backend, validated pointwise against ``mom_sommerfeld``.
 
 Validity of the fit
 -------------------
-- Quasi-static, $f < 1\,\mathrm{kHz}$.
+- Quasi-static, $f < 1\\,\\mathrm{kHz}$.
 - ``n_layers == 1`` → empty fit; ``n_layers == 2`` → one exact image
-  at $\beta = 0$ ($\Gamma_1 \equiv K_1$).
-- ``n_layers ≥ 3`` → matrix-pencil fit of $\Gamma_1 - K_1$, with a
+  at $\\beta = 0$ ($\\Gamma_1 \\equiv K_1$).
+- ``n_layers ≥ 3`` → matrix-pencil fit of $\\Gamma_1 - K_1$, with a
   :class:`ComplexImageFitWarning` when it misses ``rms_tol``.
 
 References
@@ -596,7 +596,7 @@ def fit_complex_images(
 
 
 def solve_cim(world: World, engine: Engine) -> FieldResult:
-    """Deprecated complex-image backend: runs the image auto-dispatch.
+    """Run the image auto-dispatch under the deprecated backend name ``cim``.
 
     ``cim`` never evaluated a complex-image fit on a reachable path: for
     $n = 1$ it used the homogeneous image kernel and for $n = 2$ the

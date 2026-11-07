@@ -207,3 +207,83 @@ def test_direct_reaction_matrix_equals_the_identity_extraction(soil_label) -> No
         Z = _build_Z_homogeneous(a.points, a.lengths, a.radii, soil.rho)
         Z_eye = _self_corrected_kernel(a.points, a.lengths, a.radii, eye, soil.rho)
     assert np.array_equal(Z, Z_eye)
+
+
+# ---------------------------------------------------------------------
+# 10.75 — two-terminal sources and junctions reach the mom family
+# through the shared inject / build_topology steps (CORE-2a, 10.16, 10.38)
+# ---------------------------------------------------------------------
+
+CORE2A = pytest.mark.skipif(
+    "junctions" not in gf.World.model_fields,
+    reason="return_to and junction nodes arrive with CORE-2a (release/calver)",
+)
+
+
+def _solver(name: str):
+    from groundfield.solver.mom import solve_mom
+    from groundfield.solver.mom_sommerfeld import solve_mom_sommerfeld
+
+    return {"mom": solve_mom, "mom_sommerfeld": solve_mom_sommerfeld}[name]
+
+
+def _two_rods(**source) -> gf.World:
+    w = gf.create_world(soil=SOILS["two_layer"])
+    gf.create_electrode(w, "rod", name="A", position=(0.0, 0.0, 0.5), length=2.0)
+    gf.create_electrode(w, "rod", name="B", position=(20.0, 0.0, 0.5), length=2.0)
+    gf.create_source(w, magnitude=1.0, **source)
+    return w
+
+
+@CORE2A
+@pytest.mark.finding("10.75")
+@pytest.mark.parametrize("solver", ["mom", "mom_sommerfeld"])
+def test_mom_family_honours_return_to(solver) -> None:
+    """+I at ``attached_to``, -I at ``return_to``: KCL and superposition."""
+    solve = _solver(solver)
+    engine = gf.create_engine(segment_length=0.5)
+    res = solve(_two_rods(attached_to="A", return_to="B"), engine)
+    i_a = res.electrode_currents["A"][0]
+    i_b = res.electrode_currents["B"][0]
+    assert abs(i_a + i_b) <= 1e-12
+    z_in = res.electrode_potentials["A"][0] - res.electrode_potentials["B"][0]
+    r_a = solve(_two_rods(attached_to="A"), engine)
+    r_b = solve(_two_rods(attached_to="B"), engine)
+    z11, z21 = r_a.electrode_potentials["A"][0], r_a.electrode_potentials["B"][0]
+    z12, z22 = r_b.electrode_potentials["A"][0], r_b.electrode_potentials["B"][0]
+    assert abs(z_in - (z11 - z12 - z21 + z22)) <= 1e-12 * abs(z_in)
+
+
+@CORE2A
+@pytest.mark.finding("10.75")
+@pytest.mark.parametrize("solver", ["mom", "mom_sommerfeld"])
+def test_mom_family_reports_the_junction_potential(solver) -> None:
+    """A source on a junction sees the lead in series: Z_in = Z_g1 + R."""
+    from groundfield.api import create_junction
+
+    solve = _solver(solver)
+    engine = gf.create_engine(segment_length=0.5)
+
+    def world(on_junction: bool) -> gf.World:
+        w = gf.create_world(soil=SOILS["two_layer"])
+        gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.0), length=3.0)
+        if on_junction:
+            create_junction(w, name="J", position=(0.0, 0.0, -0.2))
+            gf.create_conductor(
+                w,
+                name="lead",
+                start="J",
+                end="g1",
+                conductor_type="generic",
+                cross_section=50e-6,
+                lumped_series_resistance_ohm=0.5,
+            )
+        gf.create_source(w, attached_to="J" if on_junction else "g1", magnitude=2.0)
+        return w
+
+    res = solve(world(True), engine)
+    z_g1 = solve(world(False), engine).electrode_potentials["g1"][0] / 2.0
+    z_in = res.metadata["junction_potentials"]["J"][0] / 2.0
+    assert abs(res.electrode_currents["g1"][0] - 2.0) <= 1e-12
+    assert all(ps.electrode_name != "J" for ps in res.point_sources)
+    assert abs(z_in - (z_g1 + 0.5)) <= 1e-12 * abs(z_in)

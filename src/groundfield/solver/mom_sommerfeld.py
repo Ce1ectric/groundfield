@@ -695,7 +695,7 @@ def _reflected_parts(
     reference: float = 0.0,
     max_osc_panels: int = _MAX_OSC_PANELS,
 ) -> tuple[float, float, _QuadratureIssue | None]:
-    """The two parts of :func:`_reflected_integral` and its convergence issue.
+    """Return the two parts of :func:`_reflected_integral` and its issue.
 
     Returns ``(g_analytic, value, issue)``: the closed-form leading
     interface reflection $K_1 / \\sqrt{s^2 + (2 h_1 - p)^2}$ (1/m), the
@@ -1499,7 +1499,7 @@ class _MatrixKernel:
     def matrix(
         self, seg_points: np.ndarray, seg_lengths: np.ndarray, wire_radii: np.ndarray
     ) -> np.ndarray:
-        """The assembled matrix (no copy)."""
+        """Return the assembled matrix (no copy)."""
         return self.Z
 
     def __call__(
