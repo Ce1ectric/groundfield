@@ -588,3 +588,225 @@ def test_every_exporter_output_parses_to_its_fit_and_to_the_legacy_values() -> N
                 assert "passivity" in payload["metadata"]
                 n_formulas += 1
     assert n_formulas >= 380
+
+
+# ---------------------------------------------------------------------
+# Audit 1 of the calendar release: resource bounds of sums and products
+# (H1, H2), the power bound (L1), rational exponents (L2), work budget
+# ---------------------------------------------------------------------
+
+#: Maximal-size cases below took 13 s to 105 s on the base of this release,
+#: measured in a fresh process (SymPy's global cache makes repeated
+#: in-process runs unrepresentative); they take at most about 2 s now.
+#: The bound leaves room for the shared container.
+HEAVY_TIME_LIMIT_S = 5.0
+_CHILD_GUARD_S = 120.0
+
+_CHILD = """
+import json, sys, time
+from groundfield.io._formula import FormulaError, parse_impedance_formula
+text = sys.stdin.read()
+t0 = time.perf_counter()
+try:
+    parse_impedance_formula(text)
+    outcome = "accepted"
+except FormulaError as exc:
+    outcome = "rejected: " + str(exc)
+print(json.dumps({"seconds": time.perf_counter() - t0, "outcome": outcome}))
+"""
+
+
+def _parse_in_child(text: str) -> tuple[float, str]:
+    """Parse ``text`` in a fresh interpreter; ``(seconds, outcome)``."""
+    import subprocess
+    import sys
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _CHILD],
+            input=text,
+            capture_output=True,
+            text=True,
+            timeout=_CHILD_GUARD_S,
+        )
+    except subprocess.TimeoutExpired:
+        return _CHILD_GUARD_S, "timeout"
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    return float(out["seconds"]), out["outcome"]
+
+
+def _lcm_sum(n_terms: int, *, times_f: bool = False) -> str:
+    """Sum of ``((b+2)/b)**64`` with distinct 15-digit primes ``b`` (H1)."""
+    import sympy as sp
+
+    terms, b = [], 10**14
+    for _ in range(n_terms):
+        b = int(sp.nextprime(b))
+        terms.append(f"{'f*' if times_f else ''}({b + 2}/{b})**64")
+    return "+".join(terms)
+
+
+def _log_product() -> str:
+    """Product of 332 logarithms, 1 991 syntax nodes (H2, accepted)."""
+    return "*".join(f"log({k})" for k in range(2, 334))
+
+
+def _vanishing_product() -> str:
+    """Product of 111 sums that vanish exactly (H2, accepted, value 0)."""
+    return "*".join(
+        f"(log({a})+log({a + 1})-log({a * (a + 1)}))" for a in range(2, 113)
+    )
+
+
+def _within_documented_limits(text: str) -> None:
+    from groundfield.io._formula import MAX_CHARS, MAX_NODES
+
+    assert len(text) <= MAX_CHARS
+    assert sum(1 for _ in ast.walk(ast.parse(text, mode="eval"))) <= MAX_NODES
+
+
+@pytest.mark.parametrize(
+    "text",
+    [_lcm_sum(120), _lcm_sum(222), _lcm_sum(120, times_f=True)],
+    ids=["120-terms", "222-terms", "120-terms-times-f"],
+)
+def test_sum_of_fractions_with_distinct_denominators_is_rejected_quickly(
+    text: str,
+) -> None:
+    """Audit 1, H1: every term is a 960-digit fraction inside the bounds;
+    their common denominator grows with every term. The sum was bounded
+    only after SymPy had built it (22 s for 120 terms, 105 s for 222)."""
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    _within_documented_limits(text)
+    seconds, outcome = _parse_in_child(text)
+    assert outcome.startswith("rejected: fraction with more than 1000 digits"), outcome
+    assert seconds < HEAVY_TIME_LIMIT_S, f"{seconds:.1f} s"
+    error, _, peak = _measured(lambda: parse_impedance_formula(text))
+    assert isinstance(error, FormulaError)
+    assert peak < MEMORY_LIMIT_BYTES
+
+
+@pytest.mark.parametrize(
+    "make, n_factors, expected",
+    [(_log_product, 332, None), (_vanishing_product, 111, 0.0)],
+    ids=["332-logarithms", "111-vanishing-sums"],
+)
+def test_long_product_chains_parse_in_bounded_time(
+    make, n_factors: int, expected, monkeypatch
+) -> None:
+    """Audit 1, H2: accepted formulas whose partial product was re-evaluated
+    with ``evalf`` after every factor (on the base 2 802 and 2 857 calls,
+    13 s and 55 s in a fresh process on the shared container); now values
+    are carried along and long chains are multiplied pairwise. The number
+    of ``evalf`` calls (SymPy's own, at most about one per factor) is the
+    load-independent check, the time in a fresh process the coarse one."""
+    import sympy as sp
+    from sympy.core.evalf import EvalfMixin
+
+    from groundfield.io._formula import parse_impedance_formula
+
+    text = make()
+    _within_documented_limits(text)
+    seconds, outcome = _parse_in_child(text)
+    assert outcome == "accepted", outcome
+    assert seconds < HEAVY_TIME_LIMIT_S, f"{seconds:.1f} s"
+    calls = []
+    evalf = EvalfMixin.evalf
+
+    def counting(self, *args, **kwargs):
+        calls.append(None)
+        return evalf(self, *args, **kwargs)
+
+    monkeypatch.setattr(EvalfMixin, "evalf", counting)
+    expr = parse_impedance_formula(text)
+    monkeypatch.undo()
+    assert len(calls) <= 2 * n_factors, len(calls)
+    assert not expr.free_symbols
+    if expected is None:
+        log10_value = sum(math.log10(math.log(k)) for k in range(2, 334))
+        assert math.log10(float(sp.N(expr, 30))) == pytest.approx(log10_value)
+    else:
+        z = evaluate_spec(_spec(text), [0.0, 50.0], RHO)
+        assert np.all(z == 0.0)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "(exp(600)*f)**64",
+        "1e-300*(exp(600)*f)**64 + rho",
+        "(f*rho*exp(-400))**2",
+        "(sqrt(10**60)*rho)**16",
+        "(1e150*f)**4",
+    ],
+)
+def test_symbol_free_factor_of_a_power_base_is_bounded(text: str) -> None:
+    """Audit 1, L1: SymPy distributes the power over the factors of a
+    product, ``(exp(600)*f)**64 -> f**64*exp(38400)``; the bound looked at
+    the number atoms of the base only (600 and 64)."""
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    with pytest.raises(FormulaError, match="power would create"):
+        parse_impedance_formula(text)
+
+
+def test_symbol_free_factors_combined_by_sympy_are_bounded() -> None:
+    """``exp(600)*exp(600)`` becomes ``exp(1200)`` inside a product."""
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    with pytest.raises(FormulaError, match="number outside the bound"):
+        parse_impedance_formula("f*exp(600)*exp(600)")
+    doc = _document("1e-300*(exp(600)*f)**64 + rho")
+    with pytest.raises(EvaluateSpecError):
+        BusTypeSpec.from_dict(doc)
+
+
+@pytest.mark.parametrize(
+    "text, exponent",
+    [
+        ("f**(-3/2)", (-3, 2)),
+        ("rho**(-1/2)", (-1, 2)),
+        ("f**-(3/2)", (-3, 2)),
+        ("f**(+3/2)", (3, 2)),
+        ("rho*f**(-1/3)", (-1, 3)),
+    ],
+)
+def test_negative_rational_literal_exponents_are_accepted(text: str, exponent) -> None:
+    """Audit 1, L2: the documented ``(-3/2)`` reads as ``(-3)/2`` in Python,
+    which the exponent rule did not recognise."""
+    import sympy as sp
+
+    from groundfield.io._formula import parse_impedance_formula
+
+    expr = parse_impedance_formula(text)
+    powers = [p for p in expr.atoms(sp.Pow) if p.exp.is_Rational]
+    assert sp.Rational(*exponent) in {p.exp for p in powers}
+
+
+def test_format_impedance_formula_output_parses_for_rational_powers() -> None:
+    import sympy as sp
+
+    from groundfield.io._formula import (
+        format_impedance_formula,
+        parse_impedance_formula,
+    )
+
+    f, rho = sp.Symbol("f"), sp.Symbol("rho")
+    for expr in (rho + f ** sp.Rational(-3, 2), rho ** sp.Rational(-1, 2) * f):
+        text = format_impedance_formula(expr)
+        assert parse_impedance_formula(text) == expr, text
+
+
+def test_bookkeeping_is_capped_by_the_work_budget(monkeypatch) -> None:
+    """Every parse is bounded by ``MAX_WORK`` bookkeeping steps; the
+    exporters' formulas need a small fraction of it."""
+    from groundfield.io import _formula
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    text = " + ".join(f"1/(f + {k + 1})" for k in range(150))
+    parse_impedance_formula(text)
+    monkeypatch.setattr(_formula, "MAX_WORK", 200)
+    with pytest.raises(FormulaError, match="more than 200 bookkeeping steps"):
+        parse_impedance_formula(text)

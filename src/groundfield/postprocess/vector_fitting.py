@@ -719,6 +719,18 @@ def vector_fit(
 # ---------------------------------------------------------------------
 
 
+_PASSIVITY_BAND_FACTOR = 2.0
+"""Default band of :func:`check_passivity`: 0 Hz to this factor times the
+highest fitted frequency."""
+
+_PASSIVITY_REL_TOL = 1e-9
+"""``Re Z >= -tol * max|Z|`` counts as passive (round-off and coefficient
+rounding of an exported formula)."""
+
+_PASSIVITY_N_REFINE = 10
+"""Number of the lowest local grid minima refined by scalar minimisation."""
+
+
 @dataclass(frozen=True)
 class PassivityReport:
     """Outcome of :func:`check_passivity`.
@@ -726,21 +738,23 @@ class PassivityReport:
     Attributes
     ----------
     passed
-        ``True`` when :math:`\\Re Z \\ge 0` everywhere on the checked
-        range.
+        ``True`` when :math:`\\Re Z \\ge -10^{-9} \\max|Z|` everywhere on the
+        checked band and every value is finite.
     min_re_Z
-        Smallest :math:`\\Re Z` found, in Ω.
+        Smallest :math:`\\Re Z` found, in Ω; ``nan`` if :math:`Z` is not
+        finite somewhere (``f_at_min`` then names the frequency).
     f_at_min
         Frequency of ``min_re_Z`` in Hz.
     f_max
-        Upper end of the checked frequency range in Hz (the range starts
-        at 0 Hz).
+        Upper end of the checked band in Hz (the band starts at 0 Hz).
     rho_at_min
-        Soil resistivity of ``min_re_Z`` in Ω·m for a standard-form fit,
-        ``None`` for a vector fit.
+        Soil resistivity of ``min_re_Z`` in Ω·m: the corner of the checked
+        :math:`\\rho` range for a standard-form fit, the resistivity the
+        fit belongs to for an exported vector fit, else ``None``.
     rho_range
-        Checked resistivity range in Ω·m for a standard-form fit, else
-        ``None``.
+        Checked resistivity range ``(min, max)`` in Ω·m, or ``None``.
+    n_points
+        Number of grid points evaluated (before the refinement).
     """
 
     passed: bool
@@ -749,19 +763,30 @@ class PassivityReport:
     f_max: float
     rho_at_min: float | None = None
     rho_range: tuple[float, float] | None = None
+    n_points: int = 0
 
     def as_dict(self) -> dict[str, object]:
-        """JSON-friendly summary (e.g. for export metadata)."""
-        out: dict[str, object] = {
+        """Strict-JSON summary; the ``metadata["passivity"]`` block of an export.
+
+        Keys: ``passed``, ``min_re_Z_Ohm`` (``None`` when not finite),
+        ``f_at_min_Hz``, ``rho_at_min_Ohm_m``, ``f_checked_Hz``
+        (``[0, f_max]``), ``rho_checked_Ohm_m`` (``[min, max]`` or
+        ``None``) and ``n_points``.
+        """
+        finite = math.isfinite(self.min_re_Z)
+        return {
             "passed": bool(self.passed),
-            "min_re_Z_Ohm": float(self.min_re_Z),
+            "min_re_Z_Ohm": float(self.min_re_Z) if finite else None,
             "f_at_min_Hz": float(self.f_at_min),
-            "f_max_Hz": float(self.f_max),
+            "rho_at_min_Ohm_m": (
+                None if self.rho_at_min is None else float(self.rho_at_min)
+            ),
+            "f_checked_Hz": [0.0, float(self.f_max)],
+            "rho_checked_Ohm_m": (
+                None if self.rho_range is None else [float(x) for x in self.rho_range]
+            ),
+            "n_points": int(self.n_points),
         }
-        if self.rho_at_min is not None:
-            out["rho_at_min_Ohm_m"] = float(self.rho_at_min)
-            out["rho_range_Ohm_m"] = [float(x) for x in self.rho_range or ()]
-        return out
 
 
 def check_passivity(
@@ -771,13 +796,21 @@ def check_passivity(
     n: int = 2001,
     rho_range: tuple[float, float] | None = None,
 ) -> PassivityReport:
-    """Check :math:`\\Re Z(f) \\ge 0` of a fitted rho-f model on a band.
+    """Check :math:`\\Re Z(j 2\\pi f) \\ge 0` of a fitted rho-f model on a band.
 
-    A grounding impedance is passive, so its real part is non-negative
-    at every frequency. A rational fit can violate this *between* the
-    samples: review pass 10 found a 4-pole fit of passive data (rms
-    4.4 mΩ, no warning) with :math:`\\Re Z = -0.019\\,\\Omega` at
-    5.5 Hz, between the 0 Hz and 50 Hz samples (10.40 / 10.41).
+    A grounding impedance is the driving-point impedance of a passive
+    one-port, so its real part is non-negative at every frequency,
+
+    .. math::
+
+        \\operatorname{Re} Z(j\\,2\\pi f) \\;\\ge\\; 0 \\qquad (f \\ge 0).
+
+    A rational fit can violate this *between* or *beyond* its samples:
+    review pass 10 found a 4-pole fit of passive data (rms 4.4 mΩ, no
+    warning) with :math:`\\Re Z = -0.019\\,\\Omega` at 5.5 Hz, between the
+    0 Hz and 50 Hz samples (10.40 / 10.41). This is the one passivity
+    check of the package: the groundinsight exporter runs the same
+    implementation on the formula it writes.
 
     Parameters
     ----------
@@ -786,23 +819,29 @@ def check_passivity(
         :class:`~groundfield.postprocess.rho_f_standard.RhoFStandardFit`.
     f_max
         Upper end of the band in Hz (the band starts at 0 Hz). Default:
-        the highest sampled frequency of the fit.
+        twice the highest fitted frequency, the band of the export check.
     n
-        Number of points of the uniform frequency grid for a vector fit
-        (``>= 2``). The grid is augmented by the pole frequencies
-        :math:`|\\Im p_k|/2\\pi` and :math:`|p_k|/2\\pi` (where the real
-        part of a rational function has its extrema) and by the sample
-        frequencies; every local minimum is refined by a bounded scalar
+        Number of points of the linear frequency grid of a vector fit
+        (``>= 2``). The grid also holds ``3 n // 10`` logarithmically
+        spaced points from :math:`10^{-6} f_\\max`, the samples and the
+        midpoints between them, and 161 points within eight half-widths
+        :math:`|\\Re p|` of every pole frequency :math:`|\\Im p|/2\\pi`,
+        which resolve resonances narrower than any fixed grid. The ten
+        lowest local minima of the grid are refined by a bounded scalar
         minimisation.
     rho_range
         ``(rho_min, rho_max)`` in Ω·m for a standard-form fit; default
         the sampled range. :math:`\\Re Z = k_0 + k_1\\rho + k_2 f +
-        k_4 f\\rho` is bilinear, so its minimum over the box is at a
+        k_4 f\\rho` is bilinear, so its minimum over the box
+        :math:`[\\rho_\\min, \\rho_\\max] \\times [0, f_\\max]` lies at a
         corner and the check is exact.
 
     Returns
     -------
     PassivityReport
+        ``passed`` is ``True`` when every evaluated :math:`Z` is finite and
+        :math:`\\min \\Re Z \\ge -10^{-9} \\max |Z|` (the tolerance absorbs
+        round-off and the coefficient rounding of an exported formula).
 
     Raises
     ------
@@ -810,18 +849,52 @@ def check_passivity(
         For an unsupported fit type.
     ValueError
         For ``f_max <= 0``, ``n < 2`` or an invalid ``rho_range``.
+    """
+    return _check_passivity(fit, f_max=f_max, n=n, rho_range=rho_range)
 
-    Notes
-    -----
-    The export bridge to groundinsight runs its own check when it writes
-    a BusType (stream SEC/IO); both are meant to be unified.
+
+def _passivity_frequency_grid(
+    f_samples: np.ndarray, f_hi: float, poles: np.ndarray, n: int
+) -> np.ndarray:
+    """Frequencies in Hz at which :func:`check_passivity` evaluates ``Re Z``."""
+    parts = [np.array([0.0, f_hi])]
+    if f_hi > 0.0:
+        parts += [
+            np.linspace(0.0, f_hi, n),
+            np.geomspace(f_hi * 1e-6, f_hi, max(2, (3 * n) // 10)),
+        ]
+    samples = np.unique(f_samples)
+    parts += [samples, 0.5 * (samples[1:] + samples[:-1])]
+    t = np.linspace(-8.0, 8.0, 161)
+    for p in np.asarray(poles, dtype=complex).ravel():
+        width = max(abs(p.real), 1e-9 * max(abs(p), 1.0))
+        parts.append((abs(p.imag) + width * t) / (2.0 * math.pi))
+    grid = np.concatenate(parts)
+    grid = grid[np.isfinite(grid) & (grid >= 0.0) & (grid <= f_hi)]
+    return np.unique(grid)
+
+
+def _check_passivity(
+    fit,
+    *,
+    f_max: float | None = None,
+    n: int = 2001,
+    rho_range: tuple[float, float] | None = None,
+    evaluate=None,
+    rho_at_fit: float | None = None,
+) -> PassivityReport:
+    """Implementation of :func:`check_passivity`, shared with the exporter.
+
+    ``evaluate(f, rho)`` replaces the fit's own evaluation (the exporter
+    passes the rounded formula it writes); ``rho_at_fit`` is the
+    resistivity in Ω·m a vector fit belongs to and only labels the report.
     """
     from groundfield.postprocess.rho_f_standard import RhoFStandardFit
 
     if isinstance(fit, RhoFStandardFit):
-        f_top = float(np.max(fit.sample_f)) if f_max is None else float(f_max)
-        if not (f_top > 0.0) or not math.isfinite(f_top):
-            raise ValueError(f"f_max must be finite and > 0, got {f_max!r}.")
+        bilinear = True
+        f_samples = np.asarray(fit.sample_f, dtype=float)
+        poles = np.zeros(0, dtype=complex)
         if rho_range is None:
             rho_range = (float(np.min(fit.sample_rho)), float(np.max(fit.sample_rho)))
         r_lo, r_hi = (float(x) for x in rho_range)
@@ -829,58 +902,103 @@ def check_passivity(
             raise ValueError(
                 f"rho_range must satisfy 0 <= min <= max, got {rho_range!r}."
             )
-        corners = [(r, f) for r in (r_lo, r_hi) for f in (0.0, f_top)]
-        values = [float(np.real(fit.evaluate(r, f))) for r, f in corners]
-        k = int(np.argmin(values))
-        return PassivityReport(
-            passed=values[k] >= 0.0,
-            min_re_Z=values[k],
-            f_at_min=corners[k][1],
-            f_max=f_top,
-            rho_at_min=corners[k][0],
-            rho_range=(r_lo, r_hi),
-        )
-    if not isinstance(fit, VectorFitResult):
+        rho_range = (r_lo, r_hi)
+        if evaluate is None:
+
+            def evaluate(f, rho):
+                return fit.evaluate(rho, f)
+
+    elif isinstance(fit, VectorFitResult):
+        bilinear = False
+        f_samples = np.asarray(fit.fit_frequencies, dtype=float)
+        poles = np.asarray(fit.poles, dtype=complex)
+        rho_range = None if rho_at_fit is None else (rho_at_fit, rho_at_fit)
+        if evaluate is None:
+
+            def evaluate(f, rho):
+                return fit.evaluate(f)
+
+    else:
         raise TypeError(
             "check_passivity expects a VectorFitResult or a RhoFStandardFit, "
             f"got {type(fit).__name__}."
         )
-    f_top = float(np.max(fit.fit_frequencies)) if f_max is None else float(f_max)
-    if not (f_top > 0.0) or not math.isfinite(f_top):
-        raise ValueError(f"f_max must be finite and > 0, got {f_max!r}.")
     if n < 2:
         raise ValueError(f"n must be >= 2, got {n!r}.")
-    poles = np.asarray(fit.poles, dtype=complex)
-    extra = np.concatenate(
-        [
-            np.abs(poles.imag) / (2.0 * math.pi),
-            np.abs(poles) / (2.0 * math.pi),
-            np.asarray(fit.fit_frequencies, dtype=float),
-        ]
-    )
-    grid = np.union1d(
-        np.linspace(0.0, f_top, int(n)), extra[(extra >= 0.0) & (extra <= f_top)]
-    )
-    re = np.real(fit.evaluate(grid))
-    best_f, best_v = float(grid[int(np.argmin(re))]), float(np.min(re))
-    # Refine every local minimum of the grid (bounded scalar search).
-    from scipy.optimize import minimize_scalar
-
-    def re_z(x: float) -> float:
-        return float(np.real(fit.evaluate([x])[0]))
-
-    interior = np.flatnonzero((re[1:-1] <= re[:-2]) & (re[1:-1] <= re[2:])) + 1
-    for i in interior:
-        res = minimize_scalar(
-            re_z,
-            bounds=(float(grid[i - 1]), float(grid[i + 1])),
-            method="bounded",
-            options={"xatol": 1e-9 * max(f_top, 1.0)},
+    f_samples = f_samples[np.isfinite(f_samples) & (f_samples >= 0.0)]
+    if f_max is None:
+        f_top = _PASSIVITY_BAND_FACTOR * (
+            float(f_samples.max()) if f_samples.size else 0.0
         )
-        if float(res.fun) < best_v:
-            best_f, best_v = float(res.x), float(res.fun)
+    else:
+        f_top = float(f_max)
+        if not (f_top > 0.0) or not math.isfinite(f_top):
+            raise ValueError(f"f_max must be finite and > 0, got {f_max!r}.")
+
+    def z_at(f, rho):
+        with np.errstate(all="ignore"):
+            out = np.asarray(evaluate(f, rho), dtype=complex)
+        return np.broadcast_to(out, np.broadcast(np.asarray(f), np.asarray(rho)).shape)
+
+    if bilinear:
+        # Re Z is bilinear in (rho, f): its minimum lies at a corner.
+        rho_pts = np.array([rho_range[0], rho_range[1]])
+        f_pts = np.unique([0.0, f_top])
+        rho_grid, f_grid = np.meshgrid(rho_pts, f_pts, indexing="ij")
+        rho_grid, f_grid = rho_grid.ravel(), f_grid.ravel()
+        Z = z_at(f_grid, rho_grid)
+    else:
+        f_grid = _passivity_frequency_grid(f_samples, f_top, poles, int(n))
+        rho_value = np.nan if rho_range is None else rho_range[0]
+        rho_grid = np.full(f_grid.size, rho_value)
+        Z = z_at(f_grid, rho_value)
+
+    def label(i: int) -> float | None:
+        return None if rho_range is None else float(rho_grid[i])
+
+    finite = np.isfinite(Z)
+    if not finite.all():
+        i = int(np.flatnonzero(~finite)[0])
+        return PassivityReport(
+            passed=False,
+            min_re_Z=math.nan,
+            f_at_min=float(f_grid[i]),
+            f_max=f_top,
+            rho_at_min=label(i),
+            rho_range=rho_range,
+            n_points=int(Z.size),
+        )
+    re = Z.real
+    i_min = int(np.argmin(re))
+    best_re, best_f = float(re[i_min]), float(f_grid[i_min])
+    if not bilinear and re.size > 2:
+        from scipy.optimize import minimize_scalar
+
+        interior = list(
+            np.flatnonzero((re[1:-1] <= re[:-2]) & (re[1:-1] <= re[2:])) + 1
+        )
+        candidates = sorted(set(interior) | {0, re.size - 1}, key=lambda k: re[k])
+        for i in candidates[:_PASSIVITY_N_REFINE]:
+            lo, hi = f_grid[max(i - 1, 0)], f_grid[min(i + 1, re.size - 1)]
+            if hi <= lo:
+                continue
+            res = minimize_scalar(
+                lambda x: float(z_at(np.array([x]), rho_value)[0].real),
+                bounds=(float(lo), float(hi)),
+                method="bounded",
+                options={"xatol": 1e-9 * max(float(hi), 1.0)},
+            )
+            if res.fun < best_re:
+                best_re, best_f = float(res.fun), float(res.x)
+    scale = float(np.max(np.abs(Z))) if Z.size else 0.0
     return PassivityReport(
-        passed=best_v >= 0.0, min_re_Z=best_v, f_at_min=best_f, f_max=f_top
+        passed=bool(best_re >= -_PASSIVITY_REL_TOL * scale),
+        min_re_Z=best_re,
+        f_at_min=best_f,
+        f_max=f_top,
+        rho_at_min=label(i_min),
+        rho_range=rho_range,
+        n_points=int(Z.size),
     )
 
 
@@ -889,109 +1007,161 @@ def check_passivity(
 # ---------------------------------------------------------------------
 
 
-def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
-    """Convert a :class:`VectorFitResult` to a SymPy expression.
+_POLE_PAIR_REL_TOL = 1e-3
+"""Relative tolerance of the renderer's pole pairing.
 
-    The resulting expression is
+A pole with ``|Im p| < tol * max(|Re p|, 1)`` is rendered as a real pole;
+two poles whose real parts and negated imaginary parts agree within
+``tol`` (relative to ``max(|.|, 1)``) are rendered as one conjugate pair.
+"""
+
+
+def _partial_fractions(fit: VectorFitResult, s):
+    """Partial-fraction SymPy expression of a vector fit, at full precision.
+
+    The one renderer of vector fits (review pass 10, 10.73), used by
+    :func:`fit_to_sympy` (``s`` a symbol) and by the ``groundinsight``
+    exporter (``s = 2*pi*j*f``):
+
+    .. math::
+
+        Z = R_\\infty + L_\\infty s + \\sum_\\text{real} \\frac{r}{s - p}
+            + \\sum_\\text{pairs}
+              \\frac{2\\Re r\\,(s - \\Re p) - 2\\Im r\\,\\Im p}
+                   {(s - \\Re p)^2 + (\\Im p)^2},
+
+    one term per real pole or conjugate pole pair. Poles are paired with
+    :data:`_POLE_PAIR_REL_TOL`; a matched pair is symmetrised (averaged
+    real parts and ``|Im|``, the residue at the pole with positive
+    imaginary part fixes the sign of ``Im r``), so the pair term is real
+    for real ``s``. A complex pole without partner keeps a complex term.
+    The sum is not simplified: ``sympy.simplify`` would merge the terms
+    into one rational function of high degree (``s**4`` over ``s**3`` for
+    a pair, a real pole and :math:`L_\\infty`), which is hard to read and
+    badly conditioned.
+
+    Parameters
+    ----------
+    fit
+        The vector fit.
+    s
+        SymPy symbol or expression substituted for the Laplace variable.
+
+    Returns
+    -------
+    sympy.Expr
+        Sum of the terms; every number is a float64-precision
+        :class:`sympy.Float` (round with
+        :func:`groundfield.io._formula.round_coefficients`).
+    """
+    import sympy as sp
+
+    poles = np.asarray(fit.poles, dtype=complex).ravel()
+    residues = np.asarray(fit.residues, dtype=complex).ravel()
+    tol = _POLE_PAIR_REL_TOL
+    terms = [sp.Float(float(fit.R_inf))]
+    if float(fit.L_inf) != 0.0:
+        terms.append(sp.Float(float(fit.L_inf)) * s)
+    used = np.zeros(poles.size, dtype=bool)
+    for k, (p, r) in enumerate(zip(poles, residues, strict=True)):
+        if used[k]:
+            continue
+        used[k] = True
+        if abs(p.imag) < tol * max(abs(p.real), 1.0):
+            terms.append(sp.Float(r.real) / (s - sp.Float(p.real)))
+            continue
+        partner, best = -1, math.inf
+        for k2 in range(k + 1, poles.size):
+            if used[k2]:
+                continue
+            d_real = abs(poles[k2].real - p.real) / max(abs(p.real), 1.0)
+            d_imag = abs(poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
+            if d_real < tol and d_imag < tol and d_real + d_imag < best:
+                partner, best = k2, d_real + d_imag
+        if partner < 0:  # complex pole without a conjugate partner
+            r_c = sp.Float(r.real) + sp.I * sp.Float(r.imag)
+            p_c = sp.Float(p.real) + sp.I * sp.Float(p.imag)
+            terms.append(r_c / (s - p_c))
+            continue
+        used[partner] = True
+        p2, r2 = poles[partner], residues[partner]
+        # The pair is written with Im p > 0; the residue at that pole
+        # fixes the sign of Im r (an abs()-based average lost it before
+        # 0.14.1, see CHANGELOG 0.14.1).
+        r_plus, r_minus = (r, r2) if p.imag > 0.0 else (r2, r)
+        re_p = sp.Float(0.5 * (p.real + p2.real))
+        im_p = sp.Float(0.5 * (abs(p.imag) + abs(p2.imag)))
+        re_r = sp.Float(0.5 * (r.real + r2.real))
+        im_r = sp.Float(0.5 * (r_plus.imag - r_minus.imag))
+        numerator = 2 * re_r * (s - re_p) - 2 * im_r * im_p
+        terms.append(numerator / ((s - re_p) ** 2 + im_p**2))
+    return sp.Add(*terms)
+
+
+def fit_to_sympy(fit: VectorFitResult, *, decimals: int = 6):
+    """Convert a :class:`VectorFitResult` to a SymPy expression in ``s``.
+
+    The expression is the partial-fraction form of the fit,
 
     $$
     Z(s) \\;=\\; R_\\infty \\;+\\; L_\\infty \\cdot s \\;+\\;
-    \\sum_k\\,\\frac{r_k}{s - p_k}.
+    \\sum_k\\,\\frac{r_k}{s - p_k},
     $$
 
-    Complex-conjugate pole/residue pairs are combined into a single
-    real second-order term to keep the formula compact and
-    interpretable for ``groundinsight``:
+    with every complex-conjugate pole/residue pair combined into one
+    real second-order term,
 
     $$
     \\frac{r}{s - p} + \\frac{r^*}{s - p^*}
     \\;=\\; \\frac{2\\,\\Re(r)\\,(s - \\Re(p)) -
                   2\\,\\Im(r)\\,\\Im(p)}
-                 {(s - \\Re(p))^2 + \\Im(p)^2}.
+                 {(s - \\Re(p))^2 + \\Im(p)^2},
     $$
 
-    The coefficients are rounded to ``decimals`` digits to keep
-    the printed formula readable.
+    so the expression is real for real ``s``. It is built by the renderer
+    the ``groundinsight`` exporter uses (one term per real pole or pole
+    pair; review pass 10, 10.73) and is not simplified: up to the
+    calendar release ``sympy.simplify`` merged the terms into one rational
+    function of degree four over three.
 
-    Returns a :class:`sympy.Expr`. Free symbol: ``s``.
+    Parameters
+    ----------
+    fit
+        The vector fit.
+    decimals
+        Significant digits of every floating-point coefficient (1 to 17;
+        larger values count as 17). Each coefficient is the full-precision
+        value correctly rounded **once** to ``decimals`` digits, so its
+        relative error is at most :math:`\\tfrac12\\,10^{1-N}` for
+        :math:`N` = ``decimals``. Evaluated with :func:`sympy.lambdify`
+        on reviewer R5's 98 vector fits (0 to 2 kHz), the worst deviation
+        from :meth:`VectorFitResult.evaluate`, relative to
+        :math:`\\max|Z|`, is :math:`4.0\\cdot10^{-6}` at the default
+        6 digits and :math:`4.8\\cdot10^{-12}` at 12.
+
+    Returns
+    -------
+    sympy.Expr
+        Expression in the free symbol ``s`` (``sympy.Symbol("s",
+        complex=True)``).
+
+    Raises
+    ------
+    ValueError
+        If ``decimals`` is not a positive integer.
+
+    Warns
+    -----
+    UserWarning
+        If the expression does not depend on ``s`` (a fit without poles
+        and with :math:`L_\\infty = 0`).
     """
     import sympy as sp
 
+    from groundfield.io._formula import round_coefficients
+
     s = sp.Symbol("s", complex=True)
-    expr = sp.Float(fit.R_inf, decimals)
-    if fit.L_inf != 0.0:
-        expr = expr + sp.Float(fit.L_inf, decimals) * s
-
-    # Bucket poles into real and complex-conjugate pairs. Vector
-    # fitting's eigenvalue solve does not return exactly mirrored
-    # imaginary parts; we use a loose relative tolerance and
-    # **symmetrise** the matched pair (taking the average of |Im|)
-    # so the resulting expression is rigorously real-valued for
-    # real s.
-    used = np.zeros(len(fit.poles), dtype=bool)
-    rel_tol = 1e-3
-    for k, (p, r) in enumerate(zip(fit.poles, fit.residues, strict=True)):
-        if used[k]:
-            continue
-        if abs(p.imag) < rel_tol * max(abs(p.real), 1.0):
-            # Effectively real pole
-            expr = expr + sp.Float(r.real, decimals) / (s - sp.Float(p.real, decimals))
-            used[k] = True
-            continue
-        # Look for the conjugate (loose tolerance, opposite-sign imag)
-        conj_idx = -1
-        best_score = float("inf")
-        for k2 in range(k + 1, len(fit.poles)):
-            if used[k2]:
-                continue
-            d_real = abs(fit.poles[k2].real - p.real) / max(abs(p.real), 1.0)
-            d_imag = abs(fit.poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
-            score = d_real + d_imag
-            if d_real < rel_tol and d_imag < rel_tol and score < best_score:
-                conj_idx = k2
-                best_score = score
-        if conj_idx < 0:
-            # No conjugate found — fall back to a single complex term
-            expr = expr + sp.nsimplify(r, rational=False) / (
-                s - sp.nsimplify(p, rational=False)
-            )
-            used[k] = True
-            continue
-        # Symmetrise: take averages so the pair is exactly conjugate.
-        used[k] = True
-        used[conj_idx] = True
-        p2 = fit.poles[conj_idx]
-        r2 = fit.residues[conj_idx]
-        Re_p_avg = 0.5 * (p.real + p2.real)
-        Im_p_avg = 0.5 * (
-            abs(p.imag) + abs(p2.imag)
-        )  # use positive imag for the canonical pair
-        Re_r_avg = 0.5 * (r.real + r2.real)
-        # The canonical pair is written with ``Im(p) = +Im_p_avg``, so
-        # the canonical residue is the one sitting at the *positive*
-        # imaginary pole; its partner carries the negated imaginary
-        # part. Symmetrise by averaging ``Im(r_+)`` against
-        # ``-Im(r_-)`` — this keeps the *sign* of the canonical
-        # residue, which an ``abs()``-based average destroys whenever
-        # ``Im(r_+) < 0`` (the pre-0.14.1 defect: the exported
-        # expression then disagreed with the fit it claims to
-        # represent, see CHANGELOG 0.14.1).
-        if p.imag > 0.0:
-            r_plus, r_minus = r, r2
-        else:
-            r_plus, r_minus = r2, r
-        Im_r_avg = 0.5 * (r_plus.imag - r_minus.imag)
-        # Real second-order term:
-        # 2·Re(r)·(s - Re(p)) - 2·Im(r)·Im(p)  /  (s - Re(p))² + Im(p)²
-        Re_p_sym = sp.Float(Re_p_avg, decimals)
-        Im_p_sym = sp.Float(Im_p_avg, decimals)
-        Re_r_sym = sp.Float(Re_r_avg, decimals)
-        Im_r_sym = sp.Float(Im_r_avg, decimals)
-        num = 2 * Re_r_sym * (s - Re_p_sym) - 2 * Im_r_sym * Im_p_sym
-        den = (s - Re_p_sym) ** 2 + Im_p_sym**2
-        expr = expr + num / den
-
-    expr = sp.simplify(expr)
+    expr = round_coefficients(_partial_fractions(fit, s), decimals)
 
     # Defensive guard: every rho-f formula must depend on ``s``. A
     # constant Z(rho, f) silently breaks the groundinsight BusType

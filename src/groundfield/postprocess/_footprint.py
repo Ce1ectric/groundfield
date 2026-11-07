@@ -6,10 +6,12 @@ nearest wire, on a given side of the electrode (review pass 10, 10.21),
 and how far is a surface point from the wires (10.22)?
 
 Every electrode is reduced to straight wires (``segments``, a vertical
-rod becomes a point) and circles (rings). This is a local
-implementation; the electrode classes are expected to gain geometry
-methods (``wire_polylines`` and similar) in a later refactoring, at which
-point this module should delegate to them.
+rod becomes a point) and circles (rings). The wires are the ones the
+electrode reports itself through ``wire_polylines()`` (the geometry
+methods of :mod:`groundfield.geometry.electrodes`, review pass 10,
+10.79), bit for bit the wire positions of the solver's discretisation;
+only a ring keeps its exact circle, which ``wire_polylines`` samples by
+a polygon.
 
 Mathematical content
 --------------------
@@ -44,6 +46,7 @@ strip, the head of a rod).
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -221,30 +224,23 @@ class Footprint:
 # ---------------------------------------------------------------------
 
 
-def _segments(pairs: list[tuple[tuple, tuple]]) -> np.ndarray:
-    if not pairs:
-        return np.zeros((0, 2, 2))
-    return np.array([[a[:2], b[:2]] for a, b in pairs], dtype=float)
-
-
-def _mesh_lines(electrode) -> tuple[np.ndarray, np.ndarray]:
-    """x positions of the transverse and y positions of the longitudinal
-    wires of a mesh / grid electrode (mirrors the discretiser)."""
-    cx, cy, _ = electrode.corner
-    dx, dy = electrode.size
-    if electrode.kind == "grid_mesh":
-        xs = cx + dx * np.arange(electrode.n_x + 1) / electrode.n_x
-        ys = cy + dy * np.arange(electrode.n_y + 1) / electrode.n_y
-    else:  # "mesh": uniform spacing, as in solver.image._discretize_mesh
-        nx = max(2, int(np.round(dx / electrode.spacing)) + 1)
-        ny = max(2, int(np.round(dy / electrode.spacing)) + 1)
-        xs = np.linspace(cx, cx + dx, nx)
-        ys = np.linspace(cy, cy + dy, ny)
-    return xs, ys
+def _wire_runs(electrode) -> list[np.ndarray]:
+    """``electrode.wire_polylines()``, or a ``TypeError`` naming the fallback."""
+    try:
+        return electrode.wire_polylines()
+    except (AttributeError, NotImplementedError):
+        raise TypeError(
+            "No horizontal footprint for electrode kind "
+            f"{getattr(electrode, 'kind', None)!r}; use anchor='connection_point'."
+        ) from None
 
 
 def footprint(electrode) -> Footprint:
     """Horizontal wire footprint of an electrode.
+
+    Every straight wire of ``electrode.wire_polylines()`` (consecutive
+    vertices of every run) projected onto the surface; a ring is its exact
+    circle.
 
     Parameters
     ----------
@@ -258,41 +254,268 @@ def footprint(electrode) -> Footprint:
     Raises
     ------
     TypeError
-        For an electrode kind this helper does not know.
+        For an object without wire geometry.
     """
-    kind = getattr(electrode, "kind", None)
-    none = np.zeros((0, 3))
-    if kind == "rod":
-        x, y, _ = electrode.position
-        return Footprint(_segments([((x, y), (x, y))]), none)
-    if kind == "ring":
+    if getattr(electrode, "kind", None) == "ring":
         cx, cy, _ = electrode.center
         return Footprint(np.zeros((0, 2, 2)), np.array([[cx, cy, electrode.radius]]))
-    if kind == "strip":
-        return Footprint(_segments([(electrode.start, electrode.end)]), none)
-    if kind in ("polyline", "star"):
-        return Footprint(_segments(list(electrode.edges)), none)
-    if kind in ("grid_mesh", "mesh"):
-        xs, ys = _mesh_lines(electrode)
-        y0, y1 = ys[0], ys[-1]
-        x0, x1 = xs[0], xs[-1]
-        pairs = [((x, y0), (x, y1)) for x in xs] + [((x0, y), (x1, y)) for y in ys]
-        return Footprint(_segments(pairs), none)
-    raise TypeError(
-        f"No horizontal footprint for electrode kind {kind!r}; use "
-        "anchor='connection_point'."
-    )
+    pairs = [
+        run[k : k + 2, :2] for run in _wire_runs(electrode) for k in range(len(run) - 1)
+    ]
+    segments = np.array(pairs, dtype=float) if pairs else np.zeros((0, 2, 2))
+    return Footprint(segments, np.zeros((0, 3)))
+
+
+def _grid_lines(electrode) -> tuple[np.ndarray, np.ndarray]:
+    """``x`` of the wires along ``y`` and ``y`` of the wires along ``x``.
+
+    Read from the wires of a mesh / grid electrode, so the positions are
+    the discretiser's.
+    """
+    xs: set[float] = set()
+    ys: set[float] = set()
+    for run in _wire_runs(electrode):
+        (x0, y0), (x1, y1) = run[0, :2], run[-1, :2]
+        if x0 == x1:
+            xs.add(float(x0))
+        if y0 == y1:
+            ys.add(float(y0))
+    return np.array(sorted(xs)), np.array(sorted(ys))
 
 
 def mesh_centres(electrode) -> np.ndarray:
     """Centres ``(M, 2)`` of the meshes of a mesh / grid electrode, in m.
 
-    Empty for every other electrode kind.
+    The midpoints between neighbouring wires, the classical position of
+    the IEEE 80 mesh voltage. Empty for every other electrode kind.
     """
     if getattr(electrode, "kind", None) not in ("grid_mesh", "mesh"):
         return np.zeros((0, 2))
-    xs, ys = _mesh_lines(electrode)
+    xs, ys = _grid_lines(electrode)
     mx = 0.5 * (xs[:-1] + xs[1:])
     my = 0.5 * (ys[:-1] + ys[1:])
     gx, gy = np.meshgrid(mx, my, indexing="ij")
     return np.column_stack([gx.ravel(), gy.ravel()])
+
+
+# ---------------------------------------------------------------------
+# interior of closed loops (envelope, 10.21)
+# ---------------------------------------------------------------------
+
+#: Candidate grid (per axis) of the interior search of a closed polyline.
+_INTERIOR_GRID = 33
+
+
+def _inside_polygon(points: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """Even-odd test of ``points`` ``(M, 2)`` against ``polygon`` ``(K, 2)``."""
+    x = points[:, 0][:, None]
+    y = points[:, 1][:, None]
+    x0, y0 = polygon[:, 0][None, :], polygon[:, 1][None, :]
+    x1, y1 = np.roll(polygon[:, 0], -1)[None, :], np.roll(polygon[:, 1], -1)[None, :]
+    crosses = (y0 > y) != (y1 > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        x_cut = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
+    return (crosses & (x < x_cut)).sum(axis=1) % 2 == 1
+
+
+def _area_centroid(polygon: np.ndarray) -> np.ndarray:
+    """Area centroid of a simple polygon (vertex mean if it has no area).
+
+    Computed relative to the first vertex, so UTM-scale coordinates do not
+    cancel in the shoelace products.
+    """
+    origin = polygon[0]
+    local = polygon - origin
+    x, y = local[:, 0], local[:, 1]
+    xn, yn = np.roll(x, -1), np.roll(y, -1)
+    cross = x * yn - xn * y
+    area = 0.5 * cross.sum()
+    if abs(area) <= 1e-12 * max(1.0, float(np.ptp(local, axis=0).max()) ** 2):
+        return polygon.mean(axis=0)
+    return origin + np.array(
+        [
+            ((x + xn) * cross).sum() / (6.0 * area),
+            ((y + yn) * cross).sum() / (6.0 * area),
+        ]
+    )
+
+
+def _loop_centre(electrode) -> np.ndarray:
+    """Point inside a closed polyline that lies farthest from its wires.
+
+    The candidates are a regular grid over the bounding box of the wires
+    (:meth:`bounds`) and the area centroid; among the candidates inside
+    the polygon the one with the largest distance to the wires wins, ties
+    going to the candidate closest to the centroid (for a rectangle its
+    centre). Shape ``(1, 2)``, or ``(0, 2)`` if no candidate lies inside.
+    """
+    polygon = np.asarray(electrode.vertices, dtype=float)[:, :2]
+    lower, upper = electrode.bounds()
+    gx = np.linspace(lower[0], upper[0], _INTERIOR_GRID)
+    gy = np.linspace(lower[1], upper[1], _INTERIOR_GRID)
+    centroid = _area_centroid(polygon)
+    grid = np.column_stack([a.ravel() for a in np.meshgrid(gx, gy, indexing="ij")])
+    candidates = np.vstack([centroid[None, :], grid])
+    candidates = candidates[_inside_polygon(candidates, polygon)]
+    if not len(candidates):
+        return np.zeros((0, 2))
+    d = footprint(electrode).distance(candidates)
+    extent = float(max(upper[0] - lower[0], upper[1] - lower[1], 1.0))
+    best = candidates[d >= d.max() - 1e-9 * extent]
+    k = int(np.argmin(np.hypot(*(best - centroid).T)))
+    return best[k : k + 1]
+
+
+def interior_points(electrode, *, outlines: bool) -> np.ndarray:
+    """Centre of every closed mesh of an electrode, ``(M, 2)`` in m.
+
+    The interior positions of the touch-voltage envelope (review pass 10,
+    10.21), the analogue of the IEEE 80 mesh voltage: the mesh centres of a
+    ``mesh`` / ``grid_mesh`` electrode, the centre of a ``ring``, and,
+    with ``outlines=True``, the point of a closed ``polyline`` farthest
+    from its wires (:func:`_loop_centre`). Empty for every other shape.
+
+    Parameters
+    ----------
+    electrode
+        Any electrode of :mod:`groundfield.geometry.electrodes`.
+    outlines
+        Include closed polylines (building outlines) as well.
+    """
+    kind = getattr(electrode, "kind", None)
+    if kind in ("grid_mesh", "mesh"):
+        return mesh_centres(electrode)
+    if kind == "ring":
+        return np.array([electrode.center[:2]], dtype=float)
+    if (
+        outlines
+        and kind == "polyline"
+        and electrode.closed
+        and len(electrode.vertices) > 2
+    ):
+        return _loop_centre(electrode)
+    return np.zeros((0, 2))
+
+
+# ---------------------------------------------------------------------
+# foundations built from several bonded wires (audit 1, H4)
+# ---------------------------------------------------------------------
+
+_WIRE_NAME = re.compile(r"^(?P<root>.+)_w(?P<index>[0-9]+)$")
+
+
+def foundation_wires(world, name: str, clusters=None) -> list:
+    """Electrodes that form the foundation the electrode ``name`` belongs to.
+
+    The generators build a foundation that is not axis-aligned from
+    bonded straight wires: the anchor wire (local ``-y`` edge) carries the
+    foundation name, the others ``<name>_w<j>`` (review pass 10, 10.39).
+    For any member name this returns the anchor and all its ``_w<j>``
+    wires, in the order of ``world.electrodes``; with ``clusters``
+    (``FieldResult.clusters``) only those in the galvanic cluster of
+    ``name``. Any other electrode is returned alone.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not an electrode of ``world``.
+    """
+    world.get_electrode(name)  # KeyError for an unknown name
+    names = {e.name for e in world.electrodes}
+    match = _WIRE_NAME.match(name)
+    root = match.group("root") if match and match.group("root") in names else name
+
+    def belongs(electrode) -> bool:
+        if electrode.name == root:
+            return True
+        m = _WIRE_NAME.match(electrode.name)
+        return m is not None and m.group("root") == root
+
+    members = [e for e in world.electrodes if belongs(e)]
+    cluster = clusters.get(name) if clusters else None
+    if cluster is not None:
+        members = [e for e in members if e.name in cluster]
+    # The generator's wires are strips and open polylines; any other
+    # member means the names only look alike.
+    if len(members) > 1 and not all(_is_open_wire(e) for e in members):
+        return [world.get_electrode(name)]
+    return members
+
+
+def _is_open_wire(electrode) -> bool:
+    """A strip, or a polyline that is not closed into a loop."""
+    kind = getattr(electrode, "kind", None)
+    if kind == "strip":
+        return True
+    return kind == "polyline" and not (electrode.closed and len(electrode.vertices) > 2)
+
+
+def footprint_of(electrodes) -> Footprint:
+    """Union of the footprints of several electrodes (one wire set)."""
+    parts = [footprint(e) for e in electrodes]
+    if len(parts) == 1:
+        return parts[0]
+    return Footprint(
+        np.concatenate([p.segments for p in parts]).reshape(-1, 2, 2),
+        np.concatenate([p.circles for p in parts]).reshape(-1, 3),
+    )
+
+
+def _positions(values: np.ndarray, tol: float) -> np.ndarray:
+    """Distinct values of ``values`` (those closer than ``tol`` merged)."""
+    values = np.sort(values)
+    groups = np.split(values, np.flatnonzero(np.diff(values) > tol) + 1)
+    return np.array([g.mean() for g in groups])
+
+
+def grid_cells(fp: Footprint) -> np.ndarray:
+    """Cell centres ``(M, 2)`` of a rectangular wire grid in any orientation.
+
+    The wires must run in two perpendicular directions (the first wire
+    fixes them) and span the full rectangle, as the wires of a rotated
+    foundation do; the cell centres are the midpoints between neighbouring
+    wires, as for :func:`mesh_centres`. Empty for any other wire set.
+    """
+    seg = fp.segments
+    empty = np.zeros((0, 2))
+    if fp.circles.size or len(seg) < 4:
+        return empty
+    d = seg[:, 1] - seg[:, 0]
+    length = np.hypot(d[:, 0], d[:, 1])
+    if np.any(length <= 0.0):
+        return empty
+    u = d[0] / length[0]
+    v = np.array([-u[1], u[0]])
+    origin = seg[0, 0]
+    along_u = np.abs(d @ v) <= 1e-9 * length
+    along_v = np.abs(d @ u) <= 1e-9 * length
+    if not np.all(along_u | along_v) or not along_u.any() or not along_v.any():
+        return empty
+    extent = float(length.sum())
+    ys = _positions((seg[along_u, 0] - origin) @ v, 1e-9 * extent)
+    xs = _positions((seg[along_v, 0] - origin) @ u, 1e-9 * extent)
+    if xs.size < 2 or ys.size < 2:
+        return empty
+    # The wires must cover the rectangle: every line of each direction
+    # runs over the full width of the other one.
+    width, height = xs[-1] - xs[0], ys[-1] - ys[0]
+    if not (
+        math.isclose(length[along_u].sum(), ys.size * width, rel_tol=1e-6)
+        and math.isclose(length[along_v].sum(), xs.size * height, rel_tol=1e-6)
+    ):
+        return empty
+    mx = 0.5 * (xs[:-1] + xs[1:])
+    my = 0.5 * (ys[:-1] + ys[1:])
+    gx, gy = np.meshgrid(mx, my, indexing="ij")
+    return origin + gx.ravel()[:, None] * u + gy.ravel()[:, None] * v
+
+
+def interior_points_of(electrodes, *, outlines: bool) -> np.ndarray:
+    """:func:`interior_points` of one electrode, or the cells of a wire group.
+
+    A foundation made of several bonded wires (:func:`foundation_wires`)
+    is sampled like a mesh electrode: the centre of every cell.
+    """
+    if len(electrodes) == 1:
+        return interior_points(electrodes[0], outlines=outlines)
+    return grid_cells(footprint_of(electrodes))

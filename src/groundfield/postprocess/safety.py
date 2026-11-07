@@ -33,8 +33,12 @@ Since review pass 10 (10.21) the metre is measured from the electrode's
 **footprint** — the horizontal projection of its wires — not from its
 connection point: the feet stand ``distance`` metres from the nearest
 wire, on the side given by ``direction`` (seen from the length-weighted
-centroid of the wires). For meshes the envelope also evaluates the
-centre of every mesh, the classical worst position inside a grid.
+centroid of the wires). Inside a closed loop the surface potential
+sags, so :func:`touch_voltage_envelope` also evaluates the centre of
+every closed mesh in open ground — the mesh centres of grids and the
+centre of a ring, the analogue of the IEEE Std 80 *mesh voltage* — but
+not, by default, the inside of a closed polyline, the building-outline
+foundation of the generators (``interior=``).
 
 For a *step* voltage the body bridges two surface points at the
 typical step distance :math:`d_\\text{step} = 1\\,\\mathrm{m}`:
@@ -98,8 +102,12 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from groundfield.postprocess._footprint import footprint
-from groundfield.postprocess._footprint import mesh_centres as _mesh_centres
+from groundfield.postprocess._footprint import (
+    footprint,
+    footprint_of,
+    foundation_wires,
+    interior_points_of,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.result import FieldResult
@@ -204,15 +212,22 @@ def _feet_xy(
     directions: np.ndarray,
     distance: float,
     anchor: str,
+    result: "FieldResult",
 ) -> np.ndarray:
-    """Horizontal foot positions ``(n, 2)`` for unit ``directions`` ``(n, 2)``."""
+    """Horizontal foot positions ``(n, 2)`` for unit ``directions`` ``(n, 2)``.
+
+    With ``anchor="footprint"`` the footprint is that of the whole
+    foundation the electrode belongs to (:func:`foundation_wires`): a
+    rotated foundation is several bonded wires (audit 1, H4).
+    """
     e = world.get_electrode(electrode)
     if anchor == "connection_point":
         cp = e.connection_point
         return np.column_stack(
             [cp[0] + distance * directions[:, 0], cp[1] + distance * directions[:, 1]]
         )
-    return footprint(e).feet(directions, distance)
+    wires = foundation_wires(world, electrode, getattr(result, "clusters", None))
+    return footprint_of(wires).feet(directions, distance)
 
 
 def _crowding(electrode, result: "FieldResult") -> bool:
@@ -354,7 +369,7 @@ def touch_voltage(
     _check_distance(distance)
     _check_anchor(anchor)
     e_h = _horizontal(direction)
-    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor)[0]
+    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor, result)[0]
     feet = np.array([[feet_xy[0], feet_xy[1], surface_z]])
     _uniform_current_caveat(result, world, feet, caller="touch_voltage")
     phi_feet = complex(result.potential(feet, frequency_index=frequency_index)[0])
@@ -372,18 +387,23 @@ def touch_voltage_envelope(
     surface_z: float = 0.0,
     frequency_index: int = 0,
     anchor: Anchor = "footprint",
-    mesh_centres: bool = True,
+    interior: bool | None = None,
     return_points: bool = False,
 ) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Touch voltages around an electrode (and inside its meshes).
+    """Touch voltages around an electrode and inside its closed loops.
 
     Walks ``n_angles`` equally spaced directions and places the feet as
     in :func:`touch_voltage`: with ``anchor="footprint"`` this traces
     the curve at ``distance`` from the electrode's wires (rounded around
-    corners and arm tips). For mesh and grid electrodes the centre of
-    every mesh is evaluated too (``mesh_centres=True``), the classical
-    worst touch position inside a grid. The maximum of ``|U_T|`` is the
-    conservative envelope used in safety verification.
+    corners and arm tips). Inside a closed loop the surface potential
+    sags, so the touch voltage there can exceed every value on that curve
+    (a 20 m × 20 m perimeter loop at 0.5 m depth, 100 Ω·m, 100 A: 158 V
+    in the centre against at most 141 V 1 m outside). The envelope
+    therefore also evaluates the centre of every closed mesh, the
+    analogue of the *mesh voltage* of IEEE Std 80 (the worst touch
+    voltage inside a mesh of a grid, near the mesh centre); see
+    ``interior``. The maximum of ``|U_T|`` is the conservative envelope
+    used in safety verification.
 
     Parameters
     ----------
@@ -399,9 +419,18 @@ def touch_voltage_envelope(
         Must be ``>= 3``.
     surface_z, frequency_index, anchor
         See :func:`touch_voltage`.
-    mesh_centres
-        Append the mesh centres of mesh / grid electrodes (default
-        ``True``). Ignored for other electrode kinds.
+    interior
+        Which closed loops are sampled inside (review pass 10, 10.21).
+        ``None`` (default): loops in open ground — the centre of every
+        mesh of a ``mesh`` / ``grid_mesh`` electrode and the centre of a
+        ``ring``; a closed ``polyline``, the building-outline foundation
+        of the generators, is not sampled, because inside it lies the
+        building. ``True``: also a closed polyline, at the point inside
+        it farthest from its wires. ``False``: the offset curve only.
+        The default cannot see buildings: pass ``interior=False`` where
+        the inside of a ring or grid is not accessible ground (an
+        axis-aligned generated foundation is a ``grid_mesh``; a ring may
+        surround a station housing).
     return_points
         Also return the foot positions.
 
@@ -410,38 +439,47 @@ def touch_voltage_envelope(
     angles : np.ndarray, shape (n,)
         Azimuth in radians of each foot position, measured from ``+x``.
         The first ``n_angles`` entries are :math:`\\theta_k`; appended
-        mesh centres carry their azimuth seen from the centroid of the
-        wires (0 for a centre that coincides with it).
+        interior points carry their azimuth seen from the centroid of
+        the wires (0 for a point that coincides with it).
     voltages : np.ndarray, shape (n,), dtype complex
         Touch-voltage phasor :math:`U_T` in V at every foot position.
     points : np.ndarray, shape (n, 3)
         Foot positions in m; only with ``return_points=True``.
 
+    Raises
+    ------
+    ValueError
+        For ``n_angles < 3``, a non-positive ``distance``, an unknown
+        ``anchor`` or an ``interior`` other than ``None``, ``True`` and
+        ``False``.
+
     Notes
     -----
-    ``n = n_angles`` plus the number of meshes. To reproduce v0.15.0
-    (circle around the connection point) pass
-    ``anchor="connection_point", mesh_centres=False``.
+    ``n = n_angles`` plus the number of interior points. To reproduce
+    v0.15.0 (circle around the connection point) pass
+    ``anchor="connection_point", interior=False``.
     """
     if n_angles < 3:
         raise ValueError(f"n_angles must be >= 3, got {n_angles}.")
     _check_distance(distance)
     _check_anchor(anchor)
+    if interior not in (None, True, False):
+        raise ValueError(f"interior must be None, True or False, got {interior!r}.")
 
     angles = np.linspace(0.0, 2.0 * np.pi, n_angles, endpoint=False)
     dirs = np.column_stack([np.cos(angles), np.sin(angles)])
-    feet_xy = _feet_xy(world, electrode, dirs, distance, anchor)
-    e = world.get_electrode(electrode)
-    if mesh_centres:
-        centres = _mesh_centres(e)
-        if len(centres):
-            ref = footprint(e).reference_point
+    feet_xy = _feet_xy(world, electrode, dirs, distance, anchor, result)
+    if interior is not False:
+        wires = foundation_wires(world, electrode, getattr(result, "clusters", None))
+        inner = interior_points_of(wires, outlines=bool(interior))
+        if len(inner):
+            ref = footprint_of(wires).reference_point
             az = np.mod(
-                np.arctan2(centres[:, 1] - ref[1], centres[:, 0] - ref[0]), 2 * np.pi
+                np.arctan2(inner[:, 1] - ref[1], inner[:, 0] - ref[0]), 2 * np.pi
             )
-            az[np.hypot(*(centres - ref).T) <= 1e-12] = 0.0
+            az[np.hypot(*(inner - ref).T) <= 1e-12] = 0.0
             angles = np.concatenate([angles, az])
-            feet_xy = np.vstack([feet_xy, centres])
+            feet_xy = np.vstack([feet_xy, inner])
     feet = np.column_stack([feet_xy, np.full(len(feet_xy), surface_z, dtype=float)])
     _uniform_current_caveat(result, world, feet, caller="touch_voltage_envelope")
     phi_feet = result.potential(feet, frequency_index=frequency_index)
@@ -627,8 +665,9 @@ def touch_voltage_spectrum(
     ------
     ValueError
         If the currents do not match the frequencies, are not finite, a
-        result carries no source snapshot, or the source current is zero
-        at some frequency.
+        frequency appears in more than one result (it would be counted
+        twice), a result carries no source snapshot, or the source current
+        is zero at some frequency.
 
     Notes
     -----
@@ -642,6 +681,16 @@ def touch_voltage_spectrum(
         (res, k, float(f)) for res in results for k, f in enumerate(res.frequencies)
     ]
     freqs = [f for _, _, f in pairs]
+    # The harmonics of a spectrum are orthogonal only at distinct
+    # frequencies; a frequency carried by two results was counted twice
+    # (audit 1, L4).
+    ordered = sorted(freqs)
+    for lo, hi in zip(ordered, ordered[1:], strict=False):
+        if math.isclose(lo, hi, rel_tol=1e-9, abs_tol=1e-9):
+            raise ValueError(
+                f"touch_voltage_spectrum: {lo:g} Hz appears more than once among "
+                "the results; give every harmonic once."
+            )
     if isinstance(currents, Mapping):
         keys = [float(f) for f in currents]
         values = []
@@ -676,7 +725,7 @@ def touch_voltage_spectrum(
     _check_distance(distance)
     _check_anchor(anchor)
     e_h = _horizontal(direction)
-    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor)[0]
+    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor, results[0])[0]
     feet = np.array([[feet_xy[0], feet_xy[1], surface_z]])
     warned = set()
     total = 0.0

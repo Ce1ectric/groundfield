@@ -267,21 +267,21 @@ def _solved_single_rod():
 
 def test_f46_frozen_constants_have_the_writer_column_names() -> None:
     """The constants must not promise ``electrode`` / ``cluster``."""
-    # Review pass 10 (10.73) added the frequency column to both tables.
+    # Review pass 10 (10.73, 10.69) added the frequency_hz column to both tables.
     assert gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS == (
         "name",
         "cluster_root",
         "I_re",
         "I_im",
         "abs_I",
-        "frequency_Hz",
+        "frequency_hz",
     )
     assert gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS == (
         "cluster_root",
         "Z_re",
         "Z_im",
         "abs_Z",
-        "frequency_Hz",
+        "frequency_hz",
     )
     assert "electrode" not in gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS
     assert "cluster" not in gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS

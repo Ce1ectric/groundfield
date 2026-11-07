@@ -36,7 +36,16 @@ Both fit families exported here are projected onto that symbol set:
   $s = j\\,2\\pi f$. The export substitutes
   $s\\to j\\,2\\pi f$ symbolically so the resulting expression is
   in ``f`` only (independent of ``rho``); the soil resistivity the
-  fit belongs to is recorded in the samples and metadata blocks.
+  fit belongs to (``rho_at_fit``) is recorded in the samples and
+  metadata blocks.
+
+A ``groundinsight`` ``Bus`` carries one ``specific_earth_resistance``,
+the ``rho`` of the formula. For layered soil the convention is the
+resistivity $\\rho_1$ of the **upper layer** (``rho_1``): it is the
+parameter the standard form is fitted over in a $\\rho_1$ sweep with a
+fixed lower layer (the AP1 catalogue), so a vector fit of the same site
+passes ``rho_at_fit = rho_1`` and both kinds of BusType pair with the
+same ``Bus``. The layers themselves go into ``soil_summary``.
 
 The exporter does not care which impedance was fitted (input
 impedance, cluster impedance or the impedance of one electrode); it
@@ -45,13 +54,16 @@ exports the function it is given.
 Formula text
 ------------
 The formula keeps the structure of the fit (partial fractions for a
-vector fit) and prints every floating-point coefficient once, rounded
-to ``decimals`` significant digits with Python's correctly rounded
-float formatting, so the text is identical on every platform. A
-coefficient therefore carries a relative rounding error of at most
-$\\tfrac12\\,10^{1-N}$ for $N$ = ``decimals``; with the default
-$N = 12$ the formula reproduces ``fit.evaluate`` to about
-$10^{-11}$ relative.
+vector fit, the standard form term by term) and prints every
+floating-point coefficient once, rounded to ``decimals`` significant
+digits with Python's correctly rounded float formatting, so the text is
+identical on every platform. The expression comes from the same
+renderer as :func:`~groundfield.postprocess.vector_fitting.fit_to_sympy`
+and :func:`~groundfield.postprocess.rho_f_standard.fit_to_sympy_standard`
+(one pole-pairing rule, no ``sympy.simplify``). A coefficient therefore
+carries a relative rounding error of at most $\\tfrac12\\,10^{1-N}$ for
+$N$ = ``decimals``; with the default $N = 12$ the formula reproduces
+``fit.evaluate`` to about $10^{-11}$ relative.
 
 Formula safety
 --------------
@@ -74,13 +86,18 @@ $$
 $$
 
 A fit can violate this between its samples (a spurious resonance) or
-beyond them. Before a ``BusType`` is built the exported formula is
-evaluated on a dense grid from 0 to twice the highest fitted frequency
+beyond them. Before a ``BusType`` is built the exported formula (what
+``groundinsight`` will evaluate, coefficients rounded) goes through
+:func:`~groundfield.postprocess.vector_fitting.check_passivity`, the one
+passivity check of the package, over its default band from 0 Hz to
+twice the highest fitted frequency: for a vector fit a dense grid
 (linear and logarithmic points, the samples and the midpoints between
-them, and for a vector fit points around every pole), for the standard
-form on the fitted range of ``rho``, and the grid minima are refined
-with a bounded scalar minimisation. The result is stored in
-``metadata["passivity"]``; a violation emits
+them, points around every pole) whose lowest minima are refined by a
+bounded scalar minimisation; for the standard form, whose real part is
+bilinear in $(\\rho, f)$, the four corners of the fitted range of
+``rho`` times the band, which is exact. The report
+(:meth:`~groundfield.postprocess.vector_fitting.PassivityReport.as_dict`)
+is stored in ``metadata["passivity"]``; a violation emits
 :class:`NonPassiveFitWarning`, or raises :class:`NonPassiveFitError`
 with ``require_passive=True``.
 
@@ -103,11 +120,8 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence, Union
 
 import numpy as np
 
-from groundfield.postprocess.rho_f_standard import (
-    RhoFStandardFit,
-    fit_to_sympy_standard,
-)
-from groundfield.postprocess.vector_fitting import VectorFitResult
+from groundfield.postprocess.rho_f_standard import RhoFStandardFit
+from groundfield.postprocess.vector_fitting import PassivityReport, VectorFitResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import sympy
@@ -162,15 +176,6 @@ SCHEMA_NAME = "groundfield.bustype"
 SCHEMA_VERSION = 1
 """Schema name and version of the JSON document produced by this module."""
 
-_FULL_PRECISION_DIGITS = 17
-"""Digits used inside SymPy before the single rounding at print time."""
-
-_PASSIVITY_BAND_FACTOR = 2.0
-"""The passivity check covers 0 Hz to this factor times the highest fitted frequency."""
-
-_PASSIVITY_REL_TOL = 1e-9
-"""``Re Z >= -tol * max|Z|`` counts as passive (rounding of the formula)."""
-
 _IO_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
@@ -221,10 +226,15 @@ class BusTypeSpec:
         ``groundinsight`` side can be served immediately.
     metadata
         Free-form metadata dict; populated by the exporters with
-        the fit method, fit quality, fit-method-specific details
-        (poles/residues for vector fits, $k_1\\dots k_5$ for the
-        standard form), the passivity check (``"passivity"``), the
-        source ``groundfield`` version and a UTC timestamp.
+        the fit method, fit quality (``rms_error_Ohm``,
+        ``rms_relative``, for the standard form ``max_relative``;
+        ``null`` when unknown), the impedance the fit represents
+        (``"quantity"``: ``"input"``, ``"cluster"``, ``"electrode"``
+        or ``null`` for raw samples), fit-method-specific details
+        (poles/residues for vector fits, $k_0\\dots k_5$ and the
+        ``"weights"`` for the standard form), the passivity check
+        (``"passivity"``), the source ``groundfield`` version and a UTC
+        timestamp.
     """
 
     name: str
@@ -352,87 +362,24 @@ def _render(expr: "sympy.Expr", *, decimals: int) -> str:
     return format_impedance_formula(expr, significant_digits=decimals)
 
 
-_POLE_PAIR_REL_TOL = 1e-3
-"""Relative tolerance for treating a pole as real or two poles as a pair.
-
-Same rule as :func:`groundfield.postprocess.vector_fitting.fit_to_sympy`.
-"""
-
-
-def _vector_fit_expression(fit: VectorFitResult) -> "sympy.Expr":
-    """Partial-fraction SymPy expression of a vector fit in ``f``.
-
-    With $s = 2\\pi j f$ (``j`` a symbol printed as the imaginary unit)
-
-    $$
-    Z = R_\\infty + L_\\infty s + \\sum_\\text{real} \\frac{r}{s - p}
-        + \\sum_\\text{pairs}
-          \\frac{2\\Re r\\,(s - \\Re p) - 2\\Im r\\,\\Im p}
-               {(s - \\Re p)^2 + (\\Im p)^2},
-    $$
-
-    one term per real pole or conjugate pole pair, matched and
-    symmetrised as :func:`fit_to_sympy` does (the residue at the pole
-    with positive imaginary part fixes the sign; a complex pole without
-    partner keeps a complex term). Unlike :func:`fit_to_sympy` the sum
-    is not passed through ``sympy.simplify``, which can merge the terms
-    into one high-order rational function (e.g. ``pi**4*f**4*j**4``):
-    the partial fractions stay readable and well conditioned.
-    """
-    import sympy as sp
-
-    s = 2 * sp.pi * sp.Symbol("j") * sp.Symbol("f")
-    poles = np.asarray(fit.poles, dtype=complex).ravel()
-    residues = np.asarray(fit.residues, dtype=complex).ravel()
-    tol = _POLE_PAIR_REL_TOL
-    terms = [sp.Float(float(fit.R_inf))]
-    if float(fit.L_inf) != 0.0:
-        terms.append(sp.Float(float(fit.L_inf)) * s)
-    used = np.zeros(poles.size, dtype=bool)
-    for k, (p, r) in enumerate(zip(poles, residues, strict=True)):
-        if used[k]:
-            continue
-        used[k] = True
-        if abs(p.imag) < tol * max(abs(p.real), 1.0):
-            terms.append(sp.Float(r.real) / (s - sp.Float(p.real)))
-            continue
-        partner, best = -1, math.inf
-        for k2 in range(k + 1, poles.size):
-            if used[k2]:
-                continue
-            d_real = abs(poles[k2].real - p.real) / max(abs(p.real), 1.0)
-            d_imag = abs(poles[k2].imag + p.imag) / max(abs(p.imag), 1.0)
-            if d_real < tol and d_imag < tol and d_real + d_imag < best:
-                partner, best = k2, d_real + d_imag
-        if partner < 0:  # complex pole without a conjugate partner
-            r_c = sp.Float(r.real) + sp.I * sp.Float(r.imag)
-            p_c = sp.Float(p.real) + sp.I * sp.Float(p.imag)
-            terms.append(r_c / (s - p_c))
-            continue
-        used[partner] = True
-        p2, r2 = poles[partner], residues[partner]
-        r_plus, r_minus = (r, r2) if p.imag > 0.0 else (r2, r)
-        re_p = sp.Float(0.5 * (p.real + p2.real))
-        im_p = sp.Float(0.5 * (abs(p.imag) + abs(p2.imag)))
-        re_r = sp.Float(0.5 * (r.real + r2.real))
-        im_r = sp.Float(0.5 * (r_plus.imag - r_minus.imag))
-        numerator = 2 * re_r * (s - re_p) - 2 * im_r * im_p
-        terms.append(numerator / ((s - re_p) ** 2 + im_p**2))
-    return sp.Add(*terms)
-
-
 def _vector_fit_to_formula_in_f(fit: VectorFitResult, *, decimals: int) -> str:
     """Convert a ``VectorFitResult`` to an ``impedance_formula`` string in ``f``.
 
     The vector fit is in the Laplace variable $s$; ``groundinsight``
-    expects the formula in $f$ (Hz) with the imaginary unit ``j``.
-    :func:`_vector_fit_expression` builds the partial fractions with
-    $s = 2\\pi j f$ at full float64 precision, and every coefficient is
+    expects the formula in $f$ (Hz) with the imaginary unit ``j``. The
+    partial fractions come from the renderer that
+    :func:`~groundfield.postprocess.vector_fitting.fit_to_sympy` uses,
+    with $s = 2\\pi j f$ at full float64 precision; every coefficient is
     rounded once, to ``decimals`` significant digits, when the text is
     printed. No rationalisation takes place, so the coefficients stay
     readable floats.
     """
-    expr = _vector_fit_expression(fit)
+    import sympy as sp
+
+    from groundfield.postprocess.vector_fitting import _partial_fractions
+
+    s = 2 * sp.pi * sp.Symbol("j") * sp.Symbol("f")
+    expr = _partial_fractions(fit, s)
     text = _render(expr, decimals=decimals)  # raises on non-finite values
     if not expr.free_symbols:
         warnings.warn(
@@ -448,11 +395,16 @@ def _rho_f_standard_to_formula(fit: RhoFStandardFit, *, decimals: int) -> str:
     """Convert a ``RhoFStandardFit`` to an ``impedance_formula`` string.
 
     The standard form already has the canonical ``(rho, f)`` symbol
-    set used by ``groundinsight``; the imaginary unit is printed as
-    ``j`` and every coefficient is rounded once, to ``decimals``
-    significant digits.
+    set used by ``groundinsight``. The expression comes from the renderer
+    that :func:`~groundfield.postprocess.rho_f_standard.fit_to_sympy_standard`
+    uses; the imaginary unit is printed as ``j`` and every coefficient is
+    rounded once, to ``decimals`` significant digits.
     """
-    expr = fit_to_sympy_standard(fit, decimals=_FULL_PRECISION_DIGITS)
+    import sympy as sp
+
+    from groundfield.postprocess.rho_f_standard import _standard_expression
+
+    expr = _standard_expression(fit, sp.Symbol("rho"), sp.Symbol("f"))
     return _render(expr, decimals=decimals)
 
 
@@ -485,6 +437,14 @@ def _samples_from_rho_f_standard(
     }
 
 
+def _finite_or_none(value: Any) -> Optional[float]:
+    """``float(value)``, or ``None`` when missing or not finite (strict JSON)."""
+    if value is None:
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
 def _metadata_from_vector_fit(
     fit: VectorFitResult,
     *,
@@ -497,7 +457,9 @@ def _metadata_from_vector_fit(
         "fit_method": "vector_fit",
         "fit_quality": {
             "rms_error_Ohm": float(fit.rms_error),
+            "rms_relative": _finite_or_none(fit.rms_relative),
         },
+        "quantity": fit.quantity,
         "n_poles": int(fit.poles.size),
         "poles": [{"real": float(p.real), "imag": float(p.imag)} for p in fit.poles],
         "residues": [
@@ -520,20 +482,16 @@ def _metadata_from_rho_f_standard(
     soil_summary: Optional[str],
 ) -> dict[str, Any]:
     """Metadata block for a standard-form rho-f export."""
-    quality = {
-        "rms_error_Ohm": float(fit.rms_error),
-        "rms_relative": float(fit.rms_relative),
-    }
-    if getattr(fit, "max_relative", None) is not None:
-        quality["max_relative"] = float(fit.max_relative)
     return {
         "fit_method": "rho_f_standard",
-        "fit_quality": quality,
-        "coefficients": {
-            name: float(getattr(fit, name))
-            for name in ("k0", "k1", "k2", "k3", "k4", "k5")
-            if getattr(fit, name, None) is not None
+        "fit_quality": {
+            "rms_error_Ohm": float(fit.rms_error),
+            "rms_relative": _finite_or_none(fit.rms_relative),
+            "max_relative": _finite_or_none(fit.max_relative),
         },
+        "coefficients": {name: float(v) for name, v in fit.coefficients.items()},
+        "weights": fit.weights,
+        "quantity": fit.quantity,
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
         "source": f"groundfield {_groundfield_version()}",
@@ -546,142 +504,53 @@ def _metadata_from_rho_f_standard(
 # ---------------------------------------------------------------------
 
 
-def _passivity_frequency_grid(
-    f_samples: np.ndarray, f_hi: float, poles: np.ndarray
-) -> np.ndarray:
-    """Frequencies (Hz) at which the passivity check evaluates ``Re Z``.
+def _formula_evaluator(expr: "sympy.Expr"):
+    """NumPy evaluator ``(f, rho) -> Z`` of a parsed impedance formula."""
+    import sympy as sp
 
-    Linear and logarithmic points over ``[0, f_hi]``, the samples and
-    the midpoints between them, and for every pole $p = -\\alpha \\pm
-    j\\beta$ points $(\\beta + t\\,\\alpha)/2\\pi$, $|t| \\le 8$, which
-    resolve resonances narrower than any fixed grid.
-    """
-    parts = [np.array([0.0, f_hi])]
-    if f_hi > 0.0:
-        parts += [np.linspace(0.0, f_hi, 2001), np.geomspace(f_hi * 1e-6, f_hi, 601)]
-    samples = np.unique(f_samples)
-    parts += [samples, 0.5 * (samples[1:] + samples[:-1])]
-    t = np.linspace(-8.0, 8.0, 161)
-    for p in np.asarray(poles, dtype=complex).ravel():
-        width = max(abs(p.real), 1e-9 * max(abs(p), 1.0))
-        parts.append((abs(p.imag) + width * t) / (2.0 * math.pi))
-    grid = np.concatenate(parts)
-    grid = grid[np.isfinite(grid) & (grid >= 0.0) & (grid <= f_hi)]
-    return np.unique(grid)
+    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
+
+    def evaluate(f: Any, rho: Any) -> np.ndarray:
+        return np.asarray(func(f, rho), dtype=complex)
+
+    return evaluate
 
 
 def _passivity_report(
-    expr: "sympy.Expr",
-    fit: Union[RhoFStandardFit, VectorFitResult],
-    *,
-    rho_at_fit: Optional[float],
-) -> dict[str, Any]:
-    """Check ``Re Z >= 0`` of the exported formula; see the module docstring."""
-    import sympy as sp
-    from scipy.optimize import minimize_scalar
+    expr: "sympy.Expr", fit: FitLike, *, rho_at_fit: Optional[float]
+) -> PassivityReport:
+    """Run :func:`~groundfield.postprocess.vector_fitting.check_passivity` on the formula.
 
-    f_sym, rho_sym = sp.Symbol("f"), sp.Symbol("rho")
-    func = sp.lambdify((f_sym, rho_sym), expr, modules=["numpy"])
+    The one passivity check of the package, evaluated on the exported
+    formula (what groundinsight computes) instead of the fit object, over
+    its default band (see the module docstring).
+    """
+    from groundfield.postprocess import vector_fitting
 
-    if isinstance(fit, RhoFStandardFit):
-        f_samples = np.asarray(fit.sample_f, dtype=float)
-        rho_samples = np.asarray(fit.sample_rho, dtype=float)
-        poles = np.zeros(0, dtype=complex)
-    else:
-        f_samples = np.asarray(fit.fit_frequencies, dtype=float)
-        rho_samples = np.array([float(rho_at_fit)])
-        poles = np.asarray(fit.poles, dtype=complex)
-    f_samples = f_samples[np.isfinite(f_samples) & (f_samples >= 0.0)]
-    f_fit_max = float(f_samples.max()) if f_samples.size else 0.0
-    f_hi = _PASSIVITY_BAND_FACTOR * f_fit_max
-    f_grid = _passivity_frequency_grid(f_samples, f_hi, poles)
-
-    rho_samples = rho_samples[np.isfinite(rho_samples)]
-    rho_lo, rho_hi = float(rho_samples.min()), float(rho_samples.max())
-    if rho_sym in expr.free_symbols and rho_hi > rho_lo:
-        inner = (
-            np.geomspace(rho_lo, rho_hi, 9)
-            if rho_lo > 0.0
-            else np.linspace(rho_lo, rho_hi, 9)
-        )
-        rho_grid = np.unique(np.concatenate([inner, rho_samples]))
-    else:
-        rho_grid = np.array([rho_lo])
-
-    def evaluate(f: Any, rho: Any) -> np.ndarray:
-        shape = np.broadcast(np.asarray(f), np.asarray(rho)).shape
-        with np.errstate(all="ignore"):
-            out = np.asarray(func(f, rho), dtype=complex)
-        return np.broadcast_to(out, shape)
-
-    Z = evaluate(f_grid[None, :], rho_grid[:, None])
-    report: dict[str, Any] = {
-        "passed": True,
-        "min_re_Z_Ohm": None,
-        "f_at_min_Hz": None,
-        "rho_at_min_Ohm_m": None,
-        "f_checked_Hz": [0.0, f_hi],
-        "rho_checked_Ohm_m": [float(rho_grid.min()), float(rho_grid.max())],
-        "n_points": int(Z.size),
-    }
-    finite = np.isfinite(Z)
-    if not finite.all():
-        i_r, i_f = np.argwhere(~finite)[0]
-        report.update(
-            passed=False,
-            f_at_min_Hz=float(f_grid[i_f]),
-            rho_at_min_Ohm_m=float(rho_grid[i_r]),
-        )
-        return report
-
-    re = Z.real
-    i_r, i_f = np.unravel_index(int(np.argmin(re)), re.shape)
-    best_re, best_f, rho_worst = float(re[i_r, i_f]), float(f_grid[i_f]), rho_grid[i_r]
-    row = re[i_r]
-    interior = (row[1:-1] <= row[:-2]) & (row[1:-1] <= row[2:])
-    minima = list(np.flatnonzero(interior) + 1) + [0, row.size - 1]
-    for i in sorted(set(minima), key=lambda k: row[k])[:10]:
-        lo, hi = f_grid[max(i - 1, 0)], f_grid[min(i + 1, row.size - 1)]
-        if hi <= lo:
-            continue
-        res = minimize_scalar(
-            lambda x: float(evaluate(x, rho_worst).real),
-            bounds=(float(lo), float(hi)),
-            method="bounded",
-            options={"xatol": 1e-9 * max(float(hi), 1.0)},
-        )
-        if res.fun < best_re:
-            best_re, best_f = float(res.fun), float(res.x)
-    scale = float(np.max(np.abs(Z))) if Z.size else 0.0
-    report.update(
-        passed=bool(best_re >= -_PASSIVITY_REL_TOL * scale),
-        min_re_Z_Ohm=best_re,
-        f_at_min_Hz=best_f,
-        rho_at_min_Ohm_m=float(rho_worst),
+    return vector_fitting._check_passivity(
+        fit,
+        evaluate=_formula_evaluator(expr),
+        rho_at_fit=None if isinstance(fit, RhoFStandardFit) else rho_at_fit,
     )
-    return report
 
 
-def _passivity_message(name: str, report: dict[str, Any], f_fit_max: float) -> str:
+def _passivity_message(name: str, report: PassivityReport, f_fit_max: float) -> str:
     """Actionable text for :class:`NonPassiveFitWarning` / :class:`NonPassiveFitError`."""
-    f_at = report["f_at_min_Hz"]
+    f_at = report.f_at_min
     where = "inside" if f_at <= f_fit_max else "above"
     rho_text = (
-        f", rho = {report['rho_at_min_Ohm_m']:.6g} Ohm m"
-        if report["rho_checked_Ohm_m"][0] != report["rho_checked_Ohm_m"][1]
+        f", rho = {report.rho_at_min:.6g} Ohm m"
+        if report.rho_range is not None and report.rho_range[0] != report.rho_range[1]
         else ""
     )
-    if report["min_re_Z_Ohm"] is None:
+    if not math.isfinite(report.min_re_Z):
         what = f"is not finite at f = {f_at:.6g} Hz{rho_text}"
     else:
-        what = (
-            f"has Re Z = {report['min_re_Z_Ohm']:.4g} Ohm at f = {f_at:.6g} Hz"
-            f"{rho_text}"
-        )
+        what = f"has Re Z = {report.min_re_Z:.4g} Ohm at f = {f_at:.6g} Hz{rho_text}"
     return (
         f"BusType {name!r}: the exported impedance formula is not passive: it "
         f"{what}, {where} the fitted band 0 to {f_fit_max:g} Hz (checked from "
-        f"0 to {report['f_checked_Hz'][1]:g} Hz). A passive grounding impedance "
+        f"0 to {report.f_max:g} Hz). A passive grounding impedance "
         "has Re Z >= 0 at every frequency. Refit (for a vector fit try another "
         "n_poles or more frequency samples), or pass require_passive=True to "
         "refuse such exports."
@@ -711,10 +580,10 @@ def _check_rho_at_fit(fit: FitLike, rho_at_fit: Optional[float], caller: str) ->
             "metadata['rho_at_fit_Ohm_m']) so that it is paired with a "
             "groundinsight Bus of the same specific_earth_resistance. Pass it "
             f"explicitly, e.g. {caller}(fit, ..., rho_at_fit=100.0). For "
-            "layered soil pass the value the groundinsight Bus will carry "
-            "(for example the top-layer resistivity) and describe the layers "
-            "with soil_summary=...; standard-form fits (RhoFStandardFit) do "
-            "not need it."
+            "layered soil the convention is the resistivity of the upper layer, "
+            "rho_1 (the soil parameter of the standard rho-f form and of rho_1 "
+            "sweeps), and the layers are described with soil_summary=...; "
+            "standard-form fits (RhoFStandardFit) do not need it."
         )
     try:
         value = float(rho_at_fit)
@@ -748,18 +617,20 @@ def _build_spec(
             "RhoFStandardFit or VectorFitResult"
         )
     _check_rho_at_fit(fit, rho_at_fit, caller)
-    if isinstance(decimals, bool) or int(decimals) != decimals or decimals < 1:
+    from groundfield.io._formula import _significant_digits, parse_impedance_formula
+
+    try:
+        digits = _significant_digits(decimals)
+    except ValueError:
         raise ValueError(
             f"{caller}: decimals is the number of significant digits per "
             f"coefficient and must be a positive integer, got {decimals!r}."
-        )
-    from groundfield.io._formula import parse_impedance_formula
-
+        ) from None
     try:
         if isinstance(fit, RhoFStandardFit):
-            formula = _rho_f_standard_to_formula(fit, decimals=int(decimals))
+            formula = _rho_f_standard_to_formula(fit, decimals=digits)
         else:
-            formula = _vector_fit_to_formula_in_f(fit, decimals=int(decimals))
+            formula = _vector_fit_to_formula_in_f(fit, decimals=digits)
         # Self-check: the written formula must load with the safe parser.
         expr = parse_impedance_formula(formula, symbols=("f", "rho"))
     except ValueError as exc:  # non-finite or out-of-range coefficients
@@ -786,8 +657,8 @@ def _build_spec(
         )
 
     passivity = _passivity_report(expr, fit, rho_at_fit=rho_at_fit)
-    metadata["passivity"] = passivity
-    if not passivity["passed"]:
+    metadata["passivity"] = passivity.as_dict()
+    if not passivity.passed:
         message = _passivity_message(str(name), passivity, f_fit_max)
         if require_passive:
             raise NonPassiveFitError(message)
@@ -841,8 +712,10 @@ def to_bustype_dict(
         :class:`VectorFitResult` was computed. Required for vector
         fits (it goes into ``samples["rho_Ohm_m"]`` and
         ``metadata["rho_at_fit_Ohm_m"]``); ignored for standard-form
-        fits. For layered soil pass the value the ``groundinsight``
-        ``Bus`` will carry and describe the layers in ``soil_summary``.
+        fits. For layered soil the convention is the resistivity of the
+        upper layer, ``rho_1``, the value a ``groundinsight`` ``Bus``
+        carries as ``specific_earth_resistance`` (see the module
+        docstring); describe the layers in ``soil_summary``.
     electrode_name, soil_summary : str, optional
         Free-form metadata entries; recommended for traceability.
     require_passive : bool, optional
@@ -926,7 +799,9 @@ def save_bustype_json(
     rho_at_fit : float, optional
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
-        standard-form fits.
+        standard-form fits. For layered soil the convention is the
+        resistivity of the upper layer, ``rho_1`` (see
+        :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries.
     indent : int, optional
@@ -1081,7 +956,9 @@ def to_bustype(
     rho_at_fit : float, optional
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
-        standard-form fits.
+        standard-form fits. For layered soil the convention is the
+        resistivity of the upper layer, ``rho_1`` (see
+        :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not part of the live ``BusType``).
     require_passive : bool, optional
@@ -1154,7 +1031,9 @@ def save_bustype_to_db(
     rho_at_fit : float, optional
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
-        standard-form fits.
+        standard-form fits. For layered soil the convention is the
+        resistivity of the upper layer, ``rho_1`` (see
+        :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not stored in the database).
     overwrite : bool, optional
@@ -1276,15 +1155,22 @@ def evaluate_spec(
 
 
 def fit_quality_summary(spec: BusTypeSpec) -> str:
-    """One-line human-readable summary of fit quality / kind."""
+    """One-line human-readable summary of fit quality / kind.
+
+    Names the fit method, the rms error, the relative rms and worst
+    pointwise relative error when the document records them, and the
+    impedance the fit represents (``quantity``: ``input``,
+    ``cluster`` or ``electrode``) when known.
+    """
     md = spec.metadata
     method = md.get("fit_method", "unknown")
     fq = md.get("fit_quality", {})
     rms = fq.get("rms_error_Ohm", math.nan)
-    rel = fq.get("rms_relative")
-    if rel is not None:
-        return (
-            f"BusTypeSpec(name={spec.name!r}, method={method}, "
-            f"rms={rms:.3e} Ω, rms_rel={rel:.2%})"
-        )
-    return f"BusTypeSpec(name={spec.name!r}, method={method}, rms={rms:.3e} Ω)"
+    parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms:.3e} Ω"]
+    if fq.get("rms_relative") is not None:
+        parts.append(f"rms_rel={fq['rms_relative']:.2%}")
+    if fq.get("max_relative") is not None:
+        parts.append(f"max_rel={fq['max_relative']:.2%}")
+    if md.get("quantity") is not None:
+        parts.append(f"quantity={md['quantity']}")
+    return f"BusTypeSpec({', '.join(parts)})"

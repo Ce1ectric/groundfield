@@ -49,14 +49,18 @@ files round-trip without loss of accuracy.
 
 Frequency and provenance (review pass 10, 10.73)
 ------------------------------------------------
-Every table carries a ``frequency_Hz`` column, and every file starts
-with ``#`` comment lines that record where it came from::
+Every table records its frequency in Hz: the electrode and cluster
+tables in a ``frequency_hz`` column (lower-case unit suffix, the
+convention of the spec layer and of :meth:`FieldResult.to_dataframe`,
+10.69), the potential path in its ``frequency_Hz`` column of v0.15.0.
+Every file starts with ``#`` comment lines that record where it came
+from::
 
     # groundfield csv: electrode_table
     # groundfield_version: 2026.11.0
     # written_utc: 2026-11-07T19:30:00Z
     # backend: image
-    # frequency_Hz: 50
+    # frequency_hz: 50
     # frequency_index: 0
 
 followed by the provenance block of the solve (``solve.*`` keys) when
@@ -119,7 +123,7 @@ ELECTRODE_TABLE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "I_re",
     "I_im",
     "abs_I",
-    "frequency_Hz",
+    "frequency_hz",
 )
 
 #: Mandatory columns of :func:`save_cluster_impedances_csv`. A cluster
@@ -131,7 +135,7 @@ CLUSTER_IMPEDANCE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "Z_re",
     "Z_im",
     "abs_Z",
-    "frequency_Hz",
+    "frequency_hz",
 )
 
 
@@ -350,7 +354,7 @@ def save_potential_path_csv(
             result,
             "potential_path",
             {
-                "frequencies_Hz": ", ".join(
+                "frequencies_hz": ", ".join(
                     _fmt_number(result.frequencies[k]) for k in f_idx
                 ),
                 "frequency_indices": ", ".join(str(k) for k in f_idx),
@@ -381,7 +385,7 @@ def save_electrode_table_csv(
         the ``kind`` and ``depth_m`` columns.
     frequency_index
         Index into :attr:`FieldResult.frequencies`. Default 0. The
-        frequency is written to the ``frequency_Hz`` column.
+        frequency is written to the ``frequency_hz`` column.
     overwrite
         Replace an existing file (default ``False``: raise).
     provenance
@@ -401,13 +405,13 @@ def save_electrode_table_csv(
     out = _ensure_path(path, overwrite)
     df = electrode_current_table(result, world=world, frequency_index=frequency_index)
     f_hz = float(result.frequencies[frequency_index])
-    df.insert(min(2, len(df.columns)), "frequency_Hz", f_hz)
+    df.insert(min(2, len(df.columns)), "frequency_hz", f_hz)
     header = None
     if provenance:
         header = _provenance_lines(
             result,
             "electrode_table",
-            {"frequency_Hz": _fmt_number(f_hz), "frequency_index": frequency_index},
+            {"frequency_hz": _fmt_number(f_hz), "frequency_index": frequency_index},
         )
     return _write(df, out, header)
 
@@ -435,7 +439,7 @@ def save_cluster_impedances_csv(
         Destination CSV path.
     frequency_index
         Index into :attr:`FieldResult.frequencies`. Default 0. The
-        frequency is written to the ``frequency_Hz`` column.
+        frequency is written to the ``frequency_hz`` column.
     overwrite
         Replace an existing file (default ``False``: raise).
     provenance
@@ -463,12 +467,12 @@ def save_cluster_impedances_csv(
         df = df.copy()
         df["members"] = df["members"].apply(lambda lst: ";".join(lst))
     f_hz = float(result.frequencies[frequency_index])
-    df.insert(min(1, len(df.columns)), "frequency_Hz", f_hz)
+    df.insert(min(1, len(df.columns)), "frequency_hz", f_hz)
     header = None
     if provenance:
         header = _provenance_lines(
             result,
             "cluster_impedances",
-            {"frequency_Hz": _fmt_number(f_hz), "frequency_index": frequency_index},
+            {"frequency_hz": _fmt_number(f_hz), "frequency_index": frequency_index},
         )
     return _write(df, out, header)
