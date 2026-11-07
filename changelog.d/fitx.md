@@ -63,8 +63,11 @@
   significant digits (`decimals` must be a positive integer, also a NumPy
   integer, and every other value raises `ValueError`; above 17 counts as
   17). Accuracy is unchanged: worst deviation from `fit.evaluate` over R5's
-  fits 4.0e-6 at 6 digits and 4.8e-12 at 12. Exported formula text is
-  unchanged. Test:
+  fits 4.0e-6 at 6 digits and 4.8e-12 at 12. Exported vector-fit formulas
+  are unchanged character for character; exported standard-form formulas
+  keep every coefficient and value, but a complex coefficient now keeps its
+  own sign (`- f*(12.5592 - 1338.31*j)` is written `+ f*(-12.5592 +
+  1338.31*j)`; 23 of R5's 31 standard fits). Test:
   `tests/test_fit_formula_renderer.py::test_fit_to_sympy_keeps_one_term_per_pole_or_pole_pair`.
 - ⚠ **One passivity check (10.40):** the BusType export runs `check_passivity`
   (on the rounded formula it writes) instead of its own implementation, so
