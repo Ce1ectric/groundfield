@@ -40,8 +40,8 @@
   `img2_grid_upper_resistive` and `img2_ring_rods_within_layer` (all
   `within_tol`). The reaction matrices of `solve_mutual_*` and of the `mom`
   family are unchanged bit for bit. A 30-house two-layer network
-  (3 669 segments, 11 frequencies) solved 15× faster in consecutive runs on the
-  same machine (memory 1 236 → 219 MB).
+  (3 669 segments, 11 frequencies) solved 10–15× faster in two back-to-back
+  comparisons on the same machine (memory 1 236 → 219 MiB).
 - **Solver structure (10.75, 10.79):** `solver/image.py` (2 526 lines) is split
   into private modules (discretisation, guards, kernels, inductive assembly,
   topology, pipeline); `solve_image` and `solve_image_2layer` run through one
@@ -59,22 +59,25 @@
 
 - **Memory of the image-family kernels (10.56):** the kernels no longer build
   `(N, N, 3)` difference tensors (96 bytes per segment pair). A 30-house network
-  (3 687 segments) peaks at 115 MB instead of 1 248 MB and solved 9.5× faster in
-  consecutive runs on the same machine; an 80-house network (9 712 segments)
-  solves in 1.9 s with 773 MB (before: about 8.4 GiB needed). Results are
+  (3 687 segments) peaks at 115 MiB instead of 1 248 MiB and solved about 10×
+  faster in back-to-back runs on the same machine; an 80-house network
+  (9 712 segments) solves in about 2 s with 773 MiB (before: about 8.4 GiB
+  needed). With rods reaching the lower layer of a two-layer soil (ADR-0007
+  path) the 30-house network peaks at 510 MiB instead of 1 250 MiB. Results are
   bit-identical. Above 1 GiB per reaction matrix the kernels switch to row
-  blocks (results then differ by round-off only). Test:
-  `tests/test_kernel_performance.py::test_solve_memory_peak_is_bounded`.
+  blocks (results then differ by round-off only). Tests:
+  `tests/test_kernel_performance.py::test_solve_memory_peak_is_bounded`,
+  `tests/test_kernel_performance.py::test_cross_layer_solve_memory_peak_is_bounded`.
 - **Reaction matrix evaluated twice per solve (10.57):** the segment potentials
   after the solve reuse the assembled matrix. Bit-identical. Test:
   `tests/test_kernel_performance.py::test_one_reaction_matrix_assembly_per_solve`.
 - **`solve_mutual_matrix` built the reaction matrix as `kernel(eye(N))`
   (10.59):** the matrix is assembled directly; Z_G is bit-identical and a
-  20-house two-layer catalogue matrix (2 466 segments) was 23× faster in
-  consecutive runs (memory 604 → 146 MB). Test:
+  20-house two-layer catalogue matrix (2 466 segments) was 23–31× faster in two
+  back-to-back comparisons (memory 604 → 146 MiB). Test:
   `tests/test_kernel_performance.py::test_mutual_matrix_without_identity_product`.
 - **`FieldResult.potential` unchunked (10.62):** large evaluations run in row
-  blocks; a 200 × 200 grid over 3 687 sources peaks at 17 MB (v0.15.0 needs about
+  blocks; a 200 × 200 grid over 3 687 sources peaks at 17 MiB (v0.15.0 needs about
   96 bytes per point·source pair, 13 GiB here). Two-layer evaluations share every
   `1/r` block between real and imaginary part and skip an all-zero imaginary
   part. Evaluations up to 16 MiB of kernel are bit-identical. Test:
