@@ -73,7 +73,11 @@ conventions the three terms are assembled with:
 - **Several frequencies** (10.60): the correction is built for the whole
   frequency set of the solve in one multi-frequency assembly (geometry,
   $\\lambda$ grid and Bessel tables once per segment pair); every
-  frequency is bit-identical to a single-frequency assembly.
+  frequency is bit-identical to a single-frequency assembly. The opt-in
+  ``sommerfeld_method="tabulated"`` shares one table of the spectral
+  integral per pair of depth groups instead (faster on large networks,
+  agrees with the exact assembly to about $10^{-5}$ of the largest
+  entry).
 """
 
 from __future__ import annotations
@@ -198,6 +202,10 @@ class _BranchCorrection:
     omegas
         Angular frequencies in rad/s of the solve (``None``: build each
         frequency on demand).
+    sommerfeld_method
+        ``"exact"`` or ``"tabulated"`` assembly of the Sommerfeld
+        correction (see
+        :func:`~groundfield.coupling.sommerfeld_inductance.build_sommerfeld_correction_matrices`).
     """
 
     def __init__(
@@ -212,6 +220,7 @@ class _BranchCorrection:
         layered_earth: object,
         skin_terms: Sequence[SkinTerm],
         omegas: Sequence[float] | None,
+        sommerfeld_method: str = "exact",
     ) -> None:
         self._n = int(n_total)
         self._index = np.asarray(index, dtype=int)
@@ -222,6 +231,7 @@ class _BranchCorrection:
         self._sigma = sigma_earth
         self._earth = layered_earth
         self._skin = tuple(skin_terms)
+        self._method = sommerfeld_method
         batch: list[float] = []
         for om in omegas or ():
             om = float(om)
@@ -277,6 +287,7 @@ class _BranchCorrection:
             omegas=omegas,
             earth=self._earth,
             image=self._image,
+            method=self._method,
         )
 
     def _build(self, omegas: list[float]) -> None:
@@ -304,6 +315,7 @@ def _assemble_inductance_matrix(
     lumped_branches: Sequence[BranchGeometry | None] | None = None,
     skin_terms: Sequence[SkinTerm] = (),
     omegas: Sequence[float] | None = None,
+    sommerfeld_method: str = "exact",
 ) -> tuple[np.ndarray | None, bool, _BranchCorrection | None]:
     """Build the partial-inductance matrix and the branch correction.
 
@@ -357,6 +369,9 @@ def _assemble_inductance_matrix(
     omegas
         Angular frequencies in rad/s of the solve; the correction is
         built for all of them at once on first use.
+    sommerfeld_method
+        ``"exact"`` (default) or ``"tabulated"`` (opt-in) assembly of the
+        Sommerfeld correction.
 
     Returns
     -------
@@ -450,6 +465,7 @@ def _assemble_inductance_matrix(
             layered_earth=layered_earth,
             skin_terms=skin_terms,
             omegas=omegas,
+            sommerfeld_method=sommerfeld_method,
         )
     return L_full, True, correction
 

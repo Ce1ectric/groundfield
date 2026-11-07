@@ -152,6 +152,7 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Literal
 
 import numpy as np
 from scipy.special import j0
@@ -170,6 +171,7 @@ __all__ = [
     "MU_0",
     "ImageConvention",
     "SommerfeldResolutionWarning",
+    "SommerfeldAssembly",
     "earth_return_correction_homogeneous",
     "earth_return_correction_layered",
     "sommerfeld_pair_integral_homogeneous",
@@ -209,6 +211,21 @@ _HARD_PANEL_BUDGET = 1 << 17
 _GRADING_SPAN = 4.0
 # Number of rho interpolation nodes per segment pair (historic design).
 _N_RHO_NODES = 24
+# Tabulated assembly (opt-in, method="tabulated"): nodes of the shared
+# S(rho) table per pair of depth groups and frequency (cubic spline in
+# t = ln(rho + z)), and the smallest block (sub-segment pairs) that gets a
+# table; smaller blocks use the per-pair rule. Against a converged
+# reference (200 interpolation nodes per pair) the table is converged
+# from 64 nodes on (W3, 10 houses: 1.7e-6 of the largest entry, the
+# per-pair rule with 24 nodes 1.4e-5; evidence e07 of stream COUP-2).
+_TABLE_NODES = 100
+_TABLE_MIN_PAIRS = 64
+
+#: Assembly of the Sommerfeld correction: ``"exact"`` (per segment pair)
+#: or ``"tabulated"`` (shared S(rho) tables, opt-in).
+SommerfeldAssembly = Literal["exact", "tabulated"]
+_ASSEMBLIES: tuple[str, ...] = ("exact", "tabulated")
+
 # Oscillatory tail cap: for a pair whose outer nodes are at least
 # rho_min apart, the tail of int w(lam) J0(lam rho) beyond Lambda is
 # bounded by ~4.5 p_max^2 / (Lambda^2.5 rho_min^1.5) when |w| decays like
@@ -1215,6 +1232,245 @@ def _convert_image(
     return values + np.where(om > 0.0, sign * 1j * om * m_img, 0.0)
 
 
+# ---------------------------------------------------------------------
+# Tabulated assembly (opt-in, review pass 10, finding 10.60)
+# ---------------------------------------------------------------------
+
+
+def _sub_segments(
+    seg_endpoints: np.ndarray, earth: LayeredEarth
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Sub-segments (split at the surface and the interfaces) of all segments.
+
+    Returns ``(parent, nodes, lengths, depth, units)``: parent segment
+    index per sub-segment, its 16 outer Gauss–Legendre nodes ``(n, 16, 3)``
+    in m, its length in m, its mean depth in m, and the unit direction of
+    every **parent** segment ``(M, 3)``.
+    """
+    planes = _split_points(earth)
+    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
+    parent, nodes, lengths, depth = [], [], [], []
+    units = np.zeros((seg_endpoints.shape[0], 3))
+    for i in range(seg_endpoints.shape[0]):
+        p1 = np.asarray(seg_endpoints[i, 0], dtype=float)
+        p2 = np.asarray(seg_endpoints[i, 1], dtype=float)
+        length = float(np.linalg.norm(p2 - p1))
+        if length <= 0.0:
+            continue
+        units[i] = (p2 - p1) / length
+        for a, b in _split_segment(p1, p2, planes):
+            d = b - a
+            la = float(np.linalg.norm(d))
+            if la <= 0.0:
+                continue
+            parent.append(i)
+            nodes.append(a[None, :] + s_nodes[:, None] * d[None, :])
+            lengths.append(la)
+            depth.append(0.5 * float(a[2] + b[2]))
+    return (
+        np.asarray(parent, dtype=int),
+        np.asarray(nodes, dtype=float).reshape(-1, 16, 3),
+        np.asarray(lengths, dtype=float),
+        np.asarray(depth, dtype=float),
+        units,
+    )
+
+
+def _block_rho(nodes_a: np.ndarray, nodes_b: np.ndarray) -> np.ndarray:
+    """Horizontal node distances (m), shape ``(n_a, n_b, 16, 16)``."""
+    dx = nodes_a[:, None, :, None, 0] - nodes_b[None, :, None, :, 0]
+    dy = nodes_a[:, None, :, None, 1] - nodes_b[None, :, None, :, 1]
+    return np.sqrt(dx * dx + dy * dy)
+
+
+def _rows_per_chunk(n_b: int) -> int:
+    """Rows of a block evaluated at once (about 2**20 node pairs)."""
+    return max(1, (1 << 20) // max(1, 256 * n_b))
+
+
+def _spline_coefficients(t_nodes: np.ndarray, s_values: np.ndarray) -> np.ndarray:
+    """Cubic-spline coefficients of $S(t)$ (not-a-knot), shape (4, n-1)."""
+    from scipy.interpolate import CubicSpline
+
+    spline = CubicSpline(t_nodes, np.stack([s_values.real, s_values.imag], axis=-1))
+    return spline.c[..., 0] + 1j * spline.c[..., 1]
+
+
+def _tabulated_block(
+    out: np.ndarray,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+    plan: _SpectralPlan,
+    sub: tuple,
+    idx_a: np.ndarray,
+    idx_b: np.ndarray,
+    symmetric: bool,
+    n_table: int,
+) -> None:
+    """Add the corrections of all sub-segment pairs (a, b) of one block.
+
+    $S(\\rho) = \\int w(\\lambda)\\,J_0(\\lambda\\rho)\\,d\\lambda$ is
+    evaluated per frequency on ``n_table`` points equidistant in
+    $t = \\ln(\\rho + z_\\text{off})$ between the smallest and the
+    largest node distance of the block, with the $\\lambda$ grid of the
+    exact assembly for the block's largest distance (``_grid_params``),
+    and interpolated by a cubic spline in $t$; the node geometry of the
+    block is computed once for all frequencies.
+    """
+    parent, nodes, lengths, _, units = sub
+    nodes_a, nodes_b = nodes[idx_a], nodes[idx_b]
+    rows = _rows_per_chunk(idx_b.size)
+    rho_min, rho_max = math.inf, 0.0
+    for r0 in range(0, idx_a.size, rows):
+        rho = _block_rho(nodes_a[r0 : r0 + rows], nodes_b)
+        rho_min = min(rho_min, float(rho.min()))
+        rho_max = max(rho_max, float(rho.max()))
+    z_off = max(plan.decay, 1e-3)
+    single = rho_max - rho_min < 1e-9
+    if single:
+        t_nodes = np.array([math.log(rho_min + z_off)])
+    else:
+        t_nodes = np.linspace(
+            math.log(rho_min + z_off), math.log(rho_max + z_off), n_table
+        )
+    rho_nodes = np.maximum(np.exp(t_nodes) - z_off, 0.0)
+    sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
+    sigma_max = 1.0 / min(earth.rhos)
+
+    # Tables per frequency: cubic-spline coefficients of S(t).
+    active = [k for k, om in enumerate(omegas) if om > 0.0]
+    coeffs: dict[int, np.ndarray] = {}
+    table_key, bessel = None, None
+    for k in active:
+        omega = omegas[k]
+        params = _grid_params(
+            z_sum=plan.decay,
+            rho_max=rho_max + 1e-9,
+            p_ref=math.sqrt(omega * MU_0 * sigma_ref),
+            scales=plan.scales(omega, earth),
+            rho_min=rho_min if plan.kind in ("same", "air") else 0.0,
+            p_max=math.sqrt(omega * MU_0 * sigma_max),
+        )
+        lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
+        if not resolved:
+            _warn_unresolved(params)
+        if params != table_key:
+            bessel = j0(lambdas[None, :] * rho_nodes[:, None])
+            table_key = params
+        s_values = bessel @ (plan.weight(lambdas, omega, earth) * lam_w)
+        coeffs[k] = s_values if single else _spline_coefficients(t_nodes, s_values)
+
+    w2 = 0.25 * (_OUTER_GL_WEIGHTS[:, None] * _OUTER_GL_WEIGHTS[None, :])
+    dots = units[parent[idx_a]] @ units[parent[idx_b]].T
+    dots[np.abs(dots) < 1e-12] = 0.0
+    scale = lengths[idx_a][:, None] * lengths[idx_b][None, :] * dots
+    blocks = {k: np.zeros((idx_a.size, idx_b.size), dtype=complex) for k in active}
+    for r0 in range(0, idx_a.size, rows):
+        na = nodes_a[r0 : r0 + rows]
+        diff = na[:, None, :, None, :] - nodes_b[None, :, None, :, :]
+        rho = np.sqrt(diff[..., 0] ** 2 + diff[..., 1] ** 2)
+        if not single:
+            t = np.log(rho + z_off)
+            i = np.clip(np.searchsorted(t_nodes, t, side="right") - 1, 0, n_table - 2)
+            dt = t - t_nodes[i]
+        if plan.direct:
+            R = np.sqrt(rho * rho + diff[..., 2] ** 2)
+            small = R < 1e-9
+            R_safe = np.where(small, 1.0, R)
+        for k in active:
+            if single:
+                inner = np.full(rho.shape, complex(coeffs[k][0]), dtype=complex)
+            else:
+                c = coeffs[k]
+                inner = ((c[0][i] * dt + c[1][i]) * dt + c[2][i]) * dt + c[3][i]
+            if plan.direct:
+                gamma = np.sqrt(1j * omegas[k] * MU_0 * sigma_ref)
+                inner += np.where(
+                    small, -gamma, (np.exp(-gamma * R_safe) - 1.0) / R_safe
+                )
+            blocks[k][r0 : r0 + rows] = np.einsum("kl,abkl->ab", w2, inner)
+    pa, pb = parent[idx_a], parent[idx_b]
+    for k in active:
+        block = blocks[k] * (1j * omegas[k] * MU_0 / (4.0 * math.pi)) * scale
+        np.add.at(out[k], (pa[:, None], pb[None, :]), block)
+        if not symmetric:
+            np.add.at(out[k], (pb[:, None], pa[None, :]), block.T)
+
+
+def _tabulated_values_none(
+    seg_endpoints: np.ndarray,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+    *,
+    n_table: int = _TABLE_NODES,
+    min_block_pairs: int = _TABLE_MIN_PAIRS,
+) -> np.ndarray:
+    """ΔZ (image ``"none"``) of all segment pairs, tabulated assembly.
+
+    Sub-segments are grouped by their mean depth; every pair of depth
+    groups shares one table of $S(\\rho)$ per frequency
+    (:class:`_SpectralTable`), and the 16x16 outer nodes of all its
+    sub-segment pairs are evaluated in vectorised row chunks. Blocks with
+    fewer than ``min_block_pairs`` sub-segment pairs (risers, single
+    inclined leads) use the exact per-pair evaluation instead, where a
+    table would not pay off.
+    """
+    M = seg_endpoints.shape[0]
+    out = np.zeros((len(omegas), M, M), dtype=complex)
+    sub = _sub_segments(seg_endpoints, earth)
+    parent, _, _, depth, units = sub
+    if parent.size == 0:
+        return out
+    keys = np.round(depth, 12)
+    groups = [np.flatnonzero(keys == key) for key in np.unique(keys)]
+    for ga, idx_a in enumerate(groups):
+        for idx_b in groups[ga:]:
+            symmetric = idx_b is idx_a
+            z_a = float(depth[idx_a[0]])
+            z_b = float(depth[idx_b[0]])
+            if idx_a.size * idx_b.size >= min_block_pairs:
+                plan = _SpectralPlan.for_pair(earth, z_a, z_b)
+                _tabulated_block(
+                    out, omegas, earth, plan, sub, idx_a, idx_b, symmetric, n_table
+                )
+                continue
+            _exact_block(
+                out, omegas, earth, sub, seg_endpoints, idx_a, idx_b, symmetric
+            )
+    return out
+
+
+def _exact_block(out, omegas, earth, sub, seg_endpoints, idx_a, idx_b, symmetric):
+    """Per-pair evaluation of a small block (the exact assembly's rule)."""
+    parent, _, _, _, units = sub
+    planes = _split_points(earth)
+    for a in idx_a:
+        for b in idx_b:
+            if symmetric and b < a:
+                continue
+            i, j = int(parent[a]), int(parent[b])
+            dot = float(units[i] @ units[j])
+            if abs(dot) < 1e-12:
+                continue
+            sa = _nth_sub(seg_endpoints[i], planes, a, parent)
+            sb = _nth_sub(seg_endpoints[j], planes, b, parent)
+            vals = _subpair_values(*sa, *sb, dot, omegas, earth)
+            out[:, i, j] += vals
+            if not (symmetric and a == b):
+                out[:, j, i] += vals
+
+
+def _nth_sub(seg, planes, index, parent) -> tuple[np.ndarray, np.ndarray]:
+    """End points of sub-segment ``index`` (global numbering) of ``seg``."""
+    first = int(np.flatnonzero(parent == parent[index])[0])
+    p1 = np.asarray(seg[0], dtype=float)
+    p2 = np.asarray(seg[1], dtype=float)
+    pieces = [
+        (a, b) for a, b in _split_segment(p1, p2, planes) if np.linalg.norm(b - a) > 0
+    ]
+    return pieces[index - first]
+
+
 def _pair_image_mutual(p1_a, p2_a, p1_b, p2_b) -> float:
     """Neumann mutual of segment a and the mirrored segment b (H)."""
     p1_b = np.asarray(p1_b, dtype=float)
@@ -1341,6 +1597,7 @@ def build_sommerfeld_correction_matrices(
     omegas: Sequence[float],
     earth: LayeredEarth,
     image: ImageConvention = "additive",
+    method: SommerfeldAssembly = "exact",
 ) -> np.ndarray:
     """Sommerfeld earth-return correction matrices for several frequencies.
 
@@ -1366,9 +1623,18 @@ def build_sommerfeld_correction_matrices(
         Layered-earth configuration.
     image
         Image convention of the inductance matrix the corrections are
-        added to: ``"additive"`` (default — what the solver assembles
-        today), ``"none"`` (exact baseline, cheapest) or
-        ``"antiparallel"``.
+        added to: ``"additive"`` (default), ``"none"`` (exact baseline,
+        cheapest; what the solver assembles) or ``"antiparallel"``.
+    method
+        ``"exact"`` (default): every segment pair gets its own
+        $\\lambda$ grid and Bessel table, and $S(\\rho)$ is interpolated
+        linearly on 24 nodes per pair. ``"tabulated"`` (opt-in, finding
+        10.60): sub-segments are grouped by depth, every pair of depth
+        groups shares one table of $S(\\rho)$ per frequency (cubic
+        spline in $\\ln(\\rho + z)$ on the $\\lambda$ grid of the
+        group's largest distance), and the outer nodes of all pairs are
+        evaluated vectorised; blocks of fewer than 64 sub-segment pairs
+        use the exact rule.
 
     Returns
     -------
@@ -1376,6 +1642,8 @@ def build_sommerfeld_correction_matrices(
         Symmetric correction matrices in Ω.
     """
     mode = _resolve_image(image, None)
+    if method not in _ASSEMBLIES:
+        raise ValueError(f"method must be one of {_ASSEMBLIES}, got {method!r}")
     omegas = [float(om) for om in np.atleast_1d(np.asarray(omegas, dtype=float))]
     seg_endpoints = np.asarray(seg_endpoints, dtype=float)
     M = seg_endpoints.shape[0]
@@ -1383,15 +1651,18 @@ def build_sommerfeld_correction_matrices(
     if M == 0 or all(om <= 0.0 for om in omegas):
         return out
     L_img = _image_inductance_matrix(seg_endpoints) if mode != "none" else None
-    for i in range(M):
-        p1_i = seg_endpoints[i, 0]
-        p2_i = seg_endpoints[i, 1]
-        for j in range(i, M):
-            vals = _pair_values_none(
-                p1_i, p2_i, seg_endpoints[j, 0], seg_endpoints[j, 1], omegas, earth
-            )
-            out[:, i, j] = vals
-            out[:, j, i] = vals
+    if method == "tabulated":
+        out = _tabulated_values_none(seg_endpoints, omegas, earth)
+    else:
+        for i in range(M):
+            p1_i = seg_endpoints[i, 0]
+            p2_i = seg_endpoints[i, 1]
+            for j in range(i, M):
+                vals = _pair_values_none(
+                    p1_i, p2_i, seg_endpoints[j, 0], seg_endpoints[j, 1], omegas, earth
+                )
+                out[:, i, j] = vals
+                out[:, j, i] = vals
     if L_img is not None:
         sign = -1.0 if mode == "additive" else 1.0
         for k, om in enumerate(omegas):
@@ -1407,6 +1678,7 @@ def build_sommerfeld_correction_matrix(
     omega: float,
     earth: LayeredEarth,
     image: ImageConvention = "additive",
+    method: SommerfeldAssembly = "exact",
 ) -> np.ndarray:
     """Assemble the dense Sommerfeld earth-return correction matrix.
 
@@ -1437,6 +1709,9 @@ def build_sommerfeld_correction_matrix(
     image
         ``"additive"`` (default), ``"none"`` or ``"antiparallel"`` —
         see the module docstring.
+    method
+        ``"exact"`` (default) or ``"tabulated"`` (opt-in, see
+        :func:`build_sommerfeld_correction_matrices`).
 
     Returns
     -------
@@ -1449,5 +1724,10 @@ def build_sommerfeld_correction_matrix(
             dtype=complex,
         )
     return build_sommerfeld_correction_matrices(
-        seg_endpoints, wire_radii, omegas=[omega], earth=earth, image=image
+        seg_endpoints,
+        wire_radii,
+        omegas=[omega],
+        earth=earth,
+        image=image,
+        method=method,
     )[0]

@@ -414,6 +414,9 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         skin_terms=skin,
         # The angular frequencies exactly as the solve step forms them.
         omegas=[2.0 * np.pi * float(f) for f in engine.frequencies],
+        # Opt-in tabulated Sommerfeld assembly (10.60): an engine field
+        # requested from the engine's owner; the exact assembly otherwise.
+        sommerfeld_method=getattr(engine, "sommerfeld_assembly", "exact"),
     )
     return BranchModel(
         earth_inductive_model=model,
