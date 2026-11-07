@@ -90,13 +90,14 @@ plugins:
             show_root_full_path: false
             heading_level: 2
 extra_javascript:
+  # MathJax configuration first, then MathJax itself. MathJax 3.2.2 is
+  # vendored (docs/javascripts/vendor/mathjax/, byte-identical to the npm
+  # tarball, see PROVENANCE.txt and SHA256SUMS there): the site loads no
+  # third-party JavaScript (finding 10.08; previously a floating
+  # cdn.jsdelivr.net/npm/mathjax@3 URL without integrity check). Fonts and
+  # TeX extensions are loaded from the same folder on demand.
   - javascripts/mathjax.js
-  # The previously-referenced ES6 polyfill CDN was removed
-  # (fourth 2026-05-12 audit pass): the domain is no longer
-  # trusted (CDN ownership change in early 2024 led to malicious
-  # payloads). Modern MathJax 3 / tex-mml-chtml does not require
-  # an ES6 polyfill for any browser the docs target.
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - javascripts/vendor/mathjax/tex-mml-chtml.js
 
 extra:
   social:
