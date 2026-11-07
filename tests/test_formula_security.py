@@ -595,10 +595,45 @@ def test_every_exporter_output_parses_to_its_fit_and_to_the_legacy_values() -> N
 # (H1, H2), the power bound (L1), rational exponents (L2), work budget
 # ---------------------------------------------------------------------
 
-#: Maximal-size cases below took 22 s to more than 60 s before audit 1
-#: (in a fresh process); they take well under a second now. The bound is
-#: generous because the container is shared.
-HEAVY_TIME_LIMIT_S = 10.0
+#: Maximal-size cases below took 22 s to more than 60 s before audit 1,
+#: measured in a fresh process (SymPy's global cache makes repeated
+#: in-process runs unrepresentative); they take 1 to 2 s now, Python start
+#: included. The bound leaves room for the shared container.
+HEAVY_TIME_LIMIT_S = 5.0
+_CHILD_GUARD_S = 120.0
+
+_CHILD = """
+import json, sys, time
+from groundfield.io._formula import FormulaError, parse_impedance_formula
+text = sys.stdin.read()
+t0 = time.perf_counter()
+try:
+    parse_impedance_formula(text)
+    outcome = "accepted"
+except FormulaError as exc:
+    outcome = "rejected: " + str(exc)
+print(json.dumps({"seconds": time.perf_counter() - t0, "outcome": outcome}))
+"""
+
+
+def _parse_in_child(text: str) -> tuple[float, str]:
+    """Parse ``text`` in a fresh interpreter; ``(seconds, outcome)``."""
+    import subprocess
+    import sys
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _CHILD],
+            input=text,
+            capture_output=True,
+            text=True,
+            timeout=_CHILD_GUARD_S,
+        )
+    except subprocess.TimeoutExpired:
+        return _CHILD_GUARD_S, "timeout"
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    return float(out["seconds"]), out["outcome"]
 
 
 def _lcm_sum(n_terms: int, *, times_f: bool = False) -> str:
@@ -645,10 +680,11 @@ def test_sum_of_fractions_with_distinct_denominators_is_rejected_quickly(
     from groundfield.io._formula import FormulaError, parse_impedance_formula
 
     _within_documented_limits(text)
-    error, seconds, peak = _measured(lambda: parse_impedance_formula(text))
-    assert isinstance(error, FormulaError), error
-    assert "fraction with more than 1000 digits" in str(error)
-    assert seconds < TIME_LIMIT_S
+    seconds, outcome = _parse_in_child(text)
+    assert outcome.startswith("rejected: fraction with more than 1000 digits"), outcome
+    assert seconds < HEAVY_TIME_LIMIT_S, f"{seconds:.1f} s"
+    error, _, peak = _measured(lambda: parse_impedance_formula(text))
+    assert isinstance(error, FormulaError)
     assert peak < MEMORY_LIMIT_BYTES
 
 
@@ -667,9 +703,10 @@ def test_long_product_chains_parse_in_bounded_time(make, expected) -> None:
 
     text = make()
     _within_documented_limits(text)
-    t0 = time.perf_counter()
+    seconds, outcome = _parse_in_child(text)
+    assert outcome == "accepted", outcome
+    assert seconds < HEAVY_TIME_LIMIT_S, f"{seconds:.1f} s"
     expr = parse_impedance_formula(text)
-    assert time.perf_counter() - t0 < HEAVY_TIME_LIMIT_S
     assert not expr.free_symbols
     if expected is None:
         log10_value = sum(math.log10(math.log(k)) for k in range(2, 334))
