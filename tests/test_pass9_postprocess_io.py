@@ -267,18 +267,21 @@ def _solved_single_rod():
 
 def test_f46_frozen_constants_have_the_writer_column_names() -> None:
     """The constants must not promise ``electrode`` / ``cluster``."""
+    # Review pass 10 (10.73) added the frequency column to both tables.
     assert gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS == (
         "name",
         "cluster_root",
         "I_re",
         "I_im",
         "abs_I",
+        "frequency_Hz",
     )
     assert gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS == (
         "cluster_root",
         "Z_re",
         "Z_im",
         "abs_Z",
+        "frequency_Hz",
     )
     assert "electrode" not in gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS
     assert "cluster" not in gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS
@@ -301,8 +304,9 @@ def test_f46_written_csvs_satisfy_the_published_contract(tmp_path) -> None:
         (p_electrodes, gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS),
         (p_clusters, gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS),
     ):
+        # Skip the provenance comment lines (review pass 10, 10.73).
         with open(path, newline="", encoding="utf-8") as fh:
-            header = next(_csv.reader(fh))
+            header = next(_csv.reader(x for x in fh if not x.startswith("#")))
         missing = set(required) - set(header)
         assert not missing, f"{path.name} is missing {sorted(missing)}"
 
@@ -312,7 +316,7 @@ def test_f46_written_csvs_satisfy_the_published_contract(tmp_path) -> None:
         result, tmp_path / "path.csv", start=(1.0, 0.0, 0.0), distance=5.0, n=3
     )
     with open(p_path, newline="", encoding="utf-8") as fh:
-        header = next(_csv.reader(fh))
+        header = next(_csv.reader(x for x in fh if not x.startswith("#")))
     assert tuple(header) == gf_csv.POTENTIAL_PATH_COLUMNS
 
 
@@ -324,12 +328,12 @@ def test_f46_constants_are_usable_as_pandas_keys(tmp_path) -> None:
     p_electrodes = gf_csv.save_electrode_table_csv(
         result, tmp_path / "electrodes.csv", world=world
     )
-    df = pd.read_csv(p_electrodes)
+    df = pd.read_csv(p_electrodes, comment="#")
     # First entry of the tuple is the identifier column by convention.
     id_col = gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS[0]
     assert df.groupby(id_col)["abs_I"].sum().sum() > 0.0
 
     p_clusters = gf_csv.save_cluster_impedances_csv(result, tmp_path / "clusters.csv")
-    dfc = pd.read_csv(p_clusters)
+    dfc = pd.read_csv(p_clusters, comment="#")
     cluster_col = gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS[0]
     assert dfc[cluster_col].tolist() == ["r1"]

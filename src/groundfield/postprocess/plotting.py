@@ -15,6 +15,14 @@ plot_potential_radial
 
 All functions return the ``matplotlib.figure.Figure`` they produce so
 that notebooks can post-process them (titles, save, sub-plots).
+
+The potential is a complex phasor. Every plot takes
+``component="real" | "imag" | "abs" | "phase"`` (default ``"real"``,
+the part plotted up to v0.15.0) and labels the axis with what it draws
+— ``Re φ``, ``Im φ``, ``|φ|`` in V or ``arg φ`` in degrees (review
+pass 10, 10.73). With phase-shifted sources or inductive coupling the
+real part is not the magnitude; use ``component="abs"`` for safety
+plots.
 """
 
 from __future__ import annotations
@@ -26,6 +34,11 @@ import numpy as np
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.result import FieldResult
     from groundfield.world import World
+
+Component = Literal["real", "imag", "abs", "phase"]
+
+_SYMBOL = {"real": "Re φ", "imag": "Im φ", "abs": "|φ|", "phase": "arg φ"}
+_UNIT = {"real": "V", "imag": "V", "abs": "V", "phase": "°"}
 
 __all__ = [
     "plot_potential_contour",
@@ -134,6 +147,35 @@ def _draw_electrodes(ax, world: "World", plane: str) -> None:
                     ax.plot([start[0], end[0]], [start[2], end[2]], "k-", linewidth=1.8)
 
 
+def _component(phi: np.ndarray, component: str) -> np.ndarray:
+    """Real-valued view of the complex potential ``phi``."""
+    if component == "real":
+        return phi.real
+    if component == "imag":
+        return phi.imag
+    if component == "abs":
+        return np.abs(phi)
+    if component == "phase":
+        return np.degrees(np.angle(phi))
+    raise ValueError(
+        f"component must be 'real', 'imag', 'abs' or 'phase', got {component!r}."
+    )
+
+
+def _label(component: str, *, log: bool = False) -> str:
+    """Axis / colour-bar label of a potential component."""
+    if log:
+        sym = _SYMBOL[component]
+        inner = sym if component == "abs" else f"|{sym}|"
+        return f"{inner} in V (log scale)"
+    return f"{_SYMBOL[component]} in {_UNIT[component]}"
+
+
+def _check_log(component: str, log: bool) -> None:
+    if log and component == "phase":
+        raise ValueError("log=True is not available for component='phase'.")
+
+
 def _make_grid(
     plane: Literal["xy", "xz"],
     extent: tuple[float, float, float, float],
@@ -177,6 +219,7 @@ def plot_potential_contour(
     levels: int = 20,
     log: bool = False,
     cmap: str = "viridis",
+    component: Component = "real",
 ):
     """Contour plot of the potential in a slice plane.
 
@@ -206,13 +249,23 @@ def plot_potential_contour(
         decades).
     cmap
         Matplotlib colormap name.
+    component
+        Part of the complex potential to draw: ``"real"`` (default),
+        ``"imag"``, ``"abs"`` or ``"phase"`` (degrees).
 
     Returns
     -------
     fig : matplotlib.figure.Figure
+
+    Raises
+    ------
+    ValueError
+        For an unknown ``component`` or ``log=True`` with ``"phase"``.
     """
     import matplotlib.pyplot as plt
 
+    _component(np.zeros(1, dtype=complex), component)
+    _check_log(component, log)
     if extent is None:
         srcs = np.array([ps.position for ps in result.point_sources])
         if plane == "xy":
@@ -229,7 +282,7 @@ def plot_potential_contour(
     fixed = z if plane == "xy" else y
     A, B, flat = _make_grid(plane, extent, fixed, n)
 
-    phi = result.potential(flat, frequency_index=frequency_index).real
+    phi = _component(result.potential(flat, frequency_index=frequency_index), component)
     phi = phi.reshape(A.shape)
 
     fig, axx = plt.subplots(figsize=(7, 5))
@@ -254,13 +307,14 @@ def plot_potential_contour(
     axx.clabel(contours, inline=True, fontsize=7, fmt="%.0f")
 
     cbar = fig.colorbar(cs, ax=axx)
-    cbar.set_label("Potential φ in V")
+    cbar.set_label(_label(component))
+    sym = _SYMBOL[component]
 
     if plane == "xy":
         axx.set_xlabel("x in m")
         axx.set_ylabel("y in m")
         axx.set_title(
-            f"Potential φ(x, y, z={z:g} m), f={result.frequencies[frequency_index]} Hz"
+            f"{sym}(x, y, z={z:g} m), f={result.frequencies[frequency_index]} Hz"
         )
         axx.set_aspect("equal")
     else:
@@ -268,7 +322,7 @@ def plot_potential_contour(
         axx.set_ylabel("z in m (depth)")
         axx.invert_yaxis()  # soil downwards
         axx.set_title(
-            f"Potential φ(x, y={y:g} m, z), f={result.frequencies[frequency_index]} Hz"
+            f"{sym}(x, y={y:g} m, z), f={result.frequencies[frequency_index]} Hz"
         )
 
     if world is not None:
@@ -292,6 +346,7 @@ def plot_potential_profile(
     n: int = 200,
     depths: Iterable[float] | None = None,
     frequency_index: int = 0,
+    component: Component = "real",
 ):
     """Potential along an arbitrary line, optionally for several depths.
 
@@ -312,6 +367,9 @@ def plot_potential_profile(
         List of depths $z$ in metres. One curve per depth.
     frequency_index
         Index into :attr:`FieldResult.frequencies`.
+    component
+        ``"real"`` (default), ``"imag"``, ``"abs"`` or ``"phase"``
+        (degrees) of the complex potential.
 
     Returns
     -------
@@ -319,6 +377,7 @@ def plot_potential_profile(
     """
     import matplotlib.pyplot as plt
 
+    _component(np.zeros(1, dtype=complex), component)
     if depths is None:
         depths = [0.0]
     direction_arr = np.asarray(direction, dtype=float)
@@ -334,13 +393,16 @@ def plot_potential_profile(
                 np.full_like(s, z_d),
             ]
         )
-        phi = result.potential(pts, frequency_index=frequency_index).real
+        phi = _component(
+            result.potential(pts, frequency_index=frequency_index), component
+        )
         ax.plot(s, phi, label=f"z = {z_d:g} m")
 
     ax.set_xlabel("distance s along profile in m")
-    ax.set_ylabel("Potential φ in V")
+    ax.set_ylabel(_label(component))
     ax.set_title(
-        f"Potential profile from {start}, f = {result.frequencies[frequency_index]} Hz"
+        f"{_SYMBOL[component]} profile from {start}, "
+        f"f = {result.frequencies[frequency_index]} Hz"
     )
     ax.grid(True, alpha=0.3)
     ax.legend()
@@ -433,6 +495,7 @@ def plot_surface_potential(
     show_contour_lines: bool = True,
     figsize: tuple[float, float] = (8.5, 7.0),
     title: str | None = None,
+    component: Component = "real",
 ):
     """Surface-potential pseudo-colour plot over the entire world.
 
@@ -463,9 +526,9 @@ def plot_surface_potential(
     via :meth:`FieldResult.potential`, which dispatches to the
     correct Green's function for the soil model the result was
     computed with (homogeneous / 2-layer / multi-layer). The
-    real part is plotted; for ``log=True`` the colour scale uses
-    $\\log_{10} |\\varphi|$ so the boundary decay is visible across
-    several decades.
+    ``component`` (default the real part) is plotted; for ``log=True``
+    the colour scale uses the logarithm of its magnitude so the boundary
+    decay is visible across several decades.
 
     Parameters
     ----------
@@ -509,6 +572,10 @@ def plot_surface_potential(
     title
         Optional title override; if ``None`` a sensible default is
         constructed from ``z`` and the chosen frequency.
+    component
+        ``"real"`` (default), ``"imag"``, ``"abs"`` or ``"phase"``
+        (degrees) of the complex potential; ``"phase"`` cannot be
+        combined with ``log=True``.
 
     Returns
     -------
@@ -517,6 +584,8 @@ def plot_surface_potential(
     import matplotlib.pyplot as plt
     from matplotlib.colors import LogNorm, Normalize
 
+    _component(np.zeros(1, dtype=complex), component)
+    _check_log(component, log)
     if extent is None:
         x_min, x_max, y_min, y_max = world_bounds_xy(world)
         extent = (
@@ -527,7 +596,7 @@ def plot_surface_potential(
         )
 
     A, B, flat = _make_grid("xy", extent, z, n)
-    phi = result.potential(flat, frequency_index=frequency_index).real
+    phi = _component(result.potential(flat, frequency_index=frequency_index), component)
     phi = phi.reshape(A.shape)
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -539,17 +608,18 @@ def plot_surface_potential(
         positive = phi_abs[phi_abs > 0]
         v_min = float(positive.min()) if positive.size else 1e-9
         v_max = float(phi_abs.max()) if phi_abs.size else 1.0
-        norm = LogNorm(vmin=max(v_min, 1e-9), vmax=max(v_max, 10 * v_min))
+        v_lo = max(v_min, 1e-9)
+        norm = LogNorm(vmin=v_lo, vmax=max(v_max, 10 * v_lo))
         cs = ax.contourf(A, B, phi_abs, levels=levels, cmap=cmap, norm=norm)
-        cbar_label = "|φ| in V (log scale)"
+        cbar_label = _label(component, log=True)
     elif symmetric:
         v = float(np.max(np.abs(phi)))
         norm = Normalize(vmin=-v, vmax=v)
         cs = ax.contourf(A, B, phi, levels=levels, cmap=cmap, norm=norm)
-        cbar_label = "Potential φ in V"
+        cbar_label = _label(component)
     else:
         cs = ax.contourf(A, B, phi, levels=levels, cmap=cmap)
-        cbar_label = "Potential φ in V"
+        cbar_label = _label(component)
 
     if show_contour_lines and not log:
         contours = ax.contour(
@@ -572,7 +642,7 @@ def plot_surface_potential(
     ax.set_aspect("equal")
     if title is None:
         f_hz = result.frequencies[frequency_index]
-        title = f"Surface potential φ(x, y, z = {z:g} m), f = {f_hz:g} Hz"
+        title = f"Surface potential {_SYMBOL[component]}(x, y, z = {z:g} m), f = {f_hz:g} Hz"
     ax.set_title(title)
 
     if show_electrodes:
@@ -592,6 +662,7 @@ def plot_potential_radial(
     depths: Iterable[float] = (0.0, 0.5, 1.0),
     frequency_index: int = 0,
     log_x: bool = False,
+    component: Component = "real",
 ):
     """Trumpet-shape decay around an electrode (or fixed point).
 
@@ -617,6 +688,9 @@ def plot_potential_radial(
     log_x
         If ``True`` use a logarithmic x-axis (better visibility of the
         trumpet shape).
+    component
+        ``"real"`` (default), ``"imag"``, ``"abs"`` or ``"phase"``
+        (degrees) of the complex potential.
 
     Returns
     -------
@@ -624,6 +698,7 @@ def plot_potential_radial(
     """
     import matplotlib.pyplot as plt
 
+    _component(np.zeros(1, dtype=complex), component)
     if isinstance(around, str):
         if world is None:
             raise ValueError("When 'around' is an electrode name, 'world' is required.")
@@ -638,11 +713,13 @@ def plot_potential_radial(
     fig, ax = plt.subplots(figsize=(7, 4))
     for z_d in depths:
         pts = np.column_stack([x0 + rs, np.full_like(rs, y0), np.full_like(rs, z_d)])
-        phi = result.potential(pts, frequency_index=frequency_index).real
+        phi = _component(
+            result.potential(pts, frequency_index=frequency_index), component
+        )
         ax.plot(rs, phi, label=f"z = {z_d:g} m")
 
     ax.set_xlabel(f"distance r from {label_origin} in m")
-    ax.set_ylabel("Potential φ in V")
+    ax.set_ylabel(_label(component))
     ax.set_title(
         f"Radial profile around {label_origin}, "
         f"f = {result.frequencies[frequency_index]} Hz"
