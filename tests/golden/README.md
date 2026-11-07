@@ -35,6 +35,20 @@ release. The current baseline is **v0.15.0** (commit `c97b067`).
 | `changed` | larger deviation, or a shape / dtype / string change |
 | `missing` / `new` | quantity disappeared / appeared |
 
+`GF_GOLDEN_STRICT=1` treats `within_tol` as a failure. Against the
+committed baseline (last release) a pure refactor that comes after a
+round-off change can no longer be bit-identical; snapshot the branch
+you start from and compare against that instead:
+
+```bash
+GF_GOLDEN_DATA_DIR=/tmp/base python -m tests.golden.harness generate
+# ... refactor ...
+GF_GOLDEN_DATA_DIR=/tmp/base GF_GOLDEN_STRICT=1 pytest tests/test_golden.py
+```
+
+In this snapshot mode the expected-change declarations are ignored:
+nothing may move.
+
 `GF_GOLDEN_STRICT=1` treats `within_tol` as a failure. Performance
 refactors must pass in strict mode on the platform the values were
 generated on (they are bit-identical by contract); across platforms

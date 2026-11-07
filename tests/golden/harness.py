@@ -67,9 +67,30 @@ from pathlib import Path
 import numpy as np
 
 GOLDEN_DIR = Path(__file__).resolve().parent
-DATA_DIR = GOLDEN_DIR / "data"
+DEFAULT_DATA_DIR = GOLDEN_DIR / "data"
 EXPECTED_DIR = GOLDEN_DIR / "expected_changes"
-MANIFEST = DATA_DIR / "MANIFEST.json"
+
+
+def data_dir() -> Path:
+    """Directory of the stored values.
+
+    ``GF_GOLDEN_DATA_DIR`` points the harness at another baseline, e.g. a
+    snapshot of the branch a refactor starts from::
+
+        GF_GOLDEN_DATA_DIR=/tmp/base python -m tests.golden.harness generate
+        # ... refactor ...
+        GF_GOLDEN_DATA_DIR=/tmp/base GF_GOLDEN_STRICT=1 pytest tests/test_golden.py
+
+    The committed baseline (``tests/golden/data``, the last release) is the
+    default and is the reference of the numbers-change report.
+    """
+    return Path(os.environ.get("GF_GOLDEN_DATA_DIR") or DEFAULT_DATA_DIR)
+
+
+def manifest_path() -> Path:
+    return data_dir() / "MANIFEST.json"
+
+
 REPO_ROOT = GOLDEN_DIR.parent.parent
 
 DEFAULT_RTOL = 1e-9
@@ -105,7 +126,7 @@ def strict() -> bool:
 
 
 def case_path(name: str) -> Path:
-    return DATA_DIR / f"{name}.npz"
+    return data_dir() / f"{name}.npz"
 
 
 def _encode_key(key: str) -> str:
@@ -118,7 +139,7 @@ def _decode_key(key: str) -> str:
 
 
 def save_case(name: str, quantities: dict[str, np.ndarray]) -> str:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir().mkdir(parents=True, exist_ok=True)
     payload = {_encode_key(k): np.asarray(v) for k, v in quantities.items()}
     for key, arr in payload.items():
         if arr.dtype == object:
@@ -135,13 +156,13 @@ def load_case(name: str) -> dict[str, np.ndarray]:
 
 
 def load_manifest() -> dict:
-    if not MANIFEST.exists():
+    if not manifest_path().exists():
         return {"cases": {}}
-    return json.loads(MANIFEST.read_text(encoding="utf-8"))
+    return json.loads(manifest_path().read_text(encoding="utf-8"))
 
 
 def _write_manifest(manifest: dict) -> None:
-    MANIFEST.write_text(
+    manifest_path().write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
@@ -219,7 +240,19 @@ _ALLOWED_KEYS = {
 }
 
 
+def snapshot_mode() -> bool:
+    """True when comparing against a snapshot (``GF_GOLDEN_DATA_DIR``).
+
+    The expected-change declarations describe moves relative to the last
+    release; against a snapshot of a working branch nothing may move, so
+    the declarations do not apply.
+    """
+    return data_dir().resolve() != DEFAULT_DATA_DIR.resolve()
+
+
 def load_declarations(directory: Path = EXPECTED_DIR) -> list[Declaration]:
+    if snapshot_mode() and directory == EXPECTED_DIR:
+        return []
     decls: list[Declaration] = []
     for path in sorted(directory.glob("*.toml")):
         data = tomllib.loads(path.read_text(encoding="utf-8"))
