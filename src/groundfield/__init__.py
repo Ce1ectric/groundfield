@@ -14,27 +14,52 @@ computations for networked grounding systems such as TN distribution
 networks with a substation, house connections, cable cabinets, and
 layered soil.
 
+Namespaces
+----------
+The data model, the factories (``create_*``) and the engine are
+top-level names. The post-processing API is also grouped in curated
+namespaces; every function stays available under its flat top-level
+name as well:
+
+``gf.plot``
+    Potential maps and profiles, world geometry, current sharing,
+    sweeps and convergence plots.
+``gf.safety``
+    Touch and step voltages, EN 50522 permissible touch voltage.
+``gf.fit``
+    Reduced rho-f models (vector fitting, research standard form).
+``gf.io``
+    Export to groundinsight (BusType JSON), CSV and VTK.
+
+``import groundfield`` loads only the data model, the factories and the
+engine; post-processing, IO, generators, the geo ingest, references,
+cross-engine validation and diagnostics are imported on first use
+(PEP 562), so pandas, matplotlib, sympy and most of scipy stay unloaded
+until a function needs them.
+
 Subpackages
 -----------
 soil
-    Soil models (homogeneous, multi-layer, frequency-dependent).
+    Soil models (homogeneous, two-layer, multi-layer).
 geometry
-    Electrode and conductor geometries, mesh generation.
+    Electrode geometries.
 conductors
-    Conductors, PEN, cable shields, and their self/mutual impedances.
+    Conductors, PEN, cable shields.
 solver
-    Numerical field solver (image method, MoM) in the frequency domain.
+    Numerical field solver (image method, MoM, …) in the frequency
+    domain.
 coupling
-    Inductive and galvanic coupling between conductors, shields, and
-    soil.
+    Inductive and galvanic coupling between conductors and soil.
 postprocess
-    Evaluation: potential curves, touch and step voltages, current
-    densities, plots.
+    Potentials, touch and step voltages, current sharing, sweeps, fits,
+    plots.
 io
-    File I/O and exchange formats, in particular the export of
-    reduced ``rho-f`` models for ``groundinsight``.
+    File I/O and exchange formats, in particular the export of reduced
+    ``rho-f`` models for ``groundinsight``.
+generators, geo
+    Synthetic and OpenStreetMap-based world generators.
 utils
-    Helpers for coordinates, units, logging, and validation.
+    Logging, name suggestions, warnings of the public API.
 
 Examples
 --------
@@ -48,12 +73,17 @@ Examples
 >>> result.cluster_impedance("g1")[0].real  # doctest: +SKIP
 """
 
-from __future__ import annotations
+import importlib as _importlib
+import sys as _sys
+import typing as _typing
 
 # Version
 __version__ = "0.15.0"
 
-# Re-exports — data model
+# ---------------------------------------------------------------------
+# Eager imports: data model, engine, factories (light; no pandas,
+# matplotlib or sympy)
+# ---------------------------------------------------------------------
 from groundfield.boundary import BoundaryConditions
 from groundfield.conductors.conductor import Conductor, ConductorType
 from groundfield.geometry.electrodes import (
@@ -83,8 +113,6 @@ from groundfield.sources import (
     VoltageSource,
 )
 from groundfield.world import World
-
-# Re-exports — top-level factories
 from groundfield.api import (
     create_conductor,
     create_electrode,
@@ -94,146 +122,298 @@ from groundfield.api import (
     run_simulation,
 )
 
-# Re-exports — postprocess / plots
-from groundfield.postprocess.plotting import (
-    plot_potential_contour,
-    plot_potential_profile,
-    plot_potential_radial,
-    plot_surface_potential,
-    world_bounds_xy,
-)
-from groundfield.postprocess.safety import (
-    permissible_touch_voltage_en50522,
-    step_voltage,
-    touch_voltage,
-    touch_voltage_envelope,
-)
-from groundfield.postprocess.current_balance import (
-    cluster_current_balance,
-    electrode_current_table,
-    plot_current_sharing,
-    split_factor,
-)
-from groundfield.postprocess.geometry_plot import (
-    plot_world,
-    plot_world_3d,
-    world_bounds_3d,
-)
-from groundfield.postprocess.sweep import (
-    plot_sweep_heatmap,
-    plot_sweep_lines,
-    sweep,
-)
-from groundfield.postprocess.convergence import (
-    convergence_study,
-    plot_convergence,
-)
-from groundfield.postprocess.vector_fitting import (
-    VectorFitResult,
-    fit_to_sympy,
-    rho_f_from_field_result,
-    vector_fit,
-)
-from groundfield.postprocess.rho_f_standard import (
-    RhoFStandardFit,
-    fit_rho_f_standard,
-    fit_to_sympy_standard,
-    rho_f_standard_from_results,
+# ---------------------------------------------------------------------
+# Lazy imports (PEP 562): module -> names, resolved on first access.
+# Keep this table and the TYPE_CHECKING block below in sync (tested).
+# ---------------------------------------------------------------------
+_LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
+    "groundfield.postprocess.plotting": (
+        "plot_potential_contour",
+        "plot_potential_profile",
+        "plot_potential_radial",
+        "plot_surface_potential",
+        "world_bounds_xy",
+    ),
+    "groundfield.postprocess.safety": (
+        "permissible_touch_voltage_en50522",
+        "step_voltage",
+        "touch_voltage",
+        "touch_voltage_envelope",
+    ),
+    "groundfield.postprocess.current_balance": (
+        "cluster_current_balance",
+        "electrode_current_table",
+        "plot_current_sharing",
+        "split_factor",
+    ),
+    "groundfield.postprocess.geometry_plot": (
+        "plot_world",
+        "plot_world_3d",
+        "world_bounds_3d",
+    ),
+    "groundfield.postprocess.sweep": (
+        "plot_sweep_heatmap",
+        "plot_sweep_lines",
+        "sweep",
+    ),
+    "groundfield.postprocess.convergence": (
+        "convergence_study",
+        "plot_convergence",
+    ),
+    "groundfield.postprocess.vector_fitting": (
+        "VectorFitResult",
+        "fit_to_sympy",
+        "rho_f_from_field_result",
+        "vector_fit",
+    ),
+    "groundfield.postprocess.rho_f_standard": (
+        "RhoFStandardFit",
+        "fit_rho_f_standard",
+        "fit_to_sympy_standard",
+        "rho_f_standard_from_results",
+    ),
+    "groundfield.io.csv": (
+        "save_cluster_impedances_csv",
+        "save_electrode_table_csv",
+        "save_potential_path_csv",
+    ),
+    "groundfield.io.groundinsight": (
+        "BusTypeSpec",
+        "EvaluateSpecError",
+        "evaluate_spec",
+        "fit_quality_summary",
+        "load_bustype_json",
+        "save_bustype_json",
+        "to_bustype",
+        "to_bustype_dict",
+    ),
+    "groundfield.coupling.sommerfeld_inductance": ("LayeredEarth",),
+    "groundfield.io.vtk": (
+        "export_field_vtk",
+        "export_geometry_vtk",
+    ),
+    "groundfield.generators": (
+        "BuildingTypeSpec",
+        "Categorical",
+        "Constant",
+        "Discrete",
+        "Distribution",
+        "ElectrodeSpec",
+        "ExplicitPlacement",
+        "FoundationElectrodeSpec",
+        "GeneratorConfig",
+        "GroundingSystemSpec",
+        "HomogeneousSoilSpec",
+        "LogNormal",
+        "ManhattanGridPlacement",
+        "MeasurementInjectionConfig",
+        "MeasurementLeadConfig",
+        "MeasurementProbeConfig",
+        "MeasurementSetupConfig",
+        "MultiLayerSoilSpec",
+        "Normal",
+        "ObstacleBox",
+        "OrtsnetzLayout",
+        "OsmBuildingPlacement",
+        "PenCable",
+        "PenTopology",
+        "RadialTrunkTopology",
+        "RingElectrodeSpec",
+        "RodElectrodeSpec",
+        "StarKvsTopology",
+        "StripElectrodeSpec",
+        "TnNetworkConfig",
+        "TnNetworkGenerator",
+        "TwoLayerSoilSpec",
+        "Uniform",
+        "Weibull",
+        "WorldGenerator",
+        "buried_lead",
+        "default_building_catalog",
+        "neighbour_substation_grounding",
+        "overhead_lead",
+        "rod_circle",
+        "single_rod_grounding",
+    ),
+    # The geo data class BuildingFootprint has no optional dependency;
+    # the active functions raise an ImportError with an install hint
+    # when the ``geo`` extra is missing (ADR-0011).
+    "groundfield.geo": (
+        "BuildingFootprint",
+        "OverpassError",
+        "Projector",
+        "query_and_project",
+        "query_buildings",
+    ),
+    "groundfield.references": ("dwight1936",),
+    "groundfield.validation": (
+        "EngineComparison",
+        "compare_engines",
+    ),
+    "groundfield.diagnostics": (
+        "check_segment_resolution",
+        "expected_segments",
+        "world_statistics",
+    ),
+}
+
+if _typing.TYPE_CHECKING:
+    from groundfield.postprocess.plotting import (
+        plot_potential_contour,
+        plot_potential_profile,
+        plot_potential_radial,
+        plot_surface_potential,
+        world_bounds_xy,
+    )
+    from groundfield.postprocess.safety import (
+        permissible_touch_voltage_en50522,
+        step_voltage,
+        touch_voltage,
+        touch_voltage_envelope,
+    )
+    from groundfield.postprocess.current_balance import (
+        cluster_current_balance,
+        electrode_current_table,
+        plot_current_sharing,
+        split_factor,
+    )
+    from groundfield.postprocess.geometry_plot import (
+        plot_world,
+        plot_world_3d,
+        world_bounds_3d,
+    )
+    from groundfield.postprocess.sweep import (
+        plot_sweep_heatmap,
+        plot_sweep_lines,
+        sweep,
+    )
+    from groundfield.postprocess.convergence import (
+        convergence_study,
+        plot_convergence,
+    )
+    from groundfield.postprocess.vector_fitting import (
+        VectorFitResult,
+        fit_to_sympy,
+        rho_f_from_field_result,
+        vector_fit,
+    )
+    from groundfield.postprocess.rho_f_standard import (
+        RhoFStandardFit,
+        fit_rho_f_standard,
+        fit_to_sympy_standard,
+        rho_f_standard_from_results,
+    )
+    from groundfield.io.csv import (
+        save_cluster_impedances_csv,
+        save_electrode_table_csv,
+        save_potential_path_csv,
+    )
+    from groundfield.io.groundinsight import (
+        BusTypeSpec,
+        EvaluateSpecError,
+        evaluate_spec,
+        fit_quality_summary,
+        load_bustype_json,
+        save_bustype_json,
+        to_bustype,
+        to_bustype_dict,
+    )
+    from groundfield.coupling.sommerfeld_inductance import LayeredEarth
+    from groundfield.io.vtk import (
+        export_field_vtk,
+        export_geometry_vtk,
+    )
+    from groundfield.generators import (
+        BuildingTypeSpec,
+        Categorical,
+        Constant,
+        Discrete,
+        Distribution,
+        ElectrodeSpec,
+        ExplicitPlacement,
+        FoundationElectrodeSpec,
+        GeneratorConfig,
+        GroundingSystemSpec,
+        HomogeneousSoilSpec,
+        LogNormal,
+        ManhattanGridPlacement,
+        MeasurementInjectionConfig,
+        MeasurementLeadConfig,
+        MeasurementProbeConfig,
+        MeasurementSetupConfig,
+        MultiLayerSoilSpec,
+        Normal,
+        ObstacleBox,
+        OrtsnetzLayout,
+        OsmBuildingPlacement,
+        PenCable,
+        PenTopology,
+        RadialTrunkTopology,
+        RingElectrodeSpec,
+        RodElectrodeSpec,
+        StarKvsTopology,
+        StripElectrodeSpec,
+        TnNetworkConfig,
+        TnNetworkGenerator,
+        TwoLayerSoilSpec,
+        Uniform,
+        Weibull,
+        WorldGenerator,
+        buried_lead,
+        default_building_catalog,
+        neighbour_substation_grounding,
+        overhead_lead,
+        rod_circle,
+        single_rod_grounding,
+    )
+    from groundfield.geo import (
+        BuildingFootprint,
+        OverpassError,
+        Projector,
+        query_and_project,
+        query_buildings,
+    )
+    from groundfield.references import dwight1936
+    from groundfield.validation import (
+        EngineComparison,
+        compare_engines,
+    )
+    from groundfield.diagnostics import (
+        check_segment_resolution,
+        expected_segments,
+        world_statistics,
+    )
+
+#: Curated namespaces (modules), listed by ``dir(groundfield)``.
+_NAMESPACES = ("fit", "io", "plot", "safety")
+
+#: Subpackages and modules reachable as attributes before their first
+#: explicit import (``gf.generators``, ``gf.postprocess``, …).
+_SUBMODULES = frozenset(
+    {
+        "api",
+        "boundary",
+        "conductors",
+        "coupling",
+        "diagnostics",
+        "generators",
+        "geo",
+        "geometry",
+        "postprocess",
+        "references",
+        "soil",
+        "solver",
+        "sources",
+        "utils",
+        "validation",
+        "world",
+        *_NAMESPACES,
+    }
 )
 
-# Re-exports — io / sister-project bridge
-from groundfield.io.csv import (
-    save_cluster_impedances_csv,
-    save_electrode_table_csv,
-    save_potential_path_csv,
-)
-from groundfield.io.groundinsight import (
-    BusTypeSpec,
-    EvaluateSpecError,
-    evaluate_spec,
-    fit_quality_summary,
-    load_bustype_json,
-    save_bustype_json,
-    to_bustype,
-    to_bustype_dict,
-)
-from groundfield.coupling.sommerfeld_inductance import LayeredEarth
-from groundfield.io.vtk import (
-    export_field_vtk,
-    export_geometry_vtk,
-)
-
-# Re-exports — world generators (typical + future)
-from groundfield.generators import (
-    BuildingTypeSpec,
-    Categorical,
-    Constant,
-    Discrete,
-    Distribution,
-    ElectrodeSpec,
-    ExplicitPlacement,
-    FoundationElectrodeSpec,
-    GeneratorConfig,
-    GroundingSystemSpec,
-    HomogeneousSoilSpec,
-    LogNormal,
-    ManhattanGridPlacement,
-    MeasurementInjectionConfig,
-    MeasurementLeadConfig,
-    MeasurementProbeConfig,
-    MeasurementSetupConfig,
-    MultiLayerSoilSpec,
-    Normal,
-    ObstacleBox,
-    OrtsnetzLayout,
-    OsmBuildingPlacement,
-    PenCable,
-    PenTopology,
-    RadialTrunkTopology,
-    RingElectrodeSpec,
-    RodElectrodeSpec,
-    StarKvsTopology,
-    StripElectrodeSpec,
-    TnNetworkConfig,
-    TnNetworkGenerator,
-    TwoLayerSoilSpec,
-    Uniform,
-    Weibull,
-    WorldGenerator,
-    buried_lead,
-    default_building_catalog,
-    neighbour_substation_grounding,
-    overhead_lead,
-    rod_circle,
-    single_rod_grounding,
-)
-
-# Re-exports — geo subpackage (ADR-0011). The data class
-# :class:`BuildingFootprint` has zero optional dependencies and is
-# always importable; the active functions (:class:`Projector`,
-# :func:`query_buildings`, :func:`query_and_project`) raise a clear
-# :class:`ImportError` with an install hint when the optional
-# ``geo`` extra (``pip install groundfield[geo]``) is absent.
-from groundfield.geo import (
-    BuildingFootprint,
-    OverpassError,
-    Projector,
-    query_and_project,
-    query_buildings,
-)
-
-# Analytical reference formulas (used in plausibility tests)
-from groundfield.references import dwight1936
-
-# Cross-engine validation (see ADR-0001)
-from groundfield.validation import EngineComparison, compare_engines
-
-# Pre-solve world diagnostics
-from groundfield.diagnostics import (
-    check_segment_resolution,
-    expected_segments,
-    world_statistics,
-)
+_LAZY_NAMES: dict[str, str] = {
+    name: module for module, names in _LAZY_IMPORTS.items() for name in names
+}
 
 __all__ = [
     "__version__",
@@ -385,3 +565,28 @@ __all__ = [
     "expected_segments",
     "check_segment_resolution",
 ]
+
+
+def __getattr__(name: str) -> object:
+    """Resolve lazy names and subpackages on first access (PEP 562)."""
+    module_name = _LAZY_NAMES.get(name)
+    if module_name is not None:
+        module = _importlib.import_module(module_name)
+        try:
+            value = getattr(module, name)
+        except AttributeError:  # a submodule, e.g. references.dwight1936
+            value = _importlib.import_module(f"{module_name}.{name}")
+        globals()[name] = value
+        return value
+    if name in _SUBMODULES:
+        return _importlib.import_module(f"{__name__}.{name}")
+    raise AttributeError(
+        f"module {__name__!r} has no attribute {name!r}",
+        name=name,
+        obj=_sys.modules[__name__],
+    )
+
+
+def __dir__() -> list[str]:
+    """Public names: ``__all__``, the curated namespaces and loaded globals."""
+    return sorted(set(globals()) | set(__all__) | set(_NAMESPACES))
