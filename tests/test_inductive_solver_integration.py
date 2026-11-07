@@ -103,7 +103,6 @@ def test_neumann_is_honoured_on_lumped_and_single_segment_conductors(dsl) -> Non
     assert z.imag == pytest.approx(z_dist.imag, rel=2e-2)
 
 
-@WAVE2
 @pytest.mark.finding("10.37")
 def test_skin_model_raises_the_pen_resistance_at_1khz() -> None:
     """150 mm² Al: R_ac/R_dc = 1.5496 at 1 kHz (solid-round Bessel)."""
@@ -240,3 +239,89 @@ def test_lumped_inductive_conductor_couples_to_a_parallel_chain() -> None:
     z_chain = _series_impedance(world(20.0), "perfect_mirror", [1000.0])[0]
     z_lumped = _series_impedance(world(None), "perfect_mirror", [1000.0])[0]
     assert z_lumped == pytest.approx(z_chain, rel=1e-9)
+
+
+def _skin_ratio(f: float) -> complex:
+    """Z_int(f) / R_dc of the 150 mm2 Al conductor (independent Bessel form)."""
+    from scipy.special import iv
+
+    a = math.sqrt(A_150 / math.pi)
+    m = np.sqrt(1j * 2.0 * math.pi * f * 4e-7 * math.pi / RHO_AL)
+    z_int = m * RHO_AL / (2.0 * math.pi * a) * iv(0, m * a) / iv(1, m * a)
+    return z_int / (RHO_AL / A_150)
+
+
+@pytest.mark.finding("10.37")
+@pytest.mark.parametrize("dsl", [None, 10.0], ids=["lumped", "chain"])
+def test_skin_correction_of_an_inductive_conductor(dsl) -> None:
+    """Z_skin - Z_dc = R_dc (Z_int/R_dc - 1) - j w mu0 l / (8 pi) at 1 kHz:
+    the Bessel internal impedance replaces R_dc and the DC internal
+    inductance of the inductance matrix."""
+    z_dc = _series_impedance(_pen_world(300.0, dsl=dsl), "perfect_mirror", [1000.0])
+    z_skin = _series_impedance(
+        _pen_world(300.0, dsl=dsl, resistance_model="skin"), "perfect_mirror", [1000.0]
+    )
+    r_dc = RHO_AL * 300.0 / A_150
+    l_int_dc = 4e-7 * math.pi * 300.0 / (8.0 * math.pi)
+    expected = r_dc * (_skin_ratio(1000.0) - 1.0) - 1j * 2e3 * math.pi * l_int_dc
+    assert z_skin[0] - z_dc[0] == pytest.approx(expected, rel=1e-9)
+
+
+@pytest.mark.finding("10.37")
+def test_skin_correction_covers_the_half_stubs_of_a_galvanic_chain() -> None:
+    """Galvanic chain (R/2 stubs at both ends): the diagonal corrections of
+    all branches add up to l * dZ'_skin(f)."""
+    from groundfield.solver import _pipeline
+
+    w = _pen_world(300.0, dsl=10.0, resistance_model="skin")
+    w.conductors[0] = w.conductors[0].model_copy(
+        update={"coupling_to_soil": "galvanic"}
+    )
+    eng = gf.create_engine(
+        backend="image",
+        segment_length=0.5,
+        frequencies=[1000.0],
+        earth_inductive_model="perfect_mirror",
+    )
+    disc = _pipeline.discretise(w, eng)
+    topo = _pipeline.build_topology(w, disc)
+    branches = _pipeline.assemble_branches(w, eng, topo)
+    dz = branches.earth_correction(2.0 * math.pi * 1000.0)
+    assert len(topo.finite_branches) == 31  # 30 segments, two half stubs
+    assert np.count_nonzero(dz - np.diag(np.diagonal(dz))) == 0
+    expected = 300.0 * w.conductors[0].skin_correction_per_length(1000.0)
+    assert np.trace(dz) == pytest.approx(expected, rel=1e-12)
+
+
+@pytest.mark.finding("10.37")
+def test_skin_effect_without_inductance_model_changes_the_resistance_only() -> None:
+    """No inductance model: R_ac(f) only, no reactance; f = 0 stays R_dc."""
+    z_dc = _series_impedance(
+        _pen_world(300.0, dsl=None, inductance_model=None),
+        "perfect_mirror",
+        [0.0, 1000.0],
+    )
+    z_skin = _series_impedance(
+        _pen_world(300.0, dsl=None, inductance_model=None, resistance_model="skin"),
+        "perfect_mirror",
+        [0.0, 1000.0],
+    )
+    r_dc = RHO_AL * 300.0 / A_150
+    assert z_dc[0] == pytest.approx(r_dc, rel=1e-12)
+    assert z_skin[0] == z_dc[0]  # DC: no skin effect
+    assert z_skin[1].real == pytest.approx(r_dc * _skin_ratio(1000.0).real, rel=1e-9)
+    assert z_skin[1].imag == pytest.approx(0.0, abs=1e-12)
+    assert z_dc[1] == z_dc[0]  # the dc model stays frequency independent
+
+
+@pytest.mark.finding("10.37")
+def test_skin_effect_is_frequency_dependent() -> None:
+    """R_ac/R_dc of 150 mm2 Al through the solver: 1.0556 / 1.2308 / 1.5496."""
+    freqs = [250.0, 550.0, 1000.0]
+    z_dc = _series_impedance(_pen_world(300.0, dsl=10.0), "perfect_mirror", freqs)
+    z_skin = _series_impedance(
+        _pen_world(300.0, dsl=10.0, resistance_model="skin"), "perfect_mirror", freqs
+    )
+    r_dc = RHO_AL * 300.0 / A_150
+    ratio = 1.0 + (z_skin - z_dc).real / r_dc
+    np.testing.assert_allclose(ratio, [1.0556, 1.2308, 1.5496], atol=5e-4)

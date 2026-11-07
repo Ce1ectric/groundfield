@@ -373,9 +373,12 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
     the distributed chains and, since review pass 10 (finding 10.24),
     lumped and single-segment conductors as one branch from start to
     end — built on the image baseline of the earth-return model (see
-    :mod:`groundfield.solver._inductive`). With ``earth_inductive_model``
-    ``"carson_series"`` or ``"sommerfeld"`` the returned correction
-    ``omega -> ΔZ(omega)`` holds the earth-return correction; it is
+    :mod:`groundfield.solver._inductive`). The returned correction
+    ``omega -> ΔZ(omega)`` holds the earth-return correction
+    (``earth_inductive_model`` ``"carson_series"`` or ``"sommerfeld"``)
+    and the skin-effect correction of conductors with
+    ``resistance_model="skin"`` (finding 10.37; such a world is
+    frequency dependent even without an inductance model). It is
     assembled for all frequencies of ``engine`` at once on first use
     (finding 10.60) and returns the same matrix for each frequency as a
     single-frequency assembly, bit for bit.
@@ -393,7 +396,7 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth = resolve_earth_layers(world.soil)
-    lumped, _skin = branch_records(
+    lumped, skin = branch_records(
         world.conductors,
         cluster_id=topo.cluster_id,
         finite_branches=topo.finite_branches,
@@ -408,6 +411,7 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         sigma_earth=sigma_earth,
         layered_earth=layered_earth,
         lumped_branches=lumped,
+        skin_terms=skin,
         # The angular frequencies exactly as the solve step forms them.
         omegas=[2.0 * np.pi * float(f) for f in engine.frequencies],
     )
