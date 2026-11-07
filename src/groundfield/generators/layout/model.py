@@ -43,7 +43,7 @@ from groundfield.generators.electrode_specs import (
     RodElectrodeSpec,
     rod_circle,
 )
-from groundfield.generators.grounding import GroundingSystemSpec
+from groundfield.generators.grounding import FoundationOutline, GroundingSystemSpec
 from groundfield.generators.layout.measurement import (
     AuxiliaryElectrodePlacement,
     VoltageProbePlacement,
@@ -557,6 +557,7 @@ class LvNetworkLayout(
         source_magnitude_a: float = 1.0,
         seed: int = 0,
         foundation_mask: Optional[list[bool]] = None,
+        foundation_outline: FoundationOutline = "ombr",
         **deprecated: object,
     ) -> NetworkPlan:
         """Resolve the layout into a :class:`~groundfield.generators.plan.NetworkPlan`.
@@ -564,7 +565,9 @@ class LvNetworkLayout(
         Parameters are those of :meth:`to_world`. Random draws (presence
         probabilities and distributions in the grounding specs) use
         ``numpy.random.default_rng(seed)`` in the order substation,
-        cabinets, houses, auxiliary electrode.
+        cabinets, houses, auxiliary electrode. Each house's foundation
+        electrodes are shaped after its footprint first (see
+        ``foundation_outline`` in :meth:`to_world`).
 
         Returns
         -------
@@ -630,17 +633,22 @@ class LvNetworkLayout(
                 )
             sites.append(cabinet)
 
-        # 3. House groundings. Houses outside ``foundation_mask`` stay in
-        #    the layout (plots) but not in the network.
+        # 3. House groundings, shaped after the footprint
+        #    (``GroundingSystemSpec.with_footprint``). Houses outside
+        #    ``foundation_mask`` stay in the layout (plots) but not in the
+        #    network.
         house_spec = house_grounding or _default_house_grounding()
         houses: dict[int, PlannedSite] = {}
         for i, fp in enumerate(self.footprints):
             if foundation_mask is not None and not foundation_mask[i]:
                 continue
-            house = house_spec.plan_site(
+            centroid = fp.centroid_xy_m()
+            house = house_spec.with_footprint(
+                fp, site_xy=centroid, outline=foundation_outline
+            ).plan_site(
                 f"house_{i:03d}",
                 role="building",
-                position_xy=fp.centroid_xy_m(),
+                position_xy=centroid,
                 rng=rng,
                 footprint=fp,
             )
@@ -760,6 +768,7 @@ class LvNetworkLayout(
         source_magnitude_a: float = 1.0,
         seed: int = 0,
         foundation_mask: Optional[list[bool]] = None,
+        foundation_outline: FoundationOutline = "ombr",
         **deprecated: object,
     ) -> World:
         """Materialise the layout into a :class:`groundfield.World`.
@@ -778,8 +787,8 @@ class LvNetworkLayout(
             Soil model; default homogeneous 100 Ω·m.
         substation_grounding, cabinet_grounding, house_grounding
             Grounding specs of the substation, every cabinet and every
-            house (defaults: ring + 4 rods, one 1.5 m rod, 10 m 2 × 2
-            foundation mesh).
+            house (defaults: ring + 4 rods, one 1.5 m rod, 2 × 2
+            foundation mesh shaped after the footprint).
         pen_wire_radius_m
             PEN wire radius in m.
         pen_segment_length_m
@@ -797,6 +806,19 @@ class LvNetworkLayout(
             receive a foundation electrode (and a service drop); the
             others stay in the layout for plotting. Combine with
             :meth:`foundation_mask` for a reproducible penetration sweep.
+        foundation_outline
+            How each footprint shapes the foundation electrodes of
+            ``house_grounding`` (see
+            :meth:`GroundingSystemSpec.with_footprint
+            <groundfield.generators.grounding.GroundingSystemSpec.with_footprint>`):
+            ``"ombr"`` (default) — the oriented minimum bounding
+            rectangle of the footprint (size, orientation and centre),
+            the same rule as the OSM placement of
+            :class:`~groundfield.generators.tn_network.TnNetworkGenerator`;
+            ``"polygon"`` — the real outline as a closed ring
+            (``style="ring"`` foundations only; DIN 18014); ``"spec"`` —
+            the spec geometry at the footprint centroid (every house got
+            the same foundation before 2026.11).
 
         Returns
         -------
@@ -826,6 +848,7 @@ class LvNetworkLayout(
                 source_magnitude_a=source_magnitude_a,
                 seed=seed,
                 foundation_mask=foundation_mask,
+                foundation_outline=foundation_outline,
             )
         )
 
