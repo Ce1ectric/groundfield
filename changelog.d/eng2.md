@@ -28,15 +28,17 @@
 ### Changed
 
 - **`mom`, `mom_sommerfeld` and `bem` run the shared solve pipeline
-  (10.75, 10.59).** Discretisation, injection, topology, branches and
-  the solve step are those of `groundfield.solver._pipeline`; each
-  backend contributes only its Green's function, and the reaction matrix
-  is assembled directly instead of as the product of the kernel with the
-  identity. The numbers are unchanged: 41 of 41 stored golden cases and
-  47 further results are bit-identical to the wave-2 base. The direct
+  (10.75, 10.59).** Discretisation, injection, topology and branch
+  assembly are the steps of `groundfield.solver._pipeline`; the family
+  keeps one shared point-matching solve and read-back, each backend
+  contributes only its Green's function, and the reaction matrix is
+  assembled directly instead of as the product of the kernel with the
+  identity. The numbers are unchanged: 41 of 41 stored golden cases are
+  bit-identical to the wave-2 base, and so are the numeric fields of 47
+  further results except `bem` (≤ 3.5e-16, it now runs `mom`) and the
+  tabulated three-layer case of 10.61 (1.1e-9). The direct
   assembly makes `mom_sommerfeld` on two-layer soil faster (40 m grid,
-  ds = 2.5 m: 15.2 → 0.41 s). New result metadata: `n_segments`,
-  `segment_length`, `solver`, `stub`, `earth_inductive_model`.
+  ds = 2.5 m: 15.2 → 0.41 s).
 - ⚠ **`mom` and `mom_sommerfeld` honour `Source.return_to` and junction
   nodes (10.75 with 10.16 / 10.38).** Because they now use the shared
   injection and topology steps, the return terminal of a two-terminal
@@ -122,7 +124,10 @@
   `kernel="line"`, which it rejected before, now run. The modules
   `groundfield.solver.cim` (with `fit_complex_images`) and
   `groundfield.solver.bem` stay importable; `solve_cim` and `solve_bem`
-  warn and delegate. `fem` is registered as experimental
+  warn and delegate. Their results carry the metadata of the backend
+  that ran: `cim_fit_used`, `cim_n_images`, `cim_rms`, `reduces_to`,
+  `n_layers`, `h` and `rhos` are gone, a direct call adds
+  `dispatched_to`. `fem` is registered as experimental
   (`ExperimentalBackendWarning`, once per process). The registry entries
   are applied by the release coordinator. Tests:
   `tests/test_engine_aliases.py`.
