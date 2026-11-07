@@ -46,6 +46,7 @@ strip, the head of a rod).
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -394,3 +395,115 @@ def interior_points(electrode, *, outlines: bool) -> np.ndarray:
     ):
         return _loop_centre(electrode)
     return np.zeros((0, 2))
+
+
+# ---------------------------------------------------------------------
+# foundations built from several bonded wires (audit 1, H4)
+# ---------------------------------------------------------------------
+
+_WIRE_NAME = re.compile(r"^(?P<root>.+)_w(?P<index>[0-9]+)$")
+
+
+def foundation_wires(world, name: str, clusters=None) -> list:
+    """Electrodes that form the foundation the electrode ``name`` belongs to.
+
+    The generators build a foundation that is not axis-aligned from
+    bonded straight wires: the anchor wire (local ``-y`` edge) carries the
+    foundation name, the others ``<name>_w<j>`` (review pass 10, 10.39).
+    For any member name this returns the anchor and all its ``_w<j>``
+    wires, in the order of ``world.electrodes``; with ``clusters``
+    (``FieldResult.clusters``) only those in the galvanic cluster of
+    ``name``. Any other electrode is returned alone.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not an electrode of ``world``.
+    """
+    world.get_electrode(name)  # KeyError for an unknown name
+    names = {e.name for e in world.electrodes}
+    match = _WIRE_NAME.match(name)
+    root = match.group("root") if match and match.group("root") in names else name
+
+    def belongs(electrode) -> bool:
+        if electrode.name == root:
+            return True
+        m = _WIRE_NAME.match(electrode.name)
+        return m is not None and m.group("root") == root
+
+    members = [e for e in world.electrodes if belongs(e)]
+    cluster = clusters.get(name) if clusters else None
+    if cluster is not None:
+        members = [e for e in members if e.name in cluster]
+    return members
+
+
+def footprint_of(electrodes) -> Footprint:
+    """Union of the footprints of several electrodes (one wire set)."""
+    parts = [footprint(e) for e in electrodes]
+    if len(parts) == 1:
+        return parts[0]
+    return Footprint(
+        np.concatenate([p.segments for p in parts]).reshape(-1, 2, 2),
+        np.concatenate([p.circles for p in parts]).reshape(-1, 3),
+    )
+
+
+def _positions(values: np.ndarray, tol: float) -> np.ndarray:
+    """Distinct values of ``values`` (those closer than ``tol`` merged)."""
+    values = np.sort(values)
+    groups = np.split(values, np.flatnonzero(np.diff(values) > tol) + 1)
+    return np.array([g.mean() for g in groups])
+
+
+def grid_cells(fp: Footprint) -> np.ndarray:
+    """Cell centres ``(M, 2)`` of a rectangular wire grid in any orientation.
+
+    The wires must run in two perpendicular directions (the first wire
+    fixes them) and span the full rectangle, as the wires of a rotated
+    foundation do; the cell centres are the midpoints between neighbouring
+    wires, as for :func:`mesh_centres`. Empty for any other wire set.
+    """
+    seg = fp.segments
+    empty = np.zeros((0, 2))
+    if fp.circles.size or len(seg) < 4:
+        return empty
+    d = seg[:, 1] - seg[:, 0]
+    length = np.hypot(d[:, 0], d[:, 1])
+    if np.any(length <= 0.0):
+        return empty
+    u = d[0] / length[0]
+    v = np.array([-u[1], u[0]])
+    origin = seg[0, 0]
+    along_u = np.abs(d @ v) <= 1e-9 * length
+    along_v = np.abs(d @ u) <= 1e-9 * length
+    if not np.all(along_u | along_v) or not along_u.any() or not along_v.any():
+        return empty
+    extent = float(length.sum())
+    ys = _positions((seg[along_u, 0] - origin) @ v, 1e-9 * extent)
+    xs = _positions((seg[along_v, 0] - origin) @ u, 1e-9 * extent)
+    if xs.size < 2 or ys.size < 2:
+        return empty
+    # The wires must cover the rectangle: every line of each direction
+    # runs over the full width of the other one.
+    width, height = xs[-1] - xs[0], ys[-1] - ys[0]
+    if not (
+        math.isclose(length[along_u].sum(), ys.size * width, rel_tol=1e-6)
+        and math.isclose(length[along_v].sum(), xs.size * height, rel_tol=1e-6)
+    ):
+        return empty
+    mx = 0.5 * (xs[:-1] + xs[1:])
+    my = 0.5 * (ys[:-1] + ys[1:])
+    gx, gy = np.meshgrid(mx, my, indexing="ij")
+    return origin + gx.ravel()[:, None] * u + gy.ravel()[:, None] * v
+
+
+def interior_points_of(electrodes, *, outlines: bool) -> np.ndarray:
+    """:func:`interior_points` of one electrode, or the cells of a wire group.
+
+    A foundation made of several bonded wires (:func:`foundation_wires`)
+    is sampled like a mesh electrode: the centre of every cell.
+    """
+    if len(electrodes) == 1:
+        return interior_points(electrodes[0], outlines=outlines)
+    return grid_cells(footprint_of(electrodes))

@@ -102,7 +102,12 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from groundfield.postprocess._footprint import footprint, interior_points
+from groundfield.postprocess._footprint import (
+    footprint,
+    footprint_of,
+    foundation_wires,
+    interior_points_of,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.result import FieldResult
@@ -207,15 +212,22 @@ def _feet_xy(
     directions: np.ndarray,
     distance: float,
     anchor: str,
+    result: "FieldResult",
 ) -> np.ndarray:
-    """Horizontal foot positions ``(n, 2)`` for unit ``directions`` ``(n, 2)``."""
+    """Horizontal foot positions ``(n, 2)`` for unit ``directions`` ``(n, 2)``.
+
+    With ``anchor="footprint"`` the footprint is that of the whole
+    foundation the electrode belongs to (:func:`foundation_wires`): a
+    rotated foundation is several bonded wires (audit 1, H4).
+    """
     e = world.get_electrode(electrode)
     if anchor == "connection_point":
         cp = e.connection_point
         return np.column_stack(
             [cp[0] + distance * directions[:, 0], cp[1] + distance * directions[:, 1]]
         )
-    return footprint(e).feet(directions, distance)
+    wires = foundation_wires(world, electrode, getattr(result, "clusters", None))
+    return footprint_of(wires).feet(directions, distance)
 
 
 def _crowding(electrode, result: "FieldResult") -> bool:
@@ -357,7 +369,7 @@ def touch_voltage(
     _check_distance(distance)
     _check_anchor(anchor)
     e_h = _horizontal(direction)
-    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor)[0]
+    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor, result)[0]
     feet = np.array([[feet_xy[0], feet_xy[1], surface_z]])
     _uniform_current_caveat(result, world, feet, caller="touch_voltage")
     phi_feet = complex(result.potential(feet, frequency_index=frequency_index)[0])
@@ -455,12 +467,12 @@ def touch_voltage_envelope(
 
     angles = np.linspace(0.0, 2.0 * np.pi, n_angles, endpoint=False)
     dirs = np.column_stack([np.cos(angles), np.sin(angles)])
-    feet_xy = _feet_xy(world, electrode, dirs, distance, anchor)
-    e = world.get_electrode(electrode)
+    feet_xy = _feet_xy(world, electrode, dirs, distance, anchor, result)
     if interior is not False:
-        inner = interior_points(e, outlines=bool(interior))
+        wires = foundation_wires(world, electrode, result.clusters)
+        inner = interior_points_of(wires, outlines=bool(interior))
         if len(inner):
-            ref = footprint(e).reference_point
+            ref = footprint_of(wires).reference_point
             az = np.mod(
                 np.arctan2(inner[:, 1] - ref[1], inner[:, 0] - ref[0]), 2 * np.pi
             )
@@ -701,7 +713,7 @@ def touch_voltage_spectrum(
     _check_distance(distance)
     _check_anchor(anchor)
     e_h = _horizontal(direction)
-    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor)[0]
+    feet_xy = _feet_xy(world, electrode, e_h[None, :2], distance, anchor, results[0])[0]
     feet = np.array([[feet_xy[0], feet_xy[1], surface_z]])
     warned = set()
     total = 0.0

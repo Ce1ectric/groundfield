@@ -454,3 +454,134 @@ def test_ring_footprint_is_the_exact_circle() -> None:
     fp = footprint(ring)
     assert fp.segments.shape == (0, 2, 2)
     np.testing.assert_array_equal(fp.circles, [[2.0, 3.0, 4.0]])
+
+
+# ---------------------------------------------------------------------
+# Audit 1, H4 — rotated foundations are several bonded wires
+# ---------------------------------------------------------------------
+
+_SIDE = 10.0
+
+
+def _generated_foundation(angle_deg: float, style: str = "mesh"):
+    """10 m x 10 m foundation from the generators (2 x 2 mesh, 0.8 m).
+
+    At 0 deg it is one ``grid_mesh``; at any other angle the generator
+    builds bonded straight wires ``<name>``, ``<name>_w1`` ... (10.39).
+    """
+    from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                size_xy_m=(_SIDE, _SIDE),
+                orientation_deg=angle_deg,
+                style=style,
+                n_x=2,
+                n_y=2,
+                depth_m=0.8,
+            )
+        ]
+    ).build_at(world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0))
+    anchor = world.electrodes[0].name
+    gf.create_source(world, name="s", attached_to=anchor, magnitude=100.0)
+    eng = gf.create_engine(backend="image", segment_length=0.5, frequencies=[50.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return world, eng.solve(world), anchor
+
+
+def _rotate(angle_deg: float, lx: float, ly: float) -> tuple[float, float]:
+    a = math.radians(angle_deg)
+    return math.cos(a) * lx - math.sin(a) * ly, math.sin(a) * lx + math.cos(a) * ly
+
+
+def _to_local(angle_deg: float, xy: np.ndarray) -> np.ndarray:
+    a = math.radians(-angle_deg)
+    c, s = math.cos(a), math.sin(a)
+    return np.column_stack([c * xy[:, 0] - s * xy[:, 1], s * xy[:, 0] + c * xy[:, 1]])
+
+
+@pytest.mark.finding("10.21")
+@pytest.mark.parametrize("side", [(1, 0), (-1, 0), (0, 1), (0, -1)])
+def test_touch_voltage_of_a_rotated_foundation_matches_the_unrotated_one(side) -> None:
+    """The footprint is every wire of the foundation, not the named edge
+    wire: at 30 deg the base put the feet of +y 1 m inside the building
+    (93.9 V instead of 167.5 V, -44 %)."""
+    w0, r0, a0 = _generated_foundation(0.0)
+    w30, r30, a30 = _generated_foundation(30.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        u0 = abs(touch_voltage(r0, w0, electrode=a0, direction=(*side, 0.0)))
+        u30 = abs(
+            touch_voltage(
+                r30, w30, electrode=a30, direction=(*_rotate(30.0, *side), 0.0)
+            )
+        )
+    # one uniform current per wire vs one per grid: about 1 % (audit 1)
+    assert u30 == pytest.approx(u0, rel=0.05)
+
+
+@pytest.mark.finding("10.21")
+def test_envelope_of_a_rotated_foundation_stays_outside_and_samples_its_cells() -> None:
+    """31 of 72 foot positions lay inside the foundation and no mesh centre
+    was evaluated; now the offset curve surrounds all wires and the four
+    cell centres are sampled, like the mesh centres of the 0 deg grid."""
+    world, result, anchor = _generated_foundation(30.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, _, feet = touch_voltage_envelope(
+            result,
+            world,
+            electrode=anchor,
+            n_angles=72,
+            interior=False,
+            return_points=True,
+        )
+        _, env, feet_in = touch_voltage_envelope(
+            result, world, electrode=anchor, n_angles=72, return_points=True
+        )
+    local = _to_local(30.0, feet[:, :2])
+    assert np.all(np.max(np.abs(local), axis=1) > _SIDE / 2), "foot inside"
+    assert feet_in.shape == (72 + 4, 3)
+    centres = sorted(map(tuple, np.round(_to_local(30.0, feet_in[72:, :2]), 9)))
+    assert centres == [(-2.5, -2.5), (-2.5, 2.5), (2.5, -2.5), (2.5, 2.5)]
+    w0, r0, a0 = _generated_foundation(0.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, env0 = touch_voltage_envelope(r0, w0, electrode=a0, n_angles=72)
+    assert np.abs(env[72:]).max() == pytest.approx(np.abs(env0[72:]).max(), rel=0.05)
+
+
+@pytest.mark.finding("10.21")
+def test_any_wire_name_of_a_rotated_foundation_selects_the_whole_foundation() -> None:
+    world, result, anchor = _generated_foundation(30.0, style="ring")
+    names = [e.name for e in world.electrodes]
+    assert names == [anchor, f"{anchor}_w1", f"{anchor}_w2", f"{anchor}_w3"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ref = touch_voltage_envelope(
+            result, world, electrode=anchor, return_points=True
+        )
+        for name in names[1:]:
+            got = touch_voltage_envelope(
+                result, world, electrode=name, return_points=True
+            )
+            np.testing.assert_allclose(got[2], ref[2], atol=1e-12)
+    # A ring-style foundation is one cell: its centre is sampled.
+    np.testing.assert_allclose(ref[2][-1, :2], [0.0, 0.0], atol=1e-9)
+
+
+def test_wire_suffix_without_a_bonded_root_is_an_ordinary_electrode() -> None:
+    """``x_w1`` is grouped only with an electrode ``x`` of its cluster."""
+    from groundfield.postprocess._footprint import foundation_wires
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "strip", name="x_w1", start=(0, 0, 0.5), end=(5, 0, 0.5))
+    gf.create_electrode(w, "strip", name="y", start=(0, 9, 0.5), end=(5, 9, 0.5))
+    gf.create_electrode(w, "strip", name="y_w1", start=(0, 20, 0.5), end=(5, 20, 0.5))
+    assert [e.name for e in foundation_wires(w, "x_w1")] == ["x_w1"]
+    clusters = {"y": ["y"], "y_w1": ["y_w1"]}  # not bonded
+    assert [e.name for e in foundation_wires(w, "y", clusters)] == ["y"]
+    assert [e.name for e in foundation_wires(w, "y")] == ["y", "y_w1"]
