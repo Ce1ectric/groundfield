@@ -569,8 +569,9 @@ class FieldResult(BaseModel):
         """Positions ``(N, 3)`` in m and currents ``(N, n_freq)`` in A.
 
         Built once and cached privately (10.65): converting the pydantic
-        :class:`PointSource` list cost 0.75 of 0.99 ms per single-point
-        :meth:`potential` call at N = 3687. The cache is keyed by the
+        :class:`PointSource` list dominates a single-point
+        :meth:`potential` call (8.4 ms rebuilt vs 0.13 ms cached at
+        N = 3687). The cache is keyed by the
         identity and the length of :attr:`point_sources`, so assigning a
         new list or appending invalidates it; the list is otherwise
         treated as read-only after the solve (in-place edits of single
@@ -610,6 +611,7 @@ class FieldResult(BaseModel):
             np.array([ps.direction for ps in self.point_sources], dtype=float),
             np.zeros(len(self.point_sources)),
         )
+
     def _potential_homogeneous(
         self,
         pts: np.ndarray,

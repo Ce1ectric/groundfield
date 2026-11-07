@@ -6,8 +6,9 @@ same image terms in the same order and with the same IEEE operations
 as the numpy block :func:`groundfield.solver._kernels._series_block_numpy`
 — no fused multiply-add, no reciprocal approximation — so both paths
 give bit-identical matrices; numba only removes the temporaries and
-vectorises the loop over sources (about 2.6× faster than the numpy
-block on one core, review pass 10, 10.58).
+vectorises the loop over sources (about 3× faster than the numpy
+block on one core for 1 200 segments and 148 images, review pass 10,
+10.58).
 
 The fast-math flags ``nnan``, ``ninf`` and ``nsz`` let the compiler
 vectorise the clamp ``max(r, d)``; they do not change any result for
