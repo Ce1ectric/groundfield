@@ -327,3 +327,53 @@ def test_line_result_round_trips_through_json() -> None:
     pts = np.array([[1.0, 0.0, 0.0], [5.0, 5.0, 0.8 + 0.01], [30.0, 5.0, 0.0]])
     assert back.metadata["kernel"] == "line"
     np.testing.assert_array_equal(back.potential(pts), res.potential(pts))
+
+
+@pytest.mark.finding("10.28")
+def test_separated_skew_pairs_use_an_accurate_plain_rule(monkeypatch) -> None:
+    """Skew pairs at least one segment length apart skip the graded rule;
+    the plain Gauss–Legendre rule agrees with it to 1e-10."""
+    from groundfield.solver import _line_kernel as lk
+
+    rng = np.random.default_rng(7)
+    n = 600
+    mid = rng.uniform(-2.0, 2.0, size=(n, 3)) + np.array([0.0, 0.0, 3.0])
+    tangent = rng.normal(size=(n, 3))
+    tangent /= np.linalg.norm(tangent, axis=1)[:, None]
+    segs = lk.LineSegments(mid, rng.uniform(0.2, 1.0, n), tangent, np.full(n, 0.005))
+    i, j = rng.integers(0, n, 3000), rng.integers(0, n, 3000)
+    adaptive = lk.galerkin_pairs(segs, i, segs, j)
+    monkeypatch.setattr(lk, "_PLAIN_RULE_SEPARATION", np.inf)
+    graded = lk.galerkin_pairs(segs, i, segs, j)
+    np.testing.assert_allclose(adaptive, graded, rtol=1e-10)
+
+
+@pytest.mark.finding("10.28")
+def test_numba_far_field_block_is_bit_identical(monkeypatch) -> None:
+    """The optional compiled far-field term equals the numpy blocks."""
+    pytest.importorskip("numba")
+    from groundfield.solver import _kernels
+    from groundfield.solver import _line_kernel as lk
+
+    rng = np.random.default_rng(3)
+    n = 300
+    mid = rng.uniform(-20.0, 20.0, size=(n, 3))
+    mid[:, 2] = rng.uniform(0.3, 3.0, size=n)
+    tangent = rng.normal(size=(n, 3))
+    tangent /= np.linalg.norm(tangent, axis=1)[:, None]
+    segs = lk.LineSegments(mid, rng.uniform(0.2, 1.0, n), tangent, np.full(n, 0.005))
+    pts = np.column_stack(
+        [rng.uniform(-25, 25, 200), rng.uniform(-25, 25, 200), np.zeros(200)]
+    )
+    monkeypatch.setattr(lk, "LINE_NUMBA_MIN_PAIRS", 0)
+    compiled = (
+        lk.reaction_quadrupole_rows(segs, 0, n),
+        lk.field_quadrupole_rows(pts, segs),
+    )
+    monkeypatch.setattr(_kernels, "USE_NUMBA", False)
+    plain = (
+        lk.reaction_quadrupole_rows(segs, 0, n),
+        lk.field_quadrupole_rows(pts, segs),
+    )
+    np.testing.assert_array_equal(compiled[0], plain[0])
+    np.testing.assert_array_equal(compiled[1], plain[1])

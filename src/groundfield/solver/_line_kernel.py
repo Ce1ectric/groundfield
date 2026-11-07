@@ -214,6 +214,15 @@ def _graded_rule(n_nodes: int = 8) -> tuple[np.ndarray, np.ndarray]:
 
 
 _GRADED_NODES, _GRADED_WEIGHTS = _graded_rule()
+_PLAIN_NODES = 0.5 * (leggauss(8)[0] + 1.0)  # plain 8-point rule on [0, 1]
+_PLAIN_WEIGHTS = 0.5 * leggauss(8)[1]
+
+#: A skew pair whose segments stay at least this many observer lengths
+#: apart is integrated with one plain 8-point Gauss–Legendre panel per
+#: side instead of the graded rule: the integrand's nearest singularity
+#: is then at least one panel length away, and the rule is accurate to
+#: about 1e-10 relative (checked against the graded rule).
+_PLAIN_RULE_SEPARATION = 1.0
 
 
 def _closest_parameter(Ai, di, Aj, dj) -> np.ndarray:
@@ -246,15 +255,34 @@ def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
     """
     s_star = _closest_parameter(Ai, Li[:, None] * ti, Aj, Lj[:, None] * tj)
     x_star = s_star * Li
+    # Separation at the closest approach: distance of the closest point
+    # of segment i from segment j. Well separated pairs (most near
+    # pairs) need no grading.
+    X_star = Ai + x_star[:, None] * ti
+    W = X_star - Aj
+    along = np.clip(np.einsum("pk,pk->p", W, tj), 0.0, Lj)
+    gap = W - along[:, None] * tj
+    plain = np.einsum("pk,pk->p", gap, gap) >= (_PLAIN_RULE_SEPARATION * Li) ** 2
     total = np.zeros(Ai.shape[0])
-    for side, extent in ((-1.0, x_star), (+1.0, Li - x_star)):
-        # nodes x = x* + side·extent·u, u in [0, 1] graded towards 0
-        x = x_star[:, None] + side * extent[:, None] * _GRADED_NODES[None, :]
-        X = Ai[:, None, :] + x[:, :, None] * ti[:, None, :]
-        phi = line_potential_pairs(
-            X, Aj[:, None, :], tj[:, None, :], Lj[:, None], a2[:, None]
-        )
-        total += extent * (phi @ _GRADED_WEIGHTS)
+    for mask, nodes, weights in (
+        (~plain, _GRADED_NODES, _GRADED_WEIGHTS),
+        (plain, _PLAIN_NODES, _PLAIN_WEIGHTS),
+    ):
+        if not mask.any():
+            continue
+        xs, Lm = x_star[mask], Li[mask]
+        A_i, t_i = Ai[mask], ti[mask]
+        A_j, t_j, L_j, a2_j = Aj[mask], tj[mask], Lj[mask], a2[mask]
+        part = np.zeros(xs.shape[0])
+        for side, extent in ((-1.0, xs), (+1.0, Lm - xs)):
+            # nodes x = x* + side·extent·u, u in [0, 1] (graded towards 0)
+            x = xs[:, None] + side * extent[:, None] * nodes[None, :]
+            X = A_i[:, None, :] + x[:, :, None] * t_i[:, None, :]
+            phi = line_potential_pairs(
+                X, A_j[:, None, :], t_j[:, None, :], L_j[:, None], a2_j[:, None]
+            )
+            part += extent * (phi @ weights)
+        total[mask] = part
     return total / Li
 
 
@@ -446,11 +474,58 @@ def reaction_corrections(segs: LineSegments, min_distance: float) -> SparseCorre
     return SparseCorrection.concatenate(parts)
 
 
+#: Pair count from which the optional numba kernel evaluates the dense
+#: far-field term (below it the numpy path is as fast). Both paths give
+#: bit-identical blocks; ``groundfield.solver._kernels.USE_NUMBA``
+#: switches numba off for the line kernel as well.
+LINE_NUMBA_MIN_PAIRS: int = 200_000
+
+
+def _numba_quadrupole_rows():
+    """The compiled kernel, or ``None`` (numba missing or switched off)."""
+    from groundfield.solver import _kernels
+
+    if not _kernels.USE_NUMBA:
+        return None
+    try:
+        from groundfield.solver._line_numba import quadrupole_rows
+    except ImportError:  # numba is an optional extra
+        return None
+    return quadrupole_rows
+
+
+def _quadrupole_with_image(
+    obs_mid: np.ndarray,
+    obs_t: np.ndarray | None,
+    obs_len: np.ndarray,
+    segs: LineSegments,
+) -> np.ndarray:
+    """``quadrupole_block`` of the segments plus that of their surface images."""
+    img = segs.image()
+    kernel = None
+    if obs_mid.shape[0] * segs.mid.shape[0] >= LINE_NUMBA_MIN_PAIRS:
+        kernel = _numba_quadrupole_rows()
+    if kernel is None:
+        return quadrupole_block(obs_mid, obs_t, obs_len, segs) + quadrupole_block(
+            obs_mid, obs_t, obs_len, img
+        )
+    out = np.empty((obs_mid.shape[0], segs.mid.shape[0]))
+    t = obs_t if obs_t is not None else np.zeros_like(obs_mid)
+    c = np.ascontiguousarray
+    kernel(
+        c(obs_mid[:, 0]), c(obs_mid[:, 1]), c(obs_mid[:, 2]),
+        c(t[:, 0]), c(t[:, 1]), c(t[:, 2]), c(obs_len, dtype=float), obs_t is not None,
+        c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.mid[:, 2]), c(img.mid[:, 2]),
+        c(segs.tangent[:, 0]), c(segs.tangent[:, 1]), c(segs.tangent[:, 2]),
+        c(img.tangent[:, 2]), c(segs.length, dtype=float), float(NEAR_FACTOR), out,
+    )  # fmt: skip
+    return out
+
+
 def reaction_quadrupole_rows(segs: LineSegments, i0: int, i1: int) -> np.ndarray:
     """Dense far-field correction of rows ``i0:i1`` (direct + surface image)."""
     sl = slice(i0, i1)
-    obs = (segs.mid[sl], segs.tangent[sl], segs.length[sl])
-    return quadrupole_block(*obs, segs) + quadrupole_block(*obs, segs.image())
+    return _quadrupole_with_image(segs.mid[sl], segs.tangent[sl], segs.length[sl], segs)
 
 
 def _depth_gap(z_obs: np.ndarray, z_img_lo: float, z_img_hi: float) -> float:
@@ -527,10 +602,7 @@ def field_corrections(
 
 def field_quadrupole_rows(points: np.ndarray, segs: LineSegments) -> np.ndarray:
     """Dense far-field correction at field points (direct + surface image)."""
-    zero = np.zeros(points.shape[0])
-    return quadrupole_block(points, None, zero, segs) + quadrupole_block(
-        points, None, zero, segs.image()
-    )
+    return _quadrupole_with_image(points, None, np.zeros(points.shape[0]), segs)
 
 
 def series_field_corrections(
