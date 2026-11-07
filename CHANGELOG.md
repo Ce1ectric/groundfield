@@ -2,8 +2,29 @@
 
 All notable changes to `groundfield` are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+**Versioning.** From `2026.11.0` on, the project uses
+[Calendar Versioning](https://calver.org/) with the scheme `YYYY.MM.MICRO` in
+its [PEP 440](https://peps.python.org/pep-0440/) form: the month has no leading
+zero and there is no hyphen, `MICRO` counts the earlier releases of the same
+month, and tags carry a `v` prefix. `2026.11.0` is the first release of
+November 2026, `2026.11.1` the second one, `2027.1.0` the first release of
+January 2027. Releases up to `0.15.0` followed
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+**Deprecation policy.** A calendar version carries no compatibility promise;
+compatibility follows this policy instead:
+
+- A deprecated name, parameter or behaviour keeps working and emits a
+  `DeprecationWarning` that names its replacement and the earliest release in
+  which it may be removed.
+- It is removed no earlier than two releases **and** six months after the
+  release that announced the deprecation (announced in `2026.11.0`: removed in
+  `2027.5.0` at the earliest).
+- Every deprecation is listed under **Deprecated** in the release that
+  announces it, every removal under **Removed** in the release that performs
+  it.
 
 Change categories follow the Keep-a-Changelog vocabulary:
 
@@ -18,9 +39,9 @@ Change categories follow the Keep-a-Changelog vocabulary:
 
 The backlog of ideas that are not yet scheduled is kept at the end of this
 file under **Roadmap**. During regular work, add your entry under the
-matching category in `[Unreleased]`; the release script
-(`scripts/release.py`) moves the whole `[Unreleased]` block into a new
-version section when a release is cut.
+matching category in `[Unreleased]`; the release tool
+(`python scripts/release.py calver`) turns the whole `[Unreleased]` block into
+a new section `## [YYYY.M.MICRO] - YYYY-MM-DD` when a release is cut.
 
 ---
 
