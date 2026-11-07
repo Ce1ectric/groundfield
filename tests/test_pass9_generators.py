@@ -264,7 +264,16 @@ def test_f25_built_world_foundation_sits_on_the_ombr() -> None:
     for e in world.electrodes:
         if not e.name.startswith("residential_0_foundation_0"):
             continue
-        for point in (e.start, e.end):
+        # The OMBR of this L lies at 90 deg; since 10.39 a rectangle at a
+        # right angle is built on the grid-mesh path (corner + size).
+        if e.kind == "grid_mesh":
+            (x0, y0, _), (sx, sy) = e.corner, e.size
+            points = [(x0, y0), (x0 + sx, y0 + sy)]
+        elif e.kind == "polyline":
+            points = [v[:2] for v in e.vertices]
+        else:
+            points = [e.start[:2], e.end[:2]]
+        for point in points:
             xs.append(point[0])
             ys.append(point[1])
     assert xs, "no foundation electrode was built"

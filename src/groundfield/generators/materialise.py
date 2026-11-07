@@ -321,11 +321,17 @@ def _materialise_foundation(
         shell_coefficient_ohm_m=shell_coeff,
     )
 
+    # A rectangle turned by a multiple of 90 deg is axis-aligned: realise
+    # it on the grid-mesh path with swapped sides (and mesh counts), so
+    # the same rectangle always gets the same discretisation whichever
+    # way it was described (10.39).
+    angle_deg, dx, dy, nx, ny = _canonical_right_angle(
+        spec.orientation_deg or 0.0, dx, dy, nx, ny
+    )
     # A distributed shell needs per-wire primitives (the coefficient is
-    # carried per segment), so it always takes the strip path.
-    angle_deg = spec.orientation_deg or 0.0
+    # carried per segment), so it always takes the per-wire path.
     force_strip_path = strip_shell_coefficient > 0.0
-    if abs(angle_deg) < 1e-9 and not force_strip_path:
+    if angle_deg == 0.0 and not force_strip_path:
         create_electrode(
             world,
             "grid_mesh",
@@ -351,6 +357,41 @@ def _materialise_foundation(
         concrete_shell_coefficient=strip_shell_coefficient,
         bond_conductor_type=bond_conductor_type,
     )
+
+
+_RIGHT_ANGLE_TOL_DEG = 1e-9
+"""Angles closer than this (degrees) to a multiple of 90 count as one."""
+
+
+def _canonical_right_angle(
+    angle_deg: float, dx: float, dy: float, nx: int, ny: int
+) -> tuple[float, float, float, int, int]:
+    """Map a rectangle turned by k·90° onto the equivalent 0° rectangle.
+
+    Parameters
+    ----------
+    angle_deg
+        Rotation of the local ``+x`` axis in degrees.
+    dx, dy
+        Side lengths in m along local ``x`` / ``y``.
+    nx, ny
+        Mesh cells along local ``x`` / ``y``.
+
+    Returns
+    -------
+    tuple
+        ``(angle_deg, dx, dy, nx, ny)``. For an angle within
+        :data:`_RIGHT_ANGLE_TOL_DEG` of an even multiple of 90° the angle
+        becomes ``0.0``; for an odd multiple it becomes ``0.0`` with the
+        sides and mesh counts swapped. Any other angle is returned
+        unchanged.
+    """
+    quarter_turns = round(angle_deg / 90.0)
+    if abs(angle_deg - 90.0 * quarter_turns) > _RIGHT_ANGLE_TOL_DEG:
+        return angle_deg, dx, dy, nx, ny
+    if quarter_turns % 2:
+        return 0.0, dy, dx, ny, nx
+    return 0.0, dx, dy, nx, ny
 
 
 def _materialise_polygon_foundation(
@@ -420,6 +461,18 @@ def _materialise_rotated_foundation(
     others are ``f"{name}_w{j}"``, bonded to the anchor by
     ``f"{name}_bond_{j}"``. Only perimeter wires carry the distributed
     concrete-shell coefficient (internal braces are not encased).
+
+    Notes
+    -----
+    A wire that is crossed by other wires of the mesh is built as an open
+    :class:`~groundfield.geometry.electrodes.PolylineElectrode` with a
+    vertex at every crossing; a wire without crossings (every wire of a
+    ``style="ring"`` foundation) stays a
+    :class:`~groundfield.geometry.electrodes.StripElectrode`. Each
+    polyline edge (one mesh span) is discretised on its own, so crossings
+    fall on segment ends — the rule of the axis-aligned
+    ``GridMeshElectrode`` — and segment midpoints of crossing wires never
+    coincide (10.39). Each wire is one uniform-current owner, as before.
     """
     cos_a = math.cos(math.radians(angle_deg))
     sin_a = math.sin(math.radians(angle_deg))
@@ -427,38 +480,40 @@ def _materialise_rotated_foundation(
     half_x = 0.5 * dx
     half_y = 0.5 * dy
 
-    def to_world(lx: float, ly: float) -> tuple[float, float]:
-        return cos_a * lx - sin_a * ly + cx, sin_a * lx + cos_a * ly + cy
+    def to_world(lx: float, ly: float) -> tuple[float, float, float]:
+        return cos_a * lx - sin_a * ly + cx, sin_a * lx + cos_a * ly + cy, depth
 
-    wires: list[tuple[tuple[float, float], tuple[float, float]]] = []
-    for k in range(n_y + 1):
-        ly = -half_y + k * (dy / n_y)
-        wires.append(((-half_x, ly), (half_x, ly)))
-    for k in range(n_x + 1):
-        lx = -half_x + k * (dx / n_x)
-        wires.append(((lx, -half_y), (lx, half_y)))
-
-    perimeter_long = {0, n_y}
-    perimeter_trans = {n_y + 1, n_y + 1 + n_x}
+    xs = [-half_x + k * (dx / n_x) for k in range(n_x + 1)]
+    ys = [-half_y + k * (dy / n_y) for k in range(n_y + 1)]
+    # Local vertices of every wire: longitudinal wires at each y, through
+    # every x; transverse wires at each x, through every y.
+    wires = [[(x, y) for x in xs] for y in ys] + [[(x, y) for y in ys] for x in xs]
+    perimeter = {0, n_y, n_y + 1, n_y + 1 + n_x}
     sub_names: list[str] = []
-    for j, ((lsx, lsy), (lex, ley)) in enumerate(wires):
+    for j, local in enumerate(wires):
         sub_name = name if j == 0 else f"{name}_w{j}"
-        sx, sy = to_world(lsx, lsy)
-        tx, ty = to_world(lex, ley)
-        on_perimeter = (j < (n_y + 1) and j in perimeter_long) or (
-            j >= (n_y + 1) and j in perimeter_trans
-        )
-        create_electrode(
-            world,
-            "strip",
-            name=sub_name,
-            start=(sx, sy, depth),
-            end=(tx, ty, depth),
-            wire_radius=wire_radius,
-            concrete_shell_coefficient_ohm_m=(
-                concrete_shell_coefficient if on_perimeter else 0.0
-            ),
-        )
+        coefficient = concrete_shell_coefficient if j in perimeter else 0.0
+        vertices = [to_world(lx, ly) for lx, ly in local]
+        if len(vertices) == 2:
+            create_electrode(
+                world,
+                "strip",
+                name=sub_name,
+                start=vertices[0],
+                end=vertices[1],
+                wire_radius=wire_radius,
+                concrete_shell_coefficient_ohm_m=coefficient,
+            )
+        else:
+            create_electrode(
+                world,
+                "polyline",
+                name=sub_name,
+                vertices=vertices,
+                closed=False,
+                wire_radius=wire_radius,
+                concrete_shell_coefficient_ohm_m=coefficient,
+            )
         sub_names.append(sub_name)
     anchor = sub_names[0]
     for j, sn in enumerate(sub_names[1:], start=1):
