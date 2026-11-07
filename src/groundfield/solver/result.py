@@ -456,7 +456,10 @@ class FieldResult(BaseModel):
             raise KeyError(f"No current data for '{electrode_name}'.")
         u = self.electrode_potentials[electrode_name]
         i = self.electrode_currents[electrode_name]
-        return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i)]
+        return [
+            (uk / ik) if ik != 0 else complex("nan")
+            for uk, ik in zip(u, i, strict=False)
+        ]
 
     def cluster_impedance(self, electrode_name: str) -> list[complex]:
         """Grounding impedance of the galvanic cluster containing an electrode.
@@ -560,7 +563,10 @@ class FieldResult(BaseModel):
             sum(self.electrode_currents[m][k] for m in current_members)
             for k in range(n_freq)
         ]
-        return [(uk / ik) if ik != 0 else complex("nan") for uk, ik in zip(u, i_sum)]
+        return [
+            (uk / ik) if ik != 0 else complex("nan")
+            for uk, ik in zip(u, i_sum, strict=False)
+        ]
 
     def _cluster_potential(
         self, electrode_name: str
@@ -601,7 +607,7 @@ class FieldResult(BaseModel):
             complex(
                 sum(
                     float(wm) * self.electrode_potentials[m][k]
-                    for wm, m in zip(w, usable)
+                    for wm, m in zip(w, usable, strict=False)
                 )
                 / float(w.sum())
             )
@@ -707,7 +713,7 @@ class FieldResult(BaseModel):
             _, u_r = self._cluster_potential(record.return_to)
         return [
             (ua - ur) / ik if ik != 0 else complex("nan")
-            for ua, ur, ik in zip(u_a, u_r, record.current)
+            for ua, ur, ik in zip(u_a, u_r, record.current, strict=False)
         ]
 
     # ------------------------------------------------------------------
@@ -728,8 +734,10 @@ class FieldResult(BaseModel):
           set but ``soil_resistivity`` available): classic image-charge
           sum $1/r + 1/r_{\\text{img}}$.
         - **2-layer** (:class:`TwoLayerSoil`, or :class:`MultiLayerSoil`
-          with exactly two layers): Tagg/Sunde series with adaptive
-          truncation (tolerance $10^{-6}$, at most 100 terms).
+          with exactly two layers): Tagg/Sunde series truncated with the
+          controls of the solve, ``metadata["series"]`` (the engine's
+          ``image_max_terms`` and ``image_series_tol``; defaults 300 and
+          ``1e-6`` for results without the record).
         - **1-layer** (:class:`MultiLayerSoil` with a single layer):
           degenerate case, dispatched to the homogeneous kernel.
 
@@ -746,6 +754,12 @@ class FieldResult(BaseModel):
         -------
         phi : np.ndarray, shape (M,)
             Complex potential in V.
+
+        Warns
+        -----
+        SeriesTruncationWarning
+            If the two-layer series reaches ``max_terms`` before its tail
+            bound falls below ``tol``.
 
         Raises
         ------
@@ -914,8 +928,8 @@ class FieldResult(BaseModel):
         currents: np.ndarray,
         soil: TwoLayerSoil,
         min_distance: float,
-        max_terms: int = 100,
-        tol: float = 1e-6,
+        max_terms: int | None = None,
+        tol: float | None = None,
         line=None,
     ) -> np.ndarray:
         """Tagg/Sunde series for 2-layer soil (upper-layer fast path).
@@ -928,10 +942,24 @@ class FieldResult(BaseModel):
         +25 % at z = 12 m for K = +0.818, h_1 = 5 m). Pure
         upper-layer evaluations are bit-exact to the historic path.
 
+        The series controls default to those recorded with the solve
+        (``metadata["series"]``, see
+        :func:`~groundfield.solver._series.series_controls`); up to
+        2026.11 they were hard-coded to 100 terms and ``1e-6`` whatever
+        ``Engine.image_max_terms`` said (review pass 10, 10.25: +0.83 % at
+        100 m, +3.6 % at 500 m for :math:`K = -0.94`). A truncated series
+        emits :class:`~groundfield.solver._series.SeriesTruncationWarning`.
+
         With the line kernel (``line`` given) the upper-layer series
         uses line sources; pairs involving layer 2 keep the point form
         of the spectral kernel.
         """
+        if max_terms is None or tol is None:
+            from groundfield.solver._series import series_controls
+
+            rec_terms, rec_tol = series_controls(self.metadata)
+            max_terms = rec_terms if max_terms is None else max_terms
+            tol = rec_tol if tol is None else tol
         h_1 = soil.h_1
         rho_1 = soil.rho_1
 
@@ -980,6 +1008,7 @@ class FieldResult(BaseModel):
         from groundfield.solver._series import ImageSeries
 
         series = ImageSeries.for_soil(soil, max_terms, tol)
+        series.warn_if_truncated("FieldResult.potential")
         # An all-zero imaginary part (galvanic solves) sums to exactly
         # zero and is skipped.
         parts = [currents.real]

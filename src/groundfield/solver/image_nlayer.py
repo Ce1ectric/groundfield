@@ -92,8 +92,8 @@ def solve_image_nlayer(
     world: "World",
     engine: "Engine",
     *,
-    max_terms: int = 200,
-    tol: float = 1e-6,
+    max_terms: int | None = None,
+    tol: float | None = None,
 ) -> FieldResult:
     """Image-charge dispatcher for n-layer soil.
 
@@ -110,8 +110,9 @@ def solve_image_nlayer(
         Engine configuration; ``engine.segment_length`` controls the
         discretisation.
     max_terms, tol
-        Forwarded to :func:`solve_image_2layer` for ``n = 2``;
-        ignored otherwise.
+        Series controls forwarded to :func:`solve_image_2layer` for
+        ``n = 2`` (``None``, the default, takes ``engine.image_max_terms``
+        / ``engine.image_series_tol``); ignored otherwise.
 
     Returns
     -------

@@ -39,12 +39,14 @@ remaining tail bound and whether ``tol`` was reached.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
+import warnings
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
-__all__ = ["ImageSeries", "SeriesTruncationWarning"]
+__all__ = ["ImageSeries", "SeriesTruncationWarning", "series_controls"]
 
 
 class SeriesTruncationWarning(UserWarning):
@@ -57,6 +59,41 @@ class SeriesTruncationWarning(UserWarning):
     ``warnings.simplefilter("ignore", SeriesTruncationWarning)`` or
     raise ``Engine.image_max_terms``.
     """
+
+
+def series_controls(metadata: Mapping[str, Any] | None) -> tuple[int, float]:
+    """Series controls ``(max_terms, tol)`` recorded with a solve.
+
+    :meth:`Engine.solve <groundfield.solver.engine.Engine.solve>` stores
+    the engine's ``image_max_terms`` / ``image_series_tol`` in
+    ``FieldResult.metadata["series"]``; the post-solve field evaluation
+    uses the same controls as the solve (review pass 10, 10.25; before,
+    it was capped at 100 terms whatever the engine said).
+
+    Parameters
+    ----------
+    metadata
+        ``FieldResult.metadata`` (or ``None``).
+
+    Returns
+    -------
+    tuple[int, float]
+        Maximum number of terms and tail-bound tolerance. Results without
+        the record (hand-built, or written before 2026.11) get the engine
+        defaults :data:`~groundfield.solver.registry.DEFAULT_IMAGE_MAX_TERMS`
+        and :data:`~groundfield.solver.registry.DEFAULT_IMAGE_SERIES_TOL`.
+    """
+    from groundfield.solver.registry import (
+        DEFAULT_IMAGE_MAX_TERMS,
+        DEFAULT_IMAGE_SERIES_TOL,
+    )
+
+    record = (metadata or {}).get("series")
+    if not isinstance(record, Mapping):
+        return DEFAULT_IMAGE_MAX_TERMS, DEFAULT_IMAGE_SERIES_TOL
+    max_terms = record.get("max_terms", DEFAULT_IMAGE_MAX_TERMS)
+    tol = record.get("tol", DEFAULT_IMAGE_SERIES_TOL)
+    return int(max_terms), float(tol)
 
 
 def _series_tail_bound(abs_K: float, n: int) -> float:
@@ -155,7 +192,10 @@ class ImageSeries:
             if _series_tail_bound(abs_K, n) < tol:
                 break
         return cls(
-            K=float(K), h_1=float(h_1), max_terms=int(max_terms), tol=float(tol),
+            K=float(K),
+            h_1=float(h_1),
+            max_terms=int(max_terms),
+            tol=float(tol),
             n_terms=n_used,
         )
 
@@ -224,6 +264,39 @@ class ImageSeries:
     def converged(self) -> bool:
         """Whether the tail bound fell below :attr:`tol`."""
         return self.tail_bound < self.tol if self.n_terms else True
+
+    def warn_if_truncated(self, where: str, *, stacklevel: int | None = None) -> bool:
+        """Emit :class:`SeriesTruncationWarning` if :attr:`converged` is false.
+
+        Parameters
+        ----------
+        where
+            Caller named in the message (e.g. ``"FieldResult.potential"``).
+        stacklevel
+            ``stacklevel`` of the warning, counted from the caller of this
+            method. ``None`` (default) attributes the warning to the first
+            frame outside the package (the user's line).
+
+        Returns
+        -------
+        bool
+            Whether a warning was emitted.
+        """
+        if self.converged:
+            return False
+        message = (
+            f"{where}: the Tagg/Sunde image series was truncated at "
+            f"max_terms={self.max_terms} with a remaining tail bound of "
+            f"{self.tail_bound:.2e} > tol={self.tol:.2e} (|K| = {abs(self.K):.3f}). "
+            "Raise Engine.image_max_terms for high layer contrasts."
+        )
+        if stacklevel is None:
+            from groundfield.solver.registry import warn_external
+
+            warn_external(message, SeriesTruncationWarning)
+        else:
+            warnings.warn(message, SeriesTruncationWarning, stacklevel=stacklevel + 1)
+        return True
 
     def report(self) -> dict[str, float | int | bool]:
         """Convergence report for ``FieldResult.metadata``.

@@ -127,8 +127,8 @@ def _probe_potential_two_layer(
     currents: np.ndarray,  # (N, J) complex or real
     soil: TwoLayerSoil,
     min_distance: float,
-    max_terms: int = 100,
-    tol: float = 1e-6,
+    max_terms: int,
+    tol: float,
     line: LineSegments | None = None,
 ) -> np.ndarray:
     """Matrix form of :meth:`FieldResult._potential_two_layer`.
@@ -219,6 +219,7 @@ def _probe_potential_two_layer(
         return phi
 
     series = ImageSeries.for_soil(soil, max_terms, tol)
+    series.warn_if_truncated("solve_mutual_matrix / solve_mutual_field")
     # An all-zero imaginary part sums to exactly zero and is skipped.
     parts = [currents.real]
     if np.any(currents.imag):
@@ -250,6 +251,8 @@ class _MutualProblem:
     omega: float
     carson_dz: np.ndarray | None
     line: LineSegments | None = None
+    max_terms: int = 300
+    tol: float = 1e-6
 
 
 def _prepare(
@@ -300,17 +303,15 @@ def _prepare(
 
     # Kernel choice of the engine (10.28): point (default) or exact line
     # sources, for the reaction matrix and the field evaluation alike.
-    line = (
-        arrays.line_segments() if getattr(engine, "kernel", "point") == "line" else None
-    )
+    line = arrays.line_segments() if engine.kernel == "line" else None
     if soil_two_layer is not None:
         # 2-layer reaction operator: feed the engine's image-series
         # truncation, exactly like ``solve_image_2layer``.
         z_max = float(arrays.points[:, 2].max())
         kernel = _two_layer_self_kernel_factory(
             soil_two_layer,
-            int(getattr(engine, "image_max_terms", 100)),
-            float(getattr(engine, "image_series_tol", 1e-6)),
+            int(engine.image_max_terms),
+            float(engine.image_series_tol),
             allow_cross_layer=bool(z_max >= soil_two_layer.h_1),
             line=line,
         )
@@ -345,6 +346,8 @@ def _prepare(
         omega=omega,
         carson_dz=carson_dz,
         line=line,
+        max_terms=int(engine.image_max_terms),
+        tol=float(engine.image_series_tol),
     )
 
 
@@ -405,10 +408,14 @@ def _field_of_columns(
     T: np.ndarray,
     *,
     min_distance: float,
-    max_terms: int,
-    tol: float,
+    max_terms: int | None,
+    tol: float | None,
 ) -> np.ndarray:
-    """Potential at ``field_points`` of every leakage column of ``T``."""
+    """Potential at ``field_points`` of every leakage column of ``T``.
+
+    ``max_terms`` / ``tol`` of ``None`` take the engine's series controls
+    (review pass 10, 10.25: they were 100 / 1e-6 whatever the engine said).
+    """
     seg_points = problem.arrays.points
     if problem.soil_two_layer is not None:
         return _probe_potential_two_layer(
@@ -417,8 +424,8 @@ def _field_of_columns(
             T,
             problem.soil_two_layer,
             min_distance,
-            max_terms=max_terms,
-            tol=tol,
+            max_terms=problem.max_terms if max_terms is None else int(max_terms),
+            tol=problem.tol if tol is None else float(tol),
             line=problem.line,
         )
     K_probe = _probe_kernel_homogeneous(
@@ -448,8 +455,8 @@ def solve_mutual_matrix(
     frequency_index: int = 0,
     symmetrize: bool = True,
     matrix_min_distance: float = 1e-3,
-    matrix_max_terms: int = 100,
-    matrix_tol: float = 1e-6,
+    matrix_max_terms: int | None = None,
+    matrix_tol: float | None = None,
 ) -> np.ndarray:
     """Full mutual grounding-impedance matrix ``Z_G`` in one assembly.
 
@@ -496,12 +503,12 @@ def solve_mutual_matrix(
         If ``True`` (default) return ``0.5 · (Z + Zᵀ)`` — the historic
         post-processing.
     matrix_min_distance, matrix_max_terms, matrix_tol
-        Truncation / clamp parameters of the **off-diagonal** field
-        evaluation. The defaults ``1e-3 / 100 / 1e-6`` reproduce the
-        hard-coded defaults of :meth:`FieldResult.potential` /
-        ``_potential_two_layer`` exactly. (The reaction-matrix
-        assembly uses ``engine.image_max_terms`` / ``image_series_tol``
-        independently, just like the live solver.)
+        Clamp distance in m and series controls of the **off-diagonal**
+        field evaluation. ``None`` (default) for the series controls
+        takes ``engine.image_max_terms`` / ``engine.image_series_tol``,
+        the controls :meth:`FieldResult.potential` uses after a solve
+        with the same engine (before 2026.11 they were hard-coded to
+        100 / ``1e-6``, review pass 10, 10.25).
 
     Returns
     -------
@@ -613,8 +620,8 @@ def solve_mutual_field(
     *,
     frequency_index: int = 0,
     matrix_min_distance: float = 1e-3,
-    matrix_max_terms: int = 100,
-    matrix_tol: float = 1e-6,
+    matrix_max_terms: int | None = None,
+    matrix_tol: float | None = None,
 ) -> np.ndarray:
     """Galvanic Green-function matrix: potential at arbitrary field points per node.
 
@@ -665,11 +672,12 @@ def solve_mutual_field(
         distributed conductors make the assembled system
         frequency-dependent.
     matrix_min_distance, matrix_max_terms, matrix_tol
-        Truncation / clamp parameters of the field evaluation. The defaults
-        ``1e-3 / 100 / 1e-6`` reproduce the hard-coded defaults of
-        :meth:`FieldResult.potential` / ``_potential_two_layer`` exactly.
-        (The reaction-matrix assembly uses ``engine.image_max_terms`` /
-        ``image_series_tol`` independently, just like the live solver.)
+        Clamp distance in m and series controls of the field evaluation.
+        ``None`` (default) for the series controls takes
+        ``engine.image_max_terms`` / ``engine.image_series_tol``, the
+        controls :meth:`FieldResult.potential` uses after a solve with the
+        same engine (before 2026.11 they were hard-coded to 100 /
+        ``1e-6``, review pass 10, 10.25).
 
     Returns
     -------

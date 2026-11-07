@@ -821,9 +821,7 @@ class Engine(BaseModel):
     ) -> FieldResult:
         """Checks, dispatch and metadata core (see :meth:`solve`)."""
         _registry.emit_resolution_warnings(resolved)
-        # ``Engine.kernel`` is added by the line-kernel work (10.28); until
-        # then no kernel is requested and the backends use their own.
-        kernel = getattr(self, "kernel", None)
+        kernel = self.kernel
         _registry.check_capabilities(
             resolved,
             world,
@@ -867,10 +865,14 @@ class Engine(BaseModel):
         md["soil_kind"] = str(world.soil.kind)
         md.setdefault("earth_inductive_model", self.earth_inductive_model)
         md["solve_time_s"] = float(solve_time_s)
-        md["series"] = {
-            "max_terms": int(self.image_max_terms),
-            "tol": float(self.image_series_tol),
-        }
+        # A backend that reports the series controls it ran with wins.
+        md.setdefault(
+            "series",
+            {
+                "max_terms": int(self.image_max_terms),
+                "tol": float(self.image_series_tol),
+            },
+        )
         md["provenance"] = provenance
         return result
 

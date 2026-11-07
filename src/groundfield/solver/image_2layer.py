@@ -568,6 +568,9 @@ class _TwoLayerGreen:
         self.soil_resistivity = float(soil.rho_1)
         self.reference_resistivity = float(soil.rho_1)
         self.series = ImageSeries.for_soil(soil, max_terms, tol)
+        # Set by ``prepare``: whether the reaction kernel runs on the
+        # ADR-0007 Sommerfeld path (then the image series is not used).
+        self.cross_layer = False
 
     def prepare(self, segments, arrays, *, stacklevel: int):  # noqa: ANN001
         """Detect cross-layer geometry and build the reaction kernel."""
@@ -579,6 +582,7 @@ class _TwoLayerGreen:
         # the kernel dispatches to the rigorous Sommerfeld path.
         z_max = arrays.points[:, 2].max()
         cross_layer = bool(z_max >= h_1)
+        self.cross_layer = cross_layer
         if cross_layer:
             _log.info(
                 "image_2layer: cross-layer geometry detected "
@@ -615,35 +619,38 @@ class _TwoLayerGreen:
         )
 
     def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
-        """Soil parameters and the series convergence report."""
+        """Soil parameters and the series convergence report.
+
+        The report describes the series the solve actually evaluated.
+        On the ADR-0007 cross-layer path every pair runs through the
+        Sommerfeld kernel and the image series is not used at all:
+        ``series_used`` is ``False``, ``n_terms_used`` is ``0`` and no
+        :class:`SeriesTruncationWarning` is emitted (review pass 10,
+        10.50 / F43; before, such solves reported the term count of a
+        series that never ran and warned about its truncation).
+        ``series`` records the controls for the post-solve field
+        evaluation (:meth:`FieldResult.potential`).
+        """
         soil = self.soil
         K = soil.reflection_coefficient
-        n_terms_used = 0
-        if any(np.any(sc) for sc in solution.segment_currents):
-            n_terms_used = self.series.n_terms
+        series_used = not self.cross_layer and any(
+            np.any(sc) for sc in solution.segment_currents
+        )
+        n_terms_used = self.series.n_terms if series_used else 0
         converged = (
             _series_tail_bound(abs(K), n_terms_used) < self.tol
             if n_terms_used
             else True
         )
         if not converged:
-            tail = _series_tail_bound(abs(K), n_terms_used)
-            _log.warning(
+            _log.info(
                 "image_2layer: max_terms=%d reached, series tail bound "
-                "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e. Result may be "
-                "inaccurate.",
+                "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e.",
                 self.max_terms,
-                tail,
+                _series_tail_bound(abs(K), n_terms_used),
                 self.tol,
             )
-            warnings.warn(
-                f"image_2layer: the Tagg/Sunde image series was truncated "
-                f"at max_terms={self.max_terms} with a remaining tail bound "
-                f"of {tail:.2e} > tol={self.tol:.2e} (|K| = {abs(K):.3f}). "
-                "Raise Engine.image_max_terms for high layer contrasts.",
-                SeriesTruncationWarning,
-                stacklevel=stacklevel,
-            )
+            self.series.warn_if_truncated("image_2layer", stacklevel=stacklevel)
         return {
             "K": float(K),
             "rho_1": float(soil.rho_1),
@@ -651,6 +658,8 @@ class _TwoLayerGreen:
             "h_1": float(soil.h_1),
             "n_terms_used": n_terms_used,
             "converged": converged,
+            "series_used": series_used,
+            "series": {"max_terms": int(self.max_terms), "tol": float(self.tol)},
         }
 
 
@@ -658,8 +667,8 @@ def solve_image_2layer(
     world: "World",
     engine: "Engine",
     *,
-    max_terms: int = 100,
-    tol: float = 1e-6,
+    max_terms: int | None = None,
+    tol: float | None = None,
 ) -> FieldResult:
     """Image-charge solver for 2-layer soil (Tagg / Sunde).
 
@@ -677,17 +686,19 @@ def solve_image_2layer(
         Engine configuration. ``engine.segment_length`` controls the
         discretisation as in the homogeneous backend.
     max_terms
-        Maximum number of series terms.
+        Maximum number of series terms; ``None`` (default) takes
+        ``engine.image_max_terms``.
     tol
         Series truncation: stop as soon as the geometric tail bound
-        $|K|^{n+1}/(1-|K|)$ falls below ``tol``.
+        $|K|^{n+1}/(1-|K|)$ falls below ``tol`` (dimensionless);
+        ``None`` (default) takes ``engine.image_series_tol``.
 
     Returns
     -------
     FieldResult
         Result object. :attr:`FieldResult.metadata` exposes diagnostic
         fields (``K``, ``rho_1``, ``rho_2``, ``h_1``, ``n_terms_used``,
-        ``converged``).
+        ``converged``, ``series_used``, ``series``).
 
     Raises
     ------
@@ -700,7 +711,7 @@ def solve_image_2layer(
     Warns
     -----
     SeriesTruncationWarning
-        If the series reaches ``max_terms`` before ``tol``.
+        If the series is used and reaches ``max_terms`` before ``tol``.
     """
     if not isinstance(world.soil, TwoLayerSoil):
         raise TypeError(
@@ -718,7 +729,9 @@ def solve_image_2layer(
         soil.h_1,
         soil.reflection_coefficient,
     )
-    green = _TwoLayerGreen(
-        soil, max_terms, tol, engine.segment_length, getattr(engine, "kernel", "point")
-    )
+    if max_terms is None:
+        max_terms = engine.image_max_terms
+    if tol is None:
+        tol = engine.image_series_tol
+    green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
     return solve_image_family(world, engine, green, stacklevel=3)
