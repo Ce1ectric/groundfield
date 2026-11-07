@@ -94,7 +94,6 @@ def test_carson_series_reactance_matches_carson(freq: float) -> None:
     assert z.imag == pytest.approx(ref.imag, rel=1e-2)
 
 
-@WAVE2
 @pytest.mark.finding("10.24")
 @pytest.mark.parametrize("dsl", [None, 500.0], ids=["lumped", "single_segment"])
 def test_neumann_is_honoured_on_lumped_and_single_segment_conductors(dsl) -> None:
@@ -198,3 +197,46 @@ def test_branch_correction_is_built_once_for_all_frequencies() -> None:
     correction(2.0 * np.pi * 60.0)
     assert correction.n_assemblies == 4
     assert not np.any(correction(0.0))
+
+
+@pytest.mark.finding("10.24")
+@pytest.mark.parametrize("model", ["perfect_mirror", "carson_series"])
+@pytest.mark.parametrize("dsl", [None, 500.0], ids=["lumped", "single_segment"])
+def test_lumped_branch_equals_the_distributed_chain(model: str, dsl) -> None:
+    """With exact touching pairs (perfect_mirror) and the per-metre Carson
+    tiling the single branch is the sum of the refined chain."""
+    z_dist = _series_impedance(_pen_world(300.0, dsl=10.0), model, [50.0, 1000.0])
+    z = _series_impedance(_pen_world(300.0, dsl=dsl), model, [50.0, 1000.0])
+    np.testing.assert_allclose(z, z_dist, rtol=1e-9)
+
+
+@pytest.mark.finding("10.24")
+def test_lumped_inductive_conductor_couples_to_a_parallel_chain() -> None:
+    """The lumped branch takes part in the mutual inductances too: a lumped
+    PEN parallel to a distributed one splits the current like two chains."""
+
+    def world(dsl_b):
+        w = gf.create_world(soil=gf.HomogeneousSoil(rho=RHO_SOIL))
+        gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=3.0)
+        gf.create_electrode(w, "rod", name="g2", position=(200.0, 0.0, 0.5), length=3.0)
+        for name, y, dsl in (("a", 0.0, 20.0), ("b", 0.3, dsl_b)):
+            w.add_conductor(
+                Conductor(
+                    name=name,
+                    start=(0.0, y, 0.7),
+                    end=(200.0, y, 0.7),
+                    start_electrode="g1",
+                    end_electrode="g2",
+                    wire_radius=A_RADIUS,
+                    resistivity=RHO_AL,
+                    cross_section=A_150,
+                    discretize_segment_length=dsl,
+                    inductance_model="neumann",
+                )
+            )
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        return w
+
+    z_chain = _series_impedance(world(20.0), "perfect_mirror", [1000.0])[0]
+    z_lumped = _series_impedance(world(None), "perfect_mirror", [1000.0])[0]
+    assert z_lumped == pytest.approx(z_chain, rel=1e-9)

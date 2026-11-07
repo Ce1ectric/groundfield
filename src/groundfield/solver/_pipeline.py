@@ -369,16 +369,19 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
     """Step 4: inductance matrix and frequency-dependent branch correction.
 
     ADR-0004 + ADR-0005 + ADR-0006: the partial-inductance matrix covers
-    the distributed-conductor branches with ``inductance_model ==
-    "neumann"`` (lumped branches stay purely resistive), built on the
-    image baseline of the earth-return model (see
+    every branch of a conductor with ``inductance_model == "neumann"`` —
+    the distributed chains and, since review pass 10 (finding 10.24),
+    lumped and single-segment conductors as one branch from start to
+    end — built on the image baseline of the earth-return model (see
     :mod:`groundfield.solver._inductive`). With ``earth_inductive_model``
     ``"carson_series"`` or ``"sommerfeld"`` the returned correction
     ``omega -> ΔZ(omega)`` holds the earth-return correction; it is
     assembled for all frequencies of ``engine`` at once on first use
-    (review pass 10, finding 10.60) and returns the same matrix for each
-    frequency as a single-frequency assembly, bit for bit.
+    (finding 10.60) and returns the same matrix for each frequency as a
+    single-frequency assembly, bit for bit.
     """
+    from groundfield.solver._inductive import branch_records
+
     model = engine.earth_inductive_model
     sigma_earth: float | None = None
     layered_earth: object = None
@@ -390,6 +393,13 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         from groundfield.coupling import resolve_earth_layers
 
         layered_earth = resolve_earth_layers(world.soil)
+    lumped, _skin = branch_records(
+        world.conductors,
+        cluster_id=topo.cluster_id,
+        finite_branches=topo.finite_branches,
+        distributed_branches=topo.distributed_branches,
+        n_lumped_branches=topo.n_lumped_branches,
+    )
     L_full, has_inductance, correction = _assemble_inductance_matrix(
         topo.distributed_branches,
         n_lumped_branches=topo.n_lumped_branches,
@@ -397,6 +407,7 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         earth_model=model,
         sigma_earth=sigma_earth,
         layered_earth=layered_earth,
+        lumped_branches=lumped,
         # The angular frequencies exactly as the solve step forms them.
         omegas=[2.0 * np.pi * float(f) for f in engine.frequencies],
     )
