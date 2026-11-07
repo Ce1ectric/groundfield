@@ -257,3 +257,12 @@ def test_compare_engines_tolerance_table_is_explicit() -> None:
     assert len(z) == 3 and all(isinstance(v, complex) for v in z)
     text = rep.summary()
     assert "1000" in text and "Im" in text
+
+
+def test_engine_comparison_keeps_the_positional_order_of_0_15() -> None:
+    """The fields added for 10.71 follow the 0.15.0 fields."""
+    cmp = gf.EngineComparison({}, 0.05, {"g1": {}}, {"g1": 0.01}, True, ["n"])
+    assert cmp.cluster_impedance_table == {"g1": {}}
+    assert cmp.deviations == {"g1": 0.01}
+    assert cmp.is_consistent is True and cmp.notes == ["n"]
+    assert cmp.rows == [] and cmp.frequencies == []

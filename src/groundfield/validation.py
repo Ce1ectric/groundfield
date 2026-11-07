@@ -119,16 +119,6 @@ class EngineComparison:
         Mapping ``engine_label -> FieldResult``.
     rel_tolerance
         Relative tolerance the results were checked against.
-    frequencies
-        The common frequency list in Hz.
-    rows
-        The explicit tolerance table: one :class:`ComparisonRow` per
-        compared quantity, frequency and component (real / imaginary
-        part).
-    impedances
-        ``{"Z_cluster[<root>]" | "Z_in[<source>]": {engine_label: [Z(f)
-        per frequency]}}`` — the complex values the rows were built
-        from, in Ω.
     cluster_impedance_table
         ``{cluster_root: {engine_label: Re Z(f0)}}`` with ``f0`` the
         first frequency — a compact summary kept for compatibility; the
@@ -138,9 +128,6 @@ class EngineComparison:
         all frequencies and both components. Clusters whose impedance is
         undefined for every engine (purely passive observers) do not
         appear here.
-    input_deviations
-        ``{source_name: worst deviation}`` of the input impedance, same
-        convention.
     is_consistent
         ``True`` if and only if **at least one** quantity was actually
         evaluated, every row passed (no deviation above
@@ -151,18 +138,36 @@ class EngineComparison:
     notes
         Diagnostic strings (stub results, skipped or non-finite
         quantities, the sample-point summary).
+    frequencies
+        The common frequency list in Hz.
+    rows
+        The explicit tolerance table: one :class:`ComparisonRow` per
+        compared quantity, frequency and component (real / imaginary
+        part).
+    impedances
+        ``{"Z_cluster[<root>]" | "Z_in[<source>]": {engine_label: [Z(f)
+        per frequency]}}`` — the complex values the rows were built
+        from, in Ω.
+    input_deviations
+        ``{source_name: worst deviation}`` of the input impedance, same
+        convention as :attr:`deviations`.
+
+    Notes
+    -----
+    The fields of 0.15.0 keep their positional order; the fields added
+    in review pass 10 (10.71) follow them.
     """
 
     results: dict[str, "FieldResult"]
     rel_tolerance: float
+    cluster_impedance_table: dict[str, dict[str, float]] = field(default_factory=dict)
+    deviations: dict[str, float] = field(default_factory=dict)
+    is_consistent: bool = False
+    notes: list[str] = field(default_factory=list)
     frequencies: list[float] = field(default_factory=list)
     rows: list[ComparisonRow] = field(default_factory=list)
     impedances: dict[str, dict[str, list[complex]]] = field(default_factory=dict)
-    cluster_impedance_table: dict[str, dict[str, float]] = field(default_factory=dict)
-    deviations: dict[str, float] = field(default_factory=dict)
     input_deviations: dict[str, float] = field(default_factory=dict)
-    is_consistent: bool = False
-    notes: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         """Return a line-oriented textual summary with the tolerance table."""
