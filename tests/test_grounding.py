@@ -17,7 +17,7 @@ import math
 
 import numpy as np
 import pytest
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel
 
 import groundfield as gf
 from groundfield.generators import (

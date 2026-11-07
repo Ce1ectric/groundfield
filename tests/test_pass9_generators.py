@@ -298,7 +298,7 @@ BRIDGE_END = (53.0, 3.0)
 def _assert_manhattan(waypoints, start, end) -> None:
     assert waypoints[0] == pytest.approx(start)
     assert waypoints[-1] == pytest.approx(end)
-    for p, q in zip(waypoints, waypoints[1:]):
+    for p, q in zip(waypoints, waypoints[1:], strict=False):
         assert math.isclose(p[0], q[0]) or math.isclose(p[1], q[1])
 
 
@@ -376,7 +376,7 @@ def test_f42_obstacle_away_from_anchors_is_still_enforced() -> None:
     )
     _assert_manhattan(waypoints, BRIDGE_START, BRIDGE_END)
     inflated = obstacle.inflated(0.5)
-    for p, q in zip(waypoints, waypoints[1:]):
+    for p, q in zip(waypoints, waypoints[1:], strict=False):
         assert not segment_intersects_box(p, q, inflated)
 
 

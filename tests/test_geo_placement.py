@@ -21,6 +21,7 @@ plus the integration with :class:`TnNetworkGenerator`:
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -30,12 +31,14 @@ from groundfield.api import create_world
 from groundfield.generators.electrode_specs import FoundationElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators.placement import (
-    ExplicitPlacement,
     OsmBuildingPlacement,
     PlacementSpec,
 )
 from groundfield.geo.footprint import BuildingFootprint
 from groundfield.soil.models import TwoLayerSoil
+
+if TYPE_CHECKING:
+    from groundfield.world import World
 
 
 # ---------------------------------------------------------------------
@@ -253,7 +256,7 @@ def test_zero_orientation_uses_axis_aligned_path() -> None:
 
 def _build_tn_with_osm_placement(
     footprints: list[BuildingFootprint],
-) -> "groundfield.World":
+) -> "World":
     """Helper: build a tiny TN-Ortsnetz world driven by the given
     OSM footprints."""
     from groundfield.generators.building import BuildingTypeSpec
