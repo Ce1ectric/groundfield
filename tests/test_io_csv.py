@@ -169,8 +169,8 @@ def test_save_electrode_table_csv_matches_in_memory(tmp_path: Path) -> None:
         world=world,
     )
     df_disk = read_csv_with_provenance(out)[0]
-    # The file adds the frequency column (review pass 10, 10.73).
-    assert (df_disk.pop("frequency_Hz") == result.frequencies[0]).all()
+    # The file adds the frequency column (review pass 10, 10.73, 10.69).
+    assert (df_disk.pop("frequency_hz") == result.frequencies[0]).all()
     df_mem = gf.electrode_current_table(result, world=world)
 
     pd.testing.assert_frame_equal(
@@ -243,8 +243,8 @@ def test_tables_record_their_frequency(tmp_path: Path) -> None:
     p_c = save_cluster_impedances_csv(res, tmp_path / "c.csv", frequency_index=1)
     for p in (p_e, p_c):
         df, meta = read_csv_with_provenance(p)
-        assert df["frequency_Hz"].tolist() == [1000.0]
-        assert meta["frequency_Hz"] == "1000"
+        assert df["frequency_hz"].tolist() == [1000.0]
+        assert meta["frequency_hz"] == "1000"
         assert meta["frequency_index"] == "1"
 
 
@@ -257,7 +257,7 @@ def test_csv_files_carry_a_provenance_header(tmp_path: Path) -> None:
     df, meta = read_csv_with_provenance(p)
     assert meta["groundfield_version"] == gf.__version__
     assert meta["backend"] == "image"
-    assert meta["frequencies_Hz"] == "50, 1000"
+    assert meta["frequencies_hz"] == "50, 1000"
     assert meta["written_utc"].endswith("Z")
     assert len(df) == 6
     # Electrode names containing '#' survive (no comment='#' parsing).
@@ -284,3 +284,27 @@ def test_csv_writers_refuse_to_overwrite(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == first
     save_electrode_table_csv(res, target, frequency_index=1, overwrite=True)
     assert "1000" in target.read_text(encoding="utf-8")
+
+
+@pytest.mark.finding("10.69")
+def test_new_frequency_column_uses_the_lower_case_unit_suffix(tmp_path: Path) -> None:
+    """The frequency column the tables gained in this release follows the
+    naming convention of the spec layer and of ``FieldResult.to_dataframe``
+    (lower-case unit suffix, ``frequency_hz``). The potential path keeps
+    the ``frequency_Hz`` column it had in v0.15.0."""
+    import groundfield.io.csv as gf_csv
+
+    world, res = _two_freq_world()
+    p_e = save_electrode_table_csv(res, tmp_path / "e.csv", world=world)
+    p_c = save_cluster_impedances_csv(res, tmp_path / "c.csv")
+    for p in (p_e, p_c):
+        df, meta = read_csv_with_provenance(p)
+        assert "frequency_hz" in df.columns and "frequency_Hz" not in df.columns
+        assert meta["frequency_hz"] == "50"
+    assert gf_csv.ELECTRODE_TABLE_REQUIRED_COLUMNS[-1] == "frequency_hz"
+    assert gf_csv.CLUSTER_IMPEDANCE_REQUIRED_COLUMNS[-1] == "frequency_hz"
+    assert "frequency_hz" in res.to_dataframe().columns
+    p = save_potential_path_csv(res, tmp_path / "p.csv", start=(1.0, 0.0, 0.0), n=3)
+    df, meta = read_csv_with_provenance(p)
+    assert "frequency_Hz" in df.columns  # v0.15.0 column, unchanged
+    assert meta["frequencies_hz"] == "50, 1000"
