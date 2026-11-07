@@ -3,11 +3,21 @@
 This subpackage provides the coupling relations that follow from the
 conductor geometry and the material properties:
 
-- galvanic coupling via shared grounding nodes,
-- inductive coupling between parallel conductors (Neumann integrals),
-- Carson correction for the earth-return path at frequencies below a
-  few kHz,
-- capacitive coupling between conductor and soil (optional).
+- galvanic coupling via shared grounding nodes (layered Green's
+  functions, :mod:`~groundfield.coupling.layered_green`),
+- inductive coupling between conductor segments (Neumann partial
+  inductances, :mod:`~groundfield.coupling.inductance`),
+- the earth-return correction of the inductive coupling: Carson's
+  per-metre correction (:mod:`~groundfield.coupling.carson`, homogeneous
+  earth, long parallel wires) and the geometric Sommerfeld/Pollaczek
+  kernel (:mod:`~groundfield.coupling.sommerfeld_inductance`, exact
+  quasi-static for any number of layers).
+
+A correction matrix is only meaningful together with the image
+convention of the inductance matrix it is added to (``image=``
+argument: ``"none"``, ``"additive"``, ``"antiparallel"``; see
+:mod:`groundfield.coupling.inductance`). There is no capacitive
+coupling: below 1 kHz it is negligible for buried conductors.
 
 Guiding question
 ----------------
@@ -20,6 +30,10 @@ assessment.
 from __future__ import annotations
 
 import warnings
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from groundfield.coupling.sommerfeld_inductance import LayeredEarth
 
 __all__: list[str] = ["resolve_earth_conductivity", "resolve_earth_layers"]
 
@@ -38,9 +52,9 @@ def resolve_earth_conductivity(soil) -> float:
     - :class:`~groundfield.soil.models.MultiLayerSoil` →
       $\\sigma = 1/\\rho_1$ (top layer), with a runtime warning.
 
-    The layered cases are an *approximation*; ADR-0005 references the
-    Pollaczek/Sommerfeld kernel (via ``mom_sommerfeld``) as the
-    rigorous alternative.
+    The layered cases are an *approximation*; the Pollaczek/Sommerfeld
+    kernel (``earth_inductive_model="sommerfeld"``) is the rigorous
+    alternative.
 
     Parameters
     ----------
@@ -72,7 +86,7 @@ def resolve_earth_conductivity(soil) -> float:
             "Carson series uses upper-layer rho_1 for a TwoLayerSoil — "
             "this is an approximation. For a rigorous result on layered "
             "soils use the Pollaczek/Sommerfeld kernel via "
-            "backend='mom_sommerfeld'. See ADR-0005 §'Layered earth'.",
+            "earth_inductive_model='sommerfeld'. See ADR-0005 §'Layered earth'.",
             UserWarning,
             stacklevel=2,
         )
@@ -82,7 +96,7 @@ def resolve_earth_conductivity(soil) -> float:
             "Carson series uses top-layer rho for a MultiLayerSoil — "
             "this is an approximation. For a rigorous result on layered "
             "soils use the Pollaczek/Sommerfeld kernel via "
-            "backend='mom_sommerfeld'. See ADR-0005 §'Layered earth'.",
+            "earth_inductive_model='sommerfeld'. See ADR-0005 §'Layered earth'.",
             UserWarning,
             stacklevel=2,
         )
@@ -95,8 +109,11 @@ def resolve_earth_layers(soil) -> "LayeredEarth":
 
     Used by the Sommerfeld earth-return kernel (ADR-0006). Unlike
     :func:`resolve_earth_conductivity`, this preserves the full
-    layered structure — no warning is emitted, and layered soils
-    are handled natively by the Pollaczek/Wait kernel.
+    layered structure — no warning is emitted: the kernel is exact for
+    any number of layers (generalised reflection coefficients, review
+    pass 10, finding 10.35; before that, ``n >= 3`` used a single
+    air-image approximation that was 17–25 % off in the earth-return
+    reactance).
 
     Parameters
     ----------

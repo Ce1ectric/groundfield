@@ -9,76 +9,125 @@ and layered earth.
 
 Mathematical background
 -----------------------
-*(Rewritten in the 2026-07-08 audit, WP-C1: the historic kernel
-``1/R + ∫Γ·e^{-λ(z+z')}J0`` dropped the in-soil propagation of the
-primary term — precisely where the buried-wire earth-return
-resistance lives — and applied the soil-side reflection sign to
-overhead conductors. The implemented kernel is now the genuine
-quasi-static Pollaczek form, dispatched by which side of the soil
-surface the two segments are on.)*
-
-For a horizontal current element in a conducting half-space
-($z > 0$ soil, $z < 0$ air, $\\gamma^2 = j\\omega\\mu_0\\sigma_1$,
-$u_1 = \\sqrt{\\lambda^2 + \\gamma^2}$), the quasi-static
-vector-potential Green's functions are:
-
-**Buried source, buried observer** (depths $h, h' > 0$):
+For a horizontal current element in a stratified, quasi-static
+medium ($z > 0$ soil, $z < 0$ air, layer $k$ with
+$\\gamma_k^2 = j\\omega\\mu_0\\sigma_k$ and vertical wavenumber
+$u_k = \\sqrt{\\lambda^2 + \\gamma_k^2}$, $u_0 = \\lambda$ in air;
+time convention $e^{+j\\omega t}$), the vector-potential Green's
+function of a source at depth $z'$ and an observer at depth $z$ is
 
 $$
-G_\\text{bb} \\;=\\; \\frac{e^{-\\gamma R}}{R} \\;+\\; \\int_0^{\\infty}\\!
-\\frac{\\lambda}{u_1}\\,\\Gamma(\\lambda)\\,
-e^{-u_1 (h + h')}\\,J_0(\\lambda\\rho)\\,d\\lambda,
+G(\\rho, z, z') \\;=\\; \\delta_{kj}\\,\\frac{e^{-\\gamma_k R}}{R}
+\\;+\\; \\int_0^{\\infty}\\! \\lambda\\,F_{kj}(\\lambda; z, z')\\,
+J_0(\\lambda\\rho)\\,d\\lambda ,
 $$
 
-**Overhead source and observer** (heights $H, H' > 0$):
+with $k$ / $j$ the layers of observer / source. The spectral amplitude
+$F$ follows from the continuity of $A$ and $\\partial A/\\partial z$ at
+every interface. For source and observer in the **same** layer $k$
+(top at $z_{k-1}$, thickness $t$, depths $h, h'$ measured from its
+top) it is the closed form
 
 $$
-G_\\text{oo} \\;=\\; \\frac{1}{R} \\;-\\; \\int_0^{\\infty}\\!
-\\Gamma(\\lambda)\\,
-e^{-\\lambda (H + H')}\\,J_0(\\lambda\\rho)\\,d\\lambda
-\\qquad\\text{(Carson's geometry)},
+F_{kk} \\;=\\; \\frac{\\tilde R_\\uparrow e^{-u_k(h+h')}
+ + \\tilde R_\\downarrow e^{-u_k(2t-h-h')}
+ + \\tilde R_\\uparrow\\tilde R_\\downarrow\\bigl[e^{-u_k(2t-(h-h'))}
+ + e^{-u_k(2t+(h-h'))}\\bigr]}
+{u_k\\,\\bigl(1 - \\tilde R_\\uparrow \\tilde R_\\downarrow e^{-2u_k t}\\bigr)},
 $$
 
-**Mixed** (buried $h$, overhead $H$):
+where $\\tilde R_\\uparrow$, $\\tilde R_\\downarrow$ are the
+**generalised reflection coefficients** of the stack above and below
+layer $k$ (bottom-up / top-down recursions over
+$r_{k,m} = (u_k - u_m)/(u_k + u_m)$). For the homogeneous half-space
+this is the familiar $(\\lambda/u_1)\\Gamma e^{-u_1(h+h')}$ with
+$\\Gamma = (u_1-\\lambda)/(u_1+\\lambda)$; for two layers it is the
+four-term buried-in-layer-1 amplitude validated against Tsiamitros
+(2005) Eq. (8) (WP-D2, 2026-07-20); for $n \\ge 3$ layers the
+generalised $\\tilde R_\\downarrow$ makes it exact as well (review
+pass 10, finding 10.35 — the historic $n \\ge 3$ path used the
+single air-image form and was 17–25 % off in $X'$). Pairs in
+different layers (including a buried / overhead pair over a layered
+earth) use the transmitted amplitude, obtained from the same interface
+conditions by a small linear solve per $\\lambda$.
 
-$$
-G_\\text{bo} \\;=\\; \\int_0^{\\infty}\\!
-\\frac{2\\lambda}{u_1 + \\lambda}\\,
-e^{-u_1 h - \\lambda H}\\,J_0(\\lambda\\rho)\\,d\\lambda,
-$$
+The overhead pair keeps Carson's geometry,
+$\\lambda F_{00} = -\\Gamma_s(\\lambda) e^{-\\lambda(H+H')}$, with the
+surface reflection coefficient $\\Gamma_s$ of the whole stack.
 
-with the **reflection coefficient**
+Earth-return correction and image conventions
+---------------------------------------------
+The functions here return the **earth-return correction**
+$\\Delta Z$ that is added to $j\\omega L$, the Neumann
+partial-inductance matrix of
+:func:`groundfield.coupling.inductance.build_inductance_matrix`. The
+correction depends on which image that matrix carries (``image=``):
 
-- homogeneous earth (Pillar A):
-  $\\Gamma(\\lambda) = (u_1 - \\lambda)/(u_1 + \\lambda)$,
-- $n$-layer earth (Pillar B): the recursive Wait-style reflection
-  coefficient (Wait 1972 §3, Tleis 2008 §3.5); the $\\lambda/u_1$
-  weight and the exponents use the top-layer $u_1$ (the conductors
-  live in layer 1).
+- ``"none"`` — $\\Delta G = G - 1/R$, the exact quasi-static
+  correction to free space. At DC the soil is magnetically
+  transparent: no image at all.
+- ``"additive"`` (historic default, ADR-0004) — the matrix carries
+  the perfect-magnetic-mirror image $L_\\text{img}$; the correction
+  removes it **exactly**:
+  $\\Delta Z_\\text{additive} = \\Delta Z_\\text{none} - j\\omega
+  L_\\text{img}$, with $L_\\text{img}$ computed by the same routine
+  that added it (closed form for parallel pairs, the mirrored
+  orientation for inclined and vertical segments).
+- ``"antiparallel"`` — $\\Delta Z_\\text{none} + j\\omega
+  L_\\text{img}$.
 
-The functions in this module return the **correction beyond the
-ADR-0004 additive perfect-mirror baseline** ($1/R + 1/R'$), so the
-solver assembles ``Z_b = jω·(L_Neumann+mirror) + ΔZ_Sommerfeld``.
-The mirror deduplication $-1/R'$ is carried in closed form; only
-the smooth reflected/transmitted remainder is integrated
-numerically.
+Before review pass 10 the image was removed as $-1/R'$ integrated by
+the 16x16 outer rule and weighted with the *direct* orientation:
+vertical segments kept twice the image in the $\\sigma \\to 0$ limit,
+and segments much longer than twice their depth lost 0.6 % (25 m) to
+5.7 % (50 m) of the image term (finding 10.46).
+
+Numerical method
+----------------
+Each segment pair is integrated by 16x16 Gauss–Legendre over the two
+segments; the closed-form direct term $(e^{-\\gamma R}-1)/R$ is
+evaluated at every node, the spectral part
+$S(\\rho) = \\int \\lambda F J_0(\\lambda\\rho)\\,d\\lambda$ on 24
+log-spaced $\\rho$ nodes and interpolated (segments assumed
+approximately horizontal, mean depths per segment). Segments that cross
+the soil surface or a layer interface are split there first.
+
+The $\\lambda$ quadrature (review pass 10, finding 10.36) follows the
+F14 policy of :mod:`groundfield.coupling.layered_green`: a
+logarithmic region on $[\\epsilon, \\lambda_\\text{b}]$ with
+$\\lambda_\\text{b} \\le \\pi/(4\\rho_\\text{max})$ so that it is free
+of $J_0$ oscillations, followed by Gauss panels of width
+$\\le \\pi/\\rho_\\text{max}$ (16 nodes per $J_0$ period), geometrically
+graded near the skin and decay scales, up to
+$\\lambda_\\text{max} = 30/z$. Before the fix the log region ended at
+$\\max(p_\\text{skin}, 1/z)$ regardless of the distance, so $J_0$ went
+unresolved for distant pairs (Re −24 % at 200 m, +274 % at 400 m),
+and a 4096-panel cap truncated silently. The node budget is now
+explicit: beyond a soft limit the density drops to 8 nodes per period,
+and a :class:`~groundfield.coupling.layered_green.SommerfeldResolutionWarning`
+is raised instead of a silent truncation when even that does not fit.
+
+:func:`build_sommerfeld_correction_matrices` evaluates several
+frequencies at once (finding 10.60): geometry, $\\lambda$ grid and the
+Bessel table are built once per pair and reused for every frequency
+whose grid is identical (the common case — the grid depends on the
+frequency only through skin scales above $1/z$). Each frequency's
+matrix equals the single-frequency result bit for bit.
 
 Limit checks (built into the test suite)
 ----------------------------------------
-- $\\sigma_e\\to 0$: every kernel collapses to free space — the
-  correction tends to $-1/R'$ and exactly cancels the ADR-0004
-  mirror. (At DC the soil is magnetically transparent: **no image**.)
+- $\\sigma_e\\to 0$: $\\Delta Z_\\text{none} \\to 0$, and with
+  ``image="additive"`` the correction cancels the mirror exactly for
+  every orientation.
 - $\\sigma_e\\to\\infty$, overhead pair: $-\\Gamma \\to -1$, the net
-  image becomes the **anti-parallel** PEC image $-1/R'$ (Carson's
-  baseline).
+  image becomes the anti-parallel PEC image (Carson's baseline).
 - $\\sigma_e\\to\\infty$, buried pair: $e^{-\\gamma R} \\to 0$ — the
-  conductor is screened by the surrounding medium and the total
-  external coupling tends to zero.
+  conductor is screened by the surrounding medium.
 - Long parallel buried wires: the per-metre limit reproduces
-  Pollaczek's mutual $\\frac{j\\omega\\mu_0}{2\\pi}\\bigl[K_0(\\gamma d)
-  - K_0(\\gamma D') + J_P\\bigr]$, whose low-frequency real part is
-  Carson's $\\omega\\mu_0/8$ (with the **positive** sign — the
-  historic kernel produced $-\\omega\\mu_0/8$).
+  Pollaczek's $\\frac{j\\omega\\mu_0}{2\\pi}\\bigl[K_0(\\gamma d)
+  - K_0(\\gamma D') + J_P\\bigr]$.
+- A three-layer earth with $\\rho_2 = \\rho_3$ reproduces the
+  two-layer result.
 
 References
 ----------
@@ -88,25 +137,45 @@ References
   drahtlosen Telegraphie. *Ann. Phys.* **28**(4), 665–736.
 - Wait, J. R. (1972). *Electromagnetic Waves in Stratified
   Media*, Pergamon. Ch. 3.
-- Tleis, N. D. (2008). *Power Systems Modelling and Fault
-  Analysis*, Newnes. Ch. 3.
+- Chew, W. C. (1995). *Waves and Fields in Inhomogeneous Media*,
+  IEEE Press, §2.1 (generalised reflection coefficients).
+- Tsiamitros, D. A. et al. (2005). Earth return path impedances of
+  underground cables for the two-layer earth case. *IEEE Trans.
+  Power Delivery* **20**(3), 2174–2181.
 """
 
 from __future__ import annotations
 
+import bisect
 import math
+import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from scipy.special import j0
 
+from groundfield.coupling.inductance import (
+    ImageConvention,
+    _check_image_geometry,
+    _image_inductance_matrix,
+    _mirror,
+    _resolve_image,
+    neumann_mutual,
+)
+from groundfield.coupling.layered_green import SommerfeldResolutionWarning
+
 __all__ = [
     "MU_0",
+    "ImageConvention",
+    "SommerfeldResolutionWarning",
     "earth_return_correction_homogeneous",
     "earth_return_correction_layered",
     "sommerfeld_pair_integral_homogeneous",
     "sommerfeld_pair_integral_layered",
     "build_sommerfeld_correction_matrix",
+    "build_sommerfeld_correction_matrices",
     "LayeredEarth",
     "reflection_coefficient_homogeneous",
     "reflection_coefficient_layered",
@@ -115,15 +184,45 @@ __all__ = [
 
 MU_0 = 4.0e-7 * math.pi
 
-# Quadrature configuration. Numbers chosen so that:
-# - Outer (geometry) Gauss-Legendre uses the same 16x16 grid as
-#   coupling/inductance.py for consistency.
-# - Inner Sommerfeld quadrature uses 200 nodes split between a
-#   logarithmic part [0, lambda_break] and a linear tail
-#   [lambda_break, lambda_max]. Calibrated against the perfect-
-#   mirror limit and the Carson long-wire asymptote.
+# Outer (geometry) Gauss–Legendre rule: the same 16x16 grid as
+# coupling/inductance.py.
 _OUTER_GL_NODES, _OUTER_GL_WEIGHTS = np.polynomial.legendre.leggauss(16)
-_INNER_GL_NODES, _INNER_GL_WEIGHTS = np.polynomial.legendre.leggauss(64)
+
+# --- lambda quadrature policy (review pass 10, finding 10.36) ---------
+#
+# Log region: n_log Gauss nodes in t = ln(lambda) on [eps, lambda_b].
+_N_LOG_NODES = 64
+# Gauss order of the panels of the linear region.
+_PANEL_ORDER = 8
+# Target: two panels (16 nodes) per J0 period 2 pi / rho_max.
+_PANELS_PER_PERIOD = 2
+# Minimum number of panels of the linear region (historic floor).
+_MIN_PANELS = 8
+# Above this panel count the density drops towards one panel (8 nodes)
+# per period, the floor that layered_green also accepts.
+_SOFT_PANEL_BUDGET = 1 << 14
+# Hard allocation budget (2^17 panels = 1 Mi nodes). Exceeding it
+# raises SommerfeldResolutionWarning instead of truncating silently.
+_HARD_PANEL_BUDGET = 1 << 17
+# Graded panels resolve the reflection-coefficient transitions up to
+# this multiple of the largest physical scale (skin / decay / layer).
+_GRADING_SPAN = 4.0
+# Number of rho interpolation nodes per segment pair (historic design).
+_N_RHO_NODES = 24
+
+
+@lru_cache(maxsize=None)
+def _leggauss(n: int) -> tuple[np.ndarray, np.ndarray]:
+    """Read-only Gauss–Legendre nodes / weights of order ``n`` (cached).
+
+    ``numpy.polynomial.legendre.leggauss`` solves an eigenvalue problem
+    on every call; the historic code paid it twice per segment pair
+    and frequency (14 % of an inductive solve, review pass 10, 10.60).
+    """
+    x, w = np.polynomial.legendre.leggauss(n)
+    x.setflags(write=False)
+    w.setflags(write=False)
+    return x, w
 
 
 # ---------------------------------------------------------------------
@@ -153,12 +252,10 @@ class LayeredEarth:
     :func:`reflection_coefficient_layered`) and every consumer of
     this dataclass operate in **IEEE-754 double precision (FP64)**.
     Future hardware-accelerated backends (e.g. an MLX path on Apple
-    silicon) must honour the same precision or the cross-backend
-    cross-check in
-    ``tests/test_layered_green.py::test_cross_backend_precision``
-    will fail. ``np.complex128`` is the default at every entry point
-    and is preserved through the Sommerfeld quadrature; do not
-    silently down-cast to FP32 in a derived backend.
+    silicon) must honour the same precision. ``np.complex128`` is the
+    default at every entry point and is preserved through the
+    Sommerfeld quadrature; do not silently down-cast to FP32 in a
+    derived backend.
     """
 
     rhos: tuple[float, ...]
@@ -173,15 +270,35 @@ class LayeredEarth:
                 f"got {len(self.rhos)} rhos, {len(self.thicknesses)} thicknesses"
             )
         for r in self.rhos:
-            if r <= 0.0:
-                raise ValueError(f"rho must be positive, got {r}")
+            if not (r > 0.0) or not math.isfinite(r):
+                raise ValueError(f"rho must be positive and finite, got {r}")
         for h in self.thicknesses:
-            if h <= 0.0:
-                raise ValueError(f"layer thickness must be positive, got {h}")
+            if not (h > 0.0) or not math.isfinite(h):
+                raise ValueError(
+                    f"layer thickness must be positive and finite, got {h}"
+                )
 
     @property
     def n_layers(self) -> int:
+        """Number of layers, including the semi-infinite bottom layer."""
         return len(self.rhos)
+
+    @property
+    def interface_depths(self) -> tuple[float, ...]:
+        """Depths of the soil-layer interfaces below the surface, in m."""
+        out: list[float] = []
+        acc = 0.0
+        for h in self.thicknesses:
+            acc += float(h)
+            out.append(acc)
+        return tuple(out)
+
+    def layer_of(self, depth: float) -> int:
+        """Layer index (1-based) that contains ``depth`` (m, > 0 in soil).
+
+        A point exactly on an interface belongs to the lower layer.
+        """
+        return 1 + bisect.bisect_right(self.interface_depths, float(depth))
 
 
 # ---------------------------------------------------------------------
@@ -206,7 +323,8 @@ def reflection_coefficient_homogeneous(
     Parameters
     ----------
     lambdas : np.ndarray
-        Spectral variable, shape ``(N_lam,)``. Must be non-negative.
+        Spectral variable in 1/m, shape ``(N_lam,)``. Must be
+        non-negative.
     omega
         Angular frequency in rad/s.
     sigma_earth
@@ -215,7 +333,7 @@ def reflection_coefficient_homogeneous(
     Returns
     -------
     Gamma : np.ndarray, complex, shape (N_lam,)
-        Reflection coefficient at each $\\lambda$.
+        Reflection coefficient at each $\\lambda$ (dimensionless).
     """
     if omega <= 0.0 or sigma_earth <= 0.0:
         return np.zeros_like(lambdas, dtype=complex)
@@ -229,29 +347,29 @@ def reflection_coefficient_layered(
     omega: float,
     earth: LayeredEarth,
 ) -> np.ndarray:
-    """Magnetic reflection coefficient for an $n$-layer earth.
+    """Magnetic surface reflection coefficient of an $n$-layer earth.
 
-    Implements the recursive Tagg/Sunde-Wait formula
+    The generalised reflection coefficient of the whole stack seen
+    from the air, in the convention of
+    :func:`reflection_coefficient_homogeneous` (so that the air-side
+    reflection of a downward wave is $-\\Gamma$). It is built from the
+    deepest interface upwards,
 
     .. math::
 
-        \\Gamma_k(\\lambda) \\;=\\;
-        \\frac{u_k - u_{k+1} - (u_k + u_{k+1})\\,\\Gamma_{k+1}\\,e^{-2 u_k h_k}}
-             {u_k + u_{k+1} + (u_k - u_{k+1})\\,\\Gamma_{k+1}\\,e^{-2 u_k h_k}},
+        \\Gamma \\leftarrow \\frac{r_k + \\Gamma\\,e^{-2u_{k+1}h_{k+1}}}
+                                  {1 + r_k\\,\\Gamma\\,e^{-2u_{k+1}h_{k+1}}},
+        \\qquad r_k = \\frac{u_{k+1} - u_k}{u_{k+1} + u_k},
 
-    starting from $\\Gamma_n = 0$ (semi-infinite bottom layer)
-    and walking up to layer 1. The top-layer reflection is
-    $\\Gamma_\\text{mag}^{(n)}(\\lambda) = (u_e - \\lambda)/(u_e+\\lambda)$
-    with $u_e \\to u_1$ in the homogeneous limit, but for $n>1$
-    the recursion modifies $u_1$ effectively. The formulation
-    below is the standard one in Tleis 2008 §3.5.
-
-    For $n=1$ this collapses to
-    :func:`reflection_coefficient_homogeneous`.
+    with $u_0 = \\lambda$ (air) and $u_k$ the vertical wavenumber of
+    layer $k$. It reduces to the homogeneous $\\rho_1$ half-space as
+    $h_1 \\to \\infty$ and to the $\\rho_2$ half-space as $h_1 \\to 0$.
+    For $n = 1$ it is :func:`reflection_coefficient_homogeneous`.
 
     Parameters
     ----------
-    lambdas : np.ndarray, shape (N_lam,)
+    lambdas : np.ndarray
+        Spectral variable in 1/m, shape ``(N_lam,)``.
     omega
         Angular frequency in rad/s.
     earth : LayeredEarth
@@ -260,6 +378,7 @@ def reflection_coefficient_layered(
     Returns
     -------
     Gamma : np.ndarray, complex
+        Surface reflection coefficient (dimensionless).
     """
     if omega <= 0.0:
         return np.zeros_like(lambdas, dtype=complex)
@@ -270,25 +389,7 @@ def reflection_coefficient_layered(
             omega=omega,
             sigma_earth=1.0 / earth.rhos[0],
         )
-    # Standard recursive multilayer surface reflection (WP-D2 fix,
-    # 2026-07-20). Vertical wavenumbers with ``u[0]`` the air (quasi-
-    # static, u = lambda) and ``u[k]`` layer k (k = 1..n):
-    u = [lambdas.astype(complex)]
-    for rho_k in earth.rhos:
-        u.append(np.sqrt(lambdas * lambdas + 1j * omega * MU_0 / rho_k))
-    # Interface reflection at boundary k (between medium k and k+1), in the
-    # magnetic convention ``Gamma_hom = (u_e - lambda)/(u_e + lambda)``:
-    #   r_k = (u_{k+1} - u_k) / (u_{k+1} + u_k),  k = 0..n-1.
-    # Cascade from the deepest interface (top of the semi-infinite bottom
-    # layer) up to the air surface, adding the round-trip phase
-    # ``exp(-2 u_{k+1} h_{k+1})`` across each intermediate layer:
-    #   Gamma <- (r_k + Gamma·phase) / (1 + r_k·Gamma·phase).
-    # This correctly reduces to the homogeneous rho_1 half-space as
-    # h_1 -> inf and to the rho_2 half-space as h_1 -> 0. (The buried-in-
-    # layer-1 *correction* no longer uses this Gamma for the two-layer
-    # buried case — see ``_two_layer_reflected_weight`` — but it is the
-    # correct surface reflection for overhead conductors over layered
-    # earth and for the n>=3 approximation.)
+    u = _vertical_wavenumbers(lambdas, omega, earth)
     gamma = (u[n] - u[n - 1]) / (u[n] + u[n - 1])  # r_{n-1}, deepest interface
     for k in range(n - 2, -1, -1):
         r_k = (u[k + 1] - u[k]) / (u[k + 1] + u[k])
@@ -297,9 +398,288 @@ def reflection_coefficient_layered(
     return gamma
 
 
+def _vertical_wavenumbers(
+    lambdas: np.ndarray, omega: float, earth: LayeredEarth
+) -> list[np.ndarray]:
+    """``[u_0, u_1, ..., u_n]`` with ``u_0 = lambda`` (air), in 1/m."""
+    u = [np.asarray(lambdas, dtype=float).astype(complex)]
+    for rho_k in earth.rhos:
+        u.append(np.sqrt(lambdas * lambdas + 1j * omega * MU_0 / rho_k))
+    return u
+
+
+def _reflection_up(u: list[np.ndarray], earth: LayeredEarth, k: int) -> np.ndarray:
+    """Generalised reflection coefficient looking **up** from layer ``k``.
+
+    $\\tilde R_\\uparrow$ at the top interface of layer ``k`` (1-based),
+    including the multiple reflections in every layer above it and the
+    air. Local coefficients $r_{k,m} = (u_k - u_m)/(u_k + u_m)$.
+    """
+    R = (u[1] - u[0]) / (u[1] + u[0])  # layer 1 looking into the air
+    for m in range(2, k + 1):
+        r = (u[m] - u[m - 1]) / (u[m] + u[m - 1])
+        phase = np.exp(-2.0 * u[m - 1] * earth.thicknesses[m - 2])
+        R = (r + R * phase) / (1.0 + r * R * phase)
+    return R
+
+
+def _reflection_down(
+    u: list[np.ndarray], earth: LayeredEarth, k: int
+) -> np.ndarray | None:
+    """Generalised reflection coefficient looking **down** from layer ``k``.
+
+    $\\tilde R_\\downarrow$ at the bottom interface of layer ``k``;
+    ``None`` for the semi-infinite bottom layer.
+    """
+    n = earth.n_layers
+    if k >= n:
+        return None
+    R = (u[n - 1] - u[n]) / (u[n - 1] + u[n])
+    for m in range(n - 2, k - 1, -1):
+        r = (u[m] - u[m + 1]) / (u[m] + u[m + 1])
+        phase = np.exp(-2.0 * u[m + 1] * earth.thicknesses[m])
+        R = (r + R * phase) / (1.0 + r * R * phase)
+    return R
+
+
+def _same_layer_weight(
+    lambdas: np.ndarray,
+    u: list[np.ndarray],
+    earth: LayeredEarth,
+    k: int,
+    h_obs: float,
+    h_src: float,
+) -> np.ndarray:
+    """$\\lambda F_{kk}$ — reflected amplitude, both points in layer ``k``.
+
+    ``h_obs`` / ``h_src`` are the depths below the **top of layer k**
+    in m. Exact for any number of layers (generalised reflection
+    coefficients, see the module docstring).
+    """
+    uk = u[k]
+    R_up = _reflection_up(u, earth, k)
+    R_dn = _reflection_down(u, earth, k)
+    if R_dn is None:
+        return lambdas * R_up * np.exp(-uk * (h_obs + h_src)) / uk
+    t = float(earth.thicknesses[k - 1])
+    dh = h_obs - h_src
+    num = (
+        R_up * np.exp(-uk * (h_obs + h_src))
+        + R_dn * np.exp(-uk * (2.0 * t - h_obs - h_src))
+        + R_up * R_dn * (np.exp(-uk * (2.0 * t - dh)) + np.exp(-uk * (2.0 * t + dh)))
+    )
+    den = uk * (1.0 - R_up * R_dn * np.exp(-2.0 * uk * t))
+    return lambdas * num / den
+
+
+def _mixed_layer1_weight(
+    lambdas: np.ndarray,
+    u: list[np.ndarray],
+    earth: LayeredEarth,
+    h_buried: float,
+    height_air: float,
+) -> np.ndarray:
+    """$\\lambda F_{01}$ — buried point in layer 1, the other in the air.
+
+    Transmitted amplitude through the soil surface including the
+    reflections from the layers below (exact for any $n$); reduces to
+    $2\\lambda e^{-u_1 h - \\lambda H}/(u_1 + \\lambda)$ for a
+    homogeneous earth.
+    """
+    u1 = u[1]
+    R_up = _reflection_up(u, earth, 1)
+    R_dn = _reflection_down(u, earth, 1)
+    base = 2.0 * lambdas / (u1 + lambdas) * np.exp(-lambdas * height_air)
+    if R_dn is None:
+        return base * np.exp(-u1 * h_buried)
+    t = float(earth.thicknesses[0])
+    num = np.exp(-u1 * h_buried) + R_dn * np.exp(-u1 * (2.0 * t - h_buried))
+    den = 1.0 - R_up * R_dn * np.exp(-2.0 * u1 * t)
+    return base * num / den
+
+
+def _generic_weight(
+    lambdas: np.ndarray,
+    u: list[np.ndarray],
+    earth: LayeredEarth,
+    z_obs: float,
+    z_src: float,
+) -> np.ndarray:
+    """$\\lambda F$ for arbitrary source / observer layers (linear solve).
+
+    Solves the interface conditions (continuity of $A$ and
+    $\\partial A/\\partial z$ at $z = 0$ and every soil interface) per
+    $\\lambda$ for the secondary field of a unit spectral primary
+    $e^{-u_j|z-z'|}/u_j$ and returns $\\lambda$ times the secondary
+    field at the observer: the reflected amplitude if both points are
+    in one layer, the full transmitted amplitude otherwise. ``z_src``
+    must lie in the soil (``> 0``); ``z_obs`` may be in the air
+    (``< 0``). Used for cross-layer pairs and as an independent check
+    of the closed forms.
+    """
+    n = earth.n_layers
+    tops = (0.0, *earth.interface_depths)  # top depth of layer m = tops[m-1]
+    j_src = earth.layer_of(z_src)
+    k_obs = 0 if z_obs < 0.0 else earth.layer_of(z_obs)
+    nl = lambdas.shape[0]
+    size = 2 * n
+    A = np.zeros((nl, size, size), dtype=complex)
+    b = np.zeros((nl, size), dtype=complex)
+
+    # Unknown indices: c -> 0; a_m -> 2m-1, b_m -> 2m (m = 1..n-1);
+    # a_n -> 2n-1.
+    def idx_a(m: int) -> int:
+        return 2 * m - 1
+
+    def idx_b(m: int) -> int:
+        return 2 * m
+
+    E = [None] + [
+        np.exp(-u[m] * earth.thicknesses[m - 1]) if m < n else None
+        for m in range(1, n + 1)
+    ]
+
+    for i in range(n):  # interface i at depth tops[i], layers i (up) / i+1 (low)
+        rv, rd = 2 * i, 2 * i + 1
+        # upper medium at its bottom
+        if i == 0:
+            A[:, rv, 0] += 1.0
+            A[:, rd, 0] += u[0]
+        else:
+            m = i
+            A[:, rv, idx_a(m)] += E[m]
+            A[:, rv, idx_b(m)] += 1.0
+            A[:, rd, idx_a(m)] += -u[m] * E[m]
+            A[:, rd, idx_b(m)] += u[m]
+        # lower medium at its top (subtract)
+        m = i + 1
+        if m < n:
+            A[:, rv, idx_a(m)] -= 1.0
+            A[:, rv, idx_b(m)] -= E[m]
+            A[:, rd, idx_a(m)] -= -u[m]
+            A[:, rd, idx_b(m)] -= u[m] * E[m]
+        else:
+            A[:, rv, idx_a(m)] -= 1.0
+            A[:, rd, idx_a(m)] -= -u[m]
+        # primary: rhs = P_low - P_up at the interface
+        z_i = tops[i]
+        if j_src == i + 1:  # source in the lower medium; interface above it
+            e = np.exp(-u[j_src] * (z_src - z_i))
+            b[:, rv] += e / u[j_src]
+            b[:, rd] += e
+        if j_src == i and i >= 1:  # source in the upper medium; interface below
+            e = np.exp(-u[j_src] * (z_i - z_src))
+            b[:, rv] -= e / u[j_src]
+            b[:, rd] -= -e
+    x = np.linalg.solve(A, b[:, :, None])[:, :, 0]
+    if k_obs == 0:
+        field = x[:, 0] * np.exp(lambdas * z_obs)
+    elif k_obs < n:
+        top = tops[k_obs - 1]
+        field = x[:, idx_a(k_obs)] * np.exp(-u[k_obs] * (z_obs - top)) + x[
+            :, idx_b(k_obs)
+        ] * np.exp(-u[k_obs] * (tops[k_obs] - z_obs))
+    else:
+        top = tops[n - 1]
+        field = x[:, idx_a(n)] * np.exp(-u[n] * (z_obs - top))
+    return lambdas * field
+
+
 # ---------------------------------------------------------------------
-# Sommerfeld kernel evaluation (vectorised over rho/lambda)
+# lambda quadrature
 # ---------------------------------------------------------------------
+
+
+@lru_cache(maxsize=512)
+def _grid_from_params(
+    lambda_break: float,
+    lambda_max: float,
+    rho_max: float,
+    grading_top: float,
+    n_log_nodes: int,
+) -> tuple[np.ndarray, np.ndarray, bool]:
+    """Nodes / weights of the two-regime grid (cached, read-only).
+
+    Returns ``(lambdas, weights, resolved)``; ``resolved`` is ``False``
+    when the hard node budget forced fewer than eight nodes per $J_0$
+    period.
+    """
+    # Logarithmic region [eps, lambda_break]: Gauss–Legendre in ln(lambda).
+    eps = max(lambda_max * 1e-12, 1e-15)
+    nodes_log_x, weights_log_x = _leggauss(n_log_nodes)
+    a_log = math.log(eps)
+    b_log = math.log(lambda_break)
+    t = 0.5 * (nodes_log_x + 1.0) * (b_log - a_log) + a_log
+    lambdas_log = np.exp(t)
+    weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
+
+    # Linear region [lambda_break, lambda_max]: uniform panels resolving
+    # J0 (two per period) merged with geometrically graded panels that
+    # resolve the reflection-coefficient transitions.
+    span = lambda_max - lambda_break
+    resolved = True
+    if rho_max > 0.0:
+        n_target = int(math.ceil(span * rho_max * _PANELS_PER_PERIOD / (2.0 * math.pi)))
+        if n_target > _SOFT_PANEL_BUDGET:
+            n_floor = int(math.ceil(span * rho_max / (2.0 * math.pi)))
+            n_uniform = max(_SOFT_PANEL_BUDGET, n_floor)
+            if n_uniform > _HARD_PANEL_BUDGET:
+                n_uniform = _HARD_PANEL_BUDGET
+                resolved = False
+        else:
+            n_uniform = n_target
+    else:
+        n_uniform = 1
+    n_uniform = max(n_uniform, _MIN_PANELS)
+    edges = np.linspace(lambda_break, lambda_max, n_uniform + 1)
+    if grading_top > lambda_break:
+        graded = [lambda_break * 2.0**k for k in range(1, 200)]
+        graded = [g for g in graded if g < min(grading_top, lambda_max)]
+        if graded:
+            edges = np.union1d(edges, np.asarray(graded))
+            gaps = np.diff(edges)
+            keep = np.concatenate([[True], gaps > 1e-9 * lambda_max])
+            edges = edges[keep]
+            edges[-1] = lambda_max
+    nodes_p, weights_p = _leggauss(_PANEL_ORDER)
+    half = 0.5 * np.diff(edges)
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    lambdas_lin = (centres[:, None] + half[:, None] * nodes_p[None, :]).ravel()
+    weights_lin = (half[:, None] * weights_p[None, :]).ravel()
+
+    lambdas = np.concatenate([lambdas_log, lambdas_lin])
+    weights = np.concatenate([weights_log, weights_lin])
+    lambdas.setflags(write=False)
+    weights.setflags(write=False)
+    return lambdas, weights, resolved
+
+
+def _grid_params(
+    *,
+    z_sum: float,
+    rho_max: float,
+    p_ref: float,
+    scales: Sequence[float] = (),
+) -> tuple[float, float, float, float]:
+    """``(lambda_break, lambda_max, rho_max, grading_top)`` of a pair grid.
+
+    ``z_sum`` is the decay length of the spectral weight (m), ``rho_max``
+    the largest horizontal distance whose $J_0$ must be resolved (m),
+    ``p_ref`` the skin wavenumber $\\sqrt{\\omega\\mu_0\\sigma}$ of the
+    medium around the conductors (1/m) and ``scales`` further physical
+    wavenumbers (other layers' skin wavenumbers, 1/thickness).
+    """
+    z_eff = max(z_sum, 1e-3)
+    lambda_max = 30.0 / z_eff
+    lambda_break = max(p_ref, 1.0 / z_eff, 1e-9)
+    lambda_break = min(lambda_break, 0.5 * lambda_max)
+    rho_max = float(rho_max)
+    if rho_max > 0.0:
+        # F14 policy: keep the log region free of J0 oscillations.
+        lambda_break = max(min(lambda_break, 0.25 * math.pi / rho_max), 1e-12)
+    top_scale = max([p_ref, 1.0 / z_eff, *scales])
+    grading_top = min(_GRADING_SPAN * top_scale, lambda_max)
+    return lambda_break, lambda_max, rho_max, grading_top
 
 
 def _build_lambda_grid(
@@ -308,95 +688,73 @@ def _build_lambda_grid(
     rho_max: float,
     omega: float,
     sigma_top: float,
-    n_panels_per_oscillation: int = 8,
-    n_log_nodes: int = 64,
+    n_log_nodes: int = _N_LOG_NODES,
+    scales: Sequence[float] = (),
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build a two-regime Sommerfeld quadrature grid.
+    """Build the two-regime Sommerfeld quadrature grid (finding 10.36).
 
-    The integrand has two distinct length scales:
-
-    1. **Small $\\lambda$** — the reflection coefficient
-       $\\Gamma_\\text{mag}$ varies smoothly between its two
-       limits ($\\Gamma \\to +1$ at $\\lambda \\to 0$,
-       $\\Gamma \\to 0$ at $\\lambda \\gg p_\\text{skin}$, with
-       $p_\\text{skin} = \\sqrt{\\omega\\mu_0\\sigma}$). The
-       Bessel function is approximately constant
-       ($J_0(\\lambda\\rho) \\approx 1$) for $\\lambda\\rho \\ll 1$.
-       Use a **logarithmic** grid here.
-    2. **Large $\\lambda$** — $\\Gamma_\\text{mag} \\approx 0$,
-       $(\\Gamma-1) \\approx -1$, and the integrand is dominated
-       by $e^{-\\lambda z}\\,J_0(\\lambda\\rho)$. The Bessel
-       function oscillates rapidly. Use a **uniform** grid with
-       enough panels to resolve the oscillations.
-
-    The split point is taken as
-    $\\lambda_\\text{break} = \\max(p_\\text{skin}, 1/z_\\text{sum})$
-    to ensure both sides of the σ transition are captured.
+    Logarithmic region on $[\\epsilon, \\lambda_\\text{b}]$ with
+    $\\lambda_\\text{b} = \\min(\\max(p_\\text{skin}, 1/z),
+    \\lambda_\\text{max}/2, \\pi/(4\\rho_\\text{max}))$ — free of $J_0$
+    oscillations at any distance — and 8-node Gauss panels of width
+    $\\le \\pi/\\rho_\\text{max}$ (16 nodes per $J_0$ period), graded
+    geometrically up to four times the largest physical scale, on
+    $[\\lambda_\\text{b}, \\lambda_\\text{max} = 30/z]$.
 
     Parameters
     ----------
-    z_sum, rho_max, omega, sigma_top : float
-        Geometry and material parameters; see module docstring.
-    n_panels_per_oscillation
-        Resolution of the Bessel oscillations on the uniform tail.
-        8 × 8-point GL ≅ machine precision for typical ranges.
+    z_sum
+        Decay length of the spectral weight in m (e.g. $z + z'$).
+    rho_max
+        Largest horizontal distance in m whose $J_0(\\lambda\\rho)$ must
+        be resolved.
+    omega
+        Angular frequency in rad/s.
+    sigma_top
+        Conductivity in S/m of the medium around the conductors.
     n_log_nodes
-        Number of nodes on the logarithmic small-$\\lambda$ part.
+        Number of nodes of the logarithmic region.
+    scales
+        Further wavenumbers (1/m) to grade the panels for (other
+        layers' skin wavenumbers, inverse layer thicknesses).
 
     Returns
     -------
     lambdas, weights : np.ndarray
-        Combined Gauss-Legendre nodes and weights.
+        Combined Gauss nodes (1/m) and weights (read-only).
+
+    Warns
+    -----
+    SommerfeldResolutionWarning
+        If the node budget prevents resolving $J_0$ with at least eight
+        nodes per period (instead of the historic silent 4096-panel
+        cap).
     """
-    z_eff = max(z_sum, 1e-3)
-    lambda_max = 30.0 / z_eff
-
-    # Skin-depth-derived natural break.
-    if omega > 0.0 and sigma_top > 0.0:
-        p_skin = math.sqrt(omega * MU_0 * sigma_top)
-    else:
-        p_skin = 0.0
-    lambda_break = max(p_skin, 1.0 / z_eff, 1e-9)
-    if lambda_break > 0.5 * lambda_max:
-        lambda_break = 0.5 * lambda_max
-
-    # Logarithmic small-lambda region [eps, lambda_break]. Variable
-    # change t = ln(lambda); the transformed integrand picks up a
-    # Jacobian of lambda·dt = dlambda. Apply Gauss-Legendre on
-    # [-1, 1] mapped to [ln(eps), ln(lambda_break)].
-    eps = max(lambda_max * 1e-12, 1e-15)
-    nodes_log_x, weights_log_x = np.polynomial.legendre.leggauss(n_log_nodes)
-    a_log = math.log(eps)
-    b_log = math.log(lambda_break)
-    t = 0.5 * (nodes_log_x + 1.0) * (b_log - a_log) + a_log
-    lambdas_log = np.exp(t)
-    weights_log = 0.5 * weights_log_x * (b_log - a_log) * lambdas_log
-
-    # Uniform panel grid on [lambda_break, lambda_max] resolving the
-    # Bessel oscillations.
-    span = lambda_max - lambda_break
-    if rho_max > 0.0:
-        oscillations = max(1, int(np.ceil(span * rho_max / (2.0 * math.pi))))
-    else:
-        oscillations = 1
-    n_panels = min(n_panels_per_oscillation * oscillations, 4096)
-    panel_width = span / n_panels
-
-    nodes_panel, weights_panel = np.polynomial.legendre.leggauss(8)
-    nodes_in_panel = 0.5 * (nodes_panel + 1.0)
-    weights_in_panel = 0.5 * weights_panel
-
-    panel_starts = lambda_break + np.arange(n_panels) * panel_width
-    lambdas_lin = (
-        panel_starts[:, None] + nodes_in_panel[None, :] * panel_width
-    ).ravel()
-    weights_lin = (
-        np.ones(n_panels)[:, None] * (weights_in_panel * panel_width)[None, :]
-    ).ravel()
-
-    lambdas = np.concatenate([lambdas_log, lambdas_lin])
-    weights = np.concatenate([weights_log, weights_lin])
+    p_ref = math.sqrt(omega * MU_0 * sigma_top) if omega > 0 and sigma_top > 0 else 0.0
+    params = _grid_params(z_sum=z_sum, rho_max=rho_max, p_ref=p_ref, scales=scales)
+    lambdas, weights, resolved = _grid_from_params(*params, n_log_nodes)
+    if not resolved:
+        _warn_unresolved(params)
     return lambdas, weights
+
+
+def _warn_unresolved(params: tuple[float, float, float, float]) -> None:
+    lambda_break, lambda_max, rho_max, _ = params
+    warnings.warn(
+        "sommerfeld_inductance: the lambda quadrature cannot resolve the J0 "
+        f"oscillations of a segment pair {rho_max:.4g} m apart on "
+        f"[{lambda_break:.3g}, {lambda_max:.3g}] 1/m within the node budget "
+        f"({_HARD_PANEL_BUDGET} panels); the earth-return correction of "
+        "this pair is NOT converged. Such pairs are several kilometres "
+        "apart; split the study or check that their coupling is negligible.",
+        SommerfeldResolutionWarning,
+        stacklevel=4,
+    )
+
+
+# ---------------------------------------------------------------------
+# Point kernels (public, correction beyond the additive mirror)
+# ---------------------------------------------------------------------
 
 
 def earth_return_correction_homogeneous(
@@ -410,7 +768,7 @@ def earth_return_correction_homogeneous(
     """σ-dependent earth-return correction beyond the additive mirror.
 
     Point-kernel form of the **buried–buried** Pollaczek correction
-    (audit 2026-07-08, WP-C1; see the module docstring):
+    (see the module docstring):
 
     $$
     \\Delta G \\;=\\; \\frac{e^{-\\gamma R} - 1}{R}
@@ -432,14 +790,10 @@ def earth_return_correction_homogeneous(
 
     - $\\sigma_e \\to 0$: $\\gamma \\to 0$, $\\Gamma \\to 0$ —
       correction $\\to -1/R'$ → cancels the ADR-0004 image, total
-      → free space $1/R$ (at DC the soil is magnetically
-      transparent: no image). ✓
+      → free space $1/R$.
     - $\\sigma_e \\to \\infty$: $e^{-\\gamma R} \\to 0$,
       $\\lambda/u_1 \\to 0$ — correction $\\to -1/R - 1/R'$, total
-      → 0 (buried conductor screened by the surrounding medium). ✓
-      *(The historic kernel instead returned the additive mirror in
-      this limit, which is the electrostatic — not the magnetic —
-      image; see the audit report.)*
+      → 0 (buried conductor screened by the surrounding medium).
 
     Parameters
     ----------
@@ -448,10 +802,7 @@ def earth_return_correction_homogeneous(
         Must be ≥ 0.
     z_i, z_j
         Depths (positive into soil) in m. Must be > 0 for the
-        integral to converge; for wires *at* the surface
-        (Sunde-equivalent depth = 0) use a small regularisation
-        $z = \\max(|\\text{depth}|, r)$ where $r$ is the wire
-        radius.
+        integral to converge.
     omega
         Angular frequency in rad/s.
     sigma_earth
@@ -460,39 +811,15 @@ def earth_return_correction_homogeneous(
     Returns
     -------
     correction : complex
-        The kernel above, dimensionless (the calling
-        :func:`build_sommerfeld_correction_matrix` multiplies by
-        $\\mu_0 / (4\\pi)$ × ... × line integrations).
+        The kernel above in 1/m (the pair integrals multiply by
+        $j\\omega\\mu_0/(4\\pi)$ and integrate over both segments).
     """
     if omega <= 0.0 or sigma_earth <= 0.0:
         return 0.0 + 0.0j
-    z_sum = z_i + z_j
-    if z_sum <= 0.0:
-        z_sum = 1e-3
-    gamma2 = 1j * omega * MU_0 * sigma_earth
-    gamma = complex(np.sqrt(gamma2))
-    R_dir = math.sqrt(rho * rho + (z_i - z_j) ** 2)
-    R_mir = math.sqrt(rho * rho + z_sum * z_sum)
-    if R_dir < 1e-9:
-        direct = -gamma
-    else:
-        direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
-    lambdas, weights = _build_lambda_grid(
-        z_sum=z_sum,
-        rho_max=max(rho, 1e-6),
-        omega=omega,
-        sigma_top=sigma_earth,
+    earth = LayeredEarth(rhos=(1.0 / sigma_earth,), thicknesses=())
+    return earth_return_correction_layered(
+        rho=rho, z_i=z_i, z_j=z_j, omega=omega, earth=earth
     )
-    Gamma = reflection_coefficient_homogeneous(
-        lambdas,
-        omega=omega,
-        sigma_earth=sigma_earth,
-    )
-    u1 = np.sqrt(lambdas * lambdas + gamma2)
-    decay = np.exp(-u1 * z_sum)
-    bessel = j0(lambdas * rho)
-    reflected = complex(np.sum(weights * (lambdas / u1) * Gamma * decay * bessel))
-    return complex(direct) - 1.0 / max(R_mir, 1e-9) + reflected
 
 
 def earth_return_correction_layered(
@@ -505,347 +832,379 @@ def earth_return_correction_layered(
 ) -> complex:
     """Layered-earth analogue of :func:`earth_return_correction_homogeneous`.
 
-    Uses :func:`reflection_coefficient_layered` for the reflected
-    term; the $\\lambda/u_1$ weight, the exponents and the direct
-    attenuation use the top-layer parameters (conductors live in
-    layer 1). For ``earth.n_layers == 1`` it short-circuits to the
-    single-layer formula.
+    Buried–buried point kernel beyond the additive mirror,
+    $\\Delta G = G - 1/R - 1/R'$, with the exact layered Green's
+    function of the module docstring: the generalised-reflection
+    closed form for points in the same layer, the transmitted amplitude
+    otherwise. Review pass 10 (finding 10.46, pass-9 F50): the
+    historic implementation used the single air-image form with the
+    stack's surface reflection coefficient, whose reflected term has
+    the **opposite sign** of the exact two-layer kernel (e.g.
+    +8.7e-3 instead of −6.3e-3 at $\\rho = 0$ for earth (100, 10)
+    Ω·m, $h_1$ = 3 m, 1 kHz, $z = z' = 0.6$ m).
+
+    Parameters
+    ----------
+    rho
+        Horizontal distance in m (≥ 0).
+    z_i, z_j
+        Depths of observer and source in m (> 0, in the soil).
+    omega
+        Angular frequency in rad/s.
+    earth
+        Layered-earth configuration.
+
+    Returns
+    -------
+    correction : complex
+        Kernel value in 1/m.
     """
     if omega <= 0.0:
         return 0.0 + 0.0j
-    if earth.n_layers == 1:
-        return earth_return_correction_homogeneous(
-            rho=rho,
-            z_i=z_i,
-            z_j=z_j,
-            omega=omega,
-            sigma_earth=1.0 / earth.rhos[0],
+    if z_i <= 0.0 or z_j <= 0.0:
+        raise ValueError(
+            f"earth_return_correction_layered needs buried points (z > 0); "
+            f"got z_i={z_i}, z_j={z_j}"
         )
-    z_sum = z_i + z_j
-    if z_sum <= 0.0:
-        z_sum = 1e-3
-    sigma_top = 1.0 / earth.rhos[0]
-    gamma2 = 1j * omega * MU_0 * sigma_top
-    gamma = complex(np.sqrt(gamma2))
+    rho = float(rho)
     R_dir = math.sqrt(rho * rho + (z_i - z_j) ** 2)
-    R_mir = math.sqrt(rho * rho + z_sum * z_sum)
-    if R_dir < 1e-9:
-        direct = -gamma
-    else:
-        direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
+    R_mir = math.sqrt(rho * rho + (z_i + z_j) ** 2)
+    k_i = earth.layer_of(z_i)
+    k_j = earth.layer_of(z_j)
+    plan = _SpectralPlan.buried(earth, z_i, z_j, k_i, k_j)
     lambdas, weights = _build_lambda_grid(
-        z_sum=z_sum,
+        z_sum=plan.decay,
         rho_max=max(rho, 1e-6),
         omega=omega,
-        sigma_top=sigma_top,
+        sigma_top=1.0 / earth.rhos[plan.ref_layer - 1],
+        scales=plan.scales(omega, earth),
     )
-    Gamma = reflection_coefficient_layered(lambdas, omega=omega, earth=earth)
-    u1 = np.sqrt(lambdas * lambdas + gamma2)
-    decay = np.exp(-u1 * z_sum)
-    bessel = j0(lambdas * rho)
-    reflected = complex(np.sum(weights * (lambdas / u1) * Gamma * decay * bessel))
+    spec = plan.weight(lambdas, omega, earth)
+    reflected = complex(np.sum(weights * spec * j0(lambdas * rho)))
+    if k_i == k_j:
+        gamma = complex(np.sqrt(1j * omega * MU_0 / earth.rhos[k_i - 1]))
+        if R_dir < 1e-9:
+            direct = -gamma
+        else:
+            direct = (np.exp(-gamma * R_dir) - 1.0) / R_dir
+    else:
+        direct = 0.0
     return complex(direct) - 1.0 / max(R_mir, 1e-9) + reflected
 
 
 # ---------------------------------------------------------------------
-# Segment-pair integration via 16x16 Gauss-Legendre outer
+# Spectral plans: which weight a (sub)segment pair needs
 # ---------------------------------------------------------------------
 
 
-def _spectral_rho_interp(
-    rho_grid: np.ndarray,
-    z_ref: float,
-    spectral_weights: np.ndarray,  # (nλ,) complex — kernel × λ-weights
-    lambdas: np.ndarray,
-    *,
-    n_nodes: int = 24,
-) -> np.ndarray:
-    """Evaluate $S(\\rho) = \\sum_\\lambda w(\\lambda) J_0(\\lambda\\rho)$
-    on the outer grid via 1-D interpolation.
+class _SpectralPlan:
+    """Spectral part of the Green's function for one (sub)segment pair.
 
-    The spectral integral is a *smooth, monotone-decaying* function
-    of $\\rho$ (the $J_0$ oscillations integrate out), so it is
-    evaluated exactly on ``n_nodes`` log-spaced $\\rho$-nodes and
-    linearly interpolated in $t = \\log(\\rho + z_\\text{ref})$ to
-    the full 16×16 grid. This replaces the historic
-    ``(16, 16, nλ)`` tensor evaluation, whose cost exploded with the
-    oscillation-resolved λ-grid for distant segment pairs
-    (~2 s/pair at ρ = 200 m; now milliseconds) — audit 2026-07-08,
-    WP-C1 performance note.
+    ``kind`` is ``"same"`` (both buried in layer ``ref_layer``),
+    ``"air"`` (both overhead), ``"mixed1"`` (one in layer 1, one
+    overhead) or ``"generic"`` (any other combination, linear solve).
+    ``decay`` is the decay length of the weight in m (sets
+    $\\lambda_\\text{max}$), ``direct`` whether the closed-form direct
+    term $(e^{-\\gamma R}-1)/R$ applies and ``subtract_free`` whether the
+    free-space $e^{-\\lambda|\\Delta z|}$ is subtracted inside the
+    integral (pairs in different media).
+    """
+
+    __slots__ = (
+        "kind",
+        "ref_layer",
+        "decay",
+        "direct",
+        "subtract_free",
+        "h_a",
+        "h_b",
+        "z_a",
+        "z_b",
+    )
+
+    def __init__(self, kind, ref_layer, decay, direct, subtract_free, **depths):
+        self.kind = kind
+        self.ref_layer = ref_layer
+        self.decay = decay
+        self.direct = direct
+        self.subtract_free = subtract_free
+        self.h_a = depths.get("h_a", 0.0)
+        self.h_b = depths.get("h_b", 0.0)
+        self.z_a = depths.get("z_a", 0.0)
+        self.z_b = depths.get("z_b", 0.0)
+
+    @classmethod
+    def buried(cls, earth, z_a, z_b, k_a, k_b) -> _SpectralPlan:
+        if k_a == k_b:
+            tops = (0.0, *earth.interface_depths)
+            top = tops[k_a - 1]
+            h_a, h_b = z_a - top, z_b - top
+            decay = h_a + h_b
+            if k_a < earth.n_layers:
+                t = earth.thicknesses[k_a - 1]
+                decay = min(decay, 2.0 * t - h_a - h_b)
+            return cls("same", k_a, decay, True, False, h_a=h_a, h_b=h_b)
+        decay = max(abs(z_a - z_b), 1e-3)
+        return cls("generic", k_b, decay, False, True, z_a=z_a, z_b=z_b)
+
+    @classmethod
+    def for_pair(cls, earth, z_a: float, z_b: float) -> _SpectralPlan:
+        """Plan for observer depth ``z_a`` and source depth ``z_b`` (m)."""
+        buried_a = z_a >= 0.0
+        buried_b = z_b >= 0.0
+        if buried_a and buried_b:
+            return cls.buried(
+                earth,
+                max(z_a, 0.0),
+                max(z_b, 0.0),
+                earth.layer_of(z_a),
+                earth.layer_of(z_b),
+            )
+        if not buried_a and not buried_b:
+            return cls("air", 1, -(z_a + z_b), False, False, h_a=-z_a, h_b=-z_b)
+        z_soil, z_air = (z_a, z_b) if buried_a else (z_b, z_a)
+        if earth.layer_of(z_soil) == 1:
+            return cls("mixed1", 1, z_soil - z_air, False, True, h_a=z_soil, h_b=-z_air)
+        # Reciprocity: the generic solve needs the source in the soil.
+        return cls(
+            "generic",
+            earth.layer_of(z_soil),
+            max(z_soil - z_air, 1e-3),
+            False,
+            True,
+            z_a=z_air,
+            z_b=z_soil,
+        )
+
+    def scales(self, omega: float, earth: LayeredEarth) -> tuple[float, ...]:
+        """Physical wavenumbers (1/m) the panels are graded for."""
+        out = [math.sqrt(omega * MU_0 / r) for r in earth.rhos]
+        out += [1.0 / t for t in earth.thicknesses]
+        return tuple(out)
+
+    def weight(
+        self, lambdas: np.ndarray, omega: float, earth: LayeredEarth
+    ) -> np.ndarray:
+        """Spectral weight $w(\\lambda)$ with $\\Delta G \\ni \\int w J_0$."""
+        if self.kind == "air":
+            gamma = reflection_coefficient_layered(lambdas, omega=omega, earth=earth)
+            return -gamma * np.exp(-lambdas * (self.h_a + self.h_b))
+        u = _vertical_wavenumbers(lambdas, omega, earth)
+        if self.kind == "same":
+            return _same_layer_weight(
+                lambdas, u, earth, self.ref_layer, self.h_a, self.h_b
+            )
+        if self.kind == "mixed1":
+            w = _mixed_layer1_weight(lambdas, u, earth, self.h_a, self.h_b)
+            return w - np.exp(-lambdas * (self.h_a + self.h_b))
+        w = _generic_weight(lambdas, u, earth, self.z_a, self.z_b)
+        return w - np.exp(-lambdas * abs(self.z_a - self.z_b))
+
+
+# ---------------------------------------------------------------------
+# Segment-pair integration via 16x16 Gauss–Legendre outer
+# ---------------------------------------------------------------------
+
+
+def _rho_interp_setup(
+    rho_grid: np.ndarray, z_ref: float
+) -> tuple[np.ndarray | None, np.ndarray | None, np.ndarray]:
+    """Interpolation nodes of $S(\\rho)$ for one pair.
+
+    Returns ``(t_nodes, t_grid, rho_nodes)``; ``t_nodes`` is ``None``
+    when all outer nodes share one distance (single evaluation).
     """
     rho_min = float(rho_grid.min())
     rho_max = float(rho_grid.max())
     if rho_max - rho_min < 1e-9:
-        s_val = complex(np.sum(spectral_weights * j0(lambdas * rho_min)))
-        return np.full(rho_grid.shape, s_val, dtype=complex)
+        return None, None, np.array([rho_min])
     z_off = max(z_ref, 1e-3)
     t_lo = math.log(rho_min + z_off)
     t_hi = math.log(rho_max + z_off)
-    t_nodes = np.linspace(t_lo, t_hi, n_nodes)
-    rho_nodes = np.exp(t_nodes) - z_off
-    # Exact evaluation at the nodes: (n_nodes, nλ) — small.
-    s_nodes = (
-        j0(lambdas[None, :] * np.maximum(rho_nodes, 0.0)[:, None]) @ spectral_weights
-    )
+    t_nodes = np.linspace(t_lo, t_hi, _N_RHO_NODES)
+    rho_nodes = np.maximum(np.exp(t_nodes) - z_off, 0.0)
     t_grid = np.log(rho_grid + z_off)
+    return t_nodes, t_grid, rho_nodes
+
+
+def _interp_spectral(
+    s_nodes: np.ndarray,
+    t_nodes: np.ndarray | None,
+    t_grid: np.ndarray | None,
+    shape: tuple[int, ...],
+) -> np.ndarray:
+    """Linear interpolation of $S$ in $t = \\ln(\\rho + z)$ to the grid."""
+    if t_nodes is None:
+        return np.full(shape, complex(s_nodes[0]), dtype=complex)
     s_re = np.interp(t_grid.ravel(), t_nodes, s_nodes.real)
     s_im = np.interp(t_grid.ravel(), t_nodes, s_nodes.imag)
-    return (s_re + 1j * s_im).reshape(rho_grid.shape)
+    return (s_re + 1j * s_im).reshape(shape)
 
 
-def _two_layer_reflected_weight(
-    lambdas: np.ndarray,
-    u1: np.ndarray,
-    *,
-    omega: float,
-    earth: "LayeredEarth",
-    h_a: float,
-    h_b: float,
-    lambda_weights: np.ndarray,
-) -> np.ndarray:
-    r"""Reflected spectral weight for a source **and** observer buried in
-    layer 1 of a two-layer earth — the correct four-term Green's function
-    that replaces the single air-image form ``(λ/u1)·Γ·e^{-u1(h_a+h_b)}``.
+def _split_points(earth: LayeredEarth | None) -> tuple[float, ...]:
+    """Planes (depths in m) at which segments are split: surface + interfaces."""
+    if earth is None:
+        return (0.0,)
+    return (0.0, *earth.interface_depths)
 
-    Solves the two-interface spectral boundary-value problem (magnetic
-    vector potential ``A_x``: continuity of ``A`` and ``∂A/∂z`` at the
-    air–layer-1 and layer-1–layer-2 boundaries). With the primary
-    ``e^{-u1|z-z'|}/(2u1)`` and reflected ``A e^{-u1 z} + B e^{+u1 z}`` in
-    layer 1, the coefficients follow from a 2×2 system; the weight is
-    calibrated (factor ``2λ``) so the homogeneous limit (interface depth
-    ``d → ∞``, ``B → 0``) reproduces the existing single-layer term
-    exactly. Written in the numerically stable ``E = e^{-u1 d}`` form
-    (``d`` = ``earth.thicknesses[0]``; requires the mean depths
-    ``h_a`` (observer), ``h_b`` (source) both ``< d``, i.e. conductors in
-    layer 1). Validated against Tsiamitros 2005 Eq.(8) (WP-D2, 2026-07-20).
+
+def _split_segment(
+    p1: np.ndarray, p2: np.ndarray, planes: Sequence[float]
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Split a segment at the horizontal planes ``z = plane`` it crosses.
+
+    Returns the sub-segments in order; the cut points lie exactly on
+    their planes. A segment that only touches a plane is not split.
     """
-    sigma2 = 1.0 / earth.rhos[1]
-    u2 = np.sqrt(lambdas * lambdas + 1j * omega * MU_0 * sigma2)
-    d = float(earth.thicknesses[0])
-    E = np.exp(-u1 * d)
-    rhs1 = np.exp(-u1 * h_b) / (2.0 * u1) * (u1 - lambdas)
-    rhs2 = np.exp(-u1 * (d - h_b)) / (2.0 * u1) * (u2 - u1)
-    det = -(lambdas + u1) * (u1 + u2) - (lambdas - u1) * (u1 - u2) * E * E
-    a_up = (rhs1 * (-(u1 + u2)) - (lambdas - u1) * E * rhs2) / det
-    b_dn = ((lambdas + u1) * rhs2 - (u1 - u2) * E * rhs1) / det
-    reflected = a_up * np.exp(-u1 * h_a) + b_dn * np.exp(-u1 * (d - h_a))
-    return 2.0 * lambdas * reflected * lambda_weights
-
-
-def _pollaczek_inner_kernel(
-    rho_grid: np.ndarray,  # (16, 16) horizontal distances
-    dz_grid: np.ndarray,  # (16, 16) signed z_a - z_b
-    depth_a: np.ndarray,  # (16,)   |z| along segment a
-    depth_b: np.ndarray,  # (16,)   |z| along segment b
-    buried_a: bool,
-    buried_b: bool,
-    *,
-    omega: float,
-    sigma_top: float,
-    lambdas: np.ndarray,
-    lambda_weights: np.ndarray,
-    Gamma: np.ndarray,
-    earth: "LayeredEarth | None" = None,
-) -> np.ndarray:
-    """Pollaczek correction kernel on the outer 16×16 node grid.
-
-    Returns the correction **beyond the ADR-0004 additive-mirror
-    baseline** (see module docstring): the closed-form mirror
-    deduplication $-1/R'$, plus (buried–buried) the closed-form
-    direct-term attenuation $(e^{-\\gamma R} - 1)/R$, plus the
-    numerically integrated reflected/transmitted remainder of the
-    case-specific kernel. The spectral part uses the pair's mean
-    depth sum (segments assumed approximately horizontal — same
-    assumption as the historic kernel reuse, ADR-0006 numerical
-    notes) and is interpolated over $\\rho$
-    (:func:`_spectral_rho_interp`).
-    """
-    gamma2 = 1j * omega * MU_0 * sigma_top
-    gamma = np.sqrt(gamma2)
-    u1 = np.sqrt(lambdas * lambdas + gamma2)
-
-    ha = depth_a[:, None]  # (16, 1)
-    hb = depth_b[None, :]  # (1, 16)
-
-    if buried_a and buried_b:
-        z_sum = ha + hb
-        z_ref = float(z_sum.mean())
-        # Closed-form mirror dedup −1/R' (mirror at z = −h_b).
-        R_mir = np.sqrt(rho_grid**2 + z_sum**2)
-        inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
-        # Closed-form direct-term attenuation (e^{−γR} − 1)/R —
-        # smooth at R → 0 (limit −γ); carries the earth-return
-        # resistance of the buried path.
-        R3 = np.sqrt(rho_grid**2 + dz_grid**2)
-        small = R3 < 1e-9
-        R3_safe = np.where(small, 1.0, R3)
-        direct = np.where(
-            small,
-            -gamma,
-            (np.exp(-gamma * R3_safe) - 1.0) / R3_safe,
-        )
-        inner = inner + direct
-        # Reflected remainder. For a homogeneous earth (or n≥3, still
-        # approximate): the single air-image form (λ/u1)·Γ·e^{−u1(h+h')}.
-        # For a TWO-layer earth with both conductors in layer 1, use the
-        # correct buried-in-layer-1 four-term amplitude (WP-D2 fix): the
-        # single-image form under-weights the deep layer (validated vs
-        # Tsiamitros 2005 Eq.(8)). Both decay like Γ ~ γ²/(4λ²) at large λ.
-        h_a = float(depth_a.mean())
-        h_b = float(depth_b.mean())
-        if (
-            earth is not None
-            and earth.n_layers == 2
-            and max(h_a, h_b) < float(earth.thicknesses[0])
-        ):
-            spectral_w = _two_layer_reflected_weight(
-                lambdas,
-                u1,
-                omega=omega,
-                earth=earth,
-                h_a=h_a,
-                h_b=h_b,
-                lambda_weights=lambda_weights,
-            )
-        else:
-            spectral_w = (lambdas / u1) * Gamma * np.exp(-u1 * z_ref) * lambda_weights
-        inner = inner + _spectral_rho_interp(
-            rho_grid,
-            z_ref,
-            spectral_w,
-            lambdas,
-        )
-        return inner
-
-    if (not buried_a) and (not buried_b):
-        # Overhead pair — Carson geometry: air-side reflection −Γ.
-        z_sum = ha + hb
-        z_ref = float(z_sum.mean())
-        R_mir = np.sqrt(rho_grid**2 + z_sum**2)
-        inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
-        spectral_w = -Gamma * np.exp(-lambdas * z_ref) * lambda_weights
-        inner = inner + _spectral_rho_interp(
-            rho_grid,
-            z_ref,
-            spectral_w,
-            lambdas,
-        )
-        return inner
-
-    # Mixed pair: transmission through the soil surface. Assign the
-    # buried depth h and overhead height H per grid axis.
-    if buried_a:
-        h_g, H_g = ha, hb
-    else:
-        h_g, H_g = hb, ha
-    h_ref = float(h_g.mean())
-    H_ref = float(H_g.mean())
-    # Mirror dedup: the ADR-0004 mirror of the buried segment sits at
-    # −h, i.e. on the air side → mirror distance carries |h − H|.
-    R_mir = np.sqrt(rho_grid**2 + (h_g - H_g) ** 2)
-    inner = -1.0 / np.maximum(R_mir, 1e-9) + 0.0j
-    # Transmitted kernel minus the free-space direct term (the
-    # direct 1/R lives in the Neumann matrix): both decay with
-    # (h + H), so the remainder is integrable on the shared grid.
-    spectral_w = (
-        (2.0 * lambdas / (u1 + lambdas)) * np.exp(-u1 * h_ref - lambdas * H_ref)
-        - np.exp(-lambdas * (h_ref + H_ref))
-    ) * lambda_weights
-    inner = inner + _spectral_rho_interp(
-        rho_grid,
-        h_ref + H_ref,
-        spectral_w,
-        lambdas,
+    z1, z2 = float(p1[2]), float(p2[2])
+    length = float(np.linalg.norm(p2 - p1))
+    tol = 1e-9 * max(length, 1e-12)
+    cuts = sorted(
+        ((zc - z1) / (z2 - z1), zc)
+        for zc in planes
+        if min(z1, z2) < zc - tol and max(z1, z2) > zc + tol
     )
-    return inner
+    if not cuts:
+        return [(p1, p2)]
+    pts = [p1]
+    for s, zc in cuts:
+        q = p1 + s * (p2 - p1)
+        q[2] = zc
+        pts.append(q)
+    pts.append(p2)
+    return [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
 
 
-def _pollaczek_pair_integral(
+def _subpair_values(
+    pa1: np.ndarray,
+    pa2: np.ndarray,
+    pb1: np.ndarray,
+    pb2: np.ndarray,
+    dot: float,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+) -> np.ndarray:
+    """ΔZ (image ``"none"``) of one sub-segment pair for every frequency.
+
+    Both sub-segments lie in one medium each (split at the surface and
+    the interfaces). Returns complex values in Ω, shape ``(n_f,)``.
+    """
+    n_f = len(omegas)
+    out = np.zeros(n_f, dtype=complex)
+    da = pa2 - pa1
+    db = pb2 - pb1
+    la = float(np.linalg.norm(da))
+    lb = float(np.linalg.norm(db))
+    if la <= 0.0 or lb <= 0.0:
+        return out
+    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
+    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
+    pts_a = pa1[None, :] + s_nodes[:, None] * da[None, :]
+    pts_b = pb1[None, :] + s_nodes[:, None] * db[None, :]
+    diff = pts_a[:, None, :] - pts_b[None, :, :]
+    rho_grid = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
+    R3 = np.sqrt(rho_grid**2 + diff[:, :, 2] ** 2)
+    small = R3 < 1e-9
+    R3_safe = np.where(small, 1.0, R3)
+    outer_w = w_nodes[:, None] * w_nodes[None, :]
+
+    z_a = 0.5 * float(pa1[2] + pa2[2])
+    z_b = 0.5 * float(pb1[2] + pb2[2])
+    plan = _SpectralPlan.for_pair(earth, z_a, z_b)
+    t_nodes, t_grid, rho_nodes = _rho_interp_setup(rho_grid, plan.decay)
+    rho_max = float(rho_grid.max() + 1e-9)
+    sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
+
+    table_key = None
+    table = None
+    for k, omega in enumerate(omegas):
+        if omega <= 0.0:
+            continue
+        p_ref = math.sqrt(omega * MU_0 * sigma_ref)
+        params = _grid_params(
+            z_sum=plan.decay,
+            rho_max=rho_max,
+            p_ref=p_ref,
+            scales=plan.scales(omega, earth),
+        )
+        lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
+        if not resolved:
+            _warn_unresolved(params)
+        if params != table_key:
+            # Bessel table J0(lambda * rho_node) — the expensive part,
+            # shared by every frequency with the same grid.
+            table = j0(lambdas[None, :] * rho_nodes[:, None])
+            table_key = params
+        spec = plan.weight(lambdas, omega, earth) * lam_w
+        s_vals = table @ spec
+        inner = _interp_spectral(s_vals, t_nodes, t_grid, rho_grid.shape)
+        if plan.direct:
+            gamma = np.sqrt(1j * omega * MU_0 * sigma_ref)
+            inner = inner + np.where(
+                small, -gamma, (np.exp(-gamma * R3_safe) - 1.0) / R3_safe
+            )
+        geom = complex(np.sum(outer_w * inner)) * la * lb * dot
+        out[k] = 1j * omega * MU_0 / (4.0 * math.pi) * geom
+    return out
+
+
+def _pair_values_none(
     p1_a: np.ndarray,
     p2_a: np.ndarray,
     p1_b: np.ndarray,
     p2_b: np.ndarray,
-    *,
-    omega: float,
-    sigma_top: float,
-    gamma_provider,
-    earth: "LayeredEarth | None" = None,
-) -> complex:
-    """Shared geometric integration for both earth models.
-
-    ``gamma_provider(lambdas)`` returns the reflection coefficient
-    array (homogeneous or layered). ``earth`` is forwarded to the inner
-    kernel so that a two-layer earth uses the correct buried-in-layer-1
-    reflected amplitude for a buried–buried pair (``None`` → the
-    single-image homogeneous form).
-    """
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+) -> np.ndarray:
+    """ΔZ of a segment pair relative to free space (image ``"none"``)."""
     p1_a = np.asarray(p1_a, dtype=float)
     p2_a = np.asarray(p2_a, dtype=float)
     p1_b = np.asarray(p1_b, dtype=float)
     p2_b = np.asarray(p2_b, dtype=float)
-    if omega <= 0.0 or sigma_top <= 0.0:
-        return 0.0 + 0.0j
+    out = np.zeros(len(omegas), dtype=complex)
     da = p2_a - p1_a
     db = p2_b - p1_b
     la = float(np.linalg.norm(da))
     lb = float(np.linalg.norm(db))
     if la <= 0.0 or lb <= 0.0:
-        return 0.0 + 0.0j
-    ua = da / la
-    ub = db / lb
-    dot = float(ua @ ub)
+        return out
+    dot = float((da / la) @ (db / lb))
     if abs(dot) < 1e-12:
-        return 0.0 + 0.0j  # orthogonal segments
+        return out  # orthogonal segments: the A_x-type kernel vanishes
+    planes = _split_points(earth)
+    subs_a = _split_segment(p1_a, p2_a, planes)
+    subs_b = _split_segment(p1_b, p2_b, planes)
+    for sa1, sa2 in subs_a:
+        for sb1, sb2 in subs_b:
+            out += _subpair_values(sa1, sa2, sb1, sb2, dot, omegas, earth)
+    return out
 
-    # Outer grids.
-    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
-    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
-    pts_a = p1_a[None, :] + s_nodes[:, None] * da[None, :]
-    pts_b = p1_b[None, :] + s_nodes[:, None] * db[None, :]
-    diff = pts_a[:, None, :] - pts_b[None, :, :]
-    rho_grid = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
-    dz_grid = diff[:, :, 2]
-    z_a = pts_a[:, 2]
-    z_b = pts_b[:, 2]
-    depth_a = np.abs(z_a)
-    depth_b = np.abs(z_b)
-    # Side dispatch by segment midpoint (segments crossing z = 0 are
-    # blocked upstream by the surface-plane guard in
-    # build_inductance_matrix).
-    buried_a = bool(0.5 * (z_a[0] + z_a[-1]) >= 0.0)
-    buried_b = bool(0.5 * (z_b[0] + z_b[-1]) >= 0.0)
 
-    z_sum_grid = depth_a[:, None] + depth_b[None, :]
-    z_sum_worst = max(float(z_sum_grid.min()), 1e-3)
-    rho_max = float(rho_grid.max() + 1e-9)
-    lambdas, lambda_weights = _build_lambda_grid(
-        z_sum=z_sum_worst,
-        rho_max=rho_max,
-        omega=omega,
-        sigma_top=sigma_top,
+def _convert_image(
+    values: np.ndarray, omegas: Sequence[float], m_img: float, mode: str
+) -> np.ndarray:
+    """Move a ``"none"`` correction to another image convention."""
+    if mode == "none":
+        return values
+    sign = -1.0 if mode == "additive" else 1.0
+    om = np.asarray(omegas, dtype=float)
+    return values + np.where(om > 0.0, sign * 1j * om * m_img, 0.0)
+
+
+def _pair_image_mutual(p1_a, p2_a, p1_b, p2_b) -> float:
+    """Neumann mutual of segment a and the mirrored segment b (H)."""
+    p1_b = np.asarray(p1_b, dtype=float)
+    p2_b = np.asarray(p2_b, dtype=float)
+    seg = np.array([[p1_a, p2_a], [p1_b, p2_b]], dtype=float)
+    _check_image_geometry(
+        seg[:, 0], seg[:, 1], np.zeros(2), where="earth-return correction"
     )
-    Gamma = gamma_provider(lambdas)
-
-    inner = _pollaczek_inner_kernel(
-        rho_grid,
-        dz_grid,
-        depth_a,
-        depth_b,
-        buried_a,
-        buried_b,
-        omega=omega,
-        sigma_top=sigma_top,
-        lambdas=lambdas,
-        lambda_weights=lambda_weights,
-        Gamma=Gamma,
-        earth=earth,
+    return neumann_mutual(
+        np.asarray(p1_a, dtype=float),
+        np.asarray(p2_a, dtype=float),
+        _mirror(p1_b),
+        _mirror(p2_b),
     )
-
-    outer_w = w_nodes[:, None] * w_nodes[None, :]
-    geom_integral = complex(np.sum(outer_w * inner))
-    geom_integral *= la * lb * dot
-
-    return 1j * omega * MU_0 / (4.0 * math.pi) * geom_integral
 
 
 def sommerfeld_pair_integral_homogeneous(
@@ -856,59 +1215,47 @@ def sommerfeld_pair_integral_homogeneous(
     *,
     omega: float,
     sigma_earth: float,
+    image: ImageConvention = "additive",
 ) -> complex:
     """Integrate the σ-dependent magnetic Green function over a segment pair.
 
     Computes
 
     $$
-    \\Delta Z^{(i,j)}_\\text{Sommerfeld} \\;=\\; \\frac{j\\omega\\mu_0}{4\\pi}
+    \\Delta Z^{(i,j)} \\;=\\; \\frac{j\\omega\\mu_0}{4\\pi}
     \\int_{C_i}\\!\\!\\int_{C_j}
     (\\hat{l}_i\\cdot\\hat{l}_j)\\,
-    \\Delta G_\\text{mag}(\\vec{r}_i, \\vec{r}_j;\\,\\omega,\\sigma_e)\\,
+    \\Delta G(\\vec{r}_i, \\vec{r}_j;\\,\\omega,\\sigma_e)\\,
     dl_i\\,dl_j,
     $$
 
-    where $\\Delta G_\\text{mag}$ is the σ-dependent earth-return
-    correction beyond the ADR-0004 additive-mirror baseline
-    (vanishes for σ → 0 together with the mirror; see the module
-    docstring for the case-dispatched Pollaczek kernels). Used by
+    the earth-return correction of a homogeneous earth relative to the
+    image convention ``image`` of the inductance matrix it is added to
+    (see the module docstring). Used by
     :func:`build_sommerfeld_correction_matrix`.
 
-    The integration is 16×16 Gauss–Legendre over the two segment
-    parameterisations. The Sommerfeld inner integral is **not**
-    re-evaluated at every outer node — the spectral kernel is
-    computed once per segment pair on a shared λ-grid and reused
-    (valid because the segments are assumed approximately horizontal
-    so the depth sum varies negligibly along them; see ADR-0006
-    numerical notes). The closed-form pieces (mirror deduplication
-    $-1/R'$; buried–buried direct attenuation
-    $(e^{-\\gamma R} - 1)/R$) are evaluated exactly per outer node.
+    Parameters
+    ----------
+    p1_a, p2_a, p1_b, p2_b
+        End points of the two segments in m ($z > 0$ in the soil).
+    omega
+        Angular frequency in rad/s.
+    sigma_earth
+        Earth conductivity in S/m.
+    image
+        ``"additive"`` (default, the historic ADR-0004 baseline),
+        ``"none"`` or ``"antiparallel"``.
 
     Returns
     -------
     Z : complex
-        Per-pair earth-return correction in $\\Omega$ (already
-        includes the $j\\omega\\mu_0/(4\\pi)$ pre-factor).
+        Per-pair earth-return correction in $\\Omega$.
     """
     if omega <= 0.0 or sigma_earth <= 0.0:
         return 0.0 + 0.0j
-
-    def _gamma(lambdas: np.ndarray) -> np.ndarray:
-        return reflection_coefficient_homogeneous(
-            lambdas,
-            omega=omega,
-            sigma_earth=sigma_earth,
-        )
-
-    return _pollaczek_pair_integral(
-        p1_a,
-        p2_a,
-        p1_b,
-        p2_b,
-        omega=omega,
-        sigma_top=sigma_earth,
-        gamma_provider=_gamma,
+    earth = LayeredEarth(rhos=(1.0 / sigma_earth,), thicknesses=())
+    return sommerfeld_pair_integral_layered(
+        p1_a, p2_a, p1_b, p2_b, omega=omega, earth=earth, image=image
     )
 
 
@@ -920,45 +1267,42 @@ def sommerfeld_pair_integral_layered(
     *,
     omega: float,
     earth: LayeredEarth,
+    image: ImageConvention = "additive",
 ) -> complex:
     """Layered-earth analogue of :func:`sommerfeld_pair_integral_homogeneous`.
 
-    The reflected term uses the layered reflection coefficient; the
-    $\\lambda/u_1$ weight, the $e^{-u_1(\\cdot)}$ exponents and the
-    buried direct-term attenuation use the **top-layer** $u_1$ /
-    $\\gamma_1$ (the conductors live in layer 1 — deeper layers act
-    through the reflection coefficient only).
+    Exact layered kernel for any number of layers (generalised
+    reflection coefficients; transmitted amplitudes for pairs in
+    different media). Segments that cross the soil surface or a layer
+    interface are split there.
+
+    Parameters
+    ----------
+    p1_a, p2_a, p1_b, p2_b
+        End points of the two segments in m.
+    omega
+        Angular frequency in rad/s.
+    earth
+        Layered-earth configuration.
+    image
+        Image convention of the inductance matrix the correction is
+        added to (``"additive"`` default, ``"none"``,
+        ``"antiparallel"``). With an image, a segment that crosses the
+        soil surface raises ``ValueError`` (its image is singular).
+
+    Returns
+    -------
+    Z : complex
+        Per-pair earth-return correction in $\\Omega$.
     """
-    if earth.n_layers == 1:
-        return sommerfeld_pair_integral_homogeneous(
-            p1_a,
-            p2_a,
-            p1_b,
-            p2_b,
-            omega=omega,
-            sigma_earth=1.0 / earth.rhos[0],
-        )
+    mode = _resolve_image(image, None)
     if omega <= 0.0:
         return 0.0 + 0.0j
-    sigma_top = 1.0 / earth.rhos[0]
-
-    def _gamma(lambdas: np.ndarray) -> np.ndarray:
-        return reflection_coefficient_layered(
-            lambdas,
-            omega=omega,
-            earth=earth,
-        )
-
-    return _pollaczek_pair_integral(
-        p1_a,
-        p2_a,
-        p1_b,
-        p2_b,
-        omega=omega,
-        sigma_top=sigma_top,
-        gamma_provider=_gamma,
-        earth=earth,
-    )
+    m_img = 0.0
+    if mode != "none":
+        m_img = _pair_image_mutual(p1_a, p2_a, p1_b, p2_b)
+    vals = _pair_values_none(p1_a, p2_a, p1_b, p2_b, [omega], earth)
+    return complex(_convert_image(vals, [omega], m_img, mode)[0])
 
 
 # ---------------------------------------------------------------------
@@ -966,44 +1310,109 @@ def sommerfeld_pair_integral_layered(
 # ---------------------------------------------------------------------
 
 
+def build_sommerfeld_correction_matrices(
+    seg_endpoints: np.ndarray,  # shape (M, 2, 3)
+    wire_radii: np.ndarray | None = None,
+    *,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+    image: ImageConvention = "additive",
+) -> np.ndarray:
+    """Sommerfeld earth-return correction matrices for several frequencies.
+
+    Multi-frequency form of :func:`build_sommerfeld_correction_matrix`
+    (finding 10.60): per segment pair the outer geometry, the
+    $\\lambda$ grid and the Bessel table $J_0(\\lambda\\rho)$ — about
+    three quarters of the historic per-frequency cost — are built once
+    and reused for every frequency with the same grid. Entry ``k``
+    equals ``build_sommerfeld_correction_matrix(..., omega=omegas[k])``
+    bit for bit.
+
+    Parameters
+    ----------
+    seg_endpoints
+        Array of shape ``(M, 2, 3)``: start and end point (m) of every
+        inductive branch segment.
+    wire_radii
+        Per-branch wire radii in m (unused: the radius enters through
+        the self terms of the inductance matrix). Kept for API parity.
+    omegas
+        Angular frequencies in rad/s; entries ``<= 0`` give zeros.
+    earth
+        Layered-earth configuration.
+    image
+        Image convention of the inductance matrix the corrections are
+        added to: ``"additive"`` (default — what the solver assembles
+        today), ``"none"`` (exact baseline, cheapest) or
+        ``"antiparallel"``.
+
+    Returns
+    -------
+    dZ : np.ndarray, shape (n_f, M, M), dtype complex
+        Symmetric correction matrices in Ω.
+    """
+    mode = _resolve_image(image, None)
+    omegas = [float(om) for om in np.atleast_1d(np.asarray(omegas, dtype=float))]
+    seg_endpoints = np.asarray(seg_endpoints, dtype=float)
+    M = seg_endpoints.shape[0]
+    out = np.zeros((len(omegas), M, M), dtype=complex)
+    if M == 0 or all(om <= 0.0 for om in omegas):
+        return out
+    L_img = _image_inductance_matrix(seg_endpoints) if mode != "none" else None
+    for i in range(M):
+        p1_i = seg_endpoints[i, 0]
+        p2_i = seg_endpoints[i, 1]
+        for j in range(i, M):
+            vals = _pair_values_none(
+                p1_i, p2_i, seg_endpoints[j, 0], seg_endpoints[j, 1], omegas, earth
+            )
+            out[:, i, j] = vals
+            out[:, j, i] = vals
+    if L_img is not None:
+        sign = -1.0 if mode == "additive" else 1.0
+        for k, om in enumerate(omegas):
+            if om > 0.0:
+                out[k] += sign * 1j * om * L_img
+    return out
+
+
 def build_sommerfeld_correction_matrix(
     seg_endpoints: np.ndarray,  # shape (M, 2, 3)
-    wire_radii: np.ndarray,  # shape (M,) — currently unused but kept for API parity
+    wire_radii: np.ndarray | None = None,
     *,
     omega: float,
     earth: LayeredEarth,
+    image: ImageConvention = "additive",
 ) -> np.ndarray:
     """Assemble the dense Sommerfeld earth-return correction matrix.
 
-    The output is the σ-dependent addition to the perfect-mirror
-    Neumann inductance matrix from
-    :func:`groundfield.coupling.inductance.build_inductance_matrix`.
-    The two should be added (after multiplying $L_\\text{Neumann}$
-    by $j\\omega$):
+    The output is the σ-dependent addition to the Neumann inductance
+    matrix of
+    :func:`groundfield.coupling.inductance.build_inductance_matrix`
+    built with the same image convention:
 
     .. code-block:: python
 
-        Z_b = jω · L_Neumann + dZ_Sommerfeld
+        Z_b = jω · L(image=image) + dZ_Sommerfeld(image=image)
 
     For ``earth.n_layers == 1`` this is the homogeneous-earth
-    Sommerfeld kernel; for ``n >= 2`` the layered Pollaczek-Wait
-    kernel is used.
+    Pollaczek kernel; for ``n >= 2`` the exact layered kernel is used.
+    Several frequencies at once: :func:`build_sommerfeld_correction_matrices`.
 
     Parameters
     ----------
     seg_endpoints
         Array of shape ``(M, 2, 3)`` with the start- and end-points
-        of every distributed-conductor longitudinal-branch segment.
+        (m) of every distributed-conductor longitudinal-branch segment.
     wire_radii
-        Per-branch wire radii. Currently unused (the radius is
-        already in the perfect-mirror diagonal handled by
-        ``build_inductance_matrix``); reserved for future use when
-        the diagonal needs a wire-radius regularisation in the
-        Sommerfeld self-pair integral.
+        Per-branch wire radii in m (unused, kept for API parity).
     omega
         Angular frequency in rad/s.
     earth
         Layered-earth configuration.
+    image
+        ``"additive"`` (default), ``"none"`` or ``"antiparallel"`` —
+        see the module docstring.
 
     Returns
     -------
@@ -1012,24 +1421,9 @@ def build_sommerfeld_correction_matrix(
     """
     if omega <= 0.0:
         return np.zeros(
-            (seg_endpoints.shape[0], seg_endpoints.shape[0]),
+            (np.asarray(seg_endpoints).shape[0],) * 2,
             dtype=complex,
         )
-    M = seg_endpoints.shape[0]
-    dZ = np.zeros((M, M), dtype=complex)
-    for i in range(M):
-        p1_i = seg_endpoints[i, 0]
-        p2_i = seg_endpoints[i, 1]
-        for j in range(i, M):
-            p1_j = seg_endpoints[j, 0]
-            p2_j = seg_endpoints[j, 1]
-            val = sommerfeld_pair_integral_layered(
-                p1_i,
-                p2_i,
-                p1_j,
-                p2_j,
-                omega=omega,
-                earth=earth,
-            )
-            dZ[i, j] = dZ[j, i] = val
-    return dZ
+    return build_sommerfeld_correction_matrices(
+        seg_endpoints, wire_radii, omegas=[omega], earth=earth, image=image
+    )[0]

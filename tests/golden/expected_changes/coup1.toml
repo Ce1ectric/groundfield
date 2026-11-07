@@ -1,0 +1,27 @@
+# Stream COUP-1 — earth-return / inductive-coupling physics.
+#
+# Only the "sommerfeld" earth-return model moves in this stream; the
+# "carson_series" and "perfect_mirror" cases stay bit-identical (their
+# changes — the anti-parallel image baseline, exact touching pairs,
+# Carson's small-a term — are switched on in the solver in wave 2).
+# Measured on this branch: cond_galvanic_neumann_sommerfeld and
+# defaults_mixed_cluster_inductive max_rel 1.75e-9 (5 m segments at
+# 0.5 m, pairs within 20 m); cond_isolated_pen_sommerfeld_two_layer
+# max_rel 1.94e-5 (20 m segments at 0.5 m: the old -1/R' removal of the
+# image missed part of it for segments much longer than 2h).
+
+[[change]]
+cases = ["cond_galvanic_neumann_sommerfeld", "defaults_mixed_cluster_inductive"]
+quantities = ["*"]
+findings = ["10.36", "10.46"]
+reason = "Sommerfeld lambda grid resolves J0 with the F14 policy (10.36) and the additive image is removed exactly (10.46)."
+min_rel_change = 5e-10
+max_rel_change = 1e-7
+
+[[change]]
+cases = ["cond_isolated_pen_sommerfeld_two_layer"]
+quantities = ["*"]
+findings = ["10.36", "10.46"]
+reason = "Sommerfeld lambda grid (10.36); exact removal of the additive image for 20 m segments at 0.5 m depth (10.46)."
+min_rel_change = 1e-6
+max_rel_change = 1e-4
