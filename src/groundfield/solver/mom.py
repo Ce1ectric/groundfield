@@ -117,7 +117,10 @@ import numpy as np
 
 from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
 from groundfield.solver import _pipeline
-from groundfield.solver._guards import _check_segment_depths
+from groundfield.solver._guards import (
+    _check_point_cross_layer_diagonal,
+    _check_segment_depths,
+)
 from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._layered import canonical_soil
 from groundfield.solver._pipeline import (
@@ -717,6 +720,17 @@ class _MomGreen(_PointMatchingGreen):
                 "%.3f m) — using the ADR-0007 Sommerfeld kernel.",
                 z_max,
                 soil.h_1,
+            )
+            _check_point_cross_layer_diagonal(
+                segments,
+                arrays.points,
+                arrays.lengths,
+                arrays.directions,
+                float(soil.h_1),
+                backend=repr(self.backend),
+                remedy="Use backend='image_2layer' with its default line kernel, "
+                "which integrates these segments exactly, or a finer "
+                "segment_length",
             )
         return _two_layer_self_kernel_factory(
             soil,

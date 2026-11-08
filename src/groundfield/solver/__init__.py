@@ -31,6 +31,12 @@ solve_mutual_matrix, solve_mutual_field
     Multi-port grounding matrices of the image family.
 register_backend, get_backend, available_backends, BackendCapabilities
     The backend registry, with its error, warning and options classes.
+PointKernelInterfaceWarning
+    Diagnostic warning category: on the cross-layer path of a two-layer
+    soil the point form of the reaction matrix (``kernel="point"`` and the
+    ``mom`` family) meets a horizontal wire within 0.6 segment lengths of
+    the layer interface (-3 % ... -17 % against the exact line kernel;
+    closer still the solve raises).
 ShallowSegmentWarning
     Diagnostic warning category: a leakage segment is longer than four
     times its burial depth, so the point-image stand-in for the
@@ -50,6 +56,7 @@ reduction step.
 
 from __future__ import annotations
 
+from groundfield.solver._guards import PointKernelInterfaceWarning
 from groundfield.solver.engine import CORE_METADATA_KEYS, Backend, Engine
 from groundfield.solver.image import ShallowSegmentWarning, solve_image
 from groundfield.solver.image_2layer import solve_image_2layer
@@ -89,6 +96,7 @@ __all__ = [
     "MomSommerfeldOptions",
     "FemOptions",
     "CORE_METADATA_KEYS",
+    "PointKernelInterfaceWarning",
     "ShallowSegmentWarning",
     "solve_image",
     "solve_image_2layer",
