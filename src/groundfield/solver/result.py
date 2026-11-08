@@ -305,7 +305,7 @@ def _check_string_array_size(itemsize: int, items: list[str], path: str) -> None
     if nbytes > max(_NDARRAY_FREE_BYTES, _NDARRAY_MAX_EXPANSION * text):
         raise ValueError(
             f"{path}: {_TAG_NDARRAY} string array of width {itemsize // 4} "
-            f"with {len(items)} items takes {nbytes} bytes, more than "
+            f"with {len(items)} item(s) takes {nbytes} bytes, more than "
             f"{_NDARRAY_MAX_EXPANSION} bytes per character of its items; "
             "store the strings at the width of the longest item "
             "(numpy.array(list_of_strings))."
