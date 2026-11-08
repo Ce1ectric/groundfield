@@ -71,7 +71,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import MultiLayerSoil, TwoLayerSoil
+from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
 from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._guards import (
     _MIN_DISTANCE,
@@ -621,7 +621,7 @@ def _build_phi_hom_per_source_rho(
     the segment average and the point form of the direct and
     surface-image terms is scaled, for a pair in different layers
     (``lower[i] != lower[j]``), with ``transmitted_rho``
-    :math:`= 2\rho_1\rho_2/(\rho_1 + \rho_2)` instead of the source
+    :math:`= 2\\rho_1\\rho_2/(\\rho_1 + \\rho_2)` instead of the source
     resistivity: that is the coefficient of the transmitted direct and
     surface-image terms of the two-layer Green's function, whose point
     form the layered correction completes. Scaling it with the source
@@ -762,7 +762,12 @@ def _solve_with_layer_owners(
         disc, topo, [e.name for e in world.electrodes], _owner_interfaces(green.soil)
     )
     branches = assemble_branches(world, engine, topo)
-    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    _check_segment_depths(
+        disc.segments,
+        where=green.where,
+        stacklevel=stacklevel + 1,
+        kernel=engine.kernel,
+    )
     arrays = SegmentArrays.from_segments(disc.segments)
     kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
     solution = solve(
@@ -958,13 +963,14 @@ def solve_image_2layer(
 
     Raises
     ------
-    TypeError
-        If the soil is neither a :class:`TwoLayerSoil` nor a
-        :class:`~groundfield.soil.models.MultiLayerSoil` (which is solved
-        as the equivalent two-layer soil when its canonical stack has at
-        most two layers).
     BackendCapabilityError
-        If a ``MultiLayerSoil`` has three or more distinct layers.
+        If the soil is a :class:`HomogeneousSoil` or a
+        :class:`~groundfield.soil.models.MultiLayerSoil` with three or
+        more distinct layers (a stack with at most two is solved as the
+        equivalent two-layer soil). Before 2026.11 both raised
+        :class:`TypeError`.
+    TypeError
+        If ``world.soil`` is no soil model.
     ValueError
         If the world has no electrodes, or the geometry fails a
         discretisation guard (thin wire, burial depth).
@@ -979,9 +985,17 @@ def solve_image_2layer(
         # stack that merges to at most two layers; solve it as the
         # equivalent TwoLayerSoil instead of raising a bare TypeError.
         world = world.model_copy(update={"soil": _as_two_layer(world.soil)})
+    if isinstance(world.soil, HomogeneousSoil):
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
+            "Backend 'image_2layer' solves two-layer soil; got a "
+            "HomogeneousSoil. Use backend='image' (Engine(backend='image')"
+            ".solve dispatches by soil model)."
+        )
     if not isinstance(world.soil, TwoLayerSoil):
         raise TypeError(
-            "Backend 'image_2layer' requires TwoLayerSoil. "
+            "Backend 'image_2layer' requires a TwoLayerSoil. "
             f"Got: {type(world.soil).__name__}."
         )
     if not world.electrodes:
@@ -1001,7 +1015,7 @@ def solve_image_2layer(
         tol = engine.image_series_tol
     if engine.kernel is None:
         # The backend's preferred kernel (Engine.kernel = None, 10.28).
-        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
+        engine = engine._with(kernel=DEFAULT_KERNEL)
     green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
     if _crosses_interface(world, _owner_interfaces(soil)):
         # One owner per (electrode, layer) for rods through h_1 (10.15).

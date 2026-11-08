@@ -40,7 +40,8 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
+import secrets
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,29 @@ RESULT_SCHEMA_VERSION = 1
 
 class ResultFormatError(ValueError):
     """A file is not a readable groundfield result file."""
+
+
+def _create_temporary(directory: Path, name: str) -> tuple[int, str]:
+    """Create ``directory/.<name>.<random>.tmp`` exclusively for writing.
+
+    Like :func:`tempfile.mkstemp` (``O_CREAT | O_EXCL``, never follows a
+    symbolic link), but with the permission bits ``0o666`` filtered by
+    the process umask instead of mkstemp's fixed ``0o600``, so the
+    result file gets the permissions of a plain ``open(path, "w")``.
+
+    Returns
+    -------
+    tuple of (int, str)
+        The open file descriptor and the path of the temporary file.
+    """
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    for _ in range(100):
+        candidate = os.path.join(directory, f".{name}.{secrets.token_hex(8)}.tmp")
+        try:
+            return os.open(candidate, flags, 0o666), candidate
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"no free temporary file name in {directory}")
 
 
 def save_result(
@@ -107,7 +131,10 @@ def save_result(
     -----
     The file is written to a temporary file in the target directory and
     moved into place with :func:`os.replace`, so an interrupted write
-    never leaves a truncated result file behind.
+    never leaves a truncated result file behind. Its permissions are
+    those of a plain ``open(path, "w")``: a new file gets ``0o666``
+    reduced by the process umask (``0o644`` under the usual ``022``), a
+    replaced file keeps its mode.
     """
     if not isinstance(result, FieldResult):
         raise TypeError(
@@ -128,11 +155,11 @@ def save_result(
     }
     text = json.dumps(envelope, allow_nan=False, indent=indent, ensure_ascii=False)
     directory = target.parent if str(target.parent) else Path(".")
-    fd, tmp_name = tempfile.mkstemp(
-        prefix=f".{target.name}.", suffix=".tmp", dir=directory
-    )
+    fd, tmp_name = _create_temporary(directory, target.name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            if target.exists():  # overwrite: keep the mode of the replaced file
+                os.chmod(tmp_name, stat.S_IMODE(target.stat().st_mode))
             handle.write(text)
             handle.write("\n")
             handle.flush()
@@ -161,17 +188,35 @@ def load_result(path: str | os.PathLike[str]) -> FieldResult:
     Raises
     ------
     ResultFormatError
-        If the file is not JSON, not a groundfield result file, uses a
-        schema version newer than :data:`RESULT_SCHEMA_VERSION`, or
-        lacks the ``result`` body.
+        If the file is not UTF-8 JSON (or nests too deeply for the JSON
+        parser), not a groundfield result file, uses a schema version
+        newer than :data:`RESULT_SCHEMA_VERSION`, or lacks the
+        ``result`` body.
     pydantic.ValidationError
         If the ``result`` body does not validate as a
-        :class:`FieldResult`.
+        :class:`FieldResult`, including malformed tagged metadata (see
+        :mod:`groundfield.solver.result`). Both error types subclass
+        :class:`ValueError`.
+
+    Notes
+    -----
+    The reader accepts only what :func:`save_result` writes, so a file
+    from an untrusted source cannot make it allocate more than a small
+    multiple of the file size or create object, datetime or void
+    arrays. No pickle is involved at any point.
     """
     source = Path(path)
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ResultFormatError(f"{source} is not UTF-8 text: {exc}") from exc
+    try:
+        payload = json.loads(text)
+    except RecursionError as exc:
+        raise ResultFormatError(
+            f"{source} nests JSON values too deeply to be a result file."
+        ) from exc
+    except ValueError as exc:  # json.JSONDecodeError and over-long integers
         raise ResultFormatError(f"{source} is not a JSON file: {exc}") from exc
     if not isinstance(payload, dict) or "format" not in payload:
         raise ResultFormatError(

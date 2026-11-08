@@ -688,3 +688,157 @@ def test_release_of_the_real_project_files(tmp_path: Path) -> None:
     old_tail = old_changelog.split("## [Unreleased]", 1)[1].split("\n## [", 1)[1]
     assert old_tail.split("\n[Unreleased]: ", 1)[0] in new_changelog
     assert repo.git("status", "--porcelain") == ""
+
+
+# ---------------------------------------------------------------- remote state
+
+
+def _with_origin(repo: Repo, tmp_path: Path, *, push: bool = True) -> Path:
+    """Give ``repo`` a local bare ``origin`` (no network) and push main to it."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "main", str(origin)],
+        env=repo.env,
+        check=True,
+    )
+    repo.git("remote", "add", "origin", str(origin))
+    if push:
+        repo.git("push", "-q", "-u", "origin", "main", "--tags")
+    return origin
+
+
+def _clone(origin: Path, path: Path, env: dict[str, str]) -> Repo:
+    subprocess.run(["git", "clone", "-q", str(origin), str(path)], env=env, check=True)
+    return Repo(path, env)
+
+
+@pytest.mark.finding("A1-11", "10.09")
+def test_a_clone_behind_its_upstream_is_refused(repo: Repo, tmp_path: Path) -> None:
+    """The release was cut and pushed from another clone: the stale clone
+    must not compute the same version again and create a second, different
+    tag (the push would only fail later)."""
+    origin = _with_origin(repo, tmp_path)
+    laptop = _clone(origin, tmp_path / "laptop", repo.env)
+    done = repo.run_release("calver", "--date", "2026-11-07")
+    assert done.returncode == 0, _output(done)
+    repo.git("push", "-q", "origin", "main", "v2026.11.0")
+
+    before, head, tags = laptop.snapshot(), laptop.head(), laptop.tags()
+    stale = laptop.run_release("calver", "--date", "2026-11-20")
+
+    assert stale.returncode == 1, _output(stale)
+    assert "behind" in _output(stale) and "origin/main" in _output(stale)
+    _assert_untouched(laptop, before, head, tags)
+
+
+@pytest.mark.finding("A1-11", "10.09")
+def test_a_diverged_branch_is_refused(repo: Repo, tmp_path: Path) -> None:
+    origin = _with_origin(repo, tmp_path)
+    other = _clone(origin, tmp_path / "other", repo.env)
+    other.write("docs/other.md", "# other\n")
+    other.commit_all("other work")
+    other.git("push", "-q", "origin", "main")
+    repo.write("docs/local.md", "# local\n")
+    repo.commit_all("local work")
+
+    result = repo.run_release("calver", "--date", "2026-11-07")
+
+    assert result.returncode == 1
+    assert "behind" in _output(result)
+
+
+@pytest.mark.finding("A1-11", "10.09")
+def test_a_tag_on_the_remote_counts_like_a_local_one(
+    repo: Repo, tmp_path: Path
+) -> None:
+    """A tag that exists only on the remote (pushed from another clone)."""
+    origin = _with_origin(repo, tmp_path)
+    other = _clone(origin, tmp_path / "other", repo.env)
+    other.git("tag", "-a", "v2026.11.0", "-m", "v2026.11.0")
+    other.git("push", "-q", "origin", "v2026.11.0")
+    before, head, tags = repo.snapshot(), repo.head(), repo.tags()
+
+    explicit = repo.run_release("set", "2026.11.0", "--date", "2026-11-07")
+    assert explicit.returncode == 1
+    assert "v2026.11.0" in _output(explicit) and "remote" in _output(explicit)
+    _assert_untouched(repo, before, head, tags)
+
+    derived = repo.run_release("calver", "--date", "2026-11-07")
+    assert derived.returncode == 0, _output(derived)
+    assert "v2026.11.1" in repo.tags()
+
+
+@pytest.mark.finding("A1-11")
+def test_an_unreachable_remote_aborts(repo: Repo, tmp_path: Path) -> None:
+    origin = _with_origin(repo, tmp_path)
+    shutil.rmtree(origin)
+    before, head, tags = repo.snapshot(), repo.head(), repo.tags()
+
+    result = repo.run_release("calver", "--date", "2026-11-07")
+
+    assert result.returncode == 1
+    assert "origin" in _output(result)
+    _assert_untouched(repo, before, head, tags)
+
+
+@pytest.mark.finding("A1-11")
+def test_a_branch_without_upstream_is_refused_when_a_remote_exists(
+    repo: Repo, tmp_path: Path
+) -> None:
+    _with_origin(repo, tmp_path, push=False)
+
+    result = repo.run_release("calver", "--date", "2026-11-07", "--dry-run")
+
+    assert result.returncode == 1
+    assert "upstream" in _output(result)
+
+
+def test_a_branch_ahead_of_its_upstream_is_released(repo: Repo, tmp_path: Path) -> None:
+    _with_origin(repo, tmp_path)
+    repo.write("docs/more.md", "# not pushed yet\n")
+    repo.commit_all("local work")
+
+    result = repo.run_release("calver", "--date", "2026-11-07")
+
+    assert result.returncode == 0, _output(result)
+    assert "v2026.11.0" in repo.tags()
+
+
+def test_the_remote_checks_change_nothing(repo: Repo, tmp_path: Path) -> None:
+    """No fetch: remote-tracking refs and FETCH_HEAD stay as they were."""
+    origin = _with_origin(repo, tmp_path)
+    other = _clone(origin, tmp_path / "other", repo.env)
+    other.write("docs/other.md", "# other\n")
+    other.commit_all("other work")
+    other.git("push", "-q", "origin", "main")
+    tracking = repo.git("rev-parse", "refs/remotes/origin/main")
+
+    repo.run_release("calver", "--date", "2026-11-07", "--dry-run")
+
+    assert repo.git("rev-parse", "refs/remotes/origin/main") == tracking
+    assert not (repo.path / ".git" / "FETCH_HEAD").exists()
+
+
+def test_a_repository_without_remote_releases_with_a_note(repo: Repo) -> None:
+    result = repo.run_release("calver", "--date", "2026-11-07")
+
+    assert result.returncode == 0, _output(result)
+    assert "no git remote" in _output(result)
+
+
+@pytest.mark.finding("A1-11")
+def test_an_upstream_branch_missing_on_the_remote_aborts(
+    repo: Repo, tmp_path: Path
+) -> None:
+    origin = _with_origin(repo, tmp_path)
+    subprocess.run(
+        ["git", "update-ref", "-d", "refs/heads/main"],
+        cwd=origin,
+        env=repo.env,
+        check=True,
+    )
+
+    result = repo.run_release("calver", "--date", "2026-11-07", "--dry-run")
+
+    assert result.returncode == 1
+    assert "does not exist on the remote" in _output(result)

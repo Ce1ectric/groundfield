@@ -19,9 +19,7 @@ Three contracts are checked here:
 
 from __future__ import annotations
 
-import math
 
-import numpy as np
 import pytest
 
 import groundfield as gf
@@ -280,6 +278,64 @@ def test_galvanic_distributed_convergence_in_n_segments() -> None:
     )
     # The sequence should actually decrease in magnitude
     assert step_2 < step_1, (step_1, step_2)
+
+
+# ---------------------------------------------------------------------
+# 4b. A single galvanic sub-piece still leaks (10.24, galvanic half)
+# ---------------------------------------------------------------------
+
+
+def _input_impedance(world: gf.World, kernel: str, freqs=(50.0,)) -> list[complex]:
+    eng = gf.create_engine(
+        backend="image", segment_length=SEG, kernel=kernel, frequencies=list(freqs)
+    )
+    return eng.solve(world).input_impedance()
+
+
+@pytest.mark.finding("10.24")
+@pytest.mark.parametrize("kernel", ["point", "line"])
+def test_a_single_segment_galvanic_conductor_leaks(kernel: str) -> None:
+    """``n_segments == 1`` is the coarsest discretisation of the same
+    leaking wire: one midpoint pseudo-node between two R/2 stubs. The base
+    fell back to the leakage-free lumped branch, so the input impedance
+    jumped from 5.54 Ohm (n = 2) to 22.7 Ohm (n = 1, line kernel)."""
+    res = _solve(_galvanic_world(n_seg=1), "image", kernel=kernel)
+    leak = res.metadata["conductor_node_currents"]
+    assert len(leak) == 1 and next(iter(leak.values()))[0].real > 0.1
+    z = {
+        n: _input_impedance(_galvanic_world(n_seg=n), kernel)[0].real for n in (1, 2, 4)
+    }
+    z_lumped = _input_impedance(_two_rod_world(cross_section=PEN_A), kernel)[0].real
+    assert z[1] < 0.5 * z_lumped, (z, z_lumped)
+    assert z[1] > z[2] > z[4]  # monotone refinement sequence
+    if kernel == "line":  # exact uniform line source: n = 1 already converged
+        assert z[1] == pytest.approx(z[4], rel=1e-3)
+
+
+@pytest.mark.finding("10.24")
+def test_a_single_segment_galvanic_conductor_keeps_its_inductance() -> None:
+    """With ``inductance_model="neumann"`` the leaking chain also carries
+    the inductance (two half branches); 1 kHz, line kernel."""
+    worlds = {}
+    for n in (1, 8):
+        w = _galvanic_world(n_seg=n)
+        w.get_conductor("pen").inductance_model = "neumann"
+        worlds[n] = w
+    z1, z8 = (_input_impedance(worlds[n], "line", (1000.0,))[0] for n in (1, 8))
+    assert z1.real == pytest.approx(z8.real, rel=1e-3)
+    assert 0.5 * z8.imag < z1.imag < 2.0 * z8.imag
+
+
+def test_expected_segments_count_a_single_galvanic_sub_piece() -> None:
+    """The diagnostics predict the segment count the solver produces."""
+    from groundfield.diagnostics import expected_segments
+
+    for coupling in ("galvanic", "isolated"):
+        w = _galvanic_world(n_seg=1)
+        w.get_conductor("pen").coupling_to_soil = coupling
+        eng = gf.create_engine(backend="image", segment_length=SEG)
+        predicted = expected_segments(w, eng)["total"]
+        assert predicted == eng.solve(w).metadata["n_segments"], coupling
 
 
 # ---------------------------------------------------------------------

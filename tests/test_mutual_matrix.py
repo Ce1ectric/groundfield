@@ -349,3 +349,81 @@ def test_offdiag_selection_and_validation() -> None:
         solve_mutual_matrix(world, engine, names, _PROBE_POINTS, offdiag="galerkin")
     with pytest.raises(ValueError, match="offdiag must be"):
         solve_mutual_matrix(world, engine, names, offdiag="center")
+
+
+# ---------------------------------------------------------------------
+# One frequency per call (10.60, coup2 request)
+# ---------------------------------------------------------------------
+
+
+def _inductive_pair_world() -> "gf.World":
+    """Two rods joined by a 40 m Neumann PEN, plus a separate rod."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(world, "rod", name="a", position=(0.0, 0.0, 0.5), length=2.0)
+    gf.create_electrode(world, "rod", name="b", position=(40.0, 0.0, 0.5), length=2.0)
+    gf.create_electrode(world, "rod", name="c", position=(20.0, 15.0, 0.5), length=2.0)
+    gf.create_conductor(
+        world,
+        name="pen",
+        start="a",
+        end="b",
+        cross_section=95e-6,
+        discretize_segment_length=10.0,
+        inductance_model="neumann",
+    )
+    return world
+
+
+@pytest.mark.finding("10.60")
+@pytest.mark.parametrize("which", ["matrix", "field"])
+def test_one_call_assembles_the_branch_correction_for_its_frequency_only(
+    monkeypatch, which
+) -> None:
+    """``frequency_index`` selects one frequency; the inductive branch
+    correction must not be assembled for the engine's whole frequency set
+    (the multi-frequency assembly of ``Engine.solve``)."""
+    from groundfield.solver import mutual
+
+    built = []
+    real = mutual.assemble_branches
+
+    def recording(world, engine, topo):
+        branches = real(world, engine, topo)
+        built.append(branches)
+        return branches
+
+    monkeypatch.setattr(mutual, "assemble_branches", recording)
+    freqs = [50.0, 150.0, 250.0, 1000.0]
+    engine = gf.create_engine(segment_length=1.0, frequencies=freqs)
+    world = _inductive_pair_world()
+    if which == "matrix":
+        Z = solve_mutual_matrix(world, engine, anchors=["a", "c"], frequency_index=2)
+    else:
+        Z = gf.solve_mutual_field(
+            world,
+            engine,
+            anchors=["a", "c"],
+            field_points=_PROBE_POINTS,
+            frequency_index=2,
+        )
+    assert built[-1].earth_correction.n_assemblies == 1
+
+    single = gf.create_engine(segment_length=1.0, frequencies=[freqs[2]])
+    if which == "matrix":
+        Z_single = solve_mutual_matrix(world, single, anchors=["a", "c"])
+    else:
+        Z_single = gf.solve_mutual_field(
+            world, single, anchors=["a", "c"], field_points=_PROBE_POINTS
+        )
+    np.testing.assert_array_equal(Z, Z_single)
+    assert np.iscomplexobj(Z) and np.abs(Z.imag).max() > 0.0
+
+
+def test_frequency_index_out_of_range_is_harmless_without_inductance() -> None:
+    """Documented: the index matters only for frequency-dependent worlds."""
+    world = _build_world(gf.HomogeneousSoil(rho=100.0), 2.0)
+    engine = gf.create_engine(segment_length=_SEGMENT_LENGTH)
+    names = [a[0] for a in _ANCHORS]
+    Z0 = solve_mutual_matrix(world, engine, anchors=names)
+    Z5 = solve_mutual_matrix(world, engine, anchors=names, frequency_index=5)
+    np.testing.assert_array_equal(Z0, Z5)

@@ -137,7 +137,9 @@ def test_image_rejects_a_segment_partly_above_the_surface() -> None:
 
 @pytest.mark.finding("10.75")
 def test_mom_and_image_share_the_shallow_segment_advisory() -> None:
-    """A horizontal 5 m segment at 0.7 m warns in both families."""
+    """A horizontal 5 m segment at 0.7 m warns in both families when the
+    self image is a point image (the image family's line kernel has no such
+    bias and stays silent, audit F08)."""
     from groundfield.solver._guards import ShallowSegmentWarning
 
     w = gf.create_world(soil=SOILS["homogeneous"])
@@ -147,7 +149,9 @@ def test_mom_and_image_share_the_shallow_segment_advisory() -> None:
     gf.create_source(w, attached_to="g1", magnitude=1.0)
     for backend in ("image", "mom"):
         with pytest.warns(ShallowSegmentWarning):
-            gf.create_engine(backend=backend, segment_length=5.0).solve(w)
+            gf.create_engine(backend=backend, segment_length=5.0, kernel="point").solve(
+                w
+            )
 
 
 # ---------------------------------------------------------------------

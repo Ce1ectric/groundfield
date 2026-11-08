@@ -362,7 +362,6 @@ def test_inductive_cross_engine_50hz(backend: str) -> None:
 def test_fem_warns_on_inductance_model() -> None:
     """FEM backend logs a warning when ``inductance_model`` is set
     and falls back to the resistive solution."""
-    import logging
 
     w, _ = _galvanic_world(n_seg=4, inductance_model="neumann")
     eng = gf.create_engine(

@@ -3,10 +3,16 @@
 This subpackage forms the computational core of ``groundfield``. The
 key quantity is the complex potential ``phi(r, f)`` in the soil and on
 the conductor surfaces, evaluated per frequency in the phasor domain.
-The default solution method for homogeneous soil is the closed-form
-image-charge sum; for layered soil the Tagg/Sunde image series. A
-Method-of-Moments backend with the layered Green's function and a
-finite-element backend (``scikit-fem``) are reserved.
+The backends are registered in :mod:`groundfield.solver.registry`, the
+authority on names, capabilities and options
+(:func:`available_backends`): the image family (``image``, the
+closed-form image-charge sum for homogeneous soil, which forwards
+layered soils to ``image_2layer``, the Tagg/Sunde image series), the
+point-matching method of moments (``mom`` with the same kernels,
+``mom_sommerfeld`` with Sommerfeld quadrature of the layered Green's
+function for any number of layers) and the experimental axisymmetric
+finite-element backend ``fem``. ``cim``, ``bem`` and ``image_nlayer``
+are deprecated names of ``image`` and ``mom``.
 
 Contents
 --------
@@ -15,20 +21,24 @@ Engine
     frequency list, mesh resolution, tolerances. ``solve(world)`` runs
     the simulation.
 Backend
-    Literal type listing the available backends
-    (``"image"``, ``"image_2layer"``, ``"mom"``, ``"fem"``).
-FieldResult, PointSource
+    Literal type of the built-in backend names (for type hints; the
+    registry also accepts registered third-party names).
+FieldResult, PointSource, SourceRecord
     Result objects.
-solve_image, solve_image_2layer
+solve_image, solve_image_2layer, solve_mom
     Backend entry points (usually called via ``Engine.solve``).
+solve_mutual_matrix, solve_mutual_field
+    Multi-port grounding matrices of the image family.
+register_backend, get_backend, available_backends, BackendCapabilities
+    The backend registry, with its error, warning and options classes.
 ShallowSegmentWarning
-    Diagnostic warning category of the galvanic image family: a
-    leakage segment is longer than four times its burial depth, so the
-    point-image stand-in for the segment's image line biases the
-    reaction-matrix diagonal high. Re-exported here so callers can
-    write ``warnings.simplefilter("ignore", ShallowSegmentWarning)``
-    without importing from the backend module
-    (``groundfield.solver.image``).
+    Diagnostic warning category: a leakage segment is longer than four
+    times its burial depth, so the point-image stand-in for the
+    segment's image line biases the reaction-matrix diagonal high (point
+    kernel and the ``mom`` family; the exact line kernel has no such
+    bias). Re-exported here so callers can write
+    ``warnings.simplefilter("ignore", ShallowSegmentWarning)`` without
+    importing from the backend module.
 
 Guiding principle
 -----------------

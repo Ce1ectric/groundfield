@@ -682,8 +682,12 @@ def test_shallow_warning_states_a_bias_valid_for_the_case_it_fires_on() -> None:
         wire_radius=0.005,
     )
     gf.create_source(world, attached_to="g1", magnitude=1.0)
+    # The bias belongs to the point form of the self image; the exact line
+    # kernel (the default since 2026.11) has none and does not warn (F08).
     with pytest.warns(ShallowSegmentWarning) as record:
-        gf.create_engine(backend="image", segment_length=5.0).solve(world)
+        gf.create_engine(backend="image", segment_length=5.0, kernel="point").solve(
+            world
+        )
     message = str(record[0].message)
 
     # Plain ring electrode, no distributed conductor in sight.
@@ -696,8 +700,11 @@ def test_shallow_warning_states_a_bias_valid_for_the_case_it_fires_on() -> None:
     expected = ratio / np.arcsinh(ratio) - 1.0
     assert f"by {expected * 100.0:.0f} %" in message
     assert "by 26 %" in message
-    # The asymmetry across the family is stated, not hidden.
-    assert "mom / bem / cim / mom_sommerfeld" in message
+    # The remedy is stated; the mom family warns as well since 10.75, so
+    # the former "mom / bem / cim / mom_sommerfeld do not emit this
+    # warning" sentence is gone (F08).
+    assert "kernel='line'" in message
+    assert "do not emit this warning" not in message
 
 
 def test_vertical_segments_can_never_reach_the_shallow_warning() -> None:

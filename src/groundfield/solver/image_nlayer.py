@@ -160,7 +160,9 @@ def solve_image_nlayer(
             tmp = world.model_copy(update={"soil": two})
             res = solve_image_2layer(tmp, engine, max_terms=max_terms, tol=tol)
     else:
-        raise ValueError(
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
             f"image_nlayer: layer count {n} ≥ 3 is not supported by "
             "the real image-charge series (Γ_1(λ) is no longer "
             "constant in λ). Use 'mom_sommerfeld' (direct Sommerfeld "

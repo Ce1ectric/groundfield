@@ -335,7 +335,9 @@ def _prepare(
                 h_1=float(stack.h[0]),
             )
         else:
-            raise NotImplementedError(
+            from groundfield.solver import registry
+
+            raise registry.BackendCapabilityError(
                 f"{where} supports homogeneous and 2-layer soils; "
                 f"got MultiLayerSoil with n={stack.n_layers} layers."
             )
@@ -359,6 +361,14 @@ def _prepare(
     # Inductive coupling assembly (kept for parity; the catalogue probe
     # case has no distributed conductors, so the system stays
     # real/frequency-independent — the image no-inductance fast path).
+    # One call solves one frequency: the branch correction would otherwise
+    # be assembled for the engine's whole frequency set on first use
+    # (10.60). An index out of range only matters for an inductive world,
+    # where it raises below as before.
+    n_freq = len(engine.frequencies)
+    if -n_freq <= frequency_index < n_freq:
+        engine = engine._with(frequencies=[engine.frequencies[frequency_index]])
+        frequency_index = 0
     branches = assemble_branches(world, engine, topo)
     arrays = SegmentArrays.from_segments(disc.segments)
 

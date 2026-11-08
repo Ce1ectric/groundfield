@@ -277,7 +277,7 @@ def test_conductor_resolves_electrode_names() -> None:
     """``create_conductor`` records the electrode names for the cluster logic."""
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     g1 = gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.0)
-    g2 = gf.create_electrode(world, "rod", name="g2", position=(5, 0, 0.5), length=1.0)
+    gf.create_electrode(world, "rod", name="g2", position=(5, 0, 0.5), length=1.0)
     cond = gf.create_conductor(world, start=g1, end="g2")
     assert cond.start_electrode == "g1"
     assert cond.end_electrode == "g2"
@@ -303,19 +303,23 @@ def test_image_engine_auto_routes_two_layer_soil() -> None:
     assert res.backend == "image_2layer"
 
 
+@pytest.mark.finding("A1-08")
 def test_solve_image_directly_rejects_non_homogeneous() -> None:
     """``solve_image`` (private function) stays strict: HomogeneousSoil only.
 
     The friendly auto-dispatch happens only inside :meth:`Engine.solve`.
+    The error is the registry's BackendCapabilityError (a TypeError
+    before 2026.11, audit A1-08).
     """
     from groundfield.solver.image import solve_image
+    from groundfield.solver.registry import BackendCapabilityError
 
     soil = gf.TwoLayerSoil(rho_1=100, rho_2=500, h_1=2.0)
     world = gf.create_world(soil=soil)
     gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=1.0)
     gf.create_source(world, attached_to="g1", magnitude=1.0)
     eng = gf.create_engine(backend="image")
-    with pytest.raises(TypeError, match="HomogeneousSoil"):
+    with pytest.raises(BackendCapabilityError, match="homogeneous soil"):
         solve_image(world, eng)
 
 

@@ -393,12 +393,12 @@ def test_two_layer_frequency_regimes_low_vs_high() -> None:
         ).imag
         fracs.append((gt - g2) / (g1 - g2))
 
-    frac_by_f = dict(zip(freqs, fracs))
+    frac_by_f = dict(zip(freqs, fracs, strict=True))
     # (1) up to 1 kHz: within a few percent of the deep-layer (ρ2) bound.
     assert frac_by_f[50.0] < 0.05, f"50 Hz frac {frac_by_f[50.0]:.3f}"
     assert frac_by_f[1.0e3] < 0.05, f"1 kHz frac {frac_by_f[1.0e3]:.3f}"
     # (2) monotone rise toward the top layer across 50 Hz .. 1 MHz.
-    assert all(a < b for a, b in zip(fracs, fracs[1:])), fracs
+    assert all(a < b for a, b in zip(fracs, fracs[1:], strict=False)), fracs
     # (3) by 1 MHz the top layer contributes substantially (δ2 ~ interface).
     assert frac_by_f[1.0e6] > 0.4, f"1 MHz frac {frac_by_f[1.0e6]:.3f}"
 

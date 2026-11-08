@@ -5,7 +5,9 @@ Markers (registered in ``pyproject.toml``, enforced by
 
 ``finding(id, ...)``
     Links a test to one or more review findings, e.g.
-    ``@pytest.mark.finding("10.15")``. Select with ``--finding 10.15``.
+    ``@pytest.mark.finding("10.15")``, or to a finding of an audit round
+    of the release, e.g. ``@pytest.mark.finding("A1-01")``. Select with
+    ``--finding 10.15``.
 ``slow``
     Long-running test. Deselect with ``-m "not slow"``.
 ``network``
@@ -32,7 +34,7 @@ from dataclasses import asdict
 
 import pytest
 
-_FINDING_ID = re.compile(r"^(\d+\.\d+|F\d+|S\d+)$")
+_FINDING_ID = re.compile(r"^(\d+\.\d+|F\d+|S\d+|A\d+-\d+)$")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -71,7 +73,7 @@ def _finding_ids(item: pytest.Item) -> list[str]:
             if not isinstance(arg, str) or not _FINDING_ID.match(arg):
                 raise pytest.UsageError(
                     f"{item.nodeid}: invalid finding id {arg!r} "
-                    "(expected e.g. '10.15', 'F02' or 'S01')"
+                    "(expected e.g. '10.15', 'F02', 'S01' or 'A1-01')"
                 )
             ids.append(arg)
     return ids

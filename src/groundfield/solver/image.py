@@ -121,7 +121,7 @@ from groundfield.solver._topology import (
 from groundfield.solver._topology import (
     _solve_cluster_currents as _solve_cluster_currents,
 )
-from groundfield.soil.models import HomogeneousSoil
+from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
 from groundfield.solver.result import FieldResult
 
 __all__ = ["solve_image", "ShallowSegmentWarning"]
@@ -189,23 +189,34 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
 
     Raises
     ------
+    BackendCapabilityError
+        If the soil is a layered model (:meth:`Engine.solve
+        <groundfield.solver.engine.Engine.solve>` forwards those to
+        ``image_2layer``). Before 2026.11 this was a :class:`TypeError`.
     TypeError
-        If the soil is not a :class:`HomogeneousSoil`.
+        If ``world.soil`` is no soil model.
     ValueError
         If the world has no electrodes, or the geometry fails a
         discretisation guard (thin wire, burial depth).
     """
+    if isinstance(world.soil, (TwoLayerSoil, MultiLayerSoil)):
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
+            f"Backend 'image' solves homogeneous soil; got a "
+            f"{type(world.soil).__name__}. Engine(backend='image').solve "
+            "forwards layered soils to image_2layer (at most two distinct "
+            "layers); use backend='mom_sommerfeld' for three or more."
+        )
     if not isinstance(world.soil, HomogeneousSoil):
         raise TypeError(
-            "Backend 'image' requires HomogeneousSoil. "
-            f"Got: {type(world.soil).__name__}. "
-            "For layered models pick backend='image_2layer' "
-            "(Tagg/Sunde) or backend='mom' (planned)."
+            "Backend 'image' requires a HomogeneousSoil. "
+            f"Got: {type(world.soil).__name__}."
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
     if engine.kernel is None:
         # A direct call resolves the default like Engine.solve (10.28).
-        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
+        engine = engine._with(kernel=DEFAULT_KERNEL)
     green = _HalfSpaceGreen(world.soil.rho, engine.kernel)
     return solve_image_family(world, engine, green, stacklevel=3)

@@ -45,14 +45,14 @@ def _mixed_world() -> gf.World:
     g_ring = gf.create_electrode(
         world, "ring", name="ring_a", center=(10.0, 0.0, 0.8), radius=2.5
     )
-    g_strip = gf.create_electrode(
+    gf.create_electrode(
         world,
         "strip",
         name="strip_a",
         start=(0.0, 5.0, 0.6),
         end=(8.0, 5.0, 0.6),
     )
-    g_mesh = gf.create_electrode(
+    gf.create_electrode(
         world,
         "grid_mesh",
         name="mesh_a",
@@ -130,9 +130,7 @@ def test_world_bounds_3d_includes_conductor_endpoints() -> None:
     g1 = gf.create_electrode(
         world, "rod", name="g1", position=(0.0, 0.0, 0.5), length=1.0
     )
-    g2 = gf.create_electrode(
-        world, "rod", name="g2", position=(2.0, 0.0, 0.5), length=1.0
-    )
+    gf.create_electrode(world, "rod", name="g2", position=(2.0, 0.0, 0.5), length=1.0)
     gf.create_conductor(
         world,
         name="lead",

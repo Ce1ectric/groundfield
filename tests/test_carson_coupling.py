@@ -20,9 +20,7 @@ The tests fall into five groups:
 from __future__ import annotations
 
 import math
-import warnings
 
-import numpy as np
 import pytest
 
 import groundfield as gf
@@ -42,9 +40,7 @@ from groundfield.coupling.carson import (
 )
 from groundfield.references.carson import (
     RAILWAY_25HZ,
-    TLEIS_TAB_3_2,
     WAVE_ANTENNA_HIGH_RHO,
-    WAVE_ANTENNA_LOW_RHO,
     all_examples,
 )
 

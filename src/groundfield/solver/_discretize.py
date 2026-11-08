@@ -354,6 +354,25 @@ def _conductor_node_name(conductor_name: str, k: int) -> str:
     return f"__cond_{conductor_name}__seg_{k}"
 
 
+def _is_conductor_chain(conductor) -> bool:
+    """Whether the solver represents ``conductor`` as a chain of sub-pieces.
+
+    A distributed conductor (finite ``discretize_segment_length``) is a
+    chain when it has more than one sub-piece, or when it is galvanic: a
+    single leaking sub-piece is the coarsest discretisation of the same
+    leaking wire (one midpoint pseudo-node, two half-resistance stubs),
+    not a leakage-free lumped branch (review pass 10, 10.24, galvanic
+    half). An isolated single sub-piece is exactly one series branch and
+    stays lumped. The one predicate of discretisation, topology, the
+    inductive assembly and the diagnostics.
+    """
+    if not getattr(conductor, "is_distributed", False):
+        return False
+    return int(conductor.n_segments) > 1 or (
+        getattr(conductor, "coupling_to_soil", "isolated") == "galvanic"
+    )
+
+
 def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedBranch]]:
     """Discretise a conductor into midpoint segments + longitudinal branches.
 
@@ -387,6 +406,10 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
     finite-resistance branches between the two end clusters with
     interior nodes that carry no leakage.
 
+    A galvanic conductor with a single sub-piece (``n == 1``) gives one
+    pseudo-node at the conductor midpoint between two ``R/2`` stubs; an
+    isolated one stays a lumped branch (see :func:`_is_conductor_chain`).
+
     Parameters
     ----------
     conductor
@@ -397,7 +420,8 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
     -------
     segments : list[_Segment]
         Pseudo-electrode segments at the conductor midpoints. Empty
-        for ``coupling_to_soil == "isolated"``.
+        for ``coupling_to_soil == "isolated"`` and for conductors that
+        are no chain (lumped fallback, handled by the caller).
     branches : list[(str, str, float)]
         Longitudinal-branch list ``(node_in, node_out, R)``. For an
         isolated conductor the chain runs through anonymous interior
@@ -405,7 +429,7 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
     """
     n = conductor.n_segments
     L = conductor.length
-    if not conductor.is_distributed or n <= 1:
+    if not _is_conductor_chain(conductor):
         # Lumped fallback — caller handles via _build_finite_branches.
         return [], []
 

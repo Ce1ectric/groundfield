@@ -12,7 +12,6 @@ from __future__ import annotations
 import math
 import warnings
 from types import SimpleNamespace
-from typing import Literal
 
 import numpy as np
 import pytest
@@ -148,20 +147,37 @@ def test_branch_assembly_reads_the_engine_option() -> None:
 
 
 def test_solve_with_an_engine_that_selects_the_tabulated_assembly() -> None:
-    """End to end, with an Engine that carries the (requested) field."""
-
-    class TabulatedEngine(gf.Engine):
-        sommerfeld_assembly: Literal["exact", "tabulated"] = "tabulated"
-
+    """End to end through ``Engine.sommerfeld_assembly``."""
     kw = dict(backend="image", segment_length=0.5, frequencies=[50.0, 1000.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         res_exact = gf.Engine(**kw).solve(_pen_world())
-        res_tab = TabulatedEngine(**kw).solve(_pen_world())
+        res_tab = gf.Engine(**kw, sommerfeld_assembly="tabulated").solve(_pen_world())
+    assert (
+        res_tab.metadata["provenance"]["engine"]["sommerfeld_assembly"] == "tabulated"
+    )
     for name in ("g1", "g2"):
         z_exact = np.asarray(res_exact.electrode_potentials[name])
         z_tab = np.asarray(res_tab.electrode_potentials[name])
+        assert not np.array_equal(z_tab, z_exact)
         np.testing.assert_allclose(z_tab, z_exact, rtol=1e-6)
+
+
+def test_the_assembly_is_a_validated_engine_field() -> None:
+    """``Engine.sommerfeld_assembly``: default, validation, JSON (coup2 request)."""
+    assert gf.Engine().sommerfeld_assembly == "exact"
+    assert gf.create_engine(sommerfeld_assembly="tabulated").sommerfeld_assembly == (
+        "tabulated"
+    )
+    with pytest.raises(ValueError, match="tabulated"):
+        gf.Engine(sommerfeld_assembly="table")
+    engine = gf.Engine(sommerfeld_assembly="tabulated")
+    assert gf.Engine.model_validate_json(engine.model_dump_json()) == engine
+    # engine JSON written before the field existed loads with the default
+    old = {
+        k: v for k, v in gf.Engine().model_dump().items() if k != "sommerfeld_assembly"
+    }
+    assert gf.Engine.model_validate(old).sommerfeld_assembly == "exact"
 
 
 @pytest.mark.slow

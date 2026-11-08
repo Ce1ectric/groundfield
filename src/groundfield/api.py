@@ -62,6 +62,7 @@ from groundfield.conductors.conductor import (
     Conductor,
     ConductorType,
     InductanceModel,
+    ResistanceModel,
     SoilCoupling,
 )
 from groundfield.geometry.electrodes import (
@@ -445,6 +446,7 @@ def create_conductor(
     coupling_to_soil: SoilCoupling = "isolated",
     inductance_model: InductanceModel | None = None,
     lumped_series_resistance_ohm: float | None = None,
+    resistance_model: ResistanceModel = "dc",
 ) -> Conductor:
     """Create a conductor and register it with ``world``.
 
@@ -477,7 +479,9 @@ def create_conductor(
     discretize_segment_length
         Maximum sub-segment length in m for the distributed-conductor
         model (see ADR-0003). ``None`` (default) keeps the conductor
-        lumped (single segment, leakage only at the end electrodes).
+        lumped (single segment, leakage only at the end electrodes). A
+        galvanic conductor leaks along its length also with a single
+        sub-piece (a value at least the conductor length).
     coupling_to_soil
         ``"isolated"`` (default) — the conductor does not exchange
         current with the soil along its length. ``"galvanic"`` — every
@@ -487,11 +491,18 @@ def create_conductor(
     inductance_model
         ``None`` (default) keeps the longitudinal-branch impedance
         purely resistive (DC behaviour). ``"neumann"`` activates the
-        Neumann self- and mutual-inductance integral for every
-        distributed-conductor segment pair (ADR-0004) — the system
+        Neumann self- and mutual-inductance integral between the
+        branches of every inductive conductor — the segments of a
+        distributed conductor, or one branch from start to end for a
+        lumped one (ADR-0004, review pass 10, 10.24) — and the system
         becomes frequency-dependent and complex per frequency.
     lumped_series_resistance_ohm
         Optional additional lumped series resistance in Ω.
+    resistance_model
+        ``"dc"`` (default): the series resistance is the DC value.
+        ``"skin"``: the AC resistance of a solid round wire with skin
+        effect, opt-in (review pass 10, 10.37); needs a finite
+        ``cross_section`` (see :class:`~groundfield.conductors.Conductor`).
 
     Returns
     -------
@@ -530,6 +541,7 @@ def create_conductor(
         coupling_to_soil=coupling_to_soil,
         inductance_model=inductance_model,
         lumped_series_resistance_ohm=lumped_series_resistance_ohm,
+        resistance_model=resistance_model,
     )
     world.add_conductor(cond)
     return cond
@@ -735,15 +747,17 @@ def create_engine(
     image_series_tol: float | None = None,
     kernel: KernelKind | None = None,
     options: Mapping[str, Any] | None = None,
+    sommerfeld_assembly: Literal["exact", "tabulated"] | None = None,
 ) -> Engine:
     """Create a configured :class:`~groundfield.Engine`.
 
     Only the arguments you pass are forwarded; every argument left at
     ``None`` takes the :class:`~groundfield.Engine` default, so the engine
     is the single source of its defaults and option-level warnings of the
-    engine concern only options you actually set. Options without a
-    parameter here (e.g. the ``sommerfeld_*`` accuracy controls) are set
-    on :class:`~groundfield.Engine` directly.
+    engine concern only options you actually set. Backend-specific
+    settings, such as the accuracy controls of ``mom_sommerfeld``
+    (``epsabs``, ``epsrel``, ``lambda_max_factor``, ``max_osc_panels``) or
+    the mesh of ``fem``, go into ``options``.
 
     The :class:`Engine` performs an automatic backend dispatch inside
     :meth:`Engine.solve`: when ``backend="image"`` (the default) is
@@ -775,8 +789,9 @@ def create_engine(
         ``"sommerfeld"`` (engine default since 0.13.0; geometric
         integration of the σ-dependent vector-potential Green's function,
         validated against Pollaczek and Carson), ``"carson_series"``
-        (Carson 1926 per-metre correction × length) or
-        ``"perfect_mirror"`` (frequency-independent Neumann baseline).
+        (Carson 1926 per-metre correction × length on the anti-parallel
+        image baseline) or ``"perfect_mirror"`` (frequency-independent
+        Neumann baseline with an additive image).
     image_max_terms
         Maximum number of image-charge series terms of the layered
         backends; a truncated series emits a
@@ -794,6 +809,12 @@ def create_engine(
         ``{"mom_sommerfeld": {"epsabs": 1e-8}}`` or option models such as
         :class:`~groundfield.solver.MomSommerfeldOptions`; forwarded to
         :attr:`Engine.options <groundfield.Engine.options>`.
+    sommerfeld_assembly
+        ``"exact"`` (engine default) or ``"tabulated"`` assembly of the
+        Sommerfeld earth-return correction of inductive conductors
+        (:attr:`Engine.sommerfeld_assembly
+        <groundfield.Engine.sommerfeld_assembly>`); ``"tabulated"`` is the
+        faster choice for large networks.
 
     Returns
     -------
@@ -824,6 +845,7 @@ def create_engine(
         "earth_inductive_model": earth_inductive_model,
         "image_max_terms": image_max_terms,
         "image_series_tol": image_series_tol,
+        "sommerfeld_assembly": sommerfeld_assembly,
     }
     engine_kwargs.update({k: v for k, v in explicit.items() if v is not None})
     if kernel is not None:

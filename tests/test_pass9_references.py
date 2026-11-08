@@ -163,7 +163,7 @@ def test_self_resistance_rises_with_burial_depth(rho, freq):
         pollaczek_self_impedance(rho, rho, 10.0, freq, depth=d, gmr=GMR).real
         for d in depths
     ]
-    assert all(b > a for a, b in zip(r, r[1:])), r
+    assert all(b > a for a, b in zip(r, r[1:], strict=False)), r
 
 
 @pytest.mark.parametrize("rho", [30.0, 100.0, 1000.0])
@@ -191,7 +191,7 @@ def test_self_resistance_excess_over_carson_grows_with_frequency(rho):
         z = pollaczek_self_impedance(rho, rho, 10.0, freq, depth=1.0, gmr=GMR)
         ratios.append(z.real / (2.0 * math.pi * freq * MU_0 / 8.0))
     assert all(r > 1.0 for r in ratios), ratios
-    assert all(b > a for a, b in zip(ratios, ratios[1:])), ratios
+    assert all(b > a for a, b in zip(ratios, ratios[1:], strict=False)), ratios
 
 
 def test_self_pinned_values_1khz():
@@ -244,7 +244,7 @@ def test_mutual_resistance_rises_with_burial_depth(freq):
         ).real
         for d in (0.7, 1.0, 2.0, 3.0)
     ]
-    assert all(b > a for a, b in zip(r, r[1:])), r
+    assert all(b > a for a, b in zip(r, r[1:], strict=False)), r
 
 
 def test_self_reactance_still_matches_carson_after_kernel_fix():
@@ -368,7 +368,7 @@ def test_earth_return_reactance_increases_with_frequency():
     xs = [
         carson_self_impedance(1000.0, f, gmr=0.007).imag for f in (50.0, 250.0, 1000.0)
     ]
-    assert all(b > a for a, b in zip(xs, xs[1:])), xs
+    assert all(b > a for a, b in zip(xs, xs[1:], strict=False)), xs
     assert xs[0] * 1e3 == pytest.approx(0.8137, abs=1e-4)
     assert xs[2] * 1e3 == pytest.approx(14.3915, abs=1e-4)
     assert xs[2] / xs[0] == pytest.approx(17.7, abs=0.1)

@@ -73,13 +73,18 @@ class ShallowSegmentWarning(UserWarning):
 
     Emission scope
     --------------
-    The warning is raised by :func:`solve_image` and
-    :func:`~groundfield.solver.image_2layer.solve_image_2layer` only,
-    even though ``mom``, ``bem``, ``cim``, ``mom_sommerfeld`` and
-    ``mutual`` share the biased diagonal through
-    :func:`_self_corrected_kernel`. See the "Emission scope" note in
-    :func:`_check_segment_depths` for why the *hard* guard is shared
-    but the advisory is not.
+    The bias belongs to the *point* form of the self image. The warning
+    is raised wherever a solve uses it: by the image family
+    (``image``, ``image_2layer``; ``cim`` is an alias) with
+    ``kernel="point"``, and by the point-matching family (``mom``,
+    ``mom_sommerfeld``; ``bem`` is an alias), whose self image is always
+    the point form. It is not raised for the exact line kernel
+    (``kernel="line"``, the default of the image family since 2026.11),
+    whose Galerkin self image has no such bias: a 10 m strip at 0.1 m
+    depth gives 17.37863 Ω with 2 m segments and 17.37859 Ω with
+    0.25 m segments, where the point kernel gives 21.57 Ω and 17.23 Ω
+    (audit A1-numerics F08). ``solve_mutual_*`` assemble the same
+    reaction matrix without this advisory.
 
     Silence with
     ``warnings.simplefilter("ignore", ShallowSegmentWarning)`` once
@@ -284,7 +289,11 @@ def _segment_owner_label(seg: "_Segment") -> str:
 
 
 def _check_segment_depths(
-    all_segments: "list[_Segment]", *, where: str, stacklevel: int = 3
+    all_segments: "list[_Segment]",
+    *,
+    where: str,
+    stacklevel: int = 3,
+    kernel: str | None = "point",
 ) -> None:
     """Validate the burial depth and extent of every leakage segment.
 
@@ -347,22 +356,14 @@ def _check_segment_depths(
     --------------
     Regimes 1 and 2 are hard errors on physically invalid input and
     live in the **shared** kernel guard, so every backend in the
-    family rejects them identically. Regimes 3 and 4 are raised from
-    ``solve_image`` / ``solve_image_2layer`` only, for two reasons:
-
-    * Regime 3 needs the segment *directions*, which
-      :func:`_self_corrected_kernel` does not receive — its signature
-      is fixed by five sibling backends.
-    * Regime 4 is an advisory about a bias all backends share, but the
-      shared kernel is re-entered per frequency and per excitation
-      inside the current-solving backends, so emitting it there would
-      repeat the same message several times per solve with a
-      ``stacklevel`` pointing into solver internals instead of user
-      code. Moving it would also change the warning surface of
-      backends whose regression tests are not part of this change.
-      The honest consequence — cross-engine runs warn asymmetrically
-      about a bias all of them carry — is documented in
-      ``docs/engines/image.md``.
+    family rejects them identically. Regimes 3 and 4 are checked here,
+    once per solve, by the pipelines of the image family and of the
+    point-matching family (``mom``, ``mom_sommerfeld``; review pass 10,
+    10.75): regime 3 needs the segment *directions*, which the kernel
+    guard does not receive. Regime 4 is an advisory about the *point*
+    form of the self image; with the exact line kernel
+    (``kernel="line"``) the self image is a Galerkin integral without
+    that bias, and the advisory is not emitted (audit A1-numerics F08).
 
     Parameters
     ----------
@@ -375,6 +376,10 @@ def _check_segment_depths(
         ``stacklevel`` of the :class:`ShallowSegmentWarning`; the
         default points at the caller of the ``solve_*`` function that
         calls this guard directly.
+    kernel
+        Source kernel of the solve (``"point"``, ``"line"``); regime 4
+        applies to the point form only. ``None`` (unknown) is treated
+        like ``"point"``.
 
     Raises
     ------
@@ -384,7 +389,7 @@ def _check_segment_depths(
     Warns
     -----
     ShallowSegmentWarning
-        For regime 4.
+        For regime 4, unless ``kernel == "line"``.
     """
     if not all_segments:
         return
@@ -431,7 +436,10 @@ def _check_segment_depths(
             "case and remains legal."
         )
 
-    # Regime 4 — shallow but legal.
+    # Regime 4 — shallow but legal; a bias of the point-form self image
+    # only (the line kernel integrates the image line exactly, F08).
+    if kernel == "line":
+        return
     shallow = lengths > _MIN_IMAGE_SEPARATION_RATIO * z
     if shallow.any():
         k = int(np.argmax(lengths / z))
@@ -450,16 +458,16 @@ def _check_segment_depths(
             f"than L/{_MIN_IMAGE_SEPARATION_RATIO:.0f} — worst case "
             f"{owners[k]} with L = {lengths[k]:.4g} m at "
             f"z = {z[k]:.4g} m (inclination |e_z| = "
-            f"{vertical_fraction[k]:.3g}). The self-image term on the "
-            "reaction-matrix diagonal is a point image at distance 2z "
-            "instead of the segment's image line. For a horizontal "
-            "segment — which any segment reaching this warning is to "
-            "within 30 degrees, steeper ones are rejected outright — "
-            f"that overestimates the entry by {bias * 100.0:.0f} % "
-            "here, so the grounding impedance is biased high and "
-            "still mesh-dependent. The same bias is present in the "
-            "mom / bem / cim / mom_sommerfeld backends, which do not "
-            "emit this warning. Refine Engine.segment_length / "
+            f"{vertical_fraction[k]:.3g}). With the point kernel the "
+            "self-image term on the reaction-matrix diagonal is a point "
+            "image at distance 2z instead of the segment's image line. "
+            "For a horizontal segment — which any segment reaching this "
+            "warning is to within 30 degrees, steeper ones are rejected "
+            f"outright — that overestimates the entry by {bias * 100.0:.0f} % "
+            "here, so the grounding impedance is biased high and still "
+            "mesh-dependent. Use the exact line kernel "
+            "(Engine(kernel='line'), the default of the image family), "
+            "refine Engine.segment_length / "
             "Conductor.discretize_segment_length until the impedance "
             "stabilises, or silence this with "
             'warnings.simplefilter("ignore", ShallowSegmentWarning).',

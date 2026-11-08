@@ -25,13 +25,11 @@ from __future__ import annotations
 import math
 import warnings
 
-import numpy as np
 import pytest
 
 import groundfield as gf
 from groundfield.coupling.layered_green import (
     two_layer_real_space_kernel,
-    two_layer_spectral_kernel,
 )
 
 

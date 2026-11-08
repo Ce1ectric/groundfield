@@ -55,9 +55,11 @@ share are common :class:`~groundfield.solver.engine.Engine` fields, not
 backend options: ``segment_length``, ``earth_inductive_model`` and the
 Tagg / Sunde image-series controls ``image_max_terms`` /
 ``image_series_tol`` (consumed by ``image_2layer``, ``image_nlayer``,
-``mom``, ``mom_sommerfeld`` on its delegated two-layer path, and by the
-post-solve field evaluation; the deprecated names ``cim`` and ``bem``
-run ``image`` and ``mom``). Their single
+``mom``, ``mom_sommerfeld`` on its delegated two-layer path and
+``solve_mutual_*``, and recorded in ``FieldResult.metadata["series"]``,
+from which :meth:`FieldResult.potential` takes them for the post-solve
+field evaluation; the deprecated names ``cim`` and ``bem`` run
+``image`` and ``mom``). Their single
 documented defaults are :data:`DEFAULT_IMAGE_MAX_TERMS` and
 :data:`DEFAULT_IMAGE_SERIES_TOL`.
 
@@ -83,6 +85,7 @@ import importlib
 import os
 import warnings
 from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -150,11 +153,21 @@ class BackendCapabilityError(ValueError, NotImplementedError):
 
     Raised by :meth:`Engine.solve` before any backend code runs. The
     message names the missing capability and the registered backends
-    that can solve the world. Subclasses both :class:`ValueError` and
-    :class:`NotImplementedError`, the types ``image_nlayer``, ``cim``,
-    ``bem`` and the concrete-shell guard raised for the same situations
-    before the registry existed (``mom`` raised :class:`TypeError` for
-    three or more layers).
+    that can solve the world. The backend functions raise it as well
+    when they are called directly with a soil model they cannot solve
+    (``solve_image`` with a layered soil, ``solve_image_2layer`` with a
+    homogeneous soil, ``solve_image_nlayer`` and ``solve_mom`` with three
+    or more distinct layers), and so does the concrete-shell guard of
+    the backends without the shell correction: one error type for one
+    situation (audit A1-08). :class:`TypeError` is left for a
+    ``world.soil`` that is no soil model at all.
+
+    Subclasses both :class:`ValueError` and :class:`NotImplementedError`,
+    the types ``image_nlayer``, ``cim``, ``bem`` and the concrete-shell
+    guard raised for the same situations in 0.15.0. Changed in 2026.11:
+    ``image_2layer`` (homogeneous soil, layer stack) and ``mom`` (three
+    or more layers) raised :class:`TypeError`, which does not catch this
+    error; catch :class:`BackendCapabilityError` (or :class:`ValueError`).
     """
 
 
@@ -210,6 +223,8 @@ class BackendCapabilities:
     soils
         Soil layer counts the backend solves: ``"homogeneous"`` (one
         layer), ``"two_layer"``, ``"multi_layer"`` (three or more).
+        Any set of names is accepted (``{"homogeneous"}``); the
+        collections are stored as :class:`frozenset`.
     conductors
         Conductor models the backend honours: ``"lumped"`` (a single
         series branch), ``"distributed"`` (``discretize_segment_length``
@@ -235,11 +250,13 @@ class BackendCapabilities:
         (volume methods); those accept any kernel setting.
     """
 
-    soils: frozenset[str]
-    conductors: frozenset[str] = frozenset(_CONDUCTOR_FEATURES)
+    # Annotated with the accepted input type (audit A1-06): a set literal
+    # type-checks; __post_init__ stores a frozenset.
+    soils: AbstractSet[str]
+    conductors: AbstractSet[str] = frozenset(_CONDUCTOR_FEATURES)
     concrete_shells: bool = False
     two_terminal_sources: bool = False
-    kernels: frozenset[str] = frozenset({"point"})
+    kernels: AbstractSet[str] = frozenset({"point"})
     junctions: bool = False
 
     def __post_init__(self) -> None:
@@ -1114,7 +1131,7 @@ def _register_builtins() -> None:
         capabilities=BackendCapabilities(
             soils={"homogeneous", "two_layer", "multi_layer"},
             conductors={"lumped"},
-            kernels=(),
+            kernels=frozenset(),
         ),
         options_model=FemOptions,
         experimental=True,

@@ -40,10 +40,8 @@ import groundfield as gf
 from groundfield.coupling.sommerfeld_inductance import (
     LayeredEarth,
     earth_return_correction_homogeneous,
-    earth_return_correction_layered,
     reflection_coefficient_homogeneous,
     reflection_coefficient_layered,
-    build_sommerfeld_correction_matrix,
 )
 
 

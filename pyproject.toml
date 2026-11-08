@@ -119,7 +119,7 @@ exclude = ["*.md"]
 # The project standard (finding 10.94): pyflakes, pycodestyle, isort,
 # bugbear, pyupgrade, NumPy docstrings, PEP 8 naming with a physics
 # allow-list, McCabe complexity. `ruff check` reports all of it; CI and
-# pre-commit block on the subset `--select F,E9,B` until the cleanup pass
+# pre-commit block on the subset `--select F,E9,B,W605` until the cleanup pass
 # after the calendar release has fixed the rest.
 select = ["F", "E", "W", "I", "B", "UP", "D", "N", "C901"]
 ignore = [

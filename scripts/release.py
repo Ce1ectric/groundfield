@@ -46,6 +46,16 @@ Procedure
    has a non-empty ``## [Unreleased]`` block and no section for the new
    version, ``changelog.d/`` holds no unmerged fragments, and
    ``CLAUDE.md`` does not hard-code a version (review pass 5).
+
+   The remote state is checked read-only with ``git ls-remote`` (no
+   fetch, nothing changes): the branch must contain the tip of its
+   upstream branch (a clone that is behind or has diverged is refused),
+   and the tags of the upstream's remote count like local ones, both for
+   the ``MICRO`` of ``calver`` and for "the tag does not exist" (audit
+   A1-11; otherwise a stale clone computes the same version again and
+   creates a second, different tag that only the later push rejects). A
+   branch without an upstream is refused when the repository has a
+   remote; a repository without any remote is released with a note.
 2. Write the new version into the three files (and ``date-released``),
    and turn ``## [Unreleased]`` into ``## [X] - YYYY-MM-DD`` below a
    fresh empty ``## [Unreleased]``; the link references at the end of the
@@ -571,7 +581,13 @@ def _check_claude_md_no_hardcoded_version(root: Path) -> None:
         )
 
 
-def _git(root: Path, *args: str, check: bool = True) -> str:
+#: Seconds a ``git ls-remote`` may take before the release is refused.
+REMOTE_TIMEOUT_S = 60.0
+
+
+def _git(
+    root: Path, *args: str, check: bool = True, timeout: float | None = None
+) -> str:
     """Run git in the repository root and return its standard output.
 
     Parameters
@@ -582,19 +598,28 @@ def _git(root: Path, *args: str, check: bool = True) -> str:
         Arguments after ``git``.
     check : bool
         Raise :class:`ReleaseError` on a non-zero exit status.
+    timeout : float or None
+        Seconds before the command is abandoned with a
+        :class:`ReleaseError`; ``None`` waits.
 
     Returns
     -------
     str
         Standard output without surrounding whitespace.
     """
-    result = subprocess.run(
-        ["git", *args],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ReleaseError(
+            f"git {' '.join(args)} timed out after {timeout:g} s"
+        ) from exc
     if check and result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise ReleaseError(f"git {' '.join(args)} failed: {detail}")
@@ -644,6 +669,86 @@ def _check_repository(root: Path) -> str:
     if not branch:
         raise ReleaseError("HEAD is detached; check out the release branch first")
     return branch
+
+
+def _remote_tag_names(listing: str) -> set[str]:
+    """Tag names of a ``git ls-remote --tags`` listing (peeled ``^{}`` merged)."""
+    names = set()
+    for line in listing.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].startswith("refs/tags/"):
+            names.add(parts[1][len("refs/tags/") :].removesuffix("^{}"))
+    return names
+
+
+def _check_remote(root: Path, branch: str) -> set[str]:
+    """Check the branch against its upstream; return the remote's tags.
+
+    Read-only (``git ls-remote``, no fetch), so ``--dry-run`` changes
+    nothing either.
+
+    Parameters
+    ----------
+    root : Path
+        Repository root.
+    branch : str
+        Checked-out branch.
+
+    Returns
+    -------
+    set of str
+        Tag names on the upstream's remote; empty for a repository
+        without any remote (a note is logged).
+
+    Raises
+    ------
+    ReleaseError
+        If the repository has a remote but the branch no upstream, the
+        remote cannot be read, the upstream branch does not exist on it,
+        or the branch does not contain the upstream's tip (behind or
+        diverged).
+    """
+    remote = _git(root, "config", "--get", f"branch.{branch}.remote", check=False)
+    merge = _git(root, "config", "--get", f"branch.{branch}.merge", check=False)
+    if not remote or not merge:
+        remotes = _git(root, "remote").split()
+        if not remotes:
+            logger.info(
+                "note: no git remote; the upstream and remote-tag checks are "
+                "skipped (A1-11)"
+            )
+            return set()
+        raise ReleaseError(
+            f"branch {branch} has no upstream, so the release cannot be checked "
+            f"against the remote; set it with: git branch --set-upstream-to "
+            f"{remotes[0]}/{branch}"
+        )
+    if remote == ".":  # upstream is a local branch
+        raise ReleaseError(
+            f"branch {branch} tracks the local ref {merge}; release from a "
+            "branch that tracks a remote branch"
+        )
+    upstream = f"{remote}/{merge.removeprefix('refs/heads/')}"
+    try:
+        heads = _git(root, "ls-remote", remote, merge, timeout=REMOTE_TIMEOUT_S)
+        listing = _git(root, "ls-remote", "--tags", remote, timeout=REMOTE_TIMEOUT_S)
+    except ReleaseError as exc:
+        raise ReleaseError(f"cannot read the remote '{remote}': {exc}") from exc
+    tips = [
+        line.split()[0] for line in heads.splitlines() if line.split()[1:] == [merge]
+    ]
+    if not tips:
+        raise ReleaseError(
+            f"the upstream branch {upstream} does not exist on the remote; push "
+            f"the branch first (git push -u {remote} {branch})"
+        )
+    if not _git_ok(root, "merge-base", "--is-ancestor", tips[0], "HEAD"):
+        raise ReleaseError(
+            f"branch {branch} is behind its upstream {upstream} (or has diverged "
+            "from it): the remote has commits this clone does not contain, "
+            f"perhaps a release cut elsewhere. Run git pull, then retry."
+        )
+    return _remote_tag_names(listing)
 
 
 def _check_fragments(root: Path) -> None:
@@ -715,6 +820,7 @@ def plan_release(
         If any check fails.
     """
     branch = _check_repository(root)
+    remote_tags = _check_remote(root, branch)
     try:
         _check_claude_md_no_hardcoded_version(root)
     except RuntimeError as exc:
@@ -739,7 +845,7 @@ def plan_release(
     except InvalidVersion as exc:
         raise ReleaseError(f"current version {current!r} is not PEP 440") from exc
 
-    tags = _git(root, "tag", "--list").split()
+    tags = set(_git(root, "tag", "--list").split()) | remote_tags
     if command == "calver":
         new = calver_version(date, tags)
     elif version is not None:
@@ -754,6 +860,8 @@ def plan_release(
     tag = f"{TAG_PREFIX}{new}"
     if _git_ok(root, "rev-parse", "--quiet", "--verify", f"refs/tags/{tag}"):
         raise ReleaseError(f"tag {tag} already exists")
+    if tag in remote_tags:
+        raise ReleaseError(f"tag {tag} already exists on the remote")
 
     pyproject.updated = bump_pyproject(pyproject.original, new)
     init.updated = bump_init(init.original, new)

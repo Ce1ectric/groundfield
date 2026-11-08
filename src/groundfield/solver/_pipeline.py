@@ -184,10 +184,16 @@ class BranchModel:
         Engine setting the block was assembled for.
     inductance_matrix
         Partial-inductance matrix over all finite branches in H, or
-        ``None`` without inductive conductors.
+        ``None`` when the branch block is frequency independent. It is
+        all zero when only the skin effect makes the block frequency
+        dependent (conductors with ``resistance_model="skin"`` and no
+        ``inductance_model``).
     earth_correction
-        ``omega -> ΔZ(omega)`` earth-return correction over all finite
-        branches in Ω, or ``None``.
+        ``omega -> ΔZ(omega)`` over all finite branches in Ω: the
+        earth-return correction of the inductive branches
+        (``carson_series``, ``sommerfeld``) plus the skin-effect
+        correction on the diagonal of ``resistance_model="skin"``
+        branches (review pass 10, 10.37), or ``None`` without either.
     sigma_earth
         Earth conductivity in S/m used by ``carson_series``, else
         ``None``.
@@ -200,7 +206,12 @@ class BranchModel:
 
     @property
     def has_inductance(self) -> bool:
-        """Whether any finite branch carries an inductance."""
+        """Whether the branch block is frequency dependent.
+
+        True with an inductive conductor and also with a skin-effect
+        conductor alone (all-zero inductance matrix); the name predates
+        the skin term (10.37).
+        """
         return self.inductance_matrix is not None
 
 
@@ -564,9 +575,8 @@ def assemble_branches(world: World, engine: Engine, topo: Topology) -> BranchMod
         skin_terms=skin,
         # The angular frequencies exactly as the solve step forms them.
         omegas=[2.0 * np.pi * float(f) for f in engine.frequencies],
-        # Opt-in tabulated Sommerfeld assembly (10.60): an engine field
-        # requested from the engine's owner; the exact assembly otherwise.
-        sommerfeld_method=getattr(engine, "sommerfeld_assembly", "exact"),
+        # Exact or tabulated Sommerfeld assembly (10.60).
+        sommerfeld_method=engine.sommerfeld_assembly,
     )
     return BranchModel(
         earth_inductive_model=model,
@@ -877,8 +887,14 @@ def solve_image_family(
     # Burial-depth validation (audit 2026-07-28, F26/F29): the galvanic
     # image construction needs a finite image separation 2 z >> a.
     # Reject surface-laid / airborne conductors and warn for the shallow
-    # regime where the point-image stand-in biases the diagonal.
-    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    # regime where the point-image stand-in biases the diagonal (point
+    # kernel only, F08).
+    _check_segment_depths(
+        disc.segments,
+        where=green.where,
+        stacklevel=stacklevel + 1,
+        kernel=engine.kernel,
+    )
     arrays = SegmentArrays.from_segments(disc.segments)
     kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
     solution = solve(
@@ -1050,9 +1066,10 @@ def _reject_concrete_shells(world, backend: str) -> None:
 
     Raises
     ------
-    NotImplementedError
+    BackendCapabilityError
         If any electrode carries a non-zero
-        ``concrete_shell_coefficient_ohm_m``.
+        ``concrete_shell_coefficient_ohm_m`` (a ``NotImplementedError``,
+        as raised here before 2026.11).
     """
     shelled = [
         e.name
@@ -1060,7 +1077,9 @@ def _reject_concrete_shells(world, backend: str) -> None:
         if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0) != 0.0
     ]
     if shelled:
-        raise NotImplementedError(
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
             f"Backend '{backend}' does not implement the concrete-shell "
             f"correction (ADR-0012) carried by electrode(s) {shelled}. "
             "Use backend='image' / 'image_2layer', or set "
