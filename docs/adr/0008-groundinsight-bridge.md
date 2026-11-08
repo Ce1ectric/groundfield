@@ -181,7 +181,7 @@ return `BusType` instances or talk to the database, so
 - Vector fitting: Gustavsen & Semlyen, *IEEE T-PWRD* 14(3),
   1052–1061 (1999).
 - Standard `rho-f` form: defined in
-  :mod:`groundfield.postprocess.rho_f_standard`.
+  `groundfield.postprocess.rho_f_standard`.
 - `groundinsight.models.core_models.BusType` — consumer of the
   exported formula.
 

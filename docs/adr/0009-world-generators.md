@@ -182,9 +182,9 @@ placement are deferred to a follow-up.
 **4. `soil_specs` — soil-model specifications.** Discriminated
 union `SoilSpec` with three members: `HomogeneousSoilSpec`,
 `TwoLayerSoilSpec`, `MultiLayerSoilSpec`. Each carries the same
-fields as the underlying :class:`SoilModel` but allows
+fields as the underlying `SoilModel` but allows
 distributions; the method `to_soil(rng)` returns a fully numeric
-:class:`SoilModel`. A two-layer soil is the default.
+`SoilModel`. A two-layer soil is the default.
 
 **5. `building.BuildingTypeSpec` — building type definition.**
 Bundles a `name`, a `GroundingSystemSpec`, and an optional
