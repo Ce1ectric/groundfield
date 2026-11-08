@@ -24,9 +24,10 @@ cross-engine check):
   length, segment budget), one string per cause. The solve emits each
   of them as one warning.
 * :func:`check_segment_budget` — the hard resource guard of the solver
-  pipeline: a world whose predicted segment count exceeds
+  pipeline: a world whose predicted segment count, or whose dense nodal
+  system (every conductor sub-piece included), exceeds
   :data:`HARD_LIMIT` raises :class:`ResourceLimitError` before anything
-  of size ``N`` is allocated (finding 10.06).
+  of that size is allocated (finding 10.06; audit round 2, A2S-02).
 
 Validity envelope
 -----------------
@@ -132,14 +133,17 @@ solve time becomes minutes rather than seconds on a typical laptop.
 """
 
 HARD_LIMIT: int = 20_000
-"""Total segment count above which the solver refuses to start.
+"""Problem size above which the solver refuses to start.
 
-The image-family pipeline (and ``solve_mutual_*``) raises
-:class:`ResourceLimitError` for a world whose predicted segment count
-exceeds this value, before anything of size ``N`` is allocated (finding
-10.06: a ring entered in millimetres predicts 62 832 segments). The
-value is read at solve time: set ``groundfield.diagnostics.HARD_LIMIT``
-to a larger number to solve a large world on purpose.
+The image-family pipeline, the ``mom`` family and ``solve_mutual_*``
+raise :class:`ResourceLimitError` for a world whose predicted segment
+count, or whose dense nodal system (current owners, nodes and branches,
+every sub-piece of a distributed conductor included), exceeds this
+value, before anything of that size is allocated (finding 10.06: a ring
+entered in millimetres predicts 62 832 segments; audit round 2, A2S-02:
+an isolated conductor in mm-long sub-pieces). The value is read at solve
+time: set ``groundfield.diagnostics.HARD_LIMIT`` to a larger number to
+solve a large world on purpose.
 """
 
 # Backwards-compatible private aliases (not read by this module any
@@ -425,6 +429,65 @@ def _conductor_segment_count(c) -> int:
     return int(c.n_segments)
 
 
+def _conductor_unknowns(c) -> int:
+    """Unknowns a conductor adds to the dense nodal system (upper bound).
+
+    A lumped (or single isolated) conductor is one branch. A conductor
+    chain (:func:`groundfield.solver._discretize._is_conductor_chain`) of
+    $n$ sub-pieces adds, when isolated, $n$ branches and $n - 1$ interior
+    nodes ($2n - 1$) and, when galvanic, $n$ leaking owners with their $n$
+    midpoint nodes and $n + 1$ branches ($3n + 1$). Closed form: nothing
+    is discretised (a sub-piece length in mm instead of m must not
+    allocate the chain just to count it).
+    """
+    from groundfield.solver._discretize import _is_conductor_chain
+
+    if not _is_conductor_chain(c):
+        return 1
+    n = int(c.n_segments)
+    if c.coupling_to_soil == "galvanic":
+        return 3 * n + 1
+    return 2 * n - 1
+
+
+def _nodal_unknowns(world: "World", layer_interfaces=None) -> int:
+    """Size of the dense augmented nodal system of the solver (upper bound).
+
+    The image and ``mom`` families solve one dense system with one unknown
+    per current owner (an electrode, its part in every further soil
+    layer, every leaking conductor sub-piece), per node (one per
+    electrode cluster, junction and interior conductor node) and per
+    branch (lumped conductors and every chain sub-piece). Its matrix has
+    $n^2$ entries and is allocated whole, so a long conductor chain of
+    fine sub-pieces dominates the memory long before the leakage
+    segments do (audit round 2, A2S-02: a 100 m PEN in 2000 isolated
+    pieces, 12 segments and about 4000 unknowns, took 407 MiB).
+
+    Parameters
+    ----------
+    world
+        World to inspect.
+    layer_interfaces
+        Interface depths in m at which electrodes get one owner per
+        layer.
+
+    Returns
+    -------
+    int
+        Owners plus nodes plus branches; an electrode counts as one
+        owner and one node (every electrode its own cluster).
+    """
+    interfaces = tuple(layer_interfaces or ())
+    n = len(world.junctions)
+    for e in world.electrodes:
+        n += 2
+        if interfaces:
+            lower, upper = e.bounds()
+            n += sum(1 for h in interfaces if lower[2] < h < upper[2])
+    n += sum(_conductor_unknowns(c) for c in world.conductors)
+    return n
+
+
 def _check_ds(engine: "Engine") -> float:
     ds = float(engine.segment_length)
     if not math.isfinite(ds) or ds <= 0.0:
@@ -580,7 +643,11 @@ def expected_segments(
           distributed conductors; lumped conductors contribute 0
           and are omitted),
         * ``conductor_total`` (int),
-        * ``total`` (int) — sum of electrode and conductor segments.
+        * ``total`` (int) — sum of electrode and conductor segments,
+        * ``nodal_unknowns`` (int) — size of the dense augmented nodal
+          system (owners, nodes and branches, including every conductor
+          sub-piece), an upper bound; checked against :data:`HARD_LIMIT`
+          like ``total``.
 
     Raises
     ------
@@ -615,6 +682,7 @@ def expected_segments(
         "per_conductor": per_conductor,
         "conductor_total": c_total,
         "total": e_total + c_total,
+        "nodal_unknowns": _nodal_unknowns(world, layer_interfaces),
     }
 
 
@@ -625,10 +693,17 @@ def check_segment_budget(
 ) -> int:
     """Hard resource guard of the solver pipeline (finding 10.06).
 
-    Predicts the segment count from the geometry — first the
-    closed-form lower bound $\\sum_e \\lceil L_e/ds \\rceil$, then, if
-    that is within the limit, the exact count — and raises before
-    anything of size ``N`` is allocated.
+    Predicts the problem size from the geometry and raises before
+    anything of that size is allocated. Two sizes are checked against
+    :data:`HARD_LIMIT`:
+
+    * the leakage segments (reaction matrix): first the closed-form
+      lower bound $\sum_e \lceil L_e/ds \rceil$, then, if that is
+      within the limit, the exact count;
+    * the unknowns of the dense augmented nodal system (owners, nodes
+      and branches, including every sub-piece and interior node of a
+      conductor chain), in closed form (audit round 2, A2S-02: up to
+      then an isolated conductor of 2000 sub-pieces counted as zero).
 
     Parameters
     ----------
@@ -648,10 +723,22 @@ def check_segment_budget(
     Raises
     ------
     ResourceLimitError
-        If the count exceeds :data:`HARD_LIMIT` (read at call time).
+        If either size exceeds :data:`HARD_LIMIT` (read at call time).
     """
     ds = _check_ds(engine)
     limit = int(HARD_LIMIT)
+    unknowns = _nodal_unknowns(world, layer_interfaces)
+    if unknowns > limit:
+        raise ResourceLimitError(
+            f"World {world.name!r} needs a nodal system of {unknowns} unknowns "
+            "(current owners, nodes and branches, among them every sub-piece "
+            "and interior node of the distributed conductors), more than "
+            f"HARD_LIMIT = {limit}: its dense matrix has {unknowns * unknowns:.3g} "
+            f"entries ({16.0 * unknowns * unknowns / 2**30:.3g} GiB complex). "
+            "Check discretize_segment_length of the conductors (metres); to "
+            "solve a large world on purpose, raise "
+            "groundfield.diagnostics.HARD_LIMIT."
+        )
     conductors = sum(_conductor_segment_count(c) for c in world.conductors)
     lower = conductors + sum(_segment_lower_bound(e, ds) for e in world.electrodes)
     if lower > limit:
@@ -723,6 +810,7 @@ def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
             )
     est = expected_segments(world, engine)
     n_total = int(est["total"])
+    n_nodal = int(est["nodal_unknowns"])
     if n_total > HARD_LIMIT:
         out.append(
             Diagnostic(
@@ -737,15 +825,35 @@ def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
                 {"n_segments": n_total, "limit": HARD_LIMIT},
             )
         )
-    elif n_total >= SOFT_LIMIT:
+    elif n_nodal > HARD_LIMIT:
+        out.append(
+            Diagnostic(
+                "budget",
+                "warning",
+                (world.name,),
+                f"predicted nodal system of {n_nodal} unknowns (owners, nodes and "
+                "branches, among them every conductor sub-piece) exceeds "
+                f"HARD_LIMIT = {HARD_LIMIT}: the solve refuses such a world "
+                "(ResourceLimitError) unless groundfield.diagnostics.HARD_LIMIT "
+                "is raised. Consider a sparser distributed-conductor "
+                "discretisation (discretize_segment_length in metres).",
+                {"n_unknowns": n_nodal, "limit": HARD_LIMIT},
+            )
+        )
+    elif max(n_total, n_nodal) >= SOFT_LIMIT:
+        what = (
+            f"predicted total segment count {n_total}"
+            if n_total >= n_nodal
+            else f"predicted nodal system of {n_nodal} unknowns"
+        )
         out.append(
             Diagnostic(
                 "budget",
                 "info",
                 (world.name,),
-                f"predicted total segment count {n_total} exceeds {SOFT_LIMIT} — "
+                f"{what} exceeds {SOFT_LIMIT} — "
                 "solve time may run from seconds to minutes on a typical laptop.",
-                {"n_segments": n_total, "limit": SOFT_LIMIT},
+                {"n_segments": n_total, "n_unknowns": n_nodal, "limit": SOFT_LIMIT},
             )
         )
     return out
@@ -1026,9 +1134,11 @@ def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
        :meth:`min_feature_length` — every kind, including polyline and
        star electrodes (F53 / F54, listed as fixed in 0.15.0 but
        skipped until 2026.11).
-    3. **Total segment budget** (``"budget: ..."``): at or above
-       :data:`SOFT_LIMIT`, or above :data:`HARD_LIMIT` (the solve then
-       refuses with :class:`ResourceLimitError`).
+    3. **Total segment budget** (``"budget: ..."``): the segment count or
+       the size of the dense nodal system (every conductor sub-piece
+       included) at or above :data:`SOFT_LIMIT`, or above
+       :data:`HARD_LIMIT` (the solve then refuses with
+       :class:`ResourceLimitError`).
 
     The function never raises (except for a non-positive
     ``segment_length``) — it only reports. The full report with
