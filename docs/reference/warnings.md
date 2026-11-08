@@ -1,0 +1,288 @@
+# Warnings and errors
+
+`groundfield` warns when a result is valid but limited, and raises when
+it cannot produce a meaningful result. Every warning class below is a
+subclass of `UserWarning` (except `DeprecationWarning`), so it can be
+filtered by category:
+
+```python
+import warnings
+
+import groundfield as gf
+
+with warnings.catch_warnings():
+    warnings.simplefilter("error", gf.UniformCurrentFieldWarning)   # make it fatal
+    warnings.simplefilter("ignore", gf.ExperimentalBackendWarning)  # or silence it
+    ...  # solve and post-process here
+```
+
+Warnings are attributed to the line of your code that caused them,
+not to the inside of the package; warnings that the package's own
+internal calls would trigger (for example a generator using an old
+keyword) are not shown, because you cannot act on them. Python shows a
+`DeprecationWarning` by default only for code in `__main__` and in
+notebooks; run tests with `-W error::DeprecationWarning` to find
+deprecated names early. The page lists every warning and exception
+class defined in `src/groundfield`, then the plain `UserWarning`s, then
+the built-in exceptions with a fixed meaning.
+
+## Solver and backends
+
+### `BackendCapabilityError`
+
+`gf.BackendCapabilityError`, subclass of `ValueError` and
+`NotImplementedError`. **Raised** by `Engine.solve` before any
+numerics when the backend cannot represent the world: an unsupported
+number of soil layers, electrodes with a concrete-shell coefficient,
+junctions, or an explicitly requested kernel the backend does not
+implement. The message names the backends that can. **Remedy:** choose
+one of them (see the [backend registry](api/registry.md)); three or more
+distinct layers need `mom_sommerfeld`.
+
+### `BackendCapabilityWarning`
+
+`groundfield.solver.BackendCapabilityWarning`. **Emitted** when the
+backend solves the world with a documented simplification: `fem` treats
+distributed and inductive conductors as lumped resistive branches, and
+a backend without two-terminal sources returns the current of a source
+with `return_to` through remote earth. **Remedy:** use an image or MoM
+backend when the conductor network or the return terminal matters.
+
+### `ExperimentalBackendWarning`
+
+`gf.ExperimentalBackendWarning`. **Emitted** once per process on the
+first solve with an experimental backend (`fem`). Its results are not
+validated as a cross-check and may change between releases. **Remedy:**
+use it for orientation only, or filter the category.
+
+### `BackendOptionsWarning`
+
+`groundfield.solver.BackendOptionsWarning`. **Emitted** when
+`Engine.options` configures a backend that will not run (for example
+`options={"fem": ...}` with `backend="mom"`); the options are ignored.
+**Remedy:** remove them or select that backend.
+
+### `EngineFrequencyOrderWarning`
+
+`groundfield.solver.engine.EngineFrequencyOrderWarning`. **Emitted**
+when `Engine.frequencies` is not strictly increasing. The order is kept,
+and every result list follows it. **Remedy:** sort the list, or state the
+intent with `engine.with_frequencies(..., preserve_order=True)`.
+
+### `ShallowSegmentWarning`
+
+`groundfield.solver.ShallowSegmentWarning`. **Emitted** for the point
+kernel only (`kernel="point"` and the `mom` family) when a leakage segment is
+longer than about four times its depth: the self term uses the point
+image at distance $2z$ instead of the image line, which overestimates
+it by more than 13 % and biases the impedance high. The message
+quantifies the worst case. **Remedy:** shorter segments, or the exact
+line kernel of the image family (the default), which has no such bias.
+
+### `SeriesTruncationWarning`
+
+`groundfield.solver.image_2layer.SeriesTruncationWarning` (also in
+`groundfield.solver.mom`). **Emitted** when the Tagg/Sunde image series
+reaches `Engine.image_max_terms` before its tail bound
+$\lvert K\rvert^{n+1}/(1-\lvert K\rvert)$ falls below
+`image_series_tol`, typically at very high layer contrast
+($\lvert K\rvert \to 1$). **Remedy:** raise `image_max_terms` (the
+default 300 covers $\lvert K\rvert = 0.94$).
+
+### `SommerfeldConvergenceWarning`
+
+`groundfield.solver.mom_sommerfeld.SommerfeldConvergenceWarning`.
+**Emitted** when the quadrature of the reflected part of the layered
+Green's function does not converge to `epsrel`; the value may even have
+the wrong sign. The message names the worst pair and the cause.
+**Remedy:** raise `max_osc_panels` in
+`Engine(options={"mom_sommerfeld": {...}})` for kilometre separations
+with thin layers; at a layer contrast $\lvert K\rvert \to 1$ in two-layer
+soil use `image_2layer`.
+
+### `FemReductionWarning`
+
+`gf.FemReductionWarning`. **Emitted** once per `fem` solve, listing the
+reasons, when its equivalent-hemisphere reduction does not represent the
+world: several electrodes in a cluster (mutual resistance neglected),
+several clusters (no coupling between them), or a layer interface within
+the hemisphere radius. **Remedy:** use an integral-equation backend for
+such worlds; `fem` is experimental.
+
+### `ComplexImageFitWarning`
+
+`groundfield.solver.cim.ComplexImageFitWarning`. **Emitted** only by a
+direct call of `groundfield.solver.cim.fit_complex_images` when the
+complex-image fit misses its tolerance. The `cim` backend no longer fits
+(it is a deprecated alias of `image`). **Remedy:** do not use the fit as
+a Green's function.
+
+## Coupling (earth return, layered Green's function)
+
+### `SommerfeldResolutionWarning`
+
+`groundfield.coupling.layered_green.SommerfeldResolutionWarning` (also
+raised by `coupling.sommerfeld_inductance`). **Emitted** when the Hankel
+quadrature cannot place enough nodes per oscillation of $J_0(\lambda s)$
+within its node budget; the result would not be converged. **Remedy:**
+lower `lambda_max_factor` (no accuracy is lost: the truncated tail is
+added in closed form) or reduce the distance range of the group.
+
+### `SommerfeldTailTruncationWarning`
+
+`groundfield.coupling.layered_green.SommerfeldTailTruncationWarning`.
+**Emitted** when the reflected kernel needs more closed-form image
+terms than its budget to bound the truncated tail of the quadrature
+(a very wide range of horizontal distances in one group, typically
+pairs near the surface or the layer interface); the value is then not
+bounded by the documented tolerance. **Remedy:** lower
+`lambda_max_factor` (fewer image terms are then needed) or reduce the
+horizontal distance range of the group.
+
+## Model and input
+
+### `DeprecationWarning`
+
+**Emitted** for every deprecated name, keyword, JSON key or backend
+alias. The message names the replacement and the earliest removal
+(2027.5). **Remedy:** see [Deprecations](deprecations.md).
+
+### `InertConfigurationWarning`
+
+`groundfield.utils.InertConfigurationWarning`. **Emitted** when a
+public setting is stored but read by no backend: a non-default
+`BoundaryConditions` field or a soil `relative_permittivity` (also in
+the generator soil specs). Every backend uses the quasi-static
+conduction-current model with remote earth as reference. **Remedy:**
+remove the setting.
+
+### `CrossSectionUnitWarning`
+
+`groundfield.conductors.CrossSectionUnitWarning`. **Emitted** for a
+conductor `cross_section` above 10⁻² m², which almost always is a value
+in mm² (`50` instead of `50e-6`) and would make the conductor a
+near-ideal short. **Remedy:** give the cross section in m².
+
+## Diagnostics
+
+### `DiagnosticsWarning`
+
+`gf.DiagnosticsWarning`. **Emitted** by `diagnose(...).warn()`: one
+aggregated warning with all findings, one line per cause (thin-wire
+ratio, resolution, problem size, close or interpenetrating wires, inert
+settings, series truncation). The solve emits the discretisation
+findings as individual warnings. **Remedy:** follow the advice in each
+line; see [Diagnostics](api/diagnostics.md).
+
+### `ResourceLimitError`
+
+`gf.ResourceLimitError`, subclass of `ValueError`. **Raised** before
+any allocation when the predicted number of segments exceeds
+`groundfield.diagnostics.HARD_LIMIT` (20 000). The usual cause is a
+geometry given in millimetres or a very small `segment_length`.
+**Remedy:** check units and segment length; to solve a large world on
+purpose, raise `HARD_LIMIT`.
+
+## Post-processing
+
+### `UniformCurrentFieldWarning`
+
+`gf.UniformCurrentFieldWarning`. **Emitted** by the touch- and
+step-voltage functions when a result of the image family (one uniform
+current per electrode) is evaluated near a grid, mesh, star, strip end,
+open polyline or bonded multi-electrode cluster, where the real current
+crowds to edges and tips; the field values there are impedance-grade,
+not field-grade. **Remedy:** re-solve with `backend="mom"` for those
+quantities.
+
+### `VectorFitQualityWarning`
+
+`gf.VectorFitQualityWarning`. **Emitted** when the relative rms error of
+a vector fit exceeds `rms_tol` (1 %), or when the imaginary part of a
+0 Hz sample had to be discarded. **Remedy:** inspect `rms_relative`; try
+another `n_poles`, more samples or `weighting="inverse_magnitude"`.
+
+### `VectorFitConvergenceWarning`
+
+`groundfield.fit.VectorFitConvergenceWarning`. **Emitted** when the
+poles still move by more than 1 % after `n_iter` relocation steps.
+**Remedy:** more iterations, another `n_poles`, or a different
+weighting.
+
+### `VectorFitUnderdeterminedWarning`
+
+`groundfield.fit.VectorFitUnderdeterminedWarning`. **Emitted** when
+`n_poles` is not smaller than the number of samples: the fit only
+interpolates. **Remedy:** fewer poles or more frequencies.
+
+### `RhoFStandardQualityWarning`
+
+`gf.RhoFStandardQualityWarning`. **Emitted** when the standard-form
+fit misses a sample by more than `max_relative_tol` (5 %): the fixed
+ansatz cannot represent the sampled $Z(\rho, f)$. **Remedy:** check
+`max_relative`, restrict the $\rho$ range, or fit per $\rho$ with vector
+fitting.
+
+## IO and export
+
+### `NonPassiveFitWarning` / `NonPassiveFitError`
+
+`gf.NonPassiveFitWarning`, `gf.NonPassiveFitError` (subclass of
+`ValueError`). **Emitted / raised** (with `require_passive=True`) when
+the exported impedance formula has $\operatorname{Re}Z < 0$ somewhere
+between 0 Hz and twice the highest fitted frequency; the message names
+the frequency (and $\rho$) of the most negative value. **Remedy:**
+refit (fewer poles, different weighting) before exporting.
+
+### `EvaluateSpecError`
+
+`gf.EvaluateSpecError`, subclass of `ValueError`. **Raised** by
+`evaluate_spec`, `load_bustype_json` and `BusTypeSpec.from_dict` when a
+`BusType` document or its formula is rejected: not a `BusTypeSpec`, empty
+formula, unknown symbol, or a formula outside the allowed grammar or its
+size bounds (the parser never evaluates the text). The parser's own
+`groundfield.io._formula.FormulaError` arrives wrapped in this class.
+**Remedy:** regenerate the document with `save_bustype_json`, or fix the
+formula by hand.
+
+### `ResultFormatError`
+
+`gf.ResultFormatError`, subclass of `ValueError`. **Raised** by
+`load_result` for a file that is not a readable result file: wrong
+`format`, a newer `schema_version`, invalid JSON or UTF-8, or metadata
+outside what the writer produces. **Remedy:** load it with the
+groundfield version that wrote it (`written_by`), or regenerate it.
+
+### `OverpassError`
+
+`gf.OverpassError`, subclass of `RuntimeError`. **Raised** by the OSM
+queries on a non-success Overpass answer or a malformed payload (after
+the retries); `status_code` and the start of the body are attached. The
+answer is not cached. **Remedy:** retry later, reduce the radius, or work
+from a cached / stored answer.
+
+## Other warnings (plain `UserWarning`)
+
+| Where | When | What to do |
+|---|---|---|
+| `coupling` (Carson) | `earth_inductive_model="carson_series"` with layered soil: the upper-layer $\rho_1$ is used | use `"sommerfeld"`, which supports layered soil |
+| `solver` (`image_2layer`) | the deepest segment ends less than two segment lengths above the layer interface | refine `segment_length` near the interface |
+| `solver` (kernels) | two segments of different wires closer than the 1 mm singularity clamp | merge the wires or move them apart |
+| `solver` (pipeline) | a source looks like the hand-made counter-source of another one | use one source with `return_to` |
+| `solver` (pipeline) | conductors could not be matched to the branch network; their inductance is not applied | check the conductor end points |
+| `World.set_boundary_conditions` | a boundary field set to (or back from) a non-default value | none needed; the fields are not read |
+| `geometry` (`PolylineElectrode`) | `closed=True` with only two vertices (treated as open) | give at least three vertices |
+| `generators` | buildings that cannot be connected to a PEN cable or a feeder, exhausted feeder slots, a cabinet without electrodes, a footprint widened to 1 m, `source_return_to` overriding the measurement return | check the layout parameters named in the message |
+| `geo` | an unreadable Overpass cache file (re-fetched) | none |
+| `fit` / `io` | a fit or exported formula that does not depend on frequency | expected for frequency-independent data; otherwise check the samples |
+
+## Built-in exceptions with a fixed meaning
+
+| Exception | Raised when |
+|---|---|
+| `KeyError` | an electrode, junction, conductor or source name is unknown (the message suggests the closest names) |
+| `ValueError` | an invalid value: non-finite or non-positive physical input, a source with zero current, a short-circuited two-terminal source, a junction without soil contact, an empty world |
+| `TypeError` | an unknown keyword of a factory, or a soil that is not a soil model |
+| `NotImplementedError` | a `VoltageSource` in the world; `FieldResult.potential` for three or more soil layers |
+| `ImportError` | a function of `groundfield.geo` without the `geo` extra, or `to_bustype` without `groundinsight` (the message gives the install command) |
+| `pydantic.ValidationError` | a model field fails validation (subclass of `ValueError`) |
