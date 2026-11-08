@@ -5,7 +5,7 @@ with certain backends — with the size of the effect where it has been
 measured. The numbers are recorded in the docstrings of the modules
 named in each entry (they are the authority and are updated with the
 code) and in the [changelog](../changelog.md) of the release that
-measured them. The [validation page](../../explanation/validation.md)
+measured them. The [validation page](../explanation/validation.md)
 shows what agrees with independent references and how well.
 
 ## Scope of the physics

@@ -166,7 +166,15 @@ nav:
       - "T10 Reproducible studies": tutorials/T10_reproducible_studies.ipynb
   - How-to guides:
       - how-to/index.md
-      # DOC-B: the how-to pages (how-to/*.md) are listed here at integration.
+      - "Install the optional extras": how-to/install-extras.md
+      - "Run sweeps and Monte Carlo studies": how-to/sweeps-and-monte-carlo.md
+      - "Speed up large studies": how-to/speed-up-large-studies.md
+      - "Plot results": how-to/plot-results.md
+      - "Model the inductive coupling of cables and leads": how-to/inductive-coupling.md
+      - "Export to CSV, VTK and ParaView": how-to/export-csv-vtk-paraview.md
+      - "Work with OpenStreetMap offline": how-to/osm-offline.md
+      - "Read and act on warnings": how-to/warnings-and-diagnostics.md
+      - "Contribute to the documentation": how-to/contribute-to-the-docs.md
   - Explanation:
       - explanation/index.md
       - Concepts: explanation/concepts.md
@@ -196,9 +204,9 @@ nav:
           - "ADR-0010 Tier-0 performance": adr/0010-tier0-performance.md
           - "ADR-0011 OSM building footprints": adr/0011-osm-building-footprints.md
           - "ADR-0012 Foundation concrete encasement": adr/0012-foundation-concrete-encasement.md
-          # DOC-C: ADR-0013 (calendar versioning), ADR-0014 (backend
-          # registry and shared pipeline), ADR-0015 (exact line-source
-          # kernel) are listed here at integration.
+          - "ADR-0013 Calendar versioning": adr/0013-calendar-versioning.md
+          - "ADR-0014 Backend registry and pipeline": adr/0014-backend-registry-and-pipeline.md
+          - "ADR-0015 Line-source kernel default": adr/0015-line-source-kernel-default.md
   - Reference:
       - reference/index.md
       - API:
@@ -239,6 +247,7 @@ nav:
           - "Pass 6": audit/pass-06.md
           - "Pass 7": audit/pass-07.md
           - "Pass 8": audit/pass-08.md
+          - "Audit of 2026-07-08": audit/audit-2026-07-08.md
           - "Pass 9": audit/pass-09.md
           - "Pass 10": audit/pass-10.md
       - "Knowledge graph (graphify)": graphify.md
