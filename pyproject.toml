@@ -82,6 +82,10 @@ groundinsight = ">=0.3"
 requests = "^2.32"
 shapely = "^2.0"
 pyproj = "^3.6"
+# Executes the tutorial notebooks in tests/test_tutorials.py (docs decision 1:
+# tutorials are executed in CI with value assertions).
+nbclient = "^0.11.0"
+nbformat = "^5.10"
 
 [tool.poetry.group.docs]
 optional = true
