@@ -6,7 +6,7 @@
 # Run on all files with `pre-commit run --all-files`.
 #
 # The hooks mirror the blocking CI checks: ruff format, ruff check with the
-# blocking subset F, E9, B (`ruff check` without arguments reports the full
+# blocking subset F, E9, B, W605 (`ruff check` without arguments reports the full
 # standard configured in pyproject.toml), nbstripout for notebooks, and file
 # hygiene. Revisions are pinned to full commit SHAs, the tag is in the
 # comment; update with `pre-commit autoupdate --freeze` and keep the ruff
@@ -21,7 +21,7 @@ repos:
     hooks:
       - id: ruff-format
       - id: ruff-check
-        args: [--select, "F,E9,B"]
+        args: [--select, "F,E9,B,W605"]
 
   - repo: https://github.com/kynan/nbstripout
     rev: 34071b78c181af3bf5af955c1426466e096fc3db  # frozen: 0.9.1
