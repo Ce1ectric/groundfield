@@ -130,7 +130,11 @@ shows what agrees with independent references and how well.
 - **`carson_series`** is a per-metre approximation for long parallel
   conductors over homogeneous soil; in layered soil it uses $\rho_1$
   (with a warning), and it rejects conductor segments in the soil-surface
-  plane. **`perfect_mirror`** is a frequency-independent diagnostic
+  plane. It tiles only near-parallel pairs of segments inclined by less
+  than 8.1° and hands every other pair to the Sommerfeld kernel; at that
+  boundary the result steps by the error of the per-metre model (13 % for
+  two 1 km leads 2 m apart at 1 kHz, 42 % for two 300 m leads at 50 Hz;
+  [earth return](../explanation/earth-return.md)). **`perfect_mirror`** is a frequency-independent diagnostic
   baseline, not a model of buried conductors below 1 kHz. Use the default
   `sommerfeld` for numbers.
 - **Cost of the Sommerfeld assembly** grows with the number of segment

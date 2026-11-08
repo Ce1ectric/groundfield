@@ -3414,3 +3414,31 @@ Test: `tests/test_soil_models.py::test_old_keyword_warns_and_maps_to_canonical_f
   (≤ 2.4e-6; against the refined per-pair reference the tabulated result is
   4.2e-7 off, the per-pair rule 2.0e-6). Tests:
   `tests/test_sommerfeld_assembly_default.py`.
+
+## Decisions on the questions left open (2026-11-08)
+
+After the third adversarial audit and the user's decisions Q1–Q19, the release
+preparation left 17 questions to the author, each with a recommendation. The
+author followed every recommendation. The table records the question, the
+decision and where it went; the work streams `d2solver`, `d2gen` and `d2soil`
+below implemented the decisions that change code.
+
+| Q | Question | Decision | Where |
+|---|---|---|---|
+| 20 | Encase the cross-braces of mesh foundation electrodes in the concrete shell, as DIN 18014 lays the foundation earth electrode with its connections in the concrete? | yes | stream `d2gen` |
+| 21 | Deprecate `FoundationElectrodeSpec.concrete_model`, which only chooses one or four current owners of a ring foundation (≤ 0.06 % apart up to aspect ratio 4)? | yes | stream `d2gen` |
+| 22 | Keep the PEN routing of `TnNetworkGenerator` (an own cable per cabinet, a service drop taps the cable that feeds its building)? Place cabinets per building group in the future? | routing kept; cabinets per building group in the next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 23 | `fem` whose equivalent hemisphere puts current into a more conductive layer that the electrodes do not touch (−38 … −98 %): error instead of warning? | error | stream `d2solver` |
+| 24 | Point-form guard near a layer interface: keep the conservative thresholds (warning within 0.6 segment lengths, error within 0.387)? | kept | [known limitations](../reference/known-limitations.md#current-ansatz-and-source-kernels) |
+| 25 | Accept the step of `carson_series` at the 8.1° boundary of its validity domain as a documented limit? | accepted | [known limitations](../reference/known-limitations.md#earth-return-and-conductors), [earth return](../explanation/earth-return.md) |
+| 26 | Accept that the simulated in-line fall-of-potential reading moves because the leads now couple as wires lying side by side (Im Z_meas 0.063 → 0.054 Ω at 50 Hz)? | accepted | release notes, 10.46 |
+| 27 | Warn when `perfect_mirror` couples conductors on opposite sides of the soil surface through its additive image? | warning | stream `d2solver` |
+| 28 | Count powers of numbers (`10**40`) in the rule on nested exponents of the formula parser, as groundinsight does? | yes; already the rule (`(f*10**40)**2` is rejected, `tests/test_formula_security.py::test_exponents_of_nested_powers_multiply_to_at_most_max_pow`) | no change |
+| 29 | Only document that printing a parsed formula or passing it to `lambdify` lets SymPy evaluate parts of an untrusted formula again? | documented | [IO reference](../reference/api/io.md) |
+| 30 | One current per wire line for grids and stars in the image family (−3 … −5 %)? | next release, with its own validation | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 31 | Make the soft size notice (5 000 segments) adjustable per engine as well? | yes | stream `d2solver` |
+| 32 | Read a thin conductor inside a thicker one as a concentric cable only with an explicit marker? | next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 33 | No internal inductance of a solid wire for cable shields (100 m coaxial pair 31.97 instead of 26.97 µH)? | next release, together with 32 | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 34 | Tighten the rule for segments up to a quarter skin depth under `sommerfeld` (step of 3.5e-4 at δ/4)? | next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 35 | Radial trunk: a building in a substation slot taps its feeder's trunk instead of getting its own line from the substation? | next release, together with 22 | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 36 | Presets of the effective-resistivity weights per electrode class, with the values of the AP2 hand-over? | yes | stream `d2soil` |

@@ -5,11 +5,52 @@ description: Planned and possible work on groundfield and the items left open af
 
 # Roadmap
 
-This page collects work that is planned or possible but not scheduled for a
-release. Up to 0.15.0 the roadmap was the last section of the changelog; it
+This page collects work that is planned or possible. The first section lists
+what is scheduled for the release after 2026.11.0; everything below it is not
+scheduled. Up to 0.15.0 the roadmap was the last section of the changelog; it
 moved here in 2026.11.0, when the release notes were condensed (see the
 [changelog](changelog.md)). Ideas that a review pass recorded as *roadmap
 candidates* stay on the page of that pass in the [audit history](audit/index.md).
+
+## Scheduled for the next release
+
+Decided on 2026-11-08 together with the release of 2026.11.0 (the questions
+and answers are listed on the [pass-10 page](audit/pass-10.md#decisions-on-the-questions-left-open-2026-11-08)).
+Each item changes numbers and comes with its own validation.
+
+- **One current per wire line for grids and stars in the image family.**
+  The image family solves one uniform current per electrode; a
+  `grid_mesh` or star electrode is therefore 3.9 % (20 m × 20 m, 4 × 4
+  meshes), 5.3 % (40 m × 40 m, 8 × 8) and 4.3 % (4-arm star) above the
+  per-segment `mom` solution, and its near-field potentials are off by tens
+  of per cent. The generators build mesh foundations as one electrode per
+  wire line since 2026.11 (+1.1 %, point kernel +0.3 … +0.5 %); doing the same
+  inside the solver for every grid and star will move their results by
+  −3 … −5 % (second adversarial audit, A2G-04).
+- **Cable cabinets per building group and T-joints on the radial trunk.**
+  `TnNetworkGenerator` places its cabinets at fixed positions: both cabinets
+  of the default 30-house network lie west of the substation, so the eastern
+  houses are fed by service drops of 6 … 109 m straight from the substation
+  (every drop taps the cable that feeds its building, review finding 10.38),
+  which doubles the PEN length against the earlier routing. Cabinets will be
+  placed per building group (at the far end of the houses they feed), and a
+  building in a substation slot of `RadialTrunkTopology` will tap its feeder's
+  trunk instead of getting its own line from the substation.
+- **Concentric cables by an explicit marker, without the internal inductance
+  of the shield.** A thinner conductor drawn on the axis of a thicker one is
+  read as a core inside a cable shield and couples at the shield radius
+  (2026.11, review finding 10.46); two separate cables of different radii drawn
+  on one axis are therefore read as one concentric cable. The next release
+  binds this reading to an explicit marker (`conductor_type="cable_shield"`)
+  and gives a shield no internal inductance of a solid wire: a 100 m coaxial
+  pair with 5 mm core and 15 mm shield radius now reads a loop inductance of
+  31.97 µH instead of the 26.97 µH of a thin-walled shield.
+- **Tighter rule for long segments under `sommerfeld`.** A segment longer
+  than a quarter skin depth gets a composite outer rule; the shorter ones
+  keep the historic single rule, which reaches 4.8e-4 at a quarter skin
+  depth, so the correction steps by 3.5e-4 where the composite rule takes
+  over and stays within 5.9e-4 of a refined rule (50 Hz and 1 kHz, up to
+  3 km). The rule of the shorter segments will be tightened as well.
 
 ## Left open by 2026.11.0
 
@@ -24,15 +65,6 @@ limits a result, the reference documentation states the limit.
   0.125 m to 2 m, not monotonically in the segment length (point kernel −0.6 %
   to −1.9 %). A quadrupole term for every image would remove the residual at
   roughly twice the cost of the series assembly (10.28).
-- **One current per wire line for grids and stars in the image family.**
-  The image family solves one uniform current per electrode; a
-  `grid_mesh` or star electrode is therefore 3.9 % (20 m × 20 m, 4 × 4
-  meshes), 5.3 % (40 m × 40 m, 8 × 8) and 4.3 % (4-arm star) above the
-  per-segment `mom` solution, and its near-field potentials are off by tens
-  of per cent. The generators build mesh foundations as one electrode per
-  wire line since 2026.11 (+1.1 %, point kernel +0.3 … +0.5 %); doing the same inside the solver
-  for every grid and star would move their results by −3 … −5 % (second
-  adversarial audit, A2G-04).
 - **Line kernel on the cross-layer path.** For electrodes that cross the layer
   interface (ADR-0007) the homogeneous part of the reaction matrix uses the line
   kernel, the layered correction stays in point form (10.28).
