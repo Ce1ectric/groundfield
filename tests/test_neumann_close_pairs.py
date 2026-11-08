@@ -75,6 +75,14 @@ def _crossing(angle_deg: float, dz: float = 0.0):
     return (*a, b1, b2)
 
 
+def _t_junction(angle_deg: float):
+    """Segment b starts on the interior of a (no shared end point)."""
+    th = math.radians(angle_deg)
+    a = (np.array([0.0, 0.0, 0.7]), np.array([10.0, 0.0, 0.7]))
+    b1 = np.array([4.0, 0.0, 0.7])
+    return (*a, b1, b1 + 5.0 * np.array([math.cos(th), math.sin(th), 0.0]))
+
+
 CASES = {
     "1mm_1e-4rad": _offset_tilt(0.001, 1e-4),  # base -19 %
     "1cm_1e-2rad": _offset_tilt(0.01, 1e-2),  # base +10.5 %
@@ -84,6 +92,8 @@ CASES = {
     "crossing_30deg": _crossing(30.0),  # base -0.9 %
     "skew_1cm_5deg": _crossing(5.0, 0.01),  # base +0.5 %
     "skew_1cm_45deg": _crossing(45.0, 0.01),  # base -2.3 %
+    "t_junction_45deg": _t_junction(45.0),  # base -3.5 %
+    "t_junction_1deg": _t_junction(1.0),  # base -13 %
 }
 
 

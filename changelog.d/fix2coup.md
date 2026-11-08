@@ -99,8 +99,10 @@
   were integrated with the 16×16 rule, which only resolves 1/r for pairs
   apart by about half their length: two 5 m segments with aligned ends and
   1e-5 … 1e-3 rad between them were +12 % at 10 cm and +200 … +250 % at
-  1 cm, −19 % at 1 mm with offset ends; crossing pairs about −1 %, skew pairs
-  1 cm apart −2.3 … +0.5 %. With `touching="exact"` (the default) such pairs
+  1 cm, −19 % at 1 mm with offset ends; crossing pairs about −1 % (−12 % when
+  crossing near an end at 2°), skew pairs 1 cm apart −2.3 … +0.5 %, a branch
+  starting on the interior of another segment (T-junction without a shared
+  vertex) −3.5 … −13 %. With `touching="exact"` (the default) such pairs
   are now integrated semi-analytically (inner integral in closed form, outer
   Gauss–Legendre panels graded towards the near-singular points; ≤ 5e-11
   against an adaptive reference); `touching="quadrature"` keeps the 0.15.0
