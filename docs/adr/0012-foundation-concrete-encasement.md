@@ -431,8 +431,8 @@ not change.
 Since item 2 the field no longer selects a shell model; it only chooses
 one owner (`"lumped"`, one grid mesh) or one per side (`"distributed"`)
 for an axis-aligned `style="ring"` rectangle. The two differ by at most
-0.16 % up to aspect ratio 4 and 0.63 % up to 50 over the 39 soils of the
-AP1 grid, bare or in concrete of 100 or 1 000 Ω·m (0.06 % and 0.3 % for a
+0.16 % up to aspect ratio 4 and 0.67 % up to 50 over the 39 soils of the
+AP1 grid, bare or in concrete of 30, 100 or 1 000 Ω·m (0.06 % and 0.3 % for a
 bare ring in homogeneous soil; `Engine.solve` and an assembly from
 `solve_mutual_matrix` agree to 9e-16). The field is deprecated like the
 flat `sommerfeld_*` fields of the engine: `"distributed"` keeps working

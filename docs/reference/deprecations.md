@@ -79,7 +79,7 @@ Fields (user decision Q21):
 
 | Deprecated (v0.15.0) | Replacement | Note |
 |---|---|---|
-| `FoundationElectrodeSpec.concrete_model` | none — drop the argument | no longer a shell model: both values put the same concrete shell on every wire of the foundation. It only chooses the current owners of an axis-aligned `style="ring"` rectangle, one for the whole ring (`"lumped"`, the default) or one per side (`"distributed"`), at most 0.16 % apart up to aspect ratio 4 and 0.63 % up to 50 over the soils of the AP1 grid (0.06 % and 0.3 % for a bare ring in homogeneous soil). `"distributed"` warns; `"lumped"` and the JSON and pickles of 0.15.0 load silently |
+| `FoundationElectrodeSpec.concrete_model` | none — drop the argument | no longer a shell model: both values put the same concrete shell on every wire of the foundation. It only chooses the current owners of an axis-aligned `style="ring"` rectangle, one for the whole ring (`"lumped"`, the default) or one per side (`"distributed"`), at most 0.16 % apart up to aspect ratio 4 and 0.67 % up to 50 over the soils of the AP1 grid, bare or in concrete of 30 to 1 000 Ω·m (0.06 % and 0.3 % for a bare ring in homogeneous soil). `"distributed"` warns; `"lumped"` and the JSON and pickles of 0.15.0 load silently |
 
 ## Removed in 2026.11.0
 

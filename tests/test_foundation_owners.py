@@ -354,7 +354,7 @@ def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
         "style='ring'",
         "one per side",
         "0.16 %",
-        "0.63 %",
+        "0.67 %",
         "0.06 %",
         "0.3 %",
         "2027.5",

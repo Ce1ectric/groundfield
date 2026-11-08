@@ -65,16 +65,18 @@ __all__ = [
 
 # User decision Q21 (2026.11). The numbers are the largest relative
 # difference of the input impedance between the two values (evidence of
-# stream d2gen: ring_owner_granularity.out, ring_owner_ap1_soils.out).
+# stream d2gen: ring_owner_granularity.out, ring_owner_ap1_soils.out,
+# ring_owner_wet_concrete.out).
 _CONCRETE_MODEL_DEPRECATION = (
     "FoundationElectrodeSpec.concrete_model is deprecated. It no longer "
     "selects a concrete-shell model (both values put the same shell on the "
     "wires); it only chooses the uniform-current owners of an axis-aligned "
     "style='ring' rectangle: one per side for 'distributed', one for the "
     "whole ring for 'lumped' (the default). The two differ by at most "
-    "0.16 % up to aspect ratio 4 and 0.63 % up to aspect ratio 50 over the "
-    "soils of the AP1 grid (0.06 % and 0.3 % for a bare ring in homogeneous "
-    "soil). The field will be removed no earlier than groundfield "
+    "0.16 % up to aspect ratio 4 and 0.67 % up to aspect ratio 50 over the "
+    "soils of the AP1 grid, bare or in concrete of 30 to 1000 ohm m (0.06 % "
+    "and 0.3 % for a bare ring in homogeneous soil). The field will be "
+    "removed no earlier than groundfield "
     f"{DEPRECATION_REMOVAL}; drop the argument."
 )
 
@@ -336,9 +338,10 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "owners of an axis-aligned ``style='ring'`` rectangle: "
             '``"lumped"`` one grid-mesh owner for the whole ring, '
             '``"distributed"`` one owner per side. The two differ by at '
-            "most 0.16 % up to aspect ratio 4 and 0.63 % up to 50 over the "
-            "soils of the AP1 grid (0.06 % and 0.3 % for a bare ring in "
-            "homogeneous soil). Rotated rings (one owner per side), mesh "
+            "most 0.16 % up to aspect ratio 4 and 0.67 % up to 50 over the "
+            "soils of the AP1 grid, bare or in concrete of 30 to 1000 Ω·m "
+            "(0.06 % and 0.3 % for a bare ring in homogeneous soil). "
+            "Rotated rings (one owner per side), mesh "
             "foundations (one owner per wire) and polygon outlines (one "
             "closed wire) are the same for both values (audit A2G-04). Up "
             "to 0.15.0 the lumped shell was a registry entry that only the "

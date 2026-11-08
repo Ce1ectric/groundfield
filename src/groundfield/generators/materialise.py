@@ -78,7 +78,8 @@ given as a rectangle or as a polygon, or on whether a shell is configured
   axis-aligned and one owner per side when rotated. For a perimeter one
   owner and one per side differ by at most 0.06 % up to aspect ratio 4
   and 0.3 % up to 50 for a bare ring in homogeneous soil, 0.16 % and
-  0.63 % over the soils of the AP1 grid, bare or encased. This choice is
+  0.67 % over the soils of the AP1 grid, bare or in concrete of 30 to
+  1000 Ω·m. This choice is
   all ``concrete_model`` still does, and the field is deprecated (user
   decision Q21; ``"distributed"`` warns). (One closed polyline would make
   the rotated lumped ring one owner too, but the touch-voltage envelope
