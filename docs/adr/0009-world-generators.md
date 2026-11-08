@@ -314,8 +314,9 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    junctions, the feed lead from `meas_H` to the auxiliary electrode, the
    probe lead to `meas_S`, one two-terminal source from the station to
    `meas_H`, and the reading `measured_impedance(result)` (10.17).
-6. **Concrete.** Encased foundations carry the shell coefficient on their
-   perimeter wires for both `concrete_model` settings; braces stay bare and
-   no shell resistance is put on PEN drops (ADR-0012 amendment 2026.11).
+6. **Concrete.** Encased foundations carry the shell coefficient on every
+   wire for both `concrete_model` settings, the cross-braces of a mesh
+   foundation included (DIN 18014, user decision Q20); no shell resistance
+   is put on PEN drops (ADR-0012 amendment 2026.11).
 7. **OSM ingest.** Overpass requests and responses are bounded and
    validated before anything is cached (10.05).

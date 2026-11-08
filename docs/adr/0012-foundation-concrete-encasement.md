@@ -390,7 +390,8 @@ Decision:
    is met exactly (`tests/test_concrete_shell_coefficient.py`,
    `tests/test_concrete_one_mechanism.py`).
 2. **Generators.** Both `concrete_model` settings put $C$ and the radius
-   $r_b$ on the encased perimeter wires; braces and rods stay bare; no
+   $r_b$ on every wire of an encased foundation, the cross-braces of a mesh
+   foundation included (user decision Q20, below); rods stay bare; no
    shell resistance on PEN drops; substation and cabinet electrodes get
    $C$ when their specification is encased. `concrete_model` only chooses
    one or several owners for an axis-aligned ring foundation.
@@ -404,3 +405,22 @@ Decision:
 
 The *API additions* and *Variant 1* sections above describe the
 mechanism of 0.15.0 and are superseded by this amendment.
+
+### User decision Q20 (2026.11): the cross-braces are encased
+
+A foundation earth electrode per DIN 18014 lies in the concrete together
+with its connections. The first version of this amendment kept the
+cross-braces of a mesh foundation bare, like the rods (finding 10.13);
+since the user decision Q20 every wire of an encased foundation carries
+$r_b$ and $C$, and the lumped shell resistance of the foundation is $C$
+over its whole encased length. Bare braces were a bare electrode inside
+the concrete: the foundation could not exceed the spreading resistance of
+its braces alone, however dry the concrete. For the generators' default
+house mesh (10 m, 2 × 2 cells, 0.8 m, $r_a$ = 5 mm, $t$ = 5 cm) in
+100 Ω·m encasing the braces changes $Z$ by +1.5 / +47 / +307 % at
+$\rho_c$ = 150 / 1 000 / 5 000 Ω·m; `Engine.solve` and an independent
+assembly from `solve_mutual_matrix` agree to 4e-16
+(`tests/test_concrete_one_mechanism.py`, more cases on the
+[concrete-shell page](../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
+Ring and building-outline foundations, among them the AP1 catalogue, do
+not change.

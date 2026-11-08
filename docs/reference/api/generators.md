@@ -55,7 +55,11 @@ in the penetration rate (a house equipped at 10 % is also equipped at
 
 **Foundations and PEN cables.** A mesh foundation (`style="mesh"`) is
 one wire electrode per mesh line at every orientation (`<name>`,
-`<name>_w<j>`, bonded into one cluster), bare or encased. The image
+`<name>_w<j>`, bonded into one cluster), bare or encased; an encased
+foundation (`concrete_rho_ohm_m`) carries the concrete shell on every
+wire, its cross-braces included (DIN 18014, see
+[concrete shells](../../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
+The image
 family solves one uniform current per electrode. Against the
 per-segment `mom` solution (100 Ω·m, 1 m segments; `mom` uses the point
 kernel), one current per wire is +1.1 % with the default line kernel
