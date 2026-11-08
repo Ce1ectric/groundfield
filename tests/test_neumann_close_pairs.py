@@ -104,14 +104,15 @@ def test_close_pairs_match_an_adaptive_reference(name: str) -> None:
 
 
 def test_the_matrix_assembly_uses_the_same_rule() -> None:
-    seg = np.array([[list(p) for p in CASES[k][:2]] for k in sorted(CASES)][:1])
+    for name in sorted(CASES):
+        p1a, p2a, p1b, p2b = CASES[name]
+        seg = np.array([[p1a, p2a], [p1b, p2b]])
+        L = build_inductance_matrix(seg, np.full(2, 1e-4), image="none")
+        assert L[0, 1] == pytest.approx(neumann_mutual(*CASES[name]), rel=1e-13, abs=0)
     seg = np.concatenate(
-        [seg] + [np.array([[CASES[k][2], CASES[k][3]]]) for k in sorted(CASES)]
+        [np.array([[c[0], c[1]], [c[2], c[3]]]) for c in CASES.values()]
     )
     radii = np.full(len(seg), 1e-4)
-    L = build_inductance_matrix(seg, radii, image="none")
-    for n, k in enumerate(sorted(CASES), start=1):
-        assert L[0, n] == pytest.approx(neumann_mutual(*CASES[k]), rel=1e-13, abs=0)
     for image in ("none", "additive", "antiparallel"):
         np.testing.assert_allclose(
             build_inductance_matrix(seg, radii, image=image),
