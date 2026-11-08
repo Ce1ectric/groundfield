@@ -38,6 +38,7 @@ from __future__ import annotations
 import pathlib
 import pickle
 import re
+import sys
 import warnings
 
 import numpy as np
@@ -641,6 +642,24 @@ def test_model_copy_of_a_subclass_rejects_an_invalid_value(value: object) -> Non
     assert _errors(copied.value) == _errors(constructed.value)
     assert copied.value.title == constructed.value.title == "_TaggedFoundation"
     assert spec.concrete_model == "lumped"
+
+
+# audit R2B-06
+@pytest.mark.finding("10.12")
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="copy.replace needs Python 3.13")
+def test_copy_replace_warns_at_the_callers_line() -> None:
+    """``copy.replace`` (Python >= 3.13) reaches :meth:`model_copy` through
+    pydantic's ``__replace__``; the warning was attributed to the standard
+    library's ``copy.py``, and the default filters, which show a
+    ``DeprecationWarning`` only for ``__main__``, hid it."""
+    import copy
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        replaced = copy.replace(_ring(), concrete_model="distributed")
+    files = [w.filename for w in caught if "concrete_model" in str(w.message)]
+    assert files == [__file__]
+    assert replaced.concrete_model == "distributed"
 
 
 # audit D2B-06
