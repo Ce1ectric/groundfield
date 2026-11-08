@@ -120,6 +120,11 @@ __all__ = [
 #: ``series``
 #:     Image-series controls of the engine, ``{"max_terms", "tol"}``,
 #:     for the post-solve field evaluation.
+#: ``max_segments``
+#:     Problem-size limit the solve was checked against
+#:     (:attr:`Engine.max_segments`, or
+#:     :data:`groundfield.diagnostics.HARD_LIMIT` when the engine leaves
+#:     it at ``None``); ``fem`` has no segments and is not limited by it.
 #: ``provenance``
 #:     Versions, platform, engine configuration, world fingerprint and
 #:     UTC timestamp (see :func:`groundfield.solver.result.solve_provenance`).
@@ -134,6 +139,7 @@ CORE_METADATA_KEYS: tuple[str, ...] = (
     "earth_inductive_model",
     "solve_time_s",
     "series",
+    "max_segments",
     "provenance",
 )
 
@@ -341,6 +347,24 @@ class Engine(BaseModel):
         Frequency list in Hz. Default ``[50.0]``.
     segment_length
         Maximum segment length used to discretise the geometry, in m.
+    max_segments
+        Resource limit of this engine: the largest problem size it
+        solves, counted as the number of leakage segments and as the
+        number of unknowns of the dense nodal system (current owners,
+        nodes and branches, every conductor sub-piece included). A world
+        above it raises :class:`~groundfield.diagnostics.ResourceLimitError`
+        before anything of that size is allocated, in every segment
+        backend and in :func:`~groundfield.solver.mutual.solve_mutual_matrix`
+        / ``solve_mutual_field``. ``None`` (default) takes
+        :data:`groundfield.diagnostics.HARD_LIMIT` (20 000), read at
+        solve time; a positive integer raises or lowers the limit for
+        this engine only (user decision Q17 of 2026.11, finding 10.06).
+        The dense reaction matrix of $N$ segments takes $8N^2$ bytes
+        (3.0 GiB at 20 000), the nodal system of $n$ unknowns $16n^2$
+        bytes; :func:`~groundfield.diagnostics.expected_segments` predicts
+        both. The limit is recorded in ``FieldResult.metadata
+        ["max_segments"]``; ``fem`` meshes a volume and is not limited by
+        it.
     tolerance, max_iterations
         **Deprecated, no effect** (no backend reads them). A non-default
         value warns; both fields will be removed no earlier than
@@ -570,6 +594,17 @@ class Engine(BaseModel):
             "table per pair of depth groups and frequency; faster for large "
             "networks). See coupling.sommerfeld_inductance."
             "build_sommerfeld_correction_matrices(method=...)."
+        ),
+    )
+    max_segments: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Resource limit of this engine: the largest number of leakage "
+            "segments and of unknowns of the dense nodal system it solves; a "
+            "larger world raises ResourceLimitError before allocating. None "
+            "(default) takes groundfield.diagnostics.HARD_LIMIT (20 000), "
+            "read at solve time."
         ),
     )
 
@@ -1023,6 +1058,12 @@ class Engine(BaseModel):
             If the backend cannot represent the world (soil layer count,
             concrete-shell electrodes, explicitly requested kernel). The
             message names the registered backends that can.
+        ResourceLimitError
+            If the predicted number of segments or of nodal unknowns
+            exceeds :attr:`max_segments` (default
+            :data:`groundfield.diagnostics.HARD_LIMIT`); raised before
+            anything of that size is allocated (subclass of
+            ``ValueError``).
 
         Warns
         -----
@@ -1078,10 +1119,13 @@ class Engine(BaseModel):
         # Surfaces thin-wire violations, degenerate electrode sizes
         # and segment-budget overruns as warnings *before* the solve
         # spends minutes on a misconfigured world.
-        from groundfield.diagnostics import check_segment_resolution
+        from groundfield.diagnostics import _hard_limit, check_segment_resolution
 
         for finding in check_segment_resolution(world, self):
             warn_external(finding, UserWarning)
+        # The resource limit the backend checks the problem size against
+        # (Engine.max_segments or the module default; user decision Q17).
+        max_segments = _hard_limit(self)
 
         # Snapshot before dispatch: the record and the fingerprint
         # describe the world as the caller built it, even if a backend
@@ -1126,6 +1170,7 @@ class Engine(BaseModel):
                 "tol": float(self.image_series_tol),
             },
         )
+        md["max_segments"] = max_segments
         md["provenance"] = provenance
         return result
 
