@@ -419,12 +419,12 @@ is named.
 **Documentation (10.82–10.93)**
 
 - The documentation follows the Diátaxis structure: tutorials T01–T10 as
-  executed notebooks (tested in CI), how-to guides, a reference with glossary
-  (English and German), units and conventions, warnings catalogue, known
-  limitations and deprecations, an explanation section with one theory page
-  per engine and a validation page generated from the benchmark suite, the
-  [audit history][audit-history] and the [roadmap][roadmap]. Versioned with
-  `mike`.
+  executed notebooks with value checks (`tests/test_tutorials.py`), how-to
+  guides, a reference with glossary (English and German), units and
+  conventions, warnings catalogue, known limitations and deprecations, an
+  explanation section with one theory page per engine and a validation page
+  generated from the benchmark suite, the [audit history][audit-history] and
+  the [roadmap][roadmap]. Versioned with `mike`.
 - Formulas on the documentation site are typeset once; pages that load a TeX
   extension no longer fail.
 - Moved pages (no redirects): `api/*` → `reference/api/*`, `examples/*` →
