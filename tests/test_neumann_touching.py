@@ -238,3 +238,50 @@ def test_exact_rule_on_a_straight_chain_is_not_slower_than_twice_the_quadrature(
         return min(out)
 
     assert best("exact") < 2.0 * best("quadrature")
+
+
+# audit A3C-4 (the auditor's test, extended)
+@pytest.mark.parametrize(
+    ("eps", "lengths", "frame"),
+    [
+        (3e-9, (5.0, 3.0), "aligned"),
+        (1.5e-6, (5.0, 3.0), "aligned"),
+        (1e-5, (3.0, 5.0), "aligned"),
+        (4.4e-5, (5.0, 3.0), "aligned"),
+        (4.5e-5, (3.0, 5.0), "aligned"),
+        (1e-4, (5.0, 3.0), "aligned"),
+        (3e-9, (5.0, 3.0), "rotated"),
+        (1e-5, (3.0, 5.0), "rotated"),
+        (1e-4, (5.0, 3.0), "rotated"),
+    ],
+)
+def test_filaments_from_one_vertex_at_tiny_angles(eps, lengths, frame) -> None:
+    """Two filaments leaving one vertex at the angle ``eps``. Audit round 3:
+    below the coaxial tolerance (4.5e-5 rad) the pair was taken as
+    overlapping coaxial filaments, and the close-pair rule excludes shared
+    vertices, so the 16x16 rule was used: 16 % off at 1.5e-6 rad, 3.8 % at
+    1e-5 rad; just above it the direct vertex formula lost 2.7e-9. Now the
+    cancellation-free form below 0.81 deg: round-off when the axes are
+    axis-parallel, at most 4e-10 rotated (the angle itself carries about
+    1e-16/eps)."""
+    from tests.test_neumann_close_pairs import _mp_reference, _rotated
+
+    la, lb = lengths
+    pts = [
+        np.zeros(3),
+        np.array([la, 0.0, 0.0]),
+        np.zeros(3),
+        lb * np.array([math.cos(eps), math.sin(eps), 0.0]),
+    ]
+    if frame == "rotated":
+        pts = _rotated(pts)
+    ref = _mp_reference(*pts)
+    bound = 1e-14 if frame == "aligned" else 1e-9
+    assert neumann_mutual(*pts) == pytest.approx(ref, rel=bound, abs=0)
+    # either direction of either filament, either order
+    assert -neumann_mutual(pts[1], pts[0], pts[2], pts[3]) == pytest.approx(
+        ref, rel=bound, abs=0
+    )
+    assert neumann_mutual(pts[2], pts[3], pts[0], pts[1]) == pytest.approx(
+        ref, rel=bound, abs=0
+    )

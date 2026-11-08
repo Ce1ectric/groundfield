@@ -307,6 +307,69 @@ def _coaxial_gap_integral(l_a: float, l_b: float, gap: float) -> float:
     return F(l_a + l_b + gap) - F(l_a + gap) - F(l_b + gap) + F(gap)
 
 
+#: Filaments from one vertex at an angle below 0.81 deg (``cos > 1 - 1e-4``)
+#: use the cancellation-free form of :func:`_folded_vertex_mutual`; the
+#: direct form of :func:`_vertex_integral` loses about ``1e-16 / (1 - cos)``
+#: (2.7e-9 just above the coaxial tolerance of 4.5e-5 rad).
+_VERTEX_STABLE_COS = 1.0 - 1e-4
+
+
+def _folded_vertex_mutual(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    la: float,
+    lb: float,
+    ua: np.ndarray,
+    ub: np.ndarray,
+    dot: float,
+    tol: float,
+) -> float | None:
+    """Filaments from one vertex at a small angle (H), or ``None``.
+
+    Used below 0.81 deg (:data:`_VERTEX_STABLE_COS`), including pairs that
+    pass the coaxial test of :func:`_touching_mutual`
+    ($|\\,|\\cos\\varphi| - 1| \\le 10^{-9}$, an angle below 4.5e-5 rad) but
+    fold out of the common axis: the vertex formula of
+    :func:`_vertex_integral` holds, but its direct evaluation cancels.
+    With $\\sigma = \\sin(\\varepsilon/2)$ from the chord between the two
+    directions away from the vertex, $q = 4\\ell_a\\ell_b\\sigma^2$,
+    $R = \\sqrt{(\\ell_a - \\ell_b)^2 + q}$ the far-end distance and
+    $S = \\ell_a + \\ell_b + R$,
+
+    $$
+    I = \\ell_a \\ln\\frac{S}{\\ell_a + R - \\ell_b}
+      + \\ell_b \\ln\\frac{S}{\\ell_b + R - \\ell_a},
+    $$
+
+    where the smaller denominator is $q/(R + |\\ell_a - \\ell_b|)$ —
+    accurate down to any non-zero angle. Up to audit round 3 such pairs
+    went to the 16x16 rule (16 % off at 1.5e-6 rad, 3.8 % at 1e-5 rad).
+    Returns ``None`` when the pair shares no end point or the far end of
+    *b* lies on *a*'s axis (overlapping coaxial filaments: divergent).
+    """
+    for vertex_a, away_a in ((p1_a, ua), (p2_a, -ua)):
+        for vertex_b, far_b, away_b in ((p1_b, p2_b, ub), (p2_b, p1_b, -ub)):
+            if float(np.linalg.norm(vertex_a - vertex_b)) > tol:
+                continue
+            rel = far_b - vertex_a
+            if float(np.linalg.norm(rel - float(rel @ ua) * ua)) <= tol:
+                return None  # folded onto the axis: divergent
+            chord = away_a - away_b
+            q = la * lb * float(chord @ chord)  # 4 la lb sin^2(eps/2)
+            if q <= 0.0:
+                return None
+            diff = abs(la - lb)
+            R = math.sqrt(diff * diff + q)
+            S = la + lb + R
+            big, small = R + diff, q / (R + diff)
+            d_a, d_b = (big, small) if la >= lb else (small, big)
+            integral = la * math.log(S / d_a) + lb * math.log(S / d_b)
+            return MU_0 / (4.0 * math.pi) * dot * integral
+    return None
+
+
 def _touching_mutual(
     p1_a: np.ndarray,
     p2_a: np.ndarray,
@@ -318,9 +381,10 @@ def _touching_mutual(
     Returns the closed-form partial mutual inductance in H when the two
     straight filaments (i) lie on one axis without overlapping (any
     gap, including zero), or (ii) share an end point at a non-zero
-    angle. Returns ``None`` for every other pair (and for overlapping
-    coaxial pairs, whose filament integral diverges), so that the
-    caller falls back to its general rule.
+    angle (also below the coaxial tolerance, :func:`_folded_vertex_mutual`).
+    Returns ``None`` for every other pair (and for overlapping coaxial
+    pairs, whose filament integral diverges), so that the caller falls
+    back to its general rule.
     """
     da = p2_a - p1_a
     db = p2_b - p1_b
@@ -336,7 +400,11 @@ def _touching_mutual(
         rel1 = p1_b - p1_a
         perp = rel1 - float(rel1 @ ua) * ua
         if float(np.linalg.norm(perp)) > tol:
-            return None  # parallel, distinct axes: the Grover parallel form
+            # parallel on distinct axes (the Grover parallel form), or two
+            # filaments from one vertex at a tiny angle (audit A3C-4)
+            return _folded_vertex_mutual(
+                p1_a, p2_a, p1_b, p2_b, la, lb, ua, ub, dot, tol
+            )
         s1 = float(rel1 @ ua)
         s2 = float((p2_b - p1_a) @ ua)
         lo, hi = min(s1, s2), max(s1, s2)
@@ -345,15 +413,22 @@ def _touching_mutual(
         elif hi <= tol:
             gap = max(-hi, 0.0)
         else:
-            return None  # overlapping coaxial filaments: divergent
+            # overlapping coaxial filaments diverge; filaments from one
+            # vertex at a tiny angle do not (audit A3C-4)
+            return _folded_vertex_mutual(
+                p1_a, p2_a, p1_b, p2_b, la, lb, ua, ub, dot, tol
+            )
         sign = 1.0 if dot > 0.0 else -1.0
         return MU_0 / (4.0 * math.pi) * sign * _coaxial_gap_integral(la, lb, gap)
     for vertex_a, away_a in ((p1_a, ua), (p2_a, -ua)):
         for vertex_b, away_b in ((p1_b, ub), (p2_b, -ub)):
             if float(np.linalg.norm(vertex_a - vertex_b)) <= tol:
                 cos_eps = float(away_a @ away_b)
-                if cos_eps >= 1.0 - 1e-12:
-                    return None  # folded onto each other: divergent
+                if cos_eps > _VERTEX_STABLE_COS:
+                    # small angle: the direct form cancels (audit A3C-4)
+                    return _folded_vertex_mutual(
+                        p1_a, p2_a, p1_b, p2_b, la, lb, ua, ub, dot, tol
+                    )
                 return MU_0 / (4.0 * math.pi) * dot * _vertex_integral(la, lb, cos_eps)
     return None
 
@@ -430,6 +505,21 @@ def _touching_mutual_batch(
         coax_values = MU_0 / (4.0 * math.pi) * sign * integral
         values[ks[keep]] = coax_values[keep]
         valid[ks[keep]] = True
+        # Filaments from one vertex at a tiny angle (A3C-4): the scalar
+        # routine, for the few that share an end point with segment a.
+        for k in ks[~keep]:
+            if (
+                min(
+                    float(np.linalg.norm(va - vb))
+                    for va in (p1_a, p2_a)
+                    for vb in (p1_b[k], p2_b[k])
+                )
+                <= tol[k]
+            ):
+                val = _touching_mutual(p1_a, p2_a, p1_b[k], p2_b[k])
+                if val is not None:
+                    values[k] = val
+                    valid[k] = True
     # Pairs that only share an end point (bends): the scalar closed form,
     # for the partners that have an end point within ``tol`` of one of
     # segment a's (the scalar routine returns None for all others).
@@ -577,6 +667,11 @@ def _parallel_filaments_mutual(
 #: 0.5-2.3 %).
 _CLOSE_PAIR_FRACTION = 0.5
 
+#: ``1 - cos^2`` below which :func:`_close_pair_mutual` takes the closest
+#: approach of the axes from a cross product (angles below about 1e-3 rad);
+#: above it the direct form loses less than about 1e-16 / (1 - cos^2).
+_CLOSE_PAIR_ROBUST_DEN = 1e-6
+
 
 def _close_pair_mutual(
     p1_a: np.ndarray, p2_a: np.ndarray, p1_b: np.ndarray, p2_b: np.ndarray
@@ -590,9 +685,14 @@ def _close_pair_mutual(
     *b*'s line; the outer integral over *a* uses 16-point Gauss–Legendre
     panels graded geometrically, down to the local distance $\\rho$,
     towards the points where $P(s)$ passes an end of *b* or comes
-    closest to *b*'s line, and towards the ends of *a*. Accurate to
-    round-off for pairs that the 16x16 rule cannot resolve (nearly
-    parallel wires close together, crossing and skew pairs); not for
+    closest to *b*'s line, and towards the ends of *a*. Measured against
+    an adaptive mpmath reference: at most 5e-11 for directions differing
+    by more than 1e-6 rad (nearly parallel wires close together, crossing
+    and skew pairs, branches starting on a segment), 8.6e-11 at 1e-7 rad,
+    1.0e-9 for filaments crossing at 1e-8 rad — there the crossing point
+    of the two axes is only known to about 1e-16/1e-8 of the length
+    (audit round 3; before, the closest approach came from
+    $1 - \\cos^2\\varphi$, which cancels: 9.5e-4 at 1e-8 rad). Not for
     overlapping coaxial filaments, whose integral diverges.
     """
     da = p2_a - p1_a
@@ -607,6 +707,7 @@ def _close_pair_mutual(
     v0 = p1_a - p1_b
     c0 = float(v0 @ ub)  # t0(s) = c0 + s dot
     floor = 1e-30 * max(la, lb)
+    den = 1.0 - dot * dot
 
     def rho_at(x: float) -> float:
         v = v0 + x * ua
@@ -617,11 +718,22 @@ def _close_pair_mutual(
         x = (target - c0) / dot
         if 0.0 < x < la:
             points.add(x)
-    den = 1.0 - dot * dot
-    if den > 1e-14:
+    if den > _CLOSE_PAIR_ROBUST_DEN:
         x = (dot * c0 - float(v0 @ ua)) / den  # closest approach of the lines
         if 0.0 < x < la:
             points.add(x)
+    else:
+        # Nearly parallel axes (below about 1e-3 rad): 1 - dot^2 cancels, the
+        # closest approach comes from the cross product n = ua x ub instead,
+        # s* = ((p1_b - p1_a) x ub) . n / |n|^2 (audit round 3, A3C-4:
+        # crossing filaments at 1e-8 rad were 9.5e-4 off, the mark of the
+        # crossing point lost below 1 - dot^2 = 1e-14).
+        n = np.cross(ua, ub)
+        sin2 = float(n @ n)
+        if sin2 > 1e-300:
+            x = float(np.cross(p1_b - p1_a, ub) @ n) / sin2
+            if 0.0 < x < la:
+                points.add(x)
     marks = sorted(points)
     edges = [0.0]
     for lo, hi in zip(marks[:-1], marks[1:], strict=True):
@@ -717,6 +829,19 @@ def neumann_mutual(
        — are integrated semi-analytically instead (inner integral in
        closed form, outer panels graded towards the near-singular
        points; :func:`_close_pair_mutual`).
+
+    Accuracy (measured against adaptive mpmath references, audit round 3
+    of the calendar release): closed forms to round-off; filaments from
+    one vertex to round-off on axis-parallel geometry and to 4e-10 in a
+    general orientation down to 3e-9 rad (the angle itself carries about
+    1e-16/angle); close pairs as stated in :func:`_close_pair_mutual`
+    (5e-11 above 1e-6 rad, 1.0e-9 at 1e-8 rad). Pairs inside the
+    parallel tolerance — directions within ``parallel_tol`` in cos (4.5e-5
+    rad) and a lateral offset that varies by at most ``parallel_tol`` m
+    along the segment — use the parallel closed form at the offset of the
+    start point, off by about the relative variation of the offset
+    (4.2e-9 for wires 1 cm apart tilted by 1e-10 rad over 5 m, 1.7e-5 at
+    1 µm).
 
     The kernel $1/r$ is clamped at ``min_distance`` to suppress the
     integrable singularity for segments that touch — physically the

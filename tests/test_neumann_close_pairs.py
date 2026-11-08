@@ -155,3 +155,85 @@ def test_in_line_probe_lead_couples_as_touching_wires() -> None:
     end_to_end = MU_0 / (4.0 * math.pi) * (F(150.0) - F(50.0) - F(100.0))
     expected = parallel_segments_mutual(50.0, 0.01) + end_to_end
     assert L[:30, 30:].sum() == pytest.approx(expected, rel=2e-3, abs=0)
+
+
+# ---------------------------------------------------------------------
+# audit round 3: tiny angles (A3C-4)
+# ---------------------------------------------------------------------
+
+
+def _mp_reference(p1a, p2a, p1b, p2b) -> float:
+    """mu0/(4 pi) (ua.ub) int_a [asinh((lb - t0)/rho) + asinh(t0/rho)] ds in
+    mpmath (30 digits), tanh-sinh on the pieces between the closest
+    approach of the axes, the passages of b's ends and the ends of a (the
+    near-singular points sit at the ends of the pieces). Agrees with the
+    auditor's graded variant to 7e-12."""
+    mp = pytest.importorskip("mpmath")
+    mp.mp.dps = 30
+    A1, A2, B1, B2 = (
+        mp.matrix([mp.mpf(repr(float(c))) for c in p]) for p in (p1a, p2a, p1b, p2b)
+    )
+    da, db = A2 - A1, B2 - B1
+    la, lb = mp.norm(da), mp.norm(db)
+    ua, ub = da / la, db / lb
+    dot = sum(ua[i] * ub[i] for i in range(3))
+    v0 = A1 - B1
+    c0 = sum(v0[i] * ub[i] for i in range(3))
+
+    def g(s):
+        v = v0 + s * ua
+        t0 = c0 + s * dot
+        w = v - t0 * ub
+        rho = mp.sqrt(sum(w[i] ** 2 for i in range(3))) or mp.mpf(10) ** -60
+        return mp.asinh((lb - t0) / rho) + mp.asinh(t0 / rho)
+
+    marks = {mp.mpf(0), la}
+    for target in (mp.mpf(0), lb):
+        x = (target - c0) / dot
+        if 0 < x < la:
+            marks.add(x)
+    x = (dot * c0 - sum(v0[i] * ua[i] for i in range(3))) / (1 - dot * dot)
+    if 0 < x < la:
+        marks.add(x)
+    return float(mp.mpf(1e-7) * dot * mp.quad(g, sorted(marks)))
+
+
+def _rotated(points, yaw: float = 0.3, pitch: float = 0.7):
+    """Rotate about z by ``yaw``, about y by ``pitch``, then shift."""
+    cy, sy, cp, sp = math.cos(yaw), math.sin(yaw), math.cos(pitch), math.sin(pitch)
+    out = []
+    for p in points:
+        x, y, z = cy * p[0] - sy * p[1], sy * p[0] + cy * p[1], p[2]
+        out.append(np.array([cp * x - sp * z + 3.0, y - 2.0, sp * x + cp * z + 0.7]))
+    return out
+
+
+# audit A3C-4 (the auditor's test, extended)
+@pytest.mark.parametrize(
+    ("phi", "where", "frame"),
+    [
+        (1e-8, 2.5, "aligned"),
+        (1e-8, 0.05, "rotated"),
+        (7e-8, 2.5, "aligned"),
+        (7e-8, 0.05, "rotated"),
+        (1e-6, 2.5, "rotated"),
+        (1e-4, 0.05, "aligned"),
+    ],
+)
+def test_crossing_filaments_at_tiny_angles(
+    phi: float, where: float, frame: str
+) -> None:
+    """Two 5 m filaments crossing at ``where`` along a at the angle ``phi``.
+    Audit round 3: the closest-approach mark came from 1 - cos^2, which
+    cancels and fell below its 1e-14 cut-off: 9.5e-4 at 1e-8 rad. The mark
+    now comes from a cross product; measured worst case 1.0e-9 at 1e-8 ...
+    3e-8 rad, 3.5e-10 at 7e-8 rad (the crossing point of two axes 1e-8 rad
+    apart is only known to about 1e-16/1e-8 of the length), 8.6e-11 at
+    1e-7 rad, below 5e-11 from 1e-6 rad on."""
+    u = np.array([math.cos(phi), math.sin(phi), 0.0])
+    c = np.array([where, 0.0, 0.0])
+    pts = [np.zeros(3), np.array([5.0, 0.0, 0.0]), c - 2.0 * u, c + 3.0 * u]
+    if frame == "rotated":
+        pts = _rotated(pts)
+    bound = 2e-9 if phi < 1e-7 else (1e-10 if phi < 1e-5 else 5e-12)
+    assert neumann_mutual(*pts) == pytest.approx(_mp_reference(*pts), rel=bound, abs=0)
