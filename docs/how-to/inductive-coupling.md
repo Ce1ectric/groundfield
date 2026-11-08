@@ -69,7 +69,7 @@ falls with the distance between the cables.
 |---|---|---|
 | `"sommerfeld"` (default) | Sommerfeld/Pollaczek integral of the conducting half-space or layered earth over the real segment geometry; conductors in or above the surface plane are handled | every quantitative study |
 | `"carson_series"` | Carson's (1926) per-metre correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image: tiled per metre of overlap for near-parallel horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, inclination below 8.1°), across the surface through the field transmitted into the soil; every other pair and inclined segment gets the Sommerfeld correction of the same earth, so the result steps at 8.1° | long parallel cables in homogeneous soil; not for layered soil |
-| `"perfect_mirror"` | the earth as a perfect magnetic mirror, frequency independent | a fast diagnostic baseline only |
+| `"perfect_mirror"` | the earth as a perfect magnetic mirror, frequency independent; with conductors on both sides of the soil surface the solve warns (its additive image has no basis for such pairs) | a fast diagnostic baseline only |
 
 With `"sommerfeld"` the correction is assembled from shared tables
 (`sommerfeld_assembly="tabulated"`, the default since 2026.11; the

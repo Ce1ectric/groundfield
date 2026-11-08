@@ -205,6 +205,17 @@ image, no correction). It is cheap and frequency independent but far from
 the physics of buried conductors below 1 kHz; it was the default before
 0.13.0 and is kept as a baseline for comparisons.
 
+Its image is applied to every pair of inductive segments, also to a pair
+of which one segment lies above the soil surface ($z < 0$, an overhead
+lead) and one below it (a buried PEN or cable). Such a pair has no
+magnetic mirror between them in any physical sense, so the additive image
+has no basis there. The numbers are kept as they are (a baseline), but
+since 2026.11 the solve emits one `UserWarning` that counts these pairs,
+names the conductors on each side and points to `"sommerfeld"` (user
+decision Q27); `carson_series` and `sommerfeld` treat such pairs through
+the field transmitted into the soil and do not warn. Segments in or across
+the surface plane are rejected under this image convention, as before.
+
 ## Conductor details
 
 - **Touching segments** (10.46). Chain neighbours and bends share an end

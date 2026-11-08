@@ -325,6 +325,7 @@ from a cached / stored answer.
 | Where | When | What to do |
 |---|---|---|
 | `coupling` (Carson) | `earth_inductive_model="carson_series"` with layered soil: the upper-layer $\rho_1$ is used | use `"sommerfeld"`, which supports layered soil |
+| `solver` (inductive assembly) | `earth_inductive_model="perfect_mirror"` with inductive conductor segments on both sides of the soil surface (an overhead lead and a buried PEN): its additive image has no physical basis for such a pair; once per solve, naming the number of pairs and the conductors (user decision Q27) | use `"sommerfeld"` (the default) for numbers; the result of `perfect_mirror` is a diagnostic baseline |
 | `solver` (`image_2layer`) | the deepest segment ends less than two segment lengths above the layer interface | refine `segment_length` near the interface |
 | `solver` (kernels) | two segments of different wires closer than the 1 mm singularity clamp | merge the wires or move them apart |
 | `solver` (pipeline) | a source looks like the hand-made counter-source of another one | use one source with `return_to` |
