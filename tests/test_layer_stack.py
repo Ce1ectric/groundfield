@@ -14,6 +14,8 @@ looks at it.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -237,3 +239,71 @@ def test_mom_accepts_a_multilayer_soil_with_at_most_two_layers(multi, plain) -> 
     """Already-canonical MultiLayerSoil with n <= 2 maps to the plain model."""
     assert isinstance(_layered.canonical_soil(multi), type(plain))
     assert _z("mom", multi) == pytest.approx(_z("mom", plain), rel=1e-12, abs=0.0)
+
+
+# ---------------------------------------------------------------------
+# Audit A3S-04: the field of a soil of one resistivity declared as layers
+# ---------------------------------------------------------------------
+
+_FIELD_POINTS = np.array(
+    [[1.0, 0.0, 0.0], [0.2, 0.0, 4.0], [5.0, 0.0, 6.0], [0.05, 0.0, 3.0]]
+)
+
+
+def _rod_6m(soil):
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "rod", name="r", position=(0, 0, 0.3), length=6.0)
+    gf.create_source(w, attached_to="r")
+    return w
+
+
+@pytest.mark.finding("10.48")
+@pytest.mark.parametrize("kernel", ["line", "point"])
+@pytest.mark.parametrize(
+    "soil",
+    [
+        gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.15),
+        _multi([100.0, 100.0], [2.15]),
+        _multi([100.0, 100.0, 100.0], [1.0, 1.15]),
+    ],
+    ids=["two-layer", "multi-2", "multi-3"],
+)
+def test_field_of_an_equal_resistivity_stack_is_the_homogeneous_field(
+    soil, kernel: str
+) -> None:  # noqa: ANN001
+    """FieldResult.potential and solve_mutual_field read the canonical stack.
+
+    The impedance of TwoLayerSoil(100, 100, 2.15) equalled the homogeneous
+    one, but sources below h took the point form of the two-layer kernel in
+    the field: +2.7 % at (0.2, 0, 4) m, 21 % at 5 cm from the rod with the
+    line kernel (audit A3S-04).
+    """
+    # audit A3S-04
+    from groundfield.solver.mutual import solve_mutual_field
+
+    engine = gf.create_engine(segment_length=0.5, kernel=kernel)
+    hom = gf.HomogeneousSoil(rho=100.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        phi = engine.solve(_rod_6m(soil)).potential(_FIELD_POINTS)
+        phi_hom = engine.solve(_rod_6m(hom)).potential(_FIELD_POINTS)
+        R = solve_mutual_field(_rod_6m(soil), engine, ["r"], _FIELD_POINTS)
+        R_hom = solve_mutual_field(_rod_6m(hom), engine, ["r"], _FIELD_POINTS)
+    np.testing.assert_array_equal(phi, phi_hom)
+    np.testing.assert_array_equal(R, R_hom)
+
+
+@pytest.mark.finding("10.48")
+def test_potential_of_a_stored_three_layer_declaration_with_two_distinct_layers() -> (
+    None
+):
+    """A result that stores the declared stack is evaluated with its canonical form."""
+    # audit A3S-04
+    declared = _multi([100.0, 400.0, 400.0], [2.0, 3.0])
+    res = gf.create_engine(backend="mom_sommerfeld", segment_length=SEG).solve(
+        _rod_world(gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0), length=1.5)
+    )
+    pts = np.array([[1.0, 0.0, 0.0], [5.0, 0.0, 0.0], [2.0, 1.0, 1.0]])
+    expected = res.potential(pts)
+    stored = res.model_copy(update={"soil": declared})
+    np.testing.assert_array_equal(stored.potential(pts), expected)

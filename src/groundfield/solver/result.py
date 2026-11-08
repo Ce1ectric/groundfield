@@ -919,6 +919,15 @@ class FieldResult(BaseModel):
         - **1-layer** (:class:`MultiLayerSoil` with a single layer):
           degenerate case, dispatched to the homogeneous kernel.
 
+        The dispatch reads the canonical layer stack of ``self.soil``
+        (adjacent layers of one resistivity merged, review pass 10,
+        10.48): ``TwoLayerSoil(rho, rho, h)`` and a ``MultiLayerSoil`` of
+        one resistivity are evaluated like homogeneous soil, exactly as
+        they are solved (before audit A3S-04 their sources below ``h``
+        took the point form of the two-layer kernel, +2.7 % next to a
+        rod), and a ``MultiLayerSoil`` with at most two distinct layers
+        like the two-layer soil.
+
         Parameters
         ----------
         points
@@ -943,7 +952,7 @@ class FieldResult(BaseModel):
         ------
         NotImplementedError
             If ``self.soil`` is a :class:`MultiLayerSoil` with three or
-            more layers. The post-solve potential path does not yet
+            more distinct layers. The post-solve potential path does not yet
             carry an n-layer Green's-function kernel. The solve itself
             is still correct via the ``cim`` / ``mom_sommerfeld`` /
             ``bem`` backends — only the explicit
@@ -979,41 +988,28 @@ class FieldResult(BaseModel):
         line = self._line_sources()
 
         # Dispatch to the kernel that matches the effective number of
-        # soil layers. A ``MultiLayerSoil`` with one or two layers is
-        # mathematically equivalent to the homogeneous / two-layer
-        # case and is cast on the fly. For n ≥ 3 there is no
-        # closed-form image-charge series (Γ_1(λ) is no longer
-        # constant in λ — see ``solver/image_nlayer.py``), so the
-        # call is rejected explicitly rather than silently falling
-        # back to the homogeneous kernel.
-        if isinstance(self.soil, TwoLayerSoil):
+        # soil layers: that of the canonical layer stack, the soil the
+        # backends actually solve (review pass 10, 10.48). A
+        # ``TwoLayerSoil(rho, rho, h)`` or a ``MultiLayerSoil`` of one
+        # resistivity is homogeneous soil — its sources below h took the
+        # point form of the two-layer spectral kernel here instead of the
+        # line sources of the homogeneous result (+2.7 % next to a rod,
+        # audit A3S-04); a ``MultiLayerSoil`` with one or two distinct
+        # layers is cast on the fly. For n ≥ 3 there is no closed-form
+        # image-charge series (Γ_1(λ) is no longer constant in λ — see
+        # ``solver/image_nlayer.py``), so the call is rejected explicitly
+        # rather than silently falling back to the homogeneous kernel.
+        soil = self.soil
+        if soil is not None and not isinstance(soil, HomogeneousSoil):
+            from groundfield.solver._layered import canonical_soil
+
+            soil = canonical_soil(soil)
+        if isinstance(soil, TwoLayerSoil):
             return self._potential_two_layer(
-                pts, sources, currents, self.soil, min_distance, line=line
+                pts, sources, currents, soil, min_distance, line=line
             )
-        if isinstance(self.soil, MultiLayerSoil):
-            n = len(self.soil.layers)
-            if n == 1:
-                # Degenerate 1-layer MultiLayerSoil: use the single
-                # layer's resistivity as the homogeneous case.
-                return self._potential_homogeneous(
-                    pts,
-                    sources,
-                    currents,
-                    min_distance,
-                    rho_override=float(self.soil.layers[0].rho),
-                    line=line,
-                )
-            if n == 2:
-                # Two-layer MultiLayerSoil: cast to TwoLayerSoil and
-                # reuse the Tagg/Sunde kernel.
-                two_layer = TwoLayerSoil(
-                    rho_1=float(self.soil.layers[0].rho),
-                    rho_2=float(self.soil.layers[1].rho),
-                    h_1=float(self.soil.layers[0].h),
-                )
-                return self._potential_two_layer(
-                    pts, sources, currents, two_layer, min_distance, line=line
-                )
+        if isinstance(soil, MultiLayerSoil):
+            n = len(soil.layers)
             raise NotImplementedError(
                 f"FieldResult.potential: MultiLayerSoil with n={n} ≥ 3 "
                 "layers is not supported on the post-solve potential "
@@ -1026,6 +1022,16 @@ class FieldResult(BaseModel):
                 "instead, or reduce the soil model to "
                 "TwoLayerSoil / HomogeneousSoil for explicit field "
                 "evaluation."
+            )
+        if isinstance(soil, HomogeneousSoil) and soil is not self.soil:
+            # A layered declaration of one resistivity (see above).
+            return self._potential_homogeneous(
+                pts,
+                sources,
+                currents,
+                min_distance,
+                rho_override=float(soil.rho),
+                line=line,
             )
         return self._potential_homogeneous(
             pts, sources, currents, min_distance, line=line

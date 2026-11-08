@@ -319,30 +319,24 @@ def _prepare(
     soil = world.soil
     # Soil dispatch of ``Engine.solve`` (image -> image_2layer /
     # image_nlayer): a layer stack is solved through its canonical form,
-    # equal adjacent layers merged (10.48).
+    # equal adjacent layers merged (10.48) — a ``TwoLayerSoil(rho, rho, h)``
+    # too, whose field at points below h took the point form of the
+    # two-layer kernel (-21 % next to a rod, audit A3S-04).
     rho_homog: float | None = None
     soil_two_layer: TwoLayerSoil | None = None
+    if isinstance(soil, (TwoLayerSoil, MultiLayerSoil)):
+        from groundfield.solver._layered import canonical_soil
+
+        soil = canonical_soil(soil)
     if isinstance(soil, TwoLayerSoil):
         soil_two_layer = soil
     elif isinstance(soil, MultiLayerSoil):
-        from groundfield.solver._layered import as_layer_stack
+        from groundfield.solver import registry
 
-        stack = as_layer_stack(soil)
-        if stack.n_layers == 1:
-            rho_homog = float(stack.rhos[0])
-        elif stack.n_layers == 2:
-            soil_two_layer = TwoLayerSoil(
-                rho_1=float(stack.rhos[0]),
-                rho_2=float(stack.rhos[1]),
-                h_1=float(stack.h[0]),
-            )
-        else:
-            from groundfield.solver import registry
-
-            raise registry.BackendCapabilityError(
-                f"{where} supports homogeneous and 2-layer soils; "
-                f"got MultiLayerSoil with n={stack.n_layers} layers."
-            )
+        raise registry.BackendCapabilityError(
+            f"{where} supports homogeneous and 2-layer soils; "
+            f"got MultiLayerSoil with n={len(soil.layers)} layers."
+        )
     elif isinstance(soil, HomogeneousSoil):
         rho_homog = float(soil.rho)
     else:
