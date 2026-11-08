@@ -11,10 +11,10 @@ context.
 
 ## Why this exists
 
-The `groundfield` source tree spans eight solver backends
-(`image`, `image_2layer`, `image_nlayer`, `cim`, `mom`,
-`mom_sommerfeld`, `bem`, `fem`), four ADRs, a notebook suite and
-a growing test suite. Asking an AI assistant a structural
+The `groundfield` source tree spans the solver backends and their
+shared pipeline, the coupling and post-processing layers, the
+generators, the ADRs, the tutorials and a large test suite. Asking an
+AI assistant a structural
 question — *"which backends consume the distributed-conductor
 topology?"* or *"where is the rho-f fit produced?"* — used to
 require loading hundreds of kilobytes of source into the model
@@ -30,9 +30,8 @@ edges  = call / import / reference / cites / …
 once via Tree-sitter (locally, AST only) plus one optional
 LLM-driven semantic pass. Queries are answered with a bounded
 breadth-first traversal over the graph instead of full-corpus
-search. The published benchmark figure on mixed corpora is on
-the order of a 70× per-query token reduction at comparable
-answer quality.
+search, which needs far fewer tokens per question than reading the
+files (`graphify benchmark` measures it on this repository).
 
 This is **tooling**, not a runtime feature of `groundfield`. It
 does not change the public API or the solver behaviour.
@@ -50,16 +49,12 @@ pipx install graphifyy
 graphify --help
 ```
 
-The default LLM backend is auto-selected from whichever provider
-environment variable is set (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, …). The recommended setup for this project is
-the Anthropic API for the build phase only:
+The LLM backend of the semantic pass is selected from whichever
+provider environment variable is set (`ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, …). Set the key only for the build command, not
+globally in the shell profile, so that other tools do not pick it up:
 
 ```bash
-# Set ANTHROPIC_API_KEY only for the build / update commands.
-# Do NOT export it globally in your shell rc, otherwise Claude
-# Code will start charging your API credits instead of using your
-# Pro subscription quota for normal coding sessions.
 ANTHROPIC_API_KEY=sk-ant-... graphify extract . --backend claude
 ```
 
@@ -67,24 +62,18 @@ For a fully offline alternative, use a local Ollama model
 (`--backend ollama --model qwen2.5-coder:14b`) — no API key, no
 billing, slightly weaker semantic clustering.
 
-## Build vs. query — two phases with different billing
-
-Graphify has two operational phases that are billed very
-differently. Understanding the split is what turns this from an
-expensive tool into a near-free one for Pro / Max subscribers:
+## Build, update, query
 
 | Phase | When | Cost |
 | --- | --- | --- |
-| **Build** (`graphify extract`) | once, plus after larger refactors | one-shot LLM tokens for the semantic pass; ≈ 0.02–0.50 USD on `groundfield` (Haiku 4.5 → Sonnet 4.6) |
-| **Update** (`graphify update`) | after small code changes | **0** — AST only, no LLM call |
-| **Query** (via Claude Code with the installed hook) | every day while coding | counts against your **Claude Pro / Max subscription**, not API credits |
+| **Build** (`graphify extract`) | once, and after larger refactors | LLM tokens for the semantic pass (one-off) |
+| **Update** (`graphify update`) | after small code changes | none: AST only, no LLM call |
+| **Query** | while coding | the assistant reads the pre-built graph as ordinary files |
 
-The trick is that the daily querying does **not** go through
-`graphify query` (which would re-bill API tokens). Instead, the
-`graphify claude install` step (see below) wires Claude Code
-itself to read the pre-built graph through its own `Read` tool,
-so the assistant's reasoning is paid by the subscription quota
-and `graphify-out/graph.json` is just a static input.
+Day-to-day questions do not need `graphify query` (which calls the
+LLM again): after `graphify claude install` (below) the coding
+assistant reads `graphify-out/GRAPH_REPORT.md` and `graph.json`
+directly.
 
 ## Manual on-demand workflow
 
@@ -171,7 +160,6 @@ baseline, on this very repository.
 
 ## Recommended: Claude Code integration via `graphify claude install`
 
-This is the step that pays for itself within a few sessions.
 After the initial `extract`, run
 
 ```bash
@@ -188,12 +176,9 @@ once per checkout. It does two things:
    navigate via the graph's "god nodes" and cluster structure
    instead of grepping raw files.
 
-From this point on, **stop calling `graphify query` interactively**.
-Just talk to Claude Code as usual — it will read
-`graphify-out/GRAPH_REPORT.md` and `graph.json` as ordinary file
-inputs through its own `Read` tool. That puts the cost of every
-day-to-day question on your Claude Pro / Max subscription, not on
-your API credit.
+From this point on the assistant reads
+`graphify-out/GRAPH_REPORT.md` and `graph.json` as ordinary files;
+`graphify query` is only needed outside the assistant.
 
 Reverse the integration at any time with
 
@@ -226,12 +211,9 @@ is independent of any single repository.
 ## Limitations
 
 - The semantic LLM pass costs API tokens proportional to the
-  corpus size. For `groundfield` today (≈ 10 kLoC plus docs and
-  ADRs) the initial `extract` is on the order of a few cents at
-  current Anthropic pricing.
+  corpus size.
 - LaTeX and Beamer slides are **not** parsed by the bundled
-  Tree-sitter grammars. Markdown ADRs in `docs/adr/` are picked
-  up; the LaTeX 
+  Tree-sitter grammars; the Markdown pages and ADRs in `docs/` are.
 - Jupyter notebooks (`.ipynb`) are JSON; their code cells are
   visible to the Python grammar via the JSON wrapper, but the
   Markdown narrative is treated as plain text.
@@ -241,9 +223,7 @@ is independent of any single repository.
 
 ## Why it is not in `pyproject.toml`
 
-The same separation as for `black` / `ruff` / `mypy` in many
-open-source Python projects: tools that operate on the source
-tree are kept out of the library's dependency graph so that
-downstream users of `groundfield` are not forced to install
-them. `graphifyy` belongs to the developer's environment, not
-to the library's runtime.
+`graphifyy` pulls in many Tree-sitter grammars and is not needed to
+build, test or document the package, so it stays out of the lock file
+and the dependency groups. It belongs to the developer's environment,
+installed with pipx.

@@ -2,160 +2,78 @@
 
 **Numerical field computation for grounding systems.**
 
-[![Python versions](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12 | 3.13 | 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
+[![CalVer YYYY.M.MICRO](https://img.shields.io/badge/calver-YYYY.M.MICRO-22bfda)](https://calver.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`groundfield` is an open-source Python package for the physical
-reference modelling of networked grounding systems. Within the
-`groundmeas` / `groundinsight` / `groundfield` software family,
-`groundfield` covers the field-theoretical side: soil models,
-electrode geometries, conductors and their couplings are formulated
-as a 3-D problem in the soil and solved numerically. Field profiles,
-potential curves and current distributions are reduced to equivalent
-`rho-f` models that can be handed over to `groundinsight` as a
-`BusType`. See the [documentation](https://ce1ectric.github.io/groundfield/)
-for full details.
+`groundfield` computes the electric field of grounding systems in
+layered soil: electrodes of any shape, the PEN conductors, cable screens
+and measurement leads that connect them (with inductive coupling and
+earth return), and the resulting current and potential distribution
+below 1 kHz. From a field solution it derives grounding impedances,
+touch and step voltages (EN 50522) and reduced `rho-f` models that are
+exported to the sister project
+[`groundinsight`](https://github.com/Ce1ectric/groundinsight). Together
+with `groundmeas` (measurements) the three packages model networked
+grounding systems in medium- and low-voltage distribution networks.
 
-- **Documentation**: <https://ce1ectric.github.io/groundfield/>
-- **Source code**: <https://github.com/Ce1ectric/groundfield>
-- **Issue tracker**: <https://github.com/Ce1ectric/groundfield/issues>
-
-## Position within the software family
-
-```
-  groundmeas   ──▶   groundinsight   ◀──   groundfield
-  (measurement)      (reduced network            (field model,
-                      model)                      PDE reference)
-```
-
-`groundfield` provides the physically grounded reference model from
-which reduced impedance and multi-port representations are derived.
-These travel into `groundinsight` as `BusType` / `BranchType`
-formulas where they can be reconciled with measurement data from
-`groundmeas`.
-
-## Scope
-
-`groundfield` covers layered soil (two-layer and multi-layer models),
-typical electrode geometries (ring, strip, rod, foundation, mesh),
-conductors, cable shields and PEN with their mutual coupling, the
-Carson 1926 and rigorous Sommerfeld earth-return corrections, cross-
-layer electrodes, current and potential distribution in the soil, the
-influence of the measurement geometry on the grounding-measurement
-result, and the derivation of reduced `rho-f` models for
-`groundinsight`. See the [scope and concepts page](https://ce1ectric.github.io/groundfield/concepts/)
-for the full list with references to the underlying ADRs.
-
-## What's new
-
-`groundfield` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-and [Semantic Versioning](https://semver.org/spec/v2.0.0.html). See the
-**[changelog](https://ce1ectric.github.io/groundfield/changelog/)** for the
-full release history and the forward-looking roadmap.
-
-Recent highlights:
-
-- **0.12 — `PolylineElectrode`.** Foundation rings follow the real building
-  outline (a closed polyline) instead of the oriented bounding rectangle,
-  removing the perimeter bias and the coincident-conductor artefacts that
-  appear at AP1 scale.
-- **0.11 — one-shot mutual grounding-impedance matrix** plus an audit-driven
-  hardening of the inductive (Carson / Sommerfeld / Neumann) and cross-layer
-  stacks.
-- **0.7 — `OrtsnetzLayout`.** Imperative TN-Ortsnetz builder with a
-  Manhattan-routed PEN router and a simulated fall-of-potential measurement.
+- **Documentation:** <https://ce1ectric.github.io/groundfield/>
+- **Release notes:** [changelog](https://ce1ectric.github.io/groundfield/latest/changelog/)
+- **Source and issues:** <https://github.com/Ce1ectric/groundfield>
 
 ## Installation
 
-`groundfield` requires **Python 3.12 or newer**.
-
 ```bash
-git clone https://github.com/Ce1ectric/groundfield.git
-cd groundfield
-poetry install
+pip install groundfield                    # Python 3.12 to 3.14
+pip install "groundfield[geo,fast]"        # optional: OpenStreetMap footprints, compiled kernels
+pip install "groundfield[groundinsight]"   # optional: live groundinsight BusType objects
 ```
 
-For OSM-driven building footprints (ADR-0011), enable the optional
-`geo` extra (pulls in `requests`, `shapely`, `pyproj`):
+For development: `git clone`, then `poetry install` (see the
+[installation guide](https://ce1ectric.github.io/groundfield/latest/getting-started/installation/)).
 
-```bash
-pip install groundfield[geo]
-# or, from a Poetry checkout
-poetry install --extras geo
-```
+## Example
 
-The documentation extras live in an optional Poetry group:
-
-```bash
-poetry install --with docs
-```
-
-## Quickstart
+A substation ring earth and a house rod 40 m away, joined by a PEN
+conductor, in two-layer soil; 1 A injected at the substation:
 
 ```python
 import groundfield as gf
 
-soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
-world = gf.create_world(soil=soil)
-gf.create_electrode(
-    world, "ring", name="g1",
-    center=(0.0, 0.0, 0.8), radius=5.0, wire_radius=0.005,
-)
-gf.create_source(world, attached_to="g1", magnitude=1.0)
+world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=2.0))
+gf.create_electrode(world, "ring", name="substation", center=(0.0, 0.0, 0.8), radius=3.0)
+gf.create_electrode(world, "rod", name="house", position=(40.0, 0.0, 0.0), length=3.0)
+gf.create_conductor(world, name="pen", start="substation", end="house", cross_section=95e-6)
+gf.create_source(world, attached_to="substation", magnitude=1.0)
 
-engine = gf.create_engine(backend="image",
-                          frequencies=[50.0, 150.0, 250.0])
-result = world.solve(engine)
-print(result.cluster_impedance("g1"))
+result = world.solve(gf.create_engine(frequencies=[50.0]))
+print(result.input_impedance()[0])                # 11.27 Ω, seen at the feeding point
+print(result.cluster_impedance("substation")[0])  # 14.10 Ω, the substation earth alone
 ```
 
-`backend="image"` auto-dispatches to the matching layered backend.
-The full backend list, the `rho-f` export to `groundinsight` and
-the `TnNetworkGenerator` are documented in
-[Quickstart](https://ce1ectric.github.io/groundfield/quickstart/)
-and the [examples gallery](https://ce1ectric.github.io/groundfield/examples/).
-
-## Guiding principles
-
-- **The PDE / field model is a reference, not the end product.** The
-  solver must be instrumented so that every solution can be reduced
-  to an identification-friendly form.
-- **Measurability before accuracy.** The relevant frequency range is
-  < 1 kHz; this allows simplified soil models and fast solvers.
-- **Grey-box, not black-box.** Geometric and material inputs stay
-  visible; only the parts that are not physically prescribed are
-  identified.
+Coordinates are in metres, with the depth `z` positive downwards. The
+[quickstart](https://ce1ectric.github.io/groundfield/latest/getting-started/quickstart/)
+explains the example and the [tutorials](https://ce1ectric.github.io/groundfield/latest/tutorials/)
+continue from there.
 
 ## Development
 
 ```bash
-# Tests with coverage
-poetry run pytest --cov=groundfield
-
-# Formatting
-poetry run black src tests scripts
-
-# Local documentation
 poetry install --with docs
-poetry run mkdocs serve
+poetry run pytest -n auto                       # tests
+poetry run ruff format . && poetry run ruff check --select F,E9,B,W605 .
+poetry run mkdocs serve                         # documentation preview
+python scripts/release.py calver --dry-run      # maintainers: release checks
 ```
 
-Releases are triggered through the Poetry script. It updates the
-version in `pyproject.toml`, `src/groundfield/__init__.py`, and
-`CITATION.cff`, moves the `[Unreleased]` block of `CHANGELOG.md` into
-a new section, and creates an annotated tag.
-
-```bash
-poetry run release patch
-poetry run release minor
-poetry run release major
-poetry run release set 1.2.3
-```
+Versions follow calendar versioning `YYYY.M.MICRO` (from `2026.11.0`;
+up to `0.15.0` semantic versioning); deprecated names keep working for
+at least two releases and six months.
 
 ## Citing
 
-If you use `groundfield` in academic work, please cite according to
-the metadata in `CITATION.cff`.
+If you use `groundfield` in academic work, please cite it with the
+metadata in [`CITATION.cff`](CITATION.cff).
 
 ## License
 
