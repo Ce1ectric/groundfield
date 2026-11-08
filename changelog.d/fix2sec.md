@@ -46,9 +46,11 @@
 
 ### Added
 - **`formula_function(expr, symbols=("f", "rho"))`** in
-  `groundfield.io._formula`: NumPy function of a parsed impedance formula
-  (complex arithmetic, principal branch), built from the expression tree
-  without SymPy's code generation.
+  `groundfield.io._formula`: NumPy function of a parsed impedance formula,
+  built from the expression tree without SymPy's code generation (real
+  arithmetic for real values, as `lambdify` with NumPy; SymPy's principal
+  branch for roots and logarithms of negative numbers). Test:
+  `tests/test_formula_security.py::test_formula_function_keeps_the_real_limits_at_singular_points`.
 
 ### Changed
 - ⚠ **Form of a parsed impedance formula (10.01):** `parse_impedance_formula`
@@ -72,7 +74,7 @@
   to the base of the change). Tests:
   `tests/test_formula_security.py::test_exponents_of_nested_powers_multiply_to_at_most_max_pow`,
   `tests/test_formula_security.py::test_parsed_expression_is_unevaluated_with_numbers_as_floats`,
-  `tests/test_formula_security.py::test_formula_function_uses_complex_arithmetic_on_the_principal_branch`.
+  `tests/test_formula_security.py::test_formula_function_takes_the_principal_branch_where_real_arithmetic_has_none`.
 
 ### Fixed
 - **Strict JSON for unknown fit quality (10.19):** a fit whose rms error
