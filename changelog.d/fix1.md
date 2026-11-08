@@ -40,6 +40,20 @@
   Runtime behaviour is unchanged (deprecation warning, 0.15.0 JSON loads, a
   rejected value is reported under the name it was given); type checkers now
   also report the deprecated keywords. Test: `tests/test_typing_contract.py`.
+- **W605 joins the blocking lint subset (audit A1-12):** pre-commit and CI
+  run `ruff check --select F,E9,B,W605`; an invalid escape sequence (a
+  `SyntaxWarning` today, a `SyntaxError` under `python -W error` and in a
+  future Python) no longer passes. The 35 findings of the blocking subset in
+  `tests/` were cleared outside the generator / geo test modules.
+- **Release tool checks the remote (audit A1-11, 10.09):** before anything
+  is written, `scripts/release.py` reads the upstream branch and the remote
+  tags with `git ls-remote` (no fetch, `--dry-run` changes nothing): a
+  clone that is behind or has diverged from its upstream is refused, remote
+  tags count for the `MICRO` of `calver` and for "the tag exists", an
+  unreadable remote or a branch without upstream (in a repository with a
+  remote) aborts; a repository without any remote is released with a note.
+  A stale clone used to create a second, different `v2026.11.0` that only
+  the push rejected. Tests: `tests/test_release_script.py`.
 - **`solve_mutual_matrix` / `solve_mutual_field` assemble the inductive branch
   correction for the solved frequency only (10.60):** an engine with four
   frequencies built the correction four times per call, now once; results
@@ -78,9 +92,26 @@
   (`0644` under `022`), an overwritten file keeps its mode. Tests:
   `tests/test_result_persistence.py::test_result_file_mode_follows_the_umask`,
   `::test_overwriting_keeps_the_mode_of_the_replaced_file`.
-- **`create_engine` docstring (audit A1-07):** backend-specific settings such
-  as the `mom_sommerfeld` accuracy controls go into `options` (it advised the
-  deprecated flat fields).
+- **`ShallowSegmentWarning` follows the kernel (audit F08):** the advisory
+  quantifies the bias of the point-form self image of a segment longer than
+  four times its depth. It was also emitted for the exact line kernel (the
+  image family's default), which has no such bias: a 10 m strip at 0.1 m
+  depth gives 17.37863 Ω with 2 m segments and 17.37859 Ω with 0.25 m ones
+  (point kernel 21.57 Ω and 17.23 Ω). It is now emitted for the point kernel
+  and the `mom` family only, names the line kernel as the remedy and no
+  longer claims that the `mom` family stays silent. Tests:
+  `tests/test_shallow_segment_advisory.py`.
+- **Stale docstrings (audit A1-07):** `create_engine` (backend-specific
+  settings such as the `mom_sommerfeld` accuracy controls go into `options`,
+  not the deprecated flat fields), `groundfield.solver` (the registered
+  backends instead of "reserved" MoM / FEM), the engine's family overview
+  (`cim` / `bem` aliases, `fem` experimental), `Engine.earth_inductive_model`
+  (`carson_series` on the anti-parallel image, `sommerfeld` on the image-free
+  matrix), the consumers of the series controls, and the branch block (skin
+  term).
+- **Control characters in docstrings (10.95):** `\rho` in a non-raw
+  docstring of the two-layer solver started with a carriage return (a valid
+  escape, invisible to W605). Test: `tests/test_source_escapes.py`.
 
 ### Security
 
