@@ -59,10 +59,13 @@ ring lying exactly on the interface, −17 % … +16 % for a
 more resistive layer below a 10 m ring within its radius; against
 converged image series, audit R2A-08); a
 :class:`FemReductionWarning` names every such reason. An interface just
-below a horizontal electrode buried almost as deep as its half-extent,
-deeper than the hemisphere radius and the half-extent, is not covered by
-any rule (+34 % for a 2 m ring at 1.9 m over $h_1$ = 2 m in 1000/30 Ω·m;
-see the fem engine page).
+below a horizontal electrode buried about as deep as its half-extent or
+deeper, deeper than the hemisphere radius and the half-extent, is not
+covered by any rule (+34 % for a 2 m ring at 1.9 m over $h_1$ = 2 m in
+1000/30 Ω·m; rings 1 cm above such an interface at depths of $r$ … $D$,
+solved since audit R2A-06: +191 % … +308 % over a more conductive
+layer, −27 % … −14 % over a more resistive one; see the fem engine
+page).
 Conforming axisymmetric rod and ring models without the reduction are
 the planned replacement.
 

@@ -219,10 +219,16 @@ a warning in between; audit R2A-02).
   solved as lumped branches, and `resistance_model="skin"` is ignored, each
   with a `BackendCapabilityWarning`.
 - **Not covered** (silent): an interface just below a horizontal electrode
-  that is buried almost as deep as its half-extent, with the interface
-  deeper than both the hemisphere radius and the half-extent — a 2 m ring
-  at 1.9 m over $h_1 = 2$ m in 1000/30 Ω·m reads +34 %, at 1.993 m +250 %.
-  Rods are hardly affected (+5.7 % with the interface 1 mm below the tip).
+  that is buried about as deep as its half-extent or deeper, with the
+  interface deeper than both the hemisphere radius and the half-extent — a
+  2 m ring at 1.9 m over $h_1 = 2$ m in 1000/30 Ω·m reads +34 %, at
+  1.993 m +250 %. Since rings are solved down to their diameter (audit
+  R2A-06) the class covers deeper rings as well: a ring $r$ = 2 or 5 m at
+  $t = r \ldots D$ reads +191 … +308 % 1 cm above a more conductive layer
+  (1000/30 Ω·m), +38 … +90 % 10 cm above it, and −27 … −14 % / −21 … −9 %
+  above a more resistive one (30/1000 Ω·m), against `image_2layer` and a
+  ring series. Rods are hardly affected (+5.7 % with the interface 1 mm
+  below the tip).
 - The size notice of `Engine.solve` ("solve time may run from seconds to
   minutes") and its resource limit count the segments of the integral
   engines, which `fem` does not use: its problem is the mesh of each
