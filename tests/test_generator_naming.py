@@ -330,3 +330,50 @@ def test_layout_pickled_with_v0150_still_builds(tmp_path: pathlib.Path) -> None:
     again = pickle.loads(pickle.dumps(layout))
     assert again == layout
     assert "cabinet_placements" in json.loads(layout.model_dump_json())
+
+
+@pytest.mark.finding("10.69")
+def test_soil_specs_mirror_their_soil_models() -> None:
+    """Naming decision (2026.11): spec fields carry lower-case unit
+    suffixes, except the soil specs, whose fields are the literature
+    symbols of the soil model they build (``rho``, ``rho_1``, ``rho_2``,
+    ``h_1``, ``h``), so a spec and its model read the same."""
+    from groundfield.generators import soil_specs
+    from groundfield.soil import models
+
+    pairs = [
+        (models.HomogeneousSoil, soil_specs.HomogeneousSoilSpec),
+        (models.TwoLayerSoil, soil_specs.TwoLayerSoilSpec),
+        (models.SoilLayer, soil_specs.SoilLayerSpec),
+        (models.MultiLayerSoil, soil_specs.MultiLayerSoilSpec),
+    ]
+    for model, spec in pairs:
+        assert set(spec.model_fields) == set(model.model_fields), spec.__name__
+
+
+@pytest.mark.finding("10.69")
+def test_generator_and_geo_field_names_are_lower_case() -> None:
+    """No capitalised unit suffixes (``source_magnitude_A``) or other
+    upper-case field names remain in the generator and geo models."""
+    import inspect
+    import pkgutil
+
+    import groundfield.geo
+    import pydantic
+
+    offenders = []
+    for package in (gen, groundfield.geo):
+        for info in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+            module = importlib.import_module(info.name)
+            for obj in vars(module).values():
+                if (
+                    inspect.isclass(obj)
+                    and issubclass(obj, pydantic.BaseModel)
+                    and obj.__module__ == module.__name__
+                ):
+                    offenders += [
+                        f"{obj.__name__}.{f}"
+                        for f in obj.model_fields
+                        if f != f.lower()
+                    ]
+    assert offenders == []

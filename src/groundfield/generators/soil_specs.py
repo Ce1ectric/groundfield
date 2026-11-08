@@ -22,15 +22,24 @@ serialisation.
 
 Naming
 ------
-The soil specs use the literature symbols of the soil models they
-produce — resistivity :math:`\rho` (``rho``, ``rho_1``, ``rho_2``) in
-Ω·m and layer thickness :math:`h` (``h_1``, ``h``) in m — so a spec and
-its model read the same. The former names ``resistivity`` and
-``thickness_m`` are accepted as deprecated aliases.
+Spec fields of the generators carry lower-case unit suffixes (``depth_m``,
+``concrete_rho_ohm_m``, ``source_magnitude_a``). The soil specs are the
+one deliberate exception: a soil spec *is* its soil model with
+distributions allowed, so its fields are the model's literature symbols
+— resistivity :math:`\rho` (``rho``, ``rho_1``, ``rho_2``) in Ω·m and
+layer thickness :math:`h` (``h_1``, ``h``) in m, as on
+:class:`~groundfield.soil.models.TwoLayerSoil` since its first release —
+and a spec and its model read the same (decision of the 2026.11 naming
+review; ``TwoLayerSoilSpec(rho_1=..., rho_2=..., h_1=...)`` keeps its
+0.15.0 spelling). The 0.15.0 names ``resistivity`` and ``thickness_m``
+remain accepted as deprecated aliases (removal in 2027.5 at the
+earliest).
 """
 
 from __future__ import annotations
 
+import sys
+import warnings
 from typing import Annotated, Literal, Optional, Union
 
 import numpy as np
@@ -45,6 +54,7 @@ from groundfield.soil.models import (
     SoilModel,
     TwoLayerSoil,
 )
+from groundfield.utils.deprecation import InertConfigurationWarning
 
 __all__ = [
     "HomogeneousSoilSpec",
@@ -59,6 +69,53 @@ def _to_float(value: Union[float, Distribution], rng: np.random.Generator) -> fl
     if isinstance(value, Distribution):
         return float(value.sample(rng))
     return float(value)
+
+
+_EPS_R_DEFAULT = 10.0
+"""Default relative permittivity of the specs (that of the soil models)."""
+
+
+def _user_stacklevel() -> int:
+    """``stacklevel`` of the first caller outside groundfield and pydantic.
+
+    Counted from the function that calls :func:`warnings.warn` (level 1),
+    i.e. the caller of this helper.
+    """
+    frame = sys._getframe(1)
+    level = 1
+    while frame is not None:
+        module = str(frame.f_globals.get("__name__", ""))
+        internal = module == "groundfield" or module.startswith(
+            ("groundfield.", "pydantic", "pydantic_core")
+        )
+        if not internal:
+            return level
+        frame = frame.f_back
+        level += 1
+    return 2
+
+
+def _warn_inert_permittivity(owner: str, values: list[float]) -> None:
+    """Warn that a spec's non-default ``relative_permittivity`` is inert.
+
+    The soil models warn when a user constructs them with such a value, but
+    stay silent when groundfield's own code builds them; here the setting
+    comes from the user's spec, so the warning goes to the user's line
+    (the first caller outside groundfield) in every case (audit A1-10).
+    """
+    odd = [v for v in values if v != _EPS_R_DEFAULT]
+    if not odd:
+        return
+    shown = ", ".join(f"{v:g}" for v in odd)
+    warnings.warn(
+        f"{owner}(relative_permittivity={shown}) is stored, but no backend "
+        "reads it: every backend solves the quasi-static conduction problem "
+        "below 1 kHz, where the displacement current is negligible "
+        "(omega*eps0*eps_r*rho = 4.5e-3 at 1 kHz for rho = 1000 Ohm*m and "
+        "eps_r = 81). The value does not change any result.",
+        InertConfigurationWarning,
+        stacklevel=_user_stacklevel(),
+    )
 
 
 # Soil-model field names before the literature-symbol convention of the
@@ -127,7 +184,13 @@ class HomogeneousSoilSpec(BaseModel):
         return self.rho
 
     def to_soil(self, rng: np.random.Generator) -> HomogeneousSoil:
-        """Draw the distributions and return the soil model."""
+        """Draw the distributions and return the soil model.
+
+        A non-default ``relative_permittivity`` warns with
+        :class:`~groundfield.utils.InertConfigurationWarning` (no backend
+        reads it).
+        """
+        _warn_inert_permittivity(type(self).__name__, [self.relative_permittivity])
         return _homogeneous_soil(
             _to_float(self.rho, rng), relative_permittivity=self.relative_permittivity
         )
@@ -155,7 +218,13 @@ class TwoLayerSoilSpec(BaseModel):
     relative_permittivity: float = Field(default=10.0, gt=0.0)
 
     def to_soil(self, rng: np.random.Generator) -> TwoLayerSoil:
-        """Draw the distributions and return the soil model."""
+        """Draw the distributions and return the soil model.
+
+        A non-default ``relative_permittivity`` warns with
+        :class:`~groundfield.utils.InertConfigurationWarning` (no backend
+        reads it).
+        """
+        _warn_inert_permittivity(type(self).__name__, [self.relative_permittivity])
         return TwoLayerSoil(
             rho_1=_to_float(self.rho_1, rng),
             rho_2=_to_float(self.rho_2, rng),
@@ -233,8 +302,14 @@ class MultiLayerSoilSpec(BaseModel):
     def to_soil(self, rng: np.random.Generator) -> MultiLayerSoil:
         """Draw the distributions and return the soil model.
 
-        Per layer the thickness is drawn before the resistivity.
+        Per layer the thickness is drawn before the resistivity. A
+        non-default ``relative_permittivity`` of any layer warns with
+        :class:`~groundfield.utils.InertConfigurationWarning` (no backend
+        reads it).
         """
+        _warn_inert_permittivity(
+            type(self).__name__, [layer.relative_permittivity for layer in self.layers]
+        )
         layers: list[SoilLayer] = []
         for spec in self.layers:
             thickness: Optional[float]
