@@ -193,7 +193,7 @@ def _one_house_cfg(name: str, foundation: FoundationElectrodeSpec) -> TnNetworkC
 
 @pytest.mark.finding("10.12")
 def test_v1_lumped_shell_is_the_sunde_coefficient_on_the_foundation() -> None:
-    """``concrete_model='lumped'`` puts the Sunde coefficient
+    r"""``concrete_model='lumped'`` puts the Sunde coefficient
     $C = \rho_c/(2\pi)\,\ln(r_b/r_a)$ on the foundation (radius $r_b$);
     its lumped resistance $C/L_\text{perim}$ matches the closed form. Up to
     0.15.0 the value went into ``World.concrete_shell_corrections``

@@ -257,6 +257,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "buried_lead",
         "default_building_catalog",
         "materialise_plan",
+        "measured_impedance",
         "neighbour_substation_grounding",
         "overhead_lead",
         "rod_circle",
@@ -279,6 +280,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "compare_engines",
     ),
     "groundfield.solver.fem": ("FemReductionWarning",),
+    "groundfield.geometry.electrodes": (
+        "concrete_shell_coefficient",
+        "shell_coefficient_from_resistance",
+        "shell_resistance_from_coefficient",
+    ),
+    "groundfield.solver.mutual": ("OffDiagonal",),
     "groundfield.diagnostics": (
         "Diagnostic",
         "DiagnosticsReport",
@@ -420,6 +427,7 @@ if _typing.TYPE_CHECKING:
         buried_lead,
         default_building_catalog,
         materialise_plan,
+        measured_impedance,
         neighbour_substation_grounding,
         overhead_lead,
         rod_circle,
@@ -439,6 +447,12 @@ if _typing.TYPE_CHECKING:
         compare_engines,
     )
     from groundfield.solver.fem import FemReductionWarning
+    from groundfield.geometry.electrodes import (
+        concrete_shell_coefficient,
+        shell_coefficient_from_resistance,
+        shell_resistance_from_coefficient,
+    )
+    from groundfield.solver.mutual import OffDiagonal
     from groundfield.diagnostics import (
         Diagnostic,
         DiagnosticsReport,
@@ -512,6 +526,10 @@ __all__ = [
     "FieldResult",
     "solve_mutual_matrix",
     "solve_mutual_field",
+    "OffDiagonal",
+    "concrete_shell_coefficient",
+    "shell_coefficient_from_resistance",
+    "shell_resistance_from_coefficient",
     "available_backends",
     "BackendCapabilityError",
     "ExperimentalBackendWarning",
@@ -612,6 +630,7 @@ __all__ = [
     "OrtsnetzLayout",
     "NetworkPlan",
     "materialise_plan",
+    "measured_impedance",
     "PenCable",
     "ObstacleBox",
     # Spec layer

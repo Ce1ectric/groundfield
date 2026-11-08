@@ -71,7 +71,7 @@ def test_building_footprint_normalises_ring_orientation() -> None:
 
 
 def test_building_footprint_rejects_degenerate_ring() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):  # pydantic ValidationError
         BuildingFootprint(polygon_xy_m=[(0.0, 0.0), (1.0, 1.0)])
 
 
@@ -99,7 +99,7 @@ def test_building_footprint_is_frozen() -> None:
     fp = BuildingFootprint(
         polygon_xy_m=[(0.0, 0.0), (10.0, 0.0), (10.0, 8.0), (0.0, 8.0)],
     )
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):  # frozen model: pydantic ValidationError
         fp.osm_id = 42
 
 

@@ -22,11 +22,9 @@ import groundfield
 
 ROOT = Path(groundfield.__file__).resolve().parent
 
-#: Files owned by a parallel stream, checked once their fix is merged.
-OWNED_ELSEWHERE = {
-    # '\rho' in the module docstring (a CR); stream gen2, see the fix1 report.
-    "generators/soil_specs.py",
-}
+#: Files owned by a parallel stream, checked once their fix is merged
+#: (empty since gen2 fixed the '\rho' escape in generators/soil_specs.py).
+OWNED_ELSEWHERE: set[str] = set()
 
 _CONTROL = re.compile(r"[\t\r\x07\x08\x0b\x0c]")
 

@@ -8,7 +8,7 @@ and RNG wiring.
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 import pytest

@@ -67,7 +67,7 @@ def test_projector_ring_to_xy_m_round_trip() -> None:
     ring_xy = proj.ring_to_xy_m(ring_ll)
     assert len(ring_xy) == 4
     # Compare against single-point projection.
-    for (lat, lon), (x, y) in zip(ring_ll, ring_xy):
+    for (lat, lon), (x, y) in zip(ring_ll, ring_xy, strict=True):
         x_ref, y_ref = proj.to_xy_m(lat, lon)
         assert (x, y) == pytest.approx((x_ref, y_ref), abs=1e-9)
 

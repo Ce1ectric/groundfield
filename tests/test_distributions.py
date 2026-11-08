@@ -142,7 +142,7 @@ def test_discrete_weighted_frequencies() -> None:
     d = Discrete(values=values, weights=weights)
     s = _samples(d, n=20_000)
     n = len(s)
-    for v, w in zip(values, weights):
+    for v, w in zip(values, weights, strict=True):
         c = int(np.sum(s == v))
         assert abs(c / n - w) < 0.02, f"weight bias for {v}: got {c / n}, expect {w}"
 
@@ -152,7 +152,7 @@ def test_categorical_uniform_frequencies() -> None:
     s = [d.sample(np.random.default_rng(seed)) for seed in range(3000)]
     counts = {v: s.count(v) for v in d.values}
     expected = len(s) / len(d.values)
-    for v, c in counts.items():
+    for c in counts.values():
         assert abs(c - expected) / expected < 0.10
 
 
