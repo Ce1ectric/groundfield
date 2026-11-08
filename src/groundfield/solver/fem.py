@@ -964,7 +964,8 @@ _CONDUCTIVE_LAYER_EFFECT = (
     "conservative (rods, strips and rings; 30/10000 Ohm m: -80 % to -97 %, "
     "30/1000 Ohm m: -35 % to -80 %, near-equal layers 100/120 and 120/100 Ohm m: "
     "-7 % to +5 %; a ring within its wire radius of the interface: -96 % to "
-    "+30 %), -78 % to +1 % for a layer below the hemisphere within the "
+    "+30 % against 'image_2layer' and a ring series), -78 % to +1 % for a "
+    "layer below the hemisphere within the "
     "half-extent (rings and strips; a 20 m grid -60 % to +13 %, its formula "
     "reading +12 % high in homogeneous soil)."
 )

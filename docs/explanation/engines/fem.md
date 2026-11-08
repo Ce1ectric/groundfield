@@ -92,9 +92,9 @@ touches both, to round-off), a rod the layers its axis passes through —
 an end lying on an interface does not count, the thin-wire model has no
 end face (audit D2A-01, D2A-02). Only the first error below also counts
 a wire within its radius of a layer as touching it, the one rule that
-this makes stricter; counting it in the other two lifted errors where
-`fem` is far too low (a ring 3 mm above a more conductive layer: −56 %,
-a warning in between; audit R2A-02).
+this makes stricter; counting it in the other two had turned errors
+into warnings where `fem` is far too low (a ring 3 mm above a more
+conductive layer: −56 %; audit R2A-02).
 
 - **Error** (`ValueError`, before anything else): an electrode, driven or
   passive, lies at or above the soil surface, in the surface plane
