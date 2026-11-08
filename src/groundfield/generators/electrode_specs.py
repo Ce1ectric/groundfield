@@ -176,10 +176,12 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     on how the outline is described or on whether a shell is configured
     (audit A2G-04). A ``"mesh"`` foundation is one straight wire per mesh
     line (a polyline split at the crossings), bonded to the first: one
-    owner over perimeter and braces was 1.6 % (2 × 2) to 3.2 % (4 × 4)
-    high against the equipotential reference, one owner per wire is
-    0.3–0.6 % high. A ``"ring"`` foundation is one straight wire per side
-    with ``concrete_model="distributed"``, and with ``"lumped"`` one
+    owner over perimeter and braces was 2.4 % (2 × 2) to 3.7 % (4 × 4)
+    high against ``mom`` (one current per segment) with the default line
+    kernel, one owner per wire is 1.1 % high (0.3–0.5 % with the point
+    kernel, the kernel of ``mom``). A ``"ring"`` foundation is one
+    straight wire per side with ``concrete_model="distributed"``, and
+    with ``"lumped"`` one
     :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
     ``n_x = n_y = 1`` (one owner) when axis-aligned, one wire per side
     when rotated (at most 0.06 % apart up to aspect ratio 4). A

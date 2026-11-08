@@ -62,7 +62,9 @@ given as a rectangle or as a polygon, or on whether a shell is configured
   2 × 2 / 3 × 3 / 4 × 4 cells (10 / 20 / 30 m, line kernel, 1 m segments)
   against the equipotential reference of the same segments (one owner
   per segment; with the point kernel identical to ``mom``); one owner per
-  wire is +0.3 / +0.5 / +0.6 %;
+  wire is +0.3 / +0.5 / +0.6 %. Against ``mom`` itself (point kernel) one
+  owner per wire is +1.1 % with the default line kernel and +0.3 / +0.5 /
+  +0.5 % with the point kernel;
 * a ``style="ring"`` rectangle has one owner per side with
   ``"distributed"`` at every angle, also without a shell; with
   ``"lumped"`` it is one owner (one
@@ -87,7 +89,7 @@ conductors).
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Any, Optional
 
 from groundfield.api import (
     create_conductor,
@@ -422,9 +424,11 @@ def _materialise_polygon_foundation(
     verts = clean_polygon(spec.polygon_xy_m, min_edge_m=MIN_POLYGON_EDGE_M)
     if len(verts) < 3:
         raise ValueError(
-            f"Foundation {name!r}: polygon collapses to fewer than 3 "
-            "vertices after removing sub-centimetre edges — check the "
-            "footprint."
+            f"Foundation {name!r}: the polygon outline collapses to fewer than "
+            "3 vertices after removing edges shorter than MIN_POLYGON_EDGE_M = "
+            f"{MIN_POLYGON_EDGE_M:g} m. Use an outline at least "
+            f"{MIN_POLYGON_EDGE_M:g} m wide (GroundingSystemSpec.with_footprint "
+            "widens thin building outlines), or outline='ombr'."
         )
     perimeter = 0.0
     for k in range(len(verts)):
@@ -444,16 +448,19 @@ def _materialise_polygon_foundation(
 
 
 def _bond_to_anchor(
-    world: World, name: str, sub_names: list[str], bond_conductor_type: str
+    world: World, name: str, wires: list[Any], bond_conductor_type: str
 ) -> None:
-    """Bond every wire of a foundation to its first wire (ideal shorts)."""
-    anchor = sub_names[0]
-    for j, sn in enumerate(sub_names[1:], start=1):
+    """Bond every wire of a foundation to its first wire (ideal shorts).
+
+    ``wires`` are the electrode objects (no name lookup in the world).
+    """
+    anchor = wires[0]
+    for j, wire in enumerate(wires[1:], start=1):
         create_conductor(
             world,
             name=f"{name}_bond_{j}",
             start=anchor,
-            end=sn,
+            end=wire,
             conductor_type=bond_conductor_type,
         )
 
@@ -515,7 +522,7 @@ def _materialise_foundation_wires(
     # every x; transverse wires at each x, through every y.
     wires = [[(x, y) for x in xs] for y in ys] + [[(x, y) for y in ys] for x in xs]
     perimeter = {0, n_y, n_y + 1, n_y + 1 + n_x}
-    sub_names: list[str] = []
+    created: list[Any] = []
     for j, local in enumerate(wires):
         sub_name = name if j == 0 else f"{name}_w{j}"
         if j in perimeter:
@@ -524,7 +531,7 @@ def _materialise_foundation_wires(
             radius, coefficient = brace_wire_radius, 0.0
         vertices = [to_world(lx, ly) for lx, ly in local]
         if len(vertices) == 2:
-            create_electrode(
+            wire = create_electrode(
                 world,
                 "strip",
                 name=sub_name,
@@ -534,7 +541,7 @@ def _materialise_foundation_wires(
                 concrete_shell_coefficient_ohm_m=coefficient,
             )
         else:
-            create_electrode(
+            wire = create_electrode(
                 world,
                 "polyline",
                 name=sub_name,
@@ -543,8 +550,8 @@ def _materialise_foundation_wires(
                 wire_radius=radius,
                 concrete_shell_coefficient_ohm_m=coefficient,
             )
-        sub_names.append(sub_name)
-    _bond_to_anchor(world, name, sub_names, bond_conductor_type)
+        created.append(wire)
+    _bond_to_anchor(world, name, created, bond_conductor_type)
 
 
 def site_anchor_point(site: PlannedSite) -> Optional[tuple[float, float, float]]:
@@ -589,10 +596,11 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
     review findings 10.12 / 10.13).
     """
     cx, cy = site.position_xy
-    created: list[str] = []
+    created: list[Any] = []
     for planned in site.electrodes:
         spec = planned.spec
         name = site.electrode_name(planned)
+        first = len(world.electrodes)
         materialise_electrode(
             world,
             spec,
@@ -600,19 +608,20 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
             name=name,
             bond_conductor_type=site.bond_conductor_type,
         )
-        created.append(name)
+        # The first primitive of an electrode spec carries its name.
+        created.append(world.electrodes[first])
     if not created:
         return None
     anchor = created[0]
-    for k, name in enumerate(created[1:], start=1):
+    for k, electrode in enumerate(created[1:], start=1):
         create_conductor(
             world,
             name=f"{site.name}_bond_{k}",
             start=anchor,
-            end=name,
+            end=electrode,
             conductor_type=site.bond_conductor_type,
         )
-    return anchor
+    return anchor.name
 
 
 # ---------------------------------------------------------------------
@@ -646,7 +655,11 @@ def _node_point(world: World, name: str) -> tuple[float, float, float]:
 
 
 def materialise_branch(
-    world: World, branch: PlannedBranch, nodes: dict[str, str]
+    world: World,
+    branch: PlannedBranch,
+    nodes: dict[str, str],
+    *,
+    index: Optional[dict[str, Any]] = None,
 ) -> Conductor:
     """Create the conductor of one branch.
 
@@ -659,6 +672,10 @@ def materialise_branch(
     nodes
         Map from node name (site or junction) to electrode name; a
         name missing from the map is used verbatim.
+    index
+        Optional map from electrode / junction name to the object in
+        ``world``; saves a search through the world per end (the
+        materialiser of a large network passes it).
 
     Returns
     -------
@@ -667,13 +684,17 @@ def materialise_branch(
     """
     start = nodes.get(branch.start, branch.start)
     end = nodes.get(branch.end, branch.end)
+    if index is not None:
+        start_node, end_node = index.get(start, start), index.get(end, end)
+    else:
+        start_node, end_node = start, end
     p = branch.conductor
     if branch.axis_z_m is None:
         return create_conductor(
             world,
             name=branch.name,
-            start=start,
-            end=end,
+            start=start_node,
+            end=end_node,
             conductor_type=p.conductor_type,
             wire_radius=p.wire_radius_m,
             cross_section=p.cross_section,
@@ -682,8 +703,16 @@ def materialise_branch(
             inductance_model=p.inductance_model,
         )
     z = float(branch.axis_z_m)
-    sx, sy, _ = _node_point(world, start)
-    ex, ey, _ = _node_point(world, end)
+    sx, sy, _ = (
+        start_node.connection_point
+        if not isinstance(start_node, str)
+        else _node_point(world, start)
+    )
+    ex, ey, _ = (
+        end_node.connection_point
+        if not isinstance(end_node, str)
+        else _node_point(world, end)
+    )
     cond = Conductor(
         name=branch.name,
         start=(sx, sy, z),
@@ -729,8 +758,10 @@ def materialise_plan(plan: NetworkPlan) -> World:
             nodes[site.name] = anchor
     for junction in plan.all_junctions:
         nodes[junction.name] = materialise_junction(world, junction)
+    index: dict[str, Any] = {e.name: e for e in world.electrodes}
+    index.update((j.name, j) for j in world.junctions)
     for branch in plan.all_branches:
-        materialise_branch(world, branch, nodes)
+        materialise_branch(world, branch, nodes, index=index)
     for source in plan.sources:
         kwargs: dict = {}
         if source.name is not None:

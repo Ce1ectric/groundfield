@@ -276,3 +276,99 @@ def test_tn_generator_widens_a_footprint_without_area() -> None:
     with pytest.warns(UserWarning, match="widened"):
         world = TnNetworkGenerator(cfg, seed=0).build()
     assert any(e.name.startswith("residential_1_foundation") for e in world.electrodes)
+
+
+# audit A3SG-07
+@pytest.mark.parametrize("width_m", [0.005, 0.3, 0.49, 0.8])
+def test_a_thin_outline_with_a_polygon_foundation_is_widened(width_m: float) -> None:
+    """``foundation_outline="polygon"`` with an outline narrower than
+    MIN_FOUNDATION_SIDE_M: base: ``to_world`` raised ValueError ("collapses to
+    fewer than 3 vertices after removing sub-centimetre edges", although the
+    edge limit is 0.5 m) below 0.5 m, and laid a ring along both faces of a
+    0.8 m wall. Now the widened OMBR, with the OMBR path's warning."""
+    thin = gf.BuildingFootprint(
+        polygon_xy_m=[
+            (60.0, 10.0),
+            (72.0, 10.0),
+            (72.0, 10.0 + width_m),
+            (60.0, 10.0 + width_m),
+        ],
+        osm_id=2,
+    )
+    assert not thin.is_degenerate()  # the Overpass parser keeps it
+    layout = _layout([_square(40.0, 18.0, 1, 10.0, 8.0), thin])
+    ring = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", size_m=10.0, depth_m=0.8)]
+    )
+    with pytest.warns(UserWarning, match="widened"):
+        world = layout.to_world(
+            seed=0, foundation_outline="polygon", house_grounding=ring
+        )
+    (wall,) = _foundations(world, "house_001_foundation")
+    corner, size = _extent([wall])
+    assert sorted(size) == pytest.approx([1.0, 12.0])
+    centre = (corner[0] + size[0] / 2.0, corner[1] + size[1] / 2.0)
+    assert centre == pytest.approx((66.0, 10.0 + width_m / 2.0))
+    res = gf.create_engine(backend="image", segment_length=0.5).solve(world)
+    assert np.isfinite(res.input_impedance()[0])
+
+
+# audit A3SG-07
+def test_a_polygon_foundation_of_an_ordinary_outline_is_unchanged() -> None:
+    """No widening, no warning and no shapely call for outlines wider than
+    MIN_FOUNDATION_SIDE_M on average."""
+    import warnings
+
+    layout = _layout([_square(40.0, 18.0, 1, 10.0, 8.0)])
+    ring = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", size_m=10.0, depth_m=0.8)]
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        plan = layout.plan(seed=0, foundation_outline="polygon", house_grounding=ring)
+    (spec,) = [e.spec for s in plan.sites if s.role == "building" for e in s.electrodes]
+    assert spec.polygon_xy_m == ((-5.0, -4.0), (5.0, -4.0), (5.0, 4.0), (-5.0, 4.0))
+
+
+# audit A3SG-07
+def test_a_collapsing_polygon_outline_names_the_real_edge_limit() -> None:
+    """The materialiser's last check (a spec built by hand) names the 0.5 m
+    edge limit instead of "sub-centimetre edges" and an alternative."""
+    from groundfield.generators.materialise import materialise_site
+    from groundfield.generators.plan import PlannedElectrode, PlannedSite
+
+    spec = FoundationElectrodeSpec(
+        style="ring",
+        size_m=10.0,
+        depth_m=0.8,
+        polygon_xy_m=((0.0, 0.0), (12.0, 0.0), (12.0, 0.3), (0.0, 0.3)),
+    )
+    site = PlannedSite(
+        name="h",
+        role="building",
+        position_xy=(0.0, 0.0),
+        electrodes=[PlannedElectrode(index=0, spec=spec)],
+    )
+    world = gf.World(soil=gf.HomogeneousSoil(rho=100.0))
+    with pytest.raises(ValueError, match=r"shorter than MIN_POLYGON_EDGE_M = 0\.5 m"):
+        materialise_site(world, site)
+
+
+# audit A3SG-07
+@pytest.mark.parametrize("outline", ["ombr", "polygon"])
+def test_a_thin_outline_without_a_foundation_is_left_alone(outline: str) -> None:
+    """A grounding without a foundation electrode has nothing to shape: no
+    widening warning for a wall outline (it warned on the OMBR path)."""
+    import warnings
+
+    from groundfield.generators import RodElectrodeSpec
+
+    rods = GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)])
+    wall = gf.BuildingFootprint(
+        polygon_xy_m=[(0.0, 0.0), (12.0, 0.0), (12.0, 0.01), (0.0, 0.01)], osm_id=3
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        assert rods.with_footprint(wall, outline=outline) is rods
+    with pytest.raises(ValueError, match="outline must be"):
+        rods.with_footprint(wall, outline="hull")

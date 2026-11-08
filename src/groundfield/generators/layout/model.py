@@ -58,7 +58,8 @@ from groundfield.generators.layout.routing import (
     PenCable,
     _RoutingMixin,
 )
-from groundfield.generators.materialise import materialise_plan
+from groundfield.generators._pen_routing import min_section_length
+from groundfield.generators.materialise import materialise_plan, site_anchor_point
 from groundfield.generators.plan import (
     ConductorParameters,
     NetworkPlan,
@@ -688,7 +689,10 @@ class LvNetworkLayout(
             measurement = PlannedMeasurement(auxiliary=aux_site)
 
         # 5. PEN cables: a junction at every interior corner and tap
-        #    point, one branch between consecutive nodes.
+        #    point, one branch between consecutive nodes. Nodes closer
+        #    than the shortest cable section are merged (a tap a few
+        #    millimetres from a corner or from another tap left a section
+        #    the Conductor model refuses, audit A3SG-01).
         conductor = ConductorParameters(
             conductor_type="pen",
             wire_radius_m=pen_wire_radius_m,
@@ -696,11 +700,23 @@ class LvNetworkLayout(
             coupling_to_soil="isolated",
             segment_length_m=pen_segment_length_m,
         )
+        min_length = min_section_length(conductor)
+        anchor_points = {
+            site.name: site_anchor_point(site)
+            for site in sites
+            if site.role in ("substation", "cabinet")
+        }
         junctions: list[PlannedJunction] = []
         branches: list[PlannedBranch] = []
         cable_nodes: dict[str, list[tuple[str, tuple[float, float]]]] = {}
         for cable in self.pen_cables:
-            nodes = self._cable_nodes(cable, junctions)
+            nodes = self._merge_close_nodes(
+                cable.name,
+                self._cable_nodes(cable, junctions),
+                junctions,
+                anchor_points,
+                min_length,
+            )
             cable_nodes[cable.name] = nodes
             for j, ((a0, _p0), (a1, _p1)) in enumerate(
                 zip(nodes[:-1], nodes[1:], strict=True)
@@ -901,6 +917,69 @@ class LvNetworkLayout(
         return self._insert_tap_nodes_on_cable(
             cable=cable, nodes=nodes, tap_lookup=tap_lookup, junctions=junctions
         )
+
+    @staticmethod
+    def _merge_close_nodes(
+        cable: str,
+        nodes: list[tuple[str, tuple[float, float]]],
+        junctions: list[PlannedJunction],
+        anchor_points: dict[str, Optional[tuple[float, float, float]]],
+        min_length: float,
+    ) -> list[tuple[str, tuple[float, float]]]:
+        """Merge the nodes of a cable that are closer than ``min_length``.
+
+        A junction (corner or tap point) closer than ``min_length`` (m) to
+        the node before it is dropped, so no cable section is shorter than
+        ``min_length``; a tap of a dropped node resolves to the nearest
+        remaining node (:meth:`_tap_anchor_for`). Junctions before a site
+        anchor at the end of the cable give way to it. Distances are
+        measured between the points the conductors attach to (the anchor's
+        connection point, a junction at its depth).
+
+        Raises
+        ------
+        ValueError
+            If the two site anchors at the ends of the cable are closer
+            than ``min_length``.
+        """
+        depth = {j.name: (j.position_xy, j.depth_m) for j in junctions}
+
+        def point(name: str) -> tuple[float, float, float]:
+            anchor = anchor_points.get(name)
+            if anchor is not None:
+                return anchor
+            (x, y), z = depth[name]
+            return (x, y, z)
+
+        def gap(a: str, b: str) -> float:
+            return math.dist(point(a), point(b))
+
+        kept: list[tuple[str, tuple[float, float]]] = []
+        dropped: set[str] = set()
+        for name, xy in nodes:
+            if not kept or gap(name, kept[-1][0]) >= min_length:
+                kept.append((name, xy))
+                continue
+            if name not in anchor_points:
+                dropped.add(name)
+                continue
+            while (
+                len(kept) > 1
+                and kept[-1][0] not in anchor_points
+                and gap(name, kept[-1][0]) < min_length
+            ):
+                dropped.add(kept.pop()[0])
+            if gap(name, kept[-1][0]) < min_length:
+                raise ValueError(
+                    f"LvNetworkLayout: PEN cable {cable!r} joins {kept[-1][0]!r} "
+                    f"and {name!r}, whose connection points are "
+                    f"{gap(name, kept[-1][0]):.3g} m apart, less than the shortest "
+                    f"cable section of {min_length:g} m. Move one of the two sites."
+                )
+            kept.append((name, xy))
+        if dropped:
+            junctions[:] = [j for j in junctions if j.name not in dropped]
+        return kept
 
     def _resolve_anchor(self, name: str) -> str:
         """Validate that ``name`` is the substation or a cabinet (a plan site)."""

@@ -289,3 +289,22 @@ def test_mesh_foundation_is_close_to_the_equipotential_reference(
     z_image = _z(world, kernel="point")
     z_mom = _z(world, backend="mom")
     assert 0.0 < z_image / z_mom - 1.0 < limit
+
+
+# audit A3SG-06
+@pytest.mark.finding("10.39")
+@pytest.mark.parametrize(("size_m", "cells"), [(10.0, 2), (20.0, 3)])
+def test_documented_margin_of_mesh_foundations_against_mom(
+    size_m: float, cells: int
+) -> None:
+    """The docs (generators page, known limitations) state the margin
+    against ``mom`` for the default kernel: +1.1 %; with the point kernel
+    (the kernel of ``mom``) +0.3 ... +0.5 %. They said +0.3 ... +0.6 %
+    "against mom" for the default kernel, which is the line kernel against
+    a line-kernel per-segment reference. Measured (100 ohm m, 1 m
+    segments): line +1.13 / +1.13 %, point +0.28 / +0.45 %; mom at 0.5 m
+    segments differs from mom at 1 m by +0.02 / +0.04 %."""
+    world = _site(_mesh(size_m=size_m, n_x=cells, n_y=cells))
+    z_mom = _z(world, backend="mom")
+    assert _z(world) / z_mom - 1.0 == pytest.approx(0.0113, abs=0.0005)
+    assert 0.0025 < _z(world, kernel="point") / z_mom - 1.0 < 0.005

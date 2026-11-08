@@ -138,6 +138,7 @@ __all__ = [
     "fit_quality_summary",
     "SCHEMA_NAME",
     "SCHEMA_VERSION",
+    "MAX_METADATA_DEPTH",
     "EvaluateSpecError",
     "NonPassiveFitWarning",
     "NonPassiveFitError",
@@ -175,6 +176,15 @@ class NonPassiveFitError(ValueError):
 
 SCHEMA_NAME = "groundfield.bustype"
 SCHEMA_VERSION = 1
+
+MAX_METADATA_DEPTH = 32
+"""Deepest nesting of objects and lists in the metadata of a BusType document.
+
+The exporters write at most four levels. A deeper document is refused on
+load (:class:`ValueError`); the JSON decoder reads thousands of levels, but
+every consumer that walks the metadata recursively would fail with
+:class:`RecursionError`.
+"""
 """Schema name and version of the JSON document produced by this module."""
 
 _IO_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
@@ -253,19 +263,24 @@ class BusTypeSpec:
         """Return a JSON-ready ``dict`` matching schema v1.
 
         The result is strict JSON: every number that is not finite (a
-        sample, a fit-quality figure of a hand-built fit, ...) is written
-        as ``None`` (JSON ``null``).
+        sample, a fit-quality figure of a hand-built fit, a description
+        that is not a string, ...) is written as ``None`` (JSON ``null``).
+
+        Raises
+        ------
+        ValueError
+            If the metadata nest deeper than :data:`MAX_METADATA_DEPTH`.
         """
         return {
             "schema": SCHEMA_NAME,
             "schema_version": SCHEMA_VERSION,
             "name": self.name,
-            "description": self.description,
+            "description": _strict_json(self.description),
             "system_type": self.system_type,
             "voltage_level": float(self.voltage_level),
             "impedance_formula": self.impedance_formula,
             "samples": {
-                key: [_finite_or_none(x) for x in self.samples[key]]
+                key: [_finite_or_none(x) for x in self.samples.get(key, [])]
                 for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm")
             },
             "metadata": _strict_json(dict(self.metadata)),
@@ -289,13 +304,17 @@ class BusTypeSpec:
         ValueError
             If the payload is not a schema-v1 BusType document: not a
             ``dict``, a wrong schema name or version, a missing ``name``,
-            ``system_type`` or ``voltage_level``, a ``voltage_level`` that
-            is not a finite number, or ``samples`` / ``metadata`` that are
-            not objects (sample lists hold numbers or ``None``).
+            ``system_type`` or ``voltage_level``, a ``name`` or
+            ``system_type`` that is an object or a list, a ``description``
+            that is neither a string nor ``null``, a ``voltage_level`` that
+            is not a finite number, ``samples`` / ``metadata`` that are not
+            objects (sample lists hold numbers or ``None``), or metadata
+            nested deeper than :data:`MAX_METADATA_DEPTH`.
         EvaluateSpecError
-            If ``impedance_formula`` is missing or outside the allowed
-            formula grammar. The formula is parsed, never evaluated as
-            code; the message names the offending element.
+            If ``impedance_formula`` is missing, not a string or a number,
+            or outside the allowed formula grammar. The formula is parsed,
+            never evaluated as code; the message names the offending
+            element.
         """
         if not isinstance(payload, dict):
             raise ValueError(
@@ -322,11 +341,27 @@ class BusTypeSpec:
         for key in ("name", "system_type", "voltage_level"):
             if key not in payload:
                 raise ValueError(f"BusType document has no {key!r}")
+        for key in ("name", "system_type"):
+            if isinstance(payload[key], (dict, list)):
+                raise ValueError(
+                    f"BusType document: {key!r} must be a string, got a JSON "
+                    f"{'object' if isinstance(payload[key], dict) else 'array'}"
+                )
         name = str(payload["name"])
+        description = payload.get("description")
+        if description is not None and not isinstance(description, str):
+            raise ValueError(
+                f"BusType document {name!r}: description must be a string or "
+                f"null, got {type(description).__name__}"
+            )
         formula = payload.get("impedance_formula")
         if formula is None:
             raise EvaluateSpecError(
                 f"BusType document {name!r} has no 'impedance_formula'."
+            )
+        if isinstance(formula, (dict, list)):
+            raise EvaluateSpecError(
+                f"BusType document {name!r}: impedance_formula must be a string."
             )
         formula = formula if isinstance(formula, str) else str(formula)
         _parse_formula(formula, context=f"BusType document {name!r}")
@@ -345,6 +380,7 @@ class BusTypeSpec:
             raise ValueError(
                 f"BusType document {name!r}: samples and metadata must be JSON objects"
             )
+        _strict_json(metadata, context=f"BusType document {name!r}: metadata")
         sample_lists: dict[str, list[Any]] = {}
         for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm"):
             values = samples.get(key, [])
@@ -362,7 +398,7 @@ class BusTypeSpec:
             sample_lists[key] = list(values)
         return cls(
             name=name,
-            description=payload.get("description"),
+            description=description,
             system_type=str(payload["system_type"]),
             voltage_level=voltage_level,
             impedance_formula=formula,
@@ -495,15 +531,47 @@ def _finite_or_none(value: Any) -> Optional[float]:
     return value if math.isfinite(value) else None
 
 
-def _strict_json(value: Any) -> Any:
-    """Copy of a JSON-like structure with every non-finite float as ``None``."""
-    if isinstance(value, dict):
-        return {key: _strict_json(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_strict_json(item) for item in value]
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    return value
+def _strict_json(value: Any, *, context: str = "BusTypeSpec metadata") -> Any:
+    """Copy of a JSON-like structure with every non-finite float as ``None``.
+
+    Iterative, so the depth is bounded by :data:`MAX_METADATA_DEPTH` and not
+    by Python's recursion limit (audit A3SG-04: metadata nested 3 000 levels,
+    which the JSON decoder reads, raised :class:`RecursionError` here).
+
+    Raises
+    ------
+    ValueError
+        If ``value`` nests objects and lists deeper than
+        :data:`MAX_METADATA_DEPTH`.
+    """
+
+    def scalar(item: Any) -> Any:
+        if isinstance(item, float) and not math.isfinite(item):
+            return None
+        return item
+
+    if not isinstance(value, (dict, list, tuple)):
+        return scalar(value)
+    root: Any = {} if isinstance(value, dict) else []
+    stack: list[tuple[Any, Any, int]] = [(value, root, 1)]
+    while stack:
+        source, target, depth = stack.pop()
+        if depth > MAX_METADATA_DEPTH:
+            raise ValueError(
+                f"{context} is nested deeper than {MAX_METADATA_DEPTH} levels"
+            )
+        items = source.items() if isinstance(source, dict) else enumerate(source)
+        for key, item in items:
+            if isinstance(item, (dict, list, tuple)):
+                child: Any = {} if isinstance(item, dict) else []
+                stack.append((item, child, depth + 1))
+            else:
+                child = scalar(item)
+            if isinstance(target, dict):
+                target[key] = child
+            else:
+                target.append(child)
+    return root
 
 
 def _metadata_from_vector_fit(
@@ -1244,16 +1312,41 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
     impedance the fit represents (``quantity``: ``input``,
     ``cluster`` or ``electrode``) when known.
     """
-    md = spec.metadata
-    method = md.get("fit_method", "unknown")
-    fq = md.get("fit_quality", {})
-    rms = _finite_or_none(fq.get("rms_error_Ohm"))
+    md = spec.metadata if isinstance(spec.metadata, dict) else {}
+    fq = md.get("fit_quality")
+    if not isinstance(fq, dict):
+        fq = {}
+    method = _summary_label(md.get("fit_method")) or "unknown"
+    rms = _summary_figure(fq.get("rms_error_Ohm"))
     rms_text = "unknown" if rms is None else f"{rms:.3e} Ω"
     parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms_text}"]
-    if fq.get("rms_relative") is not None:
-        parts.append(f"rms_rel={fq['rms_relative']:.2%}")
-    if fq.get("max_relative") is not None:
-        parts.append(f"max_rel={fq['max_relative']:.2%}")
-    if md.get("quantity") is not None:
-        parts.append(f"quantity={md['quantity']}")
+    rms_relative = _summary_figure(fq.get("rms_relative"))
+    if rms_relative is not None:
+        parts.append(f"rms_rel={rms_relative:.2%}")
+    max_relative = _summary_figure(fq.get("max_relative"))
+    if max_relative is not None:
+        parts.append(f"max_rel={max_relative:.2%}")
+    quantity = _summary_label(md.get("quantity"))
+    if quantity is not None:
+        parts.append(f"quantity={quantity}")
     return f"BusTypeSpec({', '.join(parts)})"
+
+
+def _summary_figure(value: Any) -> Optional[float]:
+    """A finite real number of the metadata as ``float``, else ``None``.
+
+    Loaded documents may hold anything there (audit A3SG-04: ``null``, a
+    list, an object or a 400-digit integer crashed the summary).
+    """
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return None
+    return _finite_or_none(value)
+
+
+def _summary_label(value: Any) -> Optional[str]:
+    """A string or a number of the metadata as text; ``None`` for anything else."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, numbers.Real) and not isinstance(value, bool):
+        return str(value)
+    return None

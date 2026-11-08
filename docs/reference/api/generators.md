@@ -56,18 +56,36 @@ in the penetration rate (a house equipped at 10 % is also equipped at
 **Foundations and PEN cables.** A mesh foundation (`style="mesh"`) is
 one wire electrode per mesh line at every orientation (`<name>`,
 `<name>_w<j>`, bonded into one cluster), bare or encased. The image
-family solves one uniform current per electrode: one current per wire
-is 0.3–0.6 % above the per-segment reference (`mom`), one current for
-the whole mesh was 1.6–3.2 % above it and depended on the orientation.
+family solves one uniform current per electrode. Against the
+per-segment `mom` solution (100 Ω·m, 1 m segments; `mom` uses the point
+kernel), one current per wire is +1.1 % with the default line kernel
+and +0.3 … +0.5 % with `kernel="point"` for 10 m 2 × 2 to 30 m 4 × 4
+meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
++1.5 … +3.1 %) and depended on the orientation.
 `electrode_currents[<name>]` and `grounding_impedance(<name>)` therefore
 refer to the first wire; use `cluster_impedance` or the sum over the
 wires for the foundation. An axis-aligned `"lumped"` ring stays one
-`grid_mesh` electrode and a polygon outline one closed wire. The PEN
-cables of `TnNetworkGenerator` form a nearest-point tree: every cable
-starts at the point of the network already built that is nearest to its
-far end, at a leakage-free tap junction (`pen_tap_<k>`), so a service
-drop taps the main beside its house instead of running back along it to
-the cabinet.
+`grid_mesh` electrode and a polygon outline one closed wire; an outline
+narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with a
+warning, for both `foundation_outline="ombr"` and `"polygon"`.
+
+In `TnNetworkGenerator` every cable cabinet has its own PEN cable, as
+the topology documents: from the substation (`StarCabinetTopology`), or
+one cable per trunk segment (`RadialTrunkTopology`). A service drop taps
+the cable path that feeds its own building — the cable of its cabinet,
+or the trunk from the substation to its tap source — at the point
+nearest to the building's connection point: a leakage-free tap junction
+`pen_tap_<k>` that splits the cable into sections `<cable>_s<k>`, or the
+substation or cabinet at the end of the cable; a building in a
+substation slot of the radial trunk is connected to the substation. The
+router guarantees that a drop never starts on another building's drop,
+never runs along the cable it taps, and that no cable section is
+shorter than 1 cm (a tap closer to a node is that node; longer for PEN
+radii above 7.3 mm, so that every section stays a finite resistance). A
+drop may share its route with another cable — another cabinet's cable,
+a trunk, another drop — as cables in one trench do; the inductive
+coupling treats such overlapping conductors as touching wires. The
+layout builder merges cable nodes closer than the same length.
 
 **Measurement set-up.** A fall-of-potential measurement is a
 two-terminal source between the earthing system and an auxiliary

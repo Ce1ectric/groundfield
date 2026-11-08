@@ -30,7 +30,7 @@ limits a result, the reference documentation states the limit.
   meshes), 5.3 % (40 m × 40 m, 8 × 8) and 4.3 % (4-arm star) above the
   per-segment `mom` solution, and its near-field potentials are off by tens
   of per cent. The generators build mesh foundations as one electrode per
-  wire line since 2026.11 (+0.3 … +0.6 %); doing the same inside the solver
+  wire line since 2026.11 (+1.1 %, point kernel +0.3 … +0.5 %); doing the same inside the solver
   for every grid and star would move their results by −3 … −5 % (second
   adversarial audit, A2G-04).
 - **Line kernel on the cross-layer path.** For electrodes that cross the layer
