@@ -831,6 +831,92 @@ def test_fem_a_wire_touching_a_layer_below_its_hemisphere_raises(
         gf.create_engine(backend="fem", segment_length=0.5).solve(w)
 
 
+# ---------------------------------------------------------------------
+# Audit R2A-01: round-off in the end depths of a strip. StripElectrode
+# accepts end depths that differ by up to 1e-9 m as horizontal; only a
+# rod is non-horizontal, every other electrode has one depth.
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("start_z", "end_z"),
+    [
+        pytest.param(0.1 + 0.2, 0.3, id="float-sum"),
+        pytest.param(0.3, 0.3 + 1e-10, id="1e-10-at-the-end"),
+        pytest.param(0.3 + 1e-10, 0.3, id="1e-10-at-the-start"),
+    ],
+)
+def test_fem_round_off_in_a_strip_does_not_change_the_verdict(start_z, end_z) -> None:
+    """A strip lying in the interface h_1 = 0.3 m warns like the exact one.
+
+    fem took a strip whose end depths differ by round-off for a rod, so the
+    rod's contact rule (the open interval between its ends) applied: the
+    ends 0.1 + 0.2 / 0.3 touched no layer and raised a bare ``ValueError:
+    min() iterable argument is empty``, the ends 0.3 / 0.3 + 1e-10 raised a
+    Q23 error saying that the strip touches neither layer, while the exact
+    strip warns (audit R2A-01; 563ead7 warned for all of them).
+    """
+    # audit R2A-01
+    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.3)
+    exact = _electrode_world(soil, "strip", start=(0, 0, 0.3), end=(10, 0, 0.3))
+    noisy = _electrode_world(soil, "strip", start=(0, 0, start_z), end=(10, 0, end_z))
+    assert _fem_verdict(exact) == "warn"
+    assert _fem_verdict(noisy) == _fem_verdict(exact)
+
+
+@pytest.mark.finding("10.23")
+def test_fem_round_off_in_a_strip_below_the_interface_does_not_change_the_verdict() -> (
+    None
+):
+    """A strip 3 mm below h_1 = 0.5 m with 1e-10 m of round-off in one end.
+
+    4fc8153 warned for the exact strip (the wire-radius band) and raised
+    Q23 for the noisy one (taken for a rod, audit R2A-01).
+    """
+    # audit R2A-01
+    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
+    exact = _electrode_world(soil, "strip", start=(0, 0, 0.503), end=(10, 0, 0.503))
+    noisy = _electrode_world(
+        soil, "strip", start=(0, 0, 0.503), end=(10, 0, 0.503 + 1e-10)
+    )
+    assert _fem_verdict(noisy) == _fem_verdict(exact)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("start_z", "end_z", "needle"),
+    [
+        # 4fc8153 solved it (24.6326 Ohm); image and mom refuse it
+        pytest.param(1e-3, 1e-3 + 1e-10, "soil-surface plane", id="surface-plane"),
+        pytest.param(0.0, 1e-10, "at or above the soil surface", id="at-z=0"),
+        # 4fc8153: ValueError: min() iterable argument is empty
+        pytest.param(-1e-10, 0.0, "at or above the soil surface", id="above-z=0"),
+    ],
+)
+def test_fem_round_off_does_not_bypass_the_out_of_soil_refusal(
+    start_z, end_z, needle
+) -> None:
+    """fem refuses a strip in or above the surface plane like image and mom."""
+    # audit R2A-01
+    import warnings
+
+    w = _electrode_world(
+        gf.HomogeneousSoil(rho=100.0),
+        "strip",
+        start=(0, 0, start_z),
+        end=(10, 0, end_z),
+    )
+    for backend in ("image", "mom"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError, match="soil.surface"):
+                gf.create_engine(backend=backend, segment_length=0.5).solve(w)
+    with pytest.raises(ValueError, match=needle) as info:
+        _fem_warnings(w)
+    assert not isinstance(info.value, gf.BackendCapabilityError), info.value
+
+
 def _documented(pattern: str) -> list[str]:
     """Where the fem docs (engine page, FemReductionWarning) miss ``pattern``."""
     import re

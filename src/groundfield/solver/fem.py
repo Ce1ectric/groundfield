@@ -383,8 +383,11 @@ def _reject_electrodes_out_of_the_soil(world: "World") -> None:
     The same three conditions, on the electrodes (every one, driven or
     passive, as the integral backends discretise every one): a rod whose
     head lies above the surface (to round-off — a head at ``z = 0`` is the
-    ordinary driven rod), a horizontal electrode at ``z <= 0`` or with
-    ``2 z <= wire_radius``.
+    ordinary driven rod), any other electrode — horizontal, its end
+    depths equal to the 1e-9 m the geometry model accepts — with its
+    shallowest point at ``z <= 0`` or with ``2 z <= wire_radius``. Only
+    :class:`RodElectrode` is non-horizontal: a strip whose end depths
+    differ by round-off is a horizontal wire, not a rod (audit R2A-01).
 
     Raises
     ------
@@ -395,10 +398,9 @@ def _reject_electrodes_out_of_the_soil(world: "World") -> None:
     from groundfield.solver._guards import _SURFACE_TOL
 
     for e in world.electrodes:
-        lower, upper = e.bounds()
-        z_top, z_bottom = float(lower[2]), float(upper[2])
+        z_top = float(e.bounds()[0][2])  # the shallowest point
         a = float(e.wire_radius)
-        if z_bottom > z_top:  # a rod: its head is its shallowest point
+        if isinstance(e, RodElectrode):  # its head is its shallowest point
             if z_top >= -_SURFACE_TOL:
                 continue
             what = f"reaches above the soil surface (its head is at z = {z_top:.4g} m)"
@@ -420,17 +422,23 @@ def _reject_electrodes_out_of_the_soil(world: "World") -> None:
 
 
 def _depth_range(electrode: "_ElectrodeBase") -> tuple[float, float]:
-    """Shallowest and deepest point of a fem-reducible electrode, in m."""
+    """Shallowest and deepest point of a fem-reducible electrode, in m.
+
+    Only a :class:`RodElectrode` spans a depth range. Every other kind is
+    horizontal and has one depth, the one its hemisphere formula uses (a
+    strip's start depth): the geometry model accepts end depths that differ
+    by up to 1e-9 m as horizontal, and such round-off must not turn a
+    strip into a rod (audit R2A-01).
+    """
     if isinstance(electrode, RodElectrode):
         z0 = float(electrode.position[2])
         return z0, z0 + float(electrode.length)
     if isinstance(electrode, RingElectrode):
         z = float(electrode.center[2])
-        return z, z
-    if isinstance(electrode, StripElectrode):
-        za, zb = float(electrode.start[2]), float(electrode.end[2])
-        return min(za, zb), max(za, zb)
-    z = float(electrode.corner[2])  # GridMeshElectrode, MeshElectrode
+    elif isinstance(electrode, StripElectrode):
+        z = float(electrode.start[2])
+    else:  # GridMeshElectrode, MeshElectrode
+        z = float(electrode.corner[2])
     return z, z
 
 
@@ -595,16 +603,28 @@ def _electrode_layers(
       or within one radius below it, does not touch the top layer.
 
     Electrodes above the soil surface were refused before
-    (:func:`_reject_electrodes_out_of_the_soil`).
+    (:func:`_reject_electrodes_out_of_the_soil`). Only a
+    :class:`RodElectrode` is non-horizontal; every other electrode has
+    the one depth of :func:`_depth_range` (audit R2A-01). The result is
+    never empty: a rod whose interior no layer holds (not possible for a
+    validated rod, which is longer than its radius) counts the layers of
+    its closed axis interval.
     """
     z_top, z_bottom = _depth_range(electrode)
     a = float(electrode.wire_radius)
-    if z_bottom > z_top:
+    if isinstance(electrode, RodElectrode):
         eps = _CONTACT_ROUND_OFF * a
-        return {
+        inside = {
             k
             for k, (top, bottom) in enumerate(bounds)
             if z_top < bottom - eps and z_bottom > top + eps
+        }
+        if inside:
+            return inside
+        return {
+            k
+            for k, (top, bottom) in enumerate(bounds)
+            if z_top <= bottom and z_bottom >= top
         }
     reach = a * (1.0 + _CONTACT_ROUND_OFF)
     return {
