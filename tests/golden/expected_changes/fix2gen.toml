@@ -1,0 +1,121 @@
+# Expected golden-value changes of work stream FIX2-GEN (audit round 2:
+# A2G-04 owners of generated foundations). Format: tests/golden/README.md.
+#
+# A mesh foundation is one uniform-current owner per wire line at every
+# orientation (it was one grid_mesh owner when axis-aligned and bare). One
+# owner over perimeter and braces put the same current density on both and
+# was +1.5 % (EPR) / +5.2 % (largest touch voltage) above the equipotential
+# reference (one owner per segment = mom) for the default 10 x 10 m 2 x 2
+# house mesh; one owner per wire is +0.3 % / +1.5 %. Every generated
+# network with default (mesh) foundations moves by -0.7 ... -0.8 % in its
+# potentials. Measured against the stream start: deliver/evidence/fix2gen/
+# golden_moves_vs_base.txt; reference: mesh_owner_granularity.out,
+# mesh_surface_potential.out.
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/*"]
+findings = ["10.39", "10.12"]
+reason = """Mesh foundations are one owner per wire (audit A2G-04): node
+potentials -0.73 ... -0.74 % (trafo, cabinet, houses)."""
+min_rel_change = 5e-3
+max_rel_change = 1e-2
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["I/trafo_*", "I/kvs_*"]
+findings = ["10.39", "10.12"]
+reason = """Mesh foundations are one owner per wire (audit A2G-04): leakage of
+the substation and cabinet electrodes +0.23 ... +0.91 %."""
+min_rel_change = 1e-3
+max_rel_change = 1.5e-2
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["I/residential_*_foundation_0"]
+findings = ["10.39", "10.12"]
+reason = """The foundation anchor is now the first wire of the mesh (one of six
+owners): its current is that wire's share, -80 ... -81 % of the whole
+foundation's current, which is the sum over <name> and <name>_w1 ... _w5."""
+min_rel_change = 0.7
+max_rel_change = 0.9
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/residential_*_w*", "I/residential_*_w*"]
+findings = ["10.39", "10.12"]
+reason = "The other five wires of each mesh foundation are new owners."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["potential/*", "ps/I"]
+findings = ["10.39", "10.12"]
+reason = """Surface potentials and point sources follow the new current
+distribution (more on the perimeter, less on the braces): potential line
+4.7 %, point-source currents 6.8 % (norm-wise)."""
+min_rel_change = 1e-2
+max_rel_change = 0.1
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["ps/owner", "world/json"]
+findings = ["10.39", "10.12"]
+reason = "Mesh foundations are six polyline electrodes plus five ideal bonds."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/*", "I/substation_*"]
+findings = ["10.39", "10.12"]
+reason = """Mesh foundations are one owner per wire (audit A2G-04): node
+potentials -0.80 ... -0.84 %, substation leakage +1.0 ... +1.1 % against the
+stream start; partly cancels GEN-2's +0.33 % (10.38), so no lower bound."""
+max_rel_change = 1.5e-2
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["I/house_*_foundation_0"]
+findings = ["10.39", "10.12"]
+reason = """The anchor is the first of six wires: its current is that wire's
+share (-81 ... -82 %)."""
+min_rel_change = 0.7
+max_rel_change = 0.9
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/house_*_w*", "I/house_*_w*", "world/json"]
+findings = ["10.39", "10.12"]
+reason = "The other five wires of each mesh foundation are new owners."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "I/trafo_*", "I/kvs_*"]
+findings = ["10.39", "10.12"]
+reason = """Mesh foundations are one owner per wire (audit A2G-04): potentials
+-0.77 %, substation and cabinet leakage +0.81 ... +0.87 % against the stream
+start (on top of 10.17 / core2a)."""
+max_rel_change = 1.5e-2
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["I/residential_*_foundation_0"]
+findings = ["10.39", "10.12"]
+reason = "The anchor is the first of six wires: that wire's share (-81 %)."
+max_rel_change = 0.9
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
+findings = ["10.39", "10.12"]
+reason = """The floating probe rod reads the field 50 m out: 2.3e-3 V moves by
+3.3e-4 V (14 %); its current is round-off around zero."""
+max_rel_change = 0.5
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/residential_*_w*", "I/residential_*_w*", "world/json"]
+findings = ["10.39", "10.12"]
+reason = "The other five wires of each mesh foundation are new owners."
+allow_shape_change = true

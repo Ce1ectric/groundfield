@@ -43,6 +43,15 @@ def _foundations(world: gf.World, prefix: str) -> list:
     return [e for e in world.electrodes if e.name.startswith(prefix)]
 
 
+def _extent(wires: list) -> tuple[tuple[float, float], tuple[float, float]]:
+    """``(corner, size)`` of the bounding box of a foundation's wires (a
+    mesh foundation is one electrode per wire, audit A2G-04)."""
+    points = [v for e in wires for line in e.wire_polylines() for v in line]
+    xs = [float(v[0]) for v in points]
+    ys = [float(v[1]) for v in points]
+    return (min(xs), min(ys)), (max(xs) - min(xs), max(ys) - min(ys))
+
+
 GARAGE = gf.BuildingFootprint(
     polygon_xy_m=[(40, 0), (46, 0), (46, 4), (40, 4)], osm_id=1
 )
@@ -63,11 +72,11 @@ def _rotated(cx: float, cy: float, w: float, h: float, angle: float, osm_id: int
 def test_foundation_size_follows_the_footprint() -> None:
     """The pass-9 F28 reproduction: a garage and an apartment block."""
     world = _layout([GARAGE, BLOCK]).to_world()
-    (garage,) = _foundations(world, "house_000_foundation")
-    (block,) = _foundations(world, "house_001_foundation")
-    assert garage.kind == block.kind == "grid_mesh"
-    assert (garage.corner[:2], garage.size) == ((40.0, 0.0), (6.0, 4.0))
-    assert (block.corner[:2], block.size) == ((70.0, 0.0), (40.0, 20.0))
+    garage = _foundations(world, "house_000_foundation")
+    block = _foundations(world, "house_001_foundation")
+    assert {e.kind for e in garage + block} == {"polyline"}
+    assert _extent(garage) == ((40.0, 0.0), (6.0, 4.0))
+    assert _extent(block) == ((70.0, 0.0), (40.0, 20.0))
 
 
 def test_rotated_footprint_gives_a_rotated_foundation_on_the_ombr() -> None:
@@ -147,10 +156,10 @@ def test_polygon_outline_rejects_mesh_foundations() -> None:
 def test_spec_outline_reproduces_the_fixed_foundation() -> None:
     world = _layout([GARAGE, BLOCK]).to_world(foundation_outline="spec")
     for i, fp in enumerate((GARAGE, BLOCK)):
-        (foundation,) = _foundations(world, f"house_{i:03d}_foundation")
+        corner, size = _extent(_foundations(world, f"house_{i:03d}_foundation"))
         cx, cy = fp.centroid_xy_m()
-        assert foundation.size == (10.0, 10.0)
-        assert foundation.corner[:2] == pytest.approx((cx - 5.0, cy - 5.0))
+        assert size == pytest.approx((10.0, 10.0))
+        assert corner == pytest.approx((cx - 5.0, cy - 5.0))
 
 
 def test_foundation_outline_is_recorded_in_the_plan() -> None:
@@ -219,8 +228,8 @@ def test_a_degenerate_footprint_gets_a_minimum_foundation() -> None:
     )
     with pytest.warns(UserWarning, match="widened"):
         world = layout.to_world(seed=0)
-    (mesh,) = _foundations(world, "house_001_foundation")
-    assert sorted(mesh.size) == pytest.approx([1.0, 10.0])
+    _, size = _extent(_foundations(world, "house_001_foundation"))
+    assert sorted(size) == pytest.approx([1.0, 10.0])
     res = gf.create_engine(backend="image", segment_length=1.0).solve(world)
     assert np.isfinite(res.input_impedance()[0])
 
@@ -245,13 +254,9 @@ def test_a_footprint_without_area_gets_a_minimum_foundation(outline, size) -> No
     layout = _layout([_square(40.0, 18.0, 1, 10.0, 8.0), wall])
     with pytest.warns(UserWarning, match="widened"):
         world = layout.to_world(seed=0)
-    wires = _foundations(world, "house_001_foundation")
-    points = [v for e in wires for line in e.wire_polylines() for v in line]
-    xs = [v[0] for v in points]
-    ys = [v[1] for v in points]
-    extent = sorted([max(xs) - min(xs), max(ys) - min(ys)])
-    assert extent == pytest.approx(size)
-    centre = (0.5 * (max(xs) + min(xs)), 0.5 * (max(ys) + min(ys)))
+    (x0, y0), (dx, dy) = _extent(_foundations(world, "house_001_foundation"))
+    assert sorted((dx, dy)) == pytest.approx(size)
+    centre = (x0 + dx / 2.0, y0 + dy / 2.0)
     assert centre == pytest.approx((70.0, 10.0) if size[1] > 1 else (60.0, 10.0))
     res = gf.create_engine(backend="image", segment_length=0.5).solve(world)
     assert np.isfinite(res.input_impedance()[0])

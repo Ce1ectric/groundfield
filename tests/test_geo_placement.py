@@ -127,10 +127,12 @@ def test_osm_placement_round_trips_via_placement_union() -> None:
 
 
 def test_rotated_foundation_registers_perimeter_strips() -> None:
-    """A rotated ring-style foundation (style='ring', orientation=30 deg)
-    must register exactly four :class:`StripElectrode` primitives
-    (the four perimeter sides) plus three bonds, all sharing the
-    spec-level anchor name as the first sub-electrode.
+    """A rotated ring-style foundation (style='ring', orientation=30 deg,
+    ``concrete_model="distributed"``) must register exactly four
+    :class:`StripElectrode` primitives (the four perimeter sides) plus
+    three bonds, all sharing the spec-level anchor name as the first
+    sub-electrode. (A ``"lumped"`` ring is one closed wire at any angle,
+    audit A2G-04.)
     """
     world = create_world(
         name="rot_found_ring",
@@ -143,6 +145,7 @@ def test_rotated_foundation_registers_perimeter_strips() -> None:
                 size_xy_m=(10.0, 6.0),
                 depth_m=0.8,
                 orientation_deg=30.0,
+                concrete_model="distributed",
             )
         ],
     )
@@ -195,10 +198,11 @@ def test_rotated_foundation_mesh_style_adds_internal_braces() -> None:
     assert all(e.kind == "polyline" and len(e.vertices) == 3 for e in wires)
 
 
-def test_axis_aligned_foundation_stays_grid_mesh() -> None:
-    """When ``orientation_deg`` is ``None`` (the default), the
-    foundation must still materialise as a single
-    :class:`GridMeshElectrode` — Phase A is strictly additive."""
+def test_axis_aligned_mesh_foundation_is_one_owner_per_wire() -> None:
+    """When ``orientation_deg`` is ``None`` (the default), a mesh
+    foundation materialises as one wire per mesh line, as at any other
+    angle (audit A2G-04; up to 2026.11 one :class:`GridMeshElectrode`,
+    1.2 % above the same mesh turned by 30 deg)."""
     world = create_world(
         name="aa_found",
         soil=TwoLayerSoil(rho_1=100.0, rho_2=50.0, h_1=2.0),
@@ -219,7 +223,7 @@ def test_axis_aligned_foundation_stays_grid_mesh() -> None:
         rng=np.random.default_rng(0),
     )
     kinds = [e.kind for e in world.electrodes]
-    assert kinds == ["grid_mesh"]
+    assert kinds == ["polyline"] * 6
 
 
 def test_zero_orientation_uses_axis_aligned_path() -> None:
@@ -275,6 +279,7 @@ def _build_tn_with_osm_placement(
                     style="ring",
                     size_m=8.0,
                     depth_m=0.8,
+                    concrete_model="distributed",  # one owner per side
                 )
             ],
         ),

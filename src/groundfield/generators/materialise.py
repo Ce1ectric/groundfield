@@ -11,8 +11,8 @@ It owns, in one function each:
 * :func:`materialise_site` — the electrodes of a grounding site and
   the bonds to its anchor;
 * :func:`materialise_electrode` — one electrode, including the
-  foundation geometry (axis-aligned grid, rotated mesh, building
-  outline) and the concrete shell of ADR-0012;
+  foundation geometry (rectangle or building outline, its owners) and
+  the concrete shell of ADR-0012;
 * :func:`materialise_junction` — a PEN cable joint (a leakage-free
   :class:`~groundfield.geometry.junction.Junction` node);
 * :func:`materialise_branch` — a conductor between two nodes (PEN
@@ -45,11 +45,36 @@ which every encased (perimeter) wire carries as
 to the diagonal of each of its segments, i.e. the lumped resistance
 :math:`R_\text{shell} = C / L` in series with an electrode of length
 :math:`L` under a uniform leakage current. Both ``concrete_model`` values
-use this one mechanism (review findings 10.12–10.14); they differ only
-in the owners of an axis-aligned ring foundation: ``"lumped"`` keeps one
-grid-mesh electrode (one uniform-current owner), ``"distributed"`` one
-owner per wire. Cross-braces of a mesh foundation are not encased and
-keep the bare radius :math:`r_a`.
+use this one mechanism (review findings 10.12–10.14). Cross-braces of a
+mesh foundation are not encased and keep the bare radius :math:`r_a`.
+
+Owners of a foundation
+----------------------
+The image family solves for one uniform leakage current per electrode
+(an *owner*). A foundation's owners depend only on its structure and on
+``concrete_model`` — never on its orientation, on whether the outline is
+given as a rectangle or as a polygon, or on whether a shell is configured
+(audit A2G-04, review finding 10.39):
+
+* a mesh foundation (cross-braces) has one owner per wire line, for both
+  ``concrete_model`` values. One owner over perimeter and braces puts the
+  same current density on both and is +1.5 / +2.4 / +3.1 % high for
+  2 × 2 / 3 × 3 / 4 × 4 cells against the equipotential reference (one
+  current per segment, ``mom``); one owner per wire is +0.3 / +0.4 /
+  +0.5 %;
+* a perimeter-only foundation (``style="ring"`` or a building outline)
+  has one owner for the closed perimeter with ``"lumped"`` (exactly the
+  lumped series resistance :math:`C/L_\text{perim}` of the shell) and one
+  owner per straight wire (side or polygon edge) with ``"distributed"``;
+  for a perimeter the two differ by at most 0.06 % at aspect ratios up
+  to 4 (0.3 % at 50).
+
+Every owner set of a foundation is bonded to its first wire, the anchor:
+the local :math:`-y` side of a rectangle, which starts at the local
+:math:`(-d_x/2, -d_y/2)` corner (the connection point of incoming
+conductors), or the first edge of a polygon. An axis-aligned lumped ring
+stays one :class:`~groundfield.geometry.electrodes.GridMeshElectrode`
+(connection point at its centre).
 """
 
 from __future__ import annotations
@@ -273,21 +298,26 @@ def _materialise_foundation(
     name: str,
     bond_conductor_type: str,
 ) -> None:
-    """Foundation electrode: building outline, axis-aligned grid or per-wire mesh.
+    """Foundation electrode: building outline or rectangle (ring or mesh).
 
-    The concrete shell (ADR-0012) is the same for both
-    ``concrete_model`` values: every encased (perimeter) wire gets the
-    radius :math:`r_b` and the coefficient :math:`C`; cross-braces keep
-    the bare radius. ``"lumped"`` keeps the single
-    :class:`~groundfield.geometry.electrodes.GridMeshElectrode` (one
-    uniform-current owner) for an axis-aligned foundation whose wires are
-    all encased (``style="ring"``); ``"distributed"`` and every other
-    case use one owner per wire.
+    The owners follow the module rule (see *Owners of a foundation*): a
+    mesh is one owner per wire line; a perimeter-only rectangle is one
+    owner (``"lumped"``: a grid mesh at 0°, else one closed polyline) or
+    one per side (``"distributed"``), at any orientation and whether or
+    not a shell is configured. The concrete shell (ADR-0012) is the same
+    for both ``concrete_model`` values: every encased (perimeter) wire
+    gets the radius :math:`r_b` and the coefficient :math:`C`;
+    cross-braces keep the bare radius.
     """
     depth = float(spec.depth_m)
     if spec.polygon_xy_m is not None:
         _materialise_polygon_foundation(
-            world, spec, centre_xy=centre_xy, depth=depth, name=name
+            world,
+            spec,
+            centre_xy=centre_xy,
+            depth=depth,
+            name=name,
+            bond_conductor_type=bond_conductor_type,
         )
         return
     if spec.size_xy_m is not None:
@@ -305,33 +335,26 @@ def _materialise_foundation(
     )
 
     # A rectangle turned by a multiple of 90 deg is axis-aligned: realise
-    # it on the grid-mesh path with swapped sides (and mesh counts), so
-    # the same rectangle always gets the same discretisation whichever
-    # way it was described (10.39).
+    # it with swapped sides (and mesh counts), so the same rectangle always
+    # gets the same discretisation whichever way it was described (10.39).
     angle_deg, dx, dy, nx, ny = _canonical_right_angle(
         spec.orientation_deg or 0.0, dx, dy, nx, ny
     )
-    # One grid-mesh primitive carries one radius and one coefficient, so
-    # it can hold a shell only when every wire is encased (no braces);
-    # the distributed model always takes one owner per wire.
-    encased = shell_coefficient > 0.0
-    single_owner = not encased or (
-        spec.concrete_model == "lumped" and nx == 1 and ny == 1
-    )
-    if angle_deg == 0.0 and single_owner:
-        create_electrode(
+    braced = nx > 1 or ny > 1
+    if not braced and spec.concrete_model == "lumped":
+        _materialise_closed_perimeter(
             world,
-            "grid_mesh",
+            centre_xy=centre_xy,
+            depth=depth,
+            dx=dx,
+            dy=dy,
+            angle_deg=angle_deg,
             name=name,
-            corner=(centre_xy[0] - dx / 2.0, centre_xy[1] - dy / 2.0, depth),
-            size=(dx, dy),
-            n_x=nx,
-            n_y=ny,
             wire_radius=effective_radius,
-            concrete_shell_coefficient_ohm_m=shell_coefficient,
+            concrete_shell_coefficient=shell_coefficient,
         )
         return
-    _materialise_rotated_foundation(
+    _materialise_foundation_wires(
         world,
         centre_xy=centre_xy,
         depth=depth,
@@ -345,6 +368,58 @@ def _materialise_foundation(
         brace_wire_radius=float(spec.wire_radius_m),
         concrete_shell_coefficient=shell_coefficient,
         bond_conductor_type=bond_conductor_type,
+    )
+
+
+def _materialise_closed_perimeter(
+    world: World,
+    *,
+    centre_xy: tuple[float, float],
+    depth: float,
+    dx: float,
+    dy: float,
+    angle_deg: float,
+    name: str,
+    wire_radius: float,
+    concrete_shell_coefficient: float,
+) -> None:
+    """Perimeter of a rectangle as one owner.
+
+    Axis-aligned: one :class:`~groundfield.geometry.electrodes.GridMeshElectrode`
+    with ``n_x = n_y = 1`` (the historic realisation). Rotated: one
+    closed :class:`~groundfield.geometry.electrodes.PolylineElectrode`
+    through the corners, starting at the local :math:`(-d_x/2, -d_y/2)`
+    corner; its edges are discretised exactly like the grid mesh's
+    perimeter wires.
+    """
+    cx, cy = centre_xy
+    if angle_deg == 0.0:
+        create_electrode(
+            world,
+            "grid_mesh",
+            name=name,
+            corner=(cx - dx / 2.0, cy - dy / 2.0, depth),
+            size=(dx, dy),
+            n_x=1,
+            n_y=1,
+            wire_radius=wire_radius,
+            concrete_shell_coefficient_ohm_m=concrete_shell_coefficient,
+        )
+        return
+    cos_a = math.cos(math.radians(angle_deg))
+    sin_a = math.sin(math.radians(angle_deg))
+    local = [(-dx / 2, -dy / 2), (dx / 2, -dy / 2), (dx / 2, dy / 2), (-dx / 2, dy / 2)]
+    create_electrode(
+        world,
+        "polyline",
+        name=name,
+        vertices=[
+            (cos_a * lx - sin_a * ly + cx, sin_a * lx + cos_a * ly + cy, depth)
+            for lx, ly in local
+        ],
+        closed=True,
+        wire_radius=wire_radius,
+        concrete_shell_coefficient_ohm_m=concrete_shell_coefficient,
     )
 
 
@@ -390,8 +465,14 @@ def _materialise_polygon_foundation(
     centre_xy: tuple[float, float],
     depth: float,
     name: str,
+    bond_conductor_type: str,
 ) -> None:
-    """Foundation along the building outline (one closed polyline)."""
+    """Foundation along the building outline.
+
+    ``"lumped"``: one closed polyline (one owner). ``"distributed"``: one
+    straight wire per edge, bonded to the first (one owner per edge, as
+    the sides of a rectangle).
+    """
     cx, cy = centre_xy
     verts = clean_polygon(spec.polygon_xy_m, min_edge_m=MIN_POLYGON_EDGE_M)
     if len(verts) < 3:
@@ -406,18 +487,50 @@ def _materialise_polygon_foundation(
         x1, y1 = verts[(k + 1) % len(verts)]
         perimeter += math.hypot(x1 - x0, y1 - y0)
     effective_radius, _, shell_coefficient = concrete_shell(spec, perimeter_m=perimeter)
-    create_electrode(
-        world,
-        "polyline",
-        name=name,
-        vertices=[(cx + vx, cy + vy, depth) for vx, vy in verts],
-        closed=True,
-        wire_radius=effective_radius,
-        concrete_shell_coefficient_ohm_m=shell_coefficient,
-    )
+    points = [(cx + vx, cy + vy, depth) for vx, vy in verts]
+    if spec.concrete_model != "distributed":
+        create_electrode(
+            world,
+            "polyline",
+            name=name,
+            vertices=points,
+            closed=True,
+            wire_radius=effective_radius,
+            concrete_shell_coefficient_ohm_m=shell_coefficient,
+        )
+        return
+    sub_names: list[str] = []
+    for k, start in enumerate(points):
+        sub_name = name if k == 0 else f"{name}_w{k}"
+        create_electrode(
+            world,
+            "strip",
+            name=sub_name,
+            start=start,
+            end=points[(k + 1) % len(points)],
+            wire_radius=effective_radius,
+            concrete_shell_coefficient_ohm_m=shell_coefficient,
+        )
+        sub_names.append(sub_name)
+    _bond_to_anchor(world, name, sub_names, bond_conductor_type)
 
 
-def _materialise_rotated_foundation(
+def _bond_to_anchor(
+    world: World, name: str, sub_names: list[str], bond_conductor_type: str
+) -> None:
+    """Bond every wire of a foundation to its first wire (ideal shorts)."""
+    anchor = sub_names[0]
+    for j, sn in enumerate(sub_names[1:], start=1):
+        create_conductor(
+            world,
+            name=f"{name}_bond_{j}",
+            start=anchor,
+            end=sn,
+            conductor_type=bond_conductor_type,
+        )
+
+
+def _materialise_foundation_wires(
     world: World,
     *,
     centre_xy: tuple[float, float],
@@ -433,7 +546,7 @@ def _materialise_rotated_foundation(
     concrete_shell_coefficient: float,
     bond_conductor_type: str,
 ) -> None:
-    r"""Rotated (or per-wire) rectangular foundation as bonded straight wires.
+    r"""Rectangular foundation as one owner per wire line, bonded.
 
     ``n_y + 1`` longitudinal wires (along the local :math:`+x` axis,
     rotated by ``angle_deg``) and ``n_x + 1`` transverse wires; with
@@ -456,7 +569,8 @@ def _materialise_rotated_foundation(
     polyline edge (one mesh span) is discretised on its own, so crossings
     fall on segment ends — the rule of the axis-aligned
     ``GridMeshElectrode`` — and segment midpoints of crossing wires never
-    coincide (10.39). Each wire is one uniform-current owner, as before.
+    coincide (10.39). Each wire is one uniform-current owner, at every
+    orientation (audit A2G-04).
     """
     cos_a = math.cos(math.radians(angle_deg))
     sin_a = math.sin(math.radians(angle_deg))
@@ -502,15 +616,7 @@ def _materialise_rotated_foundation(
                 concrete_shell_coefficient_ohm_m=coefficient,
             )
         sub_names.append(sub_name)
-    anchor = sub_names[0]
-    for j, sn in enumerate(sub_names[1:], start=1):
-        create_conductor(
-            world,
-            name=f"{name}_bond_{j}",
-            start=anchor,
-            end=sn,
-            conductor_type=bond_conductor_type,
-        )
+    _bond_to_anchor(world, name, sub_names, bond_conductor_type)
 
 
 def materialise_site(world: World, site: PlannedSite) -> Optional[str]:

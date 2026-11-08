@@ -223,9 +223,12 @@ def test_foundation_mesh_style_honours_n_x_n_y() -> None:
     grounding.build_at(
         world, site_xy=(0.0, 0.0), name_prefix="house_0", rng=np.random.default_rng(0)
     )
-    e = world.electrodes[0]
-    assert e.n_x == 3
-    assert e.n_y == 4
+    # One wire per mesh line (audit A2G-04): n_y + 1 = 5 along x and
+    # n_x + 1 = 4 along y.
+    wires = [e.vertices for e in world.electrodes]
+    along_x = [v for v in wires if v[0][1] == v[-1][1]]
+    along_y = [v for v in wires if v[0][0] == v[-1][0]]
+    assert (len(along_x), len(along_y)) == (5, 4)
 
 
 def test_foundation_default_style_is_mesh() -> None:

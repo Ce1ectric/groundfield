@@ -113,12 +113,19 @@ def test_rotated_mesh_matches_grid_mesh_segment_counts() -> None:
         assert counts[0] == counts[1], (ds, counts)
 
 
-def test_ring_style_rotated_foundation_keeps_its_four_strips() -> None:
+@pytest.mark.parametrize(
+    ("model", "kinds"), [("lumped", ["polyline"]), ("distributed", ["strip"] * 4)]
+)
+def test_ring_style_rotated_foundation_keeps_its_owners(
+    model: str, kinds: list
+) -> None:
+    """A rotated ring is one closed wire (``"lumped"``, as at 0 deg) or its
+    four sides (``"distributed"``); up to 2026.11 always four strips."""
     spec = FoundationElectrodeSpec(
-        size_xy_m=(12.0, 9.0), orientation_deg=30.0, style="ring"
+        size_xy_m=(12.0, 9.0), orientation_deg=30.0, style="ring", concrete_model=model
     )
     _, _, world = _solve(spec, 1.0)
-    assert [e.kind for e in world.electrodes] == ["strip"] * 4
+    assert [e.kind for e in world.electrodes] == kinds
 
 
 # ---------------------------------------------------------------------
@@ -173,7 +180,7 @@ def test_foundation_at_right_angles_uses_the_grid_mesh_path(angle: float) -> Non
     assert _world_electrodes(turned) == _world_electrodes(straight)
 
 
-def test_axis_aligned_footprint_square_gives_a_grid_mesh_foundation() -> None:
+def test_axis_aligned_footprint_square_gives_an_axis_aligned_foundation() -> None:
     from groundfield.generators.tn_network import _override_foundation_from_footprint
 
     fp = gf.BuildingFootprint(polygon_xy_m=[(0, 0), (10, 0), (10, 10), (0, 10)])
@@ -183,4 +190,8 @@ def test_axis_aligned_footprint_square_gives_a_grid_mesh_foundation() -> None:
     shaped.build_at(
         world, site_xy=(5.0, 5.0), name_prefix="h", rng=np.random.default_rng(0)
     )
-    assert [e.kind for e in world.electrodes] == ["grid_mesh"]
+    # One owner per wire (audit A2G-04), every wire along x or y.
+    assert [e.kind for e in world.electrodes] == ["polyline"] * 6
+    for e in world.electrodes:
+        (x0, y0, _), (x1, y1, _) = e.vertices[0], e.vertices[-1]
+        assert x0 == x1 or y0 == y1

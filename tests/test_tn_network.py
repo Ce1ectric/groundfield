@@ -53,6 +53,28 @@ from groundfield.generators import (
 # ---------------------------------------------------------------------
 
 
+def _foundation_centres(world, prefix: str) -> dict[str, tuple[float, float]]:
+    """Bounding-box centre of every foundation whose name starts with
+    ``prefix``; a foundation built from wires (``<name>``, ``<name>_w<j>``)
+    counts once."""
+    import re
+
+    points: dict[str, list] = {}
+    for e in world.electrodes:
+        if e.name.startswith(prefix) and "_foundation_" in e.name:
+            base = re.sub(r"_w[0-9]+$", "", e.name)
+            points.setdefault(base, []).extend(
+                v for line in e.wire_polylines() for v in line
+            )
+    return {
+        base: (
+            0.5 * (min(p[0] for p in pts) + max(p[0] for p in pts)),
+            0.5 * (min(p[1] for p in pts) + max(p[1] for p in pts)),
+        )
+        for base, pts in points.items()
+    }
+
+
 def test_default_config_builds_and_solves_minimal() -> None:
     """Smallest sensible run: 5 residential houses, default everything else."""
     cfg = TnNetworkConfig(building_counts={"residential": 5})
@@ -93,9 +115,11 @@ def test_substation_with_ring_rods_strip_foundation() -> None:
         building_counts={"residential": 5},
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    # 1 ring + 4 rods + 1 strip + 1 foundation = 7 trafo electrodes
+    # 1 ring + 4 rods + 1 strip + 1 foundation = 7 trafo electrodes; the
+    # 2 x 2 mesh foundation is one electrode per wire (6, audit A2G-04).
     n_trafo = sum(1 for e in world.electrodes if e.name.startswith("trafo_"))
-    assert n_trafo == 7
+    assert n_trafo == 6 + 6
+    assert len(_foundation_centres(world, "trafo_")) == 1
 
 
 def test_substation_presence_prob_can_drop_electrodes() -> None:
@@ -159,11 +183,7 @@ def test_multiple_building_types_each_get_configured_grounding() -> None:
     )
     assert n_res == 5
     # 2 industry buildings × (1 foundation + 4 rods) = 10 industry electrodes
-    n_ind_foundation = sum(
-        1
-        for e in world.electrodes
-        if e.name.startswith("industry_") and "foundation_" in e.name
-    )
+    n_ind_foundation = len(_foundation_centres(world, "industry_"))
     n_ind_rod = sum(
         1
         for e in world.electrodes
@@ -194,19 +214,9 @@ def test_explicit_placement_honoured() -> None:
         building_counts={"residential": 3},
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    foundations = [
-        e
-        for e in world.electrodes
-        if "_foundation_" in e.name and e.name.startswith("residential_")
-    ]
-    assert len(foundations) == 3
-    centres = sorted(
-        (
-            (e.corner[0] + e.size[0] / 2.0, e.corner[1] + e.size[1] / 2.0)
-            for e in foundations
-        )
-    )
-    assert centres == sorted(positions)
+    centres = _foundation_centres(world, "residential_")
+    assert len(centres) == 3
+    assert sorted(centres.values()) == sorted(positions)
 
 
 def test_manhattan_grid_default_centred_at_origin() -> None:
@@ -217,13 +227,9 @@ def test_manhattan_grid_default_centred_at_origin() -> None:
         ),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    foundations = [
-        e
-        for e in world.electrodes
-        if "_foundation_" in e.name and e.name.startswith("residential_")
-    ]
-    cx = sum(e.corner[0] + e.size[0] / 2.0 for e in foundations) / len(foundations)
-    cy = sum(e.corner[1] + e.size[1] / 2.0 for e in foundations) / len(foundations)
+    centres = list(_foundation_centres(world, "residential_").values())
+    cx = sum(c[0] for c in centres) / len(centres)
+    cy = sum(c[1] for c in centres) / len(centres)
     assert math.isclose(cx, 0.0, abs_tol=1e-9)
     assert math.isclose(cy, 0.0, abs_tol=1e-9)
 
