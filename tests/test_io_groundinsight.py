@@ -1090,6 +1090,43 @@ _CRAFTED_DOCUMENTS = {
         "voltage_level": 0.4,
         "samples": {"frequency_Hz": [[1.0]]},
     },
+    # audit A3SG-04: the JSON decoder reads these; to_dict / json.dumps of
+    # the loaded spec raised RecursionError or wrote NaN.
+    "metadata-nested-3000-levels": (
+        '{"schema": "groundfield.bustype", "schema_version": 1, "name": "x", '
+        '"impedance_formula": "rho", "system_type": "TN", "voltage_level": 0.4, '
+        '"metadata": {"deep": ' + '{"a": ' * 3000 + "1" + "}" * 3000 + "}}"
+    ),
+    "description-nan": (
+        '{"schema": "groundfield.bustype", "schema_version": 1, "name": "x", '
+        '"description": NaN, "impedance_formula": "rho", "system_type": "TN", '
+        '"voltage_level": 0.4}'
+    ),
+    "description-object": {
+        "name": "x",
+        "description": {"text": "x"},
+        "impedance_formula": "rho",
+        "system_type": "TN",
+        "voltage_level": 0.4,
+    },
+    "name-object": {
+        "name": {"a": {"b": 1}},
+        "impedance_formula": "rho",
+        "system_type": "TN",
+        "voltage_level": 0.4,
+    },
+    "system-type-list": {
+        "name": "x",
+        "impedance_formula": "rho",
+        "system_type": ["TN"],
+        "voltage_level": 0.4,
+    },
+    "formula-object": {
+        "name": "x",
+        "impedance_formula": {"a": "rho"},
+        "system_type": "TN",
+        "voltage_level": 0.4,
+    },
 }
 
 
@@ -1109,6 +1146,103 @@ def test_crafted_bustype_documents_raise_value_error(key: str, tmp_path) -> None
     path.write_text(document, encoding="utf-8")
     with pytest.raises(ValueError):
         load_bustype_json(path)
+
+
+_ODD_METADATA = {
+    "fit_quality-null": {"fit_quality": None},
+    "fit_quality-list": {"fit_quality": [0.1]},
+    "rms-object": {"fit_quality": {"rms_error_Ohm": {"v": 1}}},
+    "rms-string": {"fit_quality": {"rms_error_Ohm": "abc"}},
+    "rms-bool": {"fit_quality": {"rms_error_Ohm": True}},
+    "rms_relative-huge-integer": {"fit_quality": {"rms_relative": 10**400}},
+    "rms_relative-string": {"fit_quality": {"rms_relative": "x"}},
+    "max_relative-list": {"fit_quality": {"max_relative": [0.1]}},
+    "fit_method-object": {"fit_method": {"a": [1, 2]}},
+    "quantity-list": {"quantity": ["input"]},
+    "nested-32-levels": {"deep": json.loads('{"a": ' * 31 + "1" + "}" * 31)},
+}
+
+
+@pytest.mark.finding("10.01")
+@pytest.mark.parametrize("key", sorted(_ODD_METADATA))
+def test_a_loaded_document_never_crashes_the_other_entry_points(
+    key: str, tmp_path
+) -> None:
+    """Free-form metadata of a document ``load_bustype_json`` accepts. Base:
+    ``fit_quality_summary`` raised AttributeError (``fit_quality`` null or a
+    list), TypeError (an object or a list as a figure), ValueError (a string)
+    or OverflowError (a 400-digit integer)."""
+    # audit A3SG-04
+    document = {
+        "schema": SCHEMA_NAME,
+        "schema_version": SCHEMA_VERSION,
+        "name": "crafted",
+        "description": None,
+        "system_type": "TN",
+        "voltage_level": 0.4,
+        "impedance_formula": "0.5 + f*1e-3*j",
+        "samples": {},
+        "metadata": _ODD_METADATA[key],
+    }
+    path = tmp_path / "doc.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    spec = load_bustype_json(path)
+    summary = fit_quality_summary(spec)
+    assert summary.startswith("BusTypeSpec(name='crafted'")
+    json.dumps(spec.to_dict(), allow_nan=False)
+    assert evaluate_spec(spec, [50.0], 100.0)[0] == pytest.approx(0.5 + 0.05j)
+
+
+@pytest.mark.finding("10.01")
+def test_fit_quality_summary_reads_the_figures_it_can() -> None:
+    # audit A3SG-04
+    spec = BusTypeSpec(
+        name="h",
+        description=None,
+        system_type="TN",
+        voltage_level=0.4,
+        impedance_formula="rho",
+        samples={},
+        metadata={
+            "fit_method": "rho_f_standard",
+            "fit_quality": {
+                "rms_error_Ohm": 0.01,
+                "rms_relative": [1],
+                "max_relative": 0.05,
+            },
+            "quantity": "input",
+        },
+    )
+    assert fit_quality_summary(spec) == (
+        "BusTypeSpec(name='h', method=rho_f_standard, rms=1.000e-02 Ω, "
+        "max_rel=5.00%, quantity=input)"
+    )
+
+
+@pytest.mark.finding("10.01")
+def test_to_dict_of_a_spec_built_in_memory_is_strict_json_or_refused() -> None:
+    """``to_dict`` promises strict JSON: a NaN description is written as
+    null; metadata nested deeper than MAX_METADATA_DEPTH raise ValueError
+    (base: RecursionError from 1 000 levels on, NaN written as is)."""
+    # audit A3SG-04
+    from groundfield.io.groundinsight import MAX_METADATA_DEPTH
+
+    deep: object = 1.0
+    for _ in range(3000):
+        deep = {"a": deep}
+    kwargs = dict(
+        name="h",
+        system_type="TN",
+        voltage_level=0.4,
+        impedance_formula="rho",
+        samples={},
+    )
+    spec = BusTypeSpec(description=float("nan"), metadata={"x": [math.inf]}, **kwargs)
+    payload = spec.to_dict()
+    assert payload["description"] is None and payload["metadata"] == {"x": [None]}
+    json.dumps(payload, allow_nan=False)
+    with pytest.raises(ValueError, match=f"deeper than {MAX_METADATA_DEPTH}"):
+        BusTypeSpec(description=None, metadata={"deep": deep}, **kwargs).to_dict()
 
 
 @pytest.mark.finding("10.19")
