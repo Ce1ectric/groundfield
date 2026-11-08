@@ -344,9 +344,11 @@ class _BranchCorrection:
 #: Pseudo-node names of a conductor chain
 #: (:func:`groundfield.solver._discretize._conductor_node_name`, the interior
 #: nodes of an isolated chain and the floating end points); the conductor
-#: name sits between the reserved prefix and suffix.
+#: name sits between the reserved prefix and suffix. ``re.DOTALL`` and
+#: ``fullmatch``: a name may contain line breaks (audit D2A-07).
 _CHAIN_NODE = re.compile(
-    r"^__cond_(?P<name>.+)__(?:seg_\d+|node_\d+|endpoint_start|endpoint_end)$"
+    r"__cond_(?P<name>.+)__(?:seg_\d+|node_\d+|endpoint_start|endpoint_end)",
+    re.DOTALL,
 )
 
 #: Conductor names listed per side in the message of :func:`_warn_surface_pairs`.
@@ -364,7 +366,7 @@ def _branch_conductor(branch: object) -> str | None:
     if name is not None:
         return str(name)
     for node in (getattr(branch, "node_a", None), getattr(branch, "node_b", None)):
-        match = _CHAIN_NODE.match(node) if isinstance(node, str) else None
+        match = _CHAIN_NODE.fullmatch(node) if isinstance(node, str) else None
         if match is not None:
             return match.group("name")
     return None

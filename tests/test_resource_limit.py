@@ -15,8 +15,8 @@ and honoured by :func:`~groundfield.diagnostics.diagnose`,
 Every test here fails on the base (``1e587cc``) because the field does
 not exist (``extra="forbid"``).
 
-The soft notice (a ``UserWarning`` of every solve and an *info* finding of
-``diagnose`` that the solve may take minutes) stayed at the module constant
+The soft notice (a ``UserWarning`` of every ``Engine.solve`` and an *info*
+finding of ``diagnose`` that the solve may take minutes) stayed at the module constant
 :data:`groundfield.diagnostics.SOFT_LIMIT` (5 000). User decision Q31
 (2026-11-08): ``Engine(warn_segments=...)`` sets it per engine, ``None``
 reads the constant at call time, no cross-check against ``max_segments``.
@@ -371,3 +371,59 @@ def test_warn_segments_is_not_checked_against_max_segments() -> None:
     assert [
         d.severity for d in diagnostics.diagnose(world, both).by_category("budget")
     ] == ["info"]
+
+
+@pytest.mark.finding("10.06")
+def test_the_size_notice_is_documented_for_the_entry_points_that_emit_it() -> None:
+    """``Engine.solve`` emits the notice (fem included); ``solve_mutual_*`` not.
+
+    The docs said "every solve" emits the notice, but ``solve_mutual_matrix``
+    and ``solve_mutual_field`` never do (they check the hard limit only), and
+    ``fem`` emits it from a segment count it does not use (audit D2A-09).
+    Decision of this fix: keep the behaviour, document it.
+    """
+    # audit D2A-09
+    from pathlib import Path
+
+    from groundfield.solver.mutual import solve_mutual_matrix
+
+    def world() -> gf.World:
+        w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+        gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        return w
+
+    def notices(fn) -> int:
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            fn()
+        return sum("seconds to minutes" in str(r.message) for r in rec)
+
+    engine = gf.Engine(segment_length=0.5, warn_segments=10)
+    for backend in ("image", "fem"):
+        assert (
+            notices(
+                lambda b=backend: engine.model_copy(update={"backend": b}).solve(
+                    world()
+                )
+            )
+            == 1
+        )
+    assert notices(lambda: solve_mutual_matrix(world(), engine, ["g1"])) == 0
+
+    docs = Path(__file__).resolve().parents[1] / "docs"
+    for page in (
+        docs / "reference/api/diagnostics.md",
+        docs / "explanation/performance.md",
+        docs / "how-to/speed-up-large-studies.md",
+    ):
+        text = " ".join(page.read_text(encoding="utf-8").split())
+        assert "every solve emits" not in text and "every solve at or above" not in text
+        assert "Engine.solve" in text and "solve_mutual" in text, page
+        assert "fem" in text, page
+    module = " ".join(diagnostics.__doc__.split())
+    assert "every solve warns" not in module
+    assert (
+        "solve_mutual_matrix`` and ``solve_mutual_field`` check the hard limit but emit no notice"
+        in module
+    )

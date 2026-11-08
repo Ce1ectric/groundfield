@@ -7,39 +7,55 @@ cluster, not for the electrodes. In homogeneous soil that reproduces
 the Dwight resistance of a single electrode by construction (the
 hemisphere radius is chosen from it), so the backend then checks the
 :mod:`groundfield.references.dwight1936` formulas, not the integral
-engines. When an electrode reaches below a layer interface that its
-hemisphere does not reach — a rod through or below the top layer — the
-reduction injects the current into the wrong layer (+1092 % for a 3 m
-rod through $h_1$ = 2 m; −85 % … +3138 % over the measured contrasts)
-and the backend raises
+engines. When an electrode reaches a layer that its hemisphere does not
+reach — a rod through or below the top layer, a wire on (or within its
+radius above) an interface below the hemisphere — the reduction injects
+the current into the wrong layer (+1092 % for a 3 m rod through
+$h_1$ = 2 m; −85 % … +3138 % over the measured contrasts; −18 % …
++1008 % for a 2 m ring on $h_1$ = 2 m) and the backend raises
 :class:`~groundfield.solver.registry.BackendCapabilityError` instead of
 returning a number. The same holds for a cluster that lies wholly below
 a top layer holding more than half of its hemisphere
 ($a_\\text{eq}/2 < h_1 \\le a_\\text{eq}$; +51 % … +130 % and
 −81 % … −98 % for a 3 m rod, audit round 2), and — user decision Q23
-of 2026-11-08 — for a hemisphere that spans a layer which no electrode
-of the cluster touches and which conducts better than every layer the
-electrodes touch: the hemisphere injects the current straight into it,
-and the result is too low, not conservative (−97 % … +5 % against
-``image_2layer`` and ``mom`` for rods, strips and rings below a more
-conductive top layer or above a more conductive lower layer; −92 % for
-a 10 m ring at 0.8 m over $h_1$ = 2 m in 1000/30 Ω·m, −71 % for a 10 m
-strip at 0.8 m below $h_1$ = 0.5 m in 30/1000 Ω·m). The rule is
-structural: near-equal layers (100/120 and 120/100 Ω·m, −7 % … +5 %)
-raise as well.
+of 2026-11-08 — for a layer that no electrode of the cluster touches,
+that conducts better than every layer the electrodes touch and whose top
+lies above the larger of the hemisphere radius and the electrodes'
+horizontal half-extent: the hemisphere injects the current straight
+into a layer it spans and reaches one below it much less than the
+electrodes do, and the result is too low, not conservative (−97 % …
++5 % against ``image_2layer`` and ``mom`` for a spanned layer, −78 % …
++1 % for a layer below the hemisphere within the half-extent; −92 % for
+a 10 m ring at 0.8 m over $h_1$ = 2 m in 1000/30 Ω·m, −47 % over
+$h_1$ = 5 m). The rules are structural: near-equal layers
+(100/120 and 120/100 Ω·m, −7 % … +5 %) raise as well. All of them ask
+which layers the electrodes touch with one predicate, the contact of the
+thin-wire model the integral engines solve: a horizontal wire touches
+every layer within its wire radius of its axis, a rod the layers its
+axis passes through (an end on an interface does not count; audit
+D2A-01, D2A-02). The closed forms of the hemisphere are refused outside
+their range as well: a strip deeper than half its length (+0.2 % …
++474 %), a ring deeper than its radius (+0.4 % … −28 %) and any
+``MeshElectrode`` (+118 % … +193 %), audit D2A, O-1; electrodes at or
+above the soil surface are refused like in every backend.
 It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
-three 4 m rods in homogeneous soil), when the world has several
-clusters (each solved alone, transfer impedances 0) or when a layer
-interface lies above the deepest of the electrode's lowest point, the
-hemisphere radius and the electrode's horizontal half-extent without
-falling under the rules above (+23 % for a 10 m ring over a more
-resistive layer at $h_1$ = 2 m, +22 % for a 10 m strip at 0.8 m below a
-more resistive top layer of 0.5 m, −47 % for a 10 m ring at 0.8 m over
-a more conductive layer at $h_1$ = 5 m, below its hemisphere); a
-:class:`FemReductionWarning` names every such reason. Conforming
-axisymmetric rod and ring models without the reduction are the planned
-replacement.
+three 4 m rods in homogeneous soil; −55 % … −75 % for two bonded rods of
+which one reaches into a conductive top layer), when the world has
+several clusters (each solved alone, transfer impedances 0) or when a
+layer interface lies above the deepest of the electrode's lowest point,
+the hemisphere radius and the electrode's horizontal half-extent without
+falling under the rules above (−1 % … +48 % where the spanned layer
+conducts no better than the electrodes', −44 % … −78 % for a rod that
+reaches into a conductive top layer by 1 µm … 8 cm, −16 % … +16 % for a
+more resistive layer below a 10 m ring within its radius); a
+:class:`FemReductionWarning` names every such reason. An interface just
+below a horizontal electrode buried almost as deep as its half-extent,
+deeper than the hemisphere radius and the half-extent, is not covered by
+any rule (+34 % for a 2 m ring at 1.9 m over $h_1$ = 2 m in 1000/30 Ω·m;
+see the fem engine page).
+Conforming axisymmetric rod and ring models without the reduction are
+the planned replacement.
 
 Mathematical / physical model
 -----------------------------
@@ -203,7 +219,11 @@ Scope
   therefore reproduces the Dwight value; in layered soil the hemisphere
   extends to the depth $a_{\\text{eq}}$, not to the electrode's depth,
   and the result describes a different geometry. Star and polyline
-  electrodes are not reducible and raise.
+  electrodes are not reducible and raise; a driven ``MeshElectrode``
+  raises as well (its formula, one strip along the diagonal, reads
+  +118 % … +193 %; audit D2A, O-1), and so do a strip deeper than half
+  its length and a ring deeper than its radius (see
+  :func:`equivalent_hemisphere_radius`).
 - **Multi-electrode.** The hemisphere radii of a cluster's electrodes
   are summed, i.e. the electrodes are put in parallel without their
   mutual resistance; the result is a lower bound of the cluster
@@ -239,6 +259,7 @@ References
 from __future__ import annotations
 
 import math
+import re
 import warnings
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -291,7 +312,9 @@ class FemReductionWarning(UserWarning):
     * a cluster with several electrodes (the hemisphere radii are summed,
       i.e. the electrodes' mutual resistance is neglected and the
       resistance is biased low — −35 % for a 2 m ring with three 4 m
-      rods in homogeneous soil);
+      rods in homogeneous soil; −55 % … −75 % for two bonded 3 m rods of
+      which one reaches 10 cm … 1 mm into a conductive 30/1000 Ω·m top
+      layer, where the cluster touches that layer and Q23 does not apply);
     * several clusters (each is solved alone: no mutual resistance
       between them, transfer impedances are exactly 0, passive clusters
       report 0 V);
@@ -299,12 +322,13 @@ class FemReductionWarning(UserWarning):
       hemisphere radius, with the hemisphere reaching below it into a
       layer the electrode does not touch and that conducts no better than
       the electrode's layer (+23 % for a 10 m ring at 0.8 m over a more
-      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m, against
-      ``image_2layer``). Over a more conductive layer it raises (user
-      decision Q23: −92 % in 1000/30 Ω·m); the opposite case — the
-      electrode reaches below an interface its hemisphere does not
-      (+1092 % for a 3 m rod through ``h_1`` = 2 m) — raises as well
-      (review pass 10, 10.23), both with
+      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m; −1 % … +48 % over
+      the measured cases of such a spanned layer, against
+      ``image_2layer`` and ``mom``). Over a more conductive layer it
+      raises (user decision Q23: −92 % in 1000/30 Ω·m); the opposite case
+      — the electrode reaches a layer its hemisphere does not (+1092 % for
+      a 3 m rod through ``h_1`` = 2 m, +1008 % for a 2 m ring on
+      ``h_1`` = 2 m) — raises as well (review pass 10, 10.23), both with
       :class:`~groundfield.solver.registry.BackendCapabilityError`;
     * a layer interface above the electrode's deepest point that the
       hemisphere, which spans the soil from the surface, crosses as well
@@ -316,16 +340,24 @@ class FemReductionWarning(UserWarning):
       electrodes do not touch (audit round 2, A2E-2) — and when the top
       layer the electrodes do not touch conducts better than theirs (user
       decision Q23: −71 % and −48 % for the same strip and ring under
-      30/1000 Ω·m);
+      30/1000 Ω·m). It only warns where an electrode touches the
+      conductive layer partly: a rod reaching 1 µm … 8 cm into a
+      conductive top layer of 0.2 ``a_eq`` (−44 % … −78 %; whether a
+      share-based contact rule should raise is open, audit D2A-01) or a
+      wire within its radius of the interface (−22 % … +23 %);
     * a layer interface below the electrode and its hemisphere but
       within the electrode's horizontal half-extent (ring radius, half
-      the strip length or grid diagonal): the electrode's current
-      reaches it, the compact hemisphere's much less (−47 %, −20 % and
-      −11 % for a ring r = 10 m at 0.8 m over ``h_1`` = 5, 7 and 9 m in
-      1000/30 Ω·m, +9 % over a more resistive layer at 5 m in
-      30/1000 Ω·m; −0.3 % over ``h_1`` = 20 m, where the rule is
-      silent). This rule is not part of decision Q23 and stays a
-      warning for either contrast.
+      the strip length or grid diagonal) that separates a layer
+      conducting no better than the electrodes': the electrode's current
+      reaches it, the compact hemisphere's much less (+9 % for a ring
+      r = 10 m at 0.8 m over a more resistive layer at ``h_1`` = 5 m in
+      30/1000 Ω·m; −16 % … +16 % over 30/1000, 100/1000 and 30/10000 Ω·m
+      at ``h_1`` = ``a_eq`` … 10 m). Over a more conductive layer it
+      raises since audit D2A-03 (−47 %, −20 % and −11 % at ``h_1`` = 5,
+      7 and 9 m in 1000/30 Ω·m: Q23 extended to the half-extent, a
+      coordinator decision flagged for the author's review); beyond the
+      half-extent the rule is silent (−8.4 % at ``h_1`` = 10 m, −1.3 % at
+      20 m against ``image_2layer``).
 
     The layer rules are structural, not error estimates: a vanishing,
     more resistive top layer (``h_1`` = 4 mm, +1.6 %) is reported as well.
@@ -337,6 +369,54 @@ class FemReductionWarning(UserWarning):
     Escalate with ``warnings.simplefilter("error", FemReductionWarning)``
     when ``fem`` serves as a cross-check.
     """
+
+
+def _reject_electrodes_out_of_the_soil(world: "World") -> None:
+    """Refuse electrodes at or above the soil surface, like every backend.
+
+    The integral backends refuse a leakage segment whose mid-point lies at
+    or above the surface, in the surface plane (``2 z <= wire_radius``: the
+    mirror image lies inside the wire) or with a part in the air
+    (:func:`groundfield.solver._guards._check_segment_depths`). ``fem``
+    solved such worlds: its hemisphere formulas clamp the depth at 1 mm,
+    so a ring 0.5 m in the air read like a ring 1 mm deep (audit D2A-06).
+    The same three conditions, on the electrodes (every one, driven or
+    passive, as the integral backends discretise every one): a rod whose
+    head lies above the surface (to round-off — a head at ``z = 0`` is the
+    ordinary driven rod), a horizontal electrode at ``z <= 0`` or with
+    ``2 z <= wire_radius``.
+
+    Raises
+    ------
+    ValueError
+        For the first such electrode (no other backend solves the world
+        either, so not a :class:`BackendCapabilityError`).
+    """
+    from groundfield.solver._guards import _SURFACE_TOL
+
+    for e in world.electrodes:
+        lower, upper = e.bounds()
+        z_top, z_bottom = float(lower[2]), float(upper[2])
+        a = float(e.wire_radius)
+        if z_bottom > z_top:  # a rod: its head is its shallowest point
+            if z_top >= -_SURFACE_TOL:
+                continue
+            what = f"reaches above the soil surface (its head is at z = {z_top:.4g} m)"
+        elif z_top <= 0.0:
+            what = f"lies at or above the soil surface (z = {z_top:.4g} m)"
+        elif 2.0 * z_top <= a:
+            what = (
+                f"lies in the soil-surface plane (z = {z_top:.4g} m <= "
+                f"wire_radius/2 = {0.5 * a:.4g} m), partly in the air"
+            )
+        else:
+            continue
+        raise ValueError(
+            f"Backend 'fem': electrode '{e.name}' {what}. Every backend refuses "
+            "an electrode out of the soil: z is a depth, positive downwards. "
+            "Bury it (e.g. at z = 0.5 ... 0.8 m), or start a rod at the "
+            "surface (z = 0), which is the ordinary driven rod."
+        )
 
 
 def _depth_range(electrode: "_ElectrodeBase") -> tuple[float, float]:
@@ -391,7 +471,9 @@ def _reduction_issues(
     equal resistivity is no reason. Worlds that reach this check passed
     :func:`_unreachable_layers`: a layer reported here is one the
     electrodes touch or one that conducts no better than the layers they
-    touch (user decision Q23).
+    touch (user decision Q23); within the horizontal half-extent (the
+    "wide" reason) that holds for every reported layer since audit
+    D2A-03, a more conductive one raises there as well.
     """
 
     def label(root: str) -> str:
@@ -488,25 +570,48 @@ def _layer_text(top: float, bottom: float, rho: float) -> str:
     return f"{span} (rho = {rho:g} Ohm m)"
 
 
-def _touched_layers(
-    world: "World", members: list[str], bounds: list[tuple[float, float]]
-) -> set[int]:
-    """Indices of the layers any electrode of ``members`` touches.
+#: Relative round-off allowance of the contact predicate, in units of the
+#: wire radius (as in :func:`groundfield.solver._guards._rod_ends_near_interfaces`).
+_CONTACT_ROUND_OFF = 1e-9
 
-    An electrode touches a layer when its depth range and the layer's
-    closed depth interval overlap; one lying exactly on an interface
-    touches both layers. A part above the soil surface (``z < 0``) counts
-    as lying at the surface, i.e. in the top layer.
+
+def _electrode_layers(
+    electrode: "_ElectrodeBase", bounds: list[tuple[float, float]]
+) -> set[int]:
+    """Indices of the layers ``electrode`` touches: the contact predicate.
+
+    The one predicate of every layer rule of the reduction (audit D2A-01,
+    D2A-02), the contact of the thin-wire model the integral engines solve:
+
+    * a **horizontal** electrode (constant depth $z$, wire radius $a$)
+      touches every layer that the band $[z - a, z + a]$ meets (closed): a
+      wire lying in or within one radius of an interface touches both
+      layers, and round-off of an interface depth (``0.1 + 0.2``) does
+      not decide;
+    * a **non-horizontal** electrode (a rod) touches the layers its axis
+      passes through, the open interval between its ends (to round-off):
+      the thin-wire model has no end face, so an end lying on an interface
+      does not touch the layer beyond it — a rod whose head lies on $h_1$,
+      or within one radius below it, does not touch the top layer.
+
+    Electrodes above the soil surface were refused before
+    (:func:`_reject_electrodes_out_of_the_soil`).
     """
-    touched: set[int] = set()
-    for name in members:
-        z_top, z_bottom = (max(z, 0.0) for z in _depth_range(world.get_electrode(name)))
-        touched.update(
+    z_top, z_bottom = _depth_range(electrode)
+    a = float(electrode.wire_radius)
+    if z_bottom > z_top:
+        eps = _CONTACT_ROUND_OFF * a
+        return {
             k
             for k, (top, bottom) in enumerate(bounds)
-            if z_top <= bottom and z_bottom >= top
-        )
-    return touched
+            if z_top < bottom - eps and z_bottom > top + eps
+        }
+    reach = a * (1.0 + _CONTACT_ROUND_OFF)
+    return {
+        k
+        for k, (top, bottom) in enumerate(bounds)
+        if z_top - reach <= bottom and z_top + reach >= top
+    }
 
 
 def _unreachable_layers(
@@ -520,14 +625,17 @@ def _unreachable_layers(
     The equivalent hemisphere injects the cluster current from the soil
     surface down to the radius ``a_eq``. Three configurations raise:
 
-    * an electrode reaches below a layer interface that lies above
-      ``a_eq`` — a rod through or below the top layer — and injects into
-      a layer the hemisphere never touches. Against ``mom``, rods through
-      or below a 1 … 2.5 m top layer are off by +633 % to +3138 % under a
+    * an electrode touches a layer whose top lies below ``a_eq`` — a rod
+      through or below the top layer, a wire on (or within its radius
+      above) an interface below the hemisphere — and injects into a layer
+      the hemisphere never touches. Against ``mom``, rods through or
+      below a 1 … 2.5 m top layer are off by +633 % to +3138 % under a
       conductive lower layer (1000/30 Ω·m) and by −10 % to −85 % over a
       resistive one (100/300, 100/1000 Ω·m); only near-equal layers stay
       within a few percent (100/120 Ω·m: −1.5 % to −4.1 %; review pass
-      10, 10.23);
+      10, 10.23). A 2 m ring on ``h_1`` = 2 m (``a_eq`` = 1.3 m) is
+      +1008 % (1000/30 Ω·m) and −18 % (30/1000 Ω·m) against
+      ``image_2layer`` (silent up to audit D2A-02);
     * every electrode of the cluster lies below an interface at depth
       ``h`` with ``a_eq/2 < h <= a_eq``: more than half of the hemisphere
       lies in a layer the electrodes do not touch (audit round 2, A2E-2).
@@ -536,21 +644,35 @@ def _unreachable_layers(
       ``image_2layer`` in 1000/30 and 10000/30 Ω·m, −81 % … −98 % in
       30/1000 and 30/10000 Ω·m. At ``h = a_eq`` the rule joins the first
       one;
-    * the hemisphere spans a layer (top above ``a_eq``) that no electrode
-      of the cluster touches and that conducts better than every layer
-      the electrodes touch (user decision Q23, 2026-11-08): the
-      hemisphere injects the current straight into it and the result is
-      too low, i.e. not conservative. Measured against ``image_2layer``
-      and ``mom`` for rods, strips and rings below a more conductive top
-      layer of any thickness (from 22 mm) and rings above a more
-      conductive lower layer: −97 % … +5 %, the lower the larger the
-      contrast and the share of the hemisphere in that layer
+    * a layer that no electrode of the cluster touches, that conducts
+      better than every layer the electrodes touch and whose top lies
+      above ``max(a_eq, r_ext)``, ``r_ext`` the largest horizontal
+      half-extent of the cluster's electrodes (user decision Q23,
+      2026-11-08; extended from ``a_eq`` to the half-extent by audit
+      D2A-03): the hemisphere injects the current straight into a layer
+      it spans and reaches one below it much less than the electrodes,
+      and the result is too low, i.e. not conservative. Measured against
+      ``image_2layer`` and ``mom`` for rods, strips and rings below a more
+      conductive top layer of any thickness (from 22 mm) and rings above
+      a more conductive lower layer: −97 % … +5 %, the lower the larger
+      the contrast and the share of the hemisphere in that layer
       (30/10000 Ω·m: −80 % … −97 %; 30/1000 Ω·m: −35 % … −80 %;
-      near-equal layers, 100/120 and 120/100 Ω·m: −7 % … +5 %). An
-      electrode lying exactly on the interface touches both layers. A
-      more *resistive* spanned layer keeps the
-      :class:`FemReductionWarning` (+3 % … +45 % measured).
+      near-equal layers, 100/120 and 120/100 Ω·m: −7 % … +5 %); for a
+      layer below the hemisphere within the half-extent −78 % … +1 %
+      (rings, strips), −60 % … +13 % (a 20 m grid, whose formula reads
+      +12 % high in homogeneous soil). The fem error is continuous across
+      ``a_eq`` (−67.9 % on both sides for a 10 m ring over 1000/30 Ω·m);
+      the rule stops at ``r_ext``, where it is −9.8 % … −0.8 % (rings),
+      −1.4 % (10 m strip) and +9.9 % (grid). A layer that conducts no
+      better keeps the :class:`FemReductionWarning` (−1 % … +48 % when
+      the hemisphere spans it, −16 % … +16 % below it within the
+      half-extent).
 
+    Which layers an electrode touches is one predicate for all three
+    rules, the contact of the thin-wire model of the integral engines
+    (:func:`_electrode_layers`; audit D2A-01, D2A-02): a horizontal wire
+    touches every layer within its wire radius of its axis, a rod the
+    layers its axis passes through, an end on an interface not counting.
     The checks are structural, independent of the size of the contrast.
     Layers are taken from the canonical layer stack (10.48), so a
     declared interface between equal resistivities is none. One reason is
@@ -562,29 +684,55 @@ def _unreachable_layers(
         One entry per offending cluster (empty if none).
     """
     stack = as_layer_stack(world.soil)
-    interfaces = np.cumsum(stack.h)
     bounds = _layer_bounds(stack)
     found: list[_Unreachable] = []
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]
-        deepest = max(
-            clusters[root], key=lambda e: _depth_range(world.get_electrode(e))[1]
-        )
-        z_deep = _depth_range(world.get_electrode(deepest))[1]
-        crossed = [float(d) for d in interfaces if a_eq < d < z_deep]
-        if crossed:
+        members = clusters[root]
+        # One contact predicate for the three rules (audit D2A-01, D2A-02).
+        layers = {e: _electrode_layers(world.get_electrode(e), bounds) for e in members}
+        touched = set().union(*layers.values())
+        # 10.23: an electrode touches a layer whose top lies below a_eq.
+        unreached = {
+            e: sorted(bounds[k][0] for k in ks if bounds[k][0] > a_eq)
+            for e, ks in layers.items()
+        }
+        offenders = [e for e in members if unreached[e]]
+        if offenders:
+            deepest = max(
+                offenders, key=lambda e: _depth_range(world.get_electrode(e))[1]
+            )
+            z_deep = _depth_range(world.get_electrode(deepest))[1]
+            crossed = [b[0] for b in bounds[1:] if a_eq < b[0] < z_deep]
+            if crossed:  # the interface named up to 563ead7
+                where = (
+                    f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
+                    f"layer interface at h = {crossed[0]:.3g} m"
+                )
+            else:  # a horizontal wire within its radius above the interface
+                h = unreached[deepest][0]
+                where = (
+                    f"electrode '{deepest}' lies at z = {z_deep:.4g} m, within its "
+                    f"wire radius of {world.get_electrode(deepest).wire_radius:.3g} m "
+                    f"of the layer interface at h = {h:.4g} m, so it touches the "
+                    "layer below it"
+                )
             found.append(
                 _Unreachable(
                     "wrong_layer",
-                    f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
-                    f"layer interface at h = {crossed[0]:.3g} m, but the "
-                    f"equivalent hemisphere of its cluster ends at a_eq = "
-                    f"{a_eq:.3g} m above it",
+                    f"{where}, but the equivalent hemisphere of its cluster ends at "
+                    f"a_eq = {a_eq:.3g} m above it",
                 )
             )
             continue
-        z_top = min(_depth_range(world.get_electrode(e))[0] for e in clusters[root])
-        covering = [float(d) for d in interfaces if 0.5 * a_eq < d <= min(a_eq, z_top)]
+        # A2E-2: the cluster lies below an interface in (a_eq/2, a_eq], i.e.
+        # it touches no layer above that interface.
+        z_top = min(_depth_range(world.get_electrode(e))[0] for e in members)
+        covering = [
+            bounds[k][0]
+            for k in range(1, min(touched) + 1)
+            if 0.5 * a_eq < bounds[k][0] <= a_eq
+        ]
         if covering:
             h = covering[-1]
             names = sorted(clusters[root])
@@ -608,45 +756,303 @@ def _unreachable_layers(
         # electrodes would send through their own layer(s).
         if stack.n_layers < 2:
             continue
-        touched = _touched_layers(world, clusters[root], bounds)
         rho_touched = min(float(stack.rhos[k]) for k in touched)
+        # The domain of the "wide" rule as well (audit D2A-03): a layer below
+        # the hemisphere but within the electrodes' horizontal half-extent
+        # is reached by their current and much less by the hemisphere.
+        r_ext = max(_horizontal_half_extent(world.get_electrode(e)) for e in members)
         better = [
             k
             for k, (top, _) in enumerate(bounds)
-            if top < a_eq and k not in touched and float(stack.rhos[k]) < rho_touched
+            if top < max(a_eq, r_ext)
+            and k not in touched
+            and float(stack.rhos[k]) < rho_touched
         ]
         if better:
-            layers = " and the layer ".join(
-                _layer_text(*bounds[k], float(stack.rhos[k])) for k in better
-            )
+
+            def listed(ks: list[int]) -> str:
+                return " and the layer ".join(
+                    _layer_text(*bounds[k], float(stack.rhos[k])) for k in ks
+                )
+
+            spanned = [k for k in better if bounds[k][0] < a_eq]
+            reached = [k for k in better if bounds[k][0] >= a_eq]
             own = ", ".join(
                 f"{r:g}" for r in sorted({float(stack.rhos[k]) for k in touched})
             )
+            extent = (
+                f"within its electrodes' horizontal half-extent of {r_ext:.3g} m, "
+                "which their current reaches and the compact hemisphere's much less"
+            )
+            if not reached:
+                what = (
+                    f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) spans the "
+                    f"layer {listed(spanned)}, which none of its electrodes touches "
+                    "and which conducts better than the layer(s) they touch"
+                )
+            elif not spanned:
+                what = (
+                    f"the layer {listed(reached)} lies below its equivalent "
+                    f"hemisphere (a_eq = {a_eq:.3g} m) but {extent}; none of its "
+                    "electrodes touches it and it conducts better than the "
+                    "layer(s) they touch"
+                )
+            else:
+                what = (
+                    f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) spans the "
+                    f"layer {listed(spanned)}, and the layer {listed(reached)} lies "
+                    f"below it but {extent}; none of its electrodes touches these "
+                    "layers and they conduct better than the layer(s) they touch"
+                )
             found.append(
                 _Unreachable(
                     "conductive_layer",
-                    f"{_cluster_label(clusters, root)}: its equivalent hemisphere "
-                    f"(a_eq = {a_eq:.3g} m) spans the layer {layers}, which none "
-                    "of its electrodes touches and which conducts better than "
-                    f"the layer(s) they touch (rho = {own} Ohm m)",
+                    f"{_cluster_label(clusters, root)}: {what} (rho = {own} Ohm m)",
                 )
             )
     return found
 
 
 #: Measured consequence of the Q23 configurations, for the error message
-#: (evidence d2solver/q23_fem_layer_cases_base.out: fem on bbaea9f against
-#: image_2layer and mom, segment length 0.25 m).
+#: (evidence d2solver/q23_fem_layer_cases_base.out, reproduced in
+#: f2solver/q23_spanned_unguarded.out, and f2solver/wide_cases_refs.out:
+#: fem against image_2layer and mom, segment length 0.25 m).
 _CONDUCTIVE_LAYER_EFFECT = (
-    "The hemisphere injects the cluster current straight into such a layer, so "
-    "fem reads too low (not conservative): -97 % to +5 % against "
-    "'image_2layer' and 'mom' in the measured cases (rods, strips and rings; "
-    "30/10000 Ohm m: -80 % to -97 %, 30/1000 Ohm m: -35 % to -80 %, "
-    "near-equal layers 100/120 and 120/100 Ohm m: -7 % to +5 %)."
+    "The hemisphere injects the cluster current straight into a layer it spans "
+    "and reaches a layer below it much less than the electrodes do, so fem "
+    "reads too low (not conservative): -97 % to +5 % against 'image_2layer' "
+    "and 'mom' in the measured cases of a spanned layer (rods, strips and "
+    "rings; 30/10000 Ohm m: -80 % to -97 %, 30/1000 Ohm m: -35 % to -80 %, "
+    "near-equal layers 100/120 and 120/100 Ohm m: -7 % to +5 %), -78 % to +1 % "
+    "for a layer below the hemisphere within the half-extent (rings and "
+    "strips; a 20 m grid -60 % to +13 %, its formula reading +12 % high in "
+    "homogeneous soil)."
 )
 
 
-def _unreachable_message(world: "World", found: list[_Unreachable]) -> str:
+def _first_clause(text: str, backend: str) -> str:
+    """The first sentence of a backend's error message, without its prefix."""
+    if "cannot solve this world: " in text:
+        text = text.split("cannot solve this world: ", 1)[1]
+    for prefix in (f"{backend}: ", f"solve_{backend}: "):
+        if text.startswith(prefix):
+            text = text[len(prefix) :]
+    text = re.split(r"\.\s+(?=[A-Z])", text, maxsplit=1)[0].rstrip(".")
+    return text if len(text) <= 240 else text[:237] + "..."
+
+
+#: Prefix of a :func:`_backend_refusal` result that is a refusal by the
+#: engine's resource limit, not by the world.
+_LIMIT = "limit: "
+
+
+def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | None:
+    """Why ``backend`` would refuse ``world``, or ``None`` if it accepts it.
+
+    A refusal by the engine's resource limit (``Engine.max_segments``) is
+    a setting of the engine, not of the world: it is returned with the
+    prefix :data:`_LIMIT`, and the later checks are not run.
+
+    Runs the backend's own checks without solving (audit D2A-06): the
+    capability check of the registry, the discretisation with its resource
+    limit, the burial-depth guard of every segment (galvanic conductor
+    segments included) and the geometric guards of the backend's reaction
+    matrix — the point form at the first interface (``mom``,
+    ``mom_sommerfeld``, ``image_2layer`` with ``kernel='point'``) and the
+    cross-layer refusal of ``mom_sommerfeld`` for three or more layers. It
+    mirrors ``prepare`` of those backends (``solver/mom.py``,
+    ``solver/mom_sommerfeld.py``, ``solver/image_2layer.py``) and resolves
+    the kernel like :meth:`Engine.solve <groundfield.solver.engine.Engine.solve>`.
+    """
+    from groundfield.diagnostics import ResourceLimitError
+    from groundfield.solver._guards import (
+        _check_point_interface_diagonal,
+        _check_segment_depths,
+    )
+    from groundfield.solver._kernels import DEFAULT_KERNEL
+    from groundfield.solver._pipeline import (
+        SegmentArrays,
+        build_topology,
+        discretise,
+    )
+    from groundfield.solver.registry import (
+        check_capabilities,
+        effective_kernel,
+        resolve_backend,
+    )
+
+    stack = as_layer_stack(world.soil)
+    h_1 = float(stack.h[0]) if stack.n_layers >= 2 else None
+    requested = engine.kernel
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            resolved = resolve_backend(backend, world)
+            check_capabilities(
+                resolved, world, kernel=requested, kernel_explicit=requested is not None
+            )
+            kernel = effective_kernel(
+                resolved.spec, requested if requested is not None else DEFAULT_KERNEL
+            )
+            disc = discretise(world, engine, None if h_1 is None else (h_1,))
+            build_topology(world, disc)  # adds the galvanic conductor segments
+            _check_segment_depths(disc.segments, where=backend, kernel=kernel)
+        except ResourceLimitError as exc:
+            return _LIMIT + _first_clause(str(exc), backend)
+        except (ValueError, NotImplementedError) as exc:
+            return _first_clause(str(exc), backend)
+        if h_1 is None:
+            return None
+        arrays = SegmentArrays.from_segments(disc.segments)
+        z_max = float(arrays.points[:, 2].max())
+        if backend == "mom_sommerfeld" and stack.n_layers >= 3 and z_max >= h_1:
+            return (
+                f"a segment reaches z = {z_max:.3g} m, at or below the first "
+                f"interface at h_1 = {h_1:.3g} m, and it solves three or more "
+                "layers only with every segment in the top layer"
+            )
+        if backend != "image_2layer" or kernel != "line":
+            try:
+                _check_point_interface_diagonal(
+                    disc.segments,
+                    arrays.points,
+                    arrays.lengths,
+                    arrays.directions,
+                    h_1,
+                    backend=f"'{backend}'",
+                    remedy="",
+                    cross_layer=z_max >= h_1,
+                )
+            except (ValueError, NotImplementedError):
+                return (
+                    "its point form refuses segments closer than 0.387 segment "
+                    f"lengths to the interface at h_1 = {h_1:.3g} m at "
+                    f"segment_length = {engine.segment_length:g} m"
+                )
+    return None
+
+
+def _remedy(world: "World", engine: "Engine") -> str:
+    """The backend(s) that solve ``world`` per their own checks (D2A-06)."""
+    n_layers = as_layer_stack(world.soil).n_layers
+    candidates = {1: ("image", "mom"), 2: ("mom", "image_2layer")}.get(
+        n_layers, ("mom_sommerfeld",)
+    )
+    refusals = {b: _backend_refusal(world, engine, b) for b in candidates}
+    limited = {
+        b: r[len(_LIMIT) :]
+        for b, r in refusals.items()
+        if r is not None and r.startswith(_LIMIT)
+    }
+    accepted = [b for b in candidates if refusals[b] is None or b in limited]
+    by_reason: dict[str, list[str]] = {}
+    for b, reason in refusals.items():
+        if reason is not None and b not in limited:
+            by_reason.setdefault(reason, []).append(f"'{b}'")
+    refused = " ".join(
+        f"{' and '.join(names)} refuse{'s' if len(names) == 1 else ''} this "
+        f"world: {reason}."
+        for reason, names in by_reason.items()
+    )
+    if not accepted:
+        return f"No backend solves this world yet. {refused}"
+    if accepted == ["mom_sommerfeld"]:
+        text = (
+            "Use backend='mom_sommerfeld', which solves three or more layers "
+            "when every segment lies in the top layer, as here."
+        )
+    elif accepted == ["mom", "image_2layer"]:
+        text = "Use backend='mom' (one current per segment) or 'image_2layer'."
+    else:
+        text = "Use backend=" + " or ".join(f"'{b}'" for b in accepted) + "."
+    if limited:
+        names = " and ".join(f"'{b}'" for b in limited)
+        text += (
+            f" This engine's resource limit refuses the world for {names} "
+            f"({next(iter(limited.values()))}): raise Engine.max_segments or "
+            "coarsen segment_length (their other checks were not run)."
+        )
+    return f"{text} {refused}" if refused else text
+
+
+#: Measured consequence of a burial depth beyond the electrode's half-extent
+#: (evidence f2solver/depth_validity.out: the formula against the exact
+#: uniform-current wire and ring, which ``image`` reproduces to 1e-5).
+_DEPTH_RANGE_EFFECT = (
+    "The closed forms of the equivalent hemisphere assume a burial depth "
+    "small against the electrode: Dwight's series of a wire and its image "
+    "converges only above half the wire length, his ring formula needs a depth "
+    "below the ring radius (s << D, s twice the depth). Deeper, fem reads "
+    "+0.2 % (1.25 times half the length) to +474 % (5.3 times) for strips and "
+    "+0.4 % (1.5 times the radius) to -28 % (20 times) for rings against the "
+    "exact uniform-current value that 'image' computes."
+)
+
+#: Measured consequence of the MeshElectrode formula (evidence
+#: f2solver/mesh_formula.out: fem against image and mom at 0.8 m).
+_MESH_FORMULA_EFFECT = (
+    "Its closed form, one strip along the diagonal, ignores the wires of the "
+    "mesh: +118 % to +193 % against 'image' for 10 m and 20 m meshes at 0.8 m "
+    "(spacing from the size down to 1 m), at every depth. fem reduces a "
+    "GridMeshElectrode with Sverak's formula (-1 % to +21 % for the same "
+    "wires)."
+)
+
+
+def _formula_range_issues(
+    world: "World", clusters: dict[str, list[str]], active_clusters: list[str]
+) -> tuple[list[str], list[str]]:
+    """Driven electrodes whose hemisphere formula is used outside its range.
+
+    Audit D2A, O-1: the closed forms of :func:`equivalent_hemisphere_radius`
+    were used at any depth (a 1.88 m strip at 5 m read +369 % in homogeneous
+    soil, silently). Structural limits, from the formulas:
+
+    * strip: Dwight's wire formula is the series of the wire and its image in
+      $x = s/l$ ($s = 2t$ the image distance, $l$ the length) and converges
+      for $x < 1$ only — a burial depth $t$ up to half the length (formula
+      error $\\le 0.1\\,\\%$ there);
+    * ring: Dwight's formula needs $s \\ll D$; up to $t = r$ ($s = D$) its
+      error stays within $+1.0\\,\\%$, beyond it the ring reads ever lower;
+    * MeshElectrode: one strip along the diagonal, wrong at every depth
+      (+118 % … +193 %), so a driven mesh is refused;
+    * rod and grid: no depth limit (Dwight's rod ignores the head depth,
+      +3.9 % at 0.5 m … +10 % at 10 m; Sverak's grid formula is bounded,
+      +6 % … +21 %; both conservative).
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        Descriptions of electrodes too deep for their formula, and of
+        driven mesh electrodes.
+    """
+    deep: list[str] = []
+    meshes: list[str] = []
+    for root in active_clusters:
+        for name in clusters[root]:
+            e = world.get_electrode(name)
+            if isinstance(e, MeshElectrode):
+                meshes.append(f"electrode '{name}' is a MeshElectrode")
+            elif isinstance(e, StripElectrode):
+                t, half = float(e.start[2]), 0.5 * float(e.length)
+                if t > half:
+                    deep.append(
+                        f"electrode '{name}' (strip, {e.length:.3g} m long) lies at "
+                        f"z = {t:.3g} m, deeper than half its length ({half:.3g} m)"
+                    )
+            elif isinstance(e, RingElectrode):
+                t, r = float(e.center[2]), float(e.radius)
+                if t > r:
+                    deep.append(
+                        f"electrode '{name}' (ring) lies at z = {t:.3g} m, deeper "
+                        f"than its radius ({r:.3g} m)"
+                    )
+    return deep, meshes
+
+
+def _unreachable_message(
+    world: "World", engine: "Engine", found: list[_Unreachable]
+) -> str:
     """Error message for the clusters of :func:`_unreachable_layers`."""
     wrong = [f.text for f in found if f.kind == "wrong_layer"]
     conductive = [f.text for f in found if f.kind == "conductive_layer"]
@@ -657,25 +1063,17 @@ def _unreachable_message(world: "World", found: list[_Unreachable]) -> str:
             "the cluster current from the soil surface down to a_eq, into other "
             "layers than the electrodes (rods through or below the top layer: "
             "-98 % to +3138 % against 'mom' and 'image_2layer' over the "
-            "contrasts 10000/30 ... 30/10000 Ohm m)."
+            "contrasts 10000/30 ... 30/10000 Ohm m; a 2 m ring on an interface "
+            "below its hemisphere: -18 % to +1008 % against 'image_2layer')."
         )
     if conductive:
         parts.append("; ".join(conductive) + ". " + _CONDUCTIVE_LAYER_EFFECT)
-    stack = as_layer_stack(world.soil)
-    if stack.n_layers <= 2:
-        remedy = "Use backend='mom' (one current per segment) or 'image_2layer'."
-    elif max(float(e.bounds()[1][2]) for e in world.electrodes) < float(stack.h[0]):
-        remedy = (
-            "Use backend='mom_sommerfeld', which solves three or more layers "
-            "when every segment lies in the top layer, as here."
-        )
-    else:
-        remedy = (
-            "No backend solves an electrode below the first interface of a soil "
-            "with three or more distinct layers yet ('mom_sommerfeld' requires "
-            "every segment in the top layer)."
-        )
-    return "Backend 'fem' cannot solve this world: " + " ".join(parts) + " " + remedy
+    return (
+        "Backend 'fem' cannot solve this world: "
+        + " ".join(parts)
+        + " "
+        + _remedy(world, engine)
+    )
 
 
 # ---------------------------------------------------------------------
@@ -712,6 +1110,30 @@ def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) ->
         the top-layer resistivity is the natural choice — the FEM
         then re-solves the actual layered problem on the equivalent
         hemisphere.
+
+    Returns
+    -------
+    float
+        Hemisphere radius $a_{\\text{eq}}$ in m.
+
+    Notes
+    -----
+    Range of the closed forms in depth (audit D2A, O-1; evidence
+    ``f2solver/depth_validity.out``, against the exact uniform-current wire
+    and ring and ``image`` / ``mom``): the strip formula is Dwight's series
+    of the wire and its image in $s/l$ ($s = 2t$, $l$ the length), which
+    converges for a burial depth $t < l/2$ only (error within
+    $\\pm 0.2\\,\\%$ there; +0.2 … +0.4 % at $t = 1.25\\,l/2$, +2.6 … +5.4 %
+    at $t = l$, up to +474 % at $t = 5.3\\,l/2$); the ring formula needs
+    $s \\ll D$ (+0.05 … +1.0 % up to $t = r$; −0.5 … −0.7 % at $t = 2r$,
+    −3.8 … −6.1 % at $4r$, −17 … −28 % at $20r$); the grid formula
+    (Sverak) stays bounded, +6 % … +21 %
+    from 0.25 m to 20 m depth; the rod formula ignores the head depth
+    (+3.9 % at 0.5 m … +10 % at 10 m); the ``MeshElectrode`` formula, one
+    strip along the diagonal, misses the wires of the mesh (+118 % …
+    +193 % at 0.8 m). :func:`solve_fem` refuses the strip and the ring
+    beyond their range and every driven ``MeshElectrode``; this function
+    returns the formula's value regardless.
     """
     if isinstance(electrode, RodElectrode):
         R = dw.rod(rho=rho_top, length=electrode.length, radius=electrode.wire_radius)
@@ -1352,7 +1774,8 @@ def solve_fem(
     its lowest point, its hemisphere radius and its horizontal
     half-extent; otherwise it raises (see *Raises*) or emits a
     :class:`FemReductionWarning` naming the reason (review pass 10, 10.23;
-    audit round 1, F01; user decision Q23; see the module docstring).
+    audit round 1, F01; user decision Q23; audit D2A; see the module
+    docstring).
 
     The mesh conforms to the hemisphere $r = a_{\\text{eq}}$ and the
     layer interfaces $z = \\sum_{i \\le k} h_i$ (see
@@ -1413,24 +1836,38 @@ def solve_fem(
     Raises
     ------
     BackendCapabilityError
-        If an electrode of a driven cluster reaches below a layer
-        interface that lies above the cluster's hemisphere radius
-        ``a_eq`` (rod through or below the top layer, review pass 10,
-        10.23); if every electrode of the cluster lies below an
-        interface at a depth between ``a_eq/2`` and ``a_eq`` (more than
-        half of the hemisphere in a layer the electrodes do not touch,
-        audit round 2, A2E-2); or if the hemisphere spans a layer (top
-        above ``a_eq``) that no electrode of the cluster touches and that
-        conducts better than every layer they touch (user decision Q23:
-        the result would be too low, −97 % … +5 % measured; independent
-        of the size of the contrast; an electrode exactly on an interface
-        touches both layers). The reduction cannot represent these
-        worlds; the message names the cluster, the layer and a backend
-        that solves the world. Also if a driven cluster contains an
+        If an electrode of a driven cluster touches a layer whose top lies
+        below the cluster's hemisphere radius ``a_eq`` (rod through or
+        below the top layer, a wire on an interface below the hemisphere;
+        review pass 10, 10.23); if every electrode of the cluster lies
+        below an interface at a depth between ``a_eq/2`` and ``a_eq``
+        (more than half of the hemisphere in a layer the electrodes do
+        not touch, audit round 2, A2E-2); or if a layer that no electrode
+        of the cluster touches, that conducts better than every layer
+        they touch and whose top lies above ``max(a_eq, r_ext)`` (``r_ext``
+        the electrodes' horizontal half-extent) exists (user decision Q23,
+        extended to the half-extent by audit D2A-03: the result would be
+        too low, −97 % … +13 % measured; independent of the size of the
+        contrast). A horizontal wire touches every layer within its wire
+        radius, a rod the layers its axis passes through (audit D2A-01,
+        D2A-02). The reduction cannot represent these worlds; the message
+        names the cluster, the layer and the backends that solve the
+        world. Also if a driven cluster contains an
         electrode without a closed-form hemisphere radius (polyline and
         star electrodes; the generators build mesh foundations of
-        polylines). A subclass of ``ValueError`` and
+        polylines), or one whose closed form is used outside its range: a
+        strip deeper than half its length, a ring deeper than its radius,
+        any ``MeshElectrode`` (audit D2A, O-1; see
+        :func:`equivalent_hemisphere_radius`). The message names the
+        backends whose own checks accept the world, or says that none
+        does (audit D2A-06). A subclass of ``ValueError`` and
         ``NotImplementedError``.
+    ValueError
+        If an electrode, driven or passive, lies at or above the soil
+        surface, in the surface plane (``2 z <= wire_radius``) or reaches
+        above it (a rod head above ``z = 0``) — what every other backend
+        refuses as well (audit D2A-06). A rod with its head at ``z = 0``
+        is valid.
 
     Warns
     -----
@@ -1440,7 +1877,8 @@ def solve_fem(
         cluster, several clusters, a layer interface above the deepest
         of the electrode, its hemisphere and its horizontal half-extent
         that separates the electrodes from a layer touched by them or
-        conducting no better than theirs).
+        conducting no better than theirs; see :class:`FemReductionWarning`
+        for the measured errors).
     """
     if far_field not in ("robin", "dirichlet"):
         raise ValueError(
@@ -1454,6 +1892,7 @@ def solve_fem(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    _reject_electrodes_out_of_the_soil(world)  # audit D2A-06
     _reject_concrete_shells(world, "fem")
     _warn_ignored_sources(world, "fem")
 
@@ -1576,6 +2015,24 @@ def solve_fem(
             f"electrode(s) {shown}{more}). Use backend='image' or 'mom'."
         )
 
+    # Audit D2A, O-1: a hemisphere formula outside its range is a limit of
+    # the reduction as well, reported before any mesh is built.
+    deep, meshes = _formula_range_issues(world, clusters, active_clusters)
+    if deep or meshes:
+        from groundfield.solver.registry import BackendCapabilityError
+
+        parts = []
+        if deep:
+            parts.append("; ".join(deep) + ". " + _DEPTH_RANGE_EFFECT)
+        if meshes:
+            parts.append("; ".join(meshes) + ". " + _MESH_FORMULA_EFFECT)
+        raise BackendCapabilityError(
+            "Backend 'fem' cannot solve this world: "
+            + " ".join(parts)
+            + " "
+            + _remedy(world, engine)
+        )
+
     for root in active_clusters:
         # Build a single equivalent hemisphere from the parallel
         # combination of the per-electrode hemispheres. The
@@ -1600,7 +2057,7 @@ def solve_fem(
     if unreachable:
         from groundfield.solver.registry import BackendCapabilityError
 
-        raise BackendCapabilityError(_unreachable_message(world, unreachable))
+        raise BackendCapabilityError(_unreachable_message(world, engine, unreachable))
 
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]

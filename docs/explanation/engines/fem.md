@@ -84,68 +84,127 @@ domain, so the near-field resolution no longer degrades with $h_1$
 ## Guards
 
 The registry marks `fem` experimental; the reduction itself is guarded
-(findings 10.23 and the first audit round of the release):
+(findings 10.23, the audit rounds of the release and the D2 audit). All
+layer rules ask which layers the electrodes touch with one predicate, the
+contact of the thin-wire model the integral engines solve: a horizontal
+wire touches every layer within its wire radius of its axis (a wire on or
+within one radius of an interface touches both layers), a rod the layers
+its axis passes through — an end lying on an interface does not count,
+the thin-wire model has no end face (audit D2A-01, D2A-02).
 
+- **Error** (`ValueError`, before anything else): an electrode, driven or
+  passive, lies at or above the soil surface, in the surface plane
+  ($2z \le a$) or reaches above it — what every other backend refuses as
+  well (audit D2A-06). A rod with its head at $z = 0$ is the ordinary
+  driven rod and stays valid.
 - **Error** (`BackendCapabilityError`, before meshing): an electrode
-  reaches below a layer interface that its hemisphere does not reach — a
-  rod through the top layer. The hemisphere would inject the current into
-  the wrong layer; a 3 m rod through $h_1 = 2$ m was +1092 % off in
-  v0.15.0, silently (benchmark B7 records the exclusion).
+  touches a layer that its hemisphere does not reach — a rod through the
+  top layer, a wire on (or within its radius above) an interface below
+  the hemisphere. The hemisphere would inject the current into the wrong
+  layer; a 3 m rod through $h_1 = 2$ m was +1092 % off in v0.15.0,
+  silently (benchmark B7 records the exclusion), and a 2 m ring on
+  $h_1 = 2$ m ($a_\text{eq} = 1.3$ m) is +1008 % (1000/30 Ω·m) and −18 %
+  (30/1000 Ω·m) against `image_2layer`, silent up to the D2 audit.
 - **Error** (`BackendCapabilityError`): every electrode of a driven
   cluster lies below an interface at a depth between $a_\text{eq}/2$ and
   $a_\text{eq}$, so more than half of the hemisphere sits in a layer the
   electrodes do not touch (a 3 m rod below $h_1 = 0.4$ m in
   1000 / 30 Ω·m read 31.1 Ω against 10.5 Ω from `mom`, +197 %; second
   adversarial audit, A2E-2).
-- **Error** (`BackendCapabilityError`, user decision Q23 of 2026.11): the
-  hemisphere spans a layer — one whose top lies above $a_\text{eq}$ —
-  that no electrode of the cluster touches and that conducts better than
-  every layer the electrodes touch. The hemisphere then injects the
-  current straight into that layer, and the result is too low, i.e. not
-  conservative. The rule is structural, independent of the size of the
-  contrast, and works on the canonical layer stack (equal resistivities
-  are no interface); an electrode lying exactly on an interface touches
-  both layers. The message names the cluster, the layer (depth range and
-  $\rho$), the electrodes' $\rho$, $a_\text{eq}$, the measured error and a
-  backend that solves the world. Measured against `image_2layer` and
-  `mom` on the base of the decision, where these worlds only warned:
+- **Error** (`BackendCapabilityError`, user decision Q23 of 2026.11): a
+  layer that no electrode of the cluster touches and that conducts better
+  than every layer the electrodes touch, with its top above
+  $\max(a_\text{eq}, r_\text{ext})$ — the hemisphere radius or the
+  electrodes' horizontal half-extent (ring radius, half the strip length,
+  half the grid diagonal). The hemisphere injects the current straight
+  into a layer it spans and reaches one below it much less than the
+  electrodes do, and the result is too low, i.e. not conservative. The
+  rule is structural, independent of the size of the contrast, and works
+  on the canonical layer stack (equal resistivities are no interface).
+  The fem error is continuous across $h_1 = a_\text{eq}$ (−67.9 % on both
+  sides for a 10 m ring over 1000/30 Ω·m), so the rule covers the
+  half-extent as well since the D2 audit (D2A-03; a coordinator decision
+  flagged for the author's review). The message names the cluster, the
+  layer (depth range and $\rho$), the electrodes' $\rho$,
+  $a_\text{eq}$, the measured error and the backends whose own checks
+  accept the world. Measured against `image_2layer` and `mom`:
 
     | World (two layers) | `fem` against `image_2layer` / `mom` |
     |---|---|
-    | 3 m rod at 0.5 m below a more conductive top layer, $h_1 = 0.05 \ldots 0.49\,a_\text{eq}$ (22 … 217 mm) | 100/1000 Ω·m: −12 … −58 %; 30/1000: −35 … −80 %; 30/10000: −80 … −97 % |
+    | 3 m rod at 0.5 m below a more conductive top layer, $h_1 = 0.05 \ldots 0.49\,a_\text{eq}$ (22 … 217 mm), or with its head on $h_1$ | 100/1000 Ω·m: −12 … −58 %; 30/1000: −35 … −80 %; 30/10000: −80 … −97 % |
     | 10 m strip at 0.8 m below such a top layer, $h_1 = 0.22$ and $0.50$ m | 100/1000: −32 … −47 %; 30/1000: −58 … −71 %; 30/10000: −91 … −95 % |
     | ring $r = 10$ m at 0.8 m above a more conductive layer at $h_1 = 2$ m | 1000/300 and 100/30: −45 %; 1000/30: −92 % |
+    | ring $r = 10$ m at 0.8 m above a more conductive layer at $h_1 = a_\text{eq} \ldots 10$ m (below the hemisphere, within the radius) | 1000/30: −68 … −7 %; 3000/30 and 1000/10: −78 … −8 %; 100/30 and 1000/300: −28 … −4 % |
+    | 10 m strip at 0.8 m above a more conductive layer at $h_1 = 1.2 \ldots 5$ m | 1000/30 and 3000/30: −45 … +1 % |
+    | 20 m grid at 0.5 m above 1000/30 Ω·m at $h_1 = a_\text{eq} \ldots 14$ m | −60 … +13 % (its formula reads +12 % high in homogeneous soil) |
     | near-equal layers (100/120 and 120/100 Ω·m), rods, strips and rings | −7 … +5 % (raises as well: the rule is structural) |
 
-  A more resistive layer spanned in the same way — a thin resistive top
-  layer under the $a_\text{eq}/2$ threshold of the rule above included —
-  keeps the warning below (+3 … +45 % measured).
+  The rule stops at the half-extent: just beyond it fem is silent at
+  −9.8 … −0.8 % (rings $r$ = 2, 5, 10 m), −1.4 % (10 m strip) and +9.9 %
+  (20 m grid) against `image_2layer` (−8.3 … +0.1 %, +0.6 % and +12.7 %
+  against `mom`), and the deviation fades further down (−1.3 % for the
+  10 m ring over $h_1$ = 20 m).
+- **Error** (`BackendCapabilityError`): the closed form of the
+  hemisphere is used outside its range (audit D2A, O-1). Dwight's strip
+  formula is the series of the wire and its image in $s/l$ ($s = 2t$
+  the image distance, $l$ the length) and converges only for a burial
+  depth $t < l/2$; his ring formula needs $s \ll D$. A driven strip deeper
+  than half its length and a driven ring deeper than its radius raise
+  (a 1.88 m strip at 5 m and 9.8 m read +369 % and +6120 % in homogeneous
+  soil, silently). Every driven `MeshElectrode` raises: its formula, one
+  strip along the diagonal, misses the wires of the mesh (+118 … +193 %
+  against `image` at 0.8 m); a `GridMeshElectrode` of the same wires is
+  reduced with Sverak's formula (−1 … +21 %).
 - **Error** (`BackendCapabilityError`): a driven cluster contains a star
   or polyline electrode, which has no closed-form hemisphere radius. The
   generators build mesh foundations of polyline wires, so generated
   networks cannot be solved with `fem`.
+- The backends an error message names pass their own checks for the
+  world — the capability check, the resource limit, the burial depth of
+  every segment, the point form at the interface and the cross-layer
+  limit of `mom_sommerfeld`; a backend that refuses is named with its
+  reason, and if none accepts, the message says that no backend solves
+  the world yet (audit D2A-06).
 - **Warning** (`FemReductionWarning`, once per solve, naming every reason
   and the cluster members): a cluster with several electrodes (radii
-  summed); several clusters (each solved alone, transfer impedances 0,
-  passive clusters at 0 V); a layer interface above the deeper of the
-  electrode and the hemisphere that the errors above do not cover (the
-  spanned layer is touched by an electrode or conducts no better than the
-  electrodes' layer: +23 % for a 10 m ring over a more resistive layer at
-  2 m); an interface below the electrode and the hemisphere but within
-  the horizontal half-extent of the electrode (a ring $r = 10$ m at 0.8 m
-  over a more conductive layer at $h_1$ = 5, 7 and 9 m: −47, −20 and
-  −11 %; over a more resistive one at 5 m: +9 %; not part of decision
-  Q23). Escalate with `warnings.simplefilter("error", FemReductionWarning)`
-  when `fem` serves as a check.
+  summed; −35 % for a ring with three rods in homogeneous soil, −55 … −75 %
+  for two bonded rods of which one reaches into a conductive top layer);
+  several clusters (each solved alone, transfer impedances 0, passive
+  clusters at 0 V); a layer interface above the deeper of the electrode
+  and the hemisphere that the errors above do not cover: the spanned
+  layer conducts no better than the electrodes' layer (−1 … +48 %
+  measured, +23 % for a 10 m ring over a more resistive layer at 2 m), an
+  electrode touches the conductive layer only partly (a rod reaching
+  1 µm … 8 cm into a conductive top layer of $0.2\,a_\text{eq}$:
+  −44 … −78 %; a wire within its radius of the interface: −22 … +23 %);
+  an interface below the electrode and the hemisphere but within the
+  horizontal half-extent of the electrode over a layer that conducts no
+  better (+9 % for a 10 m ring over 30/1000 Ω·m at 5 m; −16 … +16 % over
+  30/1000, 100/1000 and 30/10000 Ω·m). Escalate with
+  `warnings.simplefilter("error", FemReductionWarning)` when `fem` serves
+  as a check.
 - Concrete shells are rejected; distributed and inductive conductors are
   solved as lumped branches, and `resistance_model="skin"` is ignored, each
   with a `BackendCapabilityWarning`.
+- **Not covered** (silent): an interface just below a horizontal electrode
+  that is buried almost as deep as its half-extent, with the interface
+  deeper than both the hemisphere radius and the half-extent — a 2 m ring
+  at 1.9 m over $h_1 = 2$ m in 1000/30 Ω·m reads +34 %, at 1.993 m +250 %.
+  Rods are hardly affected (+5.7 % with the interface 1 mm below the tip).
+- The size notice of `Engine.solve` ("solve time may run from seconds to
+  minutes") and its resource limit count the segments of the integral
+  engines, which `fem` does not use: its problem is the mesh of each
+  driven cluster (about 2 400 nodes at the default resolution, 3 700 with
+  a 30 m top layer, independent of `segment_length`), and `fem` does not
+  refuse a world above `Engine.max_segments`.
 
 ## Validity range
 
 | Condition | Limit | Behaviour outside |
 |---|---|---|
-| Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error (wrong layer, or a more conductive layer the hemisphere spans and no electrode touches) or `FemReductionWarning` (see above) |
+| Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error (wrong layer, or a more conductive layer within the hemisphere or the half-extent that no electrode touches) or `FemReductionWarning` (see above) |
+| Burial depth | strip: at most half its length; ring: at most its radius; grid and rod: no limit (Sverak's grid formula stays bounded, +6 … +21 % from 0.25 m to 20 m; Dwight's rod ignores the head depth, +3.9 % at 0.5 m … +10 % at 10 m) | error (the closed form diverges: up to +474 % for strips, −28 % for rings) |
+| Kinds | rod, ring, strip, grid (`GridMeshElectrode`) | error for a driven `MeshElectrode`, star or polyline |
 | Clusters | one driven cluster | `FemReductionWarning`: no coupling between clusters |
 | Conductors | lumped | distributed and inductive conductors solved as lumped, `BackendCapabilityWarning` |
 | Accuracy | discretisation error of the hemisphere itself: B1 below; the reduction is the Dwight formula | — |

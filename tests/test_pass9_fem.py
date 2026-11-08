@@ -164,15 +164,15 @@ def test_fem_homogeneous_matches_analytic_hemisphere() -> None:
     "kind, kwargs",
     [
         ("rod", dict(position=(0.0, 0.0, 0.0), length=1.5, wire_radius=0.005)),
-        ("ring", dict(center=(0.0, 0.0, -0.8), radius=5.0, wire_radius=0.006)),
+        ("ring", dict(center=(0.0, 0.0, 0.8), radius=5.0, wire_radius=0.006)),
         (
             "strip",
-            dict(start=(0.0, 0.0, -0.7), end=(20.0, 0.0, -0.7), wire_radius=0.005),
+            dict(start=(0.0, 0.0, 0.7), end=(20.0, 0.0, 0.7), wire_radius=0.005),
         ),
         (
             "grid_mesh",
             dict(
-                corner=(0.0, 0.0, -0.7),
+                corner=(0.0, 0.0, 0.7),
                 size=(20.0, 20.0),
                 n_x=3,
                 n_y=3,
@@ -184,13 +184,16 @@ def test_fem_homogeneous_matches_analytic_hemisphere() -> None:
 def test_fem_analytic_hemisphere_across_geometries(kind: str, kwargs) -> None:
     """The hemisphere is resolved for every $a_{eq}$, not just the rod's.
 
-    ``a_eq`` spans 0.246 m … 5.56 m over these four electrodes; the
+    ``a_eq`` spans 0.246 m … 5.87 m over these four electrodes (buried:
+    up to audit D2A-06 ring, strip and grid sat in the air at z < 0,
+    which ``fem`` now refuses like every backend); the
     conforming shell mesh is built relative to it, so the
     discretisation error must stay at a fraction of a per cent for all
     of them.
 
-    Pre-fix (v0.14.1): rod $-6.10\\,\\%$, ring $+6.00\\,\\%$, strip
-    $+6.34\\,\\%$, grid $+7.66\\,\\%$ — note the *sign flip*, a
+    Pre-fix (v0.14.1, at the former depths): rod $-6.10\\,\\%$,
+    ring $+6.00\\,\\%$, strip $+6.34\\,\\%$, grid $+7.66\\,\\%$ —
+    note the *sign flip*, a
     signature of a staircase electrode whose effective radius depends
     on where the mesh lines happen to fall.
     """
