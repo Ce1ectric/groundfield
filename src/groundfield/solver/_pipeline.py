@@ -876,8 +876,14 @@ def solve_image_family(
     # Burial-depth validation (audit 2026-07-28, F26/F29): the galvanic
     # image construction needs a finite image separation 2 z >> a.
     # Reject surface-laid / airborne conductors and warn for the shallow
-    # regime where the point-image stand-in biases the diagonal.
-    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    # regime where the point-image stand-in biases the diagonal (point
+    # kernel only, F08).
+    _check_segment_depths(
+        disc.segments,
+        where=green.where,
+        stacklevel=stacklevel + 1,
+        kernel=engine.kernel,
+    )
     arrays = SegmentArrays.from_segments(disc.segments)
     kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
     solution = solve(

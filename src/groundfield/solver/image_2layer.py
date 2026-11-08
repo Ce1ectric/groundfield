@@ -762,7 +762,12 @@ def _solve_with_layer_owners(
         disc, topo, [e.name for e in world.electrodes], _owner_interfaces(green.soil)
     )
     branches = assemble_branches(world, engine, topo)
-    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    _check_segment_depths(
+        disc.segments,
+        where=green.where,
+        stacklevel=stacklevel + 1,
+        kernel=engine.kernel,
+    )
     arrays = SegmentArrays.from_segments(disc.segments)
     kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
     solution = solve(
