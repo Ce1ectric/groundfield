@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import warnings
+import weakref
 from collections import Counter
 from typing import TYPE_CHECKING, Any
 
@@ -54,6 +55,8 @@ _DEFAULT_BOUNDARY_VALUES: dict[str, Any] = {
 RESERVED_NAME_PREFIXES: tuple[str, ...] = ("__layer_", "__cond_")
 
 if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
+    from collections.abc import Container
+
     from groundfield.solver.engine import Engine
     from groundfield.solver.result import FieldResult
 
@@ -168,13 +171,15 @@ class World(BaseModel):
             starts with a reserved prefix (:data:`~groundfield.world.RESERVED_NAME_PREFIXES`).
         """
         _check_reserved_name(electrode.name, "Electrode")
-        if any(e.name == electrode.name for e in self.electrodes):
+        index = _name_index(self)
+        if index.taken(self, "electrodes", electrode.name):
             raise ValueError(f"Electrode name '{electrode.name}' already taken.")
-        if any(j.name == electrode.name for j in self.junctions):
+        if index.taken(self, "junctions", electrode.name):
             raise ValueError(
                 f"Electrode name '{electrode.name}' already taken by a junction."
             )
         self.electrodes.append(electrode)
+        index.added(self, "electrodes", electrode.name)
         return electrode
 
     def add_junction(self, junction: Junction) -> Junction:
@@ -188,13 +193,15 @@ class World(BaseModel):
             (:data:`~groundfield.world.RESERVED_NAME_PREFIXES`).
         """
         _check_reserved_name(junction.name, "Junction")
-        if any(j.name == junction.name for j in self.junctions):
+        index = _name_index(self)
+        if index.taken(self, "junctions", junction.name):
             raise ValueError(f"Junction name '{junction.name}' already taken.")
-        if any(e.name == junction.name for e in self.electrodes):
+        if index.taken(self, "electrodes", junction.name):
             raise ValueError(
                 f"Junction name '{junction.name}' already taken by an electrode."
             )
         self.junctions.append(junction)
+        index.added(self, "junctions", junction.name)
         return junction
 
     def add_conductor(self, conductor: Conductor) -> Conductor:
@@ -210,10 +217,12 @@ class World(BaseModel):
             conductor used to drop out of the network silently). The
             message names the closest node names.
         """
-        if any(c.name == conductor.name for c in self.conductors):
+        index = _name_index(self)
+        if index.taken(self, "conductors", conductor.name):
             raise ValueError(f"Conductor name '{conductor.name}' already taken.")
-        self._check_conductor_ends(conductor)
+        self._check_conductor_ends(conductor, index.node_view(self))
         self.conductors.append(conductor)
+        index.added(self, "conductors", conductor.name)
         return conductor
 
     def add_source(self, source: Source) -> Source:
@@ -230,10 +239,12 @@ class World(BaseModel):
             junction of the world (review finding 10.66). The message
             names the closest node names.
         """
-        if any(s.name == source.name for s in self.sources):
+        index = _name_index(self)
+        if index.taken(self, "sources", source.name):
             raise ValueError(f"Source name '{source.name}' already taken.")
         self._check_source_terminals(source)
         self.sources.append(source)
+        index.added(self, "sources", source.name)
         return source
 
     # ------------------------------------------------------------------
@@ -258,7 +269,7 @@ class World(BaseModel):
         )
 
     def _check_conductor_ends(
-        self, conductor: Conductor, nodes: set[str] | None = None
+        self, conductor: Conductor, nodes: "Container[str] | None" = None
     ) -> None:
         if nodes is None:
             nodes = set(self._node_names())
@@ -711,3 +722,96 @@ def _check_reserved_name(name: str, kind: str, *, world: str | None = None) -> N
                 "node of such a name could take the place of an internal one "
                 "(the solve failed with a singular matrix). Rename it."
             )
+
+
+# ---------------------------------------------------------------------
+# Name index of the add_* methods (O(1) per add)
+# ---------------------------------------------------------------------
+
+
+class _NameIndex:
+    """Names of the objects in a world's lists, for the ``add_*`` checks.
+
+    Building a network adds thousands of objects one by one, and a linear
+    scan per add made that quadratic: 1000 houses took 13 s, 11 s of them
+    in these checks (audit round 3; generated mesh foundations are one
+    electrode per wire since 2026.11). The index is a cache, not state of
+    the world: it lives outside the model (equality, copies, pickles and
+    JSON are untouched) and is trusted for a list only while that same
+    list object has the length it had when the index was last synced, so
+    an append or a new list made by hand triggers a rebuild. A name found
+    in it is confirmed by a scan before an error is raised, so an object
+    renamed in place never causes a false "already taken"; a duplicate
+    created by such a rename is reported by :meth:`World.check`, which
+    every solve runs.
+    """
+
+    __slots__ = ("world", "_lists")
+
+    _FIELDS = ("electrodes", "junctions", "conductors", "sources")
+
+    def __init__(self, world: World) -> None:
+        self.world = weakref.ref(world)
+        # field -> (the list object, its length, the set of its names)
+        self._lists: dict[str, tuple[list, int, set[str]]] = {}
+
+    def _names(self, world: World, field: str) -> set[str]:
+        items = getattr(world, field)
+        entry = self._lists.get(field)
+        if entry is None or entry[0] is not items or entry[1] != len(items):
+            entry = (items, len(items), {x.name for x in items})
+            self._lists[field] = entry
+        return entry[2]
+
+    def taken(self, world: World, field: str, name: str) -> bool:
+        """Whether ``name`` is used in the list ``field`` (confirmed by a scan)."""
+        if name not in self._names(world, field):
+            return False
+        if any(x.name == name for x in getattr(world, field)):
+            return True
+        self._lists.pop(field, None)  # stale (an object renamed in place)
+        return False
+
+    def added(self, world: World, field: str, name: str) -> None:
+        """Record that ``name`` was appended to the list ``field``."""
+        items = getattr(world, field)
+        entry = self._lists.get(field)
+        if entry is not None and entry[0] is items and entry[1] == len(items) - 1:
+            entry[2].add(name)
+            self._lists[field] = (items, len(items), entry[2])
+        else:
+            self._lists.pop(field, None)
+
+    def node_view(self, world: World) -> "_NodeNames":
+        """The node names (electrodes and junctions) as a container."""
+        return _NodeNames(
+            self._names(world, "electrodes"), self._names(world, "junctions")
+        )
+
+
+class _NodeNames:
+    """``in`` over the electrode and junction names of a world."""
+
+    __slots__ = ("electrodes", "junctions")
+
+    def __init__(self, electrodes: set[str], junctions: set[str]) -> None:
+        self.electrodes = electrodes
+        self.junctions = junctions
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.electrodes or name in self.junctions
+
+
+#: One index per live world, keyed by ``id(world)`` and dropped by a
+#: finalizer when the world is collected (``World`` is not hashable).
+_NAME_INDEXES: dict[int, _NameIndex] = {}
+
+
+def _name_index(world: World) -> _NameIndex:
+    """The name index of ``world`` (created on first use)."""
+    index = _NAME_INDEXES.get(id(world))
+    if index is None or index.world() is not world:
+        index = _NameIndex(world)
+        _NAME_INDEXES[id(world)] = index
+        weakref.finalize(world, _NAME_INDEXES.pop, id(world), None)
+    return index
