@@ -114,7 +114,7 @@ def test_group_small_input_is_exact_contraction() -> None:
     grouped = two_layer_layered_correction_group(
         s_values, z, z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1
     )
-    for s, g in zip(s_values, grouped):
+    for s, g in zip(s_values, grouped, strict=True):
         g_full = two_layer_layered_correction_real_space(
             s, z, z_s, rho_1=rho_1, rho_2=rho_2, h_1=h_1
         )

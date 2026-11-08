@@ -21,7 +21,6 @@ import pytest
 
 import groundfield as gf
 from groundfield.diagnostics import (
-    _MIN_THINWIRE_RATIO,
     check_segment_resolution,
     expected_segments,
     world_statistics,

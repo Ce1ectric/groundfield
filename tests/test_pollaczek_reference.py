@@ -291,7 +291,7 @@ def test_mutual_below_self_and_decays_with_separation():
         for x in xs
     ]
     assert all(m < z_self.imag for m in xm)
-    assert all(a > b for a, b in zip(xm, xm[1:]))
+    assert all(a > b for a, b in zip(xm, xm[1:], strict=False))
 
 
 @pytest.mark.parametrize("freq", [50.0, 1000.0])

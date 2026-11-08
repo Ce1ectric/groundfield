@@ -49,7 +49,6 @@ from groundfield.io import csv as gf_csv
 from groundfield.solver.engine import Engine
 from groundfield.sources import (
     CurrentSource,
-    Source,
     SourceAdapter,
     VoltageSource,
 )

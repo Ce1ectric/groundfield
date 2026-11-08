@@ -841,7 +841,9 @@ def test_lambda_max_factor_is_inert_over_five_orders(
         for f in (30.0, 100.0, 200.0, 1000.0, 10000.0, 30000.0)
     ]
     want = float(_closed_form_kernel(s, z, z, **_SOIL))
-    for f, v in zip((30.0, 100.0, 200.0, 1000.0, 10000.0, 30000.0), values):
+    for f, v in zip(
+        (30.0, 100.0, 200.0, 1000.0, 10000.0, 30000.0), values, strict=True
+    ):
         assert v == pytest.approx(want, rel=1e-6), (f, v, want)
     spread = (max(values) - min(values)) / abs(want)
     assert spread < 1e-7, (values, spread)

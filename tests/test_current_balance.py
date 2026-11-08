@@ -19,10 +19,8 @@ Validates :mod:`groundfield.postprocess.current_balance` against:
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
-import pandas as pd
 import pytest
 
 import groundfield as gf

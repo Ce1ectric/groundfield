@@ -277,7 +277,7 @@ def test_conductor_resolves_electrode_names() -> None:
     """``create_conductor`` records the electrode names for the cluster logic."""
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     g1 = gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=1.0)
-    g2 = gf.create_electrode(world, "rod", name="g2", position=(5, 0, 0.5), length=1.0)
+    gf.create_electrode(world, "rod", name="g2", position=(5, 0, 0.5), length=1.0)
     cond = gf.create_conductor(world, start=g1, end="g2")
     assert cond.start_electrode == "g1"
     assert cond.end_electrode == "g2"
