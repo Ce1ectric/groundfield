@@ -276,12 +276,25 @@ reproduces 0.15.0, it is named.
   feet on the 1 m circle around it, optionally only in given `directions` or
   outside given outlines (`exclude`); also `gf.safety.touch_voltage_at_part`.
   How-to *Assess touch voltages*. Test: `tests/test_touch_voltage_at_part.py`.
-- **Effective resistivity (10.84; user decision Q6):**
-  `effective_resistivity(soil, *, w0=0.13, beta=0.8, h_ref=10.0)`,
-  ρ_eff = ρ₁^(1−w)·ρ₂^w with w = w0·(h₁/h_ref)^(−β) limited to [0, 1], exact
-  for homogeneous soil and equal layers, canonical stacks reduced, an error
-  for three or more distinct layers; bit-identical to the AP1 / AP2 scripts
-  inside their calibration range. Test: `tests/test_effective_resistivity.py`.
+- **Effective resistivity (10.84; user decisions Q6, Q36):**
+  `effective_resistivity(soil, *, preset="lv_network", w0=None, beta=None,
+  h_ref=10.0)`, ρ_eff = ρ₁^(1−w)·ρ₂^w with w = w0·(h₁/h_ref)^(−β) limited to
+  [0, 1], exact for homogeneous soil and equal layers, canonical stacks
+  reduced, an error for three or more distinct layers; bit-identical to the
+  AP1 / AP2 scripts inside their calibration range. The weights come from a
+  preset per electrode class, `groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS`,
+  with the values of the AP2 hand-over (2026-10-20, AP1 catalogue computed
+  with groundfield 0.14.0): `"lv_network"` (0.13, 0.8; the default, the AP1
+  calibration over all LV networks), `"station"` (0.06, 1.3; the station
+  electrode alone) and `"lv_group_<g>_p<pp>"` for the four LV network groups
+  (perimeter equivalent n_U = Σ building perimeter / 40 m, thresholds 20 / 100 /
+  250) and 5 / 10 / 20 / 40 % foundation electrodes (q50 fit per group). An
+  explicit `w0` or `beta` replaces that weight only; an unknown name raises
+  `ValueError` naming the closest presets. For the AP1 station in the 39 AP1
+  soils, R = c·ρ_eff misses the field solution by a median 2.1 % and at most
+  15.7 % with `"station"` (hand-over 1.7 % / 15.7 %, reproduced with the
+  0.14.0 point kernel), against 5.5 % / 35.9 % with `"lv_network"` and
+  12.4 % / 41.9 % over ρ₁. Tests: `tests/test_effective_resistivity.py`.
 - **Impedance quantity (10.18, 10.19):** `quantity="input" | "cluster" |
   "electrode"` and `source=` on `sweep`, `convergence_study` and the rho-f
   helpers. Test: `tests/test_impedance_quantity.py`.
@@ -452,8 +465,9 @@ reproduces 0.15.0, it is named.
   `metadata["rho_definition"] = "effective_resistivity"`. A compact electrode
   in the upper layer follows ρ₁ more closely than the network calibration of
   ρ_eff (station of the IO example: standard form within 13.4 / 8.3 / 3.6 %
-  over ρ_eff, 3.9 / 1.9 / 0.6 % over ρ₁ for h₁ = 5 / 10 / 30 m); check
-  `max_relative`, or pass group-specific `w0`, `beta`.
+  over ρ_eff, 3.9 / 1.9 / 0.6 % over ρ₁ for h₁ = 5 / 10 / 30 m); use the
+  preset of its class (`preset="station"`: 7.5 / 2.9 / 0.6 %), the same one
+  for the BusType and its bus, and check `max_relative`.
 - ⚠ **Touch-voltage envelope (10.21; user decision Q3)** samples no interior
   by default: inside the footprint stands the station, the house, the steel
   structure or the mast; touch points are defined with

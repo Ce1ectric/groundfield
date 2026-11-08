@@ -104,9 +104,18 @@ shows what agrees with independent references and how well.
   networks of the AP1 catalogue ($h_1$ = 5 … 30 m, $\rho_1$ = 30 …
   1000 Ω·m, $\rho_2$ = 30 … 200 Ω·m), defined for homogeneous and
   two-layer soil only (three distinct layers raise `ValueError`); its
-  weight is limited to $[0, 1]$, so an upper layer thinner than 0.78 m
-  gives $\rho_2$. A compact electrode in the upper layer follows
-  $\rho_1$ more closely: check `max_relative` of a fit over
+  weight is limited to $[0, 1]$, so an upper layer thinner than
+  0.28 … 1.34 m, depending on the preset (0.78 m with the default), gives
+  $\rho_2$. The weight presets per electrode class
+  (`groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS`) are the q50 values of
+  the AP2 hand-over, derived from the catalogue computed with groundfield
+  0.14.0 and not yet re-derived for this release, whose LV-network numbers
+  differ from 0.15.0 by several per cent (concrete shell, line kernel). A
+  preset holds for its class only (the AP1 station with
+  `"lv_group_4_p40"`: rms 39.9 %); even `"station"` leaves up to 15.7 % at
+  $h_1$ = 5 m, where the station rods end 0.4 m above the interface. A
+  BusType records `rho_definition`, not the preset: use the same preset
+  for the BusType and its bus, and check `max_relative` of a fit over
   $\rho_\text{eff}$ (see [Soil](api/soil.md#effective-resistivity)).
 
 ## Backends
