@@ -24,7 +24,9 @@ DIN 18014 lies in the concrete with its connections); rods stay bare.
 from __future__ import annotations
 
 import math
+import re
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -208,8 +210,9 @@ def _mesh_wires(spec: FoundationElectrodeSpec, soil: object | None = None) -> li
 @pytest.mark.parametrize("orientation_deg", [None, 30.0])
 def test_mesh_braces_are_encased(model: str, orientation_deg: float | None) -> None:
     """DIN 18014: a foundation earth electrode lies in the concrete with its
-    connections, so the braces carry the shell like the perimeter. Up to
-    the user decision Q20 the two braces kept r_a and C = 0."""
+    connections, so the braces carry the shell like the perimeter. On the
+    2026.11 development line before the user decision Q20 the two braces
+    kept r_a and C = 0 (in 0.15.0 they had r_b and C = 0)."""
     spec = _foundation(model, 500.0, style="mesh", n_x=2, n_y=2)
     wires = _mesh_wires(spec.model_copy(update={"orientation_deg": orientation_deg}))
     assert len(wires) == 6  # 4 perimeter wires + 2 braces
@@ -237,8 +240,9 @@ def test_bare_mesh_wires_keep_the_wire_radius(orientation_deg: float | None) -> 
 def test_shell_of_a_mesh_foundation_spans_every_wire() -> None:
     """The lumped shell resistance of the whole foundation is C over the
     whole encased length: the per-wire C / L_j in parallel give C / 60 m for
-    a 10 m 2 x 2 mesh (C / 40 m, the perimeter, before Q20), the value
-    ``concrete_shell`` reports for that length."""
+    a 10 m 2 x 2 mesh (C / 40 m, the perimeter, on the development line
+    before Q20 and in the registry of 0.15.0), the value ``concrete_shell``
+    reports for that length."""
     from groundfield.generators.materialise import concrete_shell
     from groundfield.geometry.electrodes import shell_resistance_from_coefficient
 
@@ -354,11 +358,13 @@ def _assembled_mesh_impedance(soil: object, rho_c: float) -> float:
 def test_encased_mesh_equals_the_assembly_of_its_wires(
     soil: object, rho_c: float
 ) -> None:
-    """Two methods agree to round-off: ``Engine.solve`` on the generated
-    default house mesh and the hand assembly of its six encased wires. With
-    the braces bare (up to Q20) the solve was -1.4 / -75 % (100 ohm m) and
-    -11 / -90 % (30 / 100 ohm m, h_1 = 5 m) below the assembly at
-    rho_c = 150 / 5000 ohm m (evidence d2gen ``brace_effect_base.out``)."""
+    """``Engine.solve`` on the generated default house mesh and the hand
+    assembly of its six encased wires agree to round-off (a check of the
+    generator's wiring: the same kernel and owner model, audit D2B-07).
+    With the braces bare (the development line up to Q20) the solve was
+    -1.4 / -75 % (100 ohm m) and -11 / -90 % (30 / 100 ohm m, h_1 = 5 m)
+    below the assembly at rho_c = 150 / 5000 ohm m (evidence d2gen
+    ``brace_effect_base.out``)."""
     world = gf.create_world(soil=soil)
     anchor = GroundingSystemSpec(electrodes=[_house_mesh(rho_c)]).build_at(
         world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0)
@@ -368,6 +374,199 @@ def test_encased_mesh_equals_the_assembly_of_its_wires(
     assert z_solve.real == pytest.approx(
         _assembled_mesh_impedance(soil, rho_c), rel=1e-12
     )
+
+
+#: Input impedance (ohm) of the generator default house mesh (10 m, 2 x 2,
+#: 0.8 m, r_a = 5 mm, t = 5 cm) built with ``build_at``, 1 A at its anchor,
+#: solved by groundfield 0.15.0 with its default engine (image family, point
+#: kernel, 0.5 m segments, 50 Hz), at rho_c = 50 / 100 / 150 / 1000 / 5000
+#: ohm m. Evidence f2gen ``mesh_vs_v0150.py`` on the v0.15.0 checkout,
+#: reproduced by the auditor's script (D2B s01) and, to round-off, by the
+#: 0.15.0 models rebuilt in this release (``mesh_vs_v0150_models.out``).
+V0150_HOUSE_MESH = {
+    ("100 Ω·m", "lumped"): (4.072060, 4.072060, 4.072060, 4.072060, 4.072060),
+    ("100 Ω·m", "distributed"): (4.260941, 4.495502, 4.699200, 6.226285, 7.199813),
+    ("30 / 100 Ω·m", "lumped"): (1.870050, 1.870050, 1.870050, 1.870050, 1.870050),
+    ("30 / 100 Ω·m", "distributed"): (2.079758, 2.238138, 2.349233, 2.803409, 2.941482),
+}
+HOUSE_RHO_C = (50.0, 100.0, 150.0, 1000.0, 5000.0)
+DOCS = Path(__file__).resolve().parents[1] / "docs"
+
+
+def _percentages(row: str) -> list[tuple[float, float]]:
+    """The signed percentages of a Markdown table row ("+1 701 %" too), each
+    with half a unit of its last printed digit."""
+    out = []
+    for text in re.findall(r"([+−-][0-9][0-9 .]*) %", row):
+        text = text.replace(" ", "").replace("−", "-")
+        decimals = len(text.split(".")[1]) if "." in text else 0
+        out.append((float(text), 0.5 * 10.0**-decimals))
+    return out
+
+
+# audit D2B-01
+@pytest.mark.finding("10.13")
+def test_texts_place_the_bare_braces_on_the_development_line() -> None:
+    """In 0.15.0 the braces of a generated mesh foundation were never bare:
+    every wire had r_b, "distributed" put C on the perimeter only and
+    "lumped" on no wire. The bare braces (r_a, no C) existed only on the
+    2026.11 development line before user decision Q20, but the field
+    description, the module docstring, the concrete-shell page and ADR-0012
+    said "up to then the braces stayed bare"."""
+    from groundfield.generators import materialise
+
+    texts = {
+        "field description": FoundationElectrodeSpec.model_fields[
+            "concrete_rho_ohm_m"
+        ].description,
+        "materialise module": materialise.__doc__,
+        "concrete_shell": materialise.concrete_shell.__doc__,
+        "concrete-shell page": (DOCS / "explanation" / "concrete-shells.md").read_text(
+            encoding="utf-8"
+        ),
+        "ADR-0012": (DOCS / "adr" / "0012-foundation-concrete-encasement.md").read_text(
+            encoding="utf-8"
+        ),
+    }
+    for name, text in texts.items():
+        flat = " ".join(text.split())
+        assert "development line" in flat, name
+        assert "0.15.0" in flat, name
+        for stale in (
+            "up to then the braces stayed bare",
+            "the earlier rule kept the braces bare",
+            "up to then the braces kept the bare radius",
+        ):
+            assert stale not in flat, (name, stale)
+
+
+# audit D2B-01
+@pytest.mark.finding("10.13")
+@pytest.mark.parametrize("model", ["lumped", "distributed"])
+@pytest.mark.parametrize(
+    ("soil_name", "soil"),
+    [
+        ("100 Ω·m", gf.HomogeneousSoil(rho=100.0)),
+        ("30 / 100 Ω·m", gf.TwoLayerSoil(rho_1=30.0, rho_2=100.0, h_1=5.0)),
+    ],
+    ids=["homogeneous", "two-layer"],
+)
+def test_the_concrete_shell_page_states_the_change_against_0150(
+    soil_name: str, soil: object, model: str
+) -> None:
+    """The brace-effect table is relative to the bare braces of the
+    development line; *Numbers that change* and the users of 0.15.0 need the
+    change against 0.15.0, which the page states per ``concrete_model``
+    value of 0.15.0 (house mesh, default engine of each version). Measured:
+    100 ohm m +7.0 ... +782 % ("lumped") and +2.2 ... +399 %
+    ("distributed")."""
+    page = (DOCS / "explanation" / "concrete-shells.md").read_text(encoding="utf-8")
+    section = page.split("### Against 0.15.0", 1)[1].split("\n## ", 1)[0]
+    row = next(
+        line
+        for line in section.splitlines()
+        if line.startswith(f"| {soil_name}") and f'`"{model}"`' in line
+    )
+    quoted = _percentages(row)
+    assert len(quoted) == len(HOUSE_RHO_C), row
+    engine = gf.create_engine(frequencies=[50.0])
+    for rho_c, old, (documented, half_unit) in zip(
+        HOUSE_RHO_C, V0150_HOUSE_MESH[(soil_name, model)], quoted, strict=True
+    ):
+        world = gf.create_world(soil=soil)
+        anchor = GroundingSystemSpec(electrodes=[_house_mesh(rho_c)]).build_at(
+            world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0)
+        )
+        gf.create_source(world, attached_to=anchor, magnitude=1.0)
+        new = engine.solve(world).input_impedance()[0].real
+        change = 100.0 * (new / old - 1.0)
+        assert change == pytest.approx(documented, abs=half_unit + 1e-9)
+
+
+def _per_segment_brace_effect(rho_cs: tuple[float, ...]) -> list[float]:
+    """Encased over bare braces - 1 of the house mesh in 100 ohm m with one
+    current per segment (all segments at one potential): every 0.25 m
+    segment its own electrode, mutual matrix from ``solve_mutual_matrix``,
+    the shell C / ds on the diagonal of the encased segments."""
+    r_a, r_b, depth, ds = 0.005, 0.005 + T, 0.8, 0.25
+    xs = (-5.0, 0.0, 5.0)
+    lines = [[(x, y) for x in xs] for y in xs] + [[(x, y) for y in xs] for x in xs]
+    perimeter = {0, 2, 3, 5}
+    engine = gf.create_engine(frequencies=[50.0], segment_length=ds)
+    results = {}
+    for rule in ("bare", "encased"):
+        world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+        names, encased = [], []
+        for j, local in enumerate(lines):
+            shell = rule == "encased" or j in perimeter
+            for (x0, y0), (x1, y1) in zip(local[:-1], local[1:], strict=True):
+                for k in range(20):  # 5 m spans in 0.25 m segments
+                    names.append(f"s{len(names)}")
+                    encased.append(shell)
+                    gf.create_electrode(
+                        world,
+                        "strip",
+                        name=names[-1],
+                        start=(x0 + (x1 - x0) * k / 20, y0 + (y1 - y0) * k / 20, depth),
+                        end=(
+                            x0 + (x1 - x0) * (k + 1) / 20,
+                            y0 + (y1 - y0) * (k + 1) / 20,
+                            depth,
+                        ),
+                        wire_radius=r_b if shell else r_a,
+                    )
+        p = np.asarray(gf.solve_mutual_matrix(world, engine, names)).real
+        ones = np.ones(len(names))
+        results[rule] = [
+            1.0
+            / (
+                ones
+                @ np.linalg.solve(
+                    p + np.diag(np.where(encased, _coefficient(rc, r_a=r_a) / ds, 0.0)),
+                    ones,
+                )
+            )
+            for rc in rho_cs
+        ]
+    return [
+        100.0 * (e / b - 1.0)
+        for e, b in zip(results["encased"], results["bare"], strict=True)
+    ]
+
+
+# audit D2B-07
+@pytest.mark.finding("10.13")
+def test_the_brace_effect_names_its_model_and_second_method() -> None:
+    """The hand assembly from ``solve_mutual_matrix`` shares the kernel and
+    the one-owner-per-wire model with ``Engine.solve``: it checks the
+    generator, it is not an independent method. With one current per
+    segment the brace effect is +49.2 / +318.5 % instead of +46.9 / +307 %
+    at rho_c = 1000 / 5000 ohm m (house, 100 ohm m; the auditor's
+    independent BEM agrees to 0.02 pp), a model uncertainty the page and
+    ADR-0012 now state."""
+    page = " ".join(
+        (DOCS / "explanation" / "concrete-shells.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+    adr = " ".join(
+        (DOCS / "adr" / "0012-foundation-concrete-encasement.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+    for text in (page, adr):
+        assert "independent assembly" not in text
+        assert "not the numbers" in text
+    effect = _per_segment_brace_effect((1000.0, 5000.0))
+    found = re.search(
+        r"changes \$Z\$ by \+([0-9.]+) / \+([0-9.]+) % instead of \+46\.9 / \+307 %",
+        page,
+    )
+    assert found, "per-segment brace effect not quoted"
+    assert [float(found.group(1)), float(found.group(2))] == pytest.approx(
+        effect, abs=0.05
+    )
+    assert "+49.2 / +318.5 % instead of +46.9 / +307 %" in adr
 
 
 @pytest.mark.finding("10.13")
