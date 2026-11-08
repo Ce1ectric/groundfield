@@ -171,6 +171,7 @@ nav:
       - "Speed up large studies": how-to/speed-up-large-studies.md
       - "Plot results": how-to/plot-results.md
       - "Model the inductive coupling of cables and leads": how-to/inductive-coupling.md
+      - "Assess touch voltages": how-to/assess-touch-voltages.md
       - "Export to CSV, VTK and ParaView": how-to/export-csv-vtk-paraview.md
       - "Work with OpenStreetMap offline": how-to/osm-offline.md
       - "Read and act on warnings": how-to/warnings-and-diagnostics.md
