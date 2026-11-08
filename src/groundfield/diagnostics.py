@@ -124,7 +124,10 @@ self-action integral is computed under the assumption
 """
 
 SOFT_LIMIT: int = 5_000
-"""Total segment count above which the user should be aware of cost.
+"""Problem size above which the user should be aware of cost.
+
+Compared with the segment count and with the size of the dense nodal
+system (:func:`expected_segments`, key ``nodal_unknowns``).
 
 The reaction matrix scales as :math:`O(N^2)` in memory (bounded by row
 blocks above the kernel budget) and the multi-port assembly as
