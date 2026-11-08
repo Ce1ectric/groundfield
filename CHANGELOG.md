@@ -73,10 +73,11 @@ pass-10 page. Many results move on purpose: read *Numbers that change* first.
 
 ⚠ Every change of this release that moves a result computed with 0.15.0.
 Sizes are relative to 0.15.0; *golden* names the stored reference cases that
-moved (`python -m tests.golden.harness report`: 224 of 425 stored quantities
-in 24 of 45 cases moved, each declared with its finding; 18 cases are
-bit-identical and 3 differ by round-off). Where a switch reproduces 0.15.0, it
-is named.
+moved (`python -m tests.golden.harness report`: 222 of 453 stored quantities
+in 26 of 48 cases moved, each declared with its finding, 10 are no longer
+produced and 120 are new (generated mesh foundations are one electrode per
+wire); 19 cases are bit-identical and 3 differ by round-off). Where a switch
+reproduces 0.15.0, it is named.
 
 | Finding | What moves | Size | Who is affected |
 |---|---|---|---|
