@@ -1,0 +1,24 @@
+# How-to guides
+
+Short, task-oriented recipes for readers who know what they want to do.
+Each guide assumes you have worked through the first
+[tutorials](../tutorials/index.md) or know the basic workflow
+(soil → world → electrodes → source → engine → `solve`). The code blocks
+are complete and are executed by the test suite
+(`tests/test_doc_snippets.py`), so what you copy is what CI ran.
+
+| Guide | Task |
+|---|---|
+| [Install the optional extras](install-extras.md) | OpenStreetMap ingest, groundinsight bridge, compiled kernels |
+| [Run sweeps and Monte Carlo studies](sweeps-and-monte-carlo.md) | parameter grids, stochastic networks, parallel workers |
+| [Speed up large studies](speed-up-large-studies.md) | segment budget, kernel and earth-return choices, many excitations |
+| [Plot results](plot-results.md) | geometry, surface potential, profiles, cross-sections, current sharing, sweeps |
+| [Model the inductive coupling of cables and leads](inductive-coupling.md) | Neumann inductance, earth-return models, skin effect |
+| [Export to CSV, VTK and ParaView](export-csv-vtk-paraview.md) | tables with provenance, geometry and field files |
+| [Work with OpenStreetMap offline](osm-offline.md) | Overpass cache, building filters, coordinates |
+| [Read and act on warnings](warnings-and-diagnostics.md) | `diagnose()`, the common warnings and what to do about them |
+| [Contribute to the documentation](contribute-to-the-docs.md) | page types, tutorial notebooks, the snippet markers, local build |
+
+The theory behind the engines and the validation numbers are in the
+[explanation](../explanation/index.md) section; every public name is in the
+[reference](../reference/index.md).
