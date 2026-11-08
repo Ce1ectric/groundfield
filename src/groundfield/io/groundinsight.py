@@ -111,6 +111,7 @@ from __future__ import annotations
 
 import json
 import math
+import numbers
 import os
 import warnings
 from dataclasses import dataclass
@@ -286,13 +287,20 @@ class BusTypeSpec:
         Raises
         ------
         ValueError
-            If the schema name or version does not match, or
-            ``voltage_level`` is not a finite number.
+            If the payload is not a schema-v1 BusType document: not a
+            ``dict``, a wrong schema name or version, a missing ``name``,
+            ``system_type`` or ``voltage_level``, a ``voltage_level`` that
+            is not a finite number, or ``samples`` / ``metadata`` that are
+            not objects (sample lists hold numbers or ``None``).
         EvaluateSpecError
             If ``impedance_formula`` is missing or outside the allowed
             formula grammar. The formula is parsed, never evaluated as
             code; the message names the offending element.
         """
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"a BusType document is a JSON object, got {type(payload).__name__}"
+            )
         if payload.get("schema") != SCHEMA_NAME:
             raise ValueError(
                 f"unexpected schema name: got {payload.get('schema')!r}, "
@@ -311,6 +319,9 @@ class BusTypeSpec:
                 f"unsupported schema_version {version}; this groundfield "
                 f"build only reads v{SCHEMA_VERSION}"
             )
+        for key in ("name", "system_type", "voltage_level"):
+            if key not in payload:
+                raise ValueError(f"BusType document has no {key!r}")
         name = str(payload["name"])
         formula = payload.get("impedance_formula")
         if formula is None:
@@ -329,19 +340,34 @@ class BusTypeSpec:
                 f"BusType document {name!r}: voltage_level must be a finite "
                 f"number, got {str(payload['voltage_level'])[:40]!r}"
             )
+        metadata = payload.get("metadata") or {}
+        if not isinstance(samples, dict) or not isinstance(metadata, dict):
+            raise ValueError(
+                f"BusType document {name!r}: samples and metadata must be JSON objects"
+            )
+        sample_lists: dict[str, list[Any]] = {}
+        for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm"):
+            values = samples.get(key, [])
+            if isinstance(values, np.ndarray):
+                values = values.tolist()
+            if not isinstance(values, (list, tuple)) or not all(
+                value is None
+                or (isinstance(value, numbers.Real) and not isinstance(value, bool))
+                for value in values
+            ):
+                raise ValueError(
+                    f"BusType document {name!r}: samples[{key!r}] must be a list "
+                    "of numbers (null for a value that is not finite)"
+                )
+            sample_lists[key] = list(values)
         return cls(
             name=name,
             description=payload.get("description"),
             system_type=str(payload["system_type"]),
             voltage_level=voltage_level,
             impedance_formula=formula,
-            samples={
-                "frequency_Hz": list(samples.get("frequency_Hz", [])),
-                "rho_Ohm_m": list(samples.get("rho_Ohm_m", [])),
-                "Z_real_Ohm": list(samples.get("Z_real_Ohm", [])),
-                "Z_imag_Ohm": list(samples.get("Z_imag_Ohm", [])),
-            },
-            metadata=dict(payload.get("metadata", {})),
+            samples=sample_lists,
+            metadata=dict(metadata),
         )
 
 
@@ -916,14 +942,21 @@ def load_bustype_json(path: Union[str, Path]) -> BusTypeSpec:
     Raises
     ------
     ValueError
-        If the schema name or version does not match.
+        If the file is not valid JSON (also: nested too deeply to be
+        read) or not a schema-v1 BusType document, see
+        :meth:`BusTypeSpec.from_dict`.
     EvaluateSpecError
         If ``impedance_formula`` is missing or outside the allowed
         formula grammar.
     """
     p = Path(path)
     with p.open("r", encoding="utf-8") as fh:
-        payload = json.load(fh)
+        try:
+            payload = json.load(fh)
+        except RecursionError:
+            raise ValueError(
+                f"BusType document {p.name!r} is nested too deeply to be read"
+            ) from None
     return BusTypeSpec.from_dict(payload)
 
 

@@ -1058,6 +1058,59 @@ def test_unknown_fit_quality_and_samples_are_written_as_null(
     assert "rms=unknown" in fit_quality_summary(spec)
 
 
+_CRAFTED_DOCUMENTS = {
+    "deeply-nested": "[" * 100_000 + "]" * 100_000,
+    "not-an-object": "[]",
+    "missing-name": {
+        "impedance_formula": "rho",
+        "system_type": "TN",
+        "voltage_level": 0.4,
+    },
+    "missing-system-type": {
+        "name": "x",
+        "impedance_formula": "rho",
+        "voltage_level": 0.4,
+    },
+    "missing-voltage-level": {
+        "name": "x",
+        "impedance_formula": "rho",
+        "system_type": "TN",
+    },
+    "metadata-not-an-object": {
+        "name": "x",
+        "impedance_formula": "rho",
+        "system_type": "TN",
+        "voltage_level": 0.4,
+        "metadata": [[[]]],
+    },
+    "samples-not-numbers": {
+        "name": "x",
+        "impedance_formula": "rho",
+        "system_type": "TN",
+        "voltage_level": 0.4,
+        "samples": {"frequency_Hz": [[1.0]]},
+    },
+}
+
+
+@pytest.mark.finding("10.01")
+@pytest.mark.parametrize("key", list(_CRAFTED_DOCUMENTS))
+def test_crafted_bustype_documents_raise_value_error(key: str, tmp_path) -> None:
+    """A crafted BusType file raised RecursionError (deeply nested JSON),
+    AttributeError (not an object) or KeyError (missing fields) from
+    ``load_bustype_json``, outside its documented ValueError family."""
+    # audit A2G-03 (the same class: an exception outside the contract)
+    document = _CRAFTED_DOCUMENTS[key]
+    if isinstance(document, dict):
+        document = json.dumps(
+            {"schema": SCHEMA_NAME, "schema_version": SCHEMA_VERSION, **document}
+        )
+    path = tmp_path / "crafted.json"
+    path.write_text(document, encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_bustype_json(path)
+
+
 @pytest.mark.finding("10.19")
 def test_export_refuses_a_voltage_level_that_is_not_finite() -> None:
     """A NaN voltage level would make the document non-strict JSON."""

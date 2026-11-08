@@ -38,11 +38,15 @@
   also in an exponent, is now bounded by its exact decimal value before
   any float is formed, and no arithmetic error leaves the parser as
   anything but `FormulaError`; a BusType document whose `voltage_level`
-  or `schema_version` is outside the float range raises `ValueError`.
-  Tests:
+  or `schema_version` is outside the float range raises `ValueError`, and
+  so does a crafted document that is nested too deeply for Python's JSON
+  reader, is not a JSON object, lacks `name`, `system_type` or
+  `voltage_level`, or has samples that are not numbers (it raised
+  `RecursionError`, `AttributeError` or `KeyError`). Tests:
   `tests/test_formula_security.py::test_numeric_literals_outside_the_bounds_raise_formula_error`,
   `tests/test_formula_security.py::test_load_bustype_json_reports_a_huge_literal_as_evaluate_spec_error`,
-  `tests/test_formula_security.py::test_bustype_header_numbers_outside_the_float_range_raise_value_error`.
+  `tests/test_formula_security.py::test_bustype_header_numbers_outside_the_float_range_raise_value_error`,
+  `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`.
 
 ### Added
 - **`formula_function(expr, symbols=("f", "rho"))`** in
