@@ -654,11 +654,11 @@ def test_fem_an_electrode_on_the_interface_touches_both_layers() -> None:
 
     Ring r = 5 m (a_eq = 2.57 m) under a 30/1000 Ω·m top layer of 0.5 m:
     at z = 0.5 m it lies on the interface and touches both layers (the
-    reduction then only warns); 7 mm deeper, beyond its wire radius of
-    5 mm, it touches the lower layer alone and the spanned top layer, more
-    conductive, raises. (Up to audit D2A-02 the ring raised 1 µm below the
-    interface already; within its radius it touches the top layer, see
-    :func:`test_fem_a_wire_within_its_radius_of_the_interface_touches_both_layers`.)
+    reduction then only warns, +23.4 % against image_2layer); 7 mm deeper
+    it touches the lower layer alone and the spanned top layer, more
+    conductive, raises. So does the ring within its wire radius below the
+    interface since audit R2A-02, see
+    :func:`test_fem_a_wire_within_its_radius_below_a_conductive_layer_raises`.
     """
     # user decision Q23
     soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
@@ -730,25 +730,80 @@ def test_fem_a_rod_reaching_into_the_conductive_top_layer_keeps_the_warning(
 
 
 @pytest.mark.finding("10.23")
-@pytest.mark.parametrize("gap", [1e-6, 3e-3, 5e-3])
-def test_fem_a_wire_within_its_radius_of_the_interface_touches_both_layers(
-    gap,
-) -> None:
+@pytest.mark.parametrize("gap", [1e-6, 3e-3, 5e-3, 7e-3])
+def test_fem_a_wire_within_its_radius_below_a_conductive_layer_raises(gap) -> None:
     """A ring (wire radius 5 mm) whose axis lies within one radius below h_1.
 
-    It touches the conductive 30 Ohm m top layer (the contact rule of the
-    integral engines); fem is +23.4 % / +9.3 % / +0.1 % against image_2layer
-    and the reduced-kernel ring series (conservative), but raised "fem reads
-    too low" (audit D2A-02). 7 mm below h_1 (beyond the radius, -6.2 %) it
-    raises as before.
+    The Q23 rule asks for the axis (audit R2A-02): the ring touches the
+    1000 Ohm m layer only, and the spanned 30 Ohm m top layer conducts
+    better, so it raises. fem is +23.4 % / +9.3 % / +0.1 % / -6.2 % against
+    image_2layer and the reduced-kernel ring series there; the message says
+    that fem misplaces the current and quotes the measured range with its
+    positive end instead of "reads too low". Audit D2A-02 had counted the
+    band as contact and made the first three a warning, which also turned
+    errors of -30 ... -89 % into warnings
+    (:func:`test_fem_partial_contact_with_a_more_conductive_layer_raises`).
     """
-    # audit D2A-02
+    # audit R2A-02
     soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
-    touching = _electrode_world(soil, "ring", center=(0, 0, 0.5 + gap), radius=5.0)
-    res, texts = _fem_warnings(touching)
-    assert math.isfinite(res.cluster_impedance("g1")[0].real) and texts
-    beyond = _electrode_world(soil, "ring", center=(0, 0, 0.507), radius=5.0)
-    assert _fem_verdict(beyond) == "raise"
+    text = _fem_message(
+        _electrode_world(soil, "ring", center=(0, 0, 0.5 + gap), radius=5.0)
+    )
+    assert "none of its electrodes touches" in text, text
+    assert "reads too low" not in text and "misplaces the current" in text, text
+    assert "+30 %" in text, text  # the measured range ends above +23.4 %
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("soil", "radius", "z"),
+    [
+        # ring 3 mm / 5 mm above a conductive lower layer that the hemisphere
+        # spans: -55.6 % / -85.4 % against image_2layer (Q23)
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.5),
+            5.0,
+            0.497,
+            id="1000/30-3mm-above",
+        ),
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=0.5),
+            5.0,
+            0.495,
+            id="3000/30-5mm-above",
+        ),
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=10000.0, rho_2=30.0, h_1=0.8),
+            2.0,
+            0.797,
+            id="10000/30-3mm-above",
+        ),
+        # ring 5 mm below a conductive top layer in the A2E-2 band
+        # (h_1 = 0.66 a_eq): -79.4 % against image_2layer (A2E-2)
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=0.8),
+            2.0,
+            0.805,
+            id="30/10000-5mm-below",
+        ),
+    ],
+)
+def test_fem_partial_contact_with_a_more_conductive_layer_raises(
+    soil, radius, z
+) -> None:
+    """A wire within its radius of a more conductive layer it does not reach.
+
+    Audit D2A-02 let a horizontal wire touch every layer within its wire
+    radius of its axis, for every rule. That lifted the Q23 and A2E-2
+    errors where fem is far too low (-30 ... -89 % against image_2layer and
+    a radius-regularised ring series, all raised on 563ead7); 4fc8153 only
+    warned. The band now serves the 10.23 rule only, which it makes
+    stricter (audit R2A-02).
+    """
+    # audit R2A-02
+    assert _fem_verdict(
+        _electrode_world(soil, "ring", center=(0, 0, z), radius=radius)
+    ) == ("raise")
 
 
 @pytest.mark.finding("10.23")

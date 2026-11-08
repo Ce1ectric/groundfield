@@ -87,10 +87,14 @@ The registry marks `fem` experimental; the reduction itself is guarded
 (findings 10.23, the audit rounds of the release and the D2 audit). All
 layer rules ask which layers the electrodes touch with one predicate, the
 contact of the thin-wire model the integral engines solve: a horizontal
-wire touches every layer within its wire radius of its axis (a wire on or
-within one radius of an interface touches both layers), a rod the layers
-its axis passes through — an end lying on an interface does not count,
-the thin-wire model has no end face (audit D2A-01, D2A-02).
+wire touches the layers that hold its axis (a wire lying on an interface
+touches both, to round-off), a rod the layers its axis passes through —
+an end lying on an interface does not count, the thin-wire model has no
+end face (audit D2A-01, D2A-02). Only the first error below also counts
+a wire within its radius of a layer as touching it, the one rule that
+this makes stricter; counting it in the other two lifted errors where
+`fem` is far too low (a ring 3 mm above a more conductive layer: −56 %,
+a warning in between; audit R2A-02).
 
 - **Error** (`ValueError`, before anything else): an electrode, driven or
   passive, lies at or above the soil surface, in the surface plane
@@ -110,7 +114,9 @@ the thin-wire model has no end face (audit D2A-01, D2A-02).
   $a_\text{eq}$, so more than half of the hemisphere sits in a layer the
   electrodes do not touch (a 3 m rod below $h_1 = 0.4$ m in
   1000 / 30 Ω·m read 31.1 Ω against 10.5 Ω from `mom`, +197 %; second
-  adversarial audit, A2E-2).
+  adversarial audit, A2E-2; a 2 m ring 1 … 7 mm below $h_1 = 0.8$ m:
+  −5 … −84 % in 30/1000 and 30/10000 Ω·m, +11 … +19 % in 1000/30 and
+  10000/30 Ω·m).
 - **Error** (`BackendCapabilityError`, user decision Q23 of 2026.11): a
   layer that no electrode of the cluster touches and that conducts better
   than every layer the electrodes touch, with its top above
@@ -118,7 +124,8 @@ the thin-wire model has no end face (audit D2A-01, D2A-02).
   electrodes' horizontal half-extent (ring radius, half the strip length,
   half the grid diagonal). The hemisphere injects the current straight
   into a layer it spans and reaches one below it much less than the
-  electrodes do, and the result is too low, i.e. not conservative. The
+  electrodes do: `fem` misplaces the current, mostly far too low, i.e. not
+  conservative. The
   rule is structural, independent of the size of the contrast, and works
   on the canonical layer stack (equal resistivities are no interface).
   The fem error is continuous across $h_1 = a_\text{eq}$ (−67.9 % on both
@@ -138,6 +145,8 @@ the thin-wire model has no end face (audit D2A-01, D2A-02).
     | 10 m strip at 0.8 m above a more conductive layer at $h_1 = 1.2 \ldots 5$ m | 1000/30 and 3000/30: −45 … +1 % |
     | 20 m grid at 0.5 m above 1000/30 Ω·m at $h_1 = a_\text{eq} \ldots 14$ m | −60 … +13 % (its formula reads +12 % high in homogeneous soil) |
     | near-equal layers (100/120 and 120/100 Ω·m), rods, strips and rings | −7 … +5 % (raises as well: the rule is structural) |
+    | ring $r = 5$ / 10 m within its wire radius (1 µm … 7 mm) below a more conductive top layer, $h_1 = 0.5$ / 0.8 m (`mom` refuses these; second reference an independent ring series) | 30/1000 and 100/1000 Ω·m: −6 … +30 %; 30/10000: −59 … +7 %; 100/120: +2 … +3 % |
+    | ring $r = 5$ / 2 m within its wire radius (1 µm … 7 mm) above a more conductive lower layer, $h_1 = 0.5$ / 0.8 m (likewise) | 1000/30, 3000/30, 10000/30 Ω·m: −96 … +11 %; 120/100: −3 … +1 % |
 
   The rule stops at the half-extent: just beyond it fem is silent at
   −9.8 … −0.8 % (rings $r$ = 2, 5, 10 m), −1.4 % (10 m strip) and +9.9 %
@@ -176,7 +185,8 @@ the thin-wire model has no end face (audit D2A-01, D2A-02).
   measured, +23 % for a 10 m ring over a more resistive layer at 2 m), an
   electrode touches the conductive layer only partly (a rod reaching
   1 µm … 8 cm into a conductive top layer of $0.2\,a_\text{eq}$:
-  −44 … −78 %; a wire within its radius of the interface: −22 … +23 %);
+  −44 … −78 %; a ring lying exactly on the interface, which touches both
+  layers: −21 … +30 % against `image_2layer` and a ring series);
   an interface below the electrode and the hemisphere but within the
   horizontal half-extent of the electrode over a layer that conducts no
   better (+9 % for a 10 m ring over 30/1000 Ω·m at 5 m; −16 … +16 % over
