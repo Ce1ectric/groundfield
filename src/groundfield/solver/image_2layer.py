@@ -880,9 +880,11 @@ class _TwoLayerGreen:
                 UserWarning,
                 stacklevel=stacklevel,
             )
-        if cross_layer and self.kernel != "line":
+        if cross_layer and self.kernel != "line" and self.layer_interfaces:
             # The point form of the cross-layer diagonal cannot represent a
             # horizontal wire next to h_1 or the surface (audit round 2).
+            # Without a physical interface (rho_1 == rho_2) the layered
+            # correction vanishes and nothing is to be checked.
             _check_point_cross_layer_diagonal(
                 segments,
                 arrays.points,

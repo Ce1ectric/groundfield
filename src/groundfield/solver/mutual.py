@@ -61,6 +61,7 @@ from groundfield.solver._kernels import (
     _point_field_kernel,
     _series_field,
 )
+from groundfield.solver._layered import interface_depths
 from groundfield.solver._line_kernel import LineSegments
 from groundfield.solver._pipeline import (
     BranchModel,
@@ -350,7 +351,11 @@ def _prepare(
     # 1) Discretisation + topology — identical to the live backends,
     #    including one owner per (electrode, layer) for electrodes
     #    through the layer interface (10.15).
-    interfaces = (soil_two_layer.h_1,) if soil_two_layer is not None else None
+    # Wires are cut where the resistivity changes only, as in
+    # ``image_2layer`` (audit round 2, A2S-07).
+    interfaces = None
+    if soil_two_layer is not None:
+        interfaces = interface_depths(soil_two_layer) or None
     disc = discretise(world, engine, interfaces)
     topo = build_topology(world, disc)
     layer_owners = _LayerOwners.split(
@@ -381,7 +386,7 @@ def _prepare(
         # 2-layer reaction operator: feed the engine's image-series
         # truncation, exactly like ``solve_image_2layer``.
         z_max = float(arrays.points[:, 2].max())
-        if line is None and z_max >= soil_two_layer.h_1:
+        if line is None and interfaces and z_max >= soil_two_layer.h_1:
             _check_point_cross_layer_diagonal(
                 disc.segments,
                 arrays.points,

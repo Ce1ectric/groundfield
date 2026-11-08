@@ -134,3 +134,34 @@ def test_mutual_matrix_point_form_is_guarded_too() -> None:
         solve_mutual_matrix(w, engine, ["rod"])
     Z = solve_mutual_matrix(w, gf.create_engine(segment_length=2.0), ["rod"])
     assert Z[0, 0].real > 0.0
+
+
+@_FINDING
+@pytest.mark.parametrize("kernel", ["point", "line"])
+def test_no_physical_interface_nothing_to_check(kernel: str) -> None:
+    """TwoLayerSoil(rho, rho, h): wires are not cut at h, the result is homogeneous.
+
+    The guard must not mistake the absent interface for one (the rod's
+    segments straddle h = 2.15 m), neither in Engine.solve nor in
+    solve_mutual_matrix, which cut such soils at h up to audit round 2.
+    """
+    # docb item and audit A2S-07
+    from groundfield.solver.mutual import solve_mutual_matrix
+
+    def world(soil) -> gf.World:
+        w = gf.create_world(soil=soil)
+        gf.create_electrode(w, "rod", name="r", position=(0.0, 0.0, 0.3), length=6.0)
+        gf.create_source(w, attached_to="r")
+        return w
+
+    equal = world(gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.15))
+    hom = world(gf.HomogeneousSoil(rho=100.0))
+    engine = gf.create_engine(segment_length=0.5, kernel=kernel)
+    result, hits = _solve(equal, segment_length=0.5, kernel=kernel)
+    assert not hits
+    z_hom = engine.solve(hom).cluster_impedance("r")[0]
+    assert result.cluster_impedance("r")[0] == pytest.approx(z_hom, rel=1e-14)
+    z_mutual = solve_mutual_matrix(equal, engine, ["r"])[0, 0]
+    assert z_mutual == pytest.approx(
+        solve_mutual_matrix(hom, engine, ["r"])[0, 0], rel=1e-13
+    )
