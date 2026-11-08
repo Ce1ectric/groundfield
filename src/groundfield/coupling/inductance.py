@@ -70,7 +70,10 @@ segments keeps the self inductance of the unsplit wire.
 ``"quadrature"`` (the default up to 0.15.0, kept to reproduce old
 numbers) integrates such pairs with the 16x16 Gauss–Legendre rule,
 which is accurate to about -0.3 % ... +0.8 % for them (review pass
-10, finding 10.46).
+10, finding 10.46). The closed forms of all coaxial pairs of a segment
+are evaluated in one vectorised call — a straight conductor of $M$
+sub-segments has $M(M-1)/2$ of them — bit-identical with the scalar
+routine (audit round 2 of the calendar release, A2C-5).
 
 References
 ----------
@@ -323,6 +326,117 @@ def _touching_mutual(
                     return None  # folded onto each other: divergent
                 return MU_0 / (4.0 * math.pi) * dot * _vertex_integral(la, lb, cos_eps)
     return None
+
+
+def _row_dots(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Dot products of the rows of ``a`` (K, 3) with ``b`` ((K, 3) or (3,)).
+
+    Evaluated as a stack of (1, 3) @ (3, 1) products: NumPy computes each
+    of them with the same BLAS ``dot`` routine as the 1-D ``x @ y`` of
+    :func:`_touching_mutual` (a chain of fused multiply-adds on x86-64),
+    so every entry equals the scalar result bit for bit — which
+    ``a @ b`` (BLAS ``gemv``) and an element-wise sum do not.
+    """
+    rhs = b[:, :, None] if b.ndim == 2 else b[:, None]
+    return np.matmul(a[:, None, :], rhs)[:, 0, 0]
+
+
+def _touching_mutual_batch(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """:func:`_touching_mutual` of one segment against K partners at once.
+
+    Returns ``(values, valid)``: ``values[k]`` is the closed-form mutual
+    inductance in H of segment *a* and partner *k* where ``valid[k]`` is
+    true (``_touching_mutual`` would return a number), undefined
+    otherwise. Coaxial pairs — on a straight conductor of M sub-segments
+    all M(M-1)/2 pairs are coaxial — are evaluated vectorised (review
+    pass 10, audit A2C-5: one scalar call per pair made the exact rule
+    2-4x slower than the quadrature it replaces); pairs that only share
+    an end point (bends, a handful per segment) keep the scalar call.
+
+    Every entry equals the scalar ``_touching_mutual`` bit for bit: the
+    same operations in the same order, the 3-element dot products and
+    norms through :func:`_row_dots`, the logarithms with :func:`math.log`.
+    """
+    K = p1_b.shape[0]
+    values = np.zeros(K, dtype=float)
+    valid = np.zeros(K, dtype=bool)
+    if K == 0:
+        return values, valid
+    da = p2_a - p1_a
+    la = float(np.linalg.norm(da))
+    if la <= 0.0:
+        return values, valid
+    db = p2_b - p1_b
+    lb = np.sqrt(_row_dots(db, db))
+    usable = lb > 0.0
+    ua = da / la
+    ub = db / np.where(usable, lb, 1.0)[:, None]
+    dot = _row_dots(ub, ua)
+    tol = _TOUCH_TOL_REL * np.maximum(la, lb)
+    coaxial = usable & (np.abs(np.abs(dot) - 1.0) <= 1e-9)
+
+    ks = np.flatnonzero(coaxial)
+    if ks.size:
+        rel1 = p1_b[ks] - p1_a
+        s1 = _row_dots(rel1, ua)
+        perp = rel1 - s1[:, None] * ua
+        on_axis = np.sqrt(_row_dots(perp, perp)) <= tol[ks]
+        s2 = _row_dots(p2_b[ks] - p1_a, ua)
+        lo = np.minimum(s1, s2)
+        hi = np.maximum(s1, s2)
+        after = lo >= la - tol[ks]
+        before = ~after & (hi <= tol[ks])
+        gap = np.where(after, np.maximum(lo - la, 0.0), np.maximum(-hi, 0.0))
+        keep = on_axis & (after | before)  # otherwise overlapping: divergent
+        sign = np.where(dot[ks] > 0.0, 1.0, -1.0)
+        lb_k = lb[ks]
+        f_all, f_a, f_b, f_gap = _x_log_x((la + lb_k) + gap, la + gap, lb_k + gap, gap)
+        integral = f_all - f_a - f_b + f_gap
+        coax_values = MU_0 / (4.0 * math.pi) * sign * integral
+        values[ks[keep]] = coax_values[keep]
+        valid[ks[keep]] = True
+    # Pairs that only share an end point (bends): the scalar closed form,
+    # for the partners that have an end point within ``tol`` of one of
+    # segment a's (the scalar routine returns None for all others).
+    rest = np.flatnonzero(usable & ~coaxial)
+    if rest.size:
+        near = np.zeros(rest.size, dtype=bool)
+        for vertex_a in (p1_a, p2_a):
+            for ends in (p1_b, p2_b):
+                gap_vec = vertex_a - ends[rest]
+                near |= np.sqrt(_row_dots(gap_vec, gap_vec)) <= tol[rest]
+        for k in rest[near]:
+            val = _touching_mutual(p1_a, p2_a, p1_b[k], p2_b[k])
+            if val is not None:
+                values[k] = val
+                valid[k] = True
+    return values, valid
+
+
+def _x_log_x(*arrays: np.ndarray) -> tuple[np.ndarray, ...]:
+    """$F(x) = x \\ln x$ with $F(0) = 0$, element-wise, for several arrays.
+
+    The logarithm is :func:`math.log`, once per distinct argument, instead
+    of :func:`numpy.log`: that keeps the coaxial closed form bit-identical
+    with :func:`_coaxial_gap_integral` (NumPy's SIMD logarithm differs
+    from the C library in the last bit for some arguments). The
+    arguments of a chain of equal sub-segments repeat, so the number of
+    logarithms grows with the number of distinct lengths, not of pairs.
+    """
+    sizes = [a.size for a in arrays]
+    x = np.concatenate(arrays)
+    out = np.zeros(x.shape, dtype=float)
+    pos = x > 0.0
+    if pos.any():
+        unique, inverse = np.unique(x[pos], return_inverse=True)
+        logs = np.fromiter(map(math.log, unique.tolist()), float, unique.size)
+        out[pos] = x[pos] * logs[inverse]
+    return tuple(np.split(out, np.cumsum(sizes)[:-1]))
 
 
 # ---------------------------------------------------------------------
@@ -923,7 +1037,12 @@ def _apply_touching_exact(
     ua_a: np.ndarray,
     ub_b: np.ndarray,
 ) -> None:
-    """Overwrite touching / coaxial pairs of one row by their closed forms."""
+    """Overwrite touching / coaxial pairs of one row by their closed forms.
+
+    The candidates (a shared end point, or a coaxial partner) are
+    evaluated in one vectorised call (:func:`_touching_mutual_batch`,
+    bit-identical with the scalar closed forms; audit A2C-5).
+    """
     if p1_b.shape[0] == 0:
         return
     tol = _TOUCH_TOL_REL * np.maximum(lb_b, la_a)
@@ -941,11 +1060,13 @@ def _apply_touching_exact(
     rel = p1_b - p1_a[None, :]
     perp = rel - (rel @ ua_a)[:, None] * ua_a[None, :]
     coax = (np.abs(np.abs(dots) - 1.0) <= 1e-9) & (np.linalg.norm(perp, axis=1) <= tol)
-    candidates = np.where((d_end <= tol) | coax)[0]
-    for k in candidates:
-        val = _touching_mutual(p1_a, p2_a, p1_b[k], p2_b[k])
-        if val is not None:
-            M_row[k] = val
+    candidates = np.flatnonzero((d_end <= tol) | coax)
+    if candidates.size == 0:
+        return
+    values, valid = _touching_mutual_batch(
+        p1_a, p2_a, p1_b[candidates], p2_b[candidates]
+    )
+    M_row[candidates[valid]] = values[valid]
 
 
 def _inductance_blocks(
