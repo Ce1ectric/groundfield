@@ -639,10 +639,11 @@ def carson_mutual_correction(
 # nodes per panel, panels doubling from min(1/2, 2/p) and at most
 # _MIXED_PANEL_PERIODS periods of cos(q mu) wide, up to mu = 40/p
 # (e^{-40} ~ 4e-18), at most _MIXED_MAX_PANELS panels. Against mpmath
-# (interval-wise summation) to <= 1e-15 of |J_m| for f = 50 Hz ... 5 kHz,
-# rho = 10 ... 3000 Ohm m, h = 0.01 ... 10 m, d = 0.05 ... 10 m,
-# x = 0 ... 1 km; QUADPACK's Fourier integrator agrees to 1e-16 up to
-# x = 3 km (where mpmath's quadosc is unreliable).
+# (interval-wise summation), f = 50 Hz ... 5 kHz, rho = 10 ... 3000 Ohm m,
+# h = 0.01 ... 10 m, d = 0.05 ... 10 m, x = 0 ... 1 km: <= 4e-15 of |J_m|
+# up to 1 kHz, 1e-13 where J_m is small (x = 1 km at 5 kHz in 10 Ohm m:
+# round-off of the oscillating sum); QUADPACK's Fourier integrator agrees
+# likewise up to x = 3 km (where mpmath's quadosc is unreliable).
 _MIXED_PANEL_PERIODS = 4.0
 _MIXED_MAX_PANELS = 4096
 
