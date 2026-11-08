@@ -722,11 +722,14 @@ def _as_two_layer(soil: MultiLayerSoil) -> TwoLayerSoil:
 def _owner_interfaces(soil: TwoLayerSoil) -> tuple[float, ...]:
     """Interfaces at which electrodes get one owner per layer (10.15).
 
-    Only an interface where the resistivity changes: ``TwoLayerSoil(rho,
-    rho, h)`` is homogeneous soil and keeps one owner per electrode, so it
-    reproduces the homogeneous backend exactly.
+    Only an interface where the resistivity changes
+    (:func:`~groundfield.solver._layered.interface_depths`):
+    ``TwoLayerSoil(rho, rho, h)`` is homogeneous soil and keeps one owner
+    per electrode, so it reproduces the homogeneous backend exactly.
     """
-    return (float(soil.h_1),) if soil.rho_1 != soil.rho_2 else ()
+    from groundfield.solver._layered import interface_depths
+
+    return interface_depths(soil)
 
 
 def _crosses_interface(world: "World", layer_interfaces) -> bool:
@@ -831,7 +834,10 @@ class _TwoLayerGreen:
         self.tol = tol
         self.ds = ds
         self.kernel = kernel
-        self.layer_interfaces = (soil.h_1,)
+        # Wires are cut where the resistivity changes only, like in every
+        # other backend: TwoLayerSoil(rho, rho, h) is cut nowhere, as
+        # homogeneous soil (audit round 2, A2S-07).
+        self.layer_interfaces = _owner_interfaces(soil) or None
         self.soil_resistivity = float(soil.rho_1)
         self.reference_resistivity = float(soil.rho_1)
         self.series = ImageSeries.for_soil(soil, max_terms, tol)

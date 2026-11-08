@@ -364,18 +364,17 @@ def _electrode_wire_length(e) -> float:
 
 
 def _layer_interfaces(soil) -> tuple[float, ...] | None:
-    """Interface depths in m at which the image family splits wires."""
-    from groundfield.soil.models import MultiLayerSoil, TwoLayerSoil
+    """Interface depths in m at which the segment-based backends cut wires.
 
-    if isinstance(soil, TwoLayerSoil):
-        return (float(soil.h_1),)
-    if isinstance(soil, MultiLayerSoil) and len(soil.layers) > 1:
-        depths, z = [], 0.0
-        for layer in soil.layers[:-1]:
-            z += float(layer.h)
-            depths.append(z)
-        return tuple(depths)
-    return None
+    The interfaces of the canonical layer stack, i.e. only where the
+    resistivity changes (:func:`groundfield.solver._layered.interface_depths`,
+    the rule of every backend). Up to audit round 2 every declared
+    interface was counted, so a stack with two layers of one resistivity
+    predicted one segment more than the solve (A2S-07).
+    """
+    from groundfield.solver._layered import interface_depths
+
+    return interface_depths(soil) or None
 
 
 def _segment_lower_bound(e, ds: float) -> int:

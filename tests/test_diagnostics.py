@@ -277,6 +277,85 @@ def test_expected_segments_isolated_distributed_conductor_zero() -> None:
     assert pred["conductor_total"] == 0
 
 
+_STACKS = {
+    "two_layer_equal": lambda: gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.15),
+    "two_layer": lambda: gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.15),
+    "stack_one_resistivity": lambda: gf.MultiLayerSoil(
+        layers=[gf.SoilLayer(rho=100.0, h=2.15), gf.SoilLayer(rho=100.0, h=None)]
+    ),
+    "stack_equal_lower": lambda: gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(rho=100.0, h=2.15),
+            gf.SoilLayer(rho=400.0, h=3.0),
+            gf.SoilLayer(rho=400.0, h=None),
+        ]
+    ),
+    "stack_equal_upper": lambda: gf.MultiLayerSoil(
+        layers=[
+            gf.SoilLayer(rho=100.0, h=1.0),
+            gf.SoilLayer(rho=100.0, h=1.15),
+            gf.SoilLayer(rho=400.0, h=None),
+        ]
+    ),
+}
+
+
+@pytest.mark.finding("10.79")
+@pytest.mark.parametrize("backend", [None, "image_2layer", "mom", "mom_sommerfeld"])
+@pytest.mark.parametrize("stack", sorted(_STACKS))
+def test_expected_segments_matches_the_solve_for_every_layer_stack(
+    stack: str, backend: str | None
+) -> None:
+    """The prediction cuts wires where the solve does: where rho changes.
+
+    A rod 0.3-6.3 m in a stack whose declared interface separates layers of
+    one resistivity was predicted at 13 segments and solved with 12 (the
+    auditors' case ``stack_one_resistivity``); ``image_2layer`` itself cut
+    ``TwoLayerSoil(rho, rho, h)`` at h while ``mom`` did not.
+    """
+    # audit A2S-07
+    import warnings
+
+    w = gf.create_world(soil=_STACKS[stack]())
+    gf.create_electrode(w, "rod", name="r", position=(0.0, 0.0, 0.3), length=6.0)
+    gf.create_source(w, attached_to="r")
+    kw = (
+        {"segment_length": 0.5}
+        if backend is None
+        else {"backend": backend, "segment_length": 0.5}
+    )
+    engine = gf.Engine(**kw)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = w.solve(engine)
+    assert expected_segments(w, engine)["total"] == len(result.point_sources)
+
+
+@pytest.mark.finding("10.48")
+@pytest.mark.parametrize("kernel", ["line", "point"])
+def test_equal_resistivity_two_layer_soil_is_the_homogeneous_soil(kernel: str) -> None:
+    """``TwoLayerSoil(rho, rho, h)`` is cut nowhere: the homogeneous result.
+
+    h = 2.15 m does not fall on a segment boundary of the rod; the extra cut
+    of the base moved the point-kernel result by 3.8e-4.
+    """
+    # audit A2S-07
+
+    def z(soil, backend: str) -> tuple[complex, int]:
+        w = gf.create_world(soil=soil)
+        gf.create_electrode(w, "rod", name="r", position=(0.0, 0.0, 0.3), length=6.0)
+        gf.create_source(w, attached_to="r")
+        res = w.solve(gf.Engine(backend=backend, segment_length=0.5, kernel=kernel))
+        return res.cluster_impedance("r")[0], len(res.point_sources)
+
+    z_two, n_two = z(
+        gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.15), "image_2layer"
+    )
+    z_hom, n_hom = z(gf.HomogeneousSoil(rho=100.0), "image")
+    assert n_two == n_hom
+    assert z_two == pytest.approx(z_hom, rel=1e-14)
+
+
 def test_expected_segments_rejects_invalid_segment_length() -> None:
     world = _mixed_world()
     with pytest.raises(ValueError, match="segment_length"):
