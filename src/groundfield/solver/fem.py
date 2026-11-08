@@ -25,7 +25,8 @@ and the result is too low, not conservative (−97 % … +5 % against
 conductive top layer or above a more conductive lower layer; −92 % for
 a 10 m ring at 0.8 m over $h_1$ = 2 m in 1000/30 Ω·m, −71 % for a 10 m
 strip at 0.8 m below $h_1$ = 0.5 m in 30/1000 Ω·m). The rule is
-structural: near-equal layers (100/120 Ω·m, −7 % … +5 %) raise as well.
+structural: near-equal layers (100/120 and 120/100 Ω·m, −7 % … +5 %)
+raise as well.
 It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
 three 4 m rods in homogeneous soil), when the world has several

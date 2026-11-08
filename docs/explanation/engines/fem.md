@@ -96,8 +96,30 @@ The registry marks `fem` experimental; the reduction itself is guarded
   $a_\text{eq}$, so more than half of the hemisphere sits in a layer the
   electrodes do not touch (a 3 m rod below $h_1 = 0.4$ m in
   1000 / 30 Ω·m read 31.1 Ω against 10.5 Ω from `mom`, +197 %; second
-  adversarial audit, A2E-2). Thinner top layers keep the warning below
-  (+16 … +46 % and −38 … −58 % measured).
+  adversarial audit, A2E-2).
+- **Error** (`BackendCapabilityError`, user decision Q23 of 2026.11): the
+  hemisphere spans a layer — one whose top lies above $a_\text{eq}$ —
+  that no electrode of the cluster touches and that conducts better than
+  every layer the electrodes touch. The hemisphere then injects the
+  current straight into that layer, and the result is too low, i.e. not
+  conservative. The rule is structural, independent of the size of the
+  contrast, and works on the canonical layer stack (equal resistivities
+  are no interface); an electrode lying exactly on an interface touches
+  both layers. The message names the cluster, the layer (depth range and
+  $\rho$), the electrodes' $\rho$, $a_\text{eq}$, the measured error and a
+  backend that solves the world. Measured against `image_2layer` and
+  `mom` on the base of the decision, where these worlds only warned:
+
+    | World (two layers) | `fem` against `image_2layer` / `mom` |
+    |---|---|
+    | 3 m rod at 0.5 m below a more conductive top layer, $h_1 = 0.05 \ldots 0.49\,a_\text{eq}$ (22 … 217 mm) | 100/1000 Ω·m: −12 … −58 %; 30/1000: −35 … −80 %; 30/10000: −80 … −97 % |
+    | 10 m strip at 0.8 m below such a top layer, $h_1 = 0.22$ and $0.50$ m | 100/1000: −32 … −47 %; 30/1000: −58 … −71 %; 30/10000: −91 … −95 % |
+    | ring $r = 10$ m at 0.8 m above a more conductive layer at $h_1 = 2$ m | 1000/300 and 100/30: −45 %; 1000/30: −92 % |
+    | near-equal layers (100/120 and 120/100 Ω·m), rods, strips and rings | −7 … +5 % (raises as well: the rule is structural) |
+
+  A more resistive layer spanned in the same way — a thin resistive top
+  layer under the $a_\text{eq}/2$ threshold of the rule above included —
+  keeps the warning below (+3 … +45 % measured).
 - **Error** (`BackendCapabilityError`): a driven cluster contains a star
   or polyline electrode, which has no closed-form hemisphere radius. The
   generators build mesh foundations of polyline wires, so generated
@@ -106,10 +128,15 @@ The registry marks `fem` experimental; the reduction itself is guarded
   and the cluster members): a cluster with several electrodes (radii
   summed); several clusters (each solved alone, transfer impedances 0,
   passive clusters at 0 V); a layer interface above the deeper of the
-  electrode and the hemisphere; an interface within the horizontal
-  half-extent of the electrode. Escalate with
-  `warnings.simplefilter("error", FemReductionWarning)` when `fem` serves
-  as a check.
+  electrode and the hemisphere that the errors above do not cover (the
+  spanned layer is touched by an electrode or conducts no better than the
+  electrodes' layer: +23 % for a 10 m ring over a more resistive layer at
+  2 m); an interface below the electrode and the hemisphere but within
+  the horizontal half-extent of the electrode (a ring $r = 10$ m at 0.8 m
+  over a more conductive layer at $h_1$ = 5, 7 and 9 m: −47, −20 and
+  −11 %; over a more resistive one at 5 m: +9 %; not part of decision
+  Q23). Escalate with `warnings.simplefilter("error", FemReductionWarning)`
+  when `fem` serves as a check.
 - Concrete shells are rejected; distributed and inductive conductors are
   solved as lumped branches, and `resistance_model="skin"` is ignored, each
   with a `BackendCapabilityWarning`.
@@ -118,7 +145,7 @@ The registry marks `fem` experimental; the reduction itself is guarded
 
 | Condition | Limit | Behaviour outside |
 |---|---|---|
-| Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error or `FemReductionWarning` (see above) |
+| Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error (wrong layer, or a more conductive layer the hemisphere spans and no electrode touches) or `FemReductionWarning` (see above) |
 | Clusters | one driven cluster | `FemReductionWarning`: no coupling between clusters |
 | Conductors | lumped | distributed and inductive conductors solved as lumped, `BackendCapabilityWarning` |
 | Accuracy | discretisation error of the hemisphere itself: B1 below; the reduction is the Dwight formula | — |

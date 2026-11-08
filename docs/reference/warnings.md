@@ -158,8 +158,12 @@ soil use `image_2layer`.
 reasons, when its equivalent-hemisphere reduction does not represent the
 world: several electrodes in a cluster (mutual resistance neglected),
 several clusters (no coupling between them), or a layer interface within
-the hemisphere radius. **Remedy:** use an integral-equation backend for
-such worlds; `fem` is experimental.
+the hemisphere radius or the electrode's horizontal extent. A spanned
+layer that no electrode touches and that conducts better than the
+electrodes' layer is no warning but a `BackendCapabilityError` since
+2026.11 (user decision Q23: the result would be too low), as are
+electrodes in a layer the hemisphere does not reach. **Remedy:** use an
+integral-equation backend for such worlds; `fem` is experimental.
 
 ### `ComplexImageFitWarning`
 
