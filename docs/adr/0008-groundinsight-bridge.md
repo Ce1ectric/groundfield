@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — amended 2026.11 (review pass 10: safe formula parser, input impedance, passivity); see the amendment at the end of this document |
 | **Date** | 2026-05-08 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.io.groundinsight`; bridge to the sister project `groundinsight` |
@@ -184,3 +184,43 @@ return `BusType` instances or talk to the database, so
   :mod:`groundfield.postprocess.rho_f_standard`.
 - `groundinsight.models.core_models.BusType` — consumer of the
   exported formula.
+
+---
+
+## Amendment 2026.11 — formulas are parsed, exports are checked (review pass 10)
+
+Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
+
+1. **No code execution.** A BusType formula is data. `evaluate_spec`,
+   `BusTypeSpec.from_dict` and `load_bustype_json` parse it with an
+   allow-list parser (`groundfield.io._formula`): `ast.parse` (which
+   executes nothing), then the SymPy expression is built node by node from
+   numbers, `f`, `rho`, `j` / `I`, `pi`, `E`, `+ - * /`, `**` with a
+   bounded literal exponent and `sqrt` / `exp` / `log`, within size,
+   depth, magnitude and work budgets. `sympy.sympify` — which evaluates
+   its input as Python — is no longer called on formula text (10.01). A
+   rejected formula raises `EvaluateSpecError` naming the element. The
+   same corpus of accepted and rejected formulas
+   (`tests/data/formula_corpus.json`) is shared with groundinsight's own
+   guard.
+2. **Which impedance is exported.** The rho-f exporters fit the input
+   impedance of the feeding source by default (`quantity="input"`); the
+   BusType metadata records the fitted `quantity`, all coefficients
+   `k0` … `k5`, `weights` and `fit_quality.max_relative` (10.19, 10.27).
+   The standard form of this ADR gains the constant `k0`.
+3. **Readable formulas.** Coefficients are rounded once to `decimals`
+   significant digits; `nsimplify` (rationals with up to 254 digits) and
+   the merging of partial fractions are gone (10.73).
+4. **Passivity.** Every export evaluates the formula it writes from 0 Hz
+   to twice the highest fitted frequency (over the fitted ρ range for the
+   standard form) with the shared `check_passivity`; `Re Z < 0` warns
+   (`NonPassiveFitWarning`) or, with `require_passive=True`, raises
+   `NonPassiveFitError` before anything is written (10.40).
+   `metadata["passivity"]` records the verdict.
+5. **`rho_at_fit`.** A vector fit belongs to one soil; its export requires
+   `rho_at_fit`, by convention the upper-layer resistivity $\rho_1$ for
+   layered soil, and the error message says so (10.84).
+6. **Validation programme.** The round trip through groundinsight is
+   checked at $10^{-9}$, as this ADR specified (the test had used
+   $10^{-3}$), and `evaluate_spec` against groundinsight's
+   `compute_impedance` at $10^{-9}$.

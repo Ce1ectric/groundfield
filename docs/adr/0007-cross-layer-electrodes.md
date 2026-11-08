@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — step 1 (interface split), layer-aware post-processing and the mom lift implemented 2026-07-09 (audit WP-D; see the amendment at the end) |
+| **Status** | Accepted — step 1 (interface split), layer-aware post-processing and the mom lift implemented 2026-07-09 (audit WP-D; see the amendment at the end); amended 2026.11 (review pass 10: one owner per layer, slivers, reciprocity) |
 | **Date** | 2026-05-07 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -273,3 +273,34 @@ grouped by depth pairs (one spectral BVP solve per (z_i, z_j) group
 instead of per matrix entry) and cached across the kernel calls of
 one solve — a 3-rod cross-layer world dropped from 33.7 s to 4.6 s
 on the audit sandbox with identical results.
+
+---
+
+## Amendment 2026.11 — one owner per layer, slivers, reciprocity, line kernel (review pass 10)
+
+Findings 10.15 (F02), 10.25, 10.26, 10.28, 10.32 and 10.50 (F43).
+
+1. **Current per layer.** The image family carries one uniform current per
+   owner. An electrode that crosses an interface is now one owner **per
+   layer it reaches**, all in its cluster — the model of two rods bonded
+   at $h_1$ (10.15). With one owner across the interface a 12 m rod
+   through $h_1 = 5$ m in 1000 / 30 Ω·m soil was 566 % above the
+   per-segment `mom` solution; it is now within the ansatz error of
+   `mom`. `solve_mutual_matrix` / `solve_mutual_field` follow the same
+   split, and the diagonal of the mutual matrix is the length-weighted
+   cluster impedance over all owners (10.26).
+2. **Slivers.** An interface cut that would leave a piece shorter than
+   the wire diameter is dropped (`SLIVER_RADII = 2`), and the point
+   kernel takes the Galerkin self term below $L/a = 2.99$ (10.32).
+3. **Reciprocity and the line kernel.** With the exact line kernel
+   (ADR-0015) the direct term of a pair in different layers carries the
+   transmitted resistivity $2\rho_1\rho_2/(\rho_1+\rho_2)$ and the
+   near-singular interface image of the layered correction is a Galerkin
+   integral for near pairs; the reaction matrix is reciprocal to round-off
+   and the impedance of a rod through the interface changes by less than
+   $10^{-4}$ per halving of the segment length.
+4. **Series bookkeeping.** Cross-layer solves report `series_used = False`
+   and no false `SeriesTruncationWarning` (10.50); the post-solve field
+   evaluation uses the series controls of the solve (10.25).
+5. **`fem`** raises for an electrode through an interface its equivalent
+   hemisphere does not reach (ADR-0002 amendment 2026.11).

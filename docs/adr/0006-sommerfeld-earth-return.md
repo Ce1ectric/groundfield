@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — kernel corrected to the genuine Pollaczek form 2026-07-09 (audit 2026-07-08, WP-C1; see the amendment at the end of this document) |
+| **Status** | Accepted — kernel corrected to the genuine Pollaczek form 2026-07-09 (audit 2026-07-08, WP-C1; see the amendment at the end of this document); amended 2026.11 (review pass 10: image-free baseline, exact layered kernel, λ grid) |
 | **Date** | 2026-05-07 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -397,3 +397,37 @@ different ways, and a loop-closure test
 Pollaczek reference and the independent Tsiamitros (2005, Eq. 8)
 two-layer integral to within ~1 % on the Case V reactance at 1 kHz. See
 `docs/api/references.md` and `tests/test_pollaczek_reference.py`.
+
+---
+
+## Amendment 2026.11 — image-free baseline, exact layered kernel, resolved λ grid (review pass 10)
+
+Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
+
+1. **Image-free baseline.** The correction is computed against free space
+   ($\Delta G = G - 1/R$) and the solver builds the Neumann matrix without
+   an image (`image="none"`); the numbers equal the former additive
+   pairing to round-off. Conductors that cross the soil surface or lie in
+   it are solved; the pair integrals are split at $z = 0$ (F52). The
+   image is removed exactly where another convention is requested (F50:
+   the layered point kernel had the wrong sign).
+2. **Exact layered kernel.** For any number of layers the same-layer
+   spectral amplitude uses generalised reflection coefficients and the
+   pairs in different media a batched interface solve (10.35). Pillar B
+   of this ADR is thereby complete: a three-layer earth whose lower two
+   layers are equal reproduces the two-layer earth (the single-air-image
+   form was +17 … +25 % in $X'$).
+3. **λ grid.** The logarithmic region ends before $J_0$ oscillates, the
+   linear region carries 16 nodes per $J_0$ period up to four times the
+   largest physical scale, and an exhausted node budget raises
+   `SommerfeldResolutionWarning` instead of truncating silently (10.36;
+   distant pair entries were −24 % at 200 m and +274 % at 400 m).
+4. **Assembly.** Geometry, λ grid and Bessel tables are built once per
+   segment pair for the whole frequency set (10.60, bit-identical). An
+   opt-in tabulated assembly (`Engine.sommerfeld_assembly="tabulated"`,
+   one table per pair of depth groups and frequency) is faster on large
+   networks and closer to a converged reference than the default per-pair
+   rule; the default stays `"exact"`.
+5. **Pollaczek reference.** `references.pollaczek` uses the exact
+   two-layer amplitude and the $K_0$ head (10.45). Benchmark B13 compares
+   the solver's per-metre line impedance with it.

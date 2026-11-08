@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — amended 2026.11 (review pass 10: image conventions, touching pairs, lumped conductors, skin effect); see the amendment at the end of this document |
 | **Date** | 2026-05-04 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -239,3 +239,48 @@ cable-shield work later.
 - Carson, J. R. (1926). Wave propagation in overhead wires with
   ground return. *Bell Syst. Tech. J.* 5(4) — referenced for the
   follow-up ADR-0005.
+
+---
+
+## Amendment 2026.11 — image conventions, exact touching pairs, lumped conductors, skin effect (review pass 10)
+
+Findings 10.20, 10.24, 10.37, 10.44, 10.46 and 10.60. The physical model
+of this ADR (Neumann partial inductances, complex branch block) stands;
+the following decisions refine it.
+
+1. **The image is part of the earth model.** The perfect-mirror image of
+   section *Earth return ("ideal earth")* is one of three image
+   conventions of `build_inductance_matrix(image=...)`
+   (`ImageConvention`: `"none"`, `"additive"`, `"antiparallel"`). The
+   solver builds the inductance matrix with the image of the selected
+   `earth_inductive_model`: `perfect_mirror` → additive (this ADR),
+   `carson_series` → anti-parallel (ADR-0005), `sommerfeld` → none
+   (ADR-0006). An earth-return correction is defined against one image
+   and must not be added to another (10.20). `perfect_mirror` has not
+   been the default since 0.13.0.
+2. **Pair integrals.** Parallel, skew and perpendicular segment pairs use
+   closed forms; pairs that share an end point (chain neighbours, bends)
+   use Grover's vertex formula and the coaxial gap formula by default
+   (`touching="exact"`), so a straight conductor keeps the inductance of
+   the unsplit wire for every discretisation (10.46).
+   `touching="quadrature"` reproduces 0.15.0.
+3. **Internal inductance.** Every self term carries the DC internal
+   inductance $\mu_0\ell/(8\pi)$ of a solid round conductor, for
+   distributed and lumped branches alike (`include_internal=True`).
+4. **Lumped and single-segment conductors.** A conductor with an
+   `inductance_model` that the topology keeps as one branch is one
+   inductive branch from start to end, coupled to all others; up to
+   0.15.0 its inductance was dropped silently (10.24).
+5. **Skin effect (opt-in).** `Conductor.resistance_model="skin"` adds the
+   exact internal impedance of a solid round conductor relative to the DC
+   convention (resistance $R_\text{ac}(f)$, internal inductance
+   $L_\text{int}(f)$); the default `"dc"` keeps the numbers (10.37). The
+   bare-conductor restriction of section *Self-inductance and shielded
+   conductors* stands.
+6. **Frequency loop.** The earth-return correction is assembled once per
+   solve for the whole frequency set (bit-identical to single-frequency
+   assemblies, bounded cache; 10.60); the real fast path of purely
+   galvanic worlds is unchanged.
+7. **Close wires.** Coincident conductors have no finite mutual
+   inductance; `find_close_wires` and `diagnose()` report crossing,
+   touching, interpenetrating and close wires (10.44).
