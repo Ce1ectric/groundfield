@@ -1663,18 +1663,44 @@ def test_parsed_expression_is_unevaluated_with_numbers_as_floats() -> None:
         ("1/(2*pi*f*j + 300)", lambda f, rho: 1 / (2j * np.pi * f + 300)),
     ],
 )
-def test_formula_function_uses_complex_arithmetic_on_the_principal_branch(
+def test_formula_function_takes_the_principal_branch_where_real_arithmetic_has_none(
     text: str, reference
 ) -> None:
-    """``formula_function`` works in complex arithmetic, so a root or a
-    logarithm of a negative real number takes SymPy's principal branch
-    (``lambdify`` with real input gives ``nan`` there)."""
+    """A root or a logarithm of a negative number takes SymPy's principal
+    branch (``lambdify`` with real input gave ``nan`` there); everything
+    else is computed as before."""
     from groundfield.io._formula import formula_function, parse_impedance_formula
 
     f = np.array([1.0, 16.7, 50.0, 1000.0])
     function = formula_function(parse_impedance_formula(text))
     np.testing.assert_allclose(function(f, 137.0), reference(f, 137.0), rtol=1e-14)
     assert function(f, 137.0).dtype == complex
+
+
+@pytest.mark.parametrize(
+    "text, value_at_zero",
+    [
+        ("1/(1 + 1/f)", 0.0),
+        ("1/(1 + 1/f) + j*rho", 137j),
+        ("1/log(f)**4", 0.0),
+        ("exp(-1/f)*rho", 0.0),
+        ("log(f) + rho", -np.inf),
+    ],
+)
+def test_formula_function_keeps_the_real_limits_at_singular_points(
+    text: str, value_at_zero: complex
+) -> None:
+    """Real values are computed in real arithmetic, as ``lambdify`` does, so
+    the limits of real infinities survive at ``f = 0`` (a differential fuzz
+    of 400 random formulas found complex arithmetic turning them into
+    ``nan``)."""
+    from groundfield.io._formula import formula_function, parse_impedance_formula
+
+    function = formula_function(parse_impedance_formula(text))
+    with np.errstate(divide="ignore"):
+        z = function(np.array([0.0, 50.0]), 137.0)
+    assert z[0] == value_at_zero
+    assert np.isfinite(z[1])
 
 
 def test_formula_function_validates_its_input() -> None:

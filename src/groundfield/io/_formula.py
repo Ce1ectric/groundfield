@@ -1238,9 +1238,12 @@ def formula_function(
     -------
     callable
         ``function(*values) -> numpy.ndarray`` of complex values,
-        broadcast over the arguments. Arithmetic is complex
-        (``complex128``), on the principal branch for roots, fractional
-        powers and logarithms; a constant expression gives a 0-d array.
+        broadcast over the arguments; a constant expression gives a 0-d
+        array. Real values are computed in real arithmetic (``float64``,
+        as ``lambdify`` with NumPy does: ``1/(1 + 1/f)`` is 0 at
+        ``f = 0``); a fractional power or a logarithm of a negative
+        number takes SymPy's principal branch in complex arithmetic,
+        where real arithmetic gives ``nan``.
 
     Raises
     ------
@@ -1258,29 +1261,45 @@ def formula_function(
                 f"the formula function takes {len(names)} arguments "
                 f"({', '.join(names)}), got {len(values)}"
             )
-        arrays = [np.asarray(value, dtype=complex) for value in values]
+        arrays = [_numeric_array(value) for value in values]
         return np.asarray(program(arrays), dtype=complex)
 
     return function
 
 
+def _numeric_array(value: Any) -> np.ndarray:
+    """``value`` as a float64 array, or complex128 if it has complex entries."""
+    array = np.asarray(value)
+    return array.astype(complex if np.iscomplexobj(array) else float)
+
+
 def _real_exponent_power(base: Any, x: float) -> np.ndarray:
     """``base**x`` on the principal branch for a non-integer real ``x``.
 
-    A positive real base takes the real power (correctly rounded by the C
-    library); the complex power ``exp(x*log(base))`` would lose about
-    ``|x*log(base)|`` units in the last place (4e-14 relative at 1e295).
+    A base without negative or complex entries takes the real power
+    (correctly rounded by the C library); the complex power
+    ``exp(x*log(base))`` would lose about ``|x*log(base)|`` units in the
+    last place (4e-14 relative at 1e295). Negative or complex entries take
+    the complex power, positive entries of such a base the real one.
     """
-    base = np.asarray(base, dtype=complex)
+    base = _numeric_array(base)
+    if not np.iscomplexobj(base) and not np.any(base < 0.0):
+        return np.power(base, x)
+    base = base.astype(complex)
     positive = (base.imag == 0.0) & (base.real > 0.0)
-    if positive.all():
-        return np.power(base.real, x).astype(complex)
     power = base**x
     if positive.any():
-        power = np.where(
-            positive, np.power(np.where(positive, base.real, 1.0), x), power
-        )
+        real = np.power(np.where(positive, base.real, 1.0), x)
+        power = np.where(positive, real, power)
     return power
+
+
+def _logarithm(argument: Any) -> np.ndarray:
+    """Natural logarithm on the principal branch (real for non-negative input)."""
+    argument = _numeric_array(argument)
+    if not np.iscomplexobj(argument) and not np.any(argument < 0.0):
+        return np.log(argument)
+    return np.log(argument.astype(complex))
 
 
 def _compile(expr: sp.Basic, position: dict[str, int]) -> Callable[[list], Any]:
@@ -1323,17 +1342,17 @@ def _compile(expr: sp.Basic, position: dict[str, int]) -> Callable[[list], Any]:
         exponent = expr.exp
         if exponent.is_Integer:
             n = int(exponent)
-            return lambda values: np.asarray(base(values), dtype=complex) ** n
+            return lambda values: _numeric_array(base(values)) ** n
         if isinstance(exponent, (sp.Rational, sp.Float)):
             x = float(exponent)
             return lambda values: _real_exponent_power(base(values), x)
         raise ValueError(f"cannot evaluate a power with the exponent {exponent!r}")
     if isinstance(expr, sp.exp):
         argument = _compile(expr.args[0], position)
-        return lambda values: np.exp(np.asarray(argument(values), dtype=complex))
+        return lambda values: np.exp(_numeric_array(argument(values)))
     if isinstance(expr, sp.log) and len(expr.args) == 1:
         argument = _compile(expr.args[0], position)
-        return lambda values: np.log(np.asarray(argument(values), dtype=complex))
+        return lambda values: _logarithm(argument(values))
     raise ValueError(
         f"cannot evaluate a sub-expression of type {type(expr).__name__} "
         "(only Add, Mul, Pow, exp, log, numbers and symbols)"
