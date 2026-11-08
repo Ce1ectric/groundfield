@@ -40,12 +40,26 @@ Both fit families exported here are projected onto that symbol set:
   metadata blocks.
 
 A ``groundinsight`` ``Bus`` carries one ``specific_earth_resistance``,
-the ``rho`` of the formula. For layered soil the convention is the
-resistivity $\\rho_1$ of the **upper layer** (``rho_1``): it is the
-parameter the standard form is fitted over in a $\\rho_1$ sweep with a
-fixed lower layer (the AP1 catalogue), so a vector fit of the same site
-passes ``rho_at_fit = rho_1`` and both kinds of BusType pair with the
-same ``Bus``. The layers themselves go into ``soil_summary``.
+the ``rho`` of the formula: $\\rho$ for homogeneous soil and, for
+layered soil, the **effective resistivity**
+
+$$
+\\rho_\\text{eff} = \\rho_1^{\\,1-w}\\,\\rho_2^{\\,w},
+\\qquad w = w_0\\,(h_1 / 10\\ \\mathrm{m})^{-\\beta},
+$$
+
+with the AP1 calibration $w_0 = 0.13$, $\\beta = 0.8$
+(:func:`~groundfield.soil.effective_resistivity`; ADR-0008), the value
+the AP2 network model gives a bus. A vector fit therefore passes
+``rho_at_fit=effective_resistivity(soil)``, and a standard-form fit over
+layered soils is fitted over the effective resistivities of the solved
+soils, ``rho_f_standard_from_results(results, [effective_resistivity(r.soil)
+for r in results])``; both kinds of BusType then pair with the same
+``Bus``. Every document records this convention as
+``metadata["rho_definition"] = "effective_resistivity"`` (documents of
+0.15.0 have no such entry); the exporter cannot check the number it is
+given. The layers themselves, and $w_0$, $\\beta$ when they are not the
+AP1 values, go into ``soil_summary``.
 
 The exporter does not care which impedance was fitted (input
 impedance, cluster impedance or the impedance of one electrode); it
@@ -177,6 +191,12 @@ class NonPassiveFitError(ValueError):
 SCHEMA_NAME = "groundfield.bustype"
 SCHEMA_VERSION = 1
 
+#: ``metadata["rho_definition"]`` of every exported document: the ``rho`` of
+#: the formula and of the samples is the effective resistivity of the soil
+#: (:func:`~groundfield.soil.effective_resistivity`; the resistivity itself
+#: for homogeneous soil). Documents of groundfield 0.15.0 have no such entry.
+_RHO_DEFINITION = "effective_resistivity"
+
 MAX_METADATA_DEPTH = 32
 """Deepest nesting of objects and lists in the metadata of a BusType document.
 
@@ -242,11 +262,12 @@ class BusTypeSpec:
         ``rms_relative``, for the standard form ``max_relative``;
         ``null`` when unknown), the impedance the fit represents
         (``"quantity"``: ``"input"``, ``"cluster"``, ``"electrode"``
-        or ``null`` for raw samples), fit-method-specific details
-        (poles/residues for vector fits, $k_0\\dots k_5$ and the
-        ``"weights"`` for the standard form), the passivity check
-        (``"passivity"``), the source ``groundfield`` version and a UTC
-        timestamp.
+        or ``null`` for raw samples), how ``rho`` is defined
+        (``"rho_definition"``: ``"effective_resistivity"``, see the module
+        docstring), fit-method-specific details (poles/residues for
+        vector fits, $k_0\\dots k_5$ and the ``"weights"`` for the
+        standard form), the passivity check (``"passivity"``), the source
+        ``groundfield`` version and a UTC timestamp.
     """
 
     name: str
@@ -597,6 +618,7 @@ def _metadata_from_vector_fit(
         "R_inf": float(fit.R_inf),
         "L_inf": float(fit.L_inf),
         "rho_at_fit_Ohm_m": float(rho_at_fit),
+        "rho_definition": _RHO_DEFINITION,
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
         "source": f"groundfield {_groundfield_version()}",
@@ -621,6 +643,7 @@ def _metadata_from_rho_f_standard(
         "coefficients": {name: float(v) for name, v in fit.coefficients.items()},
         "weights": fit.weights,
         "quantity": fit.quantity,
+        "rho_definition": _RHO_DEFINITION,
         "electrode_name": electrode_name,
         "soil_summary": soil_summary,
         "source": f"groundfield {_groundfield_version()}",
@@ -709,10 +732,11 @@ def _check_rho_at_fit(fit: FitLike, rho_at_fit: Optional[float], caller: str) ->
             "metadata['rho_at_fit_Ohm_m']) so that it is paired with a "
             "groundinsight Bus of the same specific_earth_resistance. Pass it "
             f"explicitly, e.g. {caller}(fit, ..., rho_at_fit=100.0). For "
-            "layered soil the convention is the resistivity of the upper layer, "
-            "rho_1 (the soil parameter of the standard rho-f form and of rho_1 "
-            "sweeps), and the layers are described with soil_summary=...; "
-            "standard-form fits (RhoFStandardFit) do not need it."
+            "layered soil the convention is the effective resistivity of the "
+            "soil, rho_at_fit=groundfield.effective_resistivity(soil) (the rho "
+            "that the groundinsight Bus carries), and the layers are described "
+            "with soil_summary=...; standard-form fits (RhoFStandardFit) do not "
+            "need it."
         )
     try:
         value = float(rho_at_fit)
@@ -849,10 +873,12 @@ def to_bustype_dict(
         :class:`VectorFitResult` was computed. Required for vector
         fits (it goes into ``samples["rho_Ohm_m"]`` and
         ``metadata["rho_at_fit_Ohm_m"]``); ignored for standard-form
-        fits. For layered soil the convention is the resistivity of the
-        upper layer, ``rho_1``, the value a ``groundinsight`` ``Bus``
-        carries as ``specific_earth_resistance`` (see the module
-        docstring); describe the layers in ``soil_summary``.
+        fits. For layered soil the convention is the
+        effective resistivity of the soil, ``effective_resistivity(soil)``
+        (:func:`~groundfield.soil.effective_resistivity`), the value a
+        ``groundinsight`` ``Bus`` carries as ``specific_earth_resistance``
+        (see the module docstring); describe the layers in
+        ``soil_summary``.
     electrode_name, soil_summary : str, optional
         Free-form metadata entries; recommended for traceability.
     require_passive : bool, optional
@@ -940,7 +966,7 @@ def save_bustype_json(
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
         standard-form fits. For layered soil the convention is the
-        resistivity of the upper layer, ``rho_1`` (see
+        effective resistivity ``effective_resistivity(soil)`` (see
         :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries.
@@ -1104,7 +1130,7 @@ def to_bustype(
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
         standard-form fits. For layered soil the convention is the
-        resistivity of the upper layer, ``rho_1`` (see
+        effective resistivity ``effective_resistivity(soil)`` (see
         :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not part of the live ``BusType``).
@@ -1179,7 +1205,7 @@ def save_bustype_to_db(
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
         standard-form fits. For layered soil the convention is the
-        resistivity of the upper layer, ``rho_1`` (see
+        effective resistivity ``effective_resistivity(soil)`` (see
         :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not stored in the database).

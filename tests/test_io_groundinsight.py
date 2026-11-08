@@ -17,7 +17,9 @@ Covers ADR-0008's validation programme:
 
 and the export checks of the calendar release: readable formulas with
 ``decimals`` significant digits (10.73), the passivity check before
-export (10.40) and the ``rho_at_fit`` contract of vector fits (10.84).
+export (10.40), the ``rho_at_fit`` contract of vector fits (10.84) and,
+for layered soil, the effective resistivity as the ``rho`` of a BusType
+(10.84, user decision Q6).
 Tests that need ``groundinsight`` skip cleanly when it is missing.
 """
 
@@ -1256,19 +1258,93 @@ def test_export_refuses_a_voltage_level_that_is_not_finite() -> None:
 
 
 # ---------------------------------------------------------------------
-# 12. rho_at_fit convention for layered soil (10.84)
+# 12. rho of a BusType for layered soil: the effective resistivity
+#     (10.84, user decision Q6)
 # ---------------------------------------------------------------------
 
 
 @pytest.mark.finding("10.84")
-def test_rho_at_fit_convention_for_layered_soil_is_the_upper_layer() -> None:
-    """The error message and the export docstrings name one convention:
-    the resistivity of the upper layer, rho_1."""
+def test_rho_at_fit_convention_for_layered_soil_is_the_effective_resistivity() -> None:
+    """The error message and the export docstrings name one convention for
+    layered soil: the effective resistivity of the soil, the rho that the AP2
+    network model gives a bus (user decision Q6), not the upper-layer
+    resistivity rho_1 of the intermediate 10.84 convention."""
+    # user decision Q6
     with pytest.raises(ValueError) as excinfo:
         to_bustype_dict(
             _make_vector_fit(), name="vf", system_type="TN", voltage_level=0.4
         )
     message = str(excinfo.value)
-    assert "upper layer" in message and "rho_1" in message
+    assert "effective resistivity" in message
+    assert "rho_at_fit=groundfield.effective_resistivity(soil)" in message
+    assert "upper layer" not in message
     for func in (to_bustype_dict, save_bustype_json, to_bustype, save_bustype_to_db):
-        assert "upper layer" in func.__doc__ and "rho_1" in func.__doc__, func
+        doc = func.__doc__
+        assert "effective resistivity" in doc and "effective_resistivity" in doc, func
+        assert "upper layer" not in doc, func
+
+
+@pytest.mark.finding("10.84")
+@pytest.mark.parametrize("kind", ["vector_fit", "rho_f_standard"])
+def test_bustype_metadata_records_the_rho_definition(kind: str, tmp_path) -> None:
+    """Every document states how its rho is defined (strict JSON, survives
+    the file round trip); documents of earlier versions have no such key."""
+    # user decision Q6
+    if kind == "vector_fit":
+        fit, extra = _make_vector_fit(), {"rho_at_fit": 76.14650585114978}
+    else:
+        fit, extra = _make_rho_f_fit(), {}
+    kwargs = dict(name=kind, system_type="TN", voltage_level=0.4, **extra)
+    payload = to_bustype_dict(fit, **kwargs)
+    assert payload["metadata"]["fit_method"] == kind
+    assert payload["metadata"]["rho_definition"] == "effective_resistivity"
+    json.dumps(payload, allow_nan=False)
+    path = save_bustype_json(fit, tmp_path / f"{kind}.json", **kwargs)
+    spec = load_bustype_json(path)
+    assert spec.metadata["rho_definition"] == "effective_resistivity"
+
+
+@pytest.mark.finding("10.84")
+def test_layered_soil_exports_pair_with_an_effective_resistivity_bus() -> None:
+    """End to end in two-layer soil: a standard form fitted over the effective
+    resistivities of the solved soils, evaluated at the rho_eff of one soil
+    (the bus value of AP2), reproduces that soil's field solution within the
+    fit's max_relative; a vector fit records rho_eff as its rho_at_fit."""
+
+    # user decision Q6
+    def station(rho_1: float) -> groundfield.World:
+        soil = groundfield.TwoLayerSoil(rho_1=rho_1, rho_2=100.0, h_1=5.0)
+        world = groundfield.create_world(soil=soil)
+        groundfield.create_electrode(
+            world, "ring", name="station", center=(0.0, 0.0, 0.8), radius=2.0
+        )
+        groundfield.create_electrode(
+            world, "rod", name="rod", position=(2.0, 0.0, 0.8), length=3.0
+        )
+        groundfield.create_conductor(world, name="bond", start="station", end="rod")
+        groundfield.create_source(world, attached_to="station", magnitude=1.0)
+        return world
+
+    engine = groundfield.create_engine(frequencies=[50.0, 1000.0])
+    results = [engine.solve(station(rho)) for rho in (30.0, 100.0, 300.0, 1000.0)]
+    rhos = [groundfield.effective_resistivity(r.soil) for r in results]
+    np.testing.assert_allclose(
+        rhos, [39.39773685563934, 100.0, 233.95, 593.8227796258142], rtol=1e-4
+    )
+    fit = groundfield.rho_f_standard_from_results(results, rhos, max_relative_tol=0.15)
+    payload = to_bustype_dict(fit, name="station", system_type="TN", voltage_level=20)
+    assert sorted(set(payload["samples"]["rho_Ohm_m"])) == sorted(rhos)
+    spec = BusTypeSpec.from_dict(payload)
+    for rho, result in zip(rhos, results, strict=True):
+        z_bus = evaluate_spec(spec, [50.0], rho)[0]
+        z_field = result.input_impedance()[0]
+        assert abs(z_bus / z_field - 1.0) <= fit.max_relative + 1e-9
+    vector = to_bustype_dict(
+        _make_vector_fit(),
+        name="vf",
+        system_type="TN",
+        voltage_level=0.4,
+        rho_at_fit=groundfield.effective_resistivity(results[0].soil),
+    )
+    assert vector["metadata"]["rho_at_fit_Ohm_m"] == rhos[0]
+    assert set(vector["samples"]["rho_Ohm_m"]) == {rhos[0]}

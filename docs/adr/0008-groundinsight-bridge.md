@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026.11 (review pass 10: safe formula parser, input impedance, passivity); see the amendment at the end of this document |
+| **Status** | Accepted — amended 2026.11 (review pass 10: safe formula parser, input impedance, passivity, the effective resistivity as the `rho` of layered soil); see the amendment at the end of this document |
 | **Date** | 2026-05-08 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.io.groundinsight`; bridge to the sister project `groundinsight` |
@@ -47,6 +47,8 @@ symbols that the `compute_impedance` evaluator binds at run time:
 
 - `f` — frequency in Hz
 - `rho` — `Bus.specific_earth_resistance`, in $\Omega\,\mathrm{m}$
+  (for layered soil the effective resistivity, see item 5 of the
+  amendment)
 
 and the imaginary unit `j` (mapped to `sympy.I` by the validator).
 
@@ -113,7 +115,8 @@ can still read the file by ignoring the metadata block.
     "source":          "groundfield 0.1.0",
     "created_at_utc":  "2026-05-08T14:32:11Z",
     "electrode_name":  "trafo_ring",
-    "soil_summary":    "TwoLayerSoil(rho_1 sweep [50, 100, 300, 1000], rho_2=20, h_1=2.0)"
+    "soil_summary":    "TwoLayerSoil(rho_1 sweep [50, 100, 300, 1000], rho_2=20, h_1=2.0)",
+    "rho_definition":  "effective_resistivity"      // amendment 2026.11, item 5
   }
 }
 ```
@@ -221,9 +224,28 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    (`NonPassiveFitWarning`) or, with `require_passive=True`, raises
    `NonPassiveFitError` before anything is written (10.40).
    `metadata["passivity"]` records the verdict.
-5. **`rho_at_fit`.** A vector fit belongs to one soil; its export requires
-   `rho_at_fit`, by convention the upper-layer resistivity $\rho_1$ for
-   layered soil, and the error message says so (10.84).
+5. **`rho_at_fit` and the `rho` of layered soil.** A vector fit belongs
+   to one soil; its export requires `rho_at_fit`, and the error message
+   says what to pass (10.84). For layered soil the `rho` of every
+   BusType — `rho_at_fit` of a vector fit, the `rho` samples a standard
+   form is fitted over — is the **effective resistivity** of the soil it
+   was fitted in,
+   $\rho_\text{eff} = \rho_1^{\,1-w}\rho_2^{\,w}$ with
+   $w = w_0 (h_1/10\ \mathrm{m})^{-\beta}$ limited to $[0, 1]$
+   (`groundfield.effective_resistivity`; AP1 calibration $w_0 = 0.13$,
+   $\beta = 0.8$; $\rho$ itself for homogeneous soil). This is the value
+   the AP2 network model gives a `Bus` as `specific_earth_resistance`
+   (the author's decision for the 2026.11 release), so a BusType pairs
+   with the bus of its soil. It replaces the upper-layer resistivity
+   $\rho_1$ of an earlier draft of this amendment, which describes a soil
+   only together with a fixed lower layer and thickness. Every document
+   records the convention as `metadata["rho_definition"] =
+   "effective_resistivity"`; documents of 0.15.0 have no such entry. The
+   exporter cannot check the number it is given. $\rho_\text{eff}$ is
+   an empirical calibration on the LV networks of the AP1 catalogue
+   ($h_1$ = 5 … 30 m, $\rho_1$ = 30 … 1000 Ω·m, $\rho_2$ = 30 … 200 Ω·m);
+   a compact electrode in the upper layer follows $\rho_1$ more closely,
+   so check the fit quality (`max_relative`) of such a system.
 6. **Validation programme.** The round trip through groundinsight is
    checked at $10^{-9}$, as this ADR specified (the test had used
    $10^{-3}$), and `evaluate_spec` against groundinsight's

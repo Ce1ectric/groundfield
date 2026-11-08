@@ -99,6 +99,15 @@ shows what agrees with independent references and how well.
   $\lvert K\rvert = 0.94$ and warns (`SeriesTruncationWarning`) beyond.
   `mom_sommerfeld` may not converge for $\lvert K\rvert \to 1$
   (`SommerfeldConvergenceWarning`); use `image_2layer` for two layers.
+- **Effective resistivity** (`effective_resistivity`, the `rho` of a
+  BusType in layered soil) is an empirical calibration on the LV
+  networks of the AP1 catalogue ($h_1$ = 5 … 30 m, $\rho_1$ = 30 …
+  1000 Ω·m, $\rho_2$ = 30 … 200 Ω·m), defined for homogeneous and
+  two-layer soil only (three distinct layers raise `ValueError`); its
+  weight is limited to $[0, 1]$, so an upper layer thinner than 0.78 m
+  gives $\rho_2$. A compact electrode in the upper layer follows
+  $\rho_1$ more closely: check `max_relative` of a fit over
+  $\rho_\text{eff}$ (see [Soil](api/soil.md#effective-resistivity)).
 
 ## Backends
 

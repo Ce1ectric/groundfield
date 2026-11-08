@@ -22,6 +22,10 @@ SoilLayer
     half-space) used by ``MultiLayerSoil``.
 SoilModel
     Discriminated union of all supported soil types (``kind``).
+effective_resistivity
+    Effective resistivity $\\rho_\\text{eff} = \\rho_1^{1-w}\\rho_2^{w}$ of a
+    homogeneous or two-layer soil (AP1 calibration): the ``rho`` of a
+    groundinsight bus and of a BusType fitted in layered soil.
 
 Notes
 -----
@@ -31,6 +35,7 @@ symbols; the pre-2026.11 names ``resistivity`` and ``thickness`` are
 deprecated aliases (see :mod:`groundfield.soil.models`).
 """
 
+from groundfield.soil.effective import effective_resistivity
 from groundfield.soil.models import (
     HomogeneousSoil,
     MultiLayerSoil,
@@ -45,4 +50,5 @@ __all__ = [
     "MultiLayerSoil",
     "SoilLayer",
     "SoilModel",
+    "effective_resistivity",
 ]

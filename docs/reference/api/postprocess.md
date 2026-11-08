@@ -67,7 +67,9 @@ see the [quickstart](../../getting-started/quickstart.md)). Two families:
   in $s = j\omega$ at a fixed soil,
   $Z(s) \approx R_\infty + sL_\infty + \sum_k r_k/(s - p_k)$, with a
   passivity check ($\operatorname{Re}Z \ge 0$) before export;
-- the *standard form* fitted over a $\rho$ and $f$ sweep,
+- the *standard form* fitted over a $\rho$ and $f$ sweep (for layered
+  soil $\rho$ is the effective resistivity of each solved soil, see
+  [Soil](soil.md#effective-resistivity)),
 
   $$
   Z(\rho, f) = k_0 + k_1\rho + (k_2 + jk_3)\,f + (k_4 + jk_5)\,f\rho ,
