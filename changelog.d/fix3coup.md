@@ -59,7 +59,12 @@
   largest one (a pair got an overlap in one order and none in the other).
   Such pairs are now projected on the bisector of the two axes from the
   mean of their mid-points (3e-17 after reversal); exactly parallel pairs
-  keep their numbers bit for bit. Golden cases: none. Test:
+  keep their numbers bit for bit. Numbers move for `carson_series` worlds
+  with horizontal conductors at small angles to each other: the mutual
+  impedance of two 300 m or 1 km leads 2 m apart grows by 2e-5 at 0.5°,
+  4e-4 at 2°, 1.6e-3 at 4° and up to 6.4e-3 at 8° (50 Hz and 1 kHz); the
+  step at the 8.1° boundary becomes 12.8 % for the 1 km leads at 1 kHz
+  (12.3 %). Golden cases: none. Test:
   `tests/test_carson_validity_domain.py::test_carson_tiling_does_not_depend_on_the_segment_order`.
 - ⚠ **Filaments at tiny angles (10.46, audit A3C-4):** two filaments from
   one vertex below the coaxial tolerance (4.5e-5 rad) were taken as

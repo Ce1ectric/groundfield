@@ -313,7 +313,9 @@ the following decisions refine it.
    cable shield) the thicker radius: a filament inside a thin tube
    couples to it as at the tube radius, which gives the coaxial loop
    inductance $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per
-   metre instead of +36 %. Both one-sided integrals (inner integral in
+   metre when the shield carries no internal inductance (+36 % before;
+   a shield conductor in a solve still carries the internal inductance of
+   a solid wire, item 3). Both one-sided integrals (inner integral in
    closed form) are averaged, on end points in a fixed order, so every
    order and direction of the segments gives the same value bit for bit;
    the value is continuous in the geometry (4e-15 against an

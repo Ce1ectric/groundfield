@@ -194,8 +194,9 @@ sections; it matters for harmonics up to 1 kHz.
   trench drawn on one axis, a service drop along its main — couple as
   wires touching side by side; a thinner conductor inside a thicker one
   (a core on the axis of a cable shield) couples as a filament inside a
-  tube, at the radius of the thicker one. Draw separate cables at least
-  $r_1 + r_2$ apart if they are not one cable.
+  tube, at the radius of the thicker one. Two separate cables of
+  different radii drawn on one axis are therefore read as one concentric
+  cable: draw them at least $r_1 + r_2$ apart.
 - The leads of a measurement (tutorial
   [T07](../tutorials/T07_fall_of_potential_measurement.ipynb)) couple
   like cables; lay the probe lead at an angle to the feed lead.

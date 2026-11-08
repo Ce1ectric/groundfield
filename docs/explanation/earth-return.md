@@ -241,7 +241,10 @@ the physics of buried conductors below 1 kHz; it was the default before
   thicker one (a core on the axis of a cable shield) the thicker radius is
   used instead: a filament inside a thin tube couples to it as at the tube
   radius, and the loop gives the coaxial inductance
-  $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per metre. The
+  $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per metre when the
+  shield carries no internal inductance (`build_inductance_matrix(...,
+  include_internal=[True, False])`; in a solve every conductor carries
+  that of a solid wire, $\mu_0/(8\pi)$ per metre, also the shield). The
   value does not depend on the order or the direction of the segments,
   is continuous in the geometry, and leaves chain neighbours, bends
   turning by less than 90° and pairs farther apart unchanged. For unequal

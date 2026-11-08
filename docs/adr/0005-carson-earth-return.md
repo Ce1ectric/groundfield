@@ -539,22 +539,23 @@ Findings 10.20 (F32), 10.46 and 10.63.
    tiling — the per-metre correction at the horizontal axis distance times
    the length over which the two segments overlap — is kept for
    near-parallel pairs ($|\cos\varphi| > 0.99$) of near-horizontal
-   segments (inclination below 8.1°) on one side of the surface. A pair with one wire overhead and one
-   buried has no anti-parallel baseline (a perfect conductor screens the
-   soil) and couples through the field transmitted into the soil,
-   `carson_mixed_mutual_correction` (Carson's $J$ and the remainder of the
-   buried wire's attenuation; Ametani et al. 2009). Against an independent
-   quadrature it agrees to 4.2e-9 for x ≤ 300 m
-   ($q = x\sqrt{\omega\mu_0\sigma} \le 8.4$ at 1 kHz in 10 Ω·m; 1e-10 at
-   50 Hz) and to 1.2e-7 at x = 1 km ($q = 28$), where Carson's $J$ itself is
-   evaluated by QUADPACK's Fourier rule (the "1e-9" first stated here was
-   measured up to 300 m). Oblique pairs and every pair and self term of a
-   segment inclined by more than 8.1° get the Sommerfeld correction of a
-   homogeneous earth of the same conductivity; before, an oblique pair got
-   the per-metre value once per segment pair, which grew with the number of
-   segments (two 1 km leads at 9°: 20× the Sommerfeld coupling). At the
-   8.1° boundary the result steps by the error of the per-metre model there
-   (12 % for two 1 km leads 2 m apart at 1 kHz).
+   segments (inclination below 8.1°) on one side of the surface. A pair
+   with one wire overhead and one buried has no anti-parallel baseline (a
+   perfect conductor screens the soil) and couples through the field
+   transmitted into the soil, `carson_mixed_mutual_correction` (Carson's
+   $J$ and the remainder of the buried wire's attenuation; Ametani et al.
+   2009). Against an independent quadrature it agrees to 4.2e-9 for
+   x ≤ 300 m ($q = x\sqrt{\omega\mu_0\sigma} \le 8.4$ at 1 kHz in
+   10 Ω·m; 1e-10 at 50 Hz) and to 1.2e-7 at x = 1 km ($q = 28$), where
+   Carson's $J$ itself is evaluated by QUADPACK's Fourier rule (the "1e-9"
+   first stated here was measured up to 300 m). Oblique pairs and every
+   pair and self term of a segment inclined by more than 8.1° get the
+   Sommerfeld correction of a homogeneous earth of the same conductivity;
+   before, an oblique pair got the per-metre value once per segment pair,
+   which grew with the number of segments (two 1 km leads at 9°: 20× the
+   Sommerfeld coupling). At the 8.1° boundary the result steps by the
+   error of the per-metre model there (12 % for two 1 km leads 2 m apart
+   at 1 kHz; 12.8 % after item 6).
 6. **Order of the segments (third adversarial audit).** Near-parallel
    pairs that are not exactly parallel were projected on the axis of the
    pair's first segment: reversing the segment order moved entries by up
