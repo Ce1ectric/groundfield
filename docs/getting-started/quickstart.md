@@ -1,118 +1,124 @@
 # Quickstart
 
+A substation ring earth and the rod earth of a house 40 m away, joined
+by a PEN conductor, in two-layer soil; a current of 1 A is injected at
+the substation and returns through remote earth.
+
 ```python
 import groundfield as gf
 
-# 1) Soil model: a representative two-layer soil
-soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
+world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=2.0))
+gf.create_electrode(world, "ring", name="substation", center=(0.0, 0.0, 0.8), radius=3.0)
+gf.create_electrode(world, "rod", name="house", position=(40.0, 0.0, 0.0), length=3.0)
+gf.create_conductor(world, name="pen", start="substation", end="house", cross_section=95e-6)
+gf.create_source(world, attached_to="substation", magnitude=1.0)
 
-# 2) Build a world and add a ring electrode around a substation
-world = gf.create_world(soil=soil)
-gf.create_electrode(
-    world,
-    "ring",
-    name="g1",
-    center=(0.0, 0.0, 0.8),
-    radius=5.0,
-    wire_radius=0.005,
-)
-gf.create_source(world, attached_to="g1", magnitude=1.0)
-
-# 3) Configure the engine
-engine = gf.create_engine(
-    backend="image",                # auto-routes to image_2layer
-    # 0.25 m gives ~126 segments on this 5 m ring; the cluster
-    # impedance is converged to 5 digits (12.136 Ohm at 50 Hz, same
-    # as at 0.05 m) while the contour plot below stays fast. Refine
-    # only where the field gradient, not the impedance, matters.
-    segment_length=0.25,
-    frequencies=[50.0, 150.0, 250.0, 350.0],
-)
-
-# 3a) Sweeps that intentionally iterate non-monotonically must use
-# the explicit opt-in to silence the EngineFrequencyOrderWarning:
-#     engine_sweep = engine.with_frequencies(5000.0, 50.0,
-#                                            preserve_order=True)
-# The resulting Engine carries the list verbatim — the solver never
-# sorts behind your back.
-
-# 4) Run the simulation
-result = world.solve(engine)
-
-# 5) Evaluate
-Z = result.cluster_impedance("g1")             # input impedance per frequency
-import numpy as np
-xs = np.linspace(0.5, 30.0, 120)
-phi = result.potential(np.column_stack([xs, np.zeros_like(xs), np.zeros_like(xs)]))
-
-# 6) Plots
-gf.plot_potential_radial(result, around="g1", world=world,
-                         depths=[0.0, 0.5, 1.0])
-gf.plot_potential_contour(result, world=world, plane="xy", z=0.0)
+result = world.solve(gf.create_engine(frequencies=[50.0]))
+print(result.input_impedance()[0])                # (11.2699+0j) Ω
+print(result.cluster_impedance("substation")[0])  # (14.1046+0j) Ω
 ```
 
-## Backends
+Line by line:
 
-| Backend          | Soil model                                            | Method                                                                  | Status     |
-|------------------|-------------------------------------------------------|-------------------------------------------------------------------------|------------|
-| `image`          | `HomogeneousSoil`                                     | image-charge sum, closed form                                           | implemented |
-| `image_2layer`   | `TwoLayerSoil` (auto-dispatched from `"image"`)       | Tagg/Sunde geometric image-charge series                                | implemented |
-| `image_nlayer`   | `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil`   | dispatcher (delegates to `image` for $n=1$, `image_2layer` for $n=2$)   | implemented |
-| `cim`            | `HomogeneousSoil` or `TwoLayerSoil` ($n \ge 3$ raises) | closed-form self-kernel; reduces to `image` / `image_2layer`             | implemented |
-| `mom`            | `HomogeneousSoil` or `TwoLayerSoil`                   | Galerkin Method-of-Moments on segment level                             | implemented |
-| `mom_sommerfeld` | any layered                                           | Galerkin MoM with direct Sommerfeld quadrature (reference engine)        | implemented |
-| `bem`            | `HomogeneousSoil` or `TwoLayerSoil` ($n \ge 3$ raises) | collocation on the closed-form kernel; reduces to `mom`                  | implemented |
-| `fem`            | any layered                                           | Axisymmetric volume FEM with equivalent-hemisphere reduction            | implemented |
+- **Soil.** `TwoLayerSoil` is a top layer of resistivity
+  $\rho_1 = 100\,\Omega\,\mathrm{m}$ and thickness $h_1 = 2\,\mathrm{m}$
+  over a half-space of $\rho_2 = 300\,\Omega\,\mathrm{m}$. All inputs are
+  SI units (m, Ω·m, A, Hz).
+- **Electrodes.** Coordinates are $(x, y, z)$ in metres with $z$ the
+  depth, positive downwards: the ring lies 0.8 m deep, the rod runs from
+  the surface to 3 m. The wire radius defaults to 5 mm.
+- **Conductor.** A 95 mm² copper PEN (`cross_section` in m²) is a branch
+  with resistance $R = \rho_\text{Cu}\,\ell/A$ between the two
+  electrodes. Without `cross_section` it would be an ideal connection
+  and both electrodes would form one galvanic cluster.
+- **Source.** 1 A RMS phasor at the substation; without `return_to` the
+  current returns through remote earth (the potential reference,
+  $\varphi \to 0$ far away).
+- **Engine.** The numerics: here only the frequency list. The default
+  backend `image` forwards a two-layer soil to `image_2layer` (the
+  Tagg/Sunde image series) with the exact line-source kernel; segments
+  are at most 0.5 m long.
 
-!!! warning "Eight backends, six distinct computations"
-
-    For $n \le 2$ layers, `cim` returns values **bit-identical** to
-    `image_2layer` and `bem` bit-identical to `mom` — both use the same
-    closed-form self-kernels, and the complex-image fit that once
-    distinguished `cim` no longer runs (see
-    [ADR-0002](adr/0002-engine-family.md) and the
-    [`cim`](engines/cim.md) / [`bem`](engines/bem.md) pages). Treat them
-    as aliases, **not** as independent cross-checks. Both raise
-    `NotImplementedError` for $n \ge 3$; `mom_sommerfeld` is currently
-    the only integral-equation path for three or more layers, with `fem`
-    as the methodologically independent cross-check.
-
-`Engine.solve` automatically forwards `backend="image"` to
-`image_2layer` for a `TwoLayerSoil` and to `image_nlayer` for a
-`MultiLayerSoil`, so notebooks written for the homogeneous case keep
-working when only the soil model is swapped. The full engine theory
-lives under [Engine theory](engines/index.md); the selection
-heuristic is recorded in
-[ADR-0002](adr/0002-engine-family.md).
-
-## Cross-engine validation
+## Three impedances of one solve
 
 ```python
-from groundfield import compare_engines
-
-report = compare_engines(
-    world,
-    engines={
-        "fine":   gf.create_engine(backend="image", segment_length=0.025),
-        "coarse": gf.create_engine(backend="image", segment_length=0.10),
-    },
-    rel_tolerance=0.05,
-)
-print(report.summary())
-assert report.is_consistent
+Z_in = result.input_impedance()[0]
+Z_substation = result.cluster_impedance("substation")[0]
+Z_house = result.cluster_impedance("house")[0]
+share = result.electrode_currents["substation"][0]   # leakage current, A
+print(f"{Z_in.real:.2f} Ω, {Z_substation.real:.2f} Ω, {share.real:.0%} at the substation")
+# 11.27 Ω, 14.10 Ω, 80% at the substation
 ```
 
-The same pattern is used by `tests/test_cross_engines_extended.py`
-to enforce the methodological cross-checks between the closed-form
-image engines, the integral-equation engines (`mom`,
-`mom_sommerfeld`) and the volume-PDE engine (`fem`). `bem` and `cim`
-are deliberately absent from that list: for $n \le 2$ they reduce to
-`mom` and `image_2layer` respectively, so pairing them adds no
-independent information.
+| Method | Definition | What it describes |
+|---|---|---|
+| `input_impedance(source)` | $(\varphi_a - \varphi_r)/I_s$ | what an earth tester or a fault sees at the feeding point: the whole connected system |
+| `cluster_impedance(electrode)` | $\varphi_c / \sum_{e \in c} I_e$ | the local earthing system: one galvanic cluster (electrodes joined by ideal conductors) and only the current it leaks itself |
+| `grounding_impedance(electrode)` | $\varphi_c / I_e$ | the share of one electrode; equal to the cluster impedance for a cluster of one electrode |
 
-## Parameter sweeps
+$\varphi_a$, $\varphi_r$ are the potentials of the feeding and the
+return node (zero for a return through remote earth), $I_s$ the source
+current, $\varphi_c$ the length-weighted potential of a cluster and
+$I_e$ the current an electrode leaks into the soil. Here 20 % of the
+test current flows through the PEN to the house earth, so the substation
+ring alone (14.10 Ω) is seen as 11.27 Ω at the feeding point. Because
+the PEN resistance is only a few milliohms, the input impedance is the
+parallel connection of the two cluster impedances:
 
-- Vary `soil.rho_1`, `soil.rho_2`, `soil.h_1` and the auxiliary
-  electrode position to span the parameter space of interest.
-- The resulting `rho-f` curves feed the model reduction step in
-  `groundinsight`.
+```python
+print(abs(1 / (1 / Z_substation + 1 / Z_house) - Z_in))   # 0.0003 Ω
+```
+
+Which one you need depends on the question: the input impedance for a
+measurement or a fault loop (it is the default of `sweep`,
+`convergence_study` and the `rho-f` fits), the cluster impedance to
+characterise one earthing system on its own. The
+[sources and measurement](../explanation/sources-and-measurement.md)
+page explains the definitions in detail.
+
+## Check the result with a second method
+
+Every number from a field model should be checked against an
+independent computation. Two quick checks: solve the same world with a
+second backend, and refine the discretisation.
+
+```python
+report = gf.compare_engines(
+    world,
+    engines={"image": gf.create_engine(), "mom": gf.create_engine(backend="mom")},
+    rel_tolerance=0.05,
+)
+print(report.summary())     # largest deviation 1.1 % (house cluster): consistent
+
+fine = world.solve(gf.create_engine(segment_length=0.25))
+print(fine.input_impedance()[0])   # (11.2759+0j) Ω, +0.05 % at half the segment length
+```
+
+`mom` solves for the segment currents by point matching with midpoint
+point sources, `image_2layer` imposes uniform line currents per segment
+with the exact line-source kernel; agreement within about 1 % is
+expected (the point kernel is known to read 1–2 % low,
+see [source kernels](../explanation/kernels.md)).
+
+??? info "Values asserted by the test suite"
+
+    The code blocks on this page are executed by the documentation tests;
+    these assertions keep the numbers quoted above in step with the code.
+
+    ```python
+    assert abs(Z_in - 11.2699) < 5e-4 and abs(Z_substation - 14.1046) < 5e-4
+    assert abs(share.real - 0.799) < 1e-3
+    assert abs(1 / (1 / Z_substation + 1 / Z_house) - Z_in) < 1e-3
+    assert report.is_consistent and max(report.deviations.values()) < 0.012
+    assert abs(fine.input_impedance()[0] - 11.2759) < 5e-4
+    ```
+
+## Where next
+
+- [Tutorials](../tutorials/index.md): from this first impedance to
+  layered soil, frequency response, `rho-f` export, TN networks,
+  measurements and touch voltages.
+- [Factories](../reference/api/factories.md): every `create_*` function
+  and its parameters.
+- [Units and conventions](../reference/units-and-conventions.md):
+  coordinates, phasors, signs.

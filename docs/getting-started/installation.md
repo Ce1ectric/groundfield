@@ -1,84 +1,132 @@
 # Installation
 
-`groundfield` requires **Python 3.12 or newer** and uses
-[Poetry](https://python-poetry.org/) for dependency management.
+`groundfield` runs on **Python 3.12, 3.13 and 3.14** on any operating
+system. The core dependencies are numpy, scipy, pydantic, sympy, pandas
+and matplotlib.
 
-## From the Git checkout
-
-```bash
-git clone https://github.com/Ce1ectric/groundfield.git
-cd groundfield
-poetry install
-```
-
-Dev dependencies (pytest, black, ipykernel) live in the ``dev`` group
-and are installed by default.
-
-## Documentation group
-
-To build the documentation locally:
-
-```bash
-poetry install --with docs
-poetry run mkdocs serve
-```
-
-## Executable documentation
-
-Every fenced ``python`` block under `docs/` is executed by the test
-suite (`tests/test_pass9_doc_snippets.py`), so a snippet that has
-drifted away from the API fails CI instead of failing the reader:
-
-```bash
-poetry run pytest tests/test_pass9_doc_snippets.py
-```
-
-All blocks of one page run **in document order into one shared
-namespace**, exactly as a reader would work through the page, so a
-later block may reuse the `world` or `result` built earlier on the
-same page. Snippets run on the `matplotlib` `Agg` backend, with
-`plt.show()` neutralised and the working directory redirected to a
-temporary folder — a snippet that writes CSV / VTK / JSON therefore
-cannot litter the checkout.
-
-Blocks that are *not* runnable programs opt out with an HTML comment
-on the line directly above the fence (invisible in the rendered
-page). Always state a reason:
-
-```markdown
-<!-- skip-doctest: schema sketch, not runnable code -->
-```
-
-Use it for schema / signature sketches (typical in the ADRs),
-snippets that need the Overpass network or another optional
-dependency, and study templates that would run for hours. A whole
-page opts out with `<!-- skip-doctest-page: reason -->` anywhere in
-the file. Pages that are runnable but take minutes belong in the
-`SLOW_PAGES` map of the harness and then only run with
-`GF_DOC_SNIPPETS_SLOW=1`; trimming the demo (coarser
-`segment_length`, fewer realisations) is usually the better fix,
-because a snippet too slow for CI is also too slow for the reader
-who copy-pastes it.
-
-## PyPI
-
-Once the first release is published:
+## From PyPI
 
 ```bash
 pip install groundfield
 ```
 
-## Integration with the sister projects
+Check the installation:
 
-`groundfield` is designed to work alongside `groundinsight` and
-`groundmeas`. When the three projects share a Poetry environment they
-can be wired up as path dependencies:
+```bash
+python -c "import groundfield; print(groundfield.__version__)"
+```
+
+### Optional extras
+
+| Extra | Installs | Needed for |
+|---|---|---|
+| `geo` | `requests`, `shapely`, `pyproj` | building footprints from OpenStreetMap (Overpass), WGS84 → local coordinates, polygon geometry ([Geo / OSM](../reference/api/geo.md), ADR-0011) |
+| `groundinsight` | `groundinsight` | live `groundinsight.BusType` objects and writing into the `groundinsight` SQLite store; the JSON export works without it ([IO and groundinsight](../reference/api/io.md), ADR-0008) |
+| `fast` | `numba` | compiled kernels for the two-layer image series and the far field of the exact line-source kernel; same results, shorter solve times |
+
+```bash
+pip install "groundfield[geo,fast]"
+```
+
+Without the `geo` extra, `import groundfield.geo` works, and the
+functions that need the extra raise an `ImportError` with the install
+command. Without `fast`, every kernel runs in numpy.
+
+## From a Git checkout (development)
+
+The project uses [Poetry](https://python-poetry.org/) (2.x) and a
+committed lock file:
+
+```bash
+git clone https://github.com/Ce1ectric/groundfield.git
+cd groundfield
+poetry install                     # package + dev group
+poetry install --extras "geo fast" # optional extras
+```
+
+The `dev` group contains pytest (with pytest-cov and pytest-xdist),
+ruff, mypy, ipykernel, and `groundinsight`, `requests`, `shapely` and
+`pyproj`, so the bridge and OSM tests run end to end.
+
+### Tests
+
+```bash
+poetry run pytest -n auto                  # full suite, parallel
+poetry run pytest -m "not slow"            # skip long-running tests
+poetry run pytest --run-benchmark tests/benchmarks   # engine benchmark suite
+poetry run pytest --run-network            # tests that query Overpass
+```
+
+The markers `finding`, `slow`, `network`, `benchmark` and `golden` are
+registered in `pyproject.toml`; `pytest --finding 10.28` selects the
+tests of one review finding.
+
+### Code standards
+
+```bash
+poetry run ruff format .
+poetry run ruff check --select F,E9,B,W605 .   # blocking subset in CI
+poetry run mypy                                # report only for now
+```
+
+The same checks run as [pre-commit](https://pre-commit.com/) hooks
+(`.pre-commit-config.yaml`; install pre-commit with pipx, then
+`pre-commit install`). Docstrings follow the NumPy convention.
+
+### Documentation
+
+```bash
+poetry install --with docs
+poetry run mkdocs serve           # live preview on http://127.0.0.1:8000
+poetry run mkdocs build --strict  # what CI runs
+```
+
+The docs group contains MkDocs with Material, mkdocstrings,
+mkdocs-jupyter (renders the tutorial notebooks with their stored
+outputs) and mike (versioned deployment). Python code blocks in the
+Markdown pages are executed by the test suite, so a snippet that no
+longer matches the API fails CI; see the how-to guide on contributing
+to the documentation for the rules.
+
+## Versions and releases
+
+Releases use calendar versioning `YYYY.M.MICRO` in its PEP 440 form:
+`2026.11.0` is the first release of November 2026, `2026.11.1` the
+second, `2027.1.0` the first of January 2027. Releases up to `0.15.0`
+used semantic versioning. Deprecated names keep working for at least
+two releases and six months; see [Deprecations](../reference/deprecations.md).
+
+!!! note "For maintainers: cutting a release"
+
+    The release tool lives in the repository and is not installed with
+    the package:
+
+    ```bash
+    python scripts/release.py calver --dry-run   # all checks, prints the plan
+    python scripts/release.py calver             # writes, commits, tags
+    git push origin main
+    git push origin vYYYY.M.MICRO
+    ```
+
+    The tool validates everything before it writes (clean tree, branch
+    up to date with its upstream, the three version sources
+    `pyproject.toml`, `src/groundfield/__init__.py` and `CITATION.cff`
+    agree, non-empty `[Unreleased]` block, no unmerged
+    `changelog.d/` fragments), then commits `chore(release): vX` and
+    creates the annotated tag. It never pushes. The tag starts the
+    release workflow (tests, tag/version check, build, PyPI trusted
+    publishing) and the documentation workflow, which deploys the docs
+    of that version with the alias `latest`. `python scripts/release.py
+    set 2026.11.0rc1` sets an explicit version, e.g. a release candidate.
+
+## Working with the sister projects
+
+`groundfield`, `groundinsight` and `groundmeas` can share one Poetry
+environment through path dependencies, which is useful when changing
+the interface between them:
 
 ```toml
-[tool.poetry.dependencies]
+[tool.poetry.group.dev.dependencies]
 groundinsight = { path = "../groundinsight", develop = true }
 groundmeas = { path = "../groundmeas", develop = true }
 ```
-
-This step is optional and is usually only relevant for
-integration-heavy development.
