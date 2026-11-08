@@ -393,8 +393,11 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         raises the constructor's :class:`pydantic.ValidationError` (no
         warning, nothing stored; audit D2B-04), ``"distributed"`` emits
         the constructor's :class:`DeprecationWarning` at the caller's line
-        and ``"lumped"`` is silent. Copies that leave the field alone
-        (every copy the generators make) are silent.
+        and ``"lumped"`` is silent. Only that field is validated (on a
+        shallow copy), so the other fields, also the required fields of a
+        subclass, are copied as they are (audit R2B-05).
+        ``copy.replace`` (Python >= 3.13) calls this method. Copies that
+        leave the field alone (every copy the generators make) are silent.
 
         Parameters
         ----------
@@ -416,12 +419,15 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             ``"lumped"`` or ``"distributed"``.
         """
         if update and "concrete_model" in update:
-            # The field's own validation: the Literal check raises, the
-            # field validator warns for the deprecated value.
-            checked = type(self).model_validate(
-                {"concrete_model": update["concrete_model"]}
+            # Only the field is validated, on a shallow copy, so the other
+            # fields of a subclass need not be rebuilt (audit R2B-05): the
+            # Literal check raises, the field validator warns for the
+            # deprecated value.
+            probe = super().model_copy()
+            type(self).__pydantic_validator__.validate_assignment(
+                probe, "concrete_model", update["concrete_model"]
             )
-            update = {**update, "concrete_model": checked.concrete_model}
+            update = {**update, "concrete_model": probe.concrete_model}
         return super().model_copy(update=update, deep=deep)
 
     @model_validator(mode="after")

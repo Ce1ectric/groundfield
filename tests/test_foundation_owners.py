@@ -590,6 +590,59 @@ def test_model_copy_stores_only_valid_concrete_model_values() -> None:
         assert restored == copy
 
 
+class _TaggedFoundation(FoundationElectrodeSpec):
+    """A user's subclass with a required field of its own."""
+
+    tag: str
+
+
+def _errors(error: pydantic.ValidationError) -> list[tuple]:
+    return [(e["type"], e["loc"], e["msg"]) for e in error.errors()]
+
+
+# audit R2B-05
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("value", ["lumped", "distributed"])
+@pytest.mark.parametrize("deep", [False, True])
+def test_model_copy_of_a_subclass_with_a_required_field(value: str, deep: bool) -> None:
+    """The D2B-04 fix validated the value by building a default instance of
+    ``type(self)``; a subclass with a required field cannot be built from
+    ``{"concrete_model": ...}`` alone, so a valid update raised
+    ``ValidationError`` ("tag: Field required", for "distributed" after the
+    deprecation warning). 0.15.0 returned the copy. Only the field is
+    validated now: the copy keeps every other field, and "distributed" warns
+    once, at the caller's line."""
+    spec = _TaggedFoundation(tag="house-1", size_xy_m=(10.0, 6.0))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        copied = spec.model_copy(update={"concrete_model": value}, deep=deep)
+    assert type(copied) is _TaggedFoundation
+    assert (copied.tag, copied.size_xy_m, copied.concrete_model) == (
+        "house-1",
+        (10.0, 6.0),
+        value,
+    )
+    files = [w.filename for w in caught if "concrete_model" in str(w.message)]
+    assert files == ([__file__] if value == "distributed" else [])
+    assert spec.concrete_model == "lumped"
+
+
+# audit R2B-05
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("value", ["Lumped", None])
+def test_model_copy_of_a_subclass_rejects_an_invalid_value(value: object) -> None:
+    """An invalid value raises the subclass constructor's error, and only
+    that error (the D2B-04 fix added "tag: Field required")."""
+    spec = _TaggedFoundation(tag="house-1")
+    with pytest.raises(pydantic.ValidationError) as copied:
+        spec.model_copy(update={"concrete_model": value})
+    with pytest.raises(pydantic.ValidationError) as constructed:
+        _TaggedFoundation(tag="house-1", concrete_model=value)
+    assert _errors(copied.value) == _errors(constructed.value)
+    assert copied.value.title == constructed.value.title == "_TaggedFoundation"
+    assert spec.concrete_model == "lumped"
+
+
 # audit D2B-06
 @pytest.mark.finding("10.12")
 def test_the_silent_paths_of_the_deprecation_are_documented() -> None:
