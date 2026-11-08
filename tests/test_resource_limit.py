@@ -14,6 +14,13 @@ and honoured by :func:`~groundfield.diagnostics.diagnose`,
 
 Every test here fails on the base (``1e587cc``) because the field does
 not exist (``extra="forbid"``).
+
+The soft notice (a ``UserWarning`` of every solve and an *info* finding of
+``diagnose`` that the solve may take minutes) stayed at the module constant
+:data:`groundfield.diagnostics.SOFT_LIMIT` (5 000). User decision Q31
+(2026-11-08): ``Engine(warn_segments=...)`` sets it per engine, ``None``
+reads the constant at call time, no cross-check against ``max_segments``.
+The tests of that section fail on ``bbaea9f`` for the same reason.
 """
 
 from __future__ import annotations
@@ -255,3 +262,110 @@ def test_raising_the_engine_limit_silences_the_budget_warning(
     assert not diagnostics.diagnose(world, _engine(max_segments=100)).by_category(
         "budget"
     )
+
+
+# ---------------------------------------------------------------------
+# User decision Q31 — the soft size notice is adjustable per engine
+# ---------------------------------------------------------------------
+
+
+def _budget_notices(report: diagnostics.DiagnosticsReport) -> list:
+    return [d for d in report.by_category("budget") if d.severity == "info"]
+
+
+@pytest.mark.finding("10.06")
+def test_warn_segments_is_a_validated_engine_field() -> None:
+    """Default ``None`` (the module constant); positive integers only."""
+    # user decision Q31
+    assert gf.Engine().warn_segments is None
+    assert gf.Engine(warn_segments=12_000).warn_segments == 12_000
+    for bad in (0, -5, 2.5, "many", True, False):
+        with pytest.raises(ValueError):
+            gf.Engine(warn_segments=bad)
+    assert gf.Engine(warn_segments=np.int64(8000)).warn_segments == 8000
+    engine = gf.Engine(warn_segments=8000, max_segments=50_000)
+    with pytest.raises(ValueError):
+        engine.warn_segments = 0  # validated on assignment too
+    assert engine.warn_segments == 8000
+    # JSON round trip; engine JSON without the field (0.15.0 and the
+    # release candidate) loads with the default.
+    assert gf.Engine.model_validate_json(engine.model_dump_json()) == engine
+    old = {k: v for k, v in gf.Engine().model_dump().items() if k != "warn_segments"}
+    assert gf.Engine.model_validate(old).warn_segments is None
+    # copies keep it
+    assert engine.with_frequencies(50.0, 1000.0).warn_segments == 8000
+    assert engine.model_copy(update={"segment_length": 1.0}).warn_segments == 8000
+    assert engine.model_copy(update={"warn_segments": None}).warn_segments is None
+
+
+@pytest.mark.finding("10.06")
+def test_diagnose_reports_the_notice_at_the_engines_size() -> None:
+    """63 segments: an info finding at ``warn_segments=50``, none by default."""
+    # user decision Q31
+    world = _ring_world()
+    report = diagnostics.diagnose(world, _engine(warn_segments=50))
+    notice = _budget_notices(report)
+    assert len(notice) == 1 and len(report.by_category("budget")) == 1
+    assert notice[0].data["limit"] == 50
+    assert "Engine.warn_segments = 50" in notice[0].message
+    assert report.context["warn_segments"] == 50
+    assert report.context["max_segments"] == diagnostics.HARD_LIMIT
+    default = diagnostics.diagnose(world, _engine())
+    assert not default.by_category("budget")
+    assert default.context["warn_segments"] == diagnostics.SOFT_LIMIT
+    assert "warn_segments" not in diagnostics.diagnose(world).context  # no engine
+    # check_segment_resolution: the same cause as a plain string
+    lines = diagnostics.check_segment_resolution(world, _engine(warn_segments=50))
+    assert len(lines) == 1 and lines[0].startswith("budget: ")
+
+
+@pytest.mark.finding("10.06")
+def test_the_solve_emits_the_notice_at_the_engines_size() -> None:
+    """The pre-flight ``UserWarning``: at 63 segments for ``warn_segments=63``."""
+    # user decision Q31
+    world = _ring_world()
+
+    def notices(engine: gf.Engine) -> list[str]:
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            engine.solve(world)
+        return [str(w.message) for w in rec if str(w.message).startswith("budget: ")]
+
+    hits = notices(_engine(warn_segments=N_RING))  # at the threshold
+    assert len(hits) == 1 and "Engine.warn_segments = 63" in hits[0], hits
+    assert "seconds to minutes" in hits[0]
+    assert notices(_engine(warn_segments=N_RING + 1)) == []
+    assert notices(_engine()) == []
+
+
+@pytest.mark.finding("10.06")
+def test_warn_segments_none_reads_the_module_constant_at_call_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``SOFT_LIMIT`` stays the default; an engine value overrides it."""
+    # user decision Q31
+    monkeypatch.setattr(diagnostics, "SOFT_LIMIT", 60)
+    world = _ring_world()
+    notice = _budget_notices(diagnostics.diagnose(world, _engine()))
+    assert len(notice) == 1, notice
+    assert "SOFT_LIMIT = 60 (the default of Engine.warn_segments)" in notice[0].message
+    assert not diagnostics.diagnose(world, _engine(warn_segments=100)).by_category(
+        "budget"
+    )
+
+
+@pytest.mark.finding("10.06")
+def test_warn_segments_is_not_checked_against_max_segments() -> None:
+    """A notice above the hard limit is accepted and simply never shows."""
+    # user decision Q31
+    engine = _engine(max_segments=50, warn_segments=100)  # no error
+    world = _ring_world()
+    report = diagnostics.diagnose(world, engine)
+    assert [d.severity for d in report.by_category("budget")] == ["warning"]
+    with pytest.raises(ResourceLimitError, match=r"Engine\.max_segments = 50"):
+        _solve(world, engine)
+    # within both: a lowered notice below a raised limit
+    both = _engine(max_segments=100, warn_segments=60)
+    assert [
+        d.severity for d in diagnostics.diagnose(world, both).by_category("budget")
+    ] == ["info"]

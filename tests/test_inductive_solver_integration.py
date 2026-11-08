@@ -360,3 +360,126 @@ def test_branch_correction_memory_bound_keeps_the_numbers(monkeypatch) -> None:
     for om, ref in zip(omegas + omegas, full + full, strict=True):
         assert np.array_equal(small(om), ref)
     assert small.n_assemblies == 6  # one at a time, and rebuilt after eviction
+
+
+# ---------------------------------------------------------------------
+# User decision Q27 — perfect_mirror warns for inductive pairs on opposite
+# sides of the soil surface
+# ---------------------------------------------------------------------
+
+
+def _lead_and_pen_world(
+    *,
+    lead_z: float = -1.0,
+    lead_dsl: float | None = 25.0,
+    lead_inductive: bool = True,
+) -> gf.World:
+    """Rods 50 m apart, bonded by a lead at ``lead_z`` and a PEN at 0.7 m.
+
+    The lead hangs 1 m above the soil surface by default (``z < 0``);
+    with ``lead_dsl=25`` it has two inductive segments, the PEN
+    (``discretize_segment_length=10``) five: 10 pairs across the surface.
+    """
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=RHO_SOIL))
+    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_electrode(w, "rod", name="g2", position=(50.0, 0.0, 0.5), length=3.0)
+    for name, y, z, dsl, inductive in (
+        ("lead", 1.0, lead_z, lead_dsl, lead_inductive),
+        ("pen", 0.0, 0.7, 10.0, True),
+    ):
+        w.add_conductor(
+            Conductor(
+                name=name,
+                start=(0.0, y, z),
+                end=(50.0, y, z),
+                start_electrode="g1",
+                end_electrode="g2",
+                wire_radius=A_RADIUS,
+                resistivity=RHO_AL,
+                cross_section=A_150,
+                discretize_segment_length=dsl,
+                coupling_to_soil="isolated",
+                inductance_model="neumann" if inductive else None,
+            )
+        )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+def _surface_pair_warnings(
+    world: gf.World, model: str = "perfect_mirror", freqs: tuple = (50.0,)
+) -> tuple[gf.FieldResult, list[warnings.WarningMessage]]:
+    eng = gf.create_engine(
+        backend="image",
+        segment_length=0.5,
+        frequencies=list(freqs),
+        earth_inductive_model=model,
+    )
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        res = world.solve(eng)
+    hits = [w for w in rec if "opposite sides of the soil surface" in str(w.message)]
+    return res, hits
+
+
+@pytest.mark.finding("10.46")
+def test_perfect_mirror_warns_for_inductive_pairs_across_the_surface() -> None:
+    """The additive image has no physical basis for an overhead/buried pair.
+
+    ``perfect_mirror`` adds the mirrored-endpoint image to every pair,
+    also to a lead in the air over a buried PEN; up to bbaea9f silently.
+    The numbers stay (a diagnostic baseline); the solve says so once and
+    points to ``"sommerfeld"``.
+    """
+    # user decision Q27
+    res, hits = _surface_pair_warnings(_lead_and_pen_world())
+    assert len(hits) == 1, [str(w.message) for w in hits]
+    hit = hits[0]
+    text = str(hit.message)
+    assert hit.category is UserWarning  # a plain UserWarning
+    assert hit.filename == __file__  # attributed to the caller's line
+    assert "perfect_mirror" in text and "10 inductive segment pairs" in text, text
+    assert "'lead'" in text and "'pen'" in text, text
+    assert "'sommerfeld'" in text, text
+    assert np.isfinite(res.input_impedance()[0])
+
+
+@pytest.mark.finding("10.46")
+def test_perfect_mirror_surface_warning_is_emitted_once_per_solve() -> None:
+    # user decision Q27
+    _, hits = _surface_pair_warnings(_lead_and_pen_world(), freqs=(50.0, 150.0, 1000.0))
+    assert len(hits) == 1
+
+
+@pytest.mark.finding("10.46")
+def test_perfect_mirror_surface_warning_names_a_lumped_conductor() -> None:
+    """A lumped lead is one inductive branch: 1 x 5 pairs, still named."""
+    # user decision Q27
+    _, hits = _surface_pair_warnings(_lead_and_pen_world(lead_dsl=None))
+    assert len(hits) == 1
+    text = str(hits[0].message)
+    assert "5 inductive segment pairs" in text and "'lead'" in text, text
+
+
+@pytest.mark.finding("10.46")
+@pytest.mark.parametrize("model", ["carson_series", "sommerfeld"])
+def test_other_earth_models_do_not_warn_about_surface_pairs(model: str) -> None:
+    # user decision Q27
+    _, hits = _surface_pair_warnings(_lead_and_pen_world(), model=model)
+    assert hits == []
+
+
+@pytest.mark.finding("10.46")
+@pytest.mark.parametrize(
+    "world",
+    [
+        pytest.param(lambda: _lead_and_pen_world(lead_z=1.2), id="both-buried"),
+        pytest.param(
+            lambda: _lead_and_pen_world(lead_inductive=False), id="lead-not-inductive"
+        ),
+    ],
+)
+def test_perfect_mirror_is_silent_with_inductive_conductors_on_one_side(world) -> None:
+    # user decision Q27
+    _, hits = _surface_pair_warnings(world())
+    assert hits == []

@@ -81,9 +81,17 @@ that takes an engine (:func:`check_segment_budget`,
 :func:`expected_segments`, :func:`check_segment_resolution`,
 :func:`diagnose`) and every segment backend, ``solve_mutual_matrix`` and
 ``solve_mutual_field`` included, check against the same limit;
-``FieldResult.metadata["max_segments"]`` records it. :data:`SOFT_LIMIT`
-(the size above which a solve takes minutes on a laptop, reported as
-information) stays a module constant.
+``FieldResult.metadata["max_segments"]`` records it.
+
+The soft notice — at or above this size every solve warns that it may take
+from seconds to minutes on a laptop, and :func:`diagnose` reports it as an
+*info* finding — is set per engine as well, ``Engine(warn_segments=...)``,
+counted like ``max_segments`` (user decision Q31, 2026-11-08); ``None``
+(the default) takes :data:`SOFT_LIMIT` (5 000), read at call time. The two
+are not checked against each other: a notice above the engine's hard limit
+never appears, because such a world is refused first.
+:func:`check_segment_resolution` and :func:`diagnose` (``report.context
+["warn_segments"]``) use the engine's value.
 
 References
 ----------
@@ -152,6 +160,10 @@ The reaction matrix scales as :math:`O(N^2)` in memory (bounded by row
 blocks above the kernel budget) and the multi-port assembly as
 :math:`O(N^2)` per excitation, so ~ 5 000 segments is roughly where
 solve time becomes minutes rather than seconds on a typical laptop.
+
+The default of every engine that leaves ``Engine.warn_segments`` at
+``None`` (user decision Q31), read at call time; an engine moves the
+notice with ``Engine(warn_segments=...)``.
 """
 
 HARD_LIMIT: int = 20_000
@@ -443,6 +455,23 @@ def _limit_label(engine: "Engine | None", limit: int) -> str:
     if engine is not None and getattr(engine, "max_segments", None) is not None:
         return f"Engine.max_segments = {limit}"
     return f"HARD_LIMIT = {limit} (the default of Engine.max_segments)"
+
+
+def _soft_limit(engine: "Engine | None" = None) -> int:
+    """The size of the soft notice of ``engine`` (user decision Q31).
+
+    ``engine.warn_segments`` if the engine sets one, else :data:`SOFT_LIMIT`
+    read now (so a changed module constant acts as the default).
+    """
+    value = None if engine is None else getattr(engine, "warn_segments", None)
+    return int(SOFT_LIMIT) if value is None else int(value)
+
+
+def _soft_label(engine: "Engine | None", limit: int) -> str:
+    """Name and value of the notice size in a message: the knob to turn."""
+    if engine is not None and getattr(engine, "warn_segments", None) is not None:
+        return f"Engine.warn_segments = {limit}"
+    return f"SOFT_LIMIT = {limit} (the default of Engine.warn_segments)"
 
 
 #: How a message tells the user to solve a large world on purpose.
@@ -912,7 +941,8 @@ def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
                 {"n_unknowns": n_nodal, "limit": limit},
             )
         )
-    elif max(n_total, n_nodal) >= SOFT_LIMIT:
+    elif max(n_total, n_nodal) >= (notice := _soft_limit(engine)):
+        # user decision Q31: the size of the notice is the engine's.
         what = (
             f"predicted total segment count {n_total}"
             if n_total >= n_nodal
@@ -923,9 +953,9 @@ def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
                 "budget",
                 "info",
                 (world.name,),
-                f"{what} exceeds {SOFT_LIMIT} — "
-                "solve time may run from seconds to minutes on a typical laptop.",
-                {"n_segments": n_total, "n_unknowns": n_nodal, "limit": SOFT_LIMIT},
+                f"{what} is at or above {_soft_label(engine, notice)} — solve "
+                "time may run from seconds to minutes on a typical laptop.",
+                {"n_segments": n_total, "n_unknowns": n_nodal, "limit": notice},
             )
         )
     return out
@@ -1136,7 +1166,8 @@ def diagnose(
     engine
         Engine of the solve. Needed for the discretisation checks
         (thin wire, resolution, budget against the engine's limit
-        ``max_segments``); the proximity check then runs on the segments
+        ``max_segments`` and its notice size ``warn_segments``); the
+        proximity check then runs on the segments
         the solver assembles. Without an engine only the geometry-only
         checks run.
     result
@@ -1167,11 +1198,13 @@ def diagnose(
         rod and strip length, ring circumference, shortest polyline
         edge, star arm, mesh span).
     ``budget``
-        Predicted segment count or nodal system at or above
-        :data:`SOFT_LIMIT` (info) or above the engine's limit,
-        ``Engine.max_segments`` or by default :data:`HARD_LIMIT` (warning:
-        the solve refuses). ``report.context["max_segments"]`` holds the
-        limit.
+        Predicted segment count or nodal system at or above the engine's
+        notice size, ``Engine.warn_segments`` or by default
+        :data:`SOFT_LIMIT` (info: the solve may take minutes), or above the
+        engine's limit, ``Engine.max_segments`` or by default
+        :data:`HARD_LIMIT` (warning: the solve refuses).
+        ``report.context["max_segments"]`` and
+        ``report.context["warn_segments"]`` hold the two sizes.
     ``proximity``
         Leakage wires of different owners closer than
         :data:`PROXIMITY_REL_THRESHOLD` times the sum of their radii:
@@ -1200,6 +1233,7 @@ def diagnose(
     if engine is not None:
         report.context["segment_length_m"] = _check_ds(engine)
         report.context["max_segments"] = _hard_limit(engine)
+        report.context["warn_segments"] = _soft_limit(engine)
         report.findings.extend(_resolution_findings(world, engine))
     if proximity and (engine is None or check_budget_ok(world, engine)):
         report.findings.extend(_proximity_findings(world, engine))
@@ -1249,9 +1283,10 @@ def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
        skipped until 2026.11).
     3. **Total segment budget** (``"budget: ..."``): the segment count or
        the size of the dense nodal system (every conductor sub-piece
-       included) at or above :data:`SOFT_LIMIT`, or above the engine's
-       limit ``Engine.max_segments`` (default :data:`HARD_LIMIT`; the
-       solve then refuses with :class:`ResourceLimitError`).
+       included) at or above the engine's notice size
+       ``Engine.warn_segments`` (default :data:`SOFT_LIMIT`), or above the
+       engine's limit ``Engine.max_segments`` (default :data:`HARD_LIMIT`;
+       the solve then refuses with :class:`ResourceLimitError`).
 
     The function never raises (except for a non-positive
     ``segment_length``) — it only reports. The full report with
@@ -1262,7 +1297,8 @@ def check_segment_resolution(world: "World", engine: "Engine") -> list[str]:
     world
         World to inspect.
     engine
-        Engine carrying ``segment_length`` and ``max_segments``.
+        Engine carrying ``segment_length``, ``max_segments`` and
+        ``warn_segments``.
 
     Returns
     -------

@@ -44,15 +44,22 @@ The checks guard the assumptions of the thin-wire model (see
   excitation grows like $N^2$ and the direct solve like $N^3$. The
   dense nodal system of $n$ unknowns (current owners, nodes and
   branches, every conductor sub-piece included) takes $16n^2$ bytes.
-  Above `SOFT_LIMIT` (5 000) the report informs that a solve takes
-  minutes; above the engine's limit the solver refuses to start with
-  `ResourceLimitError`, before anything of that size is allocated. The
-  limit is set per engine, `Engine(max_segments=...)` (a positive
-  integer that bounds both sizes); an engine that leaves it at `None`
-  uses the module constant `HARD_LIMIT` (20 000), read at solve time.
-  `expected_segments(...)["limit"]`, `report.context["max_segments"]`
-  and `FieldResult.metadata["max_segments"]` show the limit that
-  applies.
+  At or above the engine's notice size the report informs that a
+  solve takes minutes (an *info* finding; every solve emits it as a
+  `UserWarning`); above the engine's limit the solver refuses to start
+  with `ResourceLimitError`, before anything of that size is allocated.
+  Both are set per engine and count both sizes: the limit with
+  `Engine(max_segments=...)`, the notice with
+  `Engine(warn_segments=...)` (positive integers; user decisions Q17 and
+  Q31 of 2026.11). An engine that leaves them at `None` uses the module
+  constants `HARD_LIMIT` (20 000) and `SOFT_LIMIT` (5 000), read at
+  solve time. The two are not checked against each other: a notice
+  above the hard limit never appears, because such a world is refused
+  first. `expected_segments(...)["limit"]`,
+  `report.context["max_segments"]` and `FieldResult.metadata
+  ["max_segments"]` show the limit that applies,
+  `report.context["warn_segments"]` the notice size; the provenance
+  block of a result keeps both requests.
 
 The segment counts follow the discretisation of the image and MoM
 families; for `fem` they do not predict the cost.
@@ -93,6 +100,26 @@ print(budget["limit"], gf.expected_segments(world, gf.create_engine(max_segments
 <!-- doctest-check
 assert budget["limit"] == HARD_LIMIT == 20_000
 assert gf.expected_segments(world, gf.create_engine(max_segments=50_000))["limit"] == 50_000
+-->
+
+The notice "solve time may run from seconds to minutes" works the same way:
+`SOFT_LIMIT` is the default, `Engine(warn_segments=...)` moves it for one
+engine, for instance down to a size that is already slow on a small
+machine.
+
+```python
+from groundfield.diagnostics import SOFT_LIMIT
+
+early = gf.Engine(segment_length=0.5, warn_segments=10)
+notice = gf.diagnose(world, early).by_category("budget")
+print(notice[0].severity, notice[0].message)    # info predicted total segment count 12 is at or above Engine.warn_segments = 10 — ...
+print(gf.diagnose(world, engine).context["warn_segments"])    # 5000: SOFT_LIMIT
+```
+
+<!-- doctest-check
+assert [d.severity for d in notice] == ["info"] and notice[0].data["limit"] == 10
+assert gf.diagnose(world, engine).context["warn_segments"] == SOFT_LIMIT == 5_000
+assert not gf.diagnose(world, engine).by_category("budget")
 -->
 
 ## API reference

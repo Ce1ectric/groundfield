@@ -16,15 +16,27 @@ and the backend raises
 returning a number. The same holds for a cluster that lies wholly below
 a top layer holding more than half of its hemisphere
 ($a_\\text{eq}/2 < h_1 \\le a_\\text{eq}$; +51 % … +130 % and
-−81 % … −98 % for a 3 m rod, audit round 2).
+−81 % … −98 % for a 3 m rod, audit round 2), and — user decision Q23
+of 2026-11-08 — for a hemisphere that spans a layer which no electrode
+of the cluster touches and which conducts better than every layer the
+electrodes touch: the hemisphere injects the current straight into it,
+and the result is too low, not conservative (−97 % … +5 % against
+``image_2layer`` and ``mom`` for rods, strips and rings below a more
+conductive top layer or above a more conductive lower layer; −92 % for
+a 10 m ring at 0.8 m over $h_1$ = 2 m in 1000/30 Ω·m, −71 % for a 10 m
+strip at 0.8 m below $h_1$ = 0.5 m in 30/1000 Ω·m). The rule is
+structural: near-equal layers (100/120 and 120/100 Ω·m, −7 % … +5 %)
+raise as well.
 It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
 three 4 m rods in homogeneous soil), when the world has several
 clusters (each solved alone, transfer impedances 0) or when a layer
 interface lies above the deepest of the electrode's lowest point, the
-hemisphere radius and the electrode's horizontal half-extent (−92 % for
-a 10 m ring over $h_1$ = 2 m, −70 % for a 10 m strip at 0.8 m below
-$h_1$ = 0.5 m, −46 % for a 10 m ring over $h_1$ = 5 m); a
+hemisphere radius and the electrode's horizontal half-extent without
+falling under the rules above (+23 % for a 10 m ring over a more
+resistive layer at $h_1$ = 2 m, +22 % for a 10 m strip at 0.8 m below a
+more resistive top layer of 0.5 m, −47 % for a 10 m ring at 0.8 m over
+a more conductive layer at $h_1$ = 5 m, below its hemisphere); a
 :class:`FemReductionWarning` names every such reason. Conforming
 axisymmetric rod and ring models without the reduction are the planned
 replacement.
@@ -284,30 +296,40 @@ class FemReductionWarning(UserWarning):
       between them, transfer impedances are exactly 0, passive clusters
       report 0 V);
     * a layer interface between the electrode's deepest point and the
-      hemisphere radius, with the hemisphere reaching below it (the
-      hemisphere injects its current into a layer the electrode does
-      not touch: −92 % for a 10 m ring at 0.8 m over ``h_1`` = 2 m). The
-      opposite case — the electrode reaches below an interface its
-      hemisphere does not (+1092 % for a 3 m rod through ``h_1`` = 2 m)
-      — raises :class:`~groundfield.solver.registry.BackendCapabilityError`
-      instead (review pass 10, 10.23);
+      hemisphere radius, with the hemisphere reaching below it into a
+      layer the electrode does not touch and that conducts no better than
+      the electrode's layer (+23 % for a 10 m ring at 0.8 m over a more
+      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m, against
+      ``image_2layer``). Over a more conductive layer it raises (user
+      decision Q23: −92 % in 1000/30 Ω·m); the opposite case — the
+      electrode reaches below an interface its hemisphere does not
+      (+1092 % for a 3 m rod through ``h_1`` = 2 m) — raises as well
+      (review pass 10, 10.23), both with
+      :class:`~groundfield.solver.registry.BackendCapabilityError`;
     * a layer interface above the electrode's deepest point that the
       hemisphere, which spans the soil from the surface, crosses as well
-      (−70 % for a 10 m strip and −47 % for a ring r = 5 m, both at
-      0.8 m below ``h_1`` = 0.5 m, 30/1000 Ω·m; audit round 1, F01).
-      A cluster wholly below such an interface at a depth above
+      (+22 % for a 10 m strip and +3 % for a ring r = 5 m, both at
+      0.8 m below a more resistive top layer of ``h_1`` = 0.5 m,
+      1000/30 Ω·m; audit round 1, F01). It raises instead when the
+      cluster lies wholly below such an interface at a depth above
       ``a_eq/2`` — more than half of the hemisphere in a layer the
-      electrodes do not touch — raises instead (audit round 2, A2E-2);
+      electrodes do not touch (audit round 2, A2E-2) — and when the top
+      layer the electrodes do not touch conducts better than theirs (user
+      decision Q23: −71 % and −48 % for the same strip and ring under
+      30/1000 Ω·m);
     * a layer interface below the electrode and its hemisphere but
       within the electrode's horizontal half-extent (ring radius, half
       the strip length or grid diagonal): the electrode's current
-      reaches it, the compact hemisphere's much less (−46 % for a ring
-      r = 10 m at 0.8 m over ``h_1`` = 5 m, 1000/30 Ω·m; −0.3 % over
-      ``h_1`` = 20 m, where the rule is silent).
+      reaches it, the compact hemisphere's much less (−47 %, −20 % and
+      −11 % for a ring r = 10 m at 0.8 m over ``h_1`` = 5, 7 and 9 m in
+      1000/30 Ω·m, +9 % over a more resistive layer at 5 m in
+      30/1000 Ω·m; −0.3 % over ``h_1`` = 20 m, where the rule is
+      silent). This rule is not part of decision Q23 and stays a
+      warning for either contrast.
 
-    The layer rules are structural, not error estimates: a vanishing top
-    layer (``h_1`` = 4 mm, +1.6 %) is reported as well. Where none
-    applies, rings and strips measured in 1000/30, 100/1000 and
+    The layer rules are structural, not error estimates: a vanishing,
+    more resistive top layer (``h_1`` = 4 mm, +1.6 %) is reported as well.
+    Where none applies, rings and strips measured in 1000/30, 100/1000 and
     100/400 Ω·m deviate from ``mom`` by −7.4 … +4.3 % and a
     20 m × 20 m grid by +8.3 … +13.4 %, of which +12.1 % is the error of
     its formula in homogeneous soil (ring, strip, rod: +0.8 … +1.6 %).
@@ -345,6 +367,13 @@ def _horizontal_half_extent(electrode: _ElectrodeBase) -> float:
     return 0.5 * math.hypot(dx, dy)
 
 
+def _cluster_label(clusters: dict[str, list[str]], root: str) -> str:
+    """``cluster {'a', 'b', ...}`` with up to four member names."""
+    names = sorted(clusters[root])
+    shown = ", ".join(f"'{n}'" for n in names[:4])
+    return f"cluster {{{shown}{', ...' if len(names) > 4 else ''}}}"
+
+
 def _reduction_issues(
     world: "World",
     clusters: dict[str, list[str]],
@@ -359,13 +388,14 @@ def _reduction_issues(
     between ``a_eq`` and ``z_deep``, which raise
     (:func:`_unreachable_layers`). Interfaces are taken from the
     canonical layer stack (10.48), so an interface between layers of
-    equal resistivity is no reason.
+    equal resistivity is no reason. Worlds that reach this check passed
+    :func:`_unreachable_layers`: a layer reported here is one the
+    electrodes touch or one that conducts no better than the layers they
+    touch (user decision Q23).
     """
 
     def label(root: str) -> str:
-        names = sorted(clusters[root])
-        shown = ", ".join(f"'{n}'" for n in names[:4])
-        return f"cluster {{{shown}{', ...' if len(names) > 4 else ''}}}"
+        return _cluster_label(clusters, root)
 
     reasons: list[str] = []
     for root in active_clusters:
@@ -434,17 +464,61 @@ def _reduction_issues(
     return reasons
 
 
+class _Unreachable(NamedTuple):
+    """One cluster the reduction cannot represent (:func:`_unreachable_layers`)."""
+
+    #: ``"wrong_layer"`` (10.23 / A2E-2) or ``"conductive_layer"`` (user
+    #: decision Q23).
+    kind: str
+    #: Description for the error message.
+    text: str
+
+
+def _layer_bounds(stack) -> list[tuple[float, float]]:
+    """Top and bottom depth in m of every layer of ``stack`` (last: ``inf``)."""
+    depths = [0.0, *(float(d) for d in np.cumsum(stack.h)), math.inf]
+    return list(zip(depths[:-1], depths[1:], strict=True))
+
+
+def _layer_text(top: float, bottom: float, rho: float) -> str:
+    """Depth range and resistivity of a layer for a message."""
+    span = (
+        f"below {top:.3g} m" if math.isinf(bottom) else f"{top:.3g} ... {bottom:.3g} m"
+    )
+    return f"{span} (rho = {rho:g} Ohm m)"
+
+
+def _touched_layers(
+    world: "World", members: list[str], bounds: list[tuple[float, float]]
+) -> set[int]:
+    """Indices of the layers any electrode of ``members`` touches.
+
+    An electrode touches a layer when its depth range and the layer's
+    closed depth interval overlap; one lying exactly on an interface
+    touches both layers. A part above the soil surface (``z < 0``) counts
+    as lying at the surface, i.e. in the top layer.
+    """
+    touched: set[int] = set()
+    for name in members:
+        z_top, z_bottom = (max(z, 0.0) for z in _depth_range(world.get_electrode(name)))
+        touched.update(
+            k
+            for k, (top, bottom) in enumerate(bounds)
+            if z_top <= bottom and z_bottom >= top
+        )
+    return touched
+
+
 def _unreachable_layers(
     world: World,
     clusters: dict[str, list[str]],
     active_clusters: list[str],
     a_eq_per_cluster: dict[str, float],
-) -> list[str]:
+) -> list[_Unreachable]:
     """Clusters whose electrodes and hemisphere sit in different layers.
 
     The equivalent hemisphere injects the cluster current from the soil
-    surface down to the radius ``a_eq``. Two configurations are of the
-    same error class and raise:
+    surface down to the radius ``a_eq``. Three configurations raise:
 
     * an electrode reaches below a layer interface that lies above
       ``a_eq`` — a rod through or below the top layer — and injects into
@@ -461,23 +535,36 @@ def _unreachable_layers(
       layer of ``h/a_eq`` = 0.55 … 0.8: +51 % … +130 % against
       ``image_2layer`` in 1000/30 and 10000/30 Ω·m, −81 % … −98 % in
       30/1000 and 30/10000 Ω·m. At ``h = a_eq`` the rule joins the first
-      one. A thinner top layer, ``h <= a_eq/2``, holds the smaller part
-      of the hemisphere and only warns (rod: +16 % … +46 % under 1000/30
-      and 10000/30, −38 % … −58 % under 100/1000 Ω·m; a much more
-      conductive top layer lowers the result far more, −65 % … −97 % in
-      30/1000 and 30/10000 Ω·m; see :class:`FemReductionWarning`).
+      one;
+    * the hemisphere spans a layer (top above ``a_eq``) that no electrode
+      of the cluster touches and that conducts better than every layer
+      the electrodes touch (user decision Q23, 2026-11-08): the
+      hemisphere injects the current straight into it and the result is
+      too low, i.e. not conservative. Measured against ``image_2layer``
+      and ``mom`` for rods, strips and rings below a more conductive top
+      layer of any thickness (from 22 mm) and rings above a more
+      conductive lower layer: −97 % … +5 %, the lower the larger the
+      contrast and the share of the hemisphere in that layer
+      (30/10000 Ω·m: −80 % … −97 %; 30/1000 Ω·m: −35 % … −80 %;
+      near-equal layers, 100/120 and 120/100 Ω·m: −7 % … +5 %). An
+      electrode lying exactly on the interface touches both layers. A
+      more *resistive* spanned layer keeps the
+      :class:`FemReductionWarning` (+3 % … +45 % measured).
 
-    The checks are structural, independent of the contrast. Interfaces
-    are taken from the canonical layer stack (10.48), so a declared
-    interface between equal resistivities is none.
+    The checks are structural, independent of the size of the contrast.
+    Layers are taken from the canonical layer stack (10.48), so a
+    declared interface between equal resistivities is none. One reason is
+    reported per cluster, in the order above.
 
     Returns
     -------
-    list[str]
-        One description per offending cluster (empty if none).
+    list[_Unreachable]
+        One entry per offending cluster (empty if none).
     """
-    interfaces = np.cumsum(as_layer_stack(world.soil).h)
-    found: list[str] = []
+    stack = as_layer_stack(world.soil)
+    interfaces = np.cumsum(stack.h)
+    bounds = _layer_bounds(stack)
+    found: list[_Unreachable] = []
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]
         deepest = max(
@@ -487,10 +574,13 @@ def _unreachable_layers(
         crossed = [float(d) for d in interfaces if a_eq < d < z_deep]
         if crossed:
             found.append(
-                f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
-                f"layer interface at h = {crossed[0]:.3g} m, but the "
-                f"equivalent hemisphere of its cluster ends at a_eq = "
-                f"{a_eq:.3g} m above it"
+                _Unreachable(
+                    "wrong_layer",
+                    f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
+                    f"layer interface at h = {crossed[0]:.3g} m, but the "
+                    f"equivalent hemisphere of its cluster ends at a_eq = "
+                    f"{a_eq:.3g} m above it",
+                )
             )
             continue
         z_top = min(_depth_range(world.get_electrode(e))[0] for e in clusters[root])
@@ -504,12 +594,88 @@ def _unreachable_layers(
                 else f"every electrode of the cluster of '{names[0]}'"
             )
             found.append(
-                f"{what} lies below the layer interface at h = {h:.3g} m "
-                f"(top at z = {z_top:.3g} m), but {100.0 * h / a_eq:.0f} % of "
-                f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) lies above "
-                "it, in a layer the electrodes do not touch"
+                _Unreachable(
+                    "wrong_layer",
+                    f"{what} lies below the layer interface at h = {h:.3g} m "
+                    f"(top at z = {z_top:.3g} m), but {100.0 * h / a_eq:.0f} % of "
+                    f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) lies above "
+                    "it, in a layer the electrodes do not touch",
+                )
+            )
+            continue
+        # user decision Q23: a spanned, untouched layer that conducts better
+        # than every layer the electrodes touch takes the current the
+        # electrodes would send through their own layer(s).
+        if stack.n_layers < 2:
+            continue
+        touched = _touched_layers(world, clusters[root], bounds)
+        rho_touched = min(float(stack.rhos[k]) for k in touched)
+        better = [
+            k
+            for k, (top, _) in enumerate(bounds)
+            if top < a_eq and k not in touched and float(stack.rhos[k]) < rho_touched
+        ]
+        if better:
+            layers = " and the layer ".join(
+                _layer_text(*bounds[k], float(stack.rhos[k])) for k in better
+            )
+            own = ", ".join(
+                f"{r:g}" for r in sorted({float(stack.rhos[k]) for k in touched})
+            )
+            found.append(
+                _Unreachable(
+                    "conductive_layer",
+                    f"{_cluster_label(clusters, root)}: its equivalent hemisphere "
+                    f"(a_eq = {a_eq:.3g} m) spans the layer {layers}, which none "
+                    "of its electrodes touches and which conducts better than "
+                    f"the layer(s) they touch (rho = {own} Ohm m)",
+                )
             )
     return found
+
+
+#: Measured consequence of the Q23 configurations, for the error message
+#: (evidence d2solver/q23_fem_layer_cases_base.out: fem on bbaea9f against
+#: image_2layer and mom, segment length 0.25 m).
+_CONDUCTIVE_LAYER_EFFECT = (
+    "The hemisphere injects the cluster current straight into such a layer, so "
+    "fem reads too low (not conservative): -97 % to +5 % against "
+    "'image_2layer' and 'mom' in the measured cases (rods, strips and rings; "
+    "30/10000 Ohm m: -80 % to -97 %, 30/1000 Ohm m: -35 % to -80 %, "
+    "near-equal layers 100/120 and 120/100 Ohm m: -7 % to +5 %)."
+)
+
+
+def _unreachable_message(world: "World", found: list[_Unreachable]) -> str:
+    """Error message for the clusters of :func:`_unreachable_layers`."""
+    wrong = [f.text for f in found if f.kind == "wrong_layer"]
+    conductive = [f.text for f in found if f.kind == "conductive_layer"]
+    parts: list[str] = []
+    if wrong:
+        parts.append(
+            "; ".join(wrong) + ". The equivalent-hemisphere reduction injects "
+            "the cluster current from the soil surface down to a_eq, into other "
+            "layers than the electrodes (rods through or below the top layer: "
+            "-98 % to +3138 % against 'mom' and 'image_2layer' over the "
+            "contrasts 10000/30 ... 30/10000 Ohm m)."
+        )
+    if conductive:
+        parts.append("; ".join(conductive) + ". " + _CONDUCTIVE_LAYER_EFFECT)
+    stack = as_layer_stack(world.soil)
+    if stack.n_layers <= 2:
+        remedy = "Use backend='mom' (one current per segment) or 'image_2layer'."
+    elif max(float(e.bounds()[1][2]) for e in world.electrodes) < float(stack.h[0]):
+        remedy = (
+            "Use backend='mom_sommerfeld', which solves three or more layers "
+            "when every segment lies in the top layer, as here."
+        )
+    else:
+        remedy = (
+            "No backend solves an electrode below the first interface of a soil "
+            "with three or more distinct layers yet ('mom_sommerfeld' requires "
+            "every segment in the top layer)."
+        )
+    return "Backend 'fem' cannot solve this world: " + " ".join(parts) + " " + remedy
 
 
 # ---------------------------------------------------------------------
@@ -1184,9 +1350,9 @@ def solve_fem(
     the electrodes: it is a valid cross-check only for one compact
     electrode per world with no layer interface above the deepest of
     its lowest point, its hemisphere radius and its horizontal
-    half-extent, and it emits a :class:`FemReductionWarning` naming the
-    reason otherwise (review pass 10, 10.23; audit round 1, F01; see the
-    module docstring).
+    half-extent; otherwise it raises (see *Raises*) or emits a
+    :class:`FemReductionWarning` naming the reason (review pass 10, 10.23;
+    audit round 1, F01; user decision Q23; see the module docstring).
 
     The mesh conforms to the hemisphere $r = a_{\\text{eq}}$ and the
     layer interfaces $z = \\sum_{i \\le k} h_i$ (see
@@ -1250,14 +1416,21 @@ def solve_fem(
         If an electrode of a driven cluster reaches below a layer
         interface that lies above the cluster's hemisphere radius
         ``a_eq`` (rod through or below the top layer, review pass 10,
-        10.23), or if every electrode of the cluster lies below an
+        10.23); if every electrode of the cluster lies below an
         interface at a depth between ``a_eq/2`` and ``a_eq`` (more than
         half of the hemisphere in a layer the electrodes do not touch,
-        audit round 2, A2E-2): the reduction cannot represent it. Also
-        if a driven cluster contains an electrode without a closed-form
-        hemisphere radius (polyline and star electrodes; the generators
-        build mesh foundations of polylines). A subclass of
-        ``ValueError`` and ``NotImplementedError``.
+        audit round 2, A2E-2); or if the hemisphere spans a layer (top
+        above ``a_eq``) that no electrode of the cluster touches and that
+        conducts better than every layer they touch (user decision Q23:
+        the result would be too low, −97 % … +5 % measured; independent
+        of the size of the contrast; an electrode exactly on an interface
+        touches both layers). The reduction cannot represent these
+        worlds; the message names the cluster, the layer and a backend
+        that solves the world. Also if a driven cluster contains an
+        electrode without a closed-form hemisphere radius (polyline and
+        star electrodes; the generators build mesh foundations of
+        polylines). A subclass of ``ValueError`` and
+        ``NotImplementedError``.
 
     Warns
     -----
@@ -1265,8 +1438,9 @@ def solve_fem(
         Once per solve when the reduction misrepresents the world in a
         way the guard above does not reject (several electrodes in a
         cluster, several clusters, a layer interface above the deepest
-        of the electrode, its hemisphere and its horizontal
-        half-extent).
+        of the electrode, its hemisphere and its horizontal half-extent
+        that separates the electrodes from a layer touched by them or
+        conducting no better than theirs).
     """
     if far_field not in ("robin", "dirichlet"):
         raise ValueError(
@@ -1416,32 +1590,17 @@ def solve_fem(
         ]
         a_eq_per_cluster[root] = float(sum(a_per_electrode))
 
-    # Review pass 10 (10.23, user decision pending): a reduction that is
-    # known to fail by up to +3138 % raises instead of warning — before
-    # any mesh is built.
+    # Review pass 10 (10.23) and user decision Q23: a reduction that is
+    # known to fail by up to +3138 % (wrong layer) or to read far too low
+    # (a better-conducting layer the electrodes do not touch) raises
+    # instead of warning — before any mesh is built.
     unreachable = _unreachable_layers(
         world, clusters, active_clusters, a_eq_per_cluster
     )
     if unreachable:
         from groundfield.solver.registry import BackendCapabilityError
 
-        two_layers = as_layer_stack(world.soil).n_layers == 2
-        remedy = (
-            "Use backend='mom' (one current per segment) or 'image_2layer'."
-            if two_layers
-            else "No backend solves an electrode below the first interface of "
-            "a soil with three or more distinct layers yet ('mom_sommerfeld' "
-            "requires every segment in the top layer)."
-        )
-        raise BackendCapabilityError(
-            "Backend 'fem' cannot solve this world: "
-            + "; ".join(unreachable)
-            + ". The equivalent-hemisphere reduction injects the cluster "
-            "current from the soil surface down to a_eq, into other layers "
-            "than the electrodes (rods through or below the top layer: "
-            "-98 % to +3138 % against 'mom' and 'image_2layer' over the "
-            "contrasts 10000/30 ... 30/10000 Ohm m). " + remedy
-        )
+        raise BackendCapabilityError(_unreachable_message(world, unreachable))
 
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]

@@ -1,0 +1,19 @@
+# Stream D2SOLVER — the user's answers Q23 / Q27 / Q31 of 2026-11-08
+# (fem guard, perfect_mirror warning, Engine.warn_segments). See ../README.md
+# for the format.
+#
+# No stored quantity moves, so this file declares no change. Checked with
+# GF_GOLDEN_STRICT=1 against the snapshot of the stream's base
+# (release/calver bbaea9f) after every commit: all stored cases
+# bit-identical.
+#
+# * Q23 (fem raises for a more conductive layer its hemisphere spans and no
+#   electrode touches): the two fem cases are a rod in homogeneous soil and
+#   a rod 0.5-3.5 m inside a 30 m top layer of 100 over 400 Ohm m (a_eq =
+#   0.44 m, no other layer spanned); neither falls under the rule.
+# * Q27 (perfect_mirror warns for inductive pairs across the soil surface):
+#   a warning only, numbers unchanged; the stored perfect_mirror cases have
+#   buried conductors only.
+# * Q31 (Engine.warn_segments): moves a notice, no number; the engine block
+#   of the provenance gains the field, which the golden harness does not
+#   store.

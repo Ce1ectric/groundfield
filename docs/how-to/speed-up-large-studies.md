@@ -100,6 +100,32 @@ assert result.metadata["max_segments"] == 50_000
 Changing `groundfield.diagnostics.HARD_LIMIT` changes the default of
 every engine of the process; `max_segments` is the per-engine setting.
 
+### Move the size notice
+
+Below the limit, every solve at or above a second size emits a
+`UserWarning` that the solve time may run from seconds to minutes
+(`"budget: ..."`, an *info* finding of `gf.diagnose`). That size belongs
+to the engine as well: `warn_segments=None` (the default) uses the module
+constant `SOFT_LIMIT` (5 000), a positive integer sets it for this engine
+only and is counted like the limit (segments and nodal unknowns). On a
+workstation that solves 10 000 segments quickly, raise it together with
+`max_segments`; on a small machine, lower it. The two are not checked
+against each other: a notice above the hard limit never appears, because
+the world is refused first.
+
+```python
+quiet = gf.Engine(segment_length=0.5, max_segments=50_000, warn_segments=12_000)
+early = gf.Engine(segment_length=0.5, warn_segments=400)
+for label, engine in (("quiet", quiet), ("early", early)):
+    notices = [d for d in gf.diagnose(world, engine, proximity=False).by_category("budget")]
+    print(label, engine.warn_segments, [d.severity for d in notices])
+```
+
+<!-- doctest-check
+assert not gf.diagnose(world, quiet, proximity=False).by_category("budget")
+assert [d.severity for d in gf.diagnose(world, early, proximity=False).by_category("budget")] == ["info"]
+-->
+
 ## 2. Choose the segment length from a convergence study
 
 Use the coarsest segment length that is converged for the quantity you

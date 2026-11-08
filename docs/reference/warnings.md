@@ -158,8 +158,12 @@ soil use `image_2layer`.
 reasons, when its equivalent-hemisphere reduction does not represent the
 world: several electrodes in a cluster (mutual resistance neglected),
 several clusters (no coupling between them), or a layer interface within
-the hemisphere radius. **Remedy:** use an integral-equation backend for
-such worlds; `fem` is experimental.
+the hemisphere radius or the electrode's horizontal extent. A spanned
+layer that no electrode touches and that conducts better than the
+electrodes' layer is no warning but a `BackendCapabilityError` since
+2026.11 (user decision Q23: the result would be too low), as are
+electrodes in a layer the hemisphere does not reach. **Remedy:** use an
+integral-equation backend for such worlds; `fem` is experimental.
 
 ### `ComplexImageFitWarning`
 
@@ -236,7 +240,10 @@ backend and by `solve_mutual_matrix` / `solve_mutual_field`. The usual
 cause is a geometry given in millimetres, a very small `segment_length`
 or a conductor `discretize_segment_length` in millimetres. **Remedy:**
 check units and segment lengths; to solve a large world on purpose,
-raise the limit of the engine, `Engine(max_segments=...)`.
+raise the limit of the engine, `Engine(max_segments=...)`. Below that
+limit, a world at or above the engine's notice size
+(`Engine(warn_segments=...)`, default `SOFT_LIMIT` = 5 000) only emits the
+`UserWarning` `"budget: ..."` that the solve may take minutes.
 
 ## Post-processing
 
@@ -321,6 +328,7 @@ from a cached / stored answer.
 | Where | When | What to do |
 |---|---|---|
 | `coupling` (Carson) | `earth_inductive_model="carson_series"` with layered soil: the upper-layer $\rho_1$ is used | use `"sommerfeld"`, which supports layered soil |
+| `solver` (inductive assembly) | `earth_inductive_model="perfect_mirror"` with inductive conductor segments on both sides of the soil surface (an overhead lead and a buried PEN): its additive image has no physical basis for such a pair; once per solve, naming the number of pairs and the conductors (user decision Q27) | use `"sommerfeld"` (the default) for numbers; the result of `perfect_mirror` is a diagnostic baseline |
 | `solver` (`image_2layer`) | the deepest segment ends less than two segment lengths above the layer interface | refine `segment_length` near the interface |
 | `solver` (kernels) | two segments of different wires closer than the 1 mm singularity clamp | merge the wires or move them apart |
 | `solver` (pipeline) | a source looks like the hand-made counter-source of another one | use one source with `return_to` |

@@ -92,6 +92,7 @@ conventions the three terms are assembled with:
 from __future__ import annotations
 
 import math
+import re
 import warnings
 from collections import defaultdict, deque
 from collections.abc import Sequence
@@ -141,12 +142,16 @@ class BranchGeometry:
         Wire radius in m (thin-wire self term).
     inductive
         Whether the branch takes part in the inductance matrix.
+    conductor
+        Name of the conductor behind the branch, for messages (``None``
+        if unknown).
     """
 
     p_a: np.ndarray
     p_b: np.ndarray
     wire_radius: float
     inductive: bool
+    conductor: str | None = None
 
 
 @dataclass(frozen=True)
@@ -336,6 +341,87 @@ class _BranchCorrection:
         self._n_built += len(omegas)
 
 
+#: Pseudo-node names of a conductor chain
+#: (:func:`groundfield.solver._discretize._conductor_node_name`, the interior
+#: nodes of an isolated chain and the floating end points); the conductor
+#: name sits between the reserved prefix and suffix.
+_CHAIN_NODE = re.compile(
+    r"^__cond_(?P<name>.+)__(?:seg_\d+|node_\d+|endpoint_start|endpoint_end)$"
+)
+
+#: Conductor names listed per side in the message of :func:`_warn_surface_pairs`.
+_MAX_NAMES = 5
+
+
+def _branch_conductor(branch: object) -> str | None:
+    """Name of the conductor behind a branch, as far as the branch knows it.
+
+    A lumped branch (:class:`BranchGeometry`) carries the name; a branch of
+    a conductor chain names its conductor in its pseudo-nodes
+    (``__cond_<name>__seg_<k>`` and siblings). ``None`` if neither applies.
+    """
+    name = getattr(branch, "conductor", None)
+    if name is not None:
+        return str(name)
+    for node in (getattr(branch, "node_a", None), getattr(branch, "node_b", None)):
+        match = _CHAIN_NODE.match(node) if isinstance(node, str) else None
+        if match is not None:
+            return match.group("name")
+    return None
+
+
+def _warn_surface_pairs(branches: Sequence[object], seg_endpoints: np.ndarray) -> None:
+    """Warn when ``perfect_mirror`` couples segments across the surface.
+
+    User decision Q27 (2026-11-08): the additive (perfect-magnetic-mirror)
+    image of ``earth_inductive_model="perfect_mirror"`` is applied to every
+    pair, also to one segment above the soil surface ($z < 0$) and one
+    below it ($z > 0$), for which it has no physical basis. The numbers
+    stay; one plain :class:`UserWarning` per assembly names the number of
+    such pairs and the conductors on each side and points to
+    ``"sommerfeld"``. The side of a segment is the side of its mid-point
+    (:func:`groundfield.coupling.inductance._overhead`, the rule of the
+    image conventions; segments in or across the surface plane were
+    rejected before).
+
+    Parameters
+    ----------
+    branches
+        Inductive branches in the order of ``seg_endpoints``.
+    seg_endpoints
+        End points of their segments in m, shape ``(M, 2, 3)``.
+    """
+    from groundfield.coupling.inductance import _overhead
+    from groundfield.solver.registry import warn_external
+
+    above = _overhead(seg_endpoints[:, 0, :], seg_endpoints[:, 1, :])
+    n_above = int(np.count_nonzero(above))
+    n_below = int(above.size) - n_above
+    if n_above == 0 or n_below == 0:
+        return
+    owner = [_branch_conductor(b) for b in branches]
+
+    def owners(side: np.ndarray) -> str:
+        names = sorted({n for n, s in zip(owner, side, strict=True) if s and n})
+        text = ", ".join(repr(n) for n in names[:_MAX_NAMES])
+        if len(names) > _MAX_NAMES:
+            text += f" and {len(names) - _MAX_NAMES} more"
+        if any(s and n is None for n, s in zip(owner, side, strict=True)):
+            text = f"{text} and unnamed branches" if text else "unnamed branches"
+        return text
+
+    warn_external(
+        f"earth_inductive_model='perfect_mirror' couples {n_above * n_below} "
+        "inductive segment pairs on opposite sides of the soil surface "
+        f"({n_above} segment(s) above it, of {owners(above)}; {n_below} below "
+        f"it, of {owners(~above)}). The additive mirror image of this model has "
+        "no physical basis for a pair of a conductor in the air and one in the "
+        "soil, so its mutual inductance is a diagnostic baseline only; use "
+        "earth_inductive_model='sommerfeld' (the default) for numbers.",
+        UserWarning,
+    )
+
+
 def _assemble_inductance_matrix(
     distributed_branches: Sequence[_DistributedBranch],
     *,
@@ -427,6 +513,16 @@ def _assemble_inductance_matrix(
         ``layered_earth``, a ``lumped_branches`` list of the wrong
         length, or (image conventions ``additive`` / ``antiparallel``)
         a conductor that crosses or lies in the soil surface.
+
+    Warns
+    -----
+    UserWarning
+        Once per call, with ``earth_model="perfect_mirror"``, when
+        inductive segments lie on both sides of the soil surface (user
+        decision Q27): the additive image has no physical basis for a
+        pair of a conductor in the air and one in the soil. The message
+        gives the number of such pairs and the conductors involved and
+        points to ``"sommerfeld"``; the matrix is unchanged.
     """
     from groundfield.coupling.inductance import build_inductance_matrix
 
@@ -470,6 +566,10 @@ def _assemble_inductance_matrix(
             touching=SOLVER_TOUCHING,
         )
         L_full[np.ix_(idx, idx)] = L_sub
+        if earth_model == "perfect_mirror":
+            # user decision Q27: say so when the additive image couples a
+            # conductor in the air with one in the soil (numbers unchanged).
+            _warn_surface_pairs([b for _, b in records], seg_endpoints)
     else:
         seg_endpoints = np.zeros((0, 2, 3))
         radii = np.zeros(0)
@@ -627,7 +727,7 @@ def branch_records(
         p_b = np.array(c.end, dtype=float)
         length = float(np.linalg.norm(p_b - p_a))
         inductive = c.inductance_model is not None and length > 0.0
-        lumped.append(BranchGeometry(p_a, p_b, float(c.wire_radius), inductive))
+        lumped.append(BranchGeometry(p_a, p_b, float(c.wire_radius), inductive, c.name))
         if c.resistance_model == "skin" and length > 0.0:
             skin.append(SkinTerm(k, length, c, inductive))
 
