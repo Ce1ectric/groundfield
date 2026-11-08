@@ -720,12 +720,13 @@ def test_the_station_preset_reproduces_the_handover_for_the_ap1_station(
     ap1_station_resistance,
 ) -> None:
     """The hand-over reports for the station preset a median error of 1.7 %
-    and a maximum of 15.7 % over the AP1 soils; R = c * rho_eff reproduces
-    them (median over the 39 soils, the homogeneous ones exact; measured
-    1.83 % and 15.69 % with the line kernel, 1.71 % and 15.69 % with the
-    point kernel of 0.14.0 at 1.5 m segments). The AP1 calibration
-    "lv_network" and the upper layer rho_1 describe the station far worse
-    (max 35.9 % and 41.9 %)."""
+    and a maximum of 15.7 % over the AP1 soils without naming the metric;
+    they appear to be the error of R = c * rho_eff (median over the 39
+    soils, the homogeneous ones exact; measured 1.83 % and 15.69 % with the
+    line kernel, 1.71 % and 15.69 % with the point kernel of 0.14.0 at
+    1.5 m segments; the median over the 36 two-layer soils is 2.09 %, audit
+    D2B-03). The AP1 calibration "lv_network" and the upper layer rho_1
+    describe the station far worse (max 35.9 % and 41.9 %)."""
     # user decision Q36
     errors = {}
     for label, kwargs in (
@@ -748,3 +749,38 @@ def test_the_station_preset_reproduces_the_handover_for_the_ap1_station(
     assert errors["rho_1"].max() > 2.5 * station.max()
     rms = {k: float(np.sqrt(np.mean(v**2))) for k, v in errors.items()}
     assert rms["station"] < 0.06 < 0.11 < rms["lv_network"] < rms["rho_1"]
+
+
+# audit D2B-03
+def test_the_soil_page_quotes_the_station_medians_with_their_denominators(
+    ap1_station_resistance,
+) -> None:
+    """The Soil page gave "a median 2.1 %" over the 36 two-layer soils and
+    1.8 % over 39 "as the hand-over does": the hand-over files give no
+    metric, so the match is an inference. The page names both denominators
+    with the measured values and says that the hand-over's numbers *appear
+    to be* this metric over the 39 soils with the point kernel at 1.5 m
+    segments (measured 1.71 / 15.69 %; the point kernel alone moves the
+    36-soil median by 0.01 pp, counting the homogeneous soils by 0.26 pp)."""
+    page = (REPO_ROOT / "docs" / "reference" / "api" / "soil.md").read_text(
+        encoding="utf-8"
+    )
+    presets = page.split("### Presets per electrode class", 1)[1]
+    validity = " ".join(
+        presets.split("**Validity.**", 1)[1].split("## API", 1)[0].split()
+    )
+    x = np.array(
+        [
+            gf.effective_resistivity(rho_1=a, rho_2=b, h_1=c, preset="station")
+            for a, b, c in AP1_SOILS_39
+        ]
+    )
+    errors = _proportional_errors(ap1_station_resistance, x)
+    median_36 = 100.0 * float(np.median(errors))
+    median_39 = 100.0 * float(np.median(np.concatenate([errors, np.zeros(3)])))
+    found_36 = re.search(r"median of ([0-9.]+) % over the 36 two-layer soils", validity)
+    found_39 = re.search(r"median over all 39 soils is ([0-9.]+) %", validity)
+    assert found_36 and found_39, validity[:400]
+    assert float(found_36.group(1)) == pytest.approx(median_36, abs=0.05)
+    assert float(found_39.group(1)) == pytest.approx(median_39, abs=0.05)
+    assert "appear to be" in validity and "as the hand-over does" not in validity
