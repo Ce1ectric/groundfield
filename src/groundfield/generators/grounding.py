@@ -173,7 +173,13 @@ def _maybe_concrete_shell(
     """Resolve the shell fields of ``spec`` and evaluate the shell.
 
     Kept for callers of the pre-2026.11 private helper; see
-    :func:`groundfield.generators.materialise.concrete_shell`.
+    :func:`groundfield.generators.materialise.concrete_shell`. The shell
+    spans every encased wire, as in the materialiser (user decision Q20):
+    the perimeter ``2 (dx + dy)`` of a rectangle without cross-braces, the
+    perimeter plus the braces, ``(n_y + 1) dx + (n_x + 1) dy``, of a
+    ``style="mesh"`` foundation (audit D2B-09; it used the perimeter for
+    meshes too). ``perimeter_m``, when given, is the encased length as is
+    (the outline of a building).
     """
     if spec.concrete_rho_ohm_m is not None:
         spec = spec.model_copy(
@@ -182,8 +188,13 @@ def _maybe_concrete_shell(
                 "concrete_thickness_m": _to_float(spec.concrete_thickness_m, rng),
             }
         )
-    perimeter = float(perimeter_m) if perimeter_m is not None else 2.0 * (dx + dy)
-    return concrete_shell(spec, encased_length_m=perimeter)
+    if perimeter_m is not None:
+        length = float(perimeter_m)
+    elif spec.style == "mesh":
+        length = (spec.n_y + 1) * float(dx) + (spec.n_x + 1) * float(dy)
+    else:
+        length = 2.0 * (float(dx) + float(dy))
+    return concrete_shell(spec, encased_length_m=length)
 
 
 def _resolve_spec(spec: ElectrodeSpec, rng: np.random.Generator) -> ElectrodeSpec:

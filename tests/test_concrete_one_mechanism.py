@@ -255,6 +255,53 @@ def test_shell_of_a_mesh_foundation_spans_every_wire() -> None:
     )
 
 
+# audit D2B-09
+@pytest.mark.finding("10.13")
+@pytest.mark.parametrize(
+    ("style", "n_x", "n_y", "encased_length_m"),
+    [
+        ("mesh", 2, 2, 48.0),
+        ("mesh", 3, 1, 44.0),
+        ("mesh", 1, 1, 32.0),
+        ("ring", 3, 2, 32.0),
+    ],
+    ids=["mesh-2x2", "mesh-3x1", "mesh-1x1", "ring"],
+)
+def test_private_shell_helper_spans_every_encased_wire(
+    style: str, n_x: int, n_y: int, encased_length_m: float
+) -> None:
+    """``grounding._maybe_concrete_shell``, kept for callers of the
+    pre-2026.11 private helper, still reported the shell over the perimeter
+    only after Q20 (C / 32 m instead of C / 44 m for the 10 m x 6 m 3 x 1
+    mesh). It reports what ``concrete_shell`` gives for the encased length
+    of the materialiser, (n_y + 1) d_x + (n_x + 1) d_y, which is the per-wire
+    shells of the built foundation in parallel."""
+    from groundfield.generators.grounding import _maybe_concrete_shell
+    from groundfield.generators.materialise import concrete_shell
+    from groundfield.geometry.electrodes import shell_resistance_from_coefficient
+
+    spec = _foundation(
+        "lumped", 1000.0, style=style, size_xy_m=(10.0, 6.0), n_x=n_x, n_y=n_y
+    )
+    helper = _maybe_concrete_shell(spec, dx=10.0, dy=6.0, rng=np.random.default_rng(0))
+    assert helper == pytest.approx(
+        concrete_shell(spec, encased_length_m=encased_length_m), rel=1e-15
+    )
+    assert helper[1] == pytest.approx(_coefficient(1000.0) / encased_length_m)
+    built = [
+        shell_resistance_from_coefficient(e)
+        for e in _mesh_wires(spec)
+        if e.concrete_shell_coefficient_ohm_m > 0.0
+    ]
+    assert sum(e for e in (1.0 / r for r in built)) == pytest.approx(
+        1.0 / helper[1], rel=1e-12
+    )
+    # An explicit length (a building outline) is the encased length as given.
+    assert _maybe_concrete_shell(
+        spec, dx=10.0, dy=6.0, rng=np.random.default_rng(0), perimeter_m=42.0
+    )[1] == pytest.approx(_coefficient(1000.0) / 42.0)
+
+
 def _house_mesh(rho_c: float) -> FoundationElectrodeSpec:
     """The generator's default house mesh (10 m, 2 x 2, 0.8 m, 5 mm) in a shell."""
     return FoundationElectrodeSpec(
