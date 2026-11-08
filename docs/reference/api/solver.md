@@ -56,6 +56,7 @@ what ran.
 | `earth_inductive_model` | `"sommerfeld"` | earth return of inductive conductors: `"sommerfeld"`, `"carson_series"`, `"perfect_mirror"` (see [Coupling](coupling.md)) |
 | `sommerfeld_assembly` | `"tabulated"` | assembly of the Sommerfeld correction of inductive conductors: `"tabulated"` (one table of the spectral integral per pair of depth groups and frequency; default since 2026.11) or `"exact"` (one quadrature per segment pair, the default up to 0.15.0) |
 | `max_segments` | `None` | resource limit of this engine: the largest number of leakage segments and of nodal unknowns it solves, `ResourceLimitError` above it before anything is allocated; `None` takes `groundfield.diagnostics.HARD_LIMIT` (20 000); recorded in `metadata["max_segments"]` |
+| `warn_segments` | `None` | size of the soft notice of this engine, counted like `max_segments`: at or above it the solve warns that it may take minutes (an *info* finding of `diagnose`); `None` takes `groundfield.diagnostics.SOFT_LIMIT` (5 000); not checked against `max_segments` (a notice above the hard limit never appears) |
 | `image_max_terms`, `image_series_tol` | 300, 10⁻⁶ | cap and stop tolerance of the Tagg/Sunde series (tail bound $\lvert K\rvert^{n+1}/(1-\lvert K\rvert)$) |
 | `options` | `{}` | backend-specific settings, e.g. `{"mom_sommerfeld": {"epsrel": 1e-9}}`, `{"fem": {"n_radial": 120}}` |
 

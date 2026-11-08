@@ -240,7 +240,10 @@ backend and by `solve_mutual_matrix` / `solve_mutual_field`. The usual
 cause is a geometry given in millimetres, a very small `segment_length`
 or a conductor `discretize_segment_length` in millimetres. **Remedy:**
 check units and segment lengths; to solve a large world on purpose,
-raise the limit of the engine, `Engine(max_segments=...)`.
+raise the limit of the engine, `Engine(max_segments=...)`. Below that
+limit, a world at or above the engine's notice size
+(`Engine(warn_segments=...)`, default `SOFT_LIMIT` = 5 000) only emits the
+`UserWarning` `"budget: ..."` that the solve may take minutes.
 
 ## Post-processing
 

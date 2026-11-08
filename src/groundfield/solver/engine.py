@@ -365,6 +365,21 @@ class Engine(BaseModel):
         both. The limit is recorded in ``FieldResult.metadata
         ["max_segments"]``; ``fem`` meshes a volume and is not limited by
         it.
+    warn_segments
+        Size of the soft notice of this engine, counted like
+        ``max_segments``: at or above it every solve emits a
+        :class:`UserWarning` that the solve time may run from seconds to
+        minutes (``"budget: ..."``), and
+        :func:`~groundfield.diagnostics.diagnose` reports it as an *info*
+        finding. ``None`` (default) takes
+        :data:`groundfield.diagnostics.SOFT_LIMIT` (5 000), read at solve
+        time; a positive integer moves the notice for this engine only, for
+        instance up to the size a workstation solves in seconds (user
+        decision Q31 of 2026.11). It is not checked against
+        ``max_segments``: a notice above the hard limit never appears,
+        because such a world is refused first. Kept by JSON round trips,
+        :meth:`with_frequencies` and :meth:`model_copy`; the provenance
+        block of a result records the request.
     tolerance, max_iterations
         **Deprecated, no effect** (no backend reads them). A non-default
         value warns; both fields will be removed no earlier than
@@ -629,6 +644,19 @@ class Engine(BaseModel):
             "read at solve time."
         ),
     )
+    # user decision Q31 (2026-11-08): the soft notice per engine.
+    warn_segments: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Size of the soft notice of this engine: at or above this number "
+            "of leakage segments or nodal unknowns the solve warns that it may "
+            "take minutes (an info finding of diagnose()). None (default) "
+            "takes groundfield.diagnostics.SOFT_LIMIT (5 000), read at solve "
+            "time. Not checked against max_segments: a notice above the hard "
+            "limit never appears, the world is refused first."
+        ),
+    )
 
     # Deprecated flat access to the mom_sommerfeld options (0.15.0 API).
     sommerfeld_lambda_max_factor = _legacy_sommerfeld_property("lambda_max_factor")
@@ -699,14 +727,14 @@ class Engine(BaseModel):
         _registry.get_backend(value)
         return value
 
-    @field_validator("max_segments", mode="before")
+    @field_validator("max_segments", "warn_segments", mode="before")
     @classmethod
-    def _reject_bool_limit(cls, value: Any) -> Any:
+    def _reject_bool_limit(cls, value: Any, info: ValidationInfo) -> Any:
         """A boolean is not a segment count (``True`` would be a limit of 1)."""
         if isinstance(value, bool):
             raise ValueError(
-                "Engine.max_segments must be a positive integer (a number of "
-                f"segments) or None for the default, got {value!r}."
+                f"Engine.{info.field_name} must be a positive integer (a number "
+                f"of segments) or None for the default, got {value!r}."
             )
         return value
 
@@ -1151,7 +1179,8 @@ class Engine(BaseModel):
         # Pre-flight discretisation check (advisory, never raises).
         # Surfaces thin-wire violations, degenerate electrode sizes
         # and segment-budget overruns as warnings *before* the solve
-        # spends minutes on a misconfigured world.
+        # spends minutes on a misconfigured world; the size notice uses
+        # Engine.warn_segments (user decision Q31).
         from groundfield.diagnostics import _hard_limit, check_segment_resolution
 
         for finding in check_segment_resolution(world, self):

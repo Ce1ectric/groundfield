@@ -50,7 +50,11 @@ to grid times sources. The resource limit of the engine,
 or nodal unknowns), stops a world before anything of size $N$ is
 allocated (`ResourceLimitError`, finding 10.06); raise it per engine to
 solve a larger world on purpose. `SOFT_LIMIT` (5 000) marks the size where
-solves take minutes rather than seconds.
+solves take minutes rather than seconds on a typical laptop; every solve
+at or above it emits a `UserWarning` that says so. The size of that notice
+belongs to the engine as well, `Engine.warn_segments` (default
+`SOFT_LIMIT`, read at solve time; user decision Q31), so a workstation can
+move it up together with `max_segments`.
 
 ## Measured in this release
 
