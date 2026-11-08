@@ -43,7 +43,7 @@ stricter (audit R2A-02). The closed forms of the hemisphere are refused outside
 their range as well: a strip deeper than half its length (+0.2 % …
 +474 %), a ring deeper than its diameter (−0.4 % … −33 %; audit
 R2A-06) and any
-``MeshElectrode`` (+118 % … +193 %), audit D2A, O-1; electrodes at or
+``MeshElectrode`` (+118 % … +262 %), audit D2A, O-1; electrodes at or
 above the soil surface are refused like in every backend.
 It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
@@ -52,11 +52,12 @@ which one reaches into a conductive top layer), when the world has
 several clusters (each solved alone, transfer impedances 0) or when a
 layer interface lies above the deepest of the electrode's lowest point,
 the hemisphere radius and the electrode's horizontal half-extent without
-falling under the rules above (−1 % … +48 % where the spanned layer
+falling under the rules above (−3 % … +48 % where the spanned layer
 conducts no better than the electrodes', −44 % … −78 % for a rod that
 reaches into a conductive top layer by 1 µm … 8 cm, −21 % … +30 % for a
-ring lying exactly on the interface, −16 % … +16 % for a
-more resistive layer below a 10 m ring within its radius); a
+ring lying exactly on the interface, −17 % … +16 % for a
+more resistive layer below a 10 m ring within its radius; against
+converged image series, audit R2A-08); a
 :class:`FemReductionWarning` names every such reason. An interface just
 below a horizontal electrode buried almost as deep as its half-extent,
 deeper than the hemisphere radius and the half-extent, is not covered by
@@ -229,7 +230,7 @@ Scope
   and the result describes a different geometry. Star and polyline
   electrodes are not reducible and raise; a driven ``MeshElectrode``
   raises as well (its formula, one strip along the diagonal, reads
-  +118 % … +193 %; audit D2A, O-1), and so do a strip deeper than half
+  +118 % … +262 %; audit D2A, O-1), and so do a strip deeper than half
   its length and a ring deeper than its diameter (see
   :func:`equivalent_hemisphere_radius`).
 - **Multi-electrode.** The hemisphere radii of a cluster's electrodes
@@ -330,9 +331,10 @@ class FemReductionWarning(UserWarning):
       hemisphere radius, with the hemisphere reaching below it into a
       layer the electrode does not touch and that conducts no better than
       the electrode's layer (+23 % for a 10 m ring at 0.8 m over a more
-      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m; −1 % … +48 % over
+      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m; −3 % … +48 % over
       the measured cases of such a spanned layer, against
-      ``image_2layer`` and ``mom``). Over a more conductive layer it
+      ``image_2layer`` and ``mom`` with converged image series, audit
+      R2A-08). Over a more conductive layer it
       raises (user decision Q23: −92 % in 1000/30 Ω·m); the opposite case
       — the electrode reaches a layer its hemisphere does not (+1092 % for
       a 3 m rod through ``h_1`` = 2 m, +1008 % for a 2 m ring on
@@ -361,7 +363,7 @@ class FemReductionWarning(UserWarning):
       conducting no better than the electrodes': the electrode's current
       reaches it, the compact hemisphere's much less (+9 % for a ring
       r = 10 m at 0.8 m over a more resistive layer at ``h_1`` = 5 m in
-      30/1000 Ω·m; −16 % … +16 % over 30/1000, 100/1000 and 30/10000 Ω·m
+      30/1000 Ω·m; −17 % … +16 % over 30/1000, 100/1000 and 30/10000 Ω·m
       at ``h_1`` = ``a_eq`` … 10 m). Over a more conductive layer it
       raises since audit D2A-03 (−47 %, −20 % and −11 % at ``h_1`` = 5,
       7 and 9 m in 1000/30 Ω·m: Q23 extended to the half-extent, a
@@ -768,11 +770,14 @@ def _unreachable_layers(
       (rings, strips), −60 % … +13 % (a 20 m grid, whose formula reads
       +12 % high in homogeneous soil). The fem error is continuous across
       ``a_eq`` (−67.9 % on both sides for a 10 m ring over 1000/30 Ω·m);
-      the rule stops at ``r_ext``, where it is −9.8 % … −0.8 % (rings),
-      −1.4 % (10 m strip) and +9.9 % (grid). A layer that conducts no
-      better keeps the :class:`FemReductionWarning` (−1 % … +48 % when
-      the hemisphere spans it, −16 % … +16 % below it within the
-      half-extent).
+      the rule stops at ``r_ext``, where it is −10.4 % … +0.8 % (rings
+      r = 2, 5, 10 m over six contrasts), −1.4 % … +1.5 % (10 m strip)
+      and +9.9 % … +12.7 % (20 m grid) against ``image_2layer``, ``mom``
+      and a ring series (audit R2A-05, ``f3solver/r2a05_q23_boundary.out``).
+      A layer that conducts no better keeps the :class:`FemReductionWarning`
+      (−3 % … +48 % when the hemisphere spans it, −17 % … +16 % below it
+      within the half-extent, against converged image series, audit
+      R2A-08).
 
     Which layers an electrode touches is one predicate for all three
     rules, the contact of the thin-wire model of the integral engines
@@ -1238,10 +1243,10 @@ _DEPTH_RANGE_EFFECT = (
 #: f2solver/mesh_formula.out: fem against image and mom at 0.8 m).
 _MESH_FORMULA_EFFECT = (
     "Its closed form, one strip along the diagonal, ignores the wires of the "
-    "mesh: +118 % to +193 % against 'image' for 10 m and 20 m meshes at 0.8 m "
-    "(spacing from the size down to 1 m), at every depth. fem reduces a "
-    "GridMeshElectrode with Sverak's formula (-1 % to +21 % for the same "
-    "wires)."
+    "mesh: +118 % to +262 % against 'image' and 'mom' for 10 m and 20 m meshes "
+    "0.5 to 10 m deep (spacing from the size down to 1 m; +118 % to +217 % at "
+    "0.8 m). fem reduces a GridMeshElectrode with Sverak's formula (-1 % to "
+    "+22 % for the same wires at 0.8 m)."
 )
 
 
@@ -1264,10 +1269,16 @@ def _formula_range_issues(
       near $t = 0.85\\,D$), beyond it the ring reads ever lower. The limit
       sat at $t = r$, where the error peaks, up to audit R2A-06;
     * MeshElectrode: one strip along the diagonal, wrong at every depth
-      (+118 % … +193 %), so a driven mesh is refused;
-    * rod and grid: no depth limit (Dwight's rod ignores the head depth,
-      +3.9 % at 0.5 m … +10 % at 10 m; Sverak's grid formula is bounded,
-      +6 % … +21 %; both conservative).
+      (+118 % … +262 % at 0.5 … 10 m), so a driven mesh is refused;
+    * rod and grid: no depth limit — both read high, but bounded in depth
+      (audit R2A-05, evidence ``f3solver/r2a05_*.out``): Dwight's rod
+      ignores the head depth, +0.8 % … +15 % for 1 … 20 m rods with the
+      head 0.5 … 10 m deep (+7.8 % … +15 % for 1 m, +3.9 % … +12 % for
+      3 m, +0.8 % … +6.9 % for 20 m); Sverak's grid formula reads the
+      higher the smaller the grid, +51 % … +67 % for a 1 m grid,
+      +29 % … +52 % for 2 m, +14 % … +39 % for 4 m, +10 % … +26 % for
+      10 m and +6.5 % … +17 % for 20 m (1 … 4 meshes of at least 1 m,
+      0.25 … 20 m deep, against ``image`` and ``mom``).
 
     Returns
     -------
@@ -1380,11 +1391,16 @@ def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) ->
     diameter of at least 50 wire diameters; −2.0 … −4.0 % at $t = 1.5\\,D$,
     −3.6 … −7.1 % at $2D$, −16 … −33 % at $10D$; evidence
     ``f3solver/r2a06_ring_depth.out``); the grid formula
-    (Sverak) stays bounded, +6 % … +21 %
-    from 0.25 m to 20 m depth; the rod formula ignores the head depth
-    (+3.9 % at 0.5 m … +10 % at 10 m); the ``MeshElectrode`` formula, one
+    (Sverak) reads high, the more the smaller the grid, and stays bounded
+    in depth: +51 % … +67 % for a 1 m grid, +29 % … +52 % for 2 m,
+    +14 % … +39 % for 4 m, +10 % … +26 % for 10 m, +6.5 % … +17 % for
+    20 m (1 … 4 meshes of at least 1 m, 0.25 … 20 m deep, against
+    ``image`` and ``mom``); the rod formula ignores the head depth
+    (+0.8 % … +15 % for 1 … 20 m rods with the head 0.5 … 10 m deep,
+    +7.8 % … +15 % for a 1 m rod); the ``MeshElectrode`` formula, one
     strip along the diagonal, misses the wires of the mesh (+118 % …
-    +193 % at 0.8 m). :func:`solve_fem` refuses the strip and the ring
+    +217 % at 0.8 m, up to +262 % at 10 m; audit R2A-05, evidence
+    ``f3solver/r2a05_*.out``). :func:`solve_fem` refuses the strip and the ring
     beyond their range and every driven ``MeshElectrode``; this function
     returns the formula's value regardless.
     """

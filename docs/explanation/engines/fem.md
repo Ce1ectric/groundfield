@@ -155,10 +155,11 @@ a warning in between; audit R2A-02).
     | ring $r = 5$ / 2 m within its wire radius (1 µm … 7 mm) above a more conductive lower layer, $h_1 = 0.5$ / 0.8 m (likewise) | 1000/30, 3000/30, 10000/30 Ω·m: −96 … +11 %; 120/100: −3 … +1 % |
 
   The rule stops at the half-extent: just beyond it fem is silent at
-  −9.8 … −0.8 % (rings $r$ = 2, 5, 10 m), −1.4 % (10 m strip) and +9.9 %
-  (20 m grid) against `image_2layer` (−8.3 … +0.1 %, +0.6 % and +12.7 %
-  against `mom`), and the deviation fades further down (−1.3 % for the
-  10 m ring over $h_1$ = 20 m).
+  −10.3 … −0.3 % (rings $r$ = 2, 5, 10 m over 1000/30, 3000/30, 1000/10,
+  100/30, 1000/300 and 120/100 Ω·m), −1.4 … −0.3 % (10 m strip) and
+  +9.9 % (20 m grid) against `image_2layer` (−8.8 … +0.8 %, +0.5 … +1.5 %
+  and +12.7 % against `mom`; audit R2A-05), and the deviation fades
+  further down (−1.3 % for the 10 m ring over $h_1$ = 20 m in 1000/30 Ω·m).
 - **Error** (`BackendCapabilityError`): the closed form of the
   hemisphere is used outside its range (audit D2A, O-1). Dwight's strip
   formula is the series of the wire and its image in $s/l$ ($s = 2t$
@@ -170,9 +171,10 @@ a warning in between; audit R2A-02).
   strip at 5 m and 9.8 m read +369 % and +6120 % in homogeneous soil,
   silently; the ring limit sat at the radius, where the formula's error
   peaks, up to audit R2A-06). Every driven `MeshElectrode` raises: its formula, one
-  strip along the diagonal, misses the wires of the mesh (+118 … +193 %
-  against `image` at 0.8 m); a `GridMeshElectrode` of the same wires is
-  reduced with Sverak's formula (−1 … +21 %).
+  strip along the diagonal, misses the wires of the mesh (+118 … +217 %
+  against `image` and `mom` at 0.8 m, up to +262 % at 10 m); a
+  `GridMeshElectrode` of the same wires is reduced with Sverak's formula
+  (−1 … +22 % at 0.8 m).
 - **Error** (`BackendCapabilityError`): a driven cluster contains a star
   or polyline electrode, which has no closed-form hemisphere radius. The
   generators build mesh foundations of polyline wires, so generated
@@ -196,7 +198,7 @@ a warning in between; audit R2A-02).
   several clusters (each solved alone, transfer impedances 0, passive
   clusters at 0 V); a layer interface above the deeper of the electrode
   and the hemisphere that the errors above do not cover: the spanned
-  layer conducts no better than the electrodes' layer (−1 … +48 %
+  layer conducts no better than the electrodes' layer (−3 … +48 %
   measured, +23 % for a 10 m ring over a more resistive layer at 2 m), an
   electrode touches the conductive layer only partly (a rod reaching
   1 µm … 8 cm into a conductive top layer of $0.2\,a_\text{eq}$:
@@ -204,8 +206,9 @@ a warning in between; audit R2A-02).
   layers: −21 … +30 % against `image_2layer` and a ring series);
   an interface below the electrode and the hemisphere but within the
   horizontal half-extent of the electrode over a layer that conducts no
-  better (+9 % for a 10 m ring over 30/1000 Ω·m at 5 m; −16 … +16 % over
-  30/1000, 100/1000 and 30/10000 Ω·m), or over a more conductive layer
+  better (+9 % for a 10 m ring over 30/1000 Ω·m at 5 m; −17 … +16 % over
+  30/1000, 100/1000 and 30/10000 Ω·m; the references sum the image series
+  of 30/10000 Ω·m to convergence, audit R2A-08), or over a more conductive layer
   behind such a layer (a 10 m ring at 0.8 m over 100/1000/30 and
   100/300/30 Ω·m: +16 … +46 % against `mom_sommerfeld` and a
   Hankel-integral ring; −10 … −9 % behind a near-equal or 1 m thin
@@ -223,8 +226,11 @@ a warning in between; audit R2A-02).
 - The size notice of `Engine.solve` ("solve time may run from seconds to
   minutes") and its resource limit count the segments of the integral
   engines, which `fem` does not use: its problem is the mesh of each
-  driven cluster (about 2 400 nodes at the default resolution, 3 700 with
-  a 30 m top layer, independent of `segment_length`), and `fem` does not
+  driven cluster (2 400 nodes at the default resolution in homogeneous
+  soil and up to 2 531 with a layer stack of at most 1 m; the radial lines
+  grow with the depth of the stack, to 3 120 … 3 564 nodes at 10 m,
+  3 670 … 4 134 at 30 m and 5 678 … 6 174 at 1 km for rods, rings, strips
+  and a grid; independent of `segment_length`), and `fem` does not
   refuse a world above `Engine.max_segments`.
 
 ## Validity range
@@ -232,7 +238,7 @@ a warning in between; audit R2A-02).
 | Condition | Limit | Behaviour outside |
 |---|---|---|
 | Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error (wrong layer, or a more conductive layer within the hemisphere or the half-extent that no electrode touches) or `FemReductionWarning` (see above) |
-| Burial depth | strip: at most half its length; ring: at most its diameter (Dwight's ring formula within −0.8 … +1.2 % there; audit R2A-06); grid and rod: no limit (Sverak's grid formula stays bounded, +6 … +21 % from 0.25 m to 20 m; Dwight's rod ignores the head depth, +3.9 % at 0.5 m … +10 % at 10 m) | error (the closed form diverges: up to +474 % for strips, −33 % for rings at ten diameters) |
+| Burial depth | strip: at most half its length; ring: at most its diameter (Dwight's ring formula within −0.8 … +1.2 % there; audit R2A-06); grid and rod: no limit, both read high but bounded in depth (Sverak's grid formula: +51 … +67 % for a 1 m grid, +29 … +52 % for 2 m, +14 … +39 % for 4 m, +10 … +26 % for 10 m, +6.5 … +17 % for 20 m, 0.25 … 20 m deep; Dwight's rod ignores the head depth: +0.8 … +15 % for 1 … 20 m rods with the head 0.5 … 10 m deep; audit R2A-05) | error (the closed form diverges: up to +474 % for strips, −33 % for rings at ten diameters) |
 | Kinds | rod, ring, strip, grid (`GridMeshElectrode`) | error for a driven `MeshElectrode`, star or polyline |
 | Clusters | one driven cluster | `FemReductionWarning`: no coupling between clusters |
 | Conductors | lumped | distributed and inductive conductors solved as lumped, `BackendCapabilityWarning` |

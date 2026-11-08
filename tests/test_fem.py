@@ -1114,12 +1114,21 @@ def _documented(pattern: str) -> list[str]:
     return [k for k, t in texts.items() if not re.search(pattern, " ".join(t.split()))]
 
 
-def _z_ref(backend: str, world) -> float:
+def _z_ref(backend: str, world, segment_length: float = 0.25) -> float:
+    """A reference value; the two-layer image series summed to convergence.
+
+    The default ``image_max_terms`` = 300 truncates the series of 30/10000
+    Ohm m (K = 0.994): -1.0 % instead of -2.4 % for a ring over it (audit
+    R2A-08). 30 000 terms leave K**30000 < 1e-78.
+    """
     import warnings
 
+    kw = {"image_max_terms": 30000} if backend in ("image_2layer", "mom") else {}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = gf.create_engine(backend=backend, segment_length=0.25).solve(world)
+        res = gf.create_engine(
+            backend=backend, segment_length=segment_length, **kw
+        ).solve(world)
     return res.cluster_impedance("g1")[0].real
 
 
@@ -1127,7 +1136,8 @@ def _z_ref(backend: str, world) -> float:
 @pytest.mark.parametrize(
     ("soil", "kind", "params"),
     [
-        # ring r = 10 m over 30/10000 at 2 m: -1.0 % / -0.9 %
+        # ring r = 10 m over 30/10000 at 2 m: -2.4 % / -2.3 % with the
+        # image series summed to convergence (-1.0 % / -0.9 % at 300 terms)
         (
             gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=2.0),
             "ring",
@@ -1145,41 +1155,44 @@ def _z_ref(backend: str, world) -> float:
 def test_fem_documented_range_of_the_resistive_warning_holds(
     soil, kind, params
 ) -> None:
-    """A more resistive spanned layer warns at -1 ... +48 %, as documented.
+    """A more resistive spanned layer warns at -3 ... +48 %, as documented.
 
     The docs quoted +3 ... +45 %; the extremes measured by the audit are
     -1.0 % (ring over 30/10000) and +47.6 % (rod under 10000/30, mom at half
-    the segment length) (audit D2A-04).
+    the segment length) (audit D2A-04) -- the -1.0 % against references
+    whose image series of 30/10000 Ohm m stopped at 300 terms; converged,
+    -2.4 % (audit R2A-08).
     """
-    # audit D2A-04
+    # audit D2A-04, audit R2A-08
     w = _electrode_world(soil, kind, **params)
     res, texts = _fem_warnings(w)
     assert texts, "no FemReductionWarning"
     fem = res.cluster_impedance("g1")[0].real
     for backend in ("image_2layer", "mom"):
         err = 100.0 * (fem / _z_ref(backend, w) - 1.0)
-        assert -1.5 <= err <= 48.5, f"{backend}: {err:+.1f} %"
-    assert _documented(r"−1 (% )?… \+48 %") == []
+        assert -3.0 <= err <= 48.0, f"{backend}: {err:+.1f} %"
+    assert _documented(r"−3 (% )?… \+48 %") == []
 
 
 @pytest.mark.finding("10.23", "F01")
 @pytest.mark.parametrize(
     ("rho_1", "rho_2", "h_1"),
     [
-        (30.0, 10000.0, 9.99),  # -15.5 % / -15.2 %
+        (30.0, 10000.0, 9.99),  # -16.2 % / -16.0 % (converged; -15.5 % at 300 terms)
         (100.0, 1000.0, _A_RING10 * (1 + 1e-9)),  # +15.2 % / +15.6 %
     ],
 )
 def test_fem_documented_range_of_the_wide_warning_holds(rho_1, rho_2, h_1) -> None:
-    """The warning that remains within the half-extent: -16 ... +16 %.
+    """The warning that remains within the half-extent: -17 ... +16 %.
 
     Since the conductive "wide" worlds raise (D2A-03), the warning covers
     layers that conduct no better than the electrodes'. The docs quoted
     -11 ... -47 % for the conductive ones and +9 % for one resistive case;
     ring r = 10 m at 0.8 m over 30/10000 and 100/1000 Ohm m reads
-    -15.5 % ... +15.6 % against image_2layer and mom (audit D2A-03).
+    -16.2 % ... +15.6 % against image_2layer and mom with the image series
+    summed to convergence (-15.5 % at 300 terms; audit D2A-03, R2A-08).
     """
-    # audit D2A-03
+    # audit D2A-03, audit R2A-08
     w = _electrode_world(
         gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1),
         "ring",
@@ -1191,8 +1204,145 @@ def test_fem_documented_range_of_the_wide_warning_holds(rho_1, rho_2, h_1) -> No
     fem = res.cluster_impedance("g1")[0].real
     for backend in ("image_2layer", "mom"):
         err = 100.0 * (fem / _z_ref(backend, w) - 1.0)
-        assert -16.5 <= err <= 16.5, f"{backend}: {err:+.1f} %"
-    assert _documented(r"−16 (% )?… \+16 %") == []
+        assert -17.0 <= err <= 16.0, f"{backend}: {err:+.1f} %"
+    assert _documented(r"−17 (% )?… \+16 %") == []
+
+
+def _formula_documented(pattern: str) -> list[str]:
+    """Where the closed-form ranges (fem page, the reduction) miss ``pattern``."""
+    from pathlib import Path
+
+    from groundfield.solver.fem import equivalent_hemisphere_radius
+
+    page = Path(__file__).resolve().parents[1] / "docs/explanation/engines/fem.md"
+    texts = {
+        "fem.md": page.read_text(encoding="utf-8"),
+        "equivalent_hemisphere_radius": equivalent_hemisphere_radius.__doc__,
+    }
+    return [k for k, t in texts.items() if not re.search(pattern, " ".join(t.split()))]
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("kind", "params", "lo", "hi", "pattern"),
+    [
+        # Sverak's grid formula by grid size: a 4 m single-mesh grid (the AP1
+        # station ring size) reads +31.9 % / +33.2 %, a 1 m grid +54.3 % /
+        # +56.1 % against image / mom; the docs said +6 ... +21 % (10 m and
+        # 20 m grids only)
+        pytest.param(
+            "grid_mesh",
+            dict(corner=(0, 0, 0.8), size=(4, 4), n_x=1, n_y=1),
+            14.0,
+            39.5,
+            r"\+14 (% )?… \+39 % for 4 m",
+            id="grid-4m",
+        ),
+        pytest.param(
+            "grid_mesh",
+            dict(corner=(0, 0, 0.5), size=(1, 1), n_x=1, n_y=1),
+            51.0,
+            67.0,
+            r"\+51 (% )?… \+67 % for a 1 m grid",
+            id="grid-1m",
+        ),
+        # the rod formula by rod length: a 1 m rod 10 m deep +12.9 % / +15.4 %
+        pytest.param(
+            "rod",
+            dict(position=(0, 0, 10.0), length=1.0),
+            0.8,
+            15.5,
+            r"\+0\.8 (% )?… \+15 % for 1 … 20 m rods",
+            id="rod-1m-at-10m",
+        ),
+    ],
+)
+def test_fem_documented_range_of_the_closed_forms_holds(
+    kind, params, lo, hi, pattern
+) -> None:
+    """The documented error of Sverak's and Dwight's formulas follows the
+    measurements over the stated scope (audit R2A-05)."""
+    # audit R2A-05
+    w = _electrode_world(gf.HomogeneousSoil(rho=100.0), kind, **params)
+    res, _ = _fem_warnings(w)
+    fem = res.cluster_impedance("g1")[0].real
+    ds = 0.125 if kind == "grid_mesh" else 1.0 / 12.0
+    for backend in ("image", "mom"):
+        err = 100.0 * (fem / _z_ref(backend, w, segment_length=ds) - 1.0)
+        assert lo <= err <= hi, f"{backend}: {err:+.1f} %"
+    assert _formula_documented(pattern) == []
+
+
+@pytest.mark.finding("10.23")
+def test_fem_documented_range_of_the_mesh_formula_holds() -> None:
+    """MeshElectrode formula: +118 ... +193 % was the range at 0.8 m against
+    image; deeper and against mom it reaches +262 % (20 m mesh, 1 m spacing,
+    10 m deep; audit R2A-05). A driven mesh is refused, so the formula is
+    taken directly."""
+    # audit R2A-05
+    from groundfield.solver.fem import equivalent_hemisphere_radius
+
+    w = _electrode_world(
+        gf.HomogeneousSoil(rho=100.0),
+        "mesh",
+        corner=(0, 0, 10.0),
+        size=(20, 20),
+        spacing=1.0,
+    )
+    formula = 100.0 / (
+        2.0 * math.pi * equivalent_hemisphere_radius(w.get_electrode("g1"), 100.0)
+    )
+    for backend in ("image", "mom"):
+        err = 100.0 * (formula / _z_ref(backend, w, segment_length=0.5) - 1.0)
+        assert 118.0 <= err <= 263.0, f"{backend}: {err:+.1f} %"
+    assert (
+        _formula_documented(r"\+118 (% )?… \+217 %.{0,40}0\.8 m, up to \+262 % at 10 m")
+        == []
+    )
+
+
+@pytest.mark.finding("10.23", "F01")
+def test_fem_documented_value_where_q23_stops_holds() -> None:
+    """Ring r = 2 m at 0.8 m over 3000/30 Ohm m at h_1 = r (1 + 1e-9), just
+    beyond the half-extent: fem is silent at -10.3 % against image_2layer
+    (-8.8 % mom, -10.4 % a ring series); the docs said -9.8 % (audit R2A-05)."""
+    # audit R2A-05
+    w = _electrode_world(
+        gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=2.0 * (1 + 1e-9)),
+        "ring",
+        center=(0, 0, 0.8),
+        radius=2.0,
+    )
+    res, texts = _fem_warnings(w)
+    assert texts == []
+    fem = res.cluster_impedance("g1")[0].real
+    err = 100.0 * (fem / _z_ref("image_2layer", w) - 1.0)
+    assert -10.5 <= err <= -10.0, f"{err:+.2f} %"
+    assert _documented(r"−10\.3 … −0\.3 % \(rings") == ["FemReductionWarning"]
+
+
+@pytest.mark.finding("10.49")
+def test_fem_documented_mesh_size_holds() -> None:
+    """fem's own problem size: 2 400 nodes in homogeneous soil, 4 124 for a
+    3 m rod under a 30 m top layer; the docs said "about 2 400 ..., 3 700
+    with a 30 m top layer" (audit R2A-05)."""
+    # audit R2A-05
+    import warnings
+
+    def nodes(soil) -> int:
+        w = _rod_world(soil)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = gf.create_engine(backend="fem", segment_length=0.5).solve(w)
+        return res.metadata["fem_mesh"]["g1"]["n_nodes"]
+
+    assert nodes(gf.HomogeneousSoil(rho=100.0)) == 2400
+    assert 3670 <= nodes(gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=30.0)) <= 4134
+    page = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "docs/explanation/engines/fem.md"
+    ).read_text(encoding="utf-8")
+    assert "3 670 … 4 134 at 30 m" in " ".join(page.split())
 
 
 @pytest.mark.finding("10.23")

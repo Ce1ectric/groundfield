@@ -161,8 +161,8 @@ world: several electrodes in a cluster (mutual resistance neglected;
 which one reaches into a conductive top layer), several clusters (no
 coupling between them), or a layer interface within the hemisphere
 radius or the electrode's horizontal extent over a layer that the
-electrodes touch or that conducts no better than theirs (−1 … +48 %
-measured for a spanned layer, −16 … +16 % for one within the extent;
+electrodes touch or that conducts no better than theirs (−3 … +48 %
+measured for a spanned layer, −17 … +16 % for one within the extent;
 −44 … −78 % for a rod that reaches 1 µm … 8 cm into a conductive top
 layer, −21 … +30 % for a ring lying exactly on the interface; −10 … +46 %
 for a more conductive layer within the extent behind one that conducts no

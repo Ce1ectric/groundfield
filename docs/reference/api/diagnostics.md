@@ -65,8 +65,10 @@ The checks guard the assumptions of the thin-wire model (see
 
 The segment counts follow the discretisation of the image and MoM
 families; for `fem` they do not predict the cost. `fem` does not use those
-segments: its problem is the mesh of each driven cluster (about 2 400 nodes
-at the default resolution, independent of `segment_length`), so its
+segments: its problem is the mesh of each driven cluster (2 400 nodes at
+the default resolution in homogeneous soil, growing with the depth of the
+layer stack to about 4 100 at 30 m and 6 200 at 1 km, independent of
+`segment_length`), so its
 `Engine.solve` still emits the notice from the segment count but does not
 refuse a world above `Engine.max_segments`.
 
