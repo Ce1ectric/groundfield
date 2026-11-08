@@ -43,9 +43,17 @@ floating point, and `evaluate_spec` evaluates the tree with its own
 numeric function instead of SymPy's `lambdify`, so a crafted formula
 cannot make SymPy expand or simplify it. Printing a parsed formula or
 handing it to `lambdify` lets SymPy evaluate parts of it again: show the
-formula text of an untrusted file instead. Non-finite numbers of a
-`BusType` document (an unknown rms error, a non-finite sample) are written
-as `null`, so the file is strict JSON.
+formula text of an untrusted file instead. The parser collects like
+terms of a sum itself; a real or imaginary part that cancels below
+$2^{-100}$ times the largest magnitude of that part among the terms is
+zero, the other part is kept. Non-finite numbers of a `BusType` document
+(an unknown rms error, a non-finite sample) are written as `null`, so the
+file is strict JSON. `load_bustype_json` also checks the rest of the
+document: `name` and `system_type` are not objects or lists,
+`description` is a string or `null`, and the free-form `metadata` nest at
+most `MAX_METADATA_DEPTH` (32) levels; anything else raises `ValueError`.
+`fit_quality_summary` reads only finite numbers and strings from the
+metadata, so a loaded document never makes it fail.
 
 **Validity.** The exported model inherits the quasi-static band
 ($f < 1\,\mathrm{kHz}$) and the linearity of the field model; it is meant

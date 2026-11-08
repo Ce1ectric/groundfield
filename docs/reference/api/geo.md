@@ -35,8 +35,9 @@ conductor in the strip foundation. The generators reduce an outline
 either to its oriented minimum bounding rectangle (OMBR, the default:
 smallest rectangle containing the polygon, rotating calipers) or follow
 the polygon itself (`foundation_outline="polygon"` of the layout
-builder). Outlines smaller than 1 m are widened to
-`MIN_FOUNDATION_SIDE_M` with a warning.
+builder). An outline whose OMBR is narrower than 1 m (a mapped wall or
+fence) is widened to `MIN_FOUNDATION_SIDE_M` with a warning in both
+cases; a polygon foundation then follows the widened OMBR.
 
 **Requests.** Overpass queries are bounded (radius, timeout, response
 size), validated before they are cached, and retried with back-off; a
