@@ -1622,6 +1622,31 @@ def test_terms_that_cancel_within_one_sum_are_collected(
         parse_impedance_formula(text)
 
 
+@pytest.mark.parametrize(
+    "text, value",
+    [
+        ("(1 + 1e-31*j - 1)*1e31*f", 50j),
+        ("f*(1 + 1e-31*j) - f", 5e-30j),
+        ("(rho*(1 + 1e-40*j) - rho)*1e40", 137j),
+        ("(1e-31 + j - j)*1e31*f", 50.0),
+        ("(0.1 + 0.2 - 0.3 + 2j)*f", 100j),
+    ],
+)
+def test_real_and_imaginary_parts_of_a_sum_cancel_separately(
+    text: str, value: complex
+) -> None:
+    """A part of a collected sum that cancels within the working precision is
+    zero; the other part is kept. Base: the complex magnitude of the sum was
+    compared with its largest term, so a sum whose real parts cancel exactly
+    and whose imaginary part is small but exact was dropped (0 at 50 Hz
+    instead of 50j). References: 60-digit mpmath evaluation of the text."""
+    # audit A3SG-05
+    from groundfield.io._formula import formula_function, parse_impedance_formula
+
+    result = complex(formula_function(parse_impedance_formula(text))(50.0, 137.0))
+    assert result == pytest.approx(value, rel=1e-12, abs=0.0)
+
+
 def test_parsed_expression_is_unevaluated_with_numbers_as_floats() -> None:
     """Symbol-free parts are single floats, the numeric factors of a product
     form one coefficient, terms keep the order of the text; no Rational

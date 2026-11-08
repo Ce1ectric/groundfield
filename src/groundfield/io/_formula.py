@@ -76,8 +76,10 @@ minute). So the parser never lets SymPy evaluate:
   ``2*pi*f*j/1000`` becomes ``0.0062831853071795865*I*f``; within one
   sum ``a + b - c + ...`` the numbers are added and terms with equal
   factors (in the same order) are collected, so ``f - f + 1000`` is
-  the number 1000; nothing else is rearranged: no expansion, no
-  distribution over sums, no merging of powers;
+  the number 1000 (a real or imaginary part of a sum of inexact numbers
+  below ``2**-100`` times the largest magnitude of that part among the
+  numbers added has cancelled and is zero); nothing else is rearranged:
+  no expansion, no distribution over sums, no merging of powers;
 * the result contains only ``Add``, ``Mul``, ``Pow`` (literal exponent),
   ``exp``, ``log``, SymPy floats, the integer ``-1``, ``I`` and the
   caller's symbols.
@@ -85,7 +87,9 @@ minute). So the parser never lets SymPy evaluate:
 Every node therefore costs a bounded amount of work, and the time and
 memory of a parse, accepted or rejected, grow linearly with the size of
 the formula. Every number of the expression is the float64 nearest to
-its value computed at 128 bits (relative error at most ``1.1e-16``).
+its value computed at 128 bits (real and imaginary part; a part below
+``2**-100`` times the magnitude is zero), so its relative error is at
+most ``1.1e-16``.
 
 Do not hand an expression parsed from untrusted text to SymPy functions
 that evaluate it: ``simplify``, ``expand``, ``subs``, ``doit``, ``evalf``
@@ -241,7 +245,8 @@ _SHADOW_PREC = 128
 """Binary precision of the numbers the parser computes."""
 
 _ZERO_SUM_BITS = 100
-"""A sum below ``2**-100`` times its largest term counts as zero (not exact sums)."""
+"""A part (real or imaginary) of a sum below ``2**-100`` times the largest
+magnitude of that part among its terms counts as zero (not exact sums)."""
 
 _MAX_EXP_ARGUMENT = MAX_LOG10_MAGNITUDE * math.log(10.0)  # about 690.8
 _MAX_SIGNIFICANT_DIGITS = 17  # float64 carries at most 17 significant digits
@@ -622,13 +627,28 @@ class _Part(NamedTuple):
 
 
 class _Accumulator:
-    """Running sum of the numbers that belong to one term of a sum."""
+    """Running sum of the numbers that belong to one term of a sum.
 
-    __slots__ = ("value", "largest", "exact", "rational", "count", "factors", "inner")
+    ``largest_re`` / ``largest_im``: largest magnitude of the real /
+    imaginary part of a number added (the scale of the cancellation noise
+    of that part of the sum).
+    """
+
+    __slots__ = (
+        "value",
+        "largest_re",
+        "largest_im",
+        "exact",
+        "rational",
+        "count",
+        "factors",
+        "inner",
+    )
 
     def __init__(self, factors: tuple[sp.Expr, ...], zero: Any) -> None:
         self.value = zero
-        self.largest = zero.real
+        self.largest_re = zero.real
+        self.largest_im = zero.real
         self.exact: Fraction | None = Fraction(0)
         self.rational = True
         self.count = 0
@@ -1000,7 +1020,8 @@ class _Builder:
             if term is None:
                 term = terms[part.factors] = _Accumulator(part.factors, zero)
             term.value += number.value
-            term.largest = max(term.largest, abs(number.value))
+            term.largest_re = max(term.largest_re, abs(number.value.real))
+            term.largest_im = max(term.largest_im, abs(number.value.imag))
             term.count += 1
             term.inner = max(term.inner, part.inner)
             if term.count == 1:
@@ -1034,18 +1055,33 @@ class _Builder:
         return _Part(self._one, (sp.Add(*args, evaluate=False),), inner, degree)
 
     def _collected(self, term: _Accumulator, node: ast.AST) -> _Number | None:
-        """The number of one collected term; ``None`` if the term cancels."""
+        """The number of one collected term; ``None`` if the term cancels.
+
+        A real or imaginary part of a sum of inexact numbers that is not
+        larger than ``2**-100`` times the largest magnitude of that part
+        among the numbers added has cancelled within the working precision
+        and is zero. The parts are judged separately: the imaginary part of
+        ``1 + 1e-31*j - 1`` is exact, only the real parts cancel (audit
+        A3SG-05: the complex magnitude was compared, and the term dropped).
+        """
         if term.count == 0:
             return None
         if term.rational and term.exact is not None:
             if term.exact == 0:
                 return None
             return self._checked(self._number(None, term.exact, True), node)
-        if term.count > 1 and abs(term.value) <= term.largest * self._noise:
+        value = term.value
+        if term.count > 1:
+            ctx = self._ctx
+            real, imag = value.real, value.imag
+            if abs(real) <= term.largest_re * self._noise:
+                real = ctx.zero
+            if abs(imag) <= term.largest_im * self._noise:
+                imag = ctx.zero
+            value = ctx.mpc(real, imag)
+        if value == 0:
             return None  # cancels within the working precision
-        if term.value == 0:
-            return None
-        return self._checked(_Number(term.value, term.exact, term.rational), node)
+        return self._checked(_Number(value, term.exact, term.rational), node)
 
     def _product(self, node: ast.BinOp) -> _Part:
         """``a * b / c * ...``: numeric factors in one coefficient, bounded per step."""
