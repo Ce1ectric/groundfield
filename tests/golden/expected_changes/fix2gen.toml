@@ -13,7 +13,7 @@
 #   TN generator form a nearest-point tree. The service drops of the default
 #   network ran from the cabinet 180 m out back along the main (60 ... 160 m
 #   each); they now tap the main beside each house (5 m). Substation
-#   potential -2.1 %, substation leakage 3 ... 5 %.
+#   potential -2.1 %, substation leakage -3.1 ... -4.8 %.
 #
 # Measured against the stream start: deliver/evidence/fix2gen/
 # golden_moves_vs_base_routing.txt (both changes), golden_moves_vs_base.txt
