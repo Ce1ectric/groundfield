@@ -1058,3 +1058,113 @@ def case_mom_sommerfeld_three_layer_grid_tabulated() -> Quantities:
         _engine(backend="mom_sommerfeld", frequencies=[50.0], segment_length=0.5)
     )
     return _result_quantities(res, cluster_of=("grid",))
+
+
+# ---------------------------------------------------------------------
+# earth-return coupling, audit round 2 (stream fix2coup; stored by the
+# coordinator)
+# ---------------------------------------------------------------------
+
+
+def _isolated_inductive(world, name, a, b, p, q, *, dsl, radius=0.006):
+    """Isolated Neumann conductor between electrodes ``a`` and ``b`` from
+    point ``p`` to point ``q`` (m)."""
+    from groundfield.conductors import Conductor
+
+    world.add_conductor(
+        Conductor(
+            name=name,
+            start=p,
+            end=q,
+            start_electrode=a,
+            end_electrode=b,
+            wire_radius=radius,
+            resistivity=2.82e-8,
+            cross_section=95e-6,
+            discretize_segment_length=dsl,
+            coupling_to_soil="isolated",
+            inductance_model="neumann",
+        )
+    )
+
+
+@_case
+def case_cond_overhead_lead_over_pen_carson_series() -> Quantities:
+    """A2C-1 / DOC-B: an overhead lead 1 m above a buried PEN (pairs on
+    opposite sides of the surface) and an oblique lead (Sommerfeld
+    fallback) under carson_series."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
+    for name, x, y in (("g1", 0, 0), ("g2", 100, 0), ("m1", 0, 1), ("m2", 100, 1)):
+        gf.create_electrode(
+            w, "rod", name=name, position=(float(x), float(y), 0.5), length=1.5
+        )
+    gf.create_electrode(w, "rod", name="m3", position=(160.0, 40.0, 0.5), length=1.5)
+    _isolated_inductive(w, "pen", "g1", "g2", (0, 0, 0.7), (100, 0, 0.7), dsl=20.0)
+    _isolated_inductive(
+        w, "lead", "m1", "m2", (0, 1, -1.0), (100, 1, -1.0), dsl=20.0, radius=0.005
+    )
+    _isolated_inductive(
+        w, "oblique", "m2", "m3", (100, 1, -1.0), (160, 40, -1.0), dsl=20.0
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res = w.solve(
+        _engine(
+            backend="image",
+            frequencies=[50.0, 1000.0],
+            segment_length=1.0,
+            earth_inductive_model="carson_series",
+        )
+    )
+    out = _result_quantities(res, cluster_of=("g1",), point_sources=False)
+    out["Zin"] = np.asarray(res.input_impedance(), dtype=complex)
+    return out
+
+
+@_case
+def case_cond_lumped_long_pen_sommerfeld() -> Quantities:
+    """A2C-2: a lumped 1 km PEN (one branch, composite outer rule)."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
+    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_electrode(w, "rod", name="g2", position=(1000.0, 0.0, 0.5), length=3.0)
+    _isolated_inductive(w, "pen", "g1", "g2", (0, 0, 0.7), (1000, 0, 0.7), dsl=None)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res = w.solve(
+        _engine(
+            backend="image",
+            frequencies=[50.0, 1000.0],
+            segment_length=1.0,
+            earth_inductive_model="sommerfeld",
+        )
+    )
+    out = _result_quantities(res, cluster_of=("g1",), point_sources=False)
+    out["Zin"] = np.asarray(res.input_impedance(), dtype=complex)
+    return out
+
+
+@_case
+def case_cond_drops_along_pen_main_perfect_mirror() -> Quantities:
+    """DOC-B / GEN-2: service drops routed back along the PEN main
+    (interpenetrating coaxial chains, evaluated as touching wires)."""
+    w = gf.create_world(soil=gf.HomogeneousSoil(**_H100))
+    for name, x, y in (("s", 0, 0), ("kvs", -200, 0), ("h0", -20, 30), ("h1", 20, 30)):
+        gf.create_electrode(
+            w, "rod", name=name, position=(float(x), float(y), 0.0), length=2.0
+        )
+    for name, a, b, xa, xb in (
+        ("pen_main", "s", "kvs", 0.0, -200.0),
+        ("drop_0", "kvs", "h0", -200.0, -20.0),
+        ("drop_1", "kvs", "h1", -200.0, 20.0),
+    ):
+        _isolated_inductive(w, name, a, b, (xa, 0, 0.6), (xb, 0, 0.6), dsl=10.0)
+    gf.create_source(w, attached_to="s", magnitude=1.0)
+    res = w.solve(
+        _engine(
+            backend="image",
+            frequencies=[50.0, 1000.0],
+            segment_length=1.0,
+            earth_inductive_model="perfect_mirror",
+        )
+    )
+    out = _result_quantities(res, cluster_of=("s",), point_sources=False)
+    out["Zin"] = np.asarray(res.input_impedance(), dtype=complex)
+    return out
