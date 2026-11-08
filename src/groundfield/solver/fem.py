@@ -41,7 +41,8 @@ rule for a layer the hemisphere does not reach counts a wire within
 its radius of that layer as touching it, the one rule this makes
 stricter (audit R2A-02). The closed forms of the hemisphere are refused outside
 their range as well: a strip deeper than half its length (+0.2 % …
-+474 %), a ring deeper than its radius (+0.4 % … −28 %) and any
++474 %), a ring deeper than its diameter (−0.4 % … −33 %; audit
+R2A-06) and any
 ``MeshElectrode`` (+118 % … +193 %), audit D2A, O-1; electrodes at or
 above the soil surface are refused like in every backend.
 It is **not** a valid cross-check either when a
@@ -229,7 +230,7 @@ Scope
   electrodes are not reducible and raise; a driven ``MeshElectrode``
   raises as well (its formula, one strip along the diagonal, reads
   +118 % … +193 %; audit D2A, O-1), and so do a strip deeper than half
-  its length and a ring deeper than its radius (see
+  its length and a ring deeper than its diameter (see
   :func:`equivalent_hemisphere_radius`).
 - **Multi-electrode.** The hemisphere radii of a cluster's electrodes
   are summed, i.e. the electrodes are put in parallel without their
@@ -1179,17 +1180,19 @@ def _remedy(world: "World", engine: "Engine") -> str:
     return f"{text} {refused}" if refused else text
 
 
-#: Measured consequence of a burial depth beyond the electrode's half-extent
-#: (evidence f2solver/depth_validity.out: the formula against the exact
-#: uniform-current wire and ring, which ``image`` reproduces to 1e-5).
+#: Measured consequence of a burial depth beyond the formula's range
+#: (evidence f2solver/depth_validity.out and f3solver/r2a06_ring_depth.out:
+#: the formula against the exact uniform-current wire and ring, which
+#: ``image`` reproduces to 1e-5).
 _DEPTH_RANGE_EFFECT = (
     "The closed forms of the equivalent hemisphere assume a burial depth "
     "small against the electrode: Dwight's series of a wire and its image "
-    "converges only above half the wire length, his ring formula needs a depth "
-    "below the ring radius (s << D, s twice the depth). Deeper, fem reads "
-    "+0.2 % (1.25 times half the length) to +474 % (5.3 times) for strips and "
-    "+0.4 % (1.5 times the radius) to -28 % (20 times) for rings against the "
-    "exact uniform-current value that 'image' computes."
+    "converges only above half the wire length, his ring formula holds to "
+    "about +-1 % down to a depth of one ring diameter (s << D, s twice the "
+    "depth). Deeper, fem reads +0.2 % (1.25 times half the length) to +474 % "
+    "(5.3 times) for strips and -0.4 % (just deeper than one diameter) to -33 % (ten "
+    "diameters) for rings against the exact uniform-current value that "
+    "'image' computes."
 )
 
 #: Measured consequence of the MeshElectrode formula (evidence
@@ -1216,8 +1219,11 @@ def _formula_range_issues(
       $x = s/l$ ($s = 2t$ the image distance, $l$ the length) and converges
       for $x < 1$ only — a burial depth $t$ up to half the length (formula
       error $\\le 0.1\\,\\%$ there);
-    * ring: Dwight's formula needs $s \\ll D$; up to $t = r$ ($s = D$) its
-      error stays within $+1.0\\,\\%$, beyond it the ring reads ever lower;
+    * ring: Dwight's formula needs $s \\ll D$; up to $t = D$ ($s = 2D$) its
+      error against the exact thin ring stays within $-0.73 \\ldots
+      +1.05\\,\\%$ (ring over wire diameter $\\ge 50$; it crosses zero
+      near $t = 0.85\\,D$), beyond it the ring reads ever lower. The limit
+      sat at $t = r$, where the error peaks, up to audit R2A-06;
     * MeshElectrode: one strip along the diagonal, wrong at every depth
       (+118 % … +193 %), so a driven mesh is refused;
     * rod and grid: no depth limit (Dwight's rod ignores the head depth,
@@ -1245,11 +1251,11 @@ def _formula_range_issues(
                         f"z = {t:.3g} m, deeper than half its length ({half:.3g} m)"
                     )
             elif isinstance(e, RingElectrode):
-                t, r = float(e.center[2]), float(e.radius)
-                if t > r:
+                t, diameter = float(e.center[2]), 2.0 * float(e.radius)
+                if t > diameter:
                     deep.append(
                         f"electrode '{name}' (ring) lies at z = {t:.3g} m, deeper "
-                        f"than its radius ({r:.3g} m)"
+                        f"than its diameter ({diameter:.3g} m)"
                     )
     return deep, meshes
 
@@ -1331,8 +1337,10 @@ def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) ->
     converges for a burial depth $t < l/2$ only (error within
     $\\pm 0.2\\,\\%$ there; +0.2 … +0.4 % at $t = 1.25\\,l/2$, +2.6 … +5.4 %
     at $t = l$, up to +474 % at $t = 5.3\\,l/2$); the ring formula needs
-    $s \\ll D$ (+0.05 … +1.0 % up to $t = r$; −0.5 … −0.7 % at $t = 2r$,
-    −3.8 … −6.1 % at $4r$, −17 … −28 % at $20r$); the grid formula
+    $s \\ll D$ (−0.83 … +1.21 % up to $t = D$, −0.73 … +1.05 % for a ring
+    diameter of at least 50 wire diameters; −2.0 … −4.0 % at $t = 1.5\\,D$,
+    −3.6 … −7.1 % at $2D$, −16 … −33 % at $10D$; evidence
+    ``f3solver/r2a06_ring_depth.out``); the grid formula
     (Sverak) stays bounded, +6 % … +21 %
     from 0.25 m to 20 m depth; the rod formula ignores the head depth
     (+3.9 % at 0.5 m … +10 % at 10 m); the ``MeshElectrode`` formula, one
@@ -2065,7 +2073,7 @@ def solve_fem(
         electrode without a closed-form hemisphere radius (polyline and
         star electrodes; the generators build mesh foundations of
         polylines), or one whose closed form is used outside its range: a
-        strip deeper than half its length, a ring deeper than its radius,
+        strip deeper than half its length, a ring deeper than its diameter,
         any ``MeshElectrode`` (audit D2A, O-1; see
         :func:`equivalent_hemisphere_radius`). The message names the
         backends whose own checks accept the world — or would at a larger

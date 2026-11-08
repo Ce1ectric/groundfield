@@ -160,10 +160,13 @@ a warning in between; audit R2A-02).
   hemisphere is used outside its range (audit D2A, O-1). Dwight's strip
   formula is the series of the wire and its image in $s/l$ ($s = 2t$
   the image distance, $l$ the length) and converges only for a burial
-  depth $t < l/2$; his ring formula needs $s \ll D$. A driven strip deeper
-  than half its length and a driven ring deeper than its radius raise
-  (a 1.88 m strip at 5 m and 9.8 m read +369 % and +6120 % in homogeneous
-  soil, silently). Every driven `MeshElectrode` raises: its formula, one
+  depth $t < l/2$; his ring formula needs $s \ll D$ and stays within
+  −0.8 … +1.2 % of the exact thin ring down to $t = D$ (it crosses zero
+  near $0.85\,D$, −3.6 … −7.1 % at $2D$). A driven strip deeper than half
+  its length and a driven ring deeper than its diameter raise (a 1.88 m
+  strip at 5 m and 9.8 m read +369 % and +6120 % in homogeneous soil,
+  silently; the ring limit sat at the radius, where the formula's error
+  peaks, up to audit R2A-06). Every driven `MeshElectrode` raises: its formula, one
   strip along the diagonal, misses the wires of the mesh (+118 … +193 %
   against `image` at 0.8 m); a `GridMeshElectrode` of the same wires is
   reduced with Sverak's formula (−1 … +21 %).
@@ -226,7 +229,7 @@ a warning in between; audit R2A-02).
 | Condition | Limit | Behaviour outside |
 |---|---|---|
 | Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error (wrong layer, or a more conductive layer within the hemisphere or the half-extent that no electrode touches) or `FemReductionWarning` (see above) |
-| Burial depth | strip: at most half its length; ring: at most its radius; grid and rod: no limit (Sverak's grid formula stays bounded, +6 … +21 % from 0.25 m to 20 m; Dwight's rod ignores the head depth, +3.9 % at 0.5 m … +10 % at 10 m) | error (the closed form diverges: up to +474 % for strips, −28 % for rings) |
+| Burial depth | strip: at most half its length; ring: at most its diameter (Dwight's ring formula within −0.8 … +1.2 % there; audit R2A-06); grid and rod: no limit (Sverak's grid formula stays bounded, +6 … +21 % from 0.25 m to 20 m; Dwight's rod ignores the head depth, +3.9 % at 0.5 m … +10 % at 10 m) | error (the closed form diverges: up to +474 % for strips, −33 % for rings at ten diameters) |
 | Kinds | rod, ring, strip, grid (`GridMeshElectrode`) | error for a driven `MeshElectrode`, star or polyline |
 | Clusters | one driven cluster | `FemReductionWarning`: no coupling between clusters |
 | Conductors | lumped | distributed and inductive conductors solved as lumped, `BackendCapabilityWarning` |

@@ -1707,10 +1707,12 @@ def test_fem_keeps_electrodes_that_start_at_the_surface(kind, params) -> None:
         ("strip", dict(start=(0, 0, 9.8), end=(1.88, 0, 9.8)), "half its length"),
         # 10 m strip just below z = l/2 = 5 m (+0.1 % ... +3 % up to z = l)
         ("strip", dict(start=(0, 0, 5.01), end=(10, 0, 5.01)), "half its length"),
-        # rings deeper than their radius: -5.4 % (r = 0.5 m at 2 m) and
-        # -4.6 % (r = 2 m at 8 m) against image, ever lower with depth
-        ("ring", dict(center=(0, 0, 2.0), radius=0.5), "its radius"),
-        ("ring", dict(center=(0, 0, 8.0), radius=2.0), "its radius"),
+        # rings deeper than their diameter: -5.7 % (r = 0.5 m at 2 m) and
+        # -4.7 % (r = 2 m at 8 m) against image, ever lower with depth;
+        # just beyond the diameter -0.9 % (audit R2A-06)
+        ("ring", dict(center=(0, 0, 2.0), radius=0.5), "its diameter"),
+        ("ring", dict(center=(0, 0, 8.0), radius=2.0), "its diameter"),
+        ("ring", dict(center=(0, 0, 1.01), radius=0.5), "its diameter"),
     ],
 )
 def test_fem_rejects_an_electrode_deeper_than_its_formula_reaches(
@@ -1723,9 +1725,8 @@ def test_fem_rejects_an_electrode_deeper_than_its_formula_reaches(
     s < l only; his ring formula assumes s << D. ``fem`` used them at any
     depth and read +369 % / +6120 % for a 1.88 m strip at 5 m / 9.8 m in
     homogeneous soil, silently (audit D2A, O-1). It now raises when the
-    burial depth exceeds the electrode's horizontal half-extent (half the
-    strip length, the ring radius) and names the backends that solve the
-    world.
+    burial depth exceeds half the strip length or the ring diameter (audit
+    R2A-06) and names the backends that solve the world.
     """
     # audit D2A O-1
     w = _electrode_world(gf.HomogeneousSoil(rho=10.0), kind, **params)
@@ -1742,6 +1743,7 @@ def test_fem_rejects_an_electrode_deeper_than_its_formula_reaches(
         ("strip", dict(start=(0, 0, 0.8), end=(1.88, 0, 0.8))),  # -0.2 %
         ("strip", dict(start=(0, 0, 5.0), end=(10, 0, 5.0))),  # z = l/2: -0.1 %
         ("ring", dict(center=(0, 0, 2.0), radius=2.0)),  # z = r: +0.7 %
+        ("ring", dict(center=(0, 0, 4.0), radius=2.0)),  # z = D: -0.7 %
         ("ring", dict(center=(0, 0, 0.8), radius=2.0)),  # benchmark B3
         # Sverak's grid formula stays bounded with depth: +11.2 % at 20 m
         ("grid_mesh", dict(corner=(0, 0, 20.0), size=(20, 20), n_x=4, n_y=4)),
@@ -1754,6 +1756,42 @@ def test_fem_keeps_electrodes_within_their_formula(kind, params) -> None:
         _electrode_world(gf.HomogeneousSoil(rho=10.0), kind, **params)
     )
     assert math.isfinite(res.cluster_impedance("g1")[0].real)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("radius", "depth"),
+    [
+        pytest.param(0.5, 0.8, id="r=0.5-at-0.8"),  # +0.4 % against image
+        pytest.param(0.5, 1.0, id="r=0.5-at-D"),  # -0.9 %
+        pytest.param(2.0, 3.0, id="r=2-at-1.5r"),  # +0.2 %
+    ],
+)
+def test_fem_solves_a_ring_down_to_its_diameter(radius, depth) -> None:
+    """Dwight's ring formula holds to about +-1 % down to t = D (audit R2A-06).
+
+    The limit at the radius sat where the formula's error peaks: a ring at
+    t = r was accepted at +0.7 ... +1.0 %, one at 1.5 r ... 2 r refused at
+    +0.2 ... -0.9 %. The formula against the exact thin ring stays within
+    -0.73 ... +1.05 % for t <= D (ring diameter over wire diameter >= 50).
+    """
+    # audit R2A-06
+    w = _electrode_world(
+        gf.HomogeneousSoil(rho=100.0), "ring", center=(0, 0, depth), radius=radius
+    )
+    res, _ = _fem_warnings(w)
+    fem = res.cluster_impedance("g1")[0].real
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ref = (
+            gf.create_engine(backend="image", segment_length=2 * math.pi * radius / 400)
+            .solve(w)
+            .cluster_impedance("g1")[0]
+            .real
+        )
+    assert abs(fem / ref - 1.0) < 0.01, f"{100 * (fem / ref - 1):+.2f} %"
 
 
 @pytest.mark.finding("10.23")

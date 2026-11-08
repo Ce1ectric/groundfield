@@ -171,10 +171,10 @@ touches, that conducts better than the electrodes' layer and whose top
 lies above the hemisphere radius or the horizontal half-extent (below the
 hemisphere: with no such shielding layer in between) is no warning but a
 `BackendCapabilityError` since 2026.11 (user decision Q23 and audit
-D2A-03: `fem` misplaces the current, mostly far too low), as are electrodes touching a layer the hemisphere does not
-reach, a strip deeper than half its length, a ring deeper than its
-radius and a driven `MeshElectrode` (the closed forms outside their
-range). See the [fem engine page](../explanation/engines/fem.md#guards)
+D2A-03: `fem` misplaces the current, mostly far too low), as are
+electrodes touching a layer the hemisphere does not reach, a strip deeper
+than half its length, a ring deeper than its diameter and a driven
+`MeshElectrode` (the closed forms outside their range). See the [fem engine page](../explanation/engines/fem.md#guards)
 for the measured numbers. **Remedy:** use an integral-equation backend
 for such worlds; `fem` is experimental.
 
