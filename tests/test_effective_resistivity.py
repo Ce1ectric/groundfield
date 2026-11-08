@@ -26,11 +26,14 @@ so every earlier call keeps its value bit for bit.
 
 from __future__ import annotations
 
+import ast
 import inspect
 import itertools
 import math
+import re
 import warnings
 from collections.abc import Mapping
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -38,6 +41,8 @@ import pytest
 import groundfield as gf
 
 pytestmark = pytest.mark.finding("10.84")  # user decision Q6
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 W0, BETA = 0.13, 0.8
 
@@ -567,6 +572,50 @@ def test_the_preset_is_checked_for_homogeneous_soil_too() -> None:
         gf.effective_resistivity(soil, preset="station", w0=-0.1)
     with pytest.raises(ValueError, match="effective_resistivity: beta "):
         gf.effective_resistivity(soil, preset="station", beta=math.nan)
+
+
+def _group_table(text: str) -> dict[str, tuple[float, float]]:
+    """The ``lv_group`` presets of a Markdown table whose rows start with
+    the group number and hold ``w0, beta`` per penetration 5/10/20/40 %."""
+    rows = {}
+    for line in text.splitlines():
+        match = re.match(r"\|\s*([1-4])\b[^|]*\|(.*)\|\s*$", line.strip())
+        if match:
+            cells = [cell.strip() for cell in match.group(2).split("|")]
+            assert len(cells) == 4, line
+            for penetration, cell in zip((5, 10, 20, 40), cells, strict=True):
+                w0, beta = (float(value) for value in cell.split(","))
+                rows[f"lv_group_{match.group(1)}_p{penetration:02d}"] = (w0, beta)
+    return rows
+
+
+def test_the_documented_tables_hold_the_presets() -> None:
+    """The table of the attribute docstring and the one of the Soil page
+    show the values of the mapping (they are re-derived together)."""
+    # user decision Q36
+    import groundfield.soil.effective as module
+
+    groups = {k: v for k, v in EXPECTED_PRESETS.items() if k.startswith("lv_group")}
+    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    for index, node in enumerate(tree.body):
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "EFFECTIVE_RESISTIVITY_PRESETS"
+        ):
+            docstring = tree.body[index + 1].value.value  # type: ignore[attr-defined]
+            break
+    else:  # pragma: no cover - the assignment is missing
+        raise AssertionError("EFFECTIVE_RESISTIVITY_PRESETS not found")
+    assert _group_table(docstring) == groups
+    assert '"lv_network"`` (0.13, 0.8)' in docstring
+    assert '"station"`` (0.06, 1.3)' in docstring
+    page = (REPO_ROOT / "docs" / "reference" / "api" / "soil.md").read_text(
+        encoding="utf-8"
+    )
+    assert _group_table(page) == groups
+    assert re.search(r'\| `"lv_network"` \(default\) \|[^|]*\| 0\.13 \| 0\.8 \|', page)
+    assert re.search(r'\| `"station"` \|[^|]*\| 0\.06 \| 1\.3 \|', page)
 
 
 def test_presets_are_exported_from_the_soil_package() -> None:

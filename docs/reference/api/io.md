@@ -32,20 +32,24 @@ resistivity of the AP1 catalogue,
 
 $$
 \rho_\text{eff} = \rho_1^{\,1-w}\,\rho_2^{\,w}, \qquad
-w = w_0\,(h_1/10\ \mathrm{m})^{-\beta}, \quad w_0 = 0.13,\ \beta = 0.8,
+w = w_0\,(h_1/10\ \mathrm{m})^{-\beta},
 $$
 
-the value the AP2 network model gives a bus
-(`gf.effective_resistivity(soil)`, see
-[Soil](soil.md#effective-resistivity)). A vector fit therefore passes
-`rho_at_fit=gf.effective_resistivity(soil)`, and a standard form is
-fitted over the effective resistivities of the solved soils,
-`gf.rho_f_standard_from_results(results, [gf.effective_resistivity(r.soil) for r in results])`;
-both kinds of `BusType` then pair with the same `Bus`. Every document
-records the convention as `metadata["rho_definition"] =
-"effective_resistivity"` (documents of 0.15.0 have no such entry). The
-exporter cannot check the number it is given; describe the layers, and
-$w_0$, $\beta$ when they are not the AP1 values, in `soil_summary`.
+with the weights $(w_0, \beta)$ of the electrode class: $w_0 = 0.13$,
+$\beta = 0.8$ of the LV networks by default, or a preset of the AP2
+hand-over such as `"station"` (0.06, 1.3) or `"lv_group_2_p10"`
+(`gf.effective_resistivity(soil, preset=...)`, see
+[Soil](soil.md#effective-resistivity)). It is the value the AP2 network
+model gives a bus. A vector fit therefore passes
+`rho_at_fit=gf.effective_resistivity(soil, preset=...)`, and a standard
+form is fitted over the effective resistivities of the solved soils,
+`gf.rho_f_standard_from_results(results, [gf.effective_resistivity(r.soil, preset=...) for r in results])`;
+both kinds of `BusType` then pair with a `Bus` whose resistivity uses the
+same preset. Every document records the convention as
+`metadata["rho_definition"] = "effective_resistivity"` (documents of
+0.15.0 have no such entry). The exporter cannot check the number it is
+given, nor the weights behind it; describe the layers, and the preset
+(or $w_0$, $\beta$) when it is not the default, in `soil_summary`.
 
 Before a `BusType` is written, the exported formula (with its rounded
 coefficients) is checked for passivity, $\operatorname{Re}Z \ge 0$ from
@@ -93,7 +97,8 @@ not exported.
 A station earth (ring and rod) in two-layer soil, swept over the
 upper-layer resistivity $\rho_1$ (fixed $\rho_2 = 100\,\Omega\,\mathrm{m}$,
 $h_1 = 5\,\mathrm{m}$), fitted with the standard form over the effective
-resistivities of the four soils and exported:
+resistivities of the four soils (weights of the `"station"` preset) and
+exported:
 
 ```python
 import groundfield as gf
@@ -108,35 +113,41 @@ def station(rho_1):
 
 engine = gf.create_engine(frequencies=[50.0, 1000.0])
 results = [engine.solve(station(rho_1)) for rho_1 in (30.0, 100.0, 300.0, 1000.0)]
-rhos = [gf.effective_resistivity(result.soil) for result in results]  # 39.4 ... 593.8 Ohm m
-fit = gf.rho_f_standard_from_results(results, rhos, max_relative_tol=0.15)  # input impedance
+rhos = [gf.effective_resistivity(r.soil, preset="station") for r in results]  # 35.8 ... 711.6 Ohm m
+fit = gf.rho_f_standard_from_results(results, rhos, max_relative_tol=0.10)  # input impedance
 
 path = gf.save_bustype_json(
-    fit, "station.bustype.json", name="Station", system_type="Substation", voltage_level=20.0
+    fit, "station.bustype.json", name="Station", system_type="Substation", voltage_level=20.0,
+    soil_summary="TwoLayerSoil(rho_1 sweep, rho_2=100, h_1=5); rho: preset 'station'",
 )
 spec = gf.load_bustype_json(path)
-print(gf.fit_quality_summary(spec))      # ... max_rel=13.41%, quantity=input
+print(gf.fit_quality_summary(spec))      # ... max_rel=7.48%, quantity=input
 
 Z_formula = gf.evaluate_spec(spec, frequencies=[50.0], rho=rhos[3])[0]   # bus at rho_eff
 Z_field = results[3].input_impedance()[0]
 assert abs(Z_formula - Z_field) / abs(Z_field) <= fit.max_relative + 1e-9
 assert spec.metadata["rho_definition"] == "effective_resistivity"
-assert abs(rhos[3] - 593.82) < 0.01 and fit.max_relative < 0.15
+assert abs(rhos[3] - 711.64) < 0.01 and fit.max_relative < 0.10
 ```
 
 <!-- doctest-check
-assert abs(fit.max_relative - 0.1341) < 5e-4
+assert abs(fit.max_relative - 0.0748) < 5e-4
 assert rhos[1] == 100.0     # rho_1 = rho_2: homogeneous, exact
+lv_network = gf.rho_f_standard_from_results(
+    results, [gf.effective_resistivity(r.soil) for r in results], max_relative_tol=0.15
+)
+assert abs(lv_network.max_relative - 0.1341) < 5e-4
 -->
 
-The station is compact and lies in the upper layer, so its impedance
-follows $\rho_1$ more closely than $\rho_\text{eff}$, whose weights are
-the calibration of the AP1 LV networks: the standard form fits it to
-13.4 % over $\rho_\text{eff}$, against 3.9 % over $\rho_1$. The `BusType`
-is still fitted over $\rho_\text{eff}$, because the bus it is paired with
-carries $\rho_\text{eff}$; check `max_relative`, and see
-[Soil](soil.md#effective-resistivity) for the validity of
-$\rho_\text{eff}$. Without inductive conductors the impedance does not
+The station is compact and lies in the upper layer, so it sees less of
+the lower layer than an LV network: the standard form fits it to 7.5 %
+over $\rho_\text{eff}$ with the station weights, against 13.4 % with the
+default weights of the LV networks. Over $\rho_1$ it would fit to 3.9 %,
+because at fixed $\rho_2$ the constant $k_0$ absorbs the lower layer, but
+the bus the `BusType` is paired with carries $\rho_\text{eff}$, here with
+the station preset. Check `max_relative`, and see
+[Soil](soil.md#effective-resistivity) for the presets and the validity
+of $\rho_\text{eff}$. Without inductive conductors the impedance does not
 depend on frequency, and the frequency coefficients $k_2 \ldots k_5$ come
 out at round-off level. Tutorial T05 shows the export of a
 frequency-dependent system, including the vector-fit path with
