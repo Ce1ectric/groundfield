@@ -207,3 +207,25 @@ def test_valid_world_still_solves_unchanged() -> None:
     res = _solve(w)
     total = sum(v[0] for v in res.electrode_currents.values())
     assert abs(total - 2.0) < 1e-12
+
+
+@pytest.mark.finding("10.66")
+@pytest.mark.parametrize("backend", ["image", "mom", "mom_sommerfeld", "fem"])
+@pytest.mark.parametrize("entry", ["engine", "world"])
+def test_a_world_without_a_source_raises_in_every_backend(
+    backend: str, entry: str
+) -> None:
+    """One rule for every backend and entry point.
+
+    Up to audit round 2 (A2S-05) Engine.solve with fem returned zeros while
+    every other backend, and World.solve with fem, raised; the changelog
+    claimed the world stayed solvable through Engine.solve.
+    """
+    # audit A2S-05
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=300.0, h_1=2.0))
+    gf.create_electrode(w, "rod", name="r", position=(0.0, 0.0, 0.5), length=1.0)
+    engine = gf.Engine(backend=backend, segment_length=0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ValueError, match="no current source"):
+            engine.solve(w) if entry == "engine" else w.solve(engine)
