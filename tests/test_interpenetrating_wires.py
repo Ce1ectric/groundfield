@@ -54,7 +54,9 @@ def test_coincident_leads_have_the_mutual_of_touching_wires() -> None:
     # Segments of the two leads that meet end to end keep the exact coaxial
     # closed form (as chain neighbours do), O(1e-9 H) each from the 1 cm
     # offset of touching wires: 2e-4 of the total.
-    assert mutual == pytest.approx(parallel_segments_mutual(50.0, 0.01), rel=1e-3)
+    assert mutual == pytest.approx(
+        parallel_segments_mutual(50.0, 0.01), rel=1e-3, abs=0
+    )
 
 
 # stream DOC-B
@@ -168,4 +170,4 @@ def test_loop_reference_applies_the_same_guard() -> None:
     moved = seg[3].copy()
     moved[:, 1] = 0.008
     expected = _parallel_filaments_mutual(seg[1, 0], seg[1, 1], moved[0], moved[1])
-    assert L[1, 3] == pytest.approx(expected, rel=1e-12)
+    assert L[1, 3] == pytest.approx(expected, rel=1e-12, abs=0)

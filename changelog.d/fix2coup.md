@@ -92,3 +92,21 @@
   about 1e-4 just above that length up to tens of per cent for km-long lumped
   conductors; segments below it keep the historic rule bit for bit. Golden
   cases: none. Tests: `tests/test_sommerfeld_long_segments.py`.
+- ⚠ **Neumann inductance of close, non-parallel segment pairs (10.46, found
+  in audit round 2 while attacking the guard above):** pairs that miss the
+  closed forms — nearly parallel wires close together whose directions
+  differ by more than 1e-9 in cos (about 0.003°), crossing and skew pairs —
+  were integrated with the 16×16 rule, which only resolves 1/r for pairs
+  apart by about half their length: two 5 m segments with aligned ends and
+  1e-5 … 1e-3 rad between them were +12 % at 10 cm and +200 … +250 % at
+  1 cm, −19 % at 1 mm with offset ends; crossing pairs about −1 %, skew pairs
+  1 cm apart −2.3 … +0.5 %. With `touching="exact"` (the default) such pairs
+  are now integrated semi-analytically (inner integral in closed form, outer
+  Gauss–Legendre panels graded towards the near-singular points; ≤ 5e-11
+  against an adaptive reference); `touching="quadrature"` keeps the 0.15.0
+  numbers. Moves every inductive result with such pairs — conductors from
+  real (non-axis-parallel) geometries running close together, the
+  generator's in-line probe lead (starts 1 cm beside the feed lead, ends on
+  its axis): feed–probe mutual 92.8 → 91.7 µH, the value of touching wires
+  over the overlap plus the end-to-end coupling (91.65 µH). Golden cases: none.
+  Tests: `tests/test_neumann_close_pairs.py`.

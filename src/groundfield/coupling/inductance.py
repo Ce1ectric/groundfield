@@ -73,6 +73,12 @@ integral of such a pair diverges (two coincident 50 m leads read
 +587j Ω at 50 Hz, a TN network with drops along its PEN main had a
 negative input reactance).
 
+**Close pairs.** Nearly parallel wires close together whose directions
+differ by more than the closed form's tolerance, crossing and skew pairs
+are integrated semi-analytically with ``touching="exact"``; the 16x16
+rule was +12 % at 10 cm and up to +250 % at 1 cm for two 5 m segments
+(audit round 2 of the calendar release).
+
 **Touching segments** (``touching=``). The Neumann integrand is
 log-singular for segments that share an end point (bends, chain
 neighbours) or lie on one axis. ``"exact"`` (the default since the
@@ -551,6 +557,122 @@ def _parallel_filaments_mutual(
     return M
 
 
+#: A non-parallel pair whose closest quadrature nodes are nearer than this
+#: fraction of the longer segment is integrated semi-analytically with
+#: ``touching="exact"``. Measured against an adaptive reference, the 16x16
+#: rule is at round-off from half a segment length on (2.6e-7 at 0.2,
+#: 1.4e-4 at 0.1, 19 % at 2e-4 for two 5 m segments 1 mm apart and
+#: 1e-4 rad inclined; crossing pairs 1-4.5 %, skew pairs 1 cm apart
+#: 0.5-2.3 %).
+_CLOSE_PAIR_FRACTION = 0.5
+
+
+def _close_pair_mutual(
+    p1_a: np.ndarray, p2_a: np.ndarray, p1_b: np.ndarray, p2_b: np.ndarray
+) -> float:
+    """Neumann mutual of two close straight filaments, semi-analytic (H).
+
+    The inner integral over segment *b* is exact,
+    $\\int_0^{\\ell_b} dt/|P - B(t)| = \\operatorname{asinh}((\\ell_b -
+    t_0)/\\rho) + \\operatorname{asinh}(t_0/\\rho)$ with $t_0$ the projection
+    of the point $P(s)$ of segment *a* on *b* and $\\rho$ its distance from
+    *b*'s line; the outer integral over *a* uses 16-point Gauss–Legendre
+    panels graded geometrically, down to the local distance $\\rho$,
+    towards the points where $P(s)$ passes an end of *b* or comes
+    closest to *b*'s line, and towards the ends of *a*. Accurate to
+    round-off for pairs that the 16x16 rule cannot resolve (nearly
+    parallel wires close together, crossing and skew pairs); not for
+    overlapping coaxial filaments, whose integral diverges.
+    """
+    da = p2_a - p1_a
+    db = p2_b - p1_b
+    la = float(np.linalg.norm(da))
+    lb = float(np.linalg.norm(db))
+    ua = da / la
+    ub = db / lb
+    dot = float(ua @ ub)
+    if dot == 0.0:
+        return 0.0
+    v0 = p1_a - p1_b
+    c0 = float(v0 @ ub)  # t0(s) = c0 + s dot
+    floor = 1e-30 * max(la, lb)
+
+    def rho_at(x: float) -> float:
+        v = v0 + x * ua
+        return max(float(np.linalg.norm(v - (c0 + x * dot) * ub)), floor)
+
+    points = {0.0, la}
+    for target in (0.0, lb):
+        x = (target - c0) / dot
+        if 0.0 < x < la:
+            points.add(x)
+    den = 1.0 - dot * dot
+    if den > 1e-14:
+        x = (dot * c0 - float(v0 @ ua)) / den  # closest approach of the lines
+        if 0.0 < x < la:
+            points.add(x)
+    marks = sorted(points)
+    edges = [0.0]
+    for lo, hi in zip(marks[:-1], marks[1:], strict=True):
+        if hi <= lo:
+            continue
+        mid = 0.5 * (lo + hi)
+        left, w = [lo], rho_at(lo)
+        while left[-1] + w < mid:
+            left.append(left[-1] + w)
+            w *= 2.0
+        right, w = [hi], rho_at(hi)
+        while right[-1] - w > mid:
+            right.append(right[-1] - w)
+            w *= 2.0
+        edges += left[1:] + [mid] + right[::-1]
+    e = np.asarray(edges)
+    lo = e[:-1, None]
+    half = 0.5 * (e[1:, None] - lo)
+    x = (lo + half * (_GL_NODES[None, :] + 1.0)).ravel()
+    w = (half * _GL_WEIGHTS[None, :]).ravel()
+    v = v0[None, :] + x[:, None] * ua[None, :]
+    t0 = c0 + x * dot
+    rho = np.linalg.norm(v - t0[:, None] * ub[None, :], axis=1)
+    rho = np.maximum(rho, floor)
+    g = np.arcsinh((lb - t0) / rho) + np.arcsinh(t0 / rho)
+    return MU_0 / (4.0 * math.pi) * dot * float(w @ g)
+
+
+def _needs_close_rule(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    r_min: float,
+) -> bool:
+    """Whether a quadrature pair gets :func:`_close_pair_mutual`.
+
+    Close (nearest quadrature nodes within :data:`_CLOSE_PAIR_FRACTION`
+    of the longer segment), not sharing an end point (closed forms) and
+    not coaxial (overlapping coaxial filaments diverge; non-overlapping
+    ones have a closed form).
+    """
+    da = p2_a - p1_a
+    db = p2_b - p1_b
+    la = float(np.linalg.norm(da))
+    lb = float(np.linalg.norm(db))
+    longer = max(la, lb)
+    if r_min >= _CLOSE_PAIR_FRACTION * longer:
+        return False
+    tol = _TOUCH_TOL_REL * longer
+    for va in (p1_a, p2_a):
+        for vb in (p1_b, p2_b):
+            if float(np.linalg.norm(va - vb)) <= tol:
+                return False
+    ua = da / la
+    perp = [
+        float(np.linalg.norm(q - p1_a - float((q - p1_a) @ ua) * ua))
+        for q in (p1_b, p2_b)
+    ]
+    return max(perp) > tol
+
+
 def neumann_mutual(
     p1_a: np.ndarray,
     p2_a: np.ndarray,
@@ -575,9 +697,15 @@ def neumann_mutual(
        their closed forms (Grover 1946; see the module docstring).
     3. Otherwise the Neumann double integral is evaluated by 16×16
        Gauss–Legendre quadrature: exact to round-off for pairs
-       separated by more than about a tenth of their length, but only
+       separated by more than about half their length, but only
        to -0.3 % ... +0.8 % for touching pairs (review pass 10,
-       finding 10.46), which is what ``touching="exact"`` fixes.
+       finding 10.46), and up to +250 % for nearly parallel wires 1 cm
+       apart (audit round 2 of the calendar release). With
+       ``touching="exact"`` such close pairs — nearest quadrature nodes
+       within half the longer segment, no shared end point, not coaxial
+       — are integrated semi-analytically instead (inner integral in
+       closed form, outer panels graded towards the near-singular
+       points; :func:`_close_pair_mutual`).
 
     The kernel $1/r$ is clamped at ``min_distance`` to suppress the
     integrable singularity for segments that touch — physically the
@@ -645,6 +773,10 @@ def neumann_mutual(
     pts_b = p1_b[None, :] + s_nodes[:, None] * db[None, :]
     diff = pts_a[:, None, :] - pts_b[None, :, :]
     r = np.linalg.norm(diff, axis=2)
+    if touching == "exact" and _needs_close_rule(
+        p1_a, p2_a, p1_b, p2_b, float(r.min())
+    ):
+        return _close_pair_mutual(p1_a, p2_a, p1_b, p2_b)
     np.maximum(r, min_distance, out=r)
     inv_r = 1.0 / r
     integral = float(np.einsum("i,j,ij->", w_nodes, w_nodes, inv_r))
@@ -995,6 +1127,7 @@ def _neumann_quadrature_batch(
     dots: np.ndarray,
     *,
     min_distance: float = 1e-6,
+    r_min_out: np.ndarray | None = None,
 ) -> np.ndarray:
     """Vectorised 16×16 Gauss–Legendre Neumann integral for K pairs.
 
@@ -1017,6 +1150,8 @@ def _neumann_quadrature_batch(
     # diff[k, i, j, :] = pts_a[i, :] - pts_b[k, j, :]
     diff = pts_a[None, :, None, :] - pts_b[:, None, :, :]  # (K, 16, 16, 3)
     r = np.linalg.norm(diff, axis=-1)  # (K, 16, 16)
+    if r_min_out is not None:
+        r_min_out[:] = r.min(axis=(1, 2))
     np.maximum(r, min_distance, out=r)
     inv_r = 1.0 / r
     # integral[k] = sum_{i,j} w_i * w_j * inv_r[k, i, j]
@@ -1036,12 +1171,15 @@ def _offdiag_row(
     ub_b: np.ndarray,
     lb_b: np.ndarray,
     db_b: np.ndarray,
+    close_rule: bool = False,
 ) -> np.ndarray:
     """Neumann mutuals of one segment against K partners (vectorised).
 
     Closed form for parallel pairs on distinct axes, 16x16
     Gauss–Legendre for the rest — exactly the historic per-row
-    assembly of :func:`build_inductance_matrix`.
+    assembly of :func:`build_inductance_matrix`. With ``close_rule``
+    (``touching="exact"``), close non-parallel pairs are integrated
+    semi-analytically (:func:`_close_pair_mutual`).
     """
     dots = ub_b @ ua_a  # (K,)
     M_par, par_mask = _parallel_filaments_mutual_batch(
@@ -1057,6 +1195,7 @@ def _offdiag_row(
     npar_mask = ~par_mask
     if npar_mask.any():
         ks = np.where(npar_mask)[0]
+        r_min = np.empty(ks.size) if close_rule else None
         M_row[ks] = _neumann_quadrature_batch(
             p1_a,
             da_a,
@@ -1067,7 +1206,16 @@ def _offdiag_row(
             lb_b[ks],
             ub_b[ks],
             dots[ks],
+            r_min_out=r_min,
         )
+        if close_rule:
+            near = r_min < _CLOSE_PAIR_FRACTION * np.maximum(la_a, lb_b[ks])
+            p2_a = p1_a + da_a
+            for n in np.flatnonzero(near & (dots[ks] != 0.0)):
+                k = ks[n]
+                p2_b = p1_b[k] + db_b[k]
+                if _needs_close_rule(p1_a, p2_a, p1_b[k], p2_b, float(r_min[n])):
+                    M_row[k] = _close_pair_mutual(p1_a, p2_a, p1_b[k], p2_b)
     return M_row
 
 
@@ -1283,7 +1431,15 @@ def _inductance_blocks(
         slc = slice(i + 1, M)
         if want_direct:
             M_pri = _offdiag_row(
-                p1[i], ua[i], float(la[i]), da[i], p1[slc], ua[slc], la[slc], da[slc]
+                p1[i],
+                ua[i],
+                float(la[i]),
+                da[i],
+                p1[slc],
+                ua[slc],
+                la[slc],
+                da[slc],
+                close_rule=touching == "exact",
             )
             if touching == "exact":
                 _apply_touching_exact(
@@ -1314,6 +1470,7 @@ def _inductance_blocks(
                 ua_img[slc],
                 la_img[slc],
                 p2_img[slc] - p1_img[slc],
+                close_rule=touching == "exact",
             )
             if touching == "exact":
                 _apply_touching_exact(
