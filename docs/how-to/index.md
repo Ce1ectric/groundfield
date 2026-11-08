@@ -14,6 +14,7 @@ are complete and are executed by the test suite
 | [Speed up large studies](speed-up-large-studies.md) | segment budget, kernel and earth-return choices, many excitations |
 | [Plot results](plot-results.md) | geometry, surface potential, profiles, cross-sections, current sharing, sweeps |
 | [Model the inductive coupling of cables and leads](inductive-coupling.md) | Neumann inductance, earth-return models, skin effect |
+| [Assess touch voltages](assess-touch-voltages.md) | touch points at accessible metal parts, transferred potential, open-air grids, EN 50522 limits |
 | [Export to CSV, VTK and ParaView](export-csv-vtk-paraview.md) | tables with provenance, geometry and field files |
 | [Work with OpenStreetMap offline](osm-offline.md) | Overpass cache, building filters, coordinates |
 | [Read and act on warnings](warnings-and-diagnostics.md) | `diagnose()`, the common warnings and what to do about them |

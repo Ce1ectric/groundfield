@@ -255,22 +255,53 @@ def test_en50522_docstrings_cite_the_current_edition() -> None:
 
 
 @pytest.mark.finding("10.42")
-def test_en50522_long_duration_allows_80_volt() -> None:
-    """EN 50522:2022 (after Table B.4): 80 V for durations well above 10 s."""
-    assert permissible_touch_voltage_en50522(3600.0, long_duration=True) == 80.0
-    assert permissible_touch_voltage_en50522(math.inf, long_duration=True) == 80.0
-    # The default keeps the end value of Table B.4 beyond 10 s.
-    assert permissible_touch_voltage_en50522(3600.0) == 85.0
+@pytest.mark.parametrize("t_f", [10.000001, 10.5, 60.0, 3600.0, 1e6, math.inf])
+def test_en50522_beyond_ten_seconds_is_80_volt(t_f: float) -> None:
+    """EN 50522:2022 as published: Table B.4 (the curve of Figure 8) up to
+    10 s, 80 V beyond.
+
+    The curve of Figure 8 is not defined beyond 10 s; the note to Figure 8
+    (5.4.1) and the text after Table B.4 (B.3) allow 80 V for current-flow
+    durations considerably longer than 10 s. Resonant-earthed networks carry
+    the earth-fault current for such durations, so every ``t_f > 10 s``,
+    including a fault that is not cleared (``math.inf``), returns 80 V (below
+    the 85 V end value of the table, on the safe side). The base returned
+    85 V and rejected ``math.inf`` without a keyword.
+    """
+    # user decision Q4
+    assert permissible_touch_voltage_en50522(t_f) == 80.0
+    assert permissible_touch_voltage_en50522(10.0) == 85.0  # last row of Table B.4
 
 
 @pytest.mark.finding("10.42")
-def test_en50522_long_duration_needs_more_than_ten_seconds() -> None:
-    with pytest.raises(ValueError, match="10 s"):
-        permissible_touch_voltage_en50522(0.5, long_duration=True)
-    with pytest.raises(ValueError, match="10 s"):
-        permissible_touch_voltage_en50522(10.0, long_duration=True)
-    with pytest.raises(ValueError, match="long_duration"):
-        permissible_touch_voltage_en50522(math.inf)
+def test_en50522_has_no_long_duration_keyword() -> None:
+    """The 80 V rule is the default beyond 10 s; the ``long_duration`` keyword
+    of earlier development snapshots is gone (it never shipped)."""
+    # user decision Q4
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    with pytest.raises(TypeError, match="long_duration"):
+        permissible_touch_voltage_en50522(3600.0, long_duration=True)
+    with pytest.raises(TypeError, match="long_duration"):
+        u_vtp(3600.0, long_duration=True)
+
+
+@pytest.mark.finding("10.42")
+def test_en50522_docstring_cites_the_clauses_of_the_80_volt_rule() -> None:
+    """The docstring names where the rule comes from: Figure 8 and its note
+    (5.4.1), Table B.4 and the text after it (B.3), and B.4."""
+    # user decision Q4
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    doc = permissible_touch_voltage_en50522.__doc__
+    for clause in ("Figure 8", "5.4.1", "Table B.4", "B.3", "80 V", "math.inf"):
+        assert clause in doc, clause
+    assert "long_duration" not in doc
+    assert "B.4" in u_vtp.__doc__ and "long_duration" not in u_vtp.__doc__
 
 
 def test_en50522_strictly_decreasing_inside_grid() -> None:
@@ -281,10 +312,22 @@ def test_en50522_strictly_decreasing_inside_grid() -> None:
     assert (diffs <= 1e-9).all()
 
 
-def test_en50522_clamped_outside_grid() -> None:
-    """Outside the grid the table endpoints are returned unchanged."""
+@pytest.mark.finding("10.42")
+def test_en50522_never_increases_with_the_fault_duration() -> None:
+    """From 1 ms to an uncleared fault the permissible value never rises
+    (725 V clamp below 50 ms, Table B.4, 80 V beyond 10 s)."""
+    # user decision Q4
+    ts = [*np.geomspace(1e-3, 1e4, 400), math.inf]
+    us = np.array([permissible_touch_voltage_en50522(float(t)) for t in ts])
+    assert np.all(np.diff(us) <= 1e-9)
+    assert us[0] == 725.0 and us[-1] == 80.0
+
+
+def test_en50522_clamped_below_the_table() -> None:
+    """Below 50 ms the first row of Table B.4 is returned (on the safe side:
+    the curve rises towards shorter durations)."""
     assert permissible_touch_voltage_en50522(1e-3) == 725.0
-    assert permissible_touch_voltage_en50522(1e6) == 85.0
+    assert permissible_touch_voltage_en50522(0.05) == 725.0
 
 
 def test_en50522_rejects_invalid_time() -> None:
@@ -294,6 +337,10 @@ def test_en50522_rejects_invalid_time() -> None:
         permissible_touch_voltage_en50522(-0.1)
     with pytest.raises(ValueError, match="t_clear_s"):
         permissible_touch_voltage_en50522(float("nan"))
+    with pytest.raises(ValueError, match="t_clear_s"):
+        permissible_touch_voltage_en50522(-math.inf)
+    with pytest.raises(TypeError):  # a duration is a number, not text (as in 0.15.0)
+        permissible_touch_voltage_en50522("20")
 
 
 def test_en50522_loglog_interpolation_in_geometric_mean() -> None:
@@ -395,9 +442,22 @@ def test_prospective_touch_voltage_validates_inputs() -> None:
     ts = np.geomspace(0.05, 10.0, 40)
     vals = [u_vtp(float(t), R_F1=1000.0, rho_s=100.0) for t in ts]
     assert np.all(np.diff(vals) <= 1e-9)
-    # Long-duration faults: 80 V plus the 10 s body current (50 mA) * R_A.
-    assert u_vtp(3600.0, R_F1=1000.0, long_duration=True) == pytest.approx(
-        80.0 + 0.050 * 1000.0
+
+
+@pytest.mark.finding("10.42")
+@pytest.mark.parametrize("t_f", [20.0, 3600.0, math.inf])
+def test_prospective_touch_voltage_beyond_ten_seconds_uses_80_volt(t_f: float) -> None:
+    """B.4 with the U_Tp of Figure 8: beyond 10 s, 80 V plus the body current
+    of the last row of Table B.1 (50 mA) times R_A / HF."""
+    # user decision Q4
+    from groundfield.postprocess.safety import (
+        permissible_prospective_touch_voltage_en50522 as u_vtp,
+    )
+
+    assert u_vtp(t_f) == 80.0
+    assert u_vtp(t_f, R_F1=1000.0) == pytest.approx(80.0 + 0.050 * 1000.0, rel=1e-12)
+    assert u_vtp(t_f, R_F1=1000.0, rho_s=500.0, HF=0.8) == pytest.approx(
+        80.0 + 0.050 / 0.8 * (1000.0 + 750.0), rel=1e-12
     )
 
 

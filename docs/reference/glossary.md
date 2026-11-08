@@ -70,9 +70,11 @@ practice. Names of releases up to 0.15.0 that were German (`kvs`,
 | electrode impedance | Erdungsimpedanz eines Erders | | cluster potential over one electrode's leakage current (`grounding_impedance`) |
 | grounding resistance, spreading resistance | Erdungswiderstand, Ausbreitungswiderstand | $R_E$, $R_A$ | real part of the grounding impedance at low frequency |
 | mutual grounding impedance | Koppelimpedanz | $Z_{ij}$ | potential of cluster $i$ per ampere leaking from cluster $j$ (`solve_mutual_matrix`) |
-| touch voltage | Berührungsspannung | $U_T$ | EPR minus the surface potential 1 m from the touched part (`touch_voltage`) |
+| touch voltage | Berührungsspannung | $U_T$ | potential of the touched part minus the surface potential 1 m from it (`touch_voltage_at_part`; `touch_voltage` with the electrode as the touched part) |
+| touch point | Berührungspunkt | | an accessible metal part above ground bonded to the earthing system: station housing or door, mast, fence, cable cabinet, service connection box (`touch_voltage_at_part`) |
+| transferred potential | Potentialverschleppung | | potential of an earthing system carried by a connected conductor (cable screen, PEN, pipe) into an area of low potential rise (EN 50522, 3.6; `touch_voltage_at_part(bonded_to=<junction>)`) |
 | prospective touch voltage | Leerlauf-Berührungsspannung (prospektive B.) | $U_{vT}$ | open-circuit touch voltage, before body and footwear resistances (EN 50522, Annex B) |
-| permissible touch voltage | zulässige Berührungsspannung | $U_{Tp}$ | EN 50522 Table B.4 as a function of the fault duration |
+| permissible touch voltage | zulässige Berührungsspannung | $U_{Tp}$ | EN 50522 Figure 8 / Table B.4 up to 10 s of fault duration, 80 V beyond |
 | step voltage | Schrittspannung | $U_S$ | surface potential difference over one step of 1 m (`step_voltage`) |
 | fault duration | Fehlerdauer | $t_F$ | s |
 | current sharing | Stromaufteilung | | currents of the electrodes and conductors (`cluster_current_balance`) |
@@ -107,7 +109,8 @@ practice. Names of releases up to 0.15.0 that were German (`kvs`,
 
 Auxiliary index for German search terms: Aufteilungsfaktor → split
 factor; Ausbreitungswiderstand → spreading resistance; Banderder → strip
-electrode; Berührungsspannung → touch voltage; Betonummantelung →
+electrode; Berührungspunkt → touch point;
+Berührungsspannung → touch voltage; Betonummantelung →
 concrete encasement; Bezugserde → remote earth; Durchdringung →
 penetration; EFH → single-family house; Eindringtiefe → skin depth;
 Eingangsimpedanz → input impedance; Erder → earth electrode;
@@ -121,6 +124,7 @@ connection box; Hilfserder → auxiliary electrode; Kabelschirm → cable
 screen; KVS → cable distribution cabinet; Leerlauf-Berührungsspannung →
 prospective touch voltage; Maschenerder → mesh earth electrode; ONS →
 MV/LV substation; Ortsnetz → LV network; PEN-Leiter → PEN conductor;
+Potentialverschleppung → transferred potential;
 Reduktionsfaktor → reduction factor; Ringerder → ring earth electrode;
 Schichtdicke → layer thickness; Schrittspannung → step voltage; Sonde →
 probe; spezifischer Erdwiderstand → soil resistivity; Staberder,

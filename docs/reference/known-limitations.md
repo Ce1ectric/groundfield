@@ -133,14 +133,24 @@ shows what agrees with independent references and how well.
 ## Post-processing and export
 
 - **EN 50522 permissible touch voltage** is interpolated in Table B.4 for
-  fault durations from 50 ms to 10 s and clamped outside; 80 V for
-  long-duration faults needs `long_duration=True`.
+  fault durations from 50 ms to 10 s and clamped to 725 V below 50 ms;
+  every duration beyond 10 s, including an uncleared fault (`math.inf`),
+  gets 80 V (the curve of Figure 8 ends at 10 s), so the value steps from
+  85 V at 10 s to 80 V just above.
 - **Touch-voltage envelope** samples a ring of directions around the
-  footprint and the centres of closed meshes — of grids, rings and the
-  generated mesh foundations (bonded wires, one per wire line), whose
-  cells lie under the building: pass `interior=False` there. The inside
-  of a closed building outline (a closed polyline) is sampled only with
-  `interior=True`.
+  electrode's footprint, a proxy for touched parts that are not known;
+  define the accessible metal parts with `touch_voltage_at_part` where
+  they are. It samples nothing inside the footprint unless asked:
+  `interior="meshes"` adds the centres of the meshes of grids, of rings
+  and of the generated mesh foundations (bonded wires, one per wire
+  line), `interior=True` also the inside of a closed polyline. The modes
+  cannot see buildings: use them where the inside is accessible open
+  ground (a substation yard), not for foundations or a ring around a
+  housing or a mast.
+- **Touch points** (`touch_voltage_at_part`) take the part's potential
+  from the electrode or junction it is bonded to; a part bonded to a
+  point along a distributed conductor between two nodes needs a junction
+  there.
 - **Reduced models.** The standard form is a fixed ansatz — check
   `max_relative` (warning above 5 %). A vector fit belongs to one soil
   (`rho_at_fit`). Passivity is checked from 0 Hz to twice the highest

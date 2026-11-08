@@ -148,11 +148,12 @@ def test_grid_envelope_covers_the_one_metre_offset_curve() -> None:
 
 
 @pytest.mark.finding("10.21")
-def test_grid_envelope_includes_the_mesh_centres() -> None:
+def test_grid_envelope_includes_the_mesh_centres_with_interior_meshes() -> None:
+    # user decision Q3: mesh centres on request (open-air grids)
     w = _grid_world()
     res = _solve(w)
     angles, env, feet = touch_voltage_envelope(
-        res, w, electrode="g1", n_angles=24, return_points=True
+        res, w, electrode="g1", n_angles=24, interior="meshes", return_points=True
     )
     assert feet.shape == (24 + 16, 3)
     assert angles.shape == env.shape == (40,)
@@ -161,21 +162,21 @@ def test_grid_envelope_includes_the_mesh_centres() -> None:
     assert got == centres
     u_centres = _ue(res, "g1") - res.potential(feet[24:])
     np.testing.assert_allclose(env[24:], u_centres, rtol=1e-12)
-    without = touch_voltage_envelope(
-        res, w, electrode="g1", n_angles=24, interior=False
-    )
+    without = touch_voltage_envelope(res, w, electrode="g1", n_angles=24)
     assert without[1].shape == (24,)
+    np.testing.assert_array_equal(without[1], env[:24])
 
 
 @pytest.mark.finding("10.21")
 def test_coarse_grid_mesh_centre_can_dominate_the_envelope() -> None:
     """A 1 x 1 grid of 20 m (perimeter only): the mesh centre, 10 m from
     every wire, is the worst touch position (158 V against 141 V 1 m
-    outside), so the envelope must not stop at the perimeter."""
+    outside), so on an open-air grid the envelope must not stop at the
+    perimeter: ``interior="meshes"``."""
     w = _grid_world(n=1, size=20.0)
     res = _solve(w, ds=1.0)
     angles, env, feet = touch_voltage_envelope(
-        res, w, electrode="g1", n_angles=24, return_points=True
+        res, w, electrode="g1", n_angles=24, interior="meshes", return_points=True
     )
     assert feet.shape == (25, 3)
     perimeter = np.abs(env[:24]).max()
@@ -211,12 +212,7 @@ def test_connection_point_anchor_reproduces_v0150() -> None:
     u_old = touch_voltage(res, w, electrode="g1", anchor="connection_point")
     assert u_old == pytest.approx(_ue(res, "g1") - _phi(res, 11.0, 10.0), rel=1e-12)
     angles, env = touch_voltage_envelope(
-        res,
-        w,
-        electrode="g1",
-        n_angles=8,
-        anchor="connection_point",
-        interior=False,
+        res, w, electrode="g1", n_angles=8, anchor="connection_point"
     )
     feet = np.column_stack([10.0 + np.cos(angles), 10.0 + np.sin(angles), np.zeros(8)])
     np.testing.assert_allclose(env, _ue(res, "g1") - res.potential(feet), rtol=1e-12)
@@ -527,21 +523,22 @@ def test_touch_voltage_of_a_rotated_foundation_matches_the_unrotated_one(side) -
 @pytest.mark.finding("10.21")
 def test_envelope_of_a_rotated_foundation_stays_outside_and_samples_its_cells() -> None:
     """31 of 72 foot positions lay inside the foundation and no mesh centre
-    was evaluated; now the offset curve surrounds all wires and the four
-    cell centres are sampled, like the mesh centres of the 0 deg grid."""
+    was evaluated; now the offset curve surrounds all wires and, with
+    ``interior="meshes"``, the four cell centres are sampled, like the mesh
+    centres of the 0 deg grid."""
     world, result, anchor = _generated_foundation(30.0)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         _, _, feet = touch_voltage_envelope(
+            result, world, electrode=anchor, n_angles=72, return_points=True
+        )
+        _, env, feet_in = touch_voltage_envelope(
             result,
             world,
             electrode=anchor,
             n_angles=72,
-            interior=False,
+            interior="meshes",
             return_points=True,
-        )
-        _, env, feet_in = touch_voltage_envelope(
-            result, world, electrode=anchor, n_angles=72, return_points=True
         )
     local = _to_local(30.0, feet[:, :2])
     assert np.all(np.max(np.abs(local), axis=1) > _SIDE / 2), "foot inside"
@@ -551,7 +548,9 @@ def test_envelope_of_a_rotated_foundation_stays_outside_and_samples_its_cells() 
     w0, r0, a0 = _generated_foundation(0.0)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        _, env0 = touch_voltage_envelope(r0, w0, electrode=a0, n_angles=72)
+        _, env0 = touch_voltage_envelope(
+            r0, w0, electrode=a0, n_angles=72, interior="meshes"
+        )
     assert np.abs(env[72:]).max() == pytest.approx(np.abs(env0[72:]).max(), rel=0.05)
 
 
@@ -563,11 +562,11 @@ def test_any_wire_name_of_a_rotated_foundation_selects_the_whole_foundation() ->
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         ref = touch_voltage_envelope(
-            result, world, electrode=anchor, return_points=True
+            result, world, electrode=anchor, interior="meshes", return_points=True
         )
         for name in names[1:]:
             got = touch_voltage_envelope(
-                result, world, electrode=name, return_points=True
+                result, world, electrode=name, interior="meshes", return_points=True
             )
             np.testing.assert_allclose(got[2], ref[2], atol=1e-12)
     # A ring-style foundation is one cell: its centre is sampled.

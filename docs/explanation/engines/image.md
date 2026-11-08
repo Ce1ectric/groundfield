@@ -133,8 +133,9 @@ outside instead, next to the touch voltage at 1 m: +20 % / −21 % at the
 grid corner with the default line kernel (+19 % / −21 % with the point
 kernel).
 
-The safety helpers therefore warn: `touch_voltage`, `step_voltage` and
-`touch_voltage_envelope` emit `UniformCurrentFieldWarning` when a result of
+The safety helpers therefore warn: `touch_voltage`, `step_voltage`,
+`touch_voltage_envelope` and `touch_voltage_at_part` emit
+`UniformCurrentFieldWarning` when a result of
 the image family is evaluated within 5 m (`NEAR_FIELD_DISTANCE_M`) of a
 grid, mesh, star, strip, open polyline or a bonded multi-electrode
 cluster. For a safety assessment of such geometries solve with `mom` (or

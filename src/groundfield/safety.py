@@ -1,8 +1,9 @@
 """Touch and step voltages: the curated namespace ``gf.safety``.
 
 Prospective touch and step voltages evaluated from the surface
-potential of a solved :class:`~groundfield.FieldResult`, and the
-permissible touch voltage of EN 50522. The functions are the same
+potential of a solved :class:`~groundfield.FieldResult` — around an
+electrode or at user-defined touch points (accessible metal parts) —
+and the permissible touch voltage of EN 50522. The functions are the same
 objects as the flat top-level names
 (``gf.safety.touch_voltage is gf.touch_voltage``); see
 :mod:`groundfield.postprocess.safety` for the definitions, units and
@@ -16,6 +17,7 @@ from groundfield.postprocess.safety import (
     permissible_touch_voltage_en50522,
     step_voltage,
     touch_voltage,
+    touch_voltage_at_part,
     touch_voltage_envelope,
     touch_voltage_spectrum,
 )
@@ -23,6 +25,7 @@ from groundfield.postprocess.safety import (
 __all__ = [
     "touch_voltage",
     "touch_voltage_envelope",
+    "touch_voltage_at_part",
     "touch_voltage_spectrum",
     "step_voltage",
     "permissible_touch_voltage_en50522",

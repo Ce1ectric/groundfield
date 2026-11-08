@@ -4,7 +4,8 @@ Extracts the engineering quantities of interest from the computed
 potential distribution:
 
 - earth potential rise ``U_E`` at the feed-in point,
-- touch and step voltages (footprint-anchored), the EN 50522:2022
+- touch and step voltages (footprint-anchored, or at user-defined
+  touch points), the EN 50522:2022
   permissible touch voltage and prospective touch voltage, and the
   true-RMS touch voltage over a fault spectrum (:mod:`.safety`),
 - potential profiles along defined paths (measurement traverses),
@@ -62,6 +63,7 @@ from groundfield.postprocess.safety import (
     permissible_touch_voltage_en50522,
     step_voltage,
     touch_voltage,
+    touch_voltage_at_part,
     touch_voltage_envelope,
     touch_voltage_spectrum,
 )
@@ -95,6 +97,7 @@ __all__ = [
     "rho_f_standard_from_results",
     "touch_voltage",
     "touch_voltage_envelope",
+    "touch_voltage_at_part",
     "step_voltage",
     "touch_voltage_spectrum",
     "permissible_touch_voltage_en50522",
