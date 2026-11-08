@@ -227,3 +227,47 @@ def test_a_degenerate_footprint_gets_a_minimum_foundation() -> None:
     from groundfield.generators.grounding import MIN_FOUNDATION_SIDE_M
 
     assert MIN_FOUNDATION_SIDE_M == 1.0
+
+
+# audit A2G-06
+@pytest.mark.parametrize(
+    ("outline", "size"),
+    [
+        ([(60.0, 10.0), (70.0, 10.0), (80.0, 10.0), (60.0, 10.0)], [1.0, 20.0]),
+        ([(60.0, 10.0)] * 4, [1.0, 1.0]),
+    ],
+    ids=["zero-width", "point"],
+)
+def test_a_footprint_without_area_gets_a_minimum_foundation(outline, size) -> None:
+    """Audit L5 limit: at 0 mm width the OMBR raised IndexError and
+    ``to_world`` crashed instead of widening the foundation."""
+    wall = gf.BuildingFootprint(polygon_xy_m=outline, osm_id=2)
+    layout = _layout([_square(40.0, 18.0, 1, 10.0, 8.0), wall])
+    with pytest.warns(UserWarning, match="widened"):
+        world = layout.to_world(seed=0)
+    wires = _foundations(world, "house_001_foundation")
+    points = [v for e in wires for line in e.wire_polylines() for v in line]
+    xs = [v[0] for v in points]
+    ys = [v[1] for v in points]
+    extent = sorted([max(xs) - min(xs), max(ys) - min(ys)])
+    assert extent == pytest.approx(size)
+    centre = (0.5 * (max(xs) + min(xs)), 0.5 * (max(ys) + min(ys)))
+    assert centre == pytest.approx((70.0, 10.0) if size[1] > 1 else (60.0, 10.0))
+    res = gf.create_engine(backend="image", segment_length=0.5).solve(world)
+    assert np.isfinite(res.input_impedance()[0])
+
+
+# audit A2G-06
+def test_tn_generator_widens_a_footprint_without_area() -> None:
+    """The OSM placement of TnNetworkGenerator uses the same rule (its
+    default ``min_area_m2=16`` would drop the wall before)."""
+    wall = gf.BuildingFootprint(
+        polygon_xy_m=[(60.0, 10.0), (70.0, 10.0), (80.0, 10.0)], osm_id=2
+    )
+    placement = OsmBuildingPlacement(
+        footprints=[_square(40.0, 18.0, 1), wall], min_area_m2=0.0
+    )
+    cfg = TnNetworkConfig(building_counts={"residential": 2}, placement=placement)
+    with pytest.warns(UserWarning, match="widened"):
+        world = TnNetworkGenerator(cfg, seed=0).build()
+    assert any(e.name.startswith("residential_1_foundation") for e in world.electrodes)

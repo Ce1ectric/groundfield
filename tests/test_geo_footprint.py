@@ -18,6 +18,7 @@ import warnings
 import pytest
 
 from groundfield.geo.footprint import (
+    MIN_OUTLINE_WIDTH_M,
     BuildingFootprint,
     ensure_orientation,
     signed_area,
@@ -198,3 +199,52 @@ def test_ombr_emits_no_runtime_warning_on_axis_aligned_footprint() -> None:
     assert centre == pytest.approx((5.0, 2.5))
     assert size == pytest.approx((10.0, 5.0))
     assert abs(angle_deg) < 1e-6
+
+
+# ---------------------------------------------------------------------
+# Degenerate outlines (audit A2G-06)
+# ---------------------------------------------------------------------
+
+
+# audit A2G-06
+@pytest.mark.finding("10.05")
+@pytest.mark.parametrize(
+    ("ring", "width"),
+    [
+        ([(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)], 2 * 50 / 30),
+        ([(0.0, 0.0), (10.0, 0.0), (10.0, 0.005), (0.0, 0.005)], 0.1 / 20.01),
+        ([(60.0, 10.0), (70.0, 10.0), (80.0, 10.0)], 0.0),
+        ([(60.0, 10.0)] * 3, 0.0),
+        ([(0.0, 0.0), (5.0, 0.0), (0.0, 0.0)], 0.0),
+    ],
+    ids=["10x5", "wall-5mm", "collinear", "point", "two-vertices"],
+)
+def test_mean_width_of_an_outline(ring, width) -> None:
+    """Mean width 2 A / P: the width of a thin rectangle, 0 without area."""
+    fp = BuildingFootprint(polygon_xy_m=ring)
+    assert fp.mean_width_m() == pytest.approx(width, rel=1e-9, abs=1e-15)
+    assert fp.is_degenerate() == (width < MIN_OUTLINE_WIDTH_M)
+
+
+# audit A2G-06
+@pytest.mark.finding("10.54")
+@pytest.mark.parametrize(
+    ("ring", "centre", "size", "angle"),
+    [
+        ([(60.0, 10.0), (70.0, 10.0), (80.0, 10.0)], (70.0, 10.0), (20.0, 0.0), 0.0),
+        ([(0.0, 0.0), (1.0, 1.0), (4.0, 4.0)], (2.0, 2.0), (4 * 2**0.5, 0.0), 45.0),
+        ([(0.0, 0.0), (0.0, 2.0), (0.0, 10.0)], (0.0, 5.0), (10.0, 0.0), 90.0),
+        ([(3.0, 4.0)] * 4, (3.0, 4.0), (0.0, 0.0), 0.0),
+        ([(0.0, 0.0), (6.0, 0.0), (0.0, 0.0)], (3.0, 0.0), (6.0, 0.0), 0.0),
+    ],
+    ids=["collinear-x", "collinear-45deg", "collinear-y", "point", "two-vertices"],
+)
+def test_ombr_of_a_degenerate_outline_is_its_segment(ring, centre, size, angle) -> None:
+    """The OMBR of identical or collinear vertices raised IndexError (the
+    polygon cleaned to an empty geometry); it is the covering segment
+    (a point for identical vertices), so a caller can widen it."""
+    fp = BuildingFootprint(polygon_xy_m=ring)
+    c, s, a = fp.oriented_bounding_rectangle()
+    assert c == pytest.approx(centre, abs=1e-12)
+    assert s == pytest.approx(size, abs=1e-12)
+    assert a == pytest.approx(angle, abs=1e-12)

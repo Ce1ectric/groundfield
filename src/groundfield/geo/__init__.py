@@ -38,15 +38,18 @@ Phase B for non-rectangular foundations).
 from __future__ import annotations
 
 from groundfield.geo.footprint import (
+    MIN_OUTLINE_WIDTH_M,
     BuildingFootprint,
     Point2D,
     Ring,
     ensure_orientation,
+    mean_width,
     signed_area,
 )
 from groundfield.geo.osm import (
     DEFAULT_ENDPOINT,
     DEFAULT_MAX_RESPONSE_BYTES,
+    MAX_PAYLOAD_DEPTH,
     MAX_RADIUS_M,
     MAX_RETRIES,
     MAX_RETRY_DELAY_S,
@@ -65,8 +68,10 @@ from groundfield.geo.projection import Projector
 __all__ = [
     # Data model
     "BuildingFootprint",
+    "MIN_OUTLINE_WIDTH_M",
     "Point2D",
     "Ring",
+    "mean_width",
     "signed_area",
     "ensure_orientation",
     # Projection
@@ -74,6 +79,7 @@ __all__ = [
     # Overpass / OSM
     "DEFAULT_ENDPOINT",
     "DEFAULT_MAX_RESPONSE_BYTES",
+    "MAX_PAYLOAD_DEPTH",
     "MAX_RADIUS_M",
     "MAX_RETRIES",
     "MAX_RETRY_DELAY_S",

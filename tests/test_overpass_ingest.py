@@ -663,6 +663,77 @@ def test_non_finite_or_negative_levels_are_unknown(raw: str) -> None:
 
 
 # ---------------------------------------------------------------------
+# Outlines that enclose no area (audit A2G-06)
+# ---------------------------------------------------------------------
+
+_DEGENERATE_GEOMETRIES = {
+    "point": [{"lat": LAT, "lon": LON}] * 4,
+    "collinear": [
+        {"lat": LAT, "lon": LON},
+        {"lat": LAT, "lon": LON + 1e-4},
+        {"lat": LAT, "lon": LON + 2e-4},
+        {"lat": LAT, "lon": LON},
+    ],
+    "collinear-diagonal": [
+        {"lat": LAT, "lon": LON},
+        {"lat": LAT + 1e-4, "lon": LON + 1e-4},
+        {"lat": LAT + 2e-4, "lon": LON + 2e-4},
+    ],
+}
+
+
+# audit A2G-06
+@pytest.mark.parametrize("label", sorted(_DEGENERATE_GEOMETRIES))
+@pytest.mark.parametrize("kind", ["way", "relation"])
+def test_outline_without_area_is_skipped(label: str, kind: str) -> None:
+    """Docstring: elements that do not form a valid polygon are skipped. With
+    the default ``min_area_m2=0`` an outline of identical or collinear
+    vertices (area 0, or 3e-5 m2 of projection round-off) was kept."""
+    geometry = _DEGENERATE_GEOMETRIES[label]
+    if kind == "way":
+        element = {
+            "type": "way",
+            "id": 9,
+            "tags": {"building": "house"},
+            "geometry": geometry,
+        }
+    else:
+        element = {
+            "type": "relation",
+            "id": 9,
+            "tags": {"type": "multipolygon", "building": "house"},
+            "members": [{"type": "way", "role": "outer", "geometry": geometry}],
+        }
+    fps = osm.parse_overpass_payload(
+        {"elements": [_way(0), element]}, Projector(LAT, LON)
+    )
+    assert [fp.osm_id for fp in fps] == [100]
+
+
+# audit A2G-06
+def test_thin_but_real_outline_is_kept() -> None:
+    """A 14 m x 5 mm wall is an outline with area (the layout widens its
+    foundation, audit L5); only outlines narrower than MIN_OUTLINE_WIDTH_M
+    on average are skipped."""
+    from groundfield.geo.footprint import MIN_OUTLINE_WIDTH_M
+
+    dlat = 0.005 / 111_200.0
+    wall = {
+        "type": "way",
+        "id": 9,
+        "tags": {"building": "wall"},
+        "geometry": [
+            {"lat": LAT, "lon": LON},
+            {"lat": LAT, "lon": LON + 2e-4},
+            {"lat": LAT + dlat, "lon": LON + 2e-4},
+            {"lat": LAT + dlat, "lon": LON},
+        ],
+    }
+    (fp,) = osm.parse_overpass_payload({"elements": [wall]}, Projector(LAT, LON))
+    assert MIN_OUTLINE_WIDTH_M < fp.mean_width_m() < 0.01
+
+
+# ---------------------------------------------------------------------
 # Real Overpass call (opt-in)
 # ---------------------------------------------------------------------
 

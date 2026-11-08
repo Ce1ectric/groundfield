@@ -885,9 +885,9 @@ def parse_overpass_payload(
         payload to keep the metric coordinates consistent.
     min_area_m2
         Skip features whose footprint area is strictly below this
-        threshold. ``0.0`` (the default) keeps every parseable
-        polygon; the placement layer may apply its own (higher)
-        threshold via :class:`OsmBuildingPlacement.min_area_m2`.
+        threshold. ``0.0`` (the default) keeps every valid polygon;
+        the placement layer may apply its own (higher) threshold via
+        :class:`OsmBuildingPlacement.min_area_m2`.
     exclude_building_tags
         ``building=*`` values to drop (e.g.
         :data:`NON_SERVICE_BUILDING_TAGS`). ``None`` (default) keeps
@@ -906,7 +906,10 @@ def parse_overpass_payload(
         If the payload does not have the structure of an Overpass result
         or a vertex is not a finite WGS84 coordinate (see the module
         docstring). Elements whose geometry contains ``null`` vertices or
-        that do not form a valid polygon are skipped.
+        that do not form a valid polygon are skipped: fewer than three
+        vertices, or an outline without area (mean width below
+        :data:`~groundfield.geo.footprint.MIN_OUTLINE_WIDTH_M`, i.e.
+        identical or collinear vertices; audit A2G-06).
 
     Notes
     -----
@@ -952,7 +955,7 @@ def parse_overpass_payload(
                 )
             except ValueError:
                 continue
-            if fp.area_m2() < min_area_m2:
+            if fp.is_degenerate() or fp.area_m2() < min_area_m2:
                 continue
             out.append(fp)
         elif kind == "relation":
@@ -1000,7 +1003,7 @@ def parse_overpass_payload(
                     )
                 except ValueError:
                     continue
-                if fp.area_m2() < min_area_m2:
+                if fp.is_degenerate() or fp.area_m2() < min_area_m2:
                     continue
                 out.append(fp)
         # Nodes are silently ignored: a building cannot be a node.
