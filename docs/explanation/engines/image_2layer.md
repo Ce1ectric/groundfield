@@ -107,9 +107,42 @@ continuous in the depth of a rod tip. (Earlier in 2026.11 cuts that would
 leave a piece shorter than the wire diameter were dropped, which ignored
 the contact with the other layer: a 4.5 m rod in 1000 / 30 Ω·m read 195.0 Ω
 with its tip 15.9 mm into the lower layer and 128.6 Ω at 16.1 mm; second
-adversarial audit, A2S-01.) What remains is the onset of the contact
-itself, between a tip that ends at the interface and one that reaches
-past it, which `mom` shows as well.
+adversarial audit, A2S-01.)
+
+The diagonal of a segment is the layered correction at the wire radius,
+$s = a$, with the interface image exchanged for its Galerkin integral. Its
+closed-form $1/R$ terms are evaluated at that radius: the default
+regularisation of `layered_green` clamps them at $h_1/200$ (25 mm for
+$h_1 = 5$ m), meant for coincident points, and took 68–84 % of the
+layered correction of every piece within $h_1/400$ of the interface — a
+ring of radius 3 m at $h_1 = 5$ m read −5.29 Ω, the contact values of a
+rod tip were 10–32 % low (third adversarial audit, A3S-01). The diagonal
+now equals the image solution to $10^{-13}$, a ring is continuous through
+$h_1$ (4.1826 Ω 1 µm above, 4.1805 Ω at $h_1$), and pairs closer than
+$h_1/200$ are regularised at the 1 mm of the point forms they combine
+with.
+
+!!! note "Rod ends at the interface: a limit of the thin-wire model"
+
+    The thin wire has no end face. A rod that ends exactly at $h_1$ is a
+    wire entirely in the upper layer; one that reaches past it by a
+    fraction of its radius touches the lower layer through a short piece
+    only. The solid rod is continuous in between, because its flat end
+    face carries the contact. Against an axisymmetric finite-volume model
+    of the solid rod (4.5 m, $a$ = 8 mm, 1000 / 30 Ω·m) the line kernel
+    reads:
+
+    | tip below $h_1$ | −16 mm | −8 mm | −1 mm | 0 | +1 mm | +4 mm | +8 mm | +16 mm |
+    |---|---|---|---|---|---|---|---|---|
+    | solid rod | 190.2 Ω | 188.9 Ω | 182.8 Ω | 161.4 Ω | 156.3 Ω | 148.5 Ω | 141.2 Ω | 130.2 Ω |
+    | thin wire | +3.3 % | +3.9 % | +7.2 % | +21.4 % | −4.6 % | −1.2 % | +0.7 % | +2.1 % |
+
+    The point kernel and `mom` behave alike (+19.0 … +20.5 % at 0). Every
+    segment backend therefore warns with `InterfaceContactWarning` when a
+    rod head or tip lies within one wire radius of an interface, and
+    `diagnose()` lists it under `interface_contact`. Keep rod ends a few
+    wire radii from an interface, or bracket the result by moving the end
+    by ±2 wire radii.
 
 !!! warning "Point kernel next to the interface"
 
@@ -118,8 +151,14 @@ past it, which `mom` shows as well.
     shorter than twice its distance to the interface: a ring of radius 3 m
     5 cm below $h_1$ gives 29.7 Ω at ds = 0.5 m against 54.7 Ω at
     ds = 0.025 m, while the line kernel gives 55.6–55.7 Ω at every segment
-    length (`tests/test_cross_layer_line_kernel.py`). The default line
-    kernel needs no such care.
+    length (`tests/test_cross_layer_line_kernel.py`). Above $h_1$ the
+    point form takes the image of a segment in the interface as a point
+    source: a ring 1 µm / 1 cm above $h_1 = 5$ m read −1931 / −57.9 Ω
+    (line kernel 4.18 / 15.4 Ω). On either side of the interface a wire
+    closer than 0.387 segment lengths therefore raises
+    `BackendCapabilityError` and one within 0.6 segment lengths warns with
+    `PointKernelInterfaceWarning`. The default line kernel needs no such
+    care.
 
 ## Validity range
 
@@ -128,6 +167,8 @@ past it, which `mom` shows as well.
 | Soil | two distinct layers after canonicalisation; $\rho_1 = \rho_2$ is solved as homogeneous | `BackendCapabilityError` for three distinct layers (use `mom_sommerfeld`) |
 | Contrast | $\lvert K\rvert < 1$; the series length grows like $\ln(\text{tol}) / \ln\lvert K\rvert$ | `SeriesTruncationWarning` at `image_max_terms` |
 | Electrodes | anywhere in the soil; below or through $h_1$ via the Sommerfeld path (slower, see [performance](../performance.md)) | — |
+| Rod ends | head and tip more than one wire radius from $h_1$ (thin wire without end face, see above) | `InterfaceContactWarning` |
+| Point kernel near $h_1$ | horizontal wires at least 0.6 segment lengths from $h_1$, on either side | `PointKernelInterfaceWarning`; within 0.387: `BackendCapabilityError` |
 | Thin wire, burial, shallow segments | as for [`image`](image.md#validity-range) | `ValueError` / `ShallowSegmentWarning` (point kernel) |
 | Field quantities near grids, stars, strip ends | uniform-current ansatz, see [`image`](image.md#field-quantities-and-the-uniform-current-ansatz) | `UniformCurrentFieldWarning` in the safety helpers |
 | Frequency | quasi-static, $f < 1$ kHz | — |

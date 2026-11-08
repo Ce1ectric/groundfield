@@ -36,7 +36,11 @@ so that wire crossings fall on segment end points, and every wire is
 cut at the soil-layer interfaces so that each segment lies in one
 layer; every interface cut is kept, however short the piece beyond it,
 so a rod tip that reaches a few millimetres into a layer is in contact
-with it. How the current is
+with it. (The thin wire has no end face, so a rod end within one wire
+radius of an interface is a limit of the model — up to +21 % against the
+solid rod — and warns with `InterfaceContactWarning`; see the
+[`image_2layer` page](../../explanation/engines/image_2layer.md#electrodes-that-reach-the-interface).)
+How the current is
 distributed over the segments — uniform per unit length on each
 electrode (image family) or one unknown per segment (`mom` family) — is
 a property of the backend, see [Solver](solver.md) and
