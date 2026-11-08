@@ -404,12 +404,15 @@ class GroundingSystemSpec(GeneratorConfig):
             narrower than :data:`MIN_FOUNDATION_SIDE_M` on average, need
             :mod:`shapely` (``geo`` extra).
         """
-        if outline == "spec" or not self.electrodes:
-            return self
-        if outline not in ("ombr", "polygon"):
+        if outline not in ("spec", "ombr", "polygon"):
             raise ValueError(
                 f"outline must be 'spec', 'ombr' or 'polygon', got {outline!r}."
             )
+        if outline == "spec" or not any(
+            isinstance(spec, FoundationElectrodeSpec) for spec in self.electrodes
+        ):
+            # Nothing to shape (no foundation): no OMBR, no warning.
+            return self
         if site_xy is None:
             site_xy = footprint.centroid_xy_m()
         ring = [(float(x), float(y)) for x, y in footprint.polygon_xy_m]

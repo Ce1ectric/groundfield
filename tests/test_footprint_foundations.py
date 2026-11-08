@@ -352,3 +352,23 @@ def test_a_collapsing_polygon_outline_names_the_real_edge_limit() -> None:
     world = gf.World(soil=gf.HomogeneousSoil(rho=100.0))
     with pytest.raises(ValueError, match=r"shorter than MIN_POLYGON_EDGE_M = 0\.5 m"):
         materialise_site(world, site)
+
+
+# audit A3SG-07
+@pytest.mark.parametrize("outline", ["ombr", "polygon"])
+def test_a_thin_outline_without_a_foundation_is_left_alone(outline: str) -> None:
+    """A grounding without a foundation electrode has nothing to shape: no
+    widening warning for a wall outline (it warned on the OMBR path)."""
+    import warnings
+
+    from groundfield.generators import RodElectrodeSpec
+
+    rods = GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)])
+    wall = gf.BuildingFootprint(
+        polygon_xy_m=[(0.0, 0.0), (12.0, 0.0), (12.0, 0.01), (0.0, 0.01)], osm_id=3
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        assert rods.with_footprint(wall, outline=outline) is rods
+    with pytest.raises(ValueError, match="outline must be"):
+        rods.with_footprint(wall, outline="hull")
