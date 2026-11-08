@@ -705,39 +705,76 @@ def _unreachable_layers(
         if stack.n_layers < 2:
             continue
         rho_touched = min(float(stack.rhos[k]) for k in touched)
+        # The domain of the "wide" rule as well (audit D2A-03): a layer below
+        # the hemisphere but within the electrodes' horizontal half-extent
+        # is reached by their current and much less by the hemisphere.
+        r_ext = max(_horizontal_half_extent(world.get_electrode(e)) for e in members)
         better = [
             k
             for k, (top, _) in enumerate(bounds)
-            if top < a_eq and k not in touched and float(stack.rhos[k]) < rho_touched
+            if top < max(a_eq, r_ext)
+            and k not in touched
+            and float(stack.rhos[k]) < rho_touched
         ]
         if better:
-            layers = " and the layer ".join(
-                _layer_text(*bounds[k], float(stack.rhos[k])) for k in better
-            )
+
+            def listed(ks: list[int]) -> str:
+                return " and the layer ".join(
+                    _layer_text(*bounds[k], float(stack.rhos[k])) for k in ks
+                )
+
+            spanned = [k for k in better if bounds[k][0] < a_eq]
+            reached = [k for k in better if bounds[k][0] >= a_eq]
             own = ", ".join(
                 f"{r:g}" for r in sorted({float(stack.rhos[k]) for k in touched})
             )
+            extent = (
+                f"within its electrodes' horizontal half-extent of {r_ext:.3g} m, "
+                "which their current reaches and the compact hemisphere's much less"
+            )
+            if not reached:
+                what = (
+                    f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) spans the "
+                    f"layer {listed(spanned)}, which none of its electrodes touches "
+                    "and which conducts better than the layer(s) they touch"
+                )
+            elif not spanned:
+                what = (
+                    f"the layer {listed(reached)} lies below its equivalent "
+                    f"hemisphere (a_eq = {a_eq:.3g} m) but {extent}; none of its "
+                    "electrodes touches it and it conducts better than the "
+                    "layer(s) they touch"
+                )
+            else:
+                what = (
+                    f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) spans the "
+                    f"layer {listed(spanned)}, and the layer {listed(reached)} lies "
+                    f"below it but {extent}; none of its electrodes touches these "
+                    "layers and they conduct better than the layer(s) they touch"
+                )
             found.append(
                 _Unreachable(
                     "conductive_layer",
-                    f"{_cluster_label(clusters, root)}: its equivalent hemisphere "
-                    f"(a_eq = {a_eq:.3g} m) spans the layer {layers}, which none "
-                    "of its electrodes touches and which conducts better than "
-                    f"the layer(s) they touch (rho = {own} Ohm m)",
+                    f"{_cluster_label(clusters, root)}: {what} (rho = {own} Ohm m)",
                 )
             )
     return found
 
 
 #: Measured consequence of the Q23 configurations, for the error message
-#: (evidence d2solver/q23_fem_layer_cases_base.out: fem on bbaea9f against
-#: image_2layer and mom, segment length 0.25 m).
+#: (evidence d2solver/q23_fem_layer_cases_base.out, reproduced in
+#: f2solver/q23_spanned_unguarded.out, and f2solver/wide_cases_refs.out:
+#: fem against image_2layer and mom, segment length 0.25 m).
 _CONDUCTIVE_LAYER_EFFECT = (
-    "The hemisphere injects the cluster current straight into such a layer, so "
-    "fem reads too low (not conservative): -97 % to +5 % against "
-    "'image_2layer' and 'mom' in the measured cases (rods, strips and rings; "
-    "30/10000 Ohm m: -80 % to -97 %, 30/1000 Ohm m: -35 % to -80 %, "
-    "near-equal layers 100/120 and 120/100 Ohm m: -7 % to +5 %)."
+    "The hemisphere injects the cluster current straight into a layer it spans "
+    "and reaches a layer below it much less than the electrodes do, so fem "
+    "reads too low (not conservative): -97 % to +5 % against 'image_2layer' "
+    "and 'mom' in the measured cases of a spanned layer (rods, strips and "
+    "rings; 30/10000 Ohm m: -80 % to -97 %, 30/1000 Ohm m: -35 % to -80 %, "
+    "near-equal layers 100/120 and 120/100 Ohm m: -7 % to +5 %), -78 % to +1 % "
+    "for a layer below the hemisphere within the half-extent (rings and "
+    "strips; a 20 m grid -60 % to +13 %, its formula reading +12 % high in "
+    "homogeneous soil)."
 )
 
 

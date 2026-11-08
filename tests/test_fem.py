@@ -730,23 +730,132 @@ def test_fem_q23_keeps_the_warning_where_the_layer_is_not_more_conductive(
     assert texts, "no FemReductionWarning"
 
 
-@pytest.mark.finding("10.23", "F01")
-def test_fem_warns_when_an_interface_lies_within_the_electrode_extent() -> None:
-    """Ring r = 10 m at 0.8 m over h_1 = 5 m (1000/30 Ω·m): fem −46 %.
+_A_RING10 = 4.622583619251554  # a_eq of a ring r = 10 m at 0.8 m, r = 5 mm (m)
 
-    The interface lies below the ring and below its hemisphere
-    (a_eq = 4.6 m), but within the ring's radius: the ring's current
-    reaches the conductive layer, the compact hemisphere's much less.
-    fem returns 11.79 Ω against mom 21.89 Ω, silent on the base and after
-    the interface rule of F01 alone (eng2 evidence e07).
+
+@pytest.mark.finding("10.23", "F01")
+@pytest.mark.parametrize(
+    ("soil", "kind", "params", "layer"),
+    [
+        # ring r = 10 m at 0.8 m (a_eq = 4.62 m, half-extent 10 m) over a more
+        # conductive layer below its hemisphere: -67.9 % at h_1 = a_eq (1 +
+        # 1e-9), the value the world at a_eq (1 - 1e-9) raised for (D2A-03),
+        # -46.9 % at 5 m, -11.0 % at 9 m (image_2layer; mom within 1 point)
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=_A_RING10 * (1 + 1e-9)),
+            "ring",
+            dict(center=(0, 0, 0.8), radius=10.0),
+            "below 4.62 m (rho = 30 Ohm m)",
+            id="ring10-1000/30-just-below-a_eq",
+        ),
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=_A_RING10 * (1 + 1e-9)),
+            "ring",
+            dict(center=(0, 0, 0.8), radius=10.0),
+            "below 4.62 m (rho = 30 Ohm m)",
+            id="ring10-3000/30-just-below-a_eq",
+        ),
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0),
+            "ring",
+            dict(center=(0, 0, 0.8), radius=10.0),
+            "below 5 m (rho = 30 Ohm m)",
+            id="ring10-1000/30-5m",
+        ),
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=9.0),
+            "ring",
+            dict(center=(0, 0, 0.8), radius=10.0),
+            "below 9 m (rho = 30 Ohm m)",
+            id="ring10-1000/30-9m",
+        ),
+        # 10 m strip at 0.8 m (half-extent 5 m) over 3000/30 at 3 m
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=3.0),
+            "strip",
+            dict(start=(0, 0, 0.8), end=(10, 0, 0.8)),
+            "below 3 m (rho = 30 Ohm m)",
+            id="strip10-3000/30-3m",
+        ),
+        # three layers: the conductive middle layer lies within the extent
+        pytest.param(
+            _three_layers((1000.0, 30.0, 1000.0), (6.0, 2.0)),
+            "ring",
+            dict(center=(0, 0, 0.8), radius=10.0),
+            "6 ... 8 m (rho = 30 Ohm m)",
+            id="ring10-three-layers",
+        ),
+    ],
+)
+def test_fem_rejects_a_more_conductive_layer_within_the_electrode_extent(
+    soil, kind, params, layer
+) -> None:
+    """Q23 extends to the domain of the "wide" rule (D2A-03).
+
+    A layer below the electrode and its hemisphere but within the
+    electrode's horizontal half-extent is reached by the electrode's
+    current and much less by the compact hemisphere. Over a more
+    conductive layer fem then reads too low, continuously with the Q23
+    worlds above a_eq (only a warning up to 563ead7; the eng2 evidence e07
+    pinned fem 11.79 Ohm against mom 21.89 Ohm for the ring over h_1 = 5 m).
+    Coordinator decision, flagged for the author's review: such a layer
+    raises like one the hemisphere spans.
     """
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0))
-    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    # audit D2A-03
+    with pytest.raises(gf.BackendCapabilityError) as info:
+        gf.create_engine(backend="fem", segment_length=0.5).solve(
+            _electrode_world(soil, kind, **params)
+        )
+    text = str(info.value)
+    assert "none of its electrodes touches" in text, text
+    assert f"the layer {layer}" in text and "half-extent" in text, text
+
+
+@pytest.mark.finding("10.23", "F01")
+@pytest.mark.parametrize(
+    ("kind", "params", "r_ext"),
+    [
+        ("ring", dict(center=(0, 0, 0.8), radius=10.0), 10.0),
+        ("strip", dict(start=(0, 0, 0.8), end=(10, 0, 0.8)), 5.0),
+    ],
+)
+def test_fem_q23_stops_at_the_horizontal_half_extent(kind, params, r_ext) -> None:
+    """Both sides of the new boundary: a layer top at the half-extent.
+
+    Just above the half-extent the conductive layer raises; just below it
+    neither rule applies and fem is silent (ring r = 10 m over 1000/30 Ohm m
+    at h_1 = 10 m: -7.9 %; 20 m: -0.3 %).
+    """
+
+    # audit D2A-03
+    def world(h_1: float) -> gf.World:
+        soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=h_1)
+        return _electrode_world(soil, kind, **params)
+
+    assert _fem_verdict(world(r_ext * (1 - 1e-9))) == "raise"
+    assert _fem_verdict(world(r_ext * (1 + 1e-9))) == "silent"
+
+
+@pytest.mark.finding("10.23", "F01")
+def test_fem_warns_when_a_more_resistive_layer_lies_within_the_electrode_extent() -> (
+    None
+):
+    """Ring r = 10 m at 0.8 m over a more resistive layer at h_1 = 5 m.
+
+    The "wide" rule keeps its warning where the layer conducts no better
+    than the electrodes' layer: fem +9.2 % against image_2layer (30/1000
+    Ohm m), 3.6154 Ohm, unchanged.
+    """
+    w = _electrode_world(
+        gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=5.0),
+        "ring",
+        center=(0, 0, 0.8),
+        radius=10.0,
+    )
     res, texts = _fem_warnings(w)
-    assert res.cluster_impedance("g1")[0].real == pytest.approx(11.79, abs=0.01)
     assert texts, "no FemReductionWarning"
     assert "h = 5 m" in texts[0] and "half-extent" in texts[0], texts[0]
+    assert res.cluster_impedance("g1")[0].real == pytest.approx(3.6154, abs=1e-4)
 
 
 def test_fem_is_silent_for_an_interface_below_the_electrode_extent() -> None:
