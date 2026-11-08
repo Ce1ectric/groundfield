@@ -64,7 +64,7 @@ pipelines that collect warnings.
 |---|---|---|
 | `UserWarning` "resolution: … shorter than segment_length" | an electrode feature is shorter than the segment length; the discretiser falls back to its minimum | refine `segment_length`, or accept it for small parts that do not matter |
 | `UserWarning` "… above the layer interface … less than 2×segment_length" | a wire lies close to the soil-layer interface | refine `segment_length` near the interface |
-| `ShallowSegmentWarning` | segments longer than four times their burial depth with the point kernel | use the default line kernel, or shorter segments |
+| `ShallowSegmentWarning` | segments longer than four times their burial depth, with the point kernel or the `mom` family | use the image family's default line kernel, or shorter segments |
 | `SeriesTruncationWarning` | the two-layer image series stopped at `image_max_terms` before reaching its tolerance (strong contrast, $\lvert K\rvert \to 1$) | raise `Engine(image_max_terms=...)` |
 | `UniformCurrentFieldWarning` | touch or step voltages from the image backend next to grids, meshes, stars, strips or bonded clusters | use `backend="mom"` for field quantities (tutorial [T08](../tutorials/T08_touch_and_step_assessment.ipynb)) |
 | `FemReductionWarning`, `ExperimentalBackendWarning` | the experimental `fem` backend reduces the world to an equivalent hemisphere that does not represent it | use `mom` or `mom_sommerfeld` |
