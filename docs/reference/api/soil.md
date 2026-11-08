@@ -209,10 +209,11 @@ soil, calibrated on the AP1 catalogue; outside the calibration range it
 is an extrapolation, and a preset belongs to its electrode class. For
 the AP1 station (the ring and rods above, at 0.6 m) solved in the 39
 soils of the AP1 grid, $R = c\,\rho_\text{eff}$ with $c$ from
-homogeneous soil misses the field solution by a median 2.1 % and at most
-15.7 % with `"station"` (the hand-over reports 1.7 % and 15.7 %), by
-5.5 % and 35.9 % with `"lv_network"` and by 12.4 % and 41.9 % over
-$\rho_1$ (rms 5.5, 11.8 and 18.9 %); the LV network presets give an rms
+homogeneous soil misses the field solution of the 36 two-layer soils by a
+median 2.1 % and at most 15.7 % with `"station"` (median 1.8 % counting
+the three exact homogeneous soils, as the hand-over does: 1.7 % and
+15.7 %), by 5.5 % and 35.9 % with `"lv_network"` and by 12.4 % and 41.9 %
+over $\rho_1$ (rms 5.5, 11.8 and 18.9 %); the LV network presets give an rms
 error of 5.5 % (group 1) up to 39.9 % (group 4, 40 %) there. For the station
 of the [IO example](io.md#example) (a 2 m ring and a 3 m rod at 0.8 m)
 swept over $\rho_1$ at $\rho_2 = 100\ \Omega\,\mathrm{m}$, the standard

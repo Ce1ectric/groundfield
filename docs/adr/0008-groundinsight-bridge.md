@@ -266,9 +266,9 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    `"effective_resistivity"` and does not name the preset; the caller
    names it in `soil_summary`. For the AP1 station in the 39 AP1 soils,
    $R = c\,\rho_\text{eff}$ ($c$ from homogeneous soil) misses the field
-   solution by at most 15.7 % with `"station"` (median 2.1 %; the
-   hand-over: 1.7 %, 15.7 %) against 35.9 % with `"lv_network"` and
-   41.9 % over $\rho_1$.
+   solution by at most 15.7 % with `"station"` (median over the 39
+   soils 1.8 %; the hand-over: 1.7 %, 15.7 %) against 35.9 % with
+   `"lv_network"` and 41.9 % over $\rho_1$.
 6. **Validation programme.** The round trip through groundinsight is
    checked at $10^{-9}$, as this ADR specified (the test had used
    $10^{-3}$), and `evaluate_spec` against groundinsight's
