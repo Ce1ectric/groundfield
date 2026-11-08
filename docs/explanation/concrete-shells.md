@@ -194,8 +194,9 @@ concrete, and 7.20 Ω with `"distributed"` at 5 000 Ω·m; 2026.11 gives
 +0.09 % at 5 000 Ω·m (100 Ω·m); with the point kernel on both versions the
 changes are +6.2 … +781 % (`"lumped"`) and +1.5 … +398 %
 (`"distributed"`) in 100 Ω·m. In a TN network the 0.15.0 lumped shell sat
-on the PEN service drop of the house: the four-house network of the
-release notes (100 Ω·m) moves by −3.8 / −5.2 / −6.5 / −13.8 / −10.7 %
+on the PEN service drop of the house: the default TN network with four
+such houses (`TnNetworkGenerator`, seed 0, 100 Ω·m, input impedance at the
+substation) moves by −3.8 / −5.2 / −6.5 / −13.8 / −10.7 %
 with `"lumped"` and by −0.3 / +1.0 / +2.5 / +34.5 / +120.9 % with
 `"distributed"` at $\rho_c$ = 50 … 5 000 Ω·m (−1.7 % without a shell, from
 other findings). The 0.15.0 models rebuilt by hand in the release code
