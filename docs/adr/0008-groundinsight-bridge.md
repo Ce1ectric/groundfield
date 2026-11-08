@@ -118,6 +118,10 @@ can still read the file by ignoring the metadata block.
 }
 ```
 
+A number that is not finite (an unknown `rms_error_Ohm` of a
+hand-built fit, a non-finite sample) is written as `null`; the file is
+strict JSON (`allow_nan=False`, amendment 2026.11, finding 10.19).
+
 For `vector_fit` the `metadata` block carries `n_poles`, the pole
 list and the residue list; `coefficients` is replaced by
 `{"R_inf": ..., "L_inf": ...}`. For `rho_f_standard` the

@@ -37,7 +37,15 @@ coefficients) is checked for passivity, $\operatorname{Re}Z \ge 0$ from
 `load_bustype_json` and `evaluate_spec` parse it with an allow-list
 parser that builds the expression from the syntax tree and never
 evaluates the text (numbers, `f`, `rho`, `j`, `pi`, `E`, arithmetic,
-literal powers, `sqrt` / `exp` / `log`, within size bounds).
+literal powers, `sqrt` / `exp` / `log`, within size bounds). Every node
+is built unevaluated; the parser computes the numbers itself in bounded
+floating point, and `evaluate_spec` evaluates the tree with its own
+numeric function instead of SymPy's `lambdify`, so a crafted formula
+cannot make SymPy expand or simplify it. Printing a parsed formula or
+handing it to `lambdify` lets SymPy evaluate parts of it again: show the
+formula text of an untrusted file instead. Non-finite numbers of a
+`BusType` document (an unknown rms error, a non-finite sample) are written
+as `null`, so the file is strict JSON.
 
 **Validity.** The exported model inherits the quasi-static band
 ($f < 1\,\mathrm{kHz}$) and the linearity of the field model; it is meant
