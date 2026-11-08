@@ -373,6 +373,7 @@ def _lead_and_pen_world(
     lead_z: float = -1.0,
     lead_dsl: float | None = 25.0,
     lead_inductive: bool = True,
+    lead_name: str = "lead",
 ) -> gf.World:
     """Rods 50 m apart, bonded by a lead at ``lead_z`` and a PEN at 0.7 m.
 
@@ -384,7 +385,7 @@ def _lead_and_pen_world(
     gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=3.0)
     gf.create_electrode(w, "rod", name="g2", position=(50.0, 0.0, 0.5), length=3.0)
     for name, y, z, dsl, inductive in (
-        ("lead", 1.0, lead_z, lead_dsl, lead_inductive),
+        (lead_name, 1.0, lead_z, lead_dsl, lead_inductive),
         ("pen", 0.0, 0.7, 10.0, True),
     ):
         w.add_conductor(
@@ -459,6 +460,24 @@ def test_perfect_mirror_surface_warning_names_a_lumped_conductor() -> None:
     assert len(hits) == 1
     text = str(hits[0].message)
     assert "5 inductive segment pairs" in text and "'lead'" in text, text
+
+
+@pytest.mark.finding("10.46")
+@pytest.mark.parametrize("name", ["le\nad", "lead\n", "\nlead", "le\r\nad"])
+def test_perfect_mirror_surface_warning_names_a_chain_conductor_across_line_breaks(
+    name: str,
+) -> None:
+    """A chain conductor whose name contains a line break is still named.
+
+    A conductor chain names its conductor in its pseudo-nodes
+    (``__cond_<name>__seg_<k>``); the pattern that reads them back lacked
+    ``re.DOTALL``, so ``'le\\nad'`` was reported as "unnamed branches".
+    """
+    # audit D2A-07
+    _, hits = _surface_pair_warnings(_lead_and_pen_world(lead_name=name))
+    assert len(hits) == 1
+    text = str(hits[0].message)
+    assert repr(name) in text and "unnamed" not in text, text
 
 
 @pytest.mark.finding("10.46")
