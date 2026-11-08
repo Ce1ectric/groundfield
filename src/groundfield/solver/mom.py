@@ -1104,11 +1104,12 @@ def solve_mom(
     ValueError
         If the world has no electrodes, or a segment lies partly above
         the soil surface.
+    BackendCapabilityError
+        For a :class:`MultiLayerSoil` with three or more distinct layers
+        (a :class:`TypeError` before 2026.11), or for electrodes with a
+        concrete-shell coefficient (ADR-0012).
     TypeError
-        For a soil model other than the three above, or a
-        :class:`MultiLayerSoil` with three or more distinct layers.
-    NotImplementedError
-        For electrodes with a concrete-shell coefficient (ADR-0012).
+        If ``world.soil`` is no soil model.
     """
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
@@ -1124,7 +1125,9 @@ def solve_mom(
     # homogeneous.
     soil = canonical_soil(world.soil)
     if isinstance(soil, MultiLayerSoil):
-        raise TypeError(
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
             "Backend 'mom' supports at most two distinct soil layers; this "
             f"MultiLayerSoil has {len(soil.layers)}. Use "
             "backend='mom_sommerfeld' for n >= 3 soils."

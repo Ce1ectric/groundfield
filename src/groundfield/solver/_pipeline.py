@@ -1049,9 +1049,10 @@ def _reject_concrete_shells(world, backend: str) -> None:
 
     Raises
     ------
-    NotImplementedError
+    BackendCapabilityError
         If any electrode carries a non-zero
-        ``concrete_shell_coefficient_ohm_m``.
+        ``concrete_shell_coefficient_ohm_m`` (a ``NotImplementedError``,
+        as raised here before 2026.11).
     """
     shelled = [
         e.name
@@ -1059,7 +1060,9 @@ def _reject_concrete_shells(world, backend: str) -> None:
         if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0) != 0.0
     ]
     if shelled:
-        raise NotImplementedError(
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
             f"Backend '{backend}' does not implement the concrete-shell "
             f"correction (ADR-0012) carried by electrode(s) {shelled}. "
             "Use backend='image' / 'image_2layer', or set "

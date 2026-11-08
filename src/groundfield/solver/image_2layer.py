@@ -71,7 +71,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import MultiLayerSoil, TwoLayerSoil
+from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
 from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._guards import (
     _MIN_DISTANCE,
@@ -958,13 +958,14 @@ def solve_image_2layer(
 
     Raises
     ------
-    TypeError
-        If the soil is neither a :class:`TwoLayerSoil` nor a
-        :class:`~groundfield.soil.models.MultiLayerSoil` (which is solved
-        as the equivalent two-layer soil when its canonical stack has at
-        most two layers).
     BackendCapabilityError
-        If a ``MultiLayerSoil`` has three or more distinct layers.
+        If the soil is a :class:`HomogeneousSoil` or a
+        :class:`~groundfield.soil.models.MultiLayerSoil` with three or
+        more distinct layers (a stack with at most two is solved as the
+        equivalent two-layer soil). Before 2026.11 both raised
+        :class:`TypeError`.
+    TypeError
+        If ``world.soil`` is no soil model.
     ValueError
         If the world has no electrodes, or the geometry fails a
         discretisation guard (thin wire, burial depth).
@@ -979,9 +980,17 @@ def solve_image_2layer(
         # stack that merges to at most two layers; solve it as the
         # equivalent TwoLayerSoil instead of raising a bare TypeError.
         world = world.model_copy(update={"soil": _as_two_layer(world.soil)})
+    if isinstance(world.soil, HomogeneousSoil):
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
+            "Backend 'image_2layer' solves two-layer soil; got a "
+            "HomogeneousSoil. Use backend='image' (Engine(backend='image')"
+            ".solve dispatches by soil model)."
+        )
     if not isinstance(world.soil, TwoLayerSoil):
         raise TypeError(
-            "Backend 'image_2layer' requires TwoLayerSoil. "
+            "Backend 'image_2layer' requires a TwoLayerSoil. "
             f"Got: {type(world.soil).__name__}."
         )
     if not world.electrodes:

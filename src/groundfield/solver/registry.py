@@ -151,11 +151,21 @@ class BackendCapabilityError(ValueError, NotImplementedError):
 
     Raised by :meth:`Engine.solve` before any backend code runs. The
     message names the missing capability and the registered backends
-    that can solve the world. Subclasses both :class:`ValueError` and
-    :class:`NotImplementedError`, the types ``image_nlayer``, ``cim``,
-    ``bem`` and the concrete-shell guard raised for the same situations
-    before the registry existed (``mom`` raised :class:`TypeError` for
-    three or more layers).
+    that can solve the world. The backend functions raise it as well
+    when they are called directly with a soil model they cannot solve
+    (``solve_image`` with a layered soil, ``solve_image_2layer`` with a
+    homogeneous soil, ``solve_image_nlayer`` and ``solve_mom`` with three
+    or more distinct layers), and so does the concrete-shell guard of
+    the backends without the shell correction: one error type for one
+    situation (audit A1-08). :class:`TypeError` is left for a
+    ``world.soil`` that is no soil model at all.
+
+    Subclasses both :class:`ValueError` and :class:`NotImplementedError`,
+    the types ``image_nlayer``, ``cim``, ``bem`` and the concrete-shell
+    guard raised for the same situations in 0.15.0. Changed in 2026.11:
+    ``image_2layer`` (homogeneous soil, layer stack) and ``mom`` (three
+    or more layers) raised :class:`TypeError`, which does not catch this
+    error; catch :class:`BackendCapabilityError` (or :class:`ValueError`).
     """
 
 

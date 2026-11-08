@@ -335,7 +335,9 @@ def _prepare(
                 h_1=float(stack.h[0]),
             )
         else:
-            raise NotImplementedError(
+            from groundfield.solver import registry
+
+            raise registry.BackendCapabilityError(
                 f"{where} supports homogeneous and 2-layer soils; "
                 f"got MultiLayerSoil with n={stack.n_layers} layers."
             )
