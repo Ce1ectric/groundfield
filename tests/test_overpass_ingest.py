@@ -519,6 +519,150 @@ def test_layout_from_osm_forwards_the_tag_filter(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------
+# Untrusted JSON that decodes but breaks a consumer (audit A2G-05)
+# ---------------------------------------------------------------------
+
+
+def _nested(depth: int) -> list:
+    """A list nested ``depth`` levels deep, built without recursion."""
+    value: list = []
+    for _ in range(depth - 1):
+        value = [value]
+    return value
+
+
+def _post_body(body: bytes) -> dict:
+    response = FakeResponse(200, body)
+    return osm._post_overpass(
+        "q",
+        endpoint=osm.DEFAULT_ENDPOINT,
+        timeout_s=30,
+        _transport=lambda *a, **k: response,
+    )
+
+
+# audit A2G-05
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"[" * 100_000 + b"]" * 100_000,
+        b'{"elements":' * 50_000 + b"[]" + b"}" * 50_000,
+    ],
+    ids=["nested-arrays", "nested-objects"],
+)
+def test_deeply_nested_body_raises_overpass_error(body: bytes) -> None:
+    """200 / 650 kB bodies (far below the cap) raised RecursionError from
+    ``json.loads``; only ``ValueError`` was turned into OverpassError."""
+    with pytest.raises(osm.OverpassError, match="JSON"):
+        _post_body(body)
+
+
+# audit A2G-05
+@pytest.mark.parametrize("depth", [40, 1_500])
+def test_payload_nested_deeper_than_an_overpass_result_is_rejected(
+    depth: int, tmp_path
+) -> None:
+    """An unknown key nested 1500 levels deep decodes (the C decoder allows
+    about 10 000 levels), passed every check and then raised RecursionError
+    from ``json.dump`` in the cache write; an Overpass result is at most a
+    handful of levels deep."""
+    body = json.dumps({"elements": [_way(0)], "x": _nested(depth)}).encode()
+    payload = _post_body(body)
+    with pytest.raises(osm.OverpassError, match="nested"):
+        osm.query_buildings(
+            LAT, LON, 100.0, cache_dir=tmp_path, _post=lambda q, **kw: payload
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+# audit A2G-05
+def test_deeply_nested_cache_file_is_refetched(tmp_path) -> None:
+    query = osm.build_query(LAT, LON, 100.0)
+    path = tmp_path / f"{osm._hash_query(query)}.json"
+    path.write_text("[" * 100_000 + "]" * 100_000, encoding="utf-8")
+    with pytest.warns(UserWarning, match="cache"):
+        payload = osm.query_buildings(
+            LAT, LON, 100.0, cache_dir=tmp_path, _post=lambda q, **kw: PAYLOAD
+        )
+    assert payload == PAYLOAD
+    assert json.loads(path.read_text(encoding="utf-8")) == PAYLOAD
+
+
+# audit A2G-05
+@pytest.mark.parametrize("key", ["lat", "lon"])
+@pytest.mark.parametrize("sign", [1, -1])
+def test_vertex_with_a_huge_integer_coordinate_raises_overpass_error(
+    key: str, sign: int, tmp_path
+) -> None:
+    """A JSON integer of 400 digits passed the type check and made
+    ``math.isfinite`` raise OverflowError."""
+    bad = dict(_way(0))
+    vertex = dict(bad["geometry"][0])
+    vertex[key] = sign * 10**400
+    bad["geometry"] = [vertex] + bad["geometry"][1:]
+    with pytest.raises(osm.OverpassError, match="vertex"):
+        osm.query_buildings(
+            LAT,
+            LON,
+            100.0,
+            cache_dir=tmp_path,
+            _post=lambda q, **kw: {"elements": [bad]},
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+# audit A2G-05
+def test_huge_integer_coordinate_in_the_json_text_raises_overpass_error() -> None:
+    body = (
+        '{"elements":[{"type":"way","id":1,"tags":{"building":"house"},'
+        '"geometry":[{"lat":' + "1" * 400 + ',"lon":10.0}]}]}'
+    ).encode()
+    with pytest.raises(osm.OverpassError, match="vertex"):
+        osm._check_payload(_post_body(body))
+
+
+# audit A2G-05
+@pytest.mark.parametrize(
+    "value", [2**63, -(2**63) - 1, 10**400], ids=["2**63", "-2**63-1", "400-digits"]
+)
+def test_ids_beyond_64_bits_are_rejected(value: int) -> None:
+    """OSM ids are 64-bit integers; a 400-digit id is not an Overpass id."""
+    way = dict(_way(0), id=value)
+    relation = {
+        "type": "relation",
+        "id": 5,
+        "tags": {"type": "multipolygon", "building": "yes"},
+        "members": [{"type": "way", "ref": value, "role": "outer"}],
+    }
+    for element in (way, relation):
+        with pytest.raises(osm.OverpassError, match="64-bit"):
+            osm.parse_overpass_payload({"elements": [element]}, Projector(LAT, LON))
+
+
+# audit A2G-05
+def test_element_with_a_null_id_is_parsed_without_an_id() -> None:
+    """``"id": null`` passed the check and crashed the parser with TypeError
+    (``int(None)``) for ways and relations."""
+    way = dict(_way(0), id=None)
+    relation = {
+        "type": "relation",
+        "id": None,
+        "tags": {"type": "multipolygon", "building": "yes"},
+        "members": [{"type": "way", "role": "outer", "geometry": _SQUARE}],
+    }
+    fps = osm.parse_overpass_payload({"elements": [way, relation]}, Projector(LAT, LON))
+    assert [fp.osm_id for fp in fps] == [None, None]
+
+
+# audit A2G-05
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf", "-2", "1e400"])
+def test_non_finite_or_negative_levels_are_unknown(raw: str) -> None:
+    tagged = dict(_way(0), tags={"building": "house", "building:levels": raw})
+    (fp,) = osm.parse_overpass_payload({"elements": [tagged]}, Projector(LAT, LON))
+    assert fp.levels is None
+
+
+# ---------------------------------------------------------------------
 # Real Overpass call (opt-in)
 # ---------------------------------------------------------------------
 
