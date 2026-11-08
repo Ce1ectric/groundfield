@@ -567,15 +567,9 @@ def _solves(backend: str, world, segment_length: float = 0.5) -> bool:
             ("mom_sommerfeld",),
             id="three-layers-bare-conductor-below-h1",
         ),
-        # a bare conductor in the air: every backend refuses its segments
-        pytest.param(
-            lambda: _ring10_with_bare_conductor(
-                gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0), -0.5
-            ),
-            (),
-            ("mom", "image_2layer"),
-            id="two-layers-bare-conductor-in-the-air",
-        ),
+        # (a bare conductor in the air, which every backend refuses, is
+        # refused by fem itself before any rule since audit R2A-07, see
+        # test_fem_refuses_a_galvanic_conductor_out_of_the_soil)
         # the plain case: both are named, both solve
         pytest.param(
             lambda: _electrode_world(
@@ -1670,6 +1664,82 @@ def test_fem_rejects_an_electrode_above_the_surface_like_every_backend(
         _fem_warnings(world)
     assert not isinstance(info.value, gf.BackendCapabilityError), info.value
     assert "'g1'" in str(info.value)
+
+
+def _rods_with_a_conductor(z_c: float, coupling: str, z_end: float | None = None):
+    """Two 3 m rods 50 m apart bonded by a distributed 50 mm2 conductor."""
+    from groundfield.conductors import Conductor
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(w, "rod", name="g2", position=(50, 0, 0.0), length=3.0)
+    w.add_conductor(
+        Conductor(
+            name="bare",
+            start=(0, 0, z_c),
+            end=(50, 0, z_c if z_end is None else z_end),
+            start_electrode="g1",
+            end_electrode="g2",
+            cross_section=50e-6,
+            discretize_segment_length=5.0,
+            coupling_to_soil=coupling,
+        )
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("z_c", "z_end", "needle"),
+    [
+        pytest.param(-0.5, None, "at or above the soil surface", id="in-the-air"),
+        pytest.param(0.0, None, "at or above the soil surface", id="at-z=0"),
+        pytest.param(0.002, None, "soil-surface plane", id="surface-plane"),
+        # sloped from 0.4 m above the surface to 0.5 m deep
+        pytest.param(-0.4, 0.5, "soil surface", id="sloped-into-the-air"),
+    ],
+)
+def test_fem_refuses_a_galvanic_conductor_out_of_the_soil(z_c, z_end, needle) -> None:
+    """image and mom refuse a leaking conductor at or above the surface or in
+    its plane; 4fc8153's fem solved the world (35.9147 Ohm), since its
+    out-of-soil refusal looked at the electrodes only (audit R2A-07)."""
+    # audit R2A-07
+    import warnings
+
+    for backend in ("image", "mom"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError, match="soil.surface"):
+                gf.create_engine(backend=backend, segment_length=0.5).solve(
+                    _rods_with_a_conductor(z_c, "galvanic", z_end)
+                )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ValueError, match=needle) as info:
+            gf.create_engine(backend="fem", segment_length=0.5).solve(
+                _rods_with_a_conductor(z_c, "galvanic", z_end)
+            )
+    assert "conductor 'bare'" in str(info.value), info.value
+    assert not isinstance(info.value, gf.BackendCapabilityError), info.value
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("z_c", "coupling"),
+    [(-0.5, "isolated"), (0.0, "isolated"), (0.5, "galvanic")],
+)
+def test_fem_keeps_conductors_that_every_backend_accepts(z_c, coupling) -> None:
+    """Guard: an isolated conductor in the air and a buried bare one solve."""
+    # audit R2A-07
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = gf.create_engine(backend="fem", segment_length=0.5).solve(
+            _rods_with_a_conductor(z_c, coupling)
+        )
+    assert math.isfinite(res.cluster_impedance("g1")[0].real)
 
 
 @pytest.mark.finding("10.23")

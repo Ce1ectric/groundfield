@@ -99,8 +99,11 @@ a warning in between; audit R2A-02).
 - **Error** (`ValueError`, before anything else): an electrode, driven or
   passive, lies at or above the soil surface, in the surface plane
   ($2z \le a$) or reaches above it — what every other backend refuses as
-  well (audit D2A-06). A rod with its head at $z = 0$ is the ordinary
-  driven rod and stays valid.
+  well (audit D2A-06) — and so does a galvanic distributed conductor
+  whose leakage segments do (audit R2A-07; `fem` itself treats every
+  conductor as a lumped branch). A rod with its head at $z = 0$ is the
+  ordinary driven rod and stays valid; an isolated conductor may run in
+  the air.
 - **Error** (`BackendCapabilityError`, before meshing): an electrode
   touches a layer that its hemisphere does not reach — a rod through the
   top layer, a wire on (or within its radius above) an interface below

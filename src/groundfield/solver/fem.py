@@ -386,7 +386,7 @@ class FemReductionWarning(UserWarning):
 
 
 def _reject_electrodes_out_of_the_soil(world: "World") -> None:
-    """Refuse electrodes at or above the soil surface, like every backend.
+    """Refuse leakage paths at or above the soil surface, like every backend.
 
     The integral backends refuse a leakage segment whose mid-point lies at
     or above the surface, in the surface plane (``2 z <= wire_radius``: the
@@ -402,15 +402,25 @@ def _reject_electrodes_out_of_the_soil(world: "World") -> None:
     shallowest point at ``z <= 0`` or with ``2 z <= wire_radius``. Only
     :class:`RodElectrode` is non-horizontal: a strip whose end depths
     differ by round-off is a horizontal wire, not a rod (audit R2A-01).
+    The leakage segments of a galvanic distributed conductor are checked
+    as the integral backends discretise them (audit R2A-07: a bare
+    conductor in the air was solved, ``fem`` treating it as a lumped
+    branch); an isolated conductor has no leakage segment and may run
+    anywhere.
 
     Raises
     ------
     ValueError
-        For the first such electrode (no other backend solves the world
-        either, so not a :class:`BackendCapabilityError`).
+        For the first such electrode or conductor (no other backend solves
+        the world either, so not a :class:`BackendCapabilityError`).
     """
+    from groundfield.solver._discretize import _discretize_conductor
     from groundfield.solver._guards import _SURFACE_TOL
 
+    remedy = (
+        "Bury it (e.g. at z = 0.5 ... 0.8 m), or start a rod at the "
+        "surface (z = 0), which is the ordinary driven rod."
+    )
     for e in world.electrodes:
         z_top = float(e.bounds()[0][2])  # the shallowest point
         a = float(e.wire_radius)
@@ -429,9 +439,38 @@ def _reject_electrodes_out_of_the_soil(world: "World") -> None:
             continue
         raise ValueError(
             f"Backend 'fem': electrode '{e.name}' {what}. Every backend refuses "
-            "an electrode out of the soil: z is a depth, positive downwards. "
-            "Bury it (e.g. at z = 0.5 ... 0.8 m), or start a rod at the "
-            "surface (z = 0), which is the ordinary driven rod."
+            f"an electrode out of the soil: z is a depth, positive downwards. {remedy}"
+        )
+    for c in world.conductors:
+        if not getattr(c, "is_distributed", False):
+            continue
+        if getattr(c, "coupling_to_soil", "isolated") != "galvanic":
+            continue
+        segments, _ = _discretize_conductor(c)
+        if not segments:
+            continue
+        z = np.array([float(seg.midpoint[2]) for seg in segments])
+        a = float(c.wire_radius)
+        k = int(np.argmin(z))
+        z_ends = (float(c.start[2]), float(c.end[2]))
+        if z[k] <= 0.0:
+            what = (
+                f"has a leakage segment at or above the soil surface (z = {z[k]:.4g} m)"
+            )
+        elif 2.0 * z[k] <= a:
+            what = (
+                f"has a leakage segment in the soil-surface plane (z = {z[k]:.4g} m "
+                f"<= wire_radius/2 = {0.5 * a:.4g} m), partly in the air"
+            )
+        elif min(z_ends) < -_SURFACE_TOL:
+            what = f"reaches above the soil surface (an end at z = {min(z_ends):.4g} m)"
+        else:
+            continue
+        raise ValueError(
+            f"Backend 'fem': conductor '{c.name}' (coupling_to_soil='galvanic', "
+            f"distributed) {what}. Every backend refuses a leaking conductor out "
+            "of the soil: z is a depth, positive downwards. Bury it, or make it "
+            "coupling_to_soil='isolated' if it does not leak into the soil."
         )
 
 
@@ -2083,9 +2122,10 @@ def solve_fem(
     ValueError
         If an electrode, driven or passive, lies at or above the soil
         surface, in the surface plane (``2 z <= wire_radius``) or reaches
-        above it (a rod head above ``z = 0``) — what every other backend
-        refuses as well (audit D2A-06). A rod with its head at ``z = 0``
-        is valid.
+        above it (a rod head above ``z = 0``), or a galvanic distributed
+        conductor has a leakage segment there — what every other backend
+        refuses as well (audit D2A-06, R2A-07). A rod with its head at
+        ``z = 0`` is valid.
 
     Warns
     -----
@@ -2110,7 +2150,7 @@ def solve_fem(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    _reject_electrodes_out_of_the_soil(world)  # audit D2A-06
+    _reject_electrodes_out_of_the_soil(world)  # audit D2A-06, R2A-07
     _reject_concrete_shells(world, "fem")
     _warn_ignored_sources(world, "fem")
 
