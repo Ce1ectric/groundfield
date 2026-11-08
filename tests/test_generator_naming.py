@@ -276,3 +276,57 @@ def test_verify_current_balance_lower_case_keys() -> None:
     with _deprecated("source_magnitude_A", "source_magnitude_a"):
         z_old = lay.measured_grounding_impedance(res, source_magnitude_A=2.0)
     assert z_old == lay.measured_grounding_impedance(res, source_magnitude_a=2.0)
+
+
+_PRISTINE_V0150 = pathlib.Path("/home/claude/gf_pristine_v0150/src")
+
+_DUMP_V0150_LAYOUT = """
+import pickle, sys, warnings
+warnings.simplefilter("ignore")
+import groundfield as gf
+from groundfield.generators import OrtsnetzLayout
+def house(cx, cy, oid):
+    return gf.BuildingFootprint(polygon_xy_m=[(cx - 5, cy - 5), (cx + 5, cy - 5),
+                                (cx + 5, cy + 5), (cx - 5, cy + 5)], osm_id=oid)
+lay = OrtsnetzLayout.from_footprints([house(30.0, 18.0, 1), house(55.0, -18.0, 2)],
+                                     substation_xy=(0.0, 0.0))
+k = lay.add_kvs((40.0, 0.0))
+lay.add_pen_cable(start="substation", end=k)
+lay.add_pen_cable(start=k, end_xy=(80.0, 0.0))
+lay.connect_all_buildings()
+lay.add_auxiliary_electrode(distance_m=150.0)
+pickle.dump(lay, open(sys.argv[1], "wb"))
+"""
+
+
+@pytest.mark.finding("10.69")
+@pytest.mark.skipif(
+    not _PRISTINE_V0150.is_dir(), reason="pristine v0.15.0 tree not available"
+)
+def test_layout_pickled_with_v0150_still_builds(tmp_path: pathlib.Path) -> None:
+    """Audit L6: a v0.15.0 pickle carries ``kvs_placements``; unpickling
+    worked but ``to_world`` raised AttributeError ('cabinet_placements')."""
+    import os
+    import pickle
+
+    target = tmp_path / "layout_v0150.pkl"
+    env = dict(os.environ, PYTHONPATH=str(_PRISTINE_V0150))
+    subprocess.run(
+        [sys.executable, "-c", _DUMP_V0150_LAYOUT, str(target)],
+        env=env,
+        check=True,
+        timeout=300,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        layout = pickle.loads(target.read_bytes())
+    assert [c.name for c in layout.cabinet_placements] == ["kvs_0"]
+    assert all(type(c) is CabinetPlacement for c in layout.cabinet_placements)
+    assert "kvs_placements" not in layout.__dict__
+    world = layout.to_world(seed=0, foundation_outline="spec")
+    assert any(e.name.startswith("kvs_0") for e in world.electrodes)
+    assert world.sources[0].return_to == "aux_rod_0"
+    # The migrated layout pickles and dumps in the new form.
+    again = pickle.loads(pickle.dumps(layout))
+    assert again == layout
+    assert "cabinet_placements" in json.loads(layout.model_dump_json())

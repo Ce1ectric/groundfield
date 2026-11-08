@@ -247,6 +247,30 @@ class LvNetworkLayout(
             data, {"kvs_placements": "cabinet_placements"}, "LvNetworkLayout"
         )
 
+    def __setstate__(self, state: dict) -> None:
+        """Unpickle, also layouts pickled by v0.15.0.
+
+        A v0.15.0 pickle (``OrtsnetzLayout``) stores its cabinets under
+        ``kvs_placements``; they are moved to :attr:`cabinet_placements`
+        as plain :class:`CabinetPlacement` objects (audit L6: the layout
+        unpickled, but ``to_world`` raised ``AttributeError``).
+        """
+        values = state.get("__dict__")
+        if isinstance(values, dict) and "kvs_placements" in values:
+            values = dict(values)
+            legacy = values.pop("kvs_placements") or []
+            if "cabinet_placements" not in values:
+                values["cabinet_placements"] = [
+                    CabinetPlacement(name=p.name, position_xy=tuple(p.position_xy))
+                    for p in legacy
+                ]
+            fields_set = set(state.get("__pydantic_fields_set__") or ())
+            if "kvs_placements" in fields_set:
+                fields_set.discard("kvs_placements")
+                fields_set.add("cabinet_placements")
+            state = {**state, "__dict__": values, "__pydantic_fields_set__": fields_set}
+        super().__setstate__(state)
+
     @property
     def kvs_placements(self) -> list[CabinetPlacement]:
         """Deprecated alias of :attr:`cabinet_placements`."""
