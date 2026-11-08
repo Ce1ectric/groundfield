@@ -423,7 +423,7 @@ def _decode_ndarray(body: Any, path: str, depth: int) -> np.ndarray:
     if not isinstance(data, list) or len(data) != size:
         n_items = len(data) if isinstance(data, list) else type(data).__name__
         raise ValueError(
-            f"{bad} has shape {shape} ({size} items) but data of {n_items} items."
+            f"{bad} has shape {shape} ({size} items) but data of {n_items} item(s)."
         )
     items = [_decode_metadata(v, f"{path}[{i}]", depth + 1) for i, v in enumerate(data)]
     for i, item in enumerate(items):
