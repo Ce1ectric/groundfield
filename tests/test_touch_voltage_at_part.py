@@ -335,6 +335,17 @@ def test_outlines_remove_the_feet_where_nobody_can_stand() -> None:
         res, w, position=door, bonded_to="rod", exclude=[HOUSING, shed]
     )
     np.testing.assert_allclose(np.degrees(angles2), [15.0 * k for k in kept[1:]])
+    # Map coordinates (UTM, 1e-9 m resolution near 5.8e6 m): the feet on the
+    # wall line stay, the same 13 positions as in local coordinates.
+    east, north = 604_123.37, 5_752_345.61
+    utm = [(x + east, y + north) for x, y in HOUSING]
+    angles3, _ = touch_voltage_at_part(
+        res, w, position=(east, north - 1.25), bonded_to="rod", exclude=[utm]
+    )
+    np.testing.assert_allclose(np.degrees(angles3), [15.0 * k for k in kept])
+    # One polygon instead of a sequence of polygons is a clear error.
+    with pytest.raises(ValueError, match="sequence of outlines"):
+        touch_voltage_at_part(res, w, position=door, bonded_to="rod", exclude=HOUSING)
 
 
 @pytest.mark.finding("10.21")

@@ -305,7 +305,8 @@ def _part_directions(n_angles: int | None, directions) -> tuple[np.ndarray, np.n
     for d in rows:
         if d.size not in (2, 3):
             raise ValueError(
-                f"directions must be 2- or 3-vectors, got {tuple(d.tolist())}."
+                "directions must be a sequence of 2- or 3-vectors, got an "
+                f"entry {tuple(d.tolist())}."
             )
         units.append(_horizontal((d[0], d[1], d[2] if d.size == 3 else 0.0))[:2])
     unit = np.asarray(units)
@@ -314,19 +315,19 @@ def _part_directions(n_angles: int | None, directions) -> tuple[np.ndarray, np.n
 
 
 def _accessible(
-    feet_xy: np.ndarray, outlines, origin: np.ndarray, distance: float
+    local: np.ndarray, outlines, origin: np.ndarray, distance: float
 ) -> np.ndarray:
     """Mask of the foot positions not strictly inside any of ``outlines``.
 
-    Computed relative to ``origin`` (the touched part), so map coordinates
-    such as UTM do not cost the precision of the boundary test; a foot on
+    ``local`` are the foot positions relative to ``origin`` (the touched
+    part); the outlines are shifted to the same origin, so map coordinates
+    such as UTM do not cost the precision of the boundary test. A foot on
     an outline (within ``1e-9`` of ``max(1, distance)``) stands against
     the wall and is kept.
     """
-    keep = np.ones(len(feet_xy), dtype=bool)
+    keep = np.ones(len(local), dtype=bool)
     if outlines is None:
         return keep
-    local = feet_xy - origin
     tol = 1e-9 * max(1.0, distance)
     for k, outline in enumerate(outlines):
         poly = np.asarray(outline, dtype=float)
@@ -337,8 +338,9 @@ def _accessible(
             or not np.all(np.isfinite(poly))
         ):
             raise ValueError(
-                f"exclude[{k}] must be a polygon of at least 3 vertices (x, y) "
-                "or (x, y, z) with finite coordinates in m."
+                "exclude must be a sequence of outlines, each a polygon of at "
+                "least 3 vertices (x, y) or (x, y, z) with finite coordinates "
+                f"in m; exclude[{k}] is not."
             )
         poly = poly[:, :2] - origin
         edges = np.stack([poly, np.roll(poly, -1, axis=0)], axis=1)
@@ -775,14 +777,13 @@ def touch_voltage_at_part(
     _check_distance(distance)
     origin = _horizontal_xy(position, "position")
     angles, unit = _part_directions(n_angles, directions)
-    feet_xy = origin + distance * unit
-    keep = _accessible(feet_xy, exclude, origin, distance)
+    keep = _accessible(distance * unit, exclude, origin, distance)
     if not keep.any():
         raise ValueError(
             "every foot position around the part lies inside an outline of "
             "exclude; there is no accessible standing position."
         )
-    angles, feet_xy = angles[keep], feet_xy[keep]
+    angles, feet_xy = angles[keep], origin + distance * unit[keep]
     u_part = _node_potential(result, bonded_to, frequency_index)
     feet = np.column_stack([feet_xy, np.full(len(feet_xy), surface_z, dtype=float)])
     _uniform_current_caveat(result, world, feet, caller="touch_voltage_at_part")
