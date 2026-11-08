@@ -56,6 +56,21 @@ _RING_HOUSE = BuildingTypeSpec(
         electrodes=[FoundationElectrodeSpec(style="ring", size_m=10.0, depth_m=0.8)]
     ),
 )
+# The scenarios below put a house's connection point on its site position.
+# Up to user decision Q38 a ring foundation was one grid mesh connected at
+# its centre; since then it is one strip per side, connected at the start of
+# its local -y side, the (-5, -5) m corner. The offset puts that corner, and
+# so the connection point, back on the site position.
+_RING_HOUSE_AT_SITE = BuildingTypeSpec(
+    name="residential",
+    grounding=GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style="ring", size_m=10.0, depth_m=0.8, offset_xy_m=(5.0, 5.0)
+            )
+        ]
+    ),
+)
 _ROD_SUBSTATION = SubstationConfig(
     grounding=GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.5)])
 )
@@ -164,7 +179,7 @@ _CASES = {
     # audit A3SG-03: the houses of the middle row sit on the east / west
     # trunks; fed from the substation slots, their drops run along the trunk
     "radial-default-grid-ring-houses": dict(
-        building_types=[_RING_HOUSE],
+        building_types=[_RING_HOUSE_AT_SITE],
         building_counts={"residential": 30},
         pen_topology=RadialTrunkTopology(),
     ),
@@ -180,7 +195,7 @@ _CASES = {
     ),
     # audit A3SG-03: a house beside another cabinet's cable
     "star-drop-along-another-cabinet-cable": dict(
-        building_types=[_RING_HOUSE],
+        building_types=[_RING_HOUSE_AT_SITE],
         building_counts={"residential": 1},
         placement=ExplicitPlacement(positions=[(30.0, 10.0)]),
         cabinets=CabinetConfig(
@@ -223,12 +238,13 @@ def test_a_drop_starts_at_the_nearest_point_of_its_feeding_cable() -> None:
 # stream DOC-B
 @pytest.mark.finding("10.38")
 def test_a_building_on_the_main_splits_it() -> None:
-    """A ring foundation's anchor (the grid-mesh centre) lies on the main:
-    the main runs through it, the building gets no drop."""
+    """A ring foundation's anchor lies on the main (the grid-mesh centre up
+    to user decision Q38, the corner put on the site position since): the
+    main runs through it, the building gets no drop."""
     world = _build(
         building_counts={"residential": 2},
         placement=_TWO_HOUSES,
-        building_types=[_RING_HOUSE],
+        building_types=[_RING_HOUSE_AT_SITE],
     )
     names = {c.name: (c.start_electrode, c.end_electrode) for c in _pen(world)}
     assert "pen_service_residential_0_foundation_0" not in names
@@ -287,7 +303,7 @@ def test_a_building_on_top_of_a_node_is_rejected_clearly() -> None:
     """A house whose connection point coincides with the cabinet's would get
     a cable of no length (a Conductor validation error deep in the build)."""
     cfg = TnNetworkConfig(
-        building_types=[_RING_HOUSE],
+        building_types=[_RING_HOUSE_AT_SITE],
         building_counts={"residential": 2},
         placement=ExplicitPlacement(positions=[(-60.0, 0.0), (-180.0, 0.0)]),
     )
@@ -352,13 +368,15 @@ def test_z_in_of_a_100_house_network_drops_against_the_old_routing() -> None:
     ds = 2 m, 50 Hz. Z_in of the world built by the 0.15.0 routing (drops
     from the cabinets, measured with this solver): 0.202724 ohm; the
     nearest-point tree with chained cabinets (base): 0.206457 ohm (+1.8 %,
-    against the documented direction); now 0.200434 ohm."""
+    against the documented direction); then 0.200434 ohm. Since user
+    decision Q38 each ring is one strip per side and its drop ends at its
+    (-5, -5) m corner instead of its centre: 0.200357 ohm (-0.039 %)."""
     world = _build(building_types=[_RING_HOUSE], building_counts={"residential": 100})
     engine = gf.create_engine(backend="image", segment_length=2.0, frequencies=[50.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         z = complex(np.asarray(engine.solve(world).input_impedance())[0]).real
-    assert z == pytest.approx(0.200434, rel=1e-5)
+    assert z == pytest.approx(0.200357, rel=1e-5)
     assert z < 0.202724
 
 

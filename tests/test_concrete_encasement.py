@@ -197,7 +197,9 @@ def test_v1_lumped_shell_is_the_sunde_coefficient_on_the_foundation() -> None:
     $C = \rho_c/(2\pi)\,\ln(r_b/r_a)$ on the foundation (radius $r_b$);
     its lumped resistance $C/L_\text{perim}$ matches the closed form. Up to
     0.15.0 the value went into ``World.concrete_shell_corrections``
-    (10.12)."""
+    (10.12). Since user decision Q38 the ring is one strip per side, each
+    with $r_b$ and $C$; their shells $C/L_k$ in parallel are
+    $C/L_\text{perim}$ (up to then one grid mesh carried it)."""
     from groundfield.geometry.electrodes import shell_resistance_from_coefficient
 
     rho_c = 5000.0
@@ -222,14 +224,20 @@ def test_v1_lumped_shell_is_the_sunde_coefficient_on_the_foundation() -> None:
         seed=0,
     ).build()
     assert world.concrete_shell_corrections == {}
-    foundation = world.get_electrode("residential_0_foundation_0")
-    assert foundation.wire_radius == pytest.approx(r_b)
-    assert foundation.concrete_shell_coefficient_ohm_m == pytest.approx(
-        rho_c / (2.0 * math.pi) * math.log(r_b / r_a), rel=1e-15
+    name = "residential_0_foundation_0"
+    sides = [world.get_electrode(name)] + [
+        world.get_electrode(f"{name}_w{j}") for j in (1, 2, 3)
+    ]
+    assert [side.kind for side in sides] == ["strip"] * 4
+    for side in sides:
+        assert side.wire_radius == pytest.approx(r_b)
+        assert side.concrete_shell_coefficient_ohm_m == pytest.approx(
+            rho_c / (2.0 * math.pi) * math.log(r_b / r_a), rel=1e-15
+        )
+    in_parallel = 1.0 / sum(
+        1.0 / shell_resistance_from_coefficient(side) for side in sides
     )
-    assert shell_resistance_from_coefficient(foundation) == pytest.approx(
-        expected_r_shell, rel=1e-12
-    )
+    assert in_parallel == pytest.approx(expected_r_shell, rel=1e-12)
 
 
 @pytest.mark.finding("10.12")
@@ -388,7 +396,12 @@ def test_stochastic_moisture_samples_per_realisation() -> None:
     w_a = TnNetworkGenerator(cfg, seed=0).build()
     w_b = TnNetworkGenerator(cfg, seed=0).build()
     assert shells(w_a) == shells(w_b)
-    assert len(shells(w_a)) == 3
+    # Three foundations of one strip per side each (user decision Q38; up to
+    # then one grid mesh each); the four sides share one draw.
+    assert len(shells(w_a)) == 12
+    for k in range(3):
+        name = f"residential_{k}_foundation_0"
+        assert len({shells(w_a)[n] for n in shells(w_a) if n.startswith(name)}) == 1
 
     w_c = TnNetworkGenerator(cfg, seed=1).build()
     # At least one foundation should have a different sampled shell
@@ -435,10 +448,12 @@ def test_substation_ring_and_kvs_rod_are_never_concrete_encased() -> None:
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     assert world.concrete_shell_corrections == {}
-    # The only shell is on the foundation, not on any substation / KVS
-    # electrode.
+    # The only shell is on the foundation (one strip per side since user
+    # decision Q38), not on any substation / KVS electrode.
     encased = [e.name for e in world.electrodes if e.concrete_shell_coefficient_ohm_m]
-    assert encased == ["residential_0_foundation_0"]
+    assert encased == ["residential_0_foundation_0"] + [
+        f"residential_0_foundation_0_w{j}" for j in (1, 2, 3)
+    ]
 
 
 # ---------------------------------------------------------------------

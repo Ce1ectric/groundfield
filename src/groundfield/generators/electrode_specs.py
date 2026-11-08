@@ -48,7 +48,8 @@ FoundationStyle = Literal["ring", "mesh"]
 - ``"ring"`` — only the rectangle's perimeter is buried (a closed
   loop of wire); no internal cross-bracing. The geometry of a
   :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
-  ``n_x = n_y = 1`` (one mesh = perimeter wires only).
+  ``n_x = n_y = 1`` (one mesh = perimeter wires only), built as one
+  straight wire per side (user decision Q38).
 - ``"mesh"`` — the perimeter plus internal horizontal and vertical
   cross-braces, dividing the foundation into ``n_x × n_y`` cells.
   The classical *Maschenerder* layout.
@@ -63,30 +64,20 @@ __all__ = [
     "rod_circle",
 ]
 
-# User decision Q21 (2026.11). The numbers bound the relative difference of
-# the input impedance between the two values over the scope they name, with
-# a margin over the largest values found (audit R2B-01/02, evidence of
-# stream f3gen: r2b_scope_scan.py and r2b_scope_refine.py search the scope,
-# r2b_corner_cases.py checks the largest cases with Engine.solve and an
-# independent BEM): 0.691 % (4 m x 1 m, t = 0.2 m, rho_c = 30 ohm m,
-# 1000/30 ohm m, h_1 = 5 m) and 1.553 % (16 m x 1 m, the same shell,
-# h_1 = 10 m); 0.321 % (80 m x 20 m) and 0.915 % (150 m x 7.75 m) bare or
-# with the default 5 cm shell (30/200 ohm m, h_1 = 5 m). Below a short side
-# of 1 m the difference grows (2 m x 0.5 m: 1.02 %).
+# User decisions Q21 and Q38 (2026.11). The field has no effect: both values
+# put the same concrete shell on the wires, and every rectangle without
+# cross-braces is one owner per side at every orientation (Q38; up to then
+# the default made an axis-aligned one a single grid-mesh owner). The size of
+# that change is quoted in the field description (evidence of stream d3gen:
+# q38_signed_analyse.out, q38_change_cases_*.out).
 _CONCRETE_MODEL_DEPRECATION = (
-    "FoundationElectrodeSpec.concrete_model is deprecated. It no longer "
-    "selects a concrete-shell model (both values put the same shell on the "
-    "wires); it only chooses the uniform-current owners of an axis-aligned "
-    "rectangle without cross-braces (style='ring', or style='mesh' with "
-    "n_x = n_y = 1): one per side for 'distributed', one for the whole "
-    "rectangle for 'lumped' (the default). Over the soils of the AP1 grid, "
-    "for a 5 mm wire at 0.8 m, bare or in concrete of 30 to 1000 ohm m up to "
-    "0.2 m thick, the two differ by less than 1 % up to aspect ratio 4 "
-    "(short side at least 1 m, sides up to 80 m) and 2 % up to aspect ratio "
-    "50 (short side at least 1 m, sides up to 150 m); bare or with the "
-    "default 5 cm shell by less than 0.4 % and 1 %. The field will be "
-    f"removed no earlier than groundfield {DEPRECATION_REMOVAL}; drop the "
-    "argument."
+    "FoundationElectrodeSpec.concrete_model is deprecated and has no effect "
+    "since groundfield 2026.11: every rectangle without cross-braces "
+    "(style='ring', or style='mesh' with n_x = n_y = 1) is one "
+    "uniform-current owner per side, at every orientation, which is what "
+    "'distributed' did, and both values put the same concrete shell on the "
+    "wires. The field will be removed no earlier than groundfield "
+    f"{DEPRECATION_REMOVAL}; drop the argument."
 )
 
 
@@ -200,23 +191,22 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
 
     The image family solves one uniform leakage current per electrode
     (an *owner*); the owners of a foundation depend only on its
-    structure (and, for an axis-aligned ring, on the deprecated
-    :attr:`concrete_model`), never on the orientation, on how the outline
-    is described or on whether a shell is configured (audit A2G-04). A
-    ``"mesh"`` foundation is one straight wire per mesh line (a polyline
-    split at the crossings), bonded to the first: one owner over
-    perimeter and braces was 2.4 % (2 × 2) to 3.7 % (4 × 4) high against
-    ``mom`` (one current per segment) with the default line kernel, one
-    owner per wire is 1.1 % high (0.3–0.5 % with the point kernel, the
-    kernel of ``mom``). A ``"ring"`` foundation is one
-    :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
-    ``n_x = n_y = 1`` (one owner) when axis-aligned and one straight wire
-    per side when rotated, and so is a ``"mesh"`` with ``n_x = n_y = 1``
-    (a rectangle without cross-braces); ``concrete_model="distributed"``
-    (deprecated) makes the axis-aligned rectangle one wire per side as
-    well, less than 1 % apart up to aspect ratio 4 and 2 % up to 50 for a
-    short side of at least 1 m (see :attr:`concrete_model` for the scope).
-    A ``polygon_xy_m`` outline is one closed polyline.
+    structure, never on the orientation, on whether a shell is configured
+    (audit A2G-04) or on the deprecated :attr:`concrete_model`, which has
+    no effect (user decision Q38). A ``"mesh"`` foundation is one straight
+    wire per mesh line (a polyline split at the crossings), bonded to the
+    first: one owner over perimeter and braces was 2.4 % (2 × 2) to 3.7 %
+    (4 × 4) high against ``mom`` (one current per segment) with the
+    default line kernel, one owner per wire is 1.1 % high (0.3–0.5 % with
+    the point kernel, the kernel of ``mom``). A rectangle without
+    cross-braces (``"ring"``, or ``"mesh"`` with ``n_x = n_y = 1``) is one
+    straight wire per side, bonded to the first, at every angle (user
+    decision Q38). Up to then an axis-aligned one was one
+    :class:`groundfield.geometry.electrodes.GridMeshElectrode` (one owner)
+    with the default value; per side its input impedance is lower by less
+    than 1 % up to aspect ratio 4 and 2 % up to 50 for a short side of at
+    least 1 m, and equal for a square (see :attr:`concrete_model` for the
+    scope). A ``polygon_xy_m`` outline is one closed polyline (one owner).
 
     With a shell (:attr:`concrete_rho_ohm_m`) every wire of the
     foundation, the cross-braces of a mesh included, is encased (DIN
@@ -340,42 +330,42 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     concrete_model: Literal["lumped", "distributed"] = Field(
         default="lumped",
         description=(
-            "**Deprecated** since 2026.11 (user decision Q21; removal no "
-            'earlier than 2027.5): drop the argument. ``"distributed"`` '
-            "still works and emits a DeprecationWarning; the default "
+            "**Deprecated** since 2026.11 and has no effect (user decisions "
+            "Q21 and Q38; removal no earlier than 2027.5): drop the argument. "
+            '``"distributed"`` emits a DeprecationWarning; the default '
             '``"lumped"`` is accepted silently, also from the JSON and '
-            "pickles of 0.15.0. The field no longer selects a shell model: "
-            "both values put the Sunde-shell coefficient "
-            "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every wire of an "
-            "encased foundation, cross-braces included, whose radius "
-            "becomes r_b = r_a + t; the solver adds C / ds to the diagonal "
-            "of each segment, i.e. the lumped shell resistance C / L in "
-            "series with the wire. It only chooses the uniform-current "
-            "owners of an axis-aligned rectangle without cross-braces "
-            "(``style='ring'``, or ``style='mesh'`` with ``n_x = n_y = 1``): "
-            '``"lumped"`` one grid-mesh owner for the whole rectangle, '
-            '``"distributed"`` one owner per side. Over the soils of the '
-            "AP1 grid, for a 5 mm wire at 0.8 m, bare or in concrete of 30 "
-            "to 1000 Ω·m up to 0.2 m thick, the two differ by less than "
-            "1 % up to aspect ratio 4 (short side at least 1 m, sides up to "
-            "80 m) and 2 % up to aspect ratio 50 (short side at least 1 m, "
-            "sides up to 150 m); bare or with the default 5 cm shell by less "
-            "than 0.4 % and 1 % (audit R2B-01). Rotated rectangles (one "
-            "owner per side), meshes with cross-braces (one owner per wire) "
-            "and polygon outlines (one closed wire) are the same for both "
-            "values (audit A2G-04). Up to 0.15.0 the lumped shell was a "
-            "registry entry that only the TN generator's PEN service drops "
-            "read (review findings 10.12-10.14)."
+            "pickles of 0.15.0. Both values build the same foundation. Every "
+            "wire of an encased foundation, cross-braces included, carries the "
+            "Sunde-shell coefficient C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) "
+            "and the radius r_b = r_a + t; the solver adds C / ds to the "
+            "diagonal of each segment, i.e. the lumped shell resistance C / L "
+            "in series with the wire. Every rectangle without cross-braces "
+            "(``style='ring'``, or ``style='mesh'`` with ``n_x = n_y = 1``) is "
+            "one uniform-current owner per side at every orientation, which is "
+            'what ``"distributed"`` did (user decision Q38). Up to then '
+            '``"lumped"`` made an axis-aligned one a single grid-mesh owner; '
+            "per side its input impedance is never higher (equal for a "
+            "square): over the soils of the AP1 grid, for a 5 mm wire at "
+            "0.8 m, bare or in concrete of 30 to 1000 Ω·m up to 0.2 m thick, "
+            "it is lower by less than 1 % up to aspect ratio 4 (short side at "
+            "least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short "
+            "side at least 1 m, sides up to 150 m); bare or with the default "
+            "5 cm shell by less than 0.4 % and 1 % (audit R2B-01). Rotated "
+            "rectangles, meshes with cross-braces (one owner per wire) and "
+            "polygon outlines (one closed wire) did not change. Up to 0.15.0 "
+            "the lumped shell was a registry entry that only the TN "
+            "generator's PEN service drops read (review findings 10.12-10.14)."
         ),
     )
 
     @field_validator("concrete_model")
     @classmethod
     def _warn_deprecated_concrete_model(cls, value: str) -> str:
-        """Warn for the non-default value (user decision Q21).
+        """Warn for the non-default value (user decisions Q21 and Q38).
 
-        Runs on construction, ``model_validate`` and JSON input; the
-        default ``"lumped"`` (also in files written by 0.15.0) is silent.
+        The value has no effect; the warning says so. Runs on construction,
+        ``model_validate`` and JSON input; the default ``"lumped"`` (also in
+        files written by 0.15.0) is silent.
         Pickles are not validated, and copies only warn when their
         ``update`` sets the value (:meth:`model_copy`), so the generators,
         which pass resolved specs on as copies, never repeat the warning.

@@ -1,0 +1,45 @@
+# Stream D3GEN — the user's answer Q38 of 2026-11-08: every rectangular
+# foundation without cross-braces is one current owner per side at every
+# angle; FoundationElectrodeSpec.concrete_model has no effect. See
+# ../README.md for the format.
+#
+# Only the golden case that builds an axis-aligned style="ring" foundation
+# with the default value moves: its two 10 m square rings (30 m apart) were
+# one GridMeshElectrode each and are four bonded strips each, so the case now
+# equals mutual_foundations_distributed_concrete bit for bit. Measured
+# (deliver/evidence/d3gen/q38_golden.out) against the snapshot of the base
+# 77c58bd: Z_G 5.18e-4, R 1.56e-2 (norm-wise), the world JSON; nothing else
+# moves (47 of 48 cases bit-identical, GF_GOLDEN_STRICT against the
+# snapshot). Against v0.15.0: Z_G 0.4213 (the shell of 10.12 and the galerkin
+# off-diagonal of Q15, declared by gen2 and ddefaults, plus this change),
+# R 1.56e-2 (this change alone).
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["Z_G"]
+findings = ["10.39"]
+reason = """User decision Q38: an axis-aligned style="ring" foundation is one strip per side for
+the default concrete_model="lumped" too. A square ring alone does not change (symmetry); in the
+pair the passive, floating foundation now carries equalising currents among its four sides (zero
+net current), as the distributed case does since 10.29: Z_G moves by 5.18e-4 norm-wise against
+the base, on top of the gen2 and ddefaults changes against v0.15.0 (the harness compares with
+v0.15.0, where this share cannot be told apart, hence no min_rel_change; the bound adds to theirs)."""
+max_rel_change = 6e-4
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["R"]
+findings = ["10.39"]
+reason = """User decision Q38: the equalising currents of the passive foundation (four owners
+instead of one) change the field next to it: R moves by 1.558e-2 norm-wise (v0.15.0 and the
+base alike; the value of mutual_foundations_distributed_concrete)."""
+min_rel_change = 1.5e-2
+max_rel_change = 1.6e-2
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["world/json"]
+findings = ["10.39"]
+reason = """User decision Q38: each foundation is four strip electrodes (h<k>_foundation_0,
+_w1 ... _w3) bonded by three ideal bare_copper conductors instead of one grid_mesh electrode."""
+allow_shape_change = true

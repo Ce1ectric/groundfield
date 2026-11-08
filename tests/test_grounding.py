@@ -194,7 +194,8 @@ def test_grounding_system_strip_orientation() -> None:
 
 
 def test_foundation_ring_style_uses_perimeter_only() -> None:
-    """``style='ring'`` produces a GridMeshElectrode with n_x=n_y=1."""
+    """``style='ring'`` builds the perimeter only: one strip per side
+    (user decision Q38; up to then a GridMeshElectrode with n_x=n_y=1)."""
     grounding = GroundingSystemSpec(
         electrodes=[
             FoundationElectrodeSpec(
@@ -206,10 +207,8 @@ def test_foundation_ring_style_uses_perimeter_only() -> None:
     grounding.build_at(
         world, site_xy=(0.0, 0.0), name_prefix="house_0", rng=np.random.default_rng(0)
     )
-    e = world.electrodes[0]
-    assert e.kind == "grid_mesh"
-    assert e.n_x == 1
-    assert e.n_y == 1
+    assert [e.kind for e in world.electrodes] == ["strip"] * 4
+    assert sum(e.total_length() for e in world.electrodes) == pytest.approx(40.0)
 
 
 def test_foundation_mesh_style_honours_n_x_n_y() -> None:

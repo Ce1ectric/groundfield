@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient; user decisions Q20: braces encased, Q21: `concrete_model` deprecated); see the amendment at the end of this document |
+| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient; user decisions Q20: braces encased, Q21: `concrete_model` deprecated, Q38: one owner per side, `concrete_model` without effect); see the amendment at the end of this document |
 | **Date** | 2026-05-15 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.generators.electrode_specs.FoundationElectrodeSpec`
@@ -393,9 +393,10 @@ Decision:
    $r_b$ on every wire of an encased foundation, the cross-braces of a mesh
    foundation included (user decision Q20, below); rods stay bare; no
    shell resistance on PEN drops; substation and cabinet electrodes get
-   $C$ when their specification is encased. `concrete_model` only chooses
-   one or several owners for an axis-aligned rectangle without
-   cross-braces and is deprecated (user decision Q21, below).
+   $C$ when their specification is encased. `concrete_model` has no
+   effect: every rectangle without cross-braces is one owner per side
+   (user decision Q38, below); the field is deprecated (user decision Q21,
+   below).
 3. **Registry deprecated.** `World.concrete_shell_corrections` is read by
    no solver and warns at solve (removal no earlier than 2027.5).
 4. **Conversion helpers** in `groundfield.geometry.electrodes`:
@@ -441,36 +442,79 @@ not change by the brace rule.
 
 ### User decision Q21 (2026.11): `concrete_model` is deprecated
 
-Since item 2 the field no longer selects a shell model; it only chooses
-one owner (`"lumped"`, one grid mesh) or one per side (`"distributed"`)
-for an axis-aligned rectangle without cross-braces (`style="ring"`, or
-`"mesh"` with `n_x = n_y = 1`). Over the 39 soils of the AP1 grid, for a
-5 mm wire at 0.8 m, bare or in concrete of 30 to 1 000 Ω·m up to 0.2 m
-thick, the two differ by less than 1 % up to aspect ratio 4 (short side at
-least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at
-least 1 m, sides up to 150 m); bare or with the default 5 cm shell by less
-than 0.4 % and 1 %. The bound lies above the largest values found, 0.691 /
-1.553 % and 0.321 / 0.915 % (audit R2B-01: a scan of the scope refined
-around its maxima, the largest cases checked with `Engine.solve` and an
-independent boundary-element solution). The first version of this
-decision quoted 0.16 % and 0.67 %, measured on six rings; the second 0.7 %
-and 1.6 %, the maxima of a coarser scan, without a shortest side for
-aspect ratio 4 (2 m × 0.5 m reaches 1.02 %). The largest values belong to
-the 0.2 m shell, whose outer radius of 0.205 m is not thin against the
-default 0.5 m segments (ratio 2.4, below the thin-wire limit of 5): there an
+Since item 2 the field no longer selected a shell model; it only chose one
+owner (`"lumped"`, one grid mesh) or one per side (`"distributed"`) for an
+axis-aligned rectangle without cross-braces (`style="ring"`, or `"mesh"`
+with `n_x = n_y = 1`), and user decision Q38 (below) took that choice away
+as well. The field is deprecated like the flat `sommerfeld_*` fields of the
+engine: `"distributed"` keeps loading and emits a `DeprecationWarning` at
+the user's line; the default `"lumped"` — also in the configuration JSON
+and pickles of 0.15.0 — is accepted silently; a `model_copy` validates an
+`update` of the field like the constructor (another value raises, audit
+D2B-04; only that field, so a subclass with fields of its own copies as
+before, audit R2B-05) and warns only when it sets the deprecated value,
+also through `copy.replace` on Python ≥ 3.13 (audit R2B-06), so the copies
+made by the generators do not repeat the warning. Assigning the attribute
+and unpickling do not validate and do not warn. Removal no earlier than
+2027.5 (`tests/test_foundation_owners.py`).
+
+### User decision Q38 (2026.11): one owner per side, already in 2026.11.0
+
+Every rectangle without cross-braces (`style="ring"`, or `"mesh"` with
+`n_x = n_y = 1`) is one strip per side, bonded to the local $-y$ side, at
+every orientation and for both values of `concrete_model`, which therefore
+has no effect; the warning of `"distributed"` says so. Up to the decision
+the default `"lumped"` made an axis-aligned one a single
+`GridMeshElectrode` (rotated ones were one strip per side for both
+values). Rationale: of the two owner models, one per side is the closer
+one to one current per segment (at the largest cases of the scope 0.23 …
+0.90 % high against 0.55 … 2.16 % for one owner), it does not depend on
+the orientation, and it is what rotated rectangles and, wire by wire,
+meshes already were. Polygon outlines (one closed polyline), meshes with
+cross-braces and `RingElectrodeSpec` circles are unchanged.
+
+Size of the change for an axis-aligned rectangle built with the default
+value. The input impedance per side is never higher than with one owner:
+the bonded owners carry the split of the current among the sides that
+dissipates least (the owner matrix is symmetric and positive definite),
+and the single owner's split is one of those they can take; for a square
+nothing changes. Over the 39 soils of the AP1 grid, for a 5 mm wire at
+0.8 m, bare or in concrete of 30 to 1 000 Ω·m up to 0.2 m thick, it is
+lower by less than 1 % up to aspect ratio 4 (short side at least 1 m,
+sides up to 80 m) and 2 % up to aspect ratio 50 (short side at least 1 m,
+sides up to 150 m); bare or with the default 5 cm shell by less than 0.4 %
+and 1 %. The largest decreases found are −0.686 / −1.529 % and −0.320 /
+−0.907 % (4 m × 1 m and 16 m × 1 m in 0.2 m of wet concrete over
+1 000 / 30 Ω·m; 80 m × 20 m and 150 m × 7.75 m in 30 / 200 Ω·m): the
+scan of audit R2B-01 (13 524 owner matrices, every value of $\rho_c$),
+re-run for the decision, with no positive value beyond round-off, and
+`Engine.solve` and the owner algebra agree. The same numbers bounded the
+difference between the two values of the field before the decision, as
+one owner over one per side minus one: the first version of decision Q21
+quoted 0.16 % and 0.67 %, measured on six rings; the second 0.7 % and
+1.6 %, the maxima of a coarser scan, without a shortest side for aspect
+ratio 4 (2 m × 0.5 m changes by −1.01 %). The largest values belong to the
+0.2 m shell, whose outer radius of 0.205 m is not thin against the default
+0.5 m segments (ratio 2.4, below the thin-wire limit of 5): there an
 independent solution that averages the potential over the wire surface
-gives 0.598 / 1.468 % instead of 0.691 / 1.553 %, and the comparison with one
+gives −0.594 / −1.447 % instead of −0.686 / −1.529 % (the same at 0.25,
+0.125 and 0.083 m segments), and the comparison of each model with one
 current per segment on the
 [concrete-shell page](../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces)
-is not converged. The field is deprecated like the
-flat `sommerfeld_*` fields of the engine: `"distributed"` keeps working
-and emits a `DeprecationWarning` at the user's line; the default
-`"lumped"` — also in the configuration JSON and pickles of 0.15.0 — is
-accepted silently; a `model_copy` validates an `update` of the field like
-the constructor (another value raises, audit D2B-04; only that field, so a
-subclass with fields of its own copies as before, audit R2B-05) and warns
-only when it sets the deprecated value, also through `copy.replace` on
-Python ≥ 3.13 (audit R2B-06), so the copies made by the generators do not
-repeat the warning. Assigning the attribute and unpickling do not validate
-and do not warn. Removal no earlier than 2027.5
-(`tests/test_foundation_owners.py`).
+is not converged.
+
+Consequences: the AP1 station (4 m × 4 m ring with three rods) changes by
+−0.0009 … −0.0026 % over the 39 AP1 soils, its houses (building outlines)
+not at all; the golden case `mutual_foundations_lumped_concrete` equals
+`mutual_foundations_distributed_concrete` (its passive foundation carries
+equalising currents: $Z_G$ 5.2e-4, the field next to it 1.6 %). The
+electrode named after the foundation is the $-y$ side, so its current and
+`grounding_impedance` refer to that side (as for rotated rectangles and
+meshes); cluster quantities (`cluster_impedance`, `input_impedance`,
+`solve_mutual_matrix`, the touch-voltage helpers, which take the whole
+foundation) keep their meaning. Its connection point, where conductors
+attached by name start, moves from the centre of the rectangle to the
+corner at the start of the $-y$ side. `fem` reduces the four strips as a
+cluster of four electrodes (see the
+[fem page](../explanation/engines/fem.md)). Tests:
+`tests/test_foundation_owners.py` (`# user decision Q38`).

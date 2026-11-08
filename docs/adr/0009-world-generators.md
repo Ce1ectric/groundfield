@@ -305,7 +305,11 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    (10.53, 10.55).
 4. **Geometry.** Layout foundations follow the building footprint (10.54);
    rotated mesh foundations are polylines split at every crossing and
-   footprints at multiples of 90° use the grid-mesh path (10.39);
+   footprints at multiples of 90° are realised as the axis-aligned
+   rectangle with swapped sides (10.39); every rectangular foundation is
+   one wire per line at every angle (audit A2G-04 for meshes, user
+   decision Q38 for rectangles without cross-braces, which were one grid
+   mesh when axis-aligned);
    `PenConfig.depth_m` is honoured; measurement leads run horizontally at
    their configured depth (10.55).
 5. **Network wiring.** PEN cable joints are leakage-free junction nodes
@@ -315,9 +319,9 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    probe lead to `meas_S`, one two-terminal source from the station to
    `meas_H`, and the reading `measured_impedance(result)` (10.17).
 6. **Concrete.** Encased foundations carry the shell coefficient on every
-   wire for both `concrete_model` settings, the cross-braces of a mesh
-   foundation included (DIN 18014, user decision Q20); no shell resistance
-   is put on PEN drops; `concrete_model` is deprecated (user decision Q21;
-   ADR-0012 amendment 2026.11).
+   wire, the cross-braces of a mesh foundation included (DIN 18014, user
+   decision Q20); no shell resistance is put on PEN drops;
+   `concrete_model` has no effect and is deprecated (user decisions Q21
+   and Q38; ADR-0012 amendment 2026.11).
 7. **OSM ingest.** Overpass requests and responses are bounded and
    validated before anything is cached (10.05).

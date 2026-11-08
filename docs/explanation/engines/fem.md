@@ -179,6 +179,27 @@ conductive layer: −56 %; audit R2A-02).
   or polyline electrode, which has no closed-form hemisphere radius. The
   generators build mesh foundations of polyline wires, so generated
   networks cannot be solved with `fem`.
+- **Generated rectangles without cross-braces** (user decision Q38 of
+  2026.11): `FoundationElectrodeSpec(style="ring")`, or `"mesh"` with
+  `n_x = n_y = 1`, is four bonded strips at every orientation; up to the
+  decision an axis-aligned one reached `fem` as one `GridMeshElectrode`
+  (Sverak's formula). As a cluster of four strips the hemisphere radii are
+  summed (`FemReductionWarning`), and the numbers move: a 10 m × 10 m and a
+  20 m × 5 m ring at 0.8 m in 100 Ω·m read −32 % against the image family
+  instead of +21 / +30 %, over the two-layer soils that `fem` accepts in
+  both forms −9 … −40 % instead of +17 … +28 %, and the AP1 station
+  (4 m × 4 m ring with three bonded rods) −35 … −71 % over the 39 AP1
+  soils instead of −22 … −42 %. A rectangle with a side shorter than twice
+  its depth is refused (a strip deeper than half its length, see above; a
+  20 m × 1 m ring at 0.8 m read +73 % as one grid). The layer rule of user
+  decision Q23 takes the horizontal half-extent per electrode, half a side
+  for a strip instead of half the diagonal of the grid, so it reaches less
+  far: a 10 m × 10 m ring over 1 000 / 100 Ω·m at 5 m and over
+  1 000 / 30 Ω·m at 6 m and a 20 m × 5 m ring over 300 / 30 Ω·m at 10 m,
+  which the grid form refused, are solved with the warning at −58 / −54 /
+  −42 %. Rotated rectangles behaved so before; the reduction gets no new
+  rule (user decision Q37: a conforming model replaces it in the next
+  release).
 - The backends an error message names pass their own checks for the
   world — the capability check, the cross-layer limit of `mom_sommerfeld`
   (decided from the geometry), the resource limit, the burial depth of

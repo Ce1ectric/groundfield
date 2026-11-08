@@ -224,8 +224,10 @@ def test_axis_aligned_mesh_foundation_is_one_owner_per_wire() -> None:
 
 
 def test_zero_orientation_uses_axis_aligned_path() -> None:
-    """``orientation_deg = 0.0`` must take the fast path too —
-    avoids needlessly synthesising 4 strips for an axis-aligned house."""
+    """``orientation_deg = 0.0`` builds the axis-aligned rectangle: one
+    strip per side along x and y, bonded to the anchor, as ``None`` does.
+    Up to user decision Q38 the default value made it one
+    ``GridMeshElectrode`` (the "fast path" this test pinned)."""
     world = create_world(
         name="zero_deg",
         soil=TwoLayerSoil(rho_1=100.0, rho_2=50.0, h_1=2.0),
@@ -247,7 +249,11 @@ def test_zero_orientation_uses_axis_aligned_path() -> None:
         rng=np.random.default_rng(0),
     )
     kinds = [e.kind for e in world.electrodes]
-    assert kinds == ["grid_mesh"]
+    assert kinds == ["strip"] * 4
+    for e in world.electrodes:
+        (x0, y0, _), (x1, y1, _) = e.start, e.end
+        assert x0 == x1 or y0 == y1
+    assert world.electrodes[0].start == (-5.0, -3.0, 0.8)
 
 
 # ---------------------------------------------------------------------
