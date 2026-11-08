@@ -361,9 +361,17 @@ def test_generator_and_geo_field_names_are_lower_case() -> None:
     import groundfield.geo
     import pydantic
 
+    # The deprecated alias modules re-export the same classes and warn once,
+    # at their first import (tested elsewhere); do not import them here.
+    aliases = {
+        "groundfield.generators.ortsnetz_builder",
+        "groundfield.generators.tn_ortsnetz",
+    }
     offenders = []
     for package in (gen, groundfield.geo):
         for info in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+            if info.name in aliases:
+                continue
             module = importlib.import_module(info.name)
             for obj in vars(module).values():
                 if (
