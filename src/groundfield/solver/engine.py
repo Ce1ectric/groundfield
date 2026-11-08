@@ -798,6 +798,17 @@ class Engine(BaseModel):
                 warn_external(str(w.message), w.category)
         return super(Engine, copy).model_copy(deep=True) if deep else copy
 
+    def _with(self, **changes: Any) -> Self:
+        """Unvalidated copy with trusted values set by the solver itself.
+
+        For internal copies on the solve path (the resolved kernel, one
+        frequency of the engine's own list): no validation and, above
+        all, no ``warnings.catch_warnings``, which mutates the
+        process-wide warning filters (resetting every module's "shown
+        once" registry and racing with other threads).
+        """
+        return super().model_copy(update=changes)
+
     @staticmethod
     def _options_with_flat(
         options: Any, flat: dict[str, Any], *, explicit: bool
@@ -1078,7 +1089,7 @@ class Engine(BaseModel):
         )
         run_engine = self
         if effective is not None and effective != requested:
-            run_engine = self.model_copy(update={"kernel": effective})
+            run_engine = self._with(kernel=effective)
         solve_fn = spec.resolve_solve_fn()
         t0 = time.perf_counter()
         result = solve_fn(world, run_engine, **kwargs)

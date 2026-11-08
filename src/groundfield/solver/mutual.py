@@ -367,9 +367,7 @@ def _prepare(
     # where it raises below as before.
     n_freq = len(engine.frequencies)
     if -n_freq <= frequency_index < n_freq:
-        engine = engine.model_copy(
-            update={"frequencies": [engine.frequencies[frequency_index]]}
-        )
+        engine = engine._with(frequencies=[engine.frequencies[frequency_index]])
         frequency_index = 0
     branches = assemble_branches(world, engine, topo)
     arrays = SegmentArrays.from_segments(disc.segments)

@@ -217,6 +217,6 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
         raise ValueError("World contains no electrodes.")
     if engine.kernel is None:
         # A direct call resolves the default like Engine.solve (10.28).
-        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
+        engine = engine._with(kernel=DEFAULT_KERNEL)
     green = _HalfSpaceGreen(world.soil.rho, engine.kernel)
     return solve_image_family(world, engine, green, stacklevel=3)

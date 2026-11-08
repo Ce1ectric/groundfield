@@ -299,3 +299,34 @@ def test_the_deprecated_flat_property_still_sets_the_option() -> None:
     assert engine.backend_options().epsrel == 1e-3
     with pytest.warns(DeprecationWarning):
         assert engine.sommerfeld_epsrel == 1e-3
+
+
+def _emit_once_per_location() -> None:
+    warnings.warn("shown once per location", UserWarning, stacklevel=1)
+
+
+@pytest.mark.parametrize("kernel", [None, "point"])
+def test_a_solve_leaves_the_warning_filters_alone(kernel) -> None:
+    """The validating model_copy records warnings with catch_warnings, which
+    resets the 'shown once' registry of every module; the solve's internal
+    engine copies must not go through it (one solve per sweep step would
+    repeat every 'default' warning)."""
+    engine = gf.Engine(segment_length=0.5, kernel=kernel)
+    world = _rod_world()
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("default")
+        _emit_once_per_location()
+        world.solve(engine)
+        _emit_once_per_location()
+    assert sum("shown once per location" in str(r.message) for r in rec) == 1
+
+
+def test_solve_mutual_matrix_leaves_the_warning_filters_alone() -> None:
+    world = _rod_world()
+    engine = gf.Engine(segment_length=0.5, frequencies=[50.0, 150.0])
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("default")
+        _emit_once_per_location()
+        gf.solve_mutual_matrix(world, engine, anchors=["g1"], frequency_index=1)
+        _emit_once_per_location()
+    assert sum("shown once per location" in str(r.message) for r in rec) == 1

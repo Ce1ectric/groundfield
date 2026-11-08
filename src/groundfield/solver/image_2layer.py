@@ -1015,7 +1015,7 @@ def solve_image_2layer(
         tol = engine.image_series_tol
     if engine.kernel is None:
         # The backend's preferred kernel (Engine.kernel = None, 10.28).
-        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
+        engine = engine._with(kernel=DEFAULT_KERNEL)
     green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
     if _crosses_interface(world, _owner_interfaces(soil)):
         # One owner per (electrode, layer) for rods through h_1 (10.15).
