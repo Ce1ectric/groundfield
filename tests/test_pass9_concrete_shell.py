@@ -7,9 +7,14 @@ lumped shell resistance was silently dropped whenever the foundation
 electrode was not the first surviving electrode of its site. Switching
 concrete on then had no effect at all.
 
-The fix folds a site's per-electrode entries onto the anchor inside
-:meth:`GroundingSystemSpec.build_at`, once the bonds that define the
-galvanic cluster are in place.
+0.15.0 folded a site's per-electrode entries onto the anchor. Since
+2026.11 (review pass 10, 10.12 / 10.13) the registry is gone from the
+generators: the shell is the coefficient ``concrete_shell_coefficient_ohm_m``
+on the encased foundation wire itself, so it cannot be looked up under
+the wrong name, rods bonded to the foundation do not leak through it, and
+several encased electrodes of one site each carry their own shell (they
+combine in parallel by construction). The tests below pin that for both
+electrode orders.
 
 This finding spans the generator/solver group boundary of the 0.15.0
 implementation split, which is why it lives in its own module rather than
@@ -58,62 +63,56 @@ FOUNDATION = FoundationElectrodeSpec(
 ROD = RodElectrodeSpec(length_m=1.5, wire_radius_m=0.008)
 
 
+def _shells(world: gf.World) -> dict[str, float]:
+    return {
+        e.name: e.concrete_shell_coefficient_ohm_m
+        for e in world.electrodes
+        if e.concrete_shell_coefficient_ohm_m > 0.0
+    }
+
+
 # ---------------------------------------------------------------------
-# The defect: registry key must be the anchor, not the electrode
+# The defect: the shell must reach the solve whatever the electrode order
 # ---------------------------------------------------------------------
 
 
-def test_shell_registered_when_foundation_is_first():
-    """Control: this case worked before 0.15.0 and must keep working."""
-    world, anchor = _build([FOUNDATION, ROD], rho_c=150.0)
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("order", [[FOUNDATION, ROD], [ROD, FOUNDATION]])
+def test_shell_sits_on_the_foundation_in_either_order(order):
+    """The F16 case (foundation at index 1) and its control: the shell is
+    on the foundation wire, never on the rod, and no registry is used."""
+    world, anchor = _build(order, rho_c=150.0)
     assert anchor is not None
-    assert list(world.concrete_shell_corrections) == [anchor]
-    assert world.concrete_shell_corrections[anchor] > 0.0
+    assert world.concrete_shell_corrections == {}
+    shells = _shells(world)
+    assert len(shells) == 1
+    (name,) = shells
+    assert "foundation" in name and "rod" not in name
 
 
-def test_shell_registered_when_foundation_is_not_first():
-    """The F16 case: foundation at index 1 — key must still be the anchor.
-
-    Before 0.15.0 the entry sat under ``house_foundation_1`` while the
-    consumers looked up ``house_rod_0``, so the shell was dropped.
-    """
-    world, anchor = _build([ROD, FOUNDATION], rho_c=150.0)
-    assert anchor is not None
-    assert anchor.startswith("house_rod")
-    assert list(world.concrete_shell_corrections) == [anchor], (
-        "shell must be keyed by the cluster anchor, not by the "
-        "foundation electrode's own name"
-    )
-    assert world.concrete_shell_corrections[anchor] > 0.0
-
-
-def test_no_registry_entry_without_concrete():
+def test_no_shell_without_concrete():
     """``concrete_rho_ohm_m=None`` keeps the historic bare-wire path."""
     world, _ = _build([ROD, FOUNDATION], rho_c=None)
     assert world.concrete_shell_corrections == {}
+    assert _shells(world) == {}
 
 
+@pytest.mark.finding("10.12")
 def test_shells_of_several_encased_electrodes_combine_in_parallel():
     """Two encased foundations in one cluster combine in parallel.
 
-    Each electrode's ``R_i = rho_c / (2*pi*L_perim,i) * ln(r_b/r_a)`` is
-    already the parallel reduction of the radial shell over its own
-    perimeter, and each leaks its share of the cluster current through
-    its *own* shell into the soil. Two independent radial paths from one
-    equipotential conductor to earth therefore give
-    ``R_eq = (sum_i 1/R_i)**-1`` — for two identical foundations ``R/2``,
-    not ``2R``. Summing them (the first cut of the 0.15.0 F16 fix, caught
-    in adversarial review) overestimates a two-foundation building by a
-    factor of four.
+    Each foundation leaks its share of the cluster current through its
+    *own* shell, ``R_i = C / L_perim,i``; two independent radial paths
+    from one equipotential conductor give ``R_eq = (sum_i 1/R_i)**-1`` —
+    for two identical foundations ``R/2``, not ``2R`` (the first cut of the
+    0.15.0 F16 fix summed them). With the shell on each electrode the
+    parallel combination is built into the solve: both carry the same C.
     """
-    world_one, anchor_one = _build([FOUNDATION], rho_c=150.0)
-    world_two, anchor_two = _build([FOUNDATION, FOUNDATION], rho_c=150.0)
-    assert anchor_one is not None and anchor_two is not None
-    single = world_one.concrete_shell_corrections[anchor_one]
-    double = world_two.concrete_shell_corrections[anchor_two]
-    assert list(world_two.concrete_shell_corrections) == [anchor_two]
-    assert double == pytest.approx(0.5 * single, rel=1e-12)
-    assert double < single, "a second parallel leakage path must lower R"
+    world_two, _ = _build([FOUNDATION, FOUNDATION], rho_c=150.0)
+    shells = _shells(world_two)
+    assert len(shells) == 2
+    a, b = shells.values()
+    assert a == b > 0.0
 
 
 # ---------------------------------------------------------------------
@@ -121,23 +120,28 @@ def test_shells_of_several_encased_electrodes_combine_in_parallel():
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.finding("10.12")
 @pytest.mark.parametrize("order", [[FOUNDATION, ROD], [ROD, FOUNDATION]])
 def test_shell_scales_with_concrete_resistivity(order):
-    """R_shell is proportional to rho_c for both electrode orders.
+    """C is proportional to rho_c for both electrode orders.
 
-    The Sunde shell resistance is
-    ``R = rho_c / (2*pi*L_perim) * ln(r_b / r_a)``, i.e. linear in
-    ``rho_c`` at fixed geometry. Before 0.15.0 the ``[ROD, FOUNDATION]``
-    order returned *no* entry at all, so a factor-33 change in rho_c was
-    invisible.
+    The Sunde shell coefficient is ``C = rho_c / (2*pi) * ln(r_b / r_a)``,
+    i.e. linear in ``rho_c`` at fixed geometry. Before 0.15.0 the
+    ``[ROD, FOUNDATION]`` order applied *no* shell at all, so a factor-33
+    change in rho_c was invisible; the cluster impedance must rise too.
     """
-    _, anchor_a = _build(order, rho_c=150.0)
-    world_a, _ = _build(order, rho_c=150.0)
+    world_a, anchor_a = _build(order, rho_c=150.0)
     world_b, anchor_b = _build(order, rho_c=5000.0)
-    assert anchor_a is not None and anchor_b is not None
-    r_low = world_a.concrete_shell_corrections[anchor_a]
-    r_high = world_b.concrete_shell_corrections[anchor_b]
-    assert r_high == pytest.approx(r_low * 5000.0 / 150.0, rel=1e-9)
+    (c_low,) = _shells(world_a).values()
+    (c_high,) = _shells(world_b).values()
+    assert c_high == pytest.approx(c_low * 5000.0 / 150.0, rel=1e-12)
+
+    def z(world, anchor):
+        gf.create_source(world, attached_to=anchor, magnitude=1.0)
+        engine = gf.create_engine(backend="image", segment_length=1.0, kernel="point")
+        return world.solve(engine).input_impedance()[0].real
+
+    assert z(world_b, anchor_b) > z(world_a, anchor_a)
 
 
 def test_distributed_model_writes_no_lumped_entry():

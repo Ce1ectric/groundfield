@@ -962,11 +962,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         buildings: list[PlannedSite],
         branches: list[PlannedBranch],
     ) -> None:
-        """Star backbone: substation → each cabinet, building → nearest cabinet.
-
-        The service drop of a building carries the building's lumped
-        concrete-shell resistance (ADR-0012 V1) as its series resistance.
-        """
+        """Star backbone: substation → each cabinet, building → nearest cabinet."""
         conductor = _pen_conductor(cfg.pen)
         wired = [c for c in cabinets if c.anchor is not None]
         for cab in wired:
@@ -994,7 +990,6 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     start=cab.name,
                     end=b.name,
                     conductor=conductor,
-                    concrete_shell_of=b.name,
                 )
             )
 
@@ -1109,7 +1104,6 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         start=taps[tap_idx].name,
                         end=b.name,
                         conductor=conductor,
-                        concrete_shell_of=b.name,
                     )
                 )
                 any_service_drop = True

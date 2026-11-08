@@ -1,16 +1,17 @@
 """Tests for ADR-0012: concrete encasement of foundation electrodes.
 
-Covers both the V1 (lumped series resistance on the PEN service drop)
-and the V2 (per-segment diagonal augmentation in the image / image_2layer
-backends) paths, plus the closed-form Sunde-shell formula and the
-end-to-end stochastic moisture path.
+Covers the per-segment shell coefficient (diagonal augmentation in the
+image / image_2layer backends) that both ``concrete_model`` values use
+since 2026.11 — up to 0.15.0 V1 (``"lumped"``) was a series resistance on
+the PEN service drop instead (review findings 10.12–10.14) — plus the
+closed-form Sunde-shell formula and the end-to-end stochastic moisture
+path.
 """
 
 from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
 import groundfield as gf
@@ -167,15 +168,38 @@ def test_v2_insulating_concrete_dominates_impedance() -> None:
 
 
 # ---------------------------------------------------------------------
-# V1 — closed-form lumped resistance on the PEN bond
+# V1 — the lumped shell is the Sunde coefficient on the foundation
 # ---------------------------------------------------------------------
 
 
-def test_v1_lumped_resistance_recorded_in_world() -> None:
-    """After building a network with concrete-encased foundations
-    in ``concrete_model='lumped'``, the world records each
-    foundation's $R_\\text{shell,total}$ in ``concrete_shell_corrections``.
-    The value matches the Sunde closed form."""
+def _one_house_cfg(name: str, foundation: FoundationElectrodeSpec) -> TnNetworkConfig:
+    residential = BuildingTypeSpec(
+        name="residential",
+        grounding=GroundingSystemSpec(electrodes=[foundation]),
+    )
+    return TnNetworkConfig(
+        name=name,
+        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
+        substation=SubstationConfig(position=(40.0, -25.0)),
+        placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
+        building_types=[residential],
+        building_counts={"residential": 1},
+        kvs=KvsConfig(
+            fixed_count=1,
+            placement=ExplicitPlacement(positions=[(40.0, -8.0)]),
+        ),
+    )
+
+
+@pytest.mark.finding("10.12")
+def test_v1_lumped_shell_is_the_sunde_coefficient_on_the_foundation() -> None:
+    """``concrete_model='lumped'`` puts the Sunde coefficient
+    $C = \rho_c/(2\pi)\,\ln(r_b/r_a)$ on the foundation (radius $r_b$);
+    its lumped resistance $C/L_\text{perim}$ matches the closed form. Up to
+    0.15.0 the value went into ``World.concrete_shell_corrections``
+    (10.12)."""
+    from groundfield.geometry.electrodes import shell_resistance_from_coefficient
+
     rho_c = 5000.0
     t = 0.05
     dx_dy = (10.0, 10.0)
@@ -183,81 +207,58 @@ def test_v1_lumped_resistance_recorded_in_world() -> None:
     perimeter = 2.0 * (dx_dy[0] + dx_dy[1])
     expected_r_shell = rho_c / (2.0 * math.pi * perimeter) * math.log(r_b / r_a)
 
-    residential = BuildingTypeSpec(
-        name="residential",
-        grounding=GroundingSystemSpec(
-            electrodes=[
-                FoundationElectrodeSpec(
-                    style="ring",
-                    size_xy_m=dx_dy,
-                    depth_m=0.8,
-                    concrete_rho_ohm_m=rho_c,
-                    concrete_thickness_m=t,
-                    concrete_model="lumped",
-                ),
-            ],
+    world = TnNetworkGenerator(
+        _one_house_cfg(
+            "t1",
+            FoundationElectrodeSpec(
+                style="ring",
+                size_xy_m=dx_dy,
+                depth_m=0.8,
+                concrete_rho_ohm_m=rho_c,
+                concrete_thickness_m=t,
+                concrete_model="lumped",
+            ),
         ),
+        seed=0,
+    ).build()
+    assert world.concrete_shell_corrections == {}
+    foundation = world.get_electrode("residential_0_foundation_0")
+    assert foundation.wire_radius == pytest.approx(r_b)
+    assert foundation.concrete_shell_coefficient_ohm_m == pytest.approx(
+        rho_c / (2.0 * math.pi) * math.log(r_b / r_a), rel=1e-15
     )
-    cfg = TnNetworkConfig(
-        name="t1",
-        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
-        substation=SubstationConfig(position=(40.0, -25.0)),
-        placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
-        building_types=[residential],
-        building_counts={"residential": 1},
-        kvs=KvsConfig(
-            fixed_count=1,
-            placement=ExplicitPlacement(positions=[(40.0, -8.0)]),
-        ),
+    assert shell_resistance_from_coefficient(foundation) == pytest.approx(
+        expected_r_shell, rel=1e-12
     )
-    world = TnNetworkGenerator(cfg, seed=0).build()
-    assert "residential_0_foundation_0" in world.concrete_shell_corrections
-    r_shell = world.concrete_shell_corrections["residential_0_foundation_0"]
-    assert r_shell == pytest.approx(expected_r_shell, rel=1e-6)
 
 
-def test_v1_pen_service_drop_carries_lumped_resistance() -> None:
-    """The PEN service-drop conductor between the KVS and the
-    foundation must carry the recorded shell resistance as its
-    ``lumped_series_resistance_ohm`` — that is the topological
-    place where the V1 ohmic drop lives."""
-    residential = BuildingTypeSpec(
-        name="residential",
-        grounding=GroundingSystemSpec(
-            electrodes=[
-                FoundationElectrodeSpec(
-                    style="ring",
-                    size_xy_m=(10.0, 10.0),
-                    depth_m=0.8,
-                    concrete_rho_ohm_m=5000.0,
-                    concrete_thickness_m=0.05,
-                    concrete_model="lumped",
-                ),
-            ],
+@pytest.mark.finding("10.12")
+def test_v1_pen_service_drop_keeps_its_geometric_resistance() -> None:
+    """The shell sits on the foundation, so the PEN service drop carries
+    no ``lumped_series_resistance_ohm`` any more (it did up to 0.15.0,
+    which also sent the current of bonded rods through the shell, 10.13)."""
+    world = TnNetworkGenerator(
+        _one_house_cfg(
+            "t2",
+            FoundationElectrodeSpec(
+                style="ring",
+                size_xy_m=(10.0, 10.0),
+                depth_m=0.8,
+                concrete_rho_ohm_m=5000.0,
+                concrete_thickness_m=0.05,
+                concrete_model="lumped",
+            ),
         ),
-    )
-    cfg = TnNetworkConfig(
-        name="t2",
-        soil=TwoLayerSoilSpec(rho_1=150.0, rho_2=30.0, h_1=4.0),
-        substation=SubstationConfig(position=(40.0, -25.0)),
-        placement=ExplicitPlacement(positions=[(0.0, 10.0)]),
-        building_types=[residential],
-        building_counts={"residential": 1},
-        kvs=KvsConfig(
-            fixed_count=1,
-            placement=ExplicitPlacement(positions=[(40.0, -8.0)]),
-        ),
-    )
-    world = TnNetworkGenerator(cfg, seed=0).build()
+        seed=0,
+    ).build()
     bond = next(
         c
         for c in world.conductors
         if c.name == "pen_service_residential_0_foundation_0"
     )
-    assert bond.lumped_series_resistance_ohm is not None
-    assert bond.lumped_series_resistance_ohm > 0.0
-    assert bond.lumped_series_resistance_ohm == pytest.approx(
-        world.concrete_shell_corrections["residential_0_foundation_0"]
+    assert bond.lumped_series_resistance_ohm is None
+    assert bond.series_resistance == pytest.approx(
+        1.68e-8 * bond.length / (math.pi * bond.wire_radius**2)
     )
 
 
@@ -267,10 +268,10 @@ def test_v1_pen_service_drop_carries_lumped_resistance() -> None:
 
 
 def test_distributed_model_does_not_use_lumped_registry() -> None:
-    """``concrete_model='distributed'`` writes to the strip's
-    ``concrete_shell_coefficient_ohm_m`` field instead of the
-    ``world.concrete_shell_corrections`` registry — the two paths
-    are mutually exclusive by construction."""
+    """``concrete_model='distributed'`` writes to the strips'
+    ``concrete_shell_coefficient_ohm_m`` field — one owner per wire —
+    and never to the ``world.concrete_shell_corrections`` registry (which
+    no generator fills since 2026.11)."""
     residential = BuildingTypeSpec(
         name="residential",
         grounding=GroundingSystemSpec(
@@ -343,7 +344,7 @@ def test_concrete_fields_json_roundtrip() -> None:
 def test_stochastic_moisture_samples_per_realisation() -> None:
     """Building two worlds with the same seed and the same
     ``Discrete`` distribution on ``concrete_rho_ohm_m`` must produce
-    identical electrode counts and identical lumped registries.
+    identical electrode counts and identical shell coefficients.
     Building with a different seed must produce different sampled
     values."""
     discrete = Discrete(values=[50.0, 5000.0], weights=[0.5, 0.5])
@@ -376,17 +377,23 @@ def test_stochastic_moisture_samples_per_realisation() -> None:
             placement=ExplicitPlacement(positions=[(40.0, -8.0)]),
         ),
     )
+
+    def shells(world):
+        return {
+            e.name: e.concrete_shell_coefficient_ohm_m
+            for e in world.electrodes
+            if "foundation" in e.name
+        }
+
     w_a = TnNetworkGenerator(cfg, seed=0).build()
     w_b = TnNetworkGenerator(cfg, seed=0).build()
-    assert w_a.concrete_shell_corrections == w_b.concrete_shell_corrections
+    assert shells(w_a) == shells(w_b)
+    assert len(shells(w_a)) == 3
 
     w_c = TnNetworkGenerator(cfg, seed=1).build()
-    # At least one foundation should have a different sampled R_shell
+    # At least one foundation should have a different sampled shell
     # (the moisture draw is per-foundation).
-    diffs = {
-        k: w_a.concrete_shell_corrections[k] - w_c.concrete_shell_corrections[k]
-        for k in w_a.concrete_shell_corrections
-    }
+    diffs = {k: shells(w_a)[k] - shells(w_c)[k] for k in shells(w_a)}
     assert any(abs(d) > 1e-6 for d in diffs.values())
 
 
@@ -397,8 +404,8 @@ def test_stochastic_moisture_samples_per_realisation() -> None:
 
 def test_substation_ring_and_kvs_rod_are_never_concrete_encased() -> None:
     """Only ``FoundationElectrodeSpec`` carries the concrete fields;
-    the substation ring + rods and the KVS rod must produce no
-    entries in ``world.concrete_shell_corrections``."""
+    the substation ring + rods and the KVS rod get no shell coefficient
+    (and no generator writes ``world.concrete_shell_corrections``)."""
     residential = BuildingTypeSpec(
         name="residential",
         grounding=GroundingSystemSpec(
@@ -427,15 +434,11 @@ def test_substation_ring_and_kvs_rod_are_never_concrete_encased() -> None:
         ),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
-    # The only correction is on the foundation, not on any
-    # substation / KVS electrode.
-    keys = list(world.concrete_shell_corrections.keys())
-    assert keys == ["residential_0_foundation_0"]
-    # No substation or KVS strip carries a shell coefficient.
-    for e in world.electrodes:
-        if e.kind == "strip":
-            on_foundation = "foundation" in e.name
-            assert (e.concrete_shell_coefficient_ohm_m == 0.0) == (not on_foundation)
+    assert world.concrete_shell_corrections == {}
+    # The only shell is on the foundation, not on any substation / KVS
+    # electrode.
+    encased = [e.name for e in world.electrodes if e.concrete_shell_coefficient_ohm_m]
+    assert encased == ["residential_0_foundation_0"]
 
 
 # ---------------------------------------------------------------------

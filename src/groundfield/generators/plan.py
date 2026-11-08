@@ -246,11 +246,6 @@ class PlannedBranch(BaseModel):
         Conductor parameters.
     cable
         Name of the routed cable the section belongs to (informational).
-    concrete_shell_of
-        Name of a site whose lumped concrete-shell resistance
-        (ADR-0012 V1, ``world.concrete_shell_corrections``) is carried by
-        this branch as its series resistance. ``None`` (default): the
-        branch has its geometric resistance.
     axis_z_m
         ``None`` (default): the conductor runs straight between the
         connection points of its two end electrodes. A value: the
@@ -268,7 +263,6 @@ class PlannedBranch(BaseModel):
     end: str
     conductor: ConductorParameters
     cable: Optional[str] = None
-    concrete_shell_of: Optional[str] = None
     axis_z_m: Optional[float] = None
 
 

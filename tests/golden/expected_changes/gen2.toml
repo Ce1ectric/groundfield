@@ -72,3 +72,23 @@ findings = ["10.17"]
 reason = """Junctions meas_H and meas_S (substation position, lead height, meas_S 1 cm
 beside meas_H); the leads start on them."""
 allow_shape_change = true
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["Z_G"]
+findings = ["10.12"]
+reason = """concrete_model="lumped" puts the Sunde coefficient C = rho_c/(2 pi) ln(r_b/r_a)
+(32.42 Ohm m) on the foundation instead of World.concrete_shell_corrections,
+which solve_mutual_matrix never read. Each diagonal entry gains C / L_perim =
+0.8104 Ohm (1.9202 -> 2.7306 Ohm, +42.2 %); the off-diagonal entries stay.
+Evidence: deliver/evidence/gen2/e1012_ap1_station_concrete.out (AP1-like site:
+house diagonals +42 / +19 / +2.8 % at rho_1 = 30 / 100 / 1000 Ohm m)."""
+min_rel_change = 0.1
+max_rel_change = 0.5
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["world/json"]
+findings = ["10.12"]
+reason = "Empty concrete_shell_corrections; the grid mesh carries concrete_shell_coefficient_ohm_m."
+allow_shape_change = true
