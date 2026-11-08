@@ -364,7 +364,15 @@ class Engine(BaseModel):
           perfect-mirror matrix, which roughly doubled the reactance, review
           pass 10, 10.20). Asymptotically correct for long parallel
           wires over homogeneous earth; an approximation for short
-          wires or layered soils.
+          wires or layered soils. The per-metre tiling is kept only for
+          near-parallel pairs of near-horizontal segments on one side of
+          the surface: a pair across the surface has no anti-parallel
+          baseline and couples through the field transmitted into the
+          soil (:func:`~groundfield.coupling.carson.carson_mixed_mutual_correction`),
+          and oblique pairs as well as segments inclined by more than
+          8.1° get the Sommerfeld correction of a homogeneous earth of
+          the same conductivity; at that boundary the result steps by
+          the error of the per-metre model (audit round 2, A2C-1).
         - ``"sommerfeld"`` (ADR-0006, Pollaczek kernel since the
           2026-07-08 audit, WP-C1) — geometric integration of the
           σ-dependent vector-potential Green's function over the

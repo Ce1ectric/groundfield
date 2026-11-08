@@ -535,3 +535,18 @@ Findings 10.20 (F32), 10.46 and 10.63.
    parallel lines over homogeneous earth; it is not a general replacement
    of `sommerfeld`, and the documentation no longer calls the two
    "identical".
+5. **Validity domain (second adversarial audit, A2C-1).** The per-metre
+   tiling `sqrt(l_i l_j)·|cos φ|·ΔZ′` is kept for near-parallel pairs
+   ($|\cos\varphi| > 0.99$) of near-horizontal segments (inclination below
+   8.1°) on one side of the surface. A pair with one wire overhead and one
+   buried has no anti-parallel baseline (a perfect conductor screens the
+   soil) and couples through the field transmitted into the soil,
+   `carson_mixed_mutual_correction` (Carson's $J$ and the remainder of the
+   buried wire's attenuation; Ametani et al. 2009), equal to an independent
+   quadrature to 1e-9. Oblique pairs and every pair and self term of a
+   segment inclined by more than 8.1° get the Sommerfeld correction of a
+   homogeneous earth of the same conductivity; before, an oblique pair got
+   the per-metre value once per segment pair, which grew with the number of
+   segments (two 1 km leads at 9°: 20× the Sommerfeld coupling). At the
+   8.1° boundary the result steps by the error of the per-metre model there
+   (12 % for two 1 km leads 2 m apart at 1 kHz).

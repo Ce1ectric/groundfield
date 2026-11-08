@@ -284,3 +284,14 @@ the following decisions refine it.
 7. **Close wires.** Coincident conductors have no finite mutual
    inductance; `find_close_wires` and `diagnose()` report crossing,
    touching, interpenetrating and close wires (10.44).
+8. **Wires closer than the sum of their radii (second adversarial audit).**
+   Two near-parallel segments whose axes stay closer than $r_1 + r_2$ over
+   a common length (coincident leads, a service drop along its PEN main)
+   are evaluated as touching wires at the axis distance $r_1 + r_2$, in
+   every image convention; before, the quadrature stopped at its 1e-6 m
+   floor (two coincident 50 m leads: 1.87 H). Close pairs that miss the
+   closed forms — nearly parallel, crossing, skew pairs and T-junctions —
+   are integrated semi-analytically (inner integral in closed form, graded
+   outer panels; 5e-11), with `touching="exact"`; `touching="quadrature"`
+   keeps the 0.15.0 rule. The coaxial closed forms are evaluated in one
+   vectorised call per segment (audit A2C-5).

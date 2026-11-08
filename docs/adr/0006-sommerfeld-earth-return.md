@@ -431,3 +431,15 @@ Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
 5. **Pollaczek reference.** `references.pollaczek` uses the exact
    two-layer amplitude and the $K_0$ head (10.45). Benchmark B13 compares
    the solver's per-metre line impedance with it.
+6. **Long segments (second adversarial audit, A2C-2).** The correction of a
+   segment pair was one 16 × 16 Gauss–Legendre rule, which cannot resolve
+   $e^{-\gamma R}$ along a segment much longer than the skin depth, and
+   every lumped inductive conductor is one such segment (3 km at 1 kHz in
+   100 Ω·m: +13.4 % earth-return resistance). A segment longer than a
+   quarter skin depth of the most conductive layer gets a composite outer
+   rule (16 nodes per piece, at most 512 pieces, beyond that a
+   `SommerfeldResolutionWarning`) and a correspondingly dense $S(\rho)$
+   table; lumped conductors now match their refined chains to 1e-4.
+   Frequencies with equal piece counts share one pass, so every frequency
+   still equals a single-frequency assembly bit for bit; segments below the
+   threshold keep the previous rule bit for bit.
