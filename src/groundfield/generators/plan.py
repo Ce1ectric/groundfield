@@ -180,9 +180,13 @@ class PlannedJunction(BaseModel):
 
     Notes
     -----
-    Until the solver offers leakage-free junction nodes, a junction is
-    materialised as a 5 cm rod electrode (see
-    :func:`groundfield.generators.materialise.materialise_plan`).
+    A junction is materialised as a leakage-free
+    :class:`~groundfield.geometry.junction.Junction` node at
+    ``(x, y, depth_m)`` (see
+    :func:`groundfield.generators.materialise.materialise_junction`); it
+    injects no current into the soil. Up to 0.15.0 it was a 5 cm rod
+    electrode that leaked part of the cable current (review finding
+    10.38).
     """
 
     model_config = ConfigDict(extra="forbid")

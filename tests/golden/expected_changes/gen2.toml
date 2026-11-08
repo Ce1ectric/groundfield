@@ -1,0 +1,32 @@
+# Expected golden-value changes of work stream GEN-2 (measurement loop
+# through junctions, PEN junctions, one concrete-shell mechanism, PEN depth).
+# Format: tests/golden/README.md.
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/substation_*", "phi/house_*", "I/substation_*", "I/house_*"]
+findings = ["10.38"]
+reason = """PEN cable joints are leakage-free junction nodes instead of 5 cm driven
+rods. The five joint rods of the test street (one corner, four taps) leaked
+0.53 % of the 1 A test current; the substation and house electrodes now carry
+all of it: substation potential +0.33 %, leakage currents +0.43 ... +0.57 %
+(30-house street at 5 % foundation penetration: 3.7 % leaked, +3.5 %).
+Evidence: deliver/evidence/gen2/e1038_layout_joints.out"""
+min_rel_change = 1e-3
+max_rel_change = 1e-2
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/pen_0_*", "I/pen_0_*"]
+findings = ["10.38"]
+reason = """The joint rods pen_0_node_1 and pen_0_tap_1 ... pen_0_tap_4 are no
+electrodes any more (they are junctions, reported in
+metadata['junction_potentials'])."""
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = "The five joint rods move from 'electrodes' to 'junctions'."
+allow_shape_change = true

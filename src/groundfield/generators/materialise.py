@@ -13,7 +13,8 @@ It owns, in one function each:
 * :func:`materialise_electrode` — one electrode, including the
   foundation geometry (axis-aligned grid, rotated mesh, building
   outline) and the concrete shell of ADR-0012;
-* :func:`materialise_junction` — a PEN cable junction;
+* :func:`materialise_junction` — a PEN cable joint (a leakage-free
+  :class:`~groundfield.geometry.junction.Junction` node);
 * :func:`materialise_branch` — a conductor between two nodes (PEN
   sections, service drops, measurement leads);
 * :func:`materialise_plan` — everything, in a fixed order.
@@ -55,6 +56,7 @@ from typing import Optional
 from groundfield.api import (
     create_conductor,
     create_electrode,
+    create_junction,
     create_source,
     create_world,
 )
@@ -76,7 +78,6 @@ from groundfield.world import World
 
 __all__ = [
     "MIN_POLYGON_EDGE_M",
-    "PEN_JUNCTION_ROD_LENGTH_M",
     "clean_polygon",
     "concrete_shell",
     "materialise_branch",
@@ -93,10 +94,6 @@ Shorter edges are merged away: a segment shorter than the
 (concrete-inflated) wire radius would trip the solver's thin-wire guard,
 and OSM footprints routinely carry centimetre-scale edges without
 physical meaning for the strip foundation."""
-
-PEN_JUNCTION_ROD_LENGTH_M = 0.05
-"""Length (m) of the rod that stands in for a PEN junction (see
-:func:`materialise_junction`)."""
 
 
 # ---------------------------------------------------------------------
@@ -592,21 +589,28 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
 
 
 def materialise_junction(world: World, junction: PlannedJunction) -> str:
-    """Create a PEN cable junction and return its node (electrode) name.
+    """Create a PEN cable joint and return its node name.
 
-    The solver has no leakage-free interior node yet, so a junction is a
-    short rod (:data:`PEN_JUNCTION_ROD_LENGTH_M`) at the cable depth. Its
-    leakage is small but not zero (review finding 10.38); this is the one
-    place to switch to a true junction node.
+    The joint is a leakage-free :class:`~groundfield.geometry.junction.Junction`
+    at ``(x, y, depth_m)``: a node of the conductor network with
+    Kirchhoff's current law and no soil contact. Up to 0.15.0 it was a
+    5 cm driven rod, which leaked 3 to 7 % of a test current through the
+    nominally isolated cable (review finding 10.38).
     """
-    create_electrode(
+    create_junction(
         world,
-        "rod",
-        name=junction.name,
         position=(junction.position_xy[0], junction.position_xy[1], junction.depth_m),
-        length=PEN_JUNCTION_ROD_LENGTH_M,
+        name=junction.name,
     )
     return junction.name
+
+
+def _node_point(world: World, name: str) -> tuple[float, float, float]:
+    """Connection point (m) of the electrode or junction called ``name``."""
+    for electrode in world.electrodes:
+        if electrode.name == name:
+            return electrode.connection_point
+    return world.get_junction(name).connection_point
 
 
 def materialise_branch(
@@ -654,8 +658,8 @@ def materialise_branch(
             lumped_series_resistance_ohm=lumped,
         )
     z = float(branch.axis_z_m)
-    sx, sy, _ = world.get_electrode(start).connection_point
-    ex, ey, _ = world.get_electrode(end).connection_point
+    sx, sy, _ = _node_point(world, start)
+    ex, ey, _ = _node_point(world, end)
     cond = Conductor(
         name=branch.name,
         start=(sx, sy, z),
