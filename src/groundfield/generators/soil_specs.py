@@ -1,4 +1,4 @@
-"""Soil-model specifications for generator-built worlds.
+r"""Soil-model specifications for generator-built worlds.
 
 The soil model parameters in :mod:`groundfield.soil.models` are
 plain numbers (Pydantic v2). For generator runs we need a *spec*
