@@ -26,6 +26,10 @@ effective_resistivity
     Effective resistivity $\\rho_\\text{eff} = \\rho_1^{1-w}\\rho_2^{w}$ of a
     homogeneous or two-layer soil (AP1 calibration): the ``rho`` of a
     groundinsight bus and of a BusType fitted in layered soil.
+EFFECTIVE_RESISTIVITY_PRESETS
+    Read-only mapping of named weight presets ``(w0, beta)`` of
+    ``effective_resistivity`` per electrode class (``"lv_network"``, the
+    default; ``"station"``; ``"lv_group_<g>_p<pp>"`` of the AP2 hand-over).
 
 Notes
 -----
@@ -35,7 +39,10 @@ symbols; the pre-2026.11 names ``resistivity`` and ``thickness`` are
 deprecated aliases (see :mod:`groundfield.soil.models`).
 """
 
-from groundfield.soil.effective import effective_resistivity
+from groundfield.soil.effective import (
+    EFFECTIVE_RESISTIVITY_PRESETS,
+    effective_resistivity,
+)
 from groundfield.soil.models import (
     HomogeneousSoil,
     MultiLayerSoil,
@@ -51,4 +58,5 @@ __all__ = [
     "SoilLayer",
     "SoilModel",
     "effective_resistivity",
+    "EFFECTIVE_RESISTIVITY_PRESETS",
 ]

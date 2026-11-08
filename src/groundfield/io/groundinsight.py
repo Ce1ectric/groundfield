@@ -48,18 +48,23 @@ $$
 \\qquad w = w_0\\,(h_1 / 10\\ \\mathrm{m})^{-\\beta},
 $$
 
-with the AP1 calibration $w_0 = 0.13$, $\\beta = 0.8$
+with the weights $(w_0, \\beta)$ of the electrode class: the AP1
+calibration $w_0 = 0.13$, $\\beta = 0.8$ by default, or a preset of
+:data:`~groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS` such as
+``"station"`` or ``"lv_group_2_p10"``
 (:func:`~groundfield.soil.effective_resistivity`; ADR-0008), the value
 the AP2 network model gives a bus. A vector fit therefore passes
-``rho_at_fit=effective_resistivity(soil)``, and a standard-form fit over
-layered soils is fitted over the effective resistivities of the solved
-soils, ``rho_f_standard_from_results(results, [effective_resistivity(r.soil)
-for r in results])``; both kinds of BusType then pair with the same
-``Bus``. Every document records this convention as
+``rho_at_fit=effective_resistivity(soil, preset=...)``, and a
+standard-form fit over layered soils is fitted over the effective
+resistivities of the solved soils, ``rho_f_standard_from_results(results,
+[effective_resistivity(r.soil, preset=...) for r in results])``; both kinds
+of BusType then pair with a ``Bus`` whose resistivity uses the same
+preset. Every document records this convention as
 ``metadata["rho_definition"] = "effective_resistivity"`` (documents of
 0.15.0 have no such entry); the exporter cannot check the number it is
-given. The layers themselves, and $w_0$, $\\beta$ when they are not the
-AP1 values, go into ``soil_summary``.
+given, nor the weights behind it. The layers themselves, and the preset
+(or $w_0$, $\\beta$) when it is not the default, go into
+``soil_summary``.
 
 The exporter does not care which impedance was fitted (input
 impedance, cluster impedance or the impedance of one electrode); it
@@ -874,11 +879,12 @@ def to_bustype_dict(
         fits (it goes into ``samples["rho_Ohm_m"]`` and
         ``metadata["rho_at_fit_Ohm_m"]``); ignored for standard-form
         fits. For layered soil the convention is the
-        effective resistivity of the soil, ``effective_resistivity(soil)``
+        effective resistivity of the soil with the weight preset of the
+        electrode class, ``effective_resistivity(soil, preset=...)``
         (:func:`~groundfield.soil.effective_resistivity`), the value a
-        ``groundinsight`` ``Bus`` carries as ``specific_earth_resistance``
-        (see the module docstring); describe the layers in
-        ``soil_summary``.
+        ``groundinsight`` ``Bus`` with the same preset carries as
+        ``specific_earth_resistance`` (see the module docstring); describe
+        the layers and the preset in ``soil_summary``.
     electrode_name, soil_summary : str, optional
         Free-form metadata entries; recommended for traceability.
     require_passive : bool, optional
@@ -966,8 +972,8 @@ def save_bustype_json(
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
         standard-form fits. For layered soil the convention is the
-        effective resistivity ``effective_resistivity(soil)`` (see
-        :func:`to_bustype_dict`).
+        effective resistivity ``effective_resistivity(soil, preset=...)``
+        (see :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries.
     indent : int, optional
@@ -1130,8 +1136,8 @@ def to_bustype(
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
         standard-form fits. For layered soil the convention is the
-        effective resistivity ``effective_resistivity(soil)`` (see
-        :func:`to_bustype_dict`).
+        effective resistivity ``effective_resistivity(soil, preset=...)``
+        (see :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not part of the live ``BusType``).
     require_passive : bool, optional
@@ -1205,8 +1211,8 @@ def save_bustype_to_db(
         Soil resistivity in $\\Omega\\,\\mathrm{m}$ of a
         :class:`VectorFitResult`; required for vector fits, ignored for
         standard-form fits. For layered soil the convention is the
-        effective resistivity ``effective_resistivity(soil)`` (see
-        :func:`to_bustype_dict`).
+        effective resistivity ``effective_resistivity(soil, preset=...)``
+        (see :func:`to_bustype_dict`).
     electrode_name, soil_summary : str, optional
         Free-form metadata entries (not stored in the database).
     overwrite : bool, optional

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026.11 (review pass 10: safe formula parser, input impedance, passivity, the effective resistivity as the `rho` of layered soil); see the amendment at the end of this document |
+| **Status** | Accepted — amended 2026.11 (review pass 10: safe formula parser, input impedance, passivity, the effective resistivity as the `rho` of layered soil, with weight presets per electrode class); see the amendment at the end of this document |
 | **Date** | 2026-05-08 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.io.groundinsight`; bridge to the sister project `groundinsight` |
@@ -232,7 +232,8 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    was fitted in,
    $\rho_\text{eff} = \rho_1^{\,1-w}\rho_2^{\,w}$ with
    $w = w_0 (h_1/10\ \mathrm{m})^{-\beta}$ limited to $[0, 1]$
-   (`groundfield.effective_resistivity`; AP1 calibration $w_0 = 0.13$,
+   (`groundfield.effective_resistivity`; weights $(w_0, \beta)$ of the
+   electrode class, by default the AP1 calibration $w_0 = 0.13$,
    $\beta = 0.8$; $\rho$ itself for homogeneous soil). This is the value
    the AP2 network model gives a `Bus` as `specific_earth_resistance`
    (the author's decision for the 2026.11 release), so a BusType pairs
@@ -244,8 +245,30 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    exporter cannot check the number it is given. $\rho_\text{eff}$ is
    an empirical calibration on the LV networks of the AP1 catalogue
    ($h_1$ = 5 … 30 m, $\rho_1$ = 30 … 1000 Ω·m, $\rho_2$ = 30 … 200 Ω·m);
-   a compact electrode in the upper layer follows $\rho_1$ more closely,
-   so check the fit quality (`max_relative`) of such a system.
+   check the fit quality (`max_relative`) of a BusType fitted over it.
+
+   *Weight presets (user decision Q36).* The weights depend on the extent
+   of the earthing system: a compact electrode in the upper layer sees
+   less of the lower layer than an LV network. `effective_resistivity(soil,
+   preset=...)` takes $(w_0, \beta)$ from the read-only mapping
+   `groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS`: `"lv_network"`
+   (0.13, 0.8, the default and the global calibration), `"station"`
+   (0.06, 1.3, the station electrode alone) and `"lv_group_<g>_p<pp>"`
+   for the four LV network groups (perimeter equivalent $n_U$,
+   thresholds 20 / 100 / 250) and the penetrations 5, 10, 20, 40 % of
+   foundation electrodes. The values are those of the author's AP2
+   hand-over (generated 2026-10-20 from the AP1 catalogue computed with
+   groundfield 0.14.0; per group the median network, q50); they belong
+   to that catalogue and are re-derived when it is recomputed. An
+   explicit `w0` or `beta` replaces that weight only, so every call made
+   before the presets keeps its value. A BusType and its bus must use the
+   same weights. `rho_definition` stays the token
+   `"effective_resistivity"` and does not name the preset; the caller
+   names it in `soil_summary`. For the AP1 station in the 39 AP1 soils,
+   $R = c\,\rho_\text{eff}$ ($c$ from homogeneous soil) misses the field
+   solution by at most 15.7 % with `"station"` (median over the 39
+   soils 1.8 %; the hand-over: 1.7 %, 15.7 %) against 35.9 % with
+   `"lv_network"` and 41.9 % over $\rho_1$.
 6. **Validation programme.** The round trip through groundinsight is
    checked at $10^{-9}$, as this ADR specified (the test had used
    $10^{-3}$), and `evaluate_spec` against groundinsight's

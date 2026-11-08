@@ -42,6 +42,7 @@ practice. Names of releases up to 0.15.0 that were German (`kvs`,
 | earthing conductor, bonding conductor | Erdungsleiter, Verbindungsleitung | `Conductor` between electrodes |
 | concrete encasement | Betonummantelung | shell of concrete around a foundation earth; per-length coefficient `concrete_shell_coefficient_ohm_m` |
 | penetration | Durchdringung | share of buildings that have a foundation earth electrode |
+| perimeter equivalent | Umfangsäquivalent | $n_U = \sum_i U_i / 40\ \mathrm{m}$ of an LV network ($U_i$ building perimeters); forms the four LV network groups of the AP2 hand-over (thresholds 20 / 100 / 250; presets `lv_group_<g>_p<pp>` of `effective_resistivity`) |
 | galvanic cluster | galvanisch verbundener Erderverbund | electrodes joined by ideal conductors; one potential |
 | junction | Knoten (ohne Erdkontakt), Muffe | node of the conductor network without soil contact (`Junction`): cable joint, instrument terminal |
 
@@ -53,7 +54,7 @@ practice. Names of releases up to 0.15.0 that were German (`kvs`,
 | two-layer soil | Zweischichtboden | | upper layer $\rho_1$, thickness $h_1$, half-space $\rho_2$ |
 | layer thickness | Schichtdicke | $h_1$ | m |
 | reflection coefficient | Reflexionsfaktor | $K$ | $(\rho_2 - \rho_1)/(\rho_2 + \rho_1)$ |
-| effective resistivity | effektiver spezifischer Erdwiderstand | $\rho_\text{eff}$ | Ω·m; $\rho_1^{1-w}\rho_2^{w}$ with $w = w_0 (h_1/10\ \mathrm{m})^{-\beta}$ in $[0, 1]$ (AP1 calibration $w_0 = 0.13$, $\beta = 0.8$), $\rho$ for homogeneous soil: the `rho` of a groundinsight bus and of a BusType in layered soil (`effective_resistivity`) |
+| effective resistivity | effektiver spezifischer Erdwiderstand | $\rho_\text{eff}$ | Ω·m; $\rho_1^{1-w}\rho_2^{w}$ with $w = w_0 (h_1/10\ \mathrm{m})^{-\beta}$ in $[0, 1]$ (weights per electrode class: AP1 calibration $w_0 = 0.13$, $\beta = 0.8$ by default, presets `"station"` and `"lv_group_<g>_p<pp>"` in `EFFECTIVE_RESISTIVITY_PRESETS`), $\rho$ for homogeneous soil: the `rho` of a groundinsight bus and of a BusType in layered soil (`effective_resistivity`) |
 | remote earth | Bezugserde | | potential reference, $\varphi \to 0$ far away |
 | soil surface | Erdoberfläche | $z = 0$ | depth $z$ positive downwards |
 | skin depth (in the soil) | Eindringtiefe | $\delta$ | $\sqrt{2\rho/(\omega\mu_0)}$ |
@@ -132,4 +133,5 @@ Schichtdicke → layer thickness; Schrittspannung → step voltage; Sonde →
 probe; spezifischer Erdwiderstand → soil resistivity; Staberder,
 Tiefenerder → driven rod; Sternerder, Strahlenerder → star earth
 electrode; Sternpunktbehandlung → neutral earthing; Stromaufteilung →
-current sharing; Zweischichtboden → two-layer soil.
+current sharing; Umfangsäquivalent → perimeter equivalent;
+Zweischichtboden → two-layer soil.
