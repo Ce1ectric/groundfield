@@ -26,16 +26,17 @@ from __future__ import annotations
 import math
 import warnings
 from collections.abc import Sequence
-from typing import Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from groundfield.geometry.primitives import (
     WireSegments,
     _edge_wires,
     _grid_wire_polylines,
     _grid_wires,
+    _segment_count,
     _split_interval_at_interfaces,
     _straight_wire,
 )
@@ -49,16 +50,242 @@ __all__ = [
     "StarElectrode",
     "MeshElectrode",
     "GridMeshElectrode",
+    "concrete_shell_coefficient",
+    "shell_coefficient_from_resistance",
+    "shell_resistance_from_coefficient",
 ]
 
-# 3-D coordinate (x, y, z); z axis points into the soil.
-Point3D = tuple[float, float, float]
+#: A finite float (NaN and infinities are rejected at construction).
+FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
+
+#: A finite, strictly positive float (lengths and extents in m).
+PositiveLength = Annotated[float, Field(gt=0.0, allow_inf_nan=False)]
+
+# 3-D coordinate (x, y, z) in m; z axis points into the soil.
+Point3D = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
 
 #: Edges shorter than this (metres) are treated as degenerate: a
 #: :class:`PolylineElectrode` rejects them so a duplicate vertex cannot
 #: silently collapse a segment to zero length. Set far below any physical
 #: wire radius, so only true coincidences trip it.
 _MIN_EDGE_LENGTH_M = 1e-9
+
+#: Interface slivers (review pass 10, 10.32): an interface cut that would
+#: leave a part of a wire shorter than ``SLIVER_RADII`` wire radii (the wire
+#: diameter) is dropped; the short part joins its neighbour, whose end
+#: segment then reaches past the interface by less than one diameter and is
+#: assigned to the layer of its midpoint. A wire piece shorter than its
+#: diameter is outside the thin-wire model: up to 0.15.0 a rod whose tip lay
+#: 1 mm below an interface raised a ``ValueError`` (segment shorter than the
+#: wire radius) and one 9 mm below it acted as a short. The threshold does
+#: not scale with the segment length on purpose: a 10 cm tip in a lower
+#: layer 33 times more conductive carries a large share of the current, and
+#: merging it at ``ds = 2 m`` (``ds/10``) put the resistance 122 % too high
+#: (evidence ``e1032_sliver_threshold.py``).
+SLIVER_RADII = 2.0
+
+
+def _merge_interface_slivers(
+    parts: list[tuple[float, float]], min_length: float
+) -> list[tuple[float, float]]:
+    """Drop interface cuts that leave a part shorter than ``min_length`` (m).
+
+    Parameters
+    ----------
+    parts
+        Consecutive intervals ``(t_lo, t_hi)`` in m along the wire, as
+        returned by :func:`~groundfield.geometry.primitives._split_interval_at_interfaces`.
+    min_length
+        Shortest part in m that is kept.
+
+    Returns
+    -------
+    list of tuple
+        The intervals after dropping the cuts.
+    """
+    if len(parts) <= 1:
+        return parts
+    bounds = [parts[0][0]] + [hi for _, hi in parts]
+    kept = [bounds[0]]
+    for k in range(1, len(bounds) - 1):
+        cut = bounds[k]
+        if cut - kept[-1] < min_length or bounds[k + 1] - cut < min_length:
+            continue
+        kept.append(cut)
+    kept.append(bounds[-1])
+    return list(zip(kept[:-1], kept[1:], strict=True))
+
+
+def _require_longer_than_radius(
+    electrode: "_ElectrodeBase", dimension: float, what: str
+) -> None:
+    """Reject a dimension that is not longer than the wire radius.
+
+    A thin-wire electrode must be much longer than it is thick; a
+    dimension at or below the wire radius is degenerate (and most often a
+    unit mix-up, e.g. a wire radius typed in mm). Detected at
+    construction instead of as a thin-wire error of one segment at solve
+    time (review pass 10, 10.67).
+
+    Raises
+    ------
+    ValueError
+        If ``dimension <= electrode.wire_radius``.
+    """
+    if not dimension > electrode.wire_radius:
+        raise ValueError(
+            f"{type(electrode).__name__} {electrode.name!r}: its {what} "
+            f"({dimension:g} m) is not longer than its wire_radius "
+            f"({electrode.wire_radius:g} m). All lengths are in metres; a wire "
+            "radius of 5 mm is wire_radius=0.005."
+        )
+
+
+# ---------------------------------------------------------------------
+# Concrete shell (ADR-0012): one mechanism, the per-length coefficient
+# (review pass 10, 10.12-10.14)
+# ---------------------------------------------------------------------
+
+_SHELL_DESCRIPTION = (
+    "Per-length radial concrete-shell coefficient "
+    "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m (ADR-0012). Every "
+    "segment of length $\\Delta s$ adds $C/\\Delta s$ to its reaction-matrix "
+    "diagonal, the radial voltage drop through the shell; with the uniform "
+    "current per electrode of the image family this adds exactly "
+    "$C/L$ per ampere to the electrode potential ($L$: total wire length), "
+    "the lumped shell resistance. ``wire_radius`` is the outer shell radius "
+    "$r_b$ (the soil sees the shell surface). ``0.0`` (default): no shell. "
+    "Honoured by the image family and ``solve_mutual_*``; the other "
+    "backends reject a non-zero value."
+)
+
+
+def _shell_field() -> Any:
+    """Field of ``concrete_shell_coefficient_ohm_m`` (same on every kind)."""
+    return Field(
+        default=0.0, ge=0.0, allow_inf_nan=False, description=_SHELL_DESCRIPTION
+    )
+
+
+def concrete_shell_coefficient(
+    rho_c: float, wire_radius: float, thickness: float
+) -> float:
+    r"""Per-length coefficient of a cylindrical concrete shell (ADR-0012).
+
+    .. math::
+
+        C = \frac{\rho_c}{2\pi}\,\ln\frac{r_a + t}{r_a}
+
+    Parameters
+    ----------
+    rho_c
+        Resistivity of the concrete in Ω·m, ``>= 0``.
+    wire_radius
+        Radius :math:`r_a` of the bare wire in m, ``> 0``.
+    thickness
+        Radial thickness :math:`t` of the shell in m, ``>= 0``.
+
+    Returns
+    -------
+    float
+        :math:`C` in Ω·m; ``0.0`` for ``rho_c = 0`` or ``thickness = 0``.
+
+    Raises
+    ------
+    ValueError
+        If an argument is negative or not finite, or ``wire_radius`` is
+        not positive.
+
+    Notes
+    -----
+    The electrode then carries ``wire_radius = r_a + t`` and
+    ``concrete_shell_coefficient_ohm_m = C``. For ``rho_c = 100`` Ω·m and
+    5 cm of concrete around a 5 mm wire, :math:`C` = 38.16 Ω·m.
+    """
+    values = {"rho_c": rho_c, "wire_radius": wire_radius, "thickness": thickness}
+    for name, value in values.items():
+        if not math.isfinite(float(value)) or float(value) < 0.0:
+            raise ValueError(f"{name} must be finite and non-negative, got {value!r}.")
+    if float(wire_radius) <= 0.0:
+        raise ValueError(f"wire_radius must be positive (m), got {wire_radius!r}.")
+    r_a = float(wire_radius)
+    return float(rho_c) / (2.0 * math.pi) * math.log((r_a + float(thickness)) / r_a)
+
+
+def shell_coefficient_from_resistance(
+    electrode: "_ElectrodeBase", resistance_ohm: float
+) -> float:
+    r"""Coefficient that gives ``electrode`` a lumped shell resistance.
+
+    The lumped shell model (ADR-0012 V1) describes the shell of one
+    electrode by its total radial resistance :math:`R` in series with the
+    soil. Spread uniformly over the electrode's wire, it becomes the
+    per-length coefficient :math:`C = R\,L` with the total wire length
+    :math:`L` (:meth:`~_ElectrodeBase.total_length`); the image family then
+    adds exactly :math:`R` per ampere to the electrode potential. The
+    generators use this conversion for ``concrete_model="lumped"``.
+
+    Parameters
+    ----------
+    electrode
+        Encased electrode (all of its wire is encased).
+    resistance_ohm
+        Lumped shell resistance :math:`R` in Ω, ``>= 0``.
+
+    Returns
+    -------
+    float
+        :math:`C` in Ω·m, for ``concrete_shell_coefficient_ohm_m``.
+
+    Raises
+    ------
+    ValueError
+        If ``resistance_ohm`` is negative or not finite.
+    """
+    resistance = float(resistance_ohm)
+    if not math.isfinite(resistance) or resistance < 0.0:
+        raise ValueError(
+            f"resistance_ohm must be finite and non-negative, got {resistance_ohm!r}."
+        )
+    return resistance * electrode.total_length()
+
+
+def shell_resistance_from_coefficient(
+    electrode: "_ElectrodeBase", coefficient_ohm_m: float | None = None
+) -> float:
+    """Lumped shell resistance of ``electrode`` for a per-length coefficient.
+
+    Inverse of :func:`shell_coefficient_from_resistance`:
+    :math:`R = C / L` in Ω with the total wire length :math:`L` in m.
+
+    Parameters
+    ----------
+    electrode
+        Encased electrode.
+    coefficient_ohm_m
+        Coefficient :math:`C` in Ω·m; ``None`` (default) takes the
+        electrode's own ``concrete_shell_coefficient_ohm_m``.
+
+    Returns
+    -------
+    float
+        :math:`R` in Ω.
+
+    Raises
+    ------
+    ValueError
+        If the coefficient is negative or not finite.
+    """
+    coefficient = float(
+        electrode.concrete_shell_coefficient_ohm_m
+        if coefficient_ohm_m is None
+        else coefficient_ohm_m
+    )
+    if not math.isfinite(coefficient) or coefficient < 0.0:
+        raise ValueError(
+            f"coefficient_ohm_m must be finite and non-negative, got {coefficient!r}."
+        )
+    return coefficient / electrode.total_length()
 
 
 class _ElectrodeBase(BaseModel):
@@ -71,8 +298,26 @@ class _ElectrodeBase(BaseModel):
     wire_radius: float = Field(
         default=0.005,
         gt=0.0,
+        allow_inf_nan=False,
         description="Wire radius in m (default 5 mm ≙ ⌀ 10 mm).",
     )
+
+    #: Kinds that carry ``concrete_shell_coefficient_ohm_m`` since 2026.11
+    #: write it to JSON only when it is non-zero, so the JSON of every
+    #: world without a shell stays byte-identical and loadable by 0.15.0.
+    _SHELL_KEY_OPTIONAL: ClassVar[bool] = False
+
+    @model_serializer(mode="wrap")
+    def _omit_zero_shell(self, handler: Any) -> Any:
+        """Drop a zero shell coefficient of the kinds that gained it in 2026.11."""
+        data = handler(self)
+        if (
+            self._SHELL_KEY_OPTIONAL
+            and isinstance(data, dict)
+            and data.get("concrete_shell_coefficient_ohm_m") == 0.0
+        ):
+            del data["concrete_shell_coefficient_ohm_m"]
+        return data
 
     @property
     def connection_point(self) -> Point3D:
@@ -178,11 +423,22 @@ class RodElectrode(_ElectrodeBase):
         ``z = 0.5``.
     length
         Rod length in metres (downwards along $+z$).
+    concrete_shell_coefficient_ohm_m
+        Per-length concrete-shell coefficient in Ω·m (ADR-0012, default
+        0: no shell); see :func:`concrete_shell_coefficient`.
     """
 
     kind: Literal["rod"] = "rod"
     position: Point3D = Field(..., description="Head point (x, y, z) in m.")
-    length: float = Field(..., gt=0.0, description="Rod length in m.")
+    length: PositiveLength = Field(..., description="Rod length in m.")
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
+
+    _SHELL_KEY_OPTIONAL: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "RodElectrode":
+        _require_longer_than_radius(self, self.length, "length")
+        return self
 
     @property
     def connection_point(self) -> Point3D:
@@ -191,16 +447,22 @@ class RodElectrode(_ElectrodeBase):
     def segments(
         self, ds: float, layer_interfaces: Sequence[float] | None = None
     ) -> WireSegments:
-        """Vertical rod: equal segments per soil layer (see base class)."""
+        """Vertical rod: equal segments per soil layer (see base class).
+
+        A part shorter than the wire diameter at an interface is not
+        split off (see :data:`SLIVER_RADII`).
+        """
         x0, y0, z0 = self.position
         head = np.array([x0, y0, 0.0])
         tangent = np.array([0.0, 0.0, 1.0])
+        intervals = _merge_interface_slivers(
+            _split_interval_at_interfaces(z0, z0 + self.length, layer_interfaces),
+            SLIVER_RADII * self.wire_radius,
+        )
         parts = []
-        for z_lo, z_hi in _split_interval_at_interfaces(
-            z0, z0 + self.length, layer_interfaces
-        ):
+        for z_lo, z_hi in intervals:
             part_len = z_hi - z_lo
-            n = max(1, int(np.ceil(part_len / ds)))
+            n = _segment_count(part_len, ds)
             parts.append(_straight_wire(head, tangent, z_lo, part_len / n, n))
         return WireSegments.concatenate(parts)
 
@@ -228,11 +490,22 @@ class RingElectrode(_ElectrodeBase):
         1.0 m below the surface.
     radius
         Ring radius in metres.
+    concrete_shell_coefficient_ohm_m
+        Per-length concrete-shell coefficient in Ω·m (ADR-0012, default
+        0: no shell); see :func:`concrete_shell_coefficient`.
     """
 
     kind: Literal["ring"] = "ring"
     center: Point3D = Field(..., description="Ring centre (x, y, z) in m.")
-    radius: float = Field(..., gt=0.0, description="Ring radius in m.")
+    radius: PositiveLength = Field(..., description="Ring radius in m.")
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
+
+    _SHELL_KEY_OPTIONAL: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "RingElectrode":
+        _require_longer_than_radius(self, self.radius, "ring radius")
+        return self
 
     @property
     def connection_point(self) -> Point3D:
@@ -249,7 +522,7 @@ class RingElectrode(_ElectrodeBase):
         length and the tangent there.
         """
         perimeter = 2.0 * np.pi * self.radius
-        n = max(8, int(np.ceil(perimeter / ds)))
+        n = _segment_count(perimeter, ds, minimum=8)
         seg_len = perimeter / n
         cx, cy, cz = self.center
         mids = np.empty((n, 3))
@@ -324,23 +597,7 @@ class StripElectrode(_ElectrodeBase):
     kind: Literal["strip"] = "strip"
     start: Point3D = Field(..., description="Strip start (x, y, z) in m.")
     end: Point3D = Field(..., description="Strip end (x, y, z) in m.")
-    concrete_shell_coefficient_ohm_m: float = Field(
-        default=0.0,
-        ge=0.0,
-        description=(
-            "Per-segment radial concrete-shell coefficient "
-            "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m. "
-            "``0.0`` (default) — no shell, behaves as before. "
-            "When positive, the MoM diagonal entry of every "
-            "segment of length $\\Delta s$ in this strip is "
-            "augmented by $C/\\Delta s$ — the radial voltage drop "
-            "through the cylindrical shell (ADR-0012 V2 path). "
-            "Currently honoured by the ``image`` and "
-            "``image_2layer`` backends; the others raise "
-            "``NotImplementedError`` so a misconfiguration is "
-            "loud rather than silently wrong."
-        ),
-    )
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
 
     @model_validator(mode="after")
     def _check_horizontal(self) -> "StripElectrode":
@@ -349,6 +606,14 @@ class StripElectrode(_ElectrodeBase):
                 "StripElectrode is horizontal: start[2] must equal end[2]. "
                 f"Got start={self.start}, end={self.end}."
             )
+        # Zero-length strips used to reach the solver and fail there as a
+        # thin-wire violation of a 0 m segment (review pass 10, 10.67).
+        if self.length <= _MIN_EDGE_LENGTH_M:
+            raise ValueError(
+                f"StripElectrode {self.name!r} has (near) zero length: start "
+                f"{self.start} and end {self.end} coincide."
+            )
+        _require_longer_than_radius(self, self.length, "length")
         return self
 
     @property
@@ -381,10 +646,14 @@ class StripElectrode(_ElectrodeBase):
         if layer_interfaces and abs(dz) > 1e-12:
             for h in layer_interfaces:
                 t_cuts.append((h - p0[2]) / dz * L)
+        intervals = _merge_interface_slivers(
+            _split_interval_at_interfaces(0.0, L, t_cuts),
+            SLIVER_RADII * self.wire_radius,
+        )
         parts = []
-        for t_lo, t_hi in _split_interval_at_interfaces(0.0, L, t_cuts):
+        for t_lo, t_hi in intervals:
             part_len = t_hi - t_lo
-            n = max(1, int(np.ceil(part_len / ds)))
+            n = _segment_count(part_len, ds)
             parts.append(_straight_wire(p0, direction, t_lo, part_len / n, n))
         return WireSegments.concatenate(parts)
 
@@ -444,15 +713,7 @@ class PolylineElectrode(_ElectrodeBase):
         default=True,
         description="Close the polyline into a ring (last vertex wired to first).",
     )
-    concrete_shell_coefficient_ohm_m: float = Field(
-        default=0.0,
-        ge=0.0,
-        description=(
-            "Per-segment radial concrete-shell coefficient "
-            "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m — same "
-            "semantics as on :class:`StripElectrode` (ADR-0012 V2)."
-        ),
-    )
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
 
     @model_validator(mode="after")
     def _check_horizontal_and_nondegenerate(self) -> "PolylineElectrode":
@@ -487,6 +748,7 @@ class PolylineElectrode(_ElectrodeBase):
                 UserWarning,
                 stacklevel=2,
             )
+        _require_longer_than_radius(self, self.min_feature_length(), "shortest edge")
         return self
 
     @property
@@ -583,20 +845,19 @@ class StarElectrode(_ElectrodeBase):
         description="Hub (x, y, z) in m; every arm stays at z = center[2].",
     )
     n_arms: int = Field(..., ge=2, description="Number of radial arms (>= 2).")
-    arm_length: float = Field(..., gt=0.0, description="Length L of a single arm in m.")
-    orientation_deg: float = Field(
+    arm_length: PositiveLength = Field(
+        ..., description="Length L of a single arm in m."
+    )
+    orientation_deg: FiniteFloat = Field(
         default=0.0,
         description="Azimuth of the first arm from +x in degrees.",
     )
-    concrete_shell_coefficient_ohm_m: float = Field(
-        default=0.0,
-        ge=0.0,
-        description=(
-            "Per-segment radial concrete-shell coefficient "
-            "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m — same "
-            "semantics as on :class:`StripElectrode` (ADR-0012 V2)."
-        ),
-    )
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "StarElectrode":
+        _require_longer_than_radius(self, self.arm_length, "arm length")
+        return self
 
     @property
     def arm_tips(self) -> list[Point3D]:
@@ -662,12 +923,27 @@ class MeshElectrode(_ElectrodeBase):
         Extent ``(dx, dy)`` of the mesh in metres.
     spacing
         Spacing between adjacent longitudinal / transverse wires in m.
+    concrete_shell_coefficient_ohm_m
+        Per-length concrete-shell coefficient in Ω·m (ADR-0012, default
+        0: no shell); see :func:`concrete_shell_coefficient`.
     """
 
     kind: Literal["mesh"] = "mesh"
     corner: Point3D = Field(..., description="Corner (x, y, z) in m.")
-    size: tuple[float, float] = Field(..., description="Extent (dx, dy) in m.")
-    spacing: float = Field(default=1.0, gt=0.0, description="Mesh spacing in m.")
+    size: tuple[PositiveLength, PositiveLength] = Field(
+        ..., description="Extent (dx, dy) in m, both > 0."
+    )
+    spacing: PositiveLength = Field(default=1.0, description="Mesh spacing in m.")
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
+
+    _SHELL_KEY_OPTIONAL: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "MeshElectrode":
+        _require_longer_than_radius(
+            self, self.min_feature_length(), "smallest extent or spacing"
+        )
+        return self
 
     @property
     def connection_point(self) -> Point3D:
@@ -736,6 +1012,9 @@ class GridMeshElectrode(_ElectrodeBase):
     n_y
         Number of meshes along $y$ (must be ≥ 1). The number of
         transverse wires is ``n_x + 1``.
+    concrete_shell_coefficient_ohm_m
+        Per-length concrete-shell coefficient in Ω·m (ADR-0012, default
+        0: no shell); see :func:`concrete_shell_coefficient`.
 
     Notes
     -----
@@ -747,9 +1026,21 @@ class GridMeshElectrode(_ElectrodeBase):
 
     kind: Literal["grid_mesh"] = "grid_mesh"
     corner: Point3D = Field(..., description="Corner (x, y, z) in m.")
-    size: tuple[float, float] = Field(..., description="Extent (dx, dy) in m.")
+    size: tuple[PositiveLength, PositiveLength] = Field(
+        ..., description="Extent (dx, dy) in m, both > 0."
+    )
     n_x: int = Field(..., ge=1, description="Number of meshes along x (≥ 1).")
     n_y: int = Field(..., ge=1, description="Number of meshes along y (≥ 1).")
+    concrete_shell_coefficient_ohm_m: float = _shell_field()
+
+    _SHELL_KEY_OPTIONAL: ClassVar[bool] = True
+
+    @model_validator(mode="after")
+    def _check_dimensions(self) -> "GridMeshElectrode":
+        _require_longer_than_radius(
+            self, self.min_feature_length(), "smaller mesh span"
+        )
+        return self
 
     @property
     def connection_point(self) -> Point3D:

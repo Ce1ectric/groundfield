@@ -47,6 +47,7 @@ from groundfield.solver._line_kernel import (
     SparseCorrection,
     field_corrections,
     field_quadrupole_rows,
+    point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
     series_corrections,
@@ -60,6 +61,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 __all__ = [
     "BLOCK_BYTES",
+    "DEFAULT_KERNEL",
     "FIELD_PIECE_BYTES",
     "MATRIX_BUDGET_BYTES",
     "NUMBA_MIN_WORK",
@@ -86,6 +88,12 @@ USE_NUMBA: bool = True
 #: Smallest series workload (rows × sources × images) handed to numba;
 #: below it the one-off compilation (about 1 s) would not pay off.
 NUMBA_MIN_WORK: int = 50_000_000
+
+#: Kernel an engine requests when it leaves the choice to the backend
+#: (``Engine.kernel = None``, the default since 2026.11, review pass 10,
+#: 10.28): the exact line-source kernel wherever a backend implements it
+#: (the image family), the backend's own kernel elsewhere.
+DEFAULT_KERNEL = "line"
 
 
 def _block_rows(n_cols: int) -> int:
@@ -189,7 +197,10 @@ def _half_space_diagonal(
     """Self-terms of the half-space reaction matrix in 1/m.
 
     The direct part is the analytical line self-potential
-    ``2 ln(L/a)/L``; the self-image part is the point image at distance
+    ``2 ln(L/a)/L``, replaced by the Galerkin self term for segments
+    shorter than 2.99 wire radii
+    (:func:`~groundfield.solver._line_kernel.point_self_term`, review
+    pass 10, 10.32); the self-image part is the point image at distance
     ``2z`` (the ``L << 4z`` limit of the image line, see
     :class:`~groundfield.solver._guards.ShallowSegmentWarning`).
 
@@ -200,8 +211,8 @@ def _half_space_diagonal(
         above the surface or with a touching mirror image.
     """
     # phi_self_direct = rho · I / (2π·L) · ln(L/a)
-    #   ⇒ K_ii (direct part) = 2·ln(L/a) / L
-    diag_direct = 2.0 * np.log(seg_lengths / wire_radii) / seg_lengths
+    #   ⇒ K_ii (direct part) = 2·ln(L/a) / L  (Galerkin form for L < 2.99 a)
+    diag_direct = point_self_term(seg_lengths, wire_radii)
     # Guard (audit 2026-07-28, F26/F29; z <= 0 since 0.15.0): the
     # point-image form diverges as z -> 0 and used to be clamped at
     # ``_MIN_DISTANCE``, which returned a mesh-dependent, far too large
@@ -675,11 +686,23 @@ class TwoLayerSeriesKernel:
     def matrix(
         self, seg_points: np.ndarray, seg_lengths: np.ndarray, wire_radii: np.ndarray
     ) -> np.ndarray:
-        """Reaction matrix in Ω (new array), bit-identical to v0.15.0's ``kernel(eye)``."""
+        """Reaction matrix in Ω (new array), bit-identical to v0.15.0's ``kernel(eye)``.
+
+        Within :data:`MATRIX_BUDGET_BYTES` the series matrix is kept for
+        later calls of the operator on the same geometry (``mom`` assembles
+        the matrix and then applies the operator: the series was built
+        twice per solve before).
+        """
         M = self.half_space.matrix(seg_points, seg_lengths, wire_radii)
-        S = self._series(seg_points)
-        S *= self.pref
-        M += S
+        if not self.fits(seg_points.shape[0]):
+            S = self._series(seg_points)
+            S *= self.pref
+            M += S
+            return M
+        S = self.series_matrix(seg_points)
+        rows = _block_rows(M.shape[0])
+        for i0 in range(0, M.shape[0], rows):
+            M[i0 : i0 + rows] += S[i0 : i0 + rows] * self.pref
         return M
 
     def __call__(
@@ -939,12 +962,17 @@ def _line_field_correction(
         Q = field_quadrupole_rows(points[sl], line)
         for out, c in zip(outs, real_parts, strict=True):
             out[sl] += Q @ c
-    corr = [field_corrections(points, line, min_distance)]
-    if images:
-        corr.append(series_field_corrections(points, line, images, min_distance))
-    sparse = SparseCorrection.concatenate(corr)
-    if sparse.rows.size:
-        C = csr_matrix((sparse.values, (sparse.rows, sparse.cols)), shape=(m, n))
-        for out, c in zip(outs, real_parts, strict=True):
-            out += C @ c
+        # Sparse near corrections block by block as well (audit round 1,
+        # A1-numerics F02): their memory then stays bounded by the block.
+        pts = points[sl]
+        corr = [field_corrections(pts, line, min_distance)]
+        if images:
+            corr.append(series_field_corrections(pts, line, images, min_distance))
+        sparse = SparseCorrection.concatenate(corr)
+        if sparse.rows.size:
+            C = csr_matrix(
+                (sparse.values, (sparse.rows, sparse.cols)), shape=(pts.shape[0], n)
+            )
+            for out, c in zip(outs, real_parts, strict=True):
+                out[sl] += C @ c
     return outs

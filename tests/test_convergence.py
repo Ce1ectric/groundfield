@@ -72,7 +72,7 @@ def test_convergence_study_approaches_sunde() -> None:
     R_sunde = rho / (2.0 * math.pi * L) * (math.log(4.0 * L / d) - 1.0)
 
     world = _single_rod_world(rho=rho, length=L)
-    eng = gf.create_engine(backend="image", segment_length=0.5)
+    eng = gf.create_engine(kernel="point", backend="image", segment_length=0.5)
     df = convergence_study(
         world,
         eng,

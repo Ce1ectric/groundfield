@@ -263,8 +263,9 @@ def test_concrete_shell_capability_error_names_the_image_family() -> None:
 def test_explicit_kernel_request_is_checked_against_the_backend() -> None:
     """A kernel the backend cannot honour raises only when asked for explicitly.
 
-    ``Engine.kernel`` is added by a parallel work stream; the subclass
-    stands in for it, so the check is exercised either way.
+    The request is carried in the value since the line kernel became the
+    default (10.28, audit A1-03): ``kernel=None`` leaves the choice to the
+    backend.
     """
     from groundfield.solver.registry import (
         BackendCapabilities,
@@ -273,9 +274,6 @@ def test_explicit_kernel_request_is_checked_against_the_backend() -> None:
         unregister_backend,
     )
 
-    class _KernelEngine(gf.Engine):
-        kernel: str = "line"
-
     register_backend(
         "toy_point_only",
         _toy_result,
@@ -283,10 +281,10 @@ def test_explicit_kernel_request_is_checked_against_the_backend() -> None:
     )
     try:
         with pytest.raises(BackendCapabilityError, match="kernel 'line'"):
-            _KernelEngine(backend="toy_point_only", kernel="line").solve(_rod_world())
+            gf.Engine(backend="toy_point_only", kernel="line").solve(_rod_world())
         # Not requested explicitly: the backend's own kernel is used and
         # recorded, without an error.
-        res = _solve_quietly(_KernelEngine(backend="toy_point_only"), _rod_world())
+        res = _solve_quietly(gf.Engine(backend="toy_point_only"), _rod_world())
         assert res.metadata["kernel"] == "point"
     finally:
         unregister_backend("toy_point_only")
@@ -450,7 +448,10 @@ def test_every_backend_reports_the_metadata_core(backend: str) -> None:
     assert md["earth_inductive_model"] == "sommerfeld"
     assert isinstance(md["n_segments"], int)
     assert md["n_segments"] == (0 if backend == "fem" else 4)
-    assert md["kernel"] == (None if backend == "fem" else "point")
+    # The image family runs the line kernel by default since 10.28.
+    image_family = backend in ("image", "image_2layer", "image_nlayer")
+    expected = "line" if image_family else "point"
+    assert md["kernel"] == (None if backend == "fem" else expected)
     assert isinstance(md["solve_time_s"], float) and md["solve_time_s"] >= 0.0
     assert md["series"] == {"max_terms": 300, "tol": 1e-6}
 

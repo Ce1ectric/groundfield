@@ -71,7 +71,8 @@ def test_image_series_is_shared_by_solver_field_and_mutual(monkeypatch) -> None:
     assert users and set(users) == {300}
     users.clear()
     res.potential(np.array([[3.0, 0.0, 0.0]]))
-    assert users and set(users) == {100}
+    # The field evaluation uses the series controls of the solve (10.25).
+    assert users and set(users) == {300}
     users.clear()
     w2 = gf.create_world(soil=soil)
     gf.create_electrode(w2, "rod", name="a", position=(0.0, 0.0, 0.5), length=2.0)

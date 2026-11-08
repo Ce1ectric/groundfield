@@ -125,17 +125,18 @@ def _multiport_diagonal(
 
 
 def test_rod_split_at_layer_interface_reports_weighted_potential() -> None:
-    """F10: the -10.9 % case of the audit — rod split at ``h_1``.
+    """F10: the mixed-length case of the audit — rod split at ``h_1``.
 
     ``TwoLayerSoil(200, 200, h_1=5)`` has ``K = 0``, so the two-layer
     backend must reproduce the homogeneous kernel exactly. The
-    interface split of the 4.509 m rod produces five 0.900 m segments
-    plus a 0.009 m remainder, i.e. the mixed-length case: 0.2 % of the
-    electrode length used to receive 1/6 = 16.7 % of the weight in the
-    reported potential.
+    interface split of the 4.55 m rod produces five 0.900 m segments
+    plus a 0.05 m remainder: 1.1 % of the electrode length used to
+    receive 1/6 = 16.7 % of the weight in the reported potential.
 
-    0.14.1 reported 40.70144871 Ω while its own constraint row
-    enforced 45.68625169 Ω (-10.9 %).
+    The audit case of 0.14.1 was a 4.509 m rod (0.009 m remainder;
+    40.70144871 Ω reported vs 45.68625169 Ω enforced, -10.9 %). Since
+    review pass 10 (10.32) a remainder shorter than the wire diameter is
+    no longer split off, so this test uses a 0.05 m remainder.
     """
     rho = 200.0
     soil = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=5.0)
@@ -145,17 +146,19 @@ def test_rod_split_at_layer_interface_reports_weighted_potential() -> None:
         "rod",
         name="r",
         position=(0.0, 0.0, 0.5),
-        length=4.509,
+        length=4.55,
         wire_radius=0.008,
     )
     gf.create_source(world, attached_to="r", magnitude=1.0)
-    result = gf.create_engine(backend="image_2layer", segment_length=1.0).solve(world)
+    result = gf.create_engine(
+        backend="image_2layer", segment_length=1.0, kernel="point"
+    ).solve(world)
 
     segs = _discretize_electrode(rod, 1.0, (soil.h_1,))
     lengths = np.array([s.length for s in segs])
-    assert lengths.min() == pytest.approx(0.009, abs=1e-9), (
+    assert lengths.min() == pytest.approx(0.05, abs=1e-9), (
         "geometry precondition: the interface split must produce the "
-        "0.009 m remainder segment"
+        "0.05 m remainder segment"
     )
 
     z_reported = result.grounding_impedance("r")[0]
@@ -163,9 +166,9 @@ def test_rod_split_at_layer_interface_reports_weighted_potential() -> None:
 
     # The reported impedance is the impedance the solver enforced.
     assert z_reported.real == pytest.approx(z_reference, rel=1e-12)
-    assert z_reported.real == pytest.approx(45.68625169, rel=1e-8)
-    # ... and no longer the unweighted mean of 0.14.1.
-    assert abs(z_reported.real - 40.70144871) > 1.0
+    assert z_reported.real == pytest.approx(45.25955625, rel=1e-8)
+    # ... and not the unweighted mean (42.38288286 Ω, -6.4 %).
+    assert abs(z_reported.real - 42.38288286) > 1.0
 
 
 def test_grounding_impedance_equals_multiport_diagonal() -> None:
@@ -189,7 +192,9 @@ def test_grounding_impedance_equals_multiport_diagonal() -> None:
         wire_radius=0.006,
     )
     gf.create_source(world, attached_to="p", magnitude=1.0)
-    result = gf.create_engine(backend="image", segment_length=1.0).solve(world)
+    result = gf.create_engine(
+        kernel="point", backend="image", segment_length=1.0
+    ).solve(world)
 
     lengths = np.array([s.length for s in _discretize_electrode(poly, 1.0)])
     assert len(np.unique(np.round(lengths, 9))) > 1, (
@@ -234,7 +239,9 @@ def test_uniform_segment_lengths_unchanged() -> None:
         wire_radius=0.005,
     )
     gf.create_source(world, attached_to="s", magnitude=1.0)
-    result = gf.create_engine(backend="image", segment_length=0.5).solve(world)
+    result = gf.create_engine(
+        kernel="point", backend="image", segment_length=0.5
+    ).solve(world)
     z = result.grounding_impedance("s")[0].real
     assert _ulps_apart(z, Z_STRIP_10M_0_14_1, budget=4), (
         f"{z!r} is more than 4 ulps from the 0.14.1 value {Z_STRIP_10M_0_14_1!r}"
@@ -640,9 +647,9 @@ def test_shallow_segment_warns_and_quantifies_the_bias() -> None:
     diagnostic is new.
     """
     with pytest.warns(ShallowSegmentWarning, match="shallower than"):
-        result = gf.create_engine(backend="image", segment_length=0.5).solve(
-            _surface_strip_world(0.01)
-        )
+        result = gf.create_engine(
+            kernel="point", backend="image", segment_length=0.5
+        ).solve(_surface_strip_world(0.01))
     z = result.grounding_impedance("tape")[0].real
     assert _ulps_apart(z, 35.49116014344861, budget=4), (
         f"{z!r} is more than 4 ulps from the 0.14.1 value 35.49116014344861"
@@ -739,9 +746,9 @@ def test_ordinary_burial_depth_is_silent() -> None:
     """
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        result = gf.create_engine(backend="image", segment_length=0.5).solve(
-            _surface_strip_world(0.5)
-        )
+        result = gf.create_engine(
+            kernel="point", backend="image", segment_length=0.5
+        ).solve(_surface_strip_world(0.5))
     z = result.grounding_impedance("tape")[0].real
     assert _ulps_apart(z, Z_STRIP_10M_0_14_1, budget=4)
 

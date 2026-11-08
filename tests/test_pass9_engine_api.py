@@ -129,6 +129,7 @@ def test_image_nlayer_converges_to_two_layer_reference() -> None:
     truncation error of the image series.
     """
     engine = gf.create_engine(
+        kernel="point",
         backend="image",
         image_max_terms=3000,
         image_series_tol=1e-9,

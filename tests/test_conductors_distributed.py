@@ -83,6 +83,8 @@ def _two_rod_world(
 
 
 def _solve(world: gf.World, backend: str, **eng_kwargs) -> gf.FieldResult:
+    # Cross-engine comparisons with the point kernel of the mom family (10.28).
+    eng_kwargs.setdefault("kernel", "point")
     eng = gf.create_engine(backend=backend, segment_length=SEG, **eng_kwargs)
     return eng.solve(world)
 

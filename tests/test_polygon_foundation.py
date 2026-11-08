@@ -52,7 +52,9 @@ def _foundation_world(spec_kwargs, *, soil=None, site_xy=(0.0, 0.0), source=True
 
 
 def _z(world, anchor, ds=0.5):
-    eng = gf.create_engine(backend="image", segment_length=ds, frequencies=[50.0])
+    eng = gf.create_engine(
+        kernel="point", backend="image", segment_length=ds, frequencies=[50.0]
+    )
     return complex(world.solve(eng).cluster_impedance(anchor)[0])
 
 

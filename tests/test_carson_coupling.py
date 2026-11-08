@@ -498,12 +498,14 @@ def test_cross_engine_carson_consistency_at_50hz(backend: str) -> None:
         n_seg=4, earth_inductive_model="carson_series", frequencies=[50.0]
     )
     eng_ref = gf.create_engine(
+        kernel="point",
         backend="image",
         segment_length=SEG,
         frequencies=[50.0],
         earth_inductive_model="carson_series",
     )
     eng_be = gf.create_engine(
+        kernel="point",
         backend=backend,
         segment_length=SEG,
         frequencies=[50.0],

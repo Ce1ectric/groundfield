@@ -71,9 +71,15 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from groundfield.soil.models import TwoLayerSoil
-from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
+from groundfield.soil.models import MultiLayerSoil, TwoLayerSoil
+from groundfield.solver._discretize import _LayerOwners
+from groundfield.solver._guards import (
+    _MIN_DISTANCE,
+    _check_segment_depths,
+    _require_image_separation,
+)
 from groundfield.solver._kernels import (
+    DEFAULT_KERNEL,
     TwoLayerSeriesKernel,
     _block_rows,
     _half_space_block,
@@ -81,10 +87,23 @@ from groundfield.solver._kernels import (
 )
 from groundfield.solver._line_kernel import (
     LineSegments,
+    _point_values,
+    galerkin_pairs,
+    near_pairs,
+    point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
 )
-from groundfield.solver._pipeline import solve_image_family
+from groundfield.solver._pipeline import (
+    SegmentArrays,
+    assemble_branches,
+    build_result,
+    build_topology,
+    discretise,
+    inject,
+    solve,
+    solve_image_family,
+)
 from groundfield.solver._series import ImageSeries
 from groundfield.solver._series import (
     SeriesTruncationWarning as SeriesTruncationWarning,
@@ -356,6 +375,8 @@ def _layered_green_matrices(
         wire_radii,
         rho_per_segment,
         line=line,
+        transmitted_rho=2.0 * rho_1 * rho_2 / (rho_1 + rho_2),
+        lower=seg_points[:, 2] >= h_1,
     )
 
     # Step 2: layered correction. The baseline rho per source is
@@ -403,6 +424,24 @@ def _layered_green_matrices(
                 rho_baseline=rho_baseline_j,
             )
             delta_Z[np.ix_(rows, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
+
+    if line is not None:
+        # Exact line sources (10.28): the near-singular interface image
+        # of the layered correction as a Galerkin integral, the rest of
+        # it in point form (diagonal included).
+        _add_line_interface_images(
+            delta_Z,
+            line,
+            rho_per_segment,
+            seg_points[:, 2] >= h_1,
+            soil,
+        )
+        if cache is not None:
+            cache["key"] = cache_key
+            cache["phi_hom_matrix"] = phi_hom_matrix
+            cache["delta_Z"] = delta_Z
+            cache["assemblies"] = int(cache.get("assemblies", 0)) + 1
+        return phi_hom_matrix, delta_Z
 
     # Diagonal: 3×3 Gauss-Legendre along the segment axis (line-self
     # peak regularised at the wire radius). Identical segments (same
@@ -471,6 +510,87 @@ def _layered_green_kernel(
     return phi_hom_matrix @ currents + delta_Z @ currents
 
 
+def _add_line_interface_images(
+    delta_Z: np.ndarray,
+    line: LineSegments,
+    rho_per_segment: np.ndarray,
+    lower: np.ndarray,
+    soil: TwoLayerSoil,
+) -> None:
+    r"""Line-exact interface image of the layered correction, in place.
+
+    For two points in the same layer the layered correction
+    :math:`\Delta G` contains the image of the source mirrored in the
+    interface, :math:`c_j / (4\pi R')` with :math:`c_j = \rho_1 K`
+    (source in layer 1) or :math:`-\rho_2 K` (layer 2),
+    :math:`K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)`, whose distance
+    :math:`R'` vanishes as both points approach the interface. Near the
+    interface its point form misses the segment average by far more than
+    the rest of :math:`\Delta G`; here it is replaced by the Galerkin
+    integral of the segment and the mirrored source segment for every
+    pair nearer than :data:`~groundfield.solver._line_kernel.NEAR_FACTOR`
+    segment lengths. The diagonal becomes the point value of
+    :math:`\Delta G` at :math:`s = a` plus the same exchange of its
+    interface-image term (the self image of a segment touching the
+    interface is a touching collinear pair).
+
+    The image term keeps the reaction matrix symmetric: the integral of
+    segment :math:`i` against the image of :math:`j` equals that of
+    :math:`j` against the image of :math:`i`.
+
+    Parameters
+    ----------
+    delta_Z
+        Layered correction in Ω with point-form off-diagonal entries,
+        shape ``(N, N)``; modified in place (the diagonal is replaced).
+    line
+        Segment geometry.
+    rho_per_segment
+        Resistivity of the layer of each segment in Ω·m (the baseline).
+    lower
+        Whether each segment lies in the lower layer.
+    soil
+        The two-layer soil.
+    """
+    from groundfield.coupling.layered_green import (
+        two_layer_layered_correction_real_space,
+    )
+
+    rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
+    K = (rho_2 - rho_1) / (rho_2 + rho_1)
+    coeff = np.where(lower, -rho_2 * K, rho_1 * K) / (4.0 * np.pi)
+    image = line.image(2.0 * h_1, -1.0)
+
+    i, j = near_pairs(line.mid, line.length, image.mid, image.length)
+    keep = (lower[i] == lower[j]) & (i != j)
+    i, j = i[keep], j[keep]
+    if i.size:
+        exact = galerkin_pairs(line, i, image, j)
+        point = _point_values(line.mid, image.mid, i, j, _MIN_DISTANCE)
+        np.add.at(delta_Z, (i, j), coeff[j] * (exact - point))
+
+    n = line.length.shape[0]
+    diag = np.arange(n)
+    self_image = galerkin_pairs(line, diag, image, diag)
+    a = line.radius
+    d = 2.0 * np.abs(h_1 - line.mid[:, 2])
+    point_image = 1.0 / np.sqrt(a * a + d * d)
+    cache: dict = {}
+    for k in range(n):
+        key = (round(float(line.mid[k, 2]), 9), round(float(a[k]), 9), bool(lower[k]))
+        if key not in cache:
+            cache[key] = two_layer_layered_correction_real_space(
+                s=float(a[k]),
+                z=float(line.mid[k, 2]),
+                z_s=float(line.mid[k, 2]),
+                rho_1=rho_1,
+                rho_2=rho_2,
+                h_1=h_1,
+                rho_baseline=float(rho_per_segment[k]),
+            ) / (2.0 * np.pi)
+        delta_Z[k, k] = cache[key] + coeff[k] * (self_image[k] - point_image[k])
+
+
 def _build_phi_hom_per_source_rho(
     seg_points: np.ndarray,
     seg_lengths: np.ndarray,
@@ -478,6 +598,8 @@ def _build_phi_hom_per_source_rho(
     rho_per_segment: np.ndarray,
     *,
     line: LineSegments | None = None,
+    transmitted_rho: float | None = None,
+    lower: np.ndarray | None = None,
 ) -> np.ndarray:
     """Reaction matrix for homog-with-per-source-rho soil.
 
@@ -494,6 +616,18 @@ def _build_phi_hom_per_source_rho(
     resistivity of the source segment's layer — which gives the
     correct ``rho_local·1/r`` near-source behaviour in each
     column.
+
+    With the exact line-source kernel (``line``), the difference between
+    the segment average and the point form of the direct and
+    surface-image terms is scaled, for a pair in different layers
+    (``lower[i] != lower[j]``), with ``transmitted_rho``
+    :math:`= 2\rho_1\rho_2/(\rho_1 + \rho_2)` instead of the source
+    resistivity: that is the coefficient of the transmitted direct and
+    surface-image terms of the two-layer Green's function, whose point
+    form the layered correction completes. Scaling it with the source
+    resistivity made the reaction matrix of a rod through the interface
+    3.8 % asymmetric and a two-port with it non-reciprocal by up to 4.7 %
+    (finding of stream eng2 on the 2026.11 work).
     """
     # Built component-wise in row blocks (10.56): entries bit-identical
     # to the former (N, N, 3) difference tensors, 8 instead of 96 bytes
@@ -511,32 +645,160 @@ def _build_phi_hom_per_source_rho(
     # mirror image touches the conductor has no finite self-image
     # term, and the historic ``_MIN_DISTANCE`` clamp turned that into
     # a silently mesh-dependent, far too large impedance.
-    diag_direct = 2.0 * np.log(seg_lengths / wire_radii) / seg_lengths
+    diag_direct = point_self_term(seg_lengths, wire_radii)
     _require_image_separation(
         seg_points, wire_radii, where="_build_phi_hom_per_source_rho"
     )
     z_mid = seg_points[:, 2]
     diag_image = 1.0 / (2.0 * np.abs(z_mid))
     np.fill_diagonal(kernel, diag_direct + diag_image)
+    scale = rho_per_segment[None, :] / (4.0 * np.pi)
     if line is not None:
         # Exact line-source kernel (10.28): far-field and near-pair
-        # corrections of the direct and surface-image terms.
+        # corrections of the direct and surface-image terms, with the
+        # transmitted resistivity for pairs in different layers.
         corrections = reaction_corrections(line, _MIN_DISTANCE)
         for i0 in range(0, kernel.shape[0], rows):
             blk = kernel[i0 : i0 + rows]
-            blk += reaction_quadrupole_rows(line, i0, i0 + blk.shape[0])
-            corrections.add_to_rows(blk, i0)
+            corr = reaction_quadrupole_rows(line, i0, i0 + blk.shape[0])
+            corrections.add_to_rows(corr, i0)
+            blk += corr
+            blk *= scale
+            if transmitted_rho is not None and lower is not None:
+                cross = lower[i0 : i0 + blk.shape[0], None] != lower[None, :]
+                blk += np.where(
+                    cross,
+                    corr
+                    * ((transmitted_rho - rho_per_segment[None, :]) / (4.0 * np.pi)),
+                    0.0,
+                )
+        return kernel
 
     # Apply rho_per_segment per column (source segment), in place
     # (10.56; the product is commutative, so bit-identical):
     # M[i, j] = rho_per_segment[j] / (4π) · kernel[i, j]
-    kernel *= rho_per_segment[None, :] / (4.0 * np.pi)
+    kernel *= scale
     return kernel
 
 
 # ---------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------
+
+
+def _as_two_layer(soil: MultiLayerSoil) -> TwoLayerSoil:
+    """The :class:`TwoLayerSoil` of a stack with at most two distinct layers.
+
+    Adjacent layers of equal resistivity are merged first (the canonical
+    stack, review pass 10, 10.48); a stack that merges to one layer becomes
+    ``TwoLayerSoil(rho, rho, h)`` with the declared first thickness, which
+    reproduces the homogeneous result.
+
+    Raises
+    ------
+    BackendCapabilityError
+        If the stack has three or more distinct layers.
+    """
+    from groundfield.solver._layered import as_layer_stack
+    from groundfield.solver.registry import BackendCapabilityError
+
+    stack = as_layer_stack(soil)
+    if stack.n_layers == 2:
+        return TwoLayerSoil(
+            rho_1=float(stack.rhos[0]),
+            rho_2=float(stack.rhos[1]),
+            h_1=float(stack.h[0]),
+        )
+    if stack.n_layers == 1:
+        h_1 = soil.layers[0].h if soil.layers[0].h else 1.0
+        rho = float(stack.rhos[0])
+        return TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=float(h_1))
+    raise BackendCapabilityError(
+        f"Backend 'image_2layer' solves at most two distinct layers; this "
+        f"MultiLayerSoil has {stack.n_layers}. Use backend='mom_sommerfeld'."
+    )
+
+
+def _owner_interfaces(soil: TwoLayerSoil) -> tuple[float, ...]:
+    """Interfaces at which electrodes get one owner per layer (10.15).
+
+    Only an interface where the resistivity changes: ``TwoLayerSoil(rho,
+    rho, h)`` is homogeneous soil and keeps one owner per electrode, so it
+    reproduces the homogeneous backend exactly.
+    """
+    return (float(soil.h_1),) if soil.rho_1 != soil.rho_2 else ()
+
+
+def _crosses_interface(world: "World", layer_interfaces) -> bool:
+    """Whether any electrode's depth range strictly contains an interface."""
+    for e in world.electrodes:
+        lower, upper = e.bounds()
+        if any(lower[2] < h < upper[2] for h in layer_interfaces):
+            return True
+    return False
+
+
+def _solve_with_layer_owners(
+    world: "World", engine: "Engine", green: "_TwoLayerGreen", *, stacklevel: int
+) -> FieldResult:
+    """The image-family pipeline with one owner per (electrode, layer) (10.15).
+
+    The steps of :func:`~groundfield.solver._pipeline.solve_image_family`,
+    with the owner split of
+    :meth:`~groundfield.solver._discretize._LayerOwners.split` between the
+    topology and the solve and its merge before the result is built. Used
+    only for worlds with an electrode through an interface; every other
+    world runs through :func:`solve_image_family` itself.
+
+    Merge note: the pipeline step functions are shared, so changes inside
+    them reach this path as well; a step added to ``solve_image_family``
+    must be added here too (or the split / merge become a hook of
+    ``solve_image_family``).
+    """
+    disc = discretise(world, engine, green.layer_interfaces)
+    node_currents = inject(world, where=green.where, stacklevel=stacklevel)
+    topo = build_topology(world, disc)
+    owners = _LayerOwners.split(
+        disc, topo, [e.name for e in world.electrodes], _owner_interfaces(green.soil)
+    )
+    branches = assemble_branches(world, engine, topo)
+    _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
+    arrays = SegmentArrays.from_segments(disc.segments)
+    kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
+    solution = solve(
+        world,
+        engine,
+        disc=disc,
+        node_currents=node_currents,
+        topo=topo,
+        branches=branches,
+        arrays=arrays,
+        kernel=kernel,
+    )
+    owners.merge(disc, topo, solution.owner_currents)
+    metadata = {
+        "world_name": world.name,
+        "n_segments": len(disc.segments),
+        "segment_length": engine.segment_length,
+        **green.metadata(solution, stacklevel=stacklevel + 1),
+        "stub": False,
+        "earth_inductive_model": branches.earth_inductive_model,
+        "kernel": engine.kernel,
+        "layer_owners": {
+            name: len(subs) + 1 for name, subs in owners.sub_owners.items()
+        },
+    }
+    return build_result(
+        world,
+        engine,
+        green=green,
+        disc=disc,
+        branches=branches,
+        arrays=arrays,
+        solution=solution,
+        cluster_id=topo.cluster_id,
+        metadata=metadata,
+    )
 
 
 class _TwoLayerGreen:
@@ -568,6 +830,9 @@ class _TwoLayerGreen:
         self.soil_resistivity = float(soil.rho_1)
         self.reference_resistivity = float(soil.rho_1)
         self.series = ImageSeries.for_soil(soil, max_terms, tol)
+        # Set by ``prepare``: whether the reaction kernel runs on the
+        # ADR-0007 Sommerfeld path (then the image series is not used).
+        self.cross_layer = False
 
     def prepare(self, segments, arrays, *, stacklevel: int):  # noqa: ANN001
         """Detect cross-layer geometry and build the reaction kernel."""
@@ -579,6 +844,7 @@ class _TwoLayerGreen:
         # the kernel dispatches to the rigorous Sommerfeld path.
         z_max = arrays.points[:, 2].max()
         cross_layer = bool(z_max >= h_1)
+        self.cross_layer = cross_layer
         if cross_layer:
             _log.info(
                 "image_2layer: cross-layer geometry detected "
@@ -615,35 +881,32 @@ class _TwoLayerGreen:
         )
 
     def metadata(self, solution, *, stacklevel: int) -> dict:  # noqa: ANN001
-        """Soil parameters and the series convergence report."""
+        """Soil parameters and the series convergence report.
+
+        The report describes the series the solve actually evaluated.
+        On the ADR-0007 cross-layer path every pair runs through the
+        Sommerfeld kernel and the image series is not used at all:
+        ``series_used`` is ``False``, ``n_terms_used`` is ``0`` and no
+        :class:`SeriesTruncationWarning` is emitted (review pass 10,
+        10.50 / F43; before, such solves reported the term count of a
+        series that never ran and warned about its truncation).
+        ``series`` records the controls for the post-solve field
+        evaluation (:meth:`FieldResult.potential`).
+        """
         soil = self.soil
         K = soil.reflection_coefficient
-        n_terms_used = 0
-        if any(np.any(sc) for sc in solution.segment_currents):
-            n_terms_used = self.series.n_terms
+        series_used = not self.cross_layer and any(
+            np.any(sc) for sc in solution.segment_currents
+        )
+        n_terms_used = self.series.n_terms if series_used else 0
         converged = (
             _series_tail_bound(abs(K), n_terms_used) < self.tol
             if n_terms_used
             else True
         )
         if not converged:
-            tail = _series_tail_bound(abs(K), n_terms_used)
-            _log.warning(
-                "image_2layer: max_terms=%d reached, series tail bound "
-                "|K|^(n+1)/(1-|K|) = %.2e > tol=%.2e. Result may be "
-                "inaccurate.",
-                self.max_terms,
-                tail,
-                self.tol,
-            )
-            warnings.warn(
-                f"image_2layer: the Tagg/Sunde image series was truncated "
-                f"at max_terms={self.max_terms} with a remaining tail bound "
-                f"of {tail:.2e} > tol={self.tol:.2e} (|K| = {abs(K):.3f}). "
-                "Raise Engine.image_max_terms for high layer contrasts.",
-                SeriesTruncationWarning,
-                stacklevel=stacklevel,
-            )
+            # One channel only (10.70): the warning, no duplicate log record.
+            self.series.warn_if_truncated("image_2layer", stacklevel=stacklevel)
         return {
             "K": float(K),
             "rho_1": float(soil.rho_1),
@@ -651,6 +914,8 @@ class _TwoLayerGreen:
             "h_1": float(soil.h_1),
             "n_terms_used": n_terms_used,
             "converged": converged,
+            "series_used": series_used,
+            "series": {"max_terms": int(self.max_terms), "tol": float(self.tol)},
         }
 
 
@@ -658,8 +923,8 @@ def solve_image_2layer(
     world: "World",
     engine: "Engine",
     *,
-    max_terms: int = 100,
-    tol: float = 1e-6,
+    max_terms: int | None = None,
+    tol: float | None = None,
 ) -> FieldResult:
     """Image-charge solver for 2-layer soil (Tagg / Sunde).
 
@@ -677,22 +942,29 @@ def solve_image_2layer(
         Engine configuration. ``engine.segment_length`` controls the
         discretisation as in the homogeneous backend.
     max_terms
-        Maximum number of series terms.
+        Maximum number of series terms; ``None`` (default) takes
+        ``engine.image_max_terms``.
     tol
         Series truncation: stop as soon as the geometric tail bound
-        $|K|^{n+1}/(1-|K|)$ falls below ``tol``.
+        $|K|^{n+1}/(1-|K|)$ falls below ``tol`` (dimensionless);
+        ``None`` (default) takes ``engine.image_series_tol``.
 
     Returns
     -------
     FieldResult
         Result object. :attr:`FieldResult.metadata` exposes diagnostic
         fields (``K``, ``rho_1``, ``rho_2``, ``h_1``, ``n_terms_used``,
-        ``converged``).
+        ``converged``, ``series_used``, ``series``).
 
     Raises
     ------
     TypeError
-        If the soil is not a :class:`TwoLayerSoil`.
+        If the soil is neither a :class:`TwoLayerSoil` nor a
+        :class:`~groundfield.soil.models.MultiLayerSoil` (which is solved
+        as the equivalent two-layer soil when its canonical stack has at
+        most two layers).
+    BackendCapabilityError
+        If a ``MultiLayerSoil`` has three or more distinct layers.
     ValueError
         If the world has no electrodes, or the geometry fails a
         discretisation guard (thin wire, burial depth).
@@ -700,8 +972,13 @@ def solve_image_2layer(
     Warns
     -----
     SeriesTruncationWarning
-        If the series reaches ``max_terms`` before ``tol``.
+        If the series is used and reaches ``max_terms`` before ``tol``.
     """
+    if isinstance(world.soil, MultiLayerSoil):
+        # Audit round 1, A1-numerics F09: the registry accepts a layer
+        # stack that merges to at most two layers; solve it as the
+        # equivalent TwoLayerSoil instead of raising a bare TypeError.
+        world = world.model_copy(update={"soil": _as_two_layer(world.soil)})
     if not isinstance(world.soil, TwoLayerSoil):
         raise TypeError(
             "Backend 'image_2layer' requires TwoLayerSoil. "
@@ -718,7 +995,15 @@ def solve_image_2layer(
         soil.h_1,
         soil.reflection_coefficient,
     )
-    green = _TwoLayerGreen(
-        soil, max_terms, tol, engine.segment_length, getattr(engine, "kernel", "point")
-    )
+    if max_terms is None:
+        max_terms = engine.image_max_terms
+    if tol is None:
+        tol = engine.image_series_tol
+    if engine.kernel is None:
+        # The backend's preferred kernel (Engine.kernel = None, 10.28).
+        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
+    green = _TwoLayerGreen(soil, max_terms, tol, engine.segment_length, engine.kernel)
+    if _crosses_interface(world, _owner_interfaces(soil)):
+        # One owner per (electrode, layer) for rods through h_1 (10.15).
+        return _solve_with_layer_owners(world, engine, green, stacklevel=3)
     return solve_image_family(world, engine, green, stacklevel=3)

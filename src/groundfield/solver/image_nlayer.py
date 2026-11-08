@@ -92,8 +92,8 @@ def solve_image_nlayer(
     world: "World",
     engine: "Engine",
     *,
-    max_terms: int = 200,
-    tol: float = 1e-6,
+    max_terms: int | None = None,
+    tol: float | None = None,
 ) -> FieldResult:
     """Image-charge dispatcher for n-layer soil.
 
@@ -110,8 +110,9 @@ def solve_image_nlayer(
         Engine configuration; ``engine.segment_length`` controls the
         discretisation.
     max_terms, tol
-        Forwarded to :func:`solve_image_2layer` for ``n = 2``;
-        ignored otherwise.
+        Series controls forwarded to :func:`solve_image_2layer` for
+        ``n = 2`` (``None``, the default, takes ``engine.image_max_terms``
+        / ``engine.image_series_tol``); ignored otherwise.
 
     Returns
     -------
@@ -140,15 +141,9 @@ def solve_image_nlayer(
         if isinstance(world.soil, HomogeneousSoil):
             res = solve_image(world, engine)
         else:
-            from groundfield.world import World
-
-            tmp = World(
-                name=world.name,
-                soil=HomogeneousSoil(resistivity=float(stack.rhos[0])),
-                electrodes=list(world.electrodes),
-                conductors=list(world.conductors),
-                sources=list(world.sources),
-                boundary=world.boundary,
+            # A copy keeps every other field of the world (junctions too).
+            tmp = world.model_copy(
+                update={"soil": HomogeneousSoil(rho=float(stack.rhos[0]))}
             )
             res = solve_image(tmp, engine)
     elif n == 2:
@@ -157,21 +152,12 @@ def solve_image_nlayer(
             res = solve_image_2layer(world, engine, max_terms=max_terms, tol=tol)
         else:
             # MultiLayerSoil with exactly two layers: cast to TwoLayerSoil.
-            from groundfield.world import World
-
             two = TwoLayerSoil(
                 rho_1=float(stack.rhos[0]),
                 rho_2=float(stack.rhos[1]),
                 h_1=float(stack.h[0]),
             )
-            tmp = World(
-                name=world.name,
-                soil=two,
-                electrodes=list(world.electrodes),
-                conductors=list(world.conductors),
-                sources=list(world.sources),
-                boundary=world.boundary,
-            )
+            tmp = world.model_copy(update={"soil": two})
             res = solve_image_2layer(tmp, engine, max_terms=max_terms, tol=tol)
     else:
         raise ValueError(

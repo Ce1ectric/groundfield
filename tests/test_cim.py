@@ -129,6 +129,16 @@ def test_cim_metadata() -> None:
 # ---------------------------------------------------------------------
 
 
+_CIM_CROSS_LAYER_XFAIL = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "10.15: image_2layer gives a rod through h_1 one owner per layer; cim "
+        "keeps one owner per electrode until it maps to image_2layer (10.76, "
+        "stream ENG-2). Remove this marker when that merges."
+    ),
+)
+
+
 def _rod_world(soil, *, z0: float, length: float, name: str = "g1") -> gf.World:
     w = gf.create_world(soil=soil)
     gf.create_electrode(w, "rod", name=name, position=(0.0, 0.0, z0), length=length)
@@ -141,9 +151,22 @@ def _rod_world(soil, *, z0: float, length: float, name: str = "g1") -> gf.World:
     ("soil", "z0", "length", "ds"),
     [
         # 3 m rod split at h_1 = 2 m: 5 x 0.4 m + 3 x 0.333 m segments
-        (gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0), 0.0, 3.0, 0.4),
-        # the pass-9 F10 shape: last segment 9 mm below h_1 = 5 m
-        (gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0), 0.5, 4.509, 0.5),
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=2.0),
+            0.0,
+            3.0,
+            0.4,
+            marks=_CIM_CROSS_LAYER_XFAIL,
+        ),
+        # the pass-9 F10 shape with a 5 cm remainder below h_1 = 5 m (a
+        # remainder shorter than the wire diameter is merged since 10.32)
+        pytest.param(
+            gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=5.0),
+            0.5,
+            4.55,
+            0.5,
+            marks=_CIM_CROSS_LAYER_XFAIL,
+        ),
         # upper layer only: a grid mesh with 3 m x 2 m cells gives
         # 0.6 m and 0.667 m segments inside one electrode
         (gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=6.0), None, None, 0.7),
@@ -171,7 +194,9 @@ def test_cim_is_bit_identical_to_image_2layer_for_unequal_segments(
         return w
 
     res_cim = gf.create_engine(backend="cim", segment_length=ds).solve(world())
-    res_il2 = gf.create_engine(backend="image_2layer", segment_length=ds).solve(world())
+    res_il2 = gf.create_engine(
+        kernel="point", backend="image_2layer", segment_length=ds
+    ).solve(world())
     lengths = {ps.length for ps in res_cim.point_sources}
     assert len({round(x, 9) for x in lengths}) > 1, "case must have unequal segments"
     assert res_cim.electrode_potentials == res_il2.electrode_potentials

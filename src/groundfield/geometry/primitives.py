@@ -13,7 +13,8 @@ only, so the solver, the pre-flight diagnostics and the plots can no
 longer disagree about them:
 
 * every straight wire of length :math:`\\ell` is cut into
-  :math:`n = \\max(1, \\lceil \\ell / \\Delta s \\rceil)` equal segments;
+  :math:`n = \\max(1, \\lceil \\ell / \\Delta s - 10^{-9} \\rceil)` equal
+  segments (the tolerance keeps floating-point noise from adding one);
 * a wire whose depth range crosses a soil-layer interface is first split
   at the interface (ADR-0007 step 1), so no segment straddles it;
 * grid wires use a segment count that is a multiple of the number of
@@ -100,6 +101,28 @@ class WireSegments:
         )
 
 
+#: Tolerance of the segment count on ``length / ds``: a wire that exceeds a
+#: whole multiple of ``ds`` only through floating-point noise (an edge of
+#: 3.0000000000000004 m at ds = 1.5 m) gets no extra segment. GEN-1 found 52
+#: instead of 50 segments on footprint polygons (review pass 10, 10.32).
+SEGMENT_COUNT_TOL = 1e-9
+
+
+def _segment_count(length: float, ds: float, minimum: int = 1) -> int:
+    """Segments of a wire: ``max(minimum, ceil(length / ds - SEGMENT_COUNT_TOL))``.
+
+    Parameters
+    ----------
+    length
+        Wire length in m.
+    ds
+        Target (maximum) segment length in m.
+    minimum
+        Smallest count (8 for a ring).
+    """
+    return max(minimum, int(np.ceil(length / ds - SEGMENT_COUNT_TOL)))
+
+
 def _split_interval_at_interfaces(
     t0: float,
     t1: float,
@@ -130,7 +153,7 @@ def _segments_per_wire(span: float, ds: float, n_spans: int) -> int:
     (``n_spans <= 1``) there is nothing to align and the plain count is
     returned. The result is never coarser than requested.
     """
-    n = max(1, int(np.ceil(span / ds)))
+    n = _segment_count(span, ds)
     if n_spans <= 1:
         return n
     return int(np.ceil(n / n_spans)) * n_spans
@@ -166,7 +189,7 @@ def _edge_wires(
         if skip_degenerate and L <= 1e-12:
             continue
         direction = (p1 - p0) / L
-        n = max(1, int(np.ceil(L / ds)))
+        n = _segment_count(L, ds)
         seg_len = L / n
         # Historic per-segment arithmetic: p0 + ((k + 0.5) * seg_len) * dir.
         mids = p0[None, :] + ((np.arange(n) + 0.5) * seg_len)[:, None] * direction

@@ -64,7 +64,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 
-__all__ = ["NEAR_FACTOR", "LineSegments"]
+__all__ = ["NEAR_FACTOR", "SELF_TERM_CROSSOVER", "LineSegments"]
 
 #: Pairs closer than ``NEAR_FACTOR · max(L_i, L_j)`` (midpoint distance)
 #: are integrated exactly; farther pairs use the quadrupole-corrected
@@ -183,6 +183,52 @@ def line_potential_pairs(
 def galerkin_self(L: np.ndarray, a: np.ndarray) -> np.ndarray:
     """Self term ``(2/L)[arsinh(L/a) - sqrt(1 + (a/L)²) + a/L]`` in 1/m."""
     return 2.0 * (np.arcsinh(L / a) - np.sqrt(1.0 + (a / L) ** 2) + a / L) / L
+
+
+#: Ratio :math:`L/a` at which the collocation self term :math:`2\ln(L/a)/L`
+#: and the Galerkin self term :func:`galerkin_self` coincide (2.990).
+SELF_TERM_CROSSOVER: float = 2.990091615374695
+
+
+def point_self_term(L: np.ndarray, a: np.ndarray) -> np.ndarray:
+    r"""Self term of the point kernel in 1/m.
+
+    The point kernel uses the collocation form :math:`2\ln(L/a)/L`, the
+    long-segment limit of the segment's potential on its own surface.
+    It collapses for short segments (zero at :math:`L = a`, so a
+    sliver at a layer interface acts as a short: ``mom`` gave a rod whose
+    tip is 9 mm below :math:`h_1` 27 % less resistance than the same rod
+    1 mm above it, review pass 10, 10.32). Below
+    :data:`SELF_TERM_CROSSOVER` the Galerkin self term
+    :func:`galerkin_self`, valid for :math:`L \sim a`, takes over:
+
+    .. math::
+        K_{ii} = \max\Bigl(\frac{2\ln(L/a)}{L},\;
+        \frac{2}{L}\Bigl[\operatorname{arsinh}\frac{L}{a}
+        - \sqrt{1 + (a/L)^2} + \frac{a}{L}\Bigr]\Bigr).
+
+    The two terms are equal at :math:`L/a = 2.990`, so the switch is
+    continuous, and every segment with :math:`L/a \ge 2.990` keeps the
+    collocation value bit for bit.
+
+    Parameters
+    ----------
+    L
+        Segment lengths in m.
+    a
+        Wire radii in m.
+
+    Returns
+    -------
+    numpy.ndarray
+        Self terms in 1/m (the potential is :math:`\rho/(4\pi)` times
+        the term times the segment current).
+    """
+    collocation = 2.0 * np.log(L / a) / L
+    short = L < SELF_TERM_CROSSOVER * a
+    if not np.any(short):
+        return collocation
+    return np.where(short, np.maximum(collocation, galerkin_self(L, a)), collocation)
 
 
 def _g2(u: np.ndarray, d: np.ndarray) -> np.ndarray:
@@ -338,19 +384,61 @@ def near_pairs(
     ``obs_len`` may be zero (field points). The distance is computed as
     in :func:`quadrupole_block`, so a pair is either *near* here or
     corrected there, never both.
+
+    The search uses each segment's own radius: the pairs within
+    ``factor · L_j`` of every source ``j`` and those within
+    ``factor · L_i`` of every observer ``i``. Up to the audit of the
+    2026.11 work it searched every observer with the radius of the
+    longest segment of the whole set, so one conductor discretised at
+    50 m in a 16-house world turned a 0.8 s line solve into 29 s and
+    1.7 GiB (audit round 1, A1-numerics F02). The pair set is the same,
+    so the results are too.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        Observer and source indices of the near pairs, sorted by
+        observer, then source.
     """
     from scipy.spatial import cKDTree
 
-    if obs_mid.shape[0] == 0 or src_mid.shape[0] == 0:
-        return np.zeros(0, dtype=int), np.zeros(0, dtype=int)
-    radius = factor * max(float(np.max(obs_len, initial=0.0)), float(np.max(src_len)))
-    tree = cKDTree(src_mid)
-    hits = tree.query_ball_point(obs_mid, r=radius * (1.0 + 1e-9) + 1e-12)
-    counts = np.fromiter((len(h) for h in hits), dtype=int, count=len(hits))
-    if counts.sum() == 0:
-        return np.zeros(0, dtype=int), np.zeros(0, dtype=int)
-    i = np.repeat(np.arange(obs_mid.shape[0]), counts)
-    j = np.concatenate([np.asarray(h, dtype=int) for h in hits if len(h)])
+    empty = np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    n_obs, n_src = obs_mid.shape[0], src_mid.shape[0]
+    if n_obs == 0 or n_src == 0:
+        return empty
+    pad = 1.0 + 1e-9
+    found_i: list[np.ndarray] = []
+    found_j: list[np.ndarray] = []
+
+    def _collect(hits, query_index: np.ndarray, *, query_is_source: bool) -> None:
+        counts = np.fromiter((len(h) for h in hits), dtype=int, count=len(hits))
+        if counts.sum() == 0:
+            return
+        q = np.repeat(query_index, counts)
+        other = np.concatenate([np.asarray(h, dtype=int) for h in hits if len(h)])
+        found_i.append(other if query_is_source else q)
+        found_j.append(q if query_is_source else other)
+
+    # Pairs near a source: the observers within factor · L_j of source j.
+    _collect(
+        cKDTree(obs_mid).query_ball_point(src_mid, r=factor * src_len * pad + 1e-12),
+        np.arange(n_src),
+        query_is_source=True,
+    )
+    # Pairs near an observer segment: the sources within factor · L_i.
+    with_length = np.flatnonzero(obs_len > 0.0)
+    if with_length.size:
+        _collect(
+            cKDTree(src_mid).query_ball_point(
+                obs_mid[with_length], r=factor * obs_len[with_length] * pad + 1e-12
+            ),
+            with_length,
+            query_is_source=False,
+        )
+    if not found_i:
+        return empty
+    key = np.unique(np.concatenate(found_i) * n_src + np.concatenate(found_j))
+    i, j = key // n_src, key % n_src
     d = obs_mid[i] - src_mid[j]
     r2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
     lim = factor * np.maximum(obs_len[i], src_len[j])
@@ -450,7 +538,7 @@ def reaction_corrections(segs: LineSegments, min_distance: float) -> SparseCorre
             diag,
             diag,
             galerkin_self(segs.length, segs.radius)
-            - 2.0 * np.log(segs.length / segs.radius) / segs.length,
+            - point_self_term(segs.length, segs.radius),
         )
     )
     i, j = near_pairs(segs.mid, segs.length, segs.mid, segs.length)

@@ -123,20 +123,19 @@ def test_strip_more_accurate_than_degenerate_mesh_workaround() -> None:
     )
 
     # Degenerate mesh with eps = 1 mm (the prior workaround) is now
-    # rejected by the thin-wire guard instead of solving wrongly.
+    # rejected instead of solving wrongly — since review pass 10 (10.67)
+    # already when it is built (1 mm extent < 5 mm wire radius).
     w2 = gf.create_world(soil=SOIL)
-    gf.create_electrode(
-        w2,
-        "mesh",
-        name="g1",
-        corner=(0.0, 0.0, depth),
-        size=(L, 1.0e-3),
-        spacing=10.0 * L,
-        wire_radius=a,
-    )
-    gf.create_source(w2, attached_to="g1", magnitude=1.0)
     with pytest.raises(ValueError, match="wire_radius"):
-        ENG.solve(w2)
+        gf.create_electrode(
+            w2,
+            "mesh",
+            name="g1",
+            corner=(0.0, 0.0, depth),
+            size=(L, 1.0e-3),
+            spacing=10.0 * L,
+            wire_radius=a,
+        )
 
 
 # ---------------------------------------------------------------------

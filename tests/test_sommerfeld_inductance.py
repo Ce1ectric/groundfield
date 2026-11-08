@@ -479,12 +479,14 @@ def test_cross_engine_sommerfeld_consistency_at_50hz(backend: str) -> None:
         frequencies=[50.0],
     )
     eng_ref = gf.create_engine(
+        kernel="point",
         backend="image",
         segment_length=SEG,
         frequencies=[50.0],
         earth_inductive_model="sommerfeld",
     )
     eng_be = gf.create_engine(
+        kernel="point",
         backend=backend,
         segment_length=SEG,
         frequencies=[50.0],
