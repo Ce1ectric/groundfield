@@ -81,6 +81,7 @@ auto-dispatch that keeps its own solve function, so the forwarding of
 
 from __future__ import annotations
 
+import copy
 import difflib
 import importlib
 import os
@@ -186,15 +187,22 @@ class BackendOptionsWarning(UserWarning):
 
 _PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep
 _PYDANTIC_DIR = os.path.dirname(os.path.abspath(pydantic.__file__)) + os.sep
+# The stem, not the file name: CPython's ``warnings.warn`` compares a prefix
+# with ``filename[:-1]``, so a prefix equal to the whole file name never
+# matches. The stem also covers ``copyreg``, whose frames are no user line
+# either.
+_COPY_STEM = os.path.splitext(os.path.abspath(copy.__file__))[0]
 
 
 def warn_external(message: str, category: type[Warning]) -> None:
     """Emit a warning attributed to the first frame outside the package.
 
-    Frames inside ``groundfield`` and ``pydantic`` (model validators)
-    are skipped, so the warning points at the user's line. This matters
-    most for :class:`DeprecationWarning`, which Python only shows by
-    default when it is attributed to ``__main__``.
+    Frames inside ``groundfield`` and ``pydantic`` (model validators) and
+    in the standard library's :mod:`copy` module (``copy.replace`` on
+    Python >= 3.13 calls pydantic's ``__replace__``; audit R2B-06) are
+    skipped, so the warning points at the user's line. This matters most
+    for :class:`DeprecationWarning`, which Python only shows by default
+    when it is attributed to ``__main__``.
 
     Parameters
     ----------
@@ -206,7 +214,7 @@ def warn_external(message: str, category: type[Warning]) -> None:
     warnings.warn(
         message,
         category,
-        skip_file_prefixes=(_PACKAGE_DIR, _PYDANTIC_DIR),
+        skip_file_prefixes=(_PACKAGE_DIR, _PYDANTIC_DIR, _COPY_STEM),
     )
 
 
