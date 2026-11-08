@@ -1195,6 +1195,73 @@ def test_fem_rejects_a_more_conductive_layer_within_the_electrode_extent(
 
 @pytest.mark.finding("10.23", "F01")
 @pytest.mark.parametrize(
+    ("rhos", "thicknesses"),
+    [
+        # fem +40.0 % / +46.4 % / +23.7 % / +23.6 % against mom_sommerfeld
+        # (+39.2 / +45.8 / +22.7 / +22.6 % against a Hankel-integral ring):
+        # the 1000 or 300 Ohm m layer that the hemisphere spans shields both
+        pytest.param((100.0, 1000.0, 30.0), (2.0, 4.0), id="100/1000/30-2-4"),
+        pytest.param((100.0, 1000.0, 30.0), (1.0, 6.0), id="100/1000/30-1-6"),
+        pytest.param((100.0, 300.0, 30.0), (2.0, 5.0), id="100/300/30-2-5"),
+        pytest.param((100.0, 1000.0, 30.0), (4.0, 2.0), id="100/1000/30-4-2"),
+        # the resistive layer lies below the hemisphere as well: +17.1 % (+16.2 %)
+        pytest.param((100.0, 1000.0, 30.0), (5.0, 2.0), id="100/1000/30-5-2"),
+    ],
+)
+def test_fem_a_resistive_layer_in_between_keeps_the_warning(rhos, thicknesses) -> None:
+    """Ring r = 10 m at 0.8 m: a 30 Ohm m layer within the half-extent behind
+    a more resistive layer.
+
+    Q23 within the half-extent (audit D2A-03) counted the conductive layer
+    whatever lay between it and the electrodes, and raised "fem reads too
+    low" where fem reads high (563ead7 warned). A layer below the
+    hemisphere now counts only if every layer between the electrodes and it
+    conducts better than the electrodes' layers (audit R2A-09).
+    """
+    # audit R2A-09
+    w = _electrode_world(
+        _three_layers(rhos, thicknesses), "ring", center=(0, 0, 0.8), radius=10.0
+    )
+    assert _fem_verdict(w) == "warn"
+
+
+@pytest.mark.finding("10.23", "F01")
+@pytest.mark.parametrize(
+    ("rhos", "thicknesses", "layers"),
+    [
+        # both conductive layers lie directly below the ring's layer: -26.5 %
+        pytest.param(
+            (1000.0, 100.0, 30.0),
+            (6.0, 2.0),
+            ("6 ... 8 m (rho = 100 Ohm m)", "below 8 m (rho = 30 Ohm m)"),
+            id="1000/100/30",
+        ),
+        # the conductive layer, then a resistive one: -32.7 %
+        pytest.param(
+            (1000.0, 30.0, 3000.0),
+            (5.0, 2.0),
+            ("5 ... 7 m (rho = 30 Ohm m)",),
+            id="1000/30/3000",
+        ),
+    ],
+)
+def test_fem_q23_counts_conductive_layers_directly_below(
+    rhos, thicknesses, layers
+) -> None:
+    """Both sides of the R2A-09 rule: a layer reached through more conductive
+    layers only still raises (fem -26.5 % / -32.7 % against mom_sommerfeld)."""
+    # audit R2A-09
+    text = _fem_message(
+        _electrode_world(
+            _three_layers(rhos, thicknesses), "ring", center=(0, 0, 0.8), radius=10.0
+        )
+    )
+    for layer in layers:
+        assert layer in text, text
+
+
+@pytest.mark.finding("10.23", "F01")
+@pytest.mark.parametrize(
     ("kind", "params", "r_ext"),
     [
         ("ring", dict(center=(0, 0, 0.8), radius=10.0), 10.0),

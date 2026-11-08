@@ -164,12 +164,14 @@ radius or the electrode's horizontal extent over a layer that the
 electrodes touch or that conducts no better than theirs (−1 … +48 %
 measured for a spanned layer, −16 … +16 % for one within the extent;
 −44 … −78 % for a rod that reaches 1 µm … 8 cm into a conductive top
-layer, −21 … +30 % for a ring lying exactly on the interface). A layer
-that no electrode touches, that conducts better than the electrodes'
-layer and whose top lies above the hemisphere radius or the horizontal
-half-extent is no warning but a `BackendCapabilityError` since 2026.11
-(user decision Q23 and audit D2A-03: `fem` misplaces the current, mostly
-far too low), as are electrodes touching a layer the hemisphere does not
+layer, −21 … +30 % for a ring lying exactly on the interface; −10 … +46 %
+for a more conductive layer within the extent behind one that conducts no
+better than the electrodes', audit R2A-09). A layer that no electrode
+touches, that conducts better than the electrodes' layer and whose top
+lies above the hemisphere radius or the horizontal half-extent (below the
+hemisphere: with no such shielding layer in between) is no warning but a
+`BackendCapabilityError` since 2026.11 (user decision Q23 and audit
+D2A-03: `fem` misplaces the current, mostly far too low), as are electrodes touching a layer the hemisphere does not
 reach, a strip deeper than half its length, a ring deeper than its
 radius and a driven `MeshElectrode` (the closed forms outside their
 range). See the [fem engine page](../explanation/engines/fem.md#guards)

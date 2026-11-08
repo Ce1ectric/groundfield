@@ -122,7 +122,10 @@ a warning in between; audit R2A-02).
   than every layer the electrodes touch, with its top above
   $\max(a_\text{eq}, r_\text{ext})$ — the hemisphere radius or the
   electrodes' horizontal half-extent (ring radius, half the strip length,
-  half the grid diagonal). The hemisphere injects the current straight
+  half the grid diagonal); below the hemisphere only when every layer
+  between the electrodes and it conducts better than theirs as well (a
+  more resistive layer in between shields both, see the warning below;
+  audit R2A-09). The hemisphere injects the current straight
   into a layer it spans and reaches one below it much less than the
   electrodes do: `fem` misplaces the current, mostly far too low, i.e. not
   conservative. The
@@ -190,7 +193,11 @@ a warning in between; audit R2A-02).
   an interface below the electrode and the hemisphere but within the
   horizontal half-extent of the electrode over a layer that conducts no
   better (+9 % for a 10 m ring over 30/1000 Ω·m at 5 m; −16 … +16 % over
-  30/1000, 100/1000 and 30/10000 Ω·m). Escalate with
+  30/1000, 100/1000 and 30/10000 Ω·m), or over a more conductive layer
+  behind such a layer (a 10 m ring at 0.8 m over 100/1000/30 and
+  100/300/30 Ω·m: +16 … +46 % against `mom_sommerfeld` and a
+  Hankel-integral ring; −10 … −9 % behind a near-equal or 1 m thin
+  resistive layer; audit R2A-09). Escalate with
   `warnings.simplefilter("error", FemReductionWarning)` when `fem` serves
   as a check.
 - Concrete shells are rejected; distributed and inductive conductors are

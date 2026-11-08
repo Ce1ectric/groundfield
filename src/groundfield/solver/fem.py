@@ -21,7 +21,10 @@ a top layer holding more than half of its hemisphere
 of 2026-11-08 — for a layer that no electrode of the cluster touches,
 that conducts better than every layer the electrodes touch and whose top
 lies above the larger of the hemisphere radius and the electrodes'
-horizontal half-extent: the hemisphere injects the current straight
+horizontal half-extent — below the hemisphere only when every layer
+between the electrodes and it conducts better than theirs as well
+(audit R2A-09: behind a more resistive layer fem reads −10 % … +46 %,
+mostly high, and warns): the hemisphere injects the current straight
 into a layer it spans and reaches one below it much less than the
 electrodes do, and fem misplaces the current, mostly far too low, i.e.
 not conservative (−97 % … +30 % against ``image_2layer`` and ``mom``
@@ -361,7 +364,11 @@ class FemReductionWarning(UserWarning):
       at ``h_1`` = ``a_eq`` … 10 m). Over a more conductive layer it
       raises since audit D2A-03 (−47 %, −20 % and −11 % at ``h_1`` = 5,
       7 and 9 m in 1000/30 Ω·m: Q23 extended to the half-extent, a
-      coordinator decision flagged for the author's review); beyond the
+      coordinator decision flagged for the author's review) — unless a
+      layer that conducts no better than the electrodes' lies in between,
+      which shields both: +16 % … +46 % for a ring r = 10 m over
+      100/1000/30 and 100/300/30 Ω·m, −10 % … −9 % behind a near-equal or
+      1 m thin resistive layer, a warning (audit R2A-09); beyond the
       half-extent the rule is silent (−8.4 % at ``h_1`` = 10 m, −1.3 % at
       20 m against ``image_2layer``).
 
@@ -487,7 +494,9 @@ def _reduction_issues(
     electrodes touch or one that conducts no better than the layers they
     touch (user decision Q23); within the horizontal half-extent (the
     "wide" reason) that holds for every reported layer since audit
-    D2A-03, a more conductive one raises there as well.
+    D2A-03, a more conductive one raises there as well — unless a layer
+    that conducts no better than the electrodes' lies between them and it
+    (audit R2A-09), which is reported here.
     """
 
     def label(root: str) -> str:
@@ -694,7 +703,16 @@ def _unreachable_layers(
       above ``max(a_eq, r_ext)``, ``r_ext`` the largest horizontal
       half-extent of the cluster's electrodes (user decision Q23,
       2026-11-08; extended from ``a_eq`` to the half-extent by audit
-      D2A-03): the hemisphere injects the current straight into a layer
+      D2A-03). Below the hemisphere such a layer counts only when every
+      layer between the deepest layer the electrodes touch and it conducts
+      better than the electrodes' layers as well: a more resistive layer
+      in between shields electrodes and hemisphere alike, and fem reads
+      +16 % … +46 % (a ring r = 10 m at 0.8 m over 100/1000/30 and
+      100/300/30 Ω·m, against ``mom_sommerfeld`` and a Hankel-integral
+      ring), −10 % … −9 % behind a near-equal or 1 m thin one — the size of
+      the error at which the rule stops at ``r_ext`` — so it keeps the
+      warning (audit R2A-09; evidence ``f3solver/r2a09_three_layers*``). The
+      hemisphere injects the current straight into a layer
       it spans and reaches one below it much less than the electrodes,
       and fem misplaces the current, mostly far too low, i.e. not
       conservative. Measured against ``image_2layer`` and ``mom`` for
@@ -822,26 +840,32 @@ def _unreachable_layers(
         if stack.n_layers < 2:
             continue
         rho_touched = min(float(stack.rhos[k]) for k in touched)
-        # The domain of the "wide" rule as well (audit D2A-03): a layer below
-        # the hemisphere but within the electrodes' horizontal half-extent
-        # is reached by their current and much less by the hemisphere.
-        r_ext = max(_horizontal_half_extent(world.get_electrode(e)) for e in members)
-        better = [
+        spanned = [
             k
             for k, (top, _) in enumerate(bounds)
-            if top < max(a_eq, r_ext)
-            and k not in touched
-            and float(stack.rhos[k]) < rho_touched
+            if top < a_eq and k not in touched and float(stack.rhos[k]) < rho_touched
         ]
-        if better:
+        # The domain of the "wide" rule as well (audit D2A-03): a layer below
+        # the hemisphere but within the electrodes' horizontal half-extent
+        # is reached by their current and much less by the hemisphere -- if
+        # every layer between the electrodes and it conducts better than
+        # theirs. A more resistive one in between shields both, and fem
+        # reads high there (audit R2A-09).
+        r_ext = max(_horizontal_half_extent(world.get_electrode(e)) for e in members)
+        reached = []
+        for k in range(max(touched) + 1, len(bounds)):
+            top = bounds[k][0]
+            if top >= max(a_eq, r_ext) or float(stack.rhos[k]) >= rho_touched:
+                break
+            if top >= a_eq:
+                reached.append(k)
+        if spanned or reached:
 
             def listed(ks: list[int]) -> str:
                 return " and the layer ".join(
                     _layer_text(*bounds[k], float(stack.rhos[k])) for k in ks
                 )
 
-            spanned = [k for k in better if bounds[k][0] < a_eq]
-            reached = [k for k in better if bounds[k][0] >= a_eq]
             own = ", ".join(
                 f"{r:g}" for r in sorted({float(stack.rhos[k]) for k in touched})
             )
@@ -1915,7 +1939,9 @@ def solve_fem(
         not touch, audit round 2, A2E-2); or if a layer that no electrode
         of the cluster touches, that conducts better than every layer
         they touch and whose top lies above ``max(a_eq, r_ext)`` (``r_ext``
-        the electrodes' horizontal half-extent) exists (user decision Q23,
+        the electrodes' horizontal half-extent; below the hemisphere only
+        with no layer between that conducts no better than the electrodes',
+        audit R2A-09) exists (user decision Q23,
         extended to the half-extent by audit D2A-03: fem misplaces the
         current, mostly far too low, −97 % … +30 % measured; independent of
         the size of the contrast). A horizontal wire touches the layers that
