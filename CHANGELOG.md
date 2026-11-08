@@ -91,7 +91,8 @@ is named.
 | 10.54, 10.39 | layout foundations follow the footprint; rotated mesh foundations split at their crossings | substation impedance 0 / +0.6 / +5.2 % in three test streets; mesh foundations +1.0 … +1.2 % (−9.5 % where the clamp fired) | layout and OSM worlds; `foundation_outline="spec"` reproduces 0.15.0 |
 | 10.53 | reproducible draws; masks of footprints without OSM id keyed by outline | reordering the footprints moved Z by 2.8 % before | `sample_world`, masks of footprints without `osm_id` |
 | 10.55 | `MeasurementLeadConfig.depth_m` and `PenConfig.depth_m` are honoured | coupled imaginary part of the probe +37 % (overhead) and +21 % (buried) at 1 kHz; inductive PEN at 1 kHz X 0.736 → 0.167 Ω; bare PEN −1.4 % (golden `gen_tn_default` ≤ 3.5e-7) | generator worlds with leads or inductive PEN |
-| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope samples mesh cells and ring centres | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V; star 275 → 818 V; 10 m ring envelope 139.4 → 182.6 V; rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point", interior=False` reproduces 0.15.0 |
+| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope follows that offset curve and samples no interior unless asked (`interior="meshes"` for open-air grids; user decision Q3) | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V; star 275 → 818 V; 10 m ring envelope 139.4 V unchanged (182.6 V in its centre with `interior="meshes"`); rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point"` reproduces 0.15.0 |
+| 10.42 | the permissible touch voltage beyond 10 s is the 80 V of the note to Figure 8 of EN 50522 (user decision Q4) | `permissible_touch_voltage_en50522(t_f > 10 s)` 85 → 80 V (−5.9 %); `math.inf` (fault not cleared) raised, now 80 V; prospective value with 1000 Ω shoes on 100 Ω·m 142.5 → 137.5 V | assessments with fault durations above 10 s, resonant-earthed networks |
 | 10.18, 10.19 | `sweep`, `convergence_study` and the rho-f helpers use the input impedance | the cluster impedance of a station was 1.26 / 1.79 / 3.09 × the input impedance with 1 / 3 / 8 houses on a PEN; a ring with two bonded rods was fitted 17 % too high | sweeps of TN worlds and BusTypes exported with the rho-f helpers; the AP1 catalogue computes its own driving-point impedance |
 | 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
 | 10.73, 10.01 | exported formulas are partial fractions with float coefficients; parsed formulas hold their numbers as floats and are evaluated without `lambdify` | at most half a unit in the last printed digit; evaluated formulas at most 4.1e-16 (exporter output) and 3.3e-15 (hand-written) | text diffs of BusType files, hand-written formulas |
@@ -103,9 +104,9 @@ is named.
 | 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged in every backend | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`); `TwoLayerSoil(ρ, ρ, h)` in `image_2layer` was 3.8e-4 (point kernel) and 3.3e-7 (line kernel) from homogeneous soil, now equal bit for bit | `cim` and declared equal layers; not AP1 |
 | 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases now raise | every layered `fem` result |
 | 10.75 | `mom` and `mom_sommerfeld` honour `return_to` and junctions | the return current flows through the return electrode instead of remote earth | `mom` family worlds with two-terminal sources |
-| 10.32 | every interface cut is kept, however short the part beyond it, so a rod tip or head next to the interface is in contact with the layer it reaches | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 130.3 Ω (−33 %); the impedance is continuous in the penetration depth (golden: none) | rods whose tip or head lies within 16 mm of an interface |
-| 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now 0.3–0.6 % above the per-segment reference; generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
-| 10.38 | the PEN cables of `TnNetworkGenerator` form a nearest-point tree: a service drop taps the main beside its house | default network: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %; measurement network −1.1 % (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
+| 10.32, 10.28 | every interface cut is kept, however short the part beyond it, and the diagonal of a piece at the interface is evaluated at the wire radius, so a rod tip or head next to the interface is in contact with the layer it reaches and a wire lying at the interface is continuous across it | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 137.4 Ω (−29 %), within −1.2 % of a solid-rod reference; a ring (r = 3 m) at h₁ = 5 m: 9.56 Ω (0.15.0, point kernel) → 4.18 Ω, continuous across h₁ (the point form raises there); a rod end within one wire radius of h₁ warns (`InterfaceContactWarning`, the thin-wire model has no end face) (golden: none) | rods whose tip or head lies within 16 mm of an interface, horizontal wires at an interface; not AP1 |
+| 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
+| 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.1 / −0.2 % for 30 / 100 / 200 houses (star) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
 
 <!-- Release coordinator: entries from the second adversarial audit go below
@@ -121,7 +122,9 @@ is named.
   with its own numeric function instead of `lambdify`, with bounds on
   length, nodes, depth, number size, work and the product of nested
   exponents (64); formulas are validated on load (`EvaluateSpecError`), and
-  crafted documents raise `ValueError`. (A first version still let SymPy
+  crafted documents raise `ValueError` (metadata nested deeper than
+  `MAX_METADATA_DEPTH`, fields of the wrong type), so every other entry point
+  works on what the loader accepts (audit A3SG-04). (A first version still let SymPy
   expand symbolic `exp` and fractional powers of large powers: 67- to
   75-character formulas ran longer than 60 s; second adversarial audit,
   A2G-01 to A2G-03.) Every formula the 0.15.0 exporter wrote still loads
@@ -219,7 +222,10 @@ is named.
   `ResourceLimitError` (10.06); `find_close_wires`, `find_close_conductors`,
   `segment_distance` (10.44); `expected_segments(...)["nodal_unknowns"]`, the
   size of the dense nodal system the guard checks (audit A2S-02);
-  `groundfield.solver.PointKernelInterfaceWarning` (10.28). Tests:
+  `groundfield.solver.PointKernelInterfaceWarning` (10.28);
+  `groundfield.solver.InterfaceContactWarning` and the `diagnose()` category
+  `interface_contact` (a rod end within one wire radius of an interface,
+  audit A3S-05); `groundfield.world.RESERVED_NAME_PREFIXES`. Tests:
   `tests/test_diagnostics_report.py`, `tests/test_source_validation.py`,
   `tests/test_conductor_proximity.py`, `tests/test_cross_layer_point_form.py`.
 
@@ -245,14 +251,27 @@ is named.
 **Safety, fits and export**
 
 - **EN 50522:2022 (F51, 10.42, 10.52):**
-  `permissible_prospective_touch_voltage_en50522` (Annex B.4),
-  `permissible_touch_voltage_en50522(t_f, long_duration=True)` (80 V), and
+  `permissible_prospective_touch_voltage_en50522` (Annex B.4) and
   `touch_voltage_spectrum` (true RMS over a fault spectrum). Tests:
   `tests/test_safety.py`.
 - **Touch-voltage options (10.21, 10.22):** `touch_voltage(anchor=)`,
-  `touch_voltage_envelope(anchor=, interior=, return_points=)`,
-  `step_voltage(world=)`, `UniformCurrentFieldWarning`. Tests:
-  `tests/test_touch_voltage_footprint.py`, `tests/test_touch_voltage_envelope.py`.
+  `touch_voltage_envelope(anchor=, interior=False | "meshes" | True,
+  return_points=)`, `step_voltage(world=)`, `UniformCurrentFieldWarning`.
+  Tests: `tests/test_touch_voltage_footprint.py`,
+  `tests/test_touch_voltage_envelope.py`.
+- **Touch points (10.21; user decision Q3):** `touch_voltage_at_part(result,
+  world, position=, bonded_to=, distance=1.0, ...)`, the touch voltage of an
+  accessible metal part above ground (a station door, a mast, a fence post, a
+  service connection box) bonded to an electrode or a PEN junction, with the
+  feet on the 1 m circle around it, optionally only in given `directions` or
+  outside given outlines (`exclude`); also `gf.safety.touch_voltage_at_part`.
+  How-to *Assess touch voltages*. Test: `tests/test_touch_voltage_at_part.py`.
+- **Effective resistivity (10.84; user decision Q6):**
+  `effective_resistivity(soil, *, w0=0.13, beta=0.8, h_ref=10.0)`,
+  ρ_eff = ρ₁^(1−w)·ρ₂^w with w = w0·(h₁/h_ref)^(−β) limited to [0, 1], exact
+  for homogeneous soil and equal layers, canonical stacks reduced, an error
+  for three or more distinct layers; bit-identical to the AP1 / AP2 scripts
+  inside their calibration range. Test: `tests/test_effective_resistivity.py`.
 - **Impedance quantity (10.18, 10.19):** `quantity="input" | "cluster" |
   "electrode"` and `source=` on `sweep`, `convergence_study` and the rho-f
   helpers. Test: `tests/test_impedance_quantity.py`.
@@ -411,8 +430,24 @@ is named.
   write `1e40`), `log` inside `exp` and fractional powers of large exact
   numbers are rejected; `evaluate_spec` gives the principal branch where
   `lambdify` gave `nan`. groundfield's exporters write none of these.
-- **`rho_at_fit` (10.84)** is the resistivity of the upper layer for layered
-  soil.
+- ⚠ **`rho` of a BusType in layered soil (10.84; user decision Q6)** is the
+  effective resistivity `effective_resistivity(soil)`, the
+  `specific_earth_resistance` an AP2 bus carries: pass it as `rho_at_fit` of a
+  vector fit and fit standard forms over ρ_eff samples. Documents record
+  `metadata["rho_definition"] = "effective_resistivity"`. A compact electrode
+  in the upper layer follows ρ₁ more closely than the network calibration of
+  ρ_eff (station of the IO example: standard form within 13.4 / 8.3 / 3.6 %
+  over ρ_eff, 3.9 / 1.9 / 0.6 % over ρ₁ for h₁ = 5 / 10 / 30 m); check
+  `max_relative`, or pass group-specific `w0`, `beta`.
+- ⚠ **Touch-voltage envelope (10.21; user decision Q3)** samples no interior
+  by default: inside the footprint stands the station, the house, the steel
+  structure or the mast; touch points are defined with
+  `touch_voltage_at_part`, open-air grids are sampled with
+  `interior="meshes"`.
+- ⚠ **Permissible touch voltage beyond 10 s (10.42; user decision Q4):** 80 V
+  for every fault duration above 10 s, including `math.inf`, after the note
+  to Figure 8 of EN 50522:2022 (the curve ends at 10 s);
+  `permissible_prospective_touch_voltage_en50522` uses the same value.
 - **CSV (10.69, 10.73):** provenance header, a `frequency_hz` column, no
   silent overwrite (`overwrite=True`).
 - **Results JSON (10.77):** standard JSON (non-finite numbers as strings),
@@ -432,9 +467,16 @@ is named.
   `electrode_currents[<name>]` and `grounding_impedance(<name>)` refer to the
   first wire, use `cluster_impedance` for the foundation. An axis-aligned
   `"lumped"` ring stays one `grid_mesh`, a polygon outline one closed wire.
-- ⚠ **PEN cables of `TnNetworkGenerator` (10.38):** a nearest-point tree; every
-  cable starts at a leakage-free tap junction (`pen_tap_<k>`) on the network
-  already built, main sections are named `<cable>_s<k>`.
+- ⚠ **PEN cables of `TnNetworkGenerator` (10.38):** every cable cabinet has its
+  own cable, as the topology documents (cabinets on one line: separate cables
+  in one trench); a service drop taps the cable that feeds its building at the
+  point nearest to the building (a leakage-free junction `pen_tap_<k>` that
+  splits the cable into sections `<cable>_s<k>`), never another drop; no
+  section or drop is shorter than 1 cm. A drop may share its route with other
+  cables, which the inductive coupling treats as touching wires (10.46).
+- **`TnNetworkGenerator.build()` of large networks:** `World` keeps a name
+  index (O(1) per added object) and the materialiser passes objects instead
+  of names: 1000 houses about 7 s → 2.4 s, worlds bit-identical.
 - ⚠ **`sample_world` (10.53)** resolves every nested distribution once per
   realisation.
 - ⚠ **Depths (10.55):** measurement leads and PEN sections run at their
@@ -571,9 +613,11 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   = []` and a raw `options` dict were accepted, and deprecated flat names in
   `model_copy` were ignored. Tests: `tests/test_engine_validation.py`.
 - **Names used twice in a loaded or edited world (10.66, audit A2S-06)** failed
-  with a singular matrix or merged an electrode and a junction; `World.check()`
-  rejects them. Test:
-  `tests/test_source_validation.py::test_check_reports_names_used_twice`.
+  with a singular matrix or merged an electrode and a junction, and names with
+  the solver's internal prefixes `__layer_` / `__cond_` broke the solve (audit
+  A3S-03); `World.check()` and the `add_*` methods reject both. Tests:
+  `tests/test_source_validation.py::test_check_reports_names_used_twice`,
+  `tests/test_source_validation.py::test_check_rejects_a_name_with_a_reserved_prefix`.
 
 **Solver**
 
@@ -593,14 +637,25 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   below h₁ no longer raises or shorts the `mom` solve, and the contact with
   the layer it reaches is kept: the first fix dropped cuts shorter than the
   wire diameter, so a 4.5 m rod in 1000/30 Ω·m jumped from 195.0 to 128.6 Ω
-  between 15.9 and 16.1 mm of tip penetration. Test:
-  `tests/test_interface_slivers.py`.
+  between 15.9 and 16.1 mm of tip penetration (audit A2S-01). The diagonal of
+  a piece at the interface clamped its closed-form image terms at h₁/200, so a
+  ring lying at h₁ = 5 m read −5.29 Ω with the default engine and contact
+  values were 10–32 % low (audit A3S-01); it is evaluated at the wire radius.
+  Tests: `tests/test_interface_slivers.py`,
+  `tests/test_cross_layer_line_kernel.py::test_ring_resistance_is_continuous_through_a_deep_interface`.
 - ⚠ **Point form next to the interface (10.28):** on the cross-layer path a
   horizontal wire next to h₁ gave wrong, even negative impedances with
   `kernel="point"` and the `mom` family (−14 % … −552 %, also in 0.15.0) or a
   bare `ValueError`; it raises `BackendCapabilityError` naming the line
   kernel, and one within 0.6 segment lengths warns
-  (`PointKernelInterfaceWarning`). Test: `tests/test_cross_layer_point_form.py`.
+  (`PointKernelInterfaceWarning`), on both sides of the interface (a ring 1 mm
+  above h₁ read −945 Ω; audit A3S-02). Test:
+  `tests/test_cross_layer_point_form.py`.
+- ⚠ **Field of equal-resistivity layers (10.48, audit A3S-04):**
+  `FieldResult.potential` and `solve_mutual_field` of `TwoLayerSoil(ρ, ρ, h)`
+  were up to 21 % off next to wires below h; they read the canonical stack
+  and equal the homogeneous field. Test:
+  `tests/test_layer_stack.py::test_field_of_an_equal_resistivity_stack_is_the_homogeneous_field`.
 - **Floating clusters in `solve_mutual_*` (10.29, audit A2S-03):** one
   factorisation for all excitations (256 bonded nodes 199.9 s → 5.6 s,
   results equal to 1e-12). Test:
@@ -737,13 +792,15 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   voltage of a 10 m mesh from 232.3 to 221.2 V (100 A). Tests:
   `tests/test_foundation_owners.py`.
 - ⚠ **Overlapping PEN cables (10.38):** service drops ran from the cabinet back
-  along the main, which made an inductive 2-house network non-passive
-  (Im Z_in −0.633 Ω at 1 kHz, now +0.072 Ω). Tests:
-  `tests/test_pen_routing.py`.
+  along the main, coaxial with it, which made an inductive 2-house network
+  non-passive (Im Z_in −0.633 Ω at 1 kHz); drops now tap their feeding cable,
+  and conductors lying side by side are touching wires (10.46). Tests:
+  `tests/test_pen_routing.py`, `tests/test_interpenetrating_wires.py`.
 - **Outlines without area (10.05, 10.54, audit A2G-06)** crashed the
   generators; they are skipped on ingest and widened with a warning by the
-  generators. Tests: `tests/test_geo_footprint.py`,
-  `tests/test_footprint_foundations.py`.
+  generators, and polygon foundations of outlines narrower than 1 m are
+  widened like the OMBR ones (audit A3SG-07). Tests:
+  `tests/test_geo_footprint.py`, `tests/test_footprint_foundations.py`.
 - **Integer fields of a resolved config (10.53)** hold `int`. Test:
   `tests/test_generators_base.py::test_resolved_integer_fields_hold_integers`.
 - **Reproducibility (10.53, F07):** resolved configs replay their realisation;
