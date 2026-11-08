@@ -1120,7 +1120,7 @@ def permissible_touch_voltage_en50522(t_clear_s: float) -> float:
 
     .. math::
 
-        \\{(t_k, U_{Tp,k})\\} \;=\;
+        \\{(t_k, U_{Tp,k})\\} \\;=\\;
         \\{(0.05, 725),\\ (0.10, 655),\\ (0.20, 525),\\
         (0.50, 225),\\ (1.00, 115),\\ (2.00, 95),\\
         (5.00, 85),\\ (10.0, 85)\\},
@@ -1131,7 +1131,7 @@ def permissible_touch_voltage_en50522(t_clear_s: float) -> float:
 
     .. math::
 
-        U_{Tp}(t_f) \;=\; 80\\,\\mathrm{V}
+        U_{Tp}(t_f) \\;=\\; 80\\,\\mathrm{V}
         \\qquad \\text{for } t_f > 10\\,\\mathrm{s},
 
     including an earth fault that is not cleared (``math.inf``).
@@ -1208,7 +1208,7 @@ def permissible_prospective_touch_voltage_en50522(
 
     .. math::
 
-        U_{vTp}(t_f) \;=\; U_{Tp}(t_f) \;+\;
+        U_{vTp}(t_f) \\;=\\; U_{Tp}(t_f) \\;+\\;
         \\frac{I_B(t_f)}{HF}\\,R_A,
         \\qquad
         R_A = R_H + R_{F1} + R_{F2},
