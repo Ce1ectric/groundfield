@@ -70,8 +70,12 @@
   now applies on both sides of the interface with the same thresholds: a
   horizontal wire closer than 0.387 segment lengths raises
   `BackendCapabilityError`, one within 0.6 warns with
-  `PointKernelInterfaceWarning` (−2.5 % / −0.4 % at 0.2 m above `h_1`). The
-  default line kernel is unaffected. Tests:
+  `PointKernelInterfaceWarning` (−2.5 % / −0.4 % at 0.2 m above `h_1`). Above
+  the interface this error threshold is conservative: it also refuses coarse
+  but accurate models (a ring r = 25 m 1.2 m above `h_1` with 5 m segments,
+  +0.9 % against the line kernel), which a finer `segment_length` — the
+  message names one — or the line kernel solves. The default line kernel is
+  unaffected. Tests:
   `tests/test_cross_layer_point_form.py::test_point_form_rejects_a_horizontal_wire_just_above_the_interface`,
   `::test_point_form_warns_for_a_horizontal_wire_above_the_interface`,
   `::test_mutual_matrix_point_form_is_guarded_above_the_interface`,
