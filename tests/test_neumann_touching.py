@@ -131,3 +131,110 @@ def test_vectorised_exact_matches_loop_reference() -> None:
             eps, radii, image=image, touching="exact"
         )
         np.testing.assert_allclose(L_vec, L_loop, rtol=1e-12, atol=1e-20)
+
+
+# ---------------------------------------------------------------------
+# Cost of the exact rule (audit round 2, A2C-5): no scalar call per pair
+# ---------------------------------------------------------------------
+
+
+def _straight_chain(m: int, step: float, direction=(1.0, 0.0, 0.0), z: float = 0.7):
+    d = np.asarray(direction, dtype=float)
+    d = d / np.linalg.norm(d)
+    t = step * np.arange(m + 1)
+    pts = t[:, None] * d[None, :] + np.array([0.0, 0.0, z])
+    return np.stack([pts[:-1], pts[1:]], axis=1)
+
+
+# audit A2C-5
+@pytest.mark.parametrize(
+    "direction, image",
+    [
+        ((1.0, 0.0, 0.0), "none"),
+        ((1.0, 0.0, 0.0), "antiparallel"),
+        ((0.956, 0.292, 0.0), "none"),  # oblique: the axis is not a coordinate axis
+        ((0.0, 0.0, 1.0), "additive"),  # vertical: coaxial with its own image too
+    ],
+)
+def test_scalar_closed_form_calls_grow_linearly(monkeypatch, direction, image) -> None:
+    """A straight conductor of M sub-segments has M(M-1)/2 coaxial pairs;
+    the exact rule evaluates them vectorised (base: one Python call per
+    pair, 19 900 calls for M = 200 and 2-4x the assembly time of the
+    quadrature). Scalar calls are left for the diagonal image terms only."""
+    import groundfield.coupling.inductance as ind
+
+    calls = {"n": 0}
+    original = ind._touching_mutual
+
+    def counting(*args, **kwargs):
+        calls["n"] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(ind, "_touching_mutual", counting)
+    m = 200
+    seg = _straight_chain(m, 5.0 if direction[2] == 0.0 else 0.1, direction)
+    ind.build_inductance_matrix(seg, np.full(m, 0.007), image=image)
+    assert calls["n"] <= 2 * m, f"{calls['n']} scalar calls for {m} segments"
+
+
+# audit A2C-5
+def test_touching_batch_is_bit_identical_with_the_scalar_closed_forms() -> None:
+    """The vectorised closed forms equal the scalar ones bit for bit, for
+    coaxial pairs (gaps, touching neighbours, reversed, overlapping),
+    bends and unrelated partners, on and off the coordinate axes."""
+    from groundfield.coupling.inductance import (
+        _touching_mutual,
+        _touching_mutual_batch,
+    )
+
+    rng = np.random.default_rng(2026)
+    n_closed = 0
+    for trial in range(60):
+        d = rng.normal(size=3)
+        d /= np.linalg.norm(d)
+        if trial % 3 == 0:
+            d = np.array([0.0, 1.0, 0.0])
+        origin = rng.normal(size=3) * 10.0
+        t = np.sort(rng.uniform(-50.0, 50.0, 10))
+        pts = origin + t[:, None] * d
+        p1, p2 = pts[:-1].copy(), pts[1:].copy()
+        flip = rng.random(p1.shape[0]) < 0.3
+        p1[flip], p2[flip] = p2[flip].copy(), p1[flip].copy()
+        extra_1 = [pts[3], rng.normal(size=3) * 20.0, origin + (t[2] + 0.3) * d]
+        extra_2 = [pts[3] + rng.normal(size=3), rng.normal(size=3) * 20.0]
+        extra_2.append(origin + (t[4] + 0.1) * d)  # overlaps: no closed form
+        p1 = np.vstack([p1, *extra_1])
+        p2 = np.vstack([p2, *extra_2])
+        for i in range(p1.shape[0]):
+            q1, q2 = np.delete(p1, i, 0), np.delete(p2, i, 0)
+            values, valid = _touching_mutual_batch(p1[i], p2[i], q1, q2)
+            for k in range(q1.shape[0]):
+                ref = _touching_mutual(p1[i], p2[i], q1[k], q2[k])
+                assert valid[k] == (ref is not None)
+                if ref is not None:
+                    assert values[k] == ref  # bit for bit
+                    n_closed += 1
+    assert n_closed > 3000
+
+
+# audit A2C-5
+@pytest.mark.benchmark
+def test_exact_rule_on_a_straight_chain_is_not_slower_than_twice_the_quadrature() -> (
+    None
+):
+    """Wall-time guard (generous: the CI machine is shared). Base: 2.4-4.2x
+    for M = 200-800; now about 1.0-1.3x."""
+    import time
+
+    seg = _straight_chain(300, 5.0)
+    radii = np.full(300, 0.007)
+
+    def best(rule: str) -> float:
+        out = []
+        for _ in range(3):
+            t0 = time.perf_counter()
+            build_inductance_matrix(seg, radii, image="none", touching=rule)
+            out.append(time.perf_counter() - t0)
+        return min(out)
+
+    assert best("exact") < 2.0 * best("quadrature")

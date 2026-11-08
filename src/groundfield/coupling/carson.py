@@ -96,6 +96,12 @@ Implementation notes
 - The complex-depth Deri/Semlyen approximation is provided as an
   internal sanity check (:func:`deri_semlyen_correction`); it is
   not the production code path.
+- A wire above the surface parallel to a wire below it is not a Carson
+  pair (both wires overhead) nor a buried pair: its mutual impedance is
+  the field transmitted into the soil,
+  :func:`carson_mixed_mutual_correction` (Carson's $J$ plus a bounded
+  remainder for the buried wire's attenuation; audit round 2 of the
+  calendar release, A2C-1).
 
 References
 ----------
@@ -120,6 +126,7 @@ __all__ = [
     "carson_p_q",
     "carson_self_correction",
     "carson_mutual_correction",
+    "carson_mixed_mutual_correction",
     "deri_semlyen_correction",
     "skin_depth",
     "carson_parameter",
@@ -622,6 +629,168 @@ def carson_mutual_correction(
     P, Q = carson_p_q(a, theta)
     pref = omega * MU_0 / math.pi
     return complex(pref * P, pref * Q)
+
+
+# ---------------------------------------------------------------------
+# Overhead wire parallel to a buried wire (audit round 2, A2C-1)
+# ---------------------------------------------------------------------
+
+# Composite Gauss–Legendre rule of the overhead–buried remainder: 32
+# nodes per panel, panels doubling from min(1/2, 2/p) and at most
+# _MIXED_PANEL_PERIODS periods of cos(q mu) wide, up to mu = 40/p
+# (e^{-40} ~ 4e-18), at most _MIXED_MAX_PANELS panels. Against mpmath
+# (interval-wise summation), f = 50 Hz ... 5 kHz, rho = 10 ... 3000 Ohm m,
+# h = 0.01 ... 10 m, d = 0.05 ... 10 m, x = 0 ... 1 km: <= 4e-15 of |J_m|
+# up to 1 kHz, 1e-13 where J_m is small (x = 1 km at 5 kHz in 10 Ohm m:
+# round-off of the oscillating sum); QUADPACK's Fourier integrator agrees
+# likewise up to x = 3 km (where mpmath's quadosc is unreliable).
+_MIXED_PANEL_PERIODS = 4.0
+_MIXED_MAX_PANELS = 4096
+
+
+@lru_cache(maxsize=1 << 14)
+def _mixed_remainder(p_h: float, p_d: float, q: float) -> tuple[float, float]:
+    """$\\Delta J = J_m(p_h, p_d, q) - J(p_h + p_d, q)$ as ``(real, imag)``.
+
+    With $s = \\sqrt{\\mu^2 + j}$ and $t = s - \\mu = j/(s + \\mu)$,
+
+    $$
+    \\Delta J \\;=\\; \\int_0^\\infty t\\,e^{-(p_h + p_d)\\mu}\\,
+    \\bigl(e^{-p_d t} - 1\\bigr)\\cos(q\\mu)\\,d\\mu ,
+    $$
+
+    the difference between the buried wire's attenuation
+    $e^{-p_d s}$ and the overhead form $e^{-p_d\\mu}$ that Carson's
+    $J$ would use for it. The integrand is bounded and decays like
+    $p_d e^{-(p_h + p_d)\\mu}/(4\\mu^2)$, so a fixed composite
+    Gauss–Legendre rule converges for every $q$ (QUADPACK's Fourier
+    integrator does not: it fails for $q \\lesssim 10^{-3}$ when the
+    first cycle hides the structure of $s$ near $\\mu = 1$).
+    $e^{-p_d t} - 1$ is evaluated with ``expm1`` (no cancellation).
+    """
+    if p_d <= 0.0:
+        return 0.0, 0.0
+    p = p_h + p_d
+    mu_max = 40.0 / p
+    cap = 2.0 * math.pi * _MIXED_PANEL_PERIODS / q if q > 0.0 else math.inf
+    edges = [0.0]
+    width = min(0.5, 2.0 / p)
+    while edges[-1] < mu_max and len(edges) <= _MIXED_MAX_PANELS:
+        edges.append(min(edges[-1] + min(width, cap), mu_max))
+        width *= 2.0
+    e = np.asarray(edges)
+    lo = e[:-1, None]
+    half = 0.5 * (e[1:, None] - lo)
+    mu = (lo + half * (_GL_NODES_32[None, :] + 1.0)).ravel()
+    w = (half * _GL_WEIGHTS_32[None, :]).ravel()
+    s = np.sqrt(mu * mu + 1j)
+    t = 1j / (s + mu)
+    f = t * np.exp(-p * mu) * np.expm1(-p_d * t)
+    if q > 0.0:
+        f = f * np.cos(q * mu)
+    total = complex(np.sum(w * f))
+    return total.real, total.imag
+
+
+def carson_mixed_mutual_correction(
+    omega: float,
+    height: float,
+    depth: float,
+    horizontal_distance: float,
+    sigma_earth: float,
+) -> complex:
+    """Mutual impedance of an overhead wire parallel to a buried wire.
+
+    Per-unit-length mutual impedance of two long parallel horizontal
+    wires on **opposite sides** of the soil surface — one at height
+    $h$ above it, one at depth $d$ below it, horizontal separation
+    $x$ — over a homogeneous earth (quasi-static, the regime of
+    Carson's theory):
+
+    $$
+    Z_m(\\omega) \\;=\\; \\frac{j\\omega\\mu_0}{\\pi}\\int_0^\\infty
+    \\frac{e^{-\\lambda h - u d}}{\\lambda + u}\\,\\cos(\\lambda x)\\,
+    d\\lambda
+    \\;=\\; \\frac{\\omega\\mu_0}{\\pi}\\,J_m(p_h, p_d, q),
+    \\qquad u = \\sqrt{\\lambda^2 + j\\omega\\mu_0\\sigma},
+    $$
+
+    the field of the overhead wire transmitted into the soil, with
+    Carson's variables $\\lambda = \\mu\\sqrt{\\omega\\mu_0\\sigma}$,
+    $p_h = h\\sqrt{\\omega\\mu_0\\sigma}$,
+    $p_d = d\\sqrt{\\omega\\mu_0\\sigma}$,
+    $q = x\\sqrt{\\omega\\mu_0\\sigma}$ and
+
+    $$
+    J_m \\;=\\; \\int_0^\\infty \\bigl(\\sqrt{\\mu^2 + j} - \\mu\\bigr)\\,
+    e^{-p_h\\mu - p_d\\sqrt{\\mu^2 + j}}\\cos(q\\mu)\\,d\\mu .
+    $$
+
+    For $d \\to 0$ this is Carson's $J$ of two overhead wires at
+    heights $h$ and $0$; it is evaluated as Carson's
+    $J(p_h + p_d, q)$ (:func:`carson_p_q`, every regime) plus the
+    bounded remainder of the buried wire's attenuation
+    (:func:`_mixed_remainder`). Measured remainder: $10^{-5}$ to
+    $4\\cdot 10^{-1}$ of $J$ (shallow conductors at 50 Hz in resistive
+    soil to deep ones at 5 kHz in 10 $\\Omega$m).
+
+    **Image baseline.** Relative to the anti-parallel
+    (perfect-electric-conductor) image of
+    ``build_inductance_matrix(image="antiparallel")`` this is the
+    whole coupling: a perfect conductor screens the soil, so the
+    baseline of a pair on opposite sides of the surface is zero.
+    Treating the buried wire as an overhead wire at height $d$
+    (Carson's correction on the mirrored-endpoint image, as the solver
+    did up to audit round 2 of the calendar release) gives 36 % too
+    little mutual reactance for a lead 1 m above a PEN at 0.7 m depth
+    at 1 kHz, 14 % at 1 m offset, 3 % for a lead 0.1 m above it.
+
+    Parameters
+    ----------
+    omega
+        Angular frequency in rad/s.
+    height
+        Height $h$ of the overhead wire above the surface in m
+        (positive).
+    depth
+        Depth $d$ of the buried wire below the surface in m
+        (positive).
+    horizontal_distance
+        Horizontal separation $x$ of the two wires in m.
+    sigma_earth
+        Earth conductivity in S/m.
+
+    Returns
+    -------
+    Z : complex
+        Per-unit-length mutual impedance in $\\Omega/\\text{m}$.
+
+    Raises
+    ------
+    ValueError
+        For a non-positive height or depth, or a negative distance.
+
+    References
+    ----------
+    - Ametani, A.; Yoneda, T.; Baba, Y.; Nagaoka, N. (2009). An
+      investigation of earth-return impedance between overhead and
+      underground conductors and its approximation. *IEEE Trans.
+      Electromagn. Compat.* **51**(3), 860–867,
+      doi:10.1109/TEMC.2009.2019953.
+    """
+    if height <= 0.0 or depth <= 0.0:
+        raise ValueError("height and depth must be positive")
+    if horizontal_distance < 0.0:
+        raise ValueError("horizontal_distance must be non-negative")
+    if omega <= 0.0 or sigma_earth <= 0.0:
+        return 0.0 + 0.0j
+    base = carson_mutual_correction(
+        omega, height, depth, horizontal_distance, sigma_earth
+    )
+    k = math.sqrt(omega * MU_0 * sigma_earth)
+    re, im = _mixed_remainder(k * height, k * depth, k * horizontal_distance)
+    pref = omega * MU_0 / math.pi
+    return base + complex(pref * re, pref * im)
 
 
 # ---------------------------------------------------------------------

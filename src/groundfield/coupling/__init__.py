@@ -9,9 +9,12 @@ conductor geometry and the material properties:
   inductances, :mod:`~groundfield.coupling.inductance`),
 - the earth-return correction of the inductive coupling: Carson's
   per-metre correction (:mod:`~groundfield.coupling.carson`, homogeneous
-  earth, long parallel wires) and the geometric Sommerfeld/Pollaczek
-  kernel (:mod:`~groundfield.coupling.sommerfeld_inductance`, exact
-  quasi-static for any number of layers).
+  earth, long parallel horizontal wires — on one side of the surface, or
+  one above and one below it through the transmitted field; the matrix
+  builder hands every other pair to the Sommerfeld kernel) and the
+  geometric Sommerfeld/Pollaczek kernel
+  (:mod:`~groundfield.coupling.sommerfeld_inductance`, exact quasi-static
+  for any number of layers).
 
 A correction matrix is only meaningful together with the image
 convention of the inductance matrix it is added to (``image=``

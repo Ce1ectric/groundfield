@@ -35,6 +35,14 @@ conventions the three terms are assembled with:
   ``"sommerfeld"``           ``"none"``          $\\Delta G = G - 1/R$ (exact)
   =========================  ==================  =======================
 
+  ``carson_series`` keeps Carson's per-metre tiling inside its validity
+  domain — near-parallel pairs of near-horizontal segments; a pair on
+  opposite sides of the surface (anti-parallel baseline zero) gets the
+  field transmitted into the soil — and hands oblique pairs and
+  inclined or vertical segments to the exact Sommerfeld kernel of a
+  homogeneous earth of the same conductivity (audit round 2 of the
+  calendar release, A2C-1 and stream DOC-B).
+
   Carson's correction is defined against the anti-parallel
   (perfect-electric-conductor) image; up to 0.15.0 the solver added it
   on top of the additive image, which gave 1.66–2.25 times the
