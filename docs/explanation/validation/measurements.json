@@ -2,7 +2,7 @@
  "schema_version": 1,
  "environment": {
   "date": "2026-11-08",
-  "groundfield": "0.15.0",
+  "groundfield": "2026.11.0",
   "python": "3.12.3",
   "numpy": "2.5.4",
   "scipy": "1.18.1",
@@ -756,14 +756,14 @@
    "benchmark": "B13",
    "backend": "pollaczek_x",
    "case": "X' 1 kHz",
-   "value": 4.090107792231734e-06,
+   "value": 8.288173556358913e-06,
    "bound": 0.005
   },
   {
    "benchmark": "B13",
    "backend": "pollaczek_r",
    "case": "R' 1 kHz",
-   "value": 0.01043479578916151,
+   "value": 0.010518509408525056,
    "bound": 0.02
   }
  ],

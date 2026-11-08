@@ -4,7 +4,7 @@
 
 !!! info "Generated page"
 
-    Every number on this page comes from one run of the engine benchmark suite, measured on 2026-11-08 with groundfield 0.15.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64), and from the bounds in `tests/benchmarks/tolerances.py`. The page is written by `python scripts/generate_validation_page.py`; `tests/test_validation_page.py` checks that it matches the stored measurements and, with `--run-benchmark`, that a fresh run reproduces them.
+    Every number on this page comes from one run of the engine benchmark suite, measured on 2026-11-08 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64), and from the bounds in `tests/benchmarks/tolerances.py`. The page is written by `python scripts/generate_validation_page.py`; `tests/test_validation_page.py` checks that it matches the stored measurements and, with `--run-benchmark`, that a fresh run reproduces them.
 
 Suite result of that run: **69 passed, 7 skipped** (`pytest tests/benchmarks --run-benchmark`; the skipped tests are combinations a benchmark does not apply to).
 
@@ -45,8 +45,8 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-10 | 0 | 1 | pass |  |
 | B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | 3 % | 2.8 % | 2 | pass | uniform current per electrode (10.22); target 2 % |
 | B13 Ring with an inductive 400 m line (`image_vs_mom`) | compare_engines row deviation (Re and Im) | 5 % | 1.0 % | 1 | pass | inductive branch shared; galvanic part differs by the ansatz |
-| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 4.1e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
-| B13 Ring with an inductive 400 m line (`pollaczek_r`) | abs(R'/R'_P - 1), same difference | 2 % | 1.0 % | 1 | pass | converges from below with the length (-4.5 % for 400/800 m); the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P |
+| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 8.3e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
+| B13 Ring with an inductive 400 m line (`pollaczek_r`) | abs(R'/R'_P - 1), same difference | 2 % | 1.1 % | 1 | pass | converges from below with the length (-4.5 % for 400/800 m); the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P |
 
 ### `image_2layer`
 
@@ -271,8 +271,8 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B12 | `mom_sommerfeld` | matrix ds=1.25 | 6.9e-9 | 1e-6 |
     | B12 | `mom_sommerfeld` | Z ds=1.25 | 1.5e-10 | 1e-6 |
     | B13 | `image_vs_mom` | worst row | 1.0 % | 5 % |
-    | B13 | `pollaczek_x` | X' 1 kHz | 4.1e-6 | 0.5 % |
-    | B13 | `pollaczek_r` | R' 1 kHz | 1.0 % | 2 % |
+    | B13 | `pollaczek_x` | X' 1 kHz | 8.3e-6 | 0.5 % |
+    | B13 | `pollaczek_r` | R' 1 kHz | 1.1 % | 2 % |
 
 ## Regenerating this page
 

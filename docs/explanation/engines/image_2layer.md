@@ -176,7 +176,7 @@ with.
 ## Validation
 
 <!-- generated:begin image_2layer -->
-Generated from the benchmark run measured on 2026-11-08 with groundfield 0.15.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
+Generated from the benchmark run measured on 2026-11-08 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|

@@ -234,8 +234,8 @@ reproduces 0.15.0, it is named.
   size of the dense nodal system the guard checks (audit A2S-02);
   `groundfield.solver.PointKernelInterfaceWarning` (10.28);
   `groundfield.solver.InterfaceContactWarning` and the `diagnose()` category
-  `interface_contact` (a rod end within one wire radius of an interface,
-  audit A3S-05); `groundfield.world.RESERVED_NAME_PREFIXES`. Tests:
+  `interface_contact` (a free rod end within one wire radius of an
+  interface; a rod split at the interface is not reported; audit A3S-05); `groundfield.world.RESERVED_NAME_PREFIXES`. Tests:
   `tests/test_diagnostics_report.py`, `tests/test_source_validation.py`,
   `tests/test_conductor_proximity.py`, `tests/test_cross_layer_point_form.py`.
 

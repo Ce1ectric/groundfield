@@ -157,7 +157,7 @@ image family is the right tool.
 ## Validation
 
 <!-- generated:begin image -->
-Generated from the benchmark run measured on 2026-11-08 with groundfield 0.15.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
+Generated from the benchmark run measured on 2026-11-08 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
@@ -166,8 +166,8 @@ Generated from the benchmark run measured on 2026-11-08 with groundfield 0.15.0 
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-10 | 0 | 1 | pass |  |
 | B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | 3 % | 2.8 % | 2 | pass | uniform current per electrode (10.22); target 2 % |
 | B13 Ring with an inductive 400 m line (`image_vs_mom`) | compare_engines row deviation (Re and Im) | 5 % | 1.0 % | 1 | pass | inductive branch shared; galvanic part differs by the ansatz |
-| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 4.1e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
-| B13 Ring with an inductive 400 m line (`pollaczek_r`) | abs(R'/R'_P - 1), same difference | 2 % | 1.0 % | 1 | pass | converges from below with the length (-4.5 % for 400/800 m); the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P |
+| B13 Ring with an inductive 400 m line (`pollaczek_x`) | abs(X'/X'_P - 1), X' = Im(Z_1600 m - Z_800 m) / 800 m at 1 kHz | 0.5 % | 8.3e-6 | 1 | pass | the two-length difference cancels the end effects; the 400 m line itself is 3.7 % (1 kHz) and 10.8 % (50 Hz) below l X'_P (finite length, l / delta = 2.5 and 0.56) |
+| B13 Ring with an inductive 400 m line (`pollaczek_r`) | abs(R'/R'_P - 1), same difference | 2 % | 1.1 % | 1 | pass | converges from below with the length (-4.5 % for 400/800 m); the 400 m line is 34 % (1 kHz) and 17 % (50 Hz) below l R'_P |
 
 Near-field quantities against `mom` on the same discretisation (uniform-current ansatz; homogeneous 100 Ω·m, ds = 0.5 m):
 
