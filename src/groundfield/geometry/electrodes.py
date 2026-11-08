@@ -70,50 +70,21 @@ Point3D = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
 #: wire radius, so only true coincidences trip it.
 _MIN_EDGE_LENGTH_M = 1e-9
 
-#: Interface slivers (review pass 10, 10.32): an interface cut that would
-#: leave a part of a wire shorter than ``SLIVER_RADII`` wire radii (the wire
-#: diameter) is dropped; the short part joins its neighbour, whose end
-#: segment then reaches past the interface by less than one diameter and is
-#: assigned to the layer of its midpoint. A wire piece shorter than its
-#: diameter is outside the thin-wire model: up to 0.15.0 a rod whose tip lay
-#: 1 mm below an interface raised a ``ValueError`` (segment shorter than the
-#: wire radius) and one 9 mm below it acted as a short. The threshold does
-#: not scale with the segment length on purpose: a 10 cm tip in a lower
-#: layer 33 times more conductive carries a large share of the current, and
-#: merging it at ``ds = 2 m`` (``ds/10``) put the resistance 122 % too high
-#: (evidence ``e1032_sliver_threshold.py``).
-SLIVER_RADII = 2.0
-
-
-def _merge_interface_slivers(
-    parts: list[tuple[float, float]], min_length: float
-) -> list[tuple[float, float]]:
-    """Drop interface cuts that leave a part shorter than ``min_length`` (m).
-
-    Parameters
-    ----------
-    parts
-        Consecutive intervals ``(t_lo, t_hi)`` in m along the wire, as
-        returned by :func:`~groundfield.geometry.primitives._split_interval_at_interfaces`.
-    min_length
-        Shortest part in m that is kept.
-
-    Returns
-    -------
-    list of tuple
-        The intervals after dropping the cuts.
-    """
-    if len(parts) <= 1:
-        return parts
-    bounds = [parts[0][0]] + [hi for _, hi in parts]
-    kept = [bounds[0]]
-    for k in range(1, len(bounds) - 1):
-        cut = bounds[k]
-        if cut - kept[-1] < min_length or bounds[k + 1] - cut < min_length:
-            continue
-        kept.append(cut)
-    kept.append(bounds[-1])
-    return list(zip(kept[:-1], kept[1:], strict=True))
+# Interface contact (review pass 10, 10.32; audit round 2, A2S-01): a
+# wire is cut at every soil-layer interface it crosses, however short the
+# part beyond the cut, and that part is a segment of its own in its own
+# layer. Every segment-based backend evaluates the self term of a part
+# shorter than its diameter with the Galerkin form, which is valid for any
+# length (it tends to the potential of a sphere of the wire radius), so the
+# contact with the layer is never dropped. Up to 0.15.0 a part shorter than
+# the wire radius raised a ``ValueError`` and a slightly longer one acted
+# as a short in ``mom``; an intermediate rule of this release merged a part
+# shorter than the wire diameter into its neighbour, which ignored the layer
+# beyond: a 4.5 m rod of radius 8 mm in 1000 over 30 Ω·m read 195.0 Ω with
+# its tip 15.9 mm into the lower layer and 128.6 Ω at 16.1 mm (+52 %). The
+# impedance is now continuous in the penetration depth; the step that
+# remains is the onset of the contact itself, between a tip that ends at
+# the interface and one that reaches past it.
 
 
 def _require_longer_than_radius(
@@ -449,15 +420,16 @@ class RodElectrode(_ElectrodeBase):
     ) -> WireSegments:
         """Vertical rod: equal segments per soil layer (see base class).
 
-        A part shorter than the wire diameter at an interface is not
-        split off (see :data:`SLIVER_RADII`).
+        The rod is cut at every interface it crosses; a part beyond a cut
+        keeps its own segment however short it is (it may be shorter than
+        the wire radius), so a tip that reaches into a layer is in contact
+        with it (audit round 2, A2S-01).
         """
         x0, y0, z0 = self.position
         head = np.array([x0, y0, 0.0])
         tangent = np.array([0.0, 0.0, 1.0])
-        intervals = _merge_interface_slivers(
-            _split_interval_at_interfaces(z0, z0 + self.length, layer_interfaces),
-            SLIVER_RADII * self.wire_radius,
+        intervals = _split_interval_at_interfaces(
+            z0, z0 + self.length, layer_interfaces
         )
         parts = []
         for z_lo, z_hi in intervals:
@@ -646,10 +618,7 @@ class StripElectrode(_ElectrodeBase):
         if layer_interfaces and abs(dz) > 1e-12:
             for h in layer_interfaces:
                 t_cuts.append((h - p0[2]) / dz * L)
-        intervals = _merge_interface_slivers(
-            _split_interval_at_interfaces(0.0, L, t_cuts),
-            SLIVER_RADII * self.wire_radius,
-        )
+        intervals = _split_interval_at_interfaces(0.0, L, t_cuts)
         parts = []
         for t_lo, t_hi in intervals:
             part_len = t_hi - t_lo

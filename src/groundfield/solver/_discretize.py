@@ -118,16 +118,18 @@ def _discretize_electrode(
         geometry can cross an interface (rods, sloped strips) split
         their segments there so no segment straddles a layer boundary
         (ADR-0007 step 1, audit 2026-07-08 WP-D2). Horizontal
-        primitives (rings, meshes) are unaffected.
+        primitives (rings, meshes) are unaffected. A part beyond an
+        interface keeps its own segment however short it is (audit
+        round 2, A2S-01).
 
     Raises
     ------
     TypeError
         If the electrode model does not provide a discretisation.
     ValueError
-        If a segment is not longer than the wire radius
-        (:func:`_require_thin_wire`), or a polyline has no
-        non-degenerate edge.
+        If a segment of the discretisation without the interface cuts
+        is not longer than the wire radius (:func:`_require_thin_wire`),
+        or a polyline has no non-degenerate edge.
     """
     try:
         geo = electrode.segments(ds, layer_interfaces)
@@ -142,9 +144,19 @@ def _discretize_electrode(
         )
     wire_radius = electrode.wire_radius
     thin = geo.lengths <= wire_radius
+    if thin.any() and layer_interfaces:
+        # A part cut off at a layer interface keeps its own segment however
+        # short it is: the wire touches that layer, and the Galerkin self
+        # term of every segment-based kernel is valid for any length (audit
+        # round 2, A2S-01). The guard concerns the chosen segment length,
+        # i.e. the discretisation without the interface cuts.
+        regular = electrode.segments(ds).lengths
+        thin, geo_lengths = regular <= wire_radius, regular
+    else:
+        geo_lengths = geo.lengths
     if thin.any():
         _require_thin_wire(
-            float(geo.lengths[int(np.argmax(thin))]), wire_radius, electrode.name
+            float(geo_lengths[int(np.argmax(thin))]), wire_radius, electrode.name
         )
     # ADR-0012 V2: strips, polylines and stars carry a concrete-shell
     # coefficient that every segment inherits; ``0.0`` leaves the
