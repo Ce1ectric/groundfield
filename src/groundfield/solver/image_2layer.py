@@ -75,7 +75,7 @@ from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoi
 from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._guards import (
     _MIN_DISTANCE,
-    _check_point_cross_layer_diagonal,
+    _check_point_interface_diagonal,
     _check_segment_depths,
     _require_image_separation,
 )
@@ -895,12 +895,13 @@ class _TwoLayerGreen:
                 UserWarning,
                 stacklevel=stacklevel,
             )
-        if cross_layer and self.kernel != "line" and self.layer_interfaces:
-            # The point form of the cross-layer diagonal cannot represent a
-            # horizontal wire next to h_1 or the surface (audit round 2).
-            # Without a physical interface (rho_1 == rho_2) the layered
-            # correction vanishes and nothing is to be checked.
-            _check_point_cross_layer_diagonal(
+        if self.kernel != "line" and self.layer_interfaces:
+            # The point form of the diagonal cannot represent a horizontal
+            # wire next to h_1 on either side of it: the 3-point depth rule
+            # of the cross-layer path (audit round 2), the point image of the
+            # interface on the series path (audit A3S-02). Without a physical
+            # interface (rho_1 == rho_2) nothing is to be checked.
+            _check_point_interface_diagonal(
                 segments,
                 arrays.points,
                 arrays.lengths,
@@ -909,6 +910,7 @@ class _TwoLayerGreen:
                 backend="'image_2layer' (kernel='point')",
                 remedy="Use the default kernel (kernel=None or 'line'), which "
                 "integrates these segments exactly, or a finer segment_length",
+                cross_layer=cross_layer,
             )
         # Tag every segment with its layer index (0 = upper, 1 = lower).
         for s in segments:

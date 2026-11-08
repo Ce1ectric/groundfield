@@ -53,7 +53,7 @@ from groundfield.soil.models import (
     TwoLayerSoil,
 )
 from groundfield.solver._discretize import _LayerOwners
-from groundfield.solver._guards import _check_point_cross_layer_diagonal
+from groundfield.solver._guards import _check_point_interface_diagonal
 from groundfield.solver._kernels import (
     DEFAULT_KERNEL,
     HalfSpaceKernel,
@@ -386,8 +386,9 @@ def _prepare(
         # 2-layer reaction operator: feed the engine's image-series
         # truncation, exactly like ``solve_image_2layer``.
         z_max = float(arrays.points[:, 2].max())
-        if line is None and interfaces and z_max >= soil_two_layer.h_1:
-            _check_point_cross_layer_diagonal(
+        if line is None and interfaces:
+            # Both sides of h_1 (audit A3S-02), as in ``image_2layer``.
+            _check_point_interface_diagonal(
                 disc.segments,
                 arrays.points,
                 arrays.lengths,
@@ -396,6 +397,7 @@ def _prepare(
                 backend=f"{where} (kernel='point')",
                 remedy="Use the default kernel (kernel=None or 'line'), which "
                 "integrates these segments exactly, or a finer segment_length",
+                cross_layer=z_max >= soil_two_layer.h_1,
             )
         kernel = _two_layer_self_kernel_factory(
             soil_two_layer,

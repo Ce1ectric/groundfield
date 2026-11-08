@@ -498,19 +498,32 @@ CROSS_LAYER_WARN_DISTANCE = 0.6
 class PointKernelInterfaceWarning(UserWarning):
     """A horizontal segment lies close to a layer interface (point form).
 
-    On the cross-layer path of a two-layer soil (an electrode reaches the
-    interface :math:`h_1`) the point form of the reaction matrix
-    (``kernel="point"`` of the image family and the ``mom`` family)
-    averages the layered correction on the diagonal over a 3-point rule
-    along the *depth* axis, :math:`\\pm 0.387 L` around the segment
-    midpoint, whatever the segment's orientation. For a horizontal segment
-    within :math:`0.6 L` of :math:`h_1` the rule samples the correction
-    next to the interface, where it varies quickly: measured −3 % … −17 %
-    against the exact line kernel (a 20 m strip and a ring r = 3 m in
-    300/50 and 100/1000 Ω·m). Closer still, where the rule reaches across
-    the interface or above the soil surface, the solve raises
-    :class:`~groundfield.solver.registry.BackendCapabilityError` (up to
-    −552 %, negative impedances; audit round 2). The exact line kernel,
+    The point form of the reaction matrix (``kernel="point"`` of the image
+    family, the ``mom`` family and ``solve_mutual_*`` with the point kernel)
+    cannot represent a horizontal wire next to a layer interface, on either
+    side of it:
+
+    * on the cross-layer path of a two-layer soil (an electrode reaches the
+      interface :math:`h_1`) it averages the layered correction on the
+      diagonal over a 3-point rule along the *depth* axis,
+      :math:`\\pm 0.387 L` around the segment midpoint, whatever the
+      segment's orientation;
+    * with every segment above :math:`h_1` (the Tagg/Sunde series, and the
+      Sommerfeld diagonal of ``mom_sommerfeld``) it takes the image of a
+      segment in the interface as a point source :math:`2|z - h_1|` away,
+      where the image *line* of a horizontal segment is much closer to the
+      wire than that point (audit A3S-02).
+
+    A horizontal segment within :math:`0.6 L` of :math:`h_1` draws this
+    warning: measured −3 % … −17 % against the exact line kernel on the
+    cross-layer path (a 20 m strip and a ring r = 3 m in 300/50 and
+    100/1000 Ω·m), −2.5 % and −0.4 % above :math:`h_1` (a ring r = 3 m,
+    ``segment_length = 0.5`` m, 0.2 m above :math:`h_1` = 5 m in 1000/30
+    and 30/1000 Ω·m). Closer still (:math:`|z - h_1| < 0.387 L`), or where
+    the 3-point rule reaches above the soil surface, the solve raises
+    :class:`~groundfield.solver.registry.BackendCapabilityError` instead
+    (negative impedances: −552 % on the cross-layer path; −1931 Ω instead
+    of 4.18 Ω for the ring 1 µm above :math:`h_1`). The exact line kernel,
     the default of the image family, integrates these segments exactly.
     """
 
@@ -638,5 +651,141 @@ def _check_point_cross_layer_diagonal(
         f"{example(near)}); the point form of the cross-layer reaction matrix "
         "samples the layered correction next to the interface there "
         "(-3 % ... -17 % against the exact line kernel). " + remedy + hint + ".",
+        PointKernelInterfaceWarning,
+    )
+
+
+def _check_point_interface_diagonal(
+    segments: "Sequence[_Segment]",
+    points: np.ndarray,
+    lengths: np.ndarray,
+    directions: np.ndarray | None,
+    h_1: float,
+    *,
+    backend: str,
+    remedy: str,
+    cross_layer: bool | None = None,
+) -> None:
+    """Point-form guard for horizontal wires on either side of an interface.
+
+    The point form of the reaction-matrix diagonal fails for a horizontal
+    wire next to the layer interface :math:`h_1` on both of its paths:
+
+    * **cross-layer path** (a segment at or below :math:`h_1`): the 3-point
+      depth rule of the layered correction, see
+      :func:`_check_point_cross_layer_diagonal`, which this function calls;
+    * **every segment above** :math:`h_1` (the Tagg/Sunde series of
+      ``image_2layer`` and ``mom``, the series diagonal of
+      ``mom_sommerfeld`` with two layers and its Sommerfeld diagonal with
+      three or more): the image of a segment in the interface enters the
+      diagonal as a point source :math:`2|z - h_1|` away, while the image
+      *line* of a horizontal segment runs parallel to the wire at that
+      distance. A ring r = 3 m (``segment_length = 0.5`` m) 1 µm / 1 mm /
+      1 cm / 5 cm / 0.1 m above :math:`h_1` = 5 m read −1931 / −945 /
+      −57.9 / 21.2 / 31.6 Ω instead of 4.18 / 4.77 / 15.4 / 28.0 / 33.5 Ω
+      (1000/30 Ω·m) and +853 % … +0.1 % in 30/1000 Ω·m (audit A3S-02);
+      0.2 m above it −2.5 % and −0.4 %.
+
+    The thresholds are those of the cross-layer path, with
+    :math:`q = |z - h_1| / (0.387 L)`: :math:`q < 1` raises for every
+    segment, :math:`|z - h_1| < 0.6 L` warns for horizontal (non-vertical)
+    segments. Vertical segments never reach either: a rod ends at or above
+    the interface, so its segment midpoints keep :math:`L/2` from it.
+
+    Parameters
+    ----------
+    segments
+        The leakage segments (for the owner names in the message).
+    points, lengths
+        Midpoints in m, shape ``(N, 3)``, and lengths in m, shape ``(N,)``.
+    directions
+        Unit tangents, shape ``(N, 3)``; ``None`` treats every segment as
+        horizontal.
+    h_1
+        Depth of the interface in m (the shallowest one; every segment lies
+        above it when ``cross_layer`` is false).
+    backend
+        Label of the solve for the message.
+    remedy
+        Sentence naming the alternatives.
+    cross_layer
+        Whether the solve runs on the cross-layer path; ``None`` decides by
+        the deepest midpoint (``z_max >= h_1``).
+
+    Raises
+    ------
+    groundfield.solver.registry.BackendCapabilityError
+        If a segment midpoint lies within ``0.387 L`` of the interface (or,
+        on the cross-layer path, the 3-point rule reaches above the soil
+        surface).
+
+    Warns
+    -----
+    PointKernelInterfaceWarning
+        If a horizontal segment lies within ``0.6 L`` of the interface.
+    """
+    z = np.asarray(points, dtype=float)[:, 2]
+    if cross_layer is None:
+        cross_layer = bool(z.size and float(z.max()) >= h_1)
+    if cross_layer:
+        _check_point_cross_layer_diagonal(
+            segments,
+            points,
+            lengths,
+            directions,
+            h_1,
+            backend=backend,
+            remedy=remedy,
+        )
+        return
+    L = np.asarray(lengths, dtype=float)
+    if directions is None:
+        horizontal = np.ones(z.shape, dtype=bool)
+    else:
+        horizontal = np.abs(np.asarray(directions, dtype=float)[:, 2]) < 1.0 - 1e-9
+    gap = np.abs(z - h_1)
+    across = gap < CROSS_LAYER_DIAGONAL_SPREAD * L
+    near = horizontal & ~across & (gap < CROSS_LAYER_WARN_DISTANCE * L)
+    if not (across.any() or near.any()):
+        return
+    finer = np.where(horizontal, gap / CROSS_LAYER_WARN_DISTANCE, np.inf)
+    hint = ""
+    if np.isfinite(finer).any():
+        hint = f" (here below {float(np.min(finer[np.isfinite(finer)])):.3g} m)"
+
+    def example(mask: np.ndarray) -> str:
+        k = int(np.flatnonzero(mask)[0])
+        return (
+            f"{_segment_owner_label(segments[k])}, segment at z = {z[k]:.4g} m, "
+            f"length {L[k]:.3g} m"
+        )
+
+    def counted(mask: np.ndarray) -> str:
+        n = int(mask.sum())
+        return f"{n} segment{'s' if n != 1 else ''}"
+
+    if across.any():
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
+            f"Backend {backend} cannot solve this world: the point form of the "
+            "reaction matrix takes the image of every segment in the layer "
+            "interface as a point source 2|z - h_1| away, and "
+            f"{counted(across)} lie closer than 0.387 segment lengths to the "
+            f"layer interface at h_1 = {h_1:.4g} m (e.g. {example(across)}), "
+            "where the image line of a horizontal wire runs much closer to the "
+            "wire than that point. Measured against the exact line kernel for a "
+            "ring 1 um ... 0.1 m above h_1: -1931 instead of 4.18 Ohm ... -5.8 % "
+            "(1000/30 Ohm m), +853 % ... +0.1 % (30/1000 Ohm m). " + remedy + hint + "."
+        )
+    from groundfield.solver.registry import warn_external
+
+    warn_external(
+        f"{backend}: {counted(near)} of horizontal wires lie closer to the "
+        f"layer interface at h_1 = {h_1:.4g} m than 0.6 segment lengths (e.g. "
+        f"{example(near)}); the point form takes the image of each segment in "
+        "the interface as a point source there (-2.5 % and -0.4 % against the "
+        "exact line kernel for a ring 0.2 m above h_1, 1000/30 and 30/1000 "
+        "Ohm m). " + remedy + hint + ".",
         PointKernelInterfaceWarning,
     )

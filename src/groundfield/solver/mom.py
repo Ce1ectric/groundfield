@@ -118,7 +118,7 @@ import numpy as np
 from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
 from groundfield.solver import _pipeline
 from groundfield.solver._guards import (
-    _check_point_cross_layer_diagonal,
+    _check_point_interface_diagonal,
     _check_segment_depths,
 )
 from groundfield.solver._kernels import HalfSpaceKernel
@@ -721,17 +721,20 @@ class _MomGreen(_PointMatchingGreen):
                 z_max,
                 soil.h_1,
             )
-            _check_point_cross_layer_diagonal(
-                segments,
-                arrays.points,
-                arrays.lengths,
-                arrays.directions,
-                float(soil.h_1),
-                backend=repr(self.backend),
-                remedy="Use backend='image_2layer' with its default line kernel, "
-                "which integrates these segments exactly, or a finer "
-                "segment_length",
-            )
+        # The point form cannot represent a horizontal wire next to h_1 on
+        # either side of it (audit round 2; above h_1: audit A3S-02).
+        _check_point_interface_diagonal(
+            segments,
+            arrays.points,
+            arrays.lengths,
+            arrays.directions,
+            float(soil.h_1),
+            backend=repr(self.backend),
+            remedy="Use backend='image_2layer' with its default line kernel, "
+            "which integrates these segments exactly, or a finer "
+            "segment_length",
+            cross_layer=bool(z_max >= soil.h_1),
+        )
         return _two_layer_self_kernel_factory(
             soil,
             self.max_terms,
