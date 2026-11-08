@@ -92,6 +92,12 @@ mkdocs-material = "^9.5.34"
 mkdocstrings = { extras = ["python"], version = "^0.26.1" }
 # >= 11.0.1: fixes the six advisories of 10.21.2 (finding 10.04).
 pymdown-extensions = ">=11.0.1,<13"
+# Tutorials are executed notebooks under docs/tutorials/, rendered with
+# their stored outputs (execute: false in mkdocs.yml).
+mkdocs-jupyter = "0.27.0"
+# Versioned documentation: one docs version per calendar release, aliases
+# `latest` (newest release) and `dev` (main), see .github/workflows/docs.yml.
+mike = "2.2.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
