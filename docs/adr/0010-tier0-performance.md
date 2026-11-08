@@ -23,8 +23,8 @@ substantially:
   across frequencies; the solve currently does $n_\text{freq}$
   redundant LU factorisations.
 * **0b — Vectorised Neumann assembly.** The Python double loop
-  in :func:`build_inductance_matrix` calls
-  :func:`neumann_mutual` for each of the $M(M-1)/2$ off-diagonal
+  in `build_inductance_matrix` calls
+  `neumann_mutual` for each of the $M(M-1)/2$ off-diagonal
   pairs. The Neumann integrand itself is already vectorised
   (a single `np.einsum`), but the per-pair Python overhead
   dominates: array conversions, branch on parallel-vs-quadrature,
@@ -51,7 +51,7 @@ implementation on the existing test suite.
 
 ### 0b (this ADR, implemented now)
 
-Rewrite :func:`build_inductance_matrix` to vectorise the off-
+Rewrite `build_inductance_matrix` to vectorise the off-
 diagonal assembly:
 
 * Compute every segment's unit vector and length once.
@@ -64,16 +64,16 @@ diagonal assembly:
   (so peak memory stays at $O(M \cdot 16^2 \cdot 3)$ rather
   than $O(M^2 \cdot 16^2 \cdot 3)$).
 * The diagonal stays identical (still
-  :func:`perfect_mirror_self_pair_inductance` per row).
+  `perfect_mirror_self_pair_inductance` per row).
 
 The legacy implementation is kept as
-:func:`_build_inductance_matrix_loop` for regression testing
+`_build_inductance_matrix_loop` for regression testing
 and as the reference oracle in :file:`tests/test_inductance_vectorised.py`.
 
 ### 0a (follow-up — deferred)
 
 Add an LU cache to the per-frequency solver loop in
-:mod:`groundfield.solver.image` (and friends). When the matrix
+`groundfield.solver.image` (and friends). When the matrix
 is frequency-independent (`earth_inductive_model ==
 "perfect_mirror"` and no per-conductor `inductance_model`),
 factor once and reuse the LU across the whole frequency list.

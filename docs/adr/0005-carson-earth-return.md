@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — amended 2026.11 (review pass 10: Carson on its anti-parallel baseline, F32); see the amendment at the end of this document |
 | **Date** | 2026-05-06 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -503,3 +503,35 @@ unless noted otherwise.
   series in SI units.
 - **Sunde, E. D.** (1968). *Earth Conduction Effects in
   Transmission Systems*, Dover. Ch. 7 — buried-wire equivalent.
+
+---
+
+## Amendment 2026.11 — Carson on its own baseline (review pass 10, F32)
+
+Findings 10.20 (F32), 10.46 and 10.63.
+
+1. **Baseline.** Carson's correction is the change of the impedance of a
+   line and its **anti-parallel** image in a perfectly conducting earth.
+   Section *Linear-system integration* added it to the Neumann matrix of
+   ADR-0004 with its **additive** perfect-mirror image, which roughly
+   doubled the earth-return reactance: 1.66–2.25 times Carson's value for
+   100 m – 1 km lines and +41 % on $|Z|$ at 1 kHz for a TN network with
+   inductive PEN conductors (review pass 10). Since 2026.11
+   `carson_series` assembles the inductance matrix with
+   `image="antiparallel"`; a 1 km isolated PEN reproduces
+   $l\,X'_\text{Carson}$ within 1 %
+   (`tests/test_inductive_solver_integration.py::test_carson_series_reactance_matches_carson`).
+2. **Regimes.** The small-$a$ regime ($a \le 0.25$) evaluates Carson's
+   series to $a^{12}$, with the sign rule read as the sign of each
+   coefficient (the literal recursion is $10^{-9}$ off at $a = 0.25$); the
+   self-term quadrature at $\theta = 0$ uses a graded composite rule and is
+   at round-off; the asymptotic expansion is used only for $a > 15$ (the
+   boundary at $a = 5$ jumped by up to $9.3 \cdot 10^{-4}$), with the sign
+   of the $a^{-7}$ term of $Q$ corrected. Regime 2 therefore covers
+   $0.25 < a \le 15$.
+3. **Cost.** $P$ and $Q$ are memoised (bit-identical) and the corrections
+   of all frequencies are built in one assembly.
+4. **Positioning.** `carson_series` is the fast approximation for long
+   parallel lines over homogeneous earth; it is not a general replacement
+   of `sommerfeld`, and the documentation no longer calls the two
+   "identical".

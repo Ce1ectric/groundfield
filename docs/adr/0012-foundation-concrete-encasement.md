@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient); see the amendment at the end of this document |
 | **Date** | 2026-05-15 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.generators.electrode_specs.FoundationElectrodeSpec`
@@ -358,3 +358,49 @@ foundation is present.
 - **ADR-0011** — OSM building footprints. This ADR completes the
   OSM-driven generator pipeline by giving the generated
   foundations the right electrical boundary condition.
+
+---
+
+## Amendment 2026.11 — one mechanism: the shell coefficient on the wires (review pass 10)
+
+Findings 10.12, 10.13 and 10.14.
+
+The two variants of this ADR reached the solver on different roads, and
+only one of them did. Variant 1 (lumped) recorded the total shell
+resistance in `World.concrete_shell_corrections`, which only
+`TnNetworkGenerator` turned into a series resistance on the PEN service
+drop; `Engine.solve` of any other world, `solve_mutual_matrix`,
+`solve_mutual_field` and the layout builder ignored it but kept the
+inflated wire radius $r_b$. For the AP1 catalogue, whose foundation matrix
+comes from `solve_mutual_matrix`, the concrete therefore lowered the
+foundation impedance at low soil resistivity instead of raising it
+(10.12). Spreading a site's lumped resistance over rods and braces
+mis-assigned their current (10.13), and the layout builder dropped the
+shell (10.14).
+
+Decision:
+
+1. **One representation.** Every electrode kind has the field
+   `concrete_shell_coefficient_ohm_m`, $C = \frac{\rho_c}{2\pi}\ln\frac{r_b}{r_a}$
+   in Ω·m. The image family and `solve_mutual_*` add $C/\Delta s$ to the
+   diagonal of every segment — variant 2 of this ADR, now for every
+   electrode kind. Under the uniform current of an owner of length $L$
+   this is exactly the lumped series resistance $C/L$ of variant 1, so the
+   two variants coincide by construction and the 2 % acceptance criterion
+   is met exactly (`tests/test_concrete_shell_coefficient.py`,
+   `tests/test_concrete_one_mechanism.py`).
+2. **Generators.** Both `concrete_model` settings put $C$ and the radius
+   $r_b$ on the encased perimeter wires; braces and rods stay bare; no
+   shell resistance on PEN drops; substation and cabinet electrodes get
+   $C$ when their specification is encased. `concrete_model` only chooses
+   one or several owners for an axis-aligned ring foundation.
+3. **Registry deprecated.** `World.concrete_shell_corrections` is read by
+   no solver and warns at solve (removal no earlier than 2027.5).
+4. **Conversion helpers** in `groundfield.geometry.electrodes`:
+   `concrete_shell_coefficient`, `shell_coefficient_from_resistance`,
+   `shell_resistance_from_coefficient`.
+5. **Capability.** Backends outside the image family reject electrodes
+   with a shell (`BackendCapabilityError`).
+
+The *API additions* and *Variant 1* sections above describe the
+mechanism of 0.15.0 and are superseded by this amendment.

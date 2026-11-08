@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026-07-09 (audit WP-E) and 2026-07-30 (review pass 9, F17/F34/F39); see the amendments at the end of this document, which supersede the selection heuristic below |
+| **Status** | Accepted — amended 2026-07-09 (audit WP-E) and 2026-07-30 (review pass 9, F17/F34/F39); see the amendments at the end of this document, which supersede the selection heuristic below; amended 2026.11 (review pass 10: deprecated names, point matching, fem experimental, benchmark suite) |
 | **Date** | 2026-05-01 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
@@ -272,3 +272,66 @@ $n \ge 3$ again, and only then does `Engine` need to expose
 `n_images` / `n_samples` (the parameters were removed from
 `solve_cim` / `solve_bem` in 0.15.0 because `Engine.solve` could
 never reach them).
+
+---
+
+## Amendment 2026.11 — three names deprecated, one point-matching scheme, fem experimental, one benchmark suite (review pass 10)
+
+Review pass 10 (findings 10.23, 10.29–10.31, 10.47–10.49, 10.61, 10.71,
+10.76) found that the eight backend names stood for four distinct
+computations, and that several statements of this ADR and its earlier
+amendments no longer described the code. Decisions of release 2026.11:
+
+1. **Deprecated names.** `cim`, `bem` and `image_nlayer` are deprecated
+   aliases in the backend registry (ADR-0014); they keep working, emit a
+   `DeprecationWarning` naming the replacement and will be removed no
+   earlier than 2027.5. `cim` runs the `image` auto-dispatch — the
+   numbers `cim` gave on every world it accepted, now also for unequal
+   segment lengths, where its unweighted read-back was +4.1 % off
+   (10.30); `bem` runs `mom` (the matrices agreed to 4e-16);
+   `image_nlayer`'s routing is done by `image`. The complex-image fit
+   (`fit_complex_images`) stays available as an analysis function and
+   reports convergence only when its maximum error meets the tolerance
+   (10.49). The rationale for not implementing Stefanescu's $n \ge 3$
+   series stands.
+2. **One point-matching scheme.** `mom` is collocation with pulse basis,
+   delta testing and a point-source near field — not Galerkin (10.31) —
+   and `mom_sommerfeld` shares that discretisation; agreement between the
+   two on two-layer soil checks the kernel, not the scheme.
+   `metadata["solver"]` is `"point_matching"` for both. Source-free
+   clusters float in both families (10.29), so transfer impedances are
+   reciprocal.
+3. **`fem` is experimental.** It solves one equivalent hemisphere per
+   cluster; it is not a cross-check of the integral engines (10.23). It
+   raises `BackendCapabilityError` when an electrode reaches a layer its
+   hemisphere does not, warns (`FemReductionWarning`) for multi-electrode
+   clusters, several clusters and interfaces within the electrode's
+   extent, and keeps its near-field resolution for deep stacks (10.49).
+   This revokes the role "independent volume-PDE cross-check" given to
+   `fem` above and in the amendments of 2026-07-09 and 2026-07-30.
+4. **Kernel.** The image family uses the exact line-source kernel by
+   default (ADR-0015). Cross-checks between `image` and `mom` pin
+   `kernel="point"` so that they compare current models on one kernel.
+5. **`mom_sommerfeld`.** A capped oscillation budget counts as
+   non-convergence and warns (10.47); for $n \ge 3$ the reflected
+   kernel of a top-layer depth class is tabulated once and checked
+   against the quadrature (10.61, default on, bounded by $10^{-6}$ in
+   benchmark B12).
+6. **Canonical layer stacks** (10.48): equal adjacent layers are merged
+   before dispatch, so `TwoLayerSoil(ρ, ρ, h)` and `MultiLayerSoil([ρ, ρ, ρ])`
+   are homogeneous for every backend.
+7. **Cross-validation envelope.** The envelope table of this ADR is
+   superseded by the benchmark suite B1–B13 (`tests/benchmarks`, marker
+   `benchmark`) with one tolerance table (`tests/benchmarks/tolerances.py`)
+   and the generated validation page of the documentation, which reports
+   the measured value of every bound. `compare_engines` compares complex
+   cluster and input impedances at every frequency and notes aliases
+   (10.71).
+
+**Consequence.** The family is four computations: the image family
+(uniform current per electrode and layer; closed-form kernels, the
+Sommerfeld kernel across an interface), `mom` (point matching, same
+kernels), `mom_sommerfeld` (point matching, quadrature kernel, any $n$)
+and the experimental `fem`. Independent evidence comes from the
+benchmark references, from `mom_sommerfeld` for the kernel and from
+`mom` for the current model.

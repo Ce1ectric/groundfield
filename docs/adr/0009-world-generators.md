@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted — amended 2026.11 (review pass 10: network plan, English names, reproducibility, measurement wiring); see the amendment at the end of this document |
 | **Date** | 2026-05-08 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.generators` (new subpackage); parameter
@@ -182,9 +182,9 @@ placement are deferred to a follow-up.
 **4. `soil_specs` — soil-model specifications.** Discriminated
 union `SoilSpec` with three members: `HomogeneousSoilSpec`,
 `TwoLayerSoilSpec`, `MultiLayerSoilSpec`. Each carries the same
-fields as the underlying :class:`SoilModel` but allows
+fields as the underlying `SoilModel` but allows
 distributions; the method `to_soil(rng)` returns a fully numeric
-:class:`SoilModel`. A two-layer soil is the default.
+`SoilModel`. A two-layer soil is the default.
 
 **5. `building.BuildingTypeSpec` — building type definition.**
 Bundles a `name`, a `GroundingSystemSpec`, and an optional
@@ -276,3 +276,46 @@ that will read from open building-map data.
   outputs after a `rho-f` fit).
 - Vector fitting & rho-f standard form — what we eventually run
   on the generated networks.
+
+---
+
+## Amendment 2026.11 — one network plan, English names, reproducible draws, the field wiring of a measurement (review pass 10)
+
+Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
+10.78.
+
+1. **One plan, one materialiser.** Both front-ends — `TnNetworkGenerator`
+   (configuration-driven) and the footprint-driven layout builder — now
+   produce a pure-data `NetworkPlan`, and one materialiser turns it into a
+   `World` (foundations, concrete shells, junctions, measurement loop,
+   sources). The physics of the two families can no longer diverge
+   (10.78). The layout builder is the package
+   `groundfield.generators.layout`.
+2. **English names.** German identifiers are replaced with deprecated
+   aliases (removal no earlier than 2027.5): `OrtsnetzLayout` →
+   `LvNetworkLayout`, KVS → cabinet (`CabinetConfig`, `StarCabinetTopology`,
+   `add_cabinet`, …), capitalised unit suffixes → lower case
+   (`source_magnitude_a`). Spec fields use lower-case unit suffixes; the
+   soil specs mirror the literature symbols of their soil models (`rho`,
+   `rho_1`, `h_1`) (10.69). Old configurations and pickles load.
+3. **Reproducibility.** `cfg.sample(rng)` resolves every distribution,
+   also in nested specs; `sample_world(rng)` routes the per-site draws of
+   the build to `rng`; the penetration mask is keyed by the outline when
+   a footprint has no `osm_id`; `jitter_m` accepts a distribution
+   (10.53, 10.55).
+4. **Geometry.** Layout foundations follow the building footprint (10.54);
+   rotated mesh foundations are polylines split at every crossing and
+   footprints at multiples of 90° use the grid-mesh path (10.39);
+   `PenConfig.depth_m` is honoured; measurement leads run horizontally at
+   their configured depth (10.55).
+5. **Network wiring.** PEN cable joints are leakage-free junction nodes
+   instead of 5 cm pseudo-rods (10.38). The fall-of-potential measurement
+   is wired as in the field: instrument terminals `meas_H` / `meas_S` as
+   junctions, the feed lead from `meas_H` to the auxiliary electrode, the
+   probe lead to `meas_S`, one two-terminal source from the station to
+   `meas_H`, and the reading `measured_impedance(result)` (10.17).
+6. **Concrete.** Encased foundations carry the shell coefficient on their
+   perimeter wires for both `concrete_model` settings; braces stay bare and
+   no shell resistance is put on PEN drops (ADR-0012 amendment 2026.11).
+7. **OSM ingest.** Overpass requests and responses are bounded and
+   validated before anything is cached (10.05).
