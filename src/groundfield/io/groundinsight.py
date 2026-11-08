@@ -282,7 +282,8 @@ class BusTypeSpec:
         Raises
         ------
         ValueError
-            If the schema name or version does not match.
+            If the schema name or version does not match, or
+            ``voltage_level`` is not a finite number.
         EvaluateSpecError
             If ``impedance_formula`` is missing or outside the allowed
             formula grammar. The formula is parsed, never evaluated as
@@ -293,7 +294,14 @@ class BusTypeSpec:
                 f"unexpected schema name: got {payload.get('schema')!r}, "
                 f"expected {SCHEMA_NAME!r}"
             )
-        version = int(payload.get("schema_version", 0))
+        try:
+            version = int(payload.get("schema_version", 0))
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError(
+                "unsupported schema_version "
+                f"{str(payload.get('schema_version'))[:40]!r}; this groundfield "
+                f"build only reads v{SCHEMA_VERSION}"
+            ) from None
         if version != SCHEMA_VERSION:
             raise ValueError(
                 f"unsupported schema_version {version}; this groundfield "
@@ -308,11 +316,20 @@ class BusTypeSpec:
         formula = formula if isinstance(formula, str) else str(formula)
         _parse_formula(formula, context=f"BusType document {name!r}")
         samples = payload.get("samples") or {}
+        try:
+            voltage_level = float(payload["voltage_level"])
+        except (TypeError, ValueError, OverflowError):
+            voltage_level = math.nan
+        if not math.isfinite(voltage_level):
+            raise ValueError(
+                f"BusType document {name!r}: voltage_level must be a finite "
+                f"number, got {str(payload['voltage_level'])[:40]!r}"
+            )
         return cls(
             name=name,
             description=payload.get("description"),
             system_type=str(payload["system_type"]),
-            voltage_level=float(payload["voltage_level"]),
+            voltage_level=voltage_level,
             impedance_formula=formula,
             samples={
                 "frequency_Hz": list(samples.get("frequency_Hz", [])),
@@ -505,15 +522,15 @@ def _metadata_from_rho_f_standard(
 
 
 def _formula_evaluator(expr: "sympy.Expr"):
-    """NumPy evaluator ``(f, rho) -> Z`` of a parsed impedance formula."""
-    import sympy as sp
+    """NumPy evaluator ``(f, rho) -> Z`` of a parsed impedance formula.
 
-    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
+    Built by :func:`~groundfield.io._formula.formula_function` from the
+    expression tree, without SymPy's code printer (``lambdify``), which
+    evaluates sub-expressions of the unevaluated tree.
+    """
+    from groundfield.io._formula import formula_function
 
-    def evaluate(f: Any, rho: Any) -> np.ndarray:
-        return np.asarray(func(f, rho), dtype=complex)
-
-    return evaluate
+    return formula_function(expr, ("f", "rho"))
 
 
 def _passivity_report(
@@ -1092,8 +1109,11 @@ def evaluate_spec(
     Parses the stored ``impedance_formula`` with the allow-list parser
     (see the module docstring; the text is never evaluated as code) and
     evaluates the resulting expression with NumPy at the provided
-    ``rho`` and ``f`` values. Useful for cheap sanity checks that do
-    not require ``groundinsight`` to be installed.
+    ``rho`` and ``f`` values, node by node through
+    :func:`~groundfield.io._formula.formula_function` (complex
+    arithmetic, principal branch for roots and logarithms; SymPy's code
+    generation is not used). Useful for cheap sanity checks that do not
+    require ``groundinsight`` to be installed.
 
     Parameters
     ----------
@@ -1124,7 +1144,7 @@ def evaluate_spec(
         ValueError`` blocks keep working because
         :class:`EvaluateSpecError` inherits from :class:`ValueError`.
     """
-    import sympy as sp
+    from groundfield.io._formula import formula_function
 
     # Defensive entry-point validation. Hand-rolled BusTypeSpec-like
     # dicts (e.g. constructed in a CLI helper from a YAML campaign
@@ -1148,9 +1168,9 @@ def evaluate_spec(
         formula if isinstance(formula, str) else str(formula),
         context="evaluate_spec: spec.impedance_formula",
     )
-    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
+    func = formula_function(expr, ("f", "rho"))
     f_arr = np.asarray(frequencies, dtype=float)
-    out = np.asarray(func(f_arr, float(rho)), dtype=complex)
+    out = func(f_arr, float(rho))
     return np.broadcast_to(out, f_arr.shape).copy()
 
 
