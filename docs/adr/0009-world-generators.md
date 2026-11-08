@@ -317,6 +317,7 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
 6. **Concrete.** Encased foundations carry the shell coefficient on every
    wire for both `concrete_model` settings, the cross-braces of a mesh
    foundation included (DIN 18014, user decision Q20); no shell resistance
-   is put on PEN drops (ADR-0012 amendment 2026.11).
+   is put on PEN drops; `concrete_model` is deprecated (user decision Q21;
+   ADR-0012 amendment 2026.11).
 7. **OSM ingest.** Overpass requests and responses are bounded and
    validated before anything is cached (10.05).

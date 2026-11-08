@@ -21,12 +21,19 @@ configured):
 * a ring foundation has one owner per side with ``"distributed"`` at every
   angle; with ``"lumped"`` one ``grid_mesh`` owner when axis-aligned and
   one owner per side when rotated (at most 0.06 % apart up to aspect
-  ratio 4, 0.24 % at 10);
+  ratio 4, 0.24 % at 10 for a bare ring in homogeneous soil);
 * a ``polygon_xy_m`` outline is one closed polyline for both values.
+
+Since that choice is all ``concrete_model`` still does, the field is
+deprecated (user decision Q21): ``"distributed"`` warns at the user's line,
+the default and the files of 0.15.0 load silently, and the generators do
+not repeat the warning.
 """
 
 from __future__ import annotations
 
+import pathlib
+import pickle
 import warnings
 
 import numpy as np
@@ -308,3 +315,174 @@ def test_documented_margin_of_mesh_foundations_against_mom(
     z_mom = _z(world, backend="mom")
     assert _z(world) / z_mom - 1.0 == pytest.approx(0.0113, abs=0.0005)
     assert 0.0025 < _z(world, kernel="point") / z_mom - 1.0 < 0.005
+
+
+# ---------------------------------------------------------------------
+# concrete_model is deprecated (user decision Q21)
+# ---------------------------------------------------------------------
+
+V0150_CONFIG = pathlib.Path(__file__).parent / "data" / "v0150_tn_network_config.json"
+V0150_PICKLES = pathlib.Path(__file__).parent / "data" / "v0150_generator_pickles.pkl"
+
+
+def _concrete_model_warnings(caught: list) -> list[str]:
+    return [
+        str(w.message)
+        for w in caught
+        if issubclass(w.category, DeprecationWarning)
+        and "concrete_model" in str(w.message)
+    ]
+
+
+def _distributed_ring(**kw: object) -> FoundationElectrodeSpec:
+    """A ring with the deprecated value, its warning consumed."""
+    with pytest.warns(DeprecationWarning, match="concrete_model"):
+        return _ring(concrete_model="distributed", **kw)
+
+
+# user decision Q21
+@pytest.mark.finding("10.12")
+def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
+    """The non-default value keeps working and warns: what the field still
+    does, how much it changes, the earliest removal, what to do."""
+    with pytest.warns(DeprecationWarning, match="concrete_model") as caught:
+        spec = _ring(concrete_model="distributed")
+    (warning,) = [w for w in caught if "concrete_model" in str(w.message)]
+    assert warning.filename == __file__  # the user's line, not groundfield's
+    message = str(warning.message)
+    for part in (
+        "style='ring'",
+        "one per side",
+        "0.16 %",
+        "0.63 %",
+        "0.06 %",
+        "0.3 %",
+        "2027.5",
+        "drop the argument",
+    ):
+        assert part in message, part
+    assert spec.concrete_model == "distributed"
+    world = _site(spec)
+    assert [e.kind for e in _owners(world)] == ["strip"] * 4
+
+
+# user decision Q21
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("how", ["omitted", "keyword", "model_validate", "json"])
+def test_default_concrete_model_is_accepted_silently(how: str) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        if how == "omitted":
+            spec = _ring()
+        elif how == "keyword":
+            spec = _ring(concrete_model="lumped")
+        elif how == "model_validate":
+            spec = FoundationElectrodeSpec.model_validate(
+                {"style": "ring", "concrete_model": "lumped"}
+            )
+        else:
+            spec = FoundationElectrodeSpec.model_validate_json(
+                _ring().model_dump_json()
+            )
+    assert _concrete_model_warnings(caught) == []
+    assert spec.concrete_model == "lumped"
+
+
+# user decision Q21
+@pytest.mark.finding("10.12")
+def test_v0150_configuration_and_pickles_load_without_a_concrete_model_warning() -> (
+    None
+):
+    """Configurations and pickles written by 0.15.0 carry
+    ``"concrete_model": "lumped"`` in every foundation spec."""
+    from groundfield.generators import TnNetworkConfig
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = TnNetworkConfig.model_validate_json(V0150_CONFIG.read_text())
+        pickled = pickle.loads(V0150_PICKLES.read_bytes())  # noqa: S301
+    assert _concrete_model_warnings(caught) == []
+    foundations = [
+        e
+        for building in cfg.building_types
+        for e in building.grounding.electrodes
+        if e.kind == "foundation"
+    ]
+    assert len(foundations) == 4
+    assert {e.concrete_model for e in foundations} == {"lumped"}
+    assert pickled  # the fixture of tests/test_generator_pickles.py
+
+
+# user decision Q21
+@pytest.mark.finding("10.12")
+def test_generator_paths_do_not_repeat_the_deprecation_warning() -> None:
+    """The warning belongs to the line that sets the value. Resolving,
+    sampling, planning, materialising, footprints, the layout builder and
+    copies pass the spec on without warning again."""
+    from groundfield.generators import (
+        BuildingTypeSpec,
+        LvNetworkLayout,
+        TnNetworkConfig,
+        TnNetworkGenerator,
+        materialise_plan,
+    )
+
+    spec = _distributed_ring(concrete_rho_ohm_m=150.0, size_xy_m=(10.0, 8.0))
+    grounding = GroundingSystemSpec(electrodes=[spec])
+    footprint = gf.BuildingFootprint(
+        polygon_xy_m=[(15.0, 10.0), (27.0, 10.0), (27.0, 19.0), (15.0, 19.0)], osm_id=7
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = TnNetworkConfig(
+            building_types=[BuildingTypeSpec(name="house", grounding=grounding)],
+            building_counts={"house": 2},
+        )
+        generator = TnNetworkGenerator(cfg, seed=0)
+        plan = generator.plan()
+        world = materialise_plan(plan)
+        generator.build()
+        generator.sample_world(1)
+        cfg.sample(2)
+        grounding.with_footprint(footprint, outline="ombr")
+        grounding.with_footprint(footprint, outline="polygon")
+        layout = LvNetworkLayout.from_footprints([footprint], substation_xy=(0.0, 0.0))
+        layout.add_pen_cable(start="substation", end_xy=(40.0, 0.0))
+        layout.connect_buildings()
+        layout.to_world(seed=0, house_grounding=grounding)
+        copied = pickle.loads(pickle.dumps(plan))
+        cfg.model_copy(deep=True)
+    assert _concrete_model_warnings(caught) == []
+    assert copied == plan
+    owners = [e for e in world.electrodes if "foundation" in e.name]
+    assert [e.kind for e in owners] == ["strip"] * 8  # two houses, four sides
+
+
+# user decision Q21
+@pytest.mark.finding("10.12")
+def test_plan_and_configuration_json_keep_the_deprecated_value() -> None:
+    """A file that says ``"distributed"`` loads with the warning and builds
+    the same world."""
+    from groundfield.generators import (
+        BuildingTypeSpec,
+        NetworkPlan,
+        TnNetworkConfig,
+        TnNetworkGenerator,
+        materialise_plan,
+    )
+
+    grounding = GroundingSystemSpec(electrodes=[_distributed_ring()])
+    cfg = TnNetworkConfig(
+        building_types=[BuildingTypeSpec(name="house", grounding=grounding)],
+        building_counts={"house": 1},
+    )
+    plan = TnNetworkGenerator(cfg, seed=0).plan()
+    with pytest.warns(DeprecationWarning, match="concrete_model"):
+        restored_plan = NetworkPlan.model_validate_json(plan.model_dump_json())
+    with pytest.warns(DeprecationWarning, match="concrete_model"):
+        restored_cfg = TnNetworkConfig.model_validate_json(cfg.model_dump_json())
+    assert restored_plan == plan
+    assert restored_cfg == cfg
+    assert gf.world_fingerprint(
+        materialise_plan(restored_plan)
+    ) == gf.world_fingerprint(materialise_plan(plan))

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient); see the amendment at the end of this document |
+| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient; user decisions Q20: braces encased, Q21: `concrete_model` deprecated); see the amendment at the end of this document |
 | **Date** | 2026-05-15 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.generators.electrode_specs.FoundationElectrodeSpec`
@@ -394,7 +394,8 @@ Decision:
    foundation included (user decision Q20, below); rods stay bare; no
    shell resistance on PEN drops; substation and cabinet electrodes get
    $C$ when their specification is encased. `concrete_model` only chooses
-   one or several owners for an axis-aligned ring foundation.
+   one or several owners for an axis-aligned ring foundation and is
+   deprecated (user decision Q21, below).
 3. **Registry deprecated.** `World.concrete_shell_corrections` is read by
    no solver and warns at solve (removal no earlier than 2027.5).
 4. **Conversion helpers** in `groundfield.geometry.electrodes`:
@@ -424,3 +425,18 @@ assembly from `solve_mutual_matrix` agree to 4e-16
 [concrete-shell page](../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
 Ring and building-outline foundations, among them the AP1 catalogue, do
 not change.
+
+### User decision Q21 (2026.11): `concrete_model` is deprecated
+
+Since item 2 the field no longer selects a shell model; it only chooses
+one owner (`"lumped"`, one grid mesh) or one per side (`"distributed"`)
+for an axis-aligned `style="ring"` rectangle. The two differ by at most
+0.16 % up to aspect ratio 4 and 0.63 % up to 50 over the 39 soils of the
+AP1 grid, bare or in concrete of 100 or 1 000 Ω·m (0.06 % and 0.3 % for a
+bare ring in homogeneous soil; `Engine.solve` and an assembly from
+`solve_mutual_matrix` agree to 9e-16). The field is deprecated like the
+flat `sommerfeld_*` fields of the engine: `"distributed"` keeps working
+and emits a `DeprecationWarning` at the user's line; the default
+`"lumped"` — also in the configuration JSON and pickles of 0.15.0 — is
+accepted silently; copies made by the generators do not repeat the
+warning. Removal no earlier than 2027.5 (`tests/test_foundation_owners.py`).

@@ -89,7 +89,12 @@ same representation:
 5. `concrete_model` only chooses the owner granularity of an axis-aligned
    ring foundation (`"lumped"`: one grid-mesh owner, `"distributed"`: one
    owner per wire); the two agree to well below the 2 % criterion of
-   ADR-0012 (`tests/test_concrete_one_mechanism.py`).
+   ADR-0012 (`tests/test_concrete_one_mechanism.py`): at most 0.16 % up to
+   aspect ratio 4 and 0.63 % up to 50 over the soils of the AP1 grid, bare
+   or encased. The field is therefore deprecated (user decision of
+   2026.11, removal no earlier than 2027.5): `"distributed"` still works
+   and warns, the default `"lumped"` and the files of 0.15.0 load
+   silently; drop the argument (see [Deprecations](../reference/deprecations.md)).
 
 `World.concrete_shell_corrections` is deprecated (it still loads and warns
 at solve; removal no earlier than 2027.5). The golden case
