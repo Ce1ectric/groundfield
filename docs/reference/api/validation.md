@@ -1,78 +1,71 @@
 # Validation (cross-engine)
 
-The :mod:`groundfield.validation` module contains
-:func:`compare_engines`, the cross-engine consistency check that
-underpins ADR-0001. Given two :class:`Engine` instances and a
-:class:`World`, it solves both and reports a structured
-:class:`EngineComparison` summarising the agreement of
-cluster impedances, electrode currents and surface potentials.
+`compare_engines(world, engines={...})` solves the same world with two
+or more engines and reports, in one tolerance table, how far their
+results are apart. Engines that differ in method (image series vs
+point-matching MoM vs Sommerfeld quadrature), in kernel or only in the
+discretisation make it the standard check that a number does not
+depend on a numerical choice (ADR-0001: two engines side by side,
+validating each other). The validation of the engines against
+closed-form references and against each other is collected on the
+[validation page](../../explanation/validation.md).
 
-This is the post-solve counterpart of :mod:`groundfield.diagnostics`
-(pre-solve structural checks).
+## What is compared
 
-## Deviation metric (changed in 0.15.0)
+Every compared quantity is complex and is compared at **every**
+frequency, real and imaginary part separately:
 
-For every cluster the report contains the **worst pairwise relative
-deviation** of the cluster impedance $Z$ over the compared engines,
+- the cluster impedance of every cluster (Ω),
+- the input impedance of every current source (Ω),
+- optionally the potential at `sample_points` (V).
+
+Each (quantity, frequency, part) is one `ComparisonRow` with the
+deviation
 
 $$
-\mathrm{dev}
-= \max_{i,j} \frac{|Z_i - Z_j|}{\min_k |Z_k|}
-= \frac{\max_k Z_k - \min_k Z_k}{\min_k |Z_k|} ,
+\mathrm{dev} = \frac{\max_k c_k - \min_k c_k}{\max\bigl(\min_k \lvert c_k\rvert,\ \epsilon\,\min_k \lvert Z_k\rvert\bigr)},
 $$
 
-the second form holding whenever all $Z_k$ have the same sign (the
-normal case: $\mathrm{Re}\{Z\} > 0$ for a passive grounding system).
-`rel_tolerance` is compared against this number, so two engines that
-differ by 5 % of the smaller value sit exactly on a
-`rel_tolerance=0.05` threshold. The same metric is used for the
-optional `sample_points` potential comparison, per sample point.
+the worst pairwise spread of the part $c_k$ over the engines, relative
+to the smallest value; the floor $\epsilon$ (`component_floor`,
+default 10⁻³ of the smallest magnitude) keeps a part that is nearly zero
+for every engine (the reactance at 50 Hz) from dominating. A row passes
+when $\mathrm{dev} \le$ `rel_tolerance`. A value that is non-finite or
+zero for some engines only fails its row.
 
-Up to 0.14.x the deviation was measured against the ensemble **mean**,
-$\max_k |Z_k - \bar{Z}| / |\bar{Z}|$. For two engines that is exactly
-half the true disagreement (and it shrinks further as engines are
-added), so a `rel_tolerance=0.05` gate silently admitted a spread of
-10.5 %. Consequences of the change:
+`is_consistent` is `True` only if at least one quantity was compared,
+every row passed and no engine returned a stub result: a comparison in
+which nothing could be evaluated (no source, a source on an unknown
+node) is reported as inconsistent rather than as a silent pass. The
+engines must use the same frequency list.
 
-- reported deviations are roughly a factor 2 larger than in 0.14.x for
-  the same world and engines — no physics changed, only the metric;
-- a comparison that was *marginally* consistent under 0.14.x may now
-  legitimately be reported as inconsistent. Loosen `rel_tolerance` only
-  after checking which engine is the outlier;
-- clusters for which at least one engine reports $Z = 0$ have an
-  undefined relative deviation and are now skipped with a note instead
-  of being silently counted as agreeing.
+## Example
 
-## Vacuous comparisons (changed in 0.15.0)
+```python
+import groundfield as gf
 
-A cluster whose net injected current vanishes ($\sum I = 0$: purely
-passive observer electrodes) has no defined impedance and is skipped.
-If **every** cluster is skipped and no `sample_points` potential has a
-usable (non-zero) reference, nothing was validated — the typical causes
-are a world without any source, or a `Source.attached_to` that does not
-match any electrode or conductor name. Such a run now reports
+world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0))
+gf.create_electrode(world, "ring", name="g1", center=(0.0, 0.0, 0.8), radius=5.0)
+gf.create_source(world, attached_to="g1", magnitude=1.0)
 
+report = gf.compare_engines(
+    world,
+    engines={
+        "image_2layer": gf.create_engine(segment_length=0.5),
+        "mom": gf.create_engine(backend="mom", segment_length=0.5),
+        "refined": gf.create_engine(segment_length=0.25),
+    },
+    rel_tolerance=0.02,
+)
+print(report.summary())
+
+assert report.is_consistent
+assert len(report.rows) == 4    # Z_cluster[g1] and Z_in[source_0], Re and Im, at 50 Hz
 ```
-is_consistent = False
-notes: "No comparable quantity (every cluster impedance undefined, no
-        usable sample point) — comparison vacuous, nothing was
-        validated."
-```
 
-Up to 0.14.x the same situation returned `is_consistent=True` (the
-running maximum deviation never left its initial `0.0`), so a CI job
-asserting `report.is_consistent` passed green having compared nothing.
-
-## Frequency-order behaviour
-
-Since 0.5.0 :class:`Engine.frequencies` is order-preserving. A
-non-monotonic frequency list raises a dedicated
-:class:`EngineFrequencyOrderWarning` (subclass of
-:class:`UserWarning`) so a single
-``warnings.simplefilter("once", EngineFrequencyOrderWarning)`` will
-collapse a ``compare_engines`` 4 × 4 matrix to one emission. The
-opt-in :meth:`Engine.with_frequencies(*, preserve_order=True)`
-constructor silences the warning explicitly.
+A single engine raises `ValueError`: one engine cannot validate itself.
+The deprecated names `cim` and `bem` run `image` and `mom` and add no
+independent information.
 
 ## API reference
 

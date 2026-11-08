@@ -94,11 +94,12 @@ fine = world.solve(gf.create_engine(segment_length=0.25))
 print(fine.input_impedance()[0])   # (11.2759+0j) Ω, +0.05 % at half the segment length
 ```
 
-`mom` solves for the segment currents by point matching with midpoint
-point sources, `image_2layer` imposes uniform line currents per segment
-with the exact line-source kernel; agreement within about 1 % is
-expected (the point kernel is known to read 1–2 % low,
-see [source kernels](../explanation/kernels.md)).
+The two methods differ in the current ansatz and the kernel: `mom`
+solves for one current per segment by point matching with midpoint
+point sources, `image_2layer` assumes a uniform current per unit length
+on each electrode and integrates it with the exact line-source kernel.
+Agreement within about 1 % is expected (the point kernel reads 1–2 %
+low, see [source kernels](../explanation/kernels.md)).
 
 ??? info "Values asserted by the test suite"
 

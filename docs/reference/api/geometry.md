@@ -35,9 +35,10 @@ no longer than `Engine.segment_length`. Grid and mesh wires are split
 so that wire crossings fall on segment end points, and every wire is
 cut at the soil-layer interfaces so that each segment lies in one
 layer; a piece shorter than two wire radii next to an interface is
-merged with its neighbour (`SLIVER_RADII`). Whether the current is
-uniform along each segment (image family) or solved for by point
-matching (`mom` family) is a property of the backend, see
+merged with its neighbour (`SLIVER_RADII`). How the current is
+distributed over the segments — uniform per unit length on each
+electrode (image family) or one unknown per segment (`mom` family) — is
+a property of the backend, see [Solver](solver.md) and
 [source kernels](../../explanation/kernels.md).
 
 **Concrete encasement.** A foundation earth in concrete adds the

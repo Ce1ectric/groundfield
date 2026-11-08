@@ -1,99 +1,63 @@
 # Diagnostics
 
-The :mod:`groundfield.diagnostics` module provides **pre-solve**
-structural diagnostics for a :class:`World`. It is the typical
-counterpart to :mod:`groundfield.validation` (which is the
-**post-solve** cross-engine consistency check).
+`groundfield.diagnostics` checks a world **before** a long solve: its
+size, the discretisation quality, wires that are too close for the
+thin-wire model, settings that have no effect, and — given a result —
+truncated series. `diagnose(world, engine)` returns one aggregated
+`DiagnosticsReport` with one line per cause (not per electrode); the
+solve emits the same findings as warnings. The post-solve counterpart,
+a comparison of several engines, is [Validation](validation.md).
 
-## Why pre-solve diagnostics?
+| Function | Answers |
+|---|---|
+| `world_statistics(world)` | counts by kind, wire and conductor lengths, footprint |
+| `expected_segments(world, engine)` | segments the discretiser will produce, per electrode and in total |
+| `check_segment_resolution(world, engine)` | thin-wire ratio, electrodes smaller than a segment, size budget (strings) |
+| `check_segment_budget(world, engine)` | raises `ResourceLimitError` above `HARD_LIMIT` (used by the solver) |
+| `diagnose(world, engine, result=None)` | all of the above plus close wires, inert settings, series truncation |
 
-For an production-grade TN-Ortsnetz with several hundred electrodes a
-mistake in the geometry — an electrode placed at the wrong
-coordinate, a missing conductor, or a segmentation budget that
-silently triples the wall-clock time — should be caught **before**
-kicking off a multi-minute solver run. The three helpers below
-each address one common failure mode:
+## Mathematical and physical context
 
-| Helper                          | What it answers                                                         |
-|---------------------------------|-------------------------------------------------------------------------|
-| `world_statistics`              | "How big is this thing? Counts per kind, total wire length, footprint." |
-| `expected_segments`             | "How many point-source segments will the discretiser produce?"          |
-| `check_segment_resolution`      | "Will the resolution be good enough? Will memory / time blow up?"       |
+The checks guard the assumptions of the thin-wire model (see
+[Geometry](geometry.md)):
 
-## Example — full pre-flight check
+- **Thin-wire ratio.** The self term of a segment of length $L$ and
+  radius $a$ behaves like $2\ln(L/a)/L$ and loses dominance as $L$
+  approaches $a$; the check asks for $L/a \ge 5$ (`MIN_THINWIRE_RATIO`).
+- **Resolution.** An electrode feature shorter than one segment is
+  represented only by the discretiser's floor (one segment per wire,
+  eight per ring).
+- **Proximity.** Two wires of different owners closer than five times
+  the sum of their radii violate the point-source assumption that a
+  source sees another wire only through its midpoint; the exact
+  line-source kernel stays physical there.
+- **Size.** The dense reaction matrix of $N$ segments has $N^2$
+  entries; the work per excitation grows like $N^2$ and the direct
+  solve like $N^3$. Above `SOFT_LIMIT` (5 000 segments) the report
+  warns, above `HARD_LIMIT` (20 000) the solver refuses to start
+  (`groundfield.diagnostics.HARD_LIMIT` can be raised on purpose).
+
+The segment counts follow the discretisation of the image and MoM
+families; for `fem` they do not predict the cost.
+
+## Example
 
 ```python
 import groundfield as gf
-from groundfield.generators import TnNetworkGenerator, TnNetworkConfig, PenConfig
 
-cfg = TnNetworkConfig(
-    soil=gf.HomogeneousSoilSpec(resistivity=100.0),
-    building_counts={"residential": 30},
-    pen=PenConfig(segment_length_m=None),
-)
-world = TnNetworkGenerator(cfg, seed=42).build()
-engine = gf.create_engine(backend="image", segment_length=0.5)
+world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+gf.create_electrode(world, "rod", name="a", position=(0.0, 0.0, 0.0), length=3.0, wire_radius=0.008)
+gf.create_electrode(world, "rod", name="b", position=(0.018, 0.0, 0.0), length=3.0, wire_radius=0.008)
+gf.create_source(world, attached_to="a", magnitude=1.0)
+engine = gf.create_engine(segment_length=0.5)
 
-# 1. Structural snapshot (machine-readable; pretty-print as needed).
-stats = gf.world_statistics(world)
-print(f"electrodes:  {stats['n_electrodes']}  "
-      f"by kind: {stats['n_electrodes_by_kind']}")
-print(f"footprint:   {stats['footprint_area_m2']:.0f} m^2")
-print(f"wire length: {stats['total_electrode_wire_length_m']:.1f} m  "
-      f"(electrodes) + "
-      f"{stats['total_conductor_length_m']:.1f} m (conductors)")
-
-# 2. Segmentation budget.
 budget = gf.expected_segments(world, engine)
-print(f"predicted total segments: {budget['total']}  "
-      f"(electrodes {budget['electrode_total']}, "
-      f"conductors {budget['conductor_total']})")
+report = gf.diagnose(world, engine)
+print(report)    # proximity: 'a'–'b' close, axis distance 18 mm (clearance 2 mm) ...
 
-# 3. Quality-of-discretisation warnings (empty list = all good).
-for msg in gf.check_segment_resolution(world, engine):
-    print(f"  WARN: {msg}")
+assert budget["total"] == 12                      # two rods of six 0.5 m segments
+assert "proximity" in report.categories()
 ```
-
-## `expected_segments` — exactness
-
-The prediction is **bit-exact** for the image-family backends —
-``image``, ``image_2layer``, ``image_nlayer``, ``mom``,
-``mom_sommerfeld``, ``cim`` and ``bem``. It mirrors
-:mod:`groundfield.solver.image`'s discretiser conventions:
-
-- rod: $n = \max(1, \lceil L / \Delta s \rceil)$
-- ring: $n = \max(8, \lceil 2 \pi r / \Delta s \rceil)$
-- strip: $n = \max(1, \lceil L / \Delta s \rceil)$
-- mesh / grid_mesh: per-wire
-  $n = \max(1, \lceil d_\text{axis} / \Delta s \rceil)$,
-  summed over both wire directions
-- distributed conductor: $n = \lceil L / \Delta s_c \rceil$
-  with $\Delta s_c = $ ``conductor.discretize_segment_length``
-
-The FEM backend (:mod:`groundfield.solver.fem`) uses an
-axisymmetric volume mesh that is not parameterised by
-``segment_length``; the prediction is **not informative** for
-FEM.
-
-## `check_segment_resolution` — heuristics
-
-Three categories of warning are surfaced:
-
-- **Thin-wire ratio** $\Delta s / r_\text{wire} \ge 5$ on every
-  electrode and on every distributed conductor. Below this, the
-  thin-wire average-potential self-action becomes biased.
-- **Electrode smaller than one segment** — the smallest geometric
-  dimension of an electrode (rod length, ring perimeter, strip
-  length, mesh wire length) must be at least one
-  ``segment_length``; otherwise the discretiser falls back to
-  its lower floor.
-- **Total segment-count budget** at a soft threshold (5 000
-  segments — solve time runs from seconds to minutes) and a
-  hard threshold (20 000 segments — the dense-system $O(N^2)$
-  memory and $O(N^3)$ solve scaling becomes painful).
-
-The function never raises — use the returned list to inform the
-user. An empty list means *no concerns detected*.
 
 ## API reference
 
