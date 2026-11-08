@@ -56,6 +56,20 @@
       "scipy": "1.18.1",
       "sha256": "011a4d85d0f135402efad181c6564adcd3fb014798e1b438be3a0d4fe7ce11eb"
     },
+    "cond_drops_along_pen_main_perfect_mirror": {
+      "generated_utc": "2026-11-08T04:59:03+00:00",
+      "git_commit": "3b13017302dd9f89251438a6212e14a77ff1d9b5",
+      "git_describe": "v0.15.0-340-g3b13017",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 10,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "3c9136f0974eb4bdb78fb8a6ddab8afcf893ff83efbe896885fc7672e09a0fa0"
+    },
     "cond_galvanic_neumann_carson_series": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
       "git_commit": "c97b067003ca390458e51b46b7a1b601193073a4",
@@ -111,6 +125,34 @@
       "python": "3.12.3",
       "scipy": "1.18.1",
       "sha256": "86a7948de946fad5ac0282d0ef7a9167d3bd88dcf9e4527ecde7a0cc02e5e3e7"
+    },
+    "cond_lumped_long_pen_sommerfeld": {
+      "generated_utc": "2026-11-08T04:59:03+00:00",
+      "git_commit": "3b13017302dd9f89251438a6212e14a77ff1d9b5",
+      "git_describe": "v0.15.0-340-g3b13017",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 6,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "53972cf6924d82fe4a387628b02c3ea61d5f557780d3d8e7a69f0e4294276023"
+    },
+    "cond_overhead_lead_over_pen_carson_series": {
+      "generated_utc": "2026-11-08T04:59:03+00:00",
+      "git_commit": "3b13017302dd9f89251438a6212e14a77ff1d9b5",
+      "git_describe": "v0.15.0-340-g3b13017",
+      "groundfield": "0.15.0",
+      "groundfield_path": "/home/claude/gf/src/groundfield",
+      "machine": "x86_64",
+      "n_quantities": 12,
+      "numpy": "2.5.4",
+      "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+      "python": "3.12.3",
+      "scipy": "1.18.1",
+      "sha256": "548849cf79385b5593b58716fb3c2fe837b870d0b9d9d697ab1dbd047597fcab"
     },
     "defaults_mixed_cluster_inductive": {
       "generated_utc": "2026-11-07T18:20:27+00:00",
