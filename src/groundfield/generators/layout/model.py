@@ -575,8 +575,9 @@ class LvNetworkLayout(
         probabilities and distributions in the grounding specs) use
         ``numpy.random.default_rng(seed)`` in the order substation,
         cabinets, houses, auxiliary electrode. Each house's foundation
-        electrodes are shaped after its footprint first (see
-        ``foundation_outline`` in :meth:`to_world`).
+        electrodes are shaped after its footprint once its draws are made
+        (see ``foundation_outline`` in :meth:`to_world`), so the outline
+        does not change which optional electrodes a seed produces.
 
         Returns
         -------
@@ -652,14 +653,13 @@ class LvNetworkLayout(
             if foundation_mask is not None and not foundation_mask[i]:
                 continue
             centroid = fp.centroid_xy_m()
-            house = house_spec.with_footprint(
-                fp, site_xy=centroid, outline=foundation_outline
-            ).plan_site(
+            house = house_spec.plan_site(
                 f"house_{i:03d}",
                 role="building",
                 position_xy=centroid,
                 rng=rng,
                 footprint=fp,
+                outline=foundation_outline,
             )
             sites.append(house)
             houses[i] = house

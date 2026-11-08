@@ -42,6 +42,7 @@ front-end (``TnNetworkGenerator`` with an OSM placement and
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
@@ -68,9 +69,18 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from groundfield.geo.footprint import BuildingFootprint
 
 __all__ = [
+    "MIN_FOUNDATION_SIDE_M",
     "FoundationOutline",
     "GroundingSystemSpec",
 ]
+
+MIN_FOUNDATION_SIDE_M = 1.0
+"""Shortest side (m) of a foundation rectangle taken from a footprint's OMBR.
+
+A narrower outline — a mapped wall or fence, e.g. 10 m x 5 mm — is widened
+to this side with a :class:`UserWarning`; as a 5 mm wide mesh it could not
+even be built (the mesh span is shorter than the wire radius, audit L5).
+The AP1 pipeline applied the same 1 m floor to its OMBR foundations."""
 
 FoundationOutline = Literal["spec", "ombr", "polygon"]
 """How a building footprint shapes a foundation electrode.
@@ -236,6 +246,7 @@ class GroundingSystemSpec(GeneratorConfig):
         rng: np.random.Generator,
         footprint: "Optional[BuildingFootprint]" = None,
         building_type: Optional[str] = None,
+        outline: FoundationOutline = "spec",
     ) -> PlannedSite:
         """Resolve the system into a :class:`~groundfield.generators.plan.PlannedSite`.
 
@@ -251,17 +262,35 @@ class GroundingSystemSpec(GeneratorConfig):
             Random generator (see :meth:`resolve_electrodes`).
         footprint, building_type
             Recorded on the site for information.
+        outline
+            ``"spec"`` (default): the foundations keep the spec geometry.
+            ``"ombr"`` / ``"polygon"``: after the random draws, the
+            resolved foundations are shaped after ``footprint`` (see
+            :meth:`with_footprint`). Drawing first keeps the random
+            stream independent of the outline, so the same seed puts
+            optional electrodes on the same sites whatever the outline
+            (audit M2).
 
         Returns
         -------
         PlannedSite
             The concrete site.
         """
+        electrodes = self.resolve_electrodes(rng)
+        if footprint is not None and outline != "spec" and electrodes:
+            shaped = GroundingSystemSpec(
+                electrodes=[planned.spec for planned in electrodes],
+                bond_conductor_type=self.bond_conductor_type,
+            ).with_footprint(footprint, site_xy=position_xy, outline=outline)
+            electrodes = [
+                PlannedElectrode(index=planned.index, spec=spec)
+                for planned, spec in zip(electrodes, shaped.electrodes, strict=True)
+            ]
         return PlannedSite(
             name=name,
             role=role,  # type: ignore[arg-type]
             position_xy=(float(position_xy[0]), float(position_xy[1])),
-            electrodes=self.resolve_electrodes(rng),
+            electrodes=electrodes,
             bond_conductor_type=self.bond_conductor_type,
             footprint=footprint,
             building_type=building_type,
@@ -294,7 +323,9 @@ class GroundingSystemSpec(GeneratorConfig):
             :math:`\varphi` and centre :math:`(c_x, c_y)` of the
             outline's oriented minimum bounding rectangle; the centre
             enters as an extra offset :math:`(c_x, c_y) - \text{site}`
-            on top of the spec's own ``offset_xy_m``. ``"polygon"``: every
+            on top of the spec's own ``offset_xy_m``. A side shorter than
+            :data:`MIN_FOUNDATION_SIDE_M` is widened to it (with a
+            :class:`UserWarning`). ``"polygon"``: every
             foundation follows the outline itself (``polygon_xy_m`` =
             exterior ring relative to ``site_xy``); only defined for
             ``style="ring"``. ``"spec"``: return ``self`` unchanged.
@@ -327,6 +358,18 @@ class GroundingSystemSpec(GeneratorConfig):
             (cx, cy), (dx, dy), orientation_deg = (
                 footprint.oriented_bounding_rectangle()
             )
+            if min(dx, dy) < MIN_FOUNDATION_SIDE_M:
+                label = "" if footprint.osm_id is None else f" {footprint.osm_id}"
+                warnings.warn(
+                    f"Footprint{label} is {dx:.3g} m x {dy:.3g} m; its "
+                    f"foundation is widened to {MIN_FOUNDATION_SIDE_M:g} m "
+                    "(MIN_FOUNDATION_SIDE_M). Drop such outlines (walls, "
+                    "fences) from the footprints if they carry no foundation.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                dx = max(dx, MIN_FOUNDATION_SIDE_M)
+                dy = max(dy, MIN_FOUNDATION_SIDE_M)
             # Recentre on the OMBR centre (F25): the electrode sits at
             # ``site_xy + offset_xy_m``.
             recentre = (cx - site_xy[0], cy - site_xy[1])
