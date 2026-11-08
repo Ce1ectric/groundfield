@@ -239,6 +239,7 @@ References
 from __future__ import annotations
 
 import math
+import re
 import warnings
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -778,7 +779,126 @@ _CONDUCTIVE_LAYER_EFFECT = (
 )
 
 
-def _unreachable_message(world: "World", found: list[_Unreachable]) -> str:
+def _first_clause(text: str, backend: str) -> str:
+    """The first sentence of a backend's error message, without its prefix."""
+    if "cannot solve this world: " in text:
+        text = text.split("cannot solve this world: ", 1)[1]
+    for prefix in (f"{backend}: ", f"solve_{backend}: "):
+        if text.startswith(prefix):
+            text = text[len(prefix) :]
+    text = re.split(r"\.\s+(?=[A-Z])", text, maxsplit=1)[0].rstrip(".")
+    return text if len(text) <= 240 else text[:237] + "..."
+
+
+def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | None:
+    """Why ``backend`` would refuse ``world``, or ``None`` if it accepts it.
+
+    Runs the backend's own checks without solving (audit D2A-06): the
+    capability check of the registry, the discretisation with its resource
+    limit, the burial-depth guard of every segment (galvanic conductor
+    segments included) and the geometric guards of the backend's reaction
+    matrix — the point form at the first interface (``mom``,
+    ``mom_sommerfeld``, ``image_2layer`` with ``kernel='point'``) and the
+    cross-layer refusal of ``mom_sommerfeld`` for three or more layers. It
+    mirrors ``prepare`` of those backends (``solver/mom.py``,
+    ``solver/mom_sommerfeld.py``, ``solver/image_2layer.py``) and resolves
+    the kernel like :meth:`Engine.solve <groundfield.solver.engine.Engine.solve>`.
+    """
+    from groundfield.solver._guards import (
+        _check_point_interface_diagonal,
+        _check_segment_depths,
+    )
+    from groundfield.solver._kernels import DEFAULT_KERNEL
+    from groundfield.solver._pipeline import (
+        SegmentArrays,
+        build_topology,
+        discretise,
+    )
+    from groundfield.solver.registry import (
+        check_capabilities,
+        effective_kernel,
+        resolve_backend,
+    )
+
+    stack = as_layer_stack(world.soil)
+    h_1 = float(stack.h[0])
+    requested = engine.kernel
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            resolved = resolve_backend(backend, world)
+            check_capabilities(
+                resolved, world, kernel=requested, kernel_explicit=requested is not None
+            )
+            kernel = effective_kernel(
+                resolved.spec, requested if requested is not None else DEFAULT_KERNEL
+            )
+            disc = discretise(world, engine, (h_1,))
+            build_topology(world, disc)  # adds the galvanic conductor segments
+            _check_segment_depths(disc.segments, where=backend, kernel=kernel)
+        except (ValueError, NotImplementedError) as exc:
+            return _first_clause(str(exc), backend)
+        arrays = SegmentArrays.from_segments(disc.segments)
+        z_max = float(arrays.points[:, 2].max())
+        if backend == "mom_sommerfeld" and stack.n_layers >= 3 and z_max >= h_1:
+            return (
+                f"a segment reaches z = {z_max:.3g} m, at or below the first "
+                f"interface at h_1 = {h_1:.3g} m, and it solves three or more "
+                "layers only with every segment in the top layer"
+            )
+        if backend != "image_2layer" or kernel != "line":
+            try:
+                _check_point_interface_diagonal(
+                    disc.segments,
+                    arrays.points,
+                    arrays.lengths,
+                    arrays.directions,
+                    h_1,
+                    backend=f"'{backend}'",
+                    remedy="",
+                    cross_layer=z_max >= h_1,
+                )
+            except (ValueError, NotImplementedError):
+                return (
+                    "its point form refuses segments closer than 0.387 segment "
+                    f"lengths to the interface at h_1 = {h_1:.3g} m at "
+                    f"segment_length = {engine.segment_length:g} m"
+                )
+    return None
+
+
+def _remedy(world: "World", engine: "Engine") -> str:
+    """The backend(s) that solve ``world`` per their own checks (D2A-06)."""
+    stack = as_layer_stack(world.soil)
+    candidates = ("mom", "image_2layer") if stack.n_layers <= 2 else ("mom_sommerfeld",)
+    refusals = {b: _backend_refusal(world, engine, b) for b in candidates}
+    accepted = [b for b in candidates if refusals[b] is None]
+    by_reason: dict[str, list[str]] = {}
+    for b, reason in refusals.items():
+        if reason is not None:
+            by_reason.setdefault(reason, []).append(f"'{b}'")
+    refused = " ".join(
+        f"{' and '.join(names)} refuse{'s' if len(names) == 1 else ''} this "
+        f"world: {reason}."
+        for reason, names in by_reason.items()
+    )
+    if not accepted:
+        return f"No backend solves this world yet. {refused}"
+    if accepted == ["mom_sommerfeld"]:
+        text = (
+            "Use backend='mom_sommerfeld', which solves three or more layers "
+            "when every segment lies in the top layer, as here."
+        )
+    elif accepted == ["mom", "image_2layer"]:
+        text = "Use backend='mom' (one current per segment) or 'image_2layer'."
+    else:
+        text = f"Use backend='{accepted[0]}'."
+    return f"{text} {refused}" if refused else text
+
+
+def _unreachable_message(
+    world: "World", engine: "Engine", found: list[_Unreachable]
+) -> str:
     """Error message for the clusters of :func:`_unreachable_layers`."""
     wrong = [f.text for f in found if f.kind == "wrong_layer"]
     conductive = [f.text for f in found if f.kind == "conductive_layer"]
@@ -793,21 +913,12 @@ def _unreachable_message(world: "World", found: list[_Unreachable]) -> str:
         )
     if conductive:
         parts.append("; ".join(conductive) + ". " + _CONDUCTIVE_LAYER_EFFECT)
-    stack = as_layer_stack(world.soil)
-    if stack.n_layers <= 2:
-        remedy = "Use backend='mom' (one current per segment) or 'image_2layer'."
-    elif max(float(e.bounds()[1][2]) for e in world.electrodes) < float(stack.h[0]):
-        remedy = (
-            "Use backend='mom_sommerfeld', which solves three or more layers "
-            "when every segment lies in the top layer, as here."
-        )
-    else:
-        remedy = (
-            "No backend solves an electrode below the first interface of a soil "
-            "with three or more distinct layers yet ('mom_sommerfeld' requires "
-            "every segment in the top layer)."
-        )
-    return "Backend 'fem' cannot solve this world: " + " ".join(parts) + " " + remedy
+    return (
+        "Backend 'fem' cannot solve this world: "
+        + " ".join(parts)
+        + " "
+        + _remedy(world, engine)
+    )
 
 
 # ---------------------------------------------------------------------
@@ -1739,7 +1850,7 @@ def solve_fem(
     if unreachable:
         from groundfield.solver.registry import BackendCapabilityError
 
-        raise BackendCapabilityError(_unreachable_message(world, unreachable))
+        raise BackendCapabilityError(_unreachable_message(world, engine, unreachable))
 
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]

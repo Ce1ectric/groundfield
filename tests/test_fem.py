@@ -491,6 +491,124 @@ def test_fem_q23_message_names_the_electrodes_resistivity() -> None:
     assert "-97 %" in text  # the measured error range reaches -97 %
 
 
+def _ring10_with_bare_conductor(soil, z_conductor: float) -> gf.World:
+    """Ring r = 10 m at 0.8 m bonded to a rod by a bare galvanic conductor."""
+    from groundfield.conductors import Conductor
+
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
+    gf.create_electrode(w, "rod", name="g2", position=(60, 0, 0.5), length=1.0)
+    w.add_conductor(
+        Conductor(
+            name="bare",
+            start=(10, 0, z_conductor),
+            end=(60, 0, z_conductor),
+            start_electrode="g1",
+            end_electrode="g2",
+            cross_section=50e-6,
+            discretize_segment_length=5.0,
+            coupling_to_soil="galvanic",
+        )
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+def _fem_message(world, segment_length: float = 0.5) -> str:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(gf.BackendCapabilityError) as info:
+            gf.create_engine(backend="fem", segment_length=segment_length).solve(world)
+    return str(info.value)
+
+
+def _solves(backend: str, world, segment_length: float = 0.5) -> bool:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = gf.create_engine(backend=backend, segment_length=segment_length).solve(
+            world
+        )
+    return math.isfinite(res.cluster_impedance("g1")[0].real)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("world", "named", "refusing"),
+    [
+        # every segment 5 cm above h_1: mom's point form refuses (closer than
+        # 0.387 segment lengths), the line kernel of image_2layer does not
+        pytest.param(
+            lambda: _electrode_world(
+                gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.85),
+                "ring",
+                center=(0, 0, 0.8),
+                radius=10.0,
+            ),
+            ("image_2layer",),
+            ("mom",),
+            id="two-layers-mom-refuses",
+        ),
+        # a bare conductor below h_1 = 2 m in three layers: mom_sommerfeld
+        # refuses the cross-layer geometry (audit D2A-06)
+        pytest.param(
+            lambda: _ring10_with_bare_conductor(
+                _three_layers((1000.0, 30.0, 1000.0), (2.0, 3.0)), 2.5
+            ),
+            (),
+            ("mom_sommerfeld",),
+            id="three-layers-bare-conductor-below-h1",
+        ),
+        # a bare conductor in the air: every backend refuses its segments
+        pytest.param(
+            lambda: _ring10_with_bare_conductor(
+                gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0), -0.5
+            ),
+            (),
+            ("mom", "image_2layer"),
+            id="two-layers-bare-conductor-in-the-air",
+        ),
+        # the plain case: both are named, both solve
+        pytest.param(
+            lambda: _electrode_world(
+                gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0),
+                "ring",
+                center=(0, 0, 0.8),
+                radius=10.0,
+            ),
+            ("mom", "image_2layer"),
+            (),
+            id="two-layers-both-solve",
+        ),
+    ],
+)
+def test_fem_names_only_a_backend_that_solves_the_world(world, named, refusing) -> None:
+    """The remedy of the error message passes the named backend's own checks.
+
+    The message named ``'mom'`` / ``'image_2layer'`` (two layers) or
+    ``'mom_sommerfeld'`` (three or more, when the electrodes lie in the top
+    layer) by a rule of thumb; those backends refused some of these worlds
+    — a bare conductor below h_1 in three layers, segments near the
+    interface (point form), a conductor in the air (audit D2A-06). The
+    message now names a backend only if its capability and geometry checks
+    accept the world, and says that no backend solves it otherwise.
+    """
+    # audit D2A-06
+    text = _fem_message(world())
+    remedy = text[max(text.rfind("Use backend="), text.rfind("No backend solves")) :]
+    for backend in named:
+        assert f"'{backend}'" in remedy, remedy
+        assert _solves(backend, world())
+    for backend in refusing:
+        assert f"backend='{backend}'" not in remedy, remedy
+        assert f"'{backend}'" in remedy and "this world: " in remedy, remedy
+    if not named:
+        assert "No backend solves this world yet" in remedy, remedy
+
+
 @pytest.mark.finding("10.23")
 def test_fem_q23_uses_the_canonical_layer_stack() -> None:
     """Equal resistivities are no interface: the merged top layer is named."""
