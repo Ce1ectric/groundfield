@@ -41,7 +41,11 @@ vertical currents reversed). Three conventions are offered:
   perfect-electric-conductor image (horizontal currents reversed).
   This is the baseline against which Carson's correction
   $\Delta Z = (\omega\mu_0/\pi)(P + jQ)$ is defined
-  (:mod:`groundfield.coupling.carson`).
+  (:mod:`groundfield.coupling.carson`). A perfect conductor screens
+  the soil: a pair on opposite sides of the surface has $L = 0$ (since
+  audit round 2 of the calendar release; the mirrored-endpoint image of
+  a buried partner lands above ground and gave $\ln(D_\text{mirror}/D)
+  < 0$), and its whole coupling is in the earth-return correction.
 
 An earth-return correction matrix is only meaningful together with
 the image convention of the inductance matrix it is added to; the
@@ -59,6 +63,15 @@ the matching reference uses $\mathrm{GMR} = a$. The frequency
 dependence of the internal impedance (skin effect) is provided by
 :meth:`groundfield.conductors.Conductor.internal_impedance_per_length`
 as a correction relative to this DC convention.
+
+**Wires lying side by side.** Two near-parallel segments whose axes
+stay closer than the sum of their radii over a common length (two
+conductors in one trench, a service drop routed back along its PEN
+main, coincident leads) are evaluated as touching wires at the axis
+distance $r_i + r_j$ in :func:`build_inductance_matrix`; the filament
+integral of such a pair diverges (two coincident 50 m leads read
++587j Ω at 50 Hz, a TN network with drops along its PEN main had a
+negative input reactance).
 
 **Touching segments** (``touching=``). The Neumann integrand is
 log-singular for segments that share an end point (bends, chain
@@ -799,6 +812,10 @@ def _build_inductance_matrix_loop(
     internal = _include_internal_array(include_internal, M)
     L = np.zeros((M, M), dtype=float)
     sign = -1.0 if mode == "antiparallel" else 1.0
+    opposite = _opposite_sides(
+        np.asarray(seg_endpoints[:, 0, :], dtype=float),
+        np.asarray(seg_endpoints[:, 1, :], dtype=float),
+    )
     for i in range(M):
         p1_i = seg_endpoints[i, 0]
         p2_i = seg_endpoints[i, 1]
@@ -832,16 +849,44 @@ def _build_inductance_matrix_loop(
         for j in range(i + 1, M):
             p1_j = seg_endpoints[j, 0]
             p2_j = seg_endpoints[j, 1]
+            if mode == "antiparallel" and opposite[i, j]:
+                L[i, j] = L[j, i] = 0.0  # screened by the PEC (A2C-1)
+                continue
             m = neumann_mutual(p1_i, p2_i, p1_j, p2_j, touching=touching)
+            m = _touching_wires(m, p1_i, p2_i, wire_radii[i], p1_j, p2_j, wire_radii[j])
             if mode != "none":
                 p1_j_img = _mirror(p1_j)
                 p2_j_img = _mirror(p2_j)
                 m_img = neumann_mutual(
                     p1_i, p2_i, p1_j_img, p2_j_img, touching=touching
                 )
+                m_img = _touching_wires(
+                    m_img, p1_i, p2_i, wire_radii[i], p1_j_img, p2_j_img, wire_radii[j]
+                )
                 m = m + sign * m_img
             L[i, j] = L[j, i] = m
     return L
+
+
+def _touching_wires(
+    m: float,
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    r_a: float,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    r_b: float,
+) -> float:
+    """Scalar form of :func:`_interpenetrating_batch` for the loop oracle."""
+    vals, inside = _interpenetrating_batch(
+        np.asarray(p1_a, dtype=float),
+        np.asarray(p2_a, dtype=float),
+        float(r_a),
+        np.asarray(p1_b, dtype=float)[None, :],
+        np.asarray(p2_b, dtype=float)[None, :],
+        np.array([float(r_b)]),
+    )
+    return float(vals[0]) if inside[0] else m
 
 
 # ---------------------------------------------------------------------
@@ -1069,6 +1114,99 @@ def _apply_touching_exact(
     M_row[candidates[valid]] = values[valid]
 
 
+#: ``|cos phi|`` above which two segments count as near-parallel (8.1 deg):
+#: the interpenetration guard below and the Carson tiling share it.
+_PARALLEL_COS_MIN = 0.99
+
+
+def _interpenetrating_batch(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    r_a: float,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    r_b: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mutual inductance of interpenetrating parallel wires (vectorised).
+
+    Two near-parallel segments (``|cos phi| > 0.99``) whose projections
+    overlap and whose axes stay closer than the sum of their radii
+    $r_a + r_b$ over the overlap are wires lying side by side (two
+    conductors in one trench, a service drop routed back along its PEN
+    main, two leads laid on top of each other). Their filament integral
+    grows like $\\ln(1/d)$ as the axis distance $d \\to 0$ and diverges
+    for coincident or overlapping coaxial filaments, where the 16x16
+    rule only stops at its $10^{-6}$ m floor: two coincident 50 m leads
+    read +587j Ω at 50 Hz, and a TN network whose drops ran back along
+    the PEN main had a negative input reactance (a non-positive-definite
+    inductance matrix). Such pairs are evaluated as parallel filaments
+    at the axis distance $r_a + r_b$ (touching wires) over the projected
+    overlap — the closed form of :func:`parallel_segments_mutual` with
+    offsets — which keeps the matrix positive definite.
+
+    Returns ``(values, mask)`` over the K partners *b*: ``values[k]`` in
+    H where ``mask[k]``.
+    """
+    K = p1_b.shape[0]
+    values = np.zeros(K, dtype=float)
+    mask = np.zeros(K, dtype=bool)
+    if K == 0:
+        return values, mask
+    da = p2_a - p1_a
+    la = float(np.linalg.norm(da))
+    db = p2_b - p1_b
+    lb = np.linalg.norm(db, axis=1)
+    if la <= 0.0:
+        return values, mask
+    ua = da / la
+    dots = (db @ ua) / np.where(lb > 0.0, lb, 1.0)
+    rel1 = p1_b - p1_a
+    rel2 = p2_b - p1_a
+    s1 = rel1 @ ua
+    s2 = rel2 @ ua
+    perp1 = np.linalg.norm(rel1 - s1[:, None] * ua, axis=1)
+    perp2 = np.linalg.norm(rel2 - s2[:, None] * ua, axis=1)
+    lo = np.minimum(s1, s2)
+    hi = np.maximum(s1, s2)
+    overlap = np.minimum(hi, la) - np.maximum(lo, 0.0)
+    d_min = r_a + np.asarray(r_b, dtype=float)
+    mask = (
+        (lb > 0.0)
+        & (np.abs(dots) > _PARALLEL_COS_MIN)
+        & (overlap > _TOUCH_TOL_REL * np.maximum(la, lb))
+        & (np.maximum(perp1, perp2) < (1.0 - 1e-9) * d_min)
+    )
+    if not mask.any():
+        return values, mask
+    d = d_min[mask]
+    b1, b2 = lo[mask], hi[mask]
+
+    def F(x: np.ndarray) -> np.ndarray:
+        return x * np.arcsinh(x / d) - np.hypot(x, d)
+
+    sign = np.where(dots[mask] > 0.0, 1.0, -1.0)
+    values[mask] = (
+        MU_0 / (4.0 * math.pi) * sign * (F(b2) - F(b2 - la) - F(b1) + F(b1 - la))
+    )
+    return values, mask
+
+
+def _overhead(p1: np.ndarray, p2: np.ndarray) -> np.ndarray:
+    """Side of the soil surface of every segment: ``True`` above it.
+
+    A segment lies on one side (image conventions reject segments that
+    cross the surface); its mid-point decides — a segment that only
+    touches the surface with one end belongs to the side of the other.
+    """
+    return 0.5 * (p1[:, 2] + p2[:, 2]) < 0.0
+
+
+def _opposite_sides(p1: np.ndarray, p2: np.ndarray) -> np.ndarray:
+    """``(M, M)`` mask of segment pairs on opposite sides of the surface."""
+    above = _overhead(p1, p2)
+    return above[:, None] != above[None, :]
+
+
 def _inductance_blocks(
     p1: np.ndarray,
     p2: np.ndarray,
@@ -1079,6 +1217,7 @@ def _inductance_blocks(
     self_from_rows: bool,
     include_internal: np.ndarray,
     touching: str,
+    diagonal: bool = True,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Direct and image blocks of the partial-inductance matrix.
 
@@ -1096,8 +1235,16 @@ def _inductance_blocks(
     ``True``, per segment otherwise); the two differ in the last bit
     for some inputs, and keeping both is what makes every legacy call
     of :func:`build_inductance_matrix` bit-identical.
+
+    With ``wire_radii``, interpenetrating parallel pairs (axes closer
+    than the sum of the radii over a common length, direct or against
+    a mirrored partner) are evaluated as touching wires
+    (:func:`_interpenetrating_batch`); without radii the filament
+    integral is kept. ``diagonal=False`` leaves the diagonal of the
+    direct block at zero (off-diagonal mutuals only, no radii needed).
     """
     M = p1.shape[0]
+    radii = None if wire_radii is None else np.asarray(wire_radii, dtype=float)
     da = p2 - p1  # (M, 3)
     la = np.linalg.norm(da, axis=1)  # (M,)
     if (la <= 0.0).any():
@@ -1118,13 +1265,13 @@ def _inductance_blocks(
 
     # Diagonal — cheap (M operations); scalar helpers.
     for i in range(M):
-        if want_direct:
+        if want_direct and diagonal:
             if self_from_rows:
                 length_i = la[i]
             else:
                 length_i = float(np.linalg.norm(p2[i] - p1[i]))
             L_dir[i, i] = thin_wire_self_inductance(
-                length_i, wire_radii[i], include_internal=bool(include_internal[i])
+                length_i, radii[i], include_internal=bool(include_internal[i])
             )
         if want_image:
             L_img[i, i] = neumann_mutual(
@@ -1150,6 +1297,11 @@ def _inductance_blocks(
                     ua[i],
                     ua[slc],
                 )
+            if radii is not None:
+                vals, inside = _interpenetrating_batch(
+                    p1[i], p2[i], radii[i], p1[slc], p2[slc], radii[slc]
+                )
+                M_pri[inside] = vals[inside]
             L_dir[i, slc] = M_pri
             L_dir[slc, i] = M_pri
         if want_image:
@@ -1175,6 +1327,11 @@ def _inductance_blocks(
                     ua[i],
                     ua_img[slc],
                 )
+            if radii is not None:
+                vals, inside = _interpenetrating_batch(
+                    p1[i], p2[i], radii[i], p1_img[slc], p2_img[slc], radii[slc]
+                )
+                M_img[inside] = vals[inside]
             L_img[i, slc] = M_img
             L_img[slc, i] = M_img
     return L_dir, L_img
@@ -1275,21 +1432,28 @@ def build_inductance_matrix(
         return L_dir
     if mode == "additive":
         return L_dir + L_img
-    return L_dir - L_img
+    L = L_dir - L_img
+    # A perfect conductor screens the soil: a pair on opposite sides of
+    # the surface has no anti-parallel baseline (audit A2C-1).
+    L[_opposite_sides(p1, p2)] = 0.0
+    return L
 
 
 def _image_inductance_matrix(
     seg_endpoints: np.ndarray,
     *,
     touching: TouchingRule = "exact",
+    wire_radii: np.ndarray | None = None,
 ) -> np.ndarray:
     """Image block $L_\\text{img}$ (mirrored-endpoint image), shape (M, M).
 
     The block that :func:`build_inductance_matrix` adds for
     ``image="additive"`` and subtracts for ``image="antiparallel"`` —
     computed by the same code path, so that an earth-return correction
-    can move between conventions exactly. Raises for segments that
-    cross or lie in the soil surface (singular image).
+    can move between conventions exactly (with ``wire_radii``, a mirrored
+    partner that interpenetrates a segment is evaluated as a touching
+    wire, as in :func:`build_inductance_matrix`). Raises for segments
+    that cross or lie in the soil surface (singular image).
     """
     _check_touching_rule(touching)
     M = seg_endpoints.shape[0]
@@ -1303,7 +1467,7 @@ def _image_inductance_matrix(
     _, L_img = _inductance_blocks(
         p1,
         p2,
-        None,
+        wire_radii,
         want_direct=False,
         want_image=True,
         self_from_rows=False,
@@ -1320,14 +1484,47 @@ def _image_inductance_matrix(
 
 def _carson_pair_plan(
     seg_endpoints: np.ndarray, wire_radii: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, list[tuple[int, int, float, float, float]]]:
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    list[tuple[int, int, float, float, float]],
+    list[tuple[int, int]],
+]:
     """Frequency-independent geometry of the Carson tiling.
 
-    Returns the per-segment Carson heights and lengths and the list of
-    off-diagonal entries ``(i, j, horizontal_distance, factor, sign)``
-    that receive a mutual correction ``sign * dz'(d) * factor``.
+    Carson's correction is a per-metre result for long parallel
+    horizontal wires. It is tiled over the segment pairs inside that
+    validity domain — near-parallel (``|cos phi| > 0.99``) pairs of
+    near-horizontal segments (inclination below 8.1 deg) — and every
+    other non-orthogonal pair, and the self term of every inclined or
+    vertical segment, is handed to the exact Sommerfeld kernel (audit
+    round 2 of the calendar release, A2C-1; up to then oblique pairs got
+    ``sqrt(l_i l_j) |cos phi|`` times the per-metre value, once per
+    segment pair, which over-counts long oblique conductors by roughly
+    their number of segments: a probe lead turning 8.1 deg against the
+    feed lead changed the measured reactance 17.6-fold).
+
+    Returns
+    -------
+    heights
+        Carson height ``|z|`` of every segment mid-point in m
+        (regularised for a segment in the surface plane).
+    lengths
+        Segment lengths in m.
+    horizontal
+        Whether a segment is near-horizontal (Carson self term).
+    entries
+        Tiled pairs ``(i, j, horizontal_distance, factor, sign)``: a
+        mutual correction ``sign * dz'(d) * factor`` with the per-metre
+        value at the horizontal axis distance ``d`` and the axial overlap
+        ``factor`` (m).
+    fallback
+        Pairs ``(i, j)``, ``i <= j``, for the Sommerfeld kernel (``i == j``:
+        the self term of a non-horizontal segment).
     """
     M = seg_endpoints.shape[0]
+    radii = np.asarray(wire_radii, dtype=float)
     # Pre-compute mid-points, axis directions, lengths, heights.
     midpoints = 0.5 * (seg_endpoints[:, 0, :] + seg_endpoints[:, 1, :])
     axes = seg_endpoints[:, 1, :] - seg_endpoints[:, 0, :]
@@ -1340,52 +1537,135 @@ def _carson_pair_plan(
     # (Sunde-equivalent). For a wire at the surface (z = 0) the
     # asymptote is logarithmic, regularised by the wire radius.
     heights = np.abs(midpoints[:, 2])
-    heights = np.where(heights > 0.0, heights, np.maximum(wire_radii, 1e-3))
+    heights = np.where(heights > 0.0, heights, np.maximum(radii, 1e-3))
+    horizontal = np.hypot(unit_axes[:, 0], unit_axes[:, 1]) > _PARALLEL_COS_MIN
 
     entries: list[tuple[int, int, float, float, float]] = []
+    fallback: list[tuple[int, int]] = [
+        (i, i) for i in range(M) if lengths[i] > 0.0 and not horizontal[i]
+    ]
     for i in range(M):
         for j in range(i + 1, M):
             dot = float(unit_axes[i] @ unit_axes[j])
             if abs(dot) < 1e-9:
                 continue  # purely orthogonal — zero by symmetry
+            if not (horizontal[i] and horizontal[j] and abs(dot) > _PARALLEL_COS_MIN):
+                # Oblique, inclined or vertical: outside Carson's domain.
+                fallback.append((i, j))
+                continue
             sign = 1.0 if dot > 0.0 else -1.0
             d_vec = midpoints[j] - midpoints[i]
-
-            if abs(dot) > 0.99:
-                # Near-parallel: transmission-line tiling (WP-C3).
-                u = unit_axes[i]
-                axial = float(d_vec @ u)
-                perp = d_vec - axial * u
-                d_perp_horiz = math.hypot(perp[0], perp[1])
-                d_perp_vert = abs(perp[2])
-                same_axis = (
-                    d_perp_horiz < max(wire_radii[i], wire_radii[j], 1e-3)
-                    and d_perp_vert < 1e-6
-                )
-                if same_axis:
-                    # Same wire: earth term fully carried by the
-                    # per-length diagonals — adding a "mutual" here
-                    # double-counts (historic non-convergence bug).
+            # Near-parallel: transmission-line tiling (WP-C3).
+            u = unit_axes[i]
+            axial = float(d_vec @ u)
+            perp = d_vec - axial * u
+            d_perp_horiz = math.hypot(perp[0], perp[1])
+            d_perp_vert = abs(perp[2])
+            same_axis = (
+                d_perp_horiz < max(radii[i], radii[j], 1e-3) and d_perp_vert < 1e-6
+            )
+            # Axial overlap of the two segment intervals along u.
+            t_i0 = float((seg_endpoints[i, 0] - midpoints[i]) @ u)
+            t_i1 = float((seg_endpoints[i, 1] - midpoints[i]) @ u)
+            lo_i, hi_i = min(t_i0, t_i1), max(t_i0, t_i1)
+            t_j0 = float((seg_endpoints[j, 0] - midpoints[i]) @ u)
+            t_j1 = float((seg_endpoints[j, 1] - midpoints[i]) @ u)
+            lo_j, hi_j = min(t_j0, t_j1), max(t_j0, t_j1)
+            overlap = min(hi_i, hi_j) - max(lo_i, lo_j)
+            if same_axis:
+                # Collinear pieces of one wire never overlap (their earth
+                # term is carried by the per-length diagonals); two
+                # conductors that do overlap on one axis are wires lying
+                # side by side: the mutual of touching wires (finding of
+                # stream DOC-B / GEN-2; up to then such pairs got none).
+                if overlap <= _TOUCH_TOL_REL * max(lengths[i], lengths[j]):
                     continue
-                # Axial overlap of the two segment intervals along u.
-                t_i0 = float((seg_endpoints[i, 0] - midpoints[i]) @ u)
-                t_i1 = float((seg_endpoints[i, 1] - midpoints[i]) @ u)
-                lo_i, hi_i = min(t_i0, t_i1), max(t_i0, t_i1)
-                t_j0 = float((seg_endpoints[j, 0] - midpoints[i]) @ u)
-                t_j1 = float((seg_endpoints[j, 1] - midpoints[i]) @ u)
-                lo_j, hi_j = min(t_j0, t_j1), max(t_j0, t_j1)
-                overlap = min(hi_i, hi_j) - max(lo_i, lo_j)
-                if overlap <= 0.0:
-                    continue  # staggered/end-to-end: no local tiling
-                entries.append((i, j, d_perp_horiz, overlap, sign))
-                continue
+                d_perp_horiz = max(d_perp_horiz, float(radii[i] + radii[j]))
+            elif overlap <= 0.0:
+                continue  # staggered/end-to-end: no local tiling
+            entries.append((i, j, d_perp_horiz, overlap, sign))
+    return heights, lengths, horizontal, entries, fallback
 
-            # Oblique pair: historic projected geometric-mean
-            # heuristic (rare in Manhattan-routed networks).
-            d_horiz = math.hypot(d_vec[0], d_vec[1])
-            ell = math.sqrt(lengths[i] * lengths[j]) * abs(dot)
-            entries.append((i, j, d_horiz, ell, sign))
-    return heights, lengths, entries
+
+def _direct_mutual_matrix(
+    seg_endpoints: np.ndarray, wire_radii: np.ndarray | None = None
+) -> np.ndarray:
+    """Off-diagonal free-space Neumann mutuals $L_\\text{dir}$ (zero diagonal).
+
+    The direct block of :func:`build_inductance_matrix` (same code path,
+    exact touching pairs, interpenetrating pairs as touching wires when
+    ``wire_radii`` is given), used to move a correction of a pair on
+    opposite sides of the surface between image conventions.
+    """
+    M = seg_endpoints.shape[0]
+    p1 = seg_endpoints[:, 0, :].astype(float, copy=False)
+    p2 = seg_endpoints[:, 1, :].astype(float, copy=False)
+    L_dir, _ = _inductance_blocks(
+        p1,
+        p2,
+        wire_radii,
+        want_direct=True,
+        want_image=False,
+        self_from_rows=False,
+        include_internal=np.ones(M, dtype=bool),
+        touching="exact",
+        diagonal=False,
+    )
+    return L_dir
+
+
+def _carson_fallback_values(
+    seg_endpoints: np.ndarray,
+    wire_radii: np.ndarray,
+    fallback: list[tuple[int, int]],
+    omegas: list[float],
+    sigma_earth: float,
+) -> dict[tuple[int, int], np.ndarray]:
+    """Sommerfeld corrections of the pairs outside Carson's domain.
+
+    Exact quasi-static correction of a homogeneous earth of conductivity
+    ``sigma_earth`` (:mod:`groundfield.coupling.sommerfeld_inductance`,
+    image-free, tabulated assembly over the segments that take part:
+    one $S(\\rho)$ table per pair of depth groups — 1.2 s instead of
+    64 s for two 1 km leads of 50 segments at an angle, and closer to a
+    converged reference than the per-pair rule), moved onto the
+    anti-parallel baseline of the Carson matrix: $\\Delta Z =
+    \\Delta Z_\\text{none} + j\\omega (L_\\text{none} -
+    L_\\text{antiparallel})$, i.e. plus the image mutual for a pair on
+    one side of the surface and plus the direct mutual for a pair on
+    opposite sides (whose anti-parallel baseline is zero). Returns
+    ``(n_f,)`` complex values in Ω per pair.
+    """
+    from groundfield.coupling.sommerfeld_inductance import (
+        LayeredEarth,
+        _tabulated_values_none,
+    )
+
+    p1 = seg_endpoints[:, 0, :].astype(float, copy=False)
+    p2 = seg_endpoints[:, 1, :].astype(float, copy=False)
+    _check_image_geometry(
+        p1, p2, np.zeros(p1.shape[0]), where="earth-return correction"
+    )
+    L_img = _image_inductance_matrix(seg_endpoints, wire_radii=wire_radii)
+    opposite = _opposite_sides(p1, p2)
+    L_dir = (
+        _direct_mutual_matrix(seg_endpoints, wire_radii)
+        if any(opposite[i, j] for i, j in fallback)
+        else None
+    )
+    earth = LayeredEarth(rhos=(1.0 / sigma_earth,), thicknesses=())
+    members = sorted({k for pair in fallback for k in pair})
+    where = {k: n for n, k in enumerate(members)}
+    table = _tabulated_values_none(
+        np.asarray(seg_endpoints, dtype=float)[members], omegas, earth
+    )
+    om = np.asarray(omegas, dtype=float)
+    out: dict[tuple[int, int], np.ndarray] = {}
+    for i, j in fallback:
+        vals = table[:, where[i], where[j]]
+        shift = L_dir[i, j] if opposite[i, j] else L_img[i, j]
+        out[(i, j)] = vals + np.where(om > 0.0, 1j * om * shift, 0.0)
+    return out
 
 
 def build_carson_correction_matrices(
@@ -1428,22 +1708,50 @@ def build_carson_correction_matrices(
     """
     mode = _resolve_image(image, None)
     omegas = [float(om) for om in np.atleast_1d(np.asarray(omegas, dtype=float))]
-    from groundfield.coupling.carson import carson_mutual_correction
+    from groundfield.coupling.carson import (
+        carson_mixed_mutual_correction,
+        carson_mutual_correction,
+    )
 
     M = seg_endpoints.shape[0]
     out = np.zeros((len(omegas), M, M), dtype=complex)
     if M == 0 or sigma_earth <= 0.0 or all(om <= 0.0 for om in omegas):
         return out
     radii = np.asarray(wire_radii, dtype=float)
-    heights, lengths, entries = _carson_pair_plan(seg_endpoints, radii)
-    L_img = None
+    heights, lengths, horizontal, entries, fallback = _carson_pair_plan(
+        seg_endpoints, radii
+    )
+    p1 = seg_endpoints[:, 0, :].astype(float, copy=False)
+    p2 = seg_endpoints[:, 1, :].astype(float, copy=False)
+    above = _overhead(p1, p2)
+    opposite = above[:, None] != above[None, :]
+    fallback_values = (
+        _carson_fallback_values(seg_endpoints, radii, fallback, omegas, sigma_earth)
+        if fallback
+        else {}
+    )
+    M_conv = None
     if mode != "antiparallel":
-        L_img = _image_inductance_matrix(seg_endpoints)
+        # Carson's correction is defined against the anti-parallel
+        # image: L_anti = L_dir - L_img on one side of the surface, 0
+        # across it. Moving it onto an inductance matrix with another
+        # image convention, dZ -> dZ - scale jw M_conv:
+        #   additive: L_add - L_anti = 2 L_img  |  L_dir + L_img (across)
+        #   none:     L_dir - L_anti =   L_img  |  L_dir         (across)
+        M_conv = _image_inductance_matrix(seg_endpoints, wire_radii=radii)
+        if opposite.any():
+            L_dir = _direct_mutual_matrix(seg_endpoints, radii)
+            if mode == "additive":
+                M_conv[opposite] = 0.5 * (L_dir[opposite] + M_conv[opposite])
+            else:
+                M_conv[opposite] = L_dir[opposite]
     for k, omega in enumerate(omegas):
         if omega <= 0.0:
             continue
         dZ = out[k]
         for i in range(M):
+            if not horizontal[i]:
+                continue  # inclined / vertical: Sommerfeld (fallback)
             # Diagonal: self correction (parallel-to-self ⇒ θ = 0),
             # per-unit-length value times this branch's length.
             dz_per_m = carson_mutual_correction(
@@ -1455,22 +1763,30 @@ def build_carson_correction_matrices(
             )
             dZ[i, i] = dz_per_m * lengths[i]
         for i, j, d_h, factor, sign in entries:
-            dz_per_m = carson_mutual_correction(
-                omega=omega,
-                height_i=heights[i],
-                height_j=heights[j],
-                horizontal_distance=d_h,
-                sigma_earth=sigma_earth,
-            )
+            if opposite[i, j]:
+                # Overhead wire parallel to a buried one: the field
+                # transmitted into the soil (no PEC baseline across the
+                # surface; audit A2C-1).
+                h_air, d_soil = (
+                    (heights[i], heights[j]) if above[i] else (heights[j], heights[i])
+                )
+                dz_per_m = carson_mixed_mutual_correction(
+                    omega, h_air, d_soil, d_h, sigma_earth
+                )
+            else:
+                dz_per_m = carson_mutual_correction(
+                    omega=omega,
+                    height_i=heights[i],
+                    height_j=heights[j],
+                    horizontal_distance=d_h,
+                    sigma_earth=sigma_earth,
+                )
             dZ[i, j] = dZ[j, i] = sign * dz_per_m * factor
-        if L_img is not None:
-            # Carson's correction is defined against the anti-parallel
-            # image: L_anti = L_dir - L_img. Moving it onto an
-            # inductance matrix with another image convention:
-            #   additive: Z = jw(L_dir + L_img) + [dZ - 2 jw L_img]
-            #   none:     Z = jw L_dir         + [dZ -   jw L_img]
+        for (i, j), vals in fallback_values.items():
+            dZ[i, j] = dZ[j, i] = vals[k]
+        if M_conv is not None:
             scale = 2.0 if mode == "additive" else 1.0
-            dZ -= scale * 1j * omega * L_img
+            dZ -= scale * 1j * omega * M_conv
     return out
 
 
@@ -1524,15 +1840,34 @@ def build_carson_correction_matrix(
       offset): **zero.** The infinite-wire self value on the diagonal
       already contains the interaction with the rest of the same
       wire.
-    - **Near-parallel pairs on distinct axes** (``|cosφ| > 0.99``):
-      mutual correction per metre at the **perpendicular** horizontal
-      axis separation, weighted by the **axial overlap length** of
-      the two segment intervals. Non-overlapping (e.g. staggered or
-      end-to-end) pairs contribute zero.
-    - **Oblique pairs** (``1e-9 < |cosφ| ≤ 0.99``): the historic
-      projected geometric-mean heuristic is retained (Carson's
-      derivation only covers parallel wires). Orthogonal pairs
-      contribute zero by symmetry.
+    - **Near-parallel pairs on distinct axes** (``|cosφ| > 0.99``) of
+      near-horizontal segments: mutual correction per metre at the
+      **perpendicular** horizontal axis separation, weighted by the
+      **axial overlap length** of the two segment intervals.
+      Non-overlapping (e.g. staggered or end-to-end) pairs contribute
+      zero. Two different conductors that overlap on one axis are
+      wires lying side by side: the mutual at the distance of touching
+      wires $r_i + r_j$ (they used to get none).
+    - **Pairs on opposite sides of the surface** (an overhead wire
+      parallel to a buried one): the field transmitted into the soil,
+      :func:`~groundfield.coupling.carson.carson_mixed_mutual_correction`
+      — the anti-parallel baseline of such a pair is zero (audit round 2
+      of the calendar release, A2C-1; the buried wire used to be treated
+      as an overhead wire at height $|z|$ on the mirrored-endpoint image:
+      -36 % mutual reactance for a lead 1 m above a PEN at 0.7 m, 1 kHz).
+    - **Outside Carson's domain** — oblique pairs
+      (``1e-9 < |cosφ| ≤ 0.99``) and every pair and self term of a
+      segment inclined by more than 8.1 deg: the exact quasi-static
+      Sommerfeld correction of a homogeneous earth of the same
+      conductivity (tabulated assembly), moved onto the anti-parallel
+      baseline. Up to audit round 2 oblique pairs got the projected
+      geometric-mean heuristic $\\sqrt{\\ell_i\\ell_j}\\,|\\cos\\varphi|$ per
+      segment pair, which grows with the number of segments (a probe lead
+      turning 8.1 deg against the feed lead changed the reading
+      17.6-fold). At the domain boundary the result steps from the
+      per-metre tiling to the Sommerfeld value, by the model error of
+      the tiling there (two 1 km leads 2 m apart, 1 kHz: 12 %).
+      Orthogonal pairs contribute zero by symmetry.
 
     Earth-conductivity sign convention
     ----------------------------------

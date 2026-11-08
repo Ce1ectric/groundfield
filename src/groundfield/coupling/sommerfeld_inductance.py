@@ -74,7 +74,9 @@ correction depends on which image that matrix carries (``image=``):
   that added it (closed form for parallel pairs, the mirrored
   orientation for inclined and vertical segments).
 - ``"antiparallel"`` — $\\Delta Z_\\text{none} + j\\omega
-  L_\\text{img}$.
+  L_\\text{img}$; for a pair on opposite sides of the surface, whose
+  anti-parallel baseline is zero (a perfect conductor screens the
+  soil), $\\Delta Z_\\text{none} + j\\omega L_\\text{dir}$.
 
 Before review pass 10 the image was removed as $-1/R'$ integrated by
 the 16x16 outer rule and weighted with the *direct* orientation:
@@ -160,8 +162,10 @@ from scipy.special import j0
 from groundfield.coupling.inductance import (
     ImageConvention,
     _check_image_geometry,
+    _direct_mutual_matrix,
     _image_inductance_matrix,
     _mirror,
+    _opposite_sides,
     _resolve_image,
     neumann_mutual,
 )
@@ -1487,20 +1491,26 @@ def _nth_sub(seg, planes, index, parent) -> tuple[np.ndarray, np.ndarray]:
     return pieces[index - first]
 
 
-def _pair_image_mutual(p1_a, p2_a, p1_b, p2_b) -> float:
-    """Neumann mutual of segment a and the mirrored segment b (H)."""
+def _pair_image_mutual(p1_a, p2_a, p1_b, p2_b, mode: str = "additive") -> float:
+    """Mutual (H) that moves a pair's correction to the image convention.
+
+    The Neumann mutual of segment a and the mirrored segment b — except
+    for ``mode="antiparallel"`` and a pair on opposite sides of the
+    surface, whose anti-parallel baseline is zero (a perfect conductor
+    screens the soil): then the direct mutual, so that
+    ``jω L(image) + ΔZ(image)`` is the same impedance in every convention.
+    """
+    p1_a = np.asarray(p1_a, dtype=float)
+    p2_a = np.asarray(p2_a, dtype=float)
     p1_b = np.asarray(p1_b, dtype=float)
     p2_b = np.asarray(p2_b, dtype=float)
     seg = np.array([[p1_a, p2_a], [p1_b, p2_b]], dtype=float)
     _check_image_geometry(
         seg[:, 0], seg[:, 1], np.zeros(2), where="earth-return correction"
     )
-    return neumann_mutual(
-        np.asarray(p1_a, dtype=float),
-        np.asarray(p2_a, dtype=float),
-        _mirror(p1_b),
-        _mirror(p2_b),
-    )
+    if mode == "antiparallel" and _opposite_sides(seg[:, 0], seg[:, 1])[0, 1]:
+        return neumann_mutual(p1_a, p2_a, p1_b, p2_b)
+    return neumann_mutual(p1_a, p2_a, _mirror(p1_b), _mirror(p2_b))
 
 
 def sommerfeld_pair_integral_homogeneous(
@@ -1596,7 +1606,7 @@ def sommerfeld_pair_integral_layered(
         return 0.0 + 0.0j
     m_img = 0.0
     if mode != "none":
-        m_img = _pair_image_mutual(p1_a, p2_a, p1_b, p2_b)
+        m_img = _pair_image_mutual(p1_a, p2_a, p1_b, p2_b, mode)
     vals = _pair_values_none(p1_a, p2_a, p1_b, p2_b, [omega], earth)
     return complex(_convert_image(vals, [omega], m_img, mode)[0])
 
@@ -1631,8 +1641,11 @@ def build_sommerfeld_correction_matrices(
         Array of shape ``(M, 2, 3)``: start and end point (m) of every
         inductive branch segment.
     wire_radii
-        Per-branch wire radii in m (unused: the radius enters through
-        the self terms of the inductance matrix). Kept for API parity.
+        Per-branch wire radii in m. Only used with an image convention:
+        a mirrored partner that interpenetrates a segment is evaluated as
+        a touching wire, as in
+        :func:`~groundfield.coupling.inductance.build_inductance_matrix`
+        (pass the same radii for an exact match in that degenerate case).
     omegas
         Angular frequencies in rad/s; entries ``<= 0`` give zeros.
     earth
@@ -1666,7 +1679,18 @@ def build_sommerfeld_correction_matrices(
     out = np.zeros((len(omegas), M, M), dtype=complex)
     if M == 0 or all(om <= 0.0 for om in omegas):
         return out
-    L_img = _image_inductance_matrix(seg_endpoints) if mode != "none" else None
+    L_img = None
+    if mode != "none":
+        # The image block of build_inductance_matrix(image=mode); with
+        # "antiparallel" a pair on opposite sides of the surface has no
+        # baseline, so its correction moves by the direct mutual instead
+        # (audit A2C-1).
+        L_img = _image_inductance_matrix(seg_endpoints, wire_radii=wire_radii)
+        if mode == "antiparallel":
+            opposite = _opposite_sides(seg_endpoints[:, 0], seg_endpoints[:, 1])
+            if opposite.any():
+                L_dir = _direct_mutual_matrix(seg_endpoints, wire_radii)
+                L_img[opposite] = L_dir[opposite]
     if method == "tabulated":
         out = _tabulated_values_none(seg_endpoints, omegas, earth)
     else:
@@ -1717,7 +1741,8 @@ def build_sommerfeld_correction_matrix(
         Array of shape ``(M, 2, 3)`` with the start- and end-points
         (m) of every distributed-conductor longitudinal-branch segment.
     wire_radii
-        Per-branch wire radii in m (unused, kept for API parity).
+        Per-branch wire radii in m (only used with an image convention,
+        see :func:`build_sommerfeld_correction_matrices`).
     omega
         Angular frequency in rad/s.
     earth
