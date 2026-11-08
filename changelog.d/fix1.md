@@ -8,6 +8,11 @@
   `tests/test_sommerfeld_tabulated.py::test_the_assembly_is_a_validated_engine_field`,
   `::test_solve_with_an_engine_that_selects_the_tabulated_assembly`.
 
+- **`create_conductor(resistance_model=...)` (10.37):** the opt-in skin
+  effect (`"skin"`; default `"dc"`) is reachable through the factory; it was
+  accepted by `Conductor(...)` only. Test:
+  `tests/test_api_factories.py::test_create_conductor_reaches_the_skin_effect_model`.
+
 ### Changed
 
 - **One error type when a backend cannot take the soil model (audit A1-08,
