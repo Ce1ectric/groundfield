@@ -282,8 +282,8 @@ def test_every_rejected_formula_is_rejected_quickly_in_a_worker_process(
     """Each string in a separate process with a deadline: rejected in under
     a second. On the base of the fixsec stream 15 of the strings added for
     SymPy's eager evaluation (rational powers of large integers, also
-    through ``exp(c*log(x))``) did not finish within 20 s, three took 1.9 s
-    to 2.5 s and one was accepted."""
+    through ``exp(c*log(x))``) did not finish within 20 s, three took 1.8 s
+    to 2.6 s and one was accepted."""
     result = worker_outcomes[entry["id"]]
     assert result["outcome"] == "rejected", result
     assert result["seconds"] < WORKER_TIME_LIMIT_S, result
@@ -968,7 +968,8 @@ def test_bookkeeping_is_capped_by_the_work_budget(monkeypatch) -> None:
 # ---------------------------------------------------------------------
 
 #: 10**300 - 1 = 3**3 * 37 * ...: under the exponent 63/64 SymPy keeps a
-#: radicand of about 19 000 digits and tests it for primality.
+#: radicand of about 18 800 digits and tests a 16 280-digit factor of it
+#: for primality.
 N300 = "9" * 300
 TEN30 = "1" + "0" * 30
 TEN30P1 = "1" + "0" * 29 + "1"
@@ -1010,8 +1011,9 @@ def test_fractional_powers_of_large_exact_numbers_are_rejected_before_sympy(
 ) -> None:
     """SymPy simplifies ``n**(p/q)`` of an exact ``n`` by factorising ``n``;
     the radicand it keeps can have ``q - 1`` times the digits of ``n``
-    (``(10**300 - 1)**(63/64)`` runs a primality test on about 19 000
-    digits; ``18**(10**30/(10**30 + 1))`` needs ``2**(10**30)``). The first
+    (``(10**300 - 1)**(63/64)`` tests a 16 280-digit factor of an
+    18 800-digit radicand for primality; ``18**(10**30/(10**30 + 1))``
+    needs ``2**(10**30)``). The first
     five strings did not finish within 20 s on the base of this change, the
     square root was accepted. Measured in a fresh process each."""
     seconds, outcome = _parse_in_child(text, _EAGER_GUARD_S)

@@ -82,9 +82,10 @@ SymPy evaluates some functions of numbers eagerly, in time that the
 bounds above do not limit: it simplifies a fractional power of an exact
 number by factorising the number, keeping a radicand of up to ``q - 1``
 times its digits (the 300-digit integer ``10**300 - 1`` under ``63/64``
-needs a primality test on about 19 000 digits, ``18**(10**30/(10**30 +
-1))`` needs ``2**(10**30)``, products merge such powers and add their
-exponents), and its ``log`` of a complex number ``r + r*j`` takes the
+gives a radicand of about 18 800 digits, and SymPy tests a 16 280-digit
+factor of it for primality; ``18**(10**30/(10**30 + 1))`` needs
+``2**(10**30)``; products merge such powers and add their exponents),
+and its ``log`` of a complex number ``r + r*j`` takes the
 square root of ``2*r**2``. Without the rules below, 15 strings of the
 formula corpus ran for more than 20 s each. So
 
