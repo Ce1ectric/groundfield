@@ -62,7 +62,9 @@ given as a rectangle or as a polygon, or on whether a shell is configured
   2 × 2 / 3 × 3 / 4 × 4 cells (10 / 20 / 30 m, line kernel, 1 m segments)
   against the equipotential reference of the same segments (one owner
   per segment; with the point kernel identical to ``mom``); one owner per
-  wire is +0.3 / +0.5 / +0.6 %;
+  wire is +0.3 / +0.5 / +0.6 %. Against ``mom`` itself (point kernel) one
+  owner per wire is +1.1 % with the default line kernel and +0.3 / +0.5 /
+  +0.5 % with the point kernel;
 * a ``style="ring"`` rectangle has one owner per side with
   ``"distributed"`` at every angle, also without a shell; with
   ``"lumped"`` it is one owner (one

@@ -39,7 +39,8 @@ shows what agrees with independent references and how well.
   few per cent above it (default line kernel: 20 m × 20 m grid with
   4 × 4 meshes +3.9 %, 40 m × 40 m with 8 × 8 meshes +5.3 %, 4-arm star
   +4.3 %); the generators build mesh foundations as one electrode per
-  wire line, which brings them to +0.3 … +0.6 %. Surface
+  wire line, which brings them to +1.1 % (+0.3 … +0.5 % with
+  `kernel="point"`, the kernel `mom` uses). Surface
   potentials near grids, meshes, stars, strip ends and bonded
   multi-electrode clusters are worse: for a 20 m × 20 m grid with 4 × 4
   meshes, 1 m outside a corner, touch voltage +19 % and step voltage
