@@ -333,3 +333,17 @@ the following decisions refine it.
    5e-11 above 1e-6 rad and 1.0e-9 at 1e-8 rad; pairs inside the parallel
    tolerance use the parallel closed form at the start offset (4.2e-9 for
    wires 1 cm apart tilted by 1e-10 rad, 1.7e-5 at 1 µm).
+10. **Pairs across the surface (user decision Q27).** Section *Earth
+    return ("ideal earth")* applies the image to every pair, also to one
+    segment above the soil surface ($z < 0$, an overhead lead) and one
+    below it (a buried PEN), for which a magnetic mirror between them has
+    no physical basis. The numbers stay — `perfect_mirror` is a
+    diagnostic baseline — but the solve emits one `UserWarning` per
+    inductive assembly with the number of such pairs and the conductors
+    on each side, pointing to `sommerfeld`; `carson_series` and
+    `sommerfeld` couple such pairs through the field transmitted into the
+    soil and do not warn. For two parallel 1 km wires, one 1 m above the
+    surface and one 0.7 m deep and 1 m beside it, in 100 Ω·m, the
+    additive image gives 2.28 times (50 Hz) and 2.77 times (1 kHz) the
+    mutual reactance of `sommerfeld`; `carson_series` gives 1.12 and 1.03
+    times.
