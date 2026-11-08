@@ -75,9 +75,10 @@ def test_max_segments_is_a_validated_engine_field() -> None:
     assert gf.Engine().max_segments is None
     assert gf.Engine(max_segments=50_000).max_segments == 50_000
     assert gf.create_engine(max_segments=123).max_segments == 123
-    for bad in (0, -5, 2.5, "many"):
+    for bad in (0, -5, 2.5, "many", True):
         with pytest.raises(ValueError):
             gf.Engine(max_segments=bad)
+    assert gf.Engine(max_segments=np.int64(5000)).max_segments == 5000
     engine = gf.Engine(max_segments=1000)
     with pytest.raises(ValueError):
         engine.max_segments = 0  # validated on assignment too

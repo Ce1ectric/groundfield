@@ -695,6 +695,17 @@ class Engine(BaseModel):
         _registry.get_backend(value)
         return value
 
+    @field_validator("max_segments", mode="before")
+    @classmethod
+    def _reject_bool_limit(cls, value: Any) -> Any:
+        """A boolean is not a segment count (``True`` would be a limit of 1)."""
+        if isinstance(value, bool):
+            raise ValueError(
+                "Engine.max_segments must be a positive integer (a number of "
+                f"segments) or None for the default, got {value!r}."
+            )
+        return value
+
     @field_validator("tolerance", "max_iterations")
     @classmethod
     def _warn_inert(cls, value: float, info: ValidationInfo) -> float:
