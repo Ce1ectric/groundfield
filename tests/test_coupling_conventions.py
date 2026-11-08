@@ -98,7 +98,7 @@ def _sources():
 
 @pytest.mark.finding("10.95")
 def test_modules_compile_without_invalid_escape_sequences() -> None:
-    """Audit A1-12: '\\D', '\;' in non-raw docstrings of coupling.inductance
+    """Audit A1-12: '\\D', '\\;' in non-raw docstrings of coupling.inductance
     raised SyntaxWarning (SyntaxError under ``python -W error``)."""
     import warnings
 

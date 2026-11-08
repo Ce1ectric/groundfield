@@ -621,7 +621,7 @@ def _build_phi_hom_per_source_rho(
     the segment average and the point form of the direct and
     surface-image terms is scaled, for a pair in different layers
     (``lower[i] != lower[j]``), with ``transmitted_rho``
-    :math:`= 2\rho_1\rho_2/(\rho_1 + \rho_2)` instead of the source
+    :math:`= 2\\rho_1\\rho_2/(\\rho_1 + \\rho_2)` instead of the source
     resistivity: that is the coefficient of the transmitted direct and
     surface-image terms of the two-layer Green's function, whose point
     form the layered correction completes. Scaling it with the source
