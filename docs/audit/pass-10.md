@@ -3443,6 +3443,19 @@ below implemented the decisions that change code.
 | 35 | Radial trunk: a building in a substation slot taps its feeder's trunk instead of getting its own line from the substation? | next release, together with 22 | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
 | 36 | Presets of the effective-resistivity weights per electrode class, with the values of the AP2 hand-over? | yes | streams `d2soil`, `f2gen` |
 
+The audits of the decision streams left four more questions, answered on the
+same day; the author again followed the recommendations and chose the next
+release for 37 and this release for 38. The earlier wording of 37 pointed to
+a "conforming axisymmetric" roadmap item that did not exist yet; the roadmap
+carries it now.
+
+| Q | Question | Decision | Where |
+|---|---|---|---|
+| 37 | Stop adding rules to the equivalent-hemisphere reduction of `fem`, in which every audit round found new limit cases (an interface 1 cm below a deep ring +191 … +308 % without a message; a rod reaching 1 µm … 8 cm into a more conductive top layer −44 … −78 %, warning only)? | yes; no further rules, replaced by a conforming axisymmetric model in the next release (rod on the axis, ring, ring with central rod; other electrodes refused until a full 3-D method exists) | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 38 | Which owner model stays when `concrete_model` is removed: one current per rectangle without cross-braces (up to 2.2 % above the reference with one current per segment) or one per side (up to 0.9 %; short side at least 1 m)? | one per side, already in 2026.11.0: `concrete_model` has no effect | stream `d3gen` |
+| 39 | Record the effective-resistivity preset in the BusType document (for example `metadata["rho_preset"]`), so that a bus paired with the wrong preset is detectable? | yes, next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
+| 40 | Quantify the overlap of the concrete shells at the corners and crossings of encased foundations? | only once a 3-D volume reference is available | [roadmap](../roadmap.md#left-open-by-2026110) |
+
 
 !!! warning "Corrections (adversarial audits of the decision streams)"
     Two adversarial audits of the three decision streams below (D2A / D2B,

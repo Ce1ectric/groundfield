@@ -16,7 +16,29 @@ candidates* stay on the page of that pass in the [audit history](audit/index.md)
 
 Decided on 2026-11-08 together with the release of 2026.11.0 (the questions
 and answers are listed on the [pass-10 page](audit/pass-10.md#decisions-on-the-questions-left-open-2026-11-08)).
-Each item changes numbers and comes with its own validation.
+Each item that changes numbers comes with its own validation.
+
+- **A conforming finite-element model in `fem`.** `fem` reduces every
+  cluster to an equivalent hemisphere. 2026.11.0 guards the reduction with
+  rules (more conductive layers above or below the hemisphere, the depth
+  ranges of the hemisphere formulas, electrodes out of the soil) and
+  documents its error ranges, yet every audit round found new limit cases:
+  an interface 1 cm below a deep ring reads +191 … +308 % without a
+  message, a rod that reaches 1 µm … 8 cm into a more conductive top layer
+  −44 … −78 % with a warning only ([known limitations](reference/known-limitations.md#backends)).
+  The reduction gets no further rules (user decision Q37). The next release
+  replaces it by a conforming axisymmetric finite-element model of the
+  electrode in its layers: a rod on the axis, a ring around it and a ring
+  with a central rod are modelled as they are; `fem` refuses every other
+  electrode (strips, rectangles, meshes, several rods such as the AP1
+  station) until a full 3-D volume method exists (deferred, see below).
+- **The effective-resistivity preset in the BusType document.** A BusType
+  fitted over `effective_resistivity(soil, preset=...)` records
+  `metadata["rho_definition"]` but not the preset, so a bus evaluated with
+  another preset (the AP1 station with `"lv_group_4_p40"`: rms 39.9 %)
+  goes unnoticed. The export will record the preset as well (for example
+  `metadata["rho_preset"]`), so a bus paired with the wrong preset is
+  detectable (user decision Q39).
 
 - **One current per wire line for grids and stars in the image family.**
   The image family solves one uniform current per electrode; a
@@ -76,8 +98,17 @@ limits a result, the reference documentation states the limit.
 - **`fem` beyond the equivalent hemisphere.** `fem` is experimental: it reduces
   every cluster to an equivalent hemisphere, lumps distributed and inductive
   conductors, returns the current of a two-terminal source through remote
-  earth and does not support junction nodes (10.23, 10.74). A full 3-D volume
-  method remains deferred (see below).
+  earth and does not support junction nodes (10.23, 10.74). The reduction
+  gets no further rules; a conforming axisymmetric model replaces it in the
+  next release (see above, user decision Q37), and a full 3-D volume method
+  remains deferred (see below).
+- **Overlapping concrete shells at junctions.** Where the wires of an
+  encased foundation meet (the corners of a rectangle, the crossings and
+  T-joints of a mesh), their shells overlap within about $r_b$ of the
+  junction and each wire counts the shared concrete as its own
+  ([known limitations](reference/known-limitations.md#backends)). The
+  effect is local; it will be quantified once a 3-D volume reference is
+  available (user decision Q40).
 - **Concrete shells in the `mom` family.** `mom` and `mom_sommerfeld` reject
   electrodes with a concrete shell; the shell is modelled by the image family
   and `solve_mutual_*` (10.12–10.14).
@@ -97,7 +128,7 @@ limits a result, the reference documentation states the limit.
 | Vectorise the ADR-0007 cross-layer Sommerfeld path | open |
 | Exact buried two-layer inductive kernel for `n ≥ 3` layers | done in 2026.11.0: the Sommerfeld kernel uses generalised reflection coefficients for any number of layers and any layer (10.35) |
 | FEM support for distributed conductors | open (`fem` is experimental, 10.23) |
-| Full-3-D FEM backend | deferred |
+| Full-3-D FEM backend | deferred; a conforming axisymmetric model replaces the equivalent-hemisphere reduction of `fem` in the next release (user decision Q37) |
 | Scaling the integral solvers to ~10 000 segments | partly: the image-family kernels need memory linear in the segment count (10.56); the dense LU solve remains |
 | `ParameterSweep` API | partly: `sweep(..., n_jobs=...)` runs the sweep in a process pool (10.64) |
 | TN-Ortsnetz topology generator | implemented in 0.7.0; the corner-routed service drop is open |
