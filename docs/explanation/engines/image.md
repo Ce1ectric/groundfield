@@ -151,7 +151,7 @@ image family is the right tool.
 | Burial | every segment entirely in the soil; the mirror image must not touch the wire ($2z > a$) | `ValueError` naming the electrode |
 | Shallow segments (point kernel only) | $L \le 4z$ for the point form of the self image | `ShallowSegmentWarning` with the bias in per cent |
 | Field quantities near grids, stars, strip ends, bonded clusters | within 5 m: ansatz error of tens of per cent (validation table) | `UniformCurrentFieldWarning` in the safety helpers |
-| Size | reaction matrix kept in memory while $8N^2 \le$ 1 GiB ($N \le 11\,585$), block evaluation beyond; `diagnostics.HARD_LIMIT` = 20 000 segments | `ResourceLimitError` before any allocation |
+| Size | reaction matrix kept in memory while $8N^2 \le$ 1 GiB ($N \le 11\,585$), block evaluation beyond; the engine's limit `Engine.max_segments` (default `diagnostics.HARD_LIMIT` = 20 000 segments) | `ResourceLimitError` before any allocation |
 
 ## Validation
 

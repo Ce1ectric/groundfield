@@ -11,9 +11,9 @@ a comparison of several engines, is [Validation](validation.md).
 | Function | Answers |
 |---|---|
 | `world_statistics(world)` | counts by kind, wire and conductor lengths, footprint |
-| `expected_segments(world, engine)` | segments the discretiser will produce, per electrode and in total |
+| `expected_segments(world, engine)` | segments the discretiser will produce, per electrode and in total, the size of the nodal system and the engine's limit (`"limit"`) |
 | `check_segment_resolution(world, engine)` | thin-wire ratio, electrodes smaller than a segment, size budget (strings) |
-| `check_segment_budget(world, engine)` | raises `ResourceLimitError` above `HARD_LIMIT` (used by the solver) |
+| `check_segment_budget(world, engine)` | raises `ResourceLimitError` above the engine's limit `Engine.max_segments` (default `HARD_LIMIT`; used by the solver) |
 | `diagnose(world, engine, result=None)` | all of the above plus close wires, rod ends at a layer interface, inert settings, series truncation |
 
 ## Mathematical and physical context
@@ -40,10 +40,19 @@ The checks guard the assumptions of the thin-wire model (see
   at the interface and −4.6 % 1 mm past it (category
   `interface_contact`, also `InterfaceContactWarning` at the solve).
 - **Size.** The dense reaction matrix of $N$ segments has $N^2$
-  entries; the work per excitation grows like $N^2$ and the direct
-  solve like $N^3$. Above `SOFT_LIMIT` (5 000 segments) the report
-  warns, above `HARD_LIMIT` (20 000) the solver refuses to start
-  (`groundfield.diagnostics.HARD_LIMIT` can be raised on purpose).
+  entries ($8N^2$ bytes, 3.0 GiB at $N$ = 20 000); the work per
+  excitation grows like $N^2$ and the direct solve like $N^3$. The
+  dense nodal system of $n$ unknowns (current owners, nodes and
+  branches, every conductor sub-piece included) takes $16n^2$ bytes.
+  Above `SOFT_LIMIT` (5 000) the report informs that a solve takes
+  minutes; above the engine's limit the solver refuses to start with
+  `ResourceLimitError`, before anything of that size is allocated. The
+  limit is set per engine, `Engine(max_segments=...)` (a positive
+  integer that bounds both sizes); an engine that leaves it at `None`
+  uses the module constant `HARD_LIMIT` (20 000), read at solve time.
+  `expected_segments(...)["limit"]`, `report.context["max_segments"]`
+  and `FieldResult.metadata["max_segments"]` show the limit that
+  applies.
 
 The segment counts follow the discretisation of the image and MoM
 families; for `fem` they do not predict the cost.
@@ -66,6 +75,25 @@ print(report)    # proximity: 'a'–'b' close, axis distance 18 mm (clearance 2 
 assert budget["total"] == 12                      # two rods of six 0.5 m segments
 assert "proximity" in report.categories()
 ```
+
+The limit is a property of the engine: a smaller one refuses this world
+before the solve allocates anything, a larger one admits worlds beyond
+`HARD_LIMIT`.
+
+```python
+from groundfield.diagnostics import HARD_LIMIT, ResourceLimitError, check_segment_budget
+
+try:
+    check_segment_budget(world, gf.create_engine(segment_length=0.5, max_segments=10))
+except ResourceLimitError as error:
+    print(error)    # ... discretises into 12 segments ..., more than Engine.max_segments = 10 ...
+print(budget["limit"], gf.expected_segments(world, gf.create_engine(max_segments=50_000))["limit"])
+```
+
+<!-- doctest-check
+assert budget["limit"] == HARD_LIMIT == 20_000
+assert gf.expected_segments(world, gf.create_engine(max_segments=50_000))["limit"] == 50_000
+-->
 
 ## API reference
 

@@ -38,10 +38,6 @@ limits a result, the reference documentation states the limit.
   kernel, the layered correction stays in point form (10.28).
 - **Compiled Carson integrals.** A `LowLevelCallable` for Carson's P and Q was
   not built; memoisation gives the bulk of the gain bit-identically (10.63).
-- **Tabulated Sommerfeld assembly as the default.** The tabulated assembly of
-  the Sommerfeld earth-return correction is opt-in
-  (`Engine(sommerfeld_assembly="tabulated")`); the default stays the per-pair
-  quadrature (10.60).
 - **Voltage sources.** Solving a world with a `VoltageSource` raises
   `NotImplementedError`; drive the world with a 1 A current source and scale by
   U / Z_in (10.51).

@@ -423,11 +423,12 @@ Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
    `SommerfeldResolutionWarning` instead of truncating silently (10.36;
    distant pair entries were −24 % at 200 m and +274 % at 400 m).
 4. **Assembly.** Geometry, λ grid and Bessel tables are built once per
-   segment pair for the whole frequency set (10.60, bit-identical). An
-   opt-in tabulated assembly (`Engine.sommerfeld_assembly="tabulated"`,
-   one table per pair of depth groups and frequency) is faster on large
-   networks and closer to a converged reference than the default per-pair
-   rule; the default stays `"exact"`.
+   segment pair for the whole frequency set (10.60, bit-identical). The
+   tabulated assembly (`Engine.sommerfeld_assembly="tabulated"`, one
+   table per pair of depth groups and frequency) is faster on large
+   networks and closer to a converged reference than the per-pair rule;
+   by the user decision of 2026-11-08 (Q16) it is the default, and the
+   per-pair rule stays available as `"exact"`.
 5. **Pollaczek reference.** `references.pollaczek` uses the exact
    two-layer amplitude and the $K_0$ head (10.45). Benchmark B13 compares
    the solver's per-metre line impedance with it.

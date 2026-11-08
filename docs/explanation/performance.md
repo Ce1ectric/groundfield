@@ -45,10 +45,12 @@ kernels work in row blocks of 4 MiB with $O(N\cdot\text{block})$ memory;
 results then differ at round-off (about $10^{-15}$). Field evaluation
 (`FieldResult.potential`) runs in pieces of at most 16 MiB, so a
 200 × 200 grid of field points costs memory proportional to the grid, not
-to grid times sources. `diagnostics.HARD_LIMIT` (20 000 segments) stops a
-world before anything of size $N$ is allocated (`ResourceLimitError`,
-finding 10.06); `SOFT_LIMIT` (5 000) marks the size where solves take
-minutes rather than seconds.
+to grid times sources. The resource limit of the engine,
+`Engine.max_segments` (default `diagnostics.HARD_LIMIT`, 20 000 segments
+or nodal unknowns), stops a world before anything of size $N$ is
+allocated (`ResourceLimitError`, finding 10.06); raise it per engine to
+solve a larger world on purpose. `SOFT_LIMIT` (5 000) marks the size where
+solves take minutes rather than seconds.
 
 ## Measured in this release
 
@@ -109,19 +111,25 @@ far field; `kernel="point"` reproduces the old numbers and cost.
 
 ### Inductive conductors
 
-| Workload | v0.15.0 | 2026.11, `sommerfeld` exact | 2026.11, `sommerfeld` tabulated (opt-in) |
+| Workload | v0.15.0 | 2026.11, `sommerfeld_assembly="exact"` | 2026.11, `"tabulated"` (default) |
 |---|---|---|---|
 | W3: 2 houses, Neumann PEN, Sommerfeld earth return, 11 f | 35.3 s | 1.9–2.1 s | 1.2–1.5 s |
 | W3: 30 houses, same | ≈ 3600 s (estimate) | 242 s | 7.8–9.1 s |
 | W3c: 30 houses, `carson_series` | 16.4 s | 3.3 s | — |
+| TN generator, 8 houses, Neumann PEN (78 inductive branches), 4 f | — | 16.6 s | 1.0 s |
+| TN generator, 30 houses, same (338 inductive branches) | — | 306 s | 12.2 s |
 
-CPU times measured by the coupling work-stream. The exact path gains from
-one multi-frequency assembly per solve (geometry, λ grid and Bessel tables
-once per pair; bit-identical) and the resolved λ grid; the tabulated
-assembly shares one table of the spectral integral per pair of depth
-groups and frequency and agrees with a converged reference better than the
-exact per-pair rule (substation impedance $5\cdot 10^{-10}$ against
-$1.1\cdot 10^{-8}$, finding 10.60). `carson_series` moved by its own fix
+CPU times of the W3 rows measured by the coupling work-stream, of the TN
+rows by the stream that made the tabulated assembly the default (user
+decision Q16; `TnNetworkGenerator`, homogeneous 100 Ω·m, ds = 1 m,
+50/250/550/1000 Hz). The per-pair path gains from one multi-frequency
+assembly per solve (geometry, λ grid and Bessel tables once per pair;
+bit-identical) and the resolved λ grid; the tabulated assembly shares one
+table of the spectral integral per pair of depth groups and frequency and
+agrees with a converged reference better than the per-pair rule
+(substation impedance $5\cdot 10^{-10}$ against $1.1\cdot 10^{-8}$ on W3;
+input impedance of the 8-house TN network $4\cdot 10^{-10}$ against
+$1.2\cdot 10^{-8}$; finding 10.60). It is the default since 2026.11. `carson_series` moved by its own fix
 (F32) and is no faster than necessary to be a check: it is an
 approximation for long parallel lines, not a replacement of `sommerfeld`
 ([earth return](earth-return.md)).
@@ -146,12 +154,13 @@ approximation for long parallel lines, not a replacement of `sommerfeld`
 
 In order of effect on a typical study:
 
-1. **Earth-return model of inductive conductors.** The exact Sommerfeld
-   assembly dominates inductive studies; `Engine.sommerfeld_assembly=
-   "tabulated"` is the faster and, by the measurements above, more
-   accurate choice for large networks. Leave conductors without an
-   `inductance_model` where their inductance is not the question — then no
-   assembly runs at all.
+1. **Earth-return model of inductive conductors.** The Sommerfeld
+   assembly dominates inductive studies; keep the default
+   `Engine.sommerfeld_assembly="tabulated"`, the faster and, by the
+   measurements above, more accurate choice (`"exact"` integrates every
+   segment pair and costs 17–25 times as much on the TN networks above).
+   Leave conductors without an `inductance_model` where their inductance
+   is not the question — then no assembly runs at all.
 2. **Segment length.** Cost and memory grow with $N^2$. With the line
    kernel straight wires are exact at any segment length, so `ds` only
    needs to resolve the geometry (corners, rings, the distance between

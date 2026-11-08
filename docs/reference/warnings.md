@@ -64,6 +64,18 @@ use it for orientation only, or filter the category.
 `options={"fem": ...}` with `backend="mom"`); the options are ignored.
 **Remedy:** remove them or select that backend.
 
+### `ProbePointsIgnoredWarning`
+
+`groundfield.solver.mutual.ProbePointsIgnoredWarning`. **Emitted** by
+`solve_mutual_matrix` when it is given `probe_points` but computes the
+galerkin off-diagonal, the default of every call since 2026.11. Up to
+0.15.0 probe points selected the potential at those points as the
+off-diagonal; a call written for 0.15.0 (the AP1 pipeline, for example)
+keeps running and now returns the reciprocal galerkin matrix, which
+reproduces the solve of the clusters joined by branches (the probe matrix
+missed it by −0.15 … −0.88 % on an AP1-like site). **Remedy:** drop
+`probe_points`, or pass `offdiag="probe"` to keep the 0.15.0 definition.
+
 ### `EngineFrequencyOrderWarning`
 
 `groundfield.solver.engine.EngineFrequencyOrderWarning`. **Emitted**
@@ -214,11 +226,14 @@ line; see [Diagnostics](api/diagnostics.md).
 ### `ResourceLimitError`
 
 `gf.ResourceLimitError`, subclass of `ValueError`. **Raised** before
-any allocation when the predicted number of segments exceeds
-`groundfield.diagnostics.HARD_LIMIT` (20 000). The usual cause is a
-geometry given in millimetres or a very small `segment_length`.
-**Remedy:** check units and segment length; to solve a large world on
-purpose, raise `HARD_LIMIT`.
+any allocation when the predicted number of segments, or of unknowns of
+the dense nodal system, exceeds the engine's limit `Engine.max_segments`
+(default `groundfield.diagnostics.HARD_LIMIT`, 20 000), by every segment
+backend and by `solve_mutual_matrix` / `solve_mutual_field`. The usual
+cause is a geometry given in millimetres, a very small `segment_length`
+or a conductor `discretize_segment_length` in millimetres. **Remedy:**
+check units and segment lengths; to solve a large world on purpose,
+raise the limit of the engine, `Engine(max_segments=...)`.
 
 ## Post-processing
 

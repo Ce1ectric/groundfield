@@ -61,8 +61,44 @@ assert counts[0] < counts[1] < counts[2]
 -->
 
 Halving the segment length doubles $N$ and roughly quadruples the matrix
-work. A world above `HARD_LIMIT` segments is rejected with
+work. A world above the engine's limit is rejected with
 `ResourceLimitError` before anything large is allocated.
+
+### Raise or lower the resource limit
+
+The limit bounds the number of leakage segments and the size of the dense
+nodal system (current owners, nodes and branches, every conductor
+sub-piece included). It belongs to the engine: `max_segments=None` (the
+default) uses the module constant `HARD_LIMIT` (20 000), a positive
+integer sets the limit for this engine only. The dense reaction matrix
+takes $8N^2$ bytes, so check the memory of the machine before you raise
+the limit — 40 000 segments need 12 GiB for the matrix alone. A lower
+limit is a cheap guard for batch runs: a world that a unit error has
+blown up fails at once instead of filling the memory. Every segment
+backend, `solve_mutual_matrix` and `solve_mutual_field` honour the
+limit, `gf.diagnose` reports against it, and the result records it:
+
+```python
+from groundfield.diagnostics import ResourceLimitError, check_segment_budget
+
+guarded = gf.create_engine(segment_length=0.5, max_segments=200)
+try:
+    check_segment_budget(world, guarded)  # what guarded.solve(world) checks first
+except ResourceLimitError as error:
+    print("refused:", str(error).split(" (")[0])
+large = gf.create_engine(segment_length=0.5, max_segments=50_000)
+print("limit:", gf.expected_segments(world, large)["limit"])
+result = large.solve(world)
+print("checked against:", result.metadata["max_segments"])
+```
+
+<!-- doctest-check
+assert gf.expected_segments(world, guarded)["total"] > 200
+assert result.metadata["max_segments"] == 50_000
+-->
+
+Changing `groundfield.diagnostics.HARD_LIMIT` changes the default of
+every engine of the process; `max_segments` is the per-engine setting.
 
 ## 2. Choose the segment length from a convergence study
 
@@ -103,8 +139,12 @@ for kernel in (None, "point"):
 When you need the response to an injection at *each* of many earth
 electrodes — the mutual grounding-impedance matrix $Z_G$ of a site —
 `gf.solve_mutual_matrix` assembles the reaction matrix once and solves
-all excitations with it, instead of one full solve per electrode. It
-expects a world with the earth electrodes only (no cables between them):
+all excitations with it, instead of one full solve per electrode. Its
+off-diagonal is the galerkin reaction of the leakage distributions,
+which is reciprocal and reproduces a solve of the clusters joined by
+branches; probe points are not needed (`offdiag="probe"` samples the
+potential at points instead, the definition up to 0.15.0). It expects a
+world with the earth electrodes only (no cables between them):
 
 ```python
 electrodes_only = network()
@@ -138,11 +178,13 @@ assert np.allclose(z_g, z_g.T)
 - Put all frequencies into **one** engine: the soil problem is assembled
   once, and the earth-return correction of inductive conductors is built
   for the whole frequency set at once.
-- For networks with many inductive branches set
-  `sommerfeld_assembly="tabulated"`: the Sommerfeld correction is then
-  interpolated from tables per depth group instead of integrated per
-  segment pair. It agrees with the per-pair assembly to far below the
-  accuracy of the model:
+- The Sommerfeld correction of inductive conductors is interpolated
+  from tables per pair of depth groups by default
+  (`sommerfeld_assembly="tabulated"`, since 2026.11) instead of
+  integrated per segment pair (`"exact"`, the default up to 0.15.0).
+  The two agree to far below the accuracy of the model, and the tables
+  are the closer of the two to a converged reference; compare them on
+  your network:
 
 ```python
 inductive = network(inductive=True)
@@ -160,7 +202,9 @@ print(f"largest relative difference: {np.max(np.abs(z_assembly['tabulated'] / z_
 assert np.max(np.abs(z_assembly["tabulated"] / z_assembly["exact"] - 1.0)) < 1e-6
 -->
 
-The difference in run time grows with the number of inductive segments.
+The difference in run time grows with the number of inductive segments
+(on an 8-house TN network with an inductive PEN, 78 inductive branches
+and four frequencies: 16.6 s CPU per-pair, 1.0 s tabulated).
 `carson_series` is cheaper still, but it is a long-parallel-wire
 approximation: for cables that run at an angle to each other or are short
 it can be far off, so it is no general substitute for `sommerfeld` (see

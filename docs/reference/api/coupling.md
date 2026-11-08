@@ -68,7 +68,7 @@ $R' \approx \omega\mu_0/8$.
 
 | `earth_inductive_model` | Use for | Limits |
 |---|---|---|
-| `"sommerfeld"` (default) | quantitative $Z(f)$ of buried and overhead conductors, layered soil, short or bent conductors | cost grows with the number of segment pairs; `sommerfeld_assembly="tabulated"` for large networks |
+| `"sommerfeld"` (default) | quantitative $Z(f)$ of buried and overhead conductors, layered soil, short or bent conductors | cost grows with the number of segment pairs; the default tabulated assembly (`Engine.sommerfeld_assembly`) shares one table per pair of depth groups, `"exact"` integrates every pair |
 | `"carson_series"` | fast scoping of long parallel conductors over homogeneous soil | per-metre approximation; layered soil uses $\rho_1$ (warning); rejects segments in the surface plane |
 | `"perfect_mirror"` | diagnostic baseline only | frequency-independent image, far from the physics of buried conductors below 1 kHz |
 
