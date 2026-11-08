@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import platform
 import re
+import stat
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -281,3 +283,63 @@ def test_python_version_is_recorded_in_full() -> None:
     assert res.metadata["provenance"]["python"].startswith(
         f"{sys.version_info.major}.{sys.version_info.minor}."
     )
+
+
+# ---------------------------------------------------------------------
+# File permissions (audit A1-05)
+# ---------------------------------------------------------------------
+
+_POSIX = pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+
+
+@_POSIX
+@pytest.mark.finding("A1-05")
+@pytest.mark.parametrize("umask", [0o022, 0o077, 0o002], ids=oct)
+def test_result_file_mode_follows_the_umask(tmp_path: Path, umask: int) -> None:
+    from groundfield.io import save_result
+
+    old = os.umask(umask)
+    try:
+        path = save_result(
+            FieldResult(backend="hand", frequencies=[50.0]), tmp_path / "r.json"
+        )
+        plain = tmp_path / "plain.json"
+        plain.write_text("{}", encoding="utf-8")
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o666 & ~umask
+    assert stat.S_IMODE(path.stat().st_mode) == stat.S_IMODE(plain.stat().st_mode)
+
+
+@_POSIX
+@pytest.mark.finding("A1-05")
+def test_overwriting_keeps_the_mode_of_the_replaced_file(tmp_path: Path) -> None:
+    from groundfield.io import load_result, save_result
+
+    res = FieldResult(backend="hand", frequencies=[50.0])
+    path = save_result(res, tmp_path / "r.json")
+    path.chmod(0o640)
+    save_result(res, path, overwrite=True)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
+    assert load_result(path) == res
+
+
+def test_a_failed_write_leaves_the_target_and_no_temporary_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from groundfield.io import load_result, save_result
+    from groundfield.io import results as results_mod
+
+    old = FieldResult(backend="old", frequencies=[50.0])
+    path = save_result(old, tmp_path / "r.json")
+
+    def broken_replace(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(results_mod.os, "replace", broken_replace)
+    with pytest.raises(OSError, match="disk full"):
+        save_result(
+            FieldResult(backend="new", frequencies=[50.0]), path, overwrite=True
+        )
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["r.json"]
+    assert load_result(path) == old
