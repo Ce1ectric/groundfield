@@ -22,9 +22,9 @@ the ``N × N`` segment reaction matrix ``nG`` times. Here:
    (electrode, soil layer) for electrodes through the layer interface
    (10.15).
 3. The off-diagonal entries are either the reaction of the leakage
-   columns (``offdiag="galerkin"``, no further kernel evaluation) or the
-   probe-point potentials (``offdiag="probe"``, one probe kernel for all
-   columns).
+   columns (``offdiag="galerkin"``, the default, no further kernel
+   evaluation) or the probe-point potentials (``offdiag="probe"``, one
+   probe kernel for all columns).
 
 Discretisation, topology and the branch block come from the shared
 image-family pipeline (:mod:`groundfield.solver._pipeline`); only the
@@ -81,10 +81,30 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver.engine import Engine
     from groundfield.world import World
 
-__all__ = ["OffDiagonal", "solve_mutual_matrix", "solve_mutual_field"]
+__all__ = [
+    "OffDiagonal",
+    "ProbePointsIgnoredWarning",
+    "solve_mutual_matrix",
+    "solve_mutual_field",
+]
 
 #: Off-diagonal definition of :func:`solve_mutual_matrix` (10.34).
 OffDiagonal = Literal["probe", "galerkin"]
+
+_OFFDIAG_CHOICES: tuple[str, ...] = ("probe", "galerkin")
+
+
+class ProbePointsIgnoredWarning(UserWarning):
+    """``solve_mutual_matrix`` was given probe points it does not use.
+
+    Since the user decision Q15 of 2026.11 the off-diagonal of
+    :func:`solve_mutual_matrix` is ``offdiag="galerkin"`` whatever the
+    call. Up to 0.15.0 passing ``probe_points`` selected the potential at
+    those points as the off-diagonal; such a call now returns the galerkin
+    matrix, ignores the points and emits this warning. Pass
+    ``offdiag="probe"`` to keep the 0.15.0 definition, or drop the probe
+    points.
+    """
 
 
 # ---------------------------------------------------------------------
@@ -543,7 +563,7 @@ def solve_mutual_matrix(
     *,
     frequency_index: int = 0,
     symmetrize: bool = True,
-    offdiag: OffDiagonal | None = None,
+    offdiag: OffDiagonal = "galerkin",
     matrix_min_distance: float = 1e-3,
     matrix_max_terms: int | None = None,
     matrix_tol: float | None = None,
@@ -565,7 +585,7 @@ def solve_mutual_matrix(
       alphabetically first member: +0.150 % for an L-shaped footprint
       at ds = 2 m, -3.8 … -9.1 % for a rod split at the layer interface
       (review pass 10, 10.26).
-    * **Off-diagonal**, ``offdiag="galerkin"``: the reaction
+    * **Off-diagonal**, ``offdiag="galerkin"`` (default): the reaction
       ``Z[i, j] = T_iᵀ (K + S) T_j`` of the leakage columns ``T`` with
       the reaction matrix ``K`` and the concrete-shell diagonal ``S``.
       It is the current-weighted potential of cluster ``i`` under
@@ -575,10 +595,22 @@ def solve_mutual_matrix(
     * **Off-diagonal**, ``offdiag="probe"``: the potential at
       ``probe_points[i]`` under excitation ``j``, as
       :meth:`FieldResult.potential` returns it after a per-excitation
-      solve. A point potential is not the potential of cluster ``i``:
-      the matrix is not reciprocal (``Z[i, j]`` and ``Z[j, i]`` differ by
-      up to 35 % in two-layer soil, review pass 10, 10.34), and
-      ``symmetrize=True`` averages that asymmetry away.
+      solve — the definition of releases up to 0.15.0. A point potential
+      is not the potential of cluster ``i``: the matrix is not reciprocal
+      (``Z[i, j]`` and ``Z[j, i]`` differ by up to 35 % in two-layer soil,
+      review pass 10, 10.34), and ``symmetrize=True`` averages that
+      asymmetry away. On an AP1-like site (a station and twelve house
+      foundations, ds = 2 m, five soils) the symmetrised probe matrix
+      misses the input impedance of the joined network by -0.15 …
+      -0.88 %, and its off-diagonal entries differ from the galerkin
+      ones by 0.15 … 1.1 % (median) and up to 41 %; the galerkin matrix
+      reproduces the network solve to 1e-12.
+
+    The galerkin off-diagonal is the default of every call since the
+    user decision Q15 of 2026.11. Up to 0.15.0 passing ``probe_points``
+    selected the probe definition; such a call now returns the galerkin
+    matrix and ignores the points with a :class:`ProbePointsIgnoredWarning`
+    — pass ``offdiag="probe"`` to keep the 0.15.0 definition.
 
     Parameters
     ----------
@@ -596,24 +628,23 @@ def solve_mutual_matrix(
         Length-``nG`` list of electrode names, one per cluster ("gnode").
     probe_points
         ``(nG, 3)`` array of ``(x, y, depth)`` points in m, one per
-        anchor: required for ``offdiag="probe"``, rejected for
-        ``offdiag="galerkin"``.
+        anchor, used by ``offdiag="probe"`` only (required there). With
+        ``offdiag="galerkin"`` they are ignored, not validated, with a
+        :class:`ProbePointsIgnoredWarning`.
     frequency_index
         Index into ``engine.frequencies``. Default 0.
     symmetrize
         If ``True`` (default) return ``0.5 · (Z + Zᵀ)``.
     offdiag
-        ``"galerkin"`` or ``"probe"``, see above. ``None`` (default)
-        selects ``"probe"`` when ``probe_points`` is given (the call of
-        releases up to 0.15.0) and ``"galerkin"`` otherwise.
+        ``"galerkin"`` (default) or ``"probe"``, see above.
     matrix_min_distance, matrix_max_terms, matrix_tol
         Clamp distance in m and series controls of the probe-point
-        evaluation (``offdiag="probe"`` only). ``None`` (default) for the
-        series controls takes ``engine.image_max_terms`` /
-        ``engine.image_series_tol``, the controls
-        :meth:`FieldResult.potential` uses after a solve with the same
-        engine (before 2026.11 they were hard-coded to 100 / ``1e-6``,
-        review pass 10, 10.25).
+        evaluation (``offdiag="probe"`` only; the galerkin off-diagonal
+        evaluates no field). ``None`` (default) for the series controls
+        takes ``engine.image_max_terms`` / ``engine.image_series_tol``,
+        the controls :meth:`FieldResult.potential` uses after a solve with
+        the same engine (before 2026.11 they were hard-coded to 100 /
+        ``1e-6``, review pass 10, 10.25).
 
     Returns
     -------
@@ -624,13 +655,22 @@ def solve_mutual_matrix(
     ------
     ValueError
         If ``world`` has no soil model or no electrodes, if
-        ``probe_points`` does not fit ``offdiag``, or if ``offdiag`` is
-        unknown.
+        ``offdiag="probe"`` comes without ``probe_points`` of shape
+        ``(nG, 3)``, or if ``offdiag`` is unknown.
     BackendCapabilityError
         If the engine's backend is not the image family (a subclass of
         ``ValueError``; up to 2026.11 the backend was ignored, 10.34).
+    ResourceLimitError
+        If the problem exceeds ``engine.max_segments`` (default
+        :data:`groundfield.diagnostics.HARD_LIMIT`).
     KeyError
         If an entry of ``anchors`` is not an electrode in ``world``.
+
+    Warns
+    -----
+    ProbePointsIgnoredWarning
+        If ``probe_points`` are given with ``offdiag="galerkin"`` (the
+        default), the call of releases up to 0.15.0.
 
     Notes
     -----
@@ -648,9 +688,7 @@ def solve_mutual_matrix(
         raise ValueError("World has no soil model.")
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    if offdiag is None:
-        offdiag = "probe" if probe_points is not None else "galerkin"
-    if offdiag not in ("probe", "galerkin"):
+    if offdiag not in _OFFDIAG_CHOICES:
         raise ValueError(f"offdiag must be 'probe' or 'galerkin', got {offdiag!r}.")
 
     nG = len(anchors)
@@ -663,10 +701,22 @@ def solve_mutual_matrix(
                 f"probe_points must have shape ({nG}, 3), got {probe_points.shape}."
             )
     elif probe_points is not None:
-        raise ValueError(
-            "probe_points are not used with offdiag='galerkin'; pass "
-            "offdiag='probe' to sample the off-diagonal at points."
+        # user decision Q15 (2026-11-08): the galerkin off-diagonal is the
+        # default whatever the call; the probe points of a 0.15.0 call are
+        # ignored, not rejected, so the call keeps running.
+        from groundfield.solver.registry import warn_external
+
+        warn_external(
+            "solve_mutual_matrix: probe_points are ignored. The off-diagonal "
+            "is offdiag='galerkin' (the default since 2026.11): the reaction "
+            "of the leakage distributions, reciprocal, the matrix that "
+            "reproduces a solve of the clusters joined by branches. Up to "
+            "0.15.0 probe points selected the potential at them instead; "
+            "pass offdiag='probe' to keep that definition, or drop "
+            "probe_points.",
+            ProbePointsIgnoredWarning,
         )
+        probe_points = None
 
     problem = _prepare(world, engine, frequency_index, where="solve_mutual_matrix")
     disc, topo, arrays = problem.disc, problem.topo, problem.arrays

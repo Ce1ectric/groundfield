@@ -83,10 +83,9 @@ def _pair_zg(model: str, rho_c: float | None, *, rho_1: float = 30.0, **kw: obje
     engine = gf.create_engine(
         backend="image", segment_length=2.0, image_max_terms=500, kernel="point"
     )
-    probes = np.array([(0.0, 0.0, 0.0), (30.0, 0.0, 0.0)])
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)  # no registry entries
-        z = gf.solve_mutual_matrix(world, engine, anchors, probes)
+        z = gf.solve_mutual_matrix(world, engine, anchors)  # galerkin (Q15)
     return np.asarray(z), world
 
 

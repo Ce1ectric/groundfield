@@ -121,9 +121,9 @@ def test_mutual_matrix_explicit_series_controls_still_apply() -> None:
     probes = np.array([[0.0, 0.0, 0.0], [40.0, 0.0, 0.0]])
     with pytest.warns(SeriesTruncationWarning, match="solve_mutual"):
         Z_cut = gf.solve_mutual_matrix(
-            world, engine, ["a", "b"], probes, matrix_max_terms=10
+            world, engine, ["a", "b"], probes, offdiag="probe", matrix_max_terms=10
         )
-    Z = gf.solve_mutual_matrix(world, engine, ["a", "b"], probes)
+    Z = gf.solve_mutual_matrix(world, engine, ["a", "b"], probes, offdiag="probe")
     assert abs(Z_cut[0, 1] / Z[0, 1] - 1.0) > 1e-3
 
 

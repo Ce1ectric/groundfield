@@ -1,0 +1,27 @@
+# Stream DDEFAULTS — the user's answers Q15 / Q16 / Q17 of 2026-11-08
+# (defaults of solve_mutual_matrix and Engine). See ../README.md for the
+# format. Every bound below was measured on stream/ddefaults against the
+# branch start 1e587cc (evidence: /home/claude/deliver/evidence/ddefaults/).
+
+# --- Q15 (10.34): galerkin off-diagonal whatever the call -----------------
+# The four golden cases call solve_mutual_matrix with probe points (the
+# 0.15.0 call), which selected the probe definition. Now the probe points
+# are ignored (ProbePointsIgnoredWarning) and the off-diagonal is the
+# reciprocal galerkin reaction. The diagonal does not move. Measured
+# (q15_golden_mutual_moves.txt): Z_G norm-wise 8.16e-4 (both foundation
+# pairs), 8.83e-4 (three rods through h_1 = 1 m), 7.69e-4 (line kernel,
+# unsymmetrised); the largest single off-diagonal entry moves by 0.48 %,
+# 1.1 % and 5.9 % (the unsymmetrised probe matrix loses its asymmetry).
+
+[[change]]
+cases = [
+    "mutual_foundations_lumped_concrete",
+    "mutual_foundations_distributed_concrete",
+    "mutual_three_rods_crosslayer",
+    "line_mutual_two_layer",
+]
+quantities = ["Z_G"]
+findings = ["10.34"]
+reason = "User decision Q15: solve_mutual_matrix uses the reciprocal galerkin off-diagonal whatever the call; probe points without offdiag='probe' are ignored with a ProbePointsIgnoredWarning."
+min_rel_change = 3e-4
+max_rel_change = 2e-3

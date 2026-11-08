@@ -288,7 +288,7 @@ def test_mutual_matrix_without_identity_product(monkeypatch, soil) -> None:
     monkeypatch.setattr(np, "eye", spy)
     probes = np.array([[0.0, 0.0, 0.0], [12.0, 0.0, 0.0], [24.0, 0.0, 0.0]])
     Z = gf.solve_mutual_matrix(
-        w, gf.Engine(segment_length=0.5), ["r0", "r1", "r2"], probes
+        w, gf.Engine(segment_length=0.5), ["r0", "r1", "r2"], probes, offdiag="probe"
     )
     assert n_segments not in sizes
     assert np.all(np.isfinite(Z))

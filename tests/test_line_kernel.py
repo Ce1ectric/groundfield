@@ -255,7 +255,12 @@ def test_mutual_matrix_uses_the_line_kernel(soil) -> None:
     gf.create_electrode(w, "rod", name="b", position=(30.0, 0.0, 0.5), length=2.0)
     eng = gf.Engine(segment_length=0.5, kernel="line")
     Z = gf.solve_mutual_matrix(
-        w, eng, ["a", "b"], np.array([[0.0, 0, 0], [30.0, 0, 0]]), symmetrize=False
+        w,
+        eng,
+        ["a", "b"],
+        np.array([[0.0, 0, 0], [30.0, 0, 0]]),
+        symmetrize=False,
+        offdiag="probe",
     )
     w1 = w.model_copy(deep=True)
     gf.create_source(w1, attached_to="a", magnitude=1.0)

@@ -84,7 +84,7 @@ def test_mutual_matrix_diagonal_follows_the_owner_split() -> None:
     w.sources.clear()
     gf.create_electrode(w, "rod", name="far", position=(40.0, 0, 0.5), length=3.0)
     probes = np.array([[0.0, 0.0, 0.0], [40.0, 0.0, 0.0]])
-    Z = gf.solve_mutual_matrix(w, engine, ["r", "far"], probes, symmetrize=False)
+    Z = gf.solve_mutual_matrix(w, engine, ["r", "far"], symmetrize=False)
     assert Z[0, 0] == pytest.approx(z_solve, rel=1e-6)
     R = gf.solve_mutual_field(w, engine, ["r", "far"], probes)
     res = _rod_world(soil, split=False).solve(engine)
