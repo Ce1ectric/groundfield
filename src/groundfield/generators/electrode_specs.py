@@ -34,7 +34,8 @@ earth electrode.
 from __future__ import annotations
 
 import math
-from typing import Annotated, Literal, Optional, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, Optional, Self, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -353,13 +354,40 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
 
         Runs on construction, ``model_validate`` and JSON input; the
         default ``"lumped"`` (also in files written by 0.15.0) is silent.
-        Copies (``model_copy``) and pickles are not validated, so the
-        generators, which pass resolved specs on as copies, never repeat
-        the warning.
+        Pickles are not validated, and copies only warn when their
+        ``update`` sets the value (:meth:`model_copy`), so the generators,
+        which pass resolved specs on as copies, never repeat the warning.
         """
         if value != "lumped":
             warn_external(_CONCRETE_MODEL_DEPRECATION, DeprecationWarning)
         return value
+
+    def model_copy(
+        self, *, update: Optional[Mapping[str, Any]] = None, deep: bool = False
+    ) -> Self:
+        """Copy of the spec; warns when ``update`` sets ``concrete_model``.
+
+        Pydantic stores ``update`` without validation, so the deprecation
+        of :attr:`concrete_model` (user decision Q21) is checked here: an
+        ``update`` that sets a value other than ``"lumped"`` emits the
+        same :class:`DeprecationWarning` as the constructor. Copies that
+        leave the field alone (every copy the generators make) are silent.
+
+        Parameters
+        ----------
+        update
+            Field values to change (not validated, as in pydantic).
+        deep
+            Deep copy instead of a shallow one.
+
+        Returns
+        -------
+        FoundationElectrodeSpec
+            The copy (the receiver is not changed).
+        """
+        if update and update.get("concrete_model", "lumped") != "lumped":
+            warn_external(_CONCRETE_MODEL_DEPRECATION, DeprecationWarning)
+        return super().model_copy(update=update, deep=deep)
 
     @model_validator(mode="after")
     def _check_polygon(self) -> "FoundationElectrodeSpec":

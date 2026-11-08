@@ -368,6 +368,26 @@ def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
 
 # user decision Q21
 @pytest.mark.finding("10.12")
+def test_model_copy_that_sets_the_deprecated_value_warns() -> None:
+    """Pydantic does not validate ``model_copy(update=...)``; the spec checks
+    the deprecated field itself, as the engine does for its flat fields.
+    A copy that leaves the field alone stays silent."""
+    with pytest.warns(DeprecationWarning, match="concrete_model") as caught:
+        copied = _ring().model_copy(update={"concrete_model": "distributed"})
+    assert [w.filename for w in caught if "concrete_model" in str(w.message)] == [
+        __file__
+    ]
+    assert copied.concrete_model == "distributed"
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        again = copied.model_copy(update={"depth_m": 1.0}, deep=True)
+        _ring().model_copy(update={"concrete_model": "lumped"})
+    assert _concrete_model_warnings(caught) == []
+    assert again.concrete_model == "distributed" and again.depth_m == 1.0
+
+
+# user decision Q21
+@pytest.mark.finding("10.12")
 @pytest.mark.parametrize("how", ["omitted", "keyword", "model_validate", "json"])
 def test_default_concrete_model_is_accepted_silently(how: str) -> None:
     with warnings.catch_warnings(record=True) as caught:

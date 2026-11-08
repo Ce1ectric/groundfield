@@ -438,5 +438,6 @@ bare ring in homogeneous soil; `Engine.solve` and an assembly from
 flat `sommerfeld_*` fields of the engine: `"distributed"` keeps working
 and emits a `DeprecationWarning` at the user's line; the default
 `"lumped"` — also in the configuration JSON and pickles of 0.15.0 — is
-accepted silently; copies made by the generators do not repeat the
+accepted silently; a `model_copy` warns only when its `update` sets the
+deprecated value, so the copies made by the generators do not repeat the
 warning. Removal no earlier than 2027.5 (`tests/test_foundation_owners.py`).
