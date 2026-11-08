@@ -199,3 +199,49 @@ def test_top_level_exports_convergence_helpers() -> None:
     needed = {"convergence_study", "plot_convergence"}
     assert needed.issubset(set(gf.__all__))
     assert all(hasattr(gf, name) for name in needed)
+
+
+@pytest.mark.finding("A1-02")
+def test_convergence_study_shows_each_distinct_warning_once() -> None:
+    """The validating Engine.model_copy reset the 'shown once' registries.
+
+    Four steps of a shallow strip with the point kernel showed the same
+    ShallowSegmentWarning four times; a plain loop over the same engines
+    shows each distinct message once.
+    """
+    # audit A2S-08
+    import warnings
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(
+        w, "strip", name="s", start=(0.0, 0.0, 0.1), end=(10.0, 0.0, 0.1)
+    )
+    gf.create_source(w, attached_to="s")
+    shown: list[str] = []
+    original = warnings.showwarning
+
+    def hook(message, category, filename, lineno, file=None, line=None):  # noqa: ANN001, ANN202
+        shown.append(str(message))
+
+    engine = gf.Engine(segment_length=2.0, kernel="point")
+    with warnings.catch_warnings():
+        warnings.resetwarnings()
+        warnings.simplefilter("default")
+        warnings.showwarning = hook
+        try:
+            convergence_study(w, engine, segment_lengths=[2.0, 1.9, 1.8, 1.7])
+        finally:
+            warnings.showwarning = original
+    assert shown and len(shown) == len(set(shown)), shown
+    assert engine.segment_length == 2.0  # the original engine is untouched
+
+
+@pytest.mark.finding("A1-02")
+@pytest.mark.parametrize("bad", [float("inf"), float("nan"), -1.0])
+def test_convergence_study_rejects_non_finite_segment_lengths(bad: float) -> None:
+    # audit A2S-08 (the internal copy is not validated by the engine)
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="r", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="r")
+    with pytest.raises(ValueError, match="finite and strictly positive"):
+        convergence_study(w, gf.Engine(), segment_lengths=[1.0, bad])
