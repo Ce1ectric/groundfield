@@ -107,6 +107,11 @@ plugins:
         python:
           paths: [src]
           options:
+            # Renders the Sphinx roles (:class:`X`, :math:`x`) and
+            # `.. math::` blocks of the docstrings as autorefs and
+            # arithmatex math (finding 10.85); the source is unchanged.
+            extensions:
+              - scripts/griffe_rest_roles.py
             docstring_style: numpy
             show_source: true
             show_signature_annotations: true
