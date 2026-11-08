@@ -37,6 +37,7 @@ from typing import Any, Generic, Optional, TypeVar, Union
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
+from groundfield.generators._compat import PickleUpgrade
 from groundfield.generators.distributions import (
     Distribution,
 )
@@ -96,7 +97,7 @@ def _coerce_rng(
 # ---------------------------------------------------------------------
 
 
-class GeneratorConfig(BaseModel):
+class GeneratorConfig(PickleUpgrade, BaseModel):
     """Base class for generator configurations.
 
     Subclasses declare their parameters as Pydantic fields. Numerical
@@ -113,6 +114,11 @@ class GeneratorConfig(BaseModel):
       :class:`Distribution` field resolved to a concrete value via
       its ``.sample(rng)`` method. Nested :class:`GeneratorConfig`
       sub-fields are recursed into; lists are processed element-wise.
+
+    A config pickled by an earlier release unpickles with its renamed
+    fields moved to the current names (``_field_renames`` of the
+    subclass) and fields added since filled with their defaults
+    (:class:`~groundfield.generators._compat.PickleUpgrade`, audit A2G-07).
     """
 
     # JSON round-trip (with discriminated-union ``Distribution``

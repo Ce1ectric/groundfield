@@ -11,7 +11,9 @@ the wording of those warnings uniform:
   so configurations written by earlier releases still load;
 * :func:`take_renamed_kwargs` — the same for keyword arguments of methods;
 * :class:`DeprecatedKeyDict` — a ``dict`` whose deprecated keys stay
-  readable.
+  readable;
+* :class:`PickleUpgrade` and :func:`upgrade_pickled_state` — bring the
+  pickled state of a model written by an earlier release up to date.
 
 The module is private; nothing here is part of the public API.
 """
@@ -20,13 +22,15 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, ClassVar
 
 __all__ = [
     "REMOVAL_RELEASE",
     "DeprecatedKeyDict",
+    "PickleUpgrade",
     "rename_input_keys",
     "take_renamed_kwargs",
+    "upgrade_pickled_state",
     "warn_renamed",
 ]
 
@@ -181,3 +185,100 @@ class DeprecatedKeyDict(dict):
         if isinstance(key, str) and key in self._aliases:
             return super().__contains__(self._aliases[key])
         return super().__contains__(key)
+
+
+def upgrade_pickled_state(model: type, state: Any) -> Any:
+    """Bring the pickled state of a Pydantic model up to date.
+
+    Pydantic restores a pickled model from its ``__dict__`` without
+    running any validator, so the ``model_validator(mode="before")`` hooks
+    that map renamed fields of an input mapping (:func:`rename_input_keys`)
+    never see a pickle (audit A2G-07: a v0.15.0-pickled ``TnNetworkConfig``
+    unpickled and then failed in ``build()`` with ``AttributeError``).
+    This function applies the model's rename tables to the state instead:
+
+    * keys listed in ``model._field_renames`` (``old -> new``) move to the
+      new field name, also in the set of explicitly set fields (a value
+      stored under the new name wins);
+    * values listed in ``model._value_renames`` (``field -> {old: new}``)
+      are replaced (e.g. ``kind="star_kvs"``);
+    * fields missing from the state (added by a later release) get their
+      defaults, and keys that are no fields any more are dropped.
+
+    Parameters
+    ----------
+    model
+        The Pydantic model class being unpickled.
+    state
+        The state handed to ``__setstate__``.
+
+    Returns
+    -------
+    object
+        The upgraded state, or ``state`` itself when it is already current.
+    """
+    if not isinstance(state, dict) or not isinstance(state.get("__dict__"), dict):
+        return state
+    values: dict = state["__dict__"]
+    fields = model.model_fields
+    renames: Mapping[str, str] = getattr(model, "_field_renames", {})
+    value_renames: Mapping[str, Mapping[Any, Any]] = getattr(
+        model, "_value_renames", {}
+    )
+    if values.keys() == fields.keys() and not any(
+        _is_old_value(values[name], old) for name, old in value_renames.items()
+    ):
+        return state
+    upgraded: dict[str, Any] = {}
+    for key, value in values.items():
+        name = renames.get(key, key)
+        if name not in fields or (name != key and name in values):
+            continue
+        upgraded[name] = value
+    for name, info in fields.items():
+        if name not in upgraded and not info.is_required():
+            upgraded[name] = info.get_default(call_default_factory=True)
+    for name, old in value_renames.items():
+        if name in upgraded and _is_old_value(upgraded[name], old):
+            upgraded[name] = old[upgraded[name]]
+    fields_set = {
+        renames.get(key, key) for key in state.get("__pydantic_fields_set__") or ()
+    } & fields.keys()
+    ordered = {name: upgraded[name] for name in fields if name in upgraded}
+    return {**state, "__dict__": ordered, "__pydantic_fields_set__": fields_set}
+
+
+def _is_old_value(value: Any, old: Mapping[Any, Any]) -> bool:
+    try:
+        return value in old
+    except TypeError:  # unhashable value: never a renamed one
+        return False
+
+
+class PickleUpgrade:
+    """Mixin for Pydantic models: unpickle states of earlier releases.
+
+    Put it before :class:`pydantic.BaseModel` in the bases and list the
+    renames of the class in class variables; the first two feed the
+    class's ``model_validator(mode="before")`` for input mappings as well:
+
+    * ``_field_renames`` — ``{old_field: new_field}``;
+    * ``_value_renames`` — ``{field: {old_value: new_value}}``;
+    * ``_unpickle_as`` — on a deprecated alias class (e.g. ``KvsConfig``),
+      the current class its pickled instances become (an alias instance
+      would otherwise differ from the same configuration loaded from JSON
+      and keep the alias name in every new pickle).
+
+    ``__setstate__`` passes the state through
+    :func:`upgrade_pickled_state` first; a current state is used as is.
+    """
+
+    _field_renames: ClassVar[Mapping[str, str]] = {}
+    _value_renames: ClassVar[Mapping[str, Mapping[Any, Any]]] = {}
+
+    def __setstate__(self, state: Any) -> None:
+        current = type(self).__dict__.get("_unpickle_as")
+        if current is not None:
+            # Same fields and slots as the alias subclass it replaces.
+            object.__setattr__(self, "__class__", current)
+        super().__setstate__(upgrade_pickled_state(type(self), state))  # type: ignore[misc]

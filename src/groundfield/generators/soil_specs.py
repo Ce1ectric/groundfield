@@ -40,12 +40,16 @@ from __future__ import annotations
 
 import sys
 import warnings
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, ClassVar, Literal, Optional, Union
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from groundfield.generators._compat import rename_input_keys, warn_renamed
+from groundfield.generators._compat import (
+    PickleUpgrade,
+    rename_input_keys,
+    warn_renamed,
+)
 from groundfield.generators.distributions import AnyDistribution, Distribution
 from groundfield.soil.models import (
     HomogeneousSoil,
@@ -156,7 +160,7 @@ def _homogeneous_soil(
 # ---------------------------------------------------------------------
 
 
-class HomogeneousSoilSpec(BaseModel):
+class HomogeneousSoilSpec(PickleUpgrade, BaseModel):
     """Homogeneous soil with a single resistivity $\\rho$.
 
     Use as a sanity check (every layered backend collapses to this
@@ -172,10 +176,12 @@ class HomogeneousSoilSpec(BaseModel):
     )
     relative_permittivity: float = Field(default=10.0, gt=0.0)
 
+    _field_renames: ClassVar[dict[str, str]] = {"resistivity": "rho"}
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(data, {"resistivity": "rho"}, "HomogeneousSoilSpec")
+        return rename_input_keys(data, cls._field_renames, "HomogeneousSoilSpec")
 
     @property
     def resistivity(self) -> Union[float, Distribution]:
@@ -196,7 +202,7 @@ class HomogeneousSoilSpec(BaseModel):
         )
 
 
-class TwoLayerSoilSpec(BaseModel):
+class TwoLayerSoilSpec(PickleUpgrade, BaseModel):
     """Two-layer model — the default.
 
     Upper layer of resistivity $\\rho_1$ and thickness $h_1$ over a
@@ -233,7 +239,7 @@ class TwoLayerSoilSpec(BaseModel):
         )
 
 
-class SoilLayerSpec(BaseModel):
+class SoilLayerSpec(PickleUpgrade, BaseModel):
     """A single layer used by :class:`MultiLayerSoilSpec`.
 
     ``h=None`` marks the semi-infinite bottom layer (only valid as the
@@ -251,12 +257,15 @@ class SoilLayerSpec(BaseModel):
     )
     relative_permittivity: float = Field(default=10.0, gt=0.0)
 
+    _field_renames: ClassVar[dict[str, str]] = {
+        "resistivity": "rho",
+        "thickness_m": "h",
+    }
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data, {"resistivity": "rho", "thickness_m": "h"}, "SoilLayerSpec"
-        )
+        return rename_input_keys(data, cls._field_renames, "SoilLayerSpec")
 
     @property
     def resistivity(self) -> Union[float, Distribution]:
@@ -271,7 +280,7 @@ class SoilLayerSpec(BaseModel):
         return self.h
 
 
-class MultiLayerSoilSpec(BaseModel):
+class MultiLayerSoilSpec(PickleUpgrade, BaseModel):
     """Multi-layer horizontally stratified soil.
 
     The list ``layers`` is consumed top-down: the first entry is the

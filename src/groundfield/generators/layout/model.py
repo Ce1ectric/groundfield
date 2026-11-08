@@ -28,12 +28,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import Collection
-from typing import Optional
+from typing import ClassVar, Optional
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from groundfield.generators._compat import (
+    PickleUpgrade,
     rename_input_keys,
     take_renamed_kwargs,
     warn_renamed,
@@ -120,7 +121,7 @@ def _default_house_grounding() -> GroundingSystemSpec:
 # ---------------------------------------------------------------------
 
 
-class CabinetPlacement(BaseModel):
+class CabinetPlacement(PickleUpgrade, BaseModel):
     """One user-placed cable cabinet (German *KVS*).
 
     Attributes
@@ -140,6 +141,8 @@ class CabinetPlacement(BaseModel):
 class KvsPlacement(CabinetPlacement):
     """Deprecated alias of :class:`CabinetPlacement`."""
 
+    _unpickle_as: ClassVar[type] = CabinetPlacement
+
     def model_post_init(self, context: object, /) -> None:
         warn_renamed("KvsPlacement", "CabinetPlacement", stacklevel=5)
         super().model_post_init(context)
@@ -151,7 +154,12 @@ class KvsPlacement(CabinetPlacement):
 
 
 class LvNetworkLayout(
-    _RoutingMixin, _MeasurementMixin, _PenetrationMixin, _PlotMixin, BaseModel
+    _RoutingMixin,
+    _MeasurementMixin,
+    _PenetrationMixin,
+    _PlotMixin,
+    PickleUpgrade,
+    BaseModel,
 ):
     r"""Imperative LV network layout builder.
 
@@ -240,36 +248,12 @@ class LvNetworkLayout(
         ),
     )
 
+    _field_renames: ClassVar[dict[str, str]] = {"kvs_placements": "cabinet_placements"}
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data, {"kvs_placements": "cabinet_placements"}, "LvNetworkLayout"
-        )
-
-    def __setstate__(self, state: dict) -> None:
-        """Unpickle, also layouts pickled by v0.15.0.
-
-        A v0.15.0 pickle (``OrtsnetzLayout``) stores its cabinets under
-        ``kvs_placements``; they are moved to :attr:`cabinet_placements`
-        as plain :class:`CabinetPlacement` objects (audit L6: the layout
-        unpickled, but ``to_world`` raised ``AttributeError``).
-        """
-        values = state.get("__dict__")
-        if isinstance(values, dict) and "kvs_placements" in values:
-            values = dict(values)
-            legacy = values.pop("kvs_placements") or []
-            if "cabinet_placements" not in values:
-                values["cabinet_placements"] = [
-                    CabinetPlacement(name=p.name, position_xy=tuple(p.position_xy))
-                    for p in legacy
-                ]
-            fields_set = set(state.get("__pydantic_fields_set__") or ())
-            if "kvs_placements" in fields_set:
-                fields_set.discard("kvs_placements")
-                fields_set.add("cabinet_placements")
-            state = {**state, "__dict__": values, "__pydantic_fields_set__": fields_set}
-        super().__setstate__(state)
+        return rename_input_keys(data, cls._field_renames, "LvNetworkLayout")
 
     @property
     def kvs_placements(self) -> list[CabinetPlacement]:
@@ -1007,6 +991,8 @@ class LvNetworkLayout(
 
 class OrtsnetzLayout(LvNetworkLayout):
     """Deprecated alias of :class:`LvNetworkLayout`."""
+
+    _unpickle_as: ClassVar[type] = LvNetworkLayout
 
     def model_post_init(self, context: object, /) -> None:
         warn_renamed("OrtsnetzLayout", "LvNetworkLayout", stacklevel=5)

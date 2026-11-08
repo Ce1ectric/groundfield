@@ -76,7 +76,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import Literal, Optional, Union
+from typing import ClassVar, Literal, Optional, Union
 
 import numpy as np
 from pydantic import Field, model_validator
@@ -292,14 +292,14 @@ class CabinetConfig(GeneratorConfig):
         description="Per-cabinet grounding system.",
     )
 
+    _field_renames: ClassVar[dict[str, str]] = {
+        "quote_per_100_buildings": "count_per_100_buildings"
+    }
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data,
-            {"quote_per_100_buildings": "count_per_100_buildings"},
-            "CabinetConfig",
-        )
+        return rename_input_keys(data, cls._field_renames, "CabinetConfig")
 
     @property
     def quote_per_100_buildings(self) -> Union[float, Distribution]:
@@ -313,6 +313,8 @@ class CabinetConfig(GeneratorConfig):
 
 class KvsConfig(CabinetConfig):
     """Deprecated alias of :class:`CabinetConfig`."""
+
+    _unpickle_as: ClassVar[type] = CabinetConfig
 
     def model_post_init(self, context: object, /) -> None:
         warn_renamed("KvsConfig", "CabinetConfig", stacklevel=5)
@@ -530,14 +532,15 @@ class TnNetworkConfig(GeneratorConfig):
         ),
     )
 
+    _field_renames: ClassVar[dict[str, str]] = {
+        "kvs": "cabinets",
+        "source_magnitude_A": "source_magnitude_a",
+    }
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data,
-            {"kvs": "cabinets", "source_magnitude_A": "source_magnitude_a"},
-            "TnNetworkConfig",
-        )
+        return rename_input_keys(data, cls._field_renames, "TnNetworkConfig")
 
     @property
     def kvs(self) -> CabinetConfig:
