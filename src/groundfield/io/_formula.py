@@ -42,8 +42,9 @@ Python expression built from
   to an integer or fraction base or to the rational coefficient ``c`` of
   a product base ``c*f*...``, needs $q \le$ :data:`MAX_ROOT_DENOMINATOR`
   and (digits of the number) $\times\, q \le$ :data:`MAX_RADICAND_DIGITS`
-  (``12**(1/3)`` and ``(2*f)**(3/2)`` are fine, ``(10**300 - 1)**(63/64)``
-  is not; written as a float, ``2.0**(1/100)``, a number is not limited);
+  (``12**(1/3)`` and ``(2*f)**(3/2)`` are fine, a 300-digit integer under
+  ``**(63/64)`` is not; written as a float, ``2.0**(1/100)``, a number is
+  not limited);
 * calls ``sqrt(x)``, ``exp(x)`` and ``log(x)`` with exactly one
   positional argument; ``log`` may not appear inside the argument of
   ``exp``, because SymPy rewrites ``exp(c*log(x))`` as the power
@@ -80,11 +81,12 @@ Resource bounds
 SymPy evaluates some functions of numbers eagerly, in time that the
 bounds above do not limit: it simplifies a fractional power of an exact
 number by factorising the number, keeping a radicand of up to ``q - 1``
-times its digits (``(10**300 - 1)**(63/64)`` runs a primality test on
-about 19 000 digits, ``18**(10**30/(10**30 + 1))`` needs ``2**(10**30)``,
-products merge such powers and add their exponents), and its ``log`` of
-a complex number ``r + r*j`` takes the square root of ``2*r**2``. On the
-base of this rule set 15 such strings did not finish within 20 s. So
+times its digits (the 300-digit integer ``10**300 - 1`` under ``63/64``
+needs a primality test on about 19 000 digits, ``18**(10**30/(10**30 +
+1))`` needs ``2**(10**30)``, products merge such powers and add their
+exponents), and its ``log`` of a complex number ``r + r*j`` takes the
+square root of ``2*r**2``. Without the rules below, 15 strings of the
+formula corpus ran for more than 20 s each. So
 
 * no exact number is ever left under a fractional power: a fractional
   power of a symbol-free base is evaluated numerically, and the rational
@@ -297,10 +299,14 @@ def parse_impedance_formula(
     bounds; powers, exponentials and the common denominator of a sum are
     checked before they are computed; values come from a numeric shadow
     evaluation that visits every node once; and the bookkeeping is capped
-    at :data:`MAX_WORK` steps. So the time and memory a formula costs,
-    accepted or rejected, are bounded by the size limits (audit 1 of the
-    calendar release found sums and products inside those limits that
-    took 13 s to 105 s).
+    at :data:`MAX_WORK` steps. No exact number is left under a fractional
+    power and ``log`` inside ``exp`` is rejected, so SymPy never
+    factorises a number or rewrites ``exp(c*log(x))`` as a power. So the
+    time and memory a formula costs, accepted or rejected, are bounded by
+    the size limits (audit 1 of the calendar release found sums and
+    products inside those limits that took 13 s to 105 s, the
+    groundinsight stream rational powers of large integers that ran for
+    more than 20 s).
     """
     names = _check_symbol_names(symbols)
     src = _normalise(text)
