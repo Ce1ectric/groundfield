@@ -52,13 +52,13 @@ Results computed with an older version can differ from the current ones. This
 table lists every release that moved numbers on purpose; the release notes
 give the details.
 
-| Release | What moved | Size | Who is affected |
+| Release | What moved | Size of the change, or of the error it removed | Who is affected |
 |---|---|---|---|
-| 2026.11.0 | default line-source kernel, return currents and measurement loop, electrodes through a layer interface, concrete shells, floating passive clusters, `solve_mutual_matrix`, touch voltages, rho-f fits and exports, `carson_series` and other inductive kernels, `fem`, generator geometry | from round-off to a factor of several (see *Numbers that change* below) | nearly every study: AP1 catalogue, touch-voltage assessments, rho-f exports, inductive and measurement studies |
-| 0.15.0 | `fem`, layered `mom_sommerfeld`, `coupling.layered_green`, the `image` family for unequal segment lengths, `references.pollaczek`, two `references.dwight1936` formulas, `rho_f_standard` with dead frequencies | `fem` up to −79 % before; image family up to +12 %; `mom_sommerfeld` kernel sign errors | layered and `fem` studies, mixed-length geometries, reference comparisons |
+| 2026.11.0 | default line-source kernel, return currents and measurement loop, electrodes through a layer interface, concrete shells, floating passive clusters, `solve_mutual_matrix`, touch voltages, rho-f fits and exports, `carson_series` and other inductive kernels, `fem`, generator geometry | from round-off to a complete change of simulated measurement readings (see *Numbers that change* below) | nearly every study: AP1 catalogue, touch-voltage assessments, rho-f exports, inductive and measurement studies |
+| 0.15.0 | `fem`, layered `mom_sommerfeld`, `coupling.layered_green`, the `image` family for unequal segment lengths, `references.pollaczek`, two `references.dwight1936` formulas, `rho_f_standard` with dead frequencies | `fem` errors up to −79 % removed; image family up to +12 %; `mom_sommerfeld` kernels of the wrong sign removed | layered and `fem` studies, mixed-length geometries, reference comparisons |
 | 0.14.1 | exported groundinsight formulas of vector fits | 28 % at 16.7 Hz in the test case | BusTypes exported from fits with a negative imaginary residue |
-| 0.13.0 | default `earth_inductive_model` (`sommerfeld`), two-layer inductive kernel, grids discretised with a half-integer number of segments per span | grid resistance was 1.97× to 2.89×; layer attribution of the reactance | inductive studies, grid electrodes |
-| 0.11.0 | multiport matrices with unequal segment lengths, layer-2 field points, `sommerfeld` and `carson_series` inductive results, the series truncation criterion, vector fits with complex residues | layer-2 potentials +7 % / +25 % before; Carson integrals −36 % / +67 % | layered studies, inductive studies, rho-f fits |
+| 0.13.0 | default `earth_inductive_model` (`sommerfeld`), two-layer inductive kernel, grids discretised with a half-integer number of segments per span | grid resistance was 1.97× to 2.89× too high; layer attribution of the reactance | inductive studies, grid electrodes |
+| 0.11.0 | multiport matrices with unequal segment lengths, layer-2 field points, `sommerfeld` and `carson_series` inductive results, the series truncation criterion, vector fits with complex residues | layer-2 potential errors of +7 % and +25 % removed; Carson integrals were −36 % and +67 % off | layered studies, inductive studies, rho-f fits |
 | 0.5.0 | order of `FieldResult.frequencies` for a non-increasing frequency list | order only | sweeps over unsorted frequency lists |
 
 ## [Unreleased]
@@ -367,6 +367,10 @@ is named.
   of 0.39–2.23 s.
 - ⚠ **One passivity check (10.40):** the export and `check_passivity` check 0 Hz
   to twice the highest fitted frequency; fits that passed may now fail.
+- ⚠ **Hand-written formulas (10.01):** roots and logarithms of numbers parse to
+  floats (values move by at most 3.6e-16); `log` inside `exp` and fractional
+  powers of large exact numbers are rejected (write the number as a float).
+  groundfield's exporters write neither.
 - **`rho_at_fit` (10.84)** is the resistivity of the upper layer for layered
   soil.
 - **CSV (10.69, 10.73):** provenance header, a `frequency_hz` column, no
@@ -392,8 +396,9 @@ is named.
   `groundfield.generators.layout`.
 - **English names (10.69):** see *Deprecated*; generated element names
   (`trafo_*`, `kvs_*`, `house_*`) are unchanged.
-- **Overpass:** retries on HTTP 503 honour `Retry-After`; `max_retries` at
-  most 5; response cap 16 MiB.
+- **Overpass:** retries on HTTP 503 honour `Retry-After`; `max_retries` is at
+  most 5; the response cap is 16 MiB (pass `max_response_bytes` for wider
+  areas).
 
 **API and performance**
 
