@@ -127,7 +127,13 @@
   resistivity 2ρ₁ρ₂/(ρ₁ + ρ₂), and the near-singular interface image of the
   layered correction is a Galerkin integral: symmetric to ~1e-8, and a rod
   through h₁ changes by less than 0.01 % per halving of ds (was up to 0.22 %).
-  Tests: `tests/test_reciprocity.py`.
+  The interface image matters most for horizontal wires just below h₁: a ring
+  (r = 3 m) 5 cm below the interface of 100 over 1000 Ω·m now gives
+  55.6–55.7 Ω at every ds from 0.5 to 0.025 m; the point kernel (and `mom`,
+  and the line kernel before) gave 29.7 Ω at ds = 0.5 m (−46 %), converging to
+  54.7 Ω only at ds = 0.025 m. Keep ds well below 2|z − h₁| with
+  `kernel="point"`. Tests: `tests/test_reciprocity.py`,
+  `tests/test_cross_layer_line_kernel.py`.
 - **`image_2layer` with a layer stack (10.48):** a `MultiLayerSoil` with two
   distinct layers raised a bare `TypeError` after passing the capability check;
   it now solves its canonical two-layer form, three distinct layers raise
