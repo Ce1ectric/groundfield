@@ -1,0 +1,21 @@
+# Stream fix2solver (audit round 2 fixes: solver, geometry, diagnostics).
+#
+# No stored quantity moves, so this file declares no change. Checked with
+# GF_GOLDEN_STRICT=1 against the snapshot of the stream's base
+# (release/calver 30a122d) after every commit: all stored cases
+# bit-identical.
+#
+# * A2S-01 (interface cuts kept): no stored case has a wire part closer than
+#   two wire radii beyond an interface; the new short-part branches of the
+#   Galerkin self term (L/a < 0.25) and of the parallel-pair integral (a
+#   segment shorter than 1e-3 of the axis distance) are not reached by any
+#   regular segment.
+# * A2S-07 (cuts where the resistivity changes): no stored case has an
+#   equal-resistivity two-layer soil.
+# * A2S-03 (floating core factorised once): the stored mutual cases are
+#   either all bonded groups (one shared system, identical matrices) or
+#   single rods without a floating core (per-anchor path kept).
+# * Point form of the cross-layer path (docb item): stored point-kernel
+#   cases have rods only (vertical segments, never guarded).
+# * A2E-2, A2C-4, A2S-02, A2S-04, A2S-05, A2S-06, A2S-08: guards, warnings
+#   and validation; no numbers involved.
