@@ -24,6 +24,15 @@ limits a result, the reference documentation states the limit.
   0.125 m to 2 m, not monotonically in the segment length (point kernel −0.6 %
   to −1.9 %). A quadrupole term for every image would remove the residual at
   roughly twice the cost of the series assembly (10.28).
+- **One current per wire line for grids and stars in the image family.**
+  The image family solves one uniform current per electrode; a
+  `grid_mesh` or star electrode is therefore 3.9 % (20 m × 20 m, 4 × 4
+  meshes), 5.3 % (40 m × 40 m, 8 × 8) and 4.3 % (4-arm star) above the
+  per-segment `mom` solution, and its near-field potentials are off by tens
+  of per cent. The generators build mesh foundations as one electrode per
+  wire line since 2026.11 (+0.3 … +0.6 %); doing the same inside the solver
+  for every grid and star would move their results by −3 … −5 % (second
+  adversarial audit, A2G-04).
 - **Line kernel on the cross-layer path.** For electrodes that cross the layer
   interface (ADR-0007) the homogeneous part of the reaction matrix uses the line
   kernel, the layered correction stays in point form (10.28).

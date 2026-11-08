@@ -34,9 +34,14 @@ shows what agrees with independent references and how well.
 
 - **Uniform current per electrode (image family).** `image` and
   `image_2layer` assume a uniform current per unit length on each
-  electrode (and soil layer). Impedances are accurate; surface
+  electrode (and soil layer). Impedances of rods and rings are within
+  about 1 % of the per-segment `mom` solution, those of grids and stars a
+  few per cent above it (default line kernel: 20 m × 20 m grid with
+  4 × 4 meshes +3.9 %, 40 m × 40 m with 8 × 8 meshes +5.3 %, 4-arm star
+  +4.3 %); the generators build mesh foundations as one electrode per
+  wire line, which brings them to +0.3 … +0.6 %. Surface
   potentials near grids, meshes, stars, strip ends and bonded
-  multi-electrode clusters are not: for a 20 m × 20 m grid with 4 × 4
+  multi-electrode clusters are worse: for a 20 m × 20 m grid with 4 × 4
   meshes, 1 m outside a corner, touch voltage +19 % and step voltage
   −21 % against the per-segment `mom` solution; a 4-arm star +7 % /
   −10 %; rings, rods and closed loops within 1 %
