@@ -186,11 +186,11 @@ the thin-wire model has no end face (audit D2A-01, D2A-02).
 - Concrete shells are rejected; distributed and inductive conductors are
   solved as lumped branches, and `resistance_model="skin"` is ignored, each
   with a `BackendCapabilityWarning`.
-- **Not covered** (silent): an interface just below a deep horizontal
-  electrode but deeper than both the hemisphere radius and the
-  half-extent — a 2 m ring 0.1 m above $h_1 = 2$ m in 1000/30 Ω·m reads
-  +34 %, 7 mm above it +250 %; a 4 m strip 0.1 m above it +51 %. Rods are
-  hardly affected (+5.7 % with the interface 1 mm below the tip).
+- **Not covered** (silent): an interface just below a horizontal electrode
+  that is buried almost as deep as its half-extent, with the interface
+  deeper than both the hemisphere radius and the half-extent — a 2 m ring
+  at 1.9 m over $h_1 = 2$ m in 1000/30 Ω·m reads +34 %, at 1.993 m +250 %.
+  Rods are hardly affected (+5.7 % with the interface 1 mm below the tip).
 - The size notice of `Engine.solve` ("solve time may run from seconds to
   minutes") and its resource limit count the segments of the integral
   engines, which `fem` does not use: its problem is the mesh of each

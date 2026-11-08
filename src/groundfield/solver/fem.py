@@ -50,9 +50,10 @@ conducts no better than the electrodes', −44 % … −78 % for a rod that
 reaches into a conductive top layer by 1 µm … 8 cm, −16 % … +16 % for a
 more resistive layer below a 10 m ring within its radius); a
 :class:`FemReductionWarning` names every such reason. An interface just
-below a deep horizontal electrode but deeper than the hemisphere radius
-and the half-extent is not covered by any rule (+34 % for a 2 m ring
-0.1 m above $h_1$ = 2 m in 1000/30 Ω·m; see the fem engine page).
+below a horizontal electrode buried almost as deep as its half-extent,
+deeper than the hemisphere radius and the half-extent, is not covered by
+any rule (+34 % for a 2 m ring at 1.9 m over $h_1$ = 2 m in 1000/30 Ω·m;
+see the fem engine page).
 Conforming axisymmetric rod and ring models without the reduction are
 the planned replacement.
 
