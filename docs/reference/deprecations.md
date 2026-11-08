@@ -45,7 +45,9 @@ Passing an old and its new name together raises `ValueError`.
 The modules `groundfield.solver.cim` (with `fit_complex_images`) and
 `groundfield.solver.bem` stay importable.
 
-## Generators (English names, 10.69)
+## Generators
+
+English names (10.69):
 
 | Deprecated (v0.15.0) | Replacement |
 |---|---|
@@ -73,6 +75,12 @@ The older module alias `groundfield.generators.tn_ortsnetz`
 (`TnOrtsnetzGenerator`, `TnOrtsnetzConfig`) keeps working with a
 warning as before.
 
+Fields (user decision Q21):
+
+| Deprecated (v0.15.0) | Replacement | Note |
+|---|---|---|
+| `FoundationElectrodeSpec.concrete_model` | none — drop the argument | no longer a shell model: both values put the same concrete shell on every wire of the foundation. It only chooses the current owners of an axis-aligned `style="ring"` rectangle, one for the whole ring (`"lumped"`, the default) or one per side (`"distributed"`), at most 0.16 % apart up to aspect ratio 4 and 0.67 % up to 50 over the soils of the AP1 grid, bare or in concrete of 30 to 1 000 Ω·m (0.06 % and 0.3 % for a bare ring in homogeneous soil). `"distributed"` warns; `"lumped"` and the JSON and pickles of 0.15.0 load silently |
+
 ## Removed in 2026.11.0
 
 Not deprecated but removed, because they were tools rather than
@@ -87,7 +95,8 @@ checkout), and the commands `major|minor|patch` of the release tool
 The deprecated names of this page are exercised by the test suite:
 `tests/test_soil_models.py`, `tests/test_engine_options.py`,
 `tests/test_solve_entry_points.py`, `tests/test_concrete_shell_registry.py`,
-`tests/test_engine_aliases.py` and `tests/test_generator_naming.py`. A
+`tests/test_engine_aliases.py`, `tests/test_generator_naming.py` and
+`tests/test_foundation_owners.py`. A
 quick check of one entry per group:
 
 ```python

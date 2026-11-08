@@ -55,7 +55,11 @@ in the penetration rate (a house equipped at 10 % is also equipped at
 
 **Foundations and PEN cables.** A mesh foundation (`style="mesh"`) is
 one wire electrode per mesh line at every orientation (`<name>`,
-`<name>_w<j>`, bonded into one cluster), bare or encased. The image
+`<name>_w<j>`, bonded into one cluster), bare or encased; an encased
+foundation (`concrete_rho_ohm_m`) carries the concrete shell on every
+wire, its cross-braces included (DIN 18014, see
+[concrete shells](../../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
+The image
 family solves one uniform current per electrode. Against the
 per-segment `mom` solution (100 Ω·m, 1 m segments; `mom` uses the point
 kernel), one current per wire is +1.1 % with the default line kernel
@@ -64,8 +68,11 @@ meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
 +1.5 … +3.1 %) and depended on the orientation.
 `electrode_currents[<name>]` and `grounding_impedance(<name>)` therefore
 refer to the first wire; use `cluster_impedance` or the sum over the
-wires for the foundation. An axis-aligned `"lumped"` ring stays one
-`grid_mesh` electrode and a polygon outline one closed wire; an outline
+wires for the foundation. An axis-aligned ring stays one `grid_mesh`
+electrode and a polygon outline one closed wire; the deprecated
+`concrete_model="distributed"` makes the axis-aligned ring one wire per
+side, at most 0.16 % apart up to aspect ratio 4 (drop the argument, see
+[Deprecations](../deprecations.md)); an outline
 narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with a
 warning, for both `foundation_outline="ombr"` and `"polygon"`.
 

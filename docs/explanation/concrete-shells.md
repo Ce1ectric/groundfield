@@ -79,15 +79,23 @@ inflated radius.
 Since 2026.11 both `concrete_model` settings of the generators produce the
 same representation:
 
-1. every encased perimeter wire carries $C$ and the radius $r_b$;
-2. cross-braces and rods stay bare ($r_a$, $C = 0$);
+1. every wire of an encased foundation carries $C$ and the radius $r_b$ —
+   the perimeter and, for a mesh foundation, the cross-braces (see
+   [Cross-braces of mesh foundations](#cross-braces-of-mesh-foundations));
+2. rods and the other electrodes of a site stay bare ($r_a$, $C = 0$);
 3. no shell resistance on PEN service drops (it would count twice);
 4. substation and cabinet electrodes get $C$ when their specification is
    encased;
 5. `concrete_model` only chooses the owner granularity of an axis-aligned
    ring foundation (`"lumped"`: one grid-mesh owner, `"distributed"`: one
    owner per wire); the two agree to well below the 2 % criterion of
-   ADR-0012 (`tests/test_concrete_one_mechanism.py`).
+   ADR-0012 (`tests/test_concrete_one_mechanism.py`): at most 0.16 % up to
+   aspect ratio 4 and 0.67 % up to 50 over the soils of the AP1 grid, bare
+   or in concrete of 30 to 1 000 Ω·m. The field is therefore deprecated
+   (user decision of 2026.11, removal no earlier than 2027.5):
+   `"distributed"` still works and warns, the default `"lumped"` and the
+   files of 0.15.0 load silently; drop the argument (see
+   [Deprecations](../reference/deprecations.md)).
 
 `World.concrete_shell_corrections` is deprecated (it still loads and warns
 at solve; removal no earlier than 2027.5). The golden case
@@ -95,6 +103,52 @@ at solve; removal no earlier than 2027.5). The golden case
 matrix: its diagonal rises because the lumped shell now reaches
 `solve_mutual_matrix`; the release notes give the magnitudes for AP1-type
 sites.
+
+## Cross-braces of mesh foundations
+
+A mesh foundation (`FoundationElectrodeSpec(style="mesh")`, the
+generators' default for buildings) joins its perimeter with cross-braces.
+DIN 18014 lays the foundation earth electrode in the concrete together
+with its connections, so the braces are encased like the perimeter: every
+wire of an encased mesh carries $r_b$ and $C$ (user decision of 2026.11;
+the earlier rule kept the braces bare). The shell resistance of the whole
+foundation is $C/L$ over every encased wire, the per-wire shells $C/L_j$
+in parallel; `concrete_shell(spec, encased_length_m=...)` in
+`groundfield.generators.materialise` reports it.
+
+The rule matters as soon as the concrete is drier than the soil. Bare
+braces are a bare electrode inside the concrete: however dry the
+concrete, the foundation could not exceed the spreading resistance of its
+braces alone (9.60 Ω for the house mesh below in 100 Ω·m). Encased, the
+shell term grows with $\rho_c$; for $\rho_c \gg \rho$ the current spreads
+over the wires in proportion to their length and
+$Z \to C/L + Z_\text{soil}$, with $Z_\text{soil}$ = 4.105 Ω for a uniform
+current over the 60 m of the house mesh. Change of the input impedance
+when the braces are encased as well:
+
+| Mesh, soil | $\rho_c$ = 50 | 100 | 150 | 1 000 | 5 000 Ω·m |
+|---|---|---|---|---|---|
+| house, 100 Ω·m | −1.1 % | −0.03 % | +1.5 % | +47 % | +307 % |
+| house, 30 / 100 Ω·m, $h_1$ = 5 m | +1.3 % | +6.2 % | +12 % | +154 % | +861 % |
+| `medium_industry`, 100 Ω·m | −1.3 % | −0.03 % | +1.6 % | +46 % | +298 % |
+| `medium_industry`, 30 / 100 Ω·m, $h_1$ = 5 m | +1.0 % | +4.8 % | +9.7 % | +120 % | +671 % |
+
+House mesh: the generators' default (10 m, 2 × 2 cells, 0.8 m deep,
+$r_a$ = 5 mm, $t$ = 5 cm); `medium_industry`: 20 m, 3 × 3 cells, same
+wire and cover. Default engine (image family, line kernel, 0.5 m
+segments). Concrete wetter than the soil lowers $Z$ a little (the wire
+grows to $r_b$); concrete as conductive as the soil changes nothing but the
+line kernel's self term. Two methods agree to 4e-16: `Engine.solve` of the
+generated world and an independent assembly — the wires as separate
+shell-free electrodes of radius $r_b$, their mutual matrix from
+`solve_mutual_matrix`, $C/L_j$ added to its diagonal, the wires bonded
+($1/(\mathbf{1}^\mathsf{T} Z^{-1} \mathbf{1})$). With the point kernel an
+encased mesh in concrete of the soil's resistivity equals the bare mesh to
+round-off.
+
+Affected are generated mesh foundations with `concrete_rho_ohm_m` set.
+Worlds without a shell, ring and building-outline foundations — the AP1
+catalogue among them — and the golden cases do not change.
 
 ## Converting between the conventions
 
@@ -108,9 +162,10 @@ material description, the coefficient and a lumped resistance:
 | `shell_resistance_from_coefficient(electrode, C=None)` | $R = C/L$ | the lumped resistance a coefficient represents |
 
 $L$ is `electrode.total_length()`, all wires of the electrode. A lumped
-resistance of a site should be spread over its encased electrodes only —
-spreading it over rods and braces was the error behind the mixed-site
-deviations of finding 10.13. With $\rho_c = 100$ Ω·m, 5 cm cover and a
+resistance of a site belongs to its encased wires only — every wire of
+the foundation, braces included, but not the bonded rods; spreading it
+over the rods was the error behind the mixed-site deviations of finding
+10.13. With $\rho_c = 100$ Ω·m, 5 cm cover and a
 5 mm wire, $C = (100/2\pi)\ln 11 \approx 38.2$ Ω·m, i.e. 3.8 Ω for 10 m of
 encased wire.
 
@@ -118,7 +173,7 @@ encased wire.
 
 | Condition | Statement |
 |---|---|
-| Geometry | thin shell around a thin wire; the shell must not overlap a neighbouring wire's shell |
+| Geometry | thin shell around a thin wire; the shell must not overlap a neighbouring wire's shell along its length (at the corners and crossings of a foundation the shells of the meeting wires share a region of the size of $r_b$, which each wire counts as its own) |
 | Current | radial through the shell; the series decomposition holds below 1 kHz for foundation sizes |
 | Concrete | homogeneous $\rho_c$ per electrode; moisture states span about 30 Ω·m (wet) to tens of kΩ·m (dry), see ADR-0012 |
 | Field quantities | the surface potential is that of the bare wire of radius $r_b$ fed through the shell; the shell resistance itself is a series element |

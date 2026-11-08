@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient); see the amendment at the end of this document |
+| **Status** | Accepted — amended 2026.11 (review pass 10: one mechanism, the shell coefficient; user decisions Q20: braces encased, Q21: `concrete_model` deprecated); see the amendment at the end of this document |
 | **Date** | 2026-05-15 |
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield.generators.electrode_specs.FoundationElectrodeSpec`
@@ -390,10 +390,12 @@ Decision:
    is met exactly (`tests/test_concrete_shell_coefficient.py`,
    `tests/test_concrete_one_mechanism.py`).
 2. **Generators.** Both `concrete_model` settings put $C$ and the radius
-   $r_b$ on the encased perimeter wires; braces and rods stay bare; no
+   $r_b$ on every wire of an encased foundation, the cross-braces of a mesh
+   foundation included (user decision Q20, below); rods stay bare; no
    shell resistance on PEN drops; substation and cabinet electrodes get
    $C$ when their specification is encased. `concrete_model` only chooses
-   one or several owners for an axis-aligned ring foundation.
+   one or several owners for an axis-aligned ring foundation and is
+   deprecated (user decision Q21, below).
 3. **Registry deprecated.** `World.concrete_shell_corrections` is read by
    no solver and warns at solve (removal no earlier than 2027.5).
 4. **Conversion helpers** in `groundfield.geometry.electrodes`:
@@ -404,3 +406,38 @@ Decision:
 
 The *API additions* and *Variant 1* sections above describe the
 mechanism of 0.15.0 and are superseded by this amendment.
+
+### User decision Q20 (2026.11): the cross-braces are encased
+
+A foundation earth electrode per DIN 18014 lies in the concrete together
+with its connections. The first version of this amendment kept the
+cross-braces of a mesh foundation bare, like the rods (finding 10.13);
+since the user decision Q20 every wire of an encased foundation carries
+$r_b$ and $C$, and the lumped shell resistance of the foundation is $C$
+over its whole encased length. Bare braces were a bare electrode inside
+the concrete: the foundation could not exceed the spreading resistance of
+its braces alone, however dry the concrete. For the generators' default
+house mesh (10 m, 2 × 2 cells, 0.8 m, $r_a$ = 5 mm, $t$ = 5 cm) in
+100 Ω·m encasing the braces changes $Z$ by +1.5 / +47 / +307 % at
+$\rho_c$ = 150 / 1 000 / 5 000 Ω·m; `Engine.solve` and an independent
+assembly from `solve_mutual_matrix` agree to 4e-16
+(`tests/test_concrete_one_mechanism.py`, more cases on the
+[concrete-shell page](../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
+Ring and building-outline foundations, among them the AP1 catalogue, do
+not change.
+
+### User decision Q21 (2026.11): `concrete_model` is deprecated
+
+Since item 2 the field no longer selects a shell model; it only chooses
+one owner (`"lumped"`, one grid mesh) or one per side (`"distributed"`)
+for an axis-aligned `style="ring"` rectangle. The two differ by at most
+0.16 % up to aspect ratio 4 and 0.67 % up to 50 over the 39 soils of the
+AP1 grid, bare or in concrete of 30, 100 or 1 000 Ω·m (0.06 % and 0.3 % for a
+bare ring in homogeneous soil; `Engine.solve` and an assembly from
+`solve_mutual_matrix` agree to 9e-16). The field is deprecated like the
+flat `sommerfeld_*` fields of the engine: `"distributed"` keeps working
+and emits a `DeprecationWarning` at the user's line; the default
+`"lumped"` — also in the configuration JSON and pickles of 0.15.0 — is
+accepted silently; a `model_copy` warns only when its `update` sets the
+deprecated value, so the copies made by the generators do not repeat the
+warning. Removal no earlier than 2027.5 (`tests/test_foundation_owners.py`).

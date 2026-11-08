@@ -102,22 +102,16 @@ class World(BaseModel):
             "entries emits a DeprecationWarning. Still loaded from JSON. "
             "Mapping from **galvanic-cluster anchor** name to the total "
             "lumped concrete-shell series resistance "
-            "$R_\\text{shell,total}$ in Ω of that cluster, populated by "
-            "foundation electrodes built with a "
-            "``FoundationElectrodeSpec`` whose ``concrete_rho_ohm_m`` is "
-            "set (ADR-0012 V1). ``GroundingSystemSpec.build_at`` writes "
-            "each electrode's own contribution first and then folds the "
-            "site's entries onto the anchor once the bonds are in place, "
-            "so the key is always the anchor even when the foundation is "
-            "not the first electrode of its spec list. Several encased "
-            "electrodes in one cluster combine **in parallel** — each "
-            "leaks through its own radial shell into the soil — so the "
-            "folded value is $(\\sum_i 1/R_i)^{-1}$. Consumed by "
-            "``TnNetworkGenerator._build_pen_backbone`` and "
-            "``_build_radial_trunk`` to inject the resistance on the "
-            "corresponding PEN service drop. The field is additive — "
-            "worlds built without the OSM / concrete path keep an empty "
-            "dict and behave as before."
+            "$R_\\text{shell,total}$ in Ω of that cluster (ADR-0012 V1). "
+            "Up to 0.15.0 the generators filled it for every encased "
+            '``FoundationElectrodeSpec`` (``concrete_model="lumped"``), '
+            "folded onto the site's anchor, several encased electrodes "
+            "**in parallel** ($(\\sum_i 1/R_i)^{-1}$), and the TN "
+            "generator put the value on the PEN service drop. Since "
+            "2026.11 no generator writes it: the shell is the coefficient "
+            "on every wire of the foundation (cross-braces included), and "
+            "``concrete_model`` is deprecated as well. Worlds without "
+            "entries keep an empty dict."
         ),
     )
 
@@ -541,21 +535,16 @@ class World(BaseModel):
     def reset_concrete_corrections(self) -> dict[str, float]:
         """Clear and return the ADR-0012 V1 concrete-shell registry.
 
-        The :attr:`concrete_shell_corrections` dict accumulates one entry
-        per foundation-electrode anchor that the generator pipeline
-        materialised with a non-``None`` ``concrete_rho_ohm_m`` field
-        (see ADR-0012, V1 "lumped" path). Re-using a single :class:`World`
-        across several :meth:`TnNetworkGenerator.build` calls — the
-        canonical pattern for Monte-Carlo studies that flip
-        ``concrete_rho_ohm_m`` per realisation — would otherwise leak
-        stale shell resistances from earlier samples into later ones.
-
-        The helper is the explicit, opt-in counterpart of the "build,
-        solve, throw away the world" pattern: when the user *does*
-        want to keep the world but re-seed the corrections, calling
-        ``world.reset_concrete_corrections()`` immediately before
-        ``generator.build(world=...)`` (or before mutating the
-        generator config and re-building) produces a clean slate.
+        Up to 0.15.0 the :attr:`concrete_shell_corrections` dict
+        accumulated one entry per foundation-electrode anchor that the
+        generator pipeline materialised with a non-``None``
+        ``concrete_rho_ohm_m`` field (ADR-0012, V1 "lumped" path), and a
+        :class:`World` re-used across several builds leaked stale shell
+        resistances into later samples. Since 2026.11 the registry is
+        deprecated, no generator writes it and no solver reads it (the
+        shell is the per-length coefficient of the encased wires); the
+        helper clears entries of worlds loaded from 0.15.0 JSON, which
+        would otherwise warn at every solve.
 
         Returns
         -------

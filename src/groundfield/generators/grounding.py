@@ -183,7 +183,7 @@ def _maybe_concrete_shell(
             }
         )
     perimeter = float(perimeter_m) if perimeter_m is not None else 2.0 * (dx + dy)
-    return concrete_shell(spec, perimeter_m=perimeter)
+    return concrete_shell(spec, encased_length_m=perimeter)
 
 
 def _resolve_spec(spec: ElectrodeSpec, rng: np.random.Generator) -> ElectrodeSpec:

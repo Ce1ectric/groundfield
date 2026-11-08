@@ -193,8 +193,12 @@ def shell_coefficient_from_resistance(
     soil. Spread uniformly over the electrode's wire, it becomes the
     per-length coefficient :math:`C = R\,L` with the total wire length
     :math:`L` (:meth:`~_ElectrodeBase.total_length`); the image family then
-    adds exactly :math:`R` per ampere to the electrode potential. The
-    generators use this conversion for ``concrete_model="lumped"``.
+    adds exactly :math:`R` per ampere to the electrode potential. Use it
+    when a shell is known as a lumped resistance (a measured value, or
+    the ``World.concrete_shell_corrections`` entry of a 0.15.0 world);
+    the generators compute :math:`C` from the concrete resistivity with
+    :func:`concrete_shell_coefficient` and put it on every wire of an
+    encased foundation, cross-braces included.
 
     Parameters
     ----------

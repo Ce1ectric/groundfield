@@ -34,11 +34,13 @@ earth electrode.
 from __future__ import annotations
 
 import math
-from typing import Annotated, Literal, Optional, Union
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, Optional, Self, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from groundfield.generators.distributions import AnyDistribution
+from groundfield.solver.registry import DEPRECATION_REMOVAL, warn_external
 
 FoundationStyle = Literal["ring", "mesh"]
 """How a :class:`FoundationElectrodeSpec` is realised.
@@ -60,6 +62,23 @@ __all__ = [
     "ElectrodeSpec",
     "rod_circle",
 ]
+
+# User decision Q21 (2026.11). The numbers are the largest relative
+# difference of the input impedance between the two values (evidence of
+# stream d2gen: ring_owner_granularity.out, ring_owner_ap1_soils.out,
+# ring_owner_wet_concrete.out).
+_CONCRETE_MODEL_DEPRECATION = (
+    "FoundationElectrodeSpec.concrete_model is deprecated. It no longer "
+    "selects a concrete-shell model (both values put the same shell on the "
+    "wires); it only chooses the uniform-current owners of an axis-aligned "
+    "style='ring' rectangle: one per side for 'distributed', one for the "
+    "whole ring for 'lumped' (the default). The two differ by at most "
+    "0.16 % up to aspect ratio 4 and 0.67 % up to aspect ratio 50 over the "
+    "soils of the AP1 grid, bare or in concrete of 30 to 1000 ohm m (0.06 % "
+    "and 0.3 % for a bare ring in homogeneous soil). The field will be "
+    "removed no earlier than groundfield "
+    f"{DEPRECATION_REMOVAL}; drop the argument."
+)
 
 
 # ---------------------------------------------------------------------
@@ -172,20 +191,25 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
 
     The image family solves one uniform leakage current per electrode
     (an *owner*); the owners of a foundation depend only on its
-    structure and on :attr:`concrete_model`, never on the orientation,
-    on how the outline is described or on whether a shell is configured
-    (audit A2G-04). A ``"mesh"`` foundation is one straight wire per mesh
-    line (a polyline split at the crossings), bonded to the first: one
-    owner over perimeter and braces was 2.4 % (2 × 2) to 3.7 % (4 × 4)
-    high against ``mom`` (one current per segment) with the default line
-    kernel, one owner per wire is 1.1 % high (0.3–0.5 % with the point
-    kernel, the kernel of ``mom``). A ``"ring"`` foundation is one
-    straight wire per side with ``concrete_model="distributed"``, and
-    with ``"lumped"`` one
+    structure (and, for an axis-aligned ring, on the deprecated
+    :attr:`concrete_model`), never on the orientation, on how the outline
+    is described or on whether a shell is configured (audit A2G-04). A
+    ``"mesh"`` foundation is one straight wire per mesh line (a polyline
+    split at the crossings), bonded to the first: one owner over
+    perimeter and braces was 2.4 % (2 × 2) to 3.7 % (4 × 4) high against
+    ``mom`` (one current per segment) with the default line kernel, one
+    owner per wire is 1.1 % high (0.3–0.5 % with the point kernel, the
+    kernel of ``mom``). A ``"ring"`` foundation is one
     :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
-    ``n_x = n_y = 1`` (one owner) when axis-aligned, one wire per side
-    when rotated (at most 0.06 % apart up to aspect ratio 4). A
-    ``polygon_xy_m`` outline is one closed polyline for both models.
+    ``n_x = n_y = 1`` (one owner) when axis-aligned and one straight wire
+    per side when rotated; ``concrete_model="distributed"`` (deprecated)
+    makes the axis-aligned ring one wire per side as well, at most 0.16 %
+    apart up to aspect ratio 4 (0.06 % for a bare ring in homogeneous
+    soil). A ``polygon_xy_m`` outline is one closed polyline.
+
+    With a shell (:attr:`concrete_rho_ohm_m`) every wire of the
+    foundation, the cross-braces of a mesh included, is encased (DIN
+    18014, user decision Q20); see ADR-0012.
 
     For an asymmetric footprint set ``size_xy_m`` instead of
     ``size_m`` (when both are given, ``size_xy_m`` wins).
@@ -276,7 +300,12 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "— right for ring/strip/rod electrodes which always run "
             "in trenches, wrong for foundation electrodes which sit "
             "inside a Streifenfundament (DIN 18014). Set this field "
-            "to enable the concrete-shell model defined in ADR-0012."
+            "to enable the concrete-shell model defined in ADR-0012: "
+            "every wire of the foundation, the cross-braces of a "
+            "``style='mesh'`` foundation included, gets the outer radius "
+            "r_b = r_a + t and the shell coefficient "
+            "C = rho_c / (2 pi) ln(r_b / r_a) (user decision Q20 of "
+            "2026.11; up to then the braces stayed bare)."
         ),
     )
     concrete_thickness_m: Union[float, AnyDistribution] = Field(
@@ -295,27 +324,73 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     concrete_model: Literal["lumped", "distributed"] = Field(
         default="lumped",
         description=(
-            "Uniform-current owners of a perimeter-only foundation. "
-            "Both values put the Sunde-shell coefficient "
-            "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every encased "
-            "(perimeter) wire, whose radius becomes r_b = r_a + t; the "
-            "solver adds C / ds to the diagonal of each segment, i.e. "
-            "the lumped shell resistance C / L in series with the wire. "
-            "Cross-braces are not encased. "
-            '``"lumped"`` (default): an axis-aligned ring foundation is '
-            "one grid-mesh owner (exactly the lumped series resistance "
-            "C / L_perim); a rotated one is one owner per side. "
-            '``"distributed"``: one owner per side at every angle, so the '
-            "current may distribute unevenly over the perimeter (at most "
-            "0.06 % from one owner up to aspect ratio 4, 0.3 % at 10 to "
-            "50). The choice holds with and without a shell, so a shell "
-            "that is electrically absent changes nothing. Mesh foundations "
-            "are one owner per wire and polygon outlines one closed wire "
-            "for both values (audit A2G-04). Up to 0.15.0 the lumped shell "
-            "was a registry entry that only the TN generator's PEN service "
-            "drops read (review findings 10.12-10.14)."
+            "**Deprecated** since 2026.11 (user decision Q21; removal no "
+            'earlier than 2027.5): drop the argument. ``"distributed"`` '
+            "still works and emits a DeprecationWarning; the default "
+            '``"lumped"`` is accepted silently, also from the JSON and '
+            "pickles of 0.15.0. The field no longer selects a shell model: "
+            "both values put the Sunde-shell coefficient "
+            "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every wire of an "
+            "encased foundation, cross-braces included, whose radius "
+            "becomes r_b = r_a + t; the solver adds C / ds to the diagonal "
+            "of each segment, i.e. the lumped shell resistance C / L in "
+            "series with the wire. It only chooses the uniform-current "
+            "owners of an axis-aligned ``style='ring'`` rectangle: "
+            '``"lumped"`` one grid-mesh owner for the whole ring, '
+            '``"distributed"`` one owner per side. The two differ by at '
+            "most 0.16 % up to aspect ratio 4 and 0.67 % up to 50 over the "
+            "soils of the AP1 grid, bare or in concrete of 30 to 1000 Ω·m "
+            "(0.06 % and 0.3 % for a bare ring in homogeneous soil). "
+            "Rotated rings (one owner per side), mesh "
+            "foundations (one owner per wire) and polygon outlines (one "
+            "closed wire) are the same for both values (audit A2G-04). Up "
+            "to 0.15.0 the lumped shell was a registry entry that only the "
+            "TN generator's PEN service drops read (review findings "
+            "10.12-10.14)."
         ),
     )
+
+    @field_validator("concrete_model")
+    @classmethod
+    def _warn_deprecated_concrete_model(cls, value: str) -> str:
+        """Warn for the non-default value (user decision Q21).
+
+        Runs on construction, ``model_validate`` and JSON input; the
+        default ``"lumped"`` (also in files written by 0.15.0) is silent.
+        Pickles are not validated, and copies only warn when their
+        ``update`` sets the value (:meth:`model_copy`), so the generators,
+        which pass resolved specs on as copies, never repeat the warning.
+        """
+        if value != "lumped":
+            warn_external(_CONCRETE_MODEL_DEPRECATION, DeprecationWarning)
+        return value
+
+    def model_copy(
+        self, *, update: Optional[Mapping[str, Any]] = None, deep: bool = False
+    ) -> Self:
+        """Copy of the spec; warns when ``update`` sets ``concrete_model``.
+
+        Pydantic stores ``update`` without validation, so the deprecation
+        of :attr:`concrete_model` (user decision Q21) is checked here: an
+        ``update`` that sets a value other than ``"lumped"`` emits the
+        same :class:`DeprecationWarning` as the constructor. Copies that
+        leave the field alone (every copy the generators make) are silent.
+
+        Parameters
+        ----------
+        update
+            Field values to change (not validated, as in pydantic).
+        deep
+            Deep copy instead of a shallow one.
+
+        Returns
+        -------
+        FoundationElectrodeSpec
+            The copy (the receiver is not changed).
+        """
+        if update and update.get("concrete_model", "lumped") != "lumped":
+            warn_external(_CONCRETE_MODEL_DEPRECATION, DeprecationWarning)
+        return super().model_copy(update=update, deep=deep)
 
     @model_validator(mode="after")
     def _check_polygon(self) -> "FoundationElectrodeSpec":
