@@ -6,10 +6,10 @@ repo_name: Ce1ectric/groundfield
 edit_uri: edit/main/docs/
 copyright: Copyright &copy; 2026 Christian Ehlert
 
-# Fail the build on any warning (broken nav link, unresolved cross-reference,
-# malformed docstring). Applies to ``mkdocs build``, ``mkdocs serve`` and the
-# ``mkdocs gh-deploy`` step in ``.github/workflows/docs.yml`` alike, so a
-# docstring regression can no longer ship to GitHub Pages unnoticed.
+# Fail the build on any warning (broken nav entry or link, unresolved
+# cross-reference, malformed docstring). Applies to `mkdocs build`,
+# `mkdocs serve` and the `mike deploy` step of .github/workflows/docs.yml
+# alike, so a docstring regression cannot ship unnoticed.
 strict: true
 
 theme:
@@ -66,11 +66,10 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path: ["."]
       check_paths: true
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+  # No Mermaid fence: Material loads mermaid.js from unpkg.com for every
+  # page with a diagram (third-party script, finding 10.08). Draw
+  # diagrams as text or as vendored images instead.
+  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -78,6 +77,30 @@ markdown_extensions:
 
 plugins:
   - search
+  # Tutorials are Jupyter notebooks under docs/tutorials/, executed by
+  # tests/test_tutorials.py and committed with their outputs; the build
+  # renders the stored outputs and never runs a kernel (execute: false).
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+      # Checked before `include`: keeps the plugin from parsing every
+      # Markdown page with jupytext to look for notebook front matter.
+      ignore: ["*.md"]
+      execute: false
+      # Markdown cells go through the MkDocs pipeline of this file:
+      # relative links to other pages are resolved and checked by the
+      # strict build, `$...$` math is rendered like on every other page
+      # and `[FieldResult][groundfield.FieldResult]` cross-references
+      # work. (The default "jupyter" mode leaves `../x.md` links broken.)
+      markdown_cell_processor: mkdocs
+      # Offer the .ipynb file for download next to the rendered page.
+      include_source: true
+      # The site's own MathJax 3.2.2 (vendored, see extra_javascript) is
+      # on every page and is reused by the plugin. The URL below is only
+      # the plugin's fallback when no MathJax script is on a page; it
+      # points at the vendored copy so that no third-party script can be
+      # requested (finding 10.08).
+      mathjax_version: 3
+      custom_mathjax_url: javascripts/vendor/mathjax/tex-mml-chtml.js
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -92,6 +115,7 @@ plugins:
             show_root_heading: true
             show_root_full_path: false
             heading_level: 2
+
 extra_javascript:
   # MathJax configuration first, then MathJax itself. MathJax 3.2.2 is
   # vendored (docs/javascripts/vendor/mathjax/, byte-identical to the npm
@@ -103,67 +127,113 @@ extra_javascript:
   - javascripts/vendor/mathjax/tex-mml-chtml.js
 
 extra:
+  # Versioned documentation (decision 7): one docs version per calendar
+  # release, deployed with mike by .github/workflows/docs.yml. The alias
+  # `latest` points at the newest release, `dev` follows main.
+  version:
+    provider: mike
+    default: latest
+    alias: true
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/Ce1ectric/groundfield
 
+# Diátaxis layout (review pass 10, Appendix B). Pages are owned by the
+# docs streams of release 2026.11: getting started and reference (DOC-A),
+# tutorials and how-to guides (DOC-B), explanation and ADRs (DOC-C),
+# changelog, roadmap and audit history (DOC-D).
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Quickstart: quickstart.md
-  - Concepts: concepts.md
-  - Performance: performance.md
-  - Examples:
-      - Overview: examples/index.md
-      - "01 — Quick start (two single electrodes)": examples/01_quickstart_two_electrodes.md
-      - "02 — Comparison of the solver engines": examples/02_engine_comparison.md
-      - "03 — Multi-layer soil models": examples/03_multilayer_soil.md
-      - "04 — Interconnected grounding system": examples/04_interconnected_grounding.md
-      - "05 — Analysing inductive coupling": examples/05_inductive_coupling.md
-      - "06 — Create a TN-Model": examples/06_tn_model.md
-      - "07 — Comparison of measurement distances": examples/07_measurement_distance.md
-      - "08 — OSM pipeline with simulation results": examples/08_osm_pipeline.md
-      - "09 — All plots in action": examples/09_plot_gallery.md
-  - Engine theory:
-      - Overview: engines/index.md
-      - "image — homogeneous": engines/image.md
-      - "image_2layer — Tagg / Sunde": engines/image_2layer.md
-      - "image_nlayer — dispatcher": engines/image_nlayer.md
-      - "cim — Complex Image Method": engines/cim.md
-      - "mom — Galerkin MoM": engines/mom.md
-      - "mom_sommerfeld — direct quadrature": engines/mom_sommerfeld.md
-      - "bem — collocation BEM": engines/bem.md
-      - "fem — axisymmetric FEM": engines/fem.md
-  - API reference:
-      - Overview: api/index.md
-      - World: api/world.md
-      - Soil: api/soil.md
-      - Geometry: api/geometry.md
-      - Conductors: api/conductors.md
-      - Sources: api/sources.md
-      - Boundary: api/boundary.md
-      - Solver: api/solver.md
-      - Coupling: api/coupling.md
-      - Postprocess: api/postprocess.md
-      - Diagnostics: api/diagnostics.md
-      - Validation: api/validation.md
-      - IO: api/io.md
-      - Geo / OSM: api/geo.md
-      - Generators: api/generators.md
-      - References: api/references.md
-  - Architecture decisions:
-      - "ADR-0001 — 2-layer method": adr/0001-two-layer-method.md
-      - "ADR-0002 — Engine family": adr/0002-engine-family.md
-      - "ADR-0003 — Distributed conductor": adr/0003-distributed-conductor-model.md
-      - "ADR-0004 — Inductive coupling": adr/0004-inductive-coupling.md
-      - "ADR-0005 — Carson earth-return": adr/0005-carson-earth-return.md
-      - "ADR-0006 — Sommerfeld earth-return": adr/0006-sommerfeld-earth-return.md
-      - "ADR-0007 — Cross-layer electrodes": adr/0007-cross-layer-electrodes.md
-      - "ADR-0008 — groundinsight bridge": adr/0008-groundinsight-bridge.md
-      - "ADR-0009 — World generators": adr/0009-world-generators.md
-      - "ADR-0010 — Tier-0 performance": adr/0010-tier0-performance.md
-      - "ADR-0011 — OSM building footprints": adr/0011-osm-building-footprints.md
-      - "ADR-0012 — Foundation concrete encasement": adr/0012-foundation-concrete-encasement.md
-  - Tooling:
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Tutorials:
+      - tutorials/index.md
+      - "T01 First grounding impedance": tutorials/T01_first_grounding_impedance.ipynb
+      - "T02 Layered soil": tutorials/T02_layered_soil.ipynb
+      - "T03 Interconnected systems and impedances": tutorials/T03_interconnected_systems_and_impedances.ipynb
+      - "T04 Frequency response and rho-f": tutorials/T04_frequency_response_and_rho_f.ipynb
+      - "T05 Export to groundinsight": tutorials/T05_export_to_groundinsight.ipynb
+      - "T06 TN network, synthetic and OSM": tutorials/T06_tn_network_synthetic_and_osm.ipynb
+      - "T07 Fall-of-potential measurement": tutorials/T07_fall_of_potential_measurement.ipynb
+      - "T08 Touch and step voltage": tutorials/T08_touch_and_step_assessment.ipynb
+      - "T09 Choosing an engine, convergence": tutorials/T09_choosing_an_engine_and_convergence.ipynb
+      - "T10 Reproducible studies": tutorials/T10_reproducible_studies.ipynb
+  - How-to guides:
+      - how-to/index.md
+      # DOC-B: the how-to pages (how-to/*.md) are listed here at integration.
+  - Explanation:
+      - explanation/index.md
+      - Concepts: explanation/concepts.md
+      - Engines:
+          - explanation/engines/index.md
+          - "image": explanation/engines/image.md
+          - "image_2layer": explanation/engines/image_2layer.md
+          - "mom": explanation/engines/mom.md
+          - "mom_sommerfeld": explanation/engines/mom_sommerfeld.md
+          - "fem (experimental)": explanation/engines/fem.md
+      - Source kernels: explanation/kernels.md
+      - Earth return: explanation/earth-return.md
+      - Concrete shells: explanation/concrete-shells.md
+      - Sources and measurement: explanation/sources-and-measurement.md
+      - Validation: explanation/validation.md
+      - Performance and scaling: explanation/performance.md
+      - Architecture decisions:
+          - "ADR-0001 Two-layer method": adr/0001-two-layer-method.md
+          - "ADR-0002 Engine family": adr/0002-engine-family.md
+          - "ADR-0003 Distributed conductor": adr/0003-distributed-conductor-model.md
+          - "ADR-0004 Inductive coupling": adr/0004-inductive-coupling.md
+          - "ADR-0005 Carson earth return": adr/0005-carson-earth-return.md
+          - "ADR-0006 Sommerfeld earth return": adr/0006-sommerfeld-earth-return.md
+          - "ADR-0007 Cross-layer electrodes": adr/0007-cross-layer-electrodes.md
+          - "ADR-0008 groundinsight bridge": adr/0008-groundinsight-bridge.md
+          - "ADR-0009 World generators": adr/0009-world-generators.md
+          - "ADR-0010 Tier-0 performance": adr/0010-tier0-performance.md
+          - "ADR-0011 OSM building footprints": adr/0011-osm-building-footprints.md
+          - "ADR-0012 Foundation concrete encasement": adr/0012-foundation-concrete-encasement.md
+          # DOC-C: ADR-0013 (calendar versioning), ADR-0014 (backend
+          # registry and shared pipeline), ADR-0015 (exact line-source
+          # kernel) are listed here at integration.
+  - Reference:
+      - reference/index.md
+      - API:
+          - reference/api/index.md
+          - Factories: reference/api/factories.md
+          - World: reference/api/world.md
+          - Soil: reference/api/soil.md
+          - Geometry: reference/api/geometry.md
+          - Conductors: reference/api/conductors.md
+          - Sources: reference/api/sources.md
+          - Boundary: reference/api/boundary.md
+          - Solver: reference/api/solver.md
+          - Backend registry: reference/api/registry.md
+          - Coupling: reference/api/coupling.md
+          - Postprocess: reference/api/postprocess.md
+          - Diagnostics: reference/api/diagnostics.md
+          - Validation: reference/api/validation.md
+          - Result files: reference/api/results-io.md
+          - IO and groundinsight: reference/api/io.md
+          - Geo / OSM: reference/api/geo.md
+          - Generators: reference/api/generators.md
+          - References: reference/api/references.md
+      - Glossary (EN / DE): reference/glossary.md
+      - Units and conventions: reference/units-and-conventions.md
+      - Warnings and errors: reference/warnings.md
+      - Known limitations: reference/known-limitations.md
+      - Deprecations: reference/deprecations.md
+  - Project:
+      - Changelog: changelog.md
+      - Roadmap: roadmap.md
+      - Audit history:
+          - audit/index.md
+          - "Pass 1": audit/pass-01.md
+          - "Pass 2": audit/pass-02.md
+          - "Pass 3": audit/pass-03.md
+          - "Pass 4": audit/pass-04.md
+          - "Pass 5": audit/pass-05.md
+          - "Pass 6": audit/pass-06.md
+          - "Pass 7": audit/pass-07.md
+          - "Pass 8": audit/pass-08.md
+          - "Pass 9": audit/pass-09.md
+          - "Pass 10": audit/pass-10.md
       - "Knowledge graph (graphify)": graphify.md
-  - Changelog & Roadmap: changelog.md
