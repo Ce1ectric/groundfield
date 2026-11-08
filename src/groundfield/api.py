@@ -749,6 +749,7 @@ def create_engine(
     options: Mapping[str, Any] | None = None,
     sommerfeld_assembly: Literal["exact", "tabulated"] | None = None,
     max_segments: int | None = None,
+    warn_segments: int | None = None,
 ) -> Engine:
     """Create a configured :class:`~groundfield.Engine`.
 
@@ -821,6 +822,12 @@ def create_engine(
         segments and of nodal unknowns it solves (:attr:`Engine.max_segments
         <groundfield.Engine.max_segments>`). Default: the module constant
         ``groundfield.diagnostics.HARD_LIMIT`` (20 000).
+    warn_segments
+        Size of the soft notice of the engine: at or above this number of
+        leakage segments or nodal unknowns the solve warns that it may take
+        minutes (:attr:`Engine.warn_segments
+        <groundfield.Engine.warn_segments>`). Default: the module constant
+        ``groundfield.diagnostics.SOFT_LIMIT`` (5 000).
 
     Returns
     -------
@@ -853,6 +860,7 @@ def create_engine(
         "image_series_tol": image_series_tol,
         "sommerfeld_assembly": sommerfeld_assembly,
         "max_segments": max_segments,
+        "warn_segments": warn_segments,
     }
     engine_kwargs.update({k: v for k, v in explicit.items() if v is not None})
     if kernel is not None:

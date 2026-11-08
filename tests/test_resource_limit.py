@@ -279,6 +279,8 @@ def test_warn_segments_is_a_validated_engine_field() -> None:
     # user decision Q31
     assert gf.Engine().warn_segments is None
     assert gf.Engine(warn_segments=12_000).warn_segments == 12_000
+    assert gf.create_engine(warn_segments=321).warn_segments == 321
+    assert gf.create_engine().warn_segments is None
     for bad in (0, -5, 2.5, "many", True, False):
         with pytest.raises(ValueError):
             gf.Engine(warn_segments=bad)

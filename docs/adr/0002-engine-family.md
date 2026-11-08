@@ -304,7 +304,10 @@ amendments no longer described the code. Decisions of release 2026.11:
 3. **`fem` is experimental.** It solves one equivalent hemisphere per
    cluster; it is not a cross-check of the integral engines (10.23). It
    raises `BackendCapabilityError` when an electrode reaches a layer its
-   hemisphere does not, warns (`FemReductionWarning`) for multi-electrode
+   hemisphere does not, and when its hemisphere spans a layer that no
+   electrode of the cluster touches and that conducts better than every
+   layer they touch (the result would be far too low, −97 … +5 %; user
+   decision Q23), warns (`FemReductionWarning`) for multi-electrode
    clusters, several clusters and interfaces within the electrode's
    extent, and keeps its near-field resolution for deep stacks (10.49).
    This revokes the role "independent volume-PDE cross-check" given to

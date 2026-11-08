@@ -79,7 +79,8 @@ Errors stop the solve before anything expensive happens:
 `BackendCapabilityError` (the backend cannot represent the world; the
 message names backends that can), `ResourceLimitError` (more segments
 or nodal unknowns than the engine's limit, `Engine(max_segments=...)`,
-by default `groundfield.diagnostics.HARD_LIMIT`), and `ValueError` /
+by default `groundfield.diagnostics.HARD_LIMIT`; the notice that a solve
+may take minutes moves with `Engine(warn_segments=...)`), and `ValueError` /
 `KeyError` for invalid input with the closest valid names.
 
 ## Handle warnings in scripts and tests
