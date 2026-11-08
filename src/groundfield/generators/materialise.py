@@ -24,9 +24,10 @@ No random numbers are drawn here: every value of a plan is concrete.
 Order of construction
 ---------------------
 ``materialise_plan`` builds sites, measurement sites, junctions,
-branches, measurement leads and sources, each list in plan order. The
-order fixes the order of ``world.electrodes`` / ``world.conductors``
-(and therefore the canonical world JSON), not the physics.
+instrument terminals, branches, measurement leads and sources, each list
+in plan order. The order fixes the order of ``world.electrodes`` /
+``world.junctions`` / ``world.conductors`` (and therefore the canonical
+world JSON), not the physics.
 
 Concrete shell (ADR-0012)
 -------------------------
@@ -693,9 +694,10 @@ def materialise_plan(plan: NetworkPlan) -> World:
 
     Notes
     -----
-    Construction order: sites, measurement sites, junctions, branches,
-    measurement leads, sources (each in plan order). No random numbers
-    are drawn, so the same plan always gives the same world.
+    Construction order: sites, measurement sites, junctions, instrument
+    terminals, branches, measurement leads, sources (each in plan order).
+    No random numbers are drawn, so the same plan always gives the same
+    world.
     """
     world = create_world(name=plan.name, soil=plan.soil)
     nodes: dict[str, str] = {}
@@ -703,7 +705,7 @@ def materialise_plan(plan: NetworkPlan) -> World:
         anchor = materialise_site(world, site)
         if anchor is not None:
             nodes[site.name] = anchor
-    for junction in plan.junctions:
+    for junction in plan.all_junctions:
         nodes[junction.name] = materialise_junction(world, junction)
     for branch in plan.all_branches:
         materialise_branch(world, branch, nodes)

@@ -795,8 +795,11 @@ class LvNetworkLayout(
             Discretisation length in m of the PEN conductors (``None``:
             lumped).
         include_source
-            Add the current source at the substation (and, with an
-            auxiliary electrode, the counter-source on it).
+            Add the current source at the substation. With an
+            auxiliary electrode it is a two-terminal source that
+            returns its current through that electrode
+            (``Source.return_to``; up to 0.15.0 a second, 180° source on
+            the auxiliary electrode stood in for it).
         source_magnitude_a
             Source current in A.
         seed

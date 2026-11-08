@@ -30,3 +30,45 @@ quantities = ["world/json"]
 findings = ["10.38"]
 reason = "The five joint rods move from 'electrodes' to 'junctions'."
 allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/aux_rod_0", "I/aux_rod_0"]
+findings = ["10.17"]
+reason = """The measurement leads end on leakage-free instrument terminals (meas_H,
+meas_S) and the source drives the test current between the substation and
+meas_H. The feed lead no longer bonds the auxiliary rod to the substation, so
+the rod takes the whole -1 A back from the soil: I(aux_rod_0) +2.41e-2 A
+(v0.15.0) -> -1 A, phi(aux_rod_0) +1.500 V -> -59.18 V. The core2a bound (1.1)
+and this one add up. Evidence: deliver/evidence/gen2/e1017_golden_measurement.out"""
+min_rel_change = 10.0
+max_rel_change = 42.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
+findings = ["10.17"]
+reason = """The probe lead no longer bonds the probe rod to the substation: the rod
+floats with zero current at the field potential of its position,
+phi 1.50075 V (v0.15.0, substation potential) -> 2.3e-3 V, I 9.1e-3 A -> 0."""
+min_rel_change = 0.5
+max_rel_change = 1.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "I/trafo_*", "I/residential_*", "I/kvs_*"]
+findings = ["10.17"]
+reason = """With the loop closed through the soil the network carries the whole 1 A
+again (base 1c3fc57: 99.95 % went through the feed lead); against v0.15.0
+(remote-earth return) the auxiliary rod at 150 m lowers the network potentials
+by 1.8 ... 1.9 % and moves the leakage currents by 1.3 ... 6.2 %."""
+min_rel_change = 1e-3
+max_rel_change = 0.1
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["world/json"]
+findings = ["10.17"]
+reason = """Junctions meas_H and meas_S (substation position, lead height, meas_S 1 cm
+beside meas_H); the leads start on them."""
+allow_shape_change = true

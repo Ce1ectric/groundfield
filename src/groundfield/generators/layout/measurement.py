@@ -86,11 +86,13 @@ class AuxiliaryElectrodePlacement(BaseModel):
     matching real-world practice and yielding a
     spreading resistance roughly a third of a single rod.
 
-    During :meth:`LvNetworkLayout.to_world` the layout adds a
-    second :class:`CurrentSource` with ``phase_deg=180`` at the
-    anchor electrode so the engine's potential field develops the
+    In :meth:`LvNetworkLayout.to_world` the substation's current
+    source returns its current through the auxiliary electrode's anchor
+    (``Source.return_to``), so the potential field develops the
     expected dipole pattern (positive trumpet at the substation,
-    negative trumpet at the auxiliary electrode).
+    negative trumpet at the auxiliary electrode). Up to 0.15.0 the
+    solver ignored ``return_to`` and a second source with
+    ``phase_deg=180`` on the auxiliary electrode stood in for it.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -450,7 +452,7 @@ class _MeasurementMixin:
         result: object,
         *,
         frequency_index: int = 0,
-        source_magnitude_a: float = 1.0,
+        source_magnitude_a: Optional[float] = None,
         probe_xy: Optional[tuple[float, float]] = None,
         probe_depth_m: float = 0.0,
         **deprecated: float,
@@ -462,7 +464,7 @@ class _MeasurementMixin:
         complex
             :math:`Z_\text{meas} =
             (\varphi_\text{sub} - \varphi_\text{probe}) / I_\text{src}`
-            at the requested frequency.
+            in Ω at the requested frequency.
 
         When neither ``probe_xy`` nor :attr:`voltage_probe` is set,
         the reference falls back to remote earth, i.e. the method
@@ -472,8 +474,15 @@ class _MeasurementMixin:
         ----------
         result
             :class:`FieldResult` from :meth:`Engine.solve`.
-        frequency_index, source_magnitude_a
-            Pick the frequency and the test-current normalisation.
+        frequency_index
+            Index of the frequency to read.
+        source_magnitude_a
+            Test current :math:`I_\text{src}` in A. ``None`` (default)
+            takes the current of the solved source that feeds the
+            substation from the result; results without a source
+            snapshot fall back to 1 A (the default before 2026.11,
+            which made the reading of a world built with another
+            ``source_magnitude_a`` wrong unless it was repeated here).
         probe_xy
             Optional explicit probe position in local ENU metres
             (overrides :attr:`voltage_probe` for this call only).
@@ -491,6 +500,16 @@ class _MeasurementMixin:
         RuntimeError
             If no auxiliary electrode is configured (the
             measurement loop is then physically open).
+
+        Notes
+        -----
+        The probe is an ideal voltmeter (a sampling point of the field,
+        no electrode), and the substation source returns its current
+        through the auxiliary electrode (``Source.return_to``), so the
+        reading follows the fall-of-potential curve of the real
+        measurement: it approaches the impedance of the network against
+        remote earth for a probe at 61.8 % of a remote auxiliary
+        electrode.
         """
         renamed = take_renamed_kwargs(
             "LvNetworkLayout.measured_grounding_impedance",
@@ -512,12 +531,7 @@ class _MeasurementMixin:
                 "LvNetworkLayout.measured_grounding_impedance: "
                 "``result`` does not look like a FieldResult."
             )
-        sub_anchor: Optional[str] = None
-        prefix = f"{self.substation_name}_"
-        for ename in electrode_potentials:
-            if ename.startswith(prefix):
-                sub_anchor = ename
-                break
+        sub_anchor = self._substation_anchor(result)
         if sub_anchor is None:
             raise RuntimeError(
                 "LvNetworkLayout.measured_grounding_impedance: no "
@@ -527,6 +541,9 @@ class _MeasurementMixin:
             )
 
         phi_sub = electrode_potentials[sub_anchor][frequency_index]
+        current = self._source_current(
+            result, sub_anchor, frequency_index, source_magnitude_a
+        )
 
         # Pick the probe location: explicit override > layout's
         # voltage_probe > remote earth fall-back.
@@ -553,21 +570,48 @@ class _MeasurementMixin:
                 )[0]
             )
 
-        return (phi_sub - phi_ref) / source_magnitude_a
+        return (phi_sub - phi_ref) / current
+
+    def _substation_anchor(self, result: object) -> Optional[str]:
+        """Electrode the substation source feeds, else the first ``substation_*``."""
+        prefix = f"{self.substation_name}_"
+        for record in getattr(result, "sources", None) or []:
+            if record.kind == "current" and record.attached_to.startswith(prefix):
+                return record.attached_to
+        for ename in getattr(result, "electrode_potentials", {}):
+            if ename.startswith(prefix):
+                return ename
+        return None
+
+    @staticmethod
+    def _source_current(
+        result: object,
+        anchor: str,
+        frequency_index: int,
+        source_magnitude_a: Optional[float],
+    ) -> complex:
+        """Test current in A: explicit, else the solved source feeding ``anchor``."""
+        if source_magnitude_a is not None:
+            return complex(source_magnitude_a)
+        for record in getattr(result, "sources", None) or []:
+            if record.kind == "current" and record.attached_to == anchor:
+                return complex(record.current[frequency_index])
+        return 1.0 + 0.0j
 
     def verify_current_balance(
         self,
         result: object,
         *,
         frequency_index: int = 0,
-        source_magnitude_a: float = 1.0,
+        source_magnitude_a: Optional[float] = None,
         tolerance: float = 0.02,
         **deprecated: float,
     ) -> dict:
         r"""Plausibility check: sum of leakage currents must close the
         measurement loop.
 
-        With the v0.7 closed-loop wiring the engine sees:
+        The substation source is a two-terminal source
+        (``Source.return_to``), so the engine sees
 
         * a positive ``+I`` injection at the substation cluster, which
           distributes itself across the substation grounding *and* the
@@ -591,6 +635,10 @@ class _MeasurementMixin:
         former upper-case keys (``positive_side_A``, ...) stay readable
         with a :class:`DeprecationWarning`.
 
+        ``source_magnitude_a`` is the test current in A; ``None``
+        (default) takes it from the solved source that feeds the
+        substation (1 A for results without a source snapshot).
+
         The "positive side" is every electrode whose name does *not*
         start with the auxiliary's name prefix; the "aux side" is
         every electrode whose name *does* start with that prefix.
@@ -607,6 +655,11 @@ class _MeasurementMixin:
                 "electrode is configured. The measurement loop is "
                 "physically open; current balance is undefined."
             )
+        anchor = self._substation_anchor(result) or ""
+        current = self._source_current(
+            result, anchor, frequency_index, source_magnitude_a
+        )
+        i_src = float(current.real) if current.imag == 0.0 else current
         aux_prefix = f"{self.auxiliary_electrode.name}_"
         currents = result.electrode_currents
         pos_sum: complex = 0j
@@ -617,11 +670,11 @@ class _MeasurementMixin:
                 neg_sum += i
             else:
                 pos_sum += i
-        expected_pos = +source_magnitude_a
-        expected_neg = -source_magnitude_a
+        expected_pos = +i_src
+        expected_neg = -i_src
         err_pos = abs(pos_sum - expected_pos)
         err_neg = abs(neg_sum - expected_neg)
-        tol_abs = tolerance * source_magnitude_a
+        tol_abs = tolerance * abs(i_src)
         ok = (err_pos <= tol_abs) and (err_neg <= tol_abs)
         values = {
             "positive_side_a": pos_sum,

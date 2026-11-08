@@ -129,7 +129,12 @@ def test_tn_plan_records_sites_roles_and_footprint_free_buildings() -> None:
     assert plan.measurement.feed_lead.role == "measurement_lead"
     assert all(b.footprint is None for b in plan.sites_with_role("building"))
     assert plan.sources[0].attached_to == "trafo"
-    assert plan.sources[0].return_to == "aux"
+    # The source drives the loop between the substation and the
+    # instrument's current terminal, at the end of the feed lead (10.17).
+    assert plan.sources[0].return_to == "meas_H"
+    assert [t.name for t in plan.measurement.terminals] == ["meas_H", "meas_S"]
+    assert plan.measurement.feed_lead.start == "meas_H"
+    assert plan.measurement.probe_lead.start == "meas_S"
 
 
 def test_tn_plan_is_concrete() -> None:

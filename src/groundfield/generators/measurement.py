@@ -1,4 +1,4 @@
-"""Measurement-setup specifications for grounding-resistance studies.
+r"""Measurement-setup specifications for grounding-resistance studies.
 
 A :class:`MeasurementSetupConfig` adds the *measurement
 infrastructure* of a fall-of-potential (or 4-wire) grounding-
@@ -10,14 +10,13 @@ resistance measurement to a generator-built world:
   rods, or any combination via :class:`GroundingSystemSpec`),
 * a **voltage probe** (Spannungssonde) at a configurable
   intermediate position, again with its own grounding system,
-* optional **metallic measurement leads** that carry the current
-  from the source back to the auxiliary electrode
-  (Stromeinspeiseleitung) and from the voltage probe to the
-  measurement device near the substation (Spannungs-Messleitung).
-  Each lead is modelled as a :class:`groundfield.Conductor` with
-  configurable depth (overhead at the surface vs. buried cable),
-  conductor type, and inductance model. With
-  ``inductance_model="neumann"`` (default), the leads couple
+* optional **metallic measurement leads**: the current feed lead
+  (Stromeinspeiseleitung) from the instrument to the auxiliary
+  electrode and the probe lead (Spannungs-Messleitung) from the
+  instrument to the voltage probe. Each lead is modelled as a
+  :class:`groundfield.Conductor` with configurable depth (overhead at
+  the surface vs. buried cable), conductor type, and inductance model.
+  With ``inductance_model="neumann"`` (default), the leads couple
   inductively to every other conductor in the world — PEN, MV
   cable shields, the parallel measurement lead — via the Neumann
   double-line integral (ADR-0004) plus the chosen earth-return
@@ -30,45 +29,68 @@ measurement / PEN / cable shield.
 
 Mathematical / physical content
 -------------------------------
-Galvanic part: with ``cfg.measurement`` set, the
-:class:`CurrentSource` injects ``I`` at the substation cluster and
-draws ``-I`` at the auxiliary electrode cluster. The current flows
-through the soil (and through any metallic leads, if present) back
-to the auxiliary electrode — exactly the closed loop of a real
-measurement. The voltage probe is a passive electrode at which the
-post-processing evaluates the surface potential.
+The instrument (an earth tester with terminals E, H and S) stands at
+the substation position. Its current source drives the test current
+:math:`I` from terminal H to terminal E: E is the substation cluster
+(the source's ``attached_to``), H is the end of the current loop (the
+source's ``return_to``) — the junction :data:`MEASUREMENT_H_TERMINAL`
+at which the feed lead ends, or the auxiliary electrode itself when no
+feed lead is modelled. The current flows through the soil from the
+substation earthing system to the auxiliary electrode and back through
+the feed lead, exactly the closed loop of a real measurement. The
+voltmeter reads
+
+.. math::
+
+   Z_\text{meas} = \frac{\varphi_E - \varphi_S}{I},
+
+with S the junction :data:`MEASUREMENT_S_TERMINAL` at which the probe
+lead ends (or the probe electrode itself without a probe lead); see
+:func:`measured_impedance`. The terminals are leakage-free
+:class:`~groundfield.geometry.junction.Junction` nodes, so neither lead
+bonds its remote electrode to the substation (up to 0.15.0 both leads
+started on the substation electrode, which short-circuited the
+voltmeter, review finding 10.17).
 
 Inductive part: the metallic leads are :class:`Conductor` instances
 with finite cross-section and ``inductance_model="neumann"``. Their
 mutual inductance to every other conductor (parallel lead, PEN
 trunk, cable shield) is computed exactly. Earth-return effects are
-added on top via the engine's ``earth_inductive_model``.
+added on top via the engine's ``earth_inductive_model``. The voltage
+induced in the probe lead appears in the potential of terminal S and
+therefore in the reading.
 
 Validity envelope
 -----------------
-* Frequency: $f \\le 1\\,\\mathrm{kHz}$ (quasi-static).
+* Frequency: $f \le 1\,\mathrm{kHz}$ (quasi-static).
 * Lead routing: each lead is modelled as a *single straight wire*
-  between its two end-points (substation anchor ↔ aux/probe
-  anchor). For a richer routing (multiple bends, parallel-then-
-  diverging), assemble several short leads manually after
-  ``build()``. The straight-line model is adequate for the typical
-  questions ("how strong is the inductive coupling between the
-  feed lead and the parallel measurement lead?").
+  from its instrument terminal to the remote anchor. For a richer
+  routing (multiple bends, parallel-then-diverging), assemble several
+  short leads manually after ``build()``. The straight-line model is
+  adequate for the typical questions ("how strong is the inductive
+  coupling between the feed lead and the parallel measurement lead?").
+  With both leads present, terminal S lies the touching distance (sum
+  of the two wire radii) to the left of terminal H, seen towards the
+  probe: an in-line probe lead then runs beside the feed lead instead
+  of through it (coincident filaments have no finite mutual
+  inductance). Place the probe off the auxiliary axis to model a wider
+  lead separation.
 * Lead height: :attr:`MeasurementLeadConfig.depth_m` is the
   :math:`z` coordinate of the lead axis (positive into the soil,
   negative above ground). The lead runs horizontally at that depth
-  between the horizontal positions of the two anchor electrodes and is
-  electrically connected to both; the short vertical risers to the
-  electrode heads are not modelled. ``depth_m = 0`` ("on the surface")
-  would put the wire into the soil-surface plane, where source and
-  image coincide; such a lead is placed :data:`SURFACE_LEAD_HEIGHT_M`
-  above the ground (isolated lead) or below it (galvanic lead, which
-  must touch the soil).
+  from its terminal (at the same height) to the horizontal position of
+  the remote anchor electrode and is electrically connected to it; the
+  short vertical riser to the electrode head is not modelled.
+  ``depth_m = 0`` ("on the surface") would put the wire into the
+  soil-surface plane, where source and image coincide; such a lead is
+  placed :data:`SURFACE_LEAD_HEIGHT_M` above the ground (isolated lead)
+  or below it (galvanic lead, which must touch the soil).
 """
 
 from __future__ import annotations
 
-from typing import Optional, Union
+import re
+from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic import Field, model_validator
 
@@ -77,9 +99,15 @@ from groundfield.generators.distributions import AnyDistribution
 from groundfield.generators.electrode_specs import RodElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from groundfield.solver.result import FieldResult
+
 __all__ = [
+    "MEASUREMENT_H_TERMINAL",
+    "MEASUREMENT_S_TERMINAL",
     "SURFACE_LEAD_HEIGHT_M",
     "lead_axis_z",
+    "measured_impedance",
     "MeasurementLeadConfig",
     "MeasurementInjectionConfig",
     "MeasurementProbeConfig",
@@ -89,6 +117,24 @@ __all__ = [
     "single_rod_grounding",
     "neighbour_substation_grounding",
 ]
+
+
+MEASUREMENT_H_TERMINAL = "meas_H"
+"""Name of the instrument's current terminal (a junction).
+
+Created when :attr:`MeasurementInjectionConfig.feed_lead` is set: the feed
+lead runs from this junction to the auxiliary electrode and the current
+source of the measurement returns its current here."""
+
+MEASUREMENT_S_TERMINAL = "meas_S"
+"""Name of the instrument's voltage terminal (a junction).
+
+Created when :attr:`MeasurementProbeConfig.lead` is set: the probe lead
+runs from this junction to the voltage probe; the voltmeter reads the
+potential difference between the earthing system and this junction."""
+
+_PROBE_ELECTRODE = re.compile(r"^probe_(rod|ring|strip|foundation)_\d+$")
+"""Electrode names of the voltage-probe site of a generated network."""
 
 
 # ---------------------------------------------------------------------
@@ -130,6 +176,141 @@ def lead_axis_z(depth_m: float, coupling_to_soil: str = "isolated") -> float:
     if coupling_to_soil == "galvanic":
         return SURFACE_LEAD_HEIGHT_M
     return -SURFACE_LEAD_HEIGHT_M
+
+
+# ---------------------------------------------------------------------
+# Reading of the simulated instrument
+# ---------------------------------------------------------------------
+
+
+def measured_impedance(
+    result: "FieldResult",
+    probe: Optional[str] = None,
+    *,
+    source: Optional[str] = None,
+) -> list[complex]:
+    r"""Reading of a simulated fall-of-potential measurement.
+
+    .. math::
+
+       Z_\text{meas}(f) = \frac{\varphi_E(f) - \varphi_S(f)}{I(f)}
+
+    with :math:`\varphi_E` the potential of the earthing system the test
+    current is fed into (the galvanic cluster of the source's
+    ``attached_to`` node, length-weighted as in
+    :meth:`~groundfield.solver.result.FieldResult.input_impedance`),
+    :math:`\varphi_S` the potential of the voltage terminal and :math:`I`
+    the source current. This is the three-pole reading of an earth
+    tester. The two-pole reading, the voltage across the current source
+    (terminals E and H) over :math:`I`, is
+    :meth:`~groundfield.solver.result.FieldResult.input_impedance`.
+
+    Parameters
+    ----------
+    result
+        Solved result of a world with a current source.
+    probe
+        Node the voltmeter reads against the earthing system: the name of
+        a junction or of an electrode (an electrode stands for its
+        galvanic cluster). Default: the instrument terminal
+        :data:`MEASUREMENT_S_TERMINAL` when the result has it (a network
+        built with a probe lead), else the voltage-probe electrode
+        (``probe_<kind>_<i>``) of a
+        :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
+        network.
+    source
+        Name of the measurement's current source; may be omitted when the
+        result carries exactly one current source.
+
+    Returns
+    -------
+    list of complex
+        :math:`Z_\text{meas}` in Ω per frequency (``nan`` where the source
+        current is zero).
+
+    Raises
+    ------
+    ValueError
+        If the result carries no source snapshot (hand-built results), no
+        current source, or several current sources and ``source`` is
+        omitted; if the named source is not a current source; if no probe
+        is given and none can be found.
+    KeyError
+        If ``source`` or ``probe`` is unknown.
+
+    Notes
+    -----
+    With metallic leads (:attr:`MeasurementInjectionConfig.feed_lead`,
+    :attr:`MeasurementProbeConfig.lead`) the voltage terminal carries the
+    voltage induced in the probe lead by the feed loop and the other
+    conductors (inductive coupling, ADR-0004); without a probe lead the
+    reading is the galvanic one. A non-inductive lead does not change the
+    reading: the feed lead is in series with an ideal current source and
+    the probe lead carries no current.
+    """
+    if not result.sources:
+        raise ValueError(
+            "measured_impedance needs the source snapshot of the solve; this "
+            "result carries none (hand-built FieldResult?)."
+        )
+    if source is None:
+        current_sources = [s for s in result.sources if s.kind == "current"]
+        if len(current_sources) != 1:
+            names = ", ".join(s.name for s in current_sources) or "none"
+            raise ValueError(
+                f"The result carries {len(current_sources)} current sources "
+                f"({names}); pass source=<name>."
+            )
+        record = current_sources[0]
+    else:
+        by_name = {s.name: s for s in result.sources}
+        if source not in by_name:
+            known = ", ".join(sorted(by_name)) or "none"
+            raise KeyError(f"Unknown source {source!r} (known: {known}).")
+        record = by_name[source]
+        if record.kind != "current":
+            raise ValueError(
+                f"Source {source!r} is a {record.kind!r} source; the reading is "
+                "defined for the current source of the measurement."
+            )
+    if probe is None:
+        probe = _default_probe(result)
+    u_e = _node_potential(result, record.attached_to)
+    u_s = _node_potential(result, probe)
+    return [
+        (ue - us) / ik if ik != 0 else complex("nan")
+        for ue, us, ik in zip(u_e, u_s, record.current, strict=False)
+    ]
+
+
+def _default_probe(result: "FieldResult") -> str:
+    """Voltage terminal of a generated measurement set-up."""
+    junctions = result.metadata.get("junction_potentials") or {}
+    if MEASUREMENT_S_TERMINAL in junctions:
+        return MEASUREMENT_S_TERMINAL
+    for name in result.electrode_potentials:
+        if _PROBE_ELECTRODE.match(name):
+            return name
+    raise ValueError(
+        f"No voltage terminal {MEASUREMENT_S_TERMINAL!r} and no probe electrode "
+        "(probe_<kind>_<i>) in the result; pass probe=<junction or electrode>."
+    )
+
+
+def _node_potential(result: "FieldResult", name: str) -> list[complex]:
+    """Potential per frequency (V) of a junction or an electrode's cluster."""
+    junctions = result.metadata.get("junction_potentials") or {}
+    if name in junctions:
+        return [complex(v) for v in junctions[name]]
+    if name not in result.electrode_potentials:
+        known = sorted(set(result.electrode_potentials) | set(junctions))
+        shown = ", ".join(known[:8]) + (" ..." if len(known) > 8 else "")
+        raise KeyError(
+            f"{name!r} is neither an electrode nor a junction of this result "
+            f"(known: {shown})."
+        )
+    # Length-weighted cluster potential, the definition of input_impedance.
+    return result._cluster_potential(name)[1]
 
 
 class MeasurementLeadConfig(GeneratorConfig):
@@ -314,14 +495,15 @@ class MeasurementInjectionConfig(GeneratorConfig):
     measurement against a neighbouring substation, point ``grounding``
     at :func:`neighbour_substation_grounding`.
 
-    ``feed_lead`` is the metallic *Stromeinspeiseleitung* between
-    the substation cluster and the aux electrode. ``None`` (default)
-    means *galvanic-only*: the source's ``return_to`` is set to the
-    aux electrode but no metallic wire closes the loop — the return
-    current flows entirely through the soil. Setting ``feed_lead``
-    to a :class:`MeasurementLeadConfig` (often via
-    :func:`overhead_lead` or :func:`buried_lead`) adds the physical
-    wire and enables the inductive coupling.
+    ``feed_lead`` is the metallic *Stromeinspeiseleitung* from the
+    instrument's current terminal :data:`MEASUREMENT_H_TERMINAL` to the
+    aux electrode; the source drives the test current between the
+    substation and that terminal. ``None`` (default) means
+    *galvanic-only*: the source's ``return_to`` is the aux electrode
+    itself, i.e. an ideal return path without impedance or inductive
+    coupling. Setting ``feed_lead`` to a :class:`MeasurementLeadConfig`
+    (often via :func:`overhead_lead` or :func:`buried_lead`) adds the
+    physical wire and enables the inductive coupling.
     """
 
     position_xy: tuple[float, float] = Field(
@@ -351,10 +533,13 @@ class MeasurementProbeConfig(GeneratorConfig):
     location. Default: a short (0.5 m) driven rod at $(60, 0)$ m —
     the classical 62 % point in fall-of-potential measurements.
 
-    ``lead`` is the metallic measurement wire from the probe back
-    to the measurement device near the substation. As with
+    ``lead`` is the metallic measurement wire from the instrument's
+    voltage terminal :data:`MEASUREMENT_S_TERMINAL` to the probe; it
+    carries no current (ideal voltmeter), so its resistance does not
+    enter the reading, but the voltage induced in it does. As with
     :class:`MeasurementInjectionConfig.feed_lead`, ``None`` is
-    galvanic-only; setting it enables inductive coupling.
+    galvanic-only (the voltmeter reads the probe electrode directly);
+    setting it enables inductive coupling.
     """
 
     position_xy: tuple[float, float] = Field(
@@ -389,16 +574,24 @@ class MeasurementSetupConfig(GeneratorConfig):
        ``injection.grounding.build_at(...)``;
     2. builds the voltage probe at :attr:`probe.position_xy` via
        ``probe.grounding.build_at(...)``;
-    3. if :attr:`injection.feed_lead` is set, adds a
-       :class:`Conductor` from the substation anchor to the aux
-       anchor with the configured depth, conductor type, and
+    3. if :attr:`injection.feed_lead` is set, adds the instrument's
+       current terminal, the junction :data:`MEASUREMENT_H_TERMINAL` at
+       the substation position, and a :class:`Conductor` from it to the
+       aux anchor with the configured depth, conductor type, and
        inductance model;
-    4. if :attr:`probe.lead` is set, adds a similar conductor from
-       the substation anchor to the probe anchor;
+    4. if :attr:`probe.lead` is set, adds the voltage terminal, the
+       junction :data:`MEASUREMENT_S_TERMINAL`, and a similar conductor
+       from it to the probe anchor;
     5. attaches the source to the substation anchor with
-       ``return_to`` pointing at the aux anchor — the test current
-       physically returns through the auxiliary electrode (and,
-       if the metallic feed lead is present, mostly through it).
+       ``return_to`` pointing at the end of the current loop
+       (:data:`MEASUREMENT_H_TERMINAL` with a feed lead, else the aux
+       anchor): the test current flows through the soil from the
+       substation to the auxiliary electrode and back through the feed
+       lead.
+
+    The reading of the simulated instrument is
+    :func:`measured_impedance` (three-pole, E-S) and
+    ``result.input_impedance()`` (two-pole, E-H).
 
     The default factory leaves both leads as ``None`` (galvanic
     only). To enable inductive coupling, set, e.g.,

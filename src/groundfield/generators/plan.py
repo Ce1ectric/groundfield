@@ -14,7 +14,7 @@ generated grounding network *before* it becomes a
 * the **branches** — conductors between two nodes (a node is a site or a
   junction): PEN cable sections and service drops;
 * the optional **measurement** set-up (auxiliary electrode, voltage
-  probe, measurement leads);
+  probe, measurement leads and the instrument terminals they end on);
 * the **sources**.
 
 Both front-ends produce a plan:
@@ -283,7 +283,16 @@ class PlannedMeasurement(BaseModel):
         Voltage probe electrode (role ``"probe"``), or ``None`` when the
         probe is a pure sampling point without an electrode.
     feed_lead, probe_lead
-        Optional metallic leads (role ``"measurement_lead"``).
+        Optional metallic leads (role ``"measurement_lead"``). Each runs
+        from an instrument terminal (see :attr:`terminals`) to the
+        remote electrode.
+    terminals
+        Leakage-free junctions at the instrument at which the leads end:
+        the current terminal ``H`` (feed lead) and the voltage terminal
+        ``S`` (probe lead). The current source of the measurement drives
+        its current between the earthing system and ``H``; the voltmeter
+        reads the potential difference between the earthing system and
+        ``S``. Empty when no lead is configured.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -292,6 +301,7 @@ class PlannedMeasurement(BaseModel):
     probe: Optional[PlannedSite] = None
     feed_lead: Optional[PlannedBranch] = None
     probe_lead: Optional[PlannedBranch] = None
+    terminals: list[PlannedJunction] = Field(default_factory=list)
 
 
 class PlannedSource(BaseModel):
@@ -349,8 +359,9 @@ class NetworkPlan(BaseModel):
     -----
     :func:`~groundfield.generators.materialise.materialise_plan` builds
     the world in a fixed order: sites, measurement sites, junctions,
-    branches, measurement leads, sources. Electrodes and conductors
-    therefore appear in the world in that order.
+    instrument terminals, branches, measurement leads, sources.
+    Electrodes, junctions and conductors therefore appear in the world
+    in that order.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -366,7 +377,8 @@ class NetworkPlan(BaseModel):
     @model_validator(mode="after")
     def _check_names(self) -> "NetworkPlan":
         nodes: set[str] = set()
-        for name in [s.name for s in self.all_sites] + [j.name for j in self.junctions]:
+        names = [s.name for s in self.all_sites] + [j.name for j in self.all_junctions]
+        for name in names:
             if name in nodes:
                 raise ValueError(f"NetworkPlan: node name {name!r} is used twice.")
             nodes.add(name)
@@ -391,6 +403,14 @@ class NetworkPlan(BaseModel):
             out.append(self.measurement.auxiliary)
             if self.measurement.probe is not None:
                 out.append(self.measurement.probe)
+        return out
+
+    @property
+    def all_junctions(self) -> list[PlannedJunction]:
+        """PEN junctions and the instrument terminals, in build order."""
+        out = list(self.junctions)
+        if self.measurement is not None:
+            out.extend(self.measurement.terminals)
         return out
 
     @property
