@@ -24,8 +24,10 @@ of a German low-voltage distribution network (*TN-Ortsnetz*):
   trunk runs along a single axis (the feeder's discrete direction)
   and cabinets are placed on that axis. The straight-line conductor
   between two trunk anchors is therefore already axis-aligned.
-  Building service drops connect the corresponding tap anchor to
-  the building's foundation centre by a single straight line.
+  A building fed by a cabinet taps the trunk from the substation to
+  that cabinet at the point nearest to the building's connection
+  point (a T-joint), a building in a substation slot is connected to
+  the substation, each by a single straight service drop.
 
 Physical interpretation
 -----------------------
@@ -85,9 +87,13 @@ __all__ = [
 class StarCabinetTopology(PickleUpgrade, BaseModel):
     """Star PEN topology (default).
 
-    The substation feeds each cable cabinet directly; every building
-    taps to its nearest cabinet (Manhattan metric). Cabinet placement
-    and count come from
+    The substation feeds each cable cabinet directly, through a cable of
+    its own (cabinets in a line get separate cables in one trench).
+    Every building is fed by its nearest cabinet (Manhattan metric): its
+    service drop taps that cabinet's cable at the point nearest to the
+    building's connection point (a T-joint, or the substation / the
+    cabinet at the cable's ends), never another building's drop. Cabinet
+    placement and count come from
     :class:`groundfield.generators.tn_network.CabinetConfig`.
 
     The JSON tag is ``kind="star_cabinet"``; configurations written with
@@ -176,9 +182,14 @@ class RadialTrunkTopology(PickleUpgrade, BaseModel):
 
     Notes
     -----
-    Trunk segments (substation → cabinet and cabinet → cabinet) and service
-    drops (tap anchor → building anchor) are realised as straight
-    3D conductors between the corresponding anchor electrodes. The
+    Trunk segments (substation → cabinet and cabinet → cabinet, one
+    cable each) and service drops are realised as straight conductors at
+    the PEN depth. A building fed by a cabinet taps the trunk from the
+    substation to its cabinet at the point nearest to the building's
+    connection point (a leakage-free tap junction, or the cabinet); a
+    building in a substation slot is connected to the substation. A drop
+    may run along the trunk or another drop (one trench), never along
+    the cable it taps. The
     Manhattan-ness of the layout is reflected in (a) the discrete
     feeder directions which keep the trunk axis-aligned and (b) the
     angular feeder assignment, which steers buildings toward the

@@ -60,9 +60,11 @@ Geometric layout
 * Cable cabinets are placed via their own
   :class:`PlacementSpec` (defaults to a Manhattan grid along the
   substation row). Their grounding follows :attr:`CabinetConfig.grounding`.
-* PEN backbone: each cable cabinet is connected to the substation;
-  each building is connected to the *nearest* cable cabinet by
-  Manhattan distance.
+* PEN backbone (star topology): each cable cabinet has its own cable
+  from the substation; each building is fed by the *nearest* cable
+  cabinet by Manhattan distance, through a service drop that taps that
+  cabinet's cable at the point nearest to the building (a T-joint;
+  rules in :mod:`groundfield.generators._pen_routing`).
 
 Validity envelope
 -----------------
@@ -452,8 +454,10 @@ class TnNetworkConfig(GeneratorConfig):
         description=(
             "PEN backbone topology. ``StarCabinetTopology`` (default) "
             "reproduces the legacy v0.6 behaviour: every cabinet is "
-            "wired directly to the substation and every building "
-            "taps to its nearest cabinet by Manhattan distance. "
+            "wired directly to the substation and every building is "
+            "fed by its nearest cabinet by Manhattan distance, its "
+            "service drop tapping that cabinet's cable at the point "
+            "nearest to the building. "
             "``RadialTrunkTopology`` lays out the substation as a "
             "radial set of LV feeders (Manhattan-aligned) with a "
             "finite slot budget per source — once a feeder's slots "
@@ -1001,27 +1005,24 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         branches: list[PlannedBranch],
         junctions: list[PlannedJunction],
     ) -> None:
-        """Star backbone: substation → cabinets, building → nearest cabinet.
+        """Star backbone: substation → each cabinet, building → nearest cabinet.
 
-        The cables form a nearest-point tree (:mod:`._pen_routing`): each
-        cabinet's cable starts at the nearest point of the cables built
-        before it (cabinets in the order of their distance from the
-        substation, so collinear cabinets are chained), each service drop
-        at the nearest point of the cable path that feeds its cabinet; tap
-        points inside a cable are leakage-free junctions. No two cables
-        overlap (a drop no longer runs back along the main to a cabinet
-        beyond the building).
+        Every cabinet has its own straight cable from the substation
+        (``pen_main_<anchor>``; collinear cabinets get separate cables in
+        one trench). Every building is fed by its nearest cabinet
+        (Manhattan metric between the site positions); its service drop
+        taps that cabinet's cable at the point nearest to the building's
+        connection point — a leakage-free tap junction ``pen_tap_<k>``,
+        or the substation / the cabinet when the nearest point is an end
+        of the cable — and never another building's drop. The full rules
+        are in :mod:`._pen_routing`.
         """
         wired = [c for c in cabinets if c.anchor is not None]
         router = _router(cfg, [substation, *wired, *buildings])
-        sx, sy = router.xy[substation.name]
-        for cab in sorted(
-            wired,
-            key=lambda c: math.hypot(
-                router.xy[c.name][0] - sx, router.xy[c.name][1] - sy
-            ),
-        ):
-            router.connect_main(cab.name, name=f"pen_main_{cab.anchor}")
+        mains: dict[str, str] = {}
+        for cab in wired:
+            mains[cab.name] = f"pen_main_{cab.anchor}"
+            router.add_cable(substation.name, cab.name, name=mains[cab.name])
         fed: dict[str, list[PlannedSite]] = {c.name: [] for c in wired}
         for b in buildings:
             if b.anchor is None:
@@ -1034,9 +1035,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             fed[cab.name].append(b)
         for cab in wired:
             by_name = {b.name: b for b in fed[cab.name]}
-            for name in router.drop_order(list(by_name), cab.name):
+            cables = [mains[cab.name]]
+            for name in router.drop_order(list(by_name), cables, cab.name):
                 router.connect_drop(
-                    name, cab.name, name=f"pen_service_{by_name[name].anchor}"
+                    name, cables, cab.name, name=f"pen_service_{by_name[name].anchor}"
                 )
         branches.extend(router.branches())
         junctions.extend(router.junctions)
@@ -1063,12 +1065,15 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
            along the feeder axis (grounded per :attr:`CabinetConfig.grounding`)
            and continue with :attr:`RadialTrunkTopology.slots_per_cabinet`
            taps per cabinet.
-        4. Wire the trunk (substation → cabinet$_1$ → cabinet$_2$ → …)
-           and the service drops as straight PEN conductors. A drop starts
-           at the nearest point of the trunk path from the substation to
-           its tap (or of a drop already routed for that tap), not
-           necessarily at the tap itself, so it never runs back along the
-           trunk (:mod:`._pen_routing`).
+        4. Wire the trunk (substation → cabinet$_1$ → cabinet$_2$ → …,
+           one cable per segment) and the service drops as straight PEN
+           conductors. The drop of a building fed by a cabinet taps the
+           trunk from the substation to that cabinet at the point nearest
+           to the building's connection point (a leakage-free tap
+           junction, or a cabinet), so it never runs back along the
+           trunk; the drop of a building in a substation slot starts at
+           the substation. A drop never starts on another building's
+           drop (:mod:`._pen_routing`).
 
         Raises
         ------
@@ -1079,6 +1084,8 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
         trunk: list[tuple[str, str, str]] = []
         fed: dict[str, list[PlannedSite]] = {}
+        # Trunk cables from the substation to every tap source.
+        paths: dict[str, list[str]] = {substation.name: []}
         wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
             substation_xy=cfg.substation.position,
@@ -1102,6 +1109,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             )
             taps: list[PlannedSite] = [substation]
             previous = substation
+            path: list[str] = []
             for k, cabinet_xy in enumerate(cabinet_positions):
                 site_name = f"{topology.name_prefix}_f{feeder_idx}_{k}"
                 cab = cfg.cabinets.grounding.plan_site(
@@ -1119,7 +1127,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         stacklevel=3,
                     )
                     continue
-                trunk.append((f"pen_trunk_f{feeder_idx}_{k}", previous.name, cab.name))
+                trunk_name = f"pen_trunk_f{feeder_idx}_{k}"
+                trunk.append((trunk_name, previous.name, cab.name))
+                path = [*path, trunk_name]
+                paths[cab.name] = path
                 taps.append(cab)
                 previous = cab
             budgets = [topology.slots_per_substation] + [
@@ -1152,12 +1163,13 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             )
         router = _router(cfg, [s for s in sites if s.anchor is not None])
         for name, start, end in trunk:
-            router.add_main(start, end, name=name)
+            router.add_cable(start, end, name=name)
         for tap, fed_buildings in fed.items():
             by_name = {b.name: b for b in fed_buildings}
-            for name in router.drop_order(list(by_name), tap):
+            cables = paths[tap]
+            for name in router.drop_order(list(by_name), cables, tap):
                 router.connect_drop(
-                    name, tap, name=f"pen_service_{by_name[name].anchor}"
+                    name, cables, tap, name=f"pen_service_{by_name[name].anchor}"
                 )
         branches.extend(router.branches())
         junctions.extend(router.junctions)

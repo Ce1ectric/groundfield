@@ -1399,3 +1399,77 @@ def test_connect_all_buildings_empty_source_anchors_raises() -> None:
     layout.add_pen_cable(start="substation", end_xy=(20.0, 0.0))
     with pytest.raises(RuntimeError, match="no source anchor"):
         layout.connect_all_buildings(source_anchors=[])
+
+
+# ---------------------------------------------------------------------
+# Short cable sections (audit A3SG-01, the layout path)
+# ---------------------------------------------------------------------
+
+
+def _pen_sections(world: gf.World) -> list[gf.Conductor]:
+    return [c for c in world.conductors if c.conductor_type == "pen"]
+
+
+# audit A3SG-01
+@pytest.mark.finding("10.38")
+@pytest.mark.parametrize("gap_m", [1e-4, 2e-3, 4e-3])
+def test_taps_millimetres_apart_share_one_node(gap_m: float) -> None:
+    """Two houses on either side of the cable whose centroids project
+    ``gap_m`` apart onto it. Base: a cable section of ``gap_m`` between the
+    two tap junctions, which the Conductor model refuses (series resistance
+    below 1e-6 ohm, pydantic ValidationError); the closer tap is merged."""
+    layout = LvNetworkLayout.from_footprints(
+        [
+            _rect_footprint(40.0, 15.0, dx=8.0, dy=8.0, osm_id=1),
+            _rect_footprint(40.0 + gap_m, -15.0, dx=8.0, dy=8.0, osm_id=2),
+        ],
+        substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(110.0, 0.0))
+    layout.connect_buildings()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = layout.to_world(seed=0)
+    drops = [c for c in world.conductors if c.name.startswith("service_")]
+    assert len(drops) == 2
+    assert drops[0].start_electrode == drops[1].start_electrode
+    assert min(c.length for c in _pen_sections(world)) > 10.0
+
+
+# audit A3SG-01
+@pytest.mark.finding("10.38")
+@pytest.mark.parametrize("offset_m", [1e-4, 2e-3, 4e-3])
+def test_a_tap_millimetres_from_a_cable_corner_is_the_corner(offset_m: float) -> None:
+    """The cable turns at (60, 0); the house's centroid projects ``offset_m``
+    before the corner. Base: a section of ``offset_m`` (ValidationError). The
+    corner and the tap are one node now."""
+    layout = LvNetworkLayout.from_footprints(
+        [_rect_footprint(60.0 - offset_m, -15.0, dx=8.0, dy=8.0, osm_id=1)],
+        substation_xy=(0.0, 0.0),
+    )
+    layout.add_pen_cable(start="substation", end_xy=(60.0, 40.0))
+    layout.connect_buildings()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = layout.to_world(seed=0)
+    (drop,) = [c for c in world.conductors if c.name.startswith("service_")]
+    # Two junctions: the corner (merged with the tap) and the free cable end.
+    assert len(world.junctions) == 2
+    node = world.get_junction(drop.start_electrode)
+    assert math.dist(node.position[:2], (60.0, 0.0)) < offset_m + 1e-9
+    assert min(c.length for c in _pen_sections(world)) > 10.0
+
+
+# audit A3SG-01
+@pytest.mark.finding("10.38")
+def test_a_cable_between_two_sites_closer_than_a_section_is_rejected() -> None:
+    layout = LvNetworkLayout.from_footprints(
+        [_rect_footprint(40.0, 20.0)], substation_xy=(0.0, 0.0)
+    )
+    layout.add_cabinet(position_xy=(0.003, 0.0), name="kvs_on_top")
+    layout.add_pen_cable(start="substation", end="kvs_on_top")
+    ring = gf.generators.GroundingSystemSpec(
+        electrodes=[gf.generators.RodElectrodeSpec(length_m=2.0)]
+    )
+    with pytest.raises(ValueError, match="shortest cable section"):
+        layout.plan(substation_grounding=ring, cabinet_grounding=ring)
