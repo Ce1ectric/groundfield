@@ -60,26 +60,8 @@ def test_create_electrode_has_one_overload_per_kind() -> None:
     assert set(typing.get_args(api.ElectrodeKind)) == set(_KIND_TO_CLASS)
 
 
-#: Kinds that gained ``concrete_shell_coefficient_ohm_m`` with 10.12 (stream
-#: core2b); their ``create_electrode`` overloads in ``api.py`` (no owner in
-#: wave 2) are extended by core2b's post-merge patch, which drops this mark.
-_SHELL_OVERLOAD_PENDING = pytest.mark.xfail(
-    strict=True,
-    reason="api.py overload lacks concrete_shell_coefficient_ohm_m (10.12); "
-    "added by the core2b post-merge patch",
-)
-
-
 @pytest.mark.finding("10.68")
-@pytest.mark.parametrize(
-    "kind",
-    [
-        pytest.param(k, marks=_SHELL_OVERLOAD_PENDING)
-        if k in ("rod", "ring", "mesh", "grid_mesh")
-        else k
-        for k in sorted(_KIND_TO_CLASS)
-    ],
-)
+@pytest.mark.parametrize("kind", sorted(_KIND_TO_CLASS))
 def test_overload_parameters_match_the_electrode_model(kind: str) -> None:
     """Every overload lists exactly the model's fields, with the same
     required/optional split — so the static view cannot drift from the

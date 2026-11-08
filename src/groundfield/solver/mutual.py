@@ -460,6 +460,10 @@ def _unit_excitation(
         inductance_matrix=problem.branches.inductance_matrix,
         carson_correction=problem.carson_dz,
         shell_coefficients=arrays.shell_coefficients,
+        # The other clusters float (10.29), as in Engine.solve: zero net
+        # current, equalising currents inside bonded groups and between
+        # the layer owners of a rod through the interface.
+        floating=True,
     )
     sc = _segment_currents(elec_total, disc.owner_segments, arrays.lengths)
     return elec_total, sc
@@ -525,7 +529,8 @@ def solve_mutual_matrix(
     """Full mutual grounding-impedance matrix ``Z_G`` in one assembly.
 
     Column ``j`` belongs to 1 A injected into ``anchors[j]``; the other
-    clusters carry no net current. The segment reaction matrix and the
+    clusters float (zero net current, review pass 10, 10.29), exactly as
+    in :meth:`Engine.solve` with one source. The segment reaction matrix and the
     leakage distribution of every excitation are computed once and
     reused for all entries.
 
@@ -609,14 +614,13 @@ def solve_mutual_matrix(
     -----
     With the uniform current per owner of the image family, the
     potential of a cluster is the current-weighted average of its
-    segment potentials. Hence ``T_iᵀ (K + S) T_j`` is the potential of
-    cluster ``i`` under excitation ``j`` whenever the leakage of
-    cluster ``i`` is the one its own excitation produces: exactly for
-    clusters of one owner, and to first order in the coupling for
-    bonded groups (a ring with rods, a rod through the layer interface).
-    With such a matrix ``(Y_L + Z_G⁻¹) u = i`` reproduces the solve of
-    the clusters joined by the branches ``Y_L``; with probe
-    off-diagonals it does not (evidence in the 2026.11 changelog).
+    segment potentials. With every other cluster floating,
+    ``T_iᵀ (K + S) T_j`` therefore equals the potential of cluster ``i``
+    under excitation ``j`` exactly (reciprocity of the reaction matrix),
+    bonded groups and rods through the layer interface included, and
+    ``(Y_L + Z_G⁻¹) u = i`` reproduces the solve of the clusters joined
+    by the branches ``Y_L``. With probe off-diagonals it does not
+    (evidence in the 2026.11 changelog).
     """
     if world.soil is None:
         raise ValueError("World has no soil model.")

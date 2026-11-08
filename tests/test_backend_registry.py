@@ -449,7 +449,7 @@ def test_every_backend_reports_the_metadata_core(backend: str) -> None:
     assert isinstance(md["n_segments"], int)
     assert md["n_segments"] == (0 if backend == "fem" else 4)
     # The image family runs the line kernel by default since 10.28.
-    image_family = backend in ("image", "image_2layer", "image_nlayer")
+    image_family = backend in ("image", "image_2layer", "image_nlayer", "cim")
     expected = "line" if image_family else "point"
     assert md["kernel"] == (None if backend == "fem" else expected)
     assert isinstance(md["solve_time_s"], float) and md["solve_time_s"] >= 0.0

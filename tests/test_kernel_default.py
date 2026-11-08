@@ -96,3 +96,15 @@ def test_direct_backend_and_mutual_calls_use_the_default_kernel() -> None:
     w.sources.clear()
     Z = gf.solve_mutual_matrix(w, engine, ["g"], [[0.0, 0.0, 0.0]])
     assert Z[0, 0] == pytest.approx(via_engine.cluster_impedance("g")[0], rel=1e-12)
+
+
+@_FINDING
+def test_direct_solve_image_uses_the_default_kernel() -> None:
+    from groundfield.solver.image import solve_image
+
+    soil = gf.HomogeneousSoil(rho=100.0)
+    engine = gf.Engine(segment_length=0.5)
+    direct = solve_image(_rod_world(soil), engine)
+    assert direct.metadata["kernel"] == "line"
+    via_engine = _solve(_rod_world(soil), engine)
+    assert direct.cluster_impedance("g") == via_engine.cluster_impedance("g")

@@ -95,7 +95,7 @@ from groundfield.solver._inductive import _CarsonBuilder as _CarsonBuilder
 from groundfield.solver._inductive import (
     _assemble_inductance_matrix as _assemble_inductance_matrix,
 )
-from groundfield.solver._kernels import HalfSpaceKernel
+from groundfield.solver._kernels import DEFAULT_KERNEL, HalfSpaceKernel
 from groundfield.solver._kernels import (
     _self_corrected_kernel as _self_corrected_kernel,
 )
@@ -204,5 +204,8 @@ def solve_image(world: "World", engine: "Engine") -> FieldResult:
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    if engine.kernel is None:
+        # A direct call resolves the default like Engine.solve (10.28).
+        engine = engine.model_copy(update={"kernel": DEFAULT_KERNEL})
     green = _HalfSpaceGreen(world.soil.rho, engine.kernel)
     return solve_image_family(world, engine, green, stacklevel=3)

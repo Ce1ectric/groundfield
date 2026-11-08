@@ -129,16 +129,6 @@ def test_cim_metadata() -> None:
 # ---------------------------------------------------------------------
 
 
-_CIM_CROSS_LAYER_XFAIL = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "10.15: image_2layer gives a rod through h_1 one owner per layer; cim "
-        "keeps one owner per electrode until it maps to image_2layer (10.76, "
-        "stream ENG-2). Remove this marker when that merges."
-    ),
-)
-
-
 def _rod_world(soil, *, z0: float, length: float, name: str = "g1") -> gf.World:
     w = gf.create_world(soil=soil)
     gf.create_electrode(w, "rod", name=name, position=(0.0, 0.0, z0), length=length)
@@ -156,7 +146,6 @@ def _rod_world(soil, *, z0: float, length: float, name: str = "g1") -> gf.World:
             0.0,
             3.0,
             0.4,
-            marks=_CIM_CROSS_LAYER_XFAIL,
         ),
         # the pass-9 F10 shape with a 5 cm remainder below h_1 = 5 m (a
         # remainder shorter than the wire diameter is merged since 10.32)
@@ -165,7 +154,6 @@ def _rod_world(soil, *, z0: float, length: float, name: str = "g1") -> gf.World:
             0.5,
             4.55,
             0.5,
-            marks=_CIM_CROSS_LAYER_XFAIL,
         ),
         # upper layer only: a grid mesh with 3 m x 2 m cells gives
         # 0.6 m and 0.667 m segments inside one electrode
@@ -193,7 +181,9 @@ def test_cim_is_bit_identical_to_image_2layer_for_unequal_segments(
         gf.create_source(w, attached_to="g1", magnitude=1.0)
         return w
 
-    res_cim = gf.create_engine(backend="cim", segment_length=ds).solve(world())
+    res_cim = gf.create_engine(backend="cim", segment_length=ds, kernel="point").solve(
+        world()
+    )
     res_il2 = gf.create_engine(
         kernel="point", backend="image_2layer", segment_length=ds
     ).solve(world())

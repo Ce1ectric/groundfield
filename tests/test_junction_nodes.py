@@ -359,11 +359,6 @@ def test_backends_without_junction_support_reject_the_world() -> None:
         w.solve(gf.create_engine(backend="fem", segment_length=SEG))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="FieldResult.input_impedance reads electrode potentials only; "
-    "junction support in result.py is requested from CORE-2b",
-)
 def test_input_impedance_of_a_source_on_a_junction() -> None:
     w = _rod_world()
     _create_junction(w, name="J", position=(0.0, 0.0, -0.2))

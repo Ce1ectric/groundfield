@@ -64,3 +64,19 @@ findings = ["10.28"]
 reason = "Engine.kernel defaults to the backend's preferred kernel: the exact line-source kernel for the image family."
 min_rel_change = 1e-3
 max_rel_change = 0.2
+
+# --- 10.29 in solve_mutual_*: the other clusters float (post-merge) -------
+# Applied with the post-merge patch of stream core2b, once core2a's floating
+# clusters are in: _unit_excitation solves with floating=True, as
+# Engine.solve does. The foundation of the distributed-concrete case is four
+# perimeter strips bonded into one cluster; floating gives the passive
+# foundation its equalising currents. Measured on the merged tree: Z_G
+# 5.2e-4, R 1.6 % (field points next to the passive foundation).
+
+[[change]]
+cases = ["mutual_foundations_distributed_concrete"]
+quantities = ["Z_G", "R"]
+findings = ["10.29"]
+reason = "solve_mutual_* let the passive clusters float like Engine.solve: bonded groups carry equalising currents."
+min_rel_change = 1e-4
+max_rel_change = 0.03

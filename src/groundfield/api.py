@@ -225,6 +225,7 @@ def create_electrode(
     position: PointLike,
     length: float,
     wire_radius: float = ...,
+    concrete_shell_coefficient_ohm_m: float = ...,
 ) -> RodElectrode: ...
 
 
@@ -237,6 +238,7 @@ def create_electrode(
     center: PointLike,
     radius: float,
     wire_radius: float = ...,
+    concrete_shell_coefficient_ohm_m: float = ...,
 ) -> RingElectrode: ...
 
 
@@ -291,6 +293,7 @@ def create_electrode(
     size: Sequence[float] | npt.NDArray[Any],
     spacing: float = ...,
     wire_radius: float = ...,
+    concrete_shell_coefficient_ohm_m: float = ...,
 ) -> MeshElectrode: ...
 
 
@@ -305,6 +308,7 @@ def create_electrode(
     n_x: int,
     n_y: int,
     wire_radius: float = ...,
+    concrete_shell_coefficient_ohm_m: float = ...,
 ) -> GridMeshElectrode: ...
 
 
@@ -324,16 +328,16 @@ def create_electrode(
     kind
         Geometry type (:data:`ElectrodeKind`). The keyword parameters of
         each kind (lengths in m, angles in degrees, ``z > 0`` in the
-        soil; ``wire_radius`` defaults to 0.005 m everywhere):
+        soil; ``wire_radius`` defaults to 0.005 m and the concrete-shell
+        coefficient ``concrete_shell_coefficient_ohm_m`` (Ω·m, ADR-0012)
+        to 0 for every kind):
 
         - ``"rod"`` — ``position`` (top end), ``length``.
         - ``"ring"`` — ``center``, ``radius``.
-        - ``"strip"`` — ``start``, ``end``,
-          ``concrete_shell_coefficient_ohm_m`` (Ω·m, default 0).
-        - ``"polyline"`` — ``vertices``, ``closed`` (default ``True``),
-          ``concrete_shell_coefficient_ohm_m``.
+        - ``"strip"`` — ``start``, ``end``.
+        - ``"polyline"`` — ``vertices``, ``closed`` (default ``True``).
         - ``"star"`` — ``center``, ``n_arms``, ``arm_length``,
-          ``orientation_deg`` (default 0), ``concrete_shell_coefficient_ohm_m``.
+          ``orientation_deg`` (default 0).
         - ``"mesh"`` — ``corner``, ``size`` ``(x, y)``, ``spacing``
           (default 1 m).
         - ``"grid_mesh"`` — ``corner``, ``size`` ``(x, y)``, ``n_x``,

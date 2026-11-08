@@ -804,7 +804,12 @@ class Engine(BaseModel):
         ------
         ValueError
             If ``world.soil`` is unset, ``world`` contains no electrodes,
-            or :attr:`backend` is not registered.
+            fails :meth:`World.check <groundfield.world.World.check>`
+            (short-circuited source, zero or non-finite magnitude), or
+            :attr:`backend` is not registered.
+        KeyError
+            If a source terminal or conductor end names no node of
+            ``world`` (:meth:`World.check <groundfield.world.World.check>`).
         BackendCapabilityError
             If the backend cannot represent the world (soil layer count,
             concrete-shell electrodes, explicitly requested kernel). The
@@ -825,6 +830,11 @@ class Engine(BaseModel):
             raise ValueError("World has no soil model. Set one before calling solve().")
         if not world.electrodes:
             raise ValueError("World contains no electrodes.")
+        # Central validation of references and excitation (10.66) for
+        # every backend and entry point. A world without a source stays
+        # solvable here (all results zero); World.solve and the image
+        # pipeline require one.
+        world.check(require_source=False)
 
         resolved = _registry.resolve_backend(self.backend, world)
         _log.info(

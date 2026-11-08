@@ -33,6 +33,10 @@ H100 = gf.HomogeneousSoil(resistivity=100.0)
 
 
 def _solve(backend: str, world: gf.World, ds: float, **kw) -> gf.FieldResult:
+    # Engine cross-checks compare the solvers' current models with the
+    # point kernel of the mom family; the image family runs the exact line
+    # kernel by default since 10.28 (about 1-2 % above point-matching).
+    kw.setdefault("kernel", "point")
     return gf.create_engine(backend=backend, segment_length=ds, **kw).solve(world)
 
 
@@ -245,7 +249,6 @@ def test_b7_rod_through_interface_mom_family(rho_1, rho_2, z_ref, measured) -> N
     )
 
 
-@pytest.mark.xfail(strict=True, reason="10.15: one uniform current across h_1 (F02)")
 @pytest.mark.parametrize(("rho_1", "rho_2"), [(1000.0, 30.0), (100.0, 1000.0)])
 def test_b7_rod_through_interface_image_2layer(rho_1, rho_2, measured) -> None:
     soil = gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=2.0)
@@ -281,8 +284,9 @@ def test_b8_two_port_reciprocity(backend, soil_label, measured) -> None:
     soil = _B8_SOILS[soil_label]
     if (backend == "image") != (soil_label == "homogeneous"):
         pytest.skip("image is the homogeneous backend, image_2layer the layered one")
-    r_a = _solve(backend, _two_port(soil, "A"), 0.5)
-    r_b = _solve(backend, _two_port(soil, "B"), 0.5)
+    # The backend's default kernel (the line kernel for the image family).
+    r_a = _solve(backend, _two_port(soil, "A"), 0.5, kernel=None)
+    r_b = _solve(backend, _two_port(soil, "B"), 0.5, kernel=None)
     z_ba = r_a.electrode_potentials["B"][0] / r_a.electrode_currents["A"][0]
     z_ab = r_b.electrode_potentials["A"][0] / r_b.electrode_currents["B"][0]
     _check(measured, "B8", backend, soil_label, abs(z_ab / z_ba - 1.0))

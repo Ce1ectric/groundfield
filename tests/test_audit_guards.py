@@ -308,14 +308,6 @@ def _cross_layer_world():
     return w
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "10.15: image_2layer gives a rod through h_1 one owner per layer; cim "
-        "keeps one owner per electrode until it maps to image_2layer (10.76, "
-        "stream ENG-2). Remove this marker when that merges."
-    ),
-)
 def test_cross_layer_n2_cim_matches_image_2layer() -> None:
     """cim used to apply the upper-layer series silently; it now
     dispatches the same ADR-0007 cross-layer kernel as image_2layer.

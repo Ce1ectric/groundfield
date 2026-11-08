@@ -73,24 +73,13 @@ def test_galerkin_multiport_is_reciprocal(kernel, soil) -> None:
 @pytest.mark.parametrize("kernel", ["point", "line"])
 @pytest.mark.parametrize("soil", sorted(_SOILS))
 @pytest.mark.parametrize("x_ring", [4.0, 6.0])
-def test_two_port_transfer_impedance_is_reciprocal(
-    kernel, soil, x_ring, request
-) -> None:
+def test_two_port_transfer_impedance_is_reciprocal(kernel, soil, x_ring) -> None:
     """Potential of B per ampere into A equals that of A per ampere into B.
 
     In the two-layer soils the passive rod has one owner per layer, so it
-    must float (zero net current, equalising currents between its layer
-    parts) for the transfer impedance to be reciprocal — finding 10.29,
-    implemented in the pipeline by stream core2a.
+    floats (zero net current, equalising currents between its layer
+    parts, finding 10.29), which makes the transfer impedance reciprocal.
     """
-    if soil != "homogeneous":
-        request.applymarker(
-            pytest.mark.xfail(
-                strict=True,
-                reason="needs floating source-free clusters (10.29, stream core2a); "
-                "passes after the merge",
-            )
-        )
     engine = gf.create_engine(backend="image", segment_length=0.5, kernel=kernel)
     res_a = engine.solve(_rod_and_ring(_SOILS[soil], "A", x_ring))
     res_b = engine.solve(_rod_and_ring(_SOILS[soil], "B", x_ring))

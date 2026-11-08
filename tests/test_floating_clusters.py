@@ -205,7 +205,10 @@ def test_single_passive_electrode_keeps_the_read_back_potential() -> None:
     gf.create_electrode(w, "rod", name="src", position=(0.0, 0.0, 0.0), length=3.0)
     gf.create_electrode(w, "ring", name="p", center=(6.0, 0.0, 0.6), radius=1.5)
     gf.create_source(w, attached_to="src", magnitude=1.0)
-    res = _solve(w)
+    # Point kernel: the reported potential is the length-weighted mean of
+    # the midpoint field. The line kernel reports the segment average of
+    # the field (Galerkin), 1e-4 away from the midpoint values here.
+    res = _solve(w, kernel="point")
     assert res.electrode_currents["p"][0] == 0
     pts = np.array(
         [ps.position for ps in res.point_sources if ps.electrode_name == "p"]
