@@ -1,11 +1,20 @@
 name: Docs
 
-# Deploys the documentation to GitHub Pages (gh-pages branch). The strict
-# build on pull requests runs in ci.yml (job "docs").
+# Versioned deployment of the documentation to GitHub Pages (gh-pages
+# branch) with mike, one docs version per calendar release (decision 7 of
+# the 2026.11 docs plan):
+#   push to main          -> version "dev"
+#   tag vYYYY.M.MICRO     -> version "YYYY.M.MICRO" with the alias "latest",
+#                            which is the default version of the site
+#   tag with a/b/rc/dev   -> its own version, "latest" is not moved
+# The strict build on pull requests runs in ci.yml (job "docs"); mike runs
+# the same strict build (strict: true in mkdocs.yml) before it commits.
 
 on:
   push:
     branches: [main]
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions: {}
@@ -20,22 +29,21 @@ env:
 
 jobs:
   deploy:
-    name: Build and deploy MkDocs site
+    name: Build and deploy the versioned MkDocs site
     runs-on: ubuntu-latest
     permissions:
-      contents: write # mkdocs gh-deploy pushes the gh-pages branch
+      contents: write # mike commits to and pushes the gh-pages branch
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # mkdocs gh-deploy pushes gh-pages with the job token, so the
-          # credential must persist for this job. The job uploads no
-          # artifacts, so the credential cannot leak through one.
+          # mike pushes gh-pages with the job token, so the credential must
+          # persist for this job. The job uploads no artifacts, so the
+          # credential cannot leak through one.
           persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Set up Python 3.12
-        id: python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -46,5 +54,34 @@ jobs:
       - name: Install project with the docs group
         run: poetry install --no-interaction --only main,docs
 
-      - name: Deploy to GitHub Pages
-        run: poetry run mkdocs gh-deploy --force --clean --verbose
+      - name: Fetch the deployed versions
+        # mike adds a version to the existing gh-pages branch; without the
+        # local branch it would start a new one and drop the other versions.
+        run: git fetch origin gh-pages --depth=1 || echo "no gh-pages branch yet"
+
+      - name: Configure the commit identity of mike
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy the development version
+        if: github.ref_type == 'branch'
+        run: poetry run mike deploy --push dev
+
+      - name: Deploy the release version
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          if [[ ! "$version" =~ ^[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$ ]]; then
+            echo "::error::tag $TAG is not a calendar version vYYYY.M.MICRO"
+            exit 1
+          fi
+          if [[ "$version" =~ (a|b|rc|\.dev)[0-9]+ ]]; then
+            # pre-release: its own docs version, "latest" stays on the release
+            poetry run mike deploy --push "$version"
+          else
+            poetry run mike deploy --push --update-aliases "$version" latest
+            poetry run mike set-default --push latest
+          fi
