@@ -29,16 +29,29 @@ voltage is
 
     U_T \\;=\\; U_E \\;-\\; \\varphi(\\mathbf{r}_\\text{feet}).
 
-Since review pass 10 (10.21) the metre is measured from the electrode's
-**footprint** — the horizontal projection of its wires — not from its
-connection point: the feet stand ``distance`` metres from the nearest
-wire, on the side given by ``direction`` (seen from the length-weighted
-centroid of the wires). Inside a closed loop the surface potential
-sags, so :func:`touch_voltage_envelope` also evaluates the centre of
-every closed mesh in open ground — the mesh centres of grids and the
-centre of a ring, the analogue of the IEEE Std 80 *mesh voltage* — but
-not, by default, the inside of a closed polyline, the building-outline
-foundation of the generators (``interior=``).
+The touched parts are the accessible metal parts above ground: a
+station housing or its door, a mast, a fence, a house connection box.
+:func:`touch_voltage_at_part` takes such a part as a touch point — its
+horizontal position and the electrode or junction it is bonded to — and
+puts the feet on the circle of radius ``distance`` around it, optionally
+only in given directions or outside the outlines where nobody can stand
+(the housing or building itself). A part bonded to a node far from the
+faulted earth, for example to a PEN junction at a house, carries a
+transferred potential.
+
+Where the parts are not known, :func:`touch_voltage` and
+:func:`touch_voltage_envelope` use the electrode itself: since review
+pass 10 (10.21) the metre is measured from its **footprint** — the
+horizontal projection of its wires — not from its connection point; the
+feet stand ``distance`` metres from the nearest wire, on the side given
+by ``direction`` (seen from the length-weighted centroid of the wires).
+The envelope does not sample the inside of the footprint by default,
+because there stands the station, the house, the steel structure or the
+mast. Over an open-air grid such as a substation yard people do walk
+inside the loops, where the surface potential sags:
+``interior="meshes"`` adds the mesh centres of grids and the centre of a
+ring, the analogue of the IEEE Std 80 *mesh voltage*, and
+``interior=True`` also the inside of a closed polyline.
 
 For a *step* voltage the body bridges two surface points at the
 typical step distance :math:`d_\\text{step} = 1\\,\\mathrm{m}`:
@@ -110,6 +123,8 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 
 from groundfield.postprocess._footprint import (
+    Footprint,
+    _inside_polygon,
     footprint,
     footprint_of,
     foundation_wires,
@@ -124,6 +139,7 @@ __all__ = [
     "touch_voltage",
     "step_voltage",
     "touch_voltage_envelope",
+    "touch_voltage_at_part",
     "touch_voltage_spectrum",
     "permissible_touch_voltage_en50522",
     "permissible_prospective_touch_voltage_en50522",
@@ -132,6 +148,11 @@ __all__ = [
 ]
 
 Anchor = Literal["footprint", "connection_point"]
+
+#: Interior sampling of :func:`touch_voltage_envelope`: ``False`` (none),
+#: ``"meshes"`` (grids, rings, bonded-wire grids) or ``True`` (also the
+#: inside of closed polylines).
+Interior = bool | Literal["meshes"]
 
 
 class UniformCurrentFieldWarning(UserWarning):
@@ -211,6 +232,119 @@ def _cluster_potential(
             f"frequency_index {frequency_index} out of range "
             f"[0, {len(result.electrode_potentials[electrode])})."
         ) from e
+
+
+def _node_potential(result: "FieldResult", name: str, frequency_index: int) -> complex:
+    """Potential in V of the electrode or junction ``name`` at one frequency."""
+    junctions = result.metadata.get("junction_potentials") or {}
+    if name in junctions:
+        values = junctions[name]
+    elif name in result.electrode_potentials:
+        values = result.electrode_potentials[name]
+    else:
+        known = sorted(set(result.electrode_potentials) | set(junctions))
+        shown = ", ".join(repr(k) for k in known[:12])
+        more = " ..." if len(known) > 12 else ""
+        raise KeyError(
+            f"{name!r} is neither an electrode nor a junction with a potential "
+            f"in this result (known: {shown}{more})."
+        )
+    try:
+        return complex(values[frequency_index])
+    except IndexError as e:
+        raise IndexError(
+            f"frequency_index {frequency_index} out of range [0, {len(values)})."
+        ) from e
+
+
+def _check_interior(interior: object) -> "Interior":
+    """``interior`` as ``False``, ``"meshes"`` or ``True`` (numpy booleans too)."""
+    if isinstance(interior, (bool, np.bool_)):
+        return bool(interior)
+    if isinstance(interior, str) and interior == "meshes":
+        return "meshes"
+    hint = (
+        " (interior=None was the 'meshes' sampling of the development "
+        "snapshots; pass interior='meshes')"
+        if interior is None
+        else ""
+    )
+    raise ValueError(
+        f"interior must be False, 'meshes' or True, got {interior!r}{hint}."
+    )
+
+
+def _horizontal_xy(values, what: str) -> np.ndarray:
+    """``(x, y)`` of a 2- or 3-vector of finite numbers (``z`` ignored)."""
+    arr = np.asarray(values, dtype=float).ravel()
+    if arr.size not in (2, 3) or not np.all(np.isfinite(arr)):
+        raise ValueError(
+            f"{what} must be (x, y) or (x, y, z) with finite coordinates, "
+            f"got {values!r}."
+        )
+    return arr[:2].copy()
+
+
+def _part_directions(n_angles: int | None, directions) -> tuple[np.ndarray, np.ndarray]:
+    """Azimuths ``(n,)`` in rad and horizontal unit vectors ``(n, 2)``."""
+    if directions is None:
+        n = 24 if n_angles is None else int(n_angles)
+        if n < 3:
+            raise ValueError(
+                f"n_angles must be >= 3, got {n_angles}; pass directions= for "
+                "fewer foot positions."
+            )
+        angles = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+        return angles, np.column_stack([np.cos(angles), np.sin(angles)])
+    if n_angles is not None:
+        raise ValueError("pass either n_angles or directions, not both.")
+    rows = [np.asarray(d, dtype=float).ravel() for d in directions]
+    if not rows:
+        raise ValueError("directions must contain at least one direction.")
+    units = []
+    for d in rows:
+        if d.size not in (2, 3):
+            raise ValueError(
+                f"directions must be 2- or 3-vectors, got {tuple(d.tolist())}."
+            )
+        units.append(_horizontal((d[0], d[1], d[2] if d.size == 3 else 0.0))[:2])
+    unit = np.asarray(units)
+    angles = np.mod(np.arctan2(unit[:, 1], unit[:, 0]), 2.0 * np.pi)
+    return angles, unit
+
+
+def _accessible(
+    feet_xy: np.ndarray, outlines, origin: np.ndarray, distance: float
+) -> np.ndarray:
+    """Mask of the foot positions not strictly inside any of ``outlines``.
+
+    Computed relative to ``origin`` (the touched part), so map coordinates
+    such as UTM do not cost the precision of the boundary test; a foot on
+    an outline (within ``1e-9`` of ``max(1, distance)``) stands against
+    the wall and is kept.
+    """
+    keep = np.ones(len(feet_xy), dtype=bool)
+    if outlines is None:
+        return keep
+    local = feet_xy - origin
+    tol = 1e-9 * max(1.0, distance)
+    for k, outline in enumerate(outlines):
+        poly = np.asarray(outline, dtype=float)
+        if (
+            poly.ndim != 2
+            or poly.shape[0] < 3
+            or poly.shape[1] not in (2, 3)
+            or not np.all(np.isfinite(poly))
+        ):
+            raise ValueError(
+                f"exclude[{k}] must be a polygon of at least 3 vertices (x, y) "
+                "or (x, y, z) with finite coordinates in m."
+            )
+        poly = poly[:, :2] - origin
+        edges = np.stack([poly, np.roll(poly, -1, axis=0)], axis=1)
+        on_wall = Footprint(edges, np.zeros((0, 3))).distance(local) <= tol
+        keep &= ~(_inside_polygon(local, poly) & ~on_wall)
+    return keep
 
 
 def _feet_xy(
@@ -318,6 +452,8 @@ def touch_voltage(
     ray that leaves the electrode's footprint in the horizontal
     projection of ``direction``: 1 m outside the edge of a grid, 1 m
     beyond the tip of a star arm, 1 m outside a ring on either side.
+    This is a proxy for an unknown touched part; for a known accessible
+    metal part use :func:`touch_voltage_at_part`.
 
     Parameters
     ----------
@@ -395,23 +531,29 @@ def touch_voltage_envelope(
     surface_z: float = 0.0,
     frequency_index: int = 0,
     anchor: Anchor = "footprint",
-    interior: bool | None = None,
+    interior: Interior = False,
     return_points: bool = False,
 ) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Touch voltages around an electrode and inside its closed loops.
+    """Touch voltages around an electrode, on request also inside its loops.
 
     Walks ``n_angles`` equally spaced directions and places the feet as
     in :func:`touch_voltage`: with ``anchor="footprint"`` this traces
     the curve at ``distance`` from the electrode's wires (rounded around
-    corners and arm tips). Inside a closed loop the surface potential
-    sags, so the touch voltage there can exceed every value on that curve
-    (a 20 m × 20 m perimeter loop at 0.5 m depth, 100 Ω·m, 100 A: 158 V
-    in the centre against at most 141 V 1 m outside). The envelope
-    therefore also evaluates the centre of every closed mesh, the
-    analogue of the *mesh voltage* of IEEE Std 80 (the worst touch
-    voltage inside a mesh of a grid, near the mesh centre); see
-    ``interior``. The maximum of ``|U_T|`` is the conservative envelope
-    used in safety verification.
+    corners and arm tips). The maximum of ``|U_T|`` is the conservative
+    envelope used in safety verification when the touched parts are not
+    known; where they are, :func:`touch_voltage_at_part` puts the feet
+    around each part.
+
+    By default nothing inside the footprint is sampled: there stands the
+    station, the house, the steel structure or the mast. Over an open-air
+    grid such as a substation yard people walk inside the loops, and the
+    surface potential sags there, so the touch voltage can exceed every
+    value on the offset curve (a 20 m × 20 m perimeter loop at 0.5 m
+    depth, 100 Ω·m, 100 A: 158 V in the centre against at most 141 V
+    1 m outside). For such grids ``interior="meshes"`` also evaluates the
+    centre of every closed mesh, the analogue of the *mesh voltage* of
+    IEEE Std 80 (the worst touch voltage inside a mesh of a grid, near
+    the mesh centre).
 
     Parameters
     ----------
@@ -428,21 +570,22 @@ def touch_voltage_envelope(
     surface_z, frequency_index, anchor
         See :func:`touch_voltage`.
     interior
-        Which closed loops are sampled inside (review pass 10, 10.21).
-        ``None`` (default): the centre of every mesh of a ``mesh`` /
-        ``grid_mesh`` electrode, the centre of a ``ring``, and the centre
-        of every cell of a foundation built from bonded wires
-        (:func:`~groundfield.postprocess._footprint.foundation_wires`):
-        the generators build every mesh foundation as one open polyline
-        per wire line and a ``"distributed"`` ring foundation as one wire
-        per side, so their cells are sampled. A closed ``polyline``, the
-        polygon-outline foundation of the generators, is not sampled,
-        because inside it lies the building. ``True``: also a closed
-        polyline, at the point inside it farthest from its wires.
-        ``False``: the offset curve only. The default cannot see
-        buildings: pass ``interior=False`` where the inside is not
-        accessible ground — the cells of a generated house foundation
-        lie under the building, a ring may surround a station housing.
+        Which closed loops are also sampled inside (review pass 10, 10.21).
+        ``False`` (default): none, the offset curve only, for every
+        electrode kind. ``"meshes"``: the centre of every mesh of a
+        ``mesh`` / ``grid_mesh`` electrode, the centre of a ``ring``, and
+        the centre of every cell of a foundation built from bonded wires
+        (:func:`~groundfield.postprocess._footprint.foundation_wires`; the
+        generators build every mesh foundation as one open polyline per
+        wire line and a ``"distributed"`` ring foundation as one wire per
+        side), but not the inside of a closed ``polyline``, the
+        building-outline foundation of the generators. Use it where the
+        inside of the loops is accessible open ground: a substation yard
+        or another open-air grid, a ring around an open area. ``True``:
+        also a closed polyline, at the point inside it farthest from its
+        wires. The modes cannot see buildings: a mesh foundation's cells
+        lie under the house, a ring may surround a station housing or a
+        mast foot.
     return_points
         Also return the foot positions.
 
@@ -462,28 +605,36 @@ def touch_voltage_envelope(
     ------
     ValueError
         For ``n_angles < 3``, a non-positive ``distance``, an unknown
-        ``anchor`` or an ``interior`` other than ``None``, ``True`` and
-        ``False``.
+        ``anchor`` or an ``interior`` other than ``False``, ``"meshes"``
+        and ``True``.
+
+    Warns
+    -----
+    UniformCurrentFieldWarning
+        Once per call, for a uniform-current result evaluated near a
+        crowding geometry (see the module docstring).
 
     Notes
     -----
     ``n = n_angles`` plus the number of interior points. To reproduce
     v0.15.0 (circle around the connection point) pass
-    ``anchor="connection_point", interior=False``.
+    ``anchor="connection_point"``. During the 2026.11 development the
+    mesh sampling was the default (``interior=None``); it is now the
+    explicit ``interior="meshes"``.
     """
     if n_angles < 3:
         raise ValueError(f"n_angles must be >= 3, got {n_angles}.")
     _check_distance(distance)
     _check_anchor(anchor)
-    if interior not in (None, True, False):
-        raise ValueError(f"interior must be None, True or False, got {interior!r}.")
+    # user decision Q3: no interior sampling unless asked for.
+    interior = _check_interior(interior)
 
     angles = np.linspace(0.0, 2.0 * np.pi, n_angles, endpoint=False)
     dirs = np.column_stack([np.cos(angles), np.sin(angles)])
     feet_xy = _feet_xy(world, electrode, dirs, distance, anchor, result)
     if interior is not False:
         wires = foundation_wires(world, electrode, getattr(result, "clusters", None))
-        inner = interior_points_of(wires, outlines=bool(interior))
+        inner = interior_points_of(wires, outlines=interior is True)
         if len(inner):
             ref = footprint_of(wires).reference_point
             az = np.mod(
@@ -497,6 +648,145 @@ def touch_voltage_envelope(
     phi_feet = result.potential(feet, frequency_index=frequency_index)
     U_E = _cluster_potential(result, electrode, frequency_index)
     voltages = U_E - phi_feet
+    if return_points:
+        return angles, voltages, feet
+    return angles, voltages
+
+
+def touch_voltage_at_part(
+    result: "FieldResult",
+    world: "World | None" = None,
+    *,
+    position: Sequence[float],
+    bonded_to: str,
+    distance: float = 1.0,
+    n_angles: int | None = None,
+    directions: "Sequence[Sequence[float]] | None" = None,
+    exclude: "Sequence[Sequence[Sequence[float]]] | None" = None,
+    surface_z: float = 0.0,
+    frequency_index: int = 0,
+    return_points: bool = False,
+) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Touch voltage of an accessible metal part, feet ``distance`` around it.
+
+    EN 50522 defines the touch voltage between a conductive part that a
+    person touches and the person's feet, standing 1 m away from the
+    part. The touch points of an installation are its accessible metal
+    parts above ground — a station housing or its door, a mast, a fence
+    post, a cable cabinet, a house connection box — not the buried
+    electrode. This helper takes one such part: its horizontal position
+    :math:`\\mathbf p` and the electrode or junction it is bonded to,
+    whose potential :math:`U_\\text{part}` it carries. The feet stand on
+    the circle of radius :math:`d` = ``distance`` around the part,
+
+    .. math::
+
+        \\mathbf r_k = \\mathbf p + d\\,(\\cos\\theta_k, \\sin\\theta_k),
+        \\qquad
+        U_{T,k} = U_\\text{part} - \\varphi(\\mathbf r_k),
+
+    at ``n_angles`` equally spaced azimuths
+    :math:`\\theta_k = 2\\pi k / n`, or only in the given ``directions``;
+    foot positions inside an outline of ``exclude`` (the housing or the
+    building itself, where nobody can stand) are dropped. A part bonded
+    to a node far from the faulted earth — a house connection box on the
+    PEN junction of a house, a cable screen led out of a station —
+    carries a transferred potential; ``U_T`` is then most of the earth
+    potential rise.
+
+    Parameters
+    ----------
+    result
+        Solver output from :meth:`Engine.solve`.
+    world
+        Optional companion world. Only used to decide whether to emit
+        :class:`UniformCurrentFieldWarning`, as in :func:`step_voltage`.
+    position
+        Horizontal position ``(x, y)`` of the touched part in m. A third
+        coordinate is accepted and ignored: the part stands above ground,
+        the feet on the surface.
+    bonded_to
+        Name of the electrode or junction (:func:`~groundfield.create_junction`)
+        whose potential the part carries: the station earth for its
+        housing, the PEN junction of a house for its connection box.
+    distance
+        Horizontal distance between the part and the feet in m, ``> 0``
+        (1.0 by EN 50522).
+    n_angles
+        Number of equally spaced foot positions on the circle, ``>= 3``;
+        24 when neither ``n_angles`` nor ``directions`` is given.
+    directions
+        Only these horizontal directions (2- or 3-vectors, the ``z``
+        component is ignored), seen from the part: for example the outside
+        of a fence. Not together with ``n_angles``.
+    exclude
+        Outlines where nobody can stand, each a polygon of vertices
+        ``(x, y)`` or ``(x, y, z)`` in m (``z`` ignored), e.g. the housing
+        of a station or a building. Foot positions strictly inside an
+        outline are dropped; positions on it (against the wall) are kept.
+    surface_z
+        :math:`z` coordinate of the soil surface in m. Default ``0.0``.
+    frequency_index
+        Index into :attr:`FieldResult.frequencies`. Default 0.
+    return_points
+        Also return the foot positions.
+
+    Returns
+    -------
+    angles : np.ndarray, shape (n,)
+        Azimuth in radians in :math:`[0, 2\\pi)` of each remaining foot
+        position, seen from the part and measured from ``+x``.
+    voltages : np.ndarray, shape (n,), dtype complex
+        Touch-voltage phasor :math:`U_T` in V at every foot position.
+    points : np.ndarray, shape (n, 3)
+        Foot positions in m; only with ``return_points=True``.
+
+    Raises
+    ------
+    KeyError
+        If ``bonded_to`` is neither an electrode nor a junction with a
+        potential in ``result``.
+    IndexError
+        If ``frequency_index`` is out of range.
+    ValueError
+        If ``distance`` is not a positive finite number, ``position`` is
+        not a finite 2- or 3-vector, ``n_angles < 3``, both ``n_angles``
+        and ``directions`` are given, a direction has no horizontal
+        component, an outline is not a polygon, or every foot position
+        lies inside an outline.
+
+    Warns
+    -----
+    UniformCurrentFieldWarning
+        Once per call, for a uniform-current result evaluated near a
+        crowding geometry (see the module docstring).
+
+    Notes
+    -----
+    For a part on a wire of the electrode with the feet pointing away
+    from it, the foot position is the one of :func:`touch_voltage` and so
+    is the value. The voltage is the prospective (open-circuit) touch
+    voltage; compare its magnitude with
+    :func:`permissible_touch_voltage_en50522`, or with
+    :func:`permissible_prospective_touch_voltage_en50522` when footwear or
+    a surface layer adds resistance.
+    """
+    # user decision Q3: touch points are the accessible metal parts.
+    _check_distance(distance)
+    origin = _horizontal_xy(position, "position")
+    angles, unit = _part_directions(n_angles, directions)
+    feet_xy = origin + distance * unit
+    keep = _accessible(feet_xy, exclude, origin, distance)
+    if not keep.any():
+        raise ValueError(
+            "every foot position around the part lies inside an outline of "
+            "exclude; there is no accessible standing position."
+        )
+    angles, feet_xy = angles[keep], feet_xy[keep]
+    u_part = _node_potential(result, bonded_to, frequency_index)
+    feet = np.column_stack([feet_xy, np.full(len(feet_xy), surface_z, dtype=float)])
+    _uniform_current_caveat(result, world, feet, caller="touch_voltage_at_part")
+    voltages = u_part - result.potential(feet, frequency_index=frequency_index)
     if return_points:
         return angles, voltages, feet
     return angles, voltages

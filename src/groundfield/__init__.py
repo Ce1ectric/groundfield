@@ -142,6 +142,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "permissible_touch_voltage_en50522",
         "step_voltage",
         "touch_voltage",
+        "touch_voltage_at_part",
         "touch_voltage_envelope",
         "touch_voltage_spectrum",
     ),
@@ -312,6 +313,7 @@ if _typing.TYPE_CHECKING:
         permissible_touch_voltage_en50522,
         step_voltage,
         touch_voltage,
+        touch_voltage_at_part,
         touch_voltage_envelope,
         touch_voltage_spectrum,
     )
@@ -550,6 +552,7 @@ __all__ = [
     # Safety (touch / step voltage)
     "touch_voltage",
     "touch_voltage_envelope",
+    "touch_voltage_at_part",
     "touch_voltage_spectrum",
     "step_voltage",
     "permissible_touch_voltage_en50522",
