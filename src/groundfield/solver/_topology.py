@@ -18,6 +18,7 @@ import numpy as np
 from groundfield.solver._discretize import (
     _discretize_conductor,
     _DistributedBranch,
+    _is_conductor_chain,
     _Segment,
 )
 
@@ -242,19 +243,14 @@ def _build_finite_branches(
         is_ideal = getattr(c, "is_ideal", None)
         if not callable(is_ideal) or is_ideal():
             continue
-        if (
-            getattr(c, "is_distributed", False)
-            and not distributed_as_lumped
-            and getattr(c, "n_segments", 1) > 1
-        ):
-            # Routed through _build_distributed_topology instead.
-            # A distributed conductor that degenerates to a single
-            # sub-piece (n_segments == 1, i.e.
-            # discretize_segment_length >= conductor length) is *not*
-            # handled there — _discretize_conductor returns an empty
-            # topology for n <= 1 — so it must fall through to the
-            # lumped branch here. Previously it silently vanished
-            # from the system (open circuit).
+        if _is_conductor_chain(c) and not distributed_as_lumped:
+            # Routed through _build_distributed_topology instead. An
+            # isolated distributed conductor that degenerates to a single
+            # sub-piece (n_segments == 1, i.e. discretize_segment_length >=
+            # conductor length) is no chain — _discretize_conductor returns
+            # an empty topology for it — so it falls through to the lumped
+            # branch here (it used to vanish: open circuit). A galvanic one
+            # is a chain with one leaking midpoint (10.24).
             continue
         node_a = cluster_id[a]
         node_b = cluster_id[b]

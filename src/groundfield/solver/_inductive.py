@@ -500,7 +500,9 @@ def _assemble_inductance_matrix(
 
 def _is_chain(conductor: Conductor) -> bool:
     """Whether the topology routes ``conductor`` as a distributed chain."""
-    return bool(conductor.is_distributed) and int(conductor.n_segments) > 1
+    from groundfield.solver._discretize import _is_conductor_chain
+
+    return _is_conductor_chain(conductor)
 
 
 def _lumped_branch_conductors(

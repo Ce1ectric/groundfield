@@ -411,7 +411,7 @@ def _conductor_segment_count(c) -> int:
     nodal-analysis branches.
 
     Distributed conductors contribute one midpoint per sub-piece
-    (``conductor.n_segments``) **only** when
+    (``conductor.n_segments``, also a single one) **only** when
     ``coupling_to_soil == "galvanic"``. With
     ``coupling_to_soil == "isolated"`` (typical jacketed cable —
     PEN inside an NAYY, etc.) the longitudinal-branch chain is
@@ -423,8 +423,7 @@ def _conductor_segment_count(c) -> int:
         return 0
     if c.coupling_to_soil != "galvanic":
         return 0
-    n = int(c.n_segments)
-    return n if n > 1 else 0
+    return int(c.n_segments)
 
 
 def _check_ds(engine: "Engine") -> float:
