@@ -422,9 +422,11 @@ def _materialise_polygon_foundation(
     verts = clean_polygon(spec.polygon_xy_m, min_edge_m=MIN_POLYGON_EDGE_M)
     if len(verts) < 3:
         raise ValueError(
-            f"Foundation {name!r}: polygon collapses to fewer than 3 "
-            "vertices after removing sub-centimetre edges — check the "
-            "footprint."
+            f"Foundation {name!r}: the polygon outline collapses to fewer than "
+            "3 vertices after removing edges shorter than MIN_POLYGON_EDGE_M = "
+            f"{MIN_POLYGON_EDGE_M:g} m. Use an outline at least "
+            f"{MIN_POLYGON_EDGE_M:g} m wide (GroundingSystemSpec.with_footprint "
+            "widens thin building outlines), or outline='ombr'."
         )
     perimeter = 0.0
     for k in range(len(verts)):

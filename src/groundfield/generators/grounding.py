@@ -38,10 +38,15 @@ front-end (``TnNetworkGenerator`` with an OSM placement and
   strip foundation runs along the building perimeter; ring-style
   foundations only);
 * ``"spec"`` — the spec geometry unchanged.
+
+In both outline rules an outline narrower than
+:data:`MIN_FOUNDATION_SIDE_M` (a mapped wall or fence) is widened to that
+side with a :class:`UserWarning`.
 """
 
 from __future__ import annotations
 
+import math
 import warnings
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
@@ -98,6 +103,50 @@ def _to_float(value: Union[float, Distribution], rng: np.random.Generator) -> fl
     if isinstance(value, Distribution):
         return float(value.sample(rng))
     return float(value)
+
+
+def _widened_ombr(
+    footprint: "BuildingFootprint",
+) -> tuple[tuple[float, float], tuple[float, float], float]:
+    """OMBR of ``footprint`` with sides of at least :data:`MIN_FOUNDATION_SIDE_M`.
+
+    Returns ``((cx, cy), (dx, dy), orientation_deg)`` in m and degrees; a
+    narrower side is widened with a :class:`UserWarning` (audit L5,
+    A2G-06).
+    """
+    (cx, cy), (dx, dy), orientation_deg = footprint.oriented_bounding_rectangle()
+    if min(dx, dy) < MIN_FOUNDATION_SIDE_M:
+        label = "" if footprint.osm_id is None else f" {footprint.osm_id}"
+        warnings.warn(
+            f"Footprint{label} is {dx:.3g} m x {dy:.3g} m; its "
+            f"foundation is widened to {MIN_FOUNDATION_SIDE_M:g} m "
+            "(MIN_FOUNDATION_SIDE_M). Drop such outlines (walls, "
+            "fences) from the footprints if they carry no foundation.",
+            UserWarning,
+            stacklevel=3,
+        )
+        dx = max(dx, MIN_FOUNDATION_SIDE_M)
+        dy = max(dy, MIN_FOUNDATION_SIDE_M)
+    return (cx, cy), (dx, dy), orientation_deg
+
+
+def _rectangle_ring(
+    centre: tuple[float, float], size: tuple[float, float], orientation_deg: float
+) -> list[tuple[float, float]]:
+    """Corners (m) of a ``size`` rectangle at ``centre``, rotated by the angle."""
+    cx, cy = centre
+    half_x, half_y = 0.5 * size[0], 0.5 * size[1]
+    c = math.cos(math.radians(orientation_deg))
+    s = math.sin(math.radians(orientation_deg))
+    return [
+        (cx + u * c - v * s, cy + u * s + v * c)
+        for u, v in (
+            (-half_x, -half_y),
+            (half_x, -half_y),
+            (half_x, half_y),
+            (-half_x, half_y),
+        )
+    ]
 
 
 # Kept for callers of the pre-2026.11 private names.
@@ -328,7 +377,14 @@ class GroundingSystemSpec(GeneratorConfig):
             :class:`UserWarning`). ``"polygon"``: every
             foundation follows the outline itself (``polygon_xy_m`` =
             exterior ring relative to ``site_xy``); only defined for
-            ``style="ring"``. ``"spec"``: return ``self`` unchanged.
+            ``style="ring"``. An outline whose OMBR is narrower than
+            :data:`MIN_FOUNDATION_SIDE_M` is replaced by that OMBR widened
+            to it, as a four-cornered outline (with a :class:`UserWarning`,
+            as for ``"ombr"``); a polygon foundation along it would run
+            along both faces of a wall, and an outline narrower than
+            :data:`~groundfield.generators.materialise.MIN_POLYGON_EDGE_M`
+            could not be built at all. ``"spec"``: return ``self``
+            unchanged.
 
         Returns
         -------
@@ -344,7 +400,9 @@ class GroundingSystemSpec(GeneratorConfig):
             (cross-braces are undefined on a general polygon) or an
             unknown ``outline``.
         ImportError
-            ``outline="ombr"`` needs :mod:`shapely` (``geo`` extra).
+            ``outline="ombr"``, and ``outline="polygon"`` for an outline
+            narrower than :data:`MIN_FOUNDATION_SIDE_M` on average, need
+            :mod:`shapely` (``geo`` extra).
         """
         if outline == "spec" or not self.electrodes:
             return self
@@ -354,25 +412,21 @@ class GroundingSystemSpec(GeneratorConfig):
             )
         if site_xy is None:
             site_xy = footprint.centroid_xy_m()
+        ring = [(float(x), float(y)) for x, y in footprint.polygon_xy_m]
         if outline == "ombr":
+            (cx, cy), (dx, dy), orientation_deg = _widened_ombr(footprint)
+            # Recentre on the OMBR centre (F25): the electrode sits at
+            # ``site_xy + offset_xy_m``.
+            recentre = (cx - site_xy[0], cy - site_xy[1])
+        elif footprint.mean_width_m() < MIN_FOUNDATION_SIDE_M:
+            # Only thin outlines can have an OMBR side below the minimum
+            # (the mean width of a rectangle is below its short side), so
+            # ordinary buildings need no shapely here.
             (cx, cy), (dx, dy), orientation_deg = (
                 footprint.oriented_bounding_rectangle()
             )
             if min(dx, dy) < MIN_FOUNDATION_SIDE_M:
-                label = "" if footprint.osm_id is None else f" {footprint.osm_id}"
-                warnings.warn(
-                    f"Footprint{label} is {dx:.3g} m x {dy:.3g} m; its "
-                    f"foundation is widened to {MIN_FOUNDATION_SIDE_M:g} m "
-                    "(MIN_FOUNDATION_SIDE_M). Drop such outlines (walls, "
-                    "fences) from the footprints if they carry no foundation.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-                dx = max(dx, MIN_FOUNDATION_SIDE_M)
-                dy = max(dy, MIN_FOUNDATION_SIDE_M)
-            # Recentre on the OMBR centre (F25): the electrode sits at
-            # ``site_xy + offset_xy_m``.
-            recentre = (cx - site_xy[0], cy - site_xy[1])
+                ring = _rectangle_ring(*_widened_ombr(footprint))
         rewritten: list[ElectrodeSpec] = []
         changed = False
         for spec in self.electrodes:
@@ -396,12 +450,7 @@ class GroundingSystemSpec(GeneratorConfig):
                         "polygon. Use outline='ombr' or a ring-style spec."
                     )
                 sx, sy = site_xy
-                update = {
-                    "polygon_xy_m": tuple(
-                        (float(x) - sx, float(y) - sy)
-                        for x, y in footprint.polygon_xy_m
-                    )
-                }
+                update = {"polygon_xy_m": tuple((x - sx, y - sy) for x, y in ring)}
             rewritten.append(spec.model_copy(update=update))
             changed = True
         if not changed:
