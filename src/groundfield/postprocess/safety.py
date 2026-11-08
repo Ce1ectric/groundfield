@@ -579,8 +579,9 @@ def touch_voltage_envelope(
         the centre of every cell of a foundation built from bonded wires
         (:func:`~groundfield.postprocess._footprint.foundation_wires`; the
         generators build every mesh foundation as one open polyline per
-        wire line and a ``"distributed"`` ring foundation as one wire per
-        side), but not the inside of a closed ``polyline``, the
+        wire line and every rectangle without cross-braces as one wire per
+        side, user decision Q38), but not the inside of a closed
+        ``polyline``, the
         building-outline foundation of the generators. Use it where the
         inside of the loops is accessible open ground: a substation yard
         or another open-air grid, a ring around an open area. ``True``:
