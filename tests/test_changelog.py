@@ -157,13 +157,11 @@ def test_audit_index_links_every_pass_page() -> None:
 
 
 @pytest.mark.finding("10.93")
-@pytest.mark.skipif(
-    not FRAGMENTS.is_dir(), reason="fragments were merged at the release"
-)
 def test_pass10_page_holds_every_fragment_verbatim() -> None:
-    page = _text(AUDIT / "pass-10.md")
     fragments = sorted(p for p in FRAGMENTS.glob("*.md") if p.name != "README.md")
-    assert fragments
+    if not fragments:
+        pytest.skip("no changelog fragments (they are deleted at the release)")
+    page = _text(AUDIT / "pass-10.md")
     stale = [p.name for p in fragments if _text(p).strip("\n") not in page]
     assert not stale, (
         "docs/audit/pass-10.md does not hold these fragments verbatim; regenerate "
