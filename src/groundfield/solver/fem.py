@@ -536,25 +536,48 @@ def _layer_text(top: float, bottom: float, rho: float) -> str:
     return f"{span} (rho = {rho:g} Ohm m)"
 
 
-def _touched_layers(
-    world: "World", members: list[str], bounds: list[tuple[float, float]]
-) -> set[int]:
-    """Indices of the layers any electrode of ``members`` touches.
+#: Relative round-off allowance of the contact predicate, in units of the
+#: wire radius (as in :func:`groundfield.solver._guards._rod_ends_near_interfaces`).
+_CONTACT_ROUND_OFF = 1e-9
 
-    An electrode touches a layer when its depth range and the layer's
-    closed depth interval overlap; one lying exactly on an interface
-    touches both layers. A part above the soil surface (``z < 0``) counts
-    as lying at the surface, i.e. in the top layer.
+
+def _electrode_layers(
+    electrode: "_ElectrodeBase", bounds: list[tuple[float, float]]
+) -> set[int]:
+    """Indices of the layers ``electrode`` touches: the contact predicate.
+
+    The one predicate of every layer rule of the reduction (audit D2A-01,
+    D2A-02), the contact of the thin-wire model the integral engines solve:
+
+    * a **horizontal** electrode (constant depth $z$, wire radius $a$)
+      touches every layer that the band $[z - a, z + a]$ meets (closed): a
+      wire lying in or within one radius of an interface touches both
+      layers, and round-off of an interface depth (``0.1 + 0.2``) does
+      not decide;
+    * a **non-horizontal** electrode (a rod) touches the layers its axis
+      passes through, the open interval between its ends (to round-off):
+      the thin-wire model has no end face, so an end lying on an interface
+      does not touch the layer beyond it — a rod whose head lies on $h_1$,
+      or within one radius below it, does not touch the top layer.
+
+    Electrodes above the soil surface were refused before
+    (:func:`_reject_electrodes_out_of_the_soil`).
     """
-    touched: set[int] = set()
-    for name in members:
-        z_top, z_bottom = (max(z, 0.0) for z in _depth_range(world.get_electrode(name)))
-        touched.update(
+    z_top, z_bottom = _depth_range(electrode)
+    a = float(electrode.wire_radius)
+    if z_bottom > z_top:
+        eps = _CONTACT_ROUND_OFF * a
+        return {
             k
             for k, (top, bottom) in enumerate(bounds)
-            if z_top <= bottom and z_bottom >= top
-        )
-    return touched
+            if z_top < bottom - eps and z_bottom > top + eps
+        }
+    reach = a * (1.0 + _CONTACT_ROUND_OFF)
+    return {
+        k
+        for k, (top, bottom) in enumerate(bounds)
+        if z_top - reach <= bottom and z_top + reach >= top
+    }
 
 
 def _unreachable_layers(
@@ -610,29 +633,54 @@ def _unreachable_layers(
         One entry per offending cluster (empty if none).
     """
     stack = as_layer_stack(world.soil)
-    interfaces = np.cumsum(stack.h)
     bounds = _layer_bounds(stack)
     found: list[_Unreachable] = []
     for root in active_clusters:
         a_eq = a_eq_per_cluster[root]
-        deepest = max(
-            clusters[root], key=lambda e: _depth_range(world.get_electrode(e))[1]
-        )
-        z_deep = _depth_range(world.get_electrode(deepest))[1]
-        crossed = [float(d) for d in interfaces if a_eq < d < z_deep]
-        if crossed:
+        members = clusters[root]
+        # One contact predicate for the three rules (audit D2A-01, D2A-02).
+        layers = {e: _electrode_layers(world.get_electrode(e), bounds) for e in members}
+        touched = set().union(*layers.values())
+        # 10.23: an electrode touches a layer whose top lies below a_eq.
+        unreached = {
+            e: sorted(bounds[k][0] for k in ks if bounds[k][0] > a_eq)
+            for e, ks in layers.items()
+        }
+        offenders = [e for e in members if unreached[e]]
+        if offenders:
+            deepest = max(
+                offenders, key=lambda e: _depth_range(world.get_electrode(e))[1]
+            )
+            z_deep = _depth_range(world.get_electrode(deepest))[1]
+            h = unreached[deepest][0]
+            if h < z_deep:
+                where = (
+                    f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
+                    f"layer interface at h = {h:.3g} m"
+                )
+            else:  # a horizontal wire within its radius above the interface
+                where = (
+                    f"electrode '{deepest}' lies at z = {z_deep:.4g} m, within its "
+                    f"wire radius of {world.get_electrode(deepest).wire_radius:.3g} m "
+                    f"of the layer interface at h = {h:.4g} m, so it touches the "
+                    "layer below it"
+                )
             found.append(
                 _Unreachable(
                     "wrong_layer",
-                    f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
-                    f"layer interface at h = {crossed[0]:.3g} m, but the "
-                    f"equivalent hemisphere of its cluster ends at a_eq = "
-                    f"{a_eq:.3g} m above it",
+                    f"{where}, but the equivalent hemisphere of its cluster ends at "
+                    f"a_eq = {a_eq:.3g} m above it",
                 )
             )
             continue
-        z_top = min(_depth_range(world.get_electrode(e))[0] for e in clusters[root])
-        covering = [float(d) for d in interfaces if 0.5 * a_eq < d <= min(a_eq, z_top)]
+        # A2E-2: the cluster lies below an interface in (a_eq/2, a_eq], i.e.
+        # it touches no layer above that interface.
+        z_top = min(_depth_range(world.get_electrode(e))[0] for e in members)
+        covering = [
+            bounds[k][0]
+            for k in range(1, min(touched) + 1)
+            if 0.5 * a_eq < bounds[k][0] <= a_eq
+        ]
         if covering:
             h = covering[-1]
             names = sorted(clusters[root])
@@ -656,7 +704,6 @@ def _unreachable_layers(
         # electrodes would send through their own layer(s).
         if stack.n_layers < 2:
             continue
-        touched = _touched_layers(world, clusters[root], bounds)
         rho_touched = min(float(stack.rhos[k]) for k in touched)
         better = [
             k

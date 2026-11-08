@@ -506,8 +506,11 @@ def test_fem_an_electrode_on_the_interface_touches_both_layers() -> None:
 
     Ring r = 5 m (a_eq = 2.57 m) under a 30/1000 Ω·m top layer of 0.5 m:
     at z = 0.5 m it lies on the interface and touches both layers (the
-    reduction then only warns); 1 µm deeper it touches the lower layer
-    alone and the spanned top layer, more conductive, raises.
+    reduction then only warns); 7 mm deeper, beyond its wire radius of
+    5 mm, it touches the lower layer alone and the spanned top layer, more
+    conductive, raises. (Up to audit D2A-02 the ring raised 1 µm below the
+    interface already; within its radius it touches the top layer, see
+    :func:`test_fem_a_wire_within_its_radius_of_the_interface_touches_both_layers`.)
     """
     # user decision Q23
     soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
@@ -515,9 +518,169 @@ def test_fem_an_electrode_on_the_interface_touches_both_layers() -> None:
     res, texts = _fem_warnings(on)
     assert math.isfinite(res.cluster_impedance("g1")[0].real)
     assert texts and "interface" in texts[0]
-    below = _electrode_world(soil, "ring", center=(0, 0, 0.5 + 1e-6), radius=5.0)
+    below = _electrode_world(soil, "ring", center=(0, 0, 0.5 + 7e-3), radius=5.0)
     with pytest.raises(gf.BackendCapabilityError, match="none of its electrodes"):
         gf.create_engine(backend="fem", segment_length=0.5).solve(below)
+
+
+# ---------------------------------------------------------------------
+# One contact predicate for the layer rules (audit D2A-01, D2A-02): a
+# horizontal wire touches every layer within its wire radius of its axis, a
+# rod the layers its axis passes through (an end on an interface does not
+# count: the thin-wire model has no end face)
+# ---------------------------------------------------------------------
+
+
+def _fem_verdict(world) -> str:
+    """'raise' (a layer rule of the reduction), 'warn' or 'silent'."""
+    try:
+        _, texts = _fem_warnings(world)
+    except gf.BackendCapabilityError:
+        return "raise"
+    return "warn" if texts else "silent"
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize("rho_2", [10000.0, 1000.0])
+@pytest.mark.parametrize("gap", [0.0, 1e-3, 3e-3])
+def test_fem_a_rod_head_on_the_interface_does_not_touch_the_layer_above(
+    rho_2, gap
+) -> None:
+    """A rod whose head lies on h_1 (or within a radius below it) is below it.
+
+    The thin-wire model has no end face, so the integral engines give a rod
+    whose head sits exactly on the interface no contact with the layer
+    above. ``fem`` counted the closed interval and only warned for the head
+    on h_1 under a conductive 30/10000 (30/1000) top layer of 0.2 a_eq,
+    where it reads -92.9 % (-64.7 %) against image_2layer and -92.7 %
+    (-63.9 %) against mom, the value the rod 1 um deeper raised for
+    (audit D2A-01).
+    """
+    # audit D2A-01
+    h_1 = 0.2 * _A_ROD
+    w = _rod_world(gf.TwoLayerSoil(rho_1=30.0, rho_2=rho_2, h_1=h_1), top=h_1 + gap)
+    with pytest.raises(gf.BackendCapabilityError, match="none of its electrodes"):
+        gf.create_engine(backend="fem", segment_length=0.5).solve(w)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize("reach", [1e-6, 0.02, 0.08])
+def test_fem_a_rod_reaching_into_the_conductive_top_layer_keeps_the_warning(
+    reach,
+) -> None:
+    """Both sides: a head that reaches into the layer touches it.
+
+    Then the cluster touches the conductive layer and Q23 does not apply;
+    fem is still -77 % / -67 % / -53 % (1 um / 2 cm / 8 cm into a 30/10000
+    top layer of 0.2 a_eq) against image_2layer and mom, a warning: a
+    share-based contact rule is the author's decision (audit D2A-01).
+    """
+    # audit D2A-01
+    h_1 = 0.2 * _A_ROD
+    w = _rod_world(gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=h_1), top=h_1 - reach)
+    assert _fem_verdict(w) == "warn"
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize("gap", [1e-6, 3e-3, 5e-3])
+def test_fem_a_wire_within_its_radius_of_the_interface_touches_both_layers(
+    gap,
+) -> None:
+    """A ring (wire radius 5 mm) whose axis lies within one radius below h_1.
+
+    It touches the conductive 30 Ohm m top layer (the contact rule of the
+    integral engines); fem is +23.4 % / +9.3 % / +0.1 % against image_2layer
+    and the reduced-kernel ring series (conservative), but raised "fem reads
+    too low" (audit D2A-02). 7 mm below h_1 (beyond the radius, -6.2 %) it
+    raises as before.
+    """
+    # audit D2A-02
+    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
+    touching = _electrode_world(soil, "ring", center=(0, 0, 0.5 + gap), radius=5.0)
+    res, texts = _fem_warnings(touching)
+    assert math.isfinite(res.cluster_impedance("g1")[0].real) and texts
+    beyond = _electrode_world(soil, "ring", center=(0, 0, 0.507), radius=5.0)
+    assert _fem_verdict(beyond) == "raise"
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(("rho_1", "rho_2"), [(30.0, 1000.0), (1000.0, 30.0)])
+def test_fem_a_wire_on_the_interface_is_not_below_it(rho_1, rho_2) -> None:
+    """The A2E-2 rule: a ring lying on h_1 is not "below" the interface.
+
+    Ring r = 2 m on h_1 = 0.8 m (a_eq = 1.21 m, so h_1 is in the A2E-2 band
+    a_eq/2 < h <= a_eq): it touches both layers, but the rule treated it as
+    lying below h_1 and raised "in a layer the electrodes do not touch";
+    fem is -0.6 % / +10.2 % against image_2layer and the ring series there
+    (audit D2A-02). 7 mm below h_1 it lies below the interface and raises.
+    """
+    # audit D2A-02
+    soil = gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=0.8)
+    on = _electrode_world(soil, "ring", center=(0, 0, 0.8), radius=2.0)
+    res, texts = _fem_warnings(on)
+    assert math.isfinite(res.cluster_impedance("g1")[0].real) and texts
+    below = _electrode_world(soil, "ring", center=(0, 0, 0.807), radius=2.0)
+    with pytest.raises(gf.BackendCapabilityError, match="of its equivalent hemisphere"):
+        gf.create_engine(backend="fem", segment_length=0.5).solve(below)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("soil", "kind", "params", "depths"),
+    [
+        # the second interface is 0.1 + 0.2 = 0.30000000000000004 m
+        pytest.param(
+            _three_layers((300.0, 1000.0, 30.0), (0.1, 0.2)),
+            "ring",
+            dict(radius=5.0),
+            (0.3, 0.1 + 0.2),
+            id="ring",
+        ),
+        # canonical top layer 0.05 + 0.03 m (30 and 30 Ohm m merge)
+        pytest.param(
+            _three_layers((30.0, 30.0, 1000.0), (0.05, 0.03)),
+            "rod",
+            dict(length=3.0),
+            (0.08, 0.05 + 0.03),
+            id="rod-head",
+        ),
+    ],
+)
+def test_fem_contact_does_not_depend_on_float_sums(soil, kind, params, depths) -> None:
+    """An electrode written at 0.3 and one at 0.1 + 0.2 get the same verdict."""
+    # audit D2A-02
+
+    def verdict(z: float) -> str:
+        key = "center" if kind == "ring" else "position"
+        return _fem_verdict(_electrode_world(soil, kind, **{key: (0, 0, z)}, **params))
+
+    assert verdict(depths[0]) == verdict(depths[1])
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(("rho_1", "rho_2"), [(1000.0, 30.0), (30.0, 1000.0)])
+@pytest.mark.parametrize("gap", [0.0, 3e-3])
+def test_fem_a_wire_touching_a_layer_below_its_hemisphere_raises(
+    rho_1, rho_2, gap
+) -> None:
+    """The 10.23 rule with the same predicate: a wire on (or within one radius
+    above) an interface below a_eq touches the layer its hemisphere does not
+    reach.
+
+    Ring r = 2 m at 2 m - gap over h_1 = 2 m (a_eq = 1.3 m): +1008 % / +487 %
+    (1000/30) and -18 % / -17 % (30/1000) against image_2layer and the ring
+    series, silent or only a warning on 563ead7 (the axis lies above the
+    interface).
+    """
+    # audit D2A-02
+    w = _electrode_world(
+        gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=2.0),
+        "ring",
+        center=(0, 0, 2.0 - gap),
+        radius=2.0,
+    )
+    with pytest.raises(gf.BackendCapabilityError, match="hemisphere of its cluster"):
+        gf.create_engine(backend="fem", segment_length=0.5).solve(w)
 
 
 @pytest.mark.finding("10.23")
