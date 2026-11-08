@@ -1,8 +1,16 @@
 # Changelog
+<!-- --8<-- [start:changelog] -->
 
-All notable changes to `groundfield` are documented in this file.
+All notable changes to `groundfield` are documented in this file. The format
+is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+These are concise release notes. The full narrative of every review and audit
+pass (findings, measurements, decisions) is kept verbatim in the
+[audit history][audit-history]; work that is planned but not scheduled is on
+the [roadmap][roadmap]. Up to 0.15.0 both stood in this file; they moved in
+2026.11.0, and the release notes of 0.1.0 to 0.15.0 were condensed. The
+complete text as published is in the history of this file (for example at the
+tag `v0.15.0`).
 
 **Versioning.** From `2026.11.0` on, the project uses
 [Calendar Versioning](https://calver.org/) with the scheme `YYYY.MM.MICRO` in
@@ -26,5262 +34,1017 @@ compatibility follows this policy instead:
   announces it, every removal under **Removed** in the release that performs
   it.
 
-Change categories follow the Keep-a-Changelog vocabulary:
+**Categories.** Each release lists its changes under **Added**, **Changed**,
+**Deprecated**, **Removed**, **Fixed** and **Security**. An entry marked ⚠
+changes numerical results; from 2026.11.0 on, every release that moves numbers
+opens with a **Numbers that change** block (what moves, by how much, for whom,
+and how to get the old numbers back), and every **Fixed** entry names the test
+that fails on the previous release. Finding identifiers (`F01`–`F57` of review
+pass 9, `10.01`–`10.95` of review pass 10) refer to the audit history.
 
-- **Added** — new features and public API.
-- **Changed** — behaviour changes to existing public API.
-- **Deprecated** — features that still work but will be removed.
-- **Removed** — features taken out of the public API.
-- **Fixed** — bug fixes.
-- **Security** — vulnerability fixes.
-- **Docs** — documentation-only changes.
-- **Internal** — refactors, tests, packaging, CI; no observable behaviour change.
+**Contributing.** Add your entry under the matching category of the
+`[Unreleased]` block; `python scripts/release.py calver` turns that block into
+the section `## [YYYY.M.MICRO] - YYYY-MM-DD` of the new release.
 
-The backlog of ideas that are not yet scheduled is kept at the end of this
-file under **Roadmap**. During regular work, add your entry under the
-matching category in `[Unreleased]`; the release tool
-(`python scripts/release.py calver`) turns the whole `[Unreleased]` block into
-a new section `## [YYYY.M.MICRO] - YYYY-MM-DD` when a release is cut.
+## Releases that changed numbers
 
----
+Results computed with an older version can differ from the current ones. This
+table lists every release that moved numbers on purpose; the release notes
+give the details.
+
+| Release | What moved | Size of the change, or of the error it removed | Who is affected |
+|---|---|---|---|
+| 2026.11.0 | default line-source kernel, return currents and measurement loop, electrodes through a layer interface, concrete shells, floating passive clusters, `solve_mutual_matrix`, touch voltages, rho-f fits and exports, `carson_series` and other inductive kernels, `fem`, generator geometry | from round-off to a complete change of simulated measurement readings (see *Numbers that change* below) | nearly every study: AP1 catalogue, touch-voltage assessments, rho-f exports, inductive and measurement studies |
+| 0.15.0 | `fem`, layered `mom_sommerfeld`, `coupling.layered_green`, the `image` family for unequal segment lengths, `references.pollaczek`, two `references.dwight1936` formulas, `rho_f_standard` with dead frequencies | `fem` errors up to −79 % removed; image family up to +12 %; `mom_sommerfeld` kernels of the wrong sign removed | layered and `fem` studies, mixed-length geometries, reference comparisons |
+| 0.14.1 | exported groundinsight formulas of vector fits | 28 % at 16.7 Hz in the test case | BusTypes exported from fits with a negative imaginary residue |
+| 0.13.0 | default `earth_inductive_model` (`sommerfeld`), two-layer inductive kernel, grids discretised with a half-integer number of segments per span | grid resistance was 1.97× to 2.89× too high; layer attribution of the reactance | inductive studies, grid electrodes |
+| 0.11.0 | multiport matrices with unequal segment lengths, layer-2 field points, `sommerfeld` and `carson_series` inductive results, the series truncation criterion, vector fits with complex residues | layer-2 potential errors of +7 % and +25 % removed; Carson integrals were −36 % and +67 % off | layered studies, inductive studies, rho-f fits |
+| 0.5.0 | order of `FieldResult.frequencies` for a non-increasing frequency list | order only | sweeps over unsorted frequency lists |
 
 ## [Unreleased]
 
-### Planned — review pass 10 (change concept, decided 2026-11-07)
+The first calendar-versioned release. It implements review pass 10 against
+0.15.0 (findings 10.01–10.95; [audit history, pass 10][pass-10]) and closes the
+pass-9 findings F01, F02 and F32 that 0.15.0 left open. The release notes the
+work streams wrote, with every measurement and test, are reproduced on the
+pass-10 page. Many results move on purpose: read *Numbers that change* first.
 
-> **Not yet implemented.** This block records the change concept of the tenth
-> review pass (2026-11-07, against `0.15.0`) as decided on 2026-11-07. Findings
-> are referenced as `10.NN`; pass-9 identifiers (`Fxx`) are kept where an item
-> was already known. Each item moves into Added / Changed / Fixed / Security /
-> Removed below once it lands together with its test; whatever is still listed
-> here when the release is cut moves to the Roadmap instead. Items marked ⚠
-> change numerical results.
->
-> **One release, calendar versioning.** All items below ship together in the
-> first calendar-versioned release. The version scheme changes from SemVer
-> (`0.15.0`) to CalVer `YYYY.MM.MICRO` (e.g. `2026.11.0`; month unpadded and no
-> hyphen, because PEP 440 drops leading zeros and reads `2026-11` as a
-> post-release). `MICRO` counts further releases within the same month. CalVer
-> carries no compatibility promise, so deprecations follow a written policy:
-> a deprecated name keeps working, warns with `DeprecationWarning`, and is
-> removed no earlier than two releases and six months after its announcement.
+### Numbers that change
 
-- **Versioning and release tooling:** `scripts/release.py` computes the CalVer
-  version from the release date, validates everything before it writes, and
-  runs git in the repository root; tags become `vYYYY.MM.MICRO`.
-- **Security (10.01):** `evaluate_spec` passes `impedance_formula` from a
-  BusType JSON to `sympy.sympify`, which evaluates Python code. Replace it by
-  an allow-list parser that builds the SymPy expression from the AST (numbers,
-  `f`, `rho`, `j`, `pi`, `+ − * / **`, `sqrt`/`exp`/`log`, size and exponent
-  bounds) and validate on load. groundinsight (local `0.6.0`) already guards
-  its formulas; its guard is re-verified against the same attack corpus and
-  against every formula groundfield exports.
-- **Packaging (10.02, 10.11):** no top-level `scripts` package and no
-  `release` console script in the wheel (the same collision exists in
-  groundinsight); `py.typed`; `polars` dropped (never imported); `profile.out`
-  untracked; `poetry-core` bounded.
-- **Silent failures become errors (10.06, 10.43, 10.51, 10.66, 10.67):** unknown
-  `attached_to` / `return_to` names, worlds without a finite current source,
-  `magnitude=nan`, `cross_section <= 0`, non-finite resistivities, zero-length
-  geometry, an ideal conductor with `discretize_segment_length`, and
-  `VoltageSource` (currently solved to zero) raise with a named parameter and a
-  suggestion; a cross section above 1e-2 m² warns ("mm² given?"); worlds beyond
-  `HARD_LIMIT` raise before any allocation unless `max_segments` is raised;
-  inert settings warn.
-- **⚠ Two-terminal sources and measurement (F01/F30, 10.16, 10.17, 10.38):**
-  `Source.return_to` honoured by every backend through one shared injection
-  step; leakage-free junction nodes; measurement leads re-wired through them
-  (replacing the 5 cm pseudo-rods); `FieldResult.input_impedance(source)`.
-- **⚠ Cross-layer electrodes (F02, 10.15, 10.32, 10.50):** one current share per
-  electrode and layer in `image_2layer`, `cim` and `solve_mutual_*`; interface
-  slivers merged; Galerkin self-term.
-- **⚠ Concrete encasement (10.12–10.14):** one mechanism — the solver always
-  treats the concrete shell as a distributed series resistance; the lumped
-  model only converts its input. Today the lumped shell is dropped by
-  `solve_mutual_matrix`, `solve_mutual_field` and every world without a PEN
-  service drop while the inflated wire radius is kept (−3 % to −29 % on a
-  foundation's self-impedance). `OrtsnetzLayout` honours the shells. An impact
-  study on representative AP1 sites compares the old and new numbers.
-- **⚠ Exact line-source kernel (10.28):** default reaction-matrix and field
-  kernel; the point kernel converges 0.9–1.9 % below the exact uniform-current
-  solution. `Engine(kernel="point")` reproduces earlier numbers.
-- **⚠ Earth return (F32, F50, F52, 10.20, 10.24, 10.35–10.37, 10.45, 10.46):**
-  `carson_series` on the anti-parallel image baseline; Sommerfeld λ-grid
-  resolves distant pairs; exact `n >= 3` buried kernel; Neumann inductance also
-  on lumped and single-segment conductors; consistent internal-inductance
-  convention; opt-in skin effect for conductor resistance.
-- **⚠ Post-solve consistency (10.25, 10.26, 10.33, 10.34):** `FieldResult.potential`
-  and `solve_mutual_*` use the engine's series controls (today capped at 100
-  terms); length-weighted `solve_mutual_matrix` diagonal; backend check and an
-  optional reciprocal off-diagonal; line-source evaluation near conductors.
-- **⚠ Safety (F13, F51, 10.21, 10.22, 10.42, 10.52):** touch voltage over the
-  electrode footprint; uniform-current caveat; the EN 50522 anchors are
-  confirmed against EN 50522:2022 Table B.4 (DIN EN 50522:2023-10) and pinned
-  as literals in the test; docstrings cite the current edition; optional
-  body-impedance / additional-resistance model and spectrum touch voltage.
-- **⚠ Fits and export (10.18, 10.19, 10.27, 10.40, 10.41):** `quantity=` on
-  `sweep` and the rho-f helpers with the input impedance as default; passivity
-  check before export; robust vector fitting with a 0 Hz sample; standard form
-  with optional constant term and relative weights; readable exported formulas.
-- **⚠ Engines (10.23, 10.29–10.31, 10.47–10.49):** floating passive clusters in
-  the `mom` family (reciprocal transfer impedances); `cim` weighted read-back;
-  `fem` marked experimental with guards; duplicated layers merged; `cim`,
-  `bem` and `image_nlayer` become deprecated aliases; shared engine benchmark
-  suite.
-- **⚠ Generators (F07, F08, F28, F47, F48, 10.39, 10.53–10.55, 10.78):** one
-  network plan and one materialiser behind `TnNetworkGenerator` and the
-  layout builder; reproducible resolved configs; rotated mesh foundations split
-  at crossings; per-footprint foundations; lead depth honoured; bounded and
-  validated Overpass requests with atomic caching; MD5 marked
-  `usedforsecurity=False` (identical digests — stored masks stay valid).
-- **Performance (10.56–10.65):** row-chunked kernels (memory from 96 B·N² to
-  O(N)), one reaction-matrix evaluation per solve, direct matrix assembly in
-  `solve_mutual_matrix`, vectorised two-layer series (optional `numba` extra),
-  multi-frequency Sommerfeld assembly, chunked field evaluation,
-  `sweep(n_jobs=...)`, performance and memory regression tests.
-- **Architecture (10.74–10.77, 10.79–10.81):** one kernel module and one solve
-  pipeline shared by all backends; backend registry with a common metadata
-  core and provenance (F22); versioned `save_result` / `load_result` (F23);
-  nested backend options.
-- **Usability (10.68–10.73):** typed electrode factories, consistent parameter
-  names with aliases, English names for German identifiers with aliases,
-  curated namespaces (`gf.plot`, `gf.safety`, `gf.fit`),
-  `FieldResult.to_dataframe()`, complex-valued `compare_engines` over all
-  frequencies.
-- **Standards (10.80, 10.94, 10.95):** `ruff format`, ruff lint with the NumPy
-  docstring convention and a physics naming allow-list, mypy, pre-commit, CI
-  jobs for lint, types, docs and Python 3.14; tests organised by feature with a
-  `finding` marker; supply-chain hardening of the workflows (10.03, 10.04).
-- **Documentation (10.82–10.93):** tutorials / how-to / reference / explanation
-  structure, versioned tutorial notebooks executed in CI, glossary, units and
-  conventions, warnings catalogue, validation page, known limitations,
-  factories in the API reference, corrections to the 0.15.0 release notes
-  (F47, F48 and F53/F54 were listed as fixed but the code was unchanged; `cim`
-  is not bit-identical to `image_2layer` on unequal segment lengths; the F16
-  entry describes the symptom of F08), a concise changelog with a list of
-  releases that changed numbers.
+⚠ Every change of this release that moves a result computed with 0.15.0.
+Sizes are relative to 0.15.0; *golden* names the stored reference cases that
+moved (`python -m tests.golden.harness report`: 224 of 425 stored quantities
+in 24 of 45 cases moved, each declared with its finding; 18 cases are
+bit-identical and 3 differ by round-off). Where a switch reproduces 0.15.0, it
+is named.
 
----
+| Finding | What moves | Size | Who is affected |
+|---|---|---|---|
+| 10.28, 10.33 | the exact line-source kernel is the default of `image` and `image_2layer`, of `FieldResult.potential` and of `solve_mutual_*` | 3 m rod +0.60 % (surface potential up to +1.9 %), two-layer ring +1.23 %, two rods joined by a bare conductor with 5 m segments: currents 10.9 %, cluster impedance 8.4 % (golden `defaults_rod_hom`, `defaults_two_layer_ring_auto`, `defaults_mixed_cluster_inductive`) | every image-family study, the AP1 catalogue (Z_G, potentials); `Engine(kernel="point")` reproduces 0.15.0 |
+| 10.15, F02 | an electrode through the layer interface has one current per layer in `image_2layer` and `solve_mutual_*` | a 12 m rod through h₁ = 5 m was +566 % (1000/30 Ω·m), +148 % and +123 % off; now +0.11 … +0.31 % (point kernel) and +0.7 … +1.3 % (line kernel) from `mom` (golden `img2_rod_crosslayer` −46.5 %, `mutual_three_rods_crosslayer`) | rods through h₁; not the AP1 station rods (4 m from 0.6 m depth, h₁ ≥ 5 m) |
+| 10.12–10.14, F08 | one concrete-shell mechanism, also in `solve_mutual_*`, the layout builder and station and cabinet foundations | AP1-like site (ρ_c = 100 Ω·m, 5 cm): house Z_G diagonal +42 / +19 / +2.8 % and network input impedance +13.6 / +8.8 / +2.2 % at ρ₁ = 30 / 100 / 1000 Ω·m; mesh foundations with `"distributed"`: +2.6 … +12 % (golden `mutual_foundations_lumped_concrete` +42.2 %) | every world with `concrete_rho_ohm_m`, including AP1 runs with concrete shells |
+| 10.26, 10.29, 10.34 | `solve_mutual_matrix`: length-weighted diagonal over all members and layers, the other clusters float, reciprocal `offdiag="galerkin"` without probe points | AP1-like site: house diagonal up to 0.10 %, station 0.000 %, galerkin off-diagonal up to 0.09 %; rods split at h₁ were −3.8 / −9.1 % off (golden `mutual_foundations_distributed_concrete` R 1.6 %) | AP1 mutual matrices Z_G |
+| 10.25 | `potential` and `solve_mutual_*` sum the image series with the engine's controls (was 100 terms) | K = −0.94 with `image_max_terms=2000`: potential 100 m from a ring 0.8 % | high-contrast two-layer studies with a raised term cap |
+| 10.16, 10.17, F01/F30 | `Source.return_to` is honoured; measurement leads end on junction nodes at the instrument | auxiliary rod 20 m away: the probe at 61.8 % now reads the remote impedance to −1.6e-3 (0.15.0: −9.9 %); with leads the old reading was 2.8e-4 Ω instead of 1.6096 Ω (golden `gen_tn_measurement_overhead_leads`: auxiliary rod −1 A instead of +0.024 A, network potentials −1.8 %) | simulated fall-of-potential measurements (AP1 Phase B), every world with `return_to` |
+| 10.29 | passive clusters float (zero net current, one potential, equalising currents) in every backend | a passive electrode in `mom`: −59 % … +1.5 %; a bonded passive pair in the image family: one potential instead of two (golden `floating_bonded_pair_two_layer` 60.5 %, `cond_coupled_leads_open_circuit` 42.5 %) | probes, auxiliary electrodes, unbonded neighbours with several electrodes, passive leads |
+| 10.38 | PEN cable joints of the layout builder are leakage-free junctions | substation potential +0.07 … +0.33 % (full foundation penetration), +3.5 % at 5 % penetration (golden `gen_layout_builder`) | layout-builder worlds |
+| 10.54, 10.39 | layout foundations follow the footprint; rotated mesh foundations split at their crossings | substation impedance 0 / +0.6 / +5.2 % in three test streets; mesh foundations +1.0 … +1.2 % (−9.5 % where the clamp fired) | layout and OSM worlds; `foundation_outline="spec"` reproduces 0.15.0 |
+| 10.53 | reproducible draws; masks of footprints without OSM id keyed by outline | reordering the footprints moved Z by 2.8 % before | `sample_world`, masks of footprints without `osm_id` |
+| 10.55 | `MeasurementLeadConfig.depth_m` and `PenConfig.depth_m` are honoured | coupled imaginary part of the probe +37 % (overhead) and +21 % (buried) at 1 kHz; inductive PEN at 1 kHz X 0.736 → 0.167 Ω; bare PEN −1.4 % (golden `gen_tn_default` ≤ 3.5e-7) | generator worlds with leads or inductive PEN |
+| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope samples mesh cells and ring centres | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V; star 275 → 818 V; 10 m ring envelope 139.4 → 182.6 V; rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point", interior=False` reproduces 0.15.0 |
+| 10.18, 10.19 | `sweep`, `convergence_study` and the rho-f helpers use the input impedance | the cluster impedance of a station was 1.26 / 1.79 / 3.09 × the input impedance with 1 / 3 / 8 houses on a PEN; a ring with two bonded rods was fitted 17 % too high | sweeps of TN worlds and BusTypes exported with the rho-f helpers; the AP1 catalogue computes its own driving-point impedance |
+| 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
+| 10.73, 10.01 | exported formulas are partial fractions with float coefficients; roots and logarithms of numbers in hand-written formulas are floats | at most half a unit in the last printed digit; at most 3.6e-16 | text diffs of BusType files, hand-written formulas |
+| 10.20, F32 | `carson_series` on the anti-parallel image | the earth-return reactance of a 1 km PEN was 2.04 × (50 Hz) and 2.19 × (1 kHz) Carson's; 30-house network \|Z\| −16.6 % at 1 kHz (golden `cond_galvanic_neumann_carson_series` 0.60 %) | `carson_series` studies |
+| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases | inductive studies with inclined or vertical conductors |
+| 10.35, 10.36, F52 | Sommerfeld kernel for three or more layers and below h₁; λ grid of distant pairs | a three-layer earth with ρ₂ = ρ₃ was +17 … +25 % in X′; pair entries 200 m and 400 m apart were −24 % and +274 % off (golden at most 2.1e-5) | `sommerfeld` on `MultiLayerSoil`, deep conductors, large networks |
+| 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2101 + 3.7839j Ω; two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω | service drops shorter than the PEN segment length, lumped leads |
+| 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
+| 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`) | `cim` and declared equal layers |
+| 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases now raise | every layered `fem` result |
+| 10.75 | `mom` and `mom_sommerfeld` honour `return_to` and junctions | the return current flows through the return electrode instead of remote earth | `mom` family worlds with two-terminal sources |
+| 10.32, 10.58, 10.61 | interface slivers dropped, segment counts, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
 
-## [0.15.0] — 2026-07-31
+<!-- Release coordinator: entries from the second adversarial audit go below
+     their category; numbers that move go into the table above. -->
 
-### Review pass 9 — the remaining findings
+### Security
 
-> This block closes the rest of the ninth review pass (2026-07-28 against
-> `0.14.0`); `0.14.1` shipped only F03, F12 and F19. It is a **minor**, not a
-> patch, because several findings could not be closed honestly without also
-> taking their behaviour-changing twin: F06 needs F05, F10 needs F11, F26 needs
-> F29, and F39 needs F34. Findings are referenced by their pass-9 identifier.
->
-> **Read this before regenerating anything.** Entries marked ⚠ change numerical
-> results. In descending order of blast radius: every `fem` number moves; every
-> layered `mom_sommerfeld` number moves; `coupling.layered_green` moves for
-> surface, interface, near-interface and cross-layer pairs and for radii beyond
-> ~160 m; the `image` family moves for electrodes with *unequal* segment lengths
-> (uniform-segment geometries are unchanged to floating-point rounding — 1 ulp on
-> 4 of 11 test worlds, because a BLAS dot replaces `np.mean`); `references.pollaczek`
-> and two `references.dwight1936` formulas move; and `rho_f_standard` fits move
-> wherever a sweep contained dead frequencies.
->
-> Still open after this release: **F01** (the simulated fall-of-potential
-> measurement is a null experiment — `Source.return_to` is inert), **F02** (the
-> ADR-0007 cross-layer current-sharing ansatz, up to +581 %) and **F32**
-> (`carson_series` on the wrong image baseline, 1.65×–2.17× too much earth-return
-> reactance). All three change what a study *means* rather than what it computes
-> and are staged separately. The deferred half of F26/F29 — the exact image-line
-> diagonal — is quantified under *Documentation* below.
-
-### Fixed — the numerical core
-
-- **⚠ `mom_sommerfeld`: the reference engine no longer truncates a conditionally
-  convergent integral (F04, F40).** The top-layer kernel was evaluated with a bare
-  `scipy.integrate.quad` on a finite `[0, lam_max]`. The direct term
-  $e^{-\lambda|z-z_s|}J_0(\lambda s)$ does not decay for two segments at equal
-  depth, so the integral converges *only* through the Bessel oscillation and the
-  cut left a sign-alternating error no tolerance could reduce:
-  `sommerfeld_kernel_value` returned **−0.012551** where the exact value is
-  **+0.039990**, and a 25 m ring in `TwoLayerSoil(100, 100, h_1=1)` came out at
-  1.4952 Ω instead of 1.5751 Ω. The kernel is now split with Lipschitz' integral
-  $\int_0^\infty e^{-\lambda d}J_0(\lambda s)\,d\lambda = 1/\sqrt{s^2+d^2}$ — the
-  direct pair and the leading interface reflection are closed-form, and only the
-  exponentially decaying remainder is quadratured. `lambda_max` now follows that
-  remainder's decay length instead of ignoring $|z-z_s|$ (two segments 2 cm apart
-  at 3 m depth previously lost 44.8 % of their reaction-matrix entry, and the error
-  *grew* under refinement). Against the analytic Tagg/Sunde series the kernel is
-  now accurate to ~3e-15 for $s \le 50$ m; the engine is also **150–8000× faster**
-  (32-segment ring: 162 s → 0.02 s).
-- **⚠ `mom_sommerfeld`: unresolved oscillation no longer returns a negative
-  Green's function, and non-convergence is no longer silent.** The panel budget
-  truncated the panel *count*, so the resolved λ-range **shrank** with the
-  refinement factor while the loop returns its last rung — refining made the answer
-  worse. For a centimetre-scale intermediate layer at kilometre separation the
-  kernel returned −9.4749e-05 where the far-field asymptote requires +5.000e-04,
-  with **zero** Python-level warnings. The budget is now spent coverage-first, and
-  exhausting the ladder raises the new `SommerfeldConvergenceWarning`, naming the
-  achieved versus requested tolerance, the offending geometry, that **the sign may
-  be wrong**, and which parameter to raise. Verified silent across 1260 in-envelope
-  parameter sets. A geometric panel family additionally resolves the
-  multiple-reflection pole $(1-\Gamma_1(0))/2h_1$, which the graded grid missed
-  entirely at extreme contrast (ρ₂/ρ₁ = 10⁸: −5.2e-2 → −2.8e-11).
-- **⚠ `coupling.layered_green`: the λ-truncation is now guaranteed instead of
-  assumed (F14).** `lambda_max` was sized from
-  `lambda_max_factor / min(h_1, s + z + z_s)`, which bears no relation to the decay
-  length $d_\text{img}$ of the reflected remainder. Every image distance can
-  degenerate, and the kernel was then wrong with no warning: −2.7e-2 for a pair at
-  the air/soil surface, +4.1 % at the layer interface, and **−39.5 %** for a pair
-  half a millimetre below it — the last one *growing as the mesh is refined*
-  towards $h_1$, which destroyed mesh convergence for exactly the cross-layer rods
-  ADR-0007 exists for. Cross-layer pairs straddling the interface had the same
-  defect. The reflected kernel is now written as its exact image superposition;
-  every term with $\lambda_\text{max}d_j < 30$ is subtracted from the integrand and
-  added back through its exact Hankel inverse $c_j/(2\sqrt{s^2+d_j^2})$, so the
-  discarded tail is bounded by $e^{-30}$ **by construction**. All of those
-  geometries, and radii from 0 to 20 km, now agree with an independently derived
-  closed form to ~3e-10 — and the result is identical to ten digits for
-  `lambda_max_factor` anywhere in 30 … 30 000.
-- **⚠ `coupling.layered_green`: the 48-node interpolation and its 64-pair
-  discontinuity (F15).** The group interpolation was 2–3 orders less accurate than
-  documented and stepped by ~3 % at the pair-count threshold where the strategy
-  switches — a discontinuity in *problem size*, which is indefensible in a
-  reference solver. Residual step is now 3.4e-5, and the interpolated-versus-exact
-  agreement ~1e-6 (worst 1.1e-5).
-- **⚠ `image` / `image_2layer`: reported potentials are the length-weighted
-  (Galerkin) average the solver actually enforces (F10, F11).** 0.11.0 (WP-B3)
-  moved the multiport matrix to a length-weighted reduction but left the
-  result-assembly path on a plain `np.mean`, so `grounding_impedance()` disagreed
-  with the impedance the solver had constrained by −10.9 % on a rod split at a
-  layer interface, and `cluster_impedance` read `members[0]` — the *alphabetically
-  first* name — so **renaming an electrode changed the reported impedance**
-  (19.4393 → 19.2314 Ω on identical geometry). `grounding_impedance(e)` now equals
-  the diagonal $Z_{ii}$ to ≤2 ulp, all members of one galvanic cluster report equal
-  potentials to 2e-16 (was 3.1e-3), and the reported value is name-independent.
-  Mixed-length geometries move by up to +12 %; uniform-segment geometries are
-  unchanged to rounding.
-- **⚠ `fem`: the axial mesh no longer degrades with the declared layer thickness
-  (F05, F06).** `_build_axisymmetric_mesh` sized the domain from
-  `a_eq + sum(h_layers)` and then filled the axial direction with a fixed 40
-  *linearly* spaced nodes, so near-electrode resolution collapsed in proportion to
-  a parameter that must have no effect. A physically homogeneous soil declared as
-  `TwoLayerSoil(100, 100, h_1=X)` returned 40.36 / 34.94 / 23.69 / 15.66 / 7.51 Ω
-  for X = 1/2/5/10/30 m against an exact 64.62 Ω — up to −79 %, monotone in X. The
-  mesh is now a geometrically graded spherical shell; the same sweep is flat within
-  −0.24 … −0.84 %.
-- **⚠ `fem`: the Dirichlet electrode is now genuinely conforming (F24).** It was a
-  staircase flat disc, so the discrete electrode did not converge to the intended
-  hemisphere: refining changed the answer *without* converging (−31.9 % → −2.0 % →
-  **+20.1 %** on a nested ladder). The electrode surface $r = a_\text{eq}$ is now an
-  exact mesh line. Verified independently across six geometries: convergence is
-  order **2.00**, strictly one-sided and strictly shrinking. A second, subtler
-  non-conformity found in re-audit is also closed — the Dirichlet node set was
-  captured *before* the layer-interface cut, so for any interface shallower than
-  $a_\text{eq}$ the cut left a free node in the middle of the energised surface
-  (an insulating patch). That affected every top-layer thickness below
-  $a_\text{eq}$, which for a 100 × 100 m mesh electrode is the whole AP1 soil grid.
-- **⚠ `references.pollaczek`: the buried-conductor kernel used Carson's air
-  exponent (F09).** Both `pollaczek_self_impedance` and
-  `pollaczek_mutual_impedance` integrated $e^{-2h\lambda}$, correct only for a
-  conductor *in air* where $\gamma \approx 0$. The Pollaczek/Sunde form for a
-  conductor buried in the earth requires $e^{-2h\,u}$ with
-  $u = \sqrt{\lambda^2 + j\omega\mu_0/\rho}$. Measured error in $R'$: −0.5 % at
-  50 Hz / $h$ = 1 m, −2.1 % at 1 kHz / 1 m, −5.8 % at 1 kHz / 3 m, −54 % at 1 MHz;
-  $X'$ was affected far less (< 0.2 % in band). **The 0.14.0 notes recorded the
-  consequence as physics** — "$R'$ sits just below $\omega\mu_0/8$, the deficit
-  growing with frequency" — and that was the bug's signature: with the correct
-  kernel $R'$ sits *above* $\omega\mu_0/8$ and *rises* with burial depth, as a
-  buried conductor's earth-return resistance must. The claim is corrected in the
-  module docstring, the API page, ADR-0006 and the tests that encoded it.
-- **⚠ `references.dwight1936`: two reference formulas were wrong.**
-  `horizontal_strip` used the round-wire bracket constant −2 instead of the strip
-  constant −1 (~10 % low, F37); `vertical_round_plate` applied a factor 2 twice and
-  so halved the plate–image term (F38).
-- **⚠ `postprocess.rho_f_standard`: dead frequencies are no longer fitted as
-  $Z = 0$ (F41)** — the same defect that had already been fixed in the
-  vector-fitting sibling. A zero impedance is not missing data; it drags the fit
-  towards the origin.
-
-### Fixed — guards that were missing or wrong
-
-- **`image` family: the `z <= 0` rejection now covers every backend (F26, F29).**
-  The self-image term $1/(2z)$ was *clamped* at a 1 mm floor instead of guarded, so
-  a horizontal electrode at $z = 0$ silently returned a resistance ~15× too high
-  and mesh-dependent, and a ring at $z = -100$ m solved to 5.5162 Ω as if buried at
-  $+100$ m. The guard now lives in the shared reaction-matrix kernel, so `mom`,
-  `bem`, `cim`, `mom_sommerfeld` and `mutual` see it too — previously only `image` /
-  `image_2layer` raised, and `compare_engines` therefore disagreed about whether a
-  world was valid at all. Validation looks at segment **extent**, not just
-  midpoints: a rod with its top 0.5 m in the air used to solve to 106.2 Ω. Messages
-  name the electrode — or the *conductor*, not the internal
-  `__cond_<name>__seg_<k>` pseudo-node.
-- **New `ShallowSegmentWarning` for the legal-but-shallow regime.** $L > 4z$ is
-  admissible but the point-image stand-in for the image line biases the diagonal by
-  $\gtrsim 13\,\%$, which is why refining the mesh keeps moving the answer there.
-  The warning quantifies the bias of the worst offender. Its quoted figure is the
-  horizontal-segment one, and the extent guard above provably restricts the warning
-  to segments inclined less than 30° from horizontal, so the figure now always
-  applies to the case that triggers it.
-- **`FieldResult.cluster_impedance` no longer drops a member's current.** The new
-  member filter was applied to the current sum as well as the potential average, so
-  potentials `{"a": 10 V}` with currents `{"a": 1 A, "b": 1 A}` returned 10 Ω
-  instead of 5 Ω. The average keeps the filtered set; the current sum runs over all
-  members again.
-- **`coupling.layered_green`: negative depths returned `nan` silently** and
-  propagated all the way to `grounding_impedance()`. All four entry points now
-  raise `ValueError`.
-- **`Engine.solve` forwards the image-series controls to `image_nlayer` (F18).**
-  `image_max_terms` / `image_series_tol` were forwarded to `solve_image_2layer` but
-  the `image_nlayer` call took no arguments, so that backend silently used its own
-  defaults although the field documentation promised otherwise.
-- **`World.solve` no longer detaches the `Source` objects `create_source` returned
-  (F31)** — a handle the user held went stale, silently.
-- **`compare_engines`: the deviation metric is pairwise, not mean-referenced
-  (F35), and `is_consistent` is no longer `True` when nothing was compared
-  (F36).** The old metric admitted about twice the documented tolerance, and an
-  empty comparison reported a false green.
-- **`generators`: `building_counts` key order no longer changes the sampled world
-  for a fixed seed (F33)** — a reproducibility defect, and the AP1 Monte-Carlo runs
-  depend on a seed pinning a world.
-- **`generators`: footprint-driven foundations land on the OMBR centre (F25)** —
-  the oriented-bounding-rectangle centre was discarded, displacing the generated
-  rectangle from the footprint it was derived from.
-- **`generators`: `route_manhattan`'s `escape_radius_m` now covers the final
-  bridge segment (F42)**, so an anchor inside a footprint no longer always raises —
-  the escape valve did not cover the case it exists for.
-- **`generators`: the ADR-0012 concrete shell is no longer silently dropped
-  (F16).** The registry was written under the electrode's own name but read under
-  the cluster anchor's, so switching concrete on had no effect whenever the
-  foundation was not the first surviving electrode of its site: a factor-33 change
-  in `concrete_rho_ohm_m` produced bit-identical impedances.
-  `GroundingSystemSpec.build_at` now folds a site's entries onto the anchor once
-  the bonds are in place. Several encased electrodes in one cluster combine **in
-  parallel**, not in series — each leaks through its own radial shell.
-- **`io.csv`: the frozen column-name constants named columns the writers never
-  emit (F46)**, so a consumer written against the published constants got a
-  `KeyError`.
-- **`fem`: `r_far_factor` was a dead knob.** `r_far` was
-  `max(r_far_factor, z_far_factor) * base_length`, so every value ≤ 20 returned the
-  same truncation radius with no warning — a truncation study swept a parameter
-  with no effect. It now sets the sphere on its own; `z_far_factor` is deprecated,
-  still acts as a lower bound when passed, and logs when it overrides.
-
-### Changed
-
-- **`cim` and `bem` no longer compute a complex-image fit, and the metadata says
-  so (F34, F39).** Both reject $n \ge 3$ up front, so the only reachable paths use
-  exact closed-form self-kernels and ignored the fit entirely — yet
-  `fit_complex_images` ran on every solve and its failed result was advertised as
-  `cim_n_images` / `cim_rms` (a NaN). `cim` returns values bit-identical to
-  `image_2layer` and `bem` to `mom`; the metadata now states that plainly.
-  `fit_complex_images` itself learned to represent the $\lambda\to\infty$ asymptote
-  of $\Gamma_1$ and to report failure instead of returning a fit whose residual is
-  meaninglessly $|K_1|$.
-- **`coupling.layered_green`: `lambda_max_factor` is now an upper bound on the
-  truncation, not the truncation itself.** Raising it is normally a no-op — that is
-  the point of the F14 fix — while lowering it moves work into the closed-form
-  image sum and is equally exact.
-- **`generators`: `MeasurementLeadConfig.depth_m` is honoured (F48)** — it was
-  sampled and discarded, so buried and overhead measurement leads were
-  geometrically identical.
+- **BusType formulas are parsed, never executed (10.01).** `evaluate_spec`
+  passed `impedance_formula` to `sympy.sympify`, so a crafted BusType file ran
+  code or exhausted memory. An allow-list parser (`groundfield.io._formula`)
+  builds the SymPy expression from the syntax tree with bounds on length,
+  nodes, depth, exponents, number size, roots of exact numbers and a work
+  budget; formulas are validated on load (`EvaluateSpecError`). Every formula
+  the 0.15.0 exporter wrote still loads with the same value. The attack corpus
+  `tests/data/formula_corpus.json` is shared with groundinsight's guard.
+  Tests: `tests/test_formula_security.py`.
+- **Result files from untrusted sources (audit A1-01).** `load_result` decodes
+  only the array types the encoder writes, checks shapes and sizes before
+  allocating and bounds the nesting depth. Tests:
+  `tests/test_result_metadata_codec.py`.
+- **Overpass requests (10.05).** Validated parameters (no query injection
+  through `timeout_s`), https only, a capped response (16 MiB by default),
+  error payloads raise and are not cached, atomic cache files, every element
+  checked before caching. Tests: `tests/test_overpass_ingest.py`.
+- **Wheel contents (10.02).** The wheel installed `scripts/release.py` and the
+  `release` command like groundinsight 0.3.0 does, so installing both
+  overwrote one with the other; it now ships only `groundfield`. Test:
+  `tests/test_packaging.py::test_wheel_contents`.
+- **Supply chain (10.03, 10.04).** Workflows with minimal permissions and
+  actions pinned to commit SHAs (Dependabot keeps them current), no persisted
+  credentials, tag names only through environment variables, the release gated
+  by the full CI; locked dependencies updated until `pip-audit` reports no
+  known advisory.
+- **Documentation site (10.08).** MathJax 3.2.2 is vendored with the site and
+  pinned by checksums, and no Google Fonts are loaded: the site requests no
+  third-party resource. Test: `tests/test_docs_assets.py`.
+- **VTK export (10.10).** A newline in `world.name` can no longer break the
+  file header; coordinates are written as `double`. Tests:
+  `tests/test_io_vtk.py::test_world_name_cannot_break_the_header`,
+  `tests/test_io_vtk.py::test_points_are_double_precision_at_utm_scale`.
+- **Release tool (10.09).** `scripts/release.py` runs git in the repository
+  root, validates everything (also against the remote) before it writes and
+  restores the files if the commit fails. Tests:
+  `tests/test_release_script.py`.
+- **FIPS builds (10.07).** The penetration-mask hash uses
+  `md5(usedforsecurity=False)`; the digests and stored masks are unchanged.
+  Test: `tests/test_generator_reproducibility.py::test_mask_works_where_md5_is_blocked_for_security`.
 
 ### Added
 
-- **`Engine.sommerfeld_lambda_max_factor`, `sommerfeld_epsabs`,
-  `sommerfeld_epsrel`, `sommerfeld_max_osc_panels`.** The accuracy knobs of the
-  package's *reference* engine were unreachable from the public API — `Engine.solve`
-  called `solve_mom_sommerfeld(world, self)` with no keywords. Defaults equal the
-  previous signature defaults, so existing callers are bit-identical, and all four
-  are echoed into `FieldResult.metadata`.
-- **`SommerfeldConvergenceWarning`**, **`SommerfeldTailTruncationWarning`** and
-  **`ShallowSegmentWarning`**; the last is now re-exported from
-  `groundfield.solver` and documented on the solver API page.
-- **Executable documentation (F27).** `tests/test_pass9_doc_snippets.py` extracts
-  every fenced `python` block under `docs/` and runs it, one namespace per page,
-  with an explicit `<!-- skip-doctest -->` marker for illustrative fragments and
-  for the network-dependent OSM examples. Nothing had ever executed the
-  documentation's code, and six live snippets were broken.
-
-### Performance
-
-- **`coupling.layered_green`: multi-kilometre spans no longer explode.** With the
-  tail bounded analytically, `lambda_max` no longer has to be large. A 4000-pair
-  group at `s_max = 4 km` runs in **71 ms** against 199 ms on 0.14.1 and 11.2 s in
-  the intermediate development state; a scalar 6 km kernel 30 → 8 ms; a 200×20
-  `two_layer_probe_matrix` 120 → 9 ms. Accuracy is unchanged or better everywhere.
-- **`mom_sommerfeld` is 150–8000× faster** and **`fem` about 15× faster**, both as
-  a side effect of the correctness work above rather than of tuning.
-
-### Documentation
-
-- **ADR-0006** carried the wrong Pollaczek exponent in its 2026-07-20 amendment and
-  now records the correction and why the old behaviour looked like physics.
-  **ADR-0011** claimed `offset_xy_m` is "zero by construction"; it is not.
-  **ADR-0002**, `docs/concepts.md`, `docs/quickstart.md` and the engine pages no
-  longer advertise `cim` as the primary $n \ge 3$ engine and `bem` as its
-  alternative — both have raised `NotImplementedError` since 0.11.0 (F17) — and now
-  state plainly that eight backends are **six distinct computations**, with
-  `mom_sommerfeld` the only integral-equation path for $n \ge 3$ and `fem` the
-  methodologically independent cross-check.
-- **Accuracy claims corrected where they were optimistic**, not just where they
-  were wrong: four "~1e-8" claims in `layered_green` (measured ~1e-6, worst
-  1.1e-5), `mom_sommerfeld`'s "10⁻¹⁴ level" per-pair error and its "≈1 ms" per-pair
-  cost (measured up to 3.25 s for a single kernel evaluation in the thin-layer
-  corner, with the $O(N^2)$ consequence spelled out), and `fem`'s "element aspect
-  ratios O(1)" (true away from the interface cut, not at it).
-- **The deferred half of F26/F29 is documented rather than hidden.** Replacing the
-  point image $1/(2z)$ by the exact image-line integral was *not* done. The residual
-  bias is stated with numbers — a 10 m tape at $z = 0.01$ m gives 54.361 / 35.491 /
-  26.603 / 22.039 / 21.043 Ω for `ds` = 1.0 / 0.5 / 0.25 / 0.1 / 0.05, i.e. **+69 %
-  at `ds` = 0.5** — together with the trap that made the naive fix wrong (the
-  horizontal $\operatorname{arsinh}$ form applied to a *vertical* rod segment is
-  worse than the point form) and the collocation-versus-Galerkin distinction of the
-  image-line term.
-- `earth_return`'s module docstring claimed the earth-return reactance *decreases*
-  with frequency; it increases (F55). The `rho_f_standard` docstring swapped the
-  physical meaning of $k_2$ and $k_3$ (F56). `check_segment_resolution` skipped
-  polyline and star electrodes (F53, F54). `ManhattanGridPlacement.jitter_m`
-  carried a `ge=0.0` constraint on a `float | Distribution` union, making the
-  documented distribution form unusable (F47).
-
-### Internal
-
-- New regression modules `tests/test_pass9_*.py`, one per subsystem, plus
-  `tests/test_audit_pass9_fixes.py` from 0.14.1. Each test was checked against a
-  clean `v0.14.1` export so that it demonstrably fails on the old code; the
-  deliberate controls over already-correct behaviour are labelled as such in their
-  docstrings. One pre-existing assertion was **tightened** (`test_fem.py`, 0.25 →
-  0.01) and one narrowed to exempt a single legitimately-earned warning
-  (`test_sommerfeld_inductance.py`) — no tolerance was loosened.
-
----
-
-## [0.14.1] — 2026-07-30
-
-### Fixed (Review pass 9 — implemented 2026-07-28)
-
-> The ninth review pass was run on 2026-07-28 against `0.14.0` (commit
-> `428442d`) with eight parallel subsystem reviewers and an independent
-> adversarial verification stage. Findings are referenced below by their
-> pass-9 identifier (F01–F57). This release deliberately carries **only the
-> three findings that are either data-corrupting or hard crashes**, so that a
-> `groundfield` version number is enough to decide whether a stored
-> `groundinsight` `BusType` is affected. The remaining findings ship in
-> `0.15.0`.
-
-- **⚠ `fit_to_sympy` lost the sign of the residue's imaginary part —
-  the exported `groundinsight` formula did not match the fit it exports**
-  (`postprocess/vector_fitting.py`, finding F03). When combining a
-  complex-conjugate pole/residue pair into the real second-order term
-  $r/(s-p) + r^{*}/(s-p^{*}) = [2\,\Re(r)\,(s-\Re(p)) - 2\,\Im(r)\,\Im(p)] /
-  [(s-\Re(p))^2 + \Im(p)^2]$,
-  the canonical residue is by construction the one sitting at the pole with
-  $\Im(p) > 0$. The previous symmetrisation used
-  `0.5 * (abs(r.imag) + abs(r2.imag))`, which forces $\Im(r) \ge 0$; the
-  following `if p.imag < 0` correction flips on the sign of the *pole*, not of
-  the *residue*. Whenever the canonical residue carried $\Im(r) < 0$ — which
-  vector fitting produces routinely for lossy earth-return driving-point
-  impedances — the $-2\,\Im(r)\,\Im(p)$ numerator term entered with the wrong
-  sign and the exported `BusType.impedance_formula` was a **different rational
-  function** from `VectorFitResult`. Measured on a
-  $Z_0\coth(\gamma\ell)$ line fit ($R = 0.3$, $L = 1$ mH, $G = 1$ nS,
-  $C = 10$ nF, $\ell = 5$ km, 6 poles): 28.1 % magnitude error at 16.7 Hz,
-  13.1 % at 50 Hz, and a *sign* difference in $\Re(Z)$ at 500 Hz. The fix
-  selects the residue belonging to the positive-imaginary pole and
-  symmetrises as $\tfrac12(\Im(r_+) - \Im(r_-))$, which preserves the sign
-  while keeping the existing exact-conjugate symmetrisation intent.
-
-  **Numerical results change.** Any `BusType` exported through
-  `to_bustype_dict` / `save_bustype_json` / `to_bustype` from a fit with at
-  least one negative-imaginary canonical residue is affected and should be
-  re-exported. `VectorFitResult` itself, `fit.evaluate()`, and every solver
-  result were always correct — the defect was confined to the SymPy rendering
-  step, so re-running `fit_to_sympy` on the stored fit is sufficient; the
-  field computation does not need repeating.
-
-- **`plot_potential_contour` raised `AttributeError` on every supported
-  NumPy when `extent` was omitted** (`postprocess/plotting.py`, finding F12).
-  The automatic-extent branch called the `ndarray.ptp()` *method*, removed in
-  NumPy 2.0, while `pyproject.toml` requires `numpy = "^2.1.0"` — so the
-  documented default call, including the one in
-  [Quickstart](quickstart.md), was dead. Now uses the free function
-  `np.ptp(...)`. A repo-wide sweep for the other NumPy-2.0 removals
-  (`itemset`, `newbyteorder`, `np.float_`, `np.complex_`, `np.NaN`, `np.Inf`,
-  `np.alltrue`, `np.product`) found no further occurrence.
-
-- **`Engine.with_frequencies()` bypassed all frequency validation on its
-  default path** (`solver/engine.py`, finding F19). The
-  `preserve_order=False` branch returned
-  `self.model_copy(update={"frequencies": freqs})`, and `model_copy(update=...)`
-  runs **no** validators under pydantic v2 — contradicting the method's own
-  docstring ("the standard `_validate_frequencies` checks run"). An empty
-  list, a negative frequency, NaN and infinity were all silently accepted, and
-  the `EngineFrequencyOrderWarning` for a non-monotonic list never fired.
-  Both paths now go through `model_validate`; the order warning is re-emitted
-  at the caller's frame so the notebook line that built the engine is the one
-  reported. The scalar checks moved into a shared
-  `_check_frequency_values` helper so the constructor and the convenience
-  constructor reject the same inputs with the same messages, and infinity is
-  now rejected explicitly (previously it fell through the `f >= 0.0` guard).
-  DC (`f == 0.0`) remains a legitimate quasi-static operating point.
-
-New `tests/test_audit_pass9_fixes.py` (14 tests): the residue-sign export for
-both signs and across a frequency sweep, the full
-`to_bustype_dict` → `BusTypeSpec` → `evaluate_spec` round trip against the
-analytic pair sum, `plot_potential_contour` without `extent` in both planes,
-and the five `with_frequencies` rejection cases plus the order-warning and
-`preserve_order` controls. Eleven of the fourteen fail on `428442d`; the other
-three are controls over behaviour that was already correct.
-
-### Docs
-
-- **`docs/examples/09_plot_gallery.md` — corrected the
-  `plot_potential_contour` cross-section snippet.** It passed a
-  non-existent `fixed=0.0` keyword (the parameter is `y` for `plane="xz"`
-  and `z` for `plane="xy"`) and advertised a `plane="yz"` option the
-  function does not implement. The surrounding prose now states the
-  plane/fixed-coordinate pairing and the `extent=None` behaviour.
-
----
-
-## [0.14.0] — 2026-07-20
-
-### Added — layered Pollaczek/Sunde per-unit-length earth-return reference
-
-New reference module `groundfield.references.pollaczek` with
-`pollaczek_self_impedance` — the rigorous two-layer, buried-conductor
-earth-return **self** impedance per unit length, in the Pollaczek/Sunde
-spectral-integral form
-`Z' = j(ωμ₀/2π)[ln(2h/GMR) + 2∫₀^∞ e^(−2hλ)/(λ+u_eff(λ)) dλ]` with the
-two-layer effective vertical wavenumber
-`u_eff = u₁(u₂+u₁tanh(u₁h₁))/(u₁+u₂tanh(u₁h₁))`, `u_i=√(λ²+jωμ₀/ρ_i)`
-(Tagg/Sunde/Wait recursion, exposed as `layered_effective_wavenumber`).
-Earth-return only (external inductance, no internal-conductor R/L — same
-convention as `references.earth_return.carson_self_impedance`).
-
-It is the layered, buried companion to the homogeneous Carson closed form:
-it reduces to `carson_self_impedance` when `ρ₁ = ρ₂` (reactance to < 0.1 %,
-the earth-return resistance sitting just below `ωμ₀/8` — Carson's
-small-argument limit, which the exact Pollaczek form recovers as `f → 0`,
-the deficit growing with frequency), collapses onto the upper layer as
-`h₁ → ∞` and the
-lower layer as `h₁ → 0`, and its two-layer reactance lies within the
-`[Carson(ρ₁), Carson(ρ₂)]` bracket — deep-layer dominated at low frequency
-(a thin resistive topsoil is inductively "seen through"). Unlike the
-assembled Sommerfeld/Pollaczek stack (`earth_inductive_model="sommerfeld"`),
-which yields a PEEC segment inductance matrix, this returns a single
-per-unit-length `z'(f)` that a reduced nodal network consumes directly and
-that serves as an independent analytic reference for the assembled stack's
-earth-return reactance. New `tests/test_pollaczek_reference.py` (50 tests:
-homogeneous↔Carson, resistance-from-below, both `h₁` limits, the Carson
-bracket across 50 Hz – 1 kHz, the low-frequency deep-layer regime, the
-wavenumber recursion, input guards), plus a loop-closure test in
-`tests/test_earth_return_benchmark.py` tying the assembled Sommerfeld stack
-to this reference and to the Tsiamitros 2005 Eq. (8) integral (all three
-within ~1 % on the Case V two-layer reactance at 1 kHz).
-
-The module also gains `loop_impedance_conductor_earth` — the full
-**conductor–earth loop** impedance `z'_loop = R'_internal + Z'_earth-return`
-of a buried earthing conductor (cable PEN, cable screen) with an ideal
-(≈ 0 Ω) far-end earthing: the Pollaczek earth-return plus the conductor's own
-IEC 60228 series resistance (its internal inductance folded into
-`gmr = 0.7788·a` for a solid round conductor, or the screen radius for a thin
-screen). This is the loop that governs earth-fault current sharing in a
-grounding system tied together through NAYY PENs / NA2XS2Y screens — which
-the bare earth-return impedance does not give on its own. Regression tests
-cover the internal-plus-earth-return composition, real NAYY-PEN (150 mm² Al)
-and NA2XS2Y-screen (25 mm² Cu) conductors at power frequency, and the
-two-layer reactance shift.
-
-And `pollaczek_mutual_impedance` — the **mutual** (off-diagonal)
-earth-return coupling impedance
-`z'_M = j(ωμ₀/2π)[ln(D/d) + 2∫ e^(−(h_i+h_j)λ)/(λ+u_eff)·cos(λx) dλ]` between
-two parallel buried conductor–earth loops (horizontal separation `x`,
-direct/mirror distances `d = √(x²+(h_i−h_j)²)`, `D = √(x²+(h_i+h_j)²)`). It
-carries no internal-conductor term (the loops are galvanically separate,
-coupled only through the earth), so with ideal termination the coupling of a
-parallel run of length `ℓ` is `z'_M·ℓ`; together with two self impedances it
-forms the 2×2 loop impedance matrix of the coupled pair. It reduces to
-`carson_mutual_impedance` and to the exact homogeneous Pollaczek mutual (the
-K₀ form) in the homogeneous limit, its magnitude sits below the self and
-decays with separation, and its two-layer reactance stays inside the Carson
-bracket (deep-layer dominated at low frequency). Regression tests cover the
-K₀ and Carson limits, the self-coincidence limit `x → GMR`, the
-separation decay, the two-layer bracket, the conductor-above-conductor
-`separation = 0` case, and the 2×2 loop matrix of two parallel PENs.
-
-Worked notebook `notebooks/46_pollaczek_earth_return.ipynb` plots `z'(f)`
-self against Carson, the homogeneous convergence, the two-layer Carson
-bracket across the layer thickness, the conductor–earth loop impedance
-`z'_loop(f)` of the two real conductors split into internal / earth-return /
-reactance, and the mutual coupling `z'_M` vs separation with the 2×2 loop
-matrix. Exposed via `groundfield.references` (`__all__`, including
-`layered_effective_wavenumber`, `pollaczek_mutual_impedance` and
-`loop_impedance_conductor_earth`); ADR-0006 gains the closed per-unit-length
-companion note.
-
----
-
-## [0.13.0] — 2026-07-20
-
-### Added — Earth-return line-impedance benchmark (Carson)
-
-New reference module `groundfield.references.earth_return` with Carson's
-closed-form earth-return **line impedance** per unit length —
-`carson_self_impedance` / `carson_mutual_impedance` (the equivalent-depth
-reactance `(ωμ₀/2π)·ln(D_e/GMR)` with `D_e = 658.87·√(ρ/f)` and the
-soil-independent resistance `ωμ₀/8`), plus `carson_equivalent_depth` and
-`carson_earth_return_resistance`. New benchmark
-`tests/test_earth_return_benchmark.py` validates groundfield's assembled
-Sommerfeld/Pollaczek stack (`earth_inductive_model="sommerfeld"`) against
-it: the earth-return **reactance** — carrying the frequency- and
-soil-dependent depth `D_e`, not just the geometric image at `2h` —
-matches Carson to about 1 %; the **resistance** converges to `ωμ₀/8` from
-below as the modelled line lengthens (the return current closes over
-~one skin depth). 17 tests (reference-formula sanity, assembled self
-reactance/resistance, the two-layer homogeneous limit + bracketing, the
-layered-reflection half-space limits, and the quantitative two-layer
-validation against Tsiamitros et al. across 50 Hz – 1 MHz — see the Fixed
-entry below). Demo
-notebook `notebooks/45_earth_return_line_impedance.ipynb` plots `Z'(f)`
-(self and mutual) against Carson and the `R'` convergence, including the
-normal-soil power-frequency corner (100 Ω·m, 50 Hz, where `X'` still
-matches Carson to ~1 %) and a **two-layer** soil section: the layered
-earth-return reactance reproduces the homogeneous result when `ρ1 = ρ2`,
-lies between the two single-layer bounds, and — validated against
-Tsiamitros et al. (IEEE Trans. PWRD 20(3), 2005, Eq. 8) — matches that
-reference to a few percent in `X'` and to ≈ 0.003 in layer attribution
-across an explicit **50 Hz – 1 MHz** sweep, with the low-frequency
-(≤ 1 kHz) regime highlighted: there the inductive return is deep-layer
-dominated (a thin resistive topsoil is inductively 'seen through').
-`LayeredEarth` accepts three or more layers unchanged. This makes the
-inductive stack's earth-return impedance quotable. Exposed via
-`groundfield.references` (`__all__`).
-
-### Fixed — two-layer inductive earth-return kernel
-
-The layered Sommerfeld/Pollaczek earth-return correction for a conductor
-buried **in the upper layer** of a two-layer earth used the homogeneous
-single-air-image spectral form `(λ/u₁)·Γ·e^{−u₁(z_i+z_j)}`, valid only for a
-half-space. It therefore mis-weighted the layers: at 10 kHz for the
-Tsiamitros Case V soil it placed the earth-return reactance roughly halfway
-between the two homogeneous bounds (attribution `frac ≈ 0.51`) when the
-deep, conductive layer should dominate (`frac ≈ 0.08`). Replaced with the
-exact four-term boundary-value solution for the spectral magnetic vector
-potential — the up-/down-going reflected amplitudes from the 2×2 interface
-system, in an overflow-stable form that factors out `e^{−u₁d}` — which
-reduces to the homogeneous form as the interface deepens. Separately,
-`reflection_coefficient_layered` (used for the overhead and `n ≥ 3` paths)
-was corrected to the standard bottom-up interface cascade; the previous
-top-interface composition failed the `h₁ → 0` half-space limit (it
-under-weighted the deep layer). Validated against Tsiamitros et al.
-(IEEE Trans. PWRD 20(3), 2005, Eq. 8): the assembled two-layer `X'` now
-matches to 2–5 % (the residual being the finite-line offset shared with the
-homogeneous case, not a layered error) and the layer attribution to ≈ 0.003
-across **50 Hz – 1 MHz** — including the ≤ 1 kHz regime central to
-low-frequency analysis, where the return is deep-layer dominated. Galvanic /
-DC two-layer results (grounding resistance, GPR, touch/step — e.g. the
-IEEE Std 80 Grid 3 above) use a different path and were never affected.
-Regression: `tests/test_earth_return_benchmark.py`
-(`test_reflection_layered_reduces_to_halfspace_limits`,
-`test_two_layer_self_reactance_matches_eq8`,
-`test_two_layer_attribution_matches_eq8_across_frequency` at 100 Hz – 1 MHz,
-and `test_two_layer_frequency_regimes_low_vs_high` pinning the ≤ 1 kHz
-deep-layer-dominated behaviour).
-
-### Changed — default `earth_inductive_model` is now `sommerfeld`
-
-The default earth-return model for inductive coupling flips from
-`perfect_mirror` to **`sommerfeld`** (the rigorous Pollaczek stack,
-validated against Carson above and against Pollaczek's analytic mutual in
-`tests/test_audit_inductive_stack.py`). `perfect_mirror` — a fast,
-frequency-independent electrostatic-image baseline whose sign is far from
-the `f < 1 kHz` physics of buried conductors (audit finding F5) — is now
-opt-in (`earth_inductive_model="perfect_mirror"`). This only affects
-solves that have at least one distributed conductor with
-`inductance_model="neumann"` at a non-zero frequency; purely galvanic /
-DC solves and the resistive grounding path are unchanged. Quantitative
-`Z(f)` results therefore now carry the earth-return resistance and the
-equivalent-depth reactance by default. Regression:
-`tests/test_sommerfeld_inductance.py::test_default_engine_produces_sommerfeld_result`.
-
-### Added — IEEE Std 80-2013 Annex H grounding-grid benchmark
-
-New reference module `groundfield.references.ieee80` with
-`grid_resistance_sverak` (Sverak's grid resistance, IEEE Std 80-2000
-Eq. 57 / 2013 Eq. 53). New benchmark `tests/test_ieee80_benchmark.py`
-reproduces the standard's **Annex H** benchmark for **all three grids**
-(grid current 744.8 A), solved with the `mom` backend — which recovers
-the current distribution as the reference programs do:
-
-- **Grid 1** — bare grid, uniform 140 Ω·m soil (Table H.5);
-- **Grid 2** — grid + twenty 7.5 m rods, uniform soil (Table H.6);
-- **Grid 3** — Grid 2 geometry in a two-layer soil (ρ1 = 300 Ω·m,
-  ρ2 = 100 Ω·m, h = 6.096 m), rods crossing the layer interface
-  (Table H.7).
-
-`groundfield` matches the published CDEGS grid resistance, GPR and touch
-voltage to about 1 % on every grid (including two-layer Grid 3) and the
-step voltage to a few percent. 8 tests total (Sverak sanity,
-Sverak-vs-solve, and the Grid 1 / 2 / 3 reproduction, parametrised). Demo
-notebook `notebooks/43_ieee80_benchmark.ipynb` lays `groundfield` next to
-CDEGS / ETAP / WinIGS for all three grids, tabulates the relative error
-and plots the grid-resistance comparison and the touch-voltage surface.
-Exposed via `groundfield.references` (`__all__`).
-
-### Fixed — grid-crossing discretisation trap (silent ~2× resistance)
-
-Mesh / grid electrodes place one point source at each segment midpoint.
-When `segment_length` produced a half-integer number of segments per mesh
-span (e.g. 2.0 m on a 7 m pitch → 3.5 segments/span), a longitudinal and
-a transverse segment midpoint coincided on a grid crossing; their mutual
-distance collapsed to the 1 mm singularity clamp and the `image` backend
-returned a grid resistance **~2–3× too large** for an otherwise valid
-grid (`ds = 2.0` → 1.97×, `ds = 2.8` → 2.89×). The discretiser
-(`_grid_segments`) now aligns the segment count per wire to a whole
-multiple of the mesh-span count, so crossings fall on segment endpoints
-and no two point sources coincide; the resistance is stable for any
-`segment_length` (≤ 0.15 % from Sverak across the former trap values) and
-the spurious singularity-clamp warning no longer fires for valid grids.
-The result is never coarser than requested. New
-`tests/test_grid_crossing_discretization.py` (16 tests: helper alignment,
-the no-coincident-midpoint invariant, and resistance stability) plus demo
-notebook `notebooks/44_grid_discretization_robustness.ipynb`.
-
-### Fixed — cross-layer two-layer solve exhausted memory on grids
-
-The two-layer *layered correction* (ADR-0007) assembled its Hankel
-contraction `J0(λ·s) @ w_phi` as one dense `(n_pairs, n_lambda)` Bessel
-matrix. For a whole grounding grid `n_pairs = n_seg²` and the
-oscillation-resolved λ-grid reaches ~5·10⁴ nodes, so the IEEE Std 80
-Annex H Grid 3 (70 m grid + twenty cross-layer rods) tried to allocate
-**≈ 263 GiB** and failed with `MemoryError`. The contraction
-(`groundfield.coupling.layered_green`) is now **row-blocked** to a fixed
-memory budget and, for large single-depth-pair blocks, **interpolated**
-over a log-spaced distance grid — the same policy already used by
-`two_layer_probe_matrix`, valid because the correction is smooth in the
-horizontal distance (the singular `1/r` part cancels in
-`Φ_lay − Φ_hom`). Grid 3 now solves in a few seconds in well under 1 GB
-with no measurable accuracy change. Pinned by
-`tests/test_layered_green_chunking.py` (blocking is bit-for-bit; the
-interpolation agrees with the exact scalar kernel to ≲ 1e-3).
-
-### Fixed — `docs/api/geometry.md` grid_mesh example used `center=`
-
-The `grid_mesh` snippet passed `center=`, but `GridMeshElectrode` takes
-`corner=` and forbids extra fields, so the example raised on execution.
-Corrected to `corner=(-10.0, -10.0, 0.5)`.
-
-### Added — `StarElectrode` (n-point star / Sternerder)
-
-New electrode primitive `StarElectrode` (`kind="star"`): `n_arms` equal
-horizontal wires of length `arm_length` radiate from a shared centre node at
-one depth, uniformly spaced by 360°/n and optionally rotated by
-`orientation_deg`; all arms form a single galvanic cluster. A new
-`_discretize_star` (one strip-style chain per arm) serves the image /
-integral backends, and the kind is wired through `create_electrode`, the
-`Electrode` union, diagnostics, the 2-D/3-D geometry plots and the VTK
-export. Validated against Dwight (1936, Eqs. 23–26): the image backend
-matches `references.dwight1936.n_point_star` to ~1 % for n ∈ {3, 4, 6, 8}
-(`tests/test_dwight_references.py::test_image_n_point_star_vs_dwight`,
-previously skipped, now active). New `tests/test_star_electrode.py` — 5 tests:
-geometry, the `n_arms >= 2` guard, single-cluster monotone `R(n_arms)`,
-rotation invariance, and a plot/VTK smoke — plus demo notebook
-`notebooks/42_star_electrode.ipynb`. Exported from `groundfield` and
-`groundfield.geometry` (which now also re-exports the previously-missing
-`PolylineElectrode`); documented with the Dwight formula in
-`docs/api/geometry.md`.
-
-### Fixed — reject degenerate `PolylineElectrode` edges; warn on 2-vertex rings
-
-`PolylineElectrode` now rejects zero-length edges during validation: a
-consecutive duplicate vertex — or repeating the first vertex at the end of a
-`closed=True` ring — raises `ValueError` instead of silently feeding a pair of
-coincident segments into the reaction matrix (driven straight into the solver's
-1 mm singularity clamp). The previous total-length check could not catch a
-single degenerate edge. In addition, `closed=True` with only two vertices now
-emits a `UserWarning` and is treated as an open wire (a ring needs at least
-three vertices). New test module `tests/test_polyline_electrode.py` — 5 tests:
-the three guard cases, valid open/closed construction, and a segment-length
-convergence check for the polyline discretiser.
-
-### Docs — governing PDE and boundary conditions on the boundary page
-
-`docs/api/boundary.md` gains a *Mathematical / physical model* section: the
-quasi-static Laplace problem $\nabla\cdot(\sigma\nabla\varphi)=0$, the
-Dirichlet far-field / Neumann surface conditions and their image-charge
-realisation, the potential datum, layer-interface continuity, and the
-validity envelope. (The `coupling` page already carries the Neumann /
-Carson / Sommerfeld governing equations, so it needed no change.)
-
----
-
-## [0.12.2] — 2026-07-18
-
-### Fixed — MkDocs `--strict` build (API-reference docstring rendering)
-
-`mkdocs build --strict` aborted with 51 warnings while the docs CI deployed
-**without** `--strict`, so the published API reference silently rendered
-incomplete parameter tables. Root causes fixed:
-
-- Pydantic model fields in `sources.CurrentSource`,
-  `geo.footprint.BuildingFootprint`, `geo.placement.OsmBuildingPlacement`
-  and `generators.ortsnetz_builder.OrtsnetzLayout` were documented under a
-  NumPy `Parameters` section; griffe could not match them to a constructor
-  signature. Moved to the correct `Attributes` section (the bulk of the
-  warnings).
-- `OrtsnetzLayout.to_world` carried a prose paragraph indented under
-  `Parameters`; griffe parsed the prose words as parameter names. Moved to a
-  `Notes` section.
-- Demoted the un-resolvable
-  `shapely.geometry.Polygon.minimum_rotated_rectangle` cross-reference in
-  `docs/api/geo.md` and `geo.footprint` to inline code.
-
-`mkdocs build --strict` is now clean (0 warnings).
-
-### Fixed — silence Shapely's benign OMBR floating-point warning
-
-`BuildingFootprint.oriented_bounding_rectangle` now wraps the Shapely
-`minimum_rotated_rectangle` call in a targeted `warnings` filter. Some
-Shapely / NumPy builds emit a benign `RuntimeWarning` (`divide by zero` /
-`invalid value` `encountered in oriented_envelope`) while computing the OMBR
-of an axis-aligned footprint even though the returned geometry is correct;
-it no longer reaches callers or the pytest warning summary. New regression
-test in `tests/test_geo_footprint.py` promotes that `RuntimeWarning` to an
-error.
-
-### Changed — `strict: true` makes every MkDocs build fail on warnings
-
-`mkdocs.yml` now sets `strict: true`, so `mkdocs build`, `mkdocs serve` and
-the `mkdocs gh-deploy` step in `.github/workflows/docs.yml` all abort on any
-warning (broken nav link, unresolved cross-reference, malformed docstring)
-instead of shipping it silently to GitHub Pages.
-
-### Added — Changelog & Roadmap page on the documentation site
-
-New `docs/changelog.md` embeds this `CHANGELOG.md` verbatim via
-`pymdownx.snippets` (`base_path` set to the repository root) and is linked
-from the nav. The release history and the Roadmap are now visible on the
-published site.
-
-### Docs — pruned the stale Roadmap and refreshed the README
-
-- Removed Roadmap bullets that are already implemented and released:
-  inductive coupling (ADR-0004), `rho-f` vector fitting, OSM building-map
-  ingest, and the Manhattan connection-routing switch.
-- Replaced the frozen "New in 0.7.0" README section with a pointer to the
-  changelog plus a short list of current highlights.
-
----
-
-## [0.12.1] — 2026-07-17
-
-### Fixed — geometry plotters render the `polyline` electrode kind
-
-The matplotlib geometry helpers were not updated when 0.12.0 added
-`PolylineElectrode` (the VTK export already was): `plot_world` /
-`plot_world_3d` silently skipped a polygon foundation ring, and
-`world_bounds_xy` / `world_bounds_3d` saw only its connection point — so
-`plot_surface_potential`'s auto-extent cropped the ring. All four now handle
-the `polyline` kind, mirroring the strip / mesh branches and
-`io.vtk._polylines_for_electrode`. A closed ring is drawn with its closing
-edge; the bounds span every vertex. Backwards compatible (no other kind
-changes). New regression tests in `tests/test_geometry_plot.py`.
-
----
-
-## [0.12.0] — 2026-07-14
-
-### Added — foundation ring along the real building outline (`PolylineElectrode`)
-
-Foundation electrodes could only be rectangles. Placing the ring on
-the *oriented bounding rectangle* (OMBR) of an OSM footprint has two
-consequences that only become visible at scale (AP1 catalogue, 196
-real low-voltage networks):
-
-- **Coincident conductors.** Terraced and semi-detached houses are
-  separate polygons sharing a party wall; their OMBRs share an edge.
-  L-/U-shaped buildings have OMBRs that overlap *other* buildings
-  outright. The resulting foundation strips fall on top of each other,
-  and the reaction-matrix assembly saturates their mutual coupling at
-  the 1 mm singularity clamp (the `clamp` warning added in 0.11.0).
-  Measured on the AP1 station set: **184 of 196 sites** carry at least
-  one such pair; at 40 % foundation penetration ~2–3 pairs per site are
-  actually built.
-- **Perimeter bias.** The OMBR overstates the electrode of every
-  non-rectangular building — median ratio 1.00, but 21 % of buildings
-  exceed +20 % and the tail reaches ×7. On an L-shaped test building
-  the OMBR ring under-states the spreading resistance by ~6 %.
-
-New primitive **`PolylineElectrode`** (`kind="polyline"`): a buried
-horizontal wire through an arbitrary vertex chain, `closed=True` making
-it a ring. It carries the same per-segment
-`concrete_shell_coefficient_ohm_m` as `StripElectrode`, and the shared
-discretiser (`solver.image._discretize_polyline`) serves every backend.
-
-**`FoundationElectrodeSpec.polygon_xy_m`** takes the outline as
-`(x, y)` vertices relative to the site centre and overrides
-`size_m` / `size_xy_m` / `orientation_deg`; `style="ring"` is required
-(cross-braces are undefined on a general polygon). The concrete shell
-(ADR-0012) uses the **polygon** perimeter for both paths — lumped
-`R_shell = C / L_perim` into `world.concrete_shell_corrections`,
-distributed `C` on every ring segment. Sub-`0.5 m` polygon edges are
-merged away first (OSM footprints routinely carry centimetre-scale
-edges that would trip the thin-wire guard).
-
-Backwards compatible: without `polygon_xy_m` nothing changes.
-A rectangular polygon reproduces the historic `GridMeshElectrode` ring
-**bit-identically** (regression test at 1e-12), and one polygon
-foundation is a single electrode with no internal bonds (the rotated
-rectangular path needed four strips plus three bond conductors).
-
-New regression suite `tests/test_polygon_foundation.py` (13 tests:
-rectangle equivalence, shell bookkeeping on both paths, the
-$\rho_c = \rho_\text{soil}$ transparency identity, L-shape bias,
-degenerate-edge cleanup, clamp-freedom for two houses sharing a wall).
-
----
-
-## [0.11.0] — 2026-07-10
-
-### Fixed — discrete reciprocity and honest n ≥ 3 handling (audit 2026-07-08, WP-B3/WP-E)
-
-- **Multiport Z is exactly reciprocal.** The grounding matrix paired
-  length-weighted excitation columns with an *unweighted* potential
-  average, breaking `Z[i, j] == Z[j, i]` at the discretisation level
-  for electrodes with unequal segment lengths (mesh electrodes with
-  `dx/nx != dy/ny`, rods split at the layer interface). The row
-  reduction now uses the Galerkin-consistent **length-weighted**
-  average — symmetry to machine precision (regression test at
-  1e-13); results for uniform per-electrode segment lengths (every
-  rod/ring/strip) are unchanged.
-- **`cim` and `bem` reject `n_layers >= 3`.** The historic
-  complex-image kernel implemented an incomplete Green's function
-  (single image family; missing the `2·h_1`-reflected families and
-  the surface–interface multiple-reflection denominator) and
-  systematically underestimated the layered correction. Both
-  backends now raise `NotImplementedError` pointing at
-  `mom_sommerfeld` / `fem`; the corrected full kernel formula is
-  documented in `solver/_layered.py`, and ADR-0002 carries an
-  amendment revoking `cim` as the primary n ≥ 3 engine.
-- **`bem` docstring no longer claims independence from `mom`** for
-  n ≤ 2 (they assemble the identical matrix — measured 4e-16;
-  audit finding P4). Genuine layered cross-validation:
-  `mom_sommerfeld` and `fem`.
-
-### Changed — vector fitting on the conjugate-pair real basis (audit 2026-07-08, WP-B4)
-
-- **Complex pole pairs now carry genuinely complex residues.** The
-  historic real-stacked least squares used one *real* unknown per
-  pole, silently removing the `Im(r)` degree of freedom for both the
-  residues and the σ-residues that steer the pole relocation — a
-  deviation from the cited Gustavsen & Semlyen algorithm. Both LS
-  systems now use the standard conjugate-pair real basis
-  (`1/(s-p) + 1/(s-p̄)` and `j/(s-p) - j/(s-p̄)` with two real
-  coefficients per pair); residues at conjugate poles are exact
-  conjugates by construction (the post-hoc repair is gone).
-  Regression test: a synthetic resonant Z with `Im(r) = 40` is now
-  reproduced to rms 1e-6 relative (previously unfittable).
-- **Convergence monitoring.** The relocation loop tracks the
-  relative pole displacement, breaks early below 1e-8 and emits a
-  `VectorFitConvergenceWarning` when it is still above 1 % after
-  `n_iter` iterations; diagnostics exposed as
-  `VectorFitResult.n_iter_used` / `pole_shift`.
-- **Optional weighting.** `vector_fit(..., weighting=
-  "inverse_magnitude")` weights samples by `1/|Z|` — the standard
-  remedy when `|Z|` spans decades.
-- **Dead frequencies are masked.** `rho_f_from_field_result` used to
-  inject `Z = 0` samples for frequencies where the electrode carries
-  no current, silently pulling the fit through the origin; those
-  samples are now excluded with a warning (all-dead input raises).
-
-### Fixed — layer-2 field evaluation and cross-layer plumbing (audit 2026-07-08, WP-D)
-
-- **Layer dispatch in the post-solve potential paths.**
-  `FieldResult.potential` and the `solve_mutual_*` probe kernels
-  applied the upper-layer Tagg/Sunde image series to *every* probe
-  and source point; for layer-2 points the measured error was +7 %
-  at z = 7 m and +25 % at z = 12 m (K = +0.818, h_1 = 5 m). Pairs
-  involving layer 2 now go through the rigorous spectral kernel
-  (new `coupling.layered_green.two_layer_probe_matrix`, grouped by
-  depth pair with one spectral-amplitude solve per group); pure
-  upper-layer evaluation keeps the historic fast path bit-exact.
-  Verified: potential continuity across the interface, homogeneous
-  limit, exact agreement with the spectral reference at depth.
-- **Interface-split discretiser (ADR-0007 step 1, previously
-  documented but not implemented).** Rod and sloped-strip segments
-  are split at the layer interface so no segment straddles h_1
-  (historic mis-assignment: up to ds/2 of wire in the wrong layer);
-  wired into every layered backend. A margin warning fires when the
-  deepest segment ends within 2·segment_length of h_1 (the
-  image-series self-terms degrade there).
-- **`mom` accepts cross-layer worlds.** The hard rejection is gone;
-  the shared self-kernel factory dispatches to the ADR-0007
-  Sommerfeld path. mom is the engine that *solves* the per-segment
-  current distribution — the audit's P5 uniform-leakage bias across
-  the interface is now measurable inside the package (regression
-  test pins mom below image_2layer for rho_2 > rho_1, and
-  mom ≡ bem to 1e-6).
-- **Cross-layer assembly grouped and cached** (performance): the
-  ADR-0007 reaction-matrix correction ran one scalar Sommerfeld
-  BVP solve per matrix entry — O(n²) quadratures, prohibitively
-  slow after the WP-B1 oscillation-resolved grids. Off-diagonals
-  are now grouped by (z_i, z_j) with one spectral-amplitude solve
-  per group (`two_layer_layered_correction_group`), identical
-  diagonal entries are deduplicated, and the current-independent
-  matrices are cached across the per-frequency/per-excitation
-  kernel calls of one solve. Measured: 3-rod cross-layer world
-  33.7 s → 4.6 s on the audit sandbox (identical result).
-- New regression suite `tests/test_audit_layer2.py` (8 tests:
-  interface continuity, pinned layer-2 anchor values, homogeneous
-  limit, split invariants, margin warning, mom cross-layer).
-
-### Fixed — inductive earth-return stack consolidated (audit 2026-07-08, WP-C)
-
-The audit's headline physics finding: the inductive coupling stack
-(`earth_inductive_model`) had three structural defects that made
-quantitative Z(f) statements above ~100 Hz unreliable. All three are
-fixed; the galvanic (resistive) results are unaffected.
-
-- **`sommerfeld` is now a genuine Pollaczek kernel** (ADR-0006
-  amendment). The historic kernel `1/R + ∫Γ e^{-λ(z+z')}J0` dropped
-  the in-soil attenuation `e^{-γR}` of the primary term — which
-  carries the buried-wire earth-return *resistance* — and produced
-  `Re Z' ≈ −ωμ0/8` per metre (Carson's value with the wrong sign);
-  it also applied the soil-side reflection `+Γ` to overhead
-  conductors (air side requires `−Γ`). The kernel now dispatches per
-  segment pair (buried/overhead/mixed), keeps the mirror
-  deduplication `−1/R'` and the direct attenuation `(e^{-γR}−1)/R`
-  in closed form, and integrates only the smooth remainder.
-  **Validated against Pollaczek's analytic K0 mutual** (Im to ~1 %,
-  Re to a few % chain truncation, correct positive sign) and the
-  σ-limits: σ→0 → free space (no image), σ→∞ → screened (buried) /
-  anti-parallel PEC image (overhead).
-- **Spectral part interpolated over ρ** instead of the historic
-  `(16,16,nλ)` tensor evaluation: distant segment pairs drop from
-  ~2 s to milliseconds per pair (the smooth Hankel integral is
-  evaluated on 24 log-spaced ρ-nodes and interpolated).
-- **`carson_series` matrix is mesh-convergent** (tiling convention):
-  collinear same-wire segment pairs no longer receive a pseudo-mutual
-  term (with the axial midpoint distance misread as Carson's
-  perpendicular wire separation — the assembled correction grew
-  ~linearly with the segment count; measured branch-current drift of
-  ~2.5× between dsl = 50 m and 6.25 m, now < 1e-3). Near-parallel
-  pairs on distinct axes tile the per-metre mutual by their **axial
-  overlap length** at the **perpendicular** axis separation — the
-  assembled block reproduces `z'·ℓ` independent of segmentation.
-- Behaviour change: results with `earth_inductive_model` set to
-  `"sommerfeld"` or `"carson_series"` change (they were wrong);
-  `"perfect_mirror"` remains bit-stable and stays the default, but
-  is now documented as a frequency-independent baseline whose
-  additive image is far from the f < 1 kHz physics of buried
-  conductors — use `"sommerfeld"` for quantitative Z(f).
-- New regression suite `tests/test_audit_inductive_stack.py`
-  (Pollaczek K0 reference, σ-limit semantics, Carson mesh
-  convergence at matrix and solver level).
-
-### Fixed — quadrature defects in the coupling kernels (audit 2026-07-08, WP-B)
-
-- **`layered_green` Hankel grid resolves the Bessel oscillations.**
-  The cross-layer kernels (`two_layer_real_space_kernel`,
-  `two_layer_layered_correction_real_space`) integrated the linear
-  λ-region with a single fixed 96-node Gauss panel; for radial
-  distances `s >> min(h_1, depths)` the `J0(λs)` oscillations were
-  unresolved — measured errors of 2.5 % at s = 100 m and **46 % at
-  s = 200 m** for cross-layer pairs (live in AP1 via the ADR-0007
-  path). The new `_hankel_lambda_grid` keeps the historic single
-  panel while it holds ≥ 8 nodes per oscillation (bit-compatible for
-  small s), splits into one 16-node panel per J0 period beyond that,
-  and caps the log-region below the first oscillation
-  (`lambda_break <= pi/(4 s)`). Verified to ~1e-9 against adaptive
-  scipy references up to s = 200 m.
-- **Carson intermediate regime handles near-perpendicular
-  geometries.** `_p_q_quadrature` truncated at `mu_max = 30/p` with
-  64 fixed Gauss nodes; for buried-pair mutual geometries
-  (`theta -> 90°`, small p) the `cos(q·mu)` oscillation was
-  unresolved — measured errors up to **−36 % in P and +67 % in Q**
-  (a = 0.44–1.6, θ ≈ 89°), squarely inside the AP1 parameter space.
-  Oscillatory cases now use QUADPACK's Fourier integrator
-  (`quad(..., weight='cos')`), which also covers the exact
-  `theta = 90°` limit (the former small-a fallback there was invalid
-  for a > 0.25 and is gone). Verified to 1e-11 against an
-  independent composite-panel/Euler-accelerated reference.
-- **Large-a asymptote:** the `a^-3` term of Q was missing its
-  `1/sqrt(2)` (~6e-4 absolute at a = 8); for `theta > 1.4 rad` the
-  asymptotic expansion degrades and now routes through the
-  quadrature path.
-- New regression suite `tests/test_audit_quadratures.py` pinning the
-  audit's failing points with independent reference values; ADR-0005
-  regime section rewritten to describe the implemented quadrature
-  (the previously documented σ-series never existed).
-
-### Changed — Tier-1 performance: one-shot multiport assembly (audit 2026-07-08, WP-F)
-
-Profiling of AP1-sized worlds showed 97 % of `Engine.solve` wall time
-inside `_self_corrected_kernel`, called once per electrode column and
-per frequency — each call rebuilding the full (N, N) geometry
-tensors. Three changes (ADR-0010 Tier 0a/1, results numerically
-identical to FP rounding):
-
-- **Batched multiport-Z assembly.** `_solve_cluster_currents` passes
-  all `N_a` excitation columns to the self-kernel in one call as an
-  `(n_segments, N_a)` matrix; the O(N²) kernel tensors are built
-  exactly once instead of `N_a` times.
-- **Multiport cache across the frequency loop.** The grounding
-  matrix Z is frequency-independent; `image`, `image_2layer` and
-  `cim` now assemble it once per solve and reuse it for every
-  frequency (new `multiport_cache` parameter).
-- **Batched potential evaluation + multi-RHS solves.** The
-  per-frequency segment potentials are evaluated in one stacked
-  kernel call for the whole frequency set; the real DC-path linear
-  systems solve `[b_re, b_im]` with a single LU factorisation
-  (also in `mom`/`bem`/`mom_sommerfeld` via `_galerkin_solve`, and
-  in `fem`).
-
-Measured (sandbox, 4 cores): 50-building TN world, ds = 0.5 m
-(N = 1476): 22.0 s → 0.18 s; 100 buildings (N = 2926): ≈ 2 min →
-0.85 s; two-rod world with distributed inductive PEN at 7
-frequencies: 7 ms. Solver output verified identical against the
-pre-change audit reference values (galvanic and inductive paths).
-
-### Added — guard rails against silently wrong results (audit 2026-07-08, WP-A)
-
-The physics/numerics audit of 2026-07-08 (report in
-`audit-report-2026-07-08/`) identified a class of configurations that
-solved to physically wrong numbers without any diagnostic. This patch
-converts them into hard errors or visible warnings:
-
-- **Surface-laid inductive conductors raise.**
-  `build_inductance_matrix(use_image=True)` rejects segments lying in
-  the soil-surface plane (`2·|z_mid| <= wire_radius`): the
-  perfect-mirror image coincides with the segment and the partial
-  self-inductance diverges (observed ~4.7 H instead of ~55 µH for a
-  25 m segment at z = 0, silently blocking the branch current). Bury
-  the conductor or pass `use_image=False`.
-- **Thin-wire hard guard.** The discretisers raise `ValueError` when
-  the resulting segment length is `<= wire_radius` — there the
-  analytic self-term `ln(L/a)` flips sign and the solve returns
-  nonsense currents. The advisory quality criterion (`L >= 5a`)
-  remains a warning (see below).
-- **Pre-flight diagnostics on every solve.** `Engine.solve` now runs
-  `check_segment_resolution` and emits each finding as a
-  `UserWarning` (thin-wire ratio, electrode smaller than one segment,
-  distributed-conductor ratio, segment budget).
-- **`SeriesTruncationWarning`.** A truncated Tagg/Sunde series
-  (`image_max_terms` reached before the tolerance) now emits a
-  visible warning in `image_2layer` and `mom` instead of a
-  logger-only record; `metadata['converged']` is unchanged.
-- **Concrete shells rejected loudly.** `mom`, `cim`, `bem`,
-  `mom_sommerfeld` and `fem` raise `NotImplementedError` for worlds
-  carrying `concrete_shell_coefficient_ohm_m != 0` (ADR-0012) instead
-  of silently solving the bare-metal problem — as the electrode
-  documentation always promised.
-- **Non-current sources warn.** Every backend warns when it drops
-  non-current sources; a world driven solely by voltage sources no
-  longer solves to all-zero silently.
-- **Clamp diagnostic.** The reaction-matrix assembly warns when
-  distinct segments fall below the 1 mm singularity clamp
-  (coincident/overlapping conductors).
-
-### Fixed
-
-- **Single-segment distributed conductors no longer vanish.** A
-  distributed conductor with `discretize_segment_length >= length`
-  (`n_segments == 1`) was skipped by both the distributed topology
-  builder *and* the lumped-branch builder and disappeared from the
-  nodal system entirely (open circuit, measured `I = 0` through the
-  conductor). It now falls back to a lumped finite branch,
-  bit-identical to the equivalent lumped conductor.
-- **Cross-layer consistency of `cim`, `bem` and the `mom_sommerfeld`
-  diagonal.** For two-layer worlds with electrodes crossing the layer
-  interface these backends silently applied the upper-layer Tagg/Sunde
-  series. The shared self-kernel factory is now created with
-  `allow_cross_layer=True`, dispatching the rigorous ADR-0007
-  cross-layer kernel — consistent with `image_2layer`. For
-  `n_layers >= 3` cross-layer worlds, `cim`/`bem`/`mom_sommerfeld` now
-  raise `ValueError` (previously: warning followed by wrong physics).
+**Solver and kernels**
+
+- **Exact line-source kernel (10.28, 10.33):** `Engine(kernel="line" | "point")`
+  and `create_engine(kernel=...)`; segments are uniform line currents in the
+  reaction matrix, in `FieldResult.potential` and in `solve_mutual_*`. Results
+  record `metadata["kernel"]`; `PointSource` gains an optional `direction`.
+  Test: `tests/test_line_kernel.py`.
+- **Backend registry (10.74):** `groundfield.solver.registry`
+  (`register_backend`, `get_backend`, `available_backends`,
+  `BackendCapabilities`), a capability check before every solve
+  (`BackendCapabilityError`, `BackendCapabilityWarning`), backend options
+  `Engine(options={...})` with `MomSommerfeldOptions` and `FemOptions`, and
+  `Engine.sommerfeld_assembly`. Tests: `tests/test_backend_registry.py`,
+  `tests/test_engine_options.py`.
+- **Junction nodes (10.38):** `create_junction(world, position=...)`, a
+  leakage-free network node for conductor ends, source terminals and
+  measurement instruments; potentials in `metadata["junction_potentials"]`.
+  Test: `tests/test_junction_nodes.py`.
+- **`solve_mutual_matrix(..., offdiag="galerkin")` (10.34):** reciprocal
+  off-diagonal entries that reproduce a network solve of the joined clusters.
+  Test: `tests/test_mutual_matrix.py`.
+- **Concrete shells on every electrode kind (10.12–10.14):**
+  `concrete_shell_coefficient_ohm_m` on rods, rings and meshes, with the
+  conversions `concrete_shell_coefficient`,
+  `shell_coefficient_from_resistance` and `shell_resistance_from_coefficient`.
+  Test: `tests/test_concrete_shell_coefficient.py`.
+- **Geometry queries (10.79):** every electrode provides `segments`,
+  `segment_count`, `wire_polylines`, `bounds`, `total_length` and
+  `min_feature_length`. Test: `tests/test_electrode_geometry.py`.
+- **Optional `fast` extra:** with `numba` the two-layer series and the far
+  field of the line kernel run compiled, bit-identical to numpy.
+
+**Results, diagnostics and files**
+
+- **`FieldResult.input_impedance(source)` and `FieldResult.sources` (10.18):**
+  the driving-point impedance (φ_attached − φ_return) / I a measurement or a
+  fault sees, and the sources as solved. Test: `tests/test_input_impedance.py`.
+- **Metadata and provenance (10.74, 10.77, F22):** every result carries a
+  metadata core (backend, kernel, versions, segment count, series controls,
+  solve time) and `metadata["provenance"]` with `world_fingerprint`. Test:
+  `tests/test_result_persistence.py`.
+- **Versioned result files (10.77, F23):** `groundfield.io.save_result` and
+  `load_result` (standard JSON, schema version, atomic write). Test:
+  `tests/test_result_persistence.py`.
+- **`FieldResult.to_dataframe()` (10.69, 10.72)** and
+  `read_csv_with_provenance(path)` (10.73). Tests:
+  `tests/test_result_dataframe.py`, `tests/test_io_csv.py`.
+- **`diagnose(world, engine=None, result=None)` (10.70)** returns a
+  `DiagnosticsReport` (thin wires, resolution, segment budget, close or
+  crossing wires, inert settings, series truncation); `World.check()` (10.66)
+  validates source terminals and conductor ends; `check_segment_budget` and
+  `ResourceLimitError` (10.06); `find_close_wires`, `find_close_conductors`,
+  `segment_distance` (10.44). Tests: `tests/test_diagnostics_report.py`,
+  `tests/test_source_validation.py`, `tests/test_conductor_proximity.py`.
+
+**Coupling**
+
+- **Skin effect, opt-in (10.37):** `Conductor(resistance_model="skin")` and
+  `create_conductor(resistance_model=...)`; exact solid-round internal
+  impedance (`solid_round_internal_impedance`). Tests:
+  `tests/test_skin_effect.py`, `tests/test_inductive_solver_integration.py`.
+- **Earth-return builders (10.20, 10.46, 10.60):** `image="none" | "additive" |
+  "antiparallel"` on the inductance and correction builders, `touching="exact"`,
+  per-segment internal inductance, multi-frequency builders
+  `build_sommerfeld_correction_matrices` / `build_carson_correction_matrices`,
+  and the tabulated Sommerfeld assembly (opt-in,
+  `Engine(sommerfeld_assembly="tabulated")`). Tests:
+  `tests/test_sommerfeld_accuracy.py`, `tests/test_sommerfeld_tabulated.py`.
+- `LayeredEarth.interface_depths` and `LayeredEarth.layer_of(depth)`.
+
+**Safety, fits and export**
+
+- **EN 50522:2022 (F51, 10.42, 10.52):**
+  `permissible_prospective_touch_voltage_en50522` (Annex B.4),
+  `permissible_touch_voltage_en50522(t_f, long_duration=True)` (80 V), and
+  `touch_voltage_spectrum` (true RMS over a fault spectrum). Tests:
+  `tests/test_safety.py`.
+- **Touch-voltage options (10.21, 10.22):** `touch_voltage(anchor=)`,
+  `touch_voltage_envelope(anchor=, interior=, return_points=)`,
+  `step_voltage(world=)`, `UniformCurrentFieldWarning`. Tests:
+  `tests/test_touch_voltage_footprint.py`, `tests/test_touch_voltage_envelope.py`.
+- **Impedance quantity (10.18, 10.19):** `quantity="input" | "cluster" |
+  "electrode"` and `source=` on `sweep`, `convergence_study` and the rho-f
+  helpers. Test: `tests/test_impedance_quantity.py`.
+- **Passivity (10.40, 10.41):** `check_passivity` and `PassivityReport`; the
+  BusType export checks passivity, records it in `metadata["passivity"]` and
+  raises with `require_passive=True` (`NonPassiveFitWarning`,
+  `NonPassiveFitError`). Tests: `tests/test_passivity.py`,
+  `tests/test_io_groundinsight.py`.
+- **Fit quality (10.27, 10.41):** `RhoFStandardFit.k0`, `.max_relative`,
+  `.weights`, `.quantity`, `VectorFitResult.rms_relative`, `vector_fit(rms_tol=)`,
+  `RhoFStandardQualityWarning`, `VectorFitQualityWarning`; BusType documents
+  record the coefficients, the fit quality and the fitted quantity. Tests:
+  `tests/test_rho_f_standard.py`, `tests/test_vector_fitting.py`.
+- **`sweep(n_jobs=...)` (10.64)** runs a process pool, bit-identical to the
+  serial sweep. Test: `tests/test_sweep.py`.
+- **Plots (10.73):** `component="real" | "imag" | "abs" | "phase"` on the
+  potential plots. Test: `tests/test_plotting.py`.
+
+**Engines and validation**
+
+- **Engine benchmark suite (10.76):** `tests/benchmarks` (B1–B13) with
+  analytic or independent reference values and one tolerance table per backend
+  (`pytest tests/benchmarks --run-benchmark`).
+- **`compare_engines` (10.71, 10.76):** an explicit tolerance table
+  (`EngineComparison.rows`), complex impedances at every frequency,
+  `component_floor`, and a note when two engines run the same computation.
+  Tests: `tests/test_compare_engines.py`, `tests/test_engine_aliases.py`.
+- **`mom_sommerfeld` (10.47, 10.61):** convergence and kernel-tabulation
+  reports in the metadata. Test: `tests/test_mom_sommerfeld.py`.
+- `FemReductionWarning`, `ExperimentalBackendWarning` and
+  `ComplexImageFit.max_error` (10.23, 10.49).
+
+**Generators**
+
+- **Network plan (10.78):** `NetworkPlan` and `materialise_plan`;
+  `TnNetworkGenerator.plan()` and `LvNetworkLayout.plan()`. Test:
+  `tests/test_network_plan.py`.
+- **Simulated earth tester (10.17):** `measured_impedance(result, probe=None,
+  source=None)` (three-pole reading) with the terminals `meas_H` and
+  `meas_S`. Test: `tests/test_measurement_loop.py`.
+- **Footprints (10.54):** `foundation_outline="ombr" | "polygon" | "spec"`,
+  `exclude_building_tags` with `NON_SERVICE_BUILDING_TAGS`, `rng=` on `build()`
+  and `plan()` (10.53). Tests: `tests/test_footprint_foundations.py`,
+  `tests/test_overpass_ingest.py`.
+
+**API**
+
+- **Typed factories (10.68):** one overload per electrode kind, `Literal`
+  option types (`ElectrodeKind`, `SourceKind`, `KernelKind`, ...) and
+  “did you mean …?” errors. Test: `tests/test_api_factories.py`.
+- **Namespaces (10.72):** `gf.plot`, `gf.safety` and `gf.fit`; the flat names
+  keep working. Test: `tests/test_package_namespace.py`.
+- `groundfield.utils`: `suggest`, `did_you_mean`, `warn_deprecated`,
+  `warn_inert`, `InertConfigurationWarning`, `REMOVAL_VERSION`.
+- The package ships a `py.typed` marker (10.02).
 
 ### Changed
 
-- **Series truncation criterion.** The Tagg/Sunde stop test now uses
-  the geometric tail bound `|K|^(n+1)/(1-|K|) < tol` instead of the
-  per-term weight `|K|^n < tol`, which underestimated the neglected
-  remainder by `1/(1-|K|)` (a factor 17 at the AP1 corner soil
-  |K| = 0.94). Applied consistently in the solver, the
-  post-processing potential kernels (`FieldResult.potential`,
-  `solve_mutual_*`) and the `converged` metadata.
-- **`Engine.image_max_terms` default raised 100 → 300** so the AP1
-  corner contrast |K| = 0.94 converges under the new tail criterion
-  (needs 277 terms). Same default in `create_engine`.
-- **Engine truncation knobs reach all layered backends.**
-  `image_max_terms` / `image_series_tol` are now forwarded to `mom`,
-  `cim`, `bem` and `mom_sommerfeld` (previously hard-coded 100/200
-  terms in those paths).
-
-### Removed
-
-- **`_layered.image_series_offsets`** (dead code, never called by any
-  backend): its higher-order expansion terms dropped the required
-  `Γ^{m+1}` powers and would have produced wrong n ≥ 3 image series
-  had it ever been consumed.
-
-### Internal
-
-- New regression suite `tests/test_audit_guards.py` (21 tests)
-  covering every guard above end-to-end.
-- `tests/test_strip.py`: the degenerate-mesh workaround comparison now
-  asserts the thin-wire `ValueError` (the workaround geometry is
-  exactly what the guard rejects).
-
----
-
-## [0.10.0] — 2026-06-28
-
-### Added — `solve_mutual_field`: surface potential at arbitrary points per node
-
-`solve_mutual_field(world, engine, anchors, field_points, …)` returns the galvanic
-Green-function matrix `R` of shape `(M, nG)` with `R[i, j]` = potential at
-`field_points[i]` under unit excitation of cluster `j` (all other clusters
-floating). It generalises the off-diagonal field evaluation of
-`solve_mutual_matrix` to an **arbitrary** number of probe points (decoupled from
-`nG`) and omits the self/diagonal term. The reaction matrix and per-excitation
-leakage columns are assembled **once** (as in `solve_mutual_matrix`); only the
-probe evaluation differs (`R = K_probe @ T`). Reuses the existing
-`image`/`image_2layer` kernels unchanged; results are bit-identical to the
-per-excitation `Engine.solve` construction (verified `max|ΔR| < 1e-9`, incl. the
-ADR-0007 cross-layer path). Building block for frequency-dependent surface
-potentials by superposition: `phi(points, f) = R @ I_leak(f)` with `I_leak(f)`
-from the reduced network `(Y_L(f) + Y_G) u = i` — the expensive 3D part is computed
-once (f-independent), the frequency sweep is cheap. New public API
-`groundfield.solve_mutual_field`; purely additive, `solve_mutual_matrix` untouched.
-
----
-
-## [0.9.0] — 2026-06-19
-
-### Added — `solve_mutual_matrix`: full mutual grounding-impedance matrix in one assembly
-
-`solve_mutual_matrix(world, engine, anchors, probe_points, …)` returns the full
-nG×nG mutual grounding-impedance matrix `Z_G` from a **single** reaction-matrix
-assembly, instead of nG separate `Engine.solve` calls. Diagonal = cluster
-self-impedance (as `FieldResult.cluster_impedance`); off-diagonal `[i, j]` =
-potential at `probe_points[i]` under unit excitation of cluster `j` (as
-`FieldResult.potential`); then `0.5·(Z + Zᵀ)`. The segment reaction matrix and the
-probe-point field kernel are each built **once** and reused across all excitations
-(`Phi = K @ T`); per-cluster current distributions use the existing
-`_solve_cluster_currents` machinery, so multi-electrode clusters are handled
-exactly. Reuses the existing `image` / `image_2layer` kernels (incl. the ADR-0007
-cross-layer path) unchanged — results are **bit-identical** to the per-excitation
-construction (verified `max|ΔZ| ≈ 1e-13`, pure BLAS-reordering residual) and
-~20–40× faster at nG ≈ 25–40. New module `solver/mutual.py`, exported as
-`groundfield.solve_mutual_matrix`. Purely additive; existing solve paths unchanged.
-
----
-
-## [0.8.1] — 2026-06-19
-
-### Fixed — image_2layer cross-layer path ~20× faster (cache Gauss–Legendre nodes)
-
-The ADR-0007 Sommerfeld cross-layer fallback (used when an electrode crosses
-the layer interface, e.g. a 9 m rod with `h_1 = 5 m`) recomputed the
-Gauss–Legendre quadrature nodes/weights
-(`numpy.polynomial.legendre.leggauss`, an O(n³) eigenvalue problem) once per
-segment pair for the fixed orders `n_log = 32` / `n_lin = 96`. Profiling
-showed ~93 % of the solve in `leggauss`/`legval`. The nodes are now cached
-per order (`coupling/layered_green.py::_leggauss_cached`); results are
-bit-identical (the quadrature itself is unchanged). A single 9 m rod over a
-1000/30 Ω·m, `h_1 = 5 m` two-layer soil drops from ~3.9 s to ~0.20 s
-(18 segments) and ~19.9 s to ~0.93 s (45 segments); the cost scales O(n²) in
-the segment count, so larger geometries benefit even more. The within-layer
-image-series path is unaffected.
-
----
-
-## [0.8.0] — 2026-06-18
-
-### Added — `create_engine`: configurable image-series convergence (`image_max_terms` / `image_series_tol`)
-
-`create_engine()` and the underlying `Engine` gain two optional parameters,
-`image_max_terms` (default `100`) and `image_series_tol` (default `1e-6`),
-forwarded to the `image_2layer` / `image_nlayer` backends. They control the
-truncation of the Tagg/Sunde image-charge series (ADR-0001). For high layer
-contrast — `|K|` close to 1, e.g. ρ₁ = 1000 Ω·m over ρ₂ = 30 Ω·m
-(`|K|` ≈ 0.94) — the series needs ≈ 230 terms to reach the tolerance; the
-previously hard-coded cap of 100 left such cases unconverged
-(`metadata["converged"] == False`) with a "Result may be inaccurate" warning
-and a truncation error up to a few percent. Callers can now raise the cap
-(e.g. `create_engine(backend="image", image_max_terms=500)`). Defaults are
-unchanged, so existing behaviour and all prior results are bit-identical.
-Regression test in `tests/test_two_layer.py`
-(`test_two_layer_image_max_terms_raises_convergence_cap`).
-
-### Added — OrtsnetzLayout.connect_all_buildings: guaranteed LV coverage
-
-`OrtsnetzLayout.connect_all_buildings()` connects *every* house to the LV
-network. `connect_buildings()` only taps each house to the nearest cable
-with a short straight stub and skips houses whose stub would cross another
-footprint (typically houses with no cable in reach). The new method closes
-that gap so the layout models a real LV network in which every customer is
-served: after the initial tap pass it routes obstacle-avoiding PEN
-*laterals* (full Manhattan A\*) from the nearest substation/KVS node to a
-free point just outside each still-unconnected house, then re-taps —
-re-tapping frequently connects neighbouring houses to the same new lateral.
-Laterals only originate from nodes galvanically connected to the substation
-(new helper `_anchors_connected_to_substation`), so a stranded KVS never
-seeds an isolated sub-network. Houses enclosed by other footprints on every
-side are reported in the returned `LateralCoverageResult.islands` instead of
-raising. The box-model free-point search lives in the new helper
-`_free_point_near_house`.
-
----
-
-## [0.7.0] — 2026-05-26
-
-### Added — OrtsnetzLayout: imperative TN-Ortsnetz builder
-
-`groundfield.generators.OrtsnetzLayout` is the new entry point for
-building a *single deterministic* TN-Ortsnetz piece by piece, in
-the order an engineer would draw it on a plan: ingest building
-footprints from OpenStreetMap, drop the substation, drop one or
-more KVS, route PEN cables in strict Manhattan geometry around
-the foundations, connect every house to its closest cable, and
-optionally drop a Hilfserder + Spannungssonde for a simulated
-fall-of-potential measurement. The whole pipeline is exposed as
-one-call-per-step methods on the layout so an AP1 sweep over many
-GPS-defined Ortsnetze reduces to a single Python loop.
-
-Key API surface (all on :class:`OrtsnetzLayout`):
-
-- `from_footprints(...)` / `from_osm(center_lat_deg, center_lon_deg,
-  radius_m, substation_xy=..., kvs_xys=..., substation_lat_lon=...,
-  kvs_lat_lons=...)` — two constructors. ``from_osm`` runs
-  :func:`groundfield.geo.osm.query_and_project` and pre-places the
-  substation and zero-or-more KVS anchors in one call. WGS84 and
-  local ENU metres are interchangeable on every anchor-placing
-  method.
-- `add_kvs(position_xy=... | position_lat_lon=...)` — drop a cable
-  cabinet at user coordinates.
-- `add_pen_cable(start=anchor, end=anchor | end_xy=... |
-  end_lat_lon=..., min_segment_length_m=..., clearance_m=...,
-  escape_radius_m=...)` — route a PEN cable from any anchor to
-  another anchor or a free coordinate using a 4-connected
-  Manhattan-grid A* that avoids every building's bounding
-  rectangle.
-- `connect_buildings()` — attach every house to the closest PEN
-  cable via a short axis-aligned stub (one or two segments);
-  unreachable houses emit a :class:`UserWarning` and stay
-  unconnected so the user can add another cable.
-- `add_auxiliary_electrode(distance_m=..., direction_deg=...,
-  grounding=..., length_m=...)` — drop the Hilfserder at a chosen
-  radius / bearing from the substation. Default geometry: a
-  3 × 0.5 m rod triangle (0.5 m side), parallel-bonded, matching
-  field-deployment practice. Override the geometry via the
-  ``grounding=GroundingSystemSpec(...)`` kwarg, or collapse to a
-  single 1.5 m rod via the ``length_m=`` legacy keyword. Each call
-  *replaces* the placement so sweeping the aux distance is a
-  one-line re-call.
-- `add_voltage_probe(inline_fraction=... | perpendicular_fraction=...
-  + perpendicular_side= | position_xy=... | position_lat_lon=...)`
-  — drop the Spannungssonde at 50 % of the Hilfserder distance,
-  inline or perpendicular (left = 90° CCW, right = 90° CW). The
-  probe is a *pure sampling point*: no rod is materialised in the
-  world, so the ideal-voltmeter assumption is preserved.
-- `foundation_mask(penetration, salt=0)` — deterministic per-house
-  :class:`bool` list derived from a stable MD5 hash of each
-  footprint's ``osm_id``. The same ``(penetration, salt)`` always
-  returns the same mask, and the mask is *nested* in
-  ``penetration`` — every house with a foundation at :math:`p_1`
-  also has one at any :math:`p_2 > p_1`. ``salt`` lets the user
-  draw independent Monte-Carlo realisations at the *same* nominal
-  penetration.
-- `to_world(foundation_mask=..., source_magnitude_A=..., ...)`
-  — materialise the layout into a full :class:`groundfield.World`:
-  substation ring + 4 rods, KVS rods, per-house foundation
-  electrodes (skipped where ``foundation_mask[i] == False``),
-  tiny PEN-junction rods at every cable corner and tap point so
-  the trunk physically follows the Manhattan polyline, PEN
-  conductors between junctions, service drops, a current source
-  at the substation cluster, and — when a Hilfserder is
-  configured — an opposite-sign return current at the aux anchor
-  that physically closes the measurement loop.
-- `measured_grounding_impedance(result, probe_xy=...,
-  source_magnitude_A=...)` — simulated meter reading
-  :math:`(\varphi_\text{sub} - \varphi_\text{probe}) / I_\text{src}`.
-  The ``probe_xy`` keyword lets the caller sample any probe
-  position from a single solve, enabling the inline-vs-perpendicular
-  comparison without re-running the solver.
-- `verify_current_balance(result, tolerance=0.02)` — Kirchhoff
-  plausibility check that aggregates leakage currents on both
-  sides of the loop (positive side = every non-aux electrode;
-  auxiliary side = every electrode prefixed with the aux name)
-  and asserts they sum to :math:`\pm I_\text{src}` within
-  tolerance. Catches the typical "stale-kernel" pitfall in a
-  notebook workflow.
-- `plot()` / `plot_surface_potential(result, world, two_slope=True,
-  symmetric=False, log=False, ...)` — interactive layout plot and
-  surface-potential pseudo-colour plot. Both overlay the
-  substation marker, Hilfserder marker (purple triangle with
-  dotted return-current line), and Spannungssonde marker (lime
-  star); the surface plot defaults to a
-  :class:`matplotlib.colors.TwoSlopeNorm` centred at zero so the
-  deep Hilfserder trough and the small substation + foundation
-  trumpet are both visible at full colour resolution.
-- `lat_lon_to_xy()` / `xy_to_lat_lon()` / `projector` — round-trip
-  helpers for plot overlays and external cross-checks.
-- `triangle_rod_grounding(rod_length_m=0.5, triangle_side_m=0.5)`
-  — free helper returning a :class:`GroundingSystemSpec` for the
-  default Hilfserder geometry; reusable for any anchor that needs
-  a rod-bundle.
-
-Snapshot data classes (Pydantic, JSON round-trippable):
-:class:`KvsPlacement`, :class:`AuxiliaryElectrodePlacement` (now
-holds a full :class:`GroundingSystemSpec`),
-:class:`VoltageProbePlacement` (pure sampling point),
-:class:`PenCable`, :class:`BuildingConnection`. Re-exported via
-:mod:`groundfield.generators` and the top-level
-:mod:`groundfield` package.
-
-### Added — Manhattan-routed PEN cable router
-
-`groundfield.generators.manhattan_routing` is the new pure-Python
-helper module behind ``OrtsnetzLayout.add_pen_cable``. Key exports:
-
-- :class:`ObstacleBox` — axis-aligned bounding box used as a
-  routing obstacle. Inflatable, with axis-aligned-segment overlap
-  test that ignores boundary touches.
-- :func:`route_manhattan(start, end, obstacles, grid_size,
-  clearance_m, escape_radius_m, max_iterations)` — 4-connected
-  A* on a regular Manhattan grid of cell size ``grid_size``.
-  Obstacles are inflated by ``clearance_m``. The ``escape_radius_m``
-  knob defines a disk around *both* start and end inside which
-  obstacle blocking is *not* enforced — the "release valve" for
-  real-OSM extracts where the substation lat/lon lands inside or
-  very near a foundation polygon. ``None`` (default) maps to
-  ``grid_size`` (one cell of slack); ``0.0`` restores the strict
-  pre-v0.7 behaviour. On failure the
-  :class:`RuntimeError` names which anchor is enclosed and
-  reports how many of the four immediate neighbour cells are
-  free, with concrete suggestions ("raise escape_radius_m to
-  e.g. X", "reduce clearance_m to Y", "move the offending
-  anchor").
-- :func:`segment_intersects_box` and
-  :func:`merge_collinear_waypoints` — supporting helpers.
-
-Pure Python; no :mod:`shapely` dependency at import time.
-
-### Added — TN-Ortsnetz radial-trunk PEN topology
-
-`groundfield.generators.pen_topology` adds a second PEN backbone
-topology for :class:`TnNetworkGenerator` alongside the legacy
-star-KVS layout: :class:`RadialTrunkTopology`. The substation
-feeds N radial feeders (default 4, evenly spaced) each with a
-finite slot budget per source; once the substation's slots are
-exhausted a KVS is inserted along the trunk axis and hosts the
-next batch of building taps. Buildings are assigned to the
-angularly-closest feeder; buildings behind the substation or
-beyond ``max_feeder_length_m`` are dropped with a
-:class:`UserWarning`. :class:`TnNetworkConfig.pen_topology` is a
-new discriminated-union field defaulting to
-:class:`StarKvsTopology` (legacy bit-identical), with
-:class:`RadialTrunkTopology` as the opt-in.
-
-### Fixed — closed measurement loop
-
-The v0.7 image solver (:mod:`groundfield.solver.image`) only
-consumes :attr:`Source.attached_to`; :attr:`Source.return_to` is
-silently ignored. Before the fix, ``add_auxiliary_electrode``
-plus an inline-probe reading produced a surface-potential plot
-in which the Hilfserder showed no gradient at all — the engine
-treated the entire test current as returning through the
-remote-earth boundary. :meth:`OrtsnetzLayout.to_world` now
-explicitly closes the loop by adding a second
-:class:`CurrentSource` with ``phase_deg=180`` at the aux anchor;
-the net injected charge is zero and the potential field develops
-the expected dipole pattern (positive trumpet at the substation,
-negative trumpet at the Hilfserder). ``Source.return_to`` on the
-substation-side source is still recorded for documentation and
-for future solver upgrades.
-
-### Tests
-
-- **`tests/test_pen_topology.py`** — 18 regression tests covering
-  :class:`RadialTrunkTopology` validation, assignment, KVS
-  planning, end-to-end :meth:`TnNetworkGenerator.build` and JSON
-  round-trip.
-- **`tests/test_ortsnetz_builder.py`** — 67 regression tests
-  covering the Manhattan routing primitives
-  (``ObstacleBox``, ``segment_intersects_box``,
-  ``merge_collinear_waypoints``, ``route_manhattan`` with
-  strict / default / generous ``escape_radius_m`` modes,
-  diagnostic error message); KVS / PEN cable placement and
-  validation; the building → cable connection algorithm
-  (single-cable + closest-cable + warn-and-skip +
-  missing-cable error); ``to_world`` honouring the
-  ``foundation_mask`` and wiring the auxiliary return source;
-  the GPS / OSM convenience layer (``from_osm``,
-  ``lat_lon_to_xy``, ``xy_to_lat_lon``, lat/lon overloads);
-  the foundation-mask helper (determinism, nestedness in
-  ``p``, fraction-tracking, salt-independence, bounds, osm-id
-  fallback); the full measurement workflow (Hilfserder
-  placement modes, voltage probe geometries, the ``probe_xy``
-  override, ``measured_grounding_impedance``,
-  ``verify_current_balance``); the surface-potential plot in
-  all three colour-axis modes (``two_slope``, ``symmetric``,
-  ``log``); and an end-to-end physics check that the engine
-  sees the expected positive-side / aux-side current split
-  within 2 % of the test current.
-
-### Notebooks
-
-- **`notebooks/35_radial_trunk_pen_topology.ipynb`** —
-  geometry-only walk-through of a bus-topology TN-Ortsnetz
-  (substation → one PEN main cable → 20 houses → KVS) with
-  strict Manhattan PEN routing.
-- **`notebooks/36_ortsnetz_builder.ipynb`** — end-to-end
-  :class:`OrtsnetzLayout` workflow on 20 synthetic OSM-style
-  footprints plus a *real* OSM extract of Mulmke (Heudeber /
-  Nordharz; 51.9136 °N, 10.8432 °E) with two KVS along the
-  K1328. Closes with a one-call-per-step usability table.
-- **`notebooks/37_foundation_penetration_sweep.ipynb`** — the
-  Mulmke layout with a reproducible foundation-electrode
-  penetration sweep, a fall-of-potential measurement
-  (Hilfserder + Spannungssonde + Kirchhoff balance check),
-  surface-potential galleries per penetration value and per
-  Hilfserder distance using the
-  :class:`TwoSlopeNorm`-default plot, and an inline-vs-
-  perpendicular probe comparison swept across Hilfserder
-  distances from a single solve per ``D``.
-
-### Added (Audit pass 7 — implemented 2026-05-18)
-
-- **`groundfield.io.groundinsight.EvaluateSpecError`** — new typed
-  exception (subclass of :class:`ValueError`) raised by
-  :func:`evaluate_spec` on malformed spec input. The class is
-  re-exported at the top level as :data:`groundfield.EvaluateSpecError`
-  and listed in :data:`groundfield.__all__`. Legacy
-  ``except ValueError`` blocks keep working unchanged because the
-  new class inherits from :class:`ValueError`; downstream
-  ``groundinsight`` consumers can now catch the typed exception
-  without grepping ``str(exc)`` (closes the *seventh 2026-05-18
-  audit pass* "no named class for evaluate_spec failures" bullet).
-- **`groundfield.World.reset_concrete_corrections()`** — explicit
-  cleanup helper for the ADR-0012 V1 concrete-shell registry
-  (`world.py`). Re-using a single :class:`World` across multiple
-  :meth:`TnNetworkGenerator.build` calls — the canonical AP1
-  Monte-Carlo pattern over ``concrete_rho_ohm_m`` — previously
-  accumulated stale entries in the public
-  :attr:`World.concrete_shell_corrections` dict. The new method
-  clears the registry and returns a shallow copy of the dropped
-  entries, so callers can inspect or log them. Calling on a fresh
-  world is an idempotent no-op. Closes the *seventh 2026-05-18
-  audit pass* "registry has no documented cleanup contract" bullet.
-- **`OsmBuildingPlacement.footprint_at(i, strict=...)`** — opt-in
-  defensive bounds check (`geo/placement.py`). Default
-  ``strict=False`` preserves the v0.6.0 "out-of-range → ``None``"
-  contract that :meth:`TnNetworkGenerator.build` relies on;
-  ``strict=True`` raises a self-describing :class:`IndexError`
-  that names the placement, the requested index, the filtered
-  footprint count (after ``min_area_m2``) and the raw list length.
-  The placement also exposes a new
-  :attr:`OsmBuildingPlacement.n_footprints` property identical to
-  ``len(placement)`` so consumers can pre-flight ``i`` without
-  invoking the dunder. Closes the *seventh 2026-05-18 audit pass*
-  "footprint_at lacks defensive bounds checking" bullet.
-- **`groundfield.geo.osm.query_buildings(..., max_retries=N)` and
-  `query_and_project(..., max_retries=N)`** — promote the
-  previously hard-coded ``1`` retry to a keyword
-  (`geo/osm.py`). Defaults to ``1``, matching the historic v0.6.0
-  contract; users on flaky cellular / VPN links can raise it,
-  CI pipelines that prefer fail-fast semantics can set ``0``.
-  ``max_retries < 0`` is rejected at the API boundary with a
-  clear :class:`ValueError`. The module docstring and the
-  :func:`_post_overpass` internal docstring are updated to match.
-  Closes the *seventh 2026-05-18 audit pass* "retry count
-  hardcoded as 1" bullet.
-
-### Tests (Audit pass 7 — implemented 2026-05-18)
-
-- **`tests/test_audit_pass7_fixes.py`** — 14 regression tests
-  mapped 1:1 to the user-visible bullets above:
-  :class:`EvaluateSpecError` is a :class:`ValueError` subclass,
-  is raised on missing / empty / unknown-symbol formulas, and is
-  reachable from the top level (4 tests);
-  :meth:`World.reset_concrete_corrections` clears the registry,
-  returns a defensive copy of the previous state, and is
-  idempotent on a fresh world (3 tests);
-  :meth:`OsmBuildingPlacement.footprint_at` keeps the historic
-  ``None`` default, raises a structured :class:`IndexError` under
-  ``strict=True`` (negative and out-of-range indices), the message
-  carries the expected diagnostic tokens, and the new
-  :attr:`n_footprints` property tracks ``len(placement)`` after
-  ``min_area_m2`` filtering (4 tests);
-  :func:`query_buildings` accepts and forwards ``max_retries``,
-  rejects negative values, defaults to ``1``, and
-  :func:`query_and_project` exposes the same keyword on its
-  signature (3 tests).
-
-### Notebooks (Audit pass 7 — implemented 2026-05-18)
-
-- **`notebooks/34_audit_pass7_fixes.ipynb`** — narrative walk-through
-  of the four behaviour changes, one short section per fix. The
-  notebook runs offline (no Overpass call) and uses synthetic
-  footprints for the placement demo.
-
-### Docs (Audit pass 7 — implemented 2026-05-18)
-
-- **`docs/api/world.md`, `docs/api/sources.md`, `docs/api/boundary.md`,
-  `docs/api/validation.md`, `docs/api/references.md`** — the five
-  long-standing missing API-reference pages (flagged from pass 1
-  through pass 6) now exist as mkdocstrings stubs that render the
-  module-level public surface. Wired into ``mkdocs.yml`` nav under
-  *API reference*. Closes the seven-pass-in-a-row backlog bullet.
-- **`docs/api/index.md`** — the API-reference index now lists the
-  ``Geo / OSM`` page that was added in 0.6.0 but missing from the
-  rendered index, alongside the five newly-added pages.
-- **`docs/api/io.md`** — adds an "Errors" subsection that documents
-  the new :class:`EvaluateSpecError` class and the typed-exception
-  contract for downstream ``groundinsight`` consumers.
-
-### Fixed (Backlog — seventh 2026-05-18 review pass)
-
-> The seventh audit pass was run on 2026-05-18, three days after the
-> `0.6.0` release (`geo` subpackage + concrete-encasement model). The
-> entries below capture new findings that emerged either as a
-> side-effect of the 0.6.0 surface (`World.concrete_shell_corrections`
-> registry, `OsmBuildingPlacement.footprint_at`, `geo.osm` retry
-> contract) or that have **still not been addressed** through six
-> previous audit passes (missing API pages, ADR cross-references).
-> Only the CHANGELOG is edited in this pass; no program code is
-> touched.
-
-- **`docs/api/sources.md`, `boundary.md`, `references.md`,
-  `validation.md`, `world.md` still missing — seventh pass in a row.**
-  The `0.6.0` release added `docs/api/geo.md` for the new OSM
-  subpackage but did **not** address the five long-standing missing
-  pages flagged in pass 1 through pass 6. `groundfield.world.World`,
-  `groundfield.solver.sources`, `groundfield.solver.boundary` and
-  `groundfield.validation` are all part of the public ``__all__`` of
-  `src/groundfield/__init__.py` (confirmed on 2026-05-18) and the
-  user has no rendered API documentation for any of them. The
-  six-pass-in-a-row finding is therefore re-elevated; without a
-  forcing CI gate it will reappear in the eighth pass.
-- **`docs/api/index.md` does not list the new `Geo / OSM` page.** The
-  rendered API-reference index enumerates Soil, Geometry, Conductors,
-  Solver, Coupling, Postprocess, Diagnostics, IO and Generators but
-  is missing the `Geo / OSM` entry that the 0.6.0 `mkdocs.yml` nav
-  added (``api/geo.md``). Drift between API overview prose and the
-  rendered nav appeared on the same release that landed the
-  subpackage — straightforward bullet-list addition.
-- **`World.concrete_shell_corrections` registry has no documented
-  cleanup contract.** Re-using a single :class:`World` across
-  multiple :meth:`TnNetworkGenerator.build` calls (the canonical
-  parameter-sweep pattern) accumulates entries from previous builds
-  in the same dict; the `0.6.0` release records the registry as a
-  public ``dict[str, float]`` but offers neither a
-  ``world.reset_concrete_corrections()`` helper nor a
-  per-build invalidation hook on the generator side. AP1 Monte-Carlo
-  studies that flip ``concrete_rho_ohm_m`` per realisation will
-  carry stale shell resistances from earlier samples into later
-  ones unless the user knows to clear the dict by hand.
-- **`OsmBuildingPlacement.footprint_at(i)` lacks defensive bounds
-  checking.** The current implementation indexes
-  ``self.footprints[i]`` directly; for ``i`` out of range CPython
-  raises a bare ``IndexError`` whose message does not name the
-  placement, the requested index, or the available range. Wrap with
-  an explicit ``raise IndexError(f"OsmBuildingPlacement: requested
-  index {i} but only {n} footprints are available; check
-  placement.n_buildings.")`` so the AP1 generator pipeline produces
-  a self-describing failure instead of an opaque traceback at
-  ``TnNetworkGenerator.build`` time.
-- **`geo.osm.query_buildings` retry count is hardcoded as ``1``.**
-  The docstring promises "one retry on ``429`` / ``504`` with
-  exponential backoff" but no parameter is exposed for users
-  working over flaky cellular / VPN links. Promote the retry count
-  to a ``max_retries: int = 1`` keyword on
-  :func:`query_buildings` / :func:`query_and_project`; the default
-  preserves current behaviour.
-- **`groundfield.io.groundinsight.evaluate_spec` ValueError class is
-  not re-exported.** Pass-5 widened `evaluate_spec` to raise
-  ``ValueError`` on non-canonical free symbols (and the Pass-5
-  Fixed block lists this as a public-surface improvement), but
-  downstream code that wants to catch the new exception has no
-  named class — it has to compare against ``str(exc)`` substrings
-  or fall back to the broad ``ValueError`` parent. Define an
-  ``EvaluateSpecError(ValueError)`` subclass in
-  `groundfield.io.groundinsight` and add it to the module ``__all__``;
-  follow-on `groundinsight` consumers will benefit from the typed
-  surface.
-- **`Conductor.lumped_series_resistance_ohm` and
-  `StripElectrode.concrete_shell_coefficient_ohm_m` are not
-  JSON-round-tripped in `tests/test_concrete_encasement.py`.** The
-  new test file covers the V2 Sunde-shell closed-form match, the
-  V1 registry, the discriminator and the end-to-end OSM smoke,
-  but does **not** assert that a `World` with a populated
-  `Conductor.lumped_series_resistance_ohm` or
-  `StripElectrode.concrete_shell_coefficient_ohm_m` survives
-  ``World.model_dump_json()`` → ``World.model_validate_json(...)``.
-  Add a single test case so the persistence contract is locked in
-  before users start sharing concrete-encasement-bearing world
-  files across runs.
-- **ADR cross-references are one-directional.** `ADR-0011`
-  (OSM building footprints) references `ADR-0009` (World
-  generators) and `ADR-0012` (Concrete encasement) references
-  `ADR-0003` (Distributed conductor) — but the *target* ADRs
-  carry no reciprocal "See also" link. A maintainer reading
-  ADR-0003 today sees no breadcrumb to the V1 lumped path that
-  reuses its framework; same for ADR-0009 → ADR-0011.
-  Bidirectional ADR linking is a one-line edit per file and
-  prevents future architectural drift.
-- **`docs/concepts.md` is silent on the lumped vs. distributed
-  Sunde-shell trade-off.** The 0.6.0 release added two
-  implementation variants (``concrete_model="lumped"`` vs.
-  ``"distributed"``) with materially different physics (V1
-  records the total shell resistance and injects a series
-  resistance on the PEN drop; V2 augments the post-kernel
-  diagonal per segment). The user-facing `concepts.md` page
-  describes neither variant nor the regime where each is
-  preferred. AP1 readers reach the ADR-0012 file as a fallback,
-  but the canonical "Concepts" page should carry a short
-  decision-guide table.
-- **`README.md` does not mention `0.6.0` features.** The README
-  Roadmap and Features sections were not updated alongside the
-  0.6.0 release — neither the `geo` extra, the
-  `BuildingFootprint` / `OsmBuildingPlacement` exports nor the
-  concrete-encasement model appear in the project description.
-  AP1 reviewers landing on the GitHub page have no signal that
-  the OSM and concrete-encasement features exist.
-- **Notebooks `30..33` are not wired into the docs nav.** All four
-  audit / OSM / concrete-encasement notebooks exist on disk and
-  are referenced in the 0.6.0 CHANGELOG "Docs" block, but
-  `mkdocs.yml` only loads `docs/examples/*.md`. The
-  `mkdocs-jupyter` plugin *is* enabled (``plugins: mkdocs-jupyter``
-  block, ``execute: false``), so adding a ``Notebooks:`` nav
-  section under Examples is a four-line edit. Without it the
-  notebook walkthroughs that the 0.6.0 changelog calls out are
-  invisible to docs-site readers.
-
-### Docs (Backlog — seventh 2026-05-18 review pass)
-
-- **`docs/index.md` Migration callout for `0.6.0`.** A short
-  "Migrating from 0.5.x" section under the index — listing the
-  new optional ``geo`` extra, the additive
-  ``concrete_rho_ohm_m`` field on
-  :class:`FoundationElectrodeSpec`, and the no-op default — would
-  spare users a CHANGELOG dive on upgrade. Mirror the pattern
-  that the 0.5 release introduced for the discriminated
-  ``Source`` union.
-- **`docs/quickstart.md` does not show the new exports.** The
-  page still ends at ``gf.create_engine(...).solve(world)``; the
-  0.6.0 exports `gf.BuildingFootprint`, `gf.OsmBuildingPlacement`,
-  `gf.Projector`, `gf.query_buildings`, `gf.query_and_project`,
-  `gf.OverpassError` are not introduced anywhere in the quickstart
-  flow. A short "Optional: OSM-driven footprints" appendix would
-  close the gap.
-- **`docs/performance.md` has no `geo` cost section.** The
-  on-disk Overpass cache, the projection cost and the OMBR
-  reduction are all new performance-relevant code paths in
-  `0.6.0`. AP1 readers running long Monte-Carlo sweeps over
-  10–100 buildings need an order-of-magnitude estimate
-  (current local: ~ms per footprint, network: ~hundreds of ms
-  on cold cache) and an explicit pointer at the cache directory
-  to clear between experiments.
-- **`docs/api/geo.md` lacks the offline-fallback contract.** The
-  0.6.0 page describes the live Overpass path and the cache
-  layer but does not state the contract of the *purely offline*
-  variant — the path through `BuildingFootprint` + manual
-  centroid placement that does not import `requests` /
-  `pyproj` / `shapely`. A "Working offline" subsection that
-  enumerates the no-dependency code path keeps the AP1 reproducible-
-  computation guarantee visible.
-- **`docs/adr/0003-distributed-conductor-model.md` and
-  `docs/adr/0009-world-generators.md`** do not yet reference
-  `ADR-0011` and `ADR-0012`. Same finding as the bidirectional
-  ADR cross-reference Fixed-backlog entry above.
-
-### Tests (Backlog — seventh 2026-05-18 review pass)
-
-- **No JSON round-trip test for `Conductor.lumped_series_resistance_ohm`.**
-  Tied to the ADR-0012 V1 persistence-contract Fixed-backlog entry above.
-- **No JSON round-trip test for
-  `StripElectrode.concrete_shell_coefficient_ohm_m`.** Tied to the
-  ADR-0012 V2 persistence-contract Fixed-backlog entry above.
-- **No regression test for `World.concrete_shell_corrections` cleanup
-  contract.** Once a per-build `reset_concrete_corrections()` helper
-  (or a `TnNetworkGenerator.build(reset_shell_corrections=True)`
-  keyword) lands, pin the contract with a two-build test that
-  asserts the second build sees a clean registry.
-- **No regression test for `OsmBuildingPlacement.footprint_at(i)`
-  out-of-range error message.** Once the bounds check lands, pin
-  the structured error string so the message does not regress to
-  a bare `IndexError`.
-- **No timing test for the `geo.osm` cache.** A trivial fixture
-  that mocks the Overpass `_post` boundary, asserts a single POST
-  per ``(origin, radius)`` tuple over five `query_buildings`
-  invocations and checks the cache directory carries exactly one
-  on-disk file is a one-screen test that would lock in the
-  ADR-0011 reproducibility guarantee.
-- **No `mkdocs build --strict` test.** Sixth-pass entry remains
-  open; seventh pass elevates it again because the new `geo.md`
-  page and the still-missing `sources.md` / `boundary.md` /
-  `references.md` / `validation.md` / `world.md` pages would all
-  be flagged by ``--strict`` immediately. Without the CI gate,
-  the eighth audit pass will inevitably re-list the same
-  five-page gap.
-
-### Roadmap candidates — seventh 2026-05-18 review pass
-
-- **`gf.show_versions()`** — same return-shape convention as the
-  proposed `gi.show_versions()` and `gm-cli doctor`. Sixth-pass
-  carried this; seventh pass re-emphasises the cross-repo
-  contract: ``dict[str, str]`` with keys ``package``, ``python``,
-  ``numpy``, ``scipy``, ``sympy``, ``pydantic``, ``polars``,
-  ``shapely``, ``pyproj``, ``requests`` (the last three reflect
-  the new ``geo`` extra) plus ``_meta = {timestamp, platform}``.
-- **`gf.docs.assert_api_pages_exist()`** — walk ``__all__`` and
-  assert every public symbol has at least one mkdocstrings
-  ``:::`` directive somewhere under ``docs/api/``. Companion to
-  the proposed `mkdocs build --strict` CI gate. Six passes have
-  flagged the missing-API-pages problem and *seven* passes the
-  forcing-function lack; this is now the highest-leverage
-  cross-repo roadmap item.
-- **`gf.World.reset_concrete_corrections()`** — public helper
-  matching the ADR-0012 V1 registry. Default behaviour stays
-  additive; the helper is opt-in for parameter sweeps. Tie to
-  the Fixed-backlog entry above.
-- **`gf.geo.OverpassCache(path, max_age_s=...)`** — promote the
-  current hidden ``$XDG_CACHE_HOME/groundfield/osm/`` directory
-  to a configurable cache object. Users running CI builds want
-  per-job cache control; AP1 Monte-Carlo runs want to pin the
-  cache for reproducibility.
-- **ADR-0013 — Cross-repo `show_versions` convention.** Bundle
-  the three-repo `show_versions` proposal into a single ADR
-  that lives in `groundfield` and is linked from
-  `groundinsight` / `groundmeas`. Five passes have proposed
-  ``show_versions``; the ADR is the forcing function that pins
-  the return shape before any of the three packages ships its
-  own implementation.
-
-### Fixed (Backlog — eighth 2026-05-25 review pass)
-
-> The eighth audit pass was run on 2026-05-25, ten days after the
-> `0.6.0` release (`geo` subpackage + concrete-encasement model) and
-> seven days after the seventh CHANGELOG-only audit pass. The
-> seventh-pass *code* fixes (`EvaluateSpecError`, `World.reset_concrete_corrections`,
-> `OsmBuildingPlacement.footprint_at` bounds-check, `query_buildings`
-> `max_retries` keyword) landed in commit `4c27695` on
-> `feature/audit-pass7-fixes` together with the new OrtsnetzLayout +
-> Manhattan PEN router + radial-trunk PEN topology in `60a9cf5`. The
-> bullets below capture both the **still-unmerged release-train risk**
-> and a new Pass-8 wave of behavioural / docs gaps. Only the
-> CHANGELOG is edited in this pass; no program code is touched.
-
-- **`feature/audit-pass7-fixes` carries two commits plus a large
-  unstaged delta — release cut blocked.** The branch holds the
-  seventh-pass code fixes (`4c27695`) and the AP1-feature commit
-  (`60a9cf5` — `OrtsnetzLayout`, `manhattan_routing`, `pen_topology`),
-  *plus* twenty-six modified files in the working tree (audit-label
-  cleanup in inline comments, AP1-reference removal in module
-  docstrings, the new `escape_radius_m` keyword on
-  :func:`route_manhattan` and :meth:`OrtsnetzLayout.add_pen_cable`,
-  CITATION.cff edits). Three CHANGELOG `Added`-blocks dated
-  2026-05-18 (escape-radius safety valve, OrtsnetzLayout GPS layer,
-  Manhattan router + Ortsnetz builder + radial-trunk topology) are
-  also unstaged. The 0.7.0 / 0.6.1 release cannot be tagged until
-  the working tree is split into a `chore(audit-cleanup)` commit
-  (audit-label / AP1-reference scrub) and a `feat(routing)` commit
-  (escape-radius valve + diagnostic error). Eighth-pass forcing
-  function: open the release PR before the next audit pass or the
-  backlog ledger keeps growing past the implementation.
-- **Audit-pass labels inside docstrings and inline comments are
-  being scrubbed without a Changelog `Internal` block.** The
-  working-tree diff against `60a9cf5` strips the parenthetical
-  *„(fifth 2026-05-13 audit pass)"* / *„(sixth 2026-05-14 audit
-  pass)"* / *„(seventh 2026-05-18 audit pass)"* breadcrumbs from
-  `src/groundfield/coupling/sommerfeld_inductance.py`,
-  `diagnostics.py`, `generators/electrode_specs.py`,
-  `generators/ortsnetz_builder.py`, `generators/tn_network.py`,
-  `geo/osm.py`, `geo/placement.py`, `io/csv.py`,
-  `io/groundinsight.py`, `postprocess/vector_fitting.py`,
-  `solver/engine.py` and `world.py`. The intent is reasonable (the
-  audit pass numbers are noise once the fix is shipped) but the
-  change is invisible to a CHANGELOG reader. Add an
-  `Internal (audit-label scrub — 2026-05-25)` block before the
-  cleanup commit lands.
-- **AP1-reference cleanup in module docstrings is undocumented.**
-  Same diff removes the *„AP1"* project name from the top-level
-  docstrings of `generators/manhattan_routing.py` and
-  `generators/ortsnetz_builder.py` (`AP1 PEN cable layout` →
-  `PEN cable layout`, `AP1 LV cable router` → `LV cable router`,
-  `AP1 reference worlds` → `reference worlds`). Project-neutral
-  docstrings are correct (`docs_review_report.md` from 2026-05-18
-  explicitly recommended this) but the change is not visible in the
-  Changelog. Add a `Docs (project-neutral docstrings — 2026-05-25)`
-  bullet referencing the 2026-05-18 docs review.
-- **`route_manhattan(..., escape_radius_m=...)` has no negative
-  test for `escape_radius_m = -1.0`.** The implementation in
-  `src/groundfield/generators/manhattan_routing.py` validates
-  ``if escape_radius_m < 0.0:`` and raises `ValueError`, but the
-  three new regression tests in `tests/test_ortsnetz_builder.py`
-  (running total 31) only cover positive defaults, `0.0` strict
-  mode and `6.0` rescue mode. Add a parametrised test on
-  `[-1.0, -0.001]` so the contract stays explicit.
-- **`OrtsnetzLayout.from_osm` accepts `kvs_lat_lons` without a
-  shape contract.** The classmethod (lines 311–432 of
-  `src/groundfield/generators/ortsnetz_builder.py`) lets the user
-  pass either `kvs_lat_lons` (list of `(lat, lon)` tuples) or
-  `kvs_xys` (list of `(x, y)` tuples), guarded by an XOR validation
-  on whether both are non-`None`. There is **no** validation that
-  the user-supplied `kvs_names` list (if given) has the same
-  length as `kvs_lat_lons` / `kvs_xys`, nor that each tuple has
-  exactly two elements. A typo like `kvs_lat_lons=[(51.0,)]`
-  reaches `projector.to_xy_m(*tup)` and raises a bare
-  `TypeError`. Add a `_validate_kvs_arguments(kvs_lat_lons,
-  kvs_xys, kvs_names)` helper that produces a self-describing
-  error at the API boundary.
-- **`evaluate_spec`'s `EvaluateSpecError` is in `docs/api/io.md`
-  but not in `docs/api/index.md`.** Pass-7 added the *„Errors"*
-  subsection to `docs/api/io.md` (commit `4c27695`); the
-  `api/index.md` overview prose still enumerates only the
-  read/write helpers and lacks a one-line pointer to the new
-  typed exception. Add it to the IO row so users browsing the
-  Overview see the typed-error contract before drilling into
-  the page.
-- **`groundfield.diagnostics` exposes `MIN_THINWIRE_RATIO`,
-  `SOFT_LIMIT`, `HARD_LIMIT` as public constants but they are not
-  listed in `docs/api/diagnostics.md`.** The constants were promoted
-  from the private leading-underscore aliases in pass 5 (commit
-  `72ee1b2`) and the audit-label cleanup currently underway in the
-  working tree keeps them but removes the *„fifth 2026-05-13 audit
-  pass"* breadcrumb. The mkdocstrings dump in `docs/api/diagnostics.md`
-  picks up the function symbols but not the module-level constants
-  because the page uses `:::groundfield.diagnostics:` without
-  `members:` or `filters:`. Add an explicit `:::groundfield.diagnostics:
-  members: [MIN_THINWIRE_RATIO, SOFT_LIMIT, HARD_LIMIT, expected_segments,
-  world_statistics, check_segment_resolution]` so the public surface
-  matches what `from groundfield.diagnostics import *` exposes.
-- **`docs/concepts.md` still has no V1 vs V2 Sunde-shell decision
-  table (eighth pass in a row for the V1/V2 distinction; second
-  pass that explicitly calls for the *table* form).** Same finding
-  as the seventh-pass `Fixed (Backlog)` entry. The two
-  implementation variants (`concrete_model="lumped"` vs
-  `"distributed"`) and their respective complexity / accuracy
-  trade-offs are still only discoverable through ADR-0012.
-- **`docs/index.md` 0.6.0 migration callout still missing
-  (seventh-pass finding re-flagged).** Same as the
-  Docs-backlog entry under the seventh review pass.
-- **`docs/quickstart.md` does not show the new 0.6.0 `geo`
-  exports (seventh-pass finding re-flagged).**
-- **`docs/performance.md` lacks a `geo` cost section
-  (seventh-pass finding re-flagged).**
-- **`docs/api/geo.md` does not document the offline fallback
-  contract (seventh-pass finding re-flagged).**
-- **ADR-0003 and ADR-0009 still have no reciprocal „See also"
-  link to ADR-0011 / ADR-0012 (seventh-pass finding re-flagged
-  — eighth pass).**
-- **Notebooks `30..36` not in `mkdocs.yml` nav (seventh-pass
-  finding re-flagged with two additional notebooks).** The 0.6.0
-  release added `32_osm_footprints.ipynb` and `33_concrete_encasement.ipynb`;
-  pass 7 added `34_audit_pass7_fixes.ipynb`; the AP1 feature
-  branch added `35_radial_trunk_pen_topology.ipynb` and
-  `36_ortsnetz_builder.ipynb`. None of the seven are reachable
-  from the rendered docs nav.
-- **`graphify-out/manifest.json` is stale.** `GRAPH_REPORT.md`
-  reports commit `aa9f0978` (the 0.6.0 release tag) while
-  `git log` is at `60a9cf5`; the manifest mtimes are all from
-  before commit `4c27695`. Run `graphify update .` before the
-  next audit pass so the knowledge-graph is in sync with the
-  Pass-7 / OrtsnetzLayout commits.
-
-### Docs (Backlog — eighth 2026-05-25 review pass)
-
-- **`README.md` still does not mention the OrtsnetzLayout +
-  Manhattan router + radial-trunk PEN topology (uncommitted
-  AP1 features).** The README's „New in 0.6.0" section lists
-  OSM-driven footprints and concrete encasement but not the
-  three uncommitted modules. Add a short *„Upcoming in 0.7.0
-  / 0.6.1"* paragraph (or wait until release-cut) describing
-  the imperative builder and the GPS / OSM convenience layer.
-- **`docs/examples/` has no end-to-end OrtsnetzLayout walkthrough.**
-  The `36_ortsnetz_builder.ipynb` notebook lives in `notebooks/`
-  (gitignored) and is rendered nowhere; an `examples/10_ortsnetz_layout.md`
-  page that imports the Mulmke OSM extract narrative would close
-  the gap for docs-site readers.
-- **`docs/adr/` has no ADR for the OrtsnetzLayout builder.** The
-  module is a substantive architectural addition (imperative
-  single-network builder vs. the stochastic `TnNetworkGenerator`)
-  but no ADR records the design rationale. Open ADR-0013 (or
-  ADR-0014 if ADR-0013 is reserved for the cross-repo
-  `show_versions` convention) — `OrtsnetzLayout: imperative
-  single-network builder for TN-Ortsnetze`.
-- **`docs/adr/` has no ADR for the Manhattan PEN router.** The
-  4-connected A* + AABB obstacle test is a new code path with
-  its own performance / correctness contract (cell size,
-  clearance, escape radius, max iterations). One paragraph of
-  rationale per knob is enough.
-- **`docs/api/generators.md` does not enumerate the new public
-  symbols** `OrtsnetzLayout`, `PenCable`, `KvsPlacement`,
-  `BuildingConnection`, `ObstacleBox`, `PenTopology`,
-  `StarKvsTopology`, `RadialTrunkTopology`,
-  `route_manhattan`, `segment_intersects_box`,
-  `merge_collinear_waypoints`. The 0.6.0 changelog block lists
-  them but the `docs/api/generators.md` mkdocstrings dump still
-  uses the default `:::groundfield.generators:` and the
-  pre-0.6.0 module docstring at the top of the page does not
-  reference them.
-- **`docs/api/io.md` *„Errors"* subsection does not show the
-  `try / except EvaluateSpecError` example.** The seventh-pass
-  edit added the subsection but only documents the class
-  surface. Add a five-line example so consumers can copy-paste
-  the pattern.
-
-### Tests (Backlog — eighth 2026-05-25 review pass)
-
-- **`route_manhattan(..., escape_radius_m=-1.0)` negative-input
-  parametrised test.** Tied to the Fixed-backlog entry above.
-- **`OrtsnetzLayout.from_osm` shape-contract regression tests.**
-  Add `tests/test_ortsnetz_builder.py::test_from_osm_kvs_shape_contract`
-  parametrised on the four failure modes: `kvs_lat_lons` with
-  mis-sized tuples, `kvs_names` length mismatch, both
-  `kvs_lat_lons` and `kvs_xys` set, both `substation_lat_lon`
-  and `substation_xy` set.
-- **No regression test against `graphify-out` staleness.** A
-  one-line `test_repo_hygiene.py::test_graphify_manifest_matches_head`
-  helper (read `GRAPH_REPORT.md` *„Built from commit"* line,
-  compare against `git rev-parse HEAD`) would surface the
-  knowledge-graph drift at PR time. Same Forcing-Function
-  pattern that `groundmeas` is rolling out for repo-root junk.
-- **JSON round-trip test for `Conductor.lumped_series_resistance_ohm`
-  (seventh-pass finding re-flagged).**
-- **JSON round-trip test for
-  `StripElectrode.concrete_shell_coefficient_ohm_m`
-  (seventh-pass finding re-flagged).**
-- **`mkdocs build --strict` CI hook (seven passes in a row
-  flagged this — eighth pass elevates it again).** With the
-  five long-standing API pages now present (commit `4c27695`)
-  the `--strict` build would *no longer* fail on the missing
-  pages; the remaining gates would catch the missing
-  `Geo / OSM` index entry, the unreferenced `0.7.0` notebooks
-  and any future broken cross-link. This is the single highest-
-  leverage forcing function for the docs backlog.
-
-### Roadmap candidates — eighth 2026-05-25 review pass
-
-- **`gf.OrtsnetzLayout.add_multi_stop_trunk(start, stops)`** —
-  the Mulmke walkthrough in `notebooks/36_ortsnetz_builder.ipynb`
-  ends with a four-item rough-edges list; the multi-stop trunk
-  helper (a single call that routes through N intermediate KVS
-  in sequence) is the first item and the only one that affects
-  the public API surface. Defer the basemap overlay and the
-  coverage report to follow-on PRs.
-- **`gf.OrtsnetzLayout.coverage_report()`** — Mulmke rough-edge
-  item 3. A read-only diagnostic that lists for each building
-  which PEN cable it was connected to, the stub length and any
-  building that ended up unconnected. Pairs with the proposed
-  `assert_api_pages_exist()` as a self-describing pre-solve
-  check.
-- **`gf.geo.OsmBuildingPlacement.per_footprint_specs`** —
-  Mulmke rough-edge item 4. Allow the user to attach a per-
-  building `FoundationElectrodeSpec` instead of the current
-  „one spec for all footprints" contract. Default behaviour
-  unchanged.
-- **`gf.cross_repo` namespace + `docs/cross-repo.md`** — once
-  ADR-0013 (Cross-repo `show_versions` convention) lands, mirror
-  the proposed `gi.cross_repo` / `gm.cross_repo` modules so the
-  three packages have a uniform façade for cross-repo helpers
-  (`show_versions`, `assert_api_pages_exist`,
-  `audit_apply(report_path)`).
-- **`gf.docs.assert_api_pages_exist()`** — same as Pass-7;
-  seven passes have flagged the missing-API-pages problem,
-  five of which are now closed, so the helper is the right
-  forcing function to prevent regression.
-
----
-
-## [0.6.0] — 2026-05-15
-
-### Changed
-
-- **`vector_fit` under-determined check now respects conjugate-pair
-  symmetry** (`postprocess/vector_fitting.py`, sixth 2026-05-14
-  audit pass). The previous trigger counted four real DOFs per
-  pole regardless of whether the search was constrained to
-  conjugate pairs. Under the default ``complex_poles=True`` the
-  pair constraint halves the actual free parameters; the
-  underdetermined-test is now ``2 * n_independent_poles >
-  len(frequencies)`` with
-  ``n_independent_poles = n_poles // 2 + (n_poles % 2)``. The
-  strict ``>`` admits the uniquely-determined boundary case
-  (``n_poles=2, N=2``) that the previous ``>=`` trigger
-  rejected as a false positive. The warning text now states
-  which ratio applies given the fit mode. Behaviour for
-  ``complex_poles=False`` is unchanged. No public API change;
-  this is a tightening of the
-  :class:`VectorFitUnderdeterminedWarning` envelope.
-
-### Added
-
-- **Concrete encasement for foundation electrodes** (ADR-0012). DIN-18014
-  Streifenfundamente sit in concrete, not in soil; the concrete's
-  resistivity varies from ~30 Ω·m (wet) to ~50 000 Ω·m (dry) and
-  materially changes the foundation's spreading impedance. Two new
-  optional fields on
-  :class:`generators.electrode_specs.FoundationElectrodeSpec` —
-  ``concrete_rho_ohm_m`` (``float | AnyDistribution | None``,
-  ``None`` = historic bare-wire behaviour) and
-  ``concrete_thickness_m`` (default 50 mm) — together with a
-  ``concrete_model: Literal["lumped", "distributed"]`` discriminator
-  expose the Sunde-shell model in two flavours:
-  - **V1 "lumped"** (default): the total shell resistance
-    ``R_shell_total = ρ_c / (2π · L_perim) · ln(r_b / r_a)`` is
-    recorded in the new ``world.concrete_shell_corrections`` registry
-    and injected as a series resistance on the PEN service drop
-    via the also-new ``Conductor.lumped_series_resistance_ohm``
-    field. Zero solver-side change; reuses ADR-0003's
-    distributed-conductor framework.
-  - **V2 "distributed"**: a per-segment radial coefficient
-    ``C = ρ_c / (2π) · ln(r_b / r_a)`` (in Ω·m) is stored on the
-    strip electrodes through the new
-    :attr:`geometry.electrodes.StripElectrode.concrete_shell_coefficient_ohm_m`
-    field; the image / image_2layer post-kernel diagonal is augmented
-    by ``C / Δs`` per segment in both the inverse-problem assembly
-    (inside ``_solve_cluster_currents``) and the post-solve
-    potential evaluation. Captures the wire-radius redistribution
-    on top of the lumped shell, so when ``ρ_c = ρ_soil`` the
-    concrete/soil interface becomes electrically invisible
-    (correct physics).
-  - Both paths route only :class:`FoundationElectrodeSpec` through
-    the shell; rod / ring / strip / mesh electrodes — which always
-    run in trenches or driven holes, never in concrete — keep their
-    bare-wire bulk-soil interface.
-  - Stochastic moisture: ``concrete_rho_ohm_m`` accepts an
-    :class:`AnyDistribution`, e.g.
-    ``Discrete(values=[50, 150, 500, 2000], weights=[...])`` for the
-    four empirical moisture bands.
-- **`groundfield.geo` — optional subpackage for OSM-driven building
-  footprints** (`src/groundfield/geo/`, ADR-0011). Four modules:
-  - `footprint.BuildingFootprint` — frozen Pydantic model carrying a
-    closed CCW polygon in the local ENU frame, optional holes,
-    ``building:levels`` and raw OSM tags. Pure-Python; no
-    :mod:`shapely` dependency at validation time. Includes
-    :func:`signed_area`, :func:`ensure_orientation`,
-    :meth:`area_m2`, :meth:`centroid_xy_m`.
-  - `projection.Projector` — WGS84 ↔ local ENU via :mod:`pyproj`
-    using ``+proj=aeqd`` centred on a user-supplied origin
-    (origin is *never* inferred from data; reproducibility
-    guarantee per ADR-0011). Single-point and vectorised
-    ring projection.
-  - `osm.build_query` / `query_buildings` / `parse_overpass_payload`
-    / `query_and_project` — Overpass-API client with deterministic
-    QL formatting, SHA-256 keyed on-disk cache
-    (default ``$XDG_CACHE_HOME/groundfield/osm/`` or
-    ``~/.cache/groundfield/osm/``), one retry on ``429`` / ``504``
-    with exponential backoff, RFC-7946 ring-orientation handling
-    for ways and multipolygon relations. Network layer is the only
-    place :mod:`requests` is imported.
-  - `placement.OsmBuildingPlacement` — Pydantic placement spec that
-    returns building centroids in declared order (interface parity
-    with :class:`generators.placement.ManhattanGridPlacement` /
-    :class:`ExplicitPlacement`) and exposes
-    :meth:`footprint_at` for the upcoming footprint-driven
-    foundation-electrode hook in `TnNetworkGenerator` (Task 3).
-    Construction is from pre-projected footprints — no HTTP call
-    in the config layer, keeps generator configs
-    JSON-serialisable and bit-exactly replayable. Filters out
-    OSM noise below ``min_area_m2`` (default 16 m², Gartenhaus).
-  - All optional :mod:`requests` / :mod:`shapely` / :mod:`pyproj`
-    imports are lazy and guarded with a clear :class:`ImportError`
-    pointing at ``pip install groundfield[geo]``.
-- **New `geo` extra in `pyproject.toml`** declaring
-  ``requests ^2.32``, ``shapely ^2.0``, ``pyproj ^3.6``. Same three
-  are added to the dev group so the new `tests/test_geo_*.py`
-  suite can run end-to-end.
-- **`OsmBuildingPlacement` is a member of the
-  `generators.placement.PlacementSpec` discriminated union** —
-  configs that use the OSM-driven path round-trip through JSON like
-  every other placement. Re-exported from
-  ``groundfield.generators`` and from the top-level
-  ``groundfield`` namespace alongside ``BuildingFootprint``,
-  ``Projector``, ``query_buildings``, ``query_and_project``, and
-  ``OverpassError``.
-- **`FoundationElectrodeSpec.orientation_deg`** (additive, default
-  ``None``). ``None`` and ``0.0`` keep the historic axis-aligned
-  ``GridMeshElectrode`` realisation; any other value triggers the
-  new rotated-foundation path in
-  ``GroundingSystemSpec._build_rotated_foundation``, which
-  synthesises the foundation as a closed
-  :class:`StripElectrode` chain (perimeter + optional inner
-  cross-braces for ``style="mesh"``) and bonds the sub-electrodes
-  internally so the spec still emits a single bondable anchor.
-- **OMBR-driven foundation override in `TnNetworkGenerator.build`** —
-  when the configured placement exposes a ``footprint_at(i)`` hook
-  (currently :class:`OsmBuildingPlacement`), every per-building
-  :class:`FoundationElectrodeSpec` is rewritten so that
-  ``size_xy_m`` and ``orientation_deg`` come from the polygon's
-  oriented minimum bounding rectangle. ``presence_prob`` and all
-  other axes survive unchanged, so the only stochastic axis in
-  an OSM-driven realisation is the Bernoulli on
-  ``presence_prob`` (per ADR-0011).
-- **`BuildingFootprint.oriented_bounding_rectangle()` and
-  `axis_aligned_bounding_rectangle()`** — public helpers exposing
-  the OMBR (Shapely-backed, requires ``geo`` extra) and the pure-
-  Python AABB. The OMBR helper is the canonical
-  Streifenfundament-Reduktion of an arbitrary polygon (see
-  ADR-0011, "Phase A").
-
-### Tests
-
-- **`tests/test_geo_footprint.py`** — 14 cases covering
-  ``signed_area`` / ``ensure_orientation``, the
-  :class:`BuildingFootprint` model (orientation normalisation,
-  hole area subtraction, frozen-instance guarantee), and the
-  AABB + OMBR helpers (axis-aligned identity, rotation
-  round-trip on a synthetic 10×6 rectangle, L-shape coverage).
-- **`tests/test_geo_osm.py`** — 15 cases on the projection
-  (round-trip, vectorised ring, invalid origin rejection),
-  the Overpass query builder (byte-determinism, parameter
-  validation), the on-disk cache (single POST per
-  ``(origin, radius)`` tuple, ``force_refresh`` bypass), and the
-  Overpass payload parser (way with ``building:levels``,
-  multipolygon with one inner hole, ``min_area_m2`` filter).
-  Network IO is mocked at the ``_post`` boundary; the suite
-  never opens a socket.
-- **`tests/test_geo_placement.py`** — 12 cases on
-  :class:`OsmBuildingPlacement` (centroid order, area filter,
-  ``selection="all"`` ignoring ``n``, ``footprint_at`` lookup,
-  JSON round-trip via the union) and on the rotated-foundation
-  branch of :meth:`GroundingSystemSpec.build_at` (4-strip
-  perimeter for ``style="ring"``, 6-wire mesh for ``style="mesh"``
-  with ``n_x = n_y = 2``, axis-aligned fast-path preservation),
-  plus two end-to-end :class:`TnNetworkGenerator` tests
-  asserting OMBR side lengths and bit-exact reproducibility
-  across seeds.
-- All three new files run in under 2 s on the dev workstation;
-  the existing 78 tests in the related suites (placement,
-  grounding, tn_ortsnetz, distributions, import) continue to
-  pass unchanged.
-
-### Notebooks
-
-- **`notebooks/32_osm_footprints.ipynb`** — AP1 demo with
-  six synthetic Reihenhaus-Footprints (varied sizes and
-  orientations), OMBR visualisation, side-by-side
-  :class:`ManhattanGridPlacement` vs.
-  :class:`OsmBuildingPlacement` plots, a 50 Hz cluster-impedance
-  micro-solve, and an optional live Overpass query (cached;
-  gracefully skipped offline).
-
-### Docs
-
-- **`docs/api/geo.md`** — new API-reference page documenting the
-  ``geo`` subpackage with the mathematical / physical context
-  (Streifenfundament reduction, OMBR rationale, validity
-  envelope, installation gate, JSON-roundtripable
-  :class:`OsmBuildingPlacement`). Hooked into ``mkdocs.yml`` nav
-  under *API reference → Geo / OSM*, and the new ADR-0011 entry
-  is wired up under *Architecture decisions*.
-- **`docs/examples/09_osm_pipeline.md`** — end-to-end AP1 walkthrough
-  in two flavours: hand-crafted pseudo-geometries (always runs)
-  and a live Overpass query (needs the ``geo`` extra + internet).
-  Both variants cover the full pipeline: OSM-Read → stochastic
-  ``presence_prob`` on :class:`FoundationElectrodeSpec` → substation
-  placement → :class:`MeasurementSetupConfig` for aux electrode +
-  voltage probe → reading φ at an arbitrary (x, y) via
-  :meth:`FieldResult.potential` (no need for a real probe
-  electrode) → surface-potential contour plot. Numerically
-  exercises the `Z_cluster` vs `Z_system` gap that defines AP1
-  Analyse 1. Linked from `mkdocs.yml` nav under *Examples →
-  09 — OSM pipeline with measurement setup*.
-- **`notebooks/32_osm_footprints.ipynb`** — extended with a live
-  Overpass section (query → world → solve → contour plot) parallel
-  to the synthetic one. Both sections produce surface-potential
-  contour plots; the live cells degrade gracefully when offline.
-- **`notebooks/33_concrete_encasement.ipynb`** — interactive
-  parameter-variation workbench for ADR-0012: closed-form Sunde
-  sweep on an isolated Banderder (V2 ↔ Sunde to within 10⁻⁴),
-  V1-vs-V2 comparison table across six $\rho_c$ decades on the
-  five-house OSM Ortsnetz, four-panel surface-potential contour
-  for the canonical moisture states (none / 80 / 500 / 5000
-  Ω·m), shell-thickness sweep at fixed $\rho_c$, and a 60-sample
-  Monte-Carlo histogram over the four-class moisture
-  distribution. Runs offline.
-- **`tests/test_concrete_encasement.py`** — 10 cases covering ADR-0012:
-  V2 Sunde-shell closed-form match on an isolated strip,
-  zero-coefficient no-op, insulating-concrete dominance, V1 registry
-  & PEN service-drop injection, V2-vs-lumped registry separation,
-  JSON round-trip of stochastic ``concrete_rho_ohm_m=Discrete(...)``,
-  reproducibility across seeds, discriminator (only foundations get
-  the shell), and end-to-end OSM-pipeline smoke (dry concrete
-  pushes system impedance up ≥ 2.5×).
-
-### Docs
-
-- **ADR-0012 — Concrete encasement of foundation electrodes**
-  (`docs/adr/0012-foundation-concrete-encasement.md`, *Accepted*).
-  Decision record for the cylindrical Sunde-shell model, the two
-  implementation variants (lumped vs. distributed), the API
-  additions on :class:`FoundationElectrodeSpec`, :class:`Conductor`
-  (``lumped_series_resistance_ohm``) and :class:`StripElectrode`
-  (``concrete_shell_coefficient_ohm_m``), and the validation
-  programme. Hooked into mkdocs nav under
-  *Architecture decisions → ADR-0012*.
-- **ADR-0011 — OSM building footprints and footprint-driven foundation
-  electrodes** (`docs/adr/0011-osm-building-footprints.md`,
-  *Accepted*). Specifies the new optional subpackage `groundfield.geo`
-  (Overpass query + on-disk cache, WGS84→ENU projection via `pyproj`,
-  `BuildingFootprint` Pydantic model, `OsmBuildingPlacement`
-  `PlacementSpec` variant) and the additive Phase-A extension to
-  `FoundationElectrodeSpec` (oriented bounding rectangle from polygon
-  +  new optional ``orientation_deg`` field). Pure stochasticity is
-  retained on ``presence_prob`` (Bernoulli per building). Implements the
-  OSM follow-up named in ADR-0009. Drives the new optional ``geo`` pip /
-  Poetry extra (`requests`, `shapely`, `pyproj`).
-
----
-
-## [0.5.0] — 2026-05-14
-
-### Changed
-
-- **`Source = Union[CurrentSource, VoltageSource]` is now a Pydantic
-  discriminated union** (`sources.py`). The annotation is
-  ``Annotated[Union[...], Discriminator("kind")]``, with a companion
-  ``SourceAdapter = TypeAdapter(Source)`` for stand-alone source-dict
-  validation. JSON / dict round-trips now report errors against the
-  selected sub-class (``CurrentSource`` / ``VoltageSource``) instead
-  of dumping the whole union's validator chain — fourth 2026-05-12
-  audit pass closure. The user-facing constructor signatures are
-  unchanged; only the error messages and the public ``Source``
-  annotation differ.
-- **`Engine.frequencies` is documented and validated as
-  order-preserving** (`solver/engine.py`). A new
-  ``field_validator("frequencies")`` rejects empty or non-positive
-  inputs and emits a ``UserWarning`` when the list is not strictly
-  increasing — but the order is *preserved* in
-  ``Engine.frequencies`` and downstream in
-  ``FieldResult.frequencies``. The new
-  ``Engine.with_frequencies(*freqs, preserve_order=True)``
-  constructor is the explicit opt-in for sweeps that intentionally
-  iterate non-monotonically (e.g. ``[5000, 50]``); it silences the
-  warning and returns a fresh ``Engine`` without mutating the
-  receiver. Closes the *fourth 2026-05-12 review pass* "silent sort"
-  finding.
-- **`TnNetworkConfig.source_return_to` exposes an explicit override
-  for the source's return path** (`generators/tn_network.py`). When
-  set, it takes precedence over the auxiliary electrode derived
-  from ``cfg.measurement``; when both are present and differ,
-  ``TnNetworkGenerator.build`` emits a ``UserWarning`` that makes
-  the precedence explicit. Previously the measurement setup
-  silently overwrote any caller-side intent for ``return_to``.
-
-### Fixed
-
-- **`World.set_boundary_conditions` now warns on revert as well as
-  on set** (`world.py`). Setting a non-default value already
-  emitted a ``UserWarning`` (v0.2.0); the same call signature now
-  *also* warns when a previously-set non-default value is reverted
-  back to the default. The previous non-default value was never
-  consumed by any backend, so the revert is a silent no-op — the
-  new warning makes that visible (fourth 2026-05-12 audit pass).
-- **`vector_fit(n_poles=0)` is rejected at the API boundary with a
-  detailed `ValueError`** (`postprocess/vector_fitting.py`). A
-  zero-pole fit produces an ``s``-free SymPy expression whose
-  ``groundinsight.BusType.impedance_formula`` consumer cannot
-  recover the frequency dependence; the failure mode was silent
-  before. ``fit_to_sympy`` additionally guards against
-  programmatically constructed ``VectorFitResult`` objects whose
-  resulting expression is ``s``-free, emitting a ``UserWarning``
-  with the same diagnostic.
-- **`mkdocs.yml` no longer references `polyfill.io`**. The CDN's
-  ownership change in early 2024 (malicious payloads injected via
-  the original domain) made the URL unsafe to ship in the docs
-  build. Modern MathJax 3 / ``tex-mml-chtml`` does not require an
-  ES6 polyfill for any browser the docs target. Four audit passes
-  in a row flagged this URL — fixed in this release.
-
-### Added
-
-- **Top-level re-exports `evaluate_spec`, `fit_quality_summary` and
-  `LayeredEarth`** (`__init__.py`). The three helpers were
-  publicly importable from their sub-modules but were missing from
-  the top-level surface and from ``__all__``. They are now
-  reachable as ``gf.evaluate_spec`` / ``gf.fit_quality_summary`` /
-  ``gf.LayeredEarth`` and listed in ``__all__``.
-- **Frozen CSV column-name tuples** in `groundfield.io.csv`
-  (``POTENTIAL_PATH_COLUMNS``, ``ELECTRODE_TABLE_REQUIRED_COLUMNS``,
-  ``CLUSTER_IMPEDANCE_REQUIRED_COLUMNS``). The convention is
-  ``<symbol>_re`` / ``<symbol>_im`` / ``abs_<symbol>`` per
-  physical quantity (``phi`` for potentials, ``I`` for currents,
-  ``Z`` for impedances) — magnitude columns therefore differ per
-  writer by design. Locking the tuples makes accidental renames
-  test-detectable and documents the join-rename requirement.
-
-### Tests
-
-- ``tests/test_audit_pass4_fixes.py`` — eight regression tests
-  mapped 1:1 to the user-visible bullets above: discriminator
-  round-trip, discriminator error path, boundary revert warning,
-  ``Engine`` order-preserving validator + warning, opt-in
-  ``with_frequencies`` silencer, ``TnNetworkConfig.source_return_to``
-  precedence with warning, ``vector_fit(n_poles=0)`` rejection,
-  CSV column-schema lock, top-level re-export presence, and
-  ``mkdocs.yml`` polyfill cleanup.
-
-### Docs
-
-- ``notebooks/30_audit_pass4_fixes.ipynb`` — narrative
-  walk-through of all behaviour changes captured in this block.
-  The notebook is short and per-fix: every cell illustrates one
-  change in isolation so the diff is easy to verify when closing
-  the audit.
-- ``CLAUDE.md`` — added a "Version (do not hard-code in this
-  file)" section that points at ``pyproject.toml`` /
-  ``groundfield.__version__`` / ``CITATION.cff`` as the canonical
-  sources. Closes the four-passes-in-a-row CLAUDE.md version-drift
-  finding from the cross-cutting recommendations.
-- ``mkdocs.yml`` — inline comment explaining why
-  ``polyfill.io`` was removed.
-
-### Fixed (Audit pass 5 — implemented 2026-05-13)
-
-> Implementation block for the *fifth 2026-05-13 review pass*. Every
-> entry maps 1:1 to a bullet under "Fixed (pending implementation) —
-> fifth 2026-05-13 review pass" further down in this `[Unreleased]`
-> block. The pending-implementation bullets remain in place for audit
-> consistency but are dispatched here. Regression tests live in
-> `tests/test_audit_pass5_fixes.py`; the matching demo notebook is
-> `notebooks/31_audit_pass5_fixes.ipynb`.
-
-- **`vector_fit` now warns on under- / exactly-determined input.**
-  A new `VectorFitUnderdeterminedWarning(UserWarning)` is emitted
-  whenever ``2 * n_poles >= len(frequencies)``. Each pole contributes
-  a residue (complex, 2 real DOFs) and a pole-location DOF (complex,
-  2 real DOFs); the real-imag stacking gives ``2 N`` real equations,
-  so the conservative ``2*n_poles >= N`` threshold catches the cases
-  the audit flagged (``n_poles=1`` on ``N ∈ {1, 2}``) — previously
-  accepted as a silent identity interpolation. The dedicated warning
-  category lets notebooks silence the diagnostic with
-  ``warnings.simplefilter("once", VectorFitUnderdeterminedWarning)``.
-- **`Engine` frequency-order warning is silenceable by category.**
-  Pass-4 introduced the order-preserving validator with a
-  ``UserWarning``; pass 5 promotes it to a dedicated
-  ``EngineFrequencyOrderWarning(UserWarning)`` subclass and switches
-  the warning text to a stable form (the per-call list literal is
-  logged at debug level instead). A single
-  ``warnings.simplefilter("once", EngineFrequencyOrderWarning)``
-  now collapses a ten-engine sweep over decreasing lists down to
-  one notification.
-- **`LayeredEarth` documents the FP64 precision contract.** The
-  dataclass docstring now states explicitly that every consumer of
-  ``LayeredEarth`` operates in IEEE-754 double precision. Future
-  hardware-accelerated backends (e.g. MLX on Apple silicon) must
-  honour the same precision contract; the
-  ``tests/test_audit_pass5_fixes.py::test_layered_earth_precision_contract``
-  homogeneous-limit cross-check enforces ``rtol=1e-12`` and would
-  fail under a silent FP32 down-cast.
-- **`io.groundinsight.evaluate_spec` raises `ValueError` on
-  malformed specs.** Three guards at the entry point now wrap the
-  deep SymPy stack trace into one human-readable ``ValueError`` per
-  cause: non-``BusTypeSpec`` argument, missing / empty
-  ``impedance_formula``, or unknown free symbols (anything other
-  than ``f``, ``rho``, ``j``). A user passing a hand-rolled spec dict
-  now sees the missing-``Z_target`` problem at the surface instead
-  of a ``KeyError`` four frames deep inside ``sympy.lambdify``.
-- **`TnNetworkConfig.source_kind` validates against a `Literal`.**
-  New ``source_kind: Literal["current", "voltage"] = "current"``
-  field on :class:`TnNetworkConfig`. Typos like ``"voltage_"``
-  (trailing underscore) are rejected at validation time with a
-  Pydantic ``ValidationError`` instead of silently falling through
-  to the default ``CurrentSource`` factory. ``TnNetworkGenerator.build``
-  forwards the kind to :func:`create_source`.
-- **`World.solve(engine)` snapshots and restores `world.sources`.**
-  The method now wraps the backend dispatch in a try / finally and
-  restores deep copies of every ``Source`` on the way out. Backends
-  that internally mutate ``source.return_to`` (Pass-4 flagged
-  ``MeasurementSetupConfig.build`` as the textbook offender) can no
-  longer leak the mutation back into the caller's world.
-- **`SourceAdapter` is now a top-level re-export.** The Pass-4
-  ``TypeAdapter[Source]`` was introduced in ``groundfield.sources``
-  but never lifted to the package surface. ``from groundfield import
-  SourceAdapter`` now works and the symbol is listed in
-  ``groundfield.__all__``.
-- **`diagnostics.MIN_THINWIRE_RATIO`, `SOFT_LIMIT`, `HARD_LIMIT`**
-  are now public module-level constants. The previous
-  ``_MIN_THINWIRE_RATIO`` / ``_BUDGET_WARN_THRESHOLD`` /
-  ``_BUDGET_HARD_THRESHOLD`` private aliases remain as
-  backwards-compatible shadows. Tests, notebooks and external
-  callers gain a stable handle ahead of the planned
-  ``coarse_segments`` opt-in.
-- **`scripts/release.py` rejects a hard-coded version in
-  `CLAUDE.md`.** The Pass-4 "do not hard-code" convention is now
-  *enforced*: a new
-  ``_check_claude_md_no_hardcoded_version`` scans the file at
-  release time, ignoring fenced code blocks and the explanatory
-  reminder paragraph, and raises a clear ``RuntimeError`` if a
-  ``__version__ = "X.Y.Z"`` (or ``version = "X.Y.Z"``) literal is
-  pasted into the project context document. ``main()`` runs the
-  check before any files are touched, so a contributor who needs
-  to fix the literal does so on a clean working tree.
-
-### Tests (Audit pass 5 — implemented 2026-05-13)
-
-- ``tests/test_audit_pass5_fixes.py`` — 16 regression tests,
-  one (or more) per bullet above:
-  ``VectorFitUnderdeterminedWarning`` raised / not raised,
-  ``EngineFrequencyOrderWarning`` category + once-filter
-  deduplication, ``LayeredEarth`` FP64 cross-check,
-  ``evaluate_spec`` on bad / empty / unknown-symbol / good specs,
-  ``TnNetworkConfig.source_kind`` typo rejection + voltage happy
-  path, ``World.solve`` source-mutation guard,
-  ``gf.SourceAdapter`` top-level import + ``__all__`` presence,
-  ``diagnostics`` public-constant identity + backwards-compatible
-  private aliases, ``scripts.release._check_claude_md_no_hardcoded_version``
-  bad-literal rejection + fenced-block exemption.
-
-### Docs (Audit pass 5 — implemented 2026-05-13)
-
-- ``notebooks/31_audit_pass5_fixes.ipynb`` — narrative walk-through
-  of every behaviour change captured in this block. Cell-per-fix
-  layout matches the Pass-4 notebook so the closure pattern stays
-  consistent.
-- ``src/groundfield/coupling/sommerfeld_inductance.py`` —
-  ``LayeredEarth`` docstring extended with the FP64 precision
-  contract.
-
----
-
-## [0.4.0] — 2026-05-12
-
-_Housekeeping release; no user-visible changes._
-
----
-
-## [0.2.0] — 2026-05-12
-
-### Fixed
-
-- **`FieldResult.potential` no longer silently falls back to the
-  homogeneous kernel for a `MultiLayerSoil` with three or more
-  layers** (`solver/result.py`). Prior to this fix, calling
-  `result.potential(points)` on a world with `n ≥ 3` soil layers
-  returned potentials computed against a single image charge at
-  $z \to -z$ — wrong by the same margin as the layered Green's
-  function deviates from the homogeneous half-space. The error was
-  silent because the dispatcher only branched on
-  `isinstance(self.soil, TwoLayerSoil)` and otherwise fell through
-  to `_potential_homogeneous`, affecting profiles, surface plots,
-  touch- and step-voltage post-processing and VTK exports
-  alike. The new dispatcher casts a degenerate 1-layer
-  `MultiLayerSoil` to the homogeneous kernel, casts a 2-layer
-  `MultiLayerSoil` to `TwoLayerSoil` and re-uses the Tagg/Sunde
-  series, and raises `NotImplementedError` for `n ≥ 3` with a
-  clear pointer that the *solve* itself remains correct via the
-  `cim` / `mom_sommerfeld` / `bem` backends and that
-  `result.electrode_potentials` / `result.cluster_impedance` stay
-  accessible. A closed-form n-layer Green's-function kernel on
-  the post-solve potential path is queued for a later release.
-- **Top-level `groundfield` package re-exports the `rho-f` fit
-  API** (`__init__.py`). `vector_fit`, `VectorFitResult`,
-  `fit_to_sympy`, `rho_f_from_field_result`, `RhoFStandardFit`,
-  `fit_rho_f_standard`, `fit_to_sympy_standard` and
-  `rho_f_standard_from_results` are now reachable via
-  `groundfield.<name>` (the README and ADR-0008 advertise this
-  short import path; prior to this fix the user had to spell out
-  `from groundfield.postprocess.vector_fitting import …` because
-  the symbols were missing from both the top-level imports and
-  `__all__`).
-- **`BoundaryConditions` no longer pretends to honour non-default
-  settings** (`boundary.py`, `world.py`). The integral /
-  image-charge backends in `groundfield.solver` enforce
-  `far_field="dirichlet"`, `surface="neumann"` and
-  `reference_node=None` implicitly through the choice of
-  Green's function; any other value set via
-  `World.set_boundary_conditions(...)` was silently dropped at
-  solve time. The fields are now documented as accepted but not
-  consumed in v0.2.0, and `set_boundary_conditions` emits a
-  `UserWarning` whenever a non-default value is supplied. The
-  fields remain reserved for the upcoming FEM backend, which will
-  resolve them explicitly.
-
-### Added
-
-- **Disk I/O — CSV and legacy ASCII VTK
-  (`groundfield.io.csv`, `groundfield.io.vtk`).** Closes the
-  long-standing ``io.csv`` / ``io.vtk`` *Reserved* slots in
-  the ``io`` package docstring. Six writers, no new
-  dependencies (pandas is already a runtime dep; the VTK
-  writer is ~30 lines of pure-Python in legacy ASCII format):
-  * ``save_potential_path_csv(result, path, *, start, direction,
-    distance, n, frequency_indices=None)`` — sample
-    :meth:`FieldResult.potential` along a line and write
-    ``(s, x, y, z, frequency_Hz, phi_re, phi_im, abs_phi)``.
-  * ``save_electrode_table_csv(result, path, *, world=None,
-    frequency_index=0)`` — wrap
-    :func:`electrode_current_table` and dump to CSV.
-  * ``save_cluster_impedances_csv(result, path, *,
-    frequency_index=0)`` — wrap :func:`cluster_current_balance`
-    and dump to CSV; the per-cluster ``members`` list is
-    flattened into a ``';'``-joined string for tabular
-    compatibility.
-  * ``export_geometry_vtk(world, path)`` — legacy ASCII VTK
-    PolyData with electrodes (rod / ring / strip /
-    grid_mesh perimeter + interior wires) and conductor line
-    segments as 3-D polylines. Cell data carries an integer
-    ``role`` field (0 = electrode, 1 = conductor) so colour-
-    by-role works directly in ParaView.
-  * ``export_field_vtk(result, path, *, extent, z=0.0,
-    n=(120, 120), frequency_index=0)`` — sample the potential
-    on a regular :math:`N_x \times N_y` grid in the slice
-    plane :math:`z = z_0` and write a STRUCTURED_POINTS file
-    with ``potential_re`` and ``potential_im`` scalars.
-- ``tests/test_io_csv.py`` (8 tests) — round-trip of the
-  potential-path writer (re-evaluating
-  :meth:`FieldResult.potential` at the saved coordinates
-  matches the saved values to 12+ significant figures), parent-
-  directory creation, multi-frequency dump, electrode-table
-  CSV ↔ in-memory DataFrame equivalence (with / without
-  ``world``), cluster-impedance CSV with the flattened
-  ``members`` column, and bad-argument error paths.
-- ``tests/test_io_vtk.py`` (9 tests) — POLYDATA header
-  integrity, exact polyline count for a mixed world (1 rod
-  + 1 ring + 1 strip + 1 ``GridMeshElectrode(n_x=3, n_y=2)``
-  + 1 conductor = 11 polylines), empty-world header-only
-  output, ``role`` cell-data scalar covers both 0 and 1,
-  STRUCTURED_POINTS ``DIMENSIONS`` / ``ORIGIN`` /
-  ``SPACING`` correctness, scalar payload size matches
-  ``n_x * n_y``, and bad-extent / too-few-grid-points error
-  paths.
-
-- **Convergence study over `engine.segment_length`
-  (`groundfield.postprocess.convergence`).** Single-axis
-  refinement helper — the canonical "halve the segment length,
-  watch what happens" experiment as one function call:
-  * ``convergence_study(world, engine, *, segment_lengths,
-    response=None) -> pd.DataFrame`` — clones the engine via
-    :meth:`Engine.model_copy` so the original is **not**
-    mutated, solves at every refinement step, and returns a
-    long-format DataFrame with ``segment_length_m``,
-    ``frequency_Hz``, ``n_segments`` and the response columns.
-    Default response: cluster impedance + EPR at the source's
-    cluster (same extractor as :func:`sweep`).
-  * ``plot_convergence(df, *, response="abs_Z",
-    reference=None, ...)`` — log-x plot with the x-axis
-    **inverted** so finer ``segment_length`` lands on the right
-    (the asymptote direction). Optional reference line for the
-    analytical asymptote (Sunde, Dwight, IEEE 80).
-- ``tests/test_convergence.py`` (12 tests) — monotone growth
-  of ``n_segments`` with refinement, monotone convergence of
-  ``abs_Z`` to within 5 % of the Sunde reference for a 1.5 m
-  rod, **engine-mutation guard** (the original engine's
-  ``segment_length`` is unchanged after the helper runs),
-  validation of the ``segment_lengths`` argument (empty,
-  single value, repeated values, non-positive entries),
-  multi-frequency row count, plot-helper smoke (single +
-  multi-frequency, with reference line), and the inverted
-  x-axis check.
-
-- **Cartesian-product parameter sweeps
-  (`groundfield.postprocess.sweep`).** New module that turns
-  the AP1 parameter axes (:math:`\rho_1`, :math:`\rho_2`,
-  :math:`h_1`, geometry, frequency) into a single tabular
-  response, ready for vector-fitting and the
-  :math:`\rho`-:math:`f` regression:
-  * ``sweep(world_factory, engine, *, axes, response=None) ->
-    pd.DataFrame`` — Cartesian product over arbitrary named
-    axes. ``engine`` is either a static :class:`Engine`
-    (reused for every combination) or a callable
-    ``engine(**combination) -> Engine`` (rebuilt per
-    combination for axis-dependent discretisation). For each
-    combination + frequency, a row is emitted with the axis
-    values, ``frequency_Hz``, and the response keys.
-  * Default response: cluster impedance and EPR at the
-    source's cluster, per frequency (``Z_re``, ``Z_im``,
-    ``abs_Z``, ``arg_Z_deg``, ``U_E_re``, ``U_E_im``,
-    ``abs_U_E``, ``I_re``, ``I_im``, ``abs_I``).
-  * ``plot_sweep_lines(df, *, x, y="abs_Z", color=None,
-    log_x=False, log_y=False, ...)`` — line plot of the
-    response, one curve per ``color`` value if set.
-  * ``plot_sweep_heatmap(df, *, x, y, response="abs_Z",
-    frequency_Hz=None, agg="mean", ...)`` — pivot-table
-    heatmap of one response over a ``(x_axis, y_axis)``
-    pair, optionally selecting a frequency slice.
-- ``tests/test_sweep.py`` (14 tests) — Cartesian-product row
-  count (axes × frequencies), default-response columns
-  present, AP1 linearity check (:math:`Z` is proportional to
-  :math:`\rho` for homogeneous soil to better than
-  :math:`10^{-6}` relative), per-combination engine factory
-  is invoked exactly once per Cartesian point, custom response
-  extractor replaces the default, empty-axes / empty-axis-
-  values error paths, plot-helper smokes (single curve, multi-
-  curve with logs, heatmap with frequency slice, unknown-column
-  guard, missing-frequency guard).
-
-- **Pre-solve world diagnostics
-  (`groundfield.diagnostics`).** New top-level module — the
-  pre-solve counterpart to :mod:`groundfield.validation`'s
-  post-solve cross-engine check. Three helpers, all of which
-  work on a :class:`World` (and optionally an :class:`Engine`)
-  without invoking the solver:
-  * ``world_statistics(world) -> dict`` — structural snapshot:
-    counts per electrode kind / conductor type / coupling mode,
-    total electrode wire length, total conductor length plus
-    ``min/median/max/mean`` of the conductor-length distribution,
-    full :math:`(x, y, z)` bounding box and footprint area, and a
-    ``has_layered_soil`` flag. Complements
-    :meth:`World.summary` (one-line text) with a richer
-    machine-readable dictionary that scales to AP1-grade
-    networks.
-  * ``expected_segments(world, engine) -> dict`` — predicts the
-    number of point-source segments that the image-family
-    discretiser will produce. Mirrors
-    :mod:`groundfield.solver.image` exactly for every electrode
-    kind (rod / ring / strip / mesh / grid_mesh) and adds the
-    ``ceil(L / discretize_segment_length)`` count for
-    distributed conductors (ADR-0003). The prediction is
-    bit-exact for the ``image`` / ``image_2layer`` /
-    ``image_nlayer`` / ``mom`` / ``mom_sommerfeld`` / ``cim``
-    / ``bem`` backends; FEM uses an unrelated axisymmetric
-    volume mesh.
-  * ``check_segment_resolution(world, engine) -> list[str]`` —
-    heuristic warnings for common AP1 modelling pitfalls:
-    thin-wire ratio :math:`\Delta s / r_\text{wire} \ge 5`,
-    electrode smaller than one segment (degenerate
-    discretisation), distributed-conductor wire / segment
-    mismatch, and total-segment budget thresholds (5 000 soft
-    warning, 20 000 hard warning to flag the dense-system
-    :math:`O(N^2)` memory and :math:`O(N^3)` solve scaling).
-    Returns an empty list when everything looks healthy.
-
-  Helpers re-exported at the package top level
-  (``gf.world_statistics``, ``gf.expected_segments``,
-  ``gf.check_segment_resolution``).
-- ``tests/test_diagnostics.py`` (20 tests) — counts and lengths
-  match the analytic geometry exactly, footprint and bounds
-  are consistent, layered-soil flag, empty-world safety,
-  ``expected_segments`` **bit-exact** against the image solver
-  for every electrode kind (rod / ring / strip / mesh /
-  grid_mesh) plus distributed-conductor counts and per-kind
-  aggregation, ``check_segment_resolution`` clean-world empty
-  return, thin-wire warning trigger, distributed-conductor
-  mismatch trigger, electrode-smaller-than-segment trigger,
-  budget-threshold trigger on a 100 m × 100 m grid mesh,
-  invalid-segment-length error path, and a top-level export
-  check.
-
-- **World-geometry plots without solving
-  (`groundfield.postprocess.geometry_plot`).** New module that
-  renders the *physical* world — electrodes, conductors and
-  current sources — as a sanity check **before**
-  ``world.solve(...)``. Useful for AP1-grade networks where a
-  typo in an electrode position or a missing conductor would
-  otherwise only surface several minutes of solver time later:
-  * ``world_bounds_3d(world) -> (x_min, x_max, y_min, y_max,
-    z_min, z_max)`` — full :math:`(x, y, z)` bounding box of the
-    electrodes plus conductor endpoints. Extension of
-    :func:`world_bounds_xy` to the third axis; correctly tracks
-    rod feet (``position[2] + length``) and overhead conductor
-    routing (negative :math:`z`).
-  * ``plot_world(world, *, plane="xy"|"xz", extent=None,
-    padding_m=5.0, show_conductors=True, show_sources=True,
-    annotate_electrodes=False, ax=None, ...) -> Figure`` —
-    top-down or vertical 2-D plot. Electrodes drawn via the
-    existing :func:`_draw_electrodes` helper (consistent style
-    with the field plots); conductors as colour-coded line
-    segments (PEN green, bare_copper orange, cable_shield grey,
-    overhead steel blue, generic dark grey; solid for
-    ``coupling_to_soil="galvanic"``, dashed for ``"isolated"``);
-    sources as red star at the anchor electrode plus a thin
-    arrow to ``return_to`` if set. Synthetic legend over
-    conductor types and source markers; soil surface (``z=0``)
-    drawn as a dotted grey line in the ``xz`` view.
-  * ``plot_world_3d(world, *, show_conductors=True,
-    show_sources=True, show_surface=True, elev=22.0, azim=-55.0,
-    ...) -> Figure`` — 3-D wireframe via
-    :mod:`mpl_toolkits.mplot3d`. The :math:`z`-axis is **inverted**
-    so depth grows downwards on screen (groundfield convention);
-    a translucent grey plane at :math:`z=0` marks the soil
-    surface. Rods drawn as vertical line segments, rings as 64-point
-    circles, strips as line segments, mesh / grid_mesh electrodes
-    as outer rectangle plus inner wires.
-
-  Helpers re-exported at the package top level
-  (``gf.plot_world``, ``gf.plot_world_3d``, ``gf.world_bounds_3d``).
-- ``tests/test_geometry_plot.py`` (18 tests) — bounding-box
-  correctness across all electrode kinds (rod foot, ring extremes,
-  strip, mesh / grid_mesh, conductor endpoints), empty-world
-  zero-box, ``plot_world`` smoke on both planes (``xy`` /
-  ``xz``), inverted ``y`` axis on ``xz``, conductor / source
-  toggle reduces line count, padding-around-bounds default,
-  explicit-extent override, unknown-plane error, optional
-  axes hand-over (``ax=...``), annotation creates one
-  :class:`matplotlib.text.Annotation` per electrode,
-  ``plot_world_3d`` smoke + inverted z-axis check + empty-world
-  + options-off variants, and a top-level export check.
-
-- **Current-sharing post-processing
-  (`groundfield.postprocess.current_balance`).** New module that
-  turns the per-electrode currents in ``FieldResult`` into the
-  AP1 *"where does the injected current actually return?"*
-  quantities:
-  * ``cluster_current_balance(result, *, frequency_index=0) ->
-    pd.DataFrame`` — per-cluster soil leakage
-    :math:`I_c = \sum_{e \in c} I_e`, cluster potential
-    :math:`U_c`, cluster impedance :math:`Z_c = U_c / I_c`,
-    sorted by descending :math:`|I_c|`.
-  * ``electrode_current_table(result, world=None, *,
-    frequency_index=0) -> pd.DataFrame`` — per-electrode
-    potential, current, two-terminal impedance, and the
-    fractional share of the cluster total :math:`s_{e \mid c} =
-    I_e / I_c`. With ``world`` set, the table also reports the
-    electrode kind and connection-point depth — the small AP1
-    annotations that turn a 200-EFH run from "wall of numbers"
-    into "what's actually loaded."
-  * ``split_factor(result, world, *, source_name=None,
-    frequency_index=0) -> complex`` — galvanic current-split
-    factor :math:`s = I_{c_\text{src}} / I_\text{src}`. Returns
-    :math:`s = 1` when the entire injected current leaves the
-    source cluster through the soil; :math:`s < 1` when a
-    metallic parallel path (PEN trunk, parallel measurement
-    lead, cable shield) carries part of the current as a
-    parallel resistive path. Raises on missing / multiple /
-    zero-magnitude sources or on unknown ``source_name``.
-
-    *Naming note.* This is **not** the *Reduktionsfaktor* of the
-    German EVU / Schirmtechnik literature (Oeding & Oswald 2016)
-    — that latter quantity is the additional **transformatorische
-    / inductive coupling correction** between a current-carrying
-    conductor and a parallel grounding / shield conductor and
-    vanishes for perpendicular geometry. The split factor here is
-    purely galvanic and applies whenever there are parallel
-    resistive paths, regardless of conductor angle. The proper
-    Reduktionsfaktor is on the roadmap; the inductance backends in
-    :mod:`groundfield.coupling` are already in place.
-  * ``plot_current_sharing(result, world=None, *, by="electrode",
-    top_n=15, frequency_index=0)`` — quick top-N bar chart of
-    :math:`|I|` (per electrode or per cluster). The default
-    ``by="electrode"`` is the AP1 default for spotting which
-    physical electrode actually carries the test current.
-
-  Backed by :class:`pandas.DataFrame` (already a runtime
-  dependency); helpers re-exported at the package top level
-  (``gf.cluster_current_balance``, ``gf.electrode_current_table``,
-  ``gf.split_factor``, ``gf.plot_current_sharing``).
-- ``tests/test_current_balance.py`` (19 tests) — KCL on a single
-  rod (``s = 1``), KCL on an ideally bonded multi-electrode
-  cluster (``s = 1`` regardless of member count), AP1
-  measurement scenario with a finite-impedance Cu feed lead in
-  parallel to the soil return path (``s < 1`` plus an explicit
-  branch-current consistency check
-  :math:`(1 - s) I_\text{src} = (U_a - U_b) / R`), per-cluster
-  KCL Σ leakages = source magnitude, sort order by descending
-  :math:`|I|`, share-of-cluster sum = 1 + 0j over each cluster,
-  optional ``world`` annotation columns (kind / depth_m),
-  unknown / missing / multiple source error paths, plot smoke
-  tests, and a top-level export check.
-
-- **Touch- and step-voltage helpers (`groundfield.postprocess.safety`).**
-  New module that closes the long-standing gap between
-  ``FieldResult`` and the engineering safety quantities promised
-  in the ``postprocess`` package docstring:
-  * ``touch_voltage(result, world, *, electrode, distance=1.0,
-    direction=(1, 0, 0), surface_z=0.0, frequency_index=0)`` —
-    pointwise :math:`U_T = U_E - \varphi(\mathbf r_\text{feet})`
-    on the soil surface.
-  * ``touch_voltage_envelope(result, world, *, electrode,
-    distance=1.0, n_angles=24, ...)`` — same evaluation along an
-    equidistant horizontal circle around the touched electrode;
-    the maximum of ``|U_T|`` is the conservative envelope used in
-    safety verification.
-  * ``step_voltage(result, *, position, direction=(1, 0, 0),
-    step=1.0, surface_z=None, frequency_index=0)`` —
-    :math:`U_S = \varphi(\mathbf r_1) - \varphi(\mathbf r_1 +
-    d_\text{step}\,\hat{\mathbf e})` between two surface points.
-  * ``permissible_touch_voltage_en50522(t_clear_s)`` — reference
-    curve :math:`U_{TP}(t_F)` taken **verbatim** from EN 50522:2010
-    **Table B.4** ("Berechnete Werte der zulässigen
-    Berührungsspannung U_TP in Abhängigkeit von der Fehlerdauer
-    t_f", values rounded to 5 V in the standard); log-log
-    interpolation over the eight canonical anchors :math:`(0.05,
-    725),\ (0.10, 655),\ (0.20, 525),\ (0.50, 225),\ (1.00, 115),\
-    (2.00, 95),\ (5.00, 85),\ (10.00, 85)` (s, V), clamped to the
-    table endpoints outside the grid (the standard's terminal 85 V
-    plateau between 5 s and 10 s is reproduced exactly).
-
-  All evaluations stay in the complex frequency-domain phasor
-  convention used by the rest of ``groundfield`` so that
-  inductive-coupling effects above DC remain visible. Helpers are
-  re-exported at the package top level (``gf.touch_voltage``,
-  ``gf.step_voltage``, …).
-- ``tests/test_safety.py`` (19 tests) — closed-form Sunde
-  homogeneous-soil reference (positive U_T below U_E, U_T → U_E
-  at remote earth, |U_S| decay to remote earth, sign of U_S
-  matching the radial potential gradient), cylindrical symmetry
-  of the envelope around a vertical rod, envelope vs. pointwise
-  cross-check, EN 50522 Table B.4 anchor-point exact match,
-  monotone decrease, log-log interpolation geometric-mean check,
-  terminal 85 V plateau between 5 s and 10 s, endpoint clamping,
-  validation of distance / step / direction / unknown-electrode
-  error paths, and a top-level export check.
-
-- **World generator framework + AP1 TN-Ortsnetz generator
-  (ADR-0009).** New subpackage `groundfield.generators` with:
-  * `GeneratorConfig` — Pydantic v2 base for generator
-    configurations. Numerical / categorical fields accept either a
-    fixed value or a :class:`Distribution`. ``cfg.sample(rng)``
-    walks the model and resolves every distribution to a concrete
-    value, recursing into nested `GeneratorConfig` instances and
-    list/tuple containers; ``cfg.has_distributions()`` is the
-    introspection counterpart.
-  * `WorldGenerator(Generic[C])` — abstract base. Concrete
-    generators implement `build(cfg)` and inherit RNG wiring,
-    `sample_world(rng)`, and the `_assert_resolved` guard.
-  * `groundfield.generators.distributions` — distribution catalogue
-    `Constant`, `Uniform`, `Normal` (with rejection-sampling
-    truncation), `LogNormal` (with `from_moments` constructor),
-    `Weibull`, `Discrete`, `Categorical`. All are Pydantic v2
-    models with a literal `kind` discriminator and a `.sample(rng)`
-    method; the `AnyDistribution` discriminated union enables
-    JSON round-tripping inside `GeneratorConfig` fields.
-  * `TnNetworkGenerator` (+ `TnNetworkConfig` and the four sub-
-    configs `SoilConfig`, `TrafoStationConfig`,
-    `HouseElectrodeConfig`, `PenConfig`) — first concrete
-    generator. Parameterises the AP1 axes from
-    `999_projektmanagement/arbeitspakete/AP1_tn_ortsnetz.md`:
-    $n_\text{EFH} \in \{5, 10, 30, 80, 200\}$, small / medium
-    commercial buildings, cable-cabinet quota
-    $q$ per 100 EFH, two-layer soil $(\rho_1, \rho_2, h_1)$,
-    house electrode kind drawn per house from a
-    `Categorical({"foundation", "rod", "mesh"})`. Topology:
-    Manhattan-grid house placement → cable cabinets along the
-    substation row → PEN backbone (substation ↔ KVS, KVS ↔
-    nearest house) as a *distributed conductor* (ADR-0003), with
-    optional `inductance_model="neumann"` (ADR-0004) and
-    selectable `coupling_to_soil`.
-- **ADR-0009** (`docs/adr/0009-world-generators.md`) — design
-  rationale, architecture (ABC + Pydantic config), distribution
-  layer, sampling semantics, topology contract, validation
-  programme.
-- `tests/test_distributions.py` (24 tests) — reproducibility under
-  seed, statistical sanity (mean/std within 5 % over 10 000
-  samples), JSON discriminated-union round-trip per
-  distribution, validation of malformed inputs (negative weights,
-  inverted bounds, non-positive scale, duplicate categorical
-  values), and rejection-sampling exhaustion on truncated Normal.
-- `tests/test_generators_base.py` (15 tests) — `resolve_value`
-  pass-through, `has_distributions` recursion, `cfg.sample`
-  resolution at top-level / nested / categorical, idempotence on
-  fully-fixed configs, reproducibility under seed, build-side
-  guard against unresolved configs, RNG wiring, JSON round-trip
-  on a mixed-distribution config.
-- `tests/test_tn_ortsnetz.py` (10 tests) — smallest-preset build &
-  solve, default-segment-budget at $n_\text{EFH}=30$,
-  bit-exact reproducibility under fixed seed, stochastic
-  reproducibility under fixed seed, categorical-mix electrode
-  kinds, $|Z| \propto \rho_1$ monotonicity at low frequency for
-  $n_\text{EFH} \in \{5, 10, 30\}$, JSON round-trip preserving
-  every distribution kind, edge cases (zero houses, unknown
-  electrode kind), KVS quota reproduction.
-- Notebook `notebooks/20_tn_ortsnetz_generator.ipynb` — deterministic
-  AP1 reference build (10 EFH foundation electrodes), three
-  side-by-side stochastic samples with a Categorical kind mix,
-  full $n_\text{EFH} \times \rho_1$ heatmap at 50 Hz showing the
-  Dwight asymptote $|Z| \propto \rho_1$ and the parallel-cluster
-  scaling with $n_\text{EFH}$, JSON round-trip of the stochastic
-  config with a bit-exact replay of the seed-42 sample.
-
-### Changed
-
-- **`build_inductance_matrix` is now vectorised
-  (ADR-0010 Tier 0b).** The Python double loop over $M(M-1)/2$
-  segment pairs is replaced by a row-at-a-time NumPy assembly:
-  pair-wise dot products in a single $O(M^2)$ multiplication,
-  closed-form Grover formula vectorised over the parallel pairs,
-  16×16 Gauss–Legendre quadrature batched over the non-parallel
-  pairs (peak memory $O(M \cdot 256 \cdot 24)$ bytes per row).
-  Reproduces the legacy loop bit-exactly to floating-point
-  precision (max relative drift ~ $10^{-12}$ — pure summation
-  roundoff). Empirical speed-up **5–10×** across $M \in [25,
-  400]$ on a typical laptop, scaling cleanly. The legacy
-  loop is kept as `_build_inductance_matrix_loop` for
-  regression-test reference.
-- `tests/test_inductance_vectorised.py` (8 tests) — bit-exact
-  regression against the legacy loop on hand-crafted mixed
-  geometry, on random non-degenerate segments at $M \in \{5, 20,
-  60\}$ for both `use_image=True/False`, on a fully-parallel
-  grid (closed-form-only path), plus symmetry / positive-
-  diagonal / single-segment / empty / zero-length-segment edge
-  cases.
-- **ADR-0010** (`docs/adr/0010-tier0-performance.md`) — design
-  rationale and validation programme. Documents 0b as
-  implemented, 0a (LU caching across frequencies) and 0c
-  (geometry-adaptive discretisation) as scoped follow-ups.
-- Notebook `notebooks/22_tier0_speedup.ipynb` — bit-exact
-  cross-check between loop and vectorised implementation, plus
-  a speed-up scan over $N$ for both random-geometry (mixed
-  parallel + quadrature path) and all-parallel-grid
-  (closed-form-only path) inputs.
-
-### Docs
-
-- **`docs/performance.md`** — comprehensive performance and
-  scaling guide. Empirical wall-clock characteristics from
-  Notebook 21 (Sommerfeld is ~1200× slower than Carson at AP1
-  frequencies and gives identical answers for parallel-wire
-  geometries; `segment_length ≤ 1 m` mandatory for AP1
-  accuracy; PEN-Neumann is ~1 % at 50 Hz at 3× cost). Wall-clock
-  estimates per AP1 study size (5 EFH up to 200 EFH).
-  Monte-Carlo strategy with a fully worked `joblib.Parallel`
-  pattern, throughput estimates per study size, and tips for
-  reproducible / resumable runs. Roadmap pointer to ACA + GMRES
-  with a clear threshold for when it becomes worth the
-  implementation effort.
-- **Eight ground-up `docs/examples/`** — a guided tour:
-  * 01 First solve (a single rod, Sunde reference);
-  * 02 Substation grounding (ring + 4 rods, Dwight 1936
-    reference);
-  * 03 TN-Ortsnetz generator basics;
-  * 04 AP1 Analysis 1 — galvanic measurement and the 62 % rule;
-  * 05 AP1 Analysis 2 — inductive coupling on the measurement
-    leads, frequency-dependent error;
-  * 06 Deterministic parameter sweep over $\rho_1$;
-  * 07 Monte-Carlo sweep with `joblib`, persistent Parquet
-    storage, statistical bands;
-  * 08 Full pipeline `groundfield` → ρ-f fit → `groundinsight`
-    `BusType` for downstream fault analyses.
-  Each page is self-contained and runnable end-to-end. Linked
-  from `examples/index.md`, navigation in `mkdocs.yml`.
-
-### Added
-
-- **`TnNetworkConfig.source_magnitude_A` accepts a Distribution.**
-  The driving current at the substation cluster (test current for
-  measurements, fault current for fault simulations) was previously
-  a plain ``float``; it now also takes any
-  :class:`Distribution`. Sweep e.g. measurement vs. fault on the
-  same world via
-  ``source_magnitude_A=Discrete(values=[1.0, 5000.0])`` or define
-  a Monte-Carlo current with ``LogNormal.from_moments(...)``.
-  Three new tests in ``tests/test_measurement.py`` cover the
-  pass-through, the discrete-distribution case, and seed
-  reproducibility.
-
-- **Measurement-setup layer for AP1 grounding-resistance studies
-  (Analysis 1 + 2).** New module
-  `groundfield.generators.measurement` with:
-  * `MeasurementLeadConfig` — one physical measurement lead
-    (overhead at surface or buried cable) modelled as a finite-
-    impedance :class:`Conductor`. Default settings:
-    ``coupling_to_soil="isolated"``,
-    ``inductance_model="neumann"`` so the lead generates a
-    magnetic field that couples to every parallel conductor (PEN,
-    cable shields, the parallel measurement lead).
-  * `MeasurementInjectionConfig` — auxiliary current electrode
-    (Hilfserder) at a configurable remote position with its own
-    :class:`GroundingSystemSpec`, plus an optional
-    `feed_lead` (`None` = AP1 Analysis 1 galvanic only;
-    a :class:`MeasurementLeadConfig` enables AP1 Analysis 2
-    inductive coupling).
-  * `MeasurementProbeConfig` — voltage probe (Spannungssonde) at a
-    configurable position with its own grounding (default: short
-    rod at the 62 % point), plus an optional metallic measurement
-    `lead`.
-  * `MeasurementSetupConfig` — top-level measurement spec used as
-    the new optional `TnNetworkConfig.measurement` field. When
-    set, the generator builds the aux electrode, the voltage
-    probe, the configured leads, and re-routes the source's
-    `return_to` to the aux anchor — the test current physically
-    returns through the auxiliary electrode (and, with metallic
-    leads enabled, mostly through them). When `None` (default)
-    the source returns through *remote earth* and no aux/probe
-    are added.
-  * Convenience factories `overhead_lead()` (surface bare copper,
-    Neumann-coupled) and `buried_lead(depth_m=0.6)` (cable shield),
-    plus `single_rod_grounding()` (Erdungsspieß) and
-    `neighbour_substation_grounding()` (ring + 4 rods, for
-    measurements against a neighbour substation).
-- `tests/test_measurement.py` (10 tests) — default-no-measurement
-  hygiene, galvanic-only setup adds aux + probe but no leads,
-  source `return_to` wiring to aux anchor, inductive setup adds
-  both leads with `inductance_model="neumann"` active, lead
-  helper inspections, neighbour-substation aux variant, smallest
-  preset solves with measurement enabled, JSON round-trip.
-- Notebook 20 grows section **9. Erdungsmessaufbau (AP1 Analyse
-  1 + 2)** with three sub-sections: 9a galvanic-only Surface
-  potential overlay, 9b inductive-coupling case with overhead
-  feed and probe leads + Sommerfeld earth-return correction, and
-  9c neighbour-substation aux variant.
-
-- **`plot_surface_potential(result, world, …)`** — new helper in
-  :mod:`groundfield.postprocess.plotting` that plots
-  $\varphi(x, y, z)$ over the *entire world* instead of over the
-  point-source bounding box. Default extent is derived from
-  :func:`world_bounds_xy(world)` plus a configurable
-  ``padding_m`` (default 15 m), so all buildings, cable cabinets
-  and the substation appear together with a strip of remote-earth
-  decay around them. Options: ``log`` (multi-decade colour scale
-  on $|\varphi|$), ``symmetric`` (signed $[-\varphi_\text{max}, +\varphi_\text{max}]$
-  scale around 0), ``show_electrodes`` overlay,
-  ``show_contour_lines`` for iso-potential annotations, custom
-  ``cmap`` / ``figsize`` / ``title``.
-- :func:`world_bounds_xy(world)` — public helper that returns
-  the smallest axis-aligned $(x, y)$ bounding box of the world's
-  electrodes. Each electrode kind is unwrapped to its true
-  footprint (rods → point, rings → enclosing square, strips →
-  endpoint bbox, grid meshes → ``corner``-to-``corner+size``).
-- Notebook 20 grows section **8. Surface-Potential über die
-  gesamte Welt** with three plots on the existing 5-EFH
-  minimal-example: linear scale with iso-lines, log $|\varphi|$
-  for the boundary decay, and a wide (60 m) padding view that
-  shows how far the field still influences the *remote earth*.
-- ``tests/test_api_smoke.py`` (4 new tests) — `world_bounds_xy`
-  bounding-box correctness, default-extent honouring on
-  `plot_surface_potential`, log-mode smoke, explicit-extent
-  override.
-
-### Changed
-
-- **`_draw_electrodes` no longer annotates electrode names** in
-  the potential / surface-potential plots. In dense AP1 networks
-  the per-electrode labels overlapped heavily and obscured the
-  contours. The geometric outlines (rod markers, ring/strip lines,
-  mesh wires) stay; callers that genuinely need labels can iterate
-  ``world.electrodes`` and call ``ax.annotate`` themselves. Affects
-  :func:`plot_potential_contour` and :func:`plot_surface_potential`.
-
-- **`FoundationElectrodeSpec` gains an explicit ring/mesh style.**
-  New field ``style: Literal["ring", "mesh"] = "mesh"``:
-  ``"ring"`` realises only the rectangle's perimeter (closed wire
-  loop, no internal cross-bracing — the *Ringerder*-style
-  foundation electrode common in residential buildings),
-  ``"mesh"`` (default) keeps the previous behaviour with
-  perimeter plus ``n_x × n_y`` internal cross-braces (the
-  classical *Maschenerder*). Internally both styles materialise as
-  a :class:`GridMeshElectrode`; ``"ring"`` forces ``n_x = n_y = 1``
-  (one mesh cell = perimeter wires only). Tests and the variant
-  catalog notebook (notebook 20) are updated.
-- **Notebook 20 plot rendering**: the foundation / grid-mesh
-  electrode is now drawn with all its longitudinal *and*
-  transverse wires (instead of just the outer rectangle), so the
-  internal cross-bracing is visible at a glance. Adds a new "Ring
-  vs. Mesh" variant section that compares the three common
-  realisations (perimeter only, 2×2 mesh, 4×4 mesh) side by side.
-
-- **`TnNetworkGenerator` refactored onto a composable spec layer
-  (ADR-0009 v2).** The flat v1 config (`n_efh`, `house_electrode`,
-  hardcoded substation ring + rods, single-rod KVS) is replaced
-  by five reusable spec modules:
-  * `electrode_specs` — discriminated union `ElectrodeSpec`
-    (`RodElectrodeSpec`, `RingElectrodeSpec`, `StripElectrodeSpec`,
-    `FoundationElectrodeSpec`) with `presence_prob` and
-    `offset_xy_m`. Helper `rod_circle(n, radius_m, …)` returns N
-    rods on a circle — the typical substation Tiefenerder layout.
-  * `grounding.GroundingSystemSpec` — `electrodes:
-    list[ElectrodeSpec]` plus `build_at(world, site_xy,
-    name_prefix, rng)`. Bonds every present electrode into one
-    cluster. Used identically by substation, KVS and every
-    building.
-  * `placement` — discriminated union `PlacementSpec`
-    (`ManhattanGridPlacement` with optional jitter,
-    `ExplicitPlacement` with caller-supplied coordinates).
-  * `soil_specs` — discriminated union `SoilSpec`
-    (`HomogeneousSoilSpec`, `TwoLayerSoilSpec`,
-    `MultiLayerSoilSpec`) with distributions per parameter and a
-    `to_soil(rng)` materialiser.
-  * `building.BuildingTypeSpec` + `default_building_catalog()` —
-    AP1-typical four-type catalog (`residential`,
-    `small_industry`, `medium_industry`, `large_industry`) with
-    distinct grounding systems.
-  The new `TnNetworkConfig` exposes `soil`, `substation`, `kvs`,
-  `placement`, `building_types`, `building_counts`, `pen`,
-  `source_magnitude_A`. Substation grounding is now any AND/OR
-  combination of ring / rods / strip / foundation; KVS grounding
-  the same; per-building grounding is type-driven and supports
-  multi-electrode systems (foundation + extra rod, ring + grid +
-  strips, …) with per-electrode `presence_prob` for stochastic
-  fleets.
-- **`TnNetworkGenerator.build` adopts lazy distribution
-  resolution.** The previous strict guard
-  `_assert_resolved(cfg)` rejected any unresolved
-  `Distribution` field and prevented the per-house Categorical
-  electrode-kind mix from being drawn at build time. The
-  generator now resolves top-level distributions lazily (one
-  draw per `build` call) and samples per-instance fields
-  (currently `house_electrode.kind`) once per house. Strict
-  upfront resolution is still available via
-  `gen.sample_world(rng)` or a manual `cfg.sample(rng)` —
-  see ADR-0009 for the documented trade-off (`sample_world`
-  collapses the Categorical to a single kind for all houses;
-  `build` gives the per-house mix).
+**Versioning, packaging and tooling**
+
+- **Calendar versioning and release tool (10.09):** `python scripts/release.py
+  calver [--date YYYY-MM-DD] [--dry-run]` or `set X.Y.Z`; it updates the three
+  version files and the changelog, commits and tags, and never pushes.
+- **Package metadata (10.11):** PEP 621 `[project]` table, SPDX licence,
+  classifiers for Python 3.12–3.14, `poetry-core>=2.2.0,<3.0.0`.
+- **Development standards (10.80, 10.94, 10.95):** ruff format and lint (NumPy
+  docstring convention), mypy, pre-commit, CI for lint, types, tests on
+  Python 3.12–3.14 and a strict docs build on pull requests; tests are
+  organised by feature and carry a `finding` marker.
+
+**Solver**
+
+- ⚠ **Default kernel (10.28):** `Engine.kernel` defaults to `None`, the
+  backend's preferred kernel: `"line"` for the image family. A 16-house solve
+  takes 2.7× (with `numba`) or 5.7× (without) the time of the point kernel.
+- ⚠ **Two-terminal sources (10.16, 10.75, F01/F30):** `image`,
+  `image_2layer`, `mom` and `mom_sommerfeld` inject +I at `attached_to` and −I
+  at `return_to`; `fem` still returns the current through remote earth and
+  warns.
+- ⚠ **Floating passive clusters (10.29)** in the image family, the `mom`
+  family and `solve_mutual_*`.
+- ⚠ **Cross-layer electrodes (10.15, F02), slivers and segment counts (10.32),
+  post-solve series controls (10.25), `solve_mutual_matrix` diagonal (10.26)**:
+  see *Numbers that change*. Cross-layer solves no longer report an image
+  series they did not evaluate (10.50, F43).
+- ⚠ **Concrete shells (10.12–10.14):** the solver sees a shell only as the
+  per-length coefficient C; `concrete_model="lumped"` and `"distributed"` put C
+  on every encased wire; mesh braces are not encased.
+- **`solve_mutual_matrix` / `solve_mutual_field` (10.34):** resolve and check
+  the backend like `Engine.solve`; a backend outside the image family raises
+  `BackendCapabilityError`.
+- **Errors (10.74, audit A1-08):** worlds a backend cannot represent raise
+  `BackendCapabilityError` (a `ValueError` and `NotImplementedError`) before
+  the solve, also from the backend functions; code that caught `TypeError`
+  from `image_2layer` or `mom` must catch `BackendCapabilityError` or
+  `ValueError`.
+- **Engine validation (audit A1-02, A1-04):** `Engine.model_copy(update=...)`
+  and attribute assignments are validated; `create_engine` forwards only the
+  arguments it is given.
+- **`mom`, `bem`, `mom_sommerfeld` (10.31, 10.75):** documented and reported
+  (`metadata["solver"] == "point_matching"`) as one point-matching scheme; they
+  share one solve pipeline and the depth advisories of the image family.
+- ⚠ **`cim` (10.30)** reads the length-weighted node potential; ⚠ **layer
+  stacks (10.48)** are merged to their canonical form; ⚠ **`fem` (10.23,
+  10.49)** is experimental, warns where its reduction does not model the world
+  and raises for electrodes below its hemisphere's layer.
+- **`compare_engines` (10.71)** compares complex impedances at every frequency;
+  comparisons that passed before may now fail.
+- **Warnings (10.70):** one warning per cause instead of per electrode;
+  pre-flight warnings point at the caller's line; `ShallowSegmentWarning`
+  follows the kernel (audit F08).
+
+**Coupling**
+
+- ⚠ **Inductive assembly (10.20, 10.46):** `carson_series` on the
+  anti-parallel image, `sommerfeld` on the image-free matrix, exact touching
+  pairs by default (`touching="quadrature"` reproduces 0.15.0), Carson's P and
+  Q with the a² term and the asymptote only above a = 15.
+- ⚠ **`references.pollaczek` (10.45)** is exact for two layers, also for
+  conductors below the first interface and pairs in different layers.
+- **One earth-return assembly for all frequencies (10.60):** bit-identical per
+  frequency; a 30-house Carson network 16.4 s → 3.3 s.
+
+**Safety, fits and export**
+
+- ⚠ **Rho-f defaults (10.18, 10.19, 10.27):** input impedance as the fitted
+  quantity; standard form with `k0` and relative weights.
+- ⚠ **Formulas (10.73):** partial fractions with float coefficients rounded
+  once to `decimals` significant digits; one renderer for `fit_to_sympy`,
+  `fit_to_sympy_standard` and the exporter; exports take 0.04–0.14 s instead
+  of 0.39–2.23 s.
+- ⚠ **One passivity check (10.40):** the export and `check_passivity` check 0 Hz
+  to twice the highest fitted frequency; fits that passed may now fail.
+- ⚠ **Hand-written formulas (10.01):** roots and logarithms of numbers parse to
+  floats (values move by at most 3.6e-16); `log` inside `exp` and fractional
+  powers of large exact numbers are rejected (write the number as a float).
+  groundfield's exporters write neither.
+- **`rho_at_fit` (10.84)** is the resistivity of the upper layer for layered
+  soil.
+- **CSV (10.69, 10.73):** provenance header, a `frequency_hz` column, no
+  silent overwrite (`overwrite=True`).
+- **Results JSON (10.77):** standard JSON (non-finite numbers as strings),
+  engine JSON with `options`; 0.15.0 files still load.
+- **`split_factor` (10.18)** divides by the solved source current; plot labels
+  name the drawn component (10.73).
+
+**Generators**
+
+- ⚠ **Measurement loop (10.17):** feed and probe leads end on the junctions
+  `meas_H` and `meas_S` at the substation; `LvNetworkLayout` readings use the
+  solved test current.
+- ⚠ **Layout builder (10.38, 10.54):** PEN joints are junctions; foundations
+  follow the footprints.
+- ⚠ **`sample_world` (10.53)** resolves every nested distribution once per
+  realisation.
+- ⚠ **Depths (10.55):** measurement leads and PEN sections run at their
+  configured depth.
+- **One network plan and one materialiser (10.78):** both front-ends produce a
+  `NetworkPlan`; the layout module became the package
+  `groundfield.generators.layout`.
+- **English names (10.69):** see *Deprecated*; generated element names
+  (`trafo_*`, `kvs_*`, `house_*`) are unchanged.
+- **Overpass:** retries on HTTP 503 honour `Retry-After`; `max_retries` is at
+  most 5; the response cap is 16 MiB (pass `max_response_bytes` for wider
+  areas).
+
+**API and performance**
+
+- **Soil parameters (10.69):** `HomogeneousSoil.rho`, `SoilLayer.rho`,
+  `SoilLayer.h`; soil models validate assignments and reject unknown keys in
+  `model_copy` (10.67).
+- **Import time (10.72):** heavy dependencies load on first use; median
+  `import groundfield` 798 ms → 223 ms.
+- **Memory and speed (10.56–10.65), bit-identical unless marked:** kernels
+  without `(N, N, 3)` tensors (30-house network 1 248 → 115 MiB peak; an
+  80-house network with 9 712 segments solves in about 2 s); one
+  reaction-matrix assembly per solve; `solve_mutual_matrix` 23–31× faster;
+  ⚠ two-layer series summed before the product (round-off, 10–15× faster on a
+  30-house network); chunked field evaluation; multi-frequency earth return;
+  ⚠ tabulated `mom_sommerfeld` kernels for three or more layers (66.6 → 0.30 s
+  on a 40 m grid).
+
+**Documentation (10.82–10.93)**
+
+- The documentation follows the Diátaxis structure: tutorials T01–T10 as
+  executed notebooks with value checks (`tests/test_tutorials.py`), how-to
+  guides, a reference with glossary (English and German), units and
+  conventions, warnings catalogue, known limitations and deprecations, an
+  explanation section with one theory page per engine and a validation page
+  generated from the benchmark suite, the [audit history][audit-history] and
+  the [roadmap][roadmap]. Versioned with `mike`.
+- Formulas on the documentation site are typeset once; pages that load a TeX
+  extension no longer fail.
+- Moved pages (no redirects): `api/*` → `reference/api/*`, `examples/*` →
+  `tutorials/` and `how-to/`, `engines/*` → `explanation/engines/`,
+  `concepts.md` → `explanation/concepts.md`, `performance.md` →
+  `explanation/performance.md`, `installation.md` and `quickstart.md` →
+  `getting-started/`.
 
 ### Deprecated
 
-- **`groundfield.generators.tn_ortsnetz`** module path. Use
-  `groundfield.generators.tn_network` instead, or import
-  `TnNetworkGenerator` / `TnNetworkConfig` from the top-level
-  `groundfield` namespace. The old module re-exports the new
-  classes under their old names (`TnOrtsnetzGenerator`,
-  `TnOrtsnetzConfig`) and emits a `DeprecationWarning`. The
-  rename is part of aligning the public surface with the
-  project-wide English-only naming convention; the AP1
-  work-package keeps its German name *TN-Ortsnetz* in the
-  research documentation and file paths.
+Every name below keeps working, emits a `DeprecationWarning` that names its
+replacement, and is removed in `2027.5.0` at the earliest.
+
+| Deprecated | Replacement |
+|---|---|
+| backend `cim` (10.76) | `image` (auto-dispatch; `cim` already ran `image_2layer`) |
+| backend `bem` (10.76) | `mom` (identical point-matching system) |
+| backend `image_nlayer` (10.76) | `image` (auto-dispatch by soil) |
+| `Engine.tolerance`, `Engine.max_iterations` (10.51) | none, they have no effect |
+| `Engine.sommerfeld_lambda_max_factor`, `sommerfeld_epsabs`, `sommerfeld_epsrel`, `sommerfeld_max_osc_panels` (10.74) | `Engine(options={"mom_sommerfeld": {...}})` or `MomSommerfeldOptions` |
+| `World.solve(snapshot_sources=False)` (10.72) | none, every entry point takes the snapshot |
+| `World.concrete_shell_corrections` (10.12–10.14) | `concrete_shell_coefficient_ohm_m` of the electrodes |
+| `HomogeneousSoil(resistivity=...)`, `SoilLayer(resistivity=...)` (10.69) | `rho` |
+| `SoilLayer(thickness=...)` (10.69) | `h` |
+| module `groundfield.generators.ortsnetz_builder` (10.69) | `groundfield.generators.layout` |
+| `OrtsnetzLayout` | `LvNetworkLayout` |
+| `KvsPlacement`, `KvsConfig` | `CabinetPlacement`, `CabinetConfig` |
+| `StarKvsTopology`, `kind="star_kvs"` | `StarCabinetTopology`, `kind="star_cabinet"` |
+| `TnNetworkConfig.kvs`, `TnNetworkConfig.source_magnitude_A` | `TnNetworkConfig.cabinets`, `TnNetworkConfig.source_magnitude_a` |
+| `CabinetConfig.quote_per_100_buildings` | `CabinetConfig.count_per_100_buildings` |
+| `RadialTrunkTopology.slots_per_kvs`, `.kvs_spacing_m`, `.plan_feeder_kvs_positions()` | `.slots_per_cabinet`, `.cabinet_spacing_m`, `.plan_feeder_cabinet_positions()` |
+| `LvNetworkLayout.add_kvs()`, `.kvs_placements` | `.add_cabinet()`, `.cabinet_placements` |
+| `from_osm(kvs_lat_lons=, kvs_xys=)`, `to_world(kvs_grounding=)` | `cabinet_lat_lons=`, `cabinet_xys=`, `cabinet_grounding=` |
+| `source_magnitude_A=` of `to_world`, `measured_grounding_impedance`, `verify_current_balance`, and the `*_A` result keys of `verify_current_balance` | `source_magnitude_a=` and `*_a` keys |
+| `HomogeneousSoilSpec.resistivity`, `SoilLayerSpec.resistivity`, `SoilLayerSpec.thickness_m` | `rho`, `rho`, `h` |
+
+Configurations and worlds written by 0.15.0 still load. `solve_cim` and
+`solve_bem` warn and delegate; their results carry the metadata of the backend
+that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 
 ### Removed
 
-- The flat v1 `TnNetworkConfig` schema (`n_efh`,
-  `n_klein_gewerbe`, `n_mittel_gewerbe`,
-  `kvs_per_100_efh`, `kvs_x_max_m`, `n_houses_per_row`,
-  `house_spacing_m`, `row_spacing_m`, the v1 `house_electrode`
-  block with its `kind` Categorical) is gone. Use
-  `building_types` + `building_counts`, plus the new sub-configs
-  `substation`, `kvs`, `placement`. Notebook 19 (groundinsight
-  bridge) is unaffected; only generator-using code paths need
-  updates.
+- **From the wheel (10.02, 10.11):** the console scripts `release` and
+  `generate-third-party-licenses`, the top-level `scripts` package and the
+  unused `polars` dependency (groundinsight 0.3.0 still installs it with the
+  `groundinsight` extra); run the tools from a checkout
+  (`python scripts/release.py ...`).
+- **Release tool options (10.09):** the `major` / `minor` / `patch` bumps and
+  `--no-push`, `--allow-dirty`, `--allow-empty-changelog`.
+- **Metadata of `cim` results (10.76):** `cim_fit_used`, `cim_n_images`,
+  `cim_rms`, `reduces_to`, `n_layers`, `h`, `rhos`.
+- **Private names (10.75, 10.79, 10.81):** `solver.image._potential_kernel`,
+  `_segment_z_extent`, the `_discretize_*` helpers, `_grid_segments` and the
+  electrode classes and `PointSource` that `solver.image` re-imported;
+  `image_2layer._two_layer_potential_kernel`; the module `solver.field_study`;
+  `Engine._stub_result` and `_dispatch`; `_layered.cylindrical_radius` and
+  `_split_layer_thicknesses`; `mom._carson_skin_metadata`,
+  `bem._build_Z_collocation`, `cim._cim_self_kernel_factory`,
+  `_galerkin_solve` of `bem` and `mom_sommerfeld`, the private Pollaczek
+  kernels of `coupling.sommerfeld_inductance` and the helpers the solver
+  modules re-imported from each other. Import public names from `groundfield`
+  or `groundfield.geometry`.
+- `gf.annotations` (a leaked `__future__` object, 10.72).
 
-- **`groundinsight` bridge — `BusType` export from a `rho-f` fit
-  (ADR-0008).** New module `groundfield.io.groundinsight` that
-  closes the family pipeline `groundfield → groundinsight`:
-  * `BusTypeSpec` — neutral, in-memory representation of an exported
-    `BusType` carrying name, description, system_type, voltage_level,
-    the SymPy `impedance_formula` string, the parallel sample table
-    `(frequency_Hz, rho_Ohm_m, Z_real_Ohm, Z_imag_Ohm)`, and a
-    free-form `metadata` block with the fit method, fit quality,
-    coefficients/poles, source-package version and creation
-    timestamp.
-  * `to_bustype_dict(fit, ...)` / `save_bustype_json(fit, path, ...)`
-    / `load_bustype_json(path)` — JSON path with a versioned schema
-    (`schema = "groundfield.bustype"`, `schema_version = 1`). Works
-    without `groundinsight` installed.
-  * `to_bustype(fit, ...)` / `save_bustype_to_db(fit, ...)` —
-    Python-API path that returns a live
-    `groundinsight.models.core_models.BusType` Pydantic instance via
-    a lazy import of `groundinsight`. Raises a clear `ImportError`
-    pointing at the optional install
-    `pip install groundfield[groundinsight]` when the package is
-    missing.
-  * `evaluate_spec(spec, frequencies, rho)` — re-evaluate an exported
-    formula at arbitrary `(f, rho)` points without round-tripping
-    through `groundinsight`.
-  * Symbol convention: `RhoFStandardFit` exports natively in
-    `(rho, f)`; `VectorFitResult` exports via the symbolic
-    substitution $s \to j\,2\pi f$ so the resulting formula matches
-    the `groundinsight.BusType.impedance_formula` parser.
-- **`groundinsight` as an optional dependency** (extras group
-  `[groundinsight]` in `pyproject.toml`). `pip install groundfield`
-  works as before; `pip install groundfield[groundinsight]` enables
-  the live-`BusType` path.
-- **ADR-0008** (`docs/adr/0008-groundinsight-bridge.md`) — design
-  rationale, JSON schema (v1), symbol convention, optional-dependency
-  strategy, and the validation programme (symbol round-trip via
-  `groundinsight.compute_impedance`, JSON round-trip,
-  optional-dependency hygiene, end-to-end notebook).
-- `tests/test_io_groundinsight.py` (12 tests): schema and dict
-  shape, JSON round-trip with bit-exact sample preservation, schema
-  rejection (wrong name / future version),
-  `groundinsight.compute_impedance` symbol round-trip for both fit
-  methods (`< 1e-9` for `rho_f_standard`, `< 1e-3` for
-  `vector_fit`), end-to-end `BusType → Bus → calculate_impedance`
-  consistency, `evaluate_spec` consistency, optional-dependency
-  hygiene (`to_bustype` raises `ImportError` when `groundinsight`
-  is unimportable while the JSON path keeps working).
-- Notebook `notebooks/19_groundinsight_export.ipynb` — AP1-style
-  end-to-end demonstration: transformer station with ring earth +
-  rods on a 2-layer soil, $\rho_1$ sweep, `RhoFStandardFit`,
-  `BusType` export to JSON and to a live `groundinsight.Network`,
-  comparison of the field-grade impedance against the reduced
-  formula evaluation.
+### Fixed
 
-- **Vector fitting + SymPy export for the rho-f model.** New module
-  `groundfield.postprocess.vector_fitting` with:
-  * `vector_fit(frequencies, Z_values, n_poles, ...)` — clean
-    Gustavsen/Semlyen 1999 vector-fitting implementation (single-
-    output, complex/real poles, optional R_∞ and L_∞ residuals).
-  * `VectorFitResult` dataclass with poles, residues, and
-    `evaluate(frequencies)` for re-evaluation.
-  * `fit_to_sympy(fit, decimals)` — produces a SymPy expression
-    in a single free symbol `s`, with complex-conjugate pole pairs
-    combined into real second-order terms. Compatible with
-    `groundinsight.BusType.impedance_formula`.
-  * `rho_f_from_field_result(result, electrode_name, n_poles)`
-    — convenience wrapper that takes a `FieldResult`, computes
-    `Z(s) = U(s)/I(s)` per frequency, and runs the fit.
-- `tests/test_vector_fitting.py` — synthetic ground-truth recovery
-  (real and complex poles), evaluate round-trip, SymPy export
-  consistency, and end-to-end FieldResult flow.
-- **ADR-0006 / ADR-0007 Phase B (n=2 cross-layer in
-  mom_sommerfeld, cim, bem).** The Sommerfeld off-diagonal kernel
-  in `mom_sommerfeld.sommerfeld_kernel_value` now dispatches to
-  `coupling.layered_green.two_layer_real_space_kernel` for any
-  source/observer pair on a 2-layer soil. Combined with the
-  shared cross-layer-aware diagonal from
-  `_two_layer_self_kernel_factory` (Phase A), this lifts the
-  cross-layer precondition in `mom_sommerfeld`, `cim`, and `bem`
-  for `n_layers == 2`. `n_layers >= 3` still emits a documented
-  `UserWarning`.
+**Inputs that solved silently**
 
-- **Cross-layer electrodes and conductors (ADR-0007, Phase A).**
-  Lifts the long-standing precondition `z_max < h_1` in the layered
-  backends. Driven rods (Tiefenerder), foundation electrodes, deep
-  meshes and any conductor that crosses the upper-layer interface
-  can now be computed directly. The implementation:
-  * **`groundfield.coupling.layered_green`** — new module with
-    `two_layer_spectral_kernel` and `two_layer_real_space_kernel`
-    that solve the 2-layer matching problem numerically and
-    produce the rigorous Green's function for any
-    (source-layer, observer-layer) pair.
-  * **`solver/image_2layer`** automatically dispatches to the
-    Sommerfeld Green's function for cross-layer geometries while
-    keeping the historic Tagg/Sunde image series as a fast path
-    for pure-upper-layer worlds (bit-exact regression preserved).
-  * **`_Segment.layer_index`** — new internal field tagging which
-    layer each segment lives in (0 = upper, 1 = next, …).
-  * **`mom_sommerfeld`, `cim`, `bem`** emit a `UserWarning` instead
-    of raising on cross-layer geometries, pointing the user at
-    `image_2layer` as the Phase A path. Phase B will extend their
-    kernels too (planned).
-- **ADR-0007** (`docs/adr/0007-cross-layer-electrodes.md`) —
-  derivation of the cross-layer matching problem, three-phase
-  rollout (A: discretiser + uniform numerical kernel; B: closed-
-  form image series for ll and ul; C: n ≥ 3 layers), and
-  validation programme.
-- `tests/test_cross_layer.py` — homogeneous-limit checks for
-  `layered_green`, reciprocity, image_2layer cross-layer
-  acceptance test, regression test for pure-upper-layer worlds,
-  warning behaviour test for `mom_sommerfeld / cim / bem`.
-- Notebook `notebooks/17_cross_layer_ap1.ipynb` — AP1-realistic
-  driven-rod-through-interface sweep showing the spreading-
-  resistance drop when the rod tip reaches the conductive lower
-  layer; ρ₂ = ρ₁ limit check.
+- **Source references (10.66):** misspelled `attached_to` / `return_to`, a
+  source on a conductor, a source returning to its own node, no current
+  source, magnitude 0 and dangling conductor ends raise with the closest
+  names. Tests: `tests/test_source_validation.py`.
+- **`VoltageSource` solved to zero (10.51)** and now raises
+  `NotImplementedError` naming the alternative. Test:
+  `tests/test_source_validation.py::test_voltage_source_raises_not_implemented_naming_the_alternative`.
+- **`HARD_LIMIT` only warned (10.06):** worlds beyond the segment limit raise
+  `ResourceLimitError` before any allocation. Test:
+  `tests/test_diagnostics_report.py::test_world_beyond_the_hard_limit_is_rejected_before_any_allocation`.
+- **Conductors (10.43, 10.67):** non-positive or non-finite cross sections and
+  resistivities raise; a cross section above 1e-2 m² warns (mm² given?); an
+  ideal conductor with `discretize_segment_length` raises. Tests:
+  `tests/test_conductor_validation.py`.
+- **Soils and geometry (10.67):** infinite resistivities and thicknesses,
+  malformed `MultiLayerSoil` stacks and degenerate electrode geometry raise
+  when built. Tests: `tests/test_soil_models.py`,
+  `tests/test_electrode_validation.py`.
+- **Inert settings (10.51, F57):** non-default boundary conditions, soil
+  permittivity and engine settings that no backend reads warn. Tests:
+  `tests/test_boundary_conditions.py`, `tests/test_engine_options.py`,
+  `tests/test_soil_specs.py`.
+- **Engine assignments and copies (audit A1-02, A1-04):** `engine.frequencies
+  = []` and a raw `options` dict were accepted, and deprecated flat names in
+  `model_copy` were ignored. Tests: `tests/test_engine_validation.py`.
 
-### Changed
+**Solver**
 
-- The `z_max >= h_1` precondition in `image_2layer` is no longer
-  fatal: the backend transparently dispatches to the Sommerfeld
-  cross-layer kernel. Behaviour for in-bounds geometries is
-  unchanged.
-- `mom_sommerfeld`, `cim`, `bem`: same precondition replaced by a
-  `UserWarning` that names the recommended workaround.
+- **Reciprocity (10.28, 10.29):** transfer impedances of the `mom` family
+  (were up to 1.46 Ω apart) and of the line kernel across the interface (were
+  1.1–4.7 % non-reciprocal) are reciprocal. Tests:
+  `tests/test_mom_family.py::test_two_port_transfer_impedance_is_reciprocal`,
+  `tests/test_reciprocity.py`.
+- **`cim` is bit-identical to `image_2layer` (10.30).** Test:
+  `tests/test_cim.py::test_cim_is_bit_identical_to_image_2layer_for_unequal_segments`.
+- **Layer stacks (10.48):** physically two-layer or homogeneous
+  `MultiLayerSoil` stacks no longer raise. Tests: `tests/test_layer_stack.py`,
+  `tests/test_layer_stack_dispatch.py`.
+- **Interface slivers (10.32):** a rod tip just below h₁ no longer raises or
+  shorts the `mom` solve. Test: `tests/test_interface_slivers.py`.
+- **`mom` family above ground (10.75):** a segment crossing the surface
+  raises instead of being solved as buried. Test:
+  `tests/test_point_matching_pipeline.py::test_mom_family_rejects_a_segment_partly_above_the_surface`.
+- **`mom_sommerfeld` budget (10.47):** a binding oscillation budget counts as
+  non-convergence. Test:
+  `tests/test_mom_sommerfeld.py::test_kernel_warns_or_converges_when_the_oscillation_budget_binds`.
+- **`fem` warnings (10.23, audit F01):** interfaces above or beside the
+  electrode are reported. Tests: `tests/test_fem.py`.
+- **`fit_complex_images` (10.49)** no longer reports convergence for a fit
+  that misses Γ₁. Test: `tests/test_cim.py::test_fit_converged_flag_bounds_the_maximum_error`.
+- **`compare_engines` (10.71, audit F03)** sees the reactance, every frequency,
+  non-finite results and a zero of one engine. Tests:
+  `tests/test_compare_engines.py`.
+- **Resolution check (F53, F54):** polyline and star electrodes are checked.
+  Test: `tests/test_diagnostics_report.py::test_resolution_check_covers_star_and_polyline`.
+- **Line-kernel cost (10.28):** one long segment no longer slows down the
+  whole near-pair search (16 houses: 29 s and 1.7 GiB before). Test:
+  `tests/test_line_kernel_near_pairs.py`.
+- **Engine knobs (10.74):** `fem` options are reachable, options for another
+  backend warn, `Engine.solve` keeps the caller's sources (10.72). Tests:
+  `tests/test_engine_options.py`, `tests/test_solve_entry_points.py`.
+- **Memory (10.56, 10.57, 10.59, 10.62, 10.65):** see *Changed*. Tests:
+  `tests/test_kernel_performance.py`.
 
-- **Geometric Sommerfeld earth-return Green's function (ADR-0006).**
-  New `Engine.earth_inductive_model="sommerfeld"` option that
-  integrates the σ-dependent vector-potential Green's function over
-  the actual segment-pair geometry. Rigorous for arbitrary wire
-  lengths and orientations; supports **layered earth natively**
-  (Pollaczek/Wait kernel) without warnings. In the long-parallel-
-  wires + homogeneous-earth limit it converges (on the cluster
-  level) to ADR-0005's per-meter Carson asymptote.
-- **`groundfield.coupling.sommerfeld_inductance`** — new module
-  with:
-  * `LayeredEarth` — frozen layered-earth dataclass.
-  * `reflection_coefficient_homogeneous` /
-    `reflection_coefficient_layered` — magnetic Fresnel /
-    Pollaczek-Wait coefficients $\Gamma_\text{mag}^{(n)}(\lambda)$.
-  * `earth_return_correction_homogeneous` /
-    `earth_return_correction_layered` — point-wise σ-dependent
-    Green's function correction (uses Lipschitz–Hankel identity
-    in the σ→0 limit).
-  * `sommerfeld_pair_integral_homogeneous` /
-    `sommerfeld_pair_integral_layered` — 16×16 Gauss–Legendre
-    outer integration over a segment pair, vectorised inner
-    Sommerfeld quadrature with split log-then-uniform λ-grid that
-    resolves both the σ-transition and the Bessel oscillations.
-  * `build_sommerfeld_correction_matrix` — dense $M\times M$
-    correction matrix consumed by all distributed-capable
-    backends, drop-in alongside `build_carson_correction_matrix`.
-- **`groundfield.coupling.resolve_earth_layers`** — extracts a
-  `LayeredEarth` from any soil model. No warning for layered
-  configurations — they are first-class citizens.
-- All distributed-capable backends (`image`, `image_2layer`,
-  `mom`, `mom_sommerfeld`, `cim`, `bem`) consume the new
-  `"sommerfeld"` switch and pass the layered-earth configuration
-  into the per-frequency builder. `fem` continues to log a
-  warning (its equivalent-hemisphere reduction is DC only).
-- **ADR-0006** (`docs/adr/0006-sommerfeld-earth-return.md`) —
-  derivation of the magnetic Green's function, three-regime limit
-  checks, two-pillar API (homogeneous Pillar A this release,
-  layered Pillar B same release), numerical strategy, validation
-  programme, and the explicit hand-off from ADR-0005's per-m
-  asymptote to this geometric formulation.
-- `tests/test_sommerfeld_inductance.py` — reflection-coefficient
-  limits, Lipschitz–Hankel σ→0 identity, σ→∞ collapse,
-  ω→0 DC reproducibility, Sommerfeld-vs-Carson agreement on a
-  long PEN at 50 Hz (cluster level), no-warning behaviour on
-  TwoLayerSoil, layered-vs-homogeneous deviation, cross-engine
-  consistency over `image / mom / cim / bem`.
-- Notebook `notebooks/16_carson_vs_sommerfeld.ipynb` — wire-length
-  sweep showing where Carson's per-m asymptote breaks down,
-  layered-earth comparison Carson(top-rho) vs.
-  Sommerfeld(layered), AP1-relevant TN-Ortsnetz example.
+**Coupling**
 
-### Changed
+- ⚠ **`carson_series` baseline (10.20, F32).** Test:
+  `tests/test_inductive_solver_integration.py::test_carson_series_reactance_matches_carson`.
+- ⚠ **Sommerfeld kernel (10.35, 10.36)** for three or more layers, conductors
+  below h₁ and distant pairs; `SommerfeldResolutionWarning` instead of silent
+  truncation. Tests: `tests/test_sommerfeld_accuracy.py`.
+- ⚠ **`earth_return_correction_layered` sign (10.46, F50).** Test:
+  `tests/test_sommerfeld_accuracy.py::test_layered_point_kernel_has_the_exact_sign`.
+- ⚠ **Carson P and Q (10.46):** the a⁻⁷ term of the Q asymptote, the small-a
+  series and the θ = 0 quadrature. Tests: `tests/test_carson_pq.py`.
+- ⚠ **Lumped and single-segment conductors (10.24):** the Neumann inductance
+  of a lumped conductor and the leakage of a one-piece galvanic conductor.
+  Tests:
+  `tests/test_inductive_solver_integration.py::test_neumann_is_honoured_on_lumped_and_single_segment_conductors`,
+  `tests/test_conductors_distributed.py::test_a_single_segment_galvanic_conductor_leaks`.
+- **Conductors at the surface (10.46, F52):** crossing or lying in the surface
+  plane is solved under `sommerfeld` and raises with the image models. Tests:
+  `tests/test_inductive_solver_integration.py::test_sommerfeld_accepts_a_surface_crossing_conductor`.
+- **`segment_distance` with a point segment (10.44, audit F04).** Test:
+  `tests/test_conductor_proximity.py::test_segment_distance_with_point_segments`.
+- **Docstrings (10.95):** invalid escape sequences and control characters.
+  Tests: `tests/test_coupling_conventions.py`, `tests/test_source_escapes.py`.
 
-- `Engine.earth_inductive_model` accepts a third value
-  `"sommerfeld"` (in addition to `"perfect_mirror"` and
-  `"carson_series"`). Default unchanged. ADR-0005's Carson series
-  is now documented as the *asymptotic* option; ADR-0006's
-  Sommerfeld kernel is the *geometric* option for AP1-grade
-  studies.
-- `_assemble_inductance_matrix` signature: gains an optional
-  `layered_earth` argument (used when `earth_model="sommerfeld"`).
+**Safety, fits and export**
 
-- **Carson earth-return correction (ADR-0005).** Adds the Carson 1926
-  finite-conductivity correction $\Delta Z_\text{Carson}(\omega)$ on
-  top of the perfect-mirror Neumann inductance from ADR-0004. New
-  `Engine.earth_inductive_model` field with values `"perfect_mirror"`
-  (default, bit-exact reproduction of ADR-0004) and `"carson_series"`
-  (Carson 1926). The branch-impedance block becomes
-  $Z_b(\omega) = R + j\omega L_\text{Neumann} + \Delta Z_\text{Carson}(\omega)$
-  with the Carson correction rebuilt at every frequency.
-- **`groundfield.coupling.carson`** — three-regime evaluation of
-  Carson's $J(p, q) = P(a, \theta) + jQ(a, \theta)$ following the
-  original 1926 paper:
-  * `_p_q_small` — leading-term form for $a \le 0.25$ (Carson eqs. 34/35),
-  * `_p_q_quadrature` — direct 64-point Gauss–Legendre numerical
-    quadrature of Carson eq. 29 for $0.25 < a \le 5$ (replaces the
-    classical Tleis recurrence with a robust numerical kernel),
-  * `_p_q_large` — asymptotic expansion for $a > 5$ (Carson eqs. 36/37),
-  * `carson_p_q`, `carson_self_correction`,
-    `carson_mutual_correction` — public API,
-  * `deri_semlyen_correction` — Deri/Semlyen 1981 complex-depth
-    approximation (sanity-check, not the production path),
-  * `skin_depth`, `carson_parameter` — diagnostic helpers.
-- **`groundfield.coupling.resolve_earth_conductivity`** — extracts
-  $\sigma_\text{earth}$ from a soil model. Exact for
-  `HomogeneousSoil`, approximate (upper-layer $\rho_1$ with a
-  `UserWarning`) for `TwoLayerSoil` and `MultiLayerSoil`.
-- **`groundfield.coupling.inductance.build_carson_correction_matrix`**
-  — assembles the dense complex Carson correction matrix
-  $\Delta Z_\text{Carson}(\omega)$ over distributed-conductor branches
-  using midpoint-rule projection onto Carson's parallel-wire formula
-  (orthogonal components contribute zero by Neumann symmetry).
-- All distributed-capable backends (`image`, `image_2layer`, `cim`,
-  `mom`, `mom_sommerfeld`, `bem`) consume the new
-  `earth_inductive_model` switch and rebuild the Carson correction
-  matrix per frequency. `fem` logs a warning and ignores Carson
-  (its equivalent-hemisphere reduction is DC only).
-- `_assemble_inductance_matrix` returns an additional third value:
-  a closure `omega -> dZ_carson(omega)` (or `None` for the
-  perfect-mirror default). `_solve_cluster_currents` and
-  `_galerkin_solve` accept a new `carson_correction` argument that
-  is added to $j\omega L$ inside Block 3.
-- **Penetration-depth diagnostic.** `FieldResult.metadata` now
-  exposes `"penetration_depth"` — a `dict[float, float]` keyed by
-  frequency that returns $\delta(\omega)$ in metres, populated by
-  every backend that runs an inductive-coupling frequency loop.
-  Together with `"earth_inductive_model"` this lets notebooks
-  diagnose "is my geometry small or large compared to $\delta$?"
-  without re-deriving the formula.
-- **`groundfield.references.carson`** — Carson 1926 Section V worked
-  examples (wave antenna at $r = 4.0$ and $r = 0.4$, railway at
-  $r = 0.2$, $\theta = 63°30'$) plus four self-consistent
-  regression anchors in the intermediate and asymptotic regimes.
-- **ADR-0005**
-  (`docs/adr/0005-carson-earth-return.md`) — Carson series
-  derivation, three-regime split, linear-system integration, soil
-  conductivity source, layered-earth handoff to the Pollaczek
-  follow-up (deferred), and the full validation programme.
-- `tests/test_carson_coupling.py` — Carson 1926 worked examples,
-  regime-boundary continuity, $\sigma\to\infty / \omega\to 0$
-  limits, skin-depth/Carson-parameter relation, Deri/Semlyen
-  cross-check, engine-side regression and frequency-dependence
-  tests, two-layer warning, 1 km PEN textbook benchmark, and
-  cross-engine consistency at 50 Hz.
-- Notebook `notebooks/15_carson_correction.ipynb` — Carson functions
-  across the three regimes, skin-depth diagnostic, 1 km PEN self
-  impedance perfect-mirror vs. Carson, mutual-coupling open-circuit
-  voltage, cross-engine table at 50 Hz / 1 kHz.
-- `scripts/benchmarks/pen_1km_carson.py` — stand-alone CLI tool
-  that reproduces the AP1-typical 1 km PEN benchmark (self
-  impedance, mutual to a parallel measurement lead, all four
-  distributed-capable backends, side-by-side closed-form
-  Oeding+Carson reference).
+- ⚠ **Touch voltage at the electrode centre (F13, 10.21),** also for rotated
+  foundations (audit H4). Tests:
+  `tests/test_touch_voltage_footprint.py::test_grid_envelope_covers_the_one_metre_offset_curve`,
+  `tests/test_touch_voltage_footprint.py::test_touch_voltage_of_a_rotated_foundation_matches_the_unrotated_one`.
+- **Uniform-current caveat (10.22):** touch and step voltages near grids,
+  meshes, stars, strips and bonded clusters from the image family warn. Test:
+  `tests/test_touch_voltage_footprint.py::test_uniform_current_backend_warns_once_per_call_near_a_grid`.
+- **EN 50522 anchors (F44, 10.42):** checked against literals of EN 50522:2022
+  Table B.4 (values unchanged); docstrings cite the 2022 edition. Test:
+  `tests/test_safety.py::test_en50522_docstrings_cite_the_current_edition`.
+- **`touch_voltage_spectrum` (10.52, audit L4)** rejects a frequency given
+  twice. Test:
+  `tests/test_safety.py::test_touch_voltage_spectrum_rejects_a_frequency_given_twice`.
+- **Vector fit with a 0 Hz sample (10.41):** no collapse to Z ≈ 0. Test:
+  `tests/test_vector_fitting.py::test_dc_sample_with_imaginary_part_does_not_collapse_the_fit`.
+- **Export errors and metadata (10.84, 10.27):** an actionable error without
+  `rho_at_fit`, the running version in the BusType metadata, strict JSON for
+  non-finite fit quality. Tests:
+  `tests/test_io_groundinsight.py::test_vector_fit_without_rho_at_fit_raises_an_actionable_error`,
+  `tests/test_io_groundinsight.py::test_metadata_of_hand_built_fits_is_strict_json`.
+- **Result JSON (10.77):** float keys, infinities and numpy values in the
+  metadata survive the round trip; result files honour the umask (audit
+  A1-05). Tests: `tests/test_result_persistence.py`.
 
-### Changed
+**Generators**
 
-- `Engine` schema gains the `earth_inductive_model` field (default
-  `"perfect_mirror"`). Existing notebooks and tests keep their
-  results bit-exact because the default reproduces ADR-0004.
-- `_assemble_inductance_matrix` signature: returns a 3-tuple
-  `(L_full, has_inductance, carson_builder)` instead of the previous
-  2-tuple. All in-tree callers updated; out-of-tree subclasses must
-  unpack the third element.
+- ⚠ **Measurement leads (10.17, 10.55, F48):** leads no longer short-circuit
+  the instrument and run at their depth. Tests:
+  `tests/test_measurement_loop.py::test_resistive_leads_do_not_change_the_reading`,
+  `tests/test_measurement.py::test_buried_lead_runs_at_its_depth`.
+- ⚠ **Concrete shells (10.12–10.14, F08):** the lumped shell outside TN
+  service drops, rods and braces inside a shell, substation and cabinet shells,
+  and the layout builder. Tests: `tests/test_concrete_one_mechanism.py`.
+- ⚠ **PEN joints and depth (10.38):** joints no longer leak, `PenConfig.depth_m`
+  acts. Tests: `tests/test_pen_junctions.py`, `tests/test_pen_depth.py`.
+- ⚠ **Foundations (10.39, 10.54, F28):** rotated meshes without the clamp,
+  layout foundations from the footprint, no shift of the random draws,
+  degenerate footprints get a minimum foundation. Tests:
+  `tests/test_rotated_foundations.py`, `tests/test_footprint_foundations.py`.
+- **Reproducibility (10.53, F07):** resolved configs replay their realisation;
+  masks ignore the footprint order. Tests:
+  `tests/test_generator_reproducibility.py`.
+- **`ManhattanGridPlacement(jitter_m=<distribution>)` (10.55, F47).** Test:
+  `tests/test_placement.py::test_manhattan_grid_jitter_accepts_a_distribution`.
+- **Malformed Overpass payloads (10.05, audit M1)** raise before caching.
+  Tests: `tests/test_overpass_ingest.py`.
+- **Layouts pickled with 0.15.0 (10.69)** still build. Test:
+  `tests/test_generator_naming.py::test_layout_pickled_with_v0150_still_builds`.
 
-### Added
 
-- **Inductive coupling (ADR-0004).** Distributed conductors now
-  carry a partial inductance per longitudinal segment. With
-  `Conductor.inductance_model = "neumann"` the solver assembles
-  the Neumann self- and mutual-inductance matrix
-  $L \in \mathbb{R}^{M \times M}$ over every distributed-conductor
-  branch and plugs it into the branch block as
-  $Z_b(\omega) = R + j\omega L$. The resulting complex linear
-  system is solved per frequency in `engine.frequencies`. With
-  `inductance_model = None` (default) the system stays real and
-  the historic DC fast path is preserved bit-exact. Earth is
-  modelled as a perfect magnetic mirror in this release; finite-
-  conductivity (Carson) correction is the subject of ADR-0005.
-- **`groundfield.coupling.inductance`** — partial-inductance
-  helpers used by the assembly:
-  * `thin_wire_self_inductance` — closed-form Grover formula for a
-    straight thin wire,
-  * `parallel_segments_mutual` — closed-form mutual inductance for
-    two equal-length parallel coaxial segments,
-  * `neumann_mutual` — generic Neumann double-line integral with a
-    closed-form fast path for parallel segments and a 16×16
-    Gauss–Legendre quadrature fallback for arbitrary 3-D geometry,
-  * `build_inductance_matrix` — assembles the dense per-branch
-    matrix including the perfect-mirror image contribution.
-- All distributed-capable backends (`image`, `image_2layer`, `cim`,
-  `mom`, `mom_sommerfeld`, `bem`) now run a frequency loop when
-  inductive coupling is active. The `_solve_cluster_currents` and
-  `_galerkin_solve` helpers grew matching `omega` and
-  `inductance_matrix` parameters; the inductance matrix is built
-  once before the loop. `fem` logs a warning and falls back to
-  the resistive solution (its equivalent-hemisphere reduction is
-  DC only).
-- New helper `_assemble_inductance_matrix` and a typed
-  `_DistributedBranch` dataclass that carries every branch's
-  endpoints and wire radius, so the inductance assembly works
-  uniformly across backends.
-- `FieldResult.metadata["conductor_node_currents"]` and
-  `["conductor_node_potentials"]` now hold one entry **per
-  frequency** (matching the public `electrode_currents` /
-  `electrode_potentials` shape).
-- **ADR-0004**
-  (`docs/adr/0004-inductive-coupling.md`) — derivation, linear
-  system, validation programme, and explicit hand-off to the
-  Carson follow-up.
-- `tests/test_inductive_coupling.py` (12 tests):
-  Grover self-formula, parallel-mutual closed-form vs. Neumann
-  quadrature, perpendicular = 0, anti-parallel sign flip, DC
-  reproducibility, $\omega \to 0$ collapse to the resistive
-  solution, frequency-induced phase shift on the source-rod
-  current, frequency-scaling open-circuit voltage on a parallel
-  measurement lead (the AP1 question), cross-engine consistency
-  at 50 Hz, FEM warning-and-fallback test.
-- Notebook `notebooks/13_inductive_coupling.ipynb` — Neumann
-  helpers validation, frequency sweep on the source-rod current,
-  loop-coupling open-circuit voltage profile, and the
-  cross-engine table at 50 Hz.
-- **`groundfield.references.oeding`** — closed-form per-unit-length
-  loop self- and mutual-inductance formulas from Oeding & Oswald
-  (2016) *Elektrische Kraftwerke und Netze*, ch. 9 (Eq. 9.8, 9.9,
-  9.13c) plus the helpers
-  `two_wire_loop_radius` ($r' = r\,e^{-1/4}$) and
-  `internal_inductance_per_length` ($\mu_0/(8\pi)$). Used as the
-  textbook reference against which the Neumann implementation is
-  validated in the long-wire limit.
-- `thin_wire_self_inductance` gained an `include_internal` flag
-  (default `True`). The internal-field contribution
-  $\mu_0\,\ell/(8\pi)$ is now added to the Grover external term by
-  default, so that summing two parallel-wire partial inductances
-  reproduces Oeding Eq. (9.13c) including the +1/4 term. Pass
-  `include_internal=False` to keep the pure external-field
-  expression for high-frequency / skin-effect studies.
-- `tests/test_oeding_inductance.py` (10 tests): direct algebraic
-  checks of `oeding.*`, plus four parametric Neumann-vs-Oeding
-  9.13c regressions across (length, distance, radius), a
-  $1/L$-convergence test, and two loop-to-loop mutual checks
-  against Eq. 9.8 (in-line and offset geometries).
-- Notebook `notebooks/14_oeding_validation.ipynb` — wire-length
-  sweep showing the $1/L$ convergence of the Neumann
-  partial-inductance combination to Eq. 9.13c, parameter sweep
-  over $(d, r)$, and loop-to-loop mutual against Eq. 9.8.
+### Corrections to the 0.15.0 release notes
 
-### Changed
+The 0.15.0 notes contain statements that review pass 10 found to be wrong
+(finding 10.82). They are left as published and marked with a footnote:
 
-- `metadata["conductor_node_currents"]` and
-  `metadata["conductor_node_potentials"]` are now
-  `dict[str, list[complex]]` (one entry per
-  `engine.frequencies`) instead of `dict[str, complex]`. The shape
-  is now consistent with the public `electrode_*` mappings;
-  callers should index `[k]` for the *k*-th frequency.
-
-### Added
-
-- **Distributed conductor model (ADR-0003).** `Conductor` now
-  carries two new fields, `discretize_segment_length` (m) and
-  `coupling_to_soil` (`"isolated"` | `"galvanic"`). When the
-  segment length is finite the conductor is split into
-  $n = \lceil L / \Delta s\rceil$ collinear sub-pieces, each with
-  its own longitudinal current. With
-  `coupling_to_soil="galvanic"` every midpoint additionally leaks
-  current into the soil through the same Green's-function kernel
-  as electrode segments — turning a buried bare-copper conductor
-  or an exposed cable shield into a true distributed earth
-  electrode. The augmented linear system in
-  `_solve_cluster_currents` and `_galerkin_solve` couples the
-  enlarged multi-port grounding matrix $Z$ (over electrode +
-  galvanic conductor segments) with KCL per cluster node and
-  Ohm's law on each longitudinal segment branch. Per ADR-0003 the
-  longitudinal impedance is purely resistive in this release;
-  inductive and Carson corrections come with ADR-0004.
-- New helpers `_discretize_conductor`,
-  `_build_distributed_topology`, `Conductor.is_distributed`,
-  `Conductor.n_segments`. The cluster builder
-  `_build_clusters` and the lumped-branch builder
-  `_build_finite_branches` skip distributed conductors so they
-  are routed exclusively through the new topology builder.
-- All seven integral-equation backends (`image`, `image_2layer`,
-  `image_nlayer` via dispatch, `cim`, `mom`, `mom_sommerfeld`,
-  `bem`) consume the distributed topology natively. `fem` falls
-  back to a lumped branch and logs a warning, because its
-  equivalent-hemisphere reduction is not defined for the small
-  midpoint pseudo-electrodes the discretiser would produce.
-- `FieldResult.metadata["conductor_node_currents"]` and
-  `["conductor_node_potentials"]` expose the per-midpoint leakage
-  and EPR for galvanic distributed conductors. The public
-  `electrode_currents` / `electrode_potentials` mappings stay
-  restricted to real electrodes for backwards compatibility.
-- **ADR-0003** (`docs/adr/0003-distributed-conductor-model.md`)
-  documenting the linear system, the boundary conditions, the
-  validation strategy, and the deferred items
-  (inductive coupling → ADR-0004).
-- `tests/test_conductors_distributed.py` (13 tests):
-  schema additions, lumped-fallback regression, isolated chain
-  series-resistor equivalence (n=2/4/8/16), galvanic chain
-  current conservation and convergence in `n_seg`, cross-engine
-  consistency on `image`, `mom`, `cim`, `bem`, FEM
-  warning-and-lumped-fallback test, three-rod chain end-to-end
-  test.
-- Notebook `notebooks/12_distributed_conductor.ipynb`:
-  algebraic-equivalence sweep, EPR + leakage profile along a
-  galvanic chain, convergence in `n_seg`, side-by-side
-  cross-engine table, `StripElectrode` vs distributed-conductor
-  cluster-impedance comparison.
-- **Finite-impedance conductor branches** — first step toward the
-  AP1 distributed-conductor model. `Conductor` now carries a
-  `cross_section` field (in m²; `None` keeps the historic ideal
-  galvanic short, `"from_radius"` resolves to π·r²). Finite
-  conductors enter the solver as branches with series resistance
-  $R_\text{ser} = \rho_\text{mat} L / A$ in an augmented
-  nodal-analysis system that couples the multi-port grounding
-  matrix $Z$ with Kirchhoff's current law per cluster node and
-  Ohm's law per branch:
-  ```
-  [ Z      -C       0    ] [ I_e    ]   [ 0       ]
-  [ C^T    0        B^T  ] [ phi_n  ] = [ I_in    ]
-  [ 0      B       -R_b  ] [ I_b    ]   [ 0       ]
-  ```
-  For `cross_section is None` the branch block is empty and the
-  system collapses bit-exactly to the legacy
-  cluster-equipotential constraint.
-- New helpers `Conductor.series_resistance`,
-  `Conductor.effective_cross_section`, `Conductor.is_ideal()` and
-  the routing helper `solver.image._build_finite_branches`. The
-  cluster builder `_build_clusters` now ignores finite conductors
-  by design — they stay separate clusters and are reattached as
-  branches.
-- Branch support in **all eight backends**: `image`, `image_2layer`
-  and `cim` route through the augmented `_solve_cluster_currents`;
-  `mom`, `mom_sommerfeld` and `bem` route through the augmented
-  `_galerkin_solve`; `image_nlayer` inherits via dispatch; `fem`
-  adds a small per-cluster nodal analysis on top of the
-  equivalent-hemisphere reduction.
-- `tests/test_conductors_finite.py` (15 tests): regression of the
-  `cross_section=None` default, closed-form two-rod / one-branch
-  split, $R_b \to 0$ and $R_b \to \infty$ limits, monotonicity
-  in $R_b$, three-rod chain transitive activation, and
-  cross-engine consistency for every backend on a homogeneous and
-  on a 2-layer soil (≤ 3 % vs. image/image_2layer reference, ≤ 7 %
-  for FEM through its equivalent-hemisphere reduction).
-- Notebook `notebooks/11_finite_conductor.ipynb`: two-rod
-  analytical check, sweep over $R_b$, five-rod PEN chain with
-  per-rod EPR profile, and side-by-side ideal vs. finite
-  comparison.
-- Pydantic v2 data model: `World`, `BoundaryConditions`,
-  `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil`, `RodElectrode`,
-  `RingElectrode`, `MeshElectrode`, `Conductor`, `CurrentSource`,
-  `VoltageSource`.
-- `Engine` (backend selection `image | image_2layer | mom | fem`,
-  frequency list, tolerances) and `FieldResult` as the unified
-  result object with `point_sources` (discretised current
-  distribution) and `result.potential(points)` for evaluating the
-  potential at arbitrary field points.
-- **Image backend** for homogeneous soil: image-charge sum over
-  discretised wire segments, line self-action correction. Returns
-  grounding impedances within < 5 % of the Sunde formula for typical
-  driven rods.
-- **Cluster logic** for galvanically connected electrodes:
-  conductors with electrode end-points form a shared potential
-  cluster. Current sharing within a cluster is solved exactly via
-  the multi-port grounding matrix (constraint: φ_i = const ∀ i ∈
-  cluster, Σ I_i = I_input).
-- `Conductor.start_electrode` / `end_electrode` (Pydantic fields),
-  set automatically by `create_conductor`.
-- `FieldResult.clusters` (mapping electrode → cluster members) and
-  `FieldResult.cluster_impedance(name)` for the physically
-  interpretable cluster grounding impedance (parallel combination).
-- Top-level factories `create_world`, `create_electrode`,
-  `create_conductor`, `create_source`, `create_engine`,
-  `run_simulation`.
-- Post-processing plots: `plot_potential_contour` (xy or xz slice),
-  `plot_potential_profile` (potential along an arbitrary line for
-  several depths), `plot_potential_radial` (trumpet around an
-  electrode).
-- Smoke-test notebook `notebooks/01_smoke_test.ipynb` with Sunde
-  comparison, "without vs. with connection" section
-  (current/potential table, before/after contour, line profile),
-  and the full plot family.
-- pytest suite `tests/test_api_smoke.py` (22 tests): parametric
-  Sunde comparison, monotonicity, cluster current balance,
-  cluster-impedance plausibility, plot smoke tests.
-- **`groundfield.references.dwight1936`** — module with all the
-  closed-form grounding formulas from Dwight, H. B., *Calculation
-  of Resistances to Ground*, AIEE 1936 (Tab. I): rod, rod pairs
-  (close / far), buried horizontal wire, right-angle, 3/4/6/8-point
-  star, ring, strip, round and vertical plate, hemisphere. Every
-  formula reproduces the worked examples published in the paper to
-  within 0.2 Ω.
-- `tests/test_dwight_references.py` (19 tests) — image-backend vs.
-  Dwight per geometry. 10 % tolerance for image vs. Dwight, < 0.5 Ω
-  for module vs. paper.
-- **ADR-0001** (`docs/adr/0001-two-layer-method.md`) — analysis and
-  decision regarding the numerical methods for 2-layer soil: two
-  engines side by side (Tagg/Sunde image-charge series + MoM with
-  Sommerfeld quadrature). Rationale, convergence, action items.
-- **`gf.compare_engines(world, engines, ...)`** and the
-  `EngineComparison` report — cross-engine self-validation per
-  ADR-0001. Tests in `tests/test_compare_engines.py` (6 tests).
-- **Engine A `image_2layer`** — Tagg/Sunde image-charge series for
-  2-layer soil (see ADR-0001, action items 1, 4, 6). Adaptive
-  series truncation at `|K|^n < 1e-6` (max. 100 terms), series
-  diagnostics in `FieldResult.metadata` (`K`, `n_terms_used`,
-  `converged`). Precondition: every electrode must lie within the
-  upper layer, otherwise a clear `ValueError` is raised.
-- **Auto-dispatch** in `Engine.solve`: `backend="image"` with a
-  world that holds a `TwoLayerSoil` transparently switches to
-  `image_2layer` — notebooks do not need to change the backend
-  string when the soil model changes.
-- **`FieldResult.soil`** as a new optional field. `FieldResult.potential`
-  picks the appropriate Green's-function kernel automatically
-  (homogeneous or 2-layer). For homogeneous solutions the existing
-  `soil_resistivity` continues to suffice — no breaking migration.
-- Tests in `tests/test_two_layer.py` (8 tests): `ρ₁=ρ₂` limit,
-  sign of K, auto-dispatch, precondition check, series convergence,
-  cross-engine sanity.
-- Notebook `notebooks/02_two_layer.ipynb` with parameter sweeps
-  over K and h₁, trumpet comparison homogeneous vs. 2-layer,
-  K=0 sanity plot.
-- **Engine B `mom` — Galerkin Method-of-Moments backend**
-  (`solver/mom.py`). Independent second engine for cross-validation
-  (ADR-0001 action item 2). Builds the full segment-level reaction
-  matrix and solves a (N+K)×(N+K) linear system for the per-segment
-  current distribution and the cluster potentials, instead of
-  assuming uniform per-unit-length currents like the image
-  backends. Supports both `HomogeneousSoil` and `TwoLayerSoil`
-  through the same Green's-function kernels as the image backends;
-  only the resolution scheme differs.
-- Cross-engine tests in `tests/test_cross_engines.py` (15 tests):
-  image vs. mom on homogeneous worlds (< 2 %), image_2layer vs. mom
-  on 2-layer worlds across the full K range (< 2 %), exact K=0
-  collapse, multi-electrode cluster cross-check, potential-field
-  consistency.
-- Notebook `notebooks/03_cross_engine.ipynb` demonstrating the
-  side-by-side validation: cluster-impedance sweep over K, surface
-  potential profiles, and a `compare_engines` programmatic check.
-- Logging helpers `groundfield.utils.configure` / `get_logger`.
-- **`solver/_layered.py`** — shared layered-soil helpers:
-  `LayerStack`, `as_layer_stack`, `reflection_gamma` (recursive
-  $\Gamma_1(\lambda)$ from per-interface Fresnel coefficients),
-  `image_series_offsets`, `cylindrical_radius`. Used by every new
-  layered backend.
-- **Engine `image_nlayer`** (`solver/image_nlayer.py`) — n-layer
-  image-charge dispatcher. Forwards `n=1` to `image`, `n=2` to
-  `image_2layer`, raises `ValueError` for `n ≥ 3` with a clear
-  pointer to `cim` / `mom_sommerfeld` / `bem`. Auto-selected from
-  `backend="image"` when the world holds a `MultiLayerSoil`.
-- **Engine `cim`** (`solver/cim.py`) — Complex Image Method via
-  matrix-pencil fit of $\Gamma_1(\lambda)$ as a sum of complex
-  exponentials. Closed-form for any layer count once the fit is
-  done. Exposes the fit through
-  `result.metadata["cim_n_images"]` and `cim_rms`.
-  Public helper: `fit_complex_images(stack, …)`.
-- **Engine `mom_sommerfeld`** (`solver/mom_sommerfeld.py`) — Galerkin
-  MoM with **direct numerical Sommerfeld quadrature** of the layered
-  Green's function (`scipy.integrate.quad`). Slow but
-  methodologically independent reference engine. Public helper:
-  `sommerfeld_kernel_value(stack, s, z, z_s, …)`.
-- **Engine `bem`** (`solver/bem.py`) — boundary-element collocation
-  with the closed-form CIM kernel. Companion to `mom` (Galerkin)
-  with a different test-function weighting.
-- **Engine `fem`** (`solver/fem.py`) — axisymmetric volume PDE on a
-  cylindrical $(s, z)$ triangular mesh, layer boundaries as
-  element-wise conductivities, sparse `spsolve`. Reduces every
-  cluster to its equivalent hemisphere via Dwight 1936 closed forms;
-  exposes the reduction through
-  `result.metadata["equivalent_hemisphere_radius"]`.
-- **Backend literal extended** to
-  `image | image_2layer | image_nlayer | cim | mom | mom_sommerfeld | bem | fem`,
-  and `Engine.solve` auto-dispatches `backend="image"` to
-  `image_nlayer` for `MultiLayerSoil` worlds.
-- Test suite extended by ≈ 50 tests:
-  `tests/test_image_nlayer.py` (5 tests),
-  `tests/test_cim.py` (7 tests),
-  `tests/test_mom_sommerfeld.py` (6 tests),
-  `tests/test_bem.py` (6 tests),
-  `tests/test_fem.py` (5 tests),
-  `tests/test_cross_engines_extended.py` (≈ 25 parametric tests
-  covering homogeneous-rod agreement, 2-layer engine agreement,
-  two-rod cluster agreement, and layer-contrast monotonicity for
-  every engine).
-- Notebooks `04_image_nlayer.ipynb`, `05_cim.ipynb`,
-  `06_mom_sommerfeld.ipynb`, `07_bem.ipynb`, `08_fem.ipynb`,
-  `09_cross_engine_extended.ipynb`. Each contains a single-rod
-  sanity, the user-mandated **two interconnected grounding systems**
-  test case (potential profile, cluster impedance, current split),
-  a layer sweep, and a self-checks block with explicit collapse /
-  monotonicity verification.
-- Notebook `10_trafostation.ipynb` — application-style cross-engine
-  reference for the grounding system of a small transformer station
-  (ring earth electrode + two driven rods + optional strip earth
-  electrode in a 2-layer soil). All `(x, y)` electrode positions are
-  exposed as parameters; rods and strip can be switched on/off via
-  flags. Reports cluster impedance for every engine, `compare_engines`
-  consistency check, and surface-potential 3-D and contour plots.
-  Uses the native `StripElectrode` primitive.
-- **`StripElectrode`** (`kind="strip"`) — first-class horizontal
-  straight strip earth electrode (Banderder). One wire from `start`
-  to `end` at a fixed depth, arbitrary in-plane direction. Replaces
-  the prior degenerate-mesh workaround. Discretiser added to
-  `solver/image.py:_discretize_strip` and shared with every
-  integral-equation backend through the existing dispatcher.
-  Plausibility test against `dwight1936.horizontal_wire` activates
-  the previously reserved entry in `tests/test_dwight_references.py`.
-  Dedicated tests in `tests/test_strip.py`.
-- **`GridMeshElectrode`** (`kind="grid_mesh"`) — rectangular meshed
-  earth electrode with explicit `n_x` × `n_y` inner meshes
-  (`n_x + 1` transverse and `n_y + 1` longitudinal wires). Cleaner
-  alternative to `MeshElectrode` (which keeps its uniform-spacing
-  API for backwards compatibility). Discretiser shares
-  `_grid_segments` with the legacy mesh. The FEM equivalent-hemisphere
-  reduction for `GridMeshElectrode` uses the Schwarz / Sverak / IEEE
-  Std 80 formula
-  $R \approx \rho/L_C + \rho/\sqrt{20 A}\,(1 + 1/(1 + h\sqrt{20/A}))$
-  so that the inner mesh density is reflected in the FEM cross-check
-  (the legacy `MeshElectrode` keeps the prior strip-along-diagonal
-  proxy).
-- **ADR-0002** (`docs/adr/0002-engine-family.md`) — engine selection
-  heuristic and cross-validation envelope.
-
-### Changed
-
-- `Engine.solve` now dispatches on `world.soil`. `solve_image`
-  (private API) remains strictly limited to `HomogeneousSoil`; the
-  friendly forwarding only happens inside `Engine.solve`.
-- Internal refactoring: `_solve_cluster_currents` is now
-  kernel-agnostic and takes a `self_kernel` closure, so both the
-  homogeneous and the 2-layer backend share the same cluster logic.
-- **Project language switched to English**: every Python source
-  file, docstring, comment, Markdown documentation page, ADR,
-  notebook, and CHANGELOG entry is now in English. This brings the
-  project in line with the open-source conventions for
-  international distribution. Variable names were already English;
-  only prose changed. The repo-internal `CLAUDE.md` was updated to
-  reflect the new language convention.
-
-### Internal
-
-- The `mom` backend now returns real results (Galerkin scheme on
-  segment level). The `fem` backend now returns real results
-  (axisymmetric volume PDE with equivalent-hemisphere reduction);
-  the prior stub is removed.
-- Bugfix in `_two_layer_self_kernel_factory`: the `extra` accumulator
-  was hard-wired to a 1-D shape, which broke the matrix-mode call
-  used by the new MoM backend (identity-matrix probe to obtain the
-  full reaction matrix in one pass). Changed to `np.zeros_like(phi)`.
-- Notebook file `02_zweischicht.ipynb` was renamed to
-  `02_two_layer.ipynb`; ADR file `0001-zweischicht-verfahren.md`
-  was renamed to `0001-two-layer-method.md`. MkDocs navigation and
-  cross-references updated.
-
-### Docs
-
-- **`docs/graphify.md`** — new tooling page describing the
-  hand-driven workflow for building a queryable knowledge graph of
-  `groundfield` with [`graphify`](https://github.com/safishamsi/graphify)
-  (PyPI: `graphifyy`, MIT) for use by AI coding assistants. Covers
-  installation via `pipx` (so the ~25 transitive Tree-sitter language
-  packages stay out of the project lock file), the build-vs-query
-  cost split, the manual `extract` / `update` workflow, the
-  recommended `graphify claude install` Claude-Code integration
-  (which routes day-to-day queries through Claude Code's `Read`
-  tool so they count against a Claude Pro / Max subscription
-  rather than billed API tokens), the `--global` cross-repo graph
-  spanning `groundfield`, `groundinsight` and `groundmeas`, and
-  the limits (LaTeX / `.ipynb` narrative unparsed). The page is
-  registered under a new **Tooling** section in `mkdocs.yml`.
-- `.gitignore` — exclude the `graphify-out/` working cache so the
-  locally generated graph (which depends on the chosen LLM backend
-  and revision) is not committed.
-
-### Internal
-
-- **`scripts/generate_graphify_report.py`** — workaround that renders
-  `graphify-out/GRAPH_REPORT.md` from the JSON artefacts that
-  `graphify extract` *does* write (`.graphify_analysis.json` plus
-  `graph.json`). Necessary because `graphify` 0.7.x silently stopped
-  emitting the Markdown report itself, while the
-  `graphify claude install` PreToolUse hook and the matching
-  `CLAUDE.md` directive both still reference that file as the entry
-  point AI coding assistants should read first. The script is
-  AST/JSON-only — no network, no API access, no LLM call — and is
-  intended to be removed once upstream `graphify` re-emits the
-  Markdown report directly. Run via
-  `poetry run python scripts/generate_graphify_report.py` after
-  every `graphify extract` invocation.
-
-No code, public API or solver behaviour is touched by this entry —
-`graphifyy` is intentionally **not** added to `pyproject.toml`,
-mirroring the way other developer tools (`black`, `ruff`, `mypy`)
-are kept out of library dependency graphs.
+- **F47, F48, F53, F54** were listed as fixed, but `generators/placement.py`
+  and `generators/measurement.py` were unchanged since 0.14.1 and
+  `diagnostics.py` since 0.13.0. They are fixed in this release (see *Fixed*).
+- **`cim` bit-identical to `image_2layer`:** false for electrodes with unequal
+  segment lengths, +4.1 % for a 3 m rod in `TwoLayerSoil(100, 400, h_1=2)` at a
+  segment length of 0.4 m (71.060 Ω against 68.262 Ω). Fixed in this release
+  (10.30).
+- **F16** quoted the symptom of F08: the layout builder still ignored the
+  concrete shell; the 0.15.0 fix covered `TnNetworkGenerator` only. Fixed in
+  this release (10.14).
+- **F17** was fixed only in part: the engine-comparison example still
+  recommended `image_nlayer` or `cim` for more than two layers, which both
+  raise. The documentation was rewritten in this release.
 
 ---
 
-## [0.1.0] — 2026-04-24
+## [0.15.0] - 2026-07-31
 
-Initial project skeleton for `groundfield`.
+The rest of review pass 9 ([audit history, pass 9][pass-09]). F01, F02 and
+F32 stayed open (closed in 2026.11.0).
+
+⚠ Numbers change for every `fem` result, layered `mom_sommerfeld`,
+`coupling.layered_green` near the surface and the interface and beyond about
+160 m, the `image` family for electrodes with unequal segment lengths (up to
++12 %), `references.pollaczek`, two `references.dwight1936` formulas, and
+`rho_f_standard` fits of sweeps with dead frequencies.
 
 ### Added
 
-- Package layout analogous to `groundinsight`, with
-  `src/groundfield/` and the subpackages `soil`, `geometry`,
-  `conductors`, `solver`, `coupling`, `postprocess`, `io`, `utils`.
-- Poetry configuration (`pyproject.toml`) with dev and docs groups.
-- MkDocs Material scaffold (`mkdocs.yml`, `docs/`) for the future
-  documentation site on GitHub Pages.
-- Release automation (`scripts/release.py`) and third-party
-  license report (`scripts/generate_third_party_licenses.py`)
-  ported from `groundinsight`.
-- GitHub-Actions workflows `ci.yml`, `docs.yml`, `release.yml`.
-- `CITATION.cff`, `LICENSE` (MIT), `.gitignore`, `CLAUDE.md`
-  (context for AI assistants).
-- First smoke test (`tests/test_import.py`).
+- `Engine.sommerfeld_lambda_max_factor`, `sommerfeld_epsabs`,
+  `sommerfeld_epsrel`, `sommerfeld_max_osc_panels`.
+- `SommerfeldConvergenceWarning`, `SommerfeldTailTruncationWarning`,
+  `ShallowSegmentWarning`.
+- Executable documentation: a test runs every Python block of the
+  documentation (F27).
 
-### Internal
+### Changed
 
-- Project shell as the foundation for **work package 1** of the
-  dissertation on networked grounding systems: TN distribution
-  network with layered soil, house connections, and cable cabinets.
+- `cim` and `bem` no longer compute a complex-image fit; “`cim` returns values
+  bit-identical to `image_2layer` and `bem` to `mom`” (F34, F39).[^c-cim]
+- `coupling.layered_green`: `lambda_max_factor` is an upper bound on the
+  truncation.
+- `generators`: `MeasurementLeadConfig.depth_m` is honoured (F48).[^c-f48]
+- Faster: `layered_green` over kilometres (199 → 71 ms), `mom_sommerfeld`
+  150–8000×, `fem` about 15×.
+
+### Deprecated
+
+- The `fem` option `z_far_factor` (`r_far_factor` sets the truncation sphere).
+
+### Fixed
+
+- ⚠ `mom_sommerfeld`: the top-layer kernel no longer truncates a
+  conditionally convergent integral (a 25 m ring 1.4952 → 1.5751 Ω), and an
+  unresolved oscillation no longer returns a negative kernel silently (F04,
+  F40).
+- ⚠ `coupling.layered_green`: the λ truncation is bounded by construction
+  (errors up to −39.5 % near the interface before) and the 64-pair
+  interpolation step is gone (F14, F15).
+- ⚠ `image`, `image_2layer`: reported potentials are the length-weighted
+  average the solver enforces, independent of electrode names; mixed-length
+  geometries move by up to +12 % (F10, F11).
+- ⚠ `fem`: the mesh no longer degrades with the declared layer thickness (up
+  to −79 % before), and the Dirichlet electrode is conforming (F05, F06, F24).
+- ⚠ `references.pollaczek` used Carson's air exponent (R′ −0.5 … −5.8 % in
+  band); the 0.14.0 notes had described this as physics (F09).
+- ⚠ `references.dwight1936`: `horizontal_strip` (about 10 % low) and
+  `vertical_round_plate` (F37, F38).
+- ⚠ `rho_f_standard`: dead frequencies are no longer fitted as Z = 0 (F41).
+- The `z <= 0` check covers every backend and the segment extent (F26, F29).
+- `cluster_impedance` sums the current of every member; `layered_green` raises
+  for negative depths; `Engine.solve` forwards the series controls to
+  `image_nlayer` (F18); `World.solve` keeps the `Source` objects (F31);
+  `compare_engines` uses a pairwise metric and reports an empty comparison as
+  inconsistent (F35, F36).
+- Generators: the `building_counts` order (F33), the OMBR centre (F25), the
+  escape radius of `route_manhattan` (F42), and “the ADR-0012 concrete shell is
+  no longer silently dropped (F16)”.[^c-f16]
+- `io.csv` column constants (F46); `fem.r_far_factor` acts.
+- Documentation: the Pollaczek exponent in ADR-0006, `offset_xy_m` in
+  ADR-0011, accuracy claims, the reactance trend of `earth_return` (F55), the
+  meaning of k₂ and k₃ (F56); backends that raise for three or more layers are
+  no longer advertised (F17);[^c-f17] “`check_segment_resolution` skipped
+  polyline and star electrodes (F53, F54)”;[^c-f53] “`ManhattanGridPlacement.jitter_m`
+  carried a `ge=0.0` constraint on a `float | Distribution` union” (F47).[^c-f47]
+
+[^c-cim]: Correction (2026.11.0): not bit-identical for electrodes with unequal segment lengths (+4.1 % for a 3 m rod split unevenly at h₁ = 2 m); fixed in 2026.11.0 (10.30).
+[^c-f48]: Correction (2026.11.0): not fixed in 0.15.0, `generators/measurement.py` was unchanged since 0.14.1; fixed in 2026.11.0 (10.55).
+[^c-f16]: Correction (2026.11.0): the symptom quoted for F16 (a factor-33 change of `concrete_rho_ohm_m` gave bit-identical impedances) is that of F08, the layout builder, which the 0.15.0 fix did not cover; fixed in 2026.11.0 (10.14).
+[^c-f17]: Correction (2026.11.0): fixed in part only; the engine-comparison example still recommended `image_nlayer` or `cim` for more than two layers.
+[^c-f53]: Correction (2026.11.0): not fixed in 0.15.0, `diagnostics.py` was unchanged since 0.13.0; fixed in 2026.11.0.
+[^c-f47]: Correction (2026.11.0): not fixed in 0.15.0, `generators/placement.py` was unchanged since 0.14.1; fixed in 2026.11.0 (10.55).
 
 ---
 
-## Backlog (2026-05-10 audit)
-
-Items identified in the cross-cutting code-review pass on
-2026-05-10 that did **not** ship in [Unreleased]. Each entry is
-queued for a future maintenance release; once an item ships, the
-matching CHANGELOG line moves into [Unreleased]. The list is
-kept here (rather than in [Unreleased]) so the published release
-notes describe shipped work only.
-
-### Fixed (pending implementation)
-
-> The following bugs and inconsistencies were identified in the
-> code-review pass on 2026-05-10. They are queued for the next
-> maintenance release; the entries are recorded here so each one
-> ships with a referenced fix commit.
-
-- **`references.oeding` and `references.carson` are not
-  re-exported on the `groundfield` package**, while
-  `references.dwight1936` is. The asymmetry surprises users who
-  expect `gf.oeding.loop_self_inductance_per_length(...)` to
-  exist after seeing `gf.dwight1936.hemisphere(...)`.
-- **`coupling.resolve_earth_conductivity` raises a generic
-  `TypeError`** for unsupported soil models. Use the package's
-  own exception type (or document the type explicitly), and
-  cover the failure path in `tests/test_carson_coupling.py` —
-  currently the only call sites are inside the engine builders
-  and the failure is never exercised.
-- **`coupling/inductance._build_inductance_matrix_loop` is
-  exported in `__all__` with a leading underscore** — `from
-  groundfield.coupling.inductance import *` therefore does not
-  expose it (Python skips underscore names) and the only caller
-  is the regression test. Either drop it from `__all__` or
-  rename without the leading underscore.
-- **`generators.tn_ortsnetz` re-export is documented as
-  deprecated** but the deprecation warning is only emitted when
-  the *module* is imported, not when individual symbols are
-  accessed via `from groundfield.generators.tn_ortsnetz import
-  TnOrtsnetzGenerator`. Add a `__getattr__` so the symbol-level
-  access also warns. Plan the removal target (e.g. `0.5.0`).
-- **`generators.measurement.MeasurementSetupConfig` mutates
-  `source.return_to`** of the parent `TnNetworkConfig` during
-  `build`. If the same `TnNetworkConfig` instance is reused for
-  a non-measurement build afterwards, the now-stale `return_to`
-  pointer leaks into the second world. Either deep-copy the
-  source spec inside the generator, or document the
-  one-shot-config contract.
-- **`coupling/sommerfeld_inductance.build_sommerfeld_correction_matrix`
-  uses a fixed 16 × 16 Gauss–Legendre node count** for the
-  outer pair integration. There is no mechanism to refine the
-  grid when the dimensionless length is large; the docstring
-  promises convergence but the production path runs at a
-  single resolution. Either expose the resolution knob or
-  document the upper bound where the fixed grid still resolves
-  the kernel.
-- **`solver/result.FieldResult.cluster_impedance(name)` returns
-  one `complex` per frequency** but the summary docstring at
-  the top of `result.py` describes the helper as "scalar". Fix
-  the summary docstring; the per-call docstrings are correct.
-
-> Additional findings from the **second 2026-05-10 review pass**:
-
-- **`generators.measurement.MeasurementSetupConfig.build`** has
-  no early-out if both `feed_lead` and `probe.lead` are
-  `None`; it still walks every spec and conditionally skips
-  the lead creation. The early-out makes the "no inductive
-  coupling, just galvanic Analysis 1" case explicit and
-  protects against future regressions where a new lead-related
-  field is added.
-- **`solver.image._build_finite_branches` and the augmented
-  multi-port system in `_solve_cluster_currents`** silently
-  ignore the case where a `Conductor.cross_section` resolves
-  to a non-positive value. The `Conductor.series_resistance`
-  helper does check for `<= 0` and falls back to the ideal
-  short, but the path is not exercised in
-  `tests/test_conductors_finite.py`. Add a regression test for
-  `cross_section = 0.0` and `cross_section = "from_radius"`
-  with `radius_m = 0` so future refactors of the helper cannot
-  introduce a silent NaN.
-- **`coupling/sommerfeld_inductance.sommerfeld_pair_integral_layered`**
-  uses a split log-then-uniform λ-grid (changelog
-  describes the strategy) but the split point is hard-wired
-  to the per-pair σ-transition. For pairs with very large
-  dimensionless length the linear part of the grid silently
-  under-samples the Bessel oscillations. Expose the
-  cross-over knob and lock it down with a notebook plot of
-  the integrand to make the convergence visible.
-- **`postprocess.convergence.convergence_study` clones the
-  engine via `engine.model_copy`** but does not deep-copy the
-  optional `frequencies` list. If a caller passes the same
-  Python list as `frequencies` to two engines, mutating one
-  list will silently mutate the cloned engine's list too.
-  Either deep-copy or document that `engine.frequencies` is
-  treated as immutable.
-- **`generators.distributions.Discrete` weights are not
-  normalised eagerly**, so a `Discrete(values=[1, 2],
-  weights=[10, 5])` calls `numpy.random.choice` with
-  un-normalised weights (numpy normalises internally, but the
-  un-normalised weights stay on the model and round-trip
-  through JSON). Add a `model_validator(mode="after")` that
-  normalises weights to sum to 1 and remembers the original
-  sum in `metadata` if a future audit needs it.
-- **`io/csv.save_potential_path_csv`** writes a header line
-  with `frequency_Hz` even when the saved frame contains a
-  single frequency. Callers piping the output back into the
-  multi-frequency reader path get a one-row-per-frequency
-  layout regardless of source dimensions — fine, but the
-  docstring should explicitly state the long-format contract.
-- **`io/vtk.export_field_vtk`** silently truncates the field
-  on `n=(120, 120)` even for very large worlds (a 200-EFH AP1
-  network spans ~150 m × 150 m; 120 grid points gives ~1.25 m
-  resolution, comparable with `engine.segment_length` and
-  therefore aliased). Either raise a `UserWarning` when the
-  grid spacing exceeds `engine.segment_length / 2` or expose
-  an `auto_grid=True` heuristic.
-- **`postprocess/current_balance.split_factor` raises on
-  *any* source whose magnitude evaluates to zero** at
-  `frequencies[frequency_index]`. For frequency sweeps where
-  the source is intentionally inactive at some harmonics
-  (e.g. `{50: 1.0, 250: 0.0}`) the helper aborts the whole
-  table. Return `complex("nan")` (or a documented sentinel)
-  for the zero-magnitude rows instead.
-- **`generators.measurement.single_rod_grounding` / 
-  `neighbour_substation_grounding`** signatures accept no
-  RNG, so a stochastic placement (a `Uniform` over the rod
-  position) cannot reproduce a previous draw. Add an
-  optional `rng` parameter that defaults to a deterministic
-  default (e.g. `np.random.default_rng(0)`) so test cases
-  stay reproducible.
-- **`postprocess.geometry_plot.plot_world_3d`** uses
-  `ax.invert_zaxis()` after every call, but does **not**
-  store / restore the original `zlim` if `ax` is passed in by
-  the caller. Successive `plot_world_3d` calls on the same
-  axis flip the z-axis back and forth.
-- **`solver/result.FieldResult.summary` is still missing a
-  docstring** as flagged in the 2026-05-09 audit; the second
-  pass confirms that the public method has not been touched.
-  Re-list here so it is not lost between audits.
-
-> Additional findings from the **third 2026-05-12 review pass**
-> (focus: `FieldResult.potential` dispatch, `BoundaryConditions`
-> wiring, `references.dwight1936` validation, `compare_engines`
-> coverage; deeper read of the `postprocess.sweep` heatmap
-> plotter and the new measurement-injection layer):
-
-- **`sources.Source.attached_to` is not validated against the
-  world's electrode / conductor list.** A typoed
-  `attached_to="g_1"` (instead of `"g1"`) silently drops the
-  source current at solve time, because the backends iterate
-  with `if src.attached_to in elec_input_current:` and just
-  skip unknown keys. Raise a clear `KeyError` in
-  `World.add_source(...)` or at the top of every backend's
-  `solve_*`.
-- **`solver/result.FieldResult.potential` (and the VTK export)
-  mirror about a hard-coded `z = 0`** even though
-  `safety.touch_voltage` exposes a `surface_z` argument. If the
-  user sets up a world with the soil surface at any other plane
-  (local-terrain coordinate), the image charges sit at the wrong
-  depth. Either add `surface_z` to `FieldResult.potential` /
-  `io.vtk.export_field_vtk` or document `z = 0` as a hard
-  invariant.
-- **`conductors.Conductor` accepts `start == end` (zero
-  length).** No `model_validator` rejects coincident endpoints,
-  and the discretisation step `_discretize_conductor` later
-  divides by `L`, producing a hard `ZeroDivisionError` for any
-  user who set `discretize_segment_length` on such a conductor.
-  Add `@model_validator(mode="after")` that raises if
-  `length < 1e-9 m`.
-- **`validation.compare_engines` checks `Z.real` only**
-  (`validation.py:~192,197`). For Carson / Sommerfeld engines or
-  any inductive-coupling configuration the imaginary part can
-  dominate at higher frequencies — a 30 % imag-part deviation
-  goes undetected. Also `if zmean == 0.0: continue` silently
-  skips clusters with symmetric real-part sign cancellation.
-  Compare `abs(Z)`, or compare `Z.real` and `Z.imag` separately
-  with the same tolerance.
-- **`generators/distributions.Discrete` allows duplicate
-  `values`.** Unlike `Categorical` (which has `_check_unique`),
-  `Discrete(values=[5, 5, 10], weights=[1, 1, 1])` is accepted
-  and silently double-weights `5`. Either merge duplicates +
-  add their weights, or add a `_check_unique` validator and
-  raise.
-- **`io/vtk._format_lines_block` is dead code** — defined but
-  never called; `export_geometry_vtk` re-implements the same
-  logic inline. Either delete the helper or have the exporter
-  use it.
-- **`references.dwight1936` validation is inconsistent.** Only
-  `rod`, `two_rods_far` and `hemisphere` validate `length > 0` /
-  `radius > 0`; `two_rods_close`, `horizontal_wire`,
-  `right_angle_wire`, `n_point_star`, `buried_ring`,
-  `horizontal_strip`, `horizontal_round_plate` and
-  `vertical_round_plate` accept any input. Calling
-  `dw.buried_ring(rho=100, ring_diameter=-1, ...)` returns a
-  meaningless float rather than raising. Apply the same
-  `length > 0` / `radius > 0` guard at every entry point.
-- **`postprocess/sweep.plot_sweep_heatmap` uses `imshow(...,
-  extent=(min, max, ...))` on a `pivot_table`.** Non-uniformly
-  spaced axis values (e.g. log-spaced soil resistivity
-  `[10, 100, 1000]`) render as equally-wide rectangular cells —
-  visually misleading. Switch to
-  `ax.pcolormesh(pivot.columns, pivot.index, pivot.values)`
-  which honours the actual coordinate spacing.
-
-### Changed (pending implementation)
-
-- **`generators/measurement.MeasurementInjectionConfig.feed_lead`
-  uses `Optional[MeasurementLeadConfig]`** while the rest of
-  the module uses `MeasurementLeadConfig | None`. Pick one and
-  apply consistently across the spec layer.
-- **`generators/distributions.LogNormal.from_moments`** —
-  verify that its constructor takes the *standard deviation*
-  (consistent with `Normal`) rather than the variance, and that
-  the docstring matches the implementation. Two adjacent
-  docstrings disagree on whether `sigma` or `var` is the
-  expected argument.
-- **`postprocess/geometry_plot.plot_world_3d`** uses
-  `mpl_toolkits.mplot3d` directly — the inverted z-axis is
-  correct under `%matplotlib inline` but occasionally flips
-  with `widget`/`ipympl` backends. Add a regression notebook
-  cell + screenshot to
-  `notebooks/20_tn_ortsnetz_generator.ipynb`.
-
-### Docs (pending implementation)
-
-The package now has a sprawling public surface that is only
-partially mirrored in the docs site. The next docs sweep should:
-
-- **Add `docs/api/references.md`** — the `references` subpackage
-  (`dwight1936`, `oeding`, `carson`) is reachable via
-  `gf.dwight1936.*` and via direct `from groundfield.references
-  import *`, but neither the API navigation nor the doc index
-  links to it. The classical reference formulas are exactly
-  what a reviewer would look up first.
-- **Add `docs/api/validation.md`** — `gf.compare_engines` and
-  `EngineComparison` are top-level exports but only mentioned
-  in passing in `docs/api/index.md` and in the engine theory
-  pages. Promote to a dedicated page.
-- **Add `docs/api/world.md`** — `World`, `BoundaryConditions`
-  and the `world.summary()` helper are top-level exports
-  without their own page.
-- **`docs/api/postprocess.md` does not yet have dedicated
-  sections for the safety, current-balance and geometry-plot
-  modules** — only `vector_fitting` and `rho_f_standard` are
-  written up. Add headings and `:::` directives so the new
-  helpers (touch / step voltage, EN 50522 limit, cluster /
-  electrode current tables, `split_factor`, `plot_world` /
-  `plot_world_3d`) become part of the navigable reference.
-- **`docs/quickstart.md` and `docs/concepts.md` were updated in
-  the previous audit pass** to cover all eight backends — the
-  next step is to extend `docs/concepts.md` with a dedicated
-  section on the **current-balance / split-factor**
-  postprocessing (today the only entry point is
-  `examples/04_grounding_measurement.md`).
-- **`docs/performance.md` references Notebook 21 (Sommerfeld vs
-  Carson scan)** — verify the link still resolves after the
-  ADR-0010 cleanup.
-- **`docs/api/coupling.md`** still uses
-  `resolve_earth_conductivity` and `resolve_earth_layers` as
-  the only documented entry points to the soil-resolver layer,
-  even though the layered-Green-function and Sommerfeld
-  inductance modules have grown several public helpers. Add a
-  dedicated heading per public helper so mkdocstrings produces
-  a discoverable index.
-- **`docs/api/postprocess.md` refers to `notebooks/01..22`** in
-  prose; the `mkdocs.yml` `examples/` nav lists eight
-  hand-curated example pages but does not enumerate the raw
-  notebooks. Decide whether to publish the full notebook
-  collection under a dedicated nav section
-  (`Notebooks: notebooks/01_*.ipynb` ... ) or to keep curation
-  as today.
-- **`docs/api/diagnostics.md` example uses `PenConfig`** — the
-  symbol moved to `generators.tn_network`; verify the import
-  path still works and update the example if not.
-- **README** does not yet mention the world generator, the
-  measurement-setup layer, the safety helpers or the
-  current-balance helpers — the public surface has grown
-  without a corresponding README rewrite.
-- **mkdocs `extra_javascript: polyfill.io` reference**
-  (`mkdocs.yml:90`) — the `groundmeas` sister project removed
-  this URL because the domain was sold and the CDN later
-  served malicious JavaScript. The same removal should happen
-  here; modern browsers do not need the polyfill for MathJax 3.
-
-> Additional doc gaps from the **second 2026-05-10 review pass**:
-
-- **No `docs/api/generators/measurement.md` sub-page.** The
-  measurement-setup layer (`MeasurementLeadConfig`,
-  `MeasurementInjectionConfig`, `MeasurementProbeConfig`,
-  `MeasurementSetupConfig` and the four convenience
-  factories `overhead_lead`, `buried_lead`,
-  `single_rod_grounding`, `neighbour_substation_grounding`)
-  is the largest single API addition in [Unreleased] but the
-  only entry point on the doc site is its mention in
-  `docs/api/generators.md`. Add a sub-page that explains
-  Analysis 1 vs. Analysis 2, the
-  return-path-via-`return_to` wiring, and the
-  galvanic/inductive switch flow.
-- **No `docs/api/postprocess/sweep.md` or
-  `convergence.md` sub-pages.** Both are stand-alone modules
-  with their own plot helpers and public DataFrames; they
-  deserve dedicated headings under
-  `docs/api/postprocess.md` rather than being lumped under
-  `Postprocess`.
-- **`docs/api/diagnostics.md`** describes
-  `world_statistics`, `expected_segments` and
-  `check_segment_resolution` but does not list the **AP1
-  budget thresholds** (`5000` soft, `20000` hard) that the
-  warning text refers to. Quote them from the source so the
-  user reading the docs can match the warning before opening
-  the file.
-- **No `docs/engines/_index_table.md` style overview** of
-  which backend supports which feature combination
-  (`HomogeneousSoil` × `TwoLayerSoil` × `MultiLayerSoil` ×
-  `inductance_model` × `earth_inductive_model` ×
-  `distributed conductors`). Today the user has to read the
-  six engine pages individually. A single capability matrix
-  closes the gap.
-- **README quickstart** still uses
-  `gf.run_simulation(...)`-style imports while the
-  `Engine.solve(world)` pattern is now the canonical entry
-  point (every example notebook 01..22 uses it). Update.
-- **`docs/installation.md`** — the optional
-  `[groundinsight]` extra is declared in `pyproject.toml` and
-  referenced from `docs/api/io.md`, but the install page does
-  not say `pip install groundfield[groundinsight]`. Mirror
-  the `pandapower` callout from `groundinsight/docs`.
-- **`docs/concepts.md` "current balance and split factor"** —
-  add a new section under Concepts that ties together
-  `cluster_current_balance`, `electrode_current_table` and
-  `split_factor`. The example currently lives only in
-  `examples/04_grounding_measurement.md` and is therefore
-  invisible to a reader who lands on Concepts first.
-- **`docs/api/world.md` (still missing) blocks the
-  `world.summary()` cross-layer warning entry** from the
-  Roadmap below — `summary` does not have a doc page to
-  attach the new behaviour to.
-- **README Python-version badge** still reads
-  `3.12 | 3.13`; `pyproject.toml` declares `^3.12` so
-  3.14 is supported. Extend the badge so users do not assume
-  3.14 is unsupported.
-- **CLAUDE.md project notes for `groundfield`** still claim
-  `0.1.0` while the public surface is several releases ahead.
-  Either bump the field manually or hook
-  `scripts/release.py` to update it from `pyproject.toml`
-  (same drift problem the cross-repo audit identified in
-  `groundinsight/CLAUDE.md` and `groundmeas/CLAUDE.md`).
-
-> Additional doc gaps from the **third 2026-05-12 review pass**:
-
-- **No `docs/api/sources.md` page.** `Source`,
-  `CurrentSource`, `VoltageSource` and the new
-  measurement-injection wiring are only documented inline in
-  `docs/api/index.md`. A dedicated page lets us spell out the
-  `attached_to` contract (which is currently silently
-  best-effort — see the bug above) and the
-  `source_type='voltage'` mutual-coupling restriction.
-- **No `docs/api/boundary.md` page.** `BoundaryConditions` is
-  in the public API but undocumented. Until the fields are
-  consumed by any backend (see bug above), users should be
-  told in writing that `world.set_boundary_conditions(...)` is
-  decorative.
-- **`docs/engines/fem.md` does not document the cluster
-  equivalent-hemisphere approximation** (radii-add rule) or its
-  error envelope when the cluster electrodes share a field.
-  Without that note a reader comparing FEM with the integral
-  backends sees a small but unexplained delta on dense
-  clusters.
-- **`docs/api/references.md` is still missing** as flagged in
-  pass 2, *and* the test-suite-facing entry points
-  (`references.carson.CarsonExample`, `all_examples()`,
-  `REGRESSION_ANCHORS`) need to land on the page so
-  contributors can find them when adding regression cases.
-- **`docs/api/io.md` does not document
-  `io.groundinsight.evaluate_spec` /
-  `io.groundinsight.fit_quality_summary` /
-  `BusTypeSpec.from_dict`.** All three are publicly importable
-  helpers but the rendered page lists only the `save_*` /
-  `to_*` family. Add a `:::` directive for each.
-- **`docs/concepts.md` "World object → Boundary"** section
-  should document the no-op status of `BoundaryConditions`
-  explicitly until the fields are wired through. Two lines
-  prevent the most likely "why is my Dirichlet not applied"
-  support question.
-
-### Tests (pending implementation)
-
-- **No cross-engine consistency test that exercises the
-  Sommerfeld earth-return path on layered soil for every
-  distributed-capable backend at 50 Hz / 1 kHz / 5 kHz.** The
-  current `tests/test_sommerfeld_inductance.py` covers the
-  homogeneous-vs-Carson agreement at 50 Hz only.
-- **No regression test for the `mutual_branches` skip in
-  `coupling/sommerfeld_inductance` for voltage sources.** The
-  changelog notes that voltage sources skip the mutual
-  contribution and emit a one-time warning; add a test that
-  asserts the warning text and that the skip indeed produces
-  the no-coupling baseline.
-- **`tests/test_distributions.py`** asserts mean/std within 5 %
-  over 10 000 samples, but no test verifies that the
-  rejection-sampling path on the truncated Normal does not
-  exhaust silently for very narrow `(low, high)` windows.
-  Already mentioned as a roadmap item; lock it in with a test.
-- **`tests/test_generators_base.py`** does not exercise
-  `cfg.has_distributions()` on the new
-  `TnNetworkConfig.measurement` sub-config. Add a test that
-  flipping a single measurement-lead field to a `Distribution`
-  flips `has_distributions()` from `False` to `True`.
-- **`tests/test_geometry_plot.py`** runs 18 smoke tests but none
-  asserts that `plot_world` raises (or returns an empty figure
-  cleanly) on an empty world with `extent=None` and
-  `padding_m=0` (degenerate bounding box).
-
-### Roadmap candidates (from the 2026-05-10 audit)
-
-The following items emerged from the cross-cutting review of the
-public surface, the docs site and the test suite. Triage into
-the appropriate Roadmap section in the next planning cycle.
-
-- **`Reduktionsfaktor` proper.** The galvanic `split_factor`
-  documentation explicitly notes that the helper is *not* the
-  German EVU/Schirmtechnik *Reduktionsfaktor* (the inductive
-  coupling correction). The inductance backends in
-  `coupling/inductance.py` are already in place — a thin
-  wrapper that integrates the inductive contribution along the
-  parallel-conductor path and returns the magnitude / phase of
-  the additional EMF would close the gap.
-- **`Network → groundinsight` round-trip** — given a multi-port
-  Z matrix produced by `gf` (Kron-reduced from a field-grade
-  world), assemble the corresponding `groundinsight.Network`
-  with one bus per port. Symmetric counterpart to the
-  `BusType` exporter.
-- **EN 50522 clearing-time helper bundle** —
-  `gf.assess_touch_voltage(result, world, electrode,
-  t_clear_s)` returning a single namedtuple (`U_T_max`,
-  `U_TP_limit`, `passes`). Trivial wrapper but missing today;
-  the measurement-setup notebook (notebook 20 §9)
-  re-implements the comparison inline.
-- **`world.summary()` should report cross-layer electrodes
-  explicitly** — today it lists every electrode kind and depth,
-  but a user staring at a `(z_min, z_max)` pair has to mentally
-  intersect with `soil.h_1` to know whether the ADR-0007
-  cross-layer path is exercised.
-- **Notebook front-matter** — five of the recent notebooks
-  (12–22) carry similar names ("inductive coupling", "Carson",
-  "Sommerfeld") that get hard to disambiguate in the file
-  browser. Adding a one-line YAML front-matter (`adr: 0005`,
-  `feature: tier0`) would let the docs build group them by
-  topic.
-
-> Additional roadmap candidates from the **second 2026-05-10
-> review pass**:
-
-- **`MeasurementSetup` → `ResultMeasurement` post-processor.**
-  Today the AP1 measurement notebook (notebook 20 §9) reads
-  the source / probe potentials by hand and computes
-  `Z_meas = U_probe / I_inj`. Wrap the pattern into a
-  post-processor that pulls the right potentials from a
-  `FieldResult` and returns the measured-vs-true earthing
-  impedance plus the 62 %-rule diagnostic. Closes the AP1
-  Analysis 1 + 2 measurement-side workflow as a single call.
-- **`gf.export_capability_matrix(file)`** — auto-generated
-  Markdown of the engine × feature support matrix described
-  in the docs gap above. Lives next to the existing
-  `compare_engines` so the docs and the test suite share a
-  single source of truth.
-- **`postprocess.convergence.convergence_study` with two
-  axes** — extend the current single-axis (`segment_length`)
-  helper to a 2-D mesh-refinement sweep so the user can
-  jointly tighten `segment_length` and (e.g.)
-  `discretize_segment_length` for distributed conductors.
-  The natural counterpart of `sweep.sweep` for refinement
-  studies.
-- **`generators.tn_network.TnNetworkGenerator.summary()`** —
-  one-line text summary that mirrors `World.summary()`, but
-  for the *config* (before sampling) and the *built world*
-  (after sampling) side by side. Useful for the AP1 parameter
-  notebooks where the user wants to confirm what was actually
-  drawn before invoking the solver.
-- **`io.groundinsight.BusTypeSpec.to_branchtype()` /
-  `save_branchtype_to_db()`** — symmetric counterpart of the
-  existing `to_bustype` family. Many `groundinsight` networks
-  expose the cable shield / PEN trunk as a `Branch` whose
-  type's `R_mutual_formula` / `M_mutual_formula` come from a
-  field-grade `gf` solve. The full bridge is incomplete until
-  `BranchType` is also exportable.
-- **`postprocess.safety.touch_voltage_envelope` with a
-  layered-soil correction.** The current envelope uses the
-  scalar `result.potential(...)`; on a 2-layer soil the
-  envelope should integrate the bus-current image series too.
-  The kernel is already in `coupling.layered_green`; wire it
-  in behind a `surface_potential_model="layered"` switch and
-  document the speed cost.
-
-> Additional test gaps from the **third 2026-05-12 review pass**:
-
-- **No regression test that `FieldResult.potential` raises (or
-  dispatches correctly) on a `MultiLayerSoil` world.** Build a
-  3-layer fixture, call `result.potential((x, y, 0.0))` and
-  assert the result is not silently produced by the homogeneous
-  kernel.
-- **No test that `World.add_source(src)` rejects a typoed
-  `attached_to`** (e.g. `"g_1"` when the world has `"g1"`).
-  Currently the bug surfaces only at solve time and only as a
-  zero-injection result.
-- **No regression test for `Conductor(start=p, end=p)`**
-  (zero length). Once the validator above lands, this becomes
-  a one-line `pytest.raises(ValidationError)` case.
-- **No `compare_engines` test on the imaginary part.** Build a
-  Carson coupling fixture, set the existing real-only check to
-  pass, then add a `Z.imag` check at 1 kHz that *would* fail
-  without the imag branch.
-- **No `Discrete(values=[5,5,10], weights=[1,1,1])` test.** A
-  one-line assertion that duplicates are rejected (or merged)
-  pins the chosen behaviour from bug 7.
-
-> Additional roadmap candidates from the **third 2026-05-12
-> review pass**:
-
-- **`FieldResult.potential(..., surface_z=0.0)` argument.**
-  Allow the user to plug in a non-zero soil-surface plane in
-  local-terrain coordinates. The plumbing already exists in
-  `safety.touch_voltage`; surface it on the post-solve
-  potential evaluator too so the VTK export and the safety
-  helper agree by construction.
-- **`fem.equivalent_hemisphere_radius` with mutual-resistance
-  correction.** Tagg-style cluster equivalence: replace the
-  pure radii-add rule with a per-electrode mutual-resistance
-  matrix lookup so clusters of driven rods produce the right
-  conductance.
-- **`gf.evaluate_spec` / `gf.fit_quality_summary` as top-level
-  re-exports.** Both are publicly importable helpers in
-  `io/groundinsight.py` but reachable only via the fully
-  qualified path. Promote next to `vector_fit` for symmetry.
-- **`EarthInductiveModel` as a top-level re-export** — the
-  Literal lives in `solver.engine.__all__` but not in
-  `groundfield.__all__`; users writing type annotations have
-  to dig into the submodule.
-- **`postprocess.geometry_plot.plot_world_top_down(...,
-  annotate=True)`** — for worlds with ≤ 30 electrodes the
-  annotated plot is invaluable for debugging measurement-setup
-  geometry. Add an opt-in `annotate` flag with a sensible
-  `annotate_threshold` default.
-- **`postprocess.sweep.plot_sweep_heatmap` log-spaced cell
-  rendering.** Switch to `pcolormesh` so the rendered cell
-  widths match the actual log-spaced axis (bug 10). Stand-alone
-  visual fix, no API impact.
-
-### Fixed (pending implementation) — fourth 2026-05-12 review pass
-
-> Focus of the fourth pass: discriminated-union annotation on the
-> `Source` re-export, boundary-condition warning semantics on
-> *reverts* to the default, missing top-level re-exports vs. the
-> sister project's flat `gi.*` surface, mkdocs notebook nav gap.
-
-- **`groundfield.sources.Source = Union[CurrentSource,
-  VoltageSource]`** lacks Pydantic's `Discriminator("kind")`
-  annotation. Pydantic falls back to attempting validation against
-  each member in declaration order during JSON deserialisation; a
-  malformed payload with `kind="voltage"` but missing `magnitude`
-  silently falls through to `CurrentSource` and is rejected there
-  with a `magnitude` error pointing at the wrong class. Mark the
-  union as
-  `Annotated[Union[CurrentSource, VoltageSource],
-  Discriminator("kind")]` so the error message matches the
-  declared `kind`.
-- **`World.set_boundary_conditions(...)` warns only on *non-
-  default kwargs***. A user who first set
-  `set_boundary_conditions(far_field="neumann")` and *then* calls
-  `set_boundary_conditions(far_field="dirichlet")` to revert sees
-  no warning, even though the latter call silently re-arms the
-  v0.2.0 default. Either also warn on every transition that
-  flips a previously non-default field back to its default
-  (because the previous non-default state was never actually
-  consumed) or document the asymmetry.
-- **`World.add_source(source)` does not validate `attached_to` or
-  `return_to` against the world's electrodes/conductors.** A
-  typo `attached_to="g_1"` on a world with electrode `"g1"` is
-  accepted; the bug surfaces at solve time as a zero-injection
-  result with no diagnostic. Already flagged in pass 3 — pass 4
-  confirms the path is still unguarded.
-- **`io.groundinsight.evaluate_spec`,
-  `io.groundinsight.fit_quality_summary` and
-  `coupling.LayeredEarth` are publicly importable but missing
-  from `groundfield.__all__`** (`__init__.py`). Users who write
-  `gf.evaluate_spec(...)` get an `AttributeError`; consistency
-  with the `gi.*` flat surface (which re-exports analogous
-  helpers) is broken. Promote all three to top-level re-exports.
-- **`solver.engine.Engine.frequencies` is silently sorted on
-  validation**, but the public docstring does not mention the
-  reorder. Notebooks that pass `frequencies=[5000, 50]` because
-  they want the dominant 5 kHz tone first in the result get a
-  silently-reordered result array — a real surprise when joining
-  against an external DataFrame indexed by the *input* order.
-  Either preserve order on construction or document the reorder.
-- **`generators.measurement.MeasurementSetupConfig.build` sets
-  `source.return_to` to the auxiliary anchor**, but does not
-  guard against a `TnNetworkConfig.source` whose `return_to` was
-  already explicitly set by the user (e.g. for a multi-source
-  AP 1 study with two parallel measurements). The user-supplied
-  `return_to` is silently overwritten. Either copy-on-write the
-  source spec inside the generator (already on the pass 1
-  backlog as a deep-copy hint) or raise a clear error.
-- **`postprocess.vector_fitting.vector_fit` accepts
-  `n_poles=0`** and returns a constant-only fit, but
-  `fit_to_sympy` then produces an expression with no `s`
-  dependence — the matching `groundinsight.BusType` is degenerate
-  (Z(rho, f) = const, ignoring rho and f). Validate `n_poles >=
-  1` at function entry or document the degenerate case
-  explicitly.
-- **`io.csv.save_potential_path_csv` writes
-  `abs_phi = |phi_re + 1j*phi_im|`** under the column
-  `abs_phi`, but the corresponding
-  `save_cluster_impedances_csv` and `save_electrode_table_csv`
-  use the suffix `_abs` (`abs_Z`, not `Z_abs`). Pick one
-  convention and apply it across `io.csv` so DataFrames
-  produced by the three writers can be joined on a uniform
-  column-naming scheme.
-- **`mkdocs.yml:90` still references
-  `https://polyfill.io/v3/polyfill.min.js?features=es6`** —
-  fourth audit pass in a row that flags it. `groundmeas`
-  already removed the URL; do the same here and in
-  `groundinsight`.
-- **`mkdocs.yml` nav lists the eight curated `examples/`
-  pages but not the 29 raw notebooks (`notebooks/01..29`).**
-  Mirror the same gap reported for `groundinsight`: the
-  feature work in `notebooks/22_tier0_speedup.ipynb`,
-  `notebooks/23_safety_touch_step.ipynb`,
-  `notebooks/29_io_csv_vtk.ipynb` etc. is invisible to the
-  docs-site reader unless they go to the GitHub tree.
-- **`generators/__init__.py` does not re-export the
-  `single_rod_grounding(rng=...)` factory's `rng` argument
-  contract** through a short doctest. The factory's RNG
-  default is `None` (no jitter), but the only example in the
-  docs (`docs/api/generators.md`) shows the deterministic
-  call — the stochastic Monte-Carlo path is not advertised
-  even though the rest of the generator framework's pass-3
-  bug list lists `rng` as a missing parameter.
-
-### Docs (pending implementation) — fourth 2026-05-12 review pass
-
-- **`docs/api/sources.md` still missing** (third audit pass in a
-  row). The pass-3 entry remains in the backlog above; pass 4
-  confirms the file has not been created. Without the page,
-  the discriminated-union fix above has no natural home for
-  its migration callout.
-- **`docs/api/boundary.md` still missing** (third audit pass in
-  a row). Pass 4 confirms the gap; `BoundaryConditions` and
-  the v0.2.0 no-op contract live only in source docstrings.
-- **`docs/api/references.md`, `docs/api/validation.md`,
-  `docs/api/world.md`** are all still missing — pass 4
-  confirms three consecutive audits have flagged them.
-- **`docs/concepts.md` has no "Engine vs. World separation"
-  section** describing why `engine.solve(world)` and
-  `world.solve(engine)` are duals, why `Engine` carries
-  `frequencies` while `World` carries `boundary`, and how the
-  v0.2.0 `BoundaryConditions` no-op interacts with the
-  upcoming FEM backend. The split is a deliberate part of the
-  architecture but the only place it is documented is the
-  `World.solve` source docstring.
-- **`docs/api/diagnostics.md` does not document the
-  `check_segment_resolution`-budget threshold rationale.** The
-  thresholds (5 000 soft, 20 000 hard) appear in the source
-  code and in this changelog but the rendered doc page lists
-  them as bare numbers. Add a short "Why 5 000?" subsection
-  that ties them to the $O(N^2)$ memory / $O(N^3)$ solve
-  scaling of the integral backends.
-- **`docs/engines/index.md` has no capability matrix.** The
-  pass-2 entry already noted the gap; pass 4 confirms it. The
-  matrix is the natural home for the
-  `inductance_model` / `earth_inductive_model` / distributed-
-  conductor support tabulation referenced in the Roadmap.
-- **`README` Python-version badge is still
-  `3.12 | 3.13`.** Pass 4 confirms the gap from pass 2.
-- **`CLAUDE.md` version drift is still `0.1.0`** while the
-  package ships `0.4.0`. Pass 4 confirms the gap; the
-  `scripts/release.py` hook flagged in pass 2 has not
-  landed.
-- **No `docs/api/coupling/sommerfeld.md`** dedicated
-  page. The Sommerfeld earth-return module (`coupling/
-  sommerfeld_inductance.py`) contains six public helpers and
-  the Pollaczek-Wait kernel; users reading
-  `docs/api/coupling.md` find the heading but not the kernel
-  signature.
-- **`docs/api/postprocess.md` lacks a "Safety helpers"
-  subsection** distinct from "Current sharing" and "Plotting"
-  — the EN 50522 lookup helper is the most safety-critical
-  function in the package and currently shows up only via
-  the autodoc.
-
-### Tests (pending implementation) — fourth 2026-05-12 review pass
-
-- **No test that `Source` JSON round-trip preserves the
-  discriminator-vs-non-discriminator union behaviour.** Once
-  the `Discriminator("kind")` annotation lands, pin the
-  resulting error message for a malformed payload so the bug
-  cannot regress silently.
-- **No test that `World.set_boundary_conditions(...)` warns on
-  the *revert-to-default* path** flagged above. Asserting
-  `pytest.warns(UserWarning, match="default")` on the second
-  call locks in whatever semantics the team picks.
-- **No test that `vector_fit(n_poles=0)` is rejected.** A
-  one-line `pytest.raises(ValueError)` regression once the
-  guard lands.
-- **No test for the `evaluate_spec` / `fit_quality_summary`
-  re-export.** Once the helpers are promoted to the top-level
-  `__all__`, assert that `gf.evaluate_spec is
-  groundfield.io.groundinsight.evaluate_spec` so a future
-  silent rename cannot break the public alias.
-- **No test for the `Engine.frequencies` sort behaviour.**
-  Pass `frequencies=[5000, 50]`, call `engine.solve(world)`,
-  and assert either (a) the returned cluster impedance is
-  indexed in the input order or (b) a `UserWarning` was
-  raised at construction time. Either way the user gets
-  determinism.
-- **No regression test on `MeasurementSetupConfig.build`
-  for a pre-set `source.return_to`.** Build a
-  `TnNetworkConfig` whose source already has
-  `return_to="explicit_aux"`, run the generator with a
-  `MeasurementSetupConfig`, and assert either that the
-  user-supplied value is honoured or that the override is
-  reported via a clear log entry.
-
-### Roadmap candidates — fourth 2026-05-12 review pass
-
-- **`gf.create_source(world, ..., validate_attached_to=True)`
-  switch** — opt-in (default `True` from the next minor release,
-  default `False` until then) for the validation contract
-  flagged repeatedly in passes 1–4. Gives the existing test
-  suite a deprecation window before the validator becomes
-  mandatory.
-- **`gf.SourceUnion` with `Discriminator("kind")`** — public
-  type alias that ships the discriminated annotation alongside
-  the legacy `Source = Union[...]`. Lets type checkers in
-  downstream notebooks pick up the fix without a major-version
-  bump.
-- **`generators.tn_network.TnNetworkConfig.measurement_array(
-  ...)`** — convenience accessor that returns a per-house
-  measurement-setup catalog (Analysis 1 only, Analysis 2 only,
-  both) so the AP 1 sweep over `n_efh ∈ {5, 10, 30, 80, 200}`
-  can be expressed as a single sweep axis rather than three
-  nested ones.
-- **`solver.engine.Engine.with_frequencies(freqs,
-  preserve_order=True)`** — copy-on-write factory that
-  produces a new engine without the silent sort surprise above.
-  Closes the order-preservation gap until the validator change
-  lands.
-- **`scripts/release.py` — sync `CLAUDE.md` version from
-  `pyproject.toml`** — same hook every pass-1..4 of the cross-
-  repo audit has requested. A six-line `re.sub` in
-  `scripts/release.py` ends the drift permanently.
-- **`io.csv.save_field_csv(result, path, *, extent, z=0.0,
-  n=(120, 120), frequency_index=0)`** — companion to the
-  existing VTK exporter that writes a long-format
-  `(x, y, frequency_Hz, phi_re, phi_im, abs_phi)` CSV. Closes
-  the symmetry gap: today CSV exports cover paths and
-  electrode tables, VTK covers fields; the slice export is
-  available only as VTK.
-
-### Fixed (pending implementation) — fifth 2026-05-13 review pass
-
-> Focus of the fifth pass: residual cleanup after the Pass-4
-> implementation block landed in `[Unreleased]`; freshly noticed
-> bugs around `Engine.frequencies` validator wording, the still-
-> unrealised top-level API documentation pages, doc/notebook
-> coverage on the mkdocs site, and a handful of new findings in
-> the cross-coupling and io packages that earlier passes had not
-> reached.
-
-- **`postprocess.vector_fitting.vector_fit(n_poles=1)`** is
-  accepted even when the input has only one or two frequencies.
-  A 1-pole fit on two complex points has 4 unknowns (real /
-  imaginary residue + pole real / imag), which is exactly the
-  number of equations after the real-imag stacking, so the
-  fit *can* succeed numerically but is meaningless. Reject
-  ``n_poles >= len(frequencies)`` or emit a `UserWarning` when
-  the problem is under- / exactly-determined.
-- **`solver.engine.Engine._validate_frequencies` warns on
-  every duplicate.** A sweep over ten engines, all built from
-  the same `frequencies=[5000, 50]` "intentionally
-  decreasing" list, emits the same warning ten times — the
-  `warnings.simplefilter("once")` default deduplicates by
-  *message text*, but the message embeds the list literal so
-  every distinct list triggers a fresh warning. Switch to a
-  dedicated `class EngineFrequencyOrderWarning(UserWarning)`
-  with a stable message prefix so notebook users can silence
-  the lot with `warnings.simplefilter("once",
-  EngineFrequencyOrderWarning)`.
-- **`coupling.layered_green.LayeredEarth.compute_T_lambda`
-  is silently single-precision on the MLX backend** (`backend=
-  "mlx"`). The MLX `mx.array(np.asarray(..., dtype=np.float32))`
-  conversion drops to FP32 while the NumPy path stays in FP64.
-  A reference run with the two backends therefore differs in
-  the 5th decimal — the Pass-3 cross-coupling cross-check did
-  not catch this because the test tolerance is `1e-4`. Either
-  default to FP64 (`mx.float64`) or document the backend
-  precision contract.
-- **`io.groundinsight.evaluate_spec` raises
-  `KeyError`** when the supplied spec dict is missing the
-  ``Z_target`` key. The error originates inside a deep dict-
-  lookup chain and the trace is hard to read for a user
-  passing a hand-rolled spec. Wrap the entry point with an
-  explicit `ValidationError` raise that names the missing key.
-- **`generators.tn_network.TnNetworkConfig.build`** does not
-  validate that `cfg.measurement.source_kind` is one of the
-  supported strings (`"current"` / `"voltage"`). A typo
-  (`"voltage_"`) silently falls through to the default
-  `CurrentSource` factory; the user sees a result that looks
-  correct until they inspect the source's `kind` field.
-- **`world.World.solve(engine)` does not deep-copy
-  `self.sources`** before passing them to the backend. A
-  backend that internally mutates `source.return_to` (the
-  Pass-4 finding on `MeasurementSetupConfig.build` is the
-  textbook example) silently rewrites the world's sources
-  for any later solve. Either copy in `World.solve` or
-  document the contract.
-- **`diagnostics.check_segment_resolution` thresholds are
-  hard-coded** to `5_000` / `20_000` without a public
-  constant. Once the integral backends gain a
-  `coarse_segments` opt-in (Pass-3 finding), the thresholds
-  will move; promote them to module-level `SOFT_LIMIT` /
-  `HARD_LIMIT` constants so tests and notebooks have a
-  stable handle.
-- **`mkdocs.yml` Examples nav still lists only 8 curated
-  pages** while `notebooks/` now carries 30 .ipynb files
-  (Pass-4 audit-fix notebook brought the total over the
-  previous 29). Pass-2/3/4 finding still only partially
-  addressed — closing it requires the same
-  `mkdocs-jupyter` migration that `groundinsight` is doing.
-- **`__init__.__all__` does not list `SourceAdapter`**, the
-  `TypeAdapter[Source]` introduced in the Pass-4
-  implementation block. Users who follow the docstring of the
-  discriminated union and try `from groundfield import
-  SourceAdapter` get an `ImportError`.
-- **`scripts/release.py` still does not propagate the
-  Pass-4 "do-not-hard-code" CLAUDE.md pattern**. The pattern
-  is documented but not enforced: a contributor who refreshes
-  the CLAUDE.md version line manually still drifts. A
-  `re.search(r"__version__ = \"[^\"]+\"", claude_md)` raise on
-  bump completes the Pass-4 closure.
-
-### Fixed (pending implementation) — sixth 2026-05-14 review pass
-
-> Sixth-pass findings against `0.5.0` (released 2026-05-14).
-> Focus: secondary effects of the just-shipped 0.5.0 surface,
-> notebook / docs reality vs. CHANGELOG claim, ADR-0011
-> follow-through, FP-precision contract enforcement, and the
-> `World.solve` deep-copy cost on engine-sweep workloads.
-
-- **`World.solve(engine)` deep-copies `self.sources` on every
-  call.** Pass-5 added the snapshot/restore pattern to defend
-  against backend-side `Source.return_to` mutation
-  (`MeasurementSetupConfig.build` was the textbook offender).
-  The implementation does
-  ``[s.model_copy(deep=True) for s in self.sources]`` on entry
-  *unconditionally*. On a 100-frequency sweep that re-uses the
-  same `World` across `Engine.with_frequencies(...).solve(...)`
-  calls the deep-copy cost dominates for sources that carry
-  large `return_to`-electrode meshes. Either gate the snapshot
-  behind a `World.solve(engine, snapshot_sources=True)`
-  default-on keyword (so power users can opt out), or do a
-  shallow snapshot of just the mutable fields
-  (`return_to`, `value`) instead of a full `model_copy(deep=True)`.
-- **`VectorFitUnderdeterminedWarning` threshold mis-fires on
-  conjugate-pair fits.** The current check
-  ``if 2 * n_poles >= len(frequencies)`` treats every pole as
-  contributing 4 real DOFs (residue real+imag, pole real+imag).
-  For a conjugate-pair fit (`complex_conj=True`, default) the
-  residues and pole locations come in complex-conjugate pairs,
-  halving the actual free parameters. The result is a false
-  positive on `n_poles=2, N=2` (warns) where the conjugate-pair
-  fit is in fact uniquely determined. Tighten the check to
-  ``2 * n_independent_poles >= len(frequencies)`` where
-  `n_independent_poles = n_poles // 2 + (n_poles % 2)`
-  under `complex_conj=True`.
-- **`LayeredEarth.compute_T_lambda` FP-precision contract is
-  documented but not enforced.** Pass-5 added the docstring
-  note "every consumer of LayeredEarth operates in IEEE-754
-  double precision" and a homogeneous-limit cross-check at
-  `rtol=1e-12`. What is still missing is the actual *guard*:
-  a future MLX-on-Apple backend silently downgrading to FP32
-  would pass the homogeneous check (which is a single-layer
-  identity, no roundoff to speak of) and fail only on
-  five-layer realistic soils. Add an assertion at the top of
-  `compute_T_lambda`: `assert out.dtype == np.float64,
-  "LayeredEarth contract: FP64 required"` — cheap, catches
-  the regression at the source.
-- **`Engine` frequency-list cache key.** `Engine.frequencies`
-  is now order-preserving with `EngineFrequencyOrderWarning`.
-  Pass 5 surfaces but does not solve the equality contract:
-  `Engine(frequencies=[50, 100]) == Engine(frequencies=[100, 50])`
-  evaluates to `False` (the warning is *per-instance*), so two
-  engines that map to the same physics produce two different
-  cache keys downstream in `compare_engines` / `convergence_study`
-  result tables. Either document the "order matters" contract
-  on `Engine.__eq__` *or* override `__eq__` / `__hash__` to
-  compare frozenset(frequencies).
-- **`io.groundinsight.evaluate_spec` free-symbol allow-list
-  is name-only.** The Pass-5 fix accepts every symbol whose
-  `name in {"f", "rho"}`, ignoring assumptions. A
-  `sp.Symbol("rho", real=False, positive=False)` slips through
-  and produces a complex-valued `rho` that crashes deep in
-  `lambdify` instead of at the validation step. Compare on
-  full symbol identity (`s == f_sym or s == rho_sym`) and
-  reject anything else.
-- **`Engine.with_frequencies(preserve_order=False)` is the
-  silent default.** The docstring shows
-  ``preserve_order=True`` but the constructor body checks
-  ``if not preserve_order`` and falls through; if the caller
-  omits the keyword the engine *does* preserve order but
-  the warning is still suppressed by the
-  `simplefilter("ignore")` block. Result: a sweep author who
-  copies the docstring example sees the same silenced
-  behaviour as the explicit `preserve_order=True` user, but
-  the silencing is by accident. Either flip the default
-  to `False` (loud) and document the explicit silencer, or
-  document that `Engine.with_frequencies` is the *opt-in*
-  silencer regardless of `preserve_order` value.
-- **`SourceAdapter` validates a single source dict but does
-  not validate a *list*.** A user-side helper that imports a
-  campaign YAML with a `sources: [...]` field has to call
-  `SourceAdapter.validate_python` per element. Add a
-  `SourcesAdapter = TypeAdapter(list[Source])` companion so
-  the bulk path is one call.
-- **`World.set_boundary_conditions(**kwargs)` revert-warning
-  is emitted regardless of whether the warning was already
-  raised for the same value.** Pass-4 added the set-and-revert
-  warning, Pass-5 left it as-is. A loop that toggles a
-  boundary value across 100 sweeps emits 200 warnings. Apply
-  a `simplefilter("once", BoundaryConditionWarning)` strategy
-  on first set, OR coalesce the warning by value identity
-  inside the method body.
-- **`vector_fit` initial pole placement is silent for
-  `n_poles == 1`.** `_initial_poles` chooses a single real
-  pole at the geometric mean of `omega_min`/`omega_max`. For
-  data with a complex-pole structure (e.g. capacitive return
-  path), the iteration cannot bend a real pole into a
-  conjugate pair within `max_iter=20` and the fit converges
-  to a poor RMSE. A `UserWarning` "vector_fit(n_poles=1)
-  cannot fit complex resonance peaks; pass n_poles=2 for
-  conjugate-pair coverage" at fit time would save a
-  Stack-Overflow round-trip.
-- **`compare_engines` returns the discrepancy matrix but
-  does not call `EngineFrequencyOrderWarning` silencer.**
-  A 4×4 cross-engine matrix over decreasing frequencies fires
-  16 warnings; the helper should suppress them once internally
-  while still surfacing them on the per-engine path.
-
-### Docs (pending implementation) — fifth 2026-05-13 review pass
-
-- **`docs/api/sources.md`, `boundary.md`, `references.md`,
-  `validation.md`, `world.md`** — fifth audit pass in a row
-  confirms these pages are still missing. The Pass-4
-  implementation block landed `Source` (discriminator),
-  `Engine` (order-preserving frequencies),
-  `TnNetworkConfig.source_return_to` and the boundary-revert
-  warning *all without their target documentation page*. Each
-  fix therefore has no natural home for its migration
-  callout. The doc pages are the longest-standing single open
-  item across the audit history.
-- **`docs/api/index.md`** does not surface `SourceAdapter` or
-  the `Discriminator("kind")` migration callout. A reader who
-  searches the API index for "discriminator" finds nothing.
-- **`docs/concepts.md`** still lacks the "Engine vs. World
-  separation" section flagged in Pass 4. Pass 5 confirms:
-  the only place the split is documented is the
-  `World.solve` source docstring.
-- **`docs/engines/index.md`** capability matrix still missing
-  (Pass-2 → Pass-5 carryover). The matrix is the natural
-  home for the new
-  `earth_inductive_model={perfect_mirror, carson_series,
-  sommerfeld}` toggle and for the `inductance_model` choice.
-- **`docs/api/postprocess.md`** still missing the dedicated
-  "Vector fitting and safety helpers" subsection (Pass-4
-  finding). The new `n_poles=0` rejection callout has no
-  doc home.
-- **`docs/api/io.md` does not document the new
-  `POTENTIAL_PATH_COLUMNS`, `ELECTRODE_TABLE_REQUIRED_COLUMNS`,
-  `CLUSTER_IMPEDANCE_REQUIRED_COLUMNS`** column tuples
-  exported in the Pass-4 implementation block. Users who want
-  to join the CSV outputs back into a pandas frame have to
-  read the source to find the canonical column names.
-- **README "Compatibility" matrix** has not been updated for
-  the `0.5.0` release cut implied by the Pass-4 fixes block.
-  Bumps `Python`, `numpy`, `scipy`, `pydantic`, `sympy`
-  minimums. Sync with `pyproject.toml` before the next tag.
-- **`docs/quickstart.md` does not call
-  `Engine.with_frequencies(*freqs, preserve_order=True)`** in
-  any example, even though that constructor is the documented
-  escape hatch for the new order-preserving validator. Add a
-  three-line snippet so the new opt-in lands with discoverable
-  prose.
-- **`CLAUDE.md`** now defers the version field to
-  `pyproject.toml` (Pass-4 doc fix), but the "Audit history"
-  section near the top of the file still lists pass 1-4
-  only. Append a pass-5 reference so the next session has the
-  same starting context the previous ones did.
-
-### Docs (pending implementation) — sixth 2026-05-14 review pass
-
-- **`docs/api/sources.md`, `boundary.md`, `references.md`,
-  `validation.md`, `world.md`** — **sixth audit pass in a
-  row** these pages are still missing. Pass 5 promised
-  `mkdocs build --strict` would catch this in CI; the test
-  has not landed and the pages have not been written. This
-  is now the longest-standing structural doc gap in the
-  three-package family. Sixth-pass acknowledges that one
-  of two things has to happen before the next release tag:
-  either the five pages land, or the `mkdocs build --strict`
-  test lands (the latter is the one-line forcing function).
-- **`docs/adr/0011-cross-repo-release-shared.md`** does not
-  exist. Pass-5 cross-cutting recommendation #5 ("a single
-  shared `scripts/_release_shared.py` would lose three
-  release-flow problems in one diff") was elevated to an
-  explicit ADR-0011 proposal in the cross-cutting summary;
-  the ADR itself was not drafted. As the architectural
-  authority on cross-repo conventions sits in `groundfield`
-  (eight existing ADRs), ADR-0011 belongs here even though
-  the implementation will ultimately live in all three
-  repos.
-- **`docs/api/index.md` does not document the FP64 contract
-  on `LayeredEarth`** that Pass-5 added in code. The
-  rendered API index page therefore does not tell the user
-  that hardware-accelerated backends are required to keep
-  IEEE-754 double precision. Add a one-paragraph admonition
-  before the `LayeredEarth` `:::` directive.
-- **`docs/api/postprocess.md` does not document
-  `VectorFitUnderdeterminedWarning`** — the warning category
-  is publicly importable but unmentioned. A reader who tries
-  to `warnings.simplefilter("once", ...)` has to discover
-  the class name from the source.
-- **`docs/api/sources.md`** (once it ships) must enumerate
-  the `SourceAdapter` / proposed `SourcesAdapter` helpers
-  with a copy-pasteable round-trip example. The Pass-4 +
-  Pass-5 Source-discriminator surface is currently
-  documented only inside the source-file docstring.
-- **`docs/concepts.md`** does not describe the "Engine
-  re-use across `World.solve` calls" pattern. Tied to the
-  sixth-pass `World.solve` deep-copy finding: the user who
-  wants the snapshot-free behaviour should see a recipe for
-  the planned `snapshot_sources=False` opt-out before the
-  perf cost bites them.
-- **`docs/engines/*.md` — Capability matrix sub-section**
-  still missing on each engine page. Pass-5 listed this; the
-  pages have not been edited. A two-column matrix
-  (`feature` × `supported / partial / planned`) at the top
-  of every `bem.md` / `mom.md` / `fem.md` / ... gives the
-  reader a one-glance picture of why one engine is in beta
-  and another is reference-quality.
-- **`README.md` does not yet list the `0.5.0` release**.
-  The CHANGELOG carries `[0.5.0] — 2026-05-14`, but the
-  README "Latest release" / badges sub-section still points
-  at `0.4.0` (verified 2026-05-14). README/CHANGELOG drift
-  reappears on every release that does not run through
-  `scripts/release.py` end-to-end.
-- **CLAUDE.md "Audit history"** — append a sixth-pass
-  reference. Pass-5 already failed to do this for itself
-  (verified above as a Pass-5 Docs-backlog item); sixth
-  pass re-confirms.
-
-### Tests (pending implementation) — fifth 2026-05-13 review pass
-
-- **No test for the new `EngineFrequencyOrderWarning`
-  category.** Once the dedicated subclass lands (Fixed-
-  backlog fifth-pass entry above), assert that
-  `warnings.simplefilter("once",
-  EngineFrequencyOrderWarning)` suppresses the same warning
-  on a second construction.
-- **No regression test for `vector_fit(n_poles=1)` on a
-  two-frequency input.** Build a fixture with
-  `frequencies=[50.0, 5000.0]` and
-  `Z_values=[…]` and assert that the helper either rejects
-  the call or warns about the under-determined fit.
-- **No regression test for the MLX backend FP32 default.**
-  Cross-validate `LayeredEarth.compute_T_lambda` with NumPy
-  and MLX on the same input and assert a `rtol=1e-12`
-  agreement, or — if the FP32 default is intentional —
-  document and pin it with a relaxed tolerance.
-- **No regression test for `World.solve` source mutation.**
-  Build a world, run `solve(engine)`, and assert that
-  `world.sources[i].return_to` is unchanged from the
-  pre-solve state.
-- **No regression test for `from groundfield import
-  SourceAdapter`.** Either lock the import or remove the
-  symbol from the public surface.
-- **No regression test for `evaluate_spec` raising
-  `ValidationError` (not `KeyError`) on a missing
-  `Z_target` key.** Locks in the human-readable error
-  message once the fix lands.
-- **No regression test for `mkdocs build`** — the rendered
-  site is built on the docs server and never checked in CI.
-  Add a `tests/test_docs.py::test_mkdocs_strict_build` that
-  runs `mkdocs build --strict` so the missing-page warnings
-  surface during PR review.
-- **No regression test for the
-  `TnNetworkConfig.build(source_kind=...)` typo path.** Build
-  a config with `source_kind="voltage_"` (trailing
-  underscore) and assert a clear `ValueError`.
-
-### Tests (pending implementation) — sixth 2026-05-14 review pass
-
-- **No regression test for the
-  `VectorFitUnderdeterminedWarning` *false-positive* path
-  under `complex_conj=True`.** Build a `vector_fit(n_poles=2,
-  N=2, complex_conj=True)` instance and assert no warning
-  fires; today the Pass-5 threshold flags it as
-  underdetermined.
-- **No regression test for FP64 contract enforcement on
-  `LayeredEarth.compute_T_lambda`.** Construct a stub backend
-  that returns an FP32 array, invoke `compute_T_lambda`, and
-  assert the proposed runtime assertion (`out.dtype == np.float64`)
-  trips with a clear message.
-- **No regression test for `World.solve(engine,
-  snapshot_sources=False)` cost.** Once the keyword lands,
-  benchmark a 100-frequency sweep with and without the
-  snapshot and assert the difference is below the
-  `tests/test_perf_smoke.py` threshold; pin the opt-out so
-  the cost is documented.
-- **No regression test for `Engine.__eq__` / `Engine.__hash__`
-  contract.** Once the sixth-pass `frequency-order` finding
-  is resolved, pin the chosen contract
-  (`Engine([50,100]) == Engine([100,50])` true or false) so
-  it cannot regress in a refactor.
-- **No regression test for `io.groundinsight.evaluate_spec`
-  rejecting a non-canonical-assumption `rho` symbol.**
-  Construct `sp.Symbol("rho", real=False)`-bearing formula,
-  call `evaluate_spec` and assert the sixth-pass tightened
-  check raises `ValueError`. Today the symbol slips through
-  and the failure surfaces deep in `sympy.lambdify`.
-- **No regression test for the `compare_engines`
-  warning-suppression path.** Build a 4×4 comparison over
-  decreasing frequencies and assert exactly one
-  `EngineFrequencyOrderWarning` fires (after the sixth-pass
-  per-engine internal silencer lands), not 16.
-- **No regression test that `set_boundary_conditions` does
-  not double-warn on repeat assignment of the same
-  non-default value.** Today the helper warns on every
-  call, even with identical kwargs.
-- **No regression test for `SourcesAdapter = TypeAdapter
-  (list[Source])`** once it ships. Round-trip a heterogeneous
-  list with one `CurrentSource` and one `VoltageSource` and
-  assert each element keeps its discriminator.
-
-### Roadmap candidates — fifth 2026-05-13 review pass
-
-- **`gf.show_versions()`** — print the installed
-  `groundfield` / `groundinsight` / `groundmeas` / NumPy /
-  SciPy / Pydantic / SymPy / MLX versions. Cross-package
-  compatibility is currently maintained by hand; surfacing
-  the active versions in one call removes the back-and-forth
-  on every issue triage.
-- **`gf.io.bench(world, engine, *, repeats=5)`** — pin the
-  per-backend wall-clock numbers reported in
-  `docs/performance.md`. Today the doc page lists static
-  tables; a `bench` helper would let the docs site
-  auto-refresh them on a release cut.
-- **`gf.audit_apply(audit_report_path: str)`** — read an
-  audit-report markdown file, parse the
-  `audit-report-changelogs-YYYY-MM-DD[-pass*].md` checklist
-  and emit a delta against the current `[Unreleased]` block.
-  Six months of audit history have produced a recurring
-  workflow; promote it into a maintainer-facing CLI.
-- **`gf.docs.assert_api_pages_exist()`** — pytest-friendly
-  helper that loads `mkdocs.yml`, walks the API section, and
-  asserts every page named in this changelog actually exists.
-  Closes the four-passes-in-a-row "page missing" finding by
-  failing the build instead of waiting for a human to flag
-  it.
-- **`gf.SourceAdapter` exposed at the top level** —
-  pair with the `Source` discriminated union from Pass-4.
-  Users hand-rolling source dicts (e.g. from a YAML
-  campaign config) need the adapter to validate the dict;
-  today they have to know the `from groundfield.sources
-  import SourceAdapter` path.
-- **`gf.boundary.FemBoundaryConditions`** — placeholder
-  subclass to make the future FEM-backend boundary semantics
-  visible *now*, even before the backend lands. Closes the
-  "v0.2.0 no-op" doc gap from a different angle: the type
-  hierarchy itself documents what the upcoming FEM backend
-  will and won't honour.
-
-### Roadmap candidates — sixth 2026-05-14 review pass
-
-- **`gf.SourcesAdapter = TypeAdapter(list[Source])`** —
-  bulk-validation companion to the Pass-4 `SourceAdapter`,
-  needed by any YAML / JSON campaign-config import path
-  that has more than one source per scenario.
-- **`World.solve(engine, snapshot_sources: bool = True)`** —
-  explicit opt-out for the Pass-5 deep-copy snapshot. The
-  perf-sensitive callers (`convergence_study`, parameter
-  sweeps, the cross-engine matrix) can disable the snapshot
-  once they have proven their backend does not mutate
-  `source.return_to`.
-- **`gf.set_warning_policy("verbose" | "once" | "silent")`** —
-  global helper to bulk-configure the pass-5 family of
-  warning categories (`EngineFrequencyOrderWarning`,
-  `VectorFitUnderdeterminedWarning`, the proposed
-  `BoundaryConditionWarning`, the proposed
-  `VectorFitRealPoleWarning`). Replaces the
-  `warnings.simplefilter("once", X)` boilerplate that
-  notebooks currently copy-paste per category.
-- **`gf.audit_apply(report_path)`** — twin of the
-  `groundinsight` proposal. Read a markdown audit's backlog
-  bullets and insert them into `[Unreleased]`. Six passes of
-  hand-merging strongly motivate the helper.
-- **ADR-0011 — cross-repo `_release_shared.py`**. Pass-5
-  cross-cutting recommendation #5; sixth pass elevates it
-  to a tracked roadmap candidate so the ADR file lands as
-  the next merge-able artefact. Mirrors the
-  `gi.scripts.release.py` and `gm.scripts.release.py` gaps
-  in a single shared implementation.
-- **`gf.show_versions()`** — keep the
-  cross-package-consistency lemma in the roadmap: when
-  `gi.show_versions()` (Pass-5 idea) and
-  `gm.show_versions()` (sixth-pass idea, see groundmeas
-  roadmap above) land, this one needs to land too with the
-  same return-shape contract.
-- **`gf.docs.assert_api_pages_exist()`** — a tiny
-  walker that asserts every `__all__` member has a
-  corresponding mkdocstrings directive somewhere under
-  `docs/api/`. Sixth pass elevates this from the Pass-5
-  proposal status to an explicit roadmap item because the
-  five-pass-in-a-row missing-pages backlog clearly demands
-  a structural forcing function.
-
-## Roadmap
-
-Backlog of feature ideas that are not yet scheduled. Updated as
-work package 1 progresses.
-
-### Performance
-
-- **Vectorise the ADR-0007 cross-layer Sommerfeld path.** After caching the
-  Gauss–Legendre nodes (see `[Unreleased]`), the remaining cost of the
-  cross-layer fallback is the genuine $O(N^2)$ per-segment-pair work in
-  `coupling/layered_green.py::two_layer_layered_correction_real_space` /
-  `_spectral_amplitudes`: many small `np.linalg.solve` calls (one
-  spectral-amplitude system per pair) plus per-pair quadrature. Batching the
-  per-pair spectral solves into a single vectorised `np.linalg.solve` over the
-  pair axis, and evaluating the Bessel/exponential kernels on the shared
-  quadrature grid in one array op, should give another ~2–5×. Motivation: AP1
-  catalogues two-layer soils with a thin upper layer (`h_1 = 5 m`) where a deep
-  station rod can cross the interface — currently the dominant per-station cost
-  even after the leggauss cache (~155 s vs ~3 s within-layer at 5 %
-  penetration). Cost scales $O(N^2)$ in segment count, so larger /
-  higher-penetration geometries benefit most.
-
-### Core functionality
-
-- **Exact buried two-layer inductive kernel → `n ≥ 3` layers.** The 0.13.0
-  fix (`coupling/sommerfeld_inductance.py::_two_layer_reflected_weight`)
-  solves the exact boundary-value problem for a conductor buried in the
-  upper layer of a **two-layer** earth, validated against Tsiamitros (2005)
-  Eq. (8) across 50 Hz – 1 MHz. For **`n ≥ 3`** layers a *buried* source
-  still falls back to the approximate single-air-image correction (the
-  surface reflection cascade `reflection_coefficient_layered` is already
-  exact for any `n`); a general `n`-layer buried spectral kernel would
-  extend the exact inductive earth-return to arbitrary multilayer soils.
-  The `n ≥ 3` buried path is currently pinned only by the homogeneous and
-  bounding checks — there is no exact multilayer reference for it yet.
-  Galvanic multilayer solves are unaffected (they use `layered_green`).
-- **FEM support for distributed conductors.** The current FEM
-  backend falls back to a lumped branch and logs a warning when
-  it sees a distributed conductor — the equivalent-hemisphere
-  reduction does not resolve the midpoint pseudo-electrodes. A
-  full-3-D FEM (deferred below) would lift this restriction.
-- Full-3-D FEM backend (via `scikit-fem` or comparable) replacing
-  the equivalent-hemisphere reduction in the current `fem` engine.
-  **Deferred** — explicitly *not* on the AP1 roadmap. The target
-  AP1 geometries (~20 houses with foundation electrodes plus a
-  transformer station with ring + driven rods plus driven rods at
-  cable cabinets) already push the integral solvers towards the
-  ~1000-segment regime where the dense $O(N^3)$ LU solve dominates;
-  a 3-D volume FEM on the same configuration would be one to two
-  orders of magnitude more expensive without adding physical
-  insight. This task is therefore reserved for follow-up work where
-  a multi-cluster volume computation is genuinely needed.
-- Scaling the integral solvers to ~10 000-segment networks: replace
-  the dense LU solve in `mom`, `bem` and `cim` by a preconditioned
-  iterative solver (GMRES with a block-diagonal or fast-multipole
-  preconditioner). Unlocks the full AP1 parameter space (large
-  TN-Ortsnetz with foundation electrodes, drives, and cable
-  cabinets) without giving up the per-segment current resolution.
-  Concrete prerequisites: ACA (adaptive cross approximation) for
-  the dense reaction matrix to bring memory from $O(N^2)$ down to
-  $O(N \log N)$ and a block-Jacobi preconditioner per cluster.
-
-### Studies and tooling
-
-- **`ParameterSweep` API** — wrap a `world_factory(**params)` plus a
-  parameter grid into a parallel sweep (`joblib`-driven, target 12
-  cores) that returns a `pandas.DataFrame` of cluster impedances,
-  EPRs and per-electrode currents. Drives the AP1 statistical
-  studies (soil layering, electrode count and position, Monte Carlo
-  realisations).
-- **TN-Ortsnetz topology generator** — *implemented 2026-05-18 in
-  the `[Unreleased]` block above.* The radial-trunk PEN topology
-  (:class:`RadialTrunkTopology`) and the integration with
-  :class:`OsmBuildingPlacement` are live; what remains as a v2
-  enhancement is the *corner-routed* service drop (tap → axis-
-  aligned corner → building), which currently runs as a single
-  straight line between anchors. For typical street-aligned plots
-  the corner offset is small compared with the full feeder length
-  and the residual error in the longitudinal branch impedance
-  stays well below 1 % at 50 Hz.
-  
-- **penetration depth** Calculate the depth of the earth current as it is used in Carson integrals. It should be possible to create the earth current depth of any soild multilayer problem to use an equivilent for the typical formulas for calculating the self and coupling impedances of a cable or overheadline with earth return part.
-
-### Integration
-
-- Direct export of `BusType` and `BranchType` into `groundinsight`
-  databases.
-- Import of measurement geometries from `groundmeas` (positions,
-  lengths, auxiliary-electrode set-up).
-
-### Documentation and typing
-
-- Reference-case library for AP1: clusters of single-family houses
-  (5 / 10 / 30 / 80 / 200), small and medium commercial buildings,
-  cable cabinets.
-- Notebook suite that covers the full parameter space described in
-  the dissertation proposal.
+## [0.14.1] - 2026-07-30
+
+The three findings of review pass 9 that corrupt data or crash
+([audit history, pass 9][pass-09]).
+
+### Fixed
+
+- ⚠ `fit_to_sympy` lost the sign of the residue's imaginary part, so the
+  exported groundinsight formula was a different function from the fit (28.1 %
+  at 16.7 Hz in the test case). Re-export affected BusTypes; fits and solver
+  results were correct (F03).
+- `plot_potential_contour` without `extent` raised `AttributeError` on NumPy 2
+  (F12).
+- `Engine.with_frequencies()` validates the frequencies (F19).
+- Documentation: the cross-section snippet of the plot gallery.
+
+---
+
+## [0.14.0] - 2026-07-20
+
+### Added
+
+- `groundfield.references.pollaczek`: `pollaczek_self_impedance`,
+  `pollaczek_mutual_impedance`, `loop_impedance_conductor_earth` and
+  `layered_effective_wavenumber`, the two-layer earth-return impedance of a
+  buried conductor per unit length (Pollaczek/Sunde), an independent reference
+  for the assembled Sommerfeld stack. Its exponent was corrected in 0.15.0
+  (F09).
+
+---
+
+## [0.13.0] - 2026-07-20
+
+### Added
+
+- `groundfield.references.earth_return` (Carson's closed form) with a
+  benchmark of the assembled Sommerfeld stack (reactance within about 1 % of
+  Carson).
+- `groundfield.references.ieee80` and the IEEE Std 80-2013 Annex H benchmark:
+  Grids 1–3 within about 1 % of the published grid resistance, GPR and touch
+  voltage.
+- `StarElectrode` (`kind="star"`), within about 1 % of Dwight's formula.
+
+### Changed
+
+- ⚠ The default `earth_inductive_model` is `sommerfeld` (was
+  `perfect_mirror`); this affects solves with Neumann conductors at f > 0.
+
+### Fixed
+
+- ⚠ The two-layer inductive earth-return kernel for conductors in the upper
+  layer mis-weighted the layers (attribution 0.51 instead of 0.08 at 10 kHz);
+  `reflection_coefficient_layered` uses the bottom-up cascade.
+- ⚠ Grids whose segment length gave a half-integer number of segments per
+  span returned 1.97 to 2.89 times the correct resistance.
+- The cross-layer two-layer solve of IEEE Std 80 Grid 3 needed about 263 GiB;
+  it now runs in well under 1 GB.
+- `PolylineElectrode` rejects zero-length edges; a closed ring of two vertices
+  warns.
+- Documentation: the `grid_mesh` example; the governing equations on the
+  boundary page.
+
+---
+
+## [0.12.2] - 2026-07-18
+
+### Added
+
+- A changelog and roadmap page on the documentation site.
+
+### Changed
+
+- `mkdocs.yml` sets `strict: true`.
+
+### Fixed
+
+- `mkdocs build --strict` is clean (51 docstring warnings fixed); Shapely's
+  benign OMBR `RuntimeWarning` is silenced.
+
+---
+
+## [0.12.1] - 2026-07-17
+
+### Fixed
+
+- The geometry plots and bounds handle the `polyline` electrode kind.
+
+---
+
+## [0.12.0] - 2026-07-14
+
+### Added
+
+- `PolylineElectrode` (`kind="polyline"`) and
+  `FoundationElectrodeSpec.polygon_xy_m`: a foundation ring along the real
+  building outline. It avoids coincident conductors of neighbouring OMBR
+  foundations (184 of 196 AP1 sites had such pairs) and the perimeter bias of
+  the OMBR (−6 % on an L-shaped building). A rectangular polygon reproduces
+  the `GridMeshElectrode` ring bit-identically.
+
+---
+
+## [0.11.0] - 2026-07-10
+
+The physics and numerics audit of 2026-07-08
+([audit history][audit-2026-07-08]). ⚠ Numbers change for multiport matrices
+with unequal segment lengths, field points in the second layer, `sommerfeld`
+and `carson_series` inductive results, the series truncation, and vector fits
+with complex residues.
+
+### Added
+
+- Guard rails (WP-A): surface-laid inductive conductors raise, a thin-wire
+  hard guard, pre-flight diagnostics on every solve, `SeriesTruncationWarning`,
+  non-image backends reject concrete shells, warnings for dropped non-current
+  sources and for the singularity clamp.
+- `vector_fit`: `VectorFitConvergenceWarning`, `n_iter_used`, `pole_shift`,
+  `weighting="inverse_magnitude"`.
+
+### Changed
+
+- ⚠ Vector fitting on the conjugate-pair real basis: complex residues (WP-B4).
+- ⚠ The series stops on the geometric tail bound; `image_max_terms` default
+  100 → 300; the series controls reach every layered backend.
+- One-shot multiport assembly (WP-F): a 50-building world 22.0 s → 0.18 s.
+
+### Removed
+
+- `_layered.image_series_offsets` (dead code).
+
+### Fixed
+
+- ⚠ The multiport matrix is exactly reciprocal (WP-B3).
+- `cim` and `bem` raise for three or more layers (incomplete kernel, WP-E).
+- ⚠ `potential` and `solve_mutual_*` use the spectral kernel for points in the
+  second layer (+7 % at 7 m and +25 % at 12 m before); rods are split at the
+  interface; `mom` accepts cross-layer worlds (WP-D).
+- ⚠ `sommerfeld` is a genuine Pollaczek kernel (the earth-return resistance had
+  the wrong sign) and the `carson_series` matrix converges under refinement
+  (WP-C).
+- ⚠ Quadratures (WP-B): the `layered_green` Hankel grid (46 % at 200 m), Carson
+  P and Q near θ = 90° (−36 % and +67 %), the large-a asymptote.
+- Single-segment distributed conductors no longer vanish; `cim`, `bem` and the
+  `mom_sommerfeld` diagonal use the cross-layer kernel;
+  `rho_f_from_field_result` masks dead frequencies.
+
+---
+
+## [0.10.0] - 2026-06-28
+
+### Added
+
+- `solve_mutual_field(world, engine, anchors, field_points)`: the potential at
+  arbitrary points under unit excitation of each cluster.
+
+---
+
+## [0.9.0] - 2026-06-19
+
+### Added
+
+- `solve_mutual_matrix`: the mutual grounding-impedance matrix from one
+  assembly, bit-identical to separate solves and 20–40× faster.
+
+---
+
+## [0.8.1] - 2026-06-19
+
+### Fixed
+
+- The `image_2layer` cross-layer path is about 20× faster (cached
+  Gauss–Legendre nodes, bit-identical).
+
+---
+
+## [0.8.0] - 2026-06-18
+
+### Added
+
+- `create_engine(image_max_terms=..., image_series_tol=...)` (defaults
+  unchanged).
+- `OrtsnetzLayout.connect_all_buildings()`: every house is connected to the
+  LV network.
+
+---
+
+## [0.7.0] - 2026-05-26
+
+Includes the fixes of review pass 7 and the findings of passes 7 and 8
+([pass 7][pass-07], [pass 8][pass-08]).
+
+### Added
+
+- `OrtsnetzLayout`: an imperative builder of a TN-Ortsnetz (OSM footprints,
+  substation, cable cabinets, Manhattan-routed PEN cables, house connections,
+  simulated fall-of-potential measurement, foundation masks).
+- `generators.manhattan_routing` and `RadialTrunkTopology`
+  (`TnNetworkConfig.pen_topology`).
+- `EvaluateSpecError`, `World.reset_concrete_corrections()`,
+  `OsmBuildingPlacement.footprint_at(i, strict=...)`,
+  `query_buildings(max_retries=...)` (pass 7).
+
+### Fixed
+
+- The measurement loop of `OrtsnetzLayout.to_world` is closed by a second
+  source of 180° at the auxiliary electrode, because the solver ignored
+  `return_to` (replaced in 2026.11.0, 10.16, 10.17).
+
+---
+
+## [0.6.0] - 2026-05-15
+
+### Added
+
+- Concrete encasement of foundation electrodes (ADR-0012).
+- `groundfield.geo`: OSM building footprints and footprint-driven foundations
+  (ADR-0011), `OsmBuildingPlacement`, `FoundationElectrodeSpec.orientation_deg`,
+  the `geo` extra.
+
+### Changed
+
+- The under-determined check of `vector_fit` respects conjugate pole pairs
+  ([pass 6][pass-06]).
+
+---
+
+## [0.5.0] - 2026-05-14
+
+The fixes of review passes 4 and 5 ([pass 4][pass-04], [pass 5][pass-05]).
+
+### Added
+
+- Top-level `evaluate_spec`, `fit_quality_summary`, `LayeredEarth` and
+  `SourceAdapter`; frozen CSV column names; public `MIN_THINWIRE_RATIO`,
+  `SOFT_LIMIT` and `HARD_LIMIT`.
+
+### Changed
+
+- `Source` is a discriminated union.
+- ⚠ `Engine.frequencies` keeps the given order (it was sorted), with
+  `EngineFrequencyOrderWarning` and `Engine.with_frequencies(...,
+  preserve_order=True)`.
+- `TnNetworkConfig.source_return_to` overrides the return electrode.
+
+### Fixed
+
+- `World.set_boundary_conditions` also warns on a revert; `vector_fit` rejects
+  `n_poles=0` and warns on under-determined input; `evaluate_spec` raises
+  `ValueError` on malformed specs; `TnNetworkConfig.source_kind` is validated;
+  `World.solve` restores the sources; the documentation no longer loads
+  `polyfill.io`.
+
+---
+
+## [0.4.0] - 2026-05-12
+
+Housekeeping release without user-visible changes; the first version published
+on PyPI (0.1.0 and 0.2.0 exist in the repository history only).
+
+---
+
+## [0.2.0] - 2026-05-12
+
+The first release with a solver.
+
+### Added
+
+- Data model (pydantic v2): `World`, soils, electrodes, conductors (ideal,
+  finite and distributed, ADR-0003), sources, `Engine`; the factories
+  `create_world`, `create_electrode`, `create_conductor`, `create_source` and
+  `create_engine`.
+- The engine family (ADR-0001, ADR-0002): `image`, `image_2layer` (Tagg/Sunde
+  series), `image_nlayer`, `cim`, `mom`, `mom_sommerfeld`, `bem`, `fem`, with
+  dispatch by soil model and `compare_engines`.
+- Inductive coupling (ADR-0004), Carson earth return (ADR-0005), Sommerfeld
+  earth return (ADR-0006), cross-layer electrodes (ADR-0007).
+- The rho-f model: vector fitting, the standard form, SymPy export and the
+  groundinsight bridge (ADR-0008).
+- World generators and the AP1 TN-Ortsnetz generator (ADR-0009) with a
+  measurement set-up.
+- Post-processing: potentials, plots, convergence studies, sweeps,
+  diagnostics, current balance, touch and step voltages, CSV and VTK export.
+- References: `dwight1936`, `oeding`, `carson`.
+
+### Changed
+
+- The inductance matrix is vectorised (ADR-0010, bit-exact).
+- The project language is English.
+
+### Deprecated
+
+- The module `groundfield.generators.tn_ortsnetz`; use
+  `groundfield.generators.tn_network`.
+
+### Removed
+
+- The flat v1 `TnNetworkConfig` schema.
+
+### Fixed
+
+- `FieldResult.potential` raises for three or more layers instead of using the
+  homogeneous kernel; the rho-f functions are exported at the top level;
+  `BoundaryConditions` warns about settings no backend reads.
+
+---
+
+## [0.1.0] - 2026-04-24
+
+### Added
+
+- Project skeleton: package layout, Poetry configuration, MkDocs scaffold,
+  release script, GitHub workflows, citation file and licence (MIT).
 
 [Unreleased]: https://github.com/Ce1ectric/groundfield/compare/v0.15.0...HEAD
 [0.15.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.15.0
@@ -5300,5 +1063,22 @@ work package 1 progresses.
 [0.6.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.4.0
-[0.2.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.2.0
-[0.1.0]: https://github.com/Ce1ectric/groundfield/releases/tag/v0.1.0
+
+<!-- --8<-- [end:changelog] -->
+
+<!-- Link targets for reading this file in the repository. The documentation
+     page docs/changelog.md includes the section above and defines the same
+     names with paths relative to docs/. -->
+[audit-history]: docs/audit/index.md
+[roadmap]: docs/roadmap.md
+[pass-01]: docs/audit/pass-01.md
+[pass-02]: docs/audit/pass-02.md
+[pass-03]: docs/audit/pass-03.md
+[pass-04]: docs/audit/pass-04.md
+[pass-05]: docs/audit/pass-05.md
+[pass-06]: docs/audit/pass-06.md
+[pass-07]: docs/audit/pass-07.md
+[pass-08]: docs/audit/pass-08.md
+[audit-2026-07-08]: docs/audit/audit-2026-07-08.md
+[pass-09]: docs/audit/pass-09.md
+[pass-10]: docs/audit/pass-10.md
