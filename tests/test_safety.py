@@ -339,6 +339,8 @@ def test_en50522_rejects_invalid_time() -> None:
         permissible_touch_voltage_en50522(float("nan"))
     with pytest.raises(ValueError, match="t_clear_s"):
         permissible_touch_voltage_en50522(-math.inf)
+    with pytest.raises(TypeError):  # a duration is a number, not text (as in 0.15.0)
+        permissible_touch_voltage_en50522("20")
 
 
 def test_en50522_loglog_interpolation_in_geometric_mean() -> None:

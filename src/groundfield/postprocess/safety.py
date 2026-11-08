@@ -1182,9 +1182,10 @@ def permissible_touch_voltage_en50522(t_clear_s: float) -> float:
     (or, with additional resistances, use
     :func:`permissible_prospective_touch_voltage_en50522`).
     """
-    t = float(t_clear_s)
-    if math.isnan(t) or t <= 0.0:
+    # math.isnan rejects text (TypeError) before float() could parse it.
+    if math.isnan(t_clear_s) or t_clear_s <= 0.0:
         raise ValueError(f"t_clear_s must be > 0 (s), got {t_clear_s!r}.")
+    t = float(t_clear_s)
     # user decision Q4: 80 V beyond the end of Figure 8 / Table B.4.
     if t > _EN50522_CURVE_END_S:
         return _EN50522_TP_LONG_DURATION
