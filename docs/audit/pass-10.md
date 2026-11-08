@@ -2802,3 +2802,262 @@ Test: `tests/test_soil_models.py::test_old_keyword_warns_and_maps_to_canonical_f
   warned; a draw for an integer field is now `int(round(x))`, the value the
   generators build with. Test:
   `tests/test_generators_base.py::test_resolved_integer_fields_hold_integers`.
+
+## Stream `fix3gen`
+
+### Added
+- **`groundfield.io.groundinsight.MAX_METADATA_DEPTH` (32):** deepest nesting of
+  objects and lists in the metadata of a BusType document (the exporters write
+  four levels); a deeper document is refused on load. Test:
+  `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`.
+
+### Changed
+- ⚠ **PEN cables of `TnNetworkGenerator` (10.38; stream DOC-B; audit A3SG-01,
+  A3SG-02, A3SG-03):** every cable cabinet has its own cable, as the topology
+  documents (star: a straight cable from the substation; radial trunk: one
+  cable per trunk segment); cabinets on one line get separate cables in one
+  trench. A service drop taps the cable path that feeds its own building — the
+  cable of its cabinet, or the trunk from the substation to its tap source — at
+  the point nearest to the building's connection point: a leakage-free tap
+  junction `pen_tap_<k>` that splits the cable into sections `<cable>_s<k>`, or
+  the substation / the cabinet at the end of the cable; a building in a
+  substation slot of the radial trunk is connected to the substation. What the
+  router guarantees: a drop never starts on another building's drop and never
+  runs along the cable it taps; no cable section or drop is shorter than 1 cm (a
+  tap closer to a node is that node; longer for PEN radii above 7.3 mm, so that
+  every section keeps twice the resistance below which a distributed conductor
+  is refused); a building whose connection point lies on its feeding cable
+  splits it (no drop); two nodes closer than that raise `ValueError`. A drop
+  may share its route with another cable (another cabinet's cable, a trunk,
+  another drop), as cables in one trench do; the inductive coupling treats such
+  conductors as touching wires and the networks stay passive. Against 0.15.0,
+  where every drop ran from its cabinet (60 to 160 m back along the main in the
+  default network, coaxial with it): the routing moves the golden networks
+  (one cabinet west of every house) by −2.1 % in the substation potential,
+  −3.1 to −4.8 % in the substation leakage, −0.2 to +1.0 % in the house
+  potentials and −1.1 % in the measurement network;
+  the input impedance of default-grid networks with ring foundations (image
+  backend, 50 Hz, 100 Ω·m) moves by −6.4 / −1.1 / −0.2 % for 30 / 100 / 200
+  houses (star) and 0.0 / −0.1 % for 30 / 100 houses (radial trunk). Against
+  the nearest-point tree of the first 2026.11 draft (chained cabinets, drops
+  hung on drops): golden networks bit-identical; 30 / 100 / 200 houses −4.1 /
+  −2.9 / −2.7 % (ring foundations) and −2.4 / −3.4 / −2.8 % (default mesh
+  foundations), radial trunk −0.5 / −0.3 %. Golden cases: `gen_tn_default`,
+  `gen_tn_measurement_overhead_leads` (moves declared in `fix2gen.toml`).
+- **Polygon foundations of thin outlines (10.54; audit A3SG-07):** with
+  `foundation_outline="polygon"` an outline whose oriented bounding rectangle
+  is narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is replaced by that rectangle
+  widened to 1 m, with the same `UserWarning` as for `"ombr"` (a ring along an
+  outline 0.5 to 1 m wide ran along both faces of a wall). Outlines wider than
+  1 m on average are unchanged.
+- **`TnNetworkGenerator.build()` of large networks (no finding):** the
+  materialiser hands objects instead of names to the world, so bonds and PEN
+  sections need no search through the world: 1000 default houses 6.5 → 4.4 s
+  (star) and 7.3 → 5.4 s (radial trunk), worlds byte-identical. The rest of the
+  cost is the name checks of `World.add_electrode` / `add_conductor`, linear in
+  the size of the world.
+
+### Fixed
+- **`build()` failed for 1–3 % of random TN networks (10.38; audit A3SG-01):**
+  a service drop whose tap fell 0.1 µm to 4.7 mm from a node of the cable left
+  a section that the `Conductor` model refuses (series resistance below
+  1e-6 Ω), so `build()` raised `pydantic.ValidationError` (1 of 100 random
+  60-house and 2 of 60 random 200-house networks). The layout builder had the
+  same defect for taps a few millimetres from a cable corner or from another
+  tap; it now merges cable nodes closer than the shortest section and refuses a
+  cable between two sites closer than it with `ValueError`. Tests:
+  `tests/test_pen_routing.py::test_a_building_millimetres_beside_a_node_still_builds`,
+  `::test_a_tap_millimetres_from_an_earlier_tap_snaps_to_it`,
+  `::test_random_position_network_builds`,
+  `::test_taps_on_a_thick_pen_keep_sections_the_conductor_model_accepts`,
+  `::test_random_networks_build_and_route_as_documented` (400 random networks,
+  60 / 200 houses, both topologies),
+  `tests/test_lv_network_layout.py::test_taps_millimetres_apart_share_one_node`,
+  `::test_a_tap_millimetres_from_a_cable_corner_is_the_corner`,
+  `::test_a_cable_between_two_sites_closer_than_a_section_is_rejected`.
+- **Cabinets chained on one cable, drops hung on other drops (10.38; audit
+  A3SG-02, A3SG-03):** the nearest-point tree of the first 2026.11 draft fed a
+  cabinet from the cable of a nearer one, although `StarCabinetTopology` and
+  `TnNetworkConfig.pen_topology` document a direct cable per cabinet (input
+  impedance +1.8 / +2.6 % for 100 / 200 houses against the 0.15.0 routing,
+  against the documented direction), and started most drops on other houses'
+  drops (26 of 30 in the radial default grid with ring foundations, 19 of 30 in
+  the default star network). Tests:
+  `tests/test_pen_routing.py::test_star_topology_wires_every_cabinet_directly_to_the_substation`,
+  `::test_collinear_cabinets_have_separate_cables_in_one_trench`,
+  `::test_z_in_of_a_100_house_network_drops_against_the_old_routing`,
+  `::test_a_drop_taps_the_cable_of_its_own_cabinet`,
+  `::test_no_drop_starts_on_another_drop_in_the_radial_default_grid`,
+  `::test_overlapping_drops_and_trunks_stay_passive`, `::test_routing_guarantees`.
+- **A loaded BusType document crashed the other entry points (10.01; audit
+  A3SG-04):** `load_bustype_json` accepted documents for which
+  `fit_quality_summary` raised `AttributeError`, `TypeError`, `ValueError` or
+  `OverflowError` (`fit_quality` null or a list; a figure that is an object, a
+  list, a string or a 400-digit integer), `to_dict()` raised `RecursionError`
+  (metadata nested 3 000 levels, which the JSON decoder reads) or wrote a NaN
+  description (not strict JSON). The loader now refuses a `name` or
+  `system_type` that is an object or a list, a `description` that is neither a
+  string nor null, an `impedance_formula` that is an object or a list
+  (`EvaluateSpecError`) and metadata deeper than `MAX_METADATA_DEPTH`;
+  `to_dict()` writes a non-string description as null and walks the metadata
+  without recursion; `fit_quality_summary` reads only finite numbers and
+  strings. Tests: `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`,
+  `::test_a_loaded_document_never_crashes_the_other_entry_points`,
+  `::test_fit_quality_summary_reads_the_figures_it_can`,
+  `::test_to_dict_of_a_spec_built_in_memory_is_strict_json_or_refused`.
+- **A sum with an exact small imaginary part parsed to zero (10.01; audit
+  A3SG-05):** the formula parser drops a collected sum that cancels within its
+  128-bit working precision, but compared the complex magnitude of the sum with
+  its largest term: `(1 + 1e-31*j - 1)*1e31*f` evaluated to 0 instead of 50j at
+  50 Hz. Real and imaginary parts are now judged separately; the 119 accepted
+  formulas of the corpus evaluate as before (worst 1.9e-15 against a 60-digit
+  mpmath evaluation). Test:
+  `tests/test_formula_security.py::test_real_and_imaginary_parts_of_a_sum_cancel_separately`.
+- **Polygon foundations of outlines narrower than 0.5 m (10.54; audit
+  A3SG-07):** `LvNetworkLayout.to_world(foundation_outline="polygon")` raised
+  `ValueError` ("polygon collapses ... after removing sub-centimetre edges",
+  although the edge limit is 0.5 m) for every such outline the Overpass parser
+  keeps; it is widened now (see Changed), and the materialiser's last check
+  names the real limit. Tests:
+  `tests/test_footprint_foundations.py::test_a_thin_outline_with_a_polygon_foundation_is_widened`,
+  `::test_a_polygon_foundation_of_an_ordinary_outline_is_unchanged`,
+  `::test_a_collapsing_polygon_outline_names_the_real_edge_limit`.
+- **Margin of generated mesh foundations against `mom` (10.39; audit
+  A3SG-06):** the documentation said one current per wire is +0.3 / +0.5 /
+  +0.6 % "against `mom`"; that is the line kernel against a line-kernel
+  per-segment reference. Against `mom` (point kernel) the default line kernel
+  is +1.1 % and `kernel="point"` +0.3 … +0.5 % for 10 m 2 × 2 to 30 m 4 × 4
+  meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
+  +1.5 … +3.1 %). Test:
+  `tests/test_foundation_owners.py::test_documented_margin_of_mesh_foundations_against_mom`.
+
+## Stream `fix3solver`
+
+### Added
+
+- **`groundfield.solver.InterfaceContactWarning` and the `diagnose()` category
+  `interface_contact` (10.32, audit A3S-05):** a rod head or tip within one
+  wire radius of a layer interface. The thin-wire model has no end face: a
+  rod that ends exactly at the interface is a wire on one side of it, one
+  that reaches past it by a fraction of its radius touches the other layer
+  through a short piece only, while the solid rod is continuous in between.
+  Against an axisymmetric finite-volume model of the solid rod (4.5 m,
+  a = 8 mm, 1000/30 Ω·m) the line kernel reads +3.3 / +3.9 / +7.2 / +21.4 %
+  with the tip 16 / 8 / 1 / 0 mm above the interface and −4.6 / −1.2 /
+  +0.7 / +2.1 % 1 / 4 / 8 / 16 mm past it (point kernel and `mom` alike).
+  The step at zero penetration that an earlier entry of this release called
+  the onset of the contact is this limit of the model. No end-face term:
+  the solid rod's 161.4 Ω at the interface lies between the two branches of
+  the thin wire (196 Ω above, at most 149.2 Ω past it). Tests:
+  `tests/test_interface_slivers.py::test_rod_tip_within_one_wire_radius_of_the_interface_warns`,
+  `::test_rod_head_within_one_wire_radius_of_the_interface_warns`,
+  `tests/test_diagnostics_report.py::test_diagnose_reports_a_rod_end_at_the_interface`.
+- **`min_distance` of `two_layer_real_space_kernel`,
+  `two_layer_layered_correction_real_space` and
+  `two_layer_layered_correction_group` (audit A3S-01):** the regularisation
+  length of the closed-form 1/R terms in m; they are clamped at
+  `min(1/lambda_clamp, min_distance)` instead of `1/lambda_clamp`
+  (`h_1/200` near the interface). `None` (default) keeps the clamp; every
+  value at or beyond it is bit-identical. Test:
+  `tests/test_cross_layer_line_kernel.py::test_min_distance_leaves_every_farther_image_bit_for_bit`.
+- **`groundfield.world.RESERVED_NAME_PREFIXES`** (`"__layer_"`,
+  `"__cond_"`), see *Fixed*.
+
+### Fixed
+
+- ⚠ **Cross-layer diagonal at the interface (10.28, 10.32, audit A3S-01):**
+  the diagonal of a segment is the layered correction at the wire radius
+  with the interface image exchanged for its Galerkin integral, but the
+  correction clamped its closed-form 1/R terms at `h_1/200` (25 mm for
+  `h_1 = 5` m), so every piece within `h_1/400` of an interface lost 68–84 %
+  of its layered correction. A ring (r = 3 m, a = 5 mm) at `h_1 = 5` m read
+  −5.29 Ω with the default engine (1000/30 Ω·m; 322 Ω instead of 6.80 Ω in
+  30/1000 Ω·m), and the contact values of a rod tip just past the interface
+  were 10–32 % low in every segment backend. The solver now evaluates the
+  diagonal at the wire radius and pairs closer than `h_1/200` at the 1 mm of
+  its point forms (also `mom_sommerfeld`'s two-layer off-diagonal kernel and
+  `two_layer_probe_matrix`, which clamps at its own `min_distance`). The
+  diagonal equals the image solution to 1e-13; the ring is continuous through
+  `h_1` (4.1826 Ω 1 µm above, 4.1805 Ω at `h_1`). Numbers move for a rod tip
+  or head within `h_1/400` of an interface (12.5 mm for `h_1 = 5` m, 75 mm for
+  30 m; 4.5 m rod, a = 8 mm, 1000/30 Ω·m, tip 1 µm past `h_1`: 133.5 → 149.2 Ω,
+  +11.7 %; 10000/10 Ω·m: 123.2 → 180.7 Ω; against the solid rod −4.6 / −1.2 /
+  +0.7 % at 1 / 4 / 8 mm, before −14.6 / −10.7 / −6.8 %), for horizontal wires
+  at or within `h_1/400` below an interface, and for pairs of segments closer
+  than `h_1/200` (segment lengths below about `h_1/100` near the interface:
+  a 2 m rod through `h_1 = 30` m, ds = 0.05 m, line kernel −0.014 %). Not
+  affected: AP1 (station rods end 0.2 m or more above `h_1`). Golden cases:
+  none. Tests: `tests/test_cross_layer_line_kernel.py`
+  (`::test_ring_resistance_is_continuous_through_a_deep_interface`,
+  `::test_diagonal_correction_at_the_wire_radius_matches_the_image_solution`,
+  `::test_pairs_closer_than_the_clamp_match_the_image_solution`),
+  `tests/test_interface_slivers.py::test_rod_tip_contact_against_the_solid_rod_reference`,
+  `::test_rod_head_contact_against_the_solid_rod_reference`,
+  `::test_rod_tip_contact_does_not_depend_on_the_interface_clamp`.
+- **Point form above the interface (10.28, audit A3S-02):** the point-form
+  guard of audit round 2 ran only when a segment reaches `h_1`. With every
+  wire above `h_1` the point form takes the image of a segment in the
+  interface as a point source 2(`h_1` − z) away: a ring (r = 3 m,
+  ds = 0.5 m) 1 µm / 1 mm / 1 cm / 5 cm above `h_1 = 5` m read −1931 / −945 /
+  −57.9 / 21.2 Ω (line kernel 4.18 / 4.77 / 15.4 / 28.0 Ω) with
+  `kernel="point"`, `mom`, `mom_sommerfeld` (two and three layers) and
+  `solve_mutual_*`, also in 0.15.0; +853 % … +0.1 % in 30/1000 Ω·m. The guard
+  now applies on both sides of the interface with the same thresholds: a
+  horizontal wire closer than 0.387 segment lengths raises
+  `BackendCapabilityError`, one within 0.6 warns with
+  `PointKernelInterfaceWarning` (−2.5 % / −0.4 % at 0.2 m above `h_1`). Above
+  the interface this error threshold is conservative: it also refuses coarse
+  but accurate models (a ring r = 25 m 1.2 m above `h_1` with 5 m segments,
+  +0.9 % against the line kernel), which a finer `segment_length` — the
+  message names one — or the line kernel solves. The default line kernel is
+  unaffected. Tests:
+  `tests/test_cross_layer_point_form.py::test_point_form_rejects_a_horizontal_wire_just_above_the_interface`,
+  `::test_point_form_warns_for_a_horizontal_wire_above_the_interface`,
+  `::test_mutual_matrix_point_form_is_guarded_above_the_interface`,
+  `::test_rods_ending_just_above_the_interface_are_not_refused`.
+- **Reserved name prefixes (10.66, audit A3S-03):** an electrode called
+  `__layer_r__L1` next to a rod `r` through `h_1`, or `__cond_pen__seg_0`
+  next to a galvanic conductor `pen`, took the place of the solver's internal
+  owner or node of that name and the solve failed with
+  `numpy.linalg.LinAlgError`. `add_electrode`, `add_junction` and
+  `World.check()` (every solve, worlds loaded from JSON) reject node names
+  with the prefixes `__layer_` and `__cond_`. Tests:
+  `tests/test_source_validation.py::test_check_rejects_a_name_with_a_reserved_prefix`,
+  `::test_reserved_prefixes_are_rejected_when_a_node_is_added`.
+- ⚠ **Field of a soil of one resistivity declared as layers (10.48, audit
+  A3S-04):** `TwoLayerSoil(rho, rho, h)` solved like homogeneous soil, but
+  `FieldResult.potential` and `solve_mutual_field` evaluated sources below
+  `h` with the point form of the two-layer kernel instead of the line sources
+  of the homogeneous result: +2.7 % at (0.2, 0, 4) m next to a 0.3–6.3 m rod,
+  21 % at 5 cm from it. Both now read the canonical layer stack and equal the
+  homogeneous result bit for bit; a stored `MultiLayerSoil` with at most two
+  distinct layers is evaluated as two-layer soil (it raised
+  `NotImplementedError` for three declared layers). Who is affected: field
+  values of equal-resistivity layered declarations near wires below `h`.
+  `fem` keeps the declared interface in its mesh on purpose (mesh topology
+  continuous over a ρ₂ sweep): 1.7e-6 / 1.0e-5 from the homogeneous solve for
+  two / three equal layers. Golden cases: none. Tests:
+  `tests/test_layer_stack.py::test_field_of_an_equal_resistivity_stack_is_the_homogeneous_field`,
+  `::test_potential_of_a_stored_three_layer_declaration_with_two_distinct_layers`.
+- **Building large networks (audit round 3, generator note):** since
+  generated mesh foundations are one electrode per wire line,
+  `TnNetworkGenerator.build()` was 10–80 times slower for 100–1000 houses:
+  `World.add_*` scanned every list for the new name. A name index next to the
+  world (not part of the model: equality, copies, pickles and JSON are
+  unchanged) makes the check O(1) per add; generated worlds are bit-identical
+  (fingerprints for 100 / 400 / 1000 houses). 1000 houses: 6.97 → 2.44 s
+  (star) and 7.52 → 2.65 s (radial) on the measuring machine. Tests:
+  `tests/test_world_names.py::test_each_add_costs_constant_name_work`,
+  `::test_lists_edited_by_hand_are_seen_by_the_next_add`,
+  `::test_the_index_is_no_state_of_the_world`.
+- **Quoted near-field deviations (10.21, 10.22):** `UniformCurrentFieldWarning`,
+  the safety module and the known limitations quoted "+19 % / −21 %" (touch /
+  step 1 m outside a 20 m grid corner), the point-kernel numbers, and the
+  `image` engine page −28 % for a step that starts above the corner. They now
+  give the default (line) kernel and the step: touch 1 m outside +20 %, step
+  from 1 m to 2 m outside −21 %, from the point above the corner 1 m outwards
+  −28 % (point kernel +19 / −21 / −28 %). The `interior` docstring of
+  `touch_voltage_envelope` called a generated foundation a `grid_mesh`; it is
+  a group of bonded wires whose cells the default samples. Tests:
+  `tests/test_touch_voltage_footprint.py::test_the_quoted_corner_deviations_are_those_of_the_default_kernel`,
+  `tests/test_touch_voltage_envelope.py::test_a_generated_mesh_foundation_is_sampled_in_its_cells_by_default`.
