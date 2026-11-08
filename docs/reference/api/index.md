@@ -17,7 +17,7 @@ curated namespace:
 | Namespace | Content |
 |---|---|
 | `gf.plot` | potential maps and profiles, world geometry, current sharing, sweeps, convergence |
-| `gf.safety` | touch and step voltage, EN 50522 permissible touch voltage |
+| `gf.safety` | touch and step voltage, touch points (`touch_voltage_at_part`), EN 50522 permissible touch voltage |
 | `gf.fit` | `rho-f` models: vector fitting and the research standard form |
 | `gf.io` | `BusType` export to groundinsight, CSV, VTK, result files |
 
