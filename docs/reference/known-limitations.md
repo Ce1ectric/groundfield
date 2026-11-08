@@ -124,7 +124,8 @@ shows what agrees with independent references and how well.
   preset holds for its class only (the AP1 station with
   `"lv_group_4_p40"`: rms 39.9 %); even `"station"` leaves up to 15.7 % at
   $h_1$ = 5 m, where the station rods end 0.4 m above the interface. A
-  BusType records `rho_definition`, not the preset: use the same preset
+  BusType records `rho_definition`, not the preset (the preset follows in
+  the next release, user decision Q39): use the same preset
   for the BusType and its bus, and check `max_relative` of a fit over
   $\rho_\text{eff}$ (see [Soil](api/soil.md#effective-resistivity)).
 
@@ -166,14 +167,18 @@ shows what agrees with independent references and how well.
   6 200 with a 1 km layer stack), and `fem` does not refuse a world above
   `Engine.max_segments`. It ignores inductance, `return_to`, junctions and
   concrete shells (`BackendCapabilityWarning` or `BackendCapabilityError`;
-  `groundfield.solver.fem`).
+  `groundfield.solver.fem`). The reduction gets no further rules; the next
+  release replaces it by a conforming axisymmetric model
+  ([roadmap](../roadmap.md#scheduled-for-the-next-release), user decision
+  Q37).
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are
   represented by the image family and `solve_mutual_*` only. Each wire
   carries its own radial shell; where wires meet — the corners of a ring,
   the crossings and T-joints of a mesh foundation, whose braces are encased
   since 2026.11 — the shells overlap within about $r_b$ of the junction
   and each wire counts the shared concrete as its own (a local effect, not
-  quantified separately).
+  quantified separately; it will be quantified once a 3-D volume reference
+  is available, user decision Q40).
 - **Aliases.** `cim`, `bem` and `image_nlayer` run `image` and `mom`;
   comparing them with their targets adds no independent information.
 
