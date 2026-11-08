@@ -45,8 +45,8 @@
   1 m on average are unchanged.
 - **`TnNetworkGenerator.build()` of large networks (no finding):** the
   materialiser hands objects instead of names to the world, so bonds and PEN
-  sections need no search through the world: 1000 default houses 6.8 → 4.6 s
-  (star) and 7.2 → 5.1 s (radial trunk), worlds byte-identical. The rest of the
+  sections need no search through the world: 1000 default houses 6.5 → 4.4 s
+  (star) and 7.3 → 5.4 s (radial trunk), worlds byte-identical. The rest of the
   cost is the name checks of `World.add_electrode` / `add_conductor`, linear in
   the size of the world.
 
