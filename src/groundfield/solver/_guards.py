@@ -529,6 +529,14 @@ class PointKernelInterfaceWarning(UserWarning):
     """
 
 
+def _conductor_hint(segments: "Sequence[_Segment]", mask: np.ndarray) -> str:
+    """Name the conductor knob when a flagged segment belongs to a conductor."""
+    flagged = np.flatnonzero(mask)
+    if any(getattr(segments[int(k)], "conductor_name", None) for k in flagged):
+        return "; for a conductor piece refine Conductor.discretize_segment_length"
+    return ""
+
+
 def _check_point_cross_layer_diagonal(
     segments: "Sequence[_Segment]",
     points: np.ndarray,
@@ -622,6 +630,7 @@ def _check_point_cross_layer_diagonal(
     hint = ""
     if np.isfinite(finer).any():
         hint = f" (here below {float(np.min(finer[np.isfinite(finer)])):.3g} m)"
+    hint += _conductor_hint(segments, in_air | across | near)
     if in_air.any() or across.any():
         from groundfield.solver.registry import BackendCapabilityError
 
@@ -769,6 +778,7 @@ def _check_point_interface_diagonal(
     hint = ""
     if np.isfinite(finer).any():
         hint = f" (here below {float(np.min(finer[np.isfinite(finer)])):.3g} m)"
+    hint += _conductor_hint(segments, across | near)
 
     def example(mask: np.ndarray) -> str:
         k = int(np.flatnonzero(mask)[0])

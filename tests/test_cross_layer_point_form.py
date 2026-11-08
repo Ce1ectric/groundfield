@@ -285,3 +285,27 @@ def test_rods_ending_just_above_the_interface_are_not_refused(engine_kw: dict) -
     result, hits = _solve(w, segment_length=0.5, **engine_kw)
     assert not hits
     assert result.cluster_impedance("r")[0].real > 150.0
+
+
+@_FINDING
+def test_the_message_names_the_conductor_knob_for_a_conductor_piece() -> None:
+    """A sloped galvanic conductor ending 5 cm above h_1 (series path)."""
+    # audit A3S-02 (self-check of the fix)
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.5), length=1.0)
+    gf.create_junction(w, name="j", position=(10.0, 0.0, 1.95))
+    gf.create_conductor(
+        w,
+        name="c",
+        start="a",
+        end="j",
+        cross_section=50e-6,
+        discretize_segment_length=1.0,
+        coupling_to_soil="galvanic",
+    )
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    with pytest.raises(BackendCapabilityError, match="conductor 'c'") as info:
+        _solve(w, segment_length=0.5, kernel="point")
+    assert "Conductor.discretize_segment_length" in str(info.value)
+    result, hits = _solve(w, segment_length=0.5)  # the line kernel solves it
+    assert not hits and result.cluster_impedance("a")[0].real > 0.0
