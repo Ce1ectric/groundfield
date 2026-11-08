@@ -56,15 +56,22 @@ def _section(version: str) -> str:
 
 
 def _notes_2026_11() -> str:
-    """Release notes of 2026.11.0: the ``[Unreleased]`` block until the
-    release tool has turned it into ``## [2026.11.0] - <date>``.
+    """Release notes of the first calendar release (planned as 2026.11.0).
 
-    The tests below hold before and after the release commit, so the
-    release workflow, which runs them on the tag, passes.
+    The ``[Unreleased]`` block until the release tool turns it into
+    ``## [YYYY.M.MICRO] - <date>``; afterwards the oldest calendar-versioned
+    section, whatever its number. The tests below therefore hold before and
+    after the release commit, so the release workflow, which runs them on
+    the tag, passes.
     """
-    if "\n## [2026.11.0] - " in _text(CHANGELOG):
-        return _section("2026.11.0")
-    return _unreleased()
+    body = _unreleased()
+    if "\n### " in body:
+        return body
+    calver = [
+        v for v, _ in _HEADING_RE.findall(_text(CHANGELOG))
+        if re.fullmatch(r"20\d\d\.\d+\.\d+", v)
+    ]
+    return _section(calver[-1])
 
 
 @pytest.mark.finding("10.93")
