@@ -693,6 +693,22 @@ def _check_point_interface_diagonal(
     segments. Vertical segments never reach either: a rod ends at or above
     the interface, so its segment midpoints keep :math:`L/2` from it.
 
+    Above the interface the error of the point form grows smoothly with
+    :math:`L/|z - h_1|` and with a conductive lower layer, and depends on
+    the gap in wire radii, so no single threshold separates good from bad
+    values (rings of 3 m and 25 m, ``h_1`` = 2 m, ``segment_length`` 0.5 /
+    2 / 5 m, three contrasts, against the line kernel at the same segment
+    length): for :math:`q \approx 0.25` −13 … −24 % (1000/30 Ω·m) and
+    +0.5 … +2.6 % (lower layer resistive), for :math:`q` = 0.52 and a gap of
+    1 cm −15 % (audit A3S-02), but for :math:`q` = 0.63 … 0.69 and gaps of
+    0.5 … 1.2 m only −3.0 … +0.9 %. The error threshold of the cross-layer
+    path is therefore conservative here: it also refuses such coarse but
+    accurate cases (a ring r = 25 m 1.2 m above ``h_1`` with 5 m segments,
+    +0.9 %); a finer ``segment_length`` (the message names one) or the line
+    kernel solves them. In the warning band (:math:`1 \le q < 1.55`) the
+    measured deviation is −2.6 … 0 %, at most 1 % beyond the usual offset
+    of the point kernel.
+
     Parameters
     ----------
     segments
