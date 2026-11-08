@@ -7,39 +7,54 @@ cluster, not for the electrodes. In homogeneous soil that reproduces
 the Dwight resistance of a single electrode by construction (the
 hemisphere radius is chosen from it), so the backend then checks the
 :mod:`groundfield.references.dwight1936` formulas, not the integral
-engines. When an electrode reaches below a layer interface that its
-hemisphere does not reach — a rod through or below the top layer — the
-reduction injects the current into the wrong layer (+1092 % for a 3 m
-rod through $h_1$ = 2 m; −85 % … +3138 % over the measured contrasts)
-and the backend raises
+engines. When an electrode reaches a layer that its hemisphere does not
+reach — a rod through or below the top layer, a wire on (or within its
+radius above) an interface below the hemisphere — the reduction injects
+the current into the wrong layer (+1092 % for a 3 m rod through
+$h_1$ = 2 m; −85 % … +3138 % over the measured contrasts; −18 % …
++1008 % for a 2 m ring on $h_1$ = 2 m) and the backend raises
 :class:`~groundfield.solver.registry.BackendCapabilityError` instead of
 returning a number. The same holds for a cluster that lies wholly below
 a top layer holding more than half of its hemisphere
 ($a_\\text{eq}/2 < h_1 \\le a_\\text{eq}$; +51 % … +130 % and
 −81 % … −98 % for a 3 m rod, audit round 2), and — user decision Q23
-of 2026-11-08 — for a hemisphere that spans a layer which no electrode
-of the cluster touches and which conducts better than every layer the
-electrodes touch: the hemisphere injects the current straight into it,
-and the result is too low, not conservative (−97 % … +5 % against
-``image_2layer`` and ``mom`` for rods, strips and rings below a more
-conductive top layer or above a more conductive lower layer; −92 % for
-a 10 m ring at 0.8 m over $h_1$ = 2 m in 1000/30 Ω·m, −71 % for a 10 m
-strip at 0.8 m below $h_1$ = 0.5 m in 30/1000 Ω·m). The rule is
-structural: near-equal layers (100/120 and 120/100 Ω·m, −7 % … +5 %)
-raise as well.
+of 2026-11-08 — for a layer that no electrode of the cluster touches,
+that conducts better than every layer the electrodes touch and whose top
+lies above the larger of the hemisphere radius and the electrodes'
+horizontal half-extent: the hemisphere injects the current straight
+into a layer it spans and reaches one below it much less than the
+electrodes do, and the result is too low, not conservative (−97 % …
++5 % against ``image_2layer`` and ``mom`` for a spanned layer, −78 % …
++1 % for a layer below the hemisphere within the half-extent; −92 % for
+a 10 m ring at 0.8 m over $h_1$ = 2 m in 1000/30 Ω·m, −47 % over
+$h_1$ = 5 m). The rules are structural: near-equal layers
+(100/120 and 120/100 Ω·m, −7 % … +5 %) raise as well. All of them ask
+which layers the electrodes touch with one predicate, the contact of the
+thin-wire model the integral engines solve: a horizontal wire touches
+every layer within its wire radius of its axis, a rod the layers its
+axis passes through (an end on an interface does not count; audit
+D2A-01, D2A-02). The closed forms of the hemisphere are refused outside
+their range as well: a strip deeper than half its length (+0.2 % …
++474 %), a ring deeper than its radius (+0.4 % … −28 %) and any
+``MeshElectrode`` (+118 % … +193 %), audit D2A, O-1; electrodes at or
+above the soil surface are refused like in every backend.
 It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
-three 4 m rods in homogeneous soil), when the world has several
-clusters (each solved alone, transfer impedances 0) or when a layer
-interface lies above the deepest of the electrode's lowest point, the
-hemisphere radius and the electrode's horizontal half-extent without
-falling under the rules above (+23 % for a 10 m ring over a more
-resistive layer at $h_1$ = 2 m, +22 % for a 10 m strip at 0.8 m below a
-more resistive top layer of 0.5 m, −47 % for a 10 m ring at 0.8 m over
-a more conductive layer at $h_1$ = 5 m, below its hemisphere); a
-:class:`FemReductionWarning` names every such reason. Conforming
-axisymmetric rod and ring models without the reduction are the planned
-replacement.
+three 4 m rods in homogeneous soil; −55 % … −75 % for two bonded rods of
+which one reaches into a conductive top layer), when the world has
+several clusters (each solved alone, transfer impedances 0) or when a
+layer interface lies above the deepest of the electrode's lowest point,
+the hemisphere radius and the electrode's horizontal half-extent without
+falling under the rules above (−1 % … +48 % where the spanned layer
+conducts no better than the electrodes', −44 % … −78 % for a rod that
+reaches into a conductive top layer by 1 µm … 8 cm, −16 % … +16 % for a
+more resistive layer below a 10 m ring within its radius); a
+:class:`FemReductionWarning` names every such reason. An interface just
+below a deep horizontal electrode but deeper than the hemisphere radius
+and the half-extent is not covered by any rule (+34 % for a 2 m ring
+0.1 m above $h_1$ = 2 m in 1000/30 Ω·m; see the fem engine page).
+Conforming axisymmetric rod and ring models without the reduction are
+the planned replacement.
 
 Mathematical / physical model
 -----------------------------
@@ -203,7 +218,11 @@ Scope
   therefore reproduces the Dwight value; in layered soil the hemisphere
   extends to the depth $a_{\\text{eq}}$, not to the electrode's depth,
   and the result describes a different geometry. Star and polyline
-  electrodes are not reducible and raise.
+  electrodes are not reducible and raise; a driven ``MeshElectrode``
+  raises as well (its formula, one strip along the diagonal, reads
+  +118 % … +193 %; audit D2A, O-1), and so do a strip deeper than half
+  its length and a ring deeper than its radius (see
+  :func:`equivalent_hemisphere_radius`).
 - **Multi-electrode.** The hemisphere radii of a cluster's electrodes
   are summed, i.e. the electrodes are put in parallel without their
   mutual resistance; the result is a lower bound of the cluster
@@ -292,7 +311,9 @@ class FemReductionWarning(UserWarning):
     * a cluster with several electrodes (the hemisphere radii are summed,
       i.e. the electrodes' mutual resistance is neglected and the
       resistance is biased low — −35 % for a 2 m ring with three 4 m
-      rods in homogeneous soil);
+      rods in homogeneous soil; −55 % … −75 % for two bonded 3 m rods of
+      which one reaches 10 cm … 1 mm into a conductive 30/1000 Ω·m top
+      layer, where the cluster touches that layer and Q23 does not apply);
     * several clusters (each is solved alone: no mutual resistance
       between them, transfer impedances are exactly 0, passive clusters
       report 0 V);
@@ -300,12 +321,13 @@ class FemReductionWarning(UserWarning):
       hemisphere radius, with the hemisphere reaching below it into a
       layer the electrode does not touch and that conducts no better than
       the electrode's layer (+23 % for a 10 m ring at 0.8 m over a more
-      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m, against
-      ``image_2layer``). Over a more conductive layer it raises (user
-      decision Q23: −92 % in 1000/30 Ω·m); the opposite case — the
-      electrode reaches below an interface its hemisphere does not
-      (+1092 % for a 3 m rod through ``h_1`` = 2 m) — raises as well
-      (review pass 10, 10.23), both with
+      resistive layer at ``h_1`` = 2 m, 30/1000 Ω·m; −1 % … +48 % over
+      the measured cases of such a spanned layer, against
+      ``image_2layer`` and ``mom``). Over a more conductive layer it
+      raises (user decision Q23: −92 % in 1000/30 Ω·m); the opposite case
+      — the electrode reaches a layer its hemisphere does not (+1092 % for
+      a 3 m rod through ``h_1`` = 2 m, +1008 % for a 2 m ring on
+      ``h_1`` = 2 m) — raises as well (review pass 10, 10.23), both with
       :class:`~groundfield.solver.registry.BackendCapabilityError`;
     * a layer interface above the electrode's deepest point that the
       hemisphere, which spans the soil from the surface, crosses as well
@@ -317,16 +339,24 @@ class FemReductionWarning(UserWarning):
       electrodes do not touch (audit round 2, A2E-2) — and when the top
       layer the electrodes do not touch conducts better than theirs (user
       decision Q23: −71 % and −48 % for the same strip and ring under
-      30/1000 Ω·m);
+      30/1000 Ω·m). It only warns where an electrode touches the
+      conductive layer partly: a rod reaching 1 µm … 8 cm into a
+      conductive top layer of 0.2 ``a_eq`` (−44 % … −78 %; whether a
+      share-based contact rule should raise is open, audit D2A-01) or a
+      wire within its radius of the interface (−22 % … +23 %);
     * a layer interface below the electrode and its hemisphere but
       within the electrode's horizontal half-extent (ring radius, half
-      the strip length or grid diagonal): the electrode's current
-      reaches it, the compact hemisphere's much less (−47 %, −20 % and
-      −11 % for a ring r = 10 m at 0.8 m over ``h_1`` = 5, 7 and 9 m in
-      1000/30 Ω·m, +9 % over a more resistive layer at 5 m in
-      30/1000 Ω·m; −0.3 % over ``h_1`` = 20 m, where the rule is
-      silent). This rule is not part of decision Q23 and stays a
-      warning for either contrast.
+      the strip length or grid diagonal) that separates a layer
+      conducting no better than the electrodes': the electrode's current
+      reaches it, the compact hemisphere's much less (+9 % for a ring
+      r = 10 m at 0.8 m over a more resistive layer at ``h_1`` = 5 m in
+      30/1000 Ω·m; −16 % … +16 % over 30/1000, 100/1000 and 30/10000 Ω·m
+      at ``h_1`` = ``a_eq`` … 10 m). Over a more conductive layer it
+      raises since audit D2A-03 (−47 %, −20 % and −11 % at ``h_1`` = 5,
+      7 and 9 m in 1000/30 Ω·m: Q23 extended to the half-extent, a
+      coordinator decision flagged for the author's review); beyond the
+      half-extent the rule is silent (−8.4 % at ``h_1`` = 10 m, −1.3 % at
+      20 m against ``image_2layer``).
 
     The layer rules are structural, not error estimates: a vanishing,
     more resistive top layer (``h_1`` = 4 mm, +1.6 %) is reported as well.
@@ -440,7 +470,9 @@ def _reduction_issues(
     equal resistivity is no reason. Worlds that reach this check passed
     :func:`_unreachable_layers`: a layer reported here is one the
     electrodes touch or one that conducts no better than the layers they
-    touch (user decision Q23).
+    touch (user decision Q23); within the horizontal half-extent (the
+    "wide" reason) that holds for every reported layer since audit
+    D2A-03, a more conductive one raises there as well.
     """
 
     def label(root: str) -> str:
@@ -592,14 +624,17 @@ def _unreachable_layers(
     The equivalent hemisphere injects the cluster current from the soil
     surface down to the radius ``a_eq``. Three configurations raise:
 
-    * an electrode reaches below a layer interface that lies above
-      ``a_eq`` — a rod through or below the top layer — and injects into
-      a layer the hemisphere never touches. Against ``mom``, rods through
-      or below a 1 … 2.5 m top layer are off by +633 % to +3138 % under a
+    * an electrode touches a layer whose top lies below ``a_eq`` — a rod
+      through or below the top layer, a wire on (or within its radius
+      above) an interface below the hemisphere — and injects into a layer
+      the hemisphere never touches. Against ``mom``, rods through or
+      below a 1 … 2.5 m top layer are off by +633 % to +3138 % under a
       conductive lower layer (1000/30 Ω·m) and by −10 % to −85 % over a
       resistive one (100/300, 100/1000 Ω·m); only near-equal layers stay
       within a few percent (100/120 Ω·m: −1.5 % to −4.1 %; review pass
-      10, 10.23);
+      10, 10.23). A 2 m ring on ``h_1`` = 2 m (``a_eq`` = 1.3 m) is
+      +1008 % (1000/30 Ω·m) and −18 % (30/1000 Ω·m) against
+      ``image_2layer`` (silent up to audit D2A-02);
     * every electrode of the cluster lies below an interface at depth
       ``h`` with ``a_eq/2 < h <= a_eq``: more than half of the hemisphere
       lies in a layer the electrodes do not touch (audit round 2, A2E-2).
@@ -608,21 +643,35 @@ def _unreachable_layers(
       ``image_2layer`` in 1000/30 and 10000/30 Ω·m, −81 % … −98 % in
       30/1000 and 30/10000 Ω·m. At ``h = a_eq`` the rule joins the first
       one;
-    * the hemisphere spans a layer (top above ``a_eq``) that no electrode
-      of the cluster touches and that conducts better than every layer
-      the electrodes touch (user decision Q23, 2026-11-08): the
-      hemisphere injects the current straight into it and the result is
-      too low, i.e. not conservative. Measured against ``image_2layer``
-      and ``mom`` for rods, strips and rings below a more conductive top
-      layer of any thickness (from 22 mm) and rings above a more
-      conductive lower layer: −97 % … +5 %, the lower the larger the
-      contrast and the share of the hemisphere in that layer
+    * a layer that no electrode of the cluster touches, that conducts
+      better than every layer the electrodes touch and whose top lies
+      above ``max(a_eq, r_ext)``, ``r_ext`` the largest horizontal
+      half-extent of the cluster's electrodes (user decision Q23,
+      2026-11-08; extended from ``a_eq`` to the half-extent by audit
+      D2A-03): the hemisphere injects the current straight into a layer
+      it spans and reaches one below it much less than the electrodes,
+      and the result is too low, i.e. not conservative. Measured against
+      ``image_2layer`` and ``mom`` for rods, strips and rings below a more
+      conductive top layer of any thickness (from 22 mm) and rings above
+      a more conductive lower layer: −97 % … +5 %, the lower the larger
+      the contrast and the share of the hemisphere in that layer
       (30/10000 Ω·m: −80 % … −97 %; 30/1000 Ω·m: −35 % … −80 %;
-      near-equal layers, 100/120 and 120/100 Ω·m: −7 % … +5 %). An
-      electrode lying exactly on the interface touches both layers. A
-      more *resistive* spanned layer keeps the
-      :class:`FemReductionWarning` (+3 % … +45 % measured).
+      near-equal layers, 100/120 and 120/100 Ω·m: −7 % … +5 %); for a
+      layer below the hemisphere within the half-extent −78 % … +1 %
+      (rings, strips), −60 % … +13 % (a 20 m grid, whose formula reads
+      +12 % high in homogeneous soil). The fem error is continuous across
+      ``a_eq`` (−67.9 % on both sides for a 10 m ring over 1000/30 Ω·m);
+      the rule stops at ``r_ext``, where it is −9.8 % … −0.8 % (rings),
+      −1.4 % (10 m strip) and +9.9 % (grid). A layer that conducts no
+      better keeps the :class:`FemReductionWarning` (−1 % … +48 % when
+      the hemisphere spans it, −16 % … +16 % below it within the
+      half-extent).
 
+    Which layers an electrode touches is one predicate for all three
+    rules, the contact of the thin-wire model of the integral engines
+    (:func:`_electrode_layers`; audit D2A-01, D2A-02): a horizontal wire
+    touches every layer within its wire radius of its axis, a rod the
+    layers its axis passes through, an end on an interface not counting.
     The checks are structural, independent of the size of the contrast.
     Layers are taken from the canonical layer stack (10.48), so a
     declared interface between equal resistivities is none. One reason is
@@ -989,7 +1038,8 @@ def _unreachable_message(
             "the cluster current from the soil surface down to a_eq, into other "
             "layers than the electrodes (rods through or below the top layer: "
             "-98 % to +3138 % against 'mom' and 'image_2layer' over the "
-            "contrasts 10000/30 ... 30/10000 Ohm m)."
+            "contrasts 10000/30 ... 30/10000 Ohm m; a 2 m ring on an interface "
+            "below its hemisphere: -18 % to +1008 % against 'image_2layer')."
         )
     if conductive:
         parts.append("; ".join(conductive) + ". " + _CONDUCTIVE_LAYER_EFFECT)
@@ -1699,7 +1749,8 @@ def solve_fem(
     its lowest point, its hemisphere radius and its horizontal
     half-extent; otherwise it raises (see *Raises*) or emits a
     :class:`FemReductionWarning` naming the reason (review pass 10, 10.23;
-    audit round 1, F01; user decision Q23; see the module docstring).
+    audit round 1, F01; user decision Q23; audit D2A; see the module
+    docstring).
 
     The mesh conforms to the hemisphere $r = a_{\\text{eq}}$ and the
     layer interfaces $z = \\sum_{i \\le k} h_i$ (see
@@ -1760,20 +1811,23 @@ def solve_fem(
     Raises
     ------
     BackendCapabilityError
-        If an electrode of a driven cluster reaches below a layer
-        interface that lies above the cluster's hemisphere radius
-        ``a_eq`` (rod through or below the top layer, review pass 10,
-        10.23); if every electrode of the cluster lies below an
-        interface at a depth between ``a_eq/2`` and ``a_eq`` (more than
-        half of the hemisphere in a layer the electrodes do not touch,
-        audit round 2, A2E-2); or if the hemisphere spans a layer (top
-        above ``a_eq``) that no electrode of the cluster touches and that
-        conducts better than every layer they touch (user decision Q23:
-        the result would be too low, −97 % … +5 % measured; independent
-        of the size of the contrast; an electrode exactly on an interface
-        touches both layers). The reduction cannot represent these
-        worlds; the message names the cluster, the layer and a backend
-        that solves the world. Also if a driven cluster contains an
+        If an electrode of a driven cluster touches a layer whose top lies
+        below the cluster's hemisphere radius ``a_eq`` (rod through or
+        below the top layer, a wire on an interface below the hemisphere;
+        review pass 10, 10.23); if every electrode of the cluster lies
+        below an interface at a depth between ``a_eq/2`` and ``a_eq``
+        (more than half of the hemisphere in a layer the electrodes do
+        not touch, audit round 2, A2E-2); or if a layer that no electrode
+        of the cluster touches, that conducts better than every layer
+        they touch and whose top lies above ``max(a_eq, r_ext)`` (``r_ext``
+        the electrodes' horizontal half-extent) exists (user decision Q23,
+        extended to the half-extent by audit D2A-03: the result would be
+        too low, −97 % … +13 % measured; independent of the size of the
+        contrast). A horizontal wire touches every layer within its wire
+        radius, a rod the layers its axis passes through (audit D2A-01,
+        D2A-02). The reduction cannot represent these worlds; the message
+        names the cluster, the layer and the backends that solve the
+        world. Also if a driven cluster contains an
         electrode without a closed-form hemisphere radius (polyline and
         star electrodes; the generators build mesh foundations of
         polylines), or one whose closed form is used outside its range: a
@@ -1798,7 +1852,8 @@ def solve_fem(
         cluster, several clusters, a layer interface above the deepest
         of the electrode, its hemisphere and its horizontal half-extent
         that separates the electrodes from a layer touched by them or
-        conducting no better than theirs).
+        conducting no better than theirs; see :class:`FemReductionWarning`
+        for the measured errors).
     """
     if far_field not in ("robin", "dirichlet"):
         raise ValueError(

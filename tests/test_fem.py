@@ -357,6 +357,7 @@ def _three_layers(rhos, thicknesses) -> gf.MultiLayerSoil:
 
 
 _A_ROD = 0.44231  # equivalent-hemisphere radius of a 3 m rod, r = 5 mm (m)
+_A_RING10 = 4.622583619251554  # a_eq of a ring r = 10 m at 0.8 m, r = 5 mm (m)
 
 _STRIP = dict(start=(0.0, 0.0, 0.8), end=(10.0, 0.0, 0.8))
 
@@ -458,7 +459,8 @@ def test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans(
     cluster touches and that conducts better than every layer they touch,
     the reduction injects the current there and reads far too low
     (non-conservative). Up to bbaea9f this was a ``FemReductionWarning``
-    (or silent); the user decided on an error, independent of the contrast.
+    (never silent: every such world warned, audit D2A-05); the user decided
+    on an error, independent of the contrast.
     """
     # user decision Q23
     from groundfield.solver.fem import solve_fem
@@ -801,6 +803,102 @@ def test_fem_a_wire_touching_a_layer_below_its_hemisphere_raises(
         gf.create_engine(backend="fem", segment_length=0.5).solve(w)
 
 
+def _documented(pattern: str) -> list[str]:
+    """Where the fem docs (engine page, FemReductionWarning) miss ``pattern``."""
+    import re
+    from pathlib import Path
+
+    from groundfield.solver.fem import FemReductionWarning
+
+    page = Path(__file__).resolve().parents[1] / "docs/explanation/engines/fem.md"
+    texts = {
+        "fem.md": page.read_text(encoding="utf-8"),
+        "FemReductionWarning": FemReductionWarning.__doc__,
+    }
+    return [k for k, t in texts.items() if not re.search(pattern, " ".join(t.split()))]
+
+
+def _z_ref(backend: str, world) -> float:
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = gf.create_engine(backend=backend, segment_length=0.25).solve(world)
+    return res.cluster_impedance("g1")[0].real
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("soil", "kind", "params"),
+    [
+        # ring r = 10 m over 30/10000 at 2 m: -1.0 % / -0.9 %
+        (
+            gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=2.0),
+            "ring",
+            dict(center=(0, 0, 0.8), radius=10.0),
+        ),
+        # 3 m rod under 10000/30 at 0.49 a_eq: +44.7 % / +46.9 % (+47.6 % at
+        # half the segment length)
+        (
+            gf.TwoLayerSoil(rho_1=10000.0, rho_2=30.0, h_1=0.49 * _A_ROD),
+            "rod",
+            dict(position=(0, 0, 0.5), length=3.0),
+        ),
+    ],
+)
+def test_fem_documented_range_of_the_resistive_warning_holds(
+    soil, kind, params
+) -> None:
+    """A more resistive spanned layer warns at -1 ... +48 %, as documented.
+
+    The docs quoted +3 ... +45 %; the extremes measured by the audit are
+    -1.0 % (ring over 30/10000) and +47.6 % (rod under 10000/30, mom at half
+    the segment length) (audit D2A-04).
+    """
+    # audit D2A-04
+    w = _electrode_world(soil, kind, **params)
+    res, texts = _fem_warnings(w)
+    assert texts, "no FemReductionWarning"
+    fem = res.cluster_impedance("g1")[0].real
+    for backend in ("image_2layer", "mom"):
+        err = 100.0 * (fem / _z_ref(backend, w) - 1.0)
+        assert -1.5 <= err <= 48.5, f"{backend}: {err:+.1f} %"
+    assert _documented(r"−1 (% )?… \+48 %") == []
+
+
+@pytest.mark.finding("10.23", "F01")
+@pytest.mark.parametrize(
+    ("rho_1", "rho_2", "h_1"),
+    [
+        (30.0, 10000.0, 9.99),  # -15.5 % / -15.2 %
+        (100.0, 1000.0, _A_RING10 * (1 + 1e-9)),  # +15.2 % / +15.6 %
+    ],
+)
+def test_fem_documented_range_of_the_wide_warning_holds(rho_1, rho_2, h_1) -> None:
+    """The warning that remains within the half-extent: -16 ... +16 %.
+
+    Since the conductive "wide" worlds raise (D2A-03), the warning covers
+    layers that conduct no better than the electrodes'. The docs quoted
+    -11 ... -47 % for the conductive ones and +9 % for one resistive case;
+    ring r = 10 m at 0.8 m over 30/10000 and 100/1000 Ohm m reads
+    -15.5 % ... +15.6 % against image_2layer and mom (audit D2A-03).
+    """
+    # audit D2A-03
+    w = _electrode_world(
+        gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1),
+        "ring",
+        center=(0, 0, 0.8),
+        radius=10.0,
+    )
+    res, texts = _fem_warnings(w)
+    assert texts and "half-extent" in texts[0], texts
+    fem = res.cluster_impedance("g1")[0].real
+    for backend in ("image_2layer", "mom"):
+        err = 100.0 * (fem / _z_ref(backend, w) - 1.0)
+        assert -16.5 <= err <= 16.5, f"{backend}: {err:+.1f} %"
+    assert _documented(r"−16 (% )?… \+16 %") == []
+
+
 @pytest.mark.finding("10.23")
 def test_fem_q23_counts_every_electrode_of_a_bonded_cluster() -> None:
     """Two bonded rods: both below the conductive top layer raise; one in it warns."""
@@ -846,9 +944,6 @@ def test_fem_q23_keeps_the_warning_where_the_layer_is_not_more_conductive(
     res, texts = _fem_warnings(w)
     assert math.isfinite(res.cluster_impedance("g1")[0].real)
     assert texts, "no FemReductionWarning"
-
-
-_A_RING10 = 4.622583619251554  # a_eq of a ring r = 10 m at 0.8 m, r = 5 mm (m)
 
 
 @pytest.mark.finding("10.23", "F01")

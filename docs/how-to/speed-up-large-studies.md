@@ -102,9 +102,12 @@ every engine of the process; `max_segments` is the per-engine setting.
 
 ### Move the size notice
 
-Below the limit, every solve at or above a second size emits a
+Below the limit, every `Engine.solve` at or above a second size emits a
 `UserWarning` that the solve time may run from seconds to minutes
-(`"budget: ..."`, an *info* finding of `gf.diagnose`). That size belongs
+(`"budget: ..."`, an *info* finding of `gf.diagnose`); `solve_mutual_matrix`
+and `solve_mutual_field` do not emit it, and for the experimental `fem` the
+segment count is not its problem size (the mesh of each cluster is). That
+size belongs
 to the engine as well: `warn_segments=None` (the default) uses the module
 constant `SOFT_LIMIT` (5 000), a positive integer sets it for this engine
 only and is counted like the limit (segments and nodal unknowns). On a

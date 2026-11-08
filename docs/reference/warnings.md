@@ -156,14 +156,24 @@ soil use `image_2layer`.
 
 `gf.FemReductionWarning`. **Emitted** once per `fem` solve, listing the
 reasons, when its equivalent-hemisphere reduction does not represent the
-world: several electrodes in a cluster (mutual resistance neglected),
-several clusters (no coupling between them), or a layer interface within
-the hemisphere radius or the electrode's horizontal extent. A spanned
-layer that no electrode touches and that conducts better than the
-electrodes' layer is no warning but a `BackendCapabilityError` since
-2026.11 (user decision Q23: the result would be too low), as are
-electrodes in a layer the hemisphere does not reach. **Remedy:** use an
-integral-equation backend for such worlds; `fem` is experimental.
+world: several electrodes in a cluster (mutual resistance neglected;
+−35 % for a ring with three rods, −55 … −75 % for two bonded rods of
+which one reaches into a conductive top layer), several clusters (no
+coupling between them), or a layer interface within the hemisphere
+radius or the electrode's horizontal extent over a layer that the
+electrodes touch or that conducts no better than theirs (−1 … +48 %
+measured for a spanned layer, −16 … +16 % for one within the extent;
+−44 … −78 % for a rod that reaches 1 µm … 8 cm into a conductive top
+layer). A layer that no electrode touches, that conducts better than the
+electrodes' layer and whose top lies above the hemisphere radius or the
+horizontal half-extent is no warning but a `BackendCapabilityError`
+since 2026.11 (user decision Q23 and audit D2A-03: the result would be
+too low), as are electrodes touching a layer the hemisphere does not
+reach, a strip deeper than half its length, a ring deeper than its
+radius and a driven `MeshElectrode` (the closed forms outside their
+range). See the [fem engine page](../explanation/engines/fem.md#guards)
+for the measured numbers. **Remedy:** use an integral-equation backend
+for such worlds; `fem` is experimental.
 
 ### `ComplexImageFitWarning`
 
@@ -243,7 +253,11 @@ check units and segment lengths; to solve a large world on purpose,
 raise the limit of the engine, `Engine(max_segments=...)`. Below that
 limit, a world at or above the engine's notice size
 (`Engine(warn_segments=...)`, default `SOFT_LIMIT` = 5 000) only emits the
-`UserWarning` `"budget: ..."` that the solve may take minutes.
+`UserWarning` `"budget: ..."` that the solve may take minutes; the notice
+comes from `Engine.solve` (with any backend), not from
+`solve_mutual_matrix` / `solve_mutual_field`. Both sizes count the
+segments of the integral engines: `fem` neither uses them nor refuses a
+world above the limit (its problem is the mesh of each driven cluster).
 
 ## Post-processing
 

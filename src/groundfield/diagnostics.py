@@ -83,13 +83,18 @@ that takes an engine (:func:`check_segment_budget`,
 ``solve_mutual_field`` included, check against the same limit;
 ``FieldResult.metadata["max_segments"]`` records it.
 
-The soft notice — at or above this size every solve warns that it may take
-from seconds to minutes on a laptop, and :func:`diagnose` reports it as an
-*info* finding — is set per engine as well, ``Engine(warn_segments=...)``,
+The soft notice is set per engine as well, ``Engine(warn_segments=...)``,
 counted like ``max_segments`` (user decision Q31, 2026-11-08); ``None``
-(the default) takes :data:`SOFT_LIMIT` (5 000), read at call time. The two
-are not checked against each other: a notice above the engine's hard limit
-never appears, because such a world is refused first.
+(the default) takes :data:`SOFT_LIMIT` (5 000), read at call time. At or
+above this size every :meth:`Engine.solve
+<groundfield.solver.engine.Engine.solve>`, with any backend, warns that it
+may take from seconds to minutes on a laptop, and :func:`diagnose` reports
+it as an *info* finding; ``solve_mutual_matrix`` and ``solve_mutual_field``
+check the hard limit but emit no notice. For ``fem`` the segment count is
+not its problem size (the mesh of each driven cluster is), and ``fem`` does
+not refuse a world above the limit either. The two sizes are not checked
+against each other: a notice above the engine's hard limit never appears,
+because such a world is refused first.
 :func:`check_segment_resolution` and :func:`diagnose` (``report.context
 ["warn_segments"]``) use the engine's value.
 

@@ -45,9 +45,11 @@ The checks guard the assumptions of the thin-wire model (see
   dense nodal system of $n$ unknowns (current owners, nodes and
   branches, every conductor sub-piece included) takes $16n^2$ bytes.
   At or above the engine's notice size the report informs that a
-  solve takes minutes (an *info* finding; every solve emits it as a
-  `UserWarning`); above the engine's limit the solver refuses to start
-  with `ResourceLimitError`, before anything of that size is allocated.
+  solve takes minutes (an *info* finding; every `Engine.solve`, with any
+  backend, emits it as a `UserWarning` — `solve_mutual_matrix` and
+  `solve_mutual_field` do not); above the engine's limit the solver
+  refuses to start with `ResourceLimitError`, before anything of that
+  size is allocated (every segment backend and `solve_mutual_*`).
   Both are set per engine and count both sizes: the limit with
   `Engine(max_segments=...)`, the notice with
   `Engine(warn_segments=...)` (positive integers; user decisions Q17 and
@@ -62,7 +64,11 @@ The checks guard the assumptions of the thin-wire model (see
   block of a result keeps both requests.
 
 The segment counts follow the discretisation of the image and MoM
-families; for `fem` they do not predict the cost.
+families; for `fem` they do not predict the cost. `fem` does not use those
+segments: its problem is the mesh of each driven cluster (about 2 400 nodes
+at the default resolution, independent of `segment_length`), so its
+`Engine.solve` still emits the notice from the segment count but does not
+refuse a world above `Engine.max_segments`.
 
 ## Example
 
