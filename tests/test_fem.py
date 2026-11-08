@@ -696,6 +696,146 @@ def test_fem_rejects_a_driven_polyline_with_a_capability_error() -> None:
     assert res.electrode_potentials["wire"][0] == 0j
 
 
+_SURFACE_CASES = [
+    # (soil, kind, params, needle of the fem message, passive)
+    pytest.param(
+        gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0),
+        "ring",
+        dict(center=(0, 0, -0.5), radius=10.0),
+        "at or above the soil surface",
+        False,
+        id="ring-in-the-air-two-layers",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "ring",
+        dict(center=(0, 0, 0.0), radius=10.0),
+        "at or above the soil surface",
+        False,
+        id="ring-at-z=0",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "strip",
+        dict(start=(0, 0, 0.0), end=(10, 0, 0.0)),
+        "at or above the soil surface",
+        False,
+        id="strip-at-z=0",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "grid_mesh",
+        dict(corner=(0, 0, 0.0), size=(10, 10), n_x=2, n_y=2),
+        "at or above the soil surface",
+        False,
+        id="grid-at-z=0",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "mesh",
+        dict(corner=(0, 0, -0.7), size=(10, 10)),
+        "at or above the soil surface",
+        False,
+        id="mesh-in-the-air",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "rod",
+        dict(position=(0, 0, -0.5), length=1.2),
+        "reaches above the soil surface",
+        False,
+        id="rod-head-in-the-air",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "ring",
+        dict(center=(0, 0, 0.0025), radius=10.0),
+        "soil-surface plane",
+        False,
+        id="ring-in-the-surface-plane",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "ring",
+        dict(center=(0, 0, -0.5), radius=2.0),
+        "at or above the soil surface",
+        True,
+        id="passive-ring-in-the-air",
+    ),
+    pytest.param(
+        gf.HomogeneousSoil(rho=100.0),
+        "polyline",
+        dict(vertices=[(0, 5, 0.0), (5, 5, 0.0)]),
+        "at or above the soil surface",
+        True,
+        id="passive-polyline-at-z=0",
+    ),
+]
+
+
+def _surface_world(soil, kind: str, params: dict, passive: bool) -> gf.World:
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, kind, name="g1", **params)
+    if passive:  # the probed electrode is passive, a rod is driven
+        gf.create_electrode(w, "rod", name="d", position=(30, 0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="d" if passive else "g1", magnitude=1.0)
+    return w
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("soil", "kind", "params", "needle", "passive"), _SURFACE_CASES
+)
+def test_fem_rejects_an_electrode_above_the_surface_like_every_backend(
+    soil, kind, params, needle, passive
+) -> None:
+    """An electrode at or above the soil surface is refused by every backend.
+
+    The integral backends refuse a segment whose mid-point lies at or above
+    the surface, in the surface plane (``2 z <= wire_radius``) or with a
+    part in the air (:func:`groundfield.solver._guards._check_segment_depths`).
+    ``fem`` solved such worlds — a ring 0.5 m in the air read like a ring
+    1 mm deep, since the hemisphere formulas clamp the depth at 1 mm — and
+    a Q23 message named ``'mom'`` / ``'image_2layer'`` for a world both
+    refuse (audit D2A-06). It now refuses them as well, before anything
+    else, with a plain ``ValueError`` like the others.
+    """
+    # audit D2A-06
+    import warnings
+
+    other = "image" if isinstance(soil, gf.HomogeneousSoil) else "image_2layer"
+    for backend in (other, "mom"):  # the rule fem matches
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(ValueError, match="soil.surface"):
+                gf.create_engine(backend=backend, segment_length=0.5).solve(
+                    _surface_world(soil, kind, params, passive)
+                )
+    world = _surface_world(soil, kind, params, passive)
+    with pytest.raises(ValueError, match=needle) as info:
+        _fem_warnings(world)
+    assert not isinstance(info.value, gf.BackendCapabilityError), info.value
+    assert "'g1'" in str(info.value)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("kind", "params"),
+    [
+        ("rod", dict(position=(0, 0, 0.0), length=3.0)),  # the driven rod
+        ("rod", dict(position=(0, 0, -1e-10), length=3.0)),  # round-off
+        ("ring", dict(center=(0, 0, 0.003), radius=10.0)),  # 2 z > a
+    ],
+)
+def test_fem_keeps_electrodes_that_start_at_the_surface(kind, params) -> None:
+    """Guard: a rod with its head at z = 0 is the ordinary driven rod."""
+    # audit D2A-06
+    res, _ = _fem_warnings(
+        _surface_world(gf.HomogeneousSoil(rho=100.0), kind, params, False)
+    )
+    assert math.isfinite(res.cluster_impedance("g1")[0].real)
+
+
 @pytest.mark.finding("10.66")
 def test_fem_rejects_a_world_without_a_source_like_every_backend() -> None:
     """fem alone solved a source-free world to zeros through Engine.solve.

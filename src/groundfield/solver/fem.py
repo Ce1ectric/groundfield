@@ -339,6 +339,54 @@ class FemReductionWarning(UserWarning):
     """
 
 
+def _reject_electrodes_out_of_the_soil(world: "World") -> None:
+    """Refuse electrodes at or above the soil surface, like every backend.
+
+    The integral backends refuse a leakage segment whose mid-point lies at
+    or above the surface, in the surface plane (``2 z <= wire_radius``: the
+    mirror image lies inside the wire) or with a part in the air
+    (:func:`groundfield.solver._guards._check_segment_depths`). ``fem``
+    solved such worlds: its hemisphere formulas clamp the depth at 1 mm,
+    so a ring 0.5 m in the air read like a ring 1 mm deep (audit D2A-06).
+    The same three conditions, on the electrodes (every one, driven or
+    passive, as the integral backends discretise every one): a rod whose
+    head lies above the surface (to round-off — a head at ``z = 0`` is the
+    ordinary driven rod), a horizontal electrode at ``z <= 0`` or with
+    ``2 z <= wire_radius``.
+
+    Raises
+    ------
+    ValueError
+        For the first such electrode (no other backend solves the world
+        either, so not a :class:`BackendCapabilityError`).
+    """
+    from groundfield.solver._guards import _SURFACE_TOL
+
+    for e in world.electrodes:
+        lower, upper = e.bounds()
+        z_top, z_bottom = float(lower[2]), float(upper[2])
+        a = float(e.wire_radius)
+        if z_bottom > z_top:  # a rod: its head is its shallowest point
+            if z_top >= -_SURFACE_TOL:
+                continue
+            what = f"reaches above the soil surface (its head is at z = {z_top:.4g} m)"
+        elif z_top <= 0.0:
+            what = f"lies at or above the soil surface (z = {z_top:.4g} m)"
+        elif 2.0 * z_top <= a:
+            what = (
+                f"lies in the soil-surface plane (z = {z_top:.4g} m <= "
+                f"wire_radius/2 = {0.5 * a:.4g} m), partly in the air"
+            )
+        else:
+            continue
+        raise ValueError(
+            f"Backend 'fem': electrode '{e.name}' {what}. Every backend refuses "
+            "an electrode out of the soil: z is a depth, positive downwards. "
+            "Bury it (e.g. at z = 0.5 ... 0.8 m), or start a rod at the "
+            "surface (z = 0), which is the ordinary driven rod."
+        )
+
+
 def _depth_range(electrode: "_ElectrodeBase") -> tuple[float, float]:
     """Shallowest and deepest point of a fem-reducible electrode, in m."""
     if isinstance(electrode, RodElectrode):
@@ -1431,6 +1479,12 @@ def solve_fem(
         star electrodes; the generators build mesh foundations of
         polylines). A subclass of ``ValueError`` and
         ``NotImplementedError``.
+    ValueError
+        If an electrode, driven or passive, lies at or above the soil
+        surface, in the surface plane (``2 z <= wire_radius``) or reaches
+        above it (a rod head above ``z = 0``) — what every other backend
+        refuses as well (audit D2A-06). A rod with its head at ``z = 0``
+        is valid.
 
     Warns
     -----
@@ -1454,6 +1508,7 @@ def solve_fem(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    _reject_electrodes_out_of_the_soil(world)  # audit D2A-06
     _reject_concrete_shells(world, "fem")
     _warn_ignored_sources(world, "fem")
 
