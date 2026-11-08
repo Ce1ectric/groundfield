@@ -13,6 +13,7 @@ than bit-exact identity.
 from __future__ import annotations
 
 import math
+import re
 
 import pytest
 
@@ -541,8 +542,10 @@ def _solves(backend: str, world, segment_length: float = 0.5) -> bool:
 @pytest.mark.parametrize(
     ("world", "named", "refusing"),
     [
-        # every segment 5 cm above h_1: mom's point form refuses (closer than
-        # 0.387 segment lengths), the line kernel of image_2layer does not
+        # every segment 5 cm above h_1: mom's point form refuses 0.5 m
+        # segments (closer than 0.387 segment lengths), the line kernel of
+        # image_2layer does not; a finer segment_length lifts it (audit
+        # R2A-04), so mom is named with that remedy
         pytest.param(
             lambda: _electrode_world(
                 gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.85),
@@ -550,9 +553,9 @@ def _solves(backend: str, world, segment_length: float = 0.5) -> bool:
                 center=(0, 0, 0.8),
                 radius=10.0,
             ),
-            ("image_2layer",),
-            ("mom",),
-            id="two-layers-mom-refuses",
+            ("image_2layer", "mom"),
+            (),
+            id="two-layers-mom-needs-finer-segments",
         ),
         # a bare conductor below h_1 = 2 m in three layers: mom_sommerfeld
         # refuses the cross-layer geometry (audit D2A-06)
@@ -603,7 +606,13 @@ def test_fem_names_only_a_backend_that_solves_the_world(world, named, refusing) 
     remedy = text[max(text.rfind("Use backend="), text.rfind("No backend solves")) :]
     for backend in named:
         assert f"'{backend}'" in remedy, remedy
-        assert _solves(backend, world())
+        finer = re.search(
+            rf"'{backend}' refuses this world at segment_length = "
+            r"[0-9.]+ m \(.*\) but accepts it below ([0-9.]+) m",
+            remedy,
+        )
+        ds = 0.99 * float(finer.group(1)) if finer else 0.5  # audit R2A-04
+        assert _solves(backend, world(), segment_length=ds)
     for backend in refusing:
         assert f"backend='{backend}'" not in remedy, remedy
         assert f"'{backend}'" in remedy and "this world: " in remedy, remedy
@@ -637,6 +646,130 @@ def test_fem_remedy_is_not_refused_by_the_engines_resource_limit() -> None:
     assert "No backend solves" not in text, text
     assert "Use backend='mom' (one current per segment) or 'image_2layer'" in text, text
     assert "Engine.max_segments" in text, text
+
+
+# ---------------------------------------------------------------------
+# Audit R2A-03, R2A-04: every remedy text comes from the backends' own
+# checks; a refusal that a setting lifts names the backend with it
+# ---------------------------------------------------------------------
+
+
+def _polyline_world(soil) -> gf.World:
+    return _electrode_world(
+        soil, "polyline", vertices=[(0, 0, 0.8), (10, 0, 0.8), (10, 10, 0.8)]
+    )
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("soil", "named"),
+    [
+        # three layers, the polyline in the top layer: mom_sommerfeld solves
+        # it (6.1644 Ohm); 4fc8153 named 'image' and 'mom', which refuse
+        # three-layer soil
+        pytest.param(
+            _three_layers((100.0, 30.0, 300.0), (2.0, 3.0)),
+            "mom_sommerfeld",
+            id="three-layers-top-layer",
+        ),
+        # the polyline below h_1 = 0.5 m: no backend solves it yet
+        pytest.param(
+            _three_layers((100.0, 30.0, 300.0), (0.5, 3.0)), None, id="below-h1"
+        ),
+        # homogeneous: the old text, unchanged
+        pytest.param(gf.HomogeneousSoil(rho=100.0), "image", id="homogeneous"),
+    ],
+)
+def test_fem_polyline_message_names_only_backends_that_solve_the_world(
+    soil, named
+) -> None:
+    """The irreducible-electrode error had a fixed remedy (audit R2A-03).
+
+    "Use backend='image' or 'mom'" was false for every world that those two
+    refuse — 87 of 165 random worlds that got this message. The remedy now
+    comes from the backends' own checks like every other fem error.
+    """
+    # audit R2A-03
+    text = _fem_message(_polyline_world(soil))
+    assert "no closed form for PolylineElectrode" in text, text
+    if named is None:
+        assert "No backend solves this world yet" in text, text
+        assert "'image'" not in text, text
+    else:
+        assert f"Use backend='{named}'" in text, text
+        assert _solves(named, _polyline_world(soil))
+    if not isinstance(soil, gf.HomogeneousSoil):
+        assert "Use backend='image' or 'mom'" not in text, text
+
+
+@pytest.mark.finding("10.23")
+def test_fem_no_backend_claim_does_not_depend_on_the_segment_length() -> None:
+    """Three layers, ring r = 10 m at 0.8 m over h_1 = 1 m (Q23), ds = 2 m.
+
+    The point form of mom_sommerfeld refuses 2 m segments 0.2 m above h_1,
+    and 4fc8153 said "No backend solves this world yet"; with a finer
+    segment_length it solves the world (15.0457 Ohm at 0.5 m). A refusal
+    that a setting lifts names the backend with that setting (audit R2A-04).
+    """
+    # audit R2A-04
+    w = _electrode_world(
+        _three_layers((1000.0, 30.0, 1000.0), (1.0, 3.0)),
+        "ring",
+        center=(0, 0, 0.8),
+        radius=10.0,
+    )
+    text = _fem_message(w, segment_length=2.0)
+    assert "No backend solves this world yet" not in text, text
+    assert "Use backend='mom_sommerfeld'" in text, text
+    assert "but accepts it below 0.333 m" in text, text
+    assert _solves("mom_sommerfeld", w, segment_length=0.33)
+
+
+@pytest.mark.finding("10.23")
+def test_fem_resource_limit_does_not_assert_the_geometry() -> None:
+    """Rod through h_1 in three layers, ``max_segments = 3``.
+
+    The dry check stopped at the resource limit before the cross-layer
+    check of mom_sommerfeld, and 4fc8153 said "Use backend='mom_sommerfeld',
+    which solves three or more layers when every segment lies in the top
+    layer, as here" — mom_sommerfeld refuses the rod at any limit. The
+    cross-layer check now runs on the geometry first (audit R2A-04).
+    """
+    # audit R2A-04
+    import warnings
+
+    w = _rod_world(_three_layers((1000.0, 30.0, 1000.0), (2.0, 3.0)), top=0.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(gf.BackendCapabilityError) as info:
+            gf.Engine(backend="fem", segment_length=0.5, max_segments=3).solve(w)
+    text = str(info.value)
+    assert "as here" not in text, text
+    assert "No backend solves this world yet" in text, text
+    assert "'mom_sommerfeld' refuses this world: electrode 'g1' reaches z = 3 m" in text
+
+
+@pytest.mark.finding("10.23")
+def test_fem_remedy_passes_the_guards_own_reason() -> None:
+    """A rod through h_1 bonded to a ring 0.1 m deep (two layers, ds = 0.5 m).
+
+    The point form of mom refuses because its 3-point rule reaches above the
+    soil surface, not because of the interface; 4fc8153 quoted a fixed text
+    about the interface. The guard's own reason is passed through, and a
+    finer segment_length lifts the refusal (audit R2A-04).
+    """
+    # audit R2A-04
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(w, "ring", name="r", center=(3, 0, 0.1), radius=1.0)
+    gf.create_conductor(w, start="g1", end="r", name="bond")
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    text = _fem_message(w)
+    assert "reach above the soil surface" in text, text
+    assert "closer than 0.387 segment lengths to the interface" not in text, text
+    assert "'mom' refuses this world at segment_length = 0.5 m" in text, text
+    assert "but accepts it below 0.258 m" in text, text
+    assert _solves("mom", w, segment_length=0.25)
 
 
 @pytest.mark.finding("10.23")

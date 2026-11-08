@@ -172,11 +172,17 @@ a warning in between; audit R2A-02).
   generators build mesh foundations of polyline wires, so generated
   networks cannot be solved with `fem`.
 - The backends an error message names pass their own checks for the
-  world — the capability check, the resource limit, the burial depth of
-  every segment, the point form at the interface and the cross-layer
-  limit of `mom_sommerfeld`; a backend that refuses is named with its
-  reason, and if none accepts, the message says that no backend solves
-  the world yet (audit D2A-06).
+  world — the capability check, the cross-layer limit of `mom_sommerfeld`
+  (decided from the geometry), the resource limit, the burial depth of
+  every segment and the point form at the interface. A backend that a
+  setting of the engine would let solve the world is named with that
+  setting: a larger `Engine.max_segments`, or a `segment_length` below the
+  length its point-form guard names (checked by running its checks again
+  at that length); a backend that refuses the world itself is named with
+  its own reason, and if none is left, the message says that no backend
+  solves the world yet. Every `fem` error takes its remedy from these
+  checks, the one for star and polyline electrodes included (audit
+  D2A-06, R2A-03, R2A-04).
 - **Warning** (`FemReductionWarning`, once per solve, naming every reason
   and the cluster members): a cluster with several electrodes (radii
   summed; −35 % for a ring with three rods in homogeneous soil, −55 … −75 %
