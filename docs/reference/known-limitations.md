@@ -130,7 +130,12 @@ shows what agrees with independent references and how well.
   inductance, `return_to`, junctions and concrete shells
   (`BackendCapabilityWarning` or `BackendCapabilityError`).
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are
-  represented by the image family and `solve_mutual_*` only.
+  represented by the image family and `solve_mutual_*` only. Each wire
+  carries its own radial shell; where wires meet — the corners of a ring,
+  the crossings and T-joints of a mesh foundation, whose braces are encased
+  since 2026.11 — the shells overlap within about $r_b$ of the junction
+  and each wire counts the shared concrete as its own (a local effect, not
+  quantified separately).
 - **Aliases.** `cim`, `bem` and `image_nlayer` run `image` and `mom`;
   comparing them with their targets adds no independent information.
 
