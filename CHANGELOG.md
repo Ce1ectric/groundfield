@@ -94,16 +94,19 @@ is named.
 | 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope samples mesh cells and ring centres | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V; star 275 → 818 V; 10 m ring envelope 139.4 → 182.6 V; rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point", interior=False` reproduces 0.15.0 |
 | 10.18, 10.19 | `sweep`, `convergence_study` and the rho-f helpers use the input impedance | the cluster impedance of a station was 1.26 / 1.79 / 3.09 × the input impedance with 1 / 3 / 8 houses on a PEN; a ring with two bonded rods was fitted 17 % too high | sweeps of TN worlds and BusTypes exported with the rho-f helpers; the AP1 catalogue computes its own driving-point impedance |
 | 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
-| 10.73, 10.01 | exported formulas are partial fractions with float coefficients; roots and logarithms of numbers in hand-written formulas are floats | at most half a unit in the last printed digit; at most 3.6e-16 | text diffs of BusType files, hand-written formulas |
+| 10.73, 10.01 | exported formulas are partial fractions with float coefficients; parsed formulas hold their numbers as floats and are evaluated without `lambdify` | at most half a unit in the last printed digit; evaluated formulas at most 4.1e-16 (exporter output) and 3.3e-15 (hand-written) | text diffs of BusType files, hand-written formulas |
 | 10.20, F32 | `carson_series` on the anti-parallel image | the earth-return reactance of a 1 km PEN was 2.04 × (50 Hz) and 2.19 × (1 kHz) Carson's; 30-house network \|Z\| −16.6 % at 1 kHz (golden `cond_galvanic_neumann_carson_series` 0.60 %) | `carson_series` studies |
 | 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases | inductive studies with inclined or vertical conductors |
 | 10.35, 10.36, F52 | Sommerfeld kernel for three or more layers and below h₁; λ grid of distant pairs | a three-layer earth with ρ₂ = ρ₃ was +17 … +25 % in X′; pair entries 200 m and 400 m apart were −24 % and +274 % off (golden at most 2.1e-5) | `sommerfeld` on `MultiLayerSoil`, deep conductors, large networks |
 | 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2101 + 3.7839j Ω; two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω | service drops shorter than the PEN segment length, lumped leads |
 | 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
-| 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`) | `cim` and declared equal layers |
+| 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged in every backend | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`); `TwoLayerSoil(ρ, ρ, h)` in `image_2layer` was 3.8e-4 (point kernel) and 3.3e-7 (line kernel) from homogeneous soil, now equal bit for bit | `cim` and declared equal layers; not AP1 |
 | 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases now raise | every layered `fem` result |
 | 10.75 | `mom` and `mom_sommerfeld` honour `return_to` and junctions | the return current flows through the return electrode instead of remote earth | `mom` family worlds with two-terminal sources |
-| 10.32, 10.58, 10.61 | interface slivers dropped, segment counts, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
+| 10.32 | every interface cut is kept, however short the part beyond it, so a rod tip or head next to the interface is in contact with the layer it reaches | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 130.3 Ω (−33 %); the impedance is continuous in the penetration depth (golden: none) | rods whose tip or head lies within 16 mm of an interface |
+| 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now 0.3–0.6 % above the per-segment reference; generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
+| 10.38 | the PEN cables of `TnNetworkGenerator` form a nearest-point tree: a service drop taps the main beside its house | default network: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %; measurement network −1.1 % (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
+| 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
 
 <!-- Release coordinator: entries from the second adversarial audit go below
      their category; numbers that move go into the table above. -->
@@ -113,20 +116,29 @@ is named.
 - **BusType formulas are parsed, never executed (10.01).** `evaluate_spec`
   passed `impedance_formula` to `sympy.sympify`, so a crafted BusType file ran
   code or exhausted memory. An allow-list parser (`groundfield.io._formula`)
-  builds the SymPy expression from the syntax tree with bounds on length,
-  nodes, depth, exponents, number size, roots of exact numbers and a work
-  budget; formulas are validated on load (`EvaluateSpecError`). Every formula
-  the 0.15.0 exporter wrote still loads with the same value. The attack corpus
-  `tests/data/formula_corpus.json` is shared with groundinsight's guard.
-  Tests: `tests/test_formula_security.py`.
+  builds the expression from the syntax tree, every node unevaluated,
+  computes its numbers itself in bounded floating point and evaluates it
+  with its own numeric function instead of `lambdify`, with bounds on
+  length, nodes, depth, number size, work and the product of nested
+  exponents (64); formulas are validated on load (`EvaluateSpecError`), and
+  crafted documents raise `ValueError`. (A first version still let SymPy
+  expand symbolic `exp` and fractional powers of large powers: 67- to
+  75-character formulas ran longer than 60 s; second adversarial audit,
+  A2G-01 to A2G-03.) Every formula the 0.15.0 exporter wrote still loads
+  with the same value. The attack corpus `tests/data/formula_corpus.json`
+  (119 accepted, 122 rejected) is shared with groundinsight's guard. Tests:
+  `tests/test_formula_security.py`.
 - **Result files from untrusted sources (audit A1-01).** `load_result` decodes
   only the array types the encoder writes, checks shapes and sizes before
-  allocating and bounds the nesting depth. Tests:
+  allocating and bounds the nesting depth; a number beyond the float range
+  raises `ValueError` (audit A2S-04). Tests:
   `tests/test_result_metadata_codec.py`.
 - **Overpass requests (10.05).** Validated parameters (no query injection
   through `timeout_s`), https only, a capped response (16 MiB by default),
   error payloads raise and are not cached, atomic cache files, every element
-  checked before caching. Tests: `tests/test_overpass_ingest.py`.
+  checked before caching; payloads nested deeper than an Overpass result, ids
+  beyond 64 bits and oversized integer coordinates raise `OverpassError`
+  (audit A2G-05). Tests: `tests/test_overpass_ingest.py`.
 - **Wheel contents (10.02).** The wheel installed `scripts/release.py` and the
   `release` command like groundinsight 0.3.0 does, so installing both
   overwrote one with the other; it now ships only `groundfield`. Test:
@@ -205,8 +217,11 @@ is named.
   crossing wires, inert settings, series truncation); `World.check()` (10.66)
   validates source terminals and conductor ends; `check_segment_budget` and
   `ResourceLimitError` (10.06); `find_close_wires`, `find_close_conductors`,
-  `segment_distance` (10.44). Tests: `tests/test_diagnostics_report.py`,
-  `tests/test_source_validation.py`, `tests/test_conductor_proximity.py`.
+  `segment_distance` (10.44); `expected_segments(...)["nodal_unknowns"]`, the
+  size of the dense nodal system the guard checks (audit A2S-02);
+  `groundfield.solver.PointKernelInterfaceWarning` (10.28). Tests:
+  `tests/test_diagnostics_report.py`, `tests/test_source_validation.py`,
+  `tests/test_conductor_proximity.py`, `tests/test_cross_layer_point_form.py`.
 
 **Coupling**
 
@@ -276,8 +291,11 @@ is named.
   `meas_S`. Test: `tests/test_measurement_loop.py`.
 - **Footprints (10.54):** `foundation_outline="ombr" | "polygon" | "spec"`,
   `exclude_building_tags` with `NON_SERVICE_BUILDING_TAGS`, `rng=` on `build()`
-  and `plan()` (10.53). Tests: `tests/test_footprint_foundations.py`,
-  `tests/test_overpass_ingest.py`.
+  and `plan()` (10.53); `BuildingFootprint.mean_width_m()` and
+  `.is_degenerate()`, `geo.mean_width`, `geo.MIN_OUTLINE_WIDTH_M` and
+  `geo.MAX_PAYLOAD_DEPTH` (audit A2G-05, A2G-06). Tests:
+  `tests/test_footprint_foundations.py`, `tests/test_overpass_ingest.py`,
+  `tests/test_geo_footprint.py`.
 
 **API**
 
@@ -338,9 +356,14 @@ is named.
   (`metadata["solver"] == "point_matching"`) as one point-matching scheme; they
   share one solve pipeline and the depth advisories of the image family.
 - ⚠ **`cim` (10.30)** reads the length-weighted node potential; ⚠ **layer
-  stacks (10.48)** are merged to their canonical form; ⚠ **`fem` (10.23,
-  10.49)** is experimental, warns where its reduction does not model the world
-  and raises for electrodes below its hemisphere's layer.
+  stacks (10.48)** are merged to their canonical form in every backend
+  (`TwoLayerSoil(ρ, ρ, h)` is homogeneous soil, audit A2S-07); ⚠ **`fem`
+  (10.23, 10.49)** is experimental, warns where its reduction does not model
+  the world or ignores the skin model, and raises for electrodes below its
+  hemisphere's layer, for clusters below a top layer that holds most of the
+  hemisphere (audit A2E-2) and for driven polyline and star electrodes.
+- **A world without a current source (10.66, audit A2S-05)** raises the same
+  `ValueError` in every backend and entry point (`fem` solved it to zeros).
 - **`compare_engines` (10.71)** compares complex impedances at every frequency;
   comparisons that passed before may now fail.
 - **Warnings (10.70):** one warning per cause instead of per electrode;
@@ -368,10 +391,13 @@ is named.
   of 0.39–2.23 s.
 - ⚠ **One passivity check (10.40):** the export and `check_passivity` check 0 Hz
   to twice the highest fitted frequency; fits that passed may now fail.
-- ⚠ **Hand-written formulas (10.01):** roots and logarithms of numbers parse to
-  floats (values move by at most 3.6e-16); `log` inside `exp` and fractional
-  powers of large exact numbers are rejected (write the number as a float).
-  groundfield's exporters write neither.
+- ⚠ **Parsed formulas (10.01):** `parse_impedance_formula` returns an
+  unevaluated expression whose numbers are 17-digit floats (`log(2)` is
+  `0.69314718055994529`); compare parsed expressions by value. Nested powers
+  whose exponents multiply to more than 64 (`((f**8)**8)**2`, `(f*10**40)**2`:
+  write `1e40`), `log` inside `exp` and fractional powers of large exact
+  numbers are rejected; `evaluate_spec` gives the principal branch where
+  `lambdify` gave `nan`. groundfield's exporters write none of these.
 - **`rho_at_fit` (10.84)** is the resistivity of the upper layer for layered
   soil.
 - **CSV (10.69, 10.73):** provenance header, a `frequency_hz` column, no
@@ -388,6 +414,14 @@ is named.
   solved test current.
 - ⚠ **Layout builder (10.38, 10.54):** PEN joints are junctions; foundations
   follow the footprints.
+- ⚠ **Mesh foundations (10.12, 10.39, audit A2G-04):** one wire electrode per
+  mesh line at every orientation, bare or encased (`<name>`, `<name>_w<j>`);
+  `electrode_currents[<name>]` and `grounding_impedance(<name>)` refer to the
+  first wire, use `cluster_impedance` for the foundation. An axis-aligned
+  `"lumped"` ring stays one `grid_mesh`, a polygon outline one closed wire.
+- ⚠ **PEN cables of `TnNetworkGenerator` (10.38):** a nearest-point tree; every
+  cable starts at a leakage-free tap junction (`pen_tap_<k>`) on the network
+  already built, main sections are named `<cable>_s<k>`.
 - ⚠ **`sample_world` (10.53)** resolves every nested distribution once per
   realisation.
 - ⚠ **Depths (10.55):** measurement leads and PEN sections run at their
@@ -399,7 +433,9 @@ is named.
   (`trafo_*`, `kvs_*`, `house_*`) are unchanged.
 - **Overpass:** retries on HTTP 503 honour `Retry-After`; `max_retries` is at
   most 5; the response cap is 16 MiB (pass `max_response_bytes` for wider
-  areas).
+  areas); element ids are 64-bit integers, a non-finite or negative
+  `building:levels` tag gives `levels=None`, outlines without area are
+  skipped.
 
 **API and performance**
 
@@ -501,7 +537,9 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - **`VoltageSource` solved to zero (10.51)** and now raises
   `NotImplementedError` naming the alternative. Test:
   `tests/test_source_validation.py::test_voltage_source_raises_not_implemented_naming_the_alternative`.
-- **`HARD_LIMIT` only warned (10.06):** worlds beyond the segment limit raise
+- **`HARD_LIMIT` only warned (10.06):** worlds beyond the segment limit, or
+  whose dense nodal system with every conductor sub-piece exceeds it (audit
+  A2S-02: a 100 m PEN in 2000 pieces was predicted at 12 segments), raise
   `ResourceLimitError` before any allocation. Test:
   `tests/test_diagnostics_report.py::test_world_beyond_the_hard_limit_is_rejected_before_any_allocation`.
 - **Conductors (10.43, 10.67):** non-positive or non-finite cross sections and
@@ -519,6 +557,10 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - **Engine assignments and copies (audit A1-02, A1-04):** `engine.frequencies
   = []` and a raw `options` dict were accepted, and deprecated flat names in
   `model_copy` were ignored. Tests: `tests/test_engine_validation.py`.
+- **Names used twice in a loaded or edited world (10.66, audit A2S-06)** failed
+  with a singular matrix or merged an electrode and a junction; `World.check()`
+  rejects them. Test:
+  `tests/test_source_validation.py::test_check_reports_names_used_twice`.
 
 **Solver**
 
@@ -534,8 +576,22 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - **Layer stacks (10.48):** physically two-layer or homogeneous
   `MultiLayerSoil` stacks no longer raise. Tests: `tests/test_layer_stack.py`,
   `tests/test_layer_stack_dispatch.py`.
-- **Interface slivers (10.32):** a rod tip just below h₁ no longer raises or
-  shorts the `mom` solve. Test: `tests/test_interface_slivers.py`.
+- ⚠ **Interface slivers and contact (10.32, audit A2S-01):** a rod tip just
+  below h₁ no longer raises or shorts the `mom` solve, and the contact with
+  the layer it reaches is kept: the first fix dropped cuts shorter than the
+  wire diameter, so a 4.5 m rod in 1000/30 Ω·m jumped from 195.0 to 128.6 Ω
+  between 15.9 and 16.1 mm of tip penetration. Test:
+  `tests/test_interface_slivers.py`.
+- ⚠ **Point form next to the interface (10.28):** on the cross-layer path a
+  horizontal wire next to h₁ gave wrong, even negative impedances with
+  `kernel="point"` and the `mom` family (−14 % … −552 %, also in 0.15.0) or a
+  bare `ValueError`; it raises `BackendCapabilityError` naming the line
+  kernel, and one within 0.6 segment lengths warns
+  (`PointKernelInterfaceWarning`). Test: `tests/test_cross_layer_point_form.py`.
+- **Floating clusters in `solve_mutual_*` (10.29, audit A2S-03):** one
+  factorisation for all excitations (256 bonded nodes 199.9 s → 5.6 s,
+  results equal to 1e-12). Test:
+  `tests/test_mutual_matrix.py::test_shared_factorisation_equals_one_floating_solve_per_anchor`.
 - **`mom` family above ground (10.75):** a segment crossing the surface
   raises instead of being solved as buried. Test:
   `tests/test_point_matching_pipeline.py::test_mom_family_rejects_a_segment_partly_above_the_surface`.
@@ -544,6 +600,12 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `tests/test_mom_sommerfeld.py::test_kernel_warns_or_converges_when_the_oscillation_budget_binds`.
 - **`fem` warnings (10.23, audit F01):** interfaces above or beside the
   electrode are reported. Tests: `tests/test_fem.py`.
+- ⚠ **`fem` below a thin top layer (10.23, audit A2E-2):** a 3 m rod below
+  h₁ = 0.4 m in 1000/30 Ω·m read 31.1 Ω against 10.5 Ω (`mom`) with a warning;
+  it raises, and driven polyline and star electrodes raise
+  `BackendCapabilityError` instead of a bare `TypeError`; `fem` warns that it
+  ignores `resistance_model="skin"` (audit A2C-4). Tests: `tests/test_fem.py`,
+  `tests/test_backend_registry.py::test_a_backend_that_ignores_the_skin_model_says_so`.
 - **`fit_complex_images` (10.49)** no longer reports convergence for a fit
   that misses Γ₁. Test: `tests/test_cim.py::test_fit_converged_flag_bounds_the_maximum_error`.
 - **`compare_engines` (10.71, audit F03)** sees the reactance, every frequency,
@@ -551,6 +613,11 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `tests/test_compare_engines.py`.
 - **Resolution check (F53, F54):** polyline and star electrodes are checked.
   Test: `tests/test_diagnostics_report.py::test_resolution_check_covers_star_and_polyline`.
+- **`expected_segments` for layer stacks (10.79, audit A2S-07)** cuts where the
+  backends cut. Test:
+  `tests/test_diagnostics.py::test_expected_segments_matches_the_solve_for_every_layer_stack`.
+- **`convergence_study` (A1-02, audit A2S-08)** shows each warning once and
+  rejects non-finite segment lengths. Tests: `tests/test_convergence.py`.
 - **Line-kernel cost (10.28):** one long segment no longer slows down the
   whole near-pair search (16 houses: 29 s and 1.7 GiB before). Test:
   `tests/test_line_kernel_near_pairs.py`.
@@ -601,11 +668,12 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `tests/test_safety.py::test_touch_voltage_spectrum_rejects_a_frequency_given_twice`.
 - **Vector fit with a 0 Hz sample (10.41):** no collapse to Z ≈ 0. Test:
   `tests/test_vector_fitting.py::test_dc_sample_with_imaginary_part_does_not_collapse_the_fit`.
-- **Export errors and metadata (10.84, 10.27):** an actionable error without
-  `rho_at_fit`, the running version in the BusType metadata, strict JSON for
-  non-finite fit quality. Tests:
+- **Export errors and metadata (10.84, 10.27, 10.19):** an actionable error
+  without `rho_at_fit`, the running version in the BusType metadata, every
+  non-finite number of a BusType document as `null` (audit A2G-08). Tests:
   `tests/test_io_groundinsight.py::test_vector_fit_without_rho_at_fit_raises_an_actionable_error`,
-  `tests/test_io_groundinsight.py::test_metadata_of_hand_built_fits_is_strict_json`.
+  `tests/test_io_groundinsight.py::test_metadata_of_hand_built_fits_is_strict_json`,
+  `tests/test_io_groundinsight.py::test_unknown_fit_quality_and_samples_are_written_as_null`.
 - **Result JSON (10.77):** float keys, infinities and numpy values in the
   metadata survive the round trip; result files honour the umask (audit
   A1-05). Tests: `tests/test_result_persistence.py`.
@@ -625,14 +693,31 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   layout foundations from the footprint, no shift of the random draws,
   degenerate footprints get a minimum foundation. Tests:
   `tests/test_rotated_foundations.py`, `tests/test_footprint_foundations.py`.
+- ⚠ **Mesh foundations depended on their orientation and on an absent shell
+  (10.12, 10.39, audit A2G-04):** the same bare mesh gave 4.796 Ω at 0° and
+  4.738 Ω at 30°, and a shell with ρ_c = ρ_soil lowered the largest touch
+  voltage of a 10 m mesh from 232.3 to 221.2 V (100 A). Tests:
+  `tests/test_foundation_owners.py`.
+- ⚠ **Overlapping PEN cables (10.38):** service drops ran from the cabinet back
+  along the main, which made an inductive 2-house network non-passive
+  (Im Z_in −0.633 Ω at 1 kHz, now +0.072 Ω). Tests:
+  `tests/test_pen_routing.py`.
+- **Outlines without area (10.05, 10.54, audit A2G-06)** crashed the
+  generators; they are skipped on ingest and widened with a warning by the
+  generators. Tests: `tests/test_geo_footprint.py`,
+  `tests/test_footprint_foundations.py`.
+- **Integer fields of a resolved config (10.53)** hold `int`. Test:
+  `tests/test_generators_base.py::test_resolved_integer_fields_hold_integers`.
 - **Reproducibility (10.53, F07):** resolved configs replay their realisation;
   masks ignore the footprint order. Tests:
   `tests/test_generator_reproducibility.py`.
 - **`ManhattanGridPlacement(jitter_m=<distribution>)` (10.55, F47).** Test:
   `tests/test_placement.py::test_manhattan_grid_jitter_accepts_a_distribution`.
-- **Malformed Overpass payloads (10.05, audit M1)** raise before caching.
-  Tests: `tests/test_overpass_ingest.py`.
-- **Layouts pickled with 0.15.0 (10.69)** still build. Test:
+- **Malformed Overpass payloads (10.05, audit M1, A2G-05)** raise
+  `OverpassError` before caching, also deeply nested ones (`RecursionError`
+  before). Tests: `tests/test_overpass_ingest.py`.
+- **Layouts and generator configs pickled with 0.15.0 (10.69, audit A2G-07)**
+  still load and build. Tests: `tests/test_generator_pickles.py`,
   `tests/test_generator_naming.py::test_layout_pickled_with_v0150_still_builds`.
 
 
