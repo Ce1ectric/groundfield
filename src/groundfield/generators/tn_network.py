@@ -76,7 +76,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import Literal, Optional, Union
+from typing import ClassVar, Literal, Optional, Union
 
 import numpy as np
 from pydantic import Field, model_validator
@@ -98,7 +98,8 @@ from groundfield.generators.electrode_specs import (
     rod_circle,
 )
 from groundfield.generators.grounding import GroundingSystemSpec
-from groundfield.generators.materialise import materialise_plan
+from groundfield.generators._pen_routing import PenRouter
+from groundfield.generators.materialise import materialise_plan, site_anchor_point
 from groundfield.generators.measurement import (
     MEASUREMENT_H_TERMINAL,
     MEASUREMENT_S_TERMINAL,
@@ -292,14 +293,14 @@ class CabinetConfig(GeneratorConfig):
         description="Per-cabinet grounding system.",
     )
 
+    _field_renames: ClassVar[dict[str, str]] = {
+        "quote_per_100_buildings": "count_per_100_buildings"
+    }
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data,
-            {"quote_per_100_buildings": "count_per_100_buildings"},
-            "CabinetConfig",
-        )
+        return rename_input_keys(data, cls._field_renames, "CabinetConfig")
 
     @property
     def quote_per_100_buildings(self) -> Union[float, Distribution]:
@@ -313,6 +314,8 @@ class CabinetConfig(GeneratorConfig):
 
 class KvsConfig(CabinetConfig):
     """Deprecated alias of :class:`CabinetConfig`."""
+
+    _unpickle_as: ClassVar[type] = CabinetConfig
 
     def model_post_init(self, context: object, /) -> None:
         warn_renamed("KvsConfig", "CabinetConfig", stacklevel=5)
@@ -530,14 +533,15 @@ class TnNetworkConfig(GeneratorConfig):
         ),
     )
 
+    _field_renames: ClassVar[dict[str, str]] = {
+        "kvs": "cabinets",
+        "source_magnitude_A": "source_magnitude_a",
+    }
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data,
-            {"kvs": "cabinets", "source_magnitude_A": "source_magnitude_a"},
-            "TnNetworkConfig",
-        )
+        return rename_input_keys(data, cls._field_renames, "TnNetworkConfig")
 
     @property
     def kvs(self) -> CabinetConfig:
@@ -557,6 +561,21 @@ class TnNetworkConfig(GeneratorConfig):
 # ---------------------------------------------------------------------
 # Generator
 # ---------------------------------------------------------------------
+
+
+def _router(cfg: "TnNetworkConfig", sites: list[PlannedSite]) -> PenRouter:
+    """PEN router over ``sites`` (the first is the substation)."""
+    node_xy = {}
+    for site in sites:
+        point = site_anchor_point(site)
+        if point is not None:
+            node_xy[site.name] = (point[0], point[1])
+    return PenRouter(
+        sites[0].name,
+        node_xy,
+        depth_m=float(cfg.pen.depth_m),
+        conductor=_pen_conductor(cfg.pen),
+    )
 
 
 def _pen_conductor(pen: PenConfig) -> ConductorParameters:
@@ -726,8 +745,11 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
 
         # --- Cable cabinets + PEN backbone ---
         branches: list[PlannedBranch] = []
+        junctions: list[PlannedJunction] = []
         if isinstance(cfg.pen_topology, RadialTrunkTopology):
-            self._plan_radial_trunk(cfg, substation, buildings, sites, branches, rng)
+            self._plan_radial_trunk(
+                cfg, substation, buildings, sites, branches, junctions, rng
+            )
         else:
             n_cabinets = self._resolve_cabinet_count(cfg, n_buildings, rng)
             cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
@@ -744,7 +766,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     "present electrodes. Increase presence_prob or set "
                     "fixed_count > 0."
                 )
-            self._plan_star_backbone(cfg, substation, cabinets, buildings, branches)
+            self._plan_star_backbone(
+                cfg, substation, cabinets, buildings, branches, junctions
+            )
 
         # --- Optional measurement set-up ---
         measurement = self._plan_measurement(cfg, substation, rng)
@@ -788,6 +812,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             name=cfg.name,
             soil=soil,
             sites=sites,
+            junctions=junctions,
             branches=branches,
             measurement=measurement,
             sources=[source],
@@ -974,22 +999,30 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         cabinets: list[PlannedSite],
         buildings: list[PlannedSite],
         branches: list[PlannedBranch],
+        junctions: list[PlannedJunction],
     ) -> None:
-        """Star backbone: substation → each cabinet, building → nearest cabinet."""
-        conductor = _pen_conductor(cfg.pen)
-        depth = float(cfg.pen.depth_m)
+        """Star backbone: substation → cabinets, building → nearest cabinet.
+
+        The cables form a nearest-point tree (:mod:`._pen_routing`): each
+        cabinet's cable starts at the nearest point of the cables built
+        before it (cabinets in the order of their distance from the
+        substation, so collinear cabinets are chained), each service drop
+        at the nearest point of the cable path that feeds its cabinet; tap
+        points inside a cable are leakage-free junctions. No two cables
+        overlap (a drop no longer runs back along the main to a cabinet
+        beyond the building).
+        """
         wired = [c for c in cabinets if c.anchor is not None]
-        for cab in wired:
-            branches.append(
-                PlannedBranch(
-                    name=f"pen_main_{cab.anchor}",
-                    role="pen",
-                    start=substation.name,
-                    end=cab.name,
-                    conductor=conductor,
-                    axis_z_m=depth,
-                )
-            )
+        router = _router(cfg, [substation, *wired, *buildings])
+        sx, sy = router.xy[substation.name]
+        for cab in sorted(
+            wired,
+            key=lambda c: math.hypot(
+                router.xy[c.name][0] - sx, router.xy[c.name][1] - sy
+            ),
+        ):
+            router.connect_main(cab.name, name=f"pen_main_{cab.anchor}")
+        fed: dict[str, list[PlannedSite]] = {c.name: [] for c in wired}
         for b in buildings:
             if b.anchor is None:
                 continue
@@ -998,16 +1031,15 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 wired,
                 key=lambda c: abs(c.position_xy[0] - bx) + abs(c.position_xy[1] - by),
             )
-            branches.append(
-                PlannedBranch(
-                    name=f"pen_service_{b.anchor}",
-                    role="service_drop",
-                    start=cab.name,
-                    end=b.name,
-                    conductor=conductor,
-                    axis_z_m=depth,
+            fed[cab.name].append(b)
+        for cab in wired:
+            by_name = {b.name: b for b in fed[cab.name]}
+            for name in router.drop_order(list(by_name), cab.name):
+                router.connect_drop(
+                    name, cab.name, name=f"pen_service_{by_name[name].anchor}"
                 )
-            )
+        branches.extend(router.branches())
+        junctions.extend(router.junctions)
 
     def _plan_radial_trunk(
         self,
@@ -1016,6 +1048,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         buildings: list[PlannedSite],
         sites: list[PlannedSite],
         branches: list[PlannedBranch],
+        junctions: list[PlannedJunction],
         rng: np.random.Generator,
     ) -> None:
         r"""Radial-trunk backbone (:class:`RadialTrunkTopology`).
@@ -1031,7 +1064,11 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
            and continue with :attr:`RadialTrunkTopology.slots_per_cabinet`
            taps per cabinet.
         4. Wire the trunk (substation → cabinet$_1$ → cabinet$_2$ → …)
-           and the service drops as straight PEN conductors.
+           and the service drops as straight PEN conductors. A drop starts
+           at the nearest point of the trunk path from the substation to
+           its tap (or of a drop already routed for that tap), not
+           necessarily at the tap itself, so it never runs back along the
+           trunk (:mod:`._pen_routing`).
 
         Raises
         ------
@@ -1040,8 +1077,8 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         """
         topology = cfg.pen_topology
         assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
-        conductor = _pen_conductor(cfg.pen)
-        depth = float(cfg.pen.depth_m)
+        trunk: list[tuple[str, str, str]] = []
+        fed: dict[str, list[PlannedSite]] = {}
         wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
             substation_xy=cfg.substation.position,
@@ -1082,16 +1119,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         stacklevel=3,
                     )
                     continue
-                branches.append(
-                    PlannedBranch(
-                        name=f"pen_trunk_f{feeder_idx}_{k}",
-                        role="pen",
-                        start=previous.name,
-                        end=cab.name,
-                        conductor=conductor,
-                        axis_z_m=depth,
-                    )
-                )
+                trunk.append((f"pen_trunk_f{feeder_idx}_{k}", previous.name, cab.name))
                 taps.append(cab)
                 previous = cab
             budgets = [topology.slots_per_substation] + [
@@ -1114,17 +1142,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         stacklevel=3,
                     )
                 budgets[tap_idx] = max(0, budgets[tap_idx] - 1)
-                b = wired[building_idx]
-                branches.append(
-                    PlannedBranch(
-                        name=f"pen_service_{b.anchor}",
-                        role="service_drop",
-                        start=taps[tap_idx].name,
-                        end=b.name,
-                        conductor=conductor,
-                        axis_z_m=depth,
-                    )
-                )
+                fed.setdefault(taps[tap_idx].name, []).append(wired[building_idx])
                 any_service_drop = True
         if not any_service_drop:
             raise ValueError(
@@ -1132,3 +1150,14 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 "zero PEN service drops. Check feeder directions, "
                 "cabinet grounding presence_prob, and slot budgets."
             )
+        router = _router(cfg, [s for s in sites if s.anchor is not None])
+        for name, start, end in trunk:
+            router.add_main(start, end, name=name)
+        for tap, fed_buildings in fed.items():
+            by_name = {b.name: b for b in fed_buildings}
+            for name in router.drop_order(list(by_name), tap):
+                router.connect_drop(
+                    name, tap, name=f"pen_service_{by_name[name].anchor}"
+                )
+        branches.extend(router.branches())
+        junctions.extend(router.junctions)

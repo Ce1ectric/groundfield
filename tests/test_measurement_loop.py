@@ -112,12 +112,17 @@ def test_probe_lead_runs_from_the_instrument_to_the_probe() -> None:
     # No feed lead: the source returns straight through the auxiliary electrode.
     (source,) = world.sources
     assert source.return_to == "aux_rod_0"
-    assert [j.name for j in world.junctions] == [MEASUREMENT_S_TERMINAL]
+    assert _instrument_junctions(world) == [MEASUREMENT_S_TERMINAL]
+
+
+def _instrument_junctions(world: gf.World) -> list[str]:
+    """Junction names without the PEN tap points (``pen_tap_*``)."""
+    return [j.name for j in world.junctions if not j.name.startswith("pen_tap_")]
 
 
 def test_galvanic_setup_has_no_instrument_junctions() -> None:
     world = _world()
-    assert world.junctions == []
+    assert _instrument_junctions(world) == []
     assert world.sources[0].return_to == "aux_rod_0"
 
 

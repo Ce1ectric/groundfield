@@ -42,15 +42,24 @@ def _pen(world: gf.World) -> list[gf.Conductor]:
     return [c for c in world.conductors if c.conductor_type == "pen"]
 
 
+def _node_point(world: gf.World, name: str) -> tuple[float, float, float]:
+    """Connection point of an electrode or a junction (PEN tap point)."""
+    if any(j.name == name for j in world.junctions):
+        return world.get_junction(name).connection_point
+    return world.get_electrode(name).connection_point
+
+
 @pytest.mark.parametrize("depth", [0.6, 1.2])
 def test_pen_sections_run_at_the_configured_depth(depth: float) -> None:
     world = _world(depth)
     sections = _pen(world)
-    assert len(sections) == 5  # one main section + four service drops
+    # The main is split at the four tap points of the service drops.
+    drops = [c for c in sections if c.name.startswith("pen_service_")]
+    assert len(drops) == 4 and len(sections) == 4 + 5
     for c in sections:
         assert c.start[2] == c.end[2] == depth
-        a = world.get_electrode(c.start_electrode).connection_point
-        b = world.get_electrode(c.end_electrode).connection_point
+        a = _node_point(world, c.start_electrode)
+        b = _node_point(world, c.end_electrode)
         assert c.start[:2] == a[:2] and c.end[:2] == b[:2]
 
 

@@ -44,7 +44,7 @@ FoundationStyle = Literal["ring", "mesh"]
 """How a :class:`FoundationElectrodeSpec` is realised.
 
 - ``"ring"`` — only the rectangle's perimeter is buried (a closed
-  loop of wire); no internal cross-bracing. Equivalent to a
+  loop of wire); no internal cross-bracing. The geometry of a
   :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
   ``n_x = n_y = 1`` (one mesh = perimeter wires only).
 - ``"mesh"`` — the perimeter plus internal horizontal and vertical
@@ -170,13 +170,20 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
       gets exactly one internal horizontal plus one internal
       vertical wire.
 
-    An axis-aligned foundation without concrete materialises as a
-    :class:`groundfield.geometry.electrodes.GridMeshElectrode`;
-    the ``"ring"`` style is just the special case ``n_x = n_y = 1``
-    of that primitive (one mesh = perimeter only). A rotated
-    foundation, and an encased one whose wires are not all encased
-    (mesh braces) or that uses ``concrete_model="distributed"``, is
-    built from one straight wire per mesh line, bonded to the first.
+    The image family solves one uniform leakage current per electrode
+    (an *owner*); the owners of a foundation depend only on its
+    structure and on :attr:`concrete_model`, never on the orientation,
+    on how the outline is described or on whether a shell is configured
+    (audit A2G-04). A ``"mesh"`` foundation is one straight wire per mesh
+    line (a polyline split at the crossings), bonded to the first: one
+    owner over perimeter and braces was 1.6 % (2 × 2) to 3.2 % (4 × 4)
+    high against the equipotential reference, one owner per wire is
+    0.3–0.6 % high. A ``"ring"`` foundation is one straight wire per side
+    with ``concrete_model="distributed"``, and with ``"lumped"`` one
+    :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
+    ``n_x = n_y = 1`` (one owner) when axis-aligned, one wire per side
+    when rotated (at most 0.06 % apart up to aspect ratio 4). A
+    ``polygon_xy_m`` outline is one closed polyline for both models.
 
     For an asymmetric footprint set ``size_xy_m`` instead of
     ``size_m`` (when both are given, ``size_xy_m`` wins).
@@ -243,14 +250,13 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         default=None,
         description=(
             "Rotation of the foundation rectangle around its centre, "
-            "in degrees. ``None`` (the default) and ``0.0`` both keep "
-            "the historic axis-aligned realisation (one "
-            ":class:`GridMeshElectrode` primitive). Any other value "
-            "synthesises the foundation from rotated "
-            ":class:`StripElectrode` primitives in "
-            ":meth:`GroundingSystemSpec.build_at` and bonds them "
-            "internally, so the spec still emits a single bondable "
-            "anchor for the outer grounding cluster. Useful both for "
+            "in degrees. ``None`` (the default) and ``0.0`` keep it "
+            "axis-aligned; a multiple of 90 degrees is the axis-aligned "
+            "rectangle with swapped sides. The orientation changes only "
+            "the geometry, never the owners (see the class docstring): a "
+            "foundation built from several wires bonds them internally, "
+            "so the spec still emits a single bondable anchor (the first "
+            "wire) for the outer grounding cluster. Useful both for "
             "footprint-driven foundations (see ADR-0011, the OSM path "
             "sets this from the polygon OMBR) and for hand-placed "
             "houses on a street that does not run E-W."
@@ -287,22 +293,25 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     concrete_model: Literal["lumped", "distributed"] = Field(
         default="lumped",
         description=(
-            "Uniform-current owners of an encased foundation. Both "
-            "values put the Sunde-shell coefficient "
+            "Uniform-current owners of a perimeter-only foundation. "
+            "Both values put the Sunde-shell coefficient "
             "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every encased "
             "(perimeter) wire, whose radius becomes r_b = r_a + t; the "
             "solver adds C / ds to the diagonal of each segment, i.e. "
             "the lumped shell resistance C / L in series with the wire. "
             "Cross-braces are not encased. "
-            '``"lumped"`` (default): an axis-aligned ring foundation '
-            "stays one grid-mesh electrode (one uniform-current owner, "
-            "exactly the lumped series resistance C / L_perim). "
-            '``"distributed"``: one owner per wire, so the current may '
-            "distribute unevenly over the perimeter. Polygon, rotated "
-            "and mesh foundations are the same for both values. Up to "
-            "0.15.0 the lumped shell was a registry entry that only the "
-            "TN generator's PEN service drops read (review findings "
-            "10.12-10.14)."
+            '``"lumped"`` (default): an axis-aligned ring foundation is '
+            "one grid-mesh owner (exactly the lumped series resistance "
+            "C / L_perim); a rotated one is one owner per side. "
+            '``"distributed"``: one owner per side at every angle, so the '
+            "current may distribute unevenly over the perimeter (at most "
+            "0.06 % from one owner up to aspect ratio 4, 0.3 % at 10 to "
+            "50). The choice holds with and without a shell, so a shell "
+            "that is electrically absent changes nothing. Mesh foundations "
+            "are one owner per wire and polygon outlines one closed wire "
+            "for both values (audit A2G-04). Up to 0.15.0 the lumped shell "
+            "was a registry entry that only the TN generator's PEN service "
+            "drops read (review findings 10.12-10.14)."
         ),
     )
 

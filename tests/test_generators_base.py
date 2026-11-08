@@ -201,3 +201,50 @@ def test_config_json_roundtrip_with_distributions() -> None:
     assert isinstance(restored.b, Discrete)
     assert isinstance(restored.label, Categorical)
     assert isinstance(restored.inner.inner_value, Normal)
+
+
+# ---------------------------------------------------------------------
+# Integer fields of a resolved config (stream DOC-B)
+# ---------------------------------------------------------------------
+
+
+# stream DOC-B: a resolved Discrete building count stayed a float
+@pytest.mark.finding("10.53")
+def test_resolved_integer_fields_hold_integers() -> None:
+    """``building_counts`` and ``CabinetConfig.fixed_count`` are integer
+    fields: a draw lands there as ``int(round(x))``, the value the build
+    uses (``model_dump_json`` warned about the float 1.0 before)."""
+    import warnings as _warnings
+
+    from groundfield.generators import (
+        CabinetConfig,
+        Discrete,
+        TnNetworkConfig,
+        TnNetworkGenerator,
+        Uniform,
+    )
+
+    cfg = TnNetworkConfig(
+        building_counts={
+            "residential": 3,
+            "small_industry": Discrete(values=[0, 1, 2], weights=[0.2, 0.5, 0.3]),
+            "medium_industry": Uniform(low=0.6, high=1.4),
+        },
+        cabinets=CabinetConfig(fixed_count=Uniform(low=1.6, high=2.4)),
+    )
+    resolved = cfg.sample(np.random.default_rng(7))
+    counts = resolved.building_counts
+    assert all(type(v) is int for v in counts.values()), counts
+    assert counts["medium_industry"] == 1
+    assert type(resolved.cabinets.fixed_count) is int
+    assert resolved.cabinets.fixed_count == 2
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error")
+        text = resolved.model_dump_json()
+    assert TnNetworkConfig.model_validate_json(text) == resolved
+    # Float fields keep the draw itself.
+    rate = TnNetworkConfig(
+        cabinets=CabinetConfig(count_per_100_buildings=Uniform(low=4.0, high=6.0))
+    ).sample(np.random.default_rng(1))
+    assert type(rate.cabinets.count_per_100_buildings) is float
+    TnNetworkGenerator(resolved, seed=0).build()

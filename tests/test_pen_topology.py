@@ -226,6 +226,17 @@ def _build_radial_world(n_buildings: int, **topo_kwargs) -> "gf.World":
     return TnNetworkGenerator(cfg, seed=123).build()
 
 
+def _service_drops(world) -> set[str]:
+    """Names of the service drops, without the sections of split drops."""
+    import re
+
+    return {
+        re.sub(r"_s[0-9]+$", "", c.name)
+        for c in world.conductors
+        if c.name.startswith("pen_service_")
+    }
+
+
 def test_radial_trunk_end_to_end_no_cabinet_when_under_budget() -> None:
     """With slots_per_substation ≥ buildings per feeder, no KVS is created."""
     world = _build_radial_world(
@@ -236,9 +247,9 @@ def test_radial_trunk_end_to_end_no_cabinet_when_under_budget() -> None:
     kvs_electrodes = [e for e in world.electrodes if e.name.startswith("kvs_f")]
     # 8 buildings across 4 feeders = 2 per feeder ≤ 3 → no KVS.
     assert kvs_electrodes == []
-    # Every building has its PEN service drop.
-    pen_services = [c for c in world.conductors if c.name.startswith("pen_service_")]
-    assert len(pen_services) == 8
+    # Every building has its PEN service drop (a drop split by a later
+    # one adds sections ``<name>_s<k>``).
+    assert len(_service_drops(world)) == 8
 
 
 def test_radial_trunk_inserts_cabinet_when_budget_overflows() -> None:
@@ -261,8 +272,7 @@ def test_radial_trunk_inserts_cabinet_when_budget_overflows() -> None:
     trunks = [c for c in world.conductors if c.name.startswith("pen_trunk_")]
     assert len(trunks) == 4
     # 16 service drops.
-    services = [c for c in world.conductors if c.name.startswith("pen_service_")]
-    assert len(services) == 16
+    assert len(_service_drops(world)) == 16
 
 
 def test_radial_trunk_source_attached_to_substation() -> None:

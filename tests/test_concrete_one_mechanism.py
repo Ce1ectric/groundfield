@@ -260,8 +260,10 @@ def test_service_drops_carry_no_shell_resistance() -> None:
     )
     cfg = TnNetworkConfig(building_types=[building], building_counts={"house": 2})
     world = TnNetworkGenerator(cfg, seed=0).build()
-    drops = [c for c in world.conductors if c.name.startswith("pen_service_")]
-    assert drops and all(c.lumped_series_resistance_ohm is None for c in drops)
+    # The ring foundations' anchors lie on the PEN main, which runs through
+    # them (no drops since the PEN routing of 2026.11): check every section.
+    pen = [c for c in world.conductors if c.conductor_type == "pen"]
+    assert pen and all(c.lumped_series_resistance_ohm is None for c in pen)
 
 
 # ---------------------------------------------------------------------

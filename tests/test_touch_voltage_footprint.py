@@ -466,8 +466,9 @@ _SIDE = 10.0
 def _generated_foundation(angle_deg: float, style: str = "mesh"):
     """10 m x 10 m foundation from the generators (2 x 2 mesh, 0.8 m).
 
-    At 0 deg it is one ``grid_mesh``; at any other angle the generator
-    builds bonded straight wires ``<name>``, ``<name>_w1`` ... (10.39).
+    The generator builds a mesh at every angle, and a ring at any angle
+    but 0, from bonded straight wires ``<name>``, ``<name>_w1`` ...
+    (10.39, audit A2G-04); an axis-aligned ring is one ``grid_mesh``.
     """
     from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
 

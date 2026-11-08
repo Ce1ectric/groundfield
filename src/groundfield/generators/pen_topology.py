@@ -59,11 +59,15 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, ClassVar, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from groundfield.generators._compat import rename_input_keys, warn_renamed
+from groundfield.generators._compat import (
+    PickleUpgrade,
+    rename_input_keys,
+    warn_renamed,
+)
 
 __all__ = [
     "StarCabinetTopology",
@@ -78,7 +82,7 @@ __all__ = [
 # ---------------------------------------------------------------------
 
 
-class StarCabinetTopology(BaseModel):
+class StarCabinetTopology(PickleUpgrade, BaseModel):
     """Star PEN topology (default).
 
     The substation feeds each cable cabinet directly; every building
@@ -95,6 +99,10 @@ class StarCabinetTopology(BaseModel):
 
     kind: Literal["star_cabinet", "star_kvs"] = "star_cabinet"
 
+    _value_renames: ClassVar[dict[str, dict[str, str]]] = {
+        "kind": {"star_kvs": "star_cabinet"}
+    }
+
     @field_validator("kind")
     @classmethod
     def _canonical_kind(cls, value: str) -> str:
@@ -107,6 +115,8 @@ class StarCabinetTopology(BaseModel):
 class StarKvsTopology(StarCabinetTopology):
     """Deprecated alias of :class:`StarCabinetTopology`."""
 
+    _unpickle_as: ClassVar[type] = StarCabinetTopology
+
     def model_post_init(self, context: object, /) -> None:
         warn_renamed("StarKvsTopology", "StarCabinetTopology", stacklevel=5)
         super().model_post_init(context)
@@ -117,7 +127,7 @@ class StarKvsTopology(StarCabinetTopology):
 # ---------------------------------------------------------------------
 
 
-class RadialTrunkTopology(BaseModel):
+class RadialTrunkTopology(PickleUpgrade, BaseModel):
     r"""Radial-feeder PEN topology with finite per-source slot budget.
 
     The substation feeds :attr:`n_feeders` radial feeders. Each
@@ -224,17 +234,15 @@ class RadialTrunkTopology(BaseModel):
         description="Name prefix for the inserted cabinets.",
     )
 
+    _field_renames: ClassVar[dict[str, str]] = {
+        "slots_per_kvs": "slots_per_cabinet",
+        "kvs_spacing_m": "cabinet_spacing_m",
+    }
+
     @model_validator(mode="before")
     @classmethod
     def _renamed_fields(cls, data: object) -> object:
-        return rename_input_keys(
-            data,
-            {
-                "slots_per_kvs": "slots_per_cabinet",
-                "kvs_spacing_m": "cabinet_spacing_m",
-            },
-            "RadialTrunkTopology",
-        )
+        return rename_input_keys(data, cls._field_renames, "RadialTrunkTopology")
 
     @property
     def slots_per_kvs(self) -> int:

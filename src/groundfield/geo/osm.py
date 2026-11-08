@@ -52,13 +52,17 @@ Requests are bounded and validated (review finding 10.05):
 * the response is streamed and capped at ``max_response_bytes``
   (default :data:`DEFAULT_MAX_RESPONSE_BYTES`, which also bounds the
   memory of decoding it);
-* an HTTP-200 payload whose ``remark`` reports an Overpass runtime
-  error, or that does not have the structure of an Overpass result — a
-  JSON object with an ``elements`` list of objects whose ``type``,
-  ``id``, ``tags``, ``geometry`` and ``members`` have the Overpass types,
-  and whose vertices are finite WGS84 coordinates — raises
-  :class:`OverpassError` before anything is cached or parsed; a cached
-  payload that fails this check is fetched again;
+* an HTTP-200 body that is not JSON, and a payload whose ``remark``
+  reports an Overpass runtime error or that does not have the structure
+  of an Overpass result — a JSON object nested at most
+  :data:`MAX_PAYLOAD_DEPTH` levels deep, with an ``elements`` list of
+  objects whose ``type``, ``id``, ``tags``, ``geometry`` and ``members``
+  have the Overpass types (ids 64-bit integers), and whose vertices are
+  finite WGS84 coordinates — raises :class:`OverpassError` before
+  anything is cached or parsed; a cached payload that fails this check is
+  fetched again. No other exception type escapes for untrusted input
+  (audit A2G-05: deeply nested bodies and integer coordinates of a few
+  hundred digits raised ``RecursionError`` / ``OverflowError``);
 * cache files are written atomically (temporary file + rename); an
   unreadable cache file is re-fetched with a warning;
 * the cache key of a non-default endpoint includes the endpoint (the
@@ -118,6 +122,7 @@ def _groundfield_version() -> str:
 __all__ = [
     "DEFAULT_ENDPOINT",
     "DEFAULT_MAX_RESPONSE_BYTES",
+    "MAX_PAYLOAD_DEPTH",
     "MAX_RADIUS_M",
     "MAX_RETRIES",
     "MAX_RETRY_DELAY_S",
@@ -155,6 +160,20 @@ most about 0.4 GiB. The largest payload of the AP1 catalogue (196 LV
 networks) is 3 MiB; pass a larger ``max_response_bytes`` for wide areas.
 Until the first 2026.11 consolidation the default was 64 MiB (up to
 1.6 GiB parsed, audit L7)."""
+
+MAX_PAYLOAD_DEPTH = 16
+"""Deepest container nesting accepted in an Overpass payload.
+
+An Overpass result nests at most seven levels (payload → ``elements`` →
+element → ``members`` → member → ``geometry`` → vertex). A body nested
+far deeper is not an Overpass result: up to about 10 000 levels it decodes
+and would reach the recursive pure-Python encoder of :func:`json.dump` in
+the cache write (``RecursionError`` beyond about 1 000 levels, audit
+A2G-05); beyond that the decoder itself raises ``RecursionError``. Both
+become :class:`OverpassError`."""
+
+_INT64_MIN = -(2**63)
+_INT64_MAX = 2**63 - 1
 
 MAX_RETRIES = 5
 """Largest accepted ``max_retries``."""
@@ -409,17 +428,20 @@ def _check_payload(payload: Any) -> dict[str, Any]:
 
     Checks the top level (a JSON object with an ``elements`` list, no
     runtime-error ``remark``) and every element: an object whose ``type``
-    is a string, ``id`` an integer, ``tags`` an object of string values,
-    ``geometry`` a list of vertices and ``members`` a list of objects (with
-    string ``type`` / ``role``, integer ``ref`` and their own
+    is a string, ``id`` a 64-bit integer, ``tags`` an object of string
+    values, ``geometry`` a list of vertices and ``members`` a list of objects
+    (with string ``type`` / ``role``, 64-bit integer ``ref`` and their own
     ``geometry``). A vertex is ``null`` (a node Overpass could not place;
     the element is skipped when parsing) or an object with finite ``lat``
-    in [-90, 90] and ``lon`` in [-180, 180].
+    in [-90, 90] and ``lon`` in [-180, 180]. No container, also under keys
+    the parser does not read, is nested deeper than
+    :data:`MAX_PAYLOAD_DEPTH`.
     """
     if not isinstance(payload, dict):
         raise OverpassError(
             f"Overpass payload must be a JSON object, got {type(payload).__name__}."
         )
+    _check_depth(payload)
     elements = payload.get("elements", [])
     if elements is not None and not isinstance(elements, list):
         raise OverpassError("Overpass payload: 'elements' must be a list.")
@@ -435,6 +457,54 @@ def _malformed(where: str, what: str) -> OverpassError:
     return OverpassError(f"Overpass payload: {where}: {what}")
 
 
+def _check_depth(payload: Any) -> None:
+    """Raise :class:`OverpassError` for containers nested too deeply.
+
+    Walks every ``dict`` and ``list`` of ``payload`` once, without
+    recursion, and rejects a nesting deeper than
+    :data:`MAX_PAYLOAD_DEPTH`.
+    """
+    stack: list[tuple[Any, int]] = [(payload, 1)]
+    while stack:
+        container, depth = stack.pop()
+        if depth > MAX_PAYLOAD_DEPTH:
+            raise OverpassError(
+                "Overpass payload is nested deeper than "
+                f"{MAX_PAYLOAD_DEPTH} levels (MAX_PAYLOAD_DEPTH); an Overpass "
+                "result has at most 7."
+            )
+        children = container.values() if isinstance(container, dict) else container
+        for child in children:
+            if isinstance(child, (dict, list)):
+                stack.append((child, depth + 1))
+
+
+def _is_int64(value: Any) -> bool:
+    """``True`` for an ``int`` (not ``bool``) in the signed 64-bit range."""
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and _INT64_MIN <= value <= _INT64_MAX
+    )
+
+
+def _finite_float(value: Any) -> Optional[float]:
+    """``value`` as a finite ``float``, or ``None``.
+
+    ``None`` for anything but an ``int`` / ``float`` (``bool`` included),
+    for ``NaN`` / ``inf`` and for an integer too large for a float (a JSON
+    integer of a few hundred digits makes :func:`float` raise
+    ``OverflowError``, audit A2G-05).
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        out = float(value)
+    except OverflowError:
+        return None
+    return out if math.isfinite(out) else None
+
+
 def _check_element(element: Any, where: str) -> None:
     """Structure of one Overpass element (see :func:`_check_payload`)."""
     if not isinstance(element, dict):
@@ -443,8 +513,8 @@ def _check_element(element: Any, where: str) -> None:
     if kind is not None and not isinstance(kind, str):
         raise _malformed(where, "'type' must be a string.")
     ident = element.get("id")
-    if ident is not None and (isinstance(ident, bool) or not isinstance(ident, int)):
-        raise _malformed(where, "'id' must be an integer.")
+    if ident is not None and not _is_int64(ident):
+        raise _malformed(where, "'id' must be a 64-bit integer.")
     tags = element.get("tags")
     if tags is not None:
         if not isinstance(tags, dict) or not all(
@@ -466,8 +536,8 @@ def _check_element(element: Any, where: str) -> None:
             if value is not None and not isinstance(value, str):
                 raise _malformed(at, f"{key!r} must be a string.")
         ref = member.get("ref")
-        if ref is not None and (isinstance(ref, bool) or not isinstance(ref, int)):
-            raise _malformed(at, "'ref' must be an integer.")
+        if ref is not None and not _is_int64(ref):
+            raise _malformed(at, "'ref' must be a 64-bit integer.")
         _check_geometry(member.get("geometry"), at)
 
 
@@ -482,17 +552,31 @@ def _check_geometry(geometry: Any, where: str) -> None:
             continue
         if not isinstance(point, dict):
             raise _malformed(where, "a 'geometry' vertex must be an object.")
-        lat, lon = point.get("lat"), point.get("lon")
+        raw = (point.get("lat"), point.get("lon"))
         if not all(
-            isinstance(v, (int, float)) and not isinstance(v, bool) for v in (lat, lon)
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in raw
         ):
             raise _malformed(
                 where, "a 'geometry' vertex needs numeric 'lat' and 'lon'."
             )
-        if not (math.isfinite(lat) and -90.0 <= lat <= 90.0):
-            raise _malformed(where, f"vertex latitude {lat!r} is not in [-90, 90].")
-        if not (math.isfinite(lon) and -180.0 <= lon <= 180.0):
-            raise _malformed(where, f"vertex longitude {lon!r} is not in [-180, 180].")
+        lat, lon = (_finite_float(v) for v in raw)
+        if lat is None or not -90.0 <= lat <= 90.0:
+            raise _malformed(
+                where, f"vertex latitude {_brief(raw[0])} is not in [-90, 90]."
+            )
+        if lon is None or not -180.0 <= lon <= 180.0:
+            raise _malformed(
+                where, f"vertex longitude {_brief(raw[1])} is not in [-180, 180]."
+            )
+
+
+def _brief(value: Any, limit: int = 40) -> str:
+    """Short ``repr`` of an untrusted value for an error message."""
+    try:
+        text = repr(value)
+    except ValueError:  # an int beyond sys.get_int_max_str_digits()
+        return f"<{type(value).__name__} too large to print>"
+    return text if len(text) <= limit else f"{text[: limit - 3]}..."
 
 
 def _atomic_write_json(path: Path, payload: Any) -> None:
@@ -622,9 +706,12 @@ def _post_overpass(
                 body = _read_capped(response, max_response_bytes)
                 try:
                     return json.loads(body)
-                except ValueError as exc:
+                except (ValueError, RecursionError) as exc:
+                    # RecursionError: a body nested deeper than the
+                    # decoder's limit (about 10 000 levels, audit A2G-05).
                     raise OverpassError(
-                        "Overpass returned a 200 but the body is not valid JSON.",
+                        "Overpass returned a 200 but the body is not valid JSON "
+                        "(or is nested too deeply).",
                         status_code=status,
                         body=body[:1024].decode("utf-8", errors="replace"),
                     ) from exc
@@ -730,7 +817,7 @@ def query_buildings(
         try:
             with path.open("r", encoding="utf-8") as fh:
                 return _check_payload(json.load(fh))
-        except (ValueError, OverpassError) as exc:
+        except (ValueError, RecursionError, OverpassError) as exc:
             warnings.warn(
                 f"Overpass cache file {path.name} is unreadable ({exc}); re-fetching.",
                 UserWarning,
@@ -798,9 +885,9 @@ def parse_overpass_payload(
         payload to keep the metric coordinates consistent.
     min_area_m2
         Skip features whose footprint area is strictly below this
-        threshold. ``0.0`` (the default) keeps every parseable
-        polygon; the placement layer may apply its own (higher)
-        threshold via :class:`OsmBuildingPlacement.min_area_m2`.
+        threshold. ``0.0`` (the default) keeps every valid polygon;
+        the placement layer may apply its own (higher) threshold via
+        :class:`OsmBuildingPlacement.min_area_m2`.
     exclude_building_tags
         ``building=*`` values to drop (e.g.
         :data:`NON_SERVICE_BUILDING_TAGS`). ``None`` (default) keeps
@@ -819,7 +906,10 @@ def parse_overpass_payload(
         If the payload does not have the structure of an Overpass result
         or a vertex is not a finite WGS84 coordinate (see the module
         docstring). Elements whose geometry contains ``null`` vertices or
-        that do not form a valid polygon are skipped.
+        that do not form a valid polygon are skipped: fewer than three
+        vertices, or an outline without area (mean width below
+        :data:`~groundfield.geo.footprint.MIN_OUTLINE_WIDTH_M`, i.e.
+        identical or collinear vertices; audit A2G-06).
 
     Notes
     -----
@@ -860,12 +950,12 @@ def parse_overpass_payload(
                     holes_xy_m=[],
                     levels=_levels_from_tags(el.get("tags") or {}),
                     building_use=(el.get("tags") or {}).get("building"),
-                    osm_id=int(el["id"]) if "id" in el else None,
+                    osm_id=el.get("id"),
                     osm_tags=dict(el.get("tags") or {}),
                 )
             except ValueError:
                 continue
-            if fp.area_m2() < min_area_m2:
+            if fp.is_degenerate() or fp.area_m2() < min_area_m2:
                 continue
             out.append(fp)
         elif kind == "relation":
@@ -908,12 +998,12 @@ def parse_overpass_payload(
                         holes_xy_m=holes_xy,
                         levels=_levels_from_tags(tags),
                         building_use=tags.get("building"),
-                        osm_id=int(el["id"]) if "id" in el else None,
+                        osm_id=el.get("id"),
                         osm_tags=dict(tags),
                     )
                 except ValueError:
                     continue
-                if fp.area_m2() < min_area_m2:
+                if fp.is_degenerate() or fp.area_m2() < min_area_m2:
                     continue
                 out.append(fp)
         # Nodes are silently ignored: a building cannot be a node.
@@ -925,15 +1015,18 @@ def _levels_from_tags(tags: dict[str, Any]) -> Optional[float]:
 
     OSM convention is an integer but mappers often submit decimals
     (e.g. ``"1.5"`` for an attic). Returns ``None`` on any parse
-    failure so the consumer can fall back to a default heuristic.
+    failure, and for a negative or non-finite value (``"nan"``,
+    ``"inf"``, ``"1e400"``), so the consumer can fall back to a default
+    heuristic.
     """
     raw = tags.get("building:levels")
     if raw is None:
         return None
     try:
-        return float(raw)
+        levels = float(raw)
     except (TypeError, ValueError):
         return None
+    return levels if math.isfinite(levels) and levels >= 0.0 else None
 
 
 # ---------------------------------------------------------------------

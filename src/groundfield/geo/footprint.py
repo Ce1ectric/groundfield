@@ -39,6 +39,7 @@ construction.
 
 from __future__ import annotations
 
+import math
 import warnings
 from typing import Optional
 
@@ -53,12 +54,26 @@ Ring = list[Point2D]
 
 
 __all__ = [
+    "MIN_OUTLINE_WIDTH_M",
     "Point2D",
     "Ring",
     "BuildingFootprint",
+    "mean_width",
     "signed_area",
     "ensure_orientation",
 ]
+
+
+MIN_OUTLINE_WIDTH_M = 1e-3
+r"""Mean width in m below which an outline encloses no area.
+
+The mean width :math:`w = 2A/P` of a ring (twice its area over its
+perimeter, :func:`mean_width`) is the width of a long thin rectangle and
+0 for identical or collinear vertices. An outline narrower than 1 mm on
+average is a digitising artefact, not a building:
+:func:`groundfield.geo.osm.parse_overpass_payload` skips it
+(:meth:`BuildingFootprint.is_degenerate`). A mapped wall of 5 mm is kept
+(:math:`w \approx 5` mm); generators widen its foundation (audit L5)."""
 
 
 # ---------------------------------------------------------------------
@@ -103,6 +118,34 @@ def signed_area(ring: Ring) -> float:
         x1, y1 = ring[(i + 1) % n]
         s += x0 * y1 - x1 * y0
     return 0.5 * s
+
+
+def mean_width(ring: Ring) -> float:
+    r"""Mean width :math:`w = 2A/P` of a ring in m.
+
+    Parameters
+    ----------
+    ring
+        Vertex list in m (open or closed).
+
+    Returns
+    -------
+    float
+        Twice the absolute area :math:`A` over the perimeter :math:`P`:
+        :math:`d_y` for a thin :math:`d_x \times d_y` rectangle
+        (:math:`d_y \ll d_x`), :math:`d/2` for a square of side
+        :math:`d`, and 0 for identical or collinear vertices (also for
+        an empty ring).
+    """
+    n = len(ring)
+    perimeter = 0.0
+    for i in range(n):
+        x0, y0 = ring[i]
+        x1, y1 = ring[(i + 1) % n]
+        perimeter += math.hypot(x1 - x0, y1 - y0)
+    if perimeter <= 0.0:
+        return 0.0
+    return 2.0 * abs(signed_area(ring)) / perimeter
 
 
 def ensure_orientation(ring: Ring, *, ccw: bool = True) -> Ring:
@@ -245,6 +288,18 @@ class BuildingFootprint(BaseModel):
         inner = sum(-signed_area(h) for h in self.holes_xy_m)
         return outer - inner
 
+    def mean_width_m(self) -> float:
+        """Mean width :math:`2A/P` of the exterior ring in m (:func:`mean_width`)."""
+        return mean_width(self.polygon_xy_m)
+
+    def is_degenerate(self) -> bool:
+        """``True`` when the exterior ring encloses no area.
+
+        That is, its mean width is below :data:`MIN_OUTLINE_WIDTH_M`
+        (identical or collinear vertices, up to projection round-off).
+        """
+        return self.mean_width_m() < MIN_OUTLINE_WIDTH_M
+
     def centroid_xy_m(self) -> Point2D:
         r"""Geometric centroid of the *exterior* ring in metres.
 
@@ -330,7 +385,11 @@ class BuildingFootprint(BaseModel):
             (equal sides within a relative ``1e-9``) the axis closest to
             ``+x`` is reported, i.e. ``orientation_deg`` lies in
             ``(-45, 45]`` — an axis-aligned square has angle 0 whatever
-            the vertex order of the polygon.
+            the vertex order of the polygon. An outline without area
+            (identical or collinear vertices) gives its covering segment:
+            ``dy = 0`` (and ``dx = 0`` with angle 0 for a single point),
+            so a caller can widen it (audit A2G-06; this raised
+            ``IndexError`` up to 2026.11).
 
         Notes
         -----
@@ -360,11 +419,19 @@ class BuildingFootprint(BaseModel):
             raise ImportError(GEO_IMPORT_HINT) from exc
         from shapely.geometry import Polygon as _Polygon
 
+        if len(self.polygon_xy_m) < 3:
+            # A closed input of three vertices with a repeated first
+            # vertex is stored as two (ensure_orientation).
+            return _segment_ombr(self.polygon_xy_m)
         poly = _Polygon(self.polygon_xy_m, holes=self.holes_xy_m)
         if not poly.is_valid:
             # Buffer(0) is the Shapely idiom for cleaning up
             # self-intersections that occasionally show up in OSM data.
             poly = poly.buffer(0)
+        if poly.is_empty or poly.area <= 0.0:
+            # Identical or collinear vertices: buffer(0) leaves an empty
+            # geometry (no corners to read below).
+            return _segment_ombr(self.polygon_xy_m)
         # Shapely's ``oriented_envelope`` GEOS ufunc trips benign numpy
         # divide-by-zero / invalid-value floating-point flags on
         # axis-aligned footprints (the OMBR of an axis-aligned rectangle
@@ -408,6 +475,33 @@ class BuildingFootprint(BaseModel):
 
 _SQUARE_RTOL = 1e-9
 """Relative side-length difference below which an OMBR counts as a square."""
+
+
+def _segment_ombr(
+    points: "list[Point2D]",
+) -> tuple[tuple[float, float], tuple[float, float], float]:
+    """OMBR of vertices without area: the segment covering them.
+
+    The axis runs between the two vertices farthest apart (found from the
+    first vertex and then from the farthest one); the side ``dx`` is the
+    extent of the projections on that axis and ``dy`` the extent across
+    it (0 for exactly collinear vertices). A single point gives
+    ``((x, y), (0, 0), 0.0)``.
+    """
+    x0, y0 = points[0]
+    a = max(points, key=lambda p: math.hypot(p[0] - x0, p[1] - y0))
+    b = max(points, key=lambda p: math.hypot(p[0] - a[0], p[1] - a[1]))
+    length = math.hypot(b[0] - a[0], b[1] - a[1])
+    if length == 0.0:
+        return (float(x0), float(y0)), (0.0, 0.0), 0.0
+    ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+    along = [(p[0] - a[0]) * ux + (p[1] - a[1]) * uy for p in points]
+    across = [-(p[0] - a[0]) * uy + (p[1] - a[1]) * ux for p in points]
+    t_mid = 0.5 * (min(along) + max(along))
+    n_mid = 0.5 * (min(across) + max(across))
+    centre = (a[0] + t_mid * ux - n_mid * uy, a[1] + t_mid * uy + n_mid * ux)
+    size = (max(along) - min(along), max(across) - min(across))
+    return centre, size, _axis_angle_deg(ux, uy)
 
 
 def _axis_angle_deg(ux: float, uy: float) -> float:

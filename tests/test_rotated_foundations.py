@@ -173,7 +173,7 @@ def test_foundation_at_right_angles_uses_the_grid_mesh_path(angle: float) -> Non
     assert _world_electrodes(turned) == _world_electrodes(straight)
 
 
-def test_axis_aligned_footprint_square_gives_a_grid_mesh_foundation() -> None:
+def test_axis_aligned_footprint_square_gives_an_axis_aligned_foundation() -> None:
     from groundfield.generators.tn_network import _override_foundation_from_footprint
 
     fp = gf.BuildingFootprint(polygon_xy_m=[(0, 0), (10, 0), (10, 10), (0, 10)])
@@ -183,4 +183,8 @@ def test_axis_aligned_footprint_square_gives_a_grid_mesh_foundation() -> None:
     shaped.build_at(
         world, site_xy=(5.0, 5.0), name_prefix="h", rng=np.random.default_rng(0)
     )
-    assert [e.kind for e in world.electrodes] == ["grid_mesh"]
+    # One owner per wire (audit A2G-04), every wire along x or y.
+    assert [e.kind for e in world.electrodes] == ["polyline"] * 6
+    for e in world.electrodes:
+        (x0, y0, _), (x1, y1, _) = e.vertices[0], e.vertices[-1]
+        assert x0 == x1 or y0 == y1
