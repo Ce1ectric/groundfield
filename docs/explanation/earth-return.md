@@ -127,13 +127,15 @@ What 2026.11 changed (ADR-0006 amendment):
   1 kHz; buried in 100 Ω·m 1.7e-4); the shorter segments keep the
   historic rule, which reaches 4.8e-4 at a quarter skin depth, so the
   correction steps by 3.5e-4 where the composite rule takes over.
-- **Tabulated assembly** (opt-in, `Engine.sommerfeld_assembly="tabulated"`).
+- **Tabulated assembly** (the default since 2026.11,
+  `Engine.sommerfeld_assembly="tabulated"`; user decision Q16).
   Sub-segments are grouped by depth and one table of the spectral integral
   per pair of depth groups and frequency replaces the per-pair
-  quadrature. It is much faster on large networks and agrees with a
-  converged reference better than the default per-pair rule, whose
-  24-node interpolation in the horizontal distance dominates its error;
-  the default stays `"exact"` in this release. Measured times are on the
+  quadrature. It is much faster on large networks (a 30-house TN network
+  306 s → 12 s) and agrees with a converged reference better than the
+  per-pair rule (`sommerfeld_assembly="exact"`), whose 24-node
+  interpolation in the horizontal distance dominates its error (2e-10
+  against 1.2e-8 of two refined references). Measured times are on the
   [performance page](performance.md).
 
 ### Carson on its own baseline

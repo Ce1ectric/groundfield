@@ -83,7 +83,7 @@ is named.
 | 10.28, 10.33 | the exact line-source kernel is the default of `image` and `image_2layer` (also through the deprecated alias `cim`), of `FieldResult.potential` and of `solve_mutual_*` | 3 m rod +0.60 % (surface potential up to +1.9 %), two-layer ring +1.23 %, ring r = 2 m through `cim` +0.85 %, two rods joined by a bare conductor with 5 m segments: currents 10.9 %, cluster impedance 8.4 % (golden `defaults_rod_hom`, `defaults_two_layer_ring_auto`, `defaults_mixed_cluster_inductive`) | every image-family study, the AP1 catalogue (Z_G, potentials); `Engine(kernel="point")` reproduces 0.15.0 |
 | 10.15, F02 | an electrode through the layer interface has one current per layer in `image_2layer` and `solve_mutual_*` | a 12 m rod through h₁ = 5 m was +566 % (1000/30 Ω·m), +148 % and +123 % off; now +0.11 … +0.31 % (point kernel) and +0.7 … +1.3 % (line kernel) from `mom` (golden `img2_rod_crosslayer` −46.5 %, `mutual_three_rods_crosslayer`) | rods through h₁; not the AP1 station rods (4 m from 0.6 m depth, h₁ ≥ 5 m) |
 | 10.12–10.14, F08 | one concrete-shell mechanism, also in `solve_mutual_*`, the layout builder and station and cabinet foundations | AP1-like site (ρ_c = 100 Ω·m, 5 cm): house Z_G diagonal +42 / +19 / +2.8 % and network input impedance +13.6 / +8.8 / +2.2 % at ρ₁ = 30 / 100 / 1000 Ω·m; mesh foundations with `"distributed"`: +2.6 … +12 % (golden `mutual_foundations_lumped_concrete` +42.2 %) | every world with `concrete_rho_ohm_m`, including AP1 runs with concrete shells |
-| 10.26, 10.29, 10.34 | `solve_mutual_matrix`: length-weighted diagonal over all members and layers, the other clusters float, reciprocal `offdiag="galerkin"` without probe points | AP1-like site: house diagonal up to 0.10 %, station 0.000 %, galerkin off-diagonal up to 0.09 %; rods split at h₁ were −3.8 / −9.1 % off (golden `mutual_foundations_distributed_concrete` R 1.6 %) | AP1 mutual matrices Z_G |
+| 10.26, 10.29, 10.34 | `solve_mutual_matrix`: length-weighted diagonal over all members and layers, the other clusters float, and the reciprocal galerkin off-diagonal for every call (probe points are ignored with `ProbePointsIgnoredWarning` unless `offdiag="probe"`; user decision Q15) | AP1-like site: house diagonal up to 0.10 %, station 0.000 %; the probe off-diagonal missed the input impedance of the joined network by −0.15 … −0.88 % (single entries up to 41 %), galerkin reproduces it to 7e-13; AP1 catalogue path \|Z_ons\| at 50 Hz −0.05 … +0.29 % up to 20 % penetration, up to +2.67 % at 40 %; rods split at h₁ were −3.8 / −9.1 % off (golden `mutual_foundations_distributed_concrete` R 1.6 %, Z_G of four mutual cases 7.7e-4 … 8.8e-4) | AP1 mutual matrices Z_G; `offdiag="probe"` reproduces the 0.15.0 off-diagonal |
 | 10.25 | `potential` and `solve_mutual_*` sum the image series with the engine's controls (was 100 terms) | K = −0.94 with `image_max_terms=2000`: potential 100 m from a ring 0.8 % | high-contrast two-layer studies with a raised term cap |
 | 10.16, 10.17, F01/F30 | `Source.return_to` is honoured; measurement leads end on junction nodes at the instrument | auxiliary rod 20 m away: the probe at 61.8 % now reads the remote impedance to −1.6e-3 (0.15.0: −9.9 %); with leads the old reading was 2.8e-4 Ω instead of 1.6096 Ω (golden `gen_tn_measurement_overhead_leads`: auxiliary rod −1 A instead of +0.024 A, network potentials −1.8 %) | simulated fall-of-potential measurements (AP1 Phase B), every world with `return_to` |
 | 10.29 | passive clusters float (zero net current, one potential, equalising currents) in every backend | a passive electrode in `mom`: −59 % … +1.5 %; a bonded passive pair in the image family: one potential instead of two (golden `floating_bonded_pair_two_layer` 60.5 %, `cond_coupled_leads_open_circuit` 42.5 %) | probes, auxiliary electrodes, unbonded neighbours with several electrodes, passive leads |
@@ -97,7 +97,7 @@ is named.
 | 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
 | 10.73, 10.01 | exported formulas are partial fractions with float coefficients; parsed formulas hold their numbers as floats and are evaluated without `lambdify` | at most half a unit in the last printed digit; evaluated formulas at most 4.1e-16 (exporter output) and 3.3e-15 (hand-written) | text diffs of BusType files, hand-written formulas |
 | 10.20, F32 | `carson_series` on the anti-parallel image; a pair across the surface couples through the field transmitted into the soil; oblique, inclined and vertical segments (beyond 8.1°) get the Sommerfeld correction | the earth-return reactance of a 1 km PEN was 2.04 × (50 Hz) and 2.19 × (1 kHz) Carson's; 30-house network \|Z\| −16.6 % at 1 kHz (golden `cond_galvanic_neumann_carson_series` 0.60 %); an overhead lead 1 m above a PEN at 0.7 m: mutual reactance was 35.9 % low (1 kHz, 100 Ω·m); a probe lead turning 8.1° against the feed lead changed the reading 17.6-fold | `carson_series` studies, measurement leads over buried conductors |
-| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series; wires closer than the sum of their radii are touching wires; close non-parallel pairs are integrated semi-analytically | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases; two coincident 50 m leads 1.87 H → 82 µH of mutual inductance; near-parallel pairs 1 cm apart were +200 … +250 %; the generator's in-line fall-of-potential reading Im Z_meas 0.063 → 0.054 Ω (50 Hz, `sommerfeld`) | inductive studies with inclined, vertical or closely spaced conductors, simulated measurements with leads (AP1 Phase B) |
+| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series; wires closer than the sum of their radii are touching wires; close non-parallel pairs are integrated semi-analytically | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases; two coincident 50 m leads 1.87 H → 82 µH of mutual inductance; near-parallel pairs 1 cm apart were +200 … +250 %; a core inside a cable shield couples at the shield radius (loop inductance was +36 %); the generator's in-line fall-of-potential reading Im Z_meas 0.063 → 0.054 Ω (50 Hz, `sommerfeld`) | inductive studies with inclined, vertical or closely spaced conductors, simulated measurements with leads (AP1 Phase B) |
 | 10.35, 10.36, F52 | Sommerfeld kernel for three or more layers and below h₁; λ grid of distant pairs | a three-layer earth with ρ₂ = ρ₃ was +17 … +25 % in X′; pair entries 200 m and 400 m apart were −24 % and +274 % off (golden at most 2.1e-5) | `sommerfeld` on `MultiLayerSoil`, deep conductors, large networks |
 | 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor; the `sommerfeld` correction of a segment longer than a quarter skin depth is integrated piecewise | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2096 + 3.7840j Ω (equal to its 10 m chain); two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω; a lumped 3 km conductor at 1 kHz (100 Ω·m) had +13.4 % earth-return resistance against its refined chain, now ≤ 1e-4; distributed conductors with pieces longer than 40 m (1 kHz, 100 Ω·m) move by 1e-4 and more | service drops shorter than the PEN segment length, lumped leads, long lumped or coarsely divided conductors under `sommerfeld` |
 | 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
@@ -107,6 +107,7 @@ is named.
 | 10.32, 10.28 | every interface cut is kept, however short the part beyond it, and the diagonal of a piece at the interface is evaluated at the wire radius, so a rod tip or head next to the interface is in contact with the layer it reaches and a wire lying at the interface is continuous across it | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 137.4 Ω (−29 %), within −1.2 % of a solid-rod reference; a ring (r = 3 m) at h₁ = 5 m: 9.56 Ω (0.15.0, point kernel) → 4.18 Ω, continuous across h₁ (the point form raises there); a rod end within one wire radius of h₁ warns (`InterfaceContactWarning`, the thin-wire model has no end face) (golden: none) | rods whose tip or head lies within 16 mm of an interface, horizontal wires at an interface; not AP1 |
 | 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.1 / −0.2 % for 30 / 100 / 200 houses (star) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
+| 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
 
 <!-- Release coordinator: entries from the second adversarial audit go below
@@ -186,9 +187,17 @@ is named.
   leakage-free network node for conductor ends, source terminals and
   measurement instruments; potentials in `metadata["junction_potentials"]`.
   Test: `tests/test_junction_nodes.py`.
-- **`solve_mutual_matrix(..., offdiag="galerkin")` (10.34):** reciprocal
-  off-diagonal entries that reproduce a network solve of the joined clusters.
-  Test: `tests/test_mutual_matrix.py`.
+- **`solve_mutual_matrix(..., offdiag="galerkin" | "probe")` (10.34):**
+  reciprocal off-diagonal entries that reproduce a network solve of the
+  joined clusters, the default of every call (user decision Q15);
+  `ProbePointsIgnoredWarning` when probe points are passed without
+  `offdiag="probe"`. Test: `tests/test_mutual_matrix.py`.
+- **Per-engine resource limit (10.06; user decision Q17):**
+  `Engine(max_segments=...)` and `create_engine(max_segments=...)` set the
+  hard limit of leakage segments and nodal unknowns for one engine (default
+  `diagnostics.HARD_LIMIT`, 20 000), honoured by every segment backend,
+  `solve_mutual_*` and the diagnostics, recorded in
+  `metadata["max_segments"]`. Test: `tests/test_resource_limit.py`.
 - **Concrete shells on every electrode kind (10.12–10.14):**
   `concrete_shell_coefficient_ohm_m` on rods, rings and meshes, with the
   conversions `concrete_shell_coefficient`,
@@ -239,8 +248,8 @@ is named.
   "antiparallel"` on the inductance and correction builders, `touching="exact"`,
   per-segment internal inductance, multi-frequency builders
   `build_sommerfeld_correction_matrices` / `build_carson_correction_matrices`,
-  and the tabulated Sommerfeld assembly (opt-in,
-  `Engine(sommerfeld_assembly="tabulated")`). Tests:
+  and the tabulated Sommerfeld assembly (`Engine(sommerfeld_assembly=
+  "tabulated" | "exact")`, tabulated by default). Tests:
   `tests/test_sommerfeld_accuracy.py`, `tests/test_sommerfeld_tabulated.py`.
 - `LayeredEarth.interface_depths` and `LayeredEarth.layer_of(depth)`.
 - **`coupling.carson.carson_mixed_mutual_correction` (10.20, audit A2C-1):**
@@ -412,6 +421,11 @@ is named.
   conductors below the first interface and pairs in different layers.
 - **One earth-return assembly for all frequencies (10.60):** bit-identical per
   frequency; a 30-house Carson network 16.4 s → 3.3 s.
+- ⚠ **Tabulated Sommerfeld assembly by default (10.60; user decision Q16):**
+  one table of the spectral integral per pair of depth groups and frequency;
+  blocks of fewer than 64 sub-segment pairs keep the per-pair rule, which
+  stays available as `sommerfeld_assembly="exact"`. Test:
+  `tests/test_sommerfeld_assembly_default.py`.
 
 **Safety, fits and export**
 
@@ -708,18 +722,33 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - ⚠ **Wires lying side by side (10.46):** coincident or overlapping parallel
   conductors had no finite mutual inductance (two coincident 50 m leads read
   1.87 H), which made a two-house network with drops along the PEN main
-  non-passive; they are touching wires. Tests:
-  `tests/test_interpenetrating_wires.py`.
+  non-passive. Where a point of one wire lies beside the other closer than
+  r_a + r_b, the touching distance is used, pointwise inside the Neumann
+  integral and independent of the order of the conductors (a first version
+  switched whole pairs from the row segment's view: +38.7 % depending on the
+  order, indefinite matrices; audit A3C-1, A3C-2); a thinner wire inside a
+  thicker one couples at the thicker radius (core in a shield: the loop was
+  +36 %, audit A3C-5). Tests: `tests/test_interpenetrating_wires.py`.
 - ⚠ **Close non-parallel pairs (10.46):** nearly parallel, crossing, skew and
   T-junction pairs were integrated with a 16 × 16 rule that does not resolve
   1/r (+12 % at 10 cm, up to +250 % at 1 cm, −13 % for T-junctions); they are
-  integrated semi-analytically to 5e-11. Tests:
-  `tests/test_neumann_close_pairs.py`.
+  integrated semi-analytically, to 5e-11 for directions that differ by more
+  than 1e-6 rad (1.0e-9 at 1e-8 rad); filaments from one vertex at tiny
+  angles were up to 16 % off (audit A3C-4). Tests:
+  `tests/test_neumann_close_pairs.py`, `tests/test_neumann_touching.py`.
+- ⚠ **`carson_series` and the segment order (10.20, audit round 3):** a
+  near-parallel pair was projected on the axis of its first segment, so the
+  order of the segments moved entries by up to 3.1 % of the largest one;
+  such pairs are projected on the bisector (two 1 km leads 2 m apart: +2e-5
+  at 0.5° … +6.4e-3 at 8°). Test:
+  `tests/test_carson_validity_domain.py::test_carson_tiling_does_not_depend_on_the_segment_order`.
 - ⚠ **Long segments under `sommerfeld` (10.24, audit A2C-2):** one 16 × 16 rule
   over a segment much longer than the skin depth put a lumped 3 km PEN's
   earth-return resistance +13.4 % high at 1 kHz (+34.9 % at 5 km), without a
-  warning; it now matches the refined chain to 1e-4. Tests:
-  `tests/test_sommerfeld_long_segments.py`.
+  warning; the lumped 3 km PEN now matches its refined chain to 1e-4, and
+  the composite rule stays within 5.9e-4 (resistance) and 2.4e-4 (reactance)
+  of a refined rule up to 3 km, with a step of 3.5e-4 at a quarter skin
+  depth (audit A3C-4). Tests: `tests/test_sommerfeld_long_segments.py`.
 - **Cost of the exact touching-pair rule (10.46, audit A2C-5):** the coaxial
   closed forms are evaluated in one vectorised call per segment, bit for bit
   (2 km PEN solve 2.2–2.6 s → 1.1–1.4 s). Tests:

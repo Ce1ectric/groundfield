@@ -242,7 +242,8 @@ _RHO_NODE_SPACING = 0.08
 # Pieces per segment at most (the outer grid has (16 n)^2 nodes per
 # pair, evaluated in row chunks); a longer segment warns.
 _MAX_PIECES = 512
-# Tabulated assembly (opt-in, method="tabulated"): nodes of the shared
+# Tabulated assembly (method="tabulated", the solver's default since
+# 2026.11, user decision Q16): nodes of the shared
 # S(rho) table per pair of depth groups and frequency (cubic spline in
 # t = ln(rho + z)), and the smallest block (sub-segment pairs) that gets a
 # table; smaller blocks use the per-pair rule. Against a converged
@@ -253,7 +254,8 @@ _TABLE_NODES = 100
 _TABLE_MIN_PAIRS = 64
 
 #: Assembly of the Sommerfeld correction: ``"exact"`` (per segment pair)
-#: or ``"tabulated"`` (shared S(rho) tables, opt-in).
+#: or ``"tabulated"`` (shared S(rho) tables; the default of
+#: :attr:`groundfield.Engine.sommerfeld_assembly` since 2026.11).
 SommerfeldAssembly = Literal["exact", "tabulated"]
 _ASSEMBLIES: tuple[str, ...] = ("exact", "tabulated")
 
@@ -1378,7 +1380,7 @@ def _convert_image(
 
 
 # ---------------------------------------------------------------------
-# Tabulated assembly (opt-in, review pass 10, finding 10.60)
+# Tabulated assembly (review pass 10, finding 10.60; the solver default since 2026.11)
 # ---------------------------------------------------------------------
 
 
@@ -1835,8 +1837,9 @@ def build_sommerfeld_correction_matrices(
     method
         ``"exact"`` (default): every segment pair gets its own
         $\\lambda$ grid and Bessel table, and $S(\\rho)$ is interpolated
-        linearly on 24 nodes per pair. ``"tabulated"`` (opt-in, finding
-        10.60): sub-segments are grouped by depth, every pair of depth
+        linearly on 24 nodes per pair. ``"tabulated"`` (finding 10.60;
+        what the solver uses by default since 2026.11,
+        :attr:`groundfield.Engine.sommerfeld_assembly`): sub-segments are grouped by depth, every pair of depth
         groups shares one table of $S(\\rho)$ per frequency (cubic
         spline in $\\ln(\\rho + z)$ on the $\\lambda$ grid of the
         group's largest distance), and the outer nodes of all pairs are
@@ -1929,8 +1932,8 @@ def build_sommerfeld_correction_matrix(
         ``"additive"`` (default), ``"none"`` or ``"antiparallel"`` —
         see the module docstring.
     method
-        ``"exact"`` (default) or ``"tabulated"`` (opt-in, see
-        :func:`build_sommerfeld_correction_matrices`).
+        ``"exact"`` (default of this function) or ``"tabulated"`` (the
+        solver's default, see :func:`build_sommerfeld_correction_matrices`).
 
     Returns
     -------

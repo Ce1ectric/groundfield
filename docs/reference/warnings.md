@@ -66,7 +66,7 @@ use it for orientation only, or filter the category.
 
 ### `ProbePointsIgnoredWarning`
 
-`groundfield.solver.mutual.ProbePointsIgnoredWarning`. **Emitted** by
+`gf.ProbePointsIgnoredWarning` (also `groundfield.solver`). **Emitted** by
 `solve_mutual_matrix` when it is given `probe_points` but computes the
 galerkin off-diagonal, the default of every call since 2026.11. Up to
 0.15.0 probe points selected the potential at those points as the

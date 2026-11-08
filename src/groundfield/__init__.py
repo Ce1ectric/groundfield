@@ -287,7 +287,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, ...]] = {
         "shell_coefficient_from_resistance",
         "shell_resistance_from_coefficient",
     ),
-    "groundfield.solver.mutual": ("OffDiagonal",),
+    "groundfield.solver.mutual": ("OffDiagonal", "ProbePointsIgnoredWarning"),
     "groundfield.diagnostics": (
         "Diagnostic",
         "DiagnosticsReport",
@@ -455,7 +455,7 @@ if _typing.TYPE_CHECKING:
         shell_coefficient_from_resistance,
         shell_resistance_from_coefficient,
     )
-    from groundfield.solver.mutual import OffDiagonal
+    from groundfield.solver.mutual import OffDiagonal, ProbePointsIgnoredWarning
     from groundfield.diagnostics import (
         Diagnostic,
         DiagnosticsReport,
@@ -531,6 +531,7 @@ __all__ = [
     "solve_mutual_matrix",
     "solve_mutual_field",
     "OffDiagonal",
+    "ProbePointsIgnoredWarning",
     "concrete_shell_coefficient",
     "shell_coefficient_from_resistance",
     "shell_resistance_from_coefficient",

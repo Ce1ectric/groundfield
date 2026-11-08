@@ -416,3 +416,13 @@ def test_docs_describe_the_carson_validity_domain() -> None:
     assert "Sommerfeld correction of a homogeneous earth" in explanation
     assert "quarter skin depth" in explanation  # long-segment rule
     assert "Wires beside each other" in explanation  # touching rule
+
+
+@pytest.mark.finding("10.20")  # audit A3C-3
+def test_engine_docstring_describes_the_carson_validity_domain() -> None:
+    """The Engine docstring describes the validity domain of carson_series."""
+    import groundfield as gf
+
+    doc = " ".join((gf.Engine.__doc__ or "").split())
+    assert "scaled by the geometric length of each segment pair" not in doc
+    assert "8.1" in doc and "transmitted" in doc

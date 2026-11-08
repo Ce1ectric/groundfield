@@ -71,9 +71,11 @@ falls with the distance between the cables.
 | `"carson_series"` | Carson's (1926) per-metre correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image: tiled per metre of overlap for near-parallel horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, inclination below 8.1°), across the surface through the field transmitted into the soil; every other pair and inclined segment gets the Sommerfeld correction of the same earth, so the result steps at 8.1° | long parallel cables in homogeneous soil; not for layered soil |
 | `"perfect_mirror"` | the earth as a perfect magnetic mirror, frequency independent | a fast diagnostic baseline only |
 
-With `"sommerfeld"`, set `sommerfeld_assembly="tabulated"` as above when
-there are many inductive segments: the result agrees with the per-pair
-assembly to far below the model accuracy and is much faster (see
+With `"sommerfeld"` the correction is assembled from shared tables
+(`sommerfeld_assembly="tabulated"`, the default since 2026.11; the
+examples on this page spell it out): it agrees with the per-pair assembly
+(`"exact"`) to far below the model accuracy and is much faster on networks
+with many inductive segments (see
 [Speed up large studies](speed-up-large-studies.md)).
 
 ## Check against the per-metre formulas

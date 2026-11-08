@@ -380,23 +380,26 @@ class Engine(BaseModel):
           f < 1 kHz physics of buried conductors (audit finding F5); kept
           as a fast diagnostic baseline.
         - ``"carson_series"`` (ADR-0005) — the earth has finite
-          conductivity. Adds Carson 1926's per-meter earth-return
-          correction $\\Delta Z_\\text{Carson}(\\omega)$, scaled by the
-          geometric length of each segment pair, to the Neumann matrix
-          built on Carson's own baseline, the *anti-parallel* image
-          (since 2026.11; up to 0.15.0 it was added to the additive
-          perfect-mirror matrix, which roughly doubled the reactance, review
-          pass 10, 10.20). Asymptotically correct for long parallel
-          wires over homogeneous earth; an approximation for short
-          wires or layered soils. The per-metre tiling is kept only for
-          near-parallel pairs of near-horizontal segments on one side of
-          the surface: a pair across the surface has no anti-parallel
-          baseline and couples through the field transmitted into the
-          soil (:func:`~groundfield.coupling.carson.carson_mixed_mutual_correction`),
-          and oblique pairs as well as segments inclined by more than
-          8.1° get the Sommerfeld correction of a homogeneous earth of
-          the same conductivity; at that boundary the result steps by
-          the error of the per-metre model (audit round 2, A2C-1).
+          conductivity. Carson 1926's per-metre earth-return correction
+          $\\Delta Z'_\\text{Carson}(\\omega)$ is added to the Neumann matrix
+          built on Carson's own baseline, the *anti-parallel* image (since
+          2026.11; up to 0.15.0 it was added to the additive perfect-mirror
+          matrix, which roughly doubled the reactance, review pass 10,
+          10.20). It is tiled per metre of axial overlap, and only inside its
+          validity domain: near-parallel pairs ($|\\cos\\varphi| > 0.99$) of
+          near-horizontal segments (inclination below 8.1°) on one side of
+          the surface; two conductors overlapping on one axis get the
+          correction of touching wires. A pair across the surface has no
+          anti-parallel baseline and couples through the field transmitted
+          into the soil
+          (:func:`~groundfield.coupling.carson.carson_mixed_mutual_correction`).
+          Oblique pairs and every pair and self term of a segment inclined by
+          more than 8.1° get the Sommerfeld correction of a homogeneous earth
+          of the same conductivity; at that boundary the result steps by the
+          error of the per-metre model (13 % for two 1 km leads 2 m apart at
+          1 kHz; audit rounds 2 and 3). Asymptotically correct for long
+          parallel wires over homogeneous earth; an approximation for short
+          wires and for layered soil (the top layer's conductivity is used).
         - ``"sommerfeld"`` (ADR-0006, Pollaczek kernel since the
           2026-07-08 audit, WP-C1) — geometric integration of the
           σ-dependent vector-potential Green's function over the

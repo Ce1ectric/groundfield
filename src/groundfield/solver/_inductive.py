@@ -81,8 +81,9 @@ conventions the three terms are assembled with:
 - **Several frequencies** (10.60): the correction is built for the whole
   frequency set of the solve in one multi-frequency assembly (geometry,
   $\\lambda$ grid and Bessel tables once per segment pair); every
-  frequency is bit-identical to a single-frequency assembly. The opt-in
-  ``sommerfeld_method="tabulated"`` shares one table of the spectral
+  frequency is bit-identical to a single-frequency assembly.
+  ``sommerfeld_method="tabulated"`` (the default of
+  ``Engine.sommerfeld_assembly`` since 2026.11) shares one table of the spectral
   integral per pair of depth groups instead (faster on large networks,
   agrees with the exact assembly to about $10^{-5}$ of the largest
   entry).
@@ -401,8 +402,9 @@ def _assemble_inductance_matrix(
         Angular frequencies in rad/s of the solve; the correction is
         built for all of them at once on first use.
     sommerfeld_method
-        ``"exact"`` (default) or ``"tabulated"`` (opt-in) assembly of the
-        Sommerfeld correction.
+        ``"exact"`` or ``"tabulated"`` assembly of the Sommerfeld
+        correction (the engine passes ``Engine.sommerfeld_assembly``,
+        ``"tabulated"`` by default since 2026.11).
 
     Returns
     -------

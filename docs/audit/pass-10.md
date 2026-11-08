@@ -212,6 +212,35 @@ stream may have changed what an earlier one describes.
       the new default line kernel (core2b), so a ring of r = 2 m in 100 Ω·m moves by
       +0.85 % against 0.15.0 (13.31207 → 13.42534 Ω).
 
+!!! warning "Superseded by the third adversarial audit and the user's decisions"
+    These statements of the fragments below no longer describe the release; the
+    fragments at the end of the page and the release notes do:
+
+    - **core2b, `solve_mutual_matrix`:** `offdiag=None` selected `"probe"` when probe
+      points were given. The galerkin off-diagonal is the default of every call; probe
+      points need `offdiag="probe"` (ddefaults, user decision Q15).
+    - **coup2 and fix1, Sommerfeld assembly:** “the default stays the per-pair
+      assembly”, “`"exact"` (default)”. The default is `"tabulated"`; `"exact"` is the
+      per-pair rule (ddefaults, user decision Q16).
+    - **fitx, `touch_voltage_envelope(interior=None)`** sampled mesh cells and ring
+      centres by default. The default samples no interior; `interior="meshes"` does
+      (dsafety, user decision Q3).
+    - **post, `long_duration=True`** for 80 V beyond 10 s. 80 V applies to every
+      fault duration above 10 s; the keyword is gone (dsafety, user decision Q4).
+    - **secio / fitx, `rho_at_fit` = ρ₁ for layered soil.** The convention is the effective
+      resistivity `effective_resistivity(soil)` (drhoeff, user decision Q6).
+    - **fix2gen, the nearest-point tree of PEN cables** (chained cabinets, drops hung
+      on other drops). Every cabinet has its own cable and a drop taps the cable that
+      feeds its building (fix3gen).
+    - **fix2solver, “the step at zero penetration is the onset of the contact”.** It is
+      a limit of the thin-wire model; a rod end within one wire radius of an interface
+      warns (`InterfaceContactWarning`), and the interface diagonal no longer clamps at
+      h₁/200 (fix3solver).
+    - **fix2coup, wires lying side by side** were switched to touching wires as whole
+      pairs, from one segment's view (order dependent); the rule acts pointwise and
+      order-free, and the accuracy statements “5e-11”, “1e-9” and “≤ 1e-4” hold only
+      where they were measured (fix3coup).
+
 ## Stream `infra`: Release tooling, packaging and CI
 
 ### Changed
@@ -2803,258 +2832,7 @@ Test: `tests/test_soil_models.py::test_old_keyword_warns_and_maps_to_canonical_f
   generators build with. Test:
   `tests/test_generators_base.py::test_resolved_integer_fields_hold_integers`.
 
-## Stream `drhoeff`
-
-### Added
-
-- **`effective_resistivity` (10.84, user decision Q6):** the effective
-  resistivity of a homogeneous or two-layer soil in Ω·m,
-  ρ_eff = ρ₁^(1−w) · ρ₂^w with w = w0 · (h₁ / h_ref)^(−β), h_ref = 10 m and
-  the AP1 calibration w0 = 0.13, β = 0.8 (group-specific values as `w0=`,
-  `beta=`, `h_ref=`). `gf.effective_resistivity(soil)` (also
-  `groundfield.soil.effective_resistivity`, or with the keywords `rho_1`,
-  `rho_2`, `h_1`) returns ρ itself for homogeneous soil and for stacks of
-  equal layers, without round-off (the plain formula gives
-  200.00000000000003 Ω·m for 200 / 200 Ω·m, h₁ = 10 m); reduces a
-  `MultiLayerSoil` to its canonical stack (equal adjacent layers merged, as
-  the layered backends do, 10.48) and raises `ValueError` for three or more
-  distinct layers; limits w to [0, 1], so ρ_eff stays between ρ₁ and ρ₂ (the
-  unlimited formula leaves that interval below h₁ = 0.78 m: 17.9 Ω·m for
-  100 / 30 Ω·m at h₁ = 0.5 m; with the limit such a thin upper layer gives
-  ρ₂). Inside the calibration range of the AP1 catalogue (h₁ = 5 … 30 m,
-  ρ₁ = 30 … 1000 Ω·m, ρ₂ = 30 … 200 Ω·m) the value is bit-identical to the
-  AP1 / AP2 scripts' `r1 ** (1 - w) * r2 ** w` and agrees with a 50-digit
-  evaluation to 1.6e-16. Test: `tests/test_effective_resistivity.py`.
-
-### Changed
-
-- ⚠ **The `rho` of a BusType in layered soil is the effective resistivity
-  (10.84, user decision Q6):** `rho_at_fit` of a vector fit and the `rho`
-  samples of a standard form fitted in layered soil are ρ_eff of the soil
-  they were computed in, `effective_resistivity(soil)`, the
-  `specific_earth_resistance` the AP2 network model gives a groundinsight
-  bus. This replaces the upper-layer resistivity ρ₁ that the 10.84 entry of
-  this release cycle had made the convention; on the AP1 grid ρ_eff differs
-  from ρ₁ by −54.8 % (1000 over 30 Ω·m, h₁ = 5 m) to +53.6 % (30 over
-  200 Ω·m, h₁ = 5 m). The error message for a missing `rho_at_fit`, the
-  docstrings of the four exporters, the IO and Soil references, ADR-0008
-  and tutorial T05 state it. Every BusType document records the convention
-  as `metadata["rho_definition"] = "effective_resistivity"` (documents of
-  0.15.0 have no such entry). No function computes a different number: the
-  exporter writes the `rho` it is given. Affected: BusTypes exported in
-  layered soil with ρ₁ as `rho`. A compact electrode in the upper layer
-  follows ρ₁ more closely than ρ_eff of the AP1 networks: the station of the
-  IO example (2 m ring and 3 m rod) swept over ρ₁ fits the standard form to
-  13.4 / 8.3 / 3.6 % over ρ_eff and to 3.9 / 1.9 / 0.6 % over ρ₁ for
-  h₁ = 5 / 10 / 30 m; check `max_relative`. Golden cases: none. Tests:
-  `tests/test_io_groundinsight.py::test_rho_at_fit_convention_for_layered_soil_is_the_effective_resistivity`,
-  `::test_bustype_metadata_records_the_rho_definition`,
-  `::test_layered_soil_exports_pair_with_an_effective_resistivity_bus`.
-
-## Stream `dsafety`
-
-### Added
-- **Touch points: `touch_voltage_at_part` (10.21; user decision Q3):** the
-  EN 50522 touch voltage of an accessible metal part above ground — a
-  station housing or its door, a mast, a fence post, a cable cabinet, a
-  service connection box. The part is given by its horizontal position and
-  the electrode or junction it is bonded to (`bonded_to=`), whose potential
-  it carries; a part bonded to a PEN junction expresses a transferred
-  potential. The feet stand on the circle of radius `distance` (1 m) around
-  the part (`n_angles`, default 24), optionally only in given `directions`,
-  and the positions inside the outlines in `exclude` (the housing or the
-  building, where nobody can stand) are dropped. Returns the touch-voltage
-  phasors and azimuths per foot position like `touch_voltage_envelope`
-  (and the positions with `return_points=True`). Available as
-  `gf.touch_voltage_at_part` and `gf.safety.touch_voltage_at_part`. A
-  service connection box 40 m from a ring earth (100 A, 100 Ω·m), bonded to
-  the PEN, has 1081 V of the 1121 V earth potential rise as touch voltage.
-  Tests: `tests/test_touch_voltage_at_part.py::test_part_on_a_wire_matches_touch_voltage_on_the_offset_curve`,
-  `tests/test_touch_voltage_at_part.py::test_part_at_a_rod_head_against_the_analytic_surface_potential`,
-  `tests/test_touch_voltage_at_part.py::test_part_bonded_to_a_pen_junction_carries_the_transferred_potential`.
-- **How-to "Assess touch voltages"** (`docs/how-to/assess-touch-voltages.md`):
-  touch points of a compact station, the transferred potential over the
-  PEN, the meshes of an open-air grid, and the comparison with the
-  permissible values; tutorial T08 adds a fence bonded to the substation
-  grid (199.5 V at the corner post against 140.7 V 1 m outside the grid,
-  `mom`, 150 A) and an earth fault that is not cleared.
-
-### Changed
-- ⚠ **`touch_voltage_envelope` samples no interior by default (10.21; user
-  decision Q3):** inside an electrode's footprint stands the station, the
-  house, the steel structure or the mast, so the default is now
-  `interior=False` for every electrode kind: the curve `distance` outside
-  the wires only. The mesh sampling of the development snapshots (the
-  centres of the meshes of grids and of generated mesh foundations, the
-  centre of a ring) is the explicit `interior="meshes"`, for open-air grids
-  such as a substation yard; `interior=True` also samples the inside of a
-  closed polyline. `interior=None` is rejected with a hint. Against 0.15.0
-  the default envelope is the footprint's offset curve of 10.21: a ring of
-  10 m radius at 0.8 m (100 A, 100 Ω·m, `image`, point kernel) keeps
-  139.4 V (the development snapshots gave 182.6 V, its centre; with the
-  default line kernel 142.2 / 185.5 V), a 20 m perimeter loop (1 × 1 grid)
-  141.4 V instead of 158.3 V in its centre, and the 20 m × 20 m grid with
-  4 × 4 meshes 111.4 V (unchanged: the maximum is 1 m outside a corner, the
-  mesh centres reach 63.0 V). Affected: envelopes of rings, grids and
-  generated foundations computed with the development snapshots; pass
-  `interior="meshes"` for open-air grids. Golden cases: none (no case
-  evaluates the envelope). Tests:
-  `tests/test_touch_voltage_envelope.py::test_envelope_samples_no_interior_by_default`,
-  `tests/test_touch_voltage_envelope.py::test_release_note_envelopes_with_the_new_default`.
-- ⚠ **EN 50522 permissible touch voltage beyond 10 s (10.42; user decision
-  Q4):** `permissible_touch_voltage_en50522(t_f)` follows Figure 8 /
-  Table B.4 of EN 50522:2022 up to 10 s and returns 80 V for every
-  t_f > 10 s, including `math.inf` for an earth fault that is not cleared
-  (resonant-earthed networks). The curve of Figure 8 ends at 10 s; the
-  note to Figure 8 (5.4.1) and the text after Table B.4 (B.3) allow 80 V
-  for current-flow durations considerably longer than 10 s, below the
-  85 V end value of the table. 0.15.0 returned 85 V beyond 10 s (now
-  −5.9 %) and rejected `math.inf`. `permissible_prospective_touch_voltage_en50522`
-  uses the same U_Tp: beyond 10 s 80 V + 50 mA · R_A / HF (1000 Ω shoes
-  on 100 Ω·m soil: 137.5 V instead of 142.5 V). Affected: assessments
-  with fault durations above 10 s, e.g. resonant-earthed networks. Golden
-  cases: none (`safety_en50522_curve` covers 0.05 … 10 s). Tests:
-  `tests/test_safety.py::test_en50522_beyond_ten_seconds_is_80_volt`,
-  `tests/test_safety.py::test_prospective_touch_voltage_beyond_ten_seconds_uses_80_volt`.
-
-### Removed
-- **`long_duration=`** of `permissible_touch_voltage_en50522` and
-  `permissible_prospective_touch_voltage_en50522` (added during this
-  release cycle, never released): 80 V beyond 10 s is the default. Test:
-  `tests/test_safety.py::test_en50522_has_no_long_duration_keyword`.
-
-### Deprecated
-- Nothing.
-
-## Stream `fix3gen`
-
-### Added
-- **`groundfield.io.groundinsight.MAX_METADATA_DEPTH` (32):** deepest nesting of
-  objects and lists in the metadata of a BusType document (the exporters write
-  four levels); a deeper document is refused on load. Test:
-  `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`.
-
-### Changed
-- ⚠ **PEN cables of `TnNetworkGenerator` (10.38; stream DOC-B; audit A3SG-01,
-  A3SG-02, A3SG-03):** every cable cabinet has its own cable, as the topology
-  documents (star: a straight cable from the substation; radial trunk: one
-  cable per trunk segment); cabinets on one line get separate cables in one
-  trench. A service drop taps the cable path that feeds its own building — the
-  cable of its cabinet, or the trunk from the substation to its tap source — at
-  the point nearest to the building's connection point: a leakage-free tap
-  junction `pen_tap_<k>` that splits the cable into sections `<cable>_s<k>`, or
-  the substation / the cabinet at the end of the cable; a building in a
-  substation slot of the radial trunk is connected to the substation. What the
-  router guarantees: a drop never starts on another building's drop and never
-  runs along the cable it taps; no cable section or drop is shorter than 1 cm (a
-  tap closer to a node is that node; longer for PEN radii above 7.3 mm, so that
-  every section keeps twice the resistance below which a distributed conductor
-  is refused); a building whose connection point lies on its feeding cable
-  splits it (no drop); two nodes closer than that raise `ValueError`. A drop
-  may share its route with another cable (another cabinet's cable, a trunk,
-  another drop), as cables in one trench do; the inductive coupling treats such
-  conductors as touching wires and the networks stay passive. Against 0.15.0,
-  where every drop ran from its cabinet (60 to 160 m back along the main in the
-  default network, coaxial with it): the routing moves the golden networks
-  (one cabinet west of every house) by −2.1 % in the substation potential,
-  −3.1 to −4.8 % in the substation leakage, −0.2 to +1.0 % in the house
-  potentials and −1.1 % in the measurement network;
-  the input impedance of default-grid networks with ring foundations (image
-  backend, 50 Hz, 100 Ω·m) moves by −6.4 / −1.1 / −0.2 % for 30 / 100 / 200
-  houses (star) and 0.0 / −0.1 % for 30 / 100 houses (radial trunk). Against
-  the nearest-point tree of the first 2026.11 draft (chained cabinets, drops
-  hung on drops): golden networks bit-identical; 30 / 100 / 200 houses −4.1 /
-  −2.9 / −2.7 % (ring foundations) and −2.4 / −3.4 / −2.8 % (default mesh
-  foundations), radial trunk −0.5 / −0.3 %. Golden cases: `gen_tn_default`,
-  `gen_tn_measurement_overhead_leads` (moves declared in `fix2gen.toml`).
-- **Polygon foundations of thin outlines (10.54; audit A3SG-07):** with
-  `foundation_outline="polygon"` an outline whose oriented bounding rectangle
-  is narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is replaced by that rectangle
-  widened to 1 m, with the same `UserWarning` as for `"ombr"` (a ring along an
-  outline 0.5 to 1 m wide ran along both faces of a wall). Outlines wider than
-  1 m on average are unchanged.
-- **`TnNetworkGenerator.build()` of large networks (no finding):** the
-  materialiser hands objects instead of names to the world, so bonds and PEN
-  sections need no search through the world: 1000 default houses 6.5 → 4.4 s
-  (star) and 7.3 → 5.4 s (radial trunk), worlds byte-identical. The rest of the
-  cost is the name checks of `World.add_electrode` / `add_conductor`, linear in
-  the size of the world.
-
-### Fixed
-- **`build()` failed for 1–3 % of random TN networks (10.38; audit A3SG-01):**
-  a service drop whose tap fell 0.1 µm to 4.7 mm from a node of the cable left
-  a section that the `Conductor` model refuses (series resistance below
-  1e-6 Ω), so `build()` raised `pydantic.ValidationError` (1 of 100 random
-  60-house and 2 of 60 random 200-house networks). The layout builder had the
-  same defect for taps a few millimetres from a cable corner or from another
-  tap; it now merges cable nodes closer than the shortest section and refuses a
-  cable between two sites closer than it with `ValueError`. Tests:
-  `tests/test_pen_routing.py::test_a_building_millimetres_beside_a_node_still_builds`,
-  `::test_a_tap_millimetres_from_an_earlier_tap_snaps_to_it`,
-  `::test_random_position_network_builds`,
-  `::test_taps_on_a_thick_pen_keep_sections_the_conductor_model_accepts`,
-  `::test_random_networks_build_and_route_as_documented` (400 random networks,
-  60 / 200 houses, both topologies),
-  `tests/test_lv_network_layout.py::test_taps_millimetres_apart_share_one_node`,
-  `::test_a_tap_millimetres_from_a_cable_corner_is_the_corner`,
-  `::test_a_cable_between_two_sites_closer_than_a_section_is_rejected`.
-- **Cabinets chained on one cable, drops hung on other drops (10.38; audit
-  A3SG-02, A3SG-03):** the nearest-point tree of the first 2026.11 draft fed a
-  cabinet from the cable of a nearer one, although `StarCabinetTopology` and
-  `TnNetworkConfig.pen_topology` document a direct cable per cabinet (input
-  impedance +1.8 / +2.6 % for 100 / 200 houses against the 0.15.0 routing,
-  against the documented direction), and started most drops on other houses'
-  drops (26 of 30 in the radial default grid with ring foundations, 19 of 30 in
-  the default star network). Tests:
-  `tests/test_pen_routing.py::test_star_topology_wires_every_cabinet_directly_to_the_substation`,
-  `::test_collinear_cabinets_have_separate_cables_in_one_trench`,
-  `::test_z_in_of_a_100_house_network_drops_against_the_old_routing`,
-  `::test_a_drop_taps_the_cable_of_its_own_cabinet`,
-  `::test_no_drop_starts_on_another_drop_in_the_radial_default_grid`,
-  `::test_overlapping_drops_and_trunks_stay_passive`, `::test_routing_guarantees`.
-- **A loaded BusType document crashed the other entry points (10.01; audit
-  A3SG-04):** `load_bustype_json` accepted documents for which
-  `fit_quality_summary` raised `AttributeError`, `TypeError`, `ValueError` or
-  `OverflowError` (`fit_quality` null or a list; a figure that is an object, a
-  list, a string or a 400-digit integer), `to_dict()` raised `RecursionError`
-  (metadata nested 3 000 levels, which the JSON decoder reads) or wrote a NaN
-  description (not strict JSON). The loader now refuses a `name` or
-  `system_type` that is an object or a list, a `description` that is neither a
-  string nor null, an `impedance_formula` that is an object or a list
-  (`EvaluateSpecError`) and metadata deeper than `MAX_METADATA_DEPTH`;
-  `to_dict()` writes a non-string description as null and walks the metadata
-  without recursion; `fit_quality_summary` reads only finite numbers and
-  strings. Tests: `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`,
-  `::test_a_loaded_document_never_crashes_the_other_entry_points`,
-  `::test_fit_quality_summary_reads_the_figures_it_can`,
-  `::test_to_dict_of_a_spec_built_in_memory_is_strict_json_or_refused`.
-- **A sum with an exact small imaginary part parsed to zero (10.01; audit
-  A3SG-05):** the formula parser drops a collected sum that cancels within its
-  128-bit working precision, but compared the complex magnitude of the sum with
-  its largest term: `(1 + 1e-31*j - 1)*1e31*f` evaluated to 0 instead of 50j at
-  50 Hz. Real and imaginary parts are now judged separately; the 119 accepted
-  formulas of the corpus evaluate as before (worst 1.9e-15 against a 60-digit
-  mpmath evaluation). Test:
-  `tests/test_formula_security.py::test_real_and_imaginary_parts_of_a_sum_cancel_separately`.
-- **Polygon foundations of outlines narrower than 0.5 m (10.54; audit
-  A3SG-07):** `LvNetworkLayout.to_world(foundation_outline="polygon")` raised
-  `ValueError` ("polygon collapses ... after removing sub-centimetre edges",
-  although the edge limit is 0.5 m) for every such outline the Overpass parser
-  keeps; it is widened now (see Changed), and the materialiser's last check
-  names the real limit. Tests:
-  `tests/test_footprint_foundations.py::test_a_thin_outline_with_a_polygon_foundation_is_widened`,
-  `::test_a_polygon_foundation_of_an_ordinary_outline_is_unchanged`,
-  `::test_a_collapsing_polygon_outline_names_the_real_edge_limit`.
-- **Margin of generated mesh foundations against `mom` (10.39; audit
-  A3SG-06):** the documentation said one current per wire is +0.3 / +0.5 /
-  +0.6 % "against `mom`"; that is the line kernel against a line-kernel
-  per-segment reference. Against `mom` (point kernel) the default line kernel
-  is +1.1 % and `kernel="point"` +0.3 … +0.5 % for 10 m 2 × 2 to 30 m 4 × 4
-  meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
-  +1.5 … +3.1 %). Test:
-  `tests/test_foundation_owners.py::test_documented_margin_of_mesh_foundations_against_mom`.
-
-## Stream `fix3solver`
+## Stream `fix3solver`: Fixes from the third adversarial audit: solver
 
 ### Added
 
@@ -3184,3 +2962,454 @@ Test: `tests/test_soil_models.py::test_old_keyword_warns_and_maps_to_canonical_f
   a group of bonded wires whose cells the default samples. Tests:
   `tests/test_touch_voltage_footprint.py::test_the_quoted_corner_deviations_are_those_of_the_default_kernel`,
   `tests/test_touch_voltage_envelope.py::test_a_generated_mesh_foundation_is_sampled_in_its_cells_by_default`.
+
+## Stream `fix3coup`: Fixes from the third adversarial audit: coupling
+
+### Fixed
+
+- ⚠ **Wires lying beside each other: order-free, pointwise rule (10.46, audit
+  A3C-1, A3C-2):** the touching-wire rule of audit round 2 switched a whole
+  near-parallel pair to touching wires when the partner's end points lay
+  inside a cylinder of radius r_a + r_b around the *row* segment, so the
+  result depended on the order of the conductors: a V pair of 1 m and 0.5 m
+  at 1.5° read 0.362 or 0.503 µH (+38.7 %), the generator's in-line
+  fall-of-potential setup with lumped leads read Im Z_meas(50 Hz) =
+  0.134442 or 0.126676 Ω (perfect_mirror) depending on whether the feed or
+  the probe lead came first. Tilted V and X pairs whose far ends lay just
+  outside the cylinder kept a filament value above the self inductance: an
+  indefinite inductance matrix (minimum eigenvalue −1.3e-8 H), a two-wire
+  loop with Im Z_in(1 kHz) = −0.14 mΩ (−0.51 mΩ with the skin model). The
+  rule now acts pointwise inside the Neumann integral: where a point of one
+  wire lies beside the other wire (its foot on the other axis falls inside
+  that wire) closer than r_a + r_b, that distance is used; both one-sided
+  integrals (inner integral in closed form) are averaged on end points in a
+  fixed order — bit-identical for every order and direction of the
+  segments, continuous in the geometry, 4e-15 against an independent mpmath
+  quadrature. The in-line reading is 0.126676 Ω in both orders (5 m lead
+  segments: 0.126683 Ω); 2000 random close configurations × 6
+  conventions gave no indefinite matrix (round-2 state: 700). Numbers move
+  for pairs that lie beside each other closer than touching except exactly
+  coincident ones: partly overlapping parallel wires (+2.3e-4 for a 2 mm
+  offset against the whole-pair value), V pairs leaving a junction at an
+  acute angle, wires crossing at one depth, branches starting on another
+  segment (crossing at 30° with r = 0.1 mm: −7.9e-5). Chain neighbours,
+  bends turning by less than 90° and pairs farther apart keep their values
+  bit for bit. Golden cases: none (all bit-identical). Tests:
+  `tests/test_interpenetrating_wires.py::test_beside_rule_does_not_depend_on_the_order_or_direction`,
+  `::test_beside_rule_matches_an_independent_quadrature`,
+  `::test_matrix_does_not_depend_on_the_order_of_the_conductors`,
+  `::test_inline_reading_does_not_depend_on_the_order_of_the_leads`,
+  `::test_partial_inductance_matrix_stays_positive_definite`,
+  `::test_random_close_configurations_are_positive_definite`,
+  `::test_two_wire_loop_has_a_positive_reactance`,
+  `::test_mutual_is_continuous_across_the_touching_distance`,
+  `::test_chain_neighbours_and_bends_keep_their_closed_forms`.
+- ⚠ **A wire inside another (10.46, audit A3C-5):** a core on the axis of a
+  cable shield was coupled like two wires touching on the outside (axis
+  distance r_c + r_s): loop inductance +36 % against the geometric mean
+  distance, +61 % against the analytic coax, silently. Where the thinner
+  wire runs inside the thicker one, the thicker radius is used — a filament
+  inside a thin tube couples to it as at the tube radius: with the internal
+  inductance on the core only, the loop of a 100 m core (5 mm) in a shield
+  (15 mm) is 26.966 µH against the analytic coax 26.972 µH. Equal radii
+  never count as one wire inside the other (cables in one trench drawn on
+  one axis stay touching wires); for unequal radii the value steps where
+  the thinner axis leaves the thicker wire (concentric cable vs two cables
+  side by side). Golden cases: none. Tests:
+  `tests/test_interpenetrating_wires.py::test_wire_inside_another_couples_at_the_radius_of_the_thicker_wire`,
+  `::test_wire_inside_another_uses_the_geometric_mean_distance`,
+  `::test_coincident_wires_of_equal_radius_stay_touching_wires`.
+- ⚠ **`carson_series`: segment order of near-parallel pairs (10.20, audit
+  round 3, evidence e13):** a near-parallel pair that is not exactly
+  parallel was projected on the axis of its first segment, so reversing the
+  segment order moved entries of the correction by up to 3.1 % of the
+  largest one (a pair got an overlap in one order and none in the other).
+  Such pairs are now projected on the bisector of the two axes from the
+  mean of their mid-points (3e-17 after reversal); exactly parallel pairs
+  keep their numbers bit for bit. Numbers move for `carson_series` worlds
+  with horizontal conductors at small angles to each other: the mutual
+  impedance of two 300 m or 1 km leads 2 m apart grows by 2e-5 at 0.5°,
+  4e-4 at 2°, 1.6e-3 at 4° and up to 6.4e-3 at 8° (50 Hz and 1 kHz); the
+  step at the 8.1° boundary becomes 12.8 % for the 1 km leads at 1 kHz
+  (12.3 %). Golden cases: none. Test:
+  `tests/test_carson_validity_domain.py::test_carson_tiling_does_not_depend_on_the_segment_order`.
+- ⚠ **Filaments at tiny angles (10.46, audit A3C-4):** two filaments from
+  one vertex below the coaxial tolerance (4.5e-5 rad) were taken as
+  overlapping coaxial filaments and fell to the 16 × 16 rule: 16 % off at
+  1.5e-6 rad, 3.8 % at 1e-5 rad; just above it the vertex formula lost
+  2.7e-9. Below 0.81° the vertex formula is evaluated without cancellation:
+  round-off on axis-parallel geometry, at most 4e-10 in a general
+  orientation. Filaments crossing at tiny angles lost the crossing-point
+  mark of the close-pair rule (computed from 1 − cos², cut off at 1e-14):
+  9.5e-4 at 1e-8 rad; below 1 − cos² = 1e-6 the mark now comes from a
+  cross product: 1.0e-9 at 1e-8 … 3e-8 rad, 5e-11 from 1e-6 rad on. Numbers
+  move for filaments (`neumann_mutual`) and segment pairs at such angles
+  that are farther apart than r_a + r_b. Golden cases: none. Tests:
+  `tests/test_neumann_touching.py::test_filaments_from_one_vertex_at_tiny_angles`,
+  `tests/test_neumann_close_pairs.py::test_crossing_filaments_at_tiny_angles`.
+- **Accuracy statements say where they hold (10.24, 10.46, 10.20, audit
+  A3C-4):** measured worst cases replace statements that held only where
+  they were measured. Sommerfeld correction of a long segment (composite
+  rule above a quarter skin depth; audit round 2 stated 7e-5 / 1e-6 and
+  "lumped conductors match their chains to 1e-4" from buried cases):
+  against a refined rule, 50 Hz and 1 kHz, up to 3 km, within 5.9e-4 in
+  the earth-return resistance and 2.4e-4 in the reactance (worst: a 3 km
+  overhead line at 10 m over 10 Ω·m at 1 kHz; a 1 km one 4.8e-4 / 1.2e-4;
+  buried in 100 Ω·m 1.7e-4), tabulated 3.3e-4 / 9.6e-5; the historic rule
+  below a quarter skin depth reaches 4.8e-4, so the correction steps by
+  3.5e-4 (resistance) at L = δ/4. Close pairs (stated "5e-11"): 5e-11 above
+  1e-6 rad, 1.0e-9 at 1e-8 rad; pairs inside the parallel tolerance use the
+  parallel closed form at the start offset (4.2e-9 for wires 1 cm apart
+  tilted by 1e-10 rad, 1.7e-5 at 1 µm). Overhead wire over a buried one
+  (stated "1e-9"): 4.2e-9 up to x = 300 m (1 kHz, 10 Ω·m; 1e-10 at
+  50 Hz), 1.2e-7 at x = 1 km, inherited from Carson's J (1.2e-7 at a = 28,
+  θ = 89.9°, QUADPACK's Fourier rule). Tests:
+  `tests/test_sommerfeld_long_segments.py::test_long_segment_rule_meets_its_stated_accuracy`,
+  `::test_the_step_at_a_quarter_skin_depth_is_the_stated_one`,
+  `tests/test_neumann_close_pairs.py::test_crossing_filaments_at_tiny_angles`.
+- **`carson_series` validity domain in the documentation (10.20, audit
+  A3C-3):** the explanation page and the how-to still described the
+  correction as "scaled by the geometric length of each segment pair" (the
+  heuristic removed in audit round 2). They now describe the per-metre
+  tiling of near-parallel horizontal pairs, the transmitted field across
+  the surface, the Sommerfeld fallback with its step at 8.1°, the
+  long-segment rule and the rule for wires beside each other; ADR-0004,
+  -0005 and -0006 carry the corrections in their 2026.11 amendments. Test:
+  `tests/test_carson_validity_domain.py::test_docs_describe_the_carson_validity_domain`.
+
+## Stream `fix3gen`: Fixes from the third adversarial audit: generators and export
+
+### Added
+- **`groundfield.io.groundinsight.MAX_METADATA_DEPTH` (32):** deepest nesting of
+  objects and lists in the metadata of a BusType document (the exporters write
+  four levels); a deeper document is refused on load. Test:
+  `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`.
+
+### Changed
+- ⚠ **PEN cables of `TnNetworkGenerator` (10.38; stream DOC-B; audit A3SG-01,
+  A3SG-02, A3SG-03):** every cable cabinet has its own cable, as the topology
+  documents (star: a straight cable from the substation; radial trunk: one
+  cable per trunk segment); cabinets on one line get separate cables in one
+  trench. A service drop taps the cable path that feeds its own building — the
+  cable of its cabinet, or the trunk from the substation to its tap source — at
+  the point nearest to the building's connection point: a leakage-free tap
+  junction `pen_tap_<k>` that splits the cable into sections `<cable>_s<k>`, or
+  the substation / the cabinet at the end of the cable; a building in a
+  substation slot of the radial trunk is connected to the substation. What the
+  router guarantees: a drop never starts on another building's drop and never
+  runs along the cable it taps; no cable section or drop is shorter than 1 cm (a
+  tap closer to a node is that node; longer for PEN radii above 7.3 mm, so that
+  every section keeps twice the resistance below which a distributed conductor
+  is refused); a building whose connection point lies on its feeding cable
+  splits it (no drop); two nodes closer than that raise `ValueError`. A drop
+  may share its route with another cable (another cabinet's cable, a trunk,
+  another drop), as cables in one trench do; the inductive coupling treats such
+  conductors as touching wires and the networks stay passive. Against 0.15.0,
+  where every drop ran from its cabinet (60 to 160 m back along the main in the
+  default network, coaxial with it): the routing moves the golden networks
+  (one cabinet west of every house) by −2.1 % in the substation potential,
+  −3.1 to −4.8 % in the substation leakage, −0.2 to +1.0 % in the house
+  potentials and −1.1 % in the measurement network;
+  the input impedance of default-grid networks with ring foundations (image
+  backend, 50 Hz, 100 Ω·m) moves by −6.4 / −1.1 / −0.2 % for 30 / 100 / 200
+  houses (star) and 0.0 / −0.1 % for 30 / 100 houses (radial trunk). Against
+  the nearest-point tree of the first 2026.11 draft (chained cabinets, drops
+  hung on drops): golden networks bit-identical; 30 / 100 / 200 houses −4.1 /
+  −2.9 / −2.7 % (ring foundations) and −2.4 / −3.4 / −2.8 % (default mesh
+  foundations), radial trunk −0.5 / −0.3 %. Golden cases: `gen_tn_default`,
+  `gen_tn_measurement_overhead_leads` (moves declared in `fix2gen.toml`).
+- **Polygon foundations of thin outlines (10.54; audit A3SG-07):** with
+  `foundation_outline="polygon"` an outline whose oriented bounding rectangle
+  is narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is replaced by that rectangle
+  widened to 1 m, with the same `UserWarning` as for `"ombr"` (a ring along an
+  outline 0.5 to 1 m wide ran along both faces of a wall). Outlines wider than
+  1 m on average are unchanged.
+- **`TnNetworkGenerator.build()` of large networks (no finding):** the
+  materialiser hands objects instead of names to the world, so bonds and PEN
+  sections need no search through the world: 1000 default houses 6.5 → 4.4 s
+  (star) and 7.3 → 5.4 s (radial trunk), worlds byte-identical. The rest of the
+  cost is the name checks of `World.add_electrode` / `add_conductor`, linear in
+  the size of the world.
+
+### Fixed
+- **`build()` failed for 1–3 % of random TN networks (10.38; audit A3SG-01):**
+  a service drop whose tap fell 0.1 µm to 4.7 mm from a node of the cable left
+  a section that the `Conductor` model refuses (series resistance below
+  1e-6 Ω), so `build()` raised `pydantic.ValidationError` (1 of 100 random
+  60-house and 2 of 60 random 200-house networks). The layout builder had the
+  same defect for taps a few millimetres from a cable corner or from another
+  tap; it now merges cable nodes closer than the shortest section and refuses a
+  cable between two sites closer than it with `ValueError`. Tests:
+  `tests/test_pen_routing.py::test_a_building_millimetres_beside_a_node_still_builds`,
+  `::test_a_tap_millimetres_from_an_earlier_tap_snaps_to_it`,
+  `::test_random_position_network_builds`,
+  `::test_taps_on_a_thick_pen_keep_sections_the_conductor_model_accepts`,
+  `::test_random_networks_build_and_route_as_documented` (400 random networks,
+  60 / 200 houses, both topologies),
+  `tests/test_lv_network_layout.py::test_taps_millimetres_apart_share_one_node`,
+  `::test_a_tap_millimetres_from_a_cable_corner_is_the_corner`,
+  `::test_a_cable_between_two_sites_closer_than_a_section_is_rejected`.
+- **Cabinets chained on one cable, drops hung on other drops (10.38; audit
+  A3SG-02, A3SG-03):** the nearest-point tree of the first 2026.11 draft fed a
+  cabinet from the cable of a nearer one, although `StarCabinetTopology` and
+  `TnNetworkConfig.pen_topology` document a direct cable per cabinet (input
+  impedance +1.8 / +2.6 % for 100 / 200 houses against the 0.15.0 routing,
+  against the documented direction), and started most drops on other houses'
+  drops (26 of 30 in the radial default grid with ring foundations, 19 of 30 in
+  the default star network). Tests:
+  `tests/test_pen_routing.py::test_star_topology_wires_every_cabinet_directly_to_the_substation`,
+  `::test_collinear_cabinets_have_separate_cables_in_one_trench`,
+  `::test_z_in_of_a_100_house_network_drops_against_the_old_routing`,
+  `::test_a_drop_taps_the_cable_of_its_own_cabinet`,
+  `::test_no_drop_starts_on_another_drop_in_the_radial_default_grid`,
+  `::test_overlapping_drops_and_trunks_stay_passive`, `::test_routing_guarantees`.
+- **A loaded BusType document crashed the other entry points (10.01; audit
+  A3SG-04):** `load_bustype_json` accepted documents for which
+  `fit_quality_summary` raised `AttributeError`, `TypeError`, `ValueError` or
+  `OverflowError` (`fit_quality` null or a list; a figure that is an object, a
+  list, a string or a 400-digit integer), `to_dict()` raised `RecursionError`
+  (metadata nested 3 000 levels, which the JSON decoder reads) or wrote a NaN
+  description (not strict JSON). The loader now refuses a `name` or
+  `system_type` that is an object or a list, a `description` that is neither a
+  string nor null, an `impedance_formula` that is an object or a list
+  (`EvaluateSpecError`) and metadata deeper than `MAX_METADATA_DEPTH`;
+  `to_dict()` writes a non-string description as null and walks the metadata
+  without recursion; `fit_quality_summary` reads only finite numbers and
+  strings. Tests: `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`,
+  `::test_a_loaded_document_never_crashes_the_other_entry_points`,
+  `::test_fit_quality_summary_reads_the_figures_it_can`,
+  `::test_to_dict_of_a_spec_built_in_memory_is_strict_json_or_refused`.
+- **A sum with an exact small imaginary part parsed to zero (10.01; audit
+  A3SG-05):** the formula parser drops a collected sum that cancels within its
+  128-bit working precision, but compared the complex magnitude of the sum with
+  its largest term: `(1 + 1e-31*j - 1)*1e31*f` evaluated to 0 instead of 50j at
+  50 Hz. Real and imaginary parts are now judged separately; the 119 accepted
+  formulas of the corpus evaluate as before (worst 1.9e-15 against a 60-digit
+  mpmath evaluation). Test:
+  `tests/test_formula_security.py::test_real_and_imaginary_parts_of_a_sum_cancel_separately`.
+- **Polygon foundations of outlines narrower than 0.5 m (10.54; audit
+  A3SG-07):** `LvNetworkLayout.to_world(foundation_outline="polygon")` raised
+  `ValueError` ("polygon collapses ... after removing sub-centimetre edges",
+  although the edge limit is 0.5 m) for every such outline the Overpass parser
+  keeps; it is widened now (see Changed), and the materialiser's last check
+  names the real limit. Tests:
+  `tests/test_footprint_foundations.py::test_a_thin_outline_with_a_polygon_foundation_is_widened`,
+  `::test_a_polygon_foundation_of_an_ordinary_outline_is_unchanged`,
+  `::test_a_collapsing_polygon_outline_names_the_real_edge_limit`.
+- **Margin of generated mesh foundations against `mom` (10.39; audit
+  A3SG-06):** the documentation said one current per wire is +0.3 / +0.5 /
+  +0.6 % "against `mom`"; that is the line kernel against a line-kernel
+  per-segment reference. Against `mom` (point kernel) the default line kernel
+  is +1.1 % and `kernel="point"` +0.3 … +0.5 % for 10 m 2 × 2 to 30 m 4 × 4
+  meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
+  +1.5 … +3.1 %). Test:
+  `tests/test_foundation_owners.py::test_documented_margin_of_mesh_foundations_against_mom`.
+
+## Stream `dsafety`: User decisions Q3 and Q4: touch points, EN 50522 beyond 10 s
+
+### Added
+- **Touch points: `touch_voltage_at_part` (10.21; user decision Q3):** the
+  EN 50522 touch voltage of an accessible metal part above ground — a
+  station housing or its door, a mast, a fence post, a cable cabinet, a
+  service connection box. The part is given by its horizontal position and
+  the electrode or junction it is bonded to (`bonded_to=`), whose potential
+  it carries; a part bonded to a PEN junction expresses a transferred
+  potential. The feet stand on the circle of radius `distance` (1 m) around
+  the part (`n_angles`, default 24), optionally only in given `directions`,
+  and the positions inside the outlines in `exclude` (the housing or the
+  building, where nobody can stand) are dropped. Returns the touch-voltage
+  phasors and azimuths per foot position like `touch_voltage_envelope`
+  (and the positions with `return_points=True`). Available as
+  `gf.touch_voltage_at_part` and `gf.safety.touch_voltage_at_part`. A
+  service connection box 40 m from a ring earth (100 A, 100 Ω·m), bonded to
+  the PEN, has 1081 V of the 1121 V earth potential rise as touch voltage.
+  Tests: `tests/test_touch_voltage_at_part.py::test_part_on_a_wire_matches_touch_voltage_on_the_offset_curve`,
+  `tests/test_touch_voltage_at_part.py::test_part_at_a_rod_head_against_the_analytic_surface_potential`,
+  `tests/test_touch_voltage_at_part.py::test_part_bonded_to_a_pen_junction_carries_the_transferred_potential`.
+- **How-to "Assess touch voltages"** (`docs/how-to/assess-touch-voltages.md`):
+  touch points of a compact station, the transferred potential over the
+  PEN, the meshes of an open-air grid, and the comparison with the
+  permissible values; tutorial T08 adds a fence bonded to the substation
+  grid (199.5 V at the corner post against 140.7 V 1 m outside the grid,
+  `mom`, 150 A) and an earth fault that is not cleared.
+
+### Changed
+- ⚠ **`touch_voltage_envelope` samples no interior by default (10.21; user
+  decision Q3):** inside an electrode's footprint stands the station, the
+  house, the steel structure or the mast, so the default is now
+  `interior=False` for every electrode kind: the curve `distance` outside
+  the wires only. The mesh sampling of the development snapshots (the
+  centres of the meshes of grids and of generated mesh foundations, the
+  centre of a ring) is the explicit `interior="meshes"`, for open-air grids
+  such as a substation yard; `interior=True` also samples the inside of a
+  closed polyline. `interior=None` is rejected with a hint. Against 0.15.0
+  the default envelope is the footprint's offset curve of 10.21: a ring of
+  10 m radius at 0.8 m (100 A, 100 Ω·m, `image`, point kernel) keeps
+  139.4 V (the development snapshots gave 182.6 V, its centre; with the
+  default line kernel 142.2 / 185.5 V), a 20 m perimeter loop (1 × 1 grid)
+  141.4 V instead of 158.3 V in its centre, and the 20 m × 20 m grid with
+  4 × 4 meshes 111.4 V (unchanged: the maximum is 1 m outside a corner, the
+  mesh centres reach 63.0 V). Affected: envelopes of rings, grids and
+  generated foundations computed with the development snapshots; pass
+  `interior="meshes"` for open-air grids. Golden cases: none (no case
+  evaluates the envelope). Tests:
+  `tests/test_touch_voltage_envelope.py::test_envelope_samples_no_interior_by_default`,
+  `tests/test_touch_voltage_envelope.py::test_release_note_envelopes_with_the_new_default`.
+- ⚠ **EN 50522 permissible touch voltage beyond 10 s (10.42; user decision
+  Q4):** `permissible_touch_voltage_en50522(t_f)` follows Figure 8 /
+  Table B.4 of EN 50522:2022 up to 10 s and returns 80 V for every
+  t_f > 10 s, including `math.inf` for an earth fault that is not cleared
+  (resonant-earthed networks). The curve of Figure 8 ends at 10 s; the
+  note to Figure 8 (5.4.1) and the text after Table B.4 (B.3) allow 80 V
+  for current-flow durations considerably longer than 10 s, below the
+  85 V end value of the table. 0.15.0 returned 85 V beyond 10 s (now
+  −5.9 %) and rejected `math.inf`. `permissible_prospective_touch_voltage_en50522`
+  uses the same U_Tp: beyond 10 s 80 V + 50 mA · R_A / HF (1000 Ω shoes
+  on 100 Ω·m soil: 137.5 V instead of 142.5 V). Affected: assessments
+  with fault durations above 10 s, e.g. resonant-earthed networks. Golden
+  cases: none (`safety_en50522_curve` covers 0.05 … 10 s). Tests:
+  `tests/test_safety.py::test_en50522_beyond_ten_seconds_is_80_volt`,
+  `tests/test_safety.py::test_prospective_touch_voltage_beyond_ten_seconds_uses_80_volt`.
+
+### Removed
+- **`long_duration=`** of `permissible_touch_voltage_en50522` and
+  `permissible_prospective_touch_voltage_en50522` (added during this
+  release cycle, never released): 80 V beyond 10 s is the default. Test:
+  `tests/test_safety.py::test_en50522_has_no_long_duration_keyword`.
+
+### Deprecated
+- Nothing.
+
+## Stream `drhoeff`: User decision Q6: effective resistivity
+
+### Added
+
+- **`effective_resistivity` (10.84, user decision Q6):** the effective
+  resistivity of a homogeneous or two-layer soil in Ω·m,
+  ρ_eff = ρ₁^(1−w) · ρ₂^w with w = w0 · (h₁ / h_ref)^(−β), h_ref = 10 m and
+  the AP1 calibration w0 = 0.13, β = 0.8 (group-specific values as `w0=`,
+  `beta=`, `h_ref=`). `gf.effective_resistivity(soil)` (also
+  `groundfield.soil.effective_resistivity`, or with the keywords `rho_1`,
+  `rho_2`, `h_1`) returns ρ itself for homogeneous soil and for stacks of
+  equal layers, without round-off (the plain formula gives
+  200.00000000000003 Ω·m for 200 / 200 Ω·m, h₁ = 10 m); reduces a
+  `MultiLayerSoil` to its canonical stack (equal adjacent layers merged, as
+  the layered backends do, 10.48) and raises `ValueError` for three or more
+  distinct layers; limits w to [0, 1], so ρ_eff stays between ρ₁ and ρ₂ (the
+  unlimited formula leaves that interval below h₁ = 0.78 m: 17.9 Ω·m for
+  100 / 30 Ω·m at h₁ = 0.5 m; with the limit such a thin upper layer gives
+  ρ₂). Inside the calibration range of the AP1 catalogue (h₁ = 5 … 30 m,
+  ρ₁ = 30 … 1000 Ω·m, ρ₂ = 30 … 200 Ω·m) the value is bit-identical to the
+  AP1 / AP2 scripts' `r1 ** (1 - w) * r2 ** w` and agrees with a 50-digit
+  evaluation to 1.6e-16. Test: `tests/test_effective_resistivity.py`.
+
+### Changed
+
+- ⚠ **The `rho` of a BusType in layered soil is the effective resistivity
+  (10.84, user decision Q6):** `rho_at_fit` of a vector fit and the `rho`
+  samples of a standard form fitted in layered soil are ρ_eff of the soil
+  they were computed in, `effective_resistivity(soil)`, the
+  `specific_earth_resistance` the AP2 network model gives a groundinsight
+  bus. This replaces the upper-layer resistivity ρ₁ that the 10.84 entry of
+  this release cycle had made the convention; on the AP1 grid ρ_eff differs
+  from ρ₁ by −54.8 % (1000 over 30 Ω·m, h₁ = 5 m) to +53.6 % (30 over
+  200 Ω·m, h₁ = 5 m). The error message for a missing `rho_at_fit`, the
+  docstrings of the four exporters, the IO and Soil references, ADR-0008
+  and tutorial T05 state it. Every BusType document records the convention
+  as `metadata["rho_definition"] = "effective_resistivity"` (documents of
+  0.15.0 have no such entry). No function computes a different number: the
+  exporter writes the `rho` it is given. Affected: BusTypes exported in
+  layered soil with ρ₁ as `rho`. A compact electrode in the upper layer
+  follows ρ₁ more closely than ρ_eff of the AP1 networks: the station of the
+  IO example (2 m ring and 3 m rod) swept over ρ₁ fits the standard form to
+  13.4 / 8.3 / 3.6 % over ρ_eff and to 3.9 / 1.9 / 0.6 % over ρ₁ for
+  h₁ = 5 / 10 / 30 m; check `max_relative`. Golden cases: none. Tests:
+  `tests/test_io_groundinsight.py::test_rho_at_fit_convention_for_layered_soil_is_the_effective_resistivity`,
+  `::test_bustype_metadata_records_the_rho_definition`,
+  `::test_layered_soil_exports_pair_with_an_effective_resistivity_bus`.
+
+## Stream `ddefaults`: User decisions Q15 to Q17: galerkin, tabulated Sommerfeld, resource limit
+
+### Added
+
+- **Per-engine resource limit `Engine.max_segments` (10.06, user decision
+  Q17):** the hard problem-size limit of the segment backends — the number
+  of leakage segments and the number of unknowns of the dense nodal system —
+  is set per engine: `Engine(max_segments=...)` (also a `create_engine`
+  parameter) raises or lowers it for one engine, a positive integer;
+  `None` (default) takes the module constant
+  `groundfield.diagnostics.HARD_LIMIT` (20 000), read at solve time, so the
+  constants stay the defaults. Every segment backend (the image family,
+  `mom`, `mom_sommerfeld`), `solve_mutual_matrix` and `solve_mutual_field`
+  refuse a larger world with `ResourceLimitError` before anything of that
+  size is allocated; `check_segment_budget`, `expected_segments` (new key
+  `"limit"`), `check_segment_resolution` and `diagnose`
+  (`report.context["max_segments"]`) check against the same limit, and the
+  messages name the setting to change. The limit is recorded in the new core
+  metadata key `FieldResult.metadata["max_segments"]` (the engine block of
+  the provenance keeps the request itself). `SOFT_LIMIT` (5 000, the size
+  above which the solve reports that it may take minutes) stays a module
+  constant. Tests: `tests/test_resource_limit.py`.
+
+### Changed
+
+- ⚠ **`solve_mutual_matrix` uses the galerkin off-diagonal for every call
+  (10.34, user decision Q15):** `offdiag="galerkin"` (the reaction of the
+  leakage distributions: reciprocal, and the matrix with which
+  (Y_L + Z_G⁻¹)u = i reproduces the solve of the clusters joined by branches)
+  is the default whatever the call; `offdiag="probe"` (the potential at one
+  probe point per cluster, the definition of releases up to 0.15.0) stays
+  available. A call that passes `probe_points` without `offdiag="probe"` —
+  every 0.15.0 call, the AP1 catalogue pipeline among them — returns the
+  galerkin matrix; the points are ignored, not validated, with the new
+  `groundfield.solver.mutual.ProbePointsIgnoredWarning`, which names
+  `offdiag="probe"` as the way back. This supersedes the selection rule
+  added earlier in this release cycle (`offdiag=None` choosing `"probe"` when
+  probe points were given; `None` is no longer accepted). The diagonal does
+  not move. On an AP1-like site (station ring and three rods, twelve polygon
+  foundations, ds = 2 m, five soils) the symmetrised probe matrix missed the
+  input impedance of the joined network by −0.15 … −0.88 % and single
+  off-diagonal entries by up to 41 % (median 0.15 … 1.1 %); the galerkin
+  matrix reproduces it to 7e-13. On the AP1 catalogue path (group-2 site,
+  7 corner soils × 4 penetrations) |Z_ons| at 50 Hz moves by −0.05 … +0.29 %
+  at penetrations up to 20 % and by +0.25 … +2.67 % at 40 % (largest at
+  ρ₁ = 1000 Ω·m), the ONS current share at 50 Hz by up to +2.7 %. Who is
+  affected: every `Z_G` built with probe points, the AP1 catalogue. Golden
+  cases: `mutual_foundations_lumped_concrete`,
+  `mutual_foundations_distributed_concrete`, `mutual_three_rods_crosslayer`,
+  `line_mutual_two_layer` (Z_G norm-wise 7.7e-4 … 8.8e-4, single off-diagonal
+  entries 0.48 … 5.9 %). Tests:
+  `tests/test_mutual_matrix.py::test_galerkin_is_the_default_whatever_the_call`,
+  `::test_ignored_probe_points_are_not_validated`,
+  `::test_offdiag_selection_and_validation`.
+- ⚠ **Tabulated Sommerfeld assembly by default (10.60, user decision Q16):**
+  `Engine.sommerfeld_assembly` defaults to `"tabulated"` (one table of the
+  spectral integral per pair of depth groups and frequency); `"exact"` (one
+  quadrature per segment pair, the default up to 0.15.0) stays available.
+  The image family, `mom`, `mom_sommerfeld` and `solve_mutual_*` follow the
+  setting alike; engine JSON without the field (0.15.0) gets the new
+  default. Blocks of fewer than 64 sub-segment pairs keep the per-pair rule,
+  so small inductive worlds do not move. On a TN network with an inductive
+  PEN (`TnNetworkGenerator`, homogeneous 100 Ω·m, ds = 1 m, four
+  frequencies 50 … 1000 Hz) the input impedance of the tabulated solve lies
+  within 2e-10 of two independent refined references (per-pair rule with 200
+  instead of 24 interpolation nodes; tables of 400 instead of 100 nodes; both
+  with a refined λ grid), which agree with each other to 2e-10, while the
+  per-pair rule is 1.2e-8 off (8 houses); CPU time 1.0 s instead of 16.6 s
+  (8 houses, 78 inductive branches) and 12.2 s instead of 306 s (30 houses,
+  338 inductive branches; input impedance equal to 1.1e-8, the tabulated one
+  1.8e-11 from the 400-node tables). The correction matrices of small
+  conductor sets in twelve critical geometries (buried, overhead, 1 cm below
+  the surface, in the surface plane, crossing the surface or a layer
+  interface, two- and three-layer earth, 250 m segments, 10 and 1000 Ω·m;
+  50 Hz and 1 kHz) are finite, symmetric and free of warnings; against a
+  reference refined in S(ρ) and in the λ grid the tabulated rule is closer
+  than the per-pair rule in ten of them (1.5e-7 … 1.1e-5 against
+  4.2e-6 … 7.6e-5 of the largest entry) and equal in two (the surface plane,
+  where both use the per-pair rule, and a riser through h₁, 4.3e-6). Who is
+  affected: inductive conductors under `earth_inductive_model="sommerfeld"`
+  (the default) with blocks of at least 64 sub-segment pairs; numbers move
+  by about 1e-8 … 2.4e-6. Golden case: `cond_lumped_long_pen_sommerfeld`
+  (≤ 2.4e-6; against the refined per-pair reference the tabulated result is
+  4.2e-7 off, the per-pair rule 2.0e-6). Tests:
+  `tests/test_sommerfeld_assembly_default.py`.

@@ -68,7 +68,11 @@ from groundfield.solver.engine import CORE_METADATA_KEYS, Backend, Engine
 from groundfield.solver.image import ShallowSegmentWarning, solve_image
 from groundfield.solver.image_2layer import solve_image_2layer
 from groundfield.solver.mom import solve_mom
-from groundfield.solver.mutual import solve_mutual_field, solve_mutual_matrix
+from groundfield.solver.mutual import (
+    ProbePointsIgnoredWarning,
+    solve_mutual_field,
+    solve_mutual_matrix,
+)
 from groundfield.solver.registry import (
     BackendCapabilities,
     BackendCapabilityError,
@@ -111,4 +115,5 @@ __all__ = [
     "solve_mom",
     "solve_mutual_matrix",
     "solve_mutual_field",
+    "ProbePointsIgnoredWarning",
 ]
