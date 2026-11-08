@@ -1,34 +1,53 @@
-# Expected golden-value changes of work stream FIX2-GEN (audit round 2:
-# A2G-04 owners of generated foundations). Format: tests/golden/README.md.
+# Expected golden-value changes of work stream FIX2-GEN (audit round 2).
+# Format: tests/golden/README.md.
 #
-# A mesh foundation is one uniform-current owner per wire line at every
-# orientation (it was one grid_mesh owner when axis-aligned and bare). One
-# owner over perimeter and braces put the same current density on both and
-# was +1.5 % (EPR) / +5.2 % (largest touch voltage) above the equipotential
-# reference (one owner per segment = mom) for the default 10 x 10 m 2 x 2
-# house mesh; one owner per wire is +0.3 % / +1.5 %. Every generated
-# network with default (mesh) foundations moves by -0.7 ... -0.8 % in its
-# potentials. Measured against the stream start: deliver/evidence/fix2gen/
-# golden_moves_vs_base.txt; reference: mesh_owner_granularity.out,
-# mesh_surface_potential.out.
+# Two changes move the generator cases:
+#
+# * A2G-04 (10.39, 10.12): a mesh foundation is one uniform-current owner
+#   per wire line at every orientation (it was one grid_mesh owner when
+#   axis-aligned and bare). One owner over perimeter and braces was +1.5 %
+#   (EPR) / +5.2 % (largest touch voltage) above the equipotential reference
+#   for the default 10 x 10 m 2 x 2 house mesh; one owner per wire is +0.3 % /
+#   +1.5 %. Generated networks: potentials -0.7 ... -0.8 %.
+# * PEN routing (10.38 junction nodes; stream DOC-B): the PEN cables of the
+#   TN generator form a nearest-point tree. The service drops of the default
+#   network ran from the cabinet 180 m out back along the main (60 ... 160 m
+#   each); they now tap the main beside each house (5 m). Substation
+#   potential -2.1 %, substation leakage 3 ... 5 %.
+#
+# Measured against the stream start: deliver/evidence/fix2gen/
+# golden_moves_vs_base_routing.txt (both changes), golden_moves_vs_base.txt
+# (A2G-04 alone), golden_routing_only.txt (routing alone).
+
+# ---------------------------------------------------------------- gen_tn_default
 
 [[change]]
 cases = ["gen_tn_default"]
-quantities = ["phi/*"]
-findings = ["10.39", "10.12"]
-reason = """Mesh foundations are one owner per wire (audit A2G-04): node
-potentials -0.73 ... -0.74 % (trafo, cabinet, houses)."""
+quantities = ["phi/trafo_*", "phi/kvs_*"]
+findings = ["10.39", "10.12", "10.38"]
+reason = """Mesh foundations one owner per wire (-0.73 %) and service drops from
+the nearest point of the main instead of the cabinet 180 m out (-2.1 % at the
+substation): -2.8 % (substation), -1.1 % (cabinet)."""
 min_rel_change = 5e-3
-max_rel_change = 1e-2
+max_rel_change = 4e-2
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/residential_*_foundation_0"]
+findings = ["10.39", "10.12", "10.38"]
+reason = """House potentials: -0.74 % (owners) and up to +/-1 % (routing), partly
+cancelling: 0.17 ... 0.90 %."""
+min_rel_change = 1e-3
+max_rel_change = 1.5e-2
 
 [[change]]
 cases = ["gen_tn_default"]
 quantities = ["I/trafo_*", "I/kvs_*"]
-findings = ["10.39", "10.12"]
-reason = """Mesh foundations are one owner per wire (audit A2G-04): leakage of
-the substation and cabinet electrodes +0.23 ... +0.91 %."""
-min_rel_change = 1e-3
-max_rel_change = 1.5e-2
+findings = ["10.39", "10.12", "10.38"]
+reason = """Leakage of the substation and cabinet electrodes: +0.2 ... +0.9 %
+(owners) and 3.1 ... 4.8 % (routing); together 1.3 ... 5.0 %."""
+min_rel_change = 5e-3
+max_rel_change = 7e-2
 
 [[change]]
 cases = ["gen_tn_default"]
@@ -50,19 +69,21 @@ allow_shape_change = true
 [[change]]
 cases = ["gen_tn_default"]
 quantities = ["potential/*", "ps/I"]
-findings = ["10.39", "10.12"]
+findings = ["10.39", "10.12", "10.38"]
 reason = """Surface potentials and point sources follow the new current
-distribution (more on the perimeter, less on the braces): potential line
-4.7 %, point-source currents 6.8 % (norm-wise)."""
+distribution: potential line 4.1 %, point-source currents 6.8 % (norm-wise)."""
 min_rel_change = 1e-2
 max_rel_change = 0.1
 
 [[change]]
 cases = ["gen_tn_default"]
 quantities = ["ps/owner", "world/json"]
-findings = ["10.39", "10.12"]
-reason = "Mesh foundations are six polyline electrodes plus five ideal bonds."
+findings = ["10.39", "10.12", "10.38"]
+reason = """Mesh foundations are six polyline electrodes plus five ideal bonds;
+the PEN main is split at five tap junctions (pen_tap_0 ... 4)."""
 allow_shape_change = true
+
+# ------------------------------------------------------------ gen_layout_builder
 
 [[change]]
 cases = ["gen_layout_builder"]
@@ -89,14 +110,16 @@ findings = ["10.39", "10.12"]
 reason = "The other five wires of each mesh foundation are new owners."
 allow_shape_change = true
 
+# --------------------------------------------- gen_tn_measurement_overhead_leads
+
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
 quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "I/trafo_*", "I/kvs_*"]
-findings = ["10.39", "10.12"]
-reason = """Mesh foundations are one owner per wire (audit A2G-04): potentials
--0.77 %, substation and cabinet leakage +0.81 ... +0.87 % against the stream
-start (on top of 10.17 / core2a)."""
-max_rel_change = 1.5e-2
+findings = ["10.39", "10.12", "10.38"]
+reason = """Owners per wire (-0.77 %) and PEN routing (-1.1 % at the
+substation): potentials up to 1.9 %, substation and cabinet leakage up to
+2.0 % against the stream start (on top of 10.17 / core2a)."""
+max_rel_change = 3e-2
 
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
@@ -108,14 +131,15 @@ max_rel_change = 0.9
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
 quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
-findings = ["10.39", "10.12"]
-reason = """The floating probe rod reads the field 50 m out: 2.3e-3 V moves by
-3.3e-4 V (14 %); its current is round-off around zero."""
-max_rel_change = 0.5
+findings = ["10.39", "10.12", "10.38"]
+reason = """The floating probe rod reads the field 50 m out: about 2e-3 V,
+moved by up to 35 %; its current is round-off around zero."""
+max_rel_change = 5.0
 
 [[change]]
 cases = ["gen_tn_measurement_overhead_leads"]
 quantities = ["phi/residential_*_w*", "I/residential_*_w*", "world/json"]
-findings = ["10.39", "10.12"]
-reason = "The other five wires of each mesh foundation are new owners."
+findings = ["10.39", "10.12", "10.38"]
+reason = """The other five wires of each mesh foundation are new owners; tap
+junctions on the PEN main."""
 allow_shape_change = true

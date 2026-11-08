@@ -111,6 +111,7 @@ from groundfield.generators.plan import (
     PlannedJunction,
     PlannedSite,
 )
+from groundfield.soil.models import HomogeneousSoil
 from groundfield.world import World
 
 __all__ = [
@@ -122,6 +123,7 @@ __all__ = [
     "materialise_junction",
     "materialise_plan",
     "materialise_site",
+    "site_anchor_point",
 ]
 
 MIN_POLYGON_EDGE_M = 0.5
@@ -543,6 +545,20 @@ def _materialise_foundation_wires(
             )
         sub_names.append(sub_name)
     _bond_to_anchor(world, name, sub_names, bond_conductor_type)
+
+
+def site_anchor_point(site: PlannedSite) -> Optional[tuple[float, float, float]]:
+    """Connection point in m of the anchor electrode of ``site``.
+
+    The site is materialised into a scratch world, so the point is exactly
+    the one the conductors of :func:`materialise_branch` attach to
+    (``None`` for a site without present electrodes).
+    """
+    if site.anchor is None:
+        return None
+    scratch = create_world(soil=HomogeneousSoil(rho=100.0))
+    anchor = materialise_site(scratch, site)
+    return tuple(float(v) for v in _node_point(scratch, anchor))  # type: ignore[return-value]
 
 
 def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
