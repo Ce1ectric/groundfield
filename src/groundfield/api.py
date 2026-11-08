@@ -735,15 +735,17 @@ def create_engine(
     image_series_tol: float | None = None,
     kernel: KernelKind | None = None,
     options: Mapping[str, Any] | None = None,
+    sommerfeld_assembly: Literal["exact", "tabulated"] | None = None,
 ) -> Engine:
     """Create a configured :class:`~groundfield.Engine`.
 
     Only the arguments you pass are forwarded; every argument left at
     ``None`` takes the :class:`~groundfield.Engine` default, so the engine
     is the single source of its defaults and option-level warnings of the
-    engine concern only options you actually set. Options without a
-    parameter here (e.g. the ``sommerfeld_*`` accuracy controls) are set
-    on :class:`~groundfield.Engine` directly.
+    engine concern only options you actually set. Backend-specific
+    settings, such as the accuracy controls of ``mom_sommerfeld``
+    (``epsabs``, ``epsrel``, ``lambda_max_factor``, ``max_osc_panels``) or
+    the mesh of ``fem``, go into ``options``.
 
     The :class:`Engine` performs an automatic backend dispatch inside
     :meth:`Engine.solve`: when ``backend="image"`` (the default) is
@@ -775,8 +777,9 @@ def create_engine(
         ``"sommerfeld"`` (engine default since 0.13.0; geometric
         integration of the σ-dependent vector-potential Green's function,
         validated against Pollaczek and Carson), ``"carson_series"``
-        (Carson 1926 per-metre correction × length) or
-        ``"perfect_mirror"`` (frequency-independent Neumann baseline).
+        (Carson 1926 per-metre correction × length on the anti-parallel
+        image baseline) or ``"perfect_mirror"`` (frequency-independent
+        Neumann baseline with an additive image).
     image_max_terms
         Maximum number of image-charge series terms of the layered
         backends; a truncated series emits a
@@ -794,6 +797,12 @@ def create_engine(
         ``{"mom_sommerfeld": {"epsabs": 1e-8}}`` or option models such as
         :class:`~groundfield.solver.MomSommerfeldOptions`; forwarded to
         :attr:`Engine.options <groundfield.Engine.options>`.
+    sommerfeld_assembly
+        ``"exact"`` (engine default) or ``"tabulated"`` assembly of the
+        Sommerfeld earth-return correction of inductive conductors
+        (:attr:`Engine.sommerfeld_assembly
+        <groundfield.Engine.sommerfeld_assembly>`); ``"tabulated"`` is the
+        faster choice for large networks.
 
     Returns
     -------
@@ -824,6 +833,7 @@ def create_engine(
         "earth_inductive_model": earth_inductive_model,
         "image_max_terms": image_max_terms,
         "image_series_tol": image_series_tol,
+        "sommerfeld_assembly": sommerfeld_assembly,
     }
     engine_kwargs.update({k: v for k, v in explicit.items() if v is not None})
     if kernel is not None:
