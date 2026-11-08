@@ -73,7 +73,13 @@
   pseudo-node between two R/2 stubs and also carries its inductance with
   `inductance_model="neumann"`. Affects only galvanic distributed conductors
   shorter than `discretize_segment_length` (no golden case; isolated ones
-  keep the lumped branch). Tests:
+  keep the lumped branch). A single sub-piece is as accurate as the kernel
+  is for a long segment: with the line kernel it is converged in homogeneous
+  soil and in two-layer soil without an electrode through the interface
+  (12.134 Ω against 12.136 Ω with 32 sub-pieces, 300 over 50 Ω·m,
+  h₁ = 2 m); with an electrode through the interface the cross-layer
+  correction needs sub-pieces of the order of h₁ (one: 7.18 Ω, four:
+  9.41 Ω, 32: 9.50 Ω). Tests:
   `tests/test_conductors_distributed.py::test_a_single_segment_galvanic_conductor_leaks`,
   `::test_a_single_segment_galvanic_conductor_keeps_its_inductance`.
 - **Deprecated flat names in `Engine.model_copy` (audit A1-02):**
