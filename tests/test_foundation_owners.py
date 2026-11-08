@@ -18,10 +18,13 @@ configured):
 
 * a mesh foundation (cross-braces) has one owner per wire line at every
   angle, for both ``concrete_model`` values;
-* a ring foundation has one owner per side with ``"distributed"`` at every
-  angle; with ``"lumped"`` one ``grid_mesh`` owner when axis-aligned and
-  one owner per side when rotated (at most 0.06 % apart up to aspect
-  ratio 4, 0.24 % at 10 for a bare ring in homogeneous soil);
+* a rectangle without cross-braces (``style="ring"``, or ``"mesh"`` with
+  ``n_x = n_y = 1``) has one owner per side with ``"distributed"`` at
+  every angle; with ``"lumped"`` one ``grid_mesh`` owner when axis-aligned
+  and one owner per side when rotated (less than 0.7 % apart up to aspect
+  ratio 4 and 1.6 % up to 50 over the AP1 soils, bare or in concrete up to
+  0.2 m thick; 0.09 % and 0.33 % for a bare ring in homogeneous soil;
+  audit D2B-02);
 * a ``polygon_xy_m`` outline is one closed polyline for both values.
 
 Since that choice is all ``concrete_model`` still does, the field is
@@ -34,13 +37,16 @@ from __future__ import annotations
 
 import pathlib
 import pickle
+import re
 import warnings
 
 import numpy as np
+import pydantic
 import pytest
 
 import groundfield as gf
 from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+from groundfield.generators.electrode_specs import _CONCRETE_MODEL_DEPRECATION
 
 RHO = 100.0
 
@@ -351,12 +357,16 @@ def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
     assert warning.filename == __file__  # the user's line, not groundfield's
     message = str(warning.message)
     for part in (
+        # audit D2B-05: every foundation whose owners the value changes
+        "rectangle without cross-braces",
         "style='ring'",
+        "n_x = n_y = 1",
         "one per side",
-        "0.16 %",
-        "0.67 %",
-        "0.06 %",
-        "0.3 %",
+        # audit D2B-02: the envelope with its scope
+        "less than 0.7 % up to aspect ratio 4 (sides up to 80 m)",
+        "1.6 % up to aspect ratio 50 (up to 150 m, short side at least 1 m)",
+        "up to 0.2 m thick",
+        "0.33 % and 0.92 %",
         "2027.5",
         "drop the argument",
     ):
@@ -364,6 +374,147 @@ def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
     assert spec.concrete_model == "distributed"
     world = _site(spec)
     assert [e.kind for e in _owners(world)] == ["strip"] * 4
+
+
+def _quoted_bounds(text: str) -> dict[str, float]:
+    """The envelope a text quotes: all shells and the default shell."""
+    text = " ".join(text.split())
+    found = re.search(
+        r"less than ([0-9.]+) % up to aspect ratio 4 .*?and ([0-9.]+) % up to "
+        r"aspect ratio 50 .*?by less than ([0-9.]+) % and ([0-9.]+) %",
+        text,
+    )
+    assert found, text
+    return {
+        "4": float(found.group(1)),
+        "50": float(found.group(2)),
+        "4-default": float(found.group(3)),
+        "50-default": float(found.group(4)),
+    }
+
+
+def _lumped_over_distributed(
+    size_xy_m: tuple[float, float],
+    soil: object,
+    rho_c: float | None,
+    thickness_m: float,
+    style: str = "ring",
+) -> float:
+    """Z(lumped) / Z(distributed) - 1 of the generated rectangle (default
+    engine, 0.8 m, 5 mm wire)."""
+    values = []
+    for model in ("lumped", "distributed"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            spec = FoundationElectrodeSpec(
+                style=style,
+                size_xy_m=size_xy_m,
+                n_x=1,
+                n_y=1,
+                depth_m=0.8,
+                wire_radius_m=0.005,
+                concrete_rho_ohm_m=rho_c,
+                concrete_thickness_m=thickness_m,
+                concrete_model=model,
+            )
+        world = gf.World(soil=soil)
+        anchor = GroundingSystemSpec(electrodes=[spec]).build_at(
+            world, (0.0, 0.0), "h", np.random.default_rng(0)
+        )
+        world.add_source(gf.CurrentSource(name="s", attached_to=anchor, magnitude=1.0))
+        engine = gf.create_engine(frequencies=[50.0])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            values.append(complex(engine.solve(world).input_impedance()[0]).real)
+    return values[0] / values[1] - 1.0
+
+
+# audit D2B-02
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize(
+    ("size_xy_m", "soil", "rho_c", "thickness_m", "bound", "measured"),
+    [
+        # the largest case of each scope of the envelope scan (evidence f2gen
+        # q21_envelope_scan.py / q21_envelope_analyse.out) ...
+        ((80.0, 20.0), (30.0, 200.0, 5.0), None, 0.05, "4-default", 0.00321),
+        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", 0.00691),
+        ((150.0, 7.5), (30.0, 200.0, 5.0), None, 0.05, "50-default", 0.00914),
+        ((20.0, 1.0), (1000.0, 30.0, 10.0), 30.0, 0.2, "50", 0.01529),
+        # ... and the cases with which the auditor broke the earlier bounds
+        ((10.0, 2.5), (100.0, 100.0, None), None, 0.05, "4-default", 0.00084),
+        ((40.0, 10.0), (30.0, 200.0, 5.0), None, 0.05, "4-default", 0.00253),
+        ((50.0, 1.0), (1000.0, 30.0, 30.0), 30.0, 0.2, "50", 0.01241),
+    ],
+    ids=[
+        "80x20-bare",
+        "4x1-wet-t0.2",
+        "150x7.5-bare",
+        "20x1-wet-t0.2",
+        "10x2.5-hom",
+        "40x10-bare",
+        "50x1-wet-t0.2",
+    ],
+)
+def test_the_quoted_concrete_model_bound_holds(
+    size_xy_m: tuple[float, float],
+    soil: tuple[float, float, float | None],
+    rho_c: float | None,
+    thickness_m: float,
+    bound: str,
+    measured: float,
+) -> None:
+    """The bounds of the deprecation (0.16 % up to aspect ratio 4, 0.67 % up
+    to 50) held only for the six rings measured; the auditor found 0.38 % and
+    1.24 %. The envelope over the stated scope (sides up to 80 m / 150 m,
+    short side at least 1 m, bare or 30 ... 1000 ohm m up to 0.2 m thick, the
+    39 AP1 soils, 0.8 m, 5 mm) is quoted with that scope; the field
+    description says the same, and a mesh without braces behaves like the
+    ring (audit D2B-05)."""
+    r1, r2, h = soil
+    model = (
+        gf.HomogeneousSoil(rho=r1)
+        if h is None
+        else gf.TwoLayerSoil(rho_1=r1, rho_2=r2, h_1=h)
+    )
+    diff = _lumped_over_distributed(size_xy_m, model, rho_c, thickness_m)
+    assert diff == pytest.approx(measured, abs=5e-6)
+    for text in (
+        _CONCRETE_MODEL_DEPRECATION,
+        FoundationElectrodeSpec.model_fields["concrete_model"].description,
+    ):
+        assert abs(diff) < _quoted_bounds(text)[bound] / 100.0
+    mesh = _lumped_over_distributed(size_xy_m, model, rho_c, thickness_m, style="mesh")
+    assert mesh == pytest.approx(diff, abs=1e-12)
+
+
+# audit D2B-05
+@pytest.mark.finding("10.12")
+def test_the_texts_name_every_foundation_whose_owners_concrete_model_changes() -> None:
+    """A ``style="mesh"`` foundation with ``n_x = n_y = 1`` is one grid mesh
+    with "lumped" and four strips with "distributed", like a ring, but the
+    warning and the field description spoke of ``style="ring"`` only and
+    counted mesh foundations among those the value does not change."""
+
+    def owners(model: str, **kw: object) -> list[str]:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            spec = FoundationElectrodeSpec(
+                size_xy_m=(10.0, 6.0), concrete_model=model, **kw
+            )
+        return [e.kind for e in _owners(_site(spec))]
+
+    assert owners("lumped", style="mesh", n_x=1, n_y=1) == ["grid_mesh"]
+    assert owners("distributed", style="mesh", n_x=1, n_y=1) == ["strip"] * 4
+    # one brace is enough: one owner per wire line for both values
+    braced = owners("lumped", style="mesh", n_x=1, n_y=2)
+    assert braced == owners("distributed", style="mesh", n_x=1, n_y=2)
+    assert braced == ["strip"] * 3 + ["polyline"] * 2
+    description = FoundationElectrodeSpec.model_fields["concrete_model"].description
+    for text in (_CONCRETE_MODEL_DEPRECATION, description):
+        flat = " ".join(text.split())
+        assert "rectangle without cross-braces" in flat, flat
+        assert "n_x = n_y = 1" in flat, flat
+    assert "mesh foundations (one owner per wire)" not in " ".join(description.split())
 
 
 # user decision Q21
@@ -384,6 +535,92 @@ def test_model_copy_that_sets_the_deprecated_value_warns() -> None:
         _ring().model_copy(update={"concrete_model": "lumped"})
     assert _concrete_model_warnings(caught) == []
     assert again.concrete_model == "distributed" and again.depth_m == 1.0
+
+
+# audit D2B-04
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("value", ["Lumped", "foo", None, 1])
+@pytest.mark.parametrize("deep", [False, True])
+def test_model_copy_rejects_an_invalid_concrete_model(
+    value: object, deep: bool
+) -> None:
+    """Pydantic stores ``model_copy(update=...)`` unchecked. Up to the
+    audit a value outside {"lumped", "distributed"} emitted the
+    *deprecation* warning, was stored as it was, built four strips (any
+    value but "lumped" did) and made the copy's JSON unloadable. It raises
+    like the constructor now, without a warning, and the receiver keeps its
+    value."""
+    spec = _ring()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(pydantic.ValidationError) as copied:
+            spec.model_copy(update={"concrete_model": value}, deep=deep)
+        with pytest.raises(pydantic.ValidationError) as constructed:
+            _ring(concrete_model=value)
+    assert _concrete_model_warnings(caught) == []
+
+    def _summary(error: pydantic.ValidationError) -> list[tuple]:
+        return [(e["type"], e["loc"], e["msg"]) for e in error.errors()]
+
+    assert _summary(copied.value) == _summary(constructed.value)
+    assert copied.value.title == constructed.value.title == "FoundationElectrodeSpec"
+    assert spec.concrete_model == "lumped"
+
+
+# audit D2B-04
+@pytest.mark.finding("10.12")
+def test_model_copy_stores_only_valid_concrete_model_values() -> None:
+    """Both valid values pass, "distributed" with one warning at the
+    caller's line; the copy round-trips through JSON."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        lumped = _ring().model_copy(update={"concrete_model": "lumped"})
+    assert _concrete_model_warnings(caught) == []
+    with pytest.warns(DeprecationWarning, match="concrete_model") as caught:
+        distributed = _ring().model_copy(update={"concrete_model": "distributed"})
+    assert [w.filename for w in caught if "concrete_model" in str(w.message)] == [
+        __file__
+    ]
+    for copy in (lumped, distributed):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            restored = FoundationElectrodeSpec.model_validate_json(
+                copy.model_dump_json()
+            )
+        assert restored == copy
+
+
+# audit D2B-06
+@pytest.mark.finding("10.12")
+def test_the_silent_paths_of_the_deprecation_are_documented() -> None:
+    """Assigning the attribute, unpickling and ``model_construct`` bypass
+    pydantic's validation, so they cannot warn; stream d2gen listed this as
+    a known limitation, but no page said so. The deprecations page names
+    the paths that warn and those that do not."""
+    spec = _ring()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        spec.concrete_model = "distributed"  # attribute assignment
+        restored = pickle.loads(pickle.dumps(spec))  # noqa: S301
+        constructed = FoundationElectrodeSpec.model_construct(
+            concrete_model="distributed"
+        )
+    assert _concrete_model_warnings(caught) == []
+    assert restored.concrete_model == constructed.concrete_model == "distributed"
+    page = pathlib.Path(__file__).parents[1] / "docs" / "reference" / "deprecations.md"
+    row = next(
+        line
+        for line in page.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| `FoundationElectrodeSpec.concrete_model`")
+    )
+    for part in (
+        "Assigning the attribute",
+        "unpickling",
+        "model_construct",
+        "do not validate and do not warn",
+        "`model_copy` whose `update` sets it",
+    ):
+        assert part in row, part
 
 
 # user decision Q21

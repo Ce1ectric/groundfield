@@ -87,14 +87,13 @@ same representation:
 4. substation and cabinet electrodes get $C$ when their specification is
    encased;
 5. `concrete_model` only chooses the owner granularity of an axis-aligned
-   ring foundation (`"lumped"`: one grid-mesh owner, `"distributed"`: one
-   owner per wire); the two agree to well below the 2 % criterion of
-   ADR-0012 (`tests/test_concrete_one_mechanism.py`): at most 0.16 % up to
-   aspect ratio 4 and 0.67 % up to 50 over the soils of the AP1 grid, bare
-   or in concrete of 30 to 1 000 Ω·m. The field is therefore deprecated
-   (user decision of 2026.11, removal no earlier than 2027.5):
-   `"distributed"` still works and warns, the default `"lumped"` and the
-   files of 0.15.0 load silently; drop the argument (see
+   rectangle without cross-braces (`style="ring"`, or `"mesh"` with
+   `n_x = n_y = 1`; `"lumped"`: one grid-mesh owner, `"distributed"`: one
+   owner per side); the two agree to below the 2 % criterion of ADR-0012
+   (see [Owners of a rectangle](#owners-of-a-rectangle-without-cross-braces)).
+   The field is therefore deprecated (user decision of 2026.11, removal no
+   earlier than 2027.5): `"distributed"` still works and warns, the default
+   `"lumped"` and the files of 0.15.0 load silently; drop the argument (see
    [Deprecations](../reference/deprecations.md)).
 
 `World.concrete_shell_corrections` is deprecated (it still loads and warns
@@ -110,11 +109,21 @@ A mesh foundation (`FoundationElectrodeSpec(style="mesh")`, the
 generators' default for buildings) joins its perimeter with cross-braces.
 DIN 18014 lays the foundation earth electrode in the concrete together
 with its connections, so the braces are encased like the perimeter: every
-wire of an encased mesh carries $r_b$ and $C$ (user decision of 2026.11;
-the earlier rule kept the braces bare). The shell resistance of the whole
-foundation is $C/L$ over every encased wire, the per-wire shells $C/L_j$
-in parallel; `concrete_shell(spec, encased_length_m=...)` in
+wire of an encased mesh carries $r_b$ and $C$ (user decision of 2026.11).
+The shell resistance of the whole foundation is $C/L$ over every encased
+wire, the per-wire shells $C/L_j$ in parallel;
+`concrete_shell(spec, encased_length_m=...)` in
 `groundfield.generators.materialise` reports it.
+
+Two earlier rules preceded it. In 0.15.0 every wire of an encased mesh had
+the radius $r_b$, but the braces carried no $C$: with `"distributed"` only
+the perimeter wires had the shell, with `"lumped"` (the default) no wire
+had it, and the lumped shell sat in `World.concrete_shell_corrections`,
+which `Engine.solve` of a house never read (see
+[Against 0.15.0](#against-0150)). The 2026.11 development line, between
+review pass 10 and the user decision, kept the braces bare ($r_a$, no $C$);
+it was never released, but the first table below is measured against it
+because it isolates the braces.
 
 The rule matters as soon as the concrete is drier than the soil. Bare
 braces are a bare electrode inside the concrete: however dry the
@@ -124,7 +133,8 @@ shell term grows with $\rho_c$; for $\rho_c \gg \rho$ the current spreads
 over the wires in proportion to their length and
 $Z \to C/L + Z_\text{soil}$, with $Z_\text{soil}$ = 4.105 Ω for a uniform
 current over the 60 m of the house mesh. Change of the input impedance
-when the braces are encased as well:
+when the braces are encased as well, against the bare braces of the
+development line:
 
 | Mesh, soil | $\rho_c$ = 50 | 100 | 150 | 1 000 | 5 000 Ω·m |
 |---|---|---|---|---|---|
@@ -138,17 +148,100 @@ $r_a$ = 5 mm, $t$ = 5 cm); `medium_industry`: 20 m, 3 × 3 cells, same
 wire and cover. Default engine (image family, line kernel, 0.5 m
 segments). Concrete wetter than the soil lowers $Z$ a little (the wire
 grows to $r_b$); concrete as conductive as the soil changes nothing but the
-line kernel's self term. Two methods agree to 4e-16: `Engine.solve` of the
-generated world and an independent assembly — the wires as separate
-shell-free electrodes of radius $r_b$, their mutual matrix from
-`solve_mutual_matrix`, $C/L_j$ added to its diagonal, the wires bonded
-($1/(\mathbf{1}^\mathsf{T} Z^{-1} \mathbf{1})$). With the point kernel an
-encased mesh in concrete of the soil's resistivity equals the bare mesh to
-round-off.
+line kernel's self term. With the point kernel an encased mesh in concrete
+of the soil's resistivity equals the bare mesh to round-off.
+
+`Engine.solve` of the generated world and a hand assembly of its wires
+agree to 4e-16: the wires as separate shell-free electrodes of radius
+$r_b$, their mutual matrix from `solve_mutual_matrix`, $C/L_j$ added to
+its diagonal, the wires bonded ($1/(\mathbf{1}^\mathsf{T} Z^{-1}
+\mathbf{1})$). The assembly uses the solver's kernel and owner model, so it
+checks how the generator wires $r_b$ and $C$, not the numbers. An
+independent thin-wire boundary-element solution (its own line-source
+kernel and image series, audit D2B) reproduces every entry of the table to
+0.02 percentage points. Both rest on the owner model of the image family,
+one uniform current per wire. With one current per segment, all segments
+at one potential (the moment-method reference), encasing the braces of
+the house mesh in 100 Ω·m changes $Z$ by +49.2 / +318.5 % instead of
++46.9 / +307 % at $\rho_c$ = 1 000 / 5 000 Ω·m (`medium_industry`:
++49.2 / +312 % instead of +46.2 / +298 %); groundfield's per-segment
+assembly and the boundary-element solution agree on this to 0.02 points.
+The owner model is 1.6 / 2.8 % high for the mesh with bare braces and at
+most 0.6 % high for the encased mesh (0.43 % at 50 Ω·m, 0.004 % at
+5 000 Ω·m for the house in 100 Ω·m), whose shell evens out the current
+over the wires.
+
+### Against 0.15.0
+
+The release changes encased mesh foundations against 0.15.0 by the brace
+rule above, by the shell that now reaches the solver for `"lumped"`
+(findings 10.12–10.14), by the owners (one per wire, 10.39) and by the
+default line kernel (10.28). Combined change of the input impedance of
+the house mesh built with `GroundingSystemSpec.build_at`, default engine
+of each version (0.15.0: point kernel; 2026.11: line kernel; 0.5 m
+segments):
+
+| House mesh, soil | `concrete_model` in 0.15.0 | $\rho_c$ = 50 | 100 | 150 | 1 000 | 5 000 Ω·m |
+|---|---|---|---|---|---|---|
+| 100 Ω·m | `"lumped"` | +7.0 % | +15.0 % | +23.0 % | +157 % | +782 % |
+| 100 Ω·m | `"distributed"` | +2.2 % | +4.2 % | +6.6 % | +67.9 % | +399 % |
+| 30 / 100 Ω·m, $h_1$ = 5 m | `"lumped"` | +16.5 % | +33.8 % | +51.0 % | +341 % | +1 701 % |
+| 30 / 100 Ω·m, $h_1$ = 5 m | `"distributed"` | +4.8 % | +11.8 % | +20.2 % | +194 % | +1 045 % |
+
+In 0.15.0 the house read 4.07 Ω in 100 Ω·m with `"lumped"` whatever the
+concrete, and 7.20 Ω with `"distributed"` at 5 000 Ω·m; 2026.11 gives
+35.9 Ω for both. The line kernel contributes +0.78 % without a shell and
++0.09 % at 5 000 Ω·m (100 Ω·m); with the point kernel on both versions the
+changes are +6.2 … +781 % (`"lumped"`) and +1.5 … +398 %
+(`"distributed"`) in 100 Ω·m. In a TN network the 0.15.0 lumped shell sat
+on the PEN service drop of the house: the default TN network with four
+such houses (`TnNetworkGenerator`, seed 0, 100 Ω·m, input impedance at the
+substation) moves by −3.8 / −5.2 / −6.5 / −13.8 / −10.7 %
+with `"lumped"` and by −0.3 / +1.0 / +2.5 / +34.5 / +120.9 % with
+`"distributed"` at $\rho_c$ = 50 … 5 000 Ω·m (−1.7 % without a shell, from
+other findings). The 0.15.0 models rebuilt by hand in the release code
+reproduce the 0.15.0 numbers to round-off with the point kernel, and the
+boundary-element solution reproduces the changes to 0.08 percentage
+points.
 
 Affected are generated mesh foundations with `concrete_rho_ohm_m` set.
 Worlds without a shell, ring and building-outline foundations — the AP1
-catalogue among them — and the golden cases do not change.
+catalogue among them — and the golden cases do not change by the brace
+rule.
+
+## Owners of a rectangle without cross-braces
+
+`concrete_model` still chooses one thing: the uniform-current owners of an
+axis-aligned rectangle without cross-braces (`style="ring"`, or `"mesh"`
+with `n_x = n_y = 1`). `"lumped"` (the default) makes it one
+`GridMeshElectrode`, the same current density on all four sides;
+`"distributed"` one strip per side, each with its own density. The
+difference of the input impedance, `"lumped"` over `"distributed"` minus
+one, is never negative and is largest for narrow rectangles, conductive
+upper layers over resistive ones, and thick, wet shells. Over the 39 soils
+of the AP1 grid, for a 5 mm wire at 0.8 m (the generator defaults):
+
+| Scope | aspect ratio ≤ 4, sides ≤ 80 m | aspect ratio ≤ 50, sides ≤ 150 m, short side ≥ 1 m |
+|---|---|---|
+| bare, homogeneous soil | 0.088 % (6 m × 1.5 m) | 0.329 % (30 m × 1 m) |
+| bare or shell up to 5 cm (the default), $\rho_c$ = 30 … 1 000 Ω·m | 0.321 % (80 m × 20 m, 30 / 200 Ω·m, $h_1$ = 5 m) | 0.914 % (150 m × 7.5 m, same soil) |
+| bare or shell up to 0.2 m, $\rho_c$ = 30 … 1 000 Ω·m | 0.691 % (4 m × 1 m, 0.2 m at 30 Ω·m, 1 000 / 30 Ω·m, $h_1$ = 5 m) | 1.529 % (20 m × 1 m, same shell, $h_1$ = 10 m) |
+
+The scan covers 37 rectangles (aspect ratio 2 to 50), bare wires and
+shells of 0.015 / 0.05 / 0.1 / 0.2 m with 65 values of $\rho_c$ from 30 to
+1 000 Ω·m. Drier concrete brings the two together (0.04 % at 5 000 Ω·m for
+the 20 m × 1 m case); wetter concrete, down to a perfectly conducting
+shell, separates them up to 1.66 %; a shallower foundation (0.5 m) or a
+thicker wire (10 mm) moves the largest cases by up to +0.10 percentage
+points (0.79 % for the 4 m × 1 m case at 0.5 m). `Engine.solve` of the
+generated rectangles (both styles) reproduces the scan to 7e-16, and an
+independent thin-wire boundary-element solution reproduces the largest
+cases to 0.01 points. Against one current per segment (the moment-method
+reference) one owner per side is the closer model: for the largest cases
+above one owner is 0.55 … 2.15 % high, one per side 0.23 … 0.91 %
+(groundfield's per-segment assembly and the boundary-element solution
+agree to 0.02 points) — input for the decision which model remains when
+the field is removed.
 
 ## Converting between the conventions
 

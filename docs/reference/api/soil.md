@@ -209,12 +209,21 @@ soil, calibrated on the AP1 catalogue; outside the calibration range it
 is an extrapolation, and a preset belongs to its electrode class. For
 the AP1 station (the ring and rods above, at 0.6 m) solved in the 39
 soils of the AP1 grid, $R = c\,\rho_\text{eff}$ with $c$ from
-homogeneous soil misses the field solution of the 36 two-layer soils by a
-median 2.1 % and at most 15.7 % with `"station"` (median 1.8 % counting
-the three exact homogeneous soils, as the hand-over does: 1.7 % and
-15.7 %), by 5.5 % and 35.9 % with `"lv_network"` and by 12.4 % and 41.9 %
-over $\rho_1$ (rms 5.5, 11.8 and 18.9 %); the LV network presets give an rms
-error of 5.5 % (group 1) up to 39.9 % (group 4, 40 %) there. For the station
+homogeneous soil misses the field solution by a median of 2.1 % over the
+36 two-layer soils and at most 15.7 % with `"station"`, by 5.5 % and
+35.9 % with `"lv_network"` and by 12.4 % and 41.9 % over $\rho_1$ (rms
+5.5, 11.8 and 18.9 %); counting the three homogeneous soils, where the
+relation is exact, the median over all 39 soils is 1.8 % with `"station"`
+(5.0 % with `"lv_network"`, 11.9 % over $\rho_1$). The LV network presets give an rms error of 5.5 % (group 1) up to 39.9 %
+(group 4, 40 %) there. The hand-over quotes a median of 1.7 % and a
+maximum of 15.7 % for the station without naming its metric; they appear
+to be this error over all 39 soils, computed with the point kernel at
+1.5 m segments (the kernel of groundfield up to 0.15.0 and the segment
+length of the AP1 pipeline), which gives 1.71 % and 15.69 %. The point
+kernel alone changes the 36-soil median by 0.01 percentage points; the
+three exact soils lower the median by 0.26 (default engine) to 0.37
+points. An independent thin-wire boundary-element solution of the
+station (audit D2B) gives the same medians to 0.01 points. For the station
 of the [IO example](io.md#example) (a 2 m ring and a 3 m rod at 0.8 m)
 swept over $\rho_1$ at $\rho_2 = 100\ \Omega\,\mathrm{m}$, the standard
 form fits to 7.5 / 2.9 / 0.6 % over $\rho_\text{eff}$ with `"station"`,

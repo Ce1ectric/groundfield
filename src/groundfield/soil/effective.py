@@ -31,8 +31,13 @@ $(w_0, \beta)$ of one electrode class, all at $h_\text{ref} = 10$ m;
 - ``"lv_network"`` (0.13, 0.8), the default: the global calibration over
   all LV networks of the AP1 catalogue (the hand-over's method A0);
 - ``"station"`` (0.06, 1.3): the station electrode alone, a 4 m × 4 m ring
-  with three 4 m rods, no foundation electrodes, purely resistive (median
-  error 1.7 %, maximum 15.7 % in the hand-over);
+  with three 4 m rods, no foundation electrodes, purely resistive (the
+  hand-over quotes a median error of 1.7 % and a maximum of 15.7 % without
+  naming the metric; they appear to be the error of
+  $R = c\,\rho_\text{eff}$ over the 39 soils of the AP1 grid with the three
+  homogeneous ones at zero, computed with the point kernel at 1.5 m
+  segments; with the default engine the median is 2.1 % over the 36
+  two-layer soils and 1.8 % over all 39, see the Soil reference);
 - ``"lv_group_<g>_p<pp>"``: fitted per LV network group ``g`` = 1 … 4 and
   penetration ``pp`` = 05, 10, 20, 40 % of foundation electrodes (method A,
   the values of each group's median network, q50; table in
@@ -129,7 +134,11 @@ $h_\text{ref} = 10$ m. ``"lv_network"`` (0.13, 0.8) is the default, the
 global calibration over all LV networks of the AP1 catalogue (method A0 of
 the AP2 hand-over). ``"station"`` (0.06, 1.3) is the station electrode
 alone: a 4 m × 4 m ring with three 4 m rods, no foundation electrodes,
-purely resistive (median error 1.7 %, maximum 15.7 % in the hand-over).
+purely resistive (the hand-over quotes a median error of 1.7 % and a
+maximum of 15.7 %; they appear to be the error of $R = c\,\rho_\text{eff}$
+over all 39 soils of the AP1 grid, the three homogeneous ones at zero,
+with the point kernel at 1.5 m segments: 2.1 % median over the 36
+two-layer soils with the default engine).
 ``"lv_group_<g>_p<pp>"`` holds the weights fitted per LV network group
 ``g`` and penetration ``pp`` % of foundation electrodes (method A, the
 values of each group's median network, q50):
