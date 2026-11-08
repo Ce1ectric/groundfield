@@ -1109,6 +1109,56 @@ def test_fractional_powers_of_exact_numbers_are_evaluated_in_floating_point(
     np.testing.assert_allclose(z, expected, rtol=1e-14, atol=0.0)
 
 
+def _exact_coefficients_of_powered_float_sums(expr) -> list:
+    """Exact coefficients (other than +-1) of sums with a float coefficient
+    that stand under a fractional power."""
+    import sympy as sp
+
+    found = []
+    for power in expr.atoms(sp.Pow):
+        if power.exp.is_Integer or not power.base.is_Add:
+            continue
+        coefficients = [t.as_coeff_Mul()[0] for t in power.base.args]
+        if any(c.is_Float for c in coefficients):
+            found += [c for c in coefficients if c.is_Rational and abs(c) != 1]
+    return found
+
+
+@pytest.mark.parametrize(
+    "text, reference",
+    [
+        (
+            f"(2.0*f + {N300})**(63/64)",
+            lambda f, rho: (2.0 * f + float(N300)) ** (63 / 64),
+        ),
+        (
+            "rho*(0.5*f + 3/7)**(1/3) + (f + 2.5*rho + 12)**(-5/2)",
+            lambda f, rho: (
+                rho * (0.5 * f + 3 / 7) ** (1 / 3) + (f + 2.5 * rho + 12.0) ** -2.5
+            ),
+        ),
+    ],
+    ids=["300-digit-term", "small-terms"],
+)
+def test_sum_with_a_float_coefficient_keeps_no_exact_coefficient_under_a_root(
+    text: str, reference
+) -> None:
+    """SymPy before 1.14 (the dependency allows 1.13.2) takes the largest
+    coefficient ``c`` of a sum with a float coefficient out of a power,
+    ``(2.0*f + c)**e -> c**e * (2.0/c*f + 1)**e``, so an exact ``c``
+    under a fractional ``e`` was factorised: with SymPy 1.13.3 the first
+    string did not finish within 10 s. The exact coefficients of such a
+    sum become floats before the power is built."""
+    from groundfield.io._formula import parse_impedance_formula
+
+    expr = parse_impedance_formula(text)
+    assert _exact_coefficients_of_powered_float_sums(expr) == [], expr
+    assert _exact_roots(expr) == [], expr
+    f = np.array([1.0, 16.7, 50.0, 1000.0])
+    z = evaluate_spec(_spec(text), f, RHO)
+    np.testing.assert_allclose(z, reference(f, RHO), rtol=1e-14, atol=0.0)
+
+
 @pytest.mark.parametrize(
     "text",
     [

@@ -92,8 +92,11 @@ formula corpus ran for more than 20 s each. So
 * no exact number is ever left under a fractional power: a fractional
   power of a symbol-free base is evaluated numerically, and the rational
   coefficient ``c`` of a product base is taken out as the float
-  ``|c|**(p/q)`` (``(-c*f)**(p/q) = |c|**(p/q) * (-f)**(p/q)``); powers of
-  symbols, sums and functions keep their exact form;
+  ``|c|**(p/q)`` (``(-c*f)**(p/q) = |c|**(p/q) * (-f)**(p/q)``); a sum
+  with a float coefficient gets float coefficients throughout (SymPy
+  before 1.14 takes the largest coefficient of such a sum out of the
+  power); otherwise powers of symbols, sums and functions keep their
+  exact form;
 * ``log`` of a symbol-free argument other than a positive rational or a
   float is evaluated numerically (``log(2)`` stays exact);
 * a number created this way is a float of 17 significant digits per real
@@ -489,6 +492,28 @@ def _decimal_digits(n: int) -> int:
     if n < 10 ** (count - 1):
         return count - 1
     return count
+
+
+def _float_coefficients(total: sp.Expr) -> sp.Expr:
+    """Return a sum with a float coefficient with all its coefficients as floats.
+
+    SymPy before 1.14 takes the largest coefficient ``c`` of such a sum out
+    of a power, ``(2.0*f + c)**e -> c**e * (2.0/c*f + 1)**e``, and would
+    factorise an exact ``c`` under a fractional ``e``. Coefficients of
+    magnitude one and sums without a float coefficient are left as they
+    are.
+    """
+    terms = [term.as_coeff_Mul() for term in total.args]
+    if not any(coefficient.is_Float for coefficient, _ in terms):
+        return total
+    return sp.Add(
+        *(
+            sp.Float(float(c), _NUMERIC_DIGITS) * rest
+            if c.is_Rational and abs(c) != 1
+            else c * rest
+            for c, rest in terms
+        )
+    )
 
 
 def _rational_digits(x: sp.Rational) -> int:
@@ -987,6 +1012,8 @@ class _Builder:
         if not self._profile(base, node).symbolic:
             return self._numeric(ctx.power(self._value(base, node), power))
         if not exact:
+            if base.is_Add:
+                base = self._bounded(_float_coefficients(base), node)
             return base**exponent
         magnitude = abs(coefficient)
         factor = self._numeric(ctx.power(self._value(magnitude, node), power))

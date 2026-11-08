@@ -14,7 +14,11 @@
   under a fractional power: a fractional power (`x**(p/q)`, `sqrt`) of a
   symbol-free base is evaluated numerically, and the rational coefficient
   `c` of a product base is taken out as the float `|c|**(p/q)` (17
-  significant digits, principal branch); an exact number under a
+  significant digits, principal branch); a powered sum with a float
+  coefficient gets float coefficients throughout (SymPy 1.13, which the
+  dependency range allows, takes the largest coefficient of such a sum out
+  of the power: `(2.0*f + N)**(63/64)` did not finish within 10 s there);
+  an exact number under a
   fractional power needs `q <= 64` and digits times `q <= 300`
   (`MAX_ROOT_DENOMINATOR`, `MAX_RADICAND_DIGITS` in
   `groundfield.io._formula`, the limits of groundinsight's guard); `log()`
@@ -35,6 +39,7 @@
   `tests/test_formula_security.py::test_fractional_powers_of_large_exact_numbers_are_rejected_before_sympy`,
   `tests/test_formula_security.py::test_fractional_powers_of_exact_numbers_are_evaluated_in_floating_point`,
   `tests/test_formula_security.py::test_log_inside_exp_is_rejected`,
+  `tests/test_formula_security.py::test_sum_with_a_float_coefficient_keeps_no_exact_coefficient_under_a_root`,
   `tests/test_formula_security.py::test_complex_numbers_with_large_fractions_are_evaluated_quickly`.
 
 ### Added
