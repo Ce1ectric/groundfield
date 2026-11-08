@@ -122,7 +122,12 @@ class PenRouter:
     def connect_main(self, node: str, *, name: str) -> None:
         """Connect ``node`` by a cable from the nearest point of the mains."""
         mains = [c for c in self.cables if c.group is None]
-        start = self._attach(self.xy[node], mains, extra_nodes=[self.root])
+        cable, point, distance = self._nearest(self.xy[node], mains, [self.root])
+        if cable is None:
+            self._check_apart(node, str(point), distance)
+            start = str(point)
+        else:
+            start = self._split_at(cable, point)
         self.cables.append(_Cable(name, start, node, "pen", None))
         self._parent[node] = name
 
@@ -145,7 +150,11 @@ class PenRouter:
             # cable runs through its anchor.
             self._split(cable, building)
             return
-        start = point if cable is None else self._split_at(cable, point)
+        if cable is None:
+            self._check_apart(building, str(point), distance)
+            start = str(point)
+        else:
+            start = self._split_at(cable, point)
         self.cables.append(_Cable(name, start, building, "service_drop", feeder))
 
     def drop_order(self, buildings: list[str], feeder: str) -> list[str]:
@@ -235,18 +244,16 @@ class PenRouter:
         assert best is not None  # extra_nodes is never empty
         return best[2], best[3], best[0]
 
-    def _attach(
-        self,
-        target: tuple[float, float],
-        cables: list[_Cable],
-        *,
-        extra_nodes: list[str],
-    ) -> str:
-        """Node at the nearest point of ``cables`` (a tap junction inside one)."""
-        cable, point, _ = self._nearest(target, cables, extra_nodes)
-        if cable is None:
-            return str(point)
-        return self._split_at(cable, point)
+    @staticmethod
+    def _check_apart(node: str, other: str, distance: float) -> None:
+        """Two nodes closer than :data:`MIN_DROP_LENGTH_M` cannot be joined."""
+        if distance < MIN_DROP_LENGTH_M:
+            raise ValueError(
+                f"PEN routing: the connection point of {node!r} coincides with "
+                f"that of {other!r} ({distance:.3g} m apart, less than "
+                f"MIN_DROP_LENGTH_M = {MIN_DROP_LENGTH_M:g} m); a cable between "
+                "them would have no length. Move one of the two sites."
+            )
 
     def _split_at(self, cable: _Cable, t: object) -> str:
         """Insert a tap junction at the fraction ``t`` of ``cable``."""

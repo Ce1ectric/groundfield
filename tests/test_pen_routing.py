@@ -199,3 +199,16 @@ def test_tap_junctions_are_plan_junctions_and_round_trip() -> None:
     world, world_again = plan.to_world(), again.to_world()
     assert world.model_dump_json() == world_again.model_dump_json()
     assert [j.name for j in world.junctions] == [j.name for j in plan.junctions]
+
+
+# stream DOC-B
+def test_a_building_on_top_of_a_node_is_rejected_clearly() -> None:
+    """A house whose connection point coincides with the cabinet's would get
+    a cable of no length (a Conductor validation error deep in the build)."""
+    cfg = TnNetworkConfig(
+        building_types=[_RING_HOUSE],
+        building_counts={"residential": 2},
+        placement=ExplicitPlacement(positions=[(-60.0, 0.0), (-180.0, 0.0)]),
+    )
+    with pytest.raises(ValueError, match="coincides"):
+        TnNetworkGenerator(cfg, seed=0).build()
