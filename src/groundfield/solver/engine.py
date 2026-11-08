@@ -16,21 +16,20 @@ built-in backends fall into three families:
 ``image`` is the homogeneous-soil image-charge sum (closed form,
 uniform current per unit length, cheapest backend). ``image_2layer``
 implements the Tagg / Sunde geometric series for two-layer soil with
-convergence $|K|^n$. ``image_nlayer`` routes a layered soil with one or
-two layers to ``image`` / ``image_2layer`` and rejects three or more
-layers. ``cim`` evaluates the same image series for $n \\le 2$ (its
-complex-image fit is not used on any solve path, see
-:mod:`groundfield.solver.cim`).
+convergence $|K|^n$. Both use the exact line-source kernel by default
+(``Engine.kernel``). ``image_nlayer`` (deprecated name) routes a layered
+soil with one or two distinct layers to ``image`` / ``image_2layer``
+and rejects three or more; ``cim`` is a deprecated name of the ``image``
+auto-dispatch.
 
 *Integral equation.* ``mom`` solves for the segment currents by point
 matching (collocation) with the closed-form kernels above;
 ``mom_sommerfeld`` does the same with direct numerical Sommerfeld
 quadrature of the layered Green's function and is the only integral
-backend for $n \\ge 3$ layers. ``bem`` is the collocation solver on the
-``cim`` kernel.
+backend for $n \\ge 3$ layers. ``bem`` is a deprecated name of ``mom``.
 
-*Volume PDE.* ``fem`` is the axisymmetric finite-element solver with
-the equivalent-hemisphere reduction described in
+*Volume PDE.* ``fem`` (experimental) is the axisymmetric finite-element
+solver with the equivalent-hemisphere reduction described in
 :mod:`groundfield.solver.fem`.
 
 Notes
@@ -358,11 +357,14 @@ class Engine(BaseModel):
           as a fast diagnostic baseline.
         - ``"carson_series"`` (ADR-0005) — the earth has finite
           conductivity. Adds Carson 1926's per-meter earth-return
-          correction $\\Delta Z_\\text{Carson}(\\omega)$ on top of the
-          perfect-mirror Neumann matrix, scaled by the geometric
-          length of each segment-pair. Asymptotically correct for
-          long parallel wires over homogeneous earth; an approximation
-          for short wires or layered soils.
+          correction $\\Delta Z_\\text{Carson}(\\omega)$, scaled by the
+          geometric length of each segment pair, to the Neumann matrix
+          built on Carson's own baseline, the *anti-parallel* image
+          (since 2026.11; up to 0.15.0 it was added to the additive
+          perfect-mirror matrix, which roughly doubled the reactance, review
+          pass 10, 10.20). Asymptotically correct for long parallel
+          wires over homogeneous earth; an approximation for short
+          wires or layered soils.
         - ``"sommerfeld"`` (ADR-0006, Pollaczek kernel since the
           2026-07-08 audit, WP-C1) — geometric integration of the
           σ-dependent vector-potential Green's function over the
@@ -371,8 +373,12 @@ class Engine(BaseModel):
           $e^{-\\gamma R}$ (and with it the **positive**
           earth-return resistance $\\approx \\omega\\mu_0/8$ per
           metre in the long-wire limit), overhead pairs use the
-          air-side reflection (Carson's geometry). Supports layered
-          earth. Limits: $\\sigma \\to 0$ → free space (no image);
+          air-side reflection (Carson's geometry). The Neumann matrix
+          carries no image: the correction holds the whole earth
+          effect, so conductors in or crossing the surface plane are
+          solved too (since 2026.11). Supports layered earth; see
+          :attr:`sommerfeld_assembly` for the faster tabulated
+          assembly. Limits: $\\sigma \\to 0$ → free space (no image);
           $\\sigma \\to \\infty$ → screened (buried) / anti-parallel
           PEC image (overhead). Validated against Pollaczek's
           analytic $K_0$ mutual and Carson's line impedance
@@ -383,10 +389,11 @@ class Engine(BaseModel):
         Controls of the Tagg / Sunde image-charge series (maximum
         number of terms; stop tolerance on the geometric tail bound
         $|K|^{n+1}/(1-|K|)$, dimensionless). Common to every layered
-        backend that evaluates the series (``image_2layer``,
-        ``image_nlayer``, ``mom``, ``cim``, ``bem``, the delegated
-        two-layer path of ``mom_sommerfeld``) and recorded in
-        ``FieldResult.metadata["series"]`` for the post-solve field
+        backend that evaluates the series (``image_2layer``, ``mom``,
+        the delegated two-layer path of ``mom_sommerfeld``; the
+        deprecated names run these) and to ``solve_mutual_*``; recorded
+        in ``FieldResult.metadata["series"]``, which
+        :meth:`FieldResult.potential` uses for the post-solve field
         evaluation. Defaults: :data:`DEFAULT_IMAGE_MAX_TERMS` (300) and
         :data:`DEFAULT_IMAGE_SERIES_TOL` (1e-6).
     options
@@ -512,9 +519,9 @@ class Engine(BaseModel):
             "covers the AP1 corner soil rho_1 = 1000 / rho_2 = 30 Ohm m "
             "(|K| = 0.94, 277 terms); the solver emits a "
             "SeriesTruncationWarning when the cap is reached. Common to "
-            "every layered backend (image_2layer, image_nlayer, mom, "
-            "cim, bem, mom_sommerfeld) and recorded in "
-            "FieldResult.metadata['series']."
+            "every layered backend (image_2layer, mom, the two-layer path "
+            "of mom_sommerfeld) and to solve_mutual_*; recorded in "
+            "FieldResult.metadata['series'] for FieldResult.potential."
         ),
     )
     kernel: Literal["point", "line"] | None = Field(

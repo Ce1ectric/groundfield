@@ -184,10 +184,16 @@ class BranchModel:
         Engine setting the block was assembled for.
     inductance_matrix
         Partial-inductance matrix over all finite branches in H, or
-        ``None`` without inductive conductors.
+        ``None`` when the branch block is frequency independent. It is
+        all zero when only the skin effect makes the block frequency
+        dependent (conductors with ``resistance_model="skin"`` and no
+        ``inductance_model``).
     earth_correction
-        ``omega -> ΔZ(omega)`` earth-return correction over all finite
-        branches in Ω, or ``None``.
+        ``omega -> ΔZ(omega)`` over all finite branches in Ω: the
+        earth-return correction of the inductive branches
+        (``carson_series``, ``sommerfeld``) plus the skin-effect
+        correction on the diagonal of ``resistance_model="skin"``
+        branches (review pass 10, 10.37), or ``None`` without either.
     sigma_earth
         Earth conductivity in S/m used by ``carson_series``, else
         ``None``.
@@ -200,7 +206,12 @@ class BranchModel:
 
     @property
     def has_inductance(self) -> bool:
-        """Whether any finite branch carries an inductance."""
+        """Whether the branch block is frequency dependent.
+
+        True with an inductive conductor and also with a skin-effect
+        conductor alone (all-zero inductance matrix); the name predates
+        the skin term (10.37).
+        """
         return self.inductance_matrix is not None
 
 

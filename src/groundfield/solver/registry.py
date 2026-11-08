@@ -55,9 +55,11 @@ share are common :class:`~groundfield.solver.engine.Engine` fields, not
 backend options: ``segment_length``, ``earth_inductive_model`` and the
 Tagg / Sunde image-series controls ``image_max_terms`` /
 ``image_series_tol`` (consumed by ``image_2layer``, ``image_nlayer``,
-``mom``, ``mom_sommerfeld`` on its delegated two-layer path, and by the
-post-solve field evaluation; the deprecated names ``cim`` and ``bem``
-run ``image`` and ``mom``). Their single
+``mom``, ``mom_sommerfeld`` on its delegated two-layer path and
+``solve_mutual_*``, and recorded in ``FieldResult.metadata["series"]``,
+from which :meth:`FieldResult.potential` takes them for the post-solve
+field evaluation; the deprecated names ``cim`` and ``bem`` run
+``image`` and ``mom``). Their single
 documented defaults are :data:`DEFAULT_IMAGE_MAX_TERMS` and
 :data:`DEFAULT_IMAGE_SERIES_TOL`.
 
