@@ -105,11 +105,11 @@ reproduces 0.15.0, it is named.
 | 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor; the `sommerfeld` correction of a segment longer than a quarter skin depth is integrated piecewise | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2096 + 3.7840j Ω (equal to its 10 m chain); two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω; a lumped 3 km conductor at 1 kHz (100 Ω·m) had +13.4 % earth-return resistance against its refined chain, now ≤ 1e-4; distributed conductors with pieces longer than 40 m (1 kHz, 100 Ω·m) move by 1e-4 and more | service drops shorter than the PEN segment length, lumped leads, long lumped or coarsely divided conductors under `sommerfeld` |
 | 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
 | 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged in every backend | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`); `TwoLayerSoil(ρ, ρ, h)` in `image_2layer` was 3.8e-4 (point kernel) and 3.3e-7 (line kernel) from homogeneous soil, now equal bit for bit | `cim` and declared equal layers; not AP1 |
-| 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise, and so do a more conductive layer that no electrode touches within the hemisphere or the electrodes' horizontal half-extent (user decision Q23), strips and rings deeper than their formulas reach and electrodes out of the soil | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases, the −97 … +13 % conductive-layer cases (a warning before) and the silent +369 … +6120 % deep strips now raise | every layered `fem` result |
+| 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise, and so do a more conductive layer that no electrode touches within the hemisphere or, unshielded, the electrodes' horizontal half-extent (user decision Q23), strips and rings deeper than their formulas reach and electrodes out of the soil | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases, the −97 … +30 % conductive-layer cases (a warning before) and the silent +369 … +6120 % deep strips now raise | every layered `fem` result |
 | 10.75 | `mom` and `mom_sommerfeld` honour `return_to` and junctions | the return current flows through the return electrode instead of remote earth | `mom` family worlds with two-terminal sources |
 | 10.32, 10.28 | every interface cut is kept, however short the part beyond it, and the diagonal of a piece at the interface is evaluated at the wire radius, so a rod tip or head next to the interface is in contact with the layer it reaches and a wire lying at the interface is continuous across it | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 137.4 Ω (−29 %), within −1.2 % of a solid-rod reference; a ring (r = 3 m) at h₁ = 5 m: 9.56 Ω (0.15.0, point kernel) → 4.18 Ω, continuous across h₁ (the point form raises there); a rod end within one wire radius of h₁ warns (`InterfaceContactWarning`, the thin-wire model has no end face); with `kernel="point"` and `mom` rod tips up to about 0.1 m past h₁ move as well (+0.4 % at 50 mm, +0.05 % at 100 mm, h₁ = 5 m) (golden: none) | rods whose tip or head lies within 16 mm of an interface (0.1 m with the point form), horizontal wires at an interface; not AP1 |
 | 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
-| 10.12–10.14, 10.39, 10.28 (user decision Q20) | encased mesh foundations: every wire, cross-braces included, carries r_b and the shell coefficient C (in 0.15.0 every wire had r_b, but `"lumped"` put C on no wire and kept the shell in a registry that only the TN service drops read, `"distributed"` put C on the perimeter only) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, default engine of each version: +7.0 / +15 / +23 / +157 / +782 % against 0.15.0 `"lumped"`, +2.2 / +4.2 / +6.6 / +68 / +399 % against `"distributed"` (point kernel on both: +6.2 … +781 % and +1.5 … +398 %); in 30 over 100 Ω·m (h₁ = 5 m) up to +1701 % and +1045 %; four such houses on the default TN network (100 Ω·m): −3.8 / −5.2 / −6.5 / −14 / −11 % (`"lumped"`, whose shell sat on the service drop) and −0.3 / +1.0 / +2.5 / +35 / +121 % (`"distributed"`); of this, the rule for the braces alone (against the bare braces of the development line, never released) +1.5 / +47 / +307 % at 150 / 1000 / 5000 Ω·m (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell, not ring and building-outline foundations (AP1: see the 10.12–10.14 row) |
+| 10.12–10.14, 10.39, 10.28 (user decision Q20) | encased mesh foundations: every wire, cross-braces included, carries r_b and the shell coefficient C (in 0.15.0 every wire had r_b, but `"lumped"` put C on no wire and kept the shell in a registry that only the TN service drops read, `"distributed"` put C on the perimeter only) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, default engine of each version: +7.0 / +15 / +23 / +157 / +782 % against 0.15.0 `"lumped"`, +2.2 / +4.2 / +6.6 / +68 / +399 % against `"distributed"` (point kernel on both: +6.2 … +781 % and +1.5 … +398 %); in 30 over 100 Ω·m (h₁ = 5 m) up to +1701 % and +1045 %; four such houses on the default TN network (100 Ω·m): −3.8 / −5.2 / −6.5 / −14 / −11 % (`"lumped"`, whose shell sat on the service drop) and −0.3 / +1.0 / +2.5 / +35 / +121 % (`"distributed"`), of which −1.7 % without any shell (10.38, 10.28); the rule for the braces alone, against the 0.15.0 `"distributed"` model (braces with r_b, no C): +5.9 / +66 / +393 % at 150 / 1000 / 5000 Ω·m (against the bare braces of the development line, never released: +1.5 / +47 / +307 %) (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell, not ring and building-outline foundations (AP1: see the 10.12–10.14 row) |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.1 / −0.2 % for 30 / 100 / 200 houses (star) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -429,46 +429,57 @@ reproduces 0.15.0, it is named.
 - ⚠ **`fem` and more conductive layers (10.23; user decision Q23):** `fem`
   raises `BackendCapabilityError` when a layer that no electrode of a cluster
   touches and that conducts better than every layer the electrodes touch
-  lies above the deeper of the hemisphere radius a_eq and the electrodes'
-  horizontal half-extent. The hemisphere then injects the current straight
-  into that layer and the result is too low: −97 … +5 % against
-  `image_2layer` and `mom` (which agree within 2.5 %) where the hemisphere
-  spans the layer — rods, strips and rings below a more conductive top layer
-  from 22 mm thickness, rings whose hemisphere reaches a more conductive
-  lower layer (−92 % for a 10 m ring at 0.8 m over 1000/30 Ω·m at
-  h₁ = 2 m) — and −78 … +1 % (rings, strips; a 20 m grid −60 … +13 %) where
-  the layer lies below the hemisphere but within the half-extent (extended
-  there by the coordinator after the audit of the decision streams, D2A-03,
-  because the error is continuous across a_eq: −67.9 % on both sides for the
-  10 m ring; for the author's review). Up to now these worlds only warned
+  lies above the hemisphere radius a_eq, or below the hemisphere but above
+  the electrodes' horizontal half-extent with no more resistive layer in
+  between. The hemisphere then puts the current into that layer, and `fem`
+  misplaces it: −97 … +30 % against `image_2layer`, `mom` and an
+  independent ring series, mostly far too low — rods, strips and rings below
+  a more conductive top layer from 22 mm thickness, rings whose hemisphere
+  reaches a more conductive lower layer (−92 % for a 10 m ring at 0.8 m over
+  1000/30 Ω·m at h₁ = 2 m), −78 … +1 % for rings and strips with the layer
+  below the hemisphere but within the half-extent, +30 % for a ring within
+  its wire radius below a more conductive top layer. The half-extent part was
+  added by the coordinator after the audit of the decision streams (D2A-03:
+  the error is continuous across a_eq, −67.9 % on both sides for the 10 m
+  ring), for the author's review. Up to now these worlds only warned
   (`FemReductionWarning`). The rule is structural, independent of the size
   of the contrast (100/120 Ω·m raises as well, where `fem` was −7 … +5 %
-  off), on the canonical layer stack, with one contact predicate for every
-  layer rule of `fem`: a horizontal wire touches the layers within its wire
-  radius, a rod the layers its axis passes through (an end on an interface
-  does not count, as in the thin-wire model of the integral engines; a rod
-  head on a conductive top layer raises, −92.9 % before). More resistive
-  layers keep the warning (−1 … +48 % spanned, −16 … +16 % within the
-  half-extent). The message names the cluster, the layer, the electrodes' ρ,
-  a_eq, the measured range and only backends whose own checks accept the
-  world. Tests:
+  off), on the canonical layer stack: a horizontal wire touches the layers
+  that hold its axis (an axis on an interface touches both, to 1e-9 m), a rod
+  the layers its axis passes through (an end on an interface does not count,
+  as in the thin-wire model of the integral engines: a rod head on a
+  conductive top layer raises, −92.9 % before); only the rule of an
+  electrode below its hemisphere also counts a wire within its radius of a
+  layer. More resistive layers keep the warning (−3 … +48 % spanned,
+  −17 … +16 % within the half-extent, +16 … +46 % for a conductive layer
+  behind a more resistive one). The message names the cluster, the layer,
+  the electrodes' ρ, a_eq, the measured range and only backends whose own
+  checks accept the world (or the finer `segment_length` or larger
+  `max_segments` with which they would). Tests:
   `tests/test_fem.py::test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans`,
   `::test_fem_rejects_a_more_conductive_layer_within_the_electrode_extent`,
+  `::test_fem_a_resistive_layer_in_between_keeps_the_warning`,
+  `::test_fem_partial_contact_with_a_more_conductive_layer_raises`,
   `::test_fem_a_rod_head_on_the_interface_does_not_touch_the_layer_above`,
   `::test_fem_names_only_a_backend_that_solves_the_world` and siblings.
 - ⚠ **`fem` within the range of its formulas and in the soil (10.23; audit of
   the decision streams):** a driven strip deeper than half its length, a
-  driven ring deeper than its radius and any driven `MeshElectrode` raise
+  driven ring deeper than its diameter and any driven `MeshElectrode` raise
   `BackendCapabilityError`: Dwight's strip series diverges there (+369 % and
   +6120 % for a 1.88 m strip at 5 m and 9.8 m, silent before), the ring
-  formula assumes a depth well below the diameter (−4 … −6 % at a depth of
-  2 D), and the mesh formula is +118 … +193 % at every depth. Electrodes at
-  or above the soil surface, in the surface plane or reaching above it raise
+  formula stays within −0.8 … +1.2 % of the exact thin ring down to one
+  diameter and falls off beyond (−3.6 … −7.1 % at 2 D), and the mesh formula
+  is +118 … +262 % at every depth. Electrodes and galvanic conductors at or
+  above the soil surface, in the surface plane or reaching above it raise
   `ValueError` as in every other backend (a ring 0.5 m in the air was solved
-  like a ring 1 mm deep); a rod with its head at z = 0 stays valid. Tests:
+  like a ring 1 mm deep); a rod with its head at z = 0 stays valid, and a
+  strip whose end depths differ by round-off is a horizontal wire. Tests:
   `tests/test_fem.py::test_fem_rejects_an_electrode_deeper_than_its_formula_reaches`,
+  `::test_fem_solves_a_ring_down_to_its_diameter`,
   `::test_fem_rejects_a_driven_mesh_electrode`,
-  `::test_fem_rejects_an_electrode_above_the_surface_like_every_backend`.
+  `::test_fem_rejects_an_electrode_above_the_surface_like_every_backend`,
+  `::test_fem_refuses_a_galvanic_conductor_out_of_the_soil`,
+  `::test_fem_round_off_in_a_strip_does_not_change_the_verdict`.
 - **A world without a current source (10.66, audit A2S-05)** raises the same
   `ValueError` in every backend and entry point (`fem` solved it to zeros).
 - **`compare_engines` (10.71)** compares complex impedances at every frequency;
@@ -584,6 +595,13 @@ reproduces 0.15.0, it is named.
   `::test_shell_of_a_mesh_foundation_spans_every_wire`,
   `::test_the_concrete_shell_page_states_the_change_against_0150`,
   `::test_the_brace_effect_names_its_model_and_second_method`.
+- **`FoundationElectrodeSpec.model_copy`** validates an updated
+  `concrete_model` like the constructor and copies the other fields as
+  they are: an invalid value (e.g. `"Lumped"`) raises `ValidationError`
+  instead of being stored unchecked as in 0.15.0, so a copy can no longer
+  build four strips and write unloadable JSON (audits D2B-04, R2B-05). Tests:
+  `tests/test_foundation_owners.py::test_model_copy_rejects_an_invalid_concrete_model`,
+  `::test_model_copy_of_a_subclass_with_a_required_field`.
 - ⚠ **PEN cables of `TnNetworkGenerator` (10.38):** every cable cabinet has its
   own cable, as the topology documents (cabinets on one line: separate cables
   in one trench); a service drop taps the cable that feeds its building at the
@@ -669,7 +687,7 @@ replacement, and is removed in `2027.5.0` at the earliest.
 | `from_osm(kvs_lat_lons=, kvs_xys=)`, `to_world(kvs_grounding=)` | `cabinet_lat_lons=`, `cabinet_xys=`, `cabinet_grounding=` |
 | `source_magnitude_A=` of `to_world`, `measured_grounding_impedance`, `verify_current_balance`, and the `*_A` result keys of `verify_current_balance` | `source_magnitude_a=` and `*_a` keys |
 | `HomogeneousSoilSpec.resistivity`, `SoilLayerSpec.resistivity`, `SoilLayerSpec.thickness_m` | `rho`, `rho`, `h` |
-| `FoundationElectrodeSpec(concrete_model="distributed")` (user decision Q21) | none, drop the argument: the field no longer selects a shell model and only chooses one current owner (`"lumped"`, the default, silent) or one per side for an axis-aligned rectangle without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`); over the AP1 soils, for a 5 mm wire at 0.8 m, bare or in concrete of 30 … 1000 Ω·m up to 0.2 m thick, less than 0.7 % apart up to aspect ratio 4 (sides up to 80 m) and 1.6 % up to 50 (up to 150 m, short side at least 1 m), less than 0.33 % / 0.92 % bare or with the default 5 cm shell; warns also from JSON and from a `model_copy` that sets it (an invalid value raises there as in the constructor). Test: `tests/test_foundation_owners.py` |
+| `FoundationElectrodeSpec(concrete_model="distributed")` (user decision Q21) | none, drop the argument: the field no longer selects a shell model and only chooses one current owner (`"lumped"`, the default, silent) or one per side for an axis-aligned rectangle without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`); over the AP1 soils, for a 5 mm wire at 0.8 m, bare or in concrete of 30 … 1000 Ω·m up to 0.2 m thick, less than 1 % apart up to aspect ratio 4 (short side at least 1 m, sides up to 80 m) and 2 % up to 50 (short side at least 1 m, sides up to 150 m), less than 0.4 % / 1 % bare or with the default 5 cm shell (largest values found 0.69 / 1.55 % and 0.32 / 0.92 %; 1.02 % at 2 m × 0.5 m); warns also from JSON, from a `model_copy` that sets it and from `copy.replace` on Python ≥ 3.13. Test: `tests/test_foundation_owners.py` |
 
 Configurations and worlds written by 0.15.0 still load. `solve_cim` and
 `solve_bem` warn and delegate; their results carry the metadata of the backend

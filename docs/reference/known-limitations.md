@@ -42,10 +42,13 @@ shows what agrees with independent references and how well.
   wire line, which brings them to +1.1 % (+0.3 … +0.5 % with
   `kernel="point"`, the kernel `mom` uses); against one current per
   segment an encased mesh foundation is at most 0.6 % high, a rectangle
-  without cross-braces up to 2.15 % with one owner (the default of the
-  deprecated `concrete_model`) and 0.91 % with one owner per side (narrow
-  rectangles: 20 m × 1 m in wet concrete, 150 m × 7.5 m bare in 30 over
-  200 Ω·m). Surface
+  without cross-braces with a short side of at least 1 m up to 2.2 % with
+  one owner (the default of the deprecated `concrete_model`) and 0.9 %
+  with one owner per side (narrow rectangles: 16 m × 1 m in 0.2 m of wet
+  concrete, 150 m × 7.75 m bare in 30 over 200 Ω·m); narrower ones more
+  (10 m × 0.5 m: +2.9 % / +0.6 %). For shells as thick as 0.2 m, whose
+  outer radius is not thin against the segments (the engine warns), these
+  numbers carry about 0.2 percentage points of model uncertainty. Surface
   potentials near grids, meshes, stars, strip ends and bonded
   multi-electrode clusters are worse. Against the per-segment `mom`
   solution, with the default line kernel, touch voltage with the feet 1 m
@@ -135,27 +138,35 @@ shows what agrees with independent references and how well.
   electrode touches a layer its hemisphere does not reach, when more than
   half of the hemisphere lies in a layer the electrodes do not touch, and
   when a more conductive layer that no electrode touches lies above the
-  hemisphere radius or the electrodes' horizontal half-extent (user
-  decision Q23; −97 … +13 % before, a structural rule that also rejects
-  near-equal layers such as 100 over 120 Ω·m). It warns and is off by
-  −1 … +48 % where a spanned, untouched layer is more resistive, −16 … +16 %
-  for a more resistive layer within the half-extent, −44 … −78 % for a rod
-  that reaches 1 µm … 8 cm into a more conductive top layer, −22 … +23 % for
-  a wire within its radius of an interface (partial contact counts as
-  contact) and −55 … −75 % for two bonded rods of which one reaches into a
-  more conductive top layer. Just beyond the half-extent it is silent at
-  −9.8 … −0.8 % (rings), and an interface just below a horizontal electrode
-  buried almost as deep as its half-extent is covered by no rule (+34 % for
-  a 2 m ring 0.1 m above it in 1000/30 Ω·m, +250 % 7 mm above it). Its
-  closed forms: a strip deeper than half its length, a ring deeper than its
-  radius and a driven `MeshElectrode` raise; Dwight's rod formula ignores
-  the depth of the rod head (+3.9 % at 0.5 m … +10 % at 10 m) and Sverak's
-  grid formula reads +6 … +21 % high. `Engine.solve` reports the size of
-  `fem` worlds in segments of the integral engines, which `fem` does not use
-  (about 2 400 mesh nodes per driven cluster), and `fem` does not refuse a
-  world above `Engine.max_segments`. It ignores inductance, `return_to`,
-  junctions and concrete shells (`BackendCapabilityWarning` or
-  `BackendCapabilityError`; `groundfield.solver.fem`).
+  hemisphere radius or — with no more resistive layer in between — above
+  the electrodes' horizontal half-extent (user decision Q23; −97 … +30 %
+  before, a structural rule that also rejects near-equal layers such as
+  100 over 120 Ω·m). It warns and is off by −3 … +48 % where a spanned,
+  untouched layer is more resistive, −17 … +16 % for a more resistive
+  layer within the half-extent, −10 … +46 % for a conductive layer there
+  behind a more resistive one, −44 … −78 % for a rod that reaches
+  1 µm … 8 cm into a more conductive top layer, −21 … +30 % for a ring
+  lying exactly on an interface and −55 … −75 % for two bonded rods of
+  which one reaches into a more conductive top layer. Just beyond the
+  half-extent it is silent at −10.3 … −0.3 % (rings), and an interface
+  just below a horizontal electrode buried about as deep as its
+  half-extent or deeper, deeper than the hemisphere radius and the
+  half-extent, is covered by no rule (+34 % for a 2 m ring 0.1 m above it
+  in 1000/30 Ω·m, +250 % 7 mm above it; rings 1 cm above such an
+  interface: +191 … +308 % over a more conductive layer, −27 … −14 % over
+  a more resistive one). Its closed forms: a strip deeper than half its
+  length, a ring deeper than its diameter and a driven `MeshElectrode`
+  raise; Dwight's rod formula ignores the depth of the rod head
+  (+0.8 … +15 % for 1 … 20 m rods with the head 0.5 … 10 m deep) and
+  Sverak's grid formula reads high, the more the smaller the grid
+  (+51 … +67 % for a 1 m grid, +14 … +39 % for 4 m, +6.5 … +17 % for
+  20 m). `Engine.solve` reports the size of `fem` worlds in segments of
+  the integral engines, which `fem` does not use (2 400 mesh nodes per
+  driven cluster in homogeneous soil, up to about 4 100 with a 30 m and
+  6 200 with a 1 km layer stack), and `fem` does not refuse a world above
+  `Engine.max_segments`. It ignores inductance, `return_to`, junctions and
+  concrete shells (`BackendCapabilityWarning` or `BackendCapabilityError`;
+  `groundfield.solver.fem`).
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are
   represented by the image family and `solve_mutual_*` only. Each wire
   carries its own radial shell; where wires meet — the corners of a ring,
