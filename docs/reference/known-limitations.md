@@ -109,8 +109,10 @@ shows what agrees with independent references and how well.
   $\rho_2$. The weight presets per electrode class
   (`groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS`) are the q50 values of
   the AP2 hand-over, derived from the catalogue computed with groundfield
-  0.14.0 and not yet re-derived for this release, whose LV-network numbers
-  differ from 0.15.0 by several per cent (concrete shell, line kernel). A
+  0.14.0 and not yet re-derived for this release, which changes LV-network
+  results against 0.15.0 alone by up to +13.6 % in the input impedance and
+  +42 % in a house's $Z_G$ diagonal at $\rho_1$ = 30 Ω·m (concrete shell,
+  line kernel; *Numbers that change* in the changelog). A
   preset holds for its class only (the AP1 station with
   `"lv_group_4_p40"`: rms 39.9 %); even `"station"` leaves up to 15.7 % at
   $h_1$ = 5 m, where the station rods end 0.4 m above the interface. A
