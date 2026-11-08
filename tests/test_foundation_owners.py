@@ -37,6 +37,7 @@ import pickle
 import warnings
 
 import numpy as np
+import pydantic
 import pytest
 
 import groundfield as gf
@@ -384,6 +385,59 @@ def test_model_copy_that_sets_the_deprecated_value_warns() -> None:
         _ring().model_copy(update={"concrete_model": "lumped"})
     assert _concrete_model_warnings(caught) == []
     assert again.concrete_model == "distributed" and again.depth_m == 1.0
+
+
+# audit D2B-04
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("value", ["Lumped", "foo", None, 1])
+@pytest.mark.parametrize("deep", [False, True])
+def test_model_copy_rejects_an_invalid_concrete_model(
+    value: object, deep: bool
+) -> None:
+    """Pydantic stores ``model_copy(update=...)`` unchecked. Up to the
+    audit a value outside {"lumped", "distributed"} emitted the
+    *deprecation* warning, was stored as it was, built four strips (any
+    value but "lumped" did) and made the copy's JSON unloadable. It raises
+    like the constructor now, without a warning, and the receiver keeps its
+    value."""
+    spec = _ring()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(pydantic.ValidationError) as copied:
+            spec.model_copy(update={"concrete_model": value}, deep=deep)
+        with pytest.raises(pydantic.ValidationError) as constructed:
+            _ring(concrete_model=value)
+    assert _concrete_model_warnings(caught) == []
+
+    def _summary(error: pydantic.ValidationError) -> list[tuple]:
+        return [(e["type"], e["loc"], e["msg"]) for e in error.errors()]
+
+    assert _summary(copied.value) == _summary(constructed.value)
+    assert copied.value.title == constructed.value.title == "FoundationElectrodeSpec"
+    assert spec.concrete_model == "lumped"
+
+
+# audit D2B-04
+@pytest.mark.finding("10.12")
+def test_model_copy_stores_only_valid_concrete_model_values() -> None:
+    """Both valid values pass, "distributed" with one warning at the
+    caller's line; the copy round-trips through JSON."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        lumped = _ring().model_copy(update={"concrete_model": "lumped"})
+    assert _concrete_model_warnings(caught) == []
+    with pytest.warns(DeprecationWarning, match="concrete_model") as caught:
+        distributed = _ring().model_copy(update={"concrete_model": "distributed"})
+    assert [w.filename for w in caught if "concrete_model" in str(w.message)] == [
+        __file__
+    ]
+    for copy in (lumped, distributed):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            restored = FoundationElectrodeSpec.model_validate_json(
+                copy.model_dump_json()
+            )
+        assert restored == copy
 
 
 # user decision Q21

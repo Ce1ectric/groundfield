@@ -368,18 +368,22 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     def model_copy(
         self, *, update: Optional[Mapping[str, Any]] = None, deep: bool = False
     ) -> Self:
-        """Copy of the spec; warns when ``update`` sets ``concrete_model``.
+        """Copy of the spec; validates an ``update`` of ``concrete_model``.
 
-        Pydantic stores ``update`` without validation, so the deprecation
-        of :attr:`concrete_model` (user decision Q21) is checked here: an
-        ``update`` that sets a value other than ``"lumped"`` emits the
-        same :class:`DeprecationWarning` as the constructor. Copies that
-        leave the field alone (every copy the generators make) are silent.
+        Pydantic stores ``update`` without validation, so the deprecated
+        :attr:`concrete_model` (user decision Q21) is validated here like
+        in the constructor: a value outside ``{"lumped", "distributed"}``
+        raises the constructor's :class:`pydantic.ValidationError` (no
+        warning, nothing stored; audit D2B-04), ``"distributed"`` emits
+        the constructor's :class:`DeprecationWarning` at the caller's line
+        and ``"lumped"`` is silent. Copies that leave the field alone
+        (every copy the generators make) are silent.
 
         Parameters
         ----------
         update
-            Field values to change (not validated, as in pydantic).
+            Field values to change. ``concrete_model`` is validated; the
+            other fields are not (as in pydantic).
         deep
             Deep copy instead of a shallow one.
 
@@ -387,9 +391,20 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         -------
         FoundationElectrodeSpec
             The copy (the receiver is not changed).
+
+        Raises
+        ------
+        pydantic.ValidationError
+            If ``update`` sets ``concrete_model`` to a value other than
+            ``"lumped"`` or ``"distributed"``.
         """
-        if update and update.get("concrete_model", "lumped") != "lumped":
-            warn_external(_CONCRETE_MODEL_DEPRECATION, DeprecationWarning)
+        if update and "concrete_model" in update:
+            # The field's own validation: the Literal check raises, the
+            # field validator warns for the deprecated value.
+            checked = type(self).model_validate(
+                {"concrete_model": update["concrete_model"]}
+            )
+            update = {**update, "concrete_model": checked.concrete_model}
         return super().model_copy(update=update, deep=deep)
 
     @model_validator(mode="after")
