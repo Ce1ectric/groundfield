@@ -292,6 +292,42 @@ the following decisions refine it.
    floor (two coincident 50 m leads: 1.87 H). Close pairs that miss the
    closed forms — nearly parallel, crossing, skew pairs and T-junctions —
    are integrated semi-analytically (inner integral in closed form, graded
-   outer panels; 5e-11), with `touching="exact"`; `touching="quadrature"`
+   outer panels), with `touching="exact"`; `touching="quadrature"`
    keeps the 0.15.0 rule. The coaxial closed forms are evaluated in one
-   vectorised call per segment (audit A2C-5).
+   vectorised call per segment (audit A2C-5). The "5e-11" stated here
+   holds for directions that differ by more than 1e-6 rad; see item 9 for
+   the measured worst cases.
+9. **Wires beside each other, tiny angles (third adversarial audit,
+   A3C-1, A3C-2, A3C-4, A3C-5).** The touching rule of item 8 switched a
+   whole pair, and the decision depended on which segment was the row:
+   a V pair of 1 m and 0.5 m at 1.5° read 0.362 or 0.503 µH, the
+   generator's lumped in-line leads 0.134 or 0.127 Ω of measured
+   reactance (50 Hz); tilted V and X pairs whose far ends lay just
+   outside the cylinder kept a filament value above the self inductance
+   (an indefinite matrix, a two-wire loop with a negative reactance). The
+   rule now acts pointwise inside the Neumann integral: where a point of
+   one wire lies beside the other wire (its foot on the other axis falls
+   inside that wire) closer than $r_1 + r_2$, that distance is used —
+   touching wires — and where the thinner wire runs inside the thicker
+   one ($\rho + r_\text{thin} \le r_\text{thick}$, a core inside a
+   cable shield) the thicker radius: a filament inside a thin tube
+   couples to it as at the tube radius, which gives the coaxial loop
+   inductance $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per
+   metre instead of +36 %. Both one-sided integrals (inner integral in
+   closed form) are averaged, on end points in a fixed order, so every
+   order and direction of the segments gives the same value bit for bit;
+   the value is continuous in the geometry (4e-15 against an
+   independent quadrature), chain neighbours and bends turning by less
+   than 90° keep their closed forms, and 2000 random close
+   configurations gave no indefinite matrix (700 before). Equal radii
+   never count as one wire inside the other; for unequal radii the model
+   steps from "inside" to "side by side" where the thinner axis leaves
+   the thicker wire (the two describe different cables). Filaments from
+   one vertex below 0.81° use a cancellation-free form of Grover's vertex
+   formula (16 % off at 1.5e-6 rad before), and the close-pair rule takes
+   the crossing point of nearly parallel axes from a cross product
+   (9.5e-4 at 1e-8 rad before). Measured against mpmath: closed forms to
+   round-off, vertex pairs to 4e-10 in a general orientation, close pairs
+   5e-11 above 1e-6 rad and 1.0e-9 at 1e-8 rad; pairs inside the parallel
+   tolerance use the parallel closed form at the start offset (4.2e-9 for
+   wires 1 cm apart tilted by 1e-10 rad, 1.7e-5 at 1 µm).

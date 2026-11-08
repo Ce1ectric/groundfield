@@ -68,7 +68,7 @@ falls with the distance between the cables.
 | `earth_inductive_model` | Physics | Use it for |
 |---|---|---|
 | `"sommerfeld"` (default) | Sommerfeld/Pollaczek integral of the conducting half-space or layered earth over the real segment geometry; conductors in or above the surface plane are handled | every quantitative study |
-| `"carson_series"` | Carson's (1926) correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image | long parallel cables in homogeneous soil; not for conductors at an angle to each other or for layered soil |
+| `"carson_series"` | Carson's (1926) per-metre correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image: tiled per metre of overlap for near-parallel horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, inclination below 8.1°), across the surface through the field transmitted into the soil; every other pair and inclined segment gets the Sommerfeld correction of the same earth, so the result steps at 8.1° | long parallel cables in homogeneous soil; not for layered soil |
 | `"perfect_mirror"` | the earth as a perfect magnetic mirror, frequency independent | a fast diagnostic baseline only |
 
 With `"sommerfeld"`, set `sommerfeld_assembly="tabulated"` as above when
@@ -190,6 +190,12 @@ sections; it matters for harmonics up to 1 kHz.
 ## Things to know
 
 - A conductor without `inductance_model` is purely resistive.
+- Two conductors closer than the sum of their radii — cables in one
+  trench drawn on one axis, a service drop along its main — couple as
+  wires touching side by side; a thinner conductor inside a thicker one
+  (a core on the axis of a cable shield) couples as a filament inside a
+  tube, at the radius of the thicker one. Draw separate cables at least
+  $r_1 + r_2$ apart if they are not one cable.
 - The leads of a measurement (tutorial
   [T07](../tutorials/T07_fall_of_potential_measurement.ipynb)) couple
   like cables; lay the probe lead at an angle to the feed lead.

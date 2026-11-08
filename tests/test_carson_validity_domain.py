@@ -392,3 +392,27 @@ def test_carson_tiling_does_not_depend_on_the_segment_order(image: str) -> None:
         back = np.empty_like(dzp)
         back[np.ix_(perm, perm)] = sign[:, None] * sign[None, :] * dzp
         assert np.abs(back - dz).max() <= 1e-12 * np.abs(dz).max()
+
+
+# audit A3C-3: the documentation describes the validity domain
+@pytest.mark.finding("10.20")
+def test_docs_describe_the_carson_validity_domain() -> None:
+    """Audit round 3: the explanation and how-to pages still described
+    carson_series as Carson's correction "scaled by the geometric length of
+    each segment pair" (the heuristic removed in audit round 2)."""
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    pages = {
+        name: " ".join((root / "docs" / name).read_text(encoding="utf-8").split())
+        for name in ("explanation/earth-return.md", "how-to/inductive-coupling.md")
+    }
+    for text in pages.values():
+        assert "geometric length of each segment pair" not in text
+        assert "times the pair length" not in text
+        assert "8.1°" in text
+        assert "transmitted into the soil" in text
+    explanation = pages["explanation/earth-return.md"]
+    assert "Sommerfeld correction of a homogeneous earth" in explanation
+    assert "quarter skin depth" in explanation  # long-segment rule
+    assert "Wires beside each other" in explanation  # touching rule

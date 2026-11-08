@@ -224,8 +224,19 @@ _N_RHO_NODES = 24
 # frequency) gets a composite outer rule of 16 nodes per piece, and the
 # pair's S(rho) table nodes are spaced _RHO_NODE_SPACING apart in
 # t = ln(rho + z) (the 24 nodes of a short pair over a km-long range left
-# 1-2e-3). Measured against a refined reference: piece = delta/4 is
-# within 7e-5 (earth-return resistance) and 1e-6 (reactance).
+# 1-2e-3). Accuracy of a segment's self correction against a refined
+# reference (pieces delta/32, spacing 0.005, self-consistent to 2e-6),
+# measured at 50 Hz and 1 kHz for 0.3 ... 60 skin depths up to 3 km,
+# buried at 0.7 m in 100 Ohm m or in 1000/30 Ohm m (h1 = 5 m), overhead
+# at 10 m over 10 Ohm m (audit round 3): exact assembly within 5.9e-4 in
+# the earth-return resistance and 2.4e-4 in the reactance (worst: a 3 km
+# overhead line at 1 kHz; buried in 100 Ohm m 1.7e-4), the tabulated one
+# within 3.3e-4 / 9.6e-5. The table spacing dominates (half the spacing,
+# a quarter of the error); the piece length hardly matters. Below
+# delta/4 the historic single 16x16 rule is kept: within 4.8e-4 at
+# L = delta/4 (buried, 100 Ohm m), so the correction steps by 3.5e-4
+# (resistance) and 1.2e-5 (reactance) where the composite rule takes
+# over. (Audit round 2 stated 7e-5 / 1e-6 from one buried 3 km case.)
 _PIECE_SKIN_FRACTION = 0.25
 _RHO_NODE_SPACING = 0.08
 # Pieces per segment at most (the outer grid has (16 n)^2 nodes per

@@ -172,3 +172,69 @@ def test_an_extreme_segment_warns_instead_of_exhausting_memory() -> None:
     with pytest.warns(SommerfeldResolutionWarning, match="capped"):
         n = _n_pieces(100e3, om, earth)
     assert n == _MAX_PIECES
+
+
+def _self_correction(seg, earth, f, *, refined: bool = False, method="exact"):
+    """Self correction of one segment; ``refined``: pieces delta/32 and an
+    S(rho) node spacing of 0.005 (self-consistent to 2e-6)."""
+    import groundfield.coupling.sommerfeld_inductance as si
+
+    saved = si._PIECE_SKIN_FRACTION, si._RHO_NODE_SPACING
+    if refined:
+        si._PIECE_SKIN_FRACTION, si._RHO_NODE_SPACING = 1.0 / 32.0, 0.005
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SommerfeldResolutionWarning)
+            return build_sommerfeld_correction_matrices(
+                seg,
+                None,
+                omegas=[2.0 * math.pi * f],
+                earth=earth,
+                image="none",
+                method=method,
+            )[0, 0, 0]
+    finally:
+        si._PIECE_SKIN_FRACTION, si._RHO_NODE_SPACING = saved
+
+
+# audit A3C-4: the stated accuracy holds where it was measured
+@pytest.mark.parametrize(
+    ("name", "z", "rhos", "thicknesses", "re_bound", "im_bound"),
+    [
+        # overhead line at 10 m over 10 Ohm m: 4.8e-4 / 1.2e-4 (the auditor's
+        # test asked for the 1e-4 that audit round 2 had stated)
+        ("overhead_1km_10ohm", -10.0, (10.0,), (), 6e-4, 2.5e-4),
+        ("buried_1km_two_layer", 0.7, (1000.0, 30.0), (5.0,), 6e-4, 2.5e-4),
+        ("buried_1km_100ohm", 0.7, (100.0,), (), 2e-4, 1e-4),
+    ],
+)
+def test_long_segment_rule_meets_its_stated_accuracy(
+    name, z, rhos, thicknesses, re_bound, im_bound
+) -> None:
+    """A lumped 1 km conductor at 1 kHz against the refined rule. Audit
+    round 2 stated 7e-5 (resistance) and 1e-6 (reactance) from one buried
+    3 km case; measured worst cases (sommerfeld_inductance, comment of
+    _PIECE_SKIN_FRACTION): 5.9e-4 / 2.4e-4 for a 3 km overhead line."""
+    seg = np.array([[[0.0, 0.0, z], [1000.0, 0.0, z]]])
+    earth = LayeredEarth(rhos=rhos, thicknesses=thicknesses)
+    got = _self_correction(seg, earth, 1000.0)
+    ref = _self_correction(seg, earth, 1000.0, refined=True)
+    assert got.real == pytest.approx(ref.real, rel=re_bound, abs=0)
+    assert got.imag == pytest.approx(ref.imag, rel=im_bound, abs=0)
+
+
+# audit A3C-4
+def test_the_step_at_a_quarter_skin_depth_is_the_stated_one() -> None:
+    """Where the composite rule takes over (L = delta/4), the self
+    correction of a buried segment in 100 Ohm m at 1 kHz steps by 3.5e-4
+    (resistance) and 1.2e-5 (reactance): the error of the historic single
+    16x16 rule at the top of its range (4.8e-4 against the refined rule)."""
+    delta = math.sqrt(2.0 * 100.0 / (2.0 * math.pi * 1000.0 * MU0))
+    lo = _self_correction(
+        np.array([[[0, 0, 0.7], [0.25 * delta * (1 - 1e-7), 0, 0.7]]]), EARTH, 1000.0
+    )
+    hi = _self_correction(
+        np.array([[[0, 0, 0.7], [0.25 * delta * (1 + 1e-7), 0, 0.7]]]), EARTH, 1000.0
+    )
+    assert abs((hi - lo).real / lo.real) == pytest.approx(3.5e-4, rel=0.02)
+    assert abs((hi - lo).imag / lo.imag) == pytest.approx(1.2e-5, rel=0.05)

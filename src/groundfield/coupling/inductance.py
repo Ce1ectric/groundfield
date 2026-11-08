@@ -2364,7 +2364,11 @@ def build_carson_correction_matrix(
     - **Near-parallel pairs on distinct axes** (``|cosφ| > 0.99``) of
       near-horizontal segments: mutual correction per metre at the
       **perpendicular** horizontal axis separation, weighted by the
-      **axial overlap length** of the two segment intervals.
+      **axial overlap length** of the two segment intervals — measured
+      along the bisector of the two axes for a pair that is not exactly
+      parallel, so that the order of the segments does not matter
+      (audit round 3 of the calendar release; on the first segment's axis
+      the entries moved by up to 3.1 % of the largest one).
       Non-overlapping (e.g. staggered or end-to-end) pairs contribute
       zero. Two different conductors that overlap on one axis are
       wires lying side by side: the mutual at the distance of touching
@@ -2387,7 +2391,7 @@ def build_carson_correction_matrix(
       turning 8.1 deg against the feed lead changed the reading
       17.6-fold). At the domain boundary the result steps from the
       per-metre tiling to the Sommerfeld value, by the model error of
-      the tiling there (two 1 km leads 2 m apart, 1 kHz: 12 %).
+      the tiling there (two 1 km leads 2 m apart, 1 kHz: 13 %).
       Orthogonal pairs contribute zero by symmetry.
 
     Earth-conductivity sign convention

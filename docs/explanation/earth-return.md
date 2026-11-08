@@ -59,7 +59,7 @@ baseline it was derived for:
 | `earth_inductive_model` | Image of $L$ | $\Delta Z$ | Use |
 |---|---|---|---|
 | `"sommerfeld"` (default since 0.13.0) | none (free space) | $\Delta G = G - 1/R$: the full Sommerfeld/Pollaczek kernel minus the free-space part, integrated over every segment pair | quantitative $Z(f)$, any geometry, layered earth |
-| `"carson_series"` | anti-parallel (perfectly conducting earth) | Carson's per-metre correction $(\omega\mu_0/\pi)(P + jQ)$ times the pair length | long parallel lines over homogeneous earth; fast |
+| `"carson_series"` | anti-parallel (perfectly conducting earth) | Carson's per-metre correction $(\omega\mu_0/\pi)(P + jQ)$ per metre of overlap of near-parallel horizontal pairs; the Sommerfeld correction of the same homogeneous earth for every other pair ([below](#carson-on-its-own-baseline)) | long parallel lines over homogeneous earth; fast |
 | `"perfect_mirror"` | additive (magnetic mirror) | none | diagnostic baseline only |
 
 ### Sommerfeld (Pollaczek kernel)
@@ -114,6 +114,19 @@ What 2026.11 changed (ADR-0006 amendment):
   Bessel tables are built once per pair for the whole frequency set of a
   solve, bit-identical to single-frequency assemblies, with a bounded
   cache.
+- **Long segments** (10.24, audits of 2026.11). A single 16 × 16 rule over
+  a segment cannot resolve $e^{-\gamma R}$ along a segment much longer
+  than the skin depth (a lumped 3 km PEN read +13.4 % earth-return
+  resistance at 1 kHz in 100 Ω·m). A segment longer than a quarter skin
+  depth of the most conductive layer gets a composite outer rule (16
+  nodes per piece, at most 512 pieces, then a
+  `SommerfeldResolutionWarning`) and a denser $S(\rho)$ table. Against a
+  refined rule, at 50 Hz and 1 kHz up to 3 km, the correction of a
+  segment is within 5.9e-4 in the earth-return resistance and 2.4e-4 in
+  the reactance (worst: a 3 km overhead line at 10 m over 10 Ω·m at
+  1 kHz; buried in 100 Ω·m 1.7e-4); the shorter segments keep the
+  historic rule, which reaches 4.8e-4 at a quarter skin depth, so the
+  correction steps by 3.5e-4 where the composite rule takes over.
 - **Tabulated assembly** (opt-in, `Engine.sommerfeld_assembly="tabulated"`).
   Sub-segments are grouped by depth and one table of the spectral integral
   per pair of depth groups and frequency replaces the per-pair
@@ -129,9 +142,42 @@ Carson (1926) derived the earth-return impedance of a line over
 homogeneous earth as a correction to the impedance of the line and its
 **anti-parallel** image in a perfectly conducting plane, with the
 dimensionless parameter $a = D\sqrt{\omega\mu_0\sigma}$ ($D$ the distance
-between conductor and image, $2h$ for a self term). `carson_series`
-multiplies the per-metre correction by the geometric length of each
-segment pair.
+between conductor and image, $2h$ for a self term). It is a per-metre
+result for infinitely long parallel horizontal wires, so `carson_series`
+uses it only inside that validity domain (since the second adversarial
+audit of 2026.11, A2C-1):
+
+- **Near-parallel horizontal pairs on one side of the surface** —
+  $|\cos\varphi| > 0.99$ and both segments inclined by less than 8.1° —
+  get the per-metre correction at their horizontal axis distance, times
+  the length over which their projections overlap; the self term of a
+  horizontal segment is the per-metre value times its length. Pairs that
+  do not overlap (staggered, end to end) and collinear pieces of one wire
+  get none: the per-metre self value on the diagonal already contains the
+  rest of the same wire. The tiling converges under refinement. Two
+  conductors that overlap on one axis are wires lying side by side and
+  get the correction at the distance of touching wires, $r_i + r_j$.
+- **Pairs across the surface** — an overhead wire parallel to a buried
+  one — have no anti-parallel baseline (a perfect conductor screens the
+  soil). They couple through the field transmitted into the soil,
+  `carson_mixed_mutual_correction`: Carson's $J$ plus the bounded
+  remainder of the buried wire's attenuation (Ametani et al. 2009). The
+  solver used to treat the buried wire as an overhead wire at height
+  $|z|$, which gave 36 % too little mutual reactance for a lead 1 m above
+  a PEN at 0.7 m depth at 1 kHz.
+- **Everything else** — oblique pairs and every pair and self term of a
+  segment inclined by more than 8.1° (risers, sloping leads) — gets the
+  exact Sommerfeld correction of a homogeneous earth of the same
+  conductivity, moved onto the anti-parallel baseline. Up to the second
+  audit an oblique pair got $\sqrt{\ell_i\ell_j}\,|\cos\varphi|$ times
+  the per-metre value once per segment pair, which grew with the number of
+  segments (two 1 km leads at 9°: 20× the Sommerfeld coupling).
+
+At the 8.1° boundary the result steps from the per-metre tiling to the
+Sommerfeld value, by the error of the per-metre model there: 13 % for two
+1 km leads 2 m apart at 1 kHz, more for shorter leads (42 % for two 300 m
+leads at 50 Hz). That step is the price of keeping Carson's closed form
+where it is accurate; for oblique or short conductors use `sommerfeld`.
 
 Up to 0.15.0 the solver added Carson's correction to the **additive**
 image matrix of the perfect mirror, which roughly doubled the
@@ -172,11 +218,38 @@ the physics of buried conductors below 1 kHz; it was the default before
   inductive branch from start to end, coupled to all others; up to 0.15.0
   its inductance was silently dropped (a 300 m PEN read 0.0564 Ω at 1 kHz
   instead of 0.210 + 3.78j Ω).
-- **Close wires** (10.44). `conductors.find_close_wires` and `diagnose()`
-  report crossing, touching, interpenetrating and close wires; two
-  identical coincident conductors have no finite mutual inductance, which
-  is why the measurement generator lays in-line leads touching, not
-  coincident.
+- **Close pairs** (10.46). Pairs that miss the closed forms — nearly
+  parallel wires close together, crossing and skew pairs, a branch
+  starting on another segment — are integrated semi-analytically (inner
+  integral in closed form, outer Gauss–Legendre panels graded towards the
+  near-singular points); the 16 × 16 rule was +12 % at 10 cm and up to
+  +250 % at 1 cm for two 5 m segments. Measured against mpmath: 5e-11 for
+  directions that differ by more than 1e-6 rad, 1.0e-9 for filaments
+  crossing at 1e-8 rad; filaments from one vertex to round-off on
+  axis-parallel geometry (4e-10 in a general orientation).
+- **Wires beside each other** (10.46, audits of 2026.11). Where a point of
+  one wire lies beside another wire — its foot on that wire's axis falls
+  inside it — closer than the sum of the radii $r_i + r_j$, the filament
+  integral is meaningless: it diverges for coincident axes (two coincident
+  50 m leads read 1.87 H) and exceeds the self inductance once the wires
+  are closer than about their radius, which makes the inductance matrix
+  indefinite (a network whose service drops ran back along the PEN main
+  had a negative input reactance). There the distance from the other axis
+  is taken as $r_i + r_j$ — two wires touching side by side, as two
+  cables in one trench lie — pointwise inside the Neumann integral, both
+  one-sided integrals averaged. Where the thinner wire runs inside the
+  thicker one (a core on the axis of a cable shield) the thicker radius is
+  used instead: a filament inside a thin tube couples to it as at the tube
+  radius, and the loop gives the coaxial inductance
+  $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per metre. The
+  value does not depend on the order or the direction of the segments,
+  is continuous in the geometry, and leaves chain neighbours, bends
+  turning by less than 90° and pairs farther apart unchanged. For unequal
+  radii it steps where the thinner axis leaves the thicker wire, from
+  "inside" to "side by side": the two describe different cables. Equal
+  radii never count as one wire inside the other.
+- **Diagnostics** (10.44). `conductors.find_close_wires` and `diagnose()`
+  report crossing, touching, interpenetrating and close wires.
 
 ### Skin effect
 
