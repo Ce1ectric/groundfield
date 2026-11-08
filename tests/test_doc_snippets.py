@@ -125,9 +125,13 @@ LEGACY_PREFIXES: tuple[str, ...] = (
 )
 
 _FENCE_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<ticks>`{3,}|~{3,})(?P<info>.*)$")
-_SKIP_BLOCK_RE = re.compile(r"^\s*<!--\s*skip-doctest\s*(?::\s*(?P<reason>.*?))?\s*-->\s*$")
+_SKIP_BLOCK_RE = re.compile(
+    r"^\s*<!--\s*skip-doctest\s*(?::\s*(?P<reason>.*?))?\s*-->\s*$"
+)
 _MODULE_RE = re.compile(r"^\s*<!--\s*doctest-module\s*:\s*(?P<name>\S*)\s*-->\s*$")
-_ALLOW_RE = re.compile(r"^\s*<!--\s*doctest-allow-warnings\s*:\s*(?P<names>.*?)\s*-->\s*$")
+_ALLOW_RE = re.compile(
+    r"^\s*<!--\s*doctest-allow-warnings\s*:\s*(?P<names>.*?)\s*-->\s*$"
+)
 _SKIP_PAGE_RE = re.compile(r"<!--\s*skip-doctest-page\s*(?::\s*(?P<reason>.*?))?\s*-->")
 _CHECK_OPEN_RE = re.compile(r"^\s*<!--\s*doctest-check\s*$")
 _CHECK_CLOSE_RE = re.compile(r"^\s*-->\s*$")
@@ -198,7 +202,11 @@ def _markers_above(lines: list[str], fence_index: int) -> list[str]:
         if not line.strip():
             i -= 1
             continue
-        if _SKIP_BLOCK_RE.match(line) or _MODULE_RE.match(line) or _ALLOW_RE.match(line):
+        if (
+            _SKIP_BLOCK_RE.match(line)
+            or _MODULE_RE.match(line)
+            or _ALLOW_RE.match(line)
+        ):
             markers.append(line)
             i -= 1
             continue
@@ -223,10 +231,17 @@ def parse_page(path: Path) -> Page:
             while close < len(lines) and not _CHECK_CLOSE_RE.match(lines[close]):
                 close += 1
             if close >= len(lines):
-                out.marker_errors.append(f"line {i + 1}: doctest-check comment is never closed")
+                out.marker_errors.append(
+                    f"line {i + 1}: doctest-check comment is never closed"
+                )
                 break
             out.units.append(
-                Snippet(page=rel, kind="check", start_line=i + 2, source="\n".join(lines[i + 1 : close]))
+                Snippet(
+                    page=rel,
+                    kind="check",
+                    start_line=i + 2,
+                    source="\n".join(lines[i + 1 : close]),
+                )
             )
             i = close + 1
             continue
@@ -234,7 +249,11 @@ def parse_page(path: Path) -> Page:
         if match is None:
             i += 1
             continue
-        indent, ticks, info = match.group("indent"), match.group("ticks"), match.group("info")
+        indent, ticks, info = (
+            match.group("indent"),
+            match.group("ticks"),
+            match.group("info"),
+        )
         close = i + 1
         while close < len(lines):
             candidate = _FENCE_RE.match(lines[close])
@@ -247,28 +266,49 @@ def parse_page(path: Path) -> Page:
                 break
             close += 1
         if _fence_language(info) in _PY_LANGS:
-            source = "\n".join(line[len(indent) :] if line.startswith(indent) else line for line in lines[i + 1 : close])
+            source = "\n".join(
+                line[len(indent) :] if line.startswith(indent) else line
+                for line in lines[i + 1 : close]
+            )
             skip_reason, module_name, allowed = None, "", []
             for marker in _markers_above(lines, i):
                 if (m := _SKIP_BLOCK_RE.match(marker)) is not None:
                     skip_reason = (m.group("reason") or "").strip()
                     if not skip_reason:
-                        out.marker_errors.append(f"line {i + 1}: skip-doctest marker without a reason")
+                        out.marker_errors.append(
+                            f"line {i + 1}: skip-doctest marker without a reason"
+                        )
                 elif (m := _MODULE_RE.match(marker)) is not None:
                     module_name = m.group("name")
                     if not _MODULE_NAME_RE.match(module_name):
-                        out.marker_errors.append(f"line {i + 1}: invalid doctest-module name {module_name!r}")
+                        out.marker_errors.append(
+                            f"line {i + 1}: invalid doctest-module name {module_name!r}"
+                        )
                 elif (m := _ALLOW_RE.match(marker)) is not None:
-                    allowed.extend(n.strip() for n in m.group("names").split(",") if n.strip())
+                    allowed.extend(
+                        n.strip() for n in m.group("names").split(",") if n.strip()
+                    )
             if skip_reason is not None:
                 out.skipped.append((i + 1, skip_reason))
             elif module_name:
                 out.units.append(
-                    Snippet(page=rel, kind="module", start_line=i + 2, source=source, module_name=module_name)
+                    Snippet(
+                        page=rel,
+                        kind="module",
+                        start_line=i + 2,
+                        source=source,
+                        module_name=module_name,
+                    )
                 )
             else:
                 out.units.append(
-                    Snippet(page=rel, kind="block", start_line=i + 2, source=source, allowed_warnings=tuple(allowed))
+                    Snippet(
+                        page=rel,
+                        kind="block",
+                        start_line=i + 2,
+                        source=source,
+                        allowed_warnings=tuple(allowed),
+                    )
                 )
         i = close + 1
     return out
@@ -306,7 +346,9 @@ def _is_allowed(category: type[Warning], allowed: tuple[str, ...]) -> bool:
     return any(base.__name__ in allowed for base in category.__mro__)
 
 
-def _run_unit(unit: Snippet, namespace: dict[str, object]) -> list[warnings.WarningMessage]:
+def _run_unit(
+    unit: Snippet, namespace: dict[str, object]
+) -> list[warnings.WarningMessage]:
     """Execute one block or check; return the warnings it emitted."""
     code = compile(unit.source, f"{unit.page}:{unit.start_line}", "exec")
     with warnings.catch_warnings(record=True) as caught:
@@ -330,23 +372,31 @@ def snippet_sandbox(tmp_path, monkeypatch):
         # Module files of one page must not leak into the next page.
         for name in set(sys.modules) - modules_before:
             module = sys.modules.get(name)
-            if module is not None and str(getattr(module, "__file__", "") or "").startswith(str(tmp_path)):
+            if module is not None and str(
+                getattr(module, "__file__", "") or ""
+            ).startswith(str(tmp_path)):
                 del sys.modules[name]
 
 
-@pytest.mark.parametrize("page", EXECUTABLE_PAGES, ids=[p.page for p in EXECUTABLE_PAGES])
+@pytest.mark.parametrize(
+    "page", EXECUTABLE_PAGES, ids=[p.page for p in EXECUTABLE_PAGES]
+)
 def test_doc_snippets_execute(page: Page, snippet_sandbox: Path) -> None:
     """Every unmarked block runs and emits only allowed warnings."""
     if page.page_skip_reason is not None:
         pytest.skip(f"page opt-out: {page.page_skip_reason or 'no reason given'}")
     if page.page in SLOW_PAGES and not os.environ.get("GF_DOC_SNIPPETS_SLOW"):
-        pytest.skip(f"slow page ({SLOW_PAGES[page.page]}); set GF_DOC_SNIPPETS_SLOW=1 to run it")
+        pytest.skip(
+            f"slow page ({SLOW_PAGES[page.page]}); set GF_DOC_SNIPPETS_SLOW=1 to run it"
+        )
 
     namespace: dict[str, object] = {"__name__": "__doc_snippet__"}
     notes: list[str] = []
     for unit in page.units:
         if unit.kind == "module":
-            (snippet_sandbox / unit.module_name).write_text(unit.source + "\n", encoding="utf-8")
+            (snippet_sandbox / unit.module_name).write_text(
+                unit.source + "\n", encoding="utf-8"
+            )
             continue
         started = time.perf_counter()
         where = f"{page.page}:{unit.start_line} ({unit.kind})"
@@ -354,7 +404,9 @@ def test_doc_snippets_execute(page: Page, snippet_sandbox: Path) -> None:
             caught = _run_unit(unit, namespace)
         except BaseException as exc:  # noqa: BLE001 — report, don't mask
             if page.is_legacy:
-                notes.append(f"legacy page, failure not counted: {where}: {type(exc).__name__}")
+                notes.append(
+                    f"legacy page, failure not counted: {where}: {type(exc).__name__}"
+                )
                 continue
             raise AssertionError(
                 f"documentation snippet failed: {where}\n{type(exc).__name__}: {exc}\n"
@@ -363,7 +415,9 @@ def test_doc_snippets_execute(page: Page, snippet_sandbox: Path) -> None:
             ) from exc
         for message in caught:
             if not _belongs_to_page(message, f"{page.page}:"):
-                notes.append(f"third-party warning in {where}: {message.category.__name__}")
+                notes.append(
+                    f"third-party warning in {where}: {message.category.__name__}"
+                )
                 continue
             if _is_allowed(message.category, unit.allowed_warnings):
                 continue
@@ -394,7 +448,8 @@ def test_pages_that_need_value_checks_have_them() -> None:
     missing = [
         p.page
         for p in EXECUTABLE_PAGES
-        if p.page.startswith(REQUIRE_VALUE_CHECKS) and not any("assert" in u.source for u in p.executable)
+        if p.page.startswith(REQUIRE_VALUE_CHECKS)
+        and not any("assert" in u.source for u in p.executable)
     ]
     assert not missing, f"pages without a value check: {missing}"
 
@@ -412,7 +467,13 @@ def test_legacy_prefixes_are_old_layout_paths_only() -> None:
     """The non-strict legacy handling must never cover a page of the new
     layout (getting-started, tutorials, how-to, reference, explanation,
     adr, audit)."""
-    new_layout = ("docs/getting-started/", "docs/tutorials/", "docs/how-to/", "docs/reference/", "docs/explanation/")
+    new_layout = (
+        "docs/getting-started/",
+        "docs/tutorials/",
+        "docs/how-to/",
+        "docs/reference/",
+        "docs/explanation/",
+    )
     for prefix in LEGACY_PREFIXES:
         assert not prefix.startswith(new_layout), prefix
         assert prefix.startswith("docs/"), prefix
