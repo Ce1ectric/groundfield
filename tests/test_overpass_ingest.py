@@ -199,6 +199,126 @@ def test_malformed_payload_raises_overpass_error(payload: object) -> None:
         osm.parse_overpass_payload(payload, Projector(LAT, LON))  # type: ignore[arg-type]
 
 
+_SQUARE = _way(0)["geometry"]
+
+MALFORMED_ELEMENTS = {
+    "tags is a list": {
+        "type": "way",
+        "id": 1,
+        "tags": ["building"],
+        "geometry": _SQUARE,
+    },
+    "id is a list": {"type": "way", "id": [1], "tags": {"building": "yes"}},
+    "id is a bool": {"type": "way", "id": True, "tags": {"building": "yes"}},
+    "type is a number": {"type": 3, "id": 1},
+    "member is a string": {
+        "type": "relation",
+        "id": 2,
+        "tags": {"type": "multipolygon", "building": "yes"},
+        "members": ["x"],
+    },
+    "member ref is a string": {
+        "type": "relation",
+        "id": 2,
+        "tags": {"type": "multipolygon", "building": "yes"},
+        "members": [{"type": "way", "ref": "7", "role": "outer"}],
+    },
+    "building value is a list": {
+        "type": "way",
+        "id": 6,
+        "tags": {"building": ["yes"]},
+        "geometry": _SQUARE,
+    },
+    "geometry is an object": {"type": "way", "id": 7, "geometry": {"lat": 1.0}},
+    "vertex lat is a string": {
+        "type": "way",
+        "id": 8,
+        "geometry": [{"lat": "52.0", "lon": 10.0}] + _SQUARE[1:],
+    },
+}
+
+
+@pytest.mark.parametrize("label", sorted(MALFORMED_ELEMENTS))
+def test_malformed_elements_raise_overpass_error(label: str) -> None:
+    """Audit M1: such payloads crashed the parser with AttributeError /
+    TypeError instead of OverpassError."""
+    payload = {"elements": [MALFORMED_ELEMENTS[label]]}
+    with pytest.raises(osm.OverpassError, match="elements\\[0\\]"):
+        osm.parse_overpass_payload(payload, Projector(LAT, LON))
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon"), [(math.nan, LON), (1e308, LON), (95.0, LON), (LAT, 200.0)]
+)
+def test_non_finite_or_out_of_range_vertices_are_rejected(lat, lon) -> None:
+    """Audit M1: NaN / 1e308 / lat 95 vertices gave NaN-area footprints that
+    passed ``min_area_m2`` (NaN < x is False)."""
+    bad = dict(_way(0))
+    bad["geometry"] = [{"lat": lat, "lon": lon}] + _way(0)["geometry"][1:]
+    with pytest.raises(osm.OverpassError, match="vertex"):
+        osm.parse_overpass_payload(
+            {"elements": [bad]}, Projector(LAT, LON), min_area_m2=10.0
+        )
+
+
+def test_null_vertices_skip_the_element() -> None:
+    """A ``null`` vertex (a node Overpass could not place) is not malformed:
+    the element is skipped, the others are kept."""
+    partial = dict(_way(1))
+    partial["geometry"] = [None] + _way(1)["geometry"][1:]
+    fps = osm.parse_overpass_payload(
+        {"elements": [_way(0), partial]}, Projector(LAT, LON)
+    )
+    assert [fp.osm_id for fp in fps] == [100]
+
+
+def test_malformed_payload_is_neither_cached_nor_parsed(tmp_path) -> None:
+    """Audit M1: the payload was cached before it was parsed, so every later
+    call crashed from the poisoned cache without re-fetching."""
+    calls: list[int] = []
+
+    def fake_post(query, *, endpoint, timeout_s, max_retries):
+        calls.append(1)
+        return {"elements": [MALFORMED_ELEMENTS["tags is a list"]]}
+
+    for _ in range(2):
+        with pytest.raises(osm.OverpassError):
+            osm.query_and_project(LAT, LON, 100.0, cache_dir=tmp_path, _post=fake_post)
+    assert len(calls) == 2
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_malformed_cache_file_is_refetched(tmp_path) -> None:
+    query = osm.build_query(LAT, LON, 100.0)
+    path = tmp_path / f"{osm._hash_query(query)}.json"
+    path.write_text(
+        json.dumps({"elements": [MALFORMED_ELEMENTS["member is a string"]]}),
+        encoding="utf-8",
+    )
+    with pytest.warns(UserWarning, match="cache"):
+        fps, _ = osm.query_and_project(
+            LAT, LON, 100.0, cache_dir=tmp_path, _post=lambda q, **kw: PAYLOAD
+        )
+    assert len(fps) == 3
+    assert json.loads(path.read_text(encoding="utf-8")) == PAYLOAD
+
+
+def test_default_response_cap_bounds_the_decoded_size() -> None:
+    """Audit L7: 64 MiB of JSON decode to up to 1.6 GiB (25 x for a body of
+    empty objects). The default cap keeps the worst case below 0.5 GiB and
+    is 5 x the largest payload of the AP1 catalogue (3.0 MiB)."""
+    assert 3 * 2**20 * 5 <= osm.DEFAULT_MAX_RESPONSE_BYTES
+    assert 25 * osm.DEFAULT_MAX_RESPONSE_BYTES <= 2**29
+    response = FakeResponse(200, b"x" * (osm.DEFAULT_MAX_RESPONSE_BYTES + 1))
+    with pytest.raises(osm.OverpassError, match="cap"):
+        osm._post_overpass(
+            "q",
+            endpoint=osm.DEFAULT_ENDPOINT,
+            timeout_s=30,
+            _transport=lambda *a, **k: response,
+        )
+
+
 def test_truncated_cache_file_is_refetched(tmp_path) -> None:
     query = osm.build_query(LAT, LON, 100.0)
     path = tmp_path / f"{osm._hash_query(query)}.json"
