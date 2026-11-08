@@ -124,7 +124,10 @@ with a flat end is continuous in between. Against an axisymmetric model
 of the solid rod (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads
 +21 % with its tip at the interface, +7 % 1 mm above it, −4.6 % 1 mm
 below it, and within a few per cent beyond two radii, as anywhere else.
-`diagnose()` reports the same ends under `interface_contact`.
+`diagnose()` reports the same ends under `interface_contact`. An end
+that meets the end of another rod — a rod split at the interface into two
+pieces, the usual way to give each layer its own piece — has no free end
+face and is not reported.
 **Remedy:** keep rod ends a few wire radii from an interface, or bracket
 the result by moving the end by ±2 wire radii.
 

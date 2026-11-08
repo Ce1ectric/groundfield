@@ -863,23 +863,39 @@ def _rod_ends_near_interfaces(
     list of tuple
         ``(electrode, "head" | "tip", z_end, h, wire_radius)`` in m, one
         entry per end with ``|z_end - h| <= wire_radius`` (to round-off).
+        An end that meets the end of another rod (a rod split at the
+        interface into two pieces, the usual way to give each layer its
+        own piece) has no free end face and is not reported.
     """
     from groundfield.geometry.electrodes import RodElectrode
 
     if not interfaces:
         return []
-    out = []
-    for e in electrodes:
-        if not isinstance(e, RodElectrode):
-            continue
+    rods = [e for e in electrodes if isinstance(e, RodElectrode)]
+    ends = []
+    for e in rods:
+        x, y, head = (float(c) for c in e.position)
         a = float(e.wire_radius)
-        head = float(e.position[2])
-        for which, z_end in (("head", head), ("tip", head + float(e.length))):
-            for h in interfaces:
-                # Inclusive, to round-off: a tip placed exactly one radius
-                # from h (h = z_tip - a) is within reach.
-                if abs(z_end - float(h)) <= a * (1.0 + 1e-9):
-                    out.append((e.name, which, z_end, float(h), a))
+        ends.append((e.name, "head", x, y, head, a))
+        ends.append((e.name, "tip", x, y, head + float(e.length), a))
+
+    def _joined(k: int) -> bool:
+        name, _, x, y, z, a = ends[k]
+        for j, (other, _w, xo, yo, zo, ao) in enumerate(ends):
+            if j == k or other == name:
+                continue
+            reach = max(a, ao) * (1.0 + 1e-9)
+            if abs(z - zo) <= reach and math.hypot(x - xo, y - yo) <= reach:
+                return True
+        return False
+
+    out = []
+    for k, (name, which, _x, _y, z_end, a) in enumerate(ends):
+        for h in interfaces:
+            # Inclusive, to round-off: a tip placed exactly one radius
+            # from h (h = z_tip - a) is within reach.
+            if abs(z_end - float(h)) <= a * (1.0 + 1e-9) and not _joined(k):
+                out.append((name, which, z_end, float(h), a))
     return out
 
 
