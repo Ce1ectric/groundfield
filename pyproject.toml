@@ -89,7 +89,9 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.5.34"
-mkdocstrings = { extras = ["python"], version = "^0.26.1" }
+# >= 1.0.8: mkdocstrings 0.26 passes no `md` to pymdownx.highlight.Highlight
+# and crashes with pymdown-extensions 12 (TypeError in `mkdocs build`).
+mkdocstrings = { extras = ["python"], version = "^1.0.8" }
 # >= 11.0.1: fixes the six advisories of 10.21.2 (finding 10.04).
 pymdown-extensions = ">=11.0.1,<13"
 # Tutorials are executed notebooks under docs/tutorials/, rendered with
