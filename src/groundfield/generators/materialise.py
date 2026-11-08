@@ -48,10 +48,12 @@ electrode of length :math:`L` under a uniform leakage current. Both
 ``concrete_model`` values use this one mechanism (review findings
 10.12–10.14). The cross-braces of a mesh foundation are encased like its
 perimeter: a foundation earth electrode per DIN 18014 lies in the concrete
-together with its connections (user decision Q20 of 2026.11; up to then
-the braces kept the bare radius :math:`r_a` and no coefficient). Without a
-shell every wire keeps :math:`r_a`. Rods and other electrodes of a site
-are never encased.
+together with its connections (user decision Q20 of 2026.11). In 0.15.0
+every wire got :math:`r_b` but the braces no coefficient (and with
+``"lumped"`` no wire did); the bare braces (:math:`r_a`, no coefficient)
+of the 2026.11 development line before the decision were never released.
+Without a shell every wire keeps :math:`r_a`. Rods and other electrodes of
+a site are never encased.
 
 Owners of a foundation
 ----------------------
@@ -70,18 +72,20 @@ given as a rectangle or as a polygon, or on whether a shell is configured
   wire is +0.3 / +0.5 / +0.6 %. Against ``mom`` itself (point kernel) one
   owner per wire is +1.1 % with the default line kernel and +0.3 / +0.5 /
   +0.5 % with the point kernel;
-* a ``style="ring"`` rectangle has one owner per side with
-  ``"distributed"`` at every angle, also without a shell; with
-  ``"lumped"`` it is one owner (one
-  :class:`~groundfield.geometry.electrodes.GridMeshElectrode`, exactly the
-  lumped series resistance :math:`C/L_\text{perim}` of the shell) when
-  axis-aligned and one owner per side when rotated. For a perimeter one
-  owner and one per side differ by at most 0.06 % up to aspect ratio 4
-  and 0.3 % up to 50 for a bare ring in homogeneous soil, 0.16 % and
-  0.67 % over the soils of the AP1 grid, bare or in concrete of 30 to
-  1000 Ω·m. This choice is
-  all ``concrete_model`` still does, and the field is deprecated (user
-  decision Q21; ``"distributed"`` warns). (One closed polyline would make
+* a rectangle without cross-braces (``style="ring"``, or ``"mesh"`` with
+  ``n_x = n_y = 1``) has one owner per side with ``"distributed"`` at
+  every angle, also without a shell; with ``"lumped"`` it is one owner
+  (one :class:`~groundfield.geometry.electrodes.GridMeshElectrode`,
+  exactly the lumped series resistance :math:`C/L_\text{perim}` of the
+  shell) when axis-aligned and one owner per side when rotated. For a
+  perimeter one owner and one per side differ, over the soils of the AP1
+  grid for a 5 mm wire at 0.8 m, by less than 0.7 % up to aspect ratio 4
+  (sides up to 80 m) and 1.6 % up to 50 (up to 150 m, short side at least
+  1 m), bare or in concrete of 30 to 1000 Ω·m up to 0.2 m thick; bare or
+  with the default 5 cm shell by less than 0.33 % and 0.92 %, bare in
+  homogeneous soil by less than 0.09 % and 0.33 % (audit D2B-02). This
+  choice is all ``concrete_model`` still does, and the field is deprecated
+  (user decision Q21; ``"distributed"`` warns). (One closed polyline would make
   the rotated lumped ring one owner too, but the touch-voltage envelope
   of :mod:`groundfield.postprocess.safety` does not sample inside a
   closed polyline by default and would lose the interior point that
@@ -217,8 +221,10 @@ def concrete_shell(
 
     Notes
     -----
-    Up to the user decision Q20 of 2026.11 the braces of a mesh were bare
-    and the length was the perimeter (keyword ``perimeter_m``).
+    New in 2026.11. Before the user decision Q20 the development line kept
+    the braces of a mesh bare and took the perimeter as the length (keyword
+    ``perimeter_m``); 0.15.0 had no such function (its private
+    ``grounding._maybe_concrete_shell`` divided by the perimeter).
     """
     if spec.concrete_rho_ohm_m is None:
         return float(spec.wire_radius_m), 0.0, 0.0
@@ -327,12 +333,13 @@ def _materialise_foundation(
     """Foundation electrode: building outline or rectangle (ring or mesh).
 
     The owners follow the module rule (see *Owners of a foundation*): a
-    mesh is one owner per wire line; a ring is one owner per side, except
-    an axis-aligned ``"lumped"`` ring (one grid mesh); neither depends on
-    whether a shell is configured. The concrete shell (ADR-0012) is the
-    same for both ``concrete_model`` values: every wire of the foundation,
-    the cross-braces of a mesh included (user decision Q20, DIN 18014),
-    gets the radius :math:`r_b` and the coefficient :math:`C`.
+    mesh with cross-braces is one owner per wire line; a rectangle without
+    braces (a ring, or a mesh with ``n_x = n_y = 1``) is one owner per
+    side, except an axis-aligned ``"lumped"`` one (one grid mesh); neither
+    depends on whether a shell is configured. The concrete shell (ADR-0012)
+    is the same for both ``concrete_model`` values: every wire of the
+    foundation, the cross-braces of a mesh included (user decision Q20, DIN
+    18014), gets the radius :math:`r_b` and the coefficient :math:`C`.
     """
     depth = float(spec.depth_m)
     if spec.polygon_xy_m is not None:
@@ -508,8 +515,10 @@ def _materialise_foundation_wires(
     carries ``wire_radius`` (the shell's outer radius :math:`r_b` when a
     shell is configured, else the bare :math:`r_a`) and the concrete-shell
     coefficient ``concrete_shell_coefficient`` (user decision Q20: the
-    braces lie in the concrete too, DIN 18014; up to then they kept
-    :math:`r_a` and no coefficient, review finding 10.13).
+    braces lie in the concrete too, DIN 18014; in 0.15.0 they had
+    :math:`r_b` without a coefficient, and the 2026.11 development line
+    before the decision kept them at :math:`r_a` without one, review
+    finding 10.13).
 
     Notes
     -----

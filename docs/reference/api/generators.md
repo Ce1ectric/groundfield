@@ -68,11 +68,14 @@ meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
 +1.5 … +3.1 %) and depended on the orientation.
 `electrode_currents[<name>]` and `grounding_impedance(<name>)` therefore
 refer to the first wire; use `cluster_impedance` or the sum over the
-wires for the foundation. An axis-aligned ring stays one `grid_mesh`
+wires for the foundation. An axis-aligned rectangle without cross-braces
+(`style="ring"`, or `"mesh"` with `n_x = n_y = 1`) stays one `grid_mesh`
 electrode and a polygon outline one closed wire; the deprecated
-`concrete_model="distributed"` makes the axis-aligned ring one wire per
-side, at most 0.16 % apart up to aspect ratio 4 (drop the argument, see
-[Deprecations](../deprecations.md)); an outline
+`concrete_model="distributed"` makes the axis-aligned rectangle one wire
+per side, less than 0.7 % apart up to aspect ratio 4 and 1.6 % up to 50
+over the soils of the AP1 grid (scope and numbers on the
+[concrete-shell page](../../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces);
+drop the argument, see [Deprecations](../deprecations.md)); an outline
 narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with a
 warning, for both `foundation_outline="ombr"` and `"polygon"`.
 

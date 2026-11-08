@@ -63,20 +63,27 @@ __all__ = [
     "rod_circle",
 ]
 
-# User decision Q21 (2026.11). The numbers are the largest relative
-# difference of the input impedance between the two values (evidence of
-# stream d2gen: ring_owner_granularity.out, ring_owner_ap1_soils.out,
-# ring_owner_wet_concrete.out).
+# User decision Q21 (2026.11). The numbers are the envelope of the largest
+# relative difference of the input impedance between the two values over the
+# scope they name (audit D2B-02, evidence of stream f2gen:
+# q21_envelope_scan.py over 37 rectangles, 5 wire radii, 39 soils and
+# rho_c = 30 ... 1000 ohm m; q21_envelope_verify.py checks the largest cases
+# with Engine.solve and an independent BEM): 0.691 % (4 m x 1 m, t = 0.2 m,
+# rho_c = 30 ohm m, 1000/30 ohm m, h_1 = 5 m) and 1.529 % (20 m x 1 m, the
+# same shell, h_1 = 10 m); 0.321 % (80 m x 20 m) and 0.914 % (150 m x 7.5 m)
+# bare or with the default 5 cm shell (30/200 ohm m, h_1 = 5 m).
 _CONCRETE_MODEL_DEPRECATION = (
     "FoundationElectrodeSpec.concrete_model is deprecated. It no longer "
     "selects a concrete-shell model (both values put the same shell on the "
     "wires); it only chooses the uniform-current owners of an axis-aligned "
-    "style='ring' rectangle: one per side for 'distributed', one for the "
-    "whole ring for 'lumped' (the default). The two differ by at most "
-    "0.16 % up to aspect ratio 4 and 0.67 % up to aspect ratio 50 over the "
-    "soils of the AP1 grid, bare or in concrete of 30 to 1000 ohm m (0.06 % "
-    "and 0.3 % for a bare ring in homogeneous soil). The field will be "
-    "removed no earlier than groundfield "
+    "rectangle without cross-braces (style='ring', or style='mesh' with "
+    "n_x = n_y = 1): one per side for 'distributed', one for the whole "
+    "rectangle for 'lumped' (the default). Over the soils of the AP1 grid, "
+    "for a 5 mm wire at 0.8 m, bare or in concrete of 30 to 1000 ohm m up to "
+    "0.2 m thick, the two differ by less than 0.7 % up to aspect ratio 4 "
+    "(sides up to 80 m) and 1.6 % up to aspect ratio 50 (up to 150 m, short "
+    "side at least 1 m); bare or with the default 5 cm shell by less than "
+    "0.33 % and 0.92 %. The field will be removed no earlier than groundfield "
     f"{DEPRECATION_REMOVAL}; drop the argument."
 )
 
@@ -202,10 +209,12 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     kernel of ``mom``). A ``"ring"`` foundation is one
     :class:`groundfield.geometry.electrodes.GridMeshElectrode` with
     ``n_x = n_y = 1`` (one owner) when axis-aligned and one straight wire
-    per side when rotated; ``concrete_model="distributed"`` (deprecated)
-    makes the axis-aligned ring one wire per side as well, at most 0.16 %
-    apart up to aspect ratio 4 (0.06 % for a bare ring in homogeneous
-    soil). A ``polygon_xy_m`` outline is one closed polyline.
+    per side when rotated, and so is a ``"mesh"`` with ``n_x = n_y = 1``
+    (a rectangle without cross-braces); ``concrete_model="distributed"``
+    (deprecated) makes the axis-aligned rectangle one wire per side as
+    well, less than 0.7 % apart up to aspect ratio 4 and 1.6 % up to 50
+    (see :attr:`concrete_model` for the scope). A ``polygon_xy_m`` outline
+    is one closed polyline.
 
     With a shell (:attr:`concrete_rho_ohm_m`) every wire of the
     foundation, the cross-braces of a mesh included, is encased (DIN
@@ -305,7 +314,12 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "``style='mesh'`` foundation included, gets the outer radius "
             "r_b = r_a + t and the shell coefficient "
             "C = rho_c / (2 pi) ln(r_b / r_a) (user decision Q20 of "
-            "2026.11; up to then the braces stayed bare)."
+            "2026.11). In 0.15.0 every wire got r_b, but C only the "
+            "perimeter wires and only with ``concrete_model='distributed'`` "
+            "(``'lumped'`` kept the shell in a registry that only the TN "
+            "generator's service drops read); the bare braces (r_a, no C) "
+            "of the 2026.11 development line before that decision were "
+            "never released."
         ),
     )
     concrete_thickness_m: Union[float, AnyDistribution] = Field(
@@ -335,18 +349,21 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "becomes r_b = r_a + t; the solver adds C / ds to the diagonal "
             "of each segment, i.e. the lumped shell resistance C / L in "
             "series with the wire. It only chooses the uniform-current "
-            "owners of an axis-aligned ``style='ring'`` rectangle: "
-            '``"lumped"`` one grid-mesh owner for the whole ring, '
-            '``"distributed"`` one owner per side. The two differ by at '
-            "most 0.16 % up to aspect ratio 4 and 0.67 % up to 50 over the "
-            "soils of the AP1 grid, bare or in concrete of 30 to 1000 Ω·m "
-            "(0.06 % and 0.3 % for a bare ring in homogeneous soil). "
-            "Rotated rings (one owner per side), mesh "
-            "foundations (one owner per wire) and polygon outlines (one "
-            "closed wire) are the same for both values (audit A2G-04). Up "
-            "to 0.15.0 the lumped shell was a registry entry that only the "
-            "TN generator's PEN service drops read (review findings "
-            "10.12-10.14)."
+            "owners of an axis-aligned rectangle without cross-braces "
+            "(``style='ring'``, or ``style='mesh'`` with ``n_x = n_y = 1``): "
+            '``"lumped"`` one grid-mesh owner for the whole rectangle, '
+            '``"distributed"`` one owner per side. Over the soils of the '
+            "AP1 grid, for a 5 mm wire at 0.8 m, bare or in concrete of 30 "
+            "to 1000 Ω·m up to 0.2 m thick, the two differ by less than "
+            "0.7 % up to aspect ratio 4 (sides up to 80 m) and 1.6 % up to "
+            "aspect ratio 50 (up to 150 m, short side at least 1 m); bare or "
+            "with the default 5 cm shell by less than 0.33 % and 0.92 % "
+            "(audit D2B-02). Rotated rectangles (one owner per side), "
+            "meshes with cross-braces (one owner per wire) and polygon "
+            "outlines (one closed wire) are the same for both values (audit "
+            "A2G-04). Up to 0.15.0 the lumped shell was a registry entry "
+            "that only the TN generator's PEN service drops read (review "
+            "findings 10.12-10.14)."
         ),
     )
 
