@@ -463,14 +463,12 @@ def test_ring_footprint_is_the_exact_circle() -> None:
 _SIDE = 10.0
 
 
-def _generated_foundation(
-    angle_deg: float, style: str = "mesh", concrete_model: str = "lumped"
-):
+def _generated_foundation(angle_deg: float, style: str = "mesh"):
     """10 m x 10 m foundation from the generators (2 x 2 mesh, 0.8 m).
 
-    The generator builds a mesh at every angle as bonded wires ``<name>``,
-    ``<name>_w1`` ... (one owner per wire, 10.39, audit A2G-04); a ring is
-    one wire (``"lumped"``) or four (``"distributed"``).
+    The generator builds a mesh at every angle, and a ring at any angle
+    but 0, from bonded straight wires ``<name>``, ``<name>_w1`` ...
+    (10.39, audit A2G-04); an axis-aligned ring is one ``grid_mesh``.
     """
     from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
 
@@ -484,7 +482,6 @@ def _generated_foundation(
                 n_x=2,
                 n_y=2,
                 depth_m=0.8,
-                concrete_model=concrete_model,
             )
         ]
     ).build_at(world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0))
@@ -560,9 +557,7 @@ def test_envelope_of_a_rotated_foundation_stays_outside_and_samples_its_cells() 
 
 @pytest.mark.finding("10.21")
 def test_any_wire_name_of_a_rotated_foundation_selects_the_whole_foundation() -> None:
-    world, result, anchor = _generated_foundation(
-        30.0, style="ring", concrete_model="distributed"
-    )
+    world, result, anchor = _generated_foundation(30.0, style="ring")
     names = [e.name for e in world.electrodes]
     assert names == [anchor, f"{anchor}_w1", f"{anchor}_w2", f"{anchor}_w3"]
     with warnings.catch_warnings():

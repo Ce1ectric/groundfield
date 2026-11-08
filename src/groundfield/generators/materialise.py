@@ -58,23 +58,30 @@ given as a rectangle or as a polygon, or on whether a shell is configured
 
 * a mesh foundation (cross-braces) has one owner per wire line, for both
   ``concrete_model`` values. One owner over perimeter and braces puts the
-  same current density on both and is +1.5 / +2.4 / +3.1 % high for
-  2 × 2 / 3 × 3 / 4 × 4 cells against the equipotential reference (one
-  current per segment, ``mom``); one owner per wire is +0.3 / +0.4 /
-  +0.5 %;
-* a perimeter-only foundation (``style="ring"`` or a building outline)
-  has one owner for the closed perimeter with ``"lumped"`` (exactly the
-  lumped series resistance :math:`C/L_\text{perim}` of the shell) and one
-  owner per straight wire (side or polygon edge) with ``"distributed"``;
-  for a perimeter the two differ by at most 0.06 % at aspect ratios up
-  to 4 (0.3 % at 50).
+  same current density on both and is +1.6 / +2.5 / +3.2 % high for
+  2 × 2 / 3 × 3 / 4 × 4 cells (10 / 20 / 30 m, line kernel, 1 m segments)
+  against the equipotential reference of the same segments (one owner
+  per segment; with the point kernel identical to ``mom``); one owner per
+  wire is +0.3 / +0.5 / +0.6 %;
+* a ``style="ring"`` rectangle has one owner per side with
+  ``"distributed"`` at every angle, also without a shell; with
+  ``"lumped"`` it is one owner (one
+  :class:`~groundfield.geometry.electrodes.GridMeshElectrode`, exactly the
+  lumped series resistance :math:`C/L_\text{perim}` of the shell) when
+  axis-aligned and one owner per side when rotated. For a perimeter one
+  owner and one per side differ by at most 0.06 % up to aspect ratio 4
+  (0.3 % at 10 to 50). (One closed polyline would make the rotated lumped
+  ring one owner too, but the touch-voltage envelope of
+  :mod:`groundfield.postprocess.safety` does not sample inside a closed
+  polyline by default and would lose the interior point that decides the
+  envelope of rings of 20 m and more.)
+* a building outline (``polygon_xy_m``) is one closed polyline (one
+  owner) for both values.
 
-Every owner set of a foundation is bonded to its first wire, the anchor:
+A foundation of several wires is bonded to its first wire, the anchor:
 the local :math:`-y` side of a rectangle, which starts at the local
 :math:`(-d_x/2, -d_y/2)` corner (the connection point of incoming
-conductors), or the first edge of a polygon. An axis-aligned lumped ring
-stays one :class:`~groundfield.geometry.electrodes.GridMeshElectrode`
-(connection point at its centre).
+conductors).
 """
 
 from __future__ import annotations
@@ -301,23 +308,17 @@ def _materialise_foundation(
     """Foundation electrode: building outline or rectangle (ring or mesh).
 
     The owners follow the module rule (see *Owners of a foundation*): a
-    mesh is one owner per wire line; a perimeter-only rectangle is one
-    owner (``"lumped"``: a grid mesh at 0°, else one closed polyline) or
-    one per side (``"distributed"``), at any orientation and whether or
-    not a shell is configured. The concrete shell (ADR-0012) is the same
-    for both ``concrete_model`` values: every encased (perimeter) wire
-    gets the radius :math:`r_b` and the coefficient :math:`C`;
+    mesh is one owner per wire line; a ring is one owner per side, except
+    an axis-aligned ``"lumped"`` ring (one grid mesh); neither depends on
+    whether a shell is configured. The concrete shell (ADR-0012) is the
+    same for both ``concrete_model`` values: every encased (perimeter)
+    wire gets the radius :math:`r_b` and the coefficient :math:`C`;
     cross-braces keep the bare radius.
     """
     depth = float(spec.depth_m)
     if spec.polygon_xy_m is not None:
         _materialise_polygon_foundation(
-            world,
-            spec,
-            centre_xy=centre_xy,
-            depth=depth,
-            name=name,
-            bond_conductor_type=bond_conductor_type,
+            world, spec, centre_xy=centre_xy, depth=depth, name=name
         )
         return
     if spec.size_xy_m is not None:
@@ -341,17 +342,17 @@ def _materialise_foundation(
         spec.orientation_deg or 0.0, dx, dy, nx, ny
     )
     braced = nx > 1 or ny > 1
-    if not braced and spec.concrete_model == "lumped":
-        _materialise_closed_perimeter(
+    if angle_deg == 0.0 and not braced and spec.concrete_model == "lumped":
+        create_electrode(
             world,
-            centre_xy=centre_xy,
-            depth=depth,
-            dx=dx,
-            dy=dy,
-            angle_deg=angle_deg,
+            "grid_mesh",
             name=name,
+            corner=(centre_xy[0] - dx / 2.0, centre_xy[1] - dy / 2.0, depth),
+            size=(dx, dy),
+            n_x=1,
+            n_y=1,
             wire_radius=effective_radius,
-            concrete_shell_coefficient=shell_coefficient,
+            concrete_shell_coefficient_ohm_m=shell_coefficient,
         )
         return
     _materialise_foundation_wires(
@@ -368,58 +369,6 @@ def _materialise_foundation(
         brace_wire_radius=float(spec.wire_radius_m),
         concrete_shell_coefficient=shell_coefficient,
         bond_conductor_type=bond_conductor_type,
-    )
-
-
-def _materialise_closed_perimeter(
-    world: World,
-    *,
-    centre_xy: tuple[float, float],
-    depth: float,
-    dx: float,
-    dy: float,
-    angle_deg: float,
-    name: str,
-    wire_radius: float,
-    concrete_shell_coefficient: float,
-) -> None:
-    """Perimeter of a rectangle as one owner.
-
-    Axis-aligned: one :class:`~groundfield.geometry.electrodes.GridMeshElectrode`
-    with ``n_x = n_y = 1`` (the historic realisation). Rotated: one
-    closed :class:`~groundfield.geometry.electrodes.PolylineElectrode`
-    through the corners, starting at the local :math:`(-d_x/2, -d_y/2)`
-    corner; its edges are discretised exactly like the grid mesh's
-    perimeter wires.
-    """
-    cx, cy = centre_xy
-    if angle_deg == 0.0:
-        create_electrode(
-            world,
-            "grid_mesh",
-            name=name,
-            corner=(cx - dx / 2.0, cy - dy / 2.0, depth),
-            size=(dx, dy),
-            n_x=1,
-            n_y=1,
-            wire_radius=wire_radius,
-            concrete_shell_coefficient_ohm_m=concrete_shell_coefficient,
-        )
-        return
-    cos_a = math.cos(math.radians(angle_deg))
-    sin_a = math.sin(math.radians(angle_deg))
-    local = [(-dx / 2, -dy / 2), (dx / 2, -dy / 2), (dx / 2, dy / 2), (-dx / 2, dy / 2)]
-    create_electrode(
-        world,
-        "polyline",
-        name=name,
-        vertices=[
-            (cos_a * lx - sin_a * ly + cx, sin_a * lx + cos_a * ly + cy, depth)
-            for lx, ly in local
-        ],
-        closed=True,
-        wire_radius=wire_radius,
-        concrete_shell_coefficient_ohm_m=concrete_shell_coefficient,
     )
 
 
@@ -465,14 +414,8 @@ def _materialise_polygon_foundation(
     centre_xy: tuple[float, float],
     depth: float,
     name: str,
-    bond_conductor_type: str,
 ) -> None:
-    """Foundation along the building outline.
-
-    ``"lumped"``: one closed polyline (one owner). ``"distributed"``: one
-    straight wire per edge, bonded to the first (one owner per edge, as
-    the sides of a rectangle).
-    """
+    """Foundation along the building outline (one closed polyline)."""
     cx, cy = centre_xy
     verts = clean_polygon(spec.polygon_xy_m, min_edge_m=MIN_POLYGON_EDGE_M)
     if len(verts) < 3:
@@ -487,32 +430,15 @@ def _materialise_polygon_foundation(
         x1, y1 = verts[(k + 1) % len(verts)]
         perimeter += math.hypot(x1 - x0, y1 - y0)
     effective_radius, _, shell_coefficient = concrete_shell(spec, perimeter_m=perimeter)
-    points = [(cx + vx, cy + vy, depth) for vx, vy in verts]
-    if spec.concrete_model != "distributed":
-        create_electrode(
-            world,
-            "polyline",
-            name=name,
-            vertices=points,
-            closed=True,
-            wire_radius=effective_radius,
-            concrete_shell_coefficient_ohm_m=shell_coefficient,
-        )
-        return
-    sub_names: list[str] = []
-    for k, start in enumerate(points):
-        sub_name = name if k == 0 else f"{name}_w{k}"
-        create_electrode(
-            world,
-            "strip",
-            name=sub_name,
-            start=start,
-            end=points[(k + 1) % len(points)],
-            wire_radius=effective_radius,
-            concrete_shell_coefficient_ohm_m=shell_coefficient,
-        )
-        sub_names.append(sub_name)
-    _bond_to_anchor(world, name, sub_names, bond_conductor_type)
+    create_electrode(
+        world,
+        "polyline",
+        name=name,
+        vertices=[(cx + vx, cy + vy, depth) for vx, vy in verts],
+        closed=True,
+        wire_radius=effective_radius,
+        concrete_shell_coefficient_ohm_m=shell_coefficient,
+    )
 
 
 def _bond_to_anchor(

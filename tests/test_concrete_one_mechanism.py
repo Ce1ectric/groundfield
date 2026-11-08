@@ -121,15 +121,12 @@ def test_lumped_shell_is_a_coefficient_on_the_encased_wire() -> None:
 @pytest.mark.finding("10.12")
 @pytest.mark.parametrize("rho_1", [30.0, 100.0, 1000.0])
 def test_lumped_polygon_foundation_equals_the_distributed_one(rho_1: float) -> None:
-    """A polygon ring is one closed wire (lumped) or one wire per edge
-    (distributed, audit A2G-04); both carry the shell and agree within
-    0.14 % on the diagonal and 0.6 % off it here (ADR-0012: 2 %). v0.15.0
-    dropped the lumped shell in ``solve_mutual_matrix``: Z11 -28.6 / -15.2
-    / -2.7 % against the distributed model."""
+    """A polygon ring is one closed wire: both models are the same world.
+    v0.15.0 dropped the lumped shell in ``solve_mutual_matrix``: Z11
+    -28.6 / -15.2 / -2.7 % against the distributed model."""
     z_l, _ = _pair_zg("lumped", 100.0, rho_1=rho_1, polygon_xy_m=POLY)
     z_d, _ = _pair_zg("distributed", 100.0, rho_1=rho_1, polygon_xy_m=POLY)
-    assert np.allclose(np.diag(z_l), np.diag(z_d), rtol=2e-3, atol=0.0)
-    assert np.allclose(z_l, z_d, rtol=1e-2, atol=0.0)
+    assert np.allclose(z_l, z_d, rtol=1e-12, atol=0.0)
 
 
 @pytest.mark.finding("10.12")

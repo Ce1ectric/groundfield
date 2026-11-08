@@ -13,20 +13,20 @@ reference (one owner per segment; equal to ``mom`` point matching) it is
 +1.5 / +2.4 % high for 2 x 2 / 3 x 3 cells, one owner per wire +0.3 /
 +0.4 % (evidence ``mesh_owner_granularity.out``).
 
-Rule since 2026.11 (one owner set per structure, independent of the
-orientation, of the way the outline is described and of whether a shell is
+Rule since 2026.11 (the owners never depend on whether a shell is
 configured):
 
-* a mesh foundation (cross-braces) has one owner per wire line;
-* a perimeter-only foundation (``style="ring"`` or a ``polygon_xy_m``
-  outline) has one owner for the closed perimeter with
-  ``concrete_model="lumped"`` and one owner per straight wire (side or
-  polygon edge) with ``"distributed"``.
+* a mesh foundation (cross-braces) has one owner per wire line at every
+  angle, for both ``concrete_model`` values;
+* a ring foundation has one owner per side with ``"distributed"`` at every
+  angle; with ``"lumped"`` one ``grid_mesh`` owner when axis-aligned and
+  one owner per side when rotated (at most 0.06 % apart up to aspect
+  ratio 4, 0.24 % at 10);
+* a ``polygon_xy_m`` outline is one closed polyline for both values.
 """
 
 from __future__ import annotations
 
-import math
 import warnings
 
 import numpy as np
@@ -170,19 +170,17 @@ def test_mesh_foundation_does_not_depend_on_its_orientation(
 
 # audit A2G-04
 @pytest.mark.finding("10.39")
-@pytest.mark.parametrize("model", ["lumped", "distributed"])
 @pytest.mark.parametrize("rho_c", [None, 1000.0])
-def test_ring_foundation_does_not_depend_on_its_orientation(
-    model: str, rho_c: float | None
+def test_distributed_ring_does_not_depend_on_its_orientation(
+    rho_c: float | None,
 ) -> None:
-    """A lumped ring was one owner at 0 deg and four at 30 deg: +0.24 % for a
-    20 x 2 m ring (0.30 % at aspect ratio 50)."""
+    """A bare distributed ring was one owner at 0 deg and four at 30 deg."""
     values = [
         _z(
             _site(
                 _ring(
                     orientation_deg=angle,
-                    concrete_model=model,
+                    concrete_model="distributed",
                     concrete_rho_ohm_m=rho_c,
                 )
             )
@@ -194,21 +192,15 @@ def test_ring_foundation_does_not_depend_on_its_orientation(
 
 # audit A2G-04
 @pytest.mark.finding("10.39")
-@pytest.mark.parametrize("model", ["lumped", "distributed"])
-@pytest.mark.parametrize("angle", [0.0, 30.0])
-def test_rectangle_as_polygon_equals_the_rectangle_spec(
-    model: str, angle: float
-) -> None:
-    """The same rectangle described by ``polygon_xy_m`` or by
-    ``size_xy_m`` / ``orientation_deg`` is the same model (distributed: one
-    owner per side, also for the polygon)."""
-    c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
-    corners = [(-10.0, -1.0), (10.0, -1.0), (10.0, 1.0), (-10.0, 1.0)]
-    polygon = tuple((c * x - s * y, s * x + c * y) for x, y in corners)
-    shell = {"concrete_rho_ohm_m": 500.0, "concrete_model": model}
-    z_polygon = _z(_site(_ring(polygon_xy_m=polygon, **shell)))
-    z_spec = _z(_site(_ring(orientation_deg=angle, **shell)))
-    assert z_polygon == pytest.approx(z_spec, rel=1e-6)
+def test_lumped_ring_keeps_its_axis_aligned_single_owner() -> None:
+    """Documented exception: a rotated lumped ring stays one owner per side
+    (a closed polyline would drop the interior sample of the default
+    touch-voltage envelope, which decides it for rings of 20 m and more).
+    The difference to the single axis-aligned owner is 0.24 % for this
+    20 x 2 m ring (aspect ratio 10)."""
+    z_axis = _z(_site(_ring()))
+    z_turned = _z(_site(_ring(orientation_deg=30.0)))
+    assert 0.0 < z_axis / z_turned - 1.0 < 3e-3
 
 
 # ---------------------------------------------------------------------
@@ -241,29 +233,24 @@ def test_mesh_foundation_is_one_owner_per_wire(
 @pytest.mark.finding("10.39")
 @pytest.mark.parametrize("angle", [None, 30.0])
 @pytest.mark.parametrize("rho_c", [None, 150.0])
-@pytest.mark.parametrize(
-    ("model", "kinds"),
-    [("lumped", None), ("distributed", ["strip"] * 4)],
-)
-def test_ring_owners_follow_the_concrete_model_only(
-    angle: float | None, rho_c: float | None, model: str, kinds: list | None
-) -> None:
+@pytest.mark.parametrize("model", ["lumped", "distributed"])
+def test_ring_owners(angle: float | None, rho_c: float | None, model: str) -> None:
     world = _site(
         _ring(orientation_deg=angle, concrete_rho_ohm_m=rho_c, concrete_model=model)
     )
     owners = _owners(world)
-    if kinds is None:  # lumped: one owner for the closed perimeter
-        expected = ["grid_mesh"] if angle is None else ["polyline"]
-        assert [e.kind for e in owners] == expected
+    if model == "lumped" and angle is None:
+        assert [e.kind for e in owners] == ["grid_mesh"]
     else:
-        assert [e.kind for e in owners] == kinds
+        assert [e.kind for e in owners] == ["strip"] * 4
     assert sum(e.total_length() for e in owners) == pytest.approx(44.0)
 
 
 # audit A2G-04
 @pytest.mark.finding("10.39")
 @pytest.mark.parametrize("model", ["lumped", "distributed"])
-def test_polygon_owners_follow_the_concrete_model(model: str) -> None:
+@pytest.mark.parametrize("rho_c", [None, 150.0])
+def test_polygon_outline_is_one_closed_wire(model: str, rho_c: float | None) -> None:
     outline = (
         (-6.0, -4.5),
         (6.0, -4.5),
@@ -272,13 +259,12 @@ def test_polygon_owners_follow_the_concrete_model(model: str) -> None:
         (-1.0, 1.5),
         (-6.0, 1.5),
     )
-    world = _site(_ring(polygon_xy_m=outline, concrete_model=model))
-    owners = _owners(world)
-    if model == "lumped":
-        assert [e.kind for e in owners] == ["polyline"] and owners[0].closed
-    else:
-        assert [e.kind for e in owners] == ["strip"] * 6
-    assert sum(e.total_length() for e in owners) == pytest.approx(42.0)
+    world = _site(
+        _ring(polygon_xy_m=outline, concrete_model=model, concrete_rho_ohm_m=rho_c)
+    )
+    (owner,) = _owners(world)
+    assert owner.kind == "polyline" and owner.closed
+    assert owner.total_length() == pytest.approx(42.0)
 
 
 # ---------------------------------------------------------------------

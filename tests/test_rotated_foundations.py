@@ -113,19 +113,12 @@ def test_rotated_mesh_matches_grid_mesh_segment_counts() -> None:
         assert counts[0] == counts[1], (ds, counts)
 
 
-@pytest.mark.parametrize(
-    ("model", "kinds"), [("lumped", ["polyline"]), ("distributed", ["strip"] * 4)]
-)
-def test_ring_style_rotated_foundation_keeps_its_owners(
-    model: str, kinds: list
-) -> None:
-    """A rotated ring is one closed wire (``"lumped"``, as at 0 deg) or its
-    four sides (``"distributed"``); up to 2026.11 always four strips."""
+def test_ring_style_rotated_foundation_keeps_its_four_strips() -> None:
     spec = FoundationElectrodeSpec(
-        size_xy_m=(12.0, 9.0), orientation_deg=30.0, style="ring", concrete_model=model
+        size_xy_m=(12.0, 9.0), orientation_deg=30.0, style="ring"
     )
     _, _, world = _solve(spec, 1.0)
-    assert [e.kind for e in world.electrodes] == kinds
+    assert [e.kind for e in world.electrodes] == ["strip"] * 4
 
 
 # ---------------------------------------------------------------------

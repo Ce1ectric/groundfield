@@ -127,12 +127,10 @@ def test_osm_placement_round_trips_via_placement_union() -> None:
 
 
 def test_rotated_foundation_registers_perimeter_strips() -> None:
-    """A rotated ring-style foundation (style='ring', orientation=30 deg,
-    ``concrete_model="distributed"``) must register exactly four
-    :class:`StripElectrode` primitives (the four perimeter sides) plus
-    three bonds, all sharing the spec-level anchor name as the first
-    sub-electrode. (A ``"lumped"`` ring is one closed wire at any angle,
-    audit A2G-04.)
+    """A rotated ring-style foundation (style='ring', orientation=30 deg)
+    must register exactly four :class:`StripElectrode` primitives
+    (the four perimeter sides) plus three bonds, all sharing the
+    spec-level anchor name as the first sub-electrode.
     """
     world = create_world(
         name="rot_found_ring",
@@ -145,7 +143,6 @@ def test_rotated_foundation_registers_perimeter_strips() -> None:
                 size_xy_m=(10.0, 6.0),
                 depth_m=0.8,
                 orientation_deg=30.0,
-                concrete_model="distributed",
             )
         ],
     )
@@ -279,7 +276,6 @@ def _build_tn_with_osm_placement(
                     style="ring",
                     size_m=8.0,
                     depth_m=0.8,
-                    concrete_model="distributed",  # one owner per side
                 )
             ],
         ),
