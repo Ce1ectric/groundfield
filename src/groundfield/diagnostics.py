@@ -698,7 +698,7 @@ def check_segment_budget(
     :data:`HARD_LIMIT`:
 
     * the leakage segments (reaction matrix): first the closed-form
-      lower bound $\sum_e \lceil L_e/ds \rceil$, then, if that is
+      lower bound $\\sum_e \\lceil L_e/ds \\rceil$, then, if that is
       within the limit, the exact count;
     * the unknowns of the dense augmented nodal system (owners, nodes
       and branches, including every sub-piece and interior node of a

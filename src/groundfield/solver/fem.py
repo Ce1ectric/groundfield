@@ -15,8 +15,9 @@ and the backend raises
 :class:`~groundfield.solver.registry.BackendCapabilityError` instead of
 returning a number. The same holds for a cluster that lies wholly below
 a top layer holding more than half of its hemisphere
-($a_\text{eq}/2 < h_1 \le a_\text{eq}$; +51 % … +130 % and
-−81 % … −98 % for a 3 m rod, audit round 2). It is **not** a valid cross-check either when a
+($a_\\text{eq}/2 < h_1 \\le a_\\text{eq}$; +51 % … +130 % and
+−81 % … −98 % for a 3 m rod, audit round 2).
+It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
 three 4 m rods in homogeneous soil), when the world has several
 clusters (each solved alone, transfer impedances 0) or when a layer
