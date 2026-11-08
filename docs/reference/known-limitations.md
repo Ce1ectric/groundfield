@@ -122,12 +122,19 @@ shows what agrees with independent references and how well.
 
 - **`fem` is experimental.** It replaces every cluster by an equivalent
   hemisphere: biased for clusters with several electrodes (−35 % for a
-  2 m ring with three 4 m rods), blind to the coupling between clusters,
-  and wrong when a layer interface lies within the electrode or the
-  hemisphere (−92 % for a 10 m ring over $h_1$ = 2 m, −70 % for a 10 m
-  strip below a 0.5 m top layer); it raises when the electrode reaches a
-  layer its hemisphere does not (`groundfield.solver.fem`). It ignores
-  inductance, `return_to`, junctions and concrete shells
+  2 m ring with three 4 m rods; −55 % for two bonded rods of which one
+  reaches into a more conductive top layer), blind to the coupling between
+  clusters, and off where a layer interface lies within the electrode or
+  the hemisphere. It raises when an electrode reaches a layer its
+  hemisphere does not, when more than half of the hemisphere lies in a
+  layer the electrodes do not touch, and when the hemisphere spans a more
+  conductive layer that no electrode touches (user decision Q23; −97 … +5 %
+  before — a structural rule that also rejects near-equal layers such as
+  100 over 120 Ω·m). It warns where the spanned, untouched layer is more
+  resistive (+3 … +45 %) and for a more conductive layer below the
+  hemisphere but within the electrode's extent (−11 … −47 % for a 10 m ring
+  over 1000/30 Ω·m with $h_1$ = 9 … 5 m) (`groundfield.solver.fem`). It
+  ignores inductance, `return_to`, junctions and concrete shells
   (`BackendCapabilityWarning` or `BackendCapabilityError`).
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are
   represented by the image family and `solve_mutual_*` only. Each wire
@@ -149,8 +156,11 @@ shows what agrees with independent references and how well.
   boundary the result steps by the error of the per-metre model (13 % for
   two 1 km leads 2 m apart at 1 kHz, 42 % for two 300 m leads at 50 Hz;
   [earth return](../explanation/earth-return.md)). **`perfect_mirror`** is a frequency-independent diagnostic
-  baseline, not a model of buried conductors below 1 kHz. Use the default
-  `sommerfeld` for numbers.
+  baseline, not a model of buried conductors below 1 kHz; across the soil
+  surface its additive image has no physical basis (a lead 1 m above a PEN
+  0.7 m deep: 2.28 / 2.77 times the mutual reactance of `sommerfeld` at
+  50 Hz / 1 kHz), and such a solve warns. Use the default `sommerfeld` for
+  numbers.
 - **Cost of the Sommerfeld assembly** grows with the number of segment
   pairs and frequencies. The default `sommerfeld_assembly="tabulated"`
   shares one table of the spectral integral per pair of depth groups and
@@ -206,7 +216,10 @@ shows what agrees with independent references and how well.
   limit (`Engine.max_segments`, default `HARD_LIMIT` = 20 000) raise
   `ResourceLimitError` before any allocation; the dense system grows like
   $N^2$ in memory and work per excitation. Raise the limit per engine to
-  solve a larger world on purpose.
+  solve a larger world on purpose. The notice that a solve may take
+  minutes appears from `Engine.warn_segments` (default `SOFT_LIMIT` =
+  5 000); it is not checked against `max_segments`, so a notice size
+  above the hard limit never shows.
 - **Touching electrodes.** `diagnose` reports wires of different
   electrodes that are closer than five times the sum of their radii, but
   not two electrodes that meet at a common segment end point (for example
