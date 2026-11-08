@@ -62,11 +62,17 @@ Validity envelope
   electrode**. Impedances are fine, but near grids, meshes, stars, strip
   ends and bonded multi-electrode clusters the surface potential is
   impedance-grade, not field-grade. Measured against the per-segment
-  ``mom`` backend (homogeneous 100 Ω·m, review pass 10): 20 m × 20 m
-  grid with 4 × 4 meshes, 1 m outside the corner, touch +19 %, step
-  −21 % (non-conservative); 4-arm star 1 m beyond a tip touch +7 %,
-  step −10 %; 10 m strip 1 m beyond its end step −7 %; rings, rods and
-  closed rectangular loops agree within 1 %. The helpers emit
+  ``mom`` backend (homogeneous 100 Ω·m, ``segment_length`` 0.5 m) with
+  the default line kernel, touch voltage with the feet 1 m outside the
+  footprint and step voltage from 1 m to 2 m outside it: 20 m × 20 m
+  grid with 4 × 4 meshes at the corner, touch +20 %, step −21 %
+  (non-conservative; the step from the point above the corner 1 m
+  outwards is −28 %); 4-arm star (5 m arms) beyond a tip touch +8 %,
+  step −9 %; 10 m strip beyond its end step −6 %; rings, rods and closed
+  rectangular loops within 2 %. The point kernel, which ``mom`` shares,
+  isolates the ansatz: grid +19 % / −21 % (−28 % from above the corner),
+  star +7 % / −10 %, strip −7 %, rings, rods and loops within 1 %. The
+  helpers emit
   :class:`UniformCurrentFieldWarning` once per call when a uniform-current
   result is evaluated within :data:`NEAR_FIELD_DISTANCE_M` of such an
   electrode; re-solve with ``backend="mom"`` for field-grade values.
@@ -147,9 +153,9 @@ _UNIFORM_CURRENT_BACKENDS = frozenset({"image", "image_2layer", "image_nlayer", 
 #: Horizontal distance in m from a crowding electrode within which the
 #: safety helpers warn about uniform-current results (10.22). At 5 m from
 #: the footprint the measured touch / step deviations of the uniform
-#: ansatz against ``mom`` are below 5 % for stars, strips, bonded
-#: clusters and the default house grid; only large grids keep up to 8 %
-#: (20 m grid corner, step voltage).
+#: ansatz against ``mom`` are at most 4 % for strips, bonded clusters and
+#: the default house grid, 6.5 % for a 4-arm star and 8 % for a 20 m grid
+#: (default line kernel; with the point kernel 5 % for the star).
 NEAR_FIELD_DISTANCE_M: float = 5.0
 
 
@@ -277,8 +283,9 @@ def _uniform_current_caveat(
             f"{caller}: uniform-current backend '{result.backend}' within "
             f"{NEAR_FIELD_DISTANCE_M:g} m of a grid, mesh, star, strip, open "
             "polyline or bonded multi-electrode cluster: the surface potential "
-            "is impedance-grade (20 m grid, 1 m outside the corner: touch "
-            "+19 %, step -21 % against 'mom'). Use backend='mom' for "
+            "is impedance-grade (20 m grid corner against 'mom': touch 1 m "
+            "outside +20 %, step from 1 m to 2 m outside -21 %, step from the "
+            "point above the corner 1 m outwards -28 %). Use backend='mom' for "
             "field-grade touch and step voltages.",
             UniformCurrentFieldWarning,
             stacklevel=3,
@@ -421,16 +428,20 @@ def touch_voltage_envelope(
         See :func:`touch_voltage`.
     interior
         Which closed loops are sampled inside (review pass 10, 10.21).
-        ``None`` (default): loops in open ground — the centre of every
-        mesh of a ``mesh`` / ``grid_mesh`` electrode and the centre of a
-        ``ring``; a closed ``polyline``, the building-outline foundation
-        of the generators, is not sampled, because inside it lies the
-        building. ``True``: also a closed polyline, at the point inside
-        it farthest from its wires. ``False``: the offset curve only.
-        The default cannot see buildings: pass ``interior=False`` where
-        the inside of a ring or grid is not accessible ground (an
-        axis-aligned generated foundation is a ``grid_mesh``; a ring may
-        surround a station housing).
+        ``None`` (default): the centre of every mesh of a ``mesh`` /
+        ``grid_mesh`` electrode, the centre of a ``ring``, and the centre
+        of every cell of a foundation built from bonded wires
+        (:func:`~groundfield.postprocess._footprint.foundation_wires`):
+        the generators build every mesh foundation as one open polyline
+        per wire line and a ``"distributed"`` ring foundation as one wire
+        per side, so their cells are sampled. A closed ``polyline``, the
+        polygon-outline foundation of the generators, is not sampled,
+        because inside it lies the building. ``True``: also a closed
+        polyline, at the point inside it farthest from its wires.
+        ``False``: the offset curve only. The default cannot see
+        buildings: pass ``interior=False`` where the inside is not
+        accessible ground — the cells of a generated house foundation
+        lie under the building, a ring may surround a station housing.
     return_points
         Also return the foot positions.
 
@@ -556,7 +567,8 @@ def step_voltage(
     UniformCurrentFieldWarning
         Once per call, see the module docstring. At the corner of a
         20 m × 20 m grid the uniform-current ansatz under-estimates the
-        step voltage by 21 % (1 m outside) to 28 % (above the corner).
+        step voltage by 21 % (feet 1 m and 2 m outside the corner) to 28 %
+        (feet above the corner and 1 m outside), with either kernel.
     """
     if not math.isfinite(step) or step <= 0.0:
         raise ValueError(f"step must be > 0, got {step!r}.")

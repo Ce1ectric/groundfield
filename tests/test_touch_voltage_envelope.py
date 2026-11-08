@@ -184,3 +184,53 @@ def test_open_shapes_and_rods_have_no_interior() -> None:
     for name in ("rod", "star", "open"):
         assert _envelope(res, w, name, interior=True)[2].shape == (24, 3)
     assert math.isfinite(float(np.abs(_envelope(res, w, "rod")[1]).max()))
+
+
+@pytest.mark.finding("10.21")
+def test_a_generated_mesh_foundation_is_sampled_in_its_cells_by_default() -> None:
+    """The generators build a mesh foundation from bonded wires, one per wire line.
+
+    Unlike a closed polyline outline, such a wire group is sampled at the
+    centre of every cell by default (the docstring called it a ``grid_mesh``;
+    one electrode per wire line since audit A2G-04); ``interior=False`` keeps
+    the offset curve only.
+    """
+    # audit round 3 (coordinator item): interior docstring
+    from groundfield.generators import (
+        HomogeneousSoilSpec,
+        TnNetworkConfig,
+        TnNetworkGenerator,
+    )
+    from groundfield.postprocess._footprint import foundation_wires
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        net = TnNetworkGenerator(
+            TnNetworkConfig(
+                soil=HomogeneousSoilSpec(rho=100.0),
+                building_counts={"residential": 1},
+            ),
+            seed=1,
+        ).build()
+    wires = foundation_wires(net, "residential_0_foundation_0")
+    assert len(wires) > 1 and all(e.kind == "polyline" and not e.closed for e in wires)
+    names = {e.name for e in wires}
+    w = gf.World(
+        soil=gf.HomogeneousSoil(rho=100.0),
+        electrodes=list(wires),
+        conductors=[
+            c
+            for c in net.conductors
+            if c.start_electrode in names and c.end_electrode in names
+        ],
+        sources=[
+            gf.CurrentSource(
+                name="s", attached_to="residential_0_foundation_0", magnitude=1.0
+            )
+        ],
+    )
+    res = _solve(w)
+    _, _, feet = _envelope(res, w, "residential_0_foundation_0")
+    _, _, outside = _envelope(res, w, "residential_0_foundation_0", interior=False)
+    assert outside.shape == (24, 3)
+    assert feet.shape[0] > 24

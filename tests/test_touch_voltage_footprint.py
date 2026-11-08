@@ -593,3 +593,37 @@ def test_wire_suffix_without_a_bonded_root_is_an_ordinary_electrode() -> None:
     gf.create_electrode(w, "rod", name="g_w1", position=(45.0, 0.0, 0.5), length=3.0)
     assert [e.name for e in foundation_wires(w, "g")] == ["g"]
     assert [e.name for e in foundation_wires(w, "g_w1")] == ["g_w1"]
+
+
+@pytest.mark.finding("10.22")
+def test_the_quoted_corner_deviations_are_those_of_the_default_kernel() -> None:
+    """The warning quotes what the default (line) kernel gives at a grid corner.
+
+    20 m x 20 m grid, 4 x 4 meshes, at 0.5 m, 100 Ohm m, ds = 0.5 m, against
+    the per-segment ``mom``: touch with the feet 1 m outside the corner
+    +20.2 %, step from 1 m to 2 m outside -20.8 %, step from the point above
+    the corner 1 m outwards -27.9 % (the text used to quote the point
+    kernel's +19 % / -21 % and the engine page -28 % without saying which
+    step each was; audit round 3, note of nbrefresh).
+    """
+    # audit round 3 (coordinator item): numbers of UniformCurrentFieldWarning
+    w = _grid_world()
+    d = (-1.0 / math.sqrt(2.0), -1.0 / math.sqrt(2.0), 0.0)
+    values = {}
+    for backend in ("image", "mom"):
+        res = _solve(w, backend=backend, ds=0.5)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            values[backend] = (
+                touch_voltage(res, w, electrode="g1", direction=d).real,
+                step_voltage(res, position=(d[0], d[1], 0.0), direction=d).real,
+                step_voltage(res, position=(0.0, 0.0, 0.0), direction=d).real,
+            )
+        if backend == "image":
+            text = str(_caveats(record)[0].message)
+    touch, step_out, step_above = (
+        values["image"][k] / values["mom"][k] - 1.0 for k in range(3)
+    )
+    assert f"touch 1 m outside {touch * 100:+.0f} %" in text, (touch, text)
+    assert f"from 1 m to 2 m outside {step_out * 100:+.0f} %" in text, text
+    assert f"1 m outwards {step_above * 100:+.0f} %" in text, text
