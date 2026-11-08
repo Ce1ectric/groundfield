@@ -4,19 +4,26 @@
 The page ``docs/explanation/validation.md``, its figures in
 ``docs/explanation/validation/`` and the validation tables inside the
 engine theory pages (``docs/explanation/engines/*.md``, between the
-markers ``<!-- validation:begin <name> -->`` and
-``<!-- validation:end <name> -->``) are generated from two sources and
+markers ``<!-- generated:begin <name> -->`` and
+``<!-- generated:end <name> -->``) are generated from two sources and
 contain no hand-written numbers:
 
 * ``tests/benchmarks/tolerances.py`` — the benchmark cases, their
   references and the bound every benchmark test asserts;
 * ``docs/explanation/validation/measurements.json`` — the values measured
   by running the engine benchmark suite B1–B13 (``pytest tests/benchmarks
-  --run-benchmark`` with ``GF_BENCHMARK_REPORT``), plus the kernel
-  checks of this script: rod, ring and strip of the benchmark worlds
-  solved with the point and the line kernel of the image family and
-  compared with the exact resistance of the uniform-current model
-  (closed forms below, no groundfield solver involved).
+  --run-benchmark`` with ``GF_BENCHMARK_REPORT``), plus two checks of
+  this script: the kernel check (rod, ring and strip solved with the
+  point and the line kernel of the image family and compared with the
+  exact resistance of the uniform-current model, closed forms below, no
+  groundfield solver involved) and the field check (impedance, touch,
+  step and mesh voltage of the image family against ``mom`` on the same
+  discretisation).
+
+Two further regions are computed from the code at render time: the table
+of registered backends on ``docs/explanation/engines/index.md`` (from
+:mod:`groundfield.solver.registry`) and the length of the Tagg/Sunde
+series on the ``image_2layer`` page (from ``ImageSeries``).
 
 Usage, from the repository root::
 
@@ -58,6 +65,7 @@ ENGINE_PAGES: dict[str, Path] = {
     name: DOCS / "engines" / f"{name}.md"
     for name in ("image", "image_2layer", "mom", "mom_sommerfeld", "fem")
 }
+ENGINES_INDEX = DOCS / "engines" / "index.md"
 FIGURES = (
     "benchmark_overview.svg",
     "kernel_exactness.svg",
@@ -69,8 +77,8 @@ SCHEMA_VERSION = 1
 BACKEND_ORDER = ("image", "image_2layer", "mom", "mom_sommerfeld", "fem")
 ALIASES = {"cim": "image", "bem": "mom"}
 
-_BEGIN = "<!-- validation:begin {name} -->"
-_END = "<!-- validation:end {name} -->"
+_BEGIN = "<!-- generated:begin {name} -->"
+_END = "<!-- generated:end {name} -->"
 
 # ---------------------------------------------------------------------
 # Kernel checks: exact resistances of the uniform-current model
@@ -944,6 +952,14 @@ def render_engine_region(backend: str, data: dict[str, Any]) -> str:
             "",
             field_table(data["field"]),
         ]
+    if backend == "image_2layer":
+        out += [
+            "",
+            "Length of the image series (independent of h₁: the number of "
+            "terms depends only on |K| and the tolerance):",
+            "",
+            series_table(),
+        ]
     cases = {"image": ["rod", "ring", "strip"], "image_2layer": ["strip_2l"]}.get(
         backend
     )
@@ -956,6 +972,99 @@ def render_engine_region(backend: str, data: dict[str, Any]) -> str:
             kernel_table(data["kernel"], cases),
         ]
     return "\n".join(out)
+
+
+#: Two-layer soils (rho_1, rho_2) of the series-length table.
+SERIES_SOILS = (
+    (300.0, 100.0),
+    (100.0, 400.0),
+    (1000.0, 100.0),
+    (500.0, 30.0),
+    (1000.0, 30.0),
+    (2000.0, 30.0),
+)
+
+
+def series_table() -> str:
+    """Terms of the Tagg/Sunde series at the engine's default tolerance."""
+    from groundfield.solver._series import ImageSeries
+    from groundfield.solver.registry import (
+        DEFAULT_IMAGE_MAX_TERMS,
+        DEFAULT_IMAGE_SERIES_TOL,
+    )
+
+    lines = [
+        f"| ρ₁ / ρ₂ in Ω·m | K | terms for a tail bound below "
+        f"{_sci(DEFAULT_IMAGE_SERIES_TOL, 1)} | within the default cap of "
+        f"{DEFAULT_IMAGE_MAX_TERMS} terms |",
+        "|---|---|---|---|",
+    ]
+    for rho_1, rho_2 in SERIES_SOILS:
+        k = (rho_2 - rho_1) / (rho_2 + rho_1)
+        series = ImageSeries.from_coefficients(
+            k, 1.0, max_terms=10**6, tol=DEFAULT_IMAGE_SERIES_TOL
+        )
+        fits = series.n_terms <= DEFAULT_IMAGE_MAX_TERMS
+        lines.append(
+            f"| {rho_1:g} / {rho_2:g} | {k:+.4f} | {series.n_terms} | "
+            f"{'yes' if fits else 'no — SeriesTruncationWarning'} |"
+        )
+    return "\n".join(lines)
+
+
+def registry_table() -> str:
+    """Backends as registered in :mod:`groundfield.solver.registry`."""
+    from groundfield.solver import registry
+    from groundfield.solver._kernels import DEFAULT_KERNEL
+
+    def soils(impl: Any) -> str:
+        # The soils a name accepts, including the auto-forwarding by soil
+        # model (``image`` forwards two-layer worlds to ``image_2layer``).
+        kinds = set(impl.capabilities.soils)
+        for _kind, target in impl.forward:
+            kinds |= set(registry.get_backend(target).capabilities.soils)
+        names = {"homogeneous": "1", "two_layer": "2", "multi_layer": "≥ 3"}
+        return ", ".join(names[k] for k in names if k in kinds)
+
+    def yes(flag: bool) -> str:
+        return "yes" if flag else "no"
+
+    lines = [
+        "| Name | Status | What it runs | Soil layers | Kernel (default first) "
+        "| `return_to`, junctions | Concrete shells | Conductor models | Options |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for name in registry.available_backends(include_deprecated=True):
+        spec = registry.get_backend(name)
+        impl = registry._implementation(spec)
+        caps = impl.capabilities
+        if spec.deprecated_alias_of is not None:
+            status = f"deprecated name of `{spec.deprecated_alias_of}`"
+        elif spec.experimental:
+            status = "experimental"
+        else:
+            status = "current"
+        if caps.kernels:
+            default = registry.effective_kernel(impl, DEFAULT_KERNEL)
+            kernels = [default, *sorted(k for k in caps.kernels if k != default)]
+            kernel = ", ".join(f"`{k}`" for k in kernels)
+        else:
+            kernel = "none (volume mesh)"
+        forward = (
+            "; forwards " + ", ".join(f"{k} → `{t}`" for k, t in impl.forward)
+            if impl.forward and spec.deprecated_alias_of is None
+            else ""
+        )
+        options = impl.options_model.__name__ if impl.options_model else "—"
+        summary = spec.summary.rstrip(".")
+        lines.append(
+            f"| `{name}` | {status} | {_cell(summary)}{_cell(forward)} | "
+            f"{soils(impl)} | {kernel} | "
+            f"{yes(caps.two_terminal_sources)}, {yes(caps.junctions)} | "
+            f"{yes(caps.concrete_shells)} | {', '.join(sorted(caps.conductors))} | "
+            f"{'`' + options + '`' if options != '—' else options} |"
+        )
+    return "\n".join(lines)
 
 
 def replace_region(text: str, name: str, body: str) -> str:
@@ -977,6 +1086,10 @@ def render_all(data: dict[str, Any]) -> dict[Path, str]:
                 backend,
                 render_engine_region(backend, data),
             )
+    if ENGINES_INDEX.exists():
+        files[ENGINES_INDEX] = replace_region(
+            ENGINES_INDEX.read_text(encoding="utf-8"), "registry", registry_table()
+        )
     return files
 
 
