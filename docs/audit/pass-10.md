@@ -222,9 +222,10 @@ stream may have changed what an earlier one describes.
     - **coup2 and fix1, Sommerfeld assembly:** “the default stays the per-pair
       assembly”, “`"exact"` (default)”. The default is `"tabulated"`; `"exact"` is the
       per-pair rule (ddefaults, user decision Q16).
-    - **fitx, `touch_voltage_envelope(interior=None)`** sampled mesh cells and ring
-      centres by default. The default samples no interior; `interior="meshes"` does
-      (dsafety, user decision Q3).
+    - **fitx and fix3solver, `touch_voltage_envelope(interior=None)`** sampled mesh
+      cells and ring centres (and the cells of generated mesh foundations) by default.
+      The default samples no interior; `interior="meshes"` does (dsafety, user
+      decision Q3).
     - **post, `long_duration=True`** for 80 V beyond 10 s. 80 V applies to every
       fault duration above 10 s; the keyword is gone (dsafety, user decision Q4).
     - **secio / fitx, `rho_at_fit` = ρ₁ for layered soil.** The convention is the effective
