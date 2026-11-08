@@ -43,7 +43,8 @@ A world that a backend **solves with a documented simplification**
 emits :class:`BackendCapabilityWarning` and solves:
 
 * conductor models the backend reduces (``fem`` treats distributed
-  conductors as lumped branches and ignores inductance);
+  conductors as lumped branches and ignores inductance and the skin
+  effect of ``resistance_model="skin"``);
 * sources with a ``return_to`` electrode on a backend that returns the
   current through remote earth instead.
 
@@ -133,11 +134,11 @@ DEFAULT_IMAGE_MAX_TERMS = 300
 DEFAULT_IMAGE_SERIES_TOL = 1e-6
 
 SoilKind = Literal["homogeneous", "two_layer", "multi_layer"]
-ConductorFeature = Literal["lumped", "distributed", "inductive"]
+ConductorFeature = Literal["lumped", "distributed", "inductive", "skin"]
 KernelName = Literal["point", "line"]
 
 _SOIL_KINDS: tuple[str, ...] = ("homogeneous", "two_layer", "multi_layer")
-_CONDUCTOR_FEATURES: tuple[str, ...] = ("lumped", "distributed", "inductive")
+_CONDUCTOR_FEATURES: tuple[str, ...] = ("lumped", "distributed", "inductive", "skin")
 _KERNELS: tuple[str, ...] = ("point", "line")
 
 SolveFunction = Callable[..., "FieldResult"]
@@ -228,8 +229,10 @@ class BackendCapabilities:
     conductors
         Conductor models the backend honours: ``"lumped"`` (a single
         series branch), ``"distributed"`` (``discretize_segment_length``
-        set) and ``"inductive"`` (``inductance_model`` set). A world
-        using a model outside this set solves with a
+        set), ``"inductive"`` (``inductance_model`` set) and ``"skin"``
+        (``resistance_model="skin"``, the frequency-dependent resistance
+        of review pass 10, 10.37; audit round 2, A2C-4). A world using a
+        model outside this set solves with a
         :class:`BackendCapabilityWarning`.
     concrete_shells
         Whether the backend consumes the per-electrode concrete-shell
@@ -866,6 +869,8 @@ def _conductor_features(world: World) -> set[str]:
         features.add("distributed" if c.is_distributed else "lumped")
         if c.inductance_model is not None:
             features.add("inductive")
+        if getattr(c, "resistance_model", "dc") == "skin":
+            features.add("skin")
     return features
 
 
@@ -970,10 +975,16 @@ def check_capabilities(
             for n in available_backends()
             if set(reduced) <= _capabilities(_REGISTRY[n]).conductors
         ]
+        dc = (
+            " at their DC resistance (the skin effect of resistance_model="
+            "'skin' is ignored)"
+            if "skin" in reduced
+            else ""
+        )
         warn_external(
             f"Backend '{spec.name}' does not implement the {', '.join(reduced)} "
             "conductor model(s) of this world and solves them as lumped, "
-            f"purely resistive branches. Backends that implement them: "
+            f"purely resistive branches{dc}. Backends that implement them: "
             f"{', '.join(able)}.",
             BackendCapabilityWarning,
         )
