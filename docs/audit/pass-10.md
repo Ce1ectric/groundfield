@@ -175,6 +175,43 @@ stream may have changed what an earlier one describes.
       passivity checks were merged (fitx, after post and secio), and
       `touch_voltage_envelope` replaced `mesh_centres=` by `interior=` (fitx).
 
+!!! warning "Corrections (second adversarial audit of this release)"
+    The second audit found these statements of the fragments below to be false
+    at the time they were written; the fragments of the `fix2*` streams at the end
+    of the page record the fixes, and the release notes carry the corrected
+    wording:
+
+    - **core2b, interface slivers (10.32):** dropping an interface cut that would
+      leave a part shorter than the wire diameter ignored the contact with the
+      other layer (a 4.5 m rod in 1000/30 Ω·m: 195.0 Ω with its tip 15.9 mm into
+      the lower layer, 128.6 Ω at 16.1 mm); every cut is now kept (fix2solver).
+    - **core2b, “a world without a source stays solvable through `Engine.solve`
+      (all results zero)”:** only `fem` did; every backend now raises (fix2solver).
+    - **The segment budget (10.06):** conductor sub-pieces were not counted (a
+      100 m PEN in 2000 pieces was predicted at 12 segments); the guard now counts
+      the nodal system (fix2solver).
+    - **Floating clusters in `solve_mutual_*` (10.29):** not only an accuracy
+      change; the cost grew with the square of the number of bonded nodes (256
+      nodes: 24.3 s → 199.9 s); one factorisation now serves all excitations
+      (fix2solver).
+    - **`carson_series` on the anti-parallel image (10.20):** wrong for a pair on
+      opposite sides of the surface (an overhead lead 1 m above a PEN at 0.7 m:
+      mutual reactance 35.9 % low at 1 kHz) and outside Carson's per-metre domain
+      (fix2coup).
+    - **Lumped inductive conductors (10.24):** under `sommerfeld` a km-long lumped
+      conductor was one 16 × 16 quadrature (3 km at 1 kHz: +13.4 % earth-return
+      resistance, +11 % at solver level, no warning) (fix2coup).
+    - **fixsec, “parse cost bounded” (10.01):** SymPy still expanded symbolic `exp`
+      and fractional powers of large powers (67- to 75-character formulas ran longer
+      than 60 s), and a literal of 320 nines raised `OverflowError` (fix2sec).
+    - **gen2, a shell with ρ_c = ρ_soil (10.12):** a shell of any size switched a
+      mesh foundation from one current owner to one per wire (largest touch voltage
+      232.3 → 221.2 V at 100 A) (fix2gen).
+    - **eng2, deprecated `cim` “bit-identical on every world compared” (10.76):** it is
+      bit-identical to `image_2layer` of the same release; through the alias it uses
+      the new default line kernel (core2b), so a ring of r = 2 m in 100 Ω·m moves by
+      +0.85 % against 0.15.0 (13.31207 → 13.42534 Ω).
+
 ## Stream `infra`: Release tooling, packaging and CI
 
 ### Changed
@@ -2276,3 +2313,492 @@ Test: `tests/test_soil_models.py::test_old_keyword_warns_and_maps_to_canonical_f
   for every malformed tag; `load_result` reports non-UTF-8 and too deeply
   nested JSON as `ResultFormatError`. The encoder applies the same limits.
   Tests: `tests/test_result_metadata_codec.py`.
+
+## Stream `fix2solver`: Fixes from the second adversarial audit: solver and engines
+
+### Added
+
+- **`groundfield.solver.PointKernelInterfaceWarning`:** warning category for
+  a horizontal wire within 0.6 segment lengths of the layer interface on the
+  point-form cross-layer path (see *Fixed*, point form of the cross-layer
+  path).
+- **`expected_segments(...)["nodal_unknowns"]` (10.06):** the size of the
+  dense augmented nodal system (current owners, nodes and branches, every
+  conductor sub-piece included), an upper bound computed in closed form and
+  checked against `HARD_LIMIT` like the segment count. Test:
+  `tests/test_diagnostics_report.py::test_nodal_unknowns_are_the_size_of_the_solved_system`.
+
+### Changed
+
+- **A world without a current source raises in every backend (10.66, audit
+  A2S-05):** `Engine.solve` validated with `World.check(require_source=False)`,
+  and an earlier entry of this release said such a world "stays solvable
+  through `Engine.solve` (all results zero)". Only `fem` did; the image and
+  `mom` families and `World.solve` raised. `Engine.solve` now runs the full
+  check, so every backend and both entry points raise the same `ValueError`
+  ("has no current source"), as the 10.66 concept lists. Test:
+  `tests/test_source_validation.py::test_a_world_without_a_source_raises_in_every_backend`.
+- ⚠ **`TwoLayerSoil(rho, rho, h)` is cut nowhere (10.48, audit A2S-07):**
+  `image_2layer` (also reached through `image` and the auto dispatch) cut
+  wires at `h` even when both layers have one resistivity, while `mom`,
+  `mom_sommerfeld` and `image_nlayer` did not. Every backend now cuts where
+  the resistivity changes only (the canonical stack), so such a soil solves
+  exactly like homogeneous soil: a rod 0.3–6.3 m in `TwoLayerSoil(100, 100,
+  2.15)` had 13 segments and sat 3.8e-4 (point kernel) and 3.3e-7 (line
+  kernel) from the homogeneous result; now 12 segments, equal to 2.2e-16 and
+  bit for bit. Who is affected: worlds with an equal-resistivity two-layer
+  soil and a wire through `h` (not AP1: its station rods end above `h_1`).
+  Golden cases: none. Test:
+  `tests/test_diagnostics.py::test_equal_resistivity_two_layer_soil_is_the_homogeneous_soil`.
+
+### Fixed
+
+- ⚠ **Interface contact (10.32, audit A2S-01):** an interface cut that would
+  leave a wire part shorter than the wire diameter was dropped, and the part
+  joined its neighbour in the other layer, so the contact with that layer was
+  ignored: a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m read 195.0 Ω with its tip
+  15.9 mm into the lower layer and 128.6 Ω at 16.1 mm (+52 %), in
+  `image_2layer` and the `mom` family alike, and the same at the head of a
+  rod. Every interface cut is now kept, however short the part beyond it;
+  the thin-wire guard concerns the chosen segment length only. The Galerkin
+  self term (it lost every digit below L/a = 1e-8) and the line kernel's
+  parallel-pair integral (two parts of 1e-11 m: 0 instead of 125 1/m, the rod
+  read 72.7 instead of 133.5 Ω) are evaluated without cancellation for such
+  parts; every regular segment keeps its arithmetic bit for bit. The
+  impedance is now continuous in the penetration depth (line kernel 133.5 →
+  128.6 Ω from 10 pm to 16.1 mm, the same shape for the point kernel, `mom`
+  and `mom_sommerfeld`); the step that remains is the onset of the contact
+  itself between a tip that ends at the interface and one that reaches past
+  it (195.9 → 133.5 Ω here). Who is affected: rods whose tip or head lies
+  within 16 mm (two wire radii) of an interface: −34 % in this example.
+  The constant `geometry.electrodes.SLIVER_RADII` introduced earlier in this
+  release is gone. Golden cases: none. Tests:
+  `tests/test_interface_slivers.py` (`::test_every_interface_cut_is_kept`,
+  `::test_rod_resistance_is_smooth_in_the_tip_penetration`,
+  `::test_rod_resistance_is_continuous_in_h1_at_the_former_sliver_threshold`,
+  `::test_a_tip_twelve_millimetres_into_a_conductive_layer_is_felt`,
+  `::test_a_head_just_inside_a_conductive_upper_layer_is_felt`,
+  `::test_parallel_pair_integral_of_parts_much_shorter_than_their_distance`).
+- ⚠ **Point form of the cross-layer path (10.28, ADR-0007):** with
+  `kernel="point"` (and in the `mom` family, `mom_sommerfeld` with two layers
+  and `solve_mutual_*` with the point kernel) the diagonal of the cross-layer
+  reaction matrix averages the layered correction over a 3-point rule along
+  the depth axis, ±0.387 L, whatever the segment's orientation. For a
+  horizontal wire next to the interface the rule reached across it and
+  returned wrong, even negative impedances (a rod through h₁ = 1.2 m with a
+  20 m strip at 0.8 m, 300/50 Ω·m, ds = 2 m: −19.37 Ω against 9.62 Ω with
+  the line kernel; v0.15.0: −14.24 Ω; −14 % … −552 % over the measured
+  cases), or reached above the soil surface and raised a bare `ValueError`
+  about negative depths. Such worlds now raise `BackendCapabilityError`
+  naming the line kernel (or `image_2layer` for the `mom` family) and a
+  segment length that fits; a horizontal wire within 0.6 segment lengths of
+  h₁ warns with `PointKernelInterfaceWarning` (−3 % … −17 %). Rods (cut at
+  h₁) and every valid configuration keep their numbers; the default line
+  kernel is unaffected. Golden cases: none. Tests:
+  `tests/test_cross_layer_point_form.py`,
+  `tests/test_cross_layer_line_kernel.py::test_point_kernel_keeps_its_numbers_near_the_interface`.
+- ⚠ **`fem` below a thin top layer (10.23, audit A2E-2):** the guard raised
+  only when an interface lies between the hemisphere radius `a_eq` and the
+  electrode's deepest point; a 3 m rod wholly below h₁ = 0.4 m < `a_eq`
+  (1000/30 Ω·m) only warned and returned 31.1 Ω (`mom`: 10.5 Ω, +197 %). It
+  now also raises when every electrode of a cluster lies below an interface
+  between `a_eq/2` and `a_eq` (more than half of the hemisphere in a layer
+  the electrodes do not touch; +51 … +130 % and −81 … −98 % measured for a
+  3 m rod against `image_2layer`). Thinner top layers keep the warning
+  (+16 … +46 %, −38 … −58 % for 100/1000 Ω·m), as do bonded rods through the
+  top layer. Golden cases: none. Tests:
+  `tests/test_fem.py::test_fem_rejects_a_rod_below_a_top_layer_holding_most_of_its_hemisphere`,
+  `::test_fem_only_warns_below_a_thin_top_layer`,
+  `::test_fem_guard_applies_to_a_bonded_cluster_wholly_below_the_interface`.
+- **Resource guard (10.06, audit A2S-02):** `check_segment_budget` counted
+  leakage segments only, so every sub-piece of an isolated distributed
+  conductor (a branch and an interior node of the dense nodal system and a
+  row of the inductance matrix) counted as zero: a 100 m PEN in 2000 pieces
+  predicted 12 segments and took 407 MiB, in millimetre pieces the solve died
+  with a `MemoryError`. The guard now also predicts the unknowns of the
+  nodal system in closed form and raises `ResourceLimitError` above
+  `HARD_LIMIT` before anything of that size is allocated (an inductive chain
+  before the inductance assembly); `diagnose()` reports it. Tests:
+  `tests/test_diagnostics_report.py::test_conductor_chain_beyond_the_limit_is_rejected`,
+  `::test_a_chain_in_millimetre_pieces_is_rejected_before_allocation`,
+  `::test_diagnose_reports_a_nodal_system_beyond_the_limit`.
+- **Floating clusters in `solve_mutual_*` (10.29, audit A2S-03):** every
+  excitation rebuilt the multi-port matrix of all floating clusters and
+  factorised the full nodal system again, so the cost grew with the square
+  of the number of bonded grounding nodes (256 ring-and-rod nodes: 199.9 s
+  against 24.3 s before floating). The floating core is now assembled and
+  factorised once with one right-hand side per anchor; an anchor outside the
+  core enters through its coupling column. 256 nodes: 5.6 s; 100 rotated
+  foundations of four bonded strips: 2.7 s (24.0 s); results equal to
+  1e-12 (golden values bit-identical). Tests:
+  `tests/test_mutual_matrix.py::test_shared_factorisation_equals_one_floating_solve_per_anchor`,
+  `::test_one_core_assembly_and_factorisation_for_all_anchors`.
+- **`expected_segments` for layer stacks (10.79, audit A2S-07):** the
+  prediction cut wires at every declared interface, the backends at the
+  interfaces of the canonical stack only: a rod 0.3–6.3 m in
+  `MultiLayerSoil([100 Ω·m, h = 2.15 m], [100 Ω·m])` was predicted at 13
+  segments and solved with 12. One rule now feeds both. Test:
+  `tests/test_diagnostics.py::test_expected_segments_matches_the_solve_for_every_layer_stack`.
+- **`fem` ignored the skin effect silently (10.37, audit A2C-4):** `"skin"` is
+  a conductor feature of the backend registry; `fem` (lumped, DC) warns with
+  `BackendCapabilityWarning` naming it, while `image` and `mom` raise the
+  rod-to-rod voltage of a 300 m 150 mm² Al PEN by +54.9 % from 0 Hz to 1 kHz.
+  A registered backend that lists its conductor features without `"skin"`
+  warns too. Tests:
+  `tests/test_backend_registry.py::test_a_backend_that_ignores_the_skin_model_says_so`,
+  `::test_registered_backend_without_the_skin_feature_warns`.
+- **Duplicate names in a loaded or edited world (10.66, audit A2S-06):**
+  `World.check()` did not check that names are unique (only the `add_*`
+  methods did): two electrodes of one name from JSON failed in the solver
+  with a singular matrix, an electrode and a junction of one name were merged
+  into one node. `check()` (run by every solve) now rejects a name used twice
+  among the nodes, the conductors or the sources. Test:
+  `tests/test_source_validation.py::test_check_reports_names_used_twice`.
+- **`convergence_study` repeated show-once warnings (A1-02, audit A2S-08):**
+  it copied the engine per step with the validating `Engine.model_copy`,
+  whose warning capture resets every module's registry; a shallow strip
+  showed the same `ShallowSegmentWarning` once per step. It now copies
+  internally and validates the segment lengths itself (finite and strictly
+  positive). Tests:
+  `tests/test_convergence.py::test_convergence_study_shows_each_distinct_warning_once`,
+  `::test_convergence_study_rejects_non_finite_segment_lengths`.
+
+### Security
+
+- **Crafted result files (A1-01, audit A2S-04):** a `$complex` metadata tag
+  holding an integer beyond the float range (`{"$complex": [10**400, 0]}`,
+  also inside `$tuple`, as a `$dict` key or an `$ndarray` item) escaped
+  `load_result` as a bare `OverflowError` instead of the documented
+  `ValueError`; it is now a `ValueError` naming the metadata key. Test:
+  `tests/test_result_metadata_codec.py::test_a_complex_tag_beyond_the_float_range_is_a_value_error`.
+
+## Stream `fix2coup`: Fixes from the second adversarial audit: coupling
+
+### Fixed
+
+- **Cost of the exact touching-pair rule (10.46, audit A2C-5):** the closed
+  forms of coaxial segment pairs were evaluated with one Python call per
+  pair, and on a straight conductor of M sub-segments all M(M−1)/2 pairs are
+  coaxial: `build_inductance_matrix` took 2.4–3.2× (straight PEN, M = 100–800)
+  and 7–26× (oblique PEN) the time of the 0.15.0 quadrature rule, and a solve
+  of a straight 2 km PEN (400 branches, 2 frequencies) 2.2–2.6 s instead of
+  1.0–1.3 s CPU. The coaxial pairs of a segment are now evaluated in one
+  vectorised call — bit-identical (the 3-element dot products go through the
+  same BLAS routine, the logarithms through `math.log`): 0.9–1.6× the
+  quadrature time on straight chains, 2.0–3.7× on oblique ones (where the
+  quadrature rule uses the cheap parallel closed form; 0.07–0.26 s for
+  M = 200–400), 1.1–1.4 s for the 2 km PEN solve. No number changes (golden cases bit-identical). Tests:
+  `tests/test_neumann_touching.py::test_scalar_closed_form_calls_grow_linearly`,
+  `::test_touching_batch_is_bit_identical_with_the_scalar_closed_forms`,
+  `::test_exact_rule_on_a_straight_chain_is_not_slower_than_twice_the_quadrature`
+  (benchmark).
+- ⚠ **`carson_series`: an overhead wire over a buried one (10.20, audit
+  A2C-1):** the solver treated the buried wire of such a pair as an overhead
+  wire at height |z| on the mirrored-endpoint image, whose image lands above
+  ground next to the overhead wire. The mutual reactance per metre was
+  35.9 % low for a lead 1 m above a PEN at 0.7 m depth (1 kHz, 100 Ω·m),
+  13.5 % at 1 m horizontal offset, 3.4 % for a generator surface lead 0.1 m
+  above ground, 10.3 % at 50 Hz. A perfect conductor screens the soil, so the
+  anti-parallel baseline of a pair on opposite sides of the surface is now
+  zero (`build_inductance_matrix(image="antiparallel")`), and its coupling is
+  the field transmitted into the soil, new
+  `coupling.carson.carson_mixed_mutual_correction` (Carson's J plus the
+  bounded remainder of the buried wire's attenuation; Ametani et al. 2009):
+  equal to an independent mpmath quadrature to 1e-9 and to the per-metre
+  Sommerfeld kernel to 1e-3 at 1 kHz. Affects worlds with an overhead and a
+  buried inductive conductor under `carson_series`; golden cases: none.
+  Tests: `tests/test_carson_validity_domain.py::test_overhead_wire_over_buried_wire_matches_the_transmitted_field`,
+  `::test_mixed_mutual_correction_matches_an_independent_quadrature`,
+  `::test_mixed_pair_agrees_with_the_sommerfeld_model_per_metre`,
+  `::test_antiparallel_baseline_of_a_pair_across_the_surface_is_zero`,
+  `::test_every_image_convention_gives_one_impedance`.
+- ⚠ **`carson_series` outside its validity domain (10.20, stream DOC-B):**
+  oblique segment pairs got `sqrt(l_i l_j)·|cos φ|` times the per-metre value
+  once per segment pair, which grows with the number of segments: a probe lead
+  turning 8.1° against the feed lead changed the measured reactance 17.6-fold,
+  two 1 km leads at 9° gave 20× the Sommerfeld coupling. Carson's per-metre
+  tiling is now kept for near-parallel pairs of near-horizontal segments only;
+  oblique pairs and every pair and self term of a segment inclined by more
+  than 8.1° get the exact Sommerfeld correction of a homogeneous earth of the
+  same conductivity (tabulated assembly). At the boundary the result steps
+  from the per-metre tiling to the Sommerfeld value by the model error of the
+  tiling there: 12 % for two 1 km leads 2 m apart at 1 kHz; in the DOC-B
+  measurement setup (93 m leads, 50 Hz, short against the 711 m skin depth)
+  Im Z_meas goes from 0.032 Ω (6.2°) to 0.018 Ω (8.6°), which is the
+  `sommerfeld` value. Affects `carson_series` worlds with oblique, inclined or
+  vertical inductive conductors; golden cases: none. Tests:
+  `tests/test_carson_validity_domain.py::test_pairs_outside_the_domain_get_the_sommerfeld_correction`,
+  `::test_oblique_coupling_does_not_grow_with_the_number_of_segments`,
+  `::test_oblique_leads_couple_as_in_the_sommerfeld_model`.
+- ⚠ **Wires lying side by side (10.46, streams GEN-2 / DOC-B):** two
+  near-parallel segments whose axes stay closer than the sum of their radii
+  over a common length (coincident leads, a service drop routed back along its
+  PEN main) had no finite filament mutual inductance — the 16×16 rule stopped
+  at its 1e-6 m floor: two coincident 50 m leads read 1.87 H of mutual
+  inductance (+587j Ω at 50 Hz), and a two-house TN network whose drops ran
+  back along the PEN main had a negative input reactance at 1 kHz
+  (−0.633 Ω perfect_mirror, −0.643 Ω sommerfeld). Such pairs are now evaluated
+  as touching wires at the axis distance r₁ + r₂ (in every image convention and
+  in the image block), and `carson_series` gives two conductors overlapping on
+  one axis the earth-return mutual of touching wires (it skipped them as
+  "the same wire"). The two-house network now reads +0.244 / +0.233 / +0.250 Ω
+  (perfect_mirror / sommerfeld / carson_series). Also moves the reading of the
+  generator's in-line fall-of-potential setup, whose probe lead starts 1 cm
+  beside the feed lead and ends on its axis: Im Z_meas at 50 Hz 0.063 → 0.054 Ω
+  (sommerfeld). Golden cases: none. Tests:
+  `tests/test_interpenetrating_wires.py`.
+- ⚠ **`sommerfeld`: long segments (10.24, audit A2C-2):** the earth-return
+  correction of a segment pair was one 16×16 Gauss–Legendre rule over the two
+  segments, which cannot resolve exp(−γR) along a segment much longer than the
+  skin depth — every lumped inductive conductor is one such segment. At 1 kHz
+  in 100 Ω·m (skin depth 159 m) the earth-return resistance of a straight
+  buried conductor was +1.7 % (1 km), +13.4 % (3 km), +34.9 % (5 km) against
+  the converged chain (+0.2 / +0.6 / +1.7 % at 50 Hz), and a lumped 3 km PEN
+  between two rods read +11 % series resistance, without a warning. A segment
+  longer than a quarter skin depth of the most conductive layer now gets a
+  composite outer rule (16 nodes per piece, at most 512 pieces, beyond that a
+  `SommerfeldResolutionWarning`) and an S(ρ) table as dense as a short pair's
+  (24 nodes over a km-long range left 1–2e-3); frequencies with equal piece
+  counts share one pass, so every frequency still equals a single-frequency
+  assembly bit for bit, and the tabulated assembly splits the same way. The
+  lumped conductors now match their chains to ≤ 1e-4 (3 km at 1 kHz:
+  2.78766 against 2.78773 Ω). Numbers move for every `sommerfeld` world with
+  an inductive segment longer than a quarter skin depth — at 1 kHz 40 m
+  (100 Ω·m), 22 m (30 Ω·m), 12.6 m (10 Ω·m); at 50 Hz 178 m (100 Ω·m) — by
+  about 1e-4 just above that length up to tens of per cent for km-long lumped
+  conductors; segments below it keep the historic rule bit for bit. Golden
+  cases: none. Tests: `tests/test_sommerfeld_long_segments.py`.
+- ⚠ **Neumann inductance of close, non-parallel segment pairs (10.46, found
+  in audit round 2 while attacking the guard above):** pairs that miss the
+  closed forms — nearly parallel wires close together whose directions
+  differ by more than 1e-9 in cos (about 0.003°), crossing and skew pairs —
+  were integrated with the 16×16 rule, which only resolves 1/r for pairs
+  apart by about half their length: two 5 m segments with aligned ends and
+  1e-5 … 1e-3 rad between them were +12 % at 10 cm and +200 … +250 % at
+  1 cm, −19 % at 1 mm with offset ends; crossing pairs about −1 % (−12 % when
+  crossing near an end at 2°), skew pairs 1 cm apart −2.3 … +0.5 %, a branch
+  starting on the interior of another segment (T-junction without a shared
+  vertex) −3.5 … −13 %. With `touching="exact"` (the default) such pairs
+  are now integrated semi-analytically (inner integral in closed form, outer
+  Gauss–Legendre panels graded towards the near-singular points; ≤ 5e-11
+  against an adaptive reference); `touching="quadrature"` keeps the 0.15.0
+  numbers. Moves every inductive result with such pairs — conductors from
+  real (non-axis-parallel) geometries running close together, the
+  generator's in-line probe lead (starts 1 cm beside the feed lead, ends on
+  its axis): feed–probe mutual 92.8 → 91.7 µH, the value of touching wires
+  over the overlap plus the end-to-end coupling (91.65 µH). Golden cases: none.
+  Tests: `tests/test_neumann_close_pairs.py`.
+
+## Stream `fix2sec`: Fixes from the second adversarial audit: formula parser
+
+### Security
+- **Formula parser: SymPy no longer evaluates the expression being built (10.01):**
+  the second audit of the calendar release found two more evaluation paths
+  that the parser's rules did not bound (after two rounds of rules against
+  particular inputs): SymPy's `exp` asks whether the factors of its
+  argument are comparable and expands powers of complex sums to find out,
+  and `Pow` computes the real part and the argument of the inner base of
+  `(b**e)**(p/q)`; 67- and 75-character formulas such as
+  `exp(pi*(((pi/4 + j/2)**64 + pi/4 + j/2)**64 + pi/4 + j/2)**64/1e30)` and
+  `(((((f/4 + j/2)**64/1000 + j/2)**64/1000 + j/2)**64/1000 + j/2)**63)**(1/2)`
+  ran for more than a minute. The class is fixed instead of the examples:
+  every node is now built unevaluated (`evaluate=False`), and every number
+  is computed by the parser itself in bounded floating point (128 bits,
+  every bound checked before the operation) and stored as a SymPy float;
+  within one product the numeric factors form one coefficient, within one
+  sum the numbers are added and like terms collected (so `1/(f - f)` and
+  `exp(f - f + 1000)` stay rejected). Formulas within every limit that took
+  2.2 s to 3.3 s to parse before now take at most 0.04 s, every corpus
+  string keeps its verdict, and the time of a parse grows linearly with
+  the length of the formula. The exponents of nested powers now multiply to
+  at most 64 (`MAX_POW`), the bound groundinsight's guard applies; the
+  audit's strings are rejected within 3 ms. `evaluate_spec` and the exporter's
+  passivity check evaluate the parsed expression node by node with NumPy
+  (new `formula_function`) instead of `sympy.lambdify`, whose printer
+  evaluates sub-expressions: 6.8 s for a 1 439-character formula within
+  every limit, now 2 ms. `tests/data/formula_corpus.json` gains 16
+  resource-exhaustion and 2 out-of-grammar strings, all rejected by
+  groundinsight's guard as well. Tests:
+  `tests/test_formula_security.py::test_nested_powers_of_audit_2_are_rejected_quickly`,
+  `tests/test_formula_security.py::test_formulas_within_every_limit_parse_and_evaluate_quickly`,
+  `tests/test_formula_security.py::test_parsing_and_evaluation_never_let_sympy_evaluate`,
+  `tests/test_formula_security.py::test_evaluate_spec_does_not_use_sympy_code_generation`,
+  `tests/test_formula_security.py::test_terms_that_cancel_within_one_sum_are_collected`.
+- **Formula parser: numeric literals outside the float range raise `FormulaError` (10.01):**
+  `1e-` followed by 320 nines is a valid Python float literal that rounds
+  to 0.0; the parser converted its exponent to a float and raised
+  `OverflowError`, which leaked through `load_bustype_json`. Every literal,
+  also in an exponent, is now bounded by its exact decimal value before
+  any float is formed, and no arithmetic error leaves the parser as
+  anything but `FormulaError`; a BusType document whose `voltage_level`
+  or `schema_version` is outside the float range raises `ValueError`, and
+  so does a crafted document that is nested too deeply for Python's JSON
+  reader, is not a JSON object, lacks `name`, `system_type` or
+  `voltage_level`, or has samples that are not numbers (it raised
+  `RecursionError`, `AttributeError` or `KeyError`). Tests:
+  `tests/test_formula_security.py::test_numeric_literals_outside_the_bounds_raise_formula_error`,
+  `tests/test_formula_security.py::test_load_bustype_json_reports_a_huge_literal_as_evaluate_spec_error`,
+  `tests/test_formula_security.py::test_bustype_header_numbers_outside_the_float_range_raise_value_error`,
+  `tests/test_io_groundinsight.py::test_crafted_bustype_documents_raise_value_error`.
+
+### Added
+- **`formula_function(expr, symbols=("f", "rho"))`** in
+  `groundfield.io._formula`: NumPy function of a parsed impedance formula,
+  built from the expression tree without SymPy's code generation (real
+  arithmetic for real values, as `lambdify` with NumPy; SymPy's principal
+  branch for roots and logarithms of negative numbers). Test:
+  `tests/test_formula_security.py::test_formula_function_keeps_the_real_limits_at_singular_points`.
+
+### Changed
+- ⚠ **Form of a parsed impedance formula (10.01):** `parse_impedance_formula`
+  returns an unevaluated expression whose numbers are SymPy floats of 17
+  significant digits: `2*pi*f*j/1000 + 403191/50000` parses to
+  `(0.0062831853071795866*I)*f + 8.0638199999999998`, `log(2)` to
+  `0.69314718055994529`; symbolic `exp`, `log` and powers keep the
+  structure of the text. Code that compared parsed expressions with exact
+  SymPy expressions must compare values instead. Evaluated values move by
+  at most 4.1e-16 relative for the 103 exporter formulas of the corpus and
+  3.3e-15 for the hand-written ones (closer to a 50-digit evaluation than
+  before: 1.5e-16 instead of 3.4e-15 for the worst one). Formulas that
+  loaded before and are now rejected: nested powers whose exponents
+  multiply to more than 64, also through sums and function calls and for
+  powers of numbers, e.g. `((f**8)**8)**2` or `(f*10**40)**2` (write
+  `1e40`), and exponent literals below `1e-300` such as `f**1e-400`
+  (which was read as `f**0`). `evaluate_spec` gives the principal-branch
+  value where `lambdify` gave `nan`, e.g. `(f - 100)**0.5` below 100 Hz.
+  groundfield's exporters write neither nested powers nor roots, so
+  exported formulas are not affected. Golden cases: none (bit-identical
+  to the base of the change). Tests:
+  `tests/test_formula_security.py::test_exponents_of_nested_powers_multiply_to_at_most_max_pow`,
+  `tests/test_formula_security.py::test_parsed_expression_is_unevaluated_with_numbers_as_floats`,
+  `tests/test_formula_security.py::test_formula_function_takes_the_principal_branch_where_real_arithmetic_has_none`.
+
+### Fixed
+- **Strict JSON for unknown fit quality (10.19):** a fit whose rms error
+  is unknown (NaN, e.g. a hand-built fit) exported `"rms_error_Ohm": NaN`,
+  which strict JSON parsers reject, and a non-finite sample did the same;
+  every non-finite number of a BusType document is now `null`,
+  `save_bustype_json` serialises with `allow_nan=False`, the export refuses
+  a `voltage_level` that is not finite, and `fit_quality_summary` reports
+  an unknown rms error as `rms=unknown`. Tests:
+  `tests/test_io_groundinsight.py::test_unknown_fit_quality_and_samples_are_written_as_null`,
+  `tests/test_io_groundinsight.py::test_export_refuses_a_voltage_level_that_is_not_finite`.
+
+## Stream `fix2gen`: Fixes from the second adversarial audit: generators and OSM ingest
+
+### Added
+- **Outline width of a footprint (audit A2G-06):** `BuildingFootprint.mean_width_m()`
+  (twice the area over the perimeter, the width of a thin rectangle),
+  `BuildingFootprint.is_degenerate()`, `groundfield.geo.mean_width` and
+  `groundfield.geo.MIN_OUTLINE_WIDTH_M` (1 mm). Test:
+  `tests/test_geo_footprint.py::test_mean_width_of_an_outline`.
+- **`groundfield.geo.MAX_PAYLOAD_DEPTH` (16):** deepest container nesting of an
+  accepted Overpass payload (an Overpass result has 7 levels). Test:
+  `tests/test_overpass_ingest.py::test_payload_nested_deeper_than_an_overpass_result_is_rejected`.
+
+### Changed
+- ⚠ **Owners of generated mesh foundations (10.12, 10.39; audit A2G-04):** the
+  image family solves one uniform leakage current per electrode (an owner). A
+  mesh foundation (cross-braces) is now one owner per wire line at every
+  orientation, bare or encased, for both `concrete_model` values; an
+  axis-aligned bare one was one `grid_mesh` owner. One owner over perimeter and
+  braces was +1.6 / +2.5 / +3.2 % high for 2 × 2 / 3 × 3 / 4 × 4 meshes against
+  the equipotential reference (one owner per segment, equal to `mom`), one owner
+  per wire is +0.3 / +0.5 / +0.6 %. A `"distributed"` ring foundation is one
+  owner per side also without a shell (it was one owner when bare and
+  axis-aligned). Numbers move: bare axis-aligned mesh foundations −1.2 % (10 m,
+  2 × 2) to −2.5 % (30 m, 4 × 4); generated networks with the default mesh
+  foundations −0.7 to −0.8 % in every node potential and up to 4.7 % in surface
+  potentials; the largest touch voltage over the default house mesh −3.6 %
+  (2.528 → 2.437 V per ampere, reference 2.402); bare distributed rings at most
+  0.06 % up to aspect ratio 4 (0.24 % at 10). A `"lumped"` ring keeps one
+  `grid_mesh` owner when axis-aligned and one owner per side when rotated
+  (0.24 % apart at aspect ratio 10), and polygon outlines stay one closed wire:
+  one closed polyline would drop the interior sample of the default
+  touch-voltage envelope, which decides it for rings of 20 m and more. AP1
+  (lumped polygon foundations) does not move. For a mesh foundation,
+  `electrode_currents[<anchor>]` and `grounding_impedance(<anchor>)` now refer
+  to its first wire, as for every rotated foundation: use `cluster_impedance`
+  or the sum over `<name>` and `<name>_w<j>`. Golden cases: `gen_tn_default`,
+  `gen_layout_builder`, `gen_tn_measurement_overhead_leads`.
+- ⚠ **PEN cables of `TnNetworkGenerator` form a nearest-point tree (10.38;
+  stream DOC-B):** every cable starts at the point of the network already built
+  nearest to its far end, inside a cable at a leakage-free tap junction
+  (`pen_tap_<k>`, a plan junction): cabinet cables in the order of their
+  distance from the substation (collinear cabinets are chained), service drops
+  from the cable path that feeds their cabinet or radial-trunk tap (or from a
+  drop already routed for it, closer buildings first); a building whose
+  connection point lies on a cable splits it and gets no drop. Service drops
+  started at their cabinet before, 60 to 160 m back along the main in the
+  default network, and now tap the main beside each house (5 m). Numbers move
+  for every generated TN network: default network substation potential −2.1 %,
+  substation leakage −3.1 to −4.8 %, house potentials −0.2 to +1.0 % (the
+  houses are tied closer to the substation); measurement network −1.1 %. Main
+  sections are named `<cable>_s<k>`. Golden cases: `gen_tn_default`,
+  `gen_tn_measurement_overhead_leads`.
+- **Overpass ids and levels:** element ids and member refs must be 64-bit
+  integers (`OverpassError` otherwise); a non-finite or negative
+  `building:levels` tag gives `levels=None`; outlines without area are skipped
+  (see Fixed).
+
+### Fixed
+- **A shell that is electrically absent moved a mesh foundation (10.12; audit
+  A2G-04):** with ρ_c = ρ_soil (or a 0.1 mm shell) the default 10 × 10 m mesh
+  foundation lost 1.27 % of its impedance and its largest touch voltage on the
+  offset curve dropped from 232.26 to 221.21 V (100 A), because the shell
+  switched it from one owner to one per wire; a distributed 20 × 2 m ring moved
+  by 0.24 %. Tests:
+  `tests/test_foundation_owners.py::test_vanishing_shell_on_a_mesh_foundation_is_continuous`,
+  `::test_vanishing_shell_on_a_distributed_ring_is_continuous`.
+- **Mesh foundation impedance depended on the orientation (10.39; audit
+  A2G-04):** the same bare mesh gave 4.79618 Ω at 0° and 4.73771 Ω at 30°
+  (100 Ω·m, line kernel). Tests:
+  `tests/test_foundation_owners.py::test_mesh_foundation_does_not_depend_on_its_orientation`,
+  `::test_distributed_ring_does_not_depend_on_its_orientation`,
+  `::test_mesh_foundation_is_close_to_the_equipotential_reference`.
+- **Untrusted Overpass JSON raised other exceptions than `OverpassError` (10.05;
+  audit A2G-05):** a body nested deeper than the decoder's limit (about 10 000
+  levels) raised `RecursionError`, also from a cache file; an unknown key nested
+  1 500 levels decoded, passed every check and crashed the cache write
+  (`json.dump` recurses in Python); a 400-digit integer coordinate raised
+  `OverflowError`; `"id": null` crashed the parser with `TypeError`. Tests:
+  `tests/test_overpass_ingest.py::test_deeply_nested_body_raises_overpass_error`,
+  `::test_payload_nested_deeper_than_an_overpass_result_is_rejected`,
+  `::test_deeply_nested_cache_file_is_refetched`,
+  `::test_vertex_with_a_huge_integer_coordinate_raises_overpass_error`,
+  `::test_huge_integer_coordinate_in_the_json_text_raises_overpass_error`,
+  `::test_ids_beyond_64_bits_are_rejected`,
+  `::test_element_with_a_null_id_is_parsed_without_an_id`,
+  `::test_non_finite_or_negative_levels_are_unknown`.
+- **Outlines without area (10.05, 10.54; audit A2G-06):** `parse_overpass_payload`
+  kept outlines of identical or collinear vertices with the default
+  `min_area_m2=0` (although documented as skipped); their oriented bounding
+  rectangle raised `IndexError`, so `LvNetworkLayout.to_world` and
+  `TnNetworkGenerator` crashed instead of widening the foundation to
+  `MIN_FOUNDATION_SIDE_M`. The parser now skips outlines narrower than 1 mm on
+  average; the bounding rectangle of such an outline is its covering segment,
+  which the generators widen with a warning. Tests:
+  `tests/test_overpass_ingest.py::test_outline_without_area_is_skipped`,
+  `::test_thin_but_real_outline_is_kept`,
+  `tests/test_geo_footprint.py::test_ombr_of_a_degenerate_outline_is_its_segment`,
+  `tests/test_footprint_foundations.py::test_a_footprint_without_area_gets_a_minimum_foundation`,
+  `::test_tn_generator_widens_a_footprint_without_area`.
+- **Generator objects pickled by v0.15.0 (10.69; audit A2G-07):** a pickled
+  `TnNetworkConfig` unpickled and then failed in `build()` with `AttributeError`
+  (renamed fields of soil specs, cabinets, PEN topology and the config itself).
+  Pickles are now upgraded like JSON input: renamed fields and values, defaults
+  for fields added since, and instances of the deprecated aliases (`KvsConfig`,
+  `StarKvsTopology`, `KvsPlacement`, `OrtsnetzLayout`) load as the current
+  classes, equal to the same object loaded from its v0.15.0 JSON. Tests:
+  `tests/test_generator_pickles.py`.
+- **Overlapping PEN cables made an inductive network non-passive (10.38; stream
+  DOC-B):** in a 2-house network both service drops ran from the cabinet 180 m
+  out back along the PEN main (Im Z_in = −0.633 Ω at 1 kHz with
+  `inductance_model="neumann"`); now +0.072 / +0.055 / +0.051 Ω (perfect mirror /
+  Sommerfeld / Carson series). Tests: `tests/test_pen_routing.py`.
+- **Integer fields of a resolved config held floats (10.53; stream DOC-B):**
+  `GeneratorConfig.sample` stored the float draw of a distribution in
+  `building_counts` and `CabinetConfig.fixed_count`, and `model_dump_json`
+  warned; a draw for an integer field is now `int(round(x))`, the value the
+  generators build with. Test:
+  `tests/test_generators_base.py::test_resolved_integer_fields_hold_integers`.

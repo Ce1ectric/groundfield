@@ -95,10 +95,10 @@ is named.
 | 10.18, 10.19 | `sweep`, `convergence_study` and the rho-f helpers use the input impedance | the cluster impedance of a station was 1.26 / 1.79 / 3.09 × the input impedance with 1 / 3 / 8 houses on a PEN; a ring with two bonded rods was fitted 17 % too high | sweeps of TN worlds and BusTypes exported with the rho-f helpers; the AP1 catalogue computes its own driving-point impedance |
 | 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
 | 10.73, 10.01 | exported formulas are partial fractions with float coefficients; parsed formulas hold their numbers as floats and are evaluated without `lambdify` | at most half a unit in the last printed digit; evaluated formulas at most 4.1e-16 (exporter output) and 3.3e-15 (hand-written) | text diffs of BusType files, hand-written formulas |
-| 10.20, F32 | `carson_series` on the anti-parallel image | the earth-return reactance of a 1 km PEN was 2.04 × (50 Hz) and 2.19 × (1 kHz) Carson's; 30-house network \|Z\| −16.6 % at 1 kHz (golden `cond_galvanic_neumann_carson_series` 0.60 %) | `carson_series` studies |
-| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases | inductive studies with inclined or vertical conductors |
+| 10.20, F32 | `carson_series` on the anti-parallel image; a pair across the surface couples through the field transmitted into the soil; oblique, inclined and vertical segments (beyond 8.1°) get the Sommerfeld correction | the earth-return reactance of a 1 km PEN was 2.04 × (50 Hz) and 2.19 × (1 kHz) Carson's; 30-house network \|Z\| −16.6 % at 1 kHz (golden `cond_galvanic_neumann_carson_series` 0.60 %); an overhead lead 1 m above a PEN at 0.7 m: mutual reactance was 35.9 % low (1 kHz, 100 Ω·m); a probe lead turning 8.1° against the feed lead changed the reading 17.6-fold | `carson_series` studies, measurement leads over buried conductors |
+| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series; wires closer than the sum of their radii are touching wires; close non-parallel pairs are integrated semi-analytically | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases; two coincident 50 m leads 1.87 H → 82 µH of mutual inductance; near-parallel pairs 1 cm apart were +200 … +250 %; the generator's in-line fall-of-potential reading Im Z_meas 0.063 → 0.054 Ω (50 Hz, `sommerfeld`) | inductive studies with inclined, vertical or closely spaced conductors, simulated measurements with leads (AP1 Phase B) |
 | 10.35, 10.36, F52 | Sommerfeld kernel for three or more layers and below h₁; λ grid of distant pairs | a three-layer earth with ρ₂ = ρ₃ was +17 … +25 % in X′; pair entries 200 m and 400 m apart were −24 % and +274 % off (golden at most 2.1e-5) | `sommerfeld` on `MultiLayerSoil`, deep conductors, large networks |
-| 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2101 + 3.7839j Ω; two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω | service drops shorter than the PEN segment length, lumped leads |
+| 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor; the `sommerfeld` correction of a segment longer than a quarter skin depth is integrated piecewise | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2101 + 3.7839j Ω; two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω; a lumped 3 km conductor at 1 kHz (100 Ω·m) had +13.4 % earth-return resistance against its refined chain, now ≤ 1e-4; distributed conductors with pieces longer than 40 m (1 kHz, 100 Ω·m) move by 1e-4 and more | service drops shorter than the PEN segment length, lumped leads, long lumped or coarsely divided conductors under `sommerfeld` |
 | 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
 | 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged in every backend | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`); `TwoLayerSoil(ρ, ρ, h)` in `image_2layer` was 3.8e-4 (point kernel) and 3.3e-7 (line kernel) from homogeneous soil, now equal bit for bit | `cim` and declared equal layers; not AP1 |
 | 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases now raise | every layered `fem` result |
@@ -237,6 +237,10 @@ is named.
   `Engine(sommerfeld_assembly="tabulated")`). Tests:
   `tests/test_sommerfeld_accuracy.py`, `tests/test_sommerfeld_tabulated.py`.
 - `LayeredEarth.interface_depths` and `LayeredEarth.layer_of(depth)`.
+- **`coupling.carson.carson_mixed_mutual_correction` (10.20, audit A2C-1):**
+  the earth-return coupling of an overhead and a buried wire (Carson's J and
+  the remainder of the buried wire's attenuation, Ametani et al. 2009).
+  Test: `tests/test_carson_validity_domain.py`.
 
 **Safety, fits and export**
 
@@ -375,7 +379,16 @@ is named.
 - ⚠ **Inductive assembly (10.20, 10.46):** `carson_series` on the
   anti-parallel image, `sommerfeld` on the image-free matrix, exact touching
   pairs by default (`touching="quadrature"` reproduces 0.15.0), Carson's P and
-  Q with the a² term and the asymptote only above a = 15.
+  Q with the a² term and the asymptote only above a = 15. `carson_series`
+  keeps Carson's per-metre formula for near-parallel, near-horizontal pairs
+  on one side of the surface; a pair across the surface has no anti-parallel
+  baseline and couples through the transmitted field, and oblique, inclined
+  and vertical segments get the Sommerfeld correction of a homogeneous earth
+  (at the 8.1° boundary the result steps by the error of the per-metre model,
+  12 % for two 1 km leads at 1 kHz). Wires closer than the sum of their radii
+  are evaluated as touching wires, close non-parallel pairs semi-analytically,
+  and `sommerfeld` integrates segments longer than a quarter skin depth
+  piecewise (audit A2C-1, A2C-2).
 - ⚠ **`references.pollaczek` (10.45)** is exact for two layers, also for
   conductors below the first interface and pairs in different layers.
 - **One earth-return assembly for all frequencies (10.60):** bit-identical per
@@ -631,6 +644,31 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 
 - ⚠ **`carson_series` baseline (10.20, F32).** Test:
   `tests/test_inductive_solver_integration.py::test_carson_series_reactance_matches_carson`.
+- ⚠ **`carson_series` across the surface and outside its domain (10.20, audit
+  A2C-1):** an overhead wire over a buried one was coupled through an image
+  above ground (mutual reactance 35.9 % low for a lead 1 m above a PEN at
+  0.7 m, 1 kHz), and oblique pairs got the per-metre value once per segment
+  pair, which grew with the number of segments (two 1 km leads at 9°: 20× the
+  Sommerfeld coupling). Tests: `tests/test_carson_validity_domain.py`.
+- ⚠ **Wires lying side by side (10.46):** coincident or overlapping parallel
+  conductors had no finite mutual inductance (two coincident 50 m leads read
+  1.87 H), which made a two-house network with drops along the PEN main
+  non-passive; they are touching wires. Tests:
+  `tests/test_interpenetrating_wires.py`.
+- ⚠ **Close non-parallel pairs (10.46):** nearly parallel, crossing, skew and
+  T-junction pairs were integrated with a 16 × 16 rule that does not resolve
+  1/r (+12 % at 10 cm, up to +250 % at 1 cm, −13 % for T-junctions); they are
+  integrated semi-analytically to 5e-11. Tests:
+  `tests/test_neumann_close_pairs.py`.
+- ⚠ **Long segments under `sommerfeld` (10.24, audit A2C-2):** one 16 × 16 rule
+  over a segment much longer than the skin depth put a lumped 3 km PEN's
+  earth-return resistance +13.4 % high at 1 kHz (+34.9 % at 5 km), without a
+  warning; it now matches the refined chain to 1e-4. Tests:
+  `tests/test_sommerfeld_long_segments.py`.
+- **Cost of the exact touching-pair rule (10.46, audit A2C-5):** the coaxial
+  closed forms are evaluated in one vectorised call per segment, bit for bit
+  (2 km PEN solve 2.2–2.6 s → 1.1–1.4 s). Tests:
+  `tests/test_neumann_touching.py`.
 - ⚠ **Sommerfeld kernel (10.35, 10.36)** for three or more layers, conductors
   below h₁ and distant pairs; `SommerfeldResolutionWarning` instead of silent
   truncation. Tests: `tests/test_sommerfeld_accuracy.py`.
