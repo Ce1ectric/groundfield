@@ -71,3 +71,24 @@
   beside the feed lead and ends on its axis: Im Z_meas at 50 Hz 0.063 → 0.054 Ω
   (sommerfeld). Golden cases: none. Tests:
   `tests/test_interpenetrating_wires.py`.
+- ⚠ **`sommerfeld`: long segments (10.24, audit A2C-2):** the earth-return
+  correction of a segment pair was one 16×16 Gauss–Legendre rule over the two
+  segments, which cannot resolve exp(−γR) along a segment much longer than the
+  skin depth — every lumped inductive conductor is one such segment. At 1 kHz
+  in 100 Ω·m (skin depth 159 m) the earth-return resistance of a straight
+  buried conductor was +1.7 % (1 km), +13.4 % (3 km), +34.9 % (5 km) against
+  the converged chain (+0.2 / +0.6 / +1.7 % at 50 Hz), and a lumped 3 km PEN
+  between two rods read +11 % series resistance, without a warning. A segment
+  longer than a quarter skin depth of the most conductive layer now gets a
+  composite outer rule (16 nodes per piece, at most 512 pieces, beyond that a
+  `SommerfeldResolutionWarning`) and an S(ρ) table as dense as a short pair's
+  (24 nodes over a km-long range left 1–2e-3); frequencies with equal piece
+  counts share one pass, so every frequency still equals a single-frequency
+  assembly bit for bit, and the tabulated assembly splits the same way. The
+  lumped conductors now match their chains to ≤ 1e-4 (3 km at 1 kHz:
+  2.78766 against 2.78773 Ω). Numbers move for every `sommerfeld` world with
+  an inductive segment longer than a quarter skin depth — at 1 kHz 40 m
+  (100 Ω·m), 22 m (30 Ω·m), 12.6 m (10 Ω·m); at 50 Hz 178 m (100 Ω·m) — by
+  about 1e-4 just above that length up to tens of per cent for km-long lumped
+  conductors; segments below it keep the historic rule bit for bit. Golden
+  cases: none. Tests: `tests/test_sommerfeld_long_segments.py`.

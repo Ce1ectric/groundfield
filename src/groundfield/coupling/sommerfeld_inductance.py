@@ -215,6 +215,22 @@ _HARD_PANEL_BUDGET = 1 << 17
 _GRADING_SPAN = 4.0
 # Number of rho interpolation nodes per segment pair (historic design).
 _N_RHO_NODES = 24
+# Long segments (audit round 2 of the calendar release, A2C-2). The
+# integrand of the earth-return correction varies on the skin depth, so a
+# single 16x16 outer rule over a segment much longer than that misses
+# exp(-gamma R) along it: a lumped 3 km PEN read +13 % earth-return
+# resistance at 1 kHz in 100 Ohm m, 5 km +35 %. A segment longer than
+# _PIECE_SKIN_FRACTION skin depths (most conductive layer, per
+# frequency) gets a composite outer rule of 16 nodes per piece, and the
+# pair's S(rho) table nodes are spaced _RHO_NODE_SPACING apart in
+# t = ln(rho + z) (the 24 nodes of a short pair over a km-long range left
+# 1-2e-3). Measured against a refined reference: piece = delta/4 is
+# within 5e-5 (earth-return resistance) and 1e-6 (reactance).
+_PIECE_SKIN_FRACTION = 0.25
+_RHO_NODE_SPACING = 0.08
+# Pieces per segment at most (the outer grid has (16 n)^2 nodes per
+# pair, evaluated in row chunks); a longer segment warns.
+_MAX_PIECES = 512
 # Tabulated assembly (opt-in, method="tabulated"): nodes of the shared
 # S(rho) table per pair of depth groups and frequency (cubic spline in
 # t = ln(rho + z)), and the smallest block (sub-segment pairs) that gets a
@@ -1116,6 +1132,41 @@ def _split_segment(
     return [(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
 
 
+def _n_pieces(length: float, omega: float, earth: LayeredEarth) -> int:
+    """Pieces of the composite outer rule for a segment of ``length`` m.
+
+    ``ceil(length / (delta / 4))`` with the skin depth ``delta`` of the
+    most conductive layer at ``omega``; 1 for a segment shorter than that
+    (the historic single 16-node rule) and at most :data:`_MAX_PIECES`.
+    """
+    if omega <= 0.0 or length <= 0.0:
+        return 1
+    delta = math.sqrt(2.0 * min(earth.rhos) / (omega * MU_0))
+    n = math.ceil(length / (_PIECE_SKIN_FRACTION * delta) - 1e-9)
+    if n > _MAX_PIECES:
+        warnings.warn(
+            f"Sommerfeld earth-return correction: a {length:.4g} m segment is "
+            f"{length / delta:.4g} skin depths long at "
+            f"{omega / (2.0 * math.pi):.4g} Hz; its outer quadrature is capped "
+            f"at {_MAX_PIECES} pieces (needs {n}). Split the conductor "
+            "(Conductor.discretize_segment_length) for full accuracy.",
+            SommerfeldResolutionWarning,
+            stacklevel=4,
+        )
+        n = _MAX_PIECES
+    return max(int(n), 1)
+
+
+def _outer_rule(n: int) -> tuple[np.ndarray, np.ndarray]:
+    """Composite 16-point Gauss–Legendre nodes / weights on [0, 1], n panels."""
+    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
+    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
+    if n == 1:
+        return s_nodes, w_nodes
+    nodes = ((np.arange(n)[:, None] + s_nodes[None, :]) / n).ravel()
+    return nodes, np.tile(w_nodes / n, n)
+
+
 def _subpair_values(
     pa1: np.ndarray,
     pa2: np.ndarray,
@@ -1128,41 +1179,87 @@ def _subpair_values(
     """ΔZ (image ``"none"``) of one sub-segment pair for every frequency.
 
     Both sub-segments lie in one medium each (split at the surface and
-    the interfaces). Returns complex values in Ω, shape ``(n_f,)``.
+    the interfaces). Frequencies are evaluated in groups of equal piece
+    counts of the composite outer rule (:func:`_n_pieces`); a pair of
+    segments shorter than a quarter skin depth keeps the historic single
+    16x16 rule, so every frequency equals a single-frequency call bit for
+    bit. Returns complex values in Ω, shape ``(n_f,)``.
     """
     n_f = len(omegas)
     out = np.zeros(n_f, dtype=complex)
+    la = float(np.linalg.norm(pa2 - pa1))
+    lb = float(np.linalg.norm(pb2 - pb1))
+    if la <= 0.0 or lb <= 0.0:
+        return out
+    groups: dict[tuple[int, int], list[int]] = {}
+    for k, omega in enumerate(omegas):
+        if omega <= 0.0:
+            continue
+        key = (_n_pieces(la, omega, earth), _n_pieces(lb, omega, earth))
+        groups.setdefault(key, []).append(k)
+    for (n_a, n_b), ks in groups.items():
+        out[ks] = _subpair_group(
+            pa1, pa2, pb1, pb2, dot, [omegas[k] for k in ks], earth, n_a, n_b
+        )
+    return out
+
+
+def _subpair_group(
+    pa1: np.ndarray,
+    pa2: np.ndarray,
+    pb1: np.ndarray,
+    pb2: np.ndarray,
+    dot: float,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+    n_a: int,
+    n_b: int,
+) -> np.ndarray:
+    """:func:`_subpair_values` for frequencies of one piece count (all > 0)."""
+    out = np.zeros(len(omegas), dtype=complex)
     da = pa2 - pa1
     db = pb2 - pb1
     la = float(np.linalg.norm(da))
     lb = float(np.linalg.norm(db))
-    if la <= 0.0 or lb <= 0.0:
-        return out
-    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
-    w_nodes = 0.5 * _OUTER_GL_WEIGHTS
-    pts_a = pa1[None, :] + s_nodes[:, None] * da[None, :]
-    pts_b = pb1[None, :] + s_nodes[:, None] * db[None, :]
-    diff = pts_a[:, None, :] - pts_b[None, :, :]
-    rho_grid = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
-    R3 = np.sqrt(rho_grid**2 + diff[:, :, 2] ** 2)
-    small = R3 < 1e-9
-    R3_safe = np.where(small, 1.0, R3)
-    outer_w = w_nodes[:, None] * w_nodes[None, :]
+    s_a, w_a = _outer_rule(n_a)
+    s_b, w_b = _outer_rule(n_b)
+    pts_a = pa1[None, :] + s_a[:, None] * da[None, :]
+    pts_b = pb1[None, :] + s_b[:, None] * db[None, :]
+    composite = n_a > 1 or n_b > 1
+    rows = _rows_per_chunk(pts_b.shape[0] // 16) * 16 if composite else pts_a.shape[0]
+
+    def geometry(r0: int):
+        diff = pts_a[r0 : r0 + rows, None, :] - pts_b[None, :, :]
+        rho = np.sqrt(diff[:, :, 0] ** 2 + diff[:, :, 1] ** 2)
+        R3 = np.sqrt(rho**2 + diff[:, :, 2] ** 2)
+        return rho, R3
 
     z_a = 0.5 * float(pa1[2] + pa2[2])
     z_b = 0.5 * float(pb1[2] + pb2[2])
     plan = _SpectralPlan.for_pair(earth, z_a, z_b)
-    t_nodes, t_grid, rho_nodes = _rho_interp_setup(rho_grid, plan.decay)
-    rho_max = float(rho_grid.max() + 1e-9)
-    rho_min = float(rho_grid.min()) if plan.kind in ("same", "air") else 0.0
+    if not composite:
+        rho_grid, R3 = geometry(0)
+        rho_lo, rho_hi = float(rho_grid.min()), float(rho_grid.max())
+        t_nodes, t_grid, rho_nodes = _rho_interp_setup(rho_grid, plan.decay)
+    else:
+        rho_lo, rho_hi = math.inf, 0.0
+        for r0 in range(0, pts_a.shape[0], rows):
+            rho, _ = geometry(r0)
+            rho_lo = min(rho_lo, float(rho.min()))
+            rho_hi = max(rho_hi, float(rho.max()))
+        t_nodes, rho_nodes = _dense_rho_nodes(rho_lo, rho_hi, plan.decay)
+    rho_max = rho_hi + 1e-9
+    rho_min = rho_lo if plan.kind in ("same", "air") else 0.0
     sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
     sigma_max = 1.0 / min(earth.rhos)
+    if not composite:
+        small = R3 < 1e-9
+        R3_safe = np.where(small, 1.0, R3)
+        outer_w = w_a[:, None] * w_b[None, :]
 
     table_key = None
     table = None
     for k, omega in enumerate(omegas):
-        if omega <= 0.0:
-            continue
         p_ref = math.sqrt(omega * MU_0 * sigma_ref)
         params = _grid_params(
             z_sum=plan.decay,
@@ -1182,15 +1279,48 @@ def _subpair_values(
             table_key = params
         spec = plan.weight(lambdas, omega, earth) * lam_w
         s_vals = table @ spec
-        inner = _interp_spectral(s_vals, t_nodes, t_grid, rho_grid.shape)
-        if plan.direct:
-            gamma = np.sqrt(1j * omega * MU_0 * sigma_ref)
-            inner = inner + np.where(
-                small, -gamma, (np.exp(-gamma * R3_safe) - 1.0) / R3_safe
-            )
-        geom = complex(np.sum(outer_w * inner)) * la * lb * dot
+        gamma = np.sqrt(1j * omega * MU_0 * sigma_ref)
+        if not composite:
+            inner = _interp_spectral(s_vals, t_nodes, t_grid, rho_grid.shape)
+            if plan.direct:
+                inner = inner + np.where(
+                    small, -gamma, (np.exp(-gamma * R3_safe) - 1.0) / R3_safe
+                )
+            total = complex(np.sum(outer_w * inner))
+        else:
+            total = 0.0 + 0.0j
+            z_off = max(plan.decay, 1e-3)
+            for r0 in range(0, pts_a.shape[0], rows):
+                rho, R3c = geometry(r0)
+                inner = _interp_spectral(
+                    s_vals, t_nodes, np.log(rho + z_off), rho.shape
+                )
+                if plan.direct:
+                    small_c = R3c < 1e-9
+                    R3c = np.where(small_c, 1.0, R3c)
+                    inner += np.where(
+                        small_c, -gamma, (np.exp(-gamma * R3c) - 1.0) / R3c
+                    )
+                total += complex(w_a[r0 : r0 + rows] @ inner @ w_b)
+        geom = total * la * lb * dot
         out[k] = 1j * omega * MU_0 / (4.0 * math.pi) * geom
     return out
+
+
+def _dense_rho_nodes(
+    rho_lo: float, rho_hi: float, z_ref: float
+) -> tuple[np.ndarray | None, np.ndarray]:
+    """S(rho) interpolation nodes of a composite pair: equidistant in
+    t = ln(rho + z), :data:`_RHO_NODE_SPACING` apart (at least
+    :data:`_N_RHO_NODES`)."""
+    if rho_hi - rho_lo < 1e-9:
+        return None, np.array([rho_lo])
+    z_off = max(z_ref, 1e-3)
+    t_lo = math.log(rho_lo + z_off)
+    t_hi = math.log(rho_hi + z_off)
+    n = max(_N_RHO_NODES, math.ceil((t_hi - t_lo) / _RHO_NODE_SPACING) + 1)
+    t_nodes = np.linspace(t_lo, t_hi, n)
+    return t_nodes, np.maximum(np.exp(t_nodes) - z_off, 0.0)
 
 
 def _pair_values_none(
@@ -1241,19 +1371,17 @@ def _convert_image(
 # ---------------------------------------------------------------------
 
 
-def _sub_segments(
+def _plane_split(
     seg_endpoints: np.ndarray, earth: LayeredEarth
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Sub-segments (split at the surface and the interfaces) of all segments.
+) -> tuple[list[int], list[tuple[np.ndarray, np.ndarray]], np.ndarray]:
+    """Segments split at the surface and the interfaces.
 
-    Returns ``(parent, nodes, lengths, depth, units)``: parent segment
-    index per sub-segment, its 16 outer Gauss–Legendre nodes ``(n, 16, 3)``
-    in m, its length in m, its mean depth in m, and the unit direction of
-    every **parent** segment ``(M, 3)``.
+    Returns the parent index and the end points of every non-degenerate
+    sub-segment, and the unit direction of every parent segment ``(M, 3)``.
     """
     planes = _split_points(earth)
-    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
-    parent, nodes, lengths, depth = [], [], [], []
+    parent: list[int] = []
+    ends: list[tuple[np.ndarray, np.ndarray]] = []
     units = np.zeros((seg_endpoints.shape[0], 3))
     for i in range(seg_endpoints.shape[0]):
         p1 = np.asarray(seg_endpoints[i, 0], dtype=float)
@@ -1263,20 +1391,53 @@ def _sub_segments(
             continue
         units[i] = (p2 - p1) / length
         for a, b in _split_segment(p1, p2, planes):
-            d = b - a
-            la = float(np.linalg.norm(d))
-            if la <= 0.0:
+            if float(np.linalg.norm(b - a)) <= 0.0:
                 continue
             parent.append(i)
-            nodes.append(a[None, :] + s_nodes[:, None] * d[None, :])
-            lengths.append(la)
-            depth.append(0.5 * float(a[2] + b[2]))
+            ends.append((a, b))
+    return parent, ends, units
+
+
+def _sub_segments(
+    seg_endpoints: np.ndarray,
+    earth: LayeredEarth,
+    pieces: Sequence[int] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Sub-segments (split at the surface and the interfaces) of all segments.
+
+    Returns ``(parent, nodes, lengths, depth, units, ends)``: parent segment
+    index per sub-segment, its 16 outer Gauss–Legendre nodes ``(n, 16, 3)``
+    in m, its length in m, its mean depth in m, the unit direction of
+    every **parent** segment ``(M, 3)`` and the sub-segment end points
+    ``(n, 2, 3)``. ``pieces`` splits every plane-split sub-segment (in the
+    order of :func:`_plane_split`) further into that many equal pieces
+    (long segments, :func:`_n_pieces`).
+    """
+    s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
+    base_parent, base_ends, units = _plane_split(seg_endpoints, earth)
+    parent, nodes, lengths, depth, ends = [], [], [], [], []
+    for m, (i, (a, b)) in enumerate(zip(base_parent, base_ends, strict=True)):
+        n = 1 if pieces is None else int(pieces[m])
+        if n == 1:
+            spans = [(a, b)]
+        else:
+            t = np.arange(n + 1) / n
+            pts = a[None, :] + t[:, None] * (b - a)[None, :]
+            spans = [(pts[k], pts[k + 1]) for k in range(n)]
+        for pa, pb in spans:
+            d = pb - pa
+            parent.append(i)
+            nodes.append(pa[None, :] + s_nodes[:, None] * d[None, :])
+            lengths.append(float(np.linalg.norm(d)))
+            depth.append(0.5 * float(pa[2] + pb[2]))
+            ends.append(np.stack([pa, pb]))
     return (
         np.asarray(parent, dtype=int),
         np.asarray(nodes, dtype=float).reshape(-1, 16, 3),
         np.asarray(lengths, dtype=float),
         np.asarray(depth, dtype=float),
         units,
+        np.asarray(ends, dtype=float).reshape(-1, 2, 3),
     )
 
 
@@ -1325,7 +1486,7 @@ def _tabulated_block(
     and interpolated by a cubic spline in $t$; the node geometry of the
     block is computed once for all frequencies.
     """
-    parent, nodes, lengths, _, units = sub
+    parent, nodes, lengths, _, units, _ = sub
     nodes_a, nodes_b = nodes[idx_a], nodes[idx_b]
     rows = _rows_per_chunk(idx_b.size)
     rho_min, rho_max = math.inf, 0.0
@@ -1433,14 +1594,37 @@ def _tabulated_values_none(
     inclined leads), where a table would not pay off, and blocks whose
     $\\lambda$ grid cannot resolve the block's largest distance within the
     node budget (conductors within millimetres of the surface across a
-    large network) use the exact per-pair evaluation instead.
+    large network) use the exact per-pair evaluation instead. A segment
+    longer than a quarter skin depth is split into pieces of at most that
+    length (:func:`_n_pieces`; frequencies with equal piece counts share
+    one pass).
     """
     M = seg_endpoints.shape[0]
     out = np.zeros((len(omegas), M, M), dtype=complex)
-    sub = _sub_segments(seg_endpoints, earth)
-    parent, _, _, depth, units = sub
-    if parent.size == 0:
+    _, base_ends, _ = _plane_split(seg_endpoints, earth)
+    if not base_ends:
         return out
+    lengths = [float(np.linalg.norm(b - a)) for a, b in base_ends]
+    passes: dict[tuple[int, ...], list[int]] = {}
+    for k, omega in enumerate(omegas):
+        if omega <= 0.0:
+            continue
+        key = tuple(_n_pieces(length, omega, earth) for length in lengths)
+        passes.setdefault(key, []).append(k)
+    for key, ks in passes.items():
+        pieces = None if all(n == 1 for n in key) else key
+        sub = _sub_segments(seg_endpoints, earth, pieces)
+        part = np.zeros((len(ks), M, M), dtype=complex)
+        _tabulated_pass(
+            part, [omegas[k] for k in ks], earth, sub, n_table, min_block_pairs
+        )
+        out[ks] = part
+    return out
+
+
+def _tabulated_pass(out, omegas, earth, sub, n_table, min_block_pairs) -> None:
+    """Add every depth-group block of ``sub`` to ``out`` (one piece count)."""
+    _, _, _, depth, _, _ = sub
     keys = np.round(depth, 12)
     groups = [np.flatnonzero(keys == key) for key in np.unique(keys)]
     for ga, idx_a in enumerate(groups):
@@ -1454,16 +1638,12 @@ def _tabulated_values_none(
                     out, omegas, earth, plan, sub, idx_a, idx_b, symmetric, n_table
                 ):
                     continue
-            _exact_block(
-                out, omegas, earth, sub, seg_endpoints, idx_a, idx_b, symmetric
-            )
-    return out
+            _exact_block(out, omegas, earth, sub, idx_a, idx_b, symmetric)
 
 
-def _exact_block(out, omegas, earth, sub, seg_endpoints, idx_a, idx_b, symmetric):
+def _exact_block(out, omegas, earth, sub, idx_a, idx_b, symmetric):
     """Per-pair evaluation of a small block (the exact assembly's rule)."""
-    parent, _, _, _, units = sub
-    planes = _split_points(earth)
+    parent, _, _, _, units, ends = sub
     for a in idx_a:
         for b in idx_b:
             if symmetric and b < a:
@@ -1472,23 +1652,10 @@ def _exact_block(out, omegas, earth, sub, seg_endpoints, idx_a, idx_b, symmetric
             dot = float(units[i] @ units[j])
             if abs(dot) < 1e-12:
                 continue
-            sa = _nth_sub(seg_endpoints[i], planes, a, parent)
-            sb = _nth_sub(seg_endpoints[j], planes, b, parent)
-            vals = _subpair_values(*sa, *sb, dot, omegas, earth)
+            vals = _subpair_values(*ends[a], *ends[b], dot, omegas, earth)
             out[:, i, j] += vals
             if not (symmetric and a == b):
                 out[:, j, i] += vals
-
-
-def _nth_sub(seg, planes, index, parent) -> tuple[np.ndarray, np.ndarray]:
-    """End points of sub-segment ``index`` (global numbering) of ``seg``."""
-    first = int(np.flatnonzero(parent == parent[index])[0])
-    p1 = np.asarray(seg[0], dtype=float)
-    p2 = np.asarray(seg[1], dtype=float)
-    pieces = [
-        (a, b) for a, b in _split_segment(p1, p2, planes) if np.linalg.norm(b - a) > 0
-    ]
-    return pieces[index - first]
 
 
 def _pair_image_mutual(p1_a, p2_a, p1_b, p2_b, mode: str = "additive") -> float:
