@@ -407,9 +407,11 @@ _WIRE_NAME = re.compile(r"^(?P<root>.+)_w(?P<index>[0-9]+)$")
 def foundation_wires(world, name: str, clusters=None) -> list:
     """Electrodes that form the foundation the electrode ``name`` belongs to.
 
-    The generators build a foundation that is not axis-aligned from
-    bonded straight wires: the anchor wire (local ``-y`` edge) carries the
-    foundation name, the others ``<name>_w<j>`` (review pass 10, 10.39).
+    The generators build every mesh foundation, and a ``"distributed"``
+    ring foundation, from bonded straight wires, one electrode per wire
+    line (review pass 10, 10.39; audit A2G-04, at every orientation since
+    2026.11): the anchor wire (local ``-y`` edge) carries the foundation
+    name, the others ``<name>_w<j>``.
     For any member name this returns the anchor and all its ``_w<j>``
     wires, in the order of ``world.electrodes``; with ``clusters``
     (``FieldResult.clusters``) only those in the galvanic cluster of

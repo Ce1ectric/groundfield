@@ -126,7 +126,8 @@ times its depth, because the point self image is then biased high.
 | Soil | one or two distinct layers | `BackendCapabilityError` for three distinct layers (use `mom_sommerfeld`) |
 | Kernel | point | `BackendCapabilityError` for an explicit `kernel="line"` |
 | Concrete shells | not supported | `BackendCapabilityError` |
-| Near-interface horizontal wires | segment length well below twice the distance to $h_1$ (point form of the interface image, see [`image_2layer`](image_2layer.md#electrodes-that-reach-the-interface)) | ds-dependent result |
+| Near-interface horizontal wires | distance to $h_1$, on either side, of at least 0.6 segment lengths (point form of the interface image, see [`image_2layer`](image_2layer.md#electrodes-that-reach-the-interface)) | `PointKernelInterfaceWarning` within 0.6 segment lengths, `BackendCapabilityError` within 0.387 |
+| Rod ends at a layer interface | head and tip more than one wire radius from an interface (the thin wire has no end face: +21 % with the tip at $h_1$) | `InterfaceContactWarning` |
 | Size | dense $N \times N$ matrix and one LU per inductive frequency, $O(N^3)$ | memory and time, see [performance](../performance.md) |
 | Frequency | quasi-static, $f < 1$ kHz | — |
 

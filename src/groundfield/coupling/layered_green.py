@@ -910,6 +910,55 @@ def _image_spectral_sum(
     return (np.exp(-lambdas[:, None] * dists[None, :]) @ coeffs) / (2.0 * lambdas)
 
 
+def _regularisation_wavenumber(
+    lambda_clamp: float, min_distance: float | None
+) -> float:
+    """Regularisation wavenumber of the closed-form $1/R$ terms, in 1/m.
+
+    The closed-form pieces (:func:`_primary_term_real_space`,
+    :func:`_image_real_space_sum`) clamp every $R$ at
+    $1/\\lambda_\\text{clamp}$ with $\\lambda_\\text{clamp} =$
+    ``lambda_max_factor`` $/\\min(h_1, s + z + z_s)$: 25 mm for
+    $h_1 = 5$ m, 150 mm for $h_1 = 30$ m. That keeps a coincident pair
+    finite, but it is not a physical length. A caller that evaluates the
+    kernel at a physical distance — a solver at the wire radius
+    $s = a$ on the reaction-matrix diagonal, or at its own point-form
+    regularisation off the diagonal — passes that length as
+    ``min_distance``, and the clamp becomes
+    $\\min(1/\\lambda_\\text{clamp}, $ ``min_distance`` $)$ (audit
+    A3S-01: a segment within $h_1/400$ of the interface lost 68–84 % of
+    its layered correction to the 25 mm clamp). Every $R$ at or beyond
+    $1/\\lambda_\\text{clamp}$ keeps its value bit for bit.
+
+    Parameters
+    ----------
+    lambda_clamp
+        The default regularisation wavenumber of the truncation plan, in
+        1/m.
+    min_distance
+        Shortest admissible clamp length in m (finite, > 0), or ``None``
+        for the default.
+
+    Returns
+    -------
+    float
+        ``lambda_clamp`` or ``1/min_distance``, whichever is larger.
+
+    Raises
+    ------
+    ValueError
+        If ``min_distance`` is not finite and positive.
+    """
+    if min_distance is None:
+        return lambda_clamp
+    md = float(min_distance)
+    if not (math.isfinite(md) and md > 0.0):
+        raise ValueError(
+            f"layered_green: min_distance must be finite and > 0 m, got {min_distance!r}."
+        )
+    return max(lambda_clamp, 1.0 / md)
+
+
 def _image_real_space_sum(
     coeffs: np.ndarray,
     dists: np.ndarray,
@@ -921,7 +970,7 @@ def _image_real_space_sum(
     $R_j = \\sqrt{s^2 + d_j^2}$, clamped at $1/\\lambda_\\text{clamp}$
     exactly like :func:`_primary_term_real_space` so that a coincident
     pair stays finite and the two closed-form pieces regularise
-    consistently.
+    consistently (see :func:`_regularisation_wavenumber` for the clamp).
     """
     if coeffs.size == 0:
         return np.zeros_like(np.asarray(s, dtype=float))
@@ -1474,6 +1523,7 @@ def two_layer_real_space_kernel(
     lambda_max_factor: float = 200.0,
     n_log: int = 32,
     n_lin: int = 96,
+    min_distance: float | None = None,
 ) -> float:
     """Cross-layer real-space scalar Green's function $\\varphi(s, z, z_s)$.
 
@@ -1519,7 +1569,9 @@ def two_layer_real_space_kernel(
     ``lambda_max_factor`` $/\\min(h_1, s + z + z_s)$ — so the return
     value stays finite and continuous and depends only on the knob and
     the depths, but it is *not* a physical potential: the caller must
-    regularise at the wire radius.
+    regularise at the wire radius. The same clamp applies to every
+    $R < 1/\\lambda_\\text{clamp}$ (25 mm for $h_1 = 5$ m); a caller
+    that evaluates closer pairs passes its own ``min_distance``.
 
     Parameters
     ----------
@@ -1548,6 +1600,13 @@ def two_layer_real_space_kernel(
     n_log, n_lin
         Number of nodes in the logarithmic / linear part of the
         quadrature grid.
+    min_distance
+        Regularisation length of the closed-form $1/R$ terms in m: they
+        are clamped at $\\min(1/\\lambda_\\text{clamp},$ ``min_distance``
+        $)$ instead of $1/\\lambda_\\text{clamp}$. ``None`` (default)
+        keeps $1/\\lambda_\\text{clamp}$. Values at
+        $R \\ge 1/\\lambda_\\text{clamp}$ do not depend on it (see
+        :func:`_regularisation_wavenumber`).
 
     Returns
     -------
@@ -1568,6 +1627,7 @@ def two_layer_real_space_kernel(
         lambda_max_factor=lambda_max_factor,
         warn_stacklevel=3,
     )
+    lambda_clamp = _regularisation_wavenumber(plan.lambda_clamp, min_distance)
     lambdas, weights = _hankel_lambda_grid(
         lambda_max=plan.lambda_max,
         char_length=plan.char_length,
@@ -1592,13 +1652,13 @@ def two_layer_real_space_kernel(
     ) - _image_spectral_sum(lambdas, plan.coeffs, plan.dists)
     integrand = Phi_refl * j0(lambdas * s) * lambdas
     total = float(np.sum(weights * integrand))
-    total += float(_image_real_space_sum(plan.coeffs, plan.dists, s, plan.lambda_clamp))
+    total += float(_image_real_space_sum(plan.coeffs, plan.dists, s, lambda_clamp))
 
     rho_primary = _primary_rho(z, z_s, rho_1, rho_2, h_1)
     if rho_primary == 0.0:
         return total
     return total + float(
-        _primary_term_real_space(rho_primary, s, z - z_s, plan.lambda_clamp)
+        _primary_term_real_space(rho_primary, s, z - z_s, lambda_clamp)
     )
 
 
@@ -1614,6 +1674,7 @@ def two_layer_layered_correction_group(
     lambda_max_factor: float = 200.0,
     n_log: int = 32,
     n_lin: int = 96,
+    min_distance: float | None = None,
 ) -> np.ndarray:
     """Vectorised form of :func:`two_layer_layered_correction_real_space`.
 
@@ -1665,6 +1726,37 @@ def two_layer_layered_correction_group(
     branch also no longer differ observably at the threshold (the
     historic ~3 % jump between a 64-pair and a 65-pair block is gone;
     worst deviation over every size from 60 to 129 pairs is 1.1e-5).
+
+    Parameters
+    ----------
+    s_values
+        Horizontal distances in m (any shape, ``>= 0``).
+    z, z_s
+        Observer / source depth in m (``>= 0``, positive into the soil).
+    rho_1, rho_2
+        Resistivities of the upper / lower layer in Ω·m.
+    h_1
+        Upper-layer thickness in m.
+    rho_baseline
+        Resistivity of the subtracted homogeneous half-space in Ω·m;
+        ``None`` (default) takes ``rho_1``. Solvers pass the resistivity
+        of the source layer (ADR-0007 §"Phase A.1").
+    lambda_max_factor, n_log, n_lin
+        Quadrature controls as in
+        :func:`two_layer_layered_correction_real_space`.
+    min_distance
+        Regularisation length of the closed-form $1/R$ terms in m, as in
+        :func:`two_layer_real_space_kernel`: the clamp becomes
+        $\\min(1/\\lambda_\\text{clamp},$ ``min_distance`` $)$. The solver
+        passes the 1 mm of its own point forms, so the exchange of a point
+        value for a line integral stays consistent for pairs closer than
+        $h_1/200$ (audit A3S-01). ``None`` (default) keeps the clamp.
+
+    Returns
+    -------
+    np.ndarray
+        The correction, same shape as ``s_values``; divided by
+        :math:`2\\pi` it is the potential in V per A.
     """
     if rho_baseline is None:
         rho_baseline = rho_1
@@ -1753,11 +1845,12 @@ def two_layer_layered_correction_group(
     )
     c = _log_grid_offset(z, z_s, h_1, d_rest=plan.d_rest)
     out = _hankel_contract_smooth(lambdas, s_values, w_phi, c=c)
+    lambda_clamp = _regularisation_wavenumber(plan.lambda_clamp, min_distance)
     out = out + _image_real_space_sum(
         plan.coeffs,
         plan.dists,
         s_values,
-        plan.lambda_clamp,
+        lambda_clamp,
     )
     if d_rho == 0.0:
         return out
@@ -1765,7 +1858,7 @@ def two_layer_layered_correction_group(
         d_rho,
         s_values,
         z - z_s,
-        plan.lambda_clamp,
+        lambda_clamp,
     )
 
 
@@ -1799,7 +1892,10 @@ def two_layer_probe_matrix(
     -----
     The near-singularity is regularised like the image-series paths:
     the horizontal distance is clamped at ``min_distance`` whenever
-    the vertical separation is below ``min_distance`` as well.
+    the vertical separation is below ``min_distance`` as well, and the
+    closed-form $1/R$ terms are clamped at no more than ``min_distance``
+    (they were clamped at $h_1/200$, 25 mm for $h_1 = 5$ m, up to this
+    release; audit A3S-01).
 
     Cost control: probe/source pairs are grouped by their (z, z_s)
     depth combination (rounded to 1 µm). Within a group the primary
@@ -1897,11 +1993,17 @@ def two_layer_probe_matrix(
             d_rest=plan.d_rest,
         )
         vals = _hankel_contract_smooth(lambdas, s_flat, w_phi, c=c)
+        # The closed-form 1/R terms are regularised at ``min_distance``
+        # like the image-series paths, not at the h_1/200 of the
+        # truncation plan (audit A3S-01); ``min_distance = 0`` keeps it.
+        lambda_clamp = _regularisation_wavenumber(
+            plan.lambda_clamp, min_distance if min_distance > 0.0 else None
+        )
         vals = vals + _image_real_space_sum(
             plan.coeffs,
             plan.dists,
             s_flat,
-            plan.lambda_clamp,
+            lambda_clamp,
         )
         rho_primary = _primary_rho(zm, zn, rho_1, rho_2, h_1)
         if rho_primary == 0.0:
@@ -1910,7 +2012,7 @@ def two_layer_probe_matrix(
             rho_primary,
             s_flat,
             zm - zn,
-            plan.lambda_clamp,
+            lambda_clamp,
         )
 
     # Group by the (z, z_s) pair — the kernel then depends on s only.
@@ -1946,6 +2048,7 @@ def two_layer_layered_correction_real_space(
     lambda_max_factor: float = 200.0,
     n_log: int = 32,
     n_lin: int = 96,
+    min_distance: float | None = None,
 ) -> float:
     """Real-space layered *correction* over the homogeneous-rho_1 baseline.
 
@@ -1991,6 +2094,36 @@ def two_layer_layered_correction_real_space(
     Returns 0 in the homogeneous limit by construction; otherwise
     a finite real value with the same units as
     :func:`two_layer_real_space_kernel`.
+
+    Parameters
+    ----------
+    s
+        Horizontal distance in m (``>= 0``).
+    z, z_s
+        Observer / source depth in m (``>= 0``, positive into the soil).
+    rho_1, rho_2
+        Resistivities of the upper / lower layer in Ω·m.
+    h_1
+        Upper-layer thickness in m.
+    rho_baseline
+        Resistivity of the subtracted homogeneous half-space in Ω·m (see
+        above).
+    lambda_max_factor
+        Upper bound on the quadrature truncation and default
+        regularisation wavenumber, as in
+        :func:`two_layer_real_space_kernel`.
+    n_log, n_lin
+        Number of nodes in the logarithmic / linear part of the
+        quadrature grid.
+    min_distance
+        Regularisation length of the closed-form $1/R$ terms in m: the
+        clamp becomes $\\min(1/\\lambda_\\text{clamp},$ ``min_distance``
+        $)$. A solver evaluating the reaction-matrix diagonal at the wire
+        radius ($s = a$) passes ``a``, so the interface image of a segment
+        that touches the interface keeps its value $1/\\sqrt{a^2 + d^2}$
+        instead of the 25 mm clamp of $h_1 = 5$ m (audit A3S-01).
+        ``None`` (default) keeps the clamp; values at
+        $R \\ge 1/\\lambda_\\text{clamp}$ do not depend on it.
     """
     if rho_baseline is None:
         rho_baseline = rho_1
@@ -2087,7 +2220,8 @@ def two_layer_layered_correction_real_space(
 
     integrand = delta_Phi * j0(lambdas * s) * lambdas
     total = float(np.sum(weights * integrand))
-    total += float(_image_real_space_sum(plan.coeffs, plan.dists, s, plan.lambda_clamp))
+    lambda_clamp = _regularisation_wavenumber(plan.lambda_clamp, min_distance)
+    total += float(_image_real_space_sum(plan.coeffs, plan.dists, s, lambda_clamp))
 
     d_rho = _primary_rho(z, z_s, rho_1, rho_2, h_1) - _primary_rho(
         z,
@@ -2098,4 +2232,4 @@ def two_layer_layered_correction_real_space(
     )
     if d_rho == 0.0:
         return total
-    return total + float(_primary_term_real_space(d_rho, s, z - z_s, plan.lambda_clamp))
+    return total + float(_primary_term_real_space(d_rho, s, z - z_s, lambda_clamp))

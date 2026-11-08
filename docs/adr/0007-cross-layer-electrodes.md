@@ -298,7 +298,15 @@ Findings 10.15 (F02), 10.25, 10.26, 10.28, 10.32 and 10.50 (F43).
    tip penetration — and was replaced before the release, second
    adversarial audit A2S-01. The Galerkin self term and the line
    kernel's parallel-pair integral are evaluated without cancellation
-   for such pieces.)
+   for such pieces.) The diagonal evaluates the closed-form $1/R$ terms
+   of the layered correction at the wire radius instead of their
+   default clamp $h_1/200$, which took 68–84 % of the correction of every
+   piece within $h_1/400$ of the interface (a ring at $h_1$ = 5 m read
+   −5.29 Ω; third adversarial audit A3S-01); off the diagonal they are
+   regularised at the 1 mm of the point forms. What remains at a rod end
+   is a limit of the thin-wire model, which has no end face: +21 % with
+   the tip exactly at $h_1$ against a solid-rod reference, −4.6 % 1 mm
+   past it; such ends warn (`InterfaceContactWarning`, A3S-05).
 3. **Reciprocity and the line kernel.** With the exact line kernel
    (ADR-0015) the direct term of a pair in different layers carries the
    transmitted resistivity $2\rho_1\rho_2/(\rho_1+\rho_2)$ and the
@@ -306,8 +314,13 @@ Findings 10.15 (F02), 10.25, 10.26, 10.28, 10.32 and 10.50 (F43).
    integral for near pairs; the reaction matrix is reciprocal to round-off
    and the impedance of a rod through the interface changes by less than
    $10^{-4}$ per halving of the segment length.
-4. **Series bookkeeping.** Cross-layer solves report `series_used = False`
+4. **Point form on both sides.** The point-form guard of a horizontal
+   wire within 0.387 (error) or 0.6 (warning) segment lengths of $h_1$
+   applies above the interface too, where the series takes the image of
+   the segment in the interface as a point source: a ring 1 µm above
+   $h_1$ read −1931 Ω with the point kernel and the `mom` family (A3S-02).
+5. **Series bookkeeping.** Cross-layer solves report `series_used = False`
    and no false `SeriesTruncationWarning` (10.50); the post-solve field
    evaluation uses the series controls of the solve (10.25).
-5. **`fem`** raises for an electrode through an interface its equivalent
+6. **`fem`** raises for an electrode through an interface its equivalent
    hemisphere does not reach (ADR-0002 amendment 2026.11).

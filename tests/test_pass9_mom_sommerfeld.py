@@ -102,6 +102,10 @@ from groundfield.solver.mom_sommerfeld import (
 
 # Coarse mesh — the reference engine is the slow one.
 SEG = 5.0
+#: Segment length for the ring 1.2 m above h_1 = 2 m with the point form:
+#: since audit A3S-02 a horizontal wire closer than 0.387 segment lengths to
+#: the interface is refused above h_1 too (at 5 m: q = 0.63; at 2 m: 1.56).
+SEG_NEAR_H1 = 2.0
 RING_RADIUS = 25.0
 RING_DEPTH = 0.8
 
@@ -475,14 +479,16 @@ def test_ring_impedance_contrast_matches_image_2layer() -> None:
     closed-form series it is supposed to validate.
 
     Pre-0.15.0: 4.072423 Ω vs 4.074735 Ω (-5.7e-4 relative) in 121 s;
-    after the fix the two agree to ~4e-8 in ~1 s.
+    after the fix the two agree to ~4e-8 in ~1 s (at 5 m segments; since
+    audit A3S-02 the point form refuses them for this ring 1.2 m above
+    h_1, at 2 m segments the two agree to 4.5e-8).
     """
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
     z_ref = (
         gf.create_engine(
             kernel="point",
             backend="image_2layer",
-            segment_length=SEG,
+            segment_length=SEG_NEAR_H1,
         )
         .solve(_ring_world(soil))
         .cluster_impedance("g1")[0]
@@ -490,7 +496,7 @@ def test_ring_impedance_contrast_matches_image_2layer() -> None:
     z_som = (
         gf.create_engine(
             backend="mom_sommerfeld",
-            segment_length=SEG,
+            segment_length=SEG_NEAR_H1,
         )
         .solve(_ring_world(soil))
         .cluster_impedance("g1")[0]
@@ -888,7 +894,7 @@ def test_engine_forwards_the_sommerfeld_knobs_to_the_backend() -> None:
     soil = gf.TwoLayerSoil(rho_1=100.0, rho_2=500.0, h_1=2.0)
     engine = gf.Engine(
         backend="mom_sommerfeld",
-        segment_length=SEG,
+        segment_length=SEG_NEAR_H1,
         sommerfeld_lambda_max_factor=123.0,
         sommerfeld_epsabs=2e-10,
         sommerfeld_epsrel=3e-8,
@@ -910,7 +916,7 @@ def test_engine_lambda_max_factor_changes_the_solve_result() -> None:
     def _impedance(factor: float) -> float:
         engine = gf.Engine(
             backend="mom_sommerfeld",
-            segment_length=SEG,
+            segment_length=SEG_NEAR_H1,
             sommerfeld_lambda_max_factor=factor,
         )
         with warnings.catch_warnings():

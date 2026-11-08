@@ -155,7 +155,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
-from groundfield.solver._guards import _MIN_DISTANCE, _check_point_cross_layer_diagonal
+from groundfield.solver._guards import _MIN_DISTANCE, _check_point_interface_diagonal
 from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._layered import (
     LayerStack,
@@ -1016,6 +1016,9 @@ def sommerfeld_kernel_value(
         rho_1_local = float(stack.rhos[0])
         rho_2_local = float(stack.rhos[1])
         h_1_local = float(stack.h[0])
+        # Distances floored at 1 mm like every other branch here: the
+        # closed-form 1/R terms of the delegated kernel are clamped at
+        # min(h_1/200, 1 mm) instead of h_1/200 (audit A3S-01).
         G_phys = two_layer_real_space_kernel(
             s=s,
             z=z,
@@ -1024,6 +1027,7 @@ def sommerfeld_kernel_value(
             rho_2=rho_2_local,
             h_1=h_1_local,
             lambda_max_factor=lambda_max_factor,
+            min_distance=_MIN_DISTANCE,
         )
         # G_phys has rho/2·(1/r + ...) structure; the existing caller
         # forms Z = rho_1/(4π)·G_old, so we want G_old = 2·G_phys/rho_1.
@@ -1578,9 +1582,12 @@ class _SommerfeldGreen(_PointMatchingGreen):
                     "Use backend='image_2layer' for n=2 cross-layer "
                     "worlds; for n>=3 thicken the upper layer."
                 )
-        elif stack.n_layers == 2 and self.z_max >= float(stack.h[0]):
-            # The n = 2 diagonal is the point form of the cross-layer path.
-            _check_point_cross_layer_diagonal(
+        if stack.n_layers >= 2:
+            # The diagonal is a point form on either side of h_1: the
+            # cross-layer path of n = 2, the point image of the interface in
+            # the series (n = 2) and Sommerfeld (n >= 3) diagonals above it
+            # (audit A3S-02).
+            _check_point_interface_diagonal(
                 segments,
                 arrays.points,
                 arrays.lengths,
@@ -1588,8 +1595,9 @@ class _SommerfeldGreen(_PointMatchingGreen):
                 float(stack.h[0]),
                 backend="'mom_sommerfeld'",
                 remedy="Use backend='image_2layer' with its default line kernel, "
-                "which integrates these segments exactly, or a finer "
-                "segment_length",
+                "which integrates these segments exactly (two layers), or a "
+                "finer segment_length",
+                cross_layer=bool(self.z_max >= float(stack.h[0])),
             )
         Z = _build_Z_sommerfeld(
             arrays.points,

@@ -165,3 +165,147 @@ def test_no_physical_interface_nothing_to_check(kernel: str) -> None:
     assert z_mutual == pytest.approx(
         solve_mutual_matrix(hom, engine, ["r"])[0, 0], rel=1e-13
     )
+
+
+# ---------------------------------------------------------------------
+# Audit A3S-02: the same guard above the interface (series path)
+# ---------------------------------------------------------------------
+#
+# With every segment above h_1 no electrode reaches the interface and the
+# point form takes the Tagg/Sunde image of a segment in the interface as a
+# point source 2(h_1 - z) away. For a horizontal wire just above h_1 the image
+# *line* runs much closer to the wire than that point: a ring r = 3 m
+# (ds = 0.5 m) 1 um / 1 mm / 1 cm / 5 cm above h_1 = 5 m read -1931 / -945 /
+# -57.9 / 21.2 Ohm (line kernel 4.18 / 4.77 / 15.4 / 28.0 Ohm) with the point
+# kernel, mom, mom_sommerfeld (two and three layers) and solve_mutual_matrix,
+# also in 0.15.0. The guard now applies on both sides of the interface.
+
+
+def _ring_above_interface(
+    dz: float, rho: tuple[float, float] = (1000.0, 30.0), three: bool = False
+) -> gf.World:
+    if three:
+        soil = gf.MultiLayerSoil(
+            layers=[
+                gf.SoilLayer(rho=rho[0], h=5.0),
+                gf.SoilLayer(rho=rho[1], h=2000.0),
+                gf.SoilLayer(rho=1.01 * rho[1]),
+            ]
+        )
+    else:
+        soil = gf.TwoLayerSoil(rho_1=rho[0], rho_2=rho[1], h_1=5.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w, "ring", name="e", center=(0.0, 0.0, 5.0 - dz), radius=3.0, wire_radius=0.005
+    )
+    gf.create_source(w, attached_to="e", magnitude=1.0)
+    return w
+
+
+_POINT_FORMS = [
+    ({"kernel": "point"}, "kernel=None or 'line'", False),
+    ({"backend": "mom"}, "image_2layer", False),
+    ({"backend": "mom_sommerfeld"}, "image_2layer", False),
+    ({"backend": "mom_sommerfeld"}, "image_2layer", True),
+]
+
+
+def _ring_value(dz: float, engine_kw: dict, three: bool = False, **kw):
+    return _solve(
+        _ring_above_interface(dz, three=three, **kw), segment_length=0.5, **engine_kw
+    )
+
+
+@_FINDING
+@pytest.mark.parametrize("dz", [1e-6, 1e-3, 1e-2, 0.1])
+@pytest.mark.parametrize(("engine_kw", "names", "three"), _POINT_FORMS)
+def test_point_form_rejects_a_horizontal_wire_just_above_the_interface(
+    dz: float, engine_kw: dict, names: str, three: bool
+) -> None:
+    """-1931 / -945 / -57.9 Ohm at 1 um / 1 mm / 1 cm (line kernel 4.18 / 4.77 / 15.4)."""
+    # audit A3S-02
+    with pytest.raises(BackendCapabilityError, match="0.387 segment lengths") as info:
+        _ring_value(dz, engine_kw, three)
+    assert names in str(info.value)
+    assert "electrode 'e'" in str(info.value)
+
+
+@_FINDING
+@pytest.mark.parametrize("dz", [1e-6, 1e-2])
+def test_mutual_matrix_point_form_is_guarded_above_the_interface(dz: float) -> None:
+    # audit A3S-02
+    from groundfield.solver.mutual import solve_mutual_matrix
+
+    w = _ring_above_interface(dz)
+    with pytest.raises(BackendCapabilityError, match="0.387 segment lengths"):
+        solve_mutual_matrix(
+            w, gf.create_engine(segment_length=0.5, kernel="point"), ["e"]
+        )
+    Z = solve_mutual_matrix(w, gf.create_engine(segment_length=0.5), ["e"])
+    assert Z[0, 0].real > 0.0
+
+
+@_FINDING
+@pytest.mark.parametrize(("dz", "warned"), [(0.2, True), (0.3, False)])
+@pytest.mark.parametrize(("engine_kw", "names", "three"), _POINT_FORMS)
+def test_point_form_warns_for_a_horizontal_wire_above_the_interface(
+    dz: float, warned: bool, engine_kw: dict, names: str, three: bool
+) -> None:
+    """0.2 m above h_1 (0.4 L): -2.5 % against the line kernel, warned; 0.3 m (0.6 L): -2.2 %."""
+    # audit A3S-02
+    result, hits = _ring_value(dz, engine_kw, three)
+    assert bool(hits) is warned
+    if warned:
+        assert "0.6 segment lengths" in str(hits[0].message)
+    line, _ = _ring_value(dz, {"kernel": "line"})
+    value = result.cluster_impedance("e")[0].real
+    assert value == pytest.approx(line.cluster_impedance("e")[0].real, rel=0.03)
+
+
+@_FINDING
+@pytest.mark.parametrize("dz", [1e-6, 1e-3, 1e-2, 0.05])
+def test_line_kernel_solves_wires_just_above_the_interface(dz: float) -> None:
+    """Continuous through h_1: 4.1826 Ohm 1 um above, 4.1805 Ohm at h_1 (A3S-01)."""
+    # audit A3S-02
+    result, hits = _ring_value(dz, {})
+    assert not hits
+    assert result.cluster_impedance("e")[0].real > 4.0
+
+
+@_FINDING
+@pytest.mark.parametrize("engine_kw", [{"kernel": "point"}, {"backend": "mom"}])
+def test_rods_ending_just_above_the_interface_are_not_refused(engine_kw: dict) -> None:
+    """A vertical segment keeps L/2 from h_1: the series-path guard never fires."""
+    # audit A3S-02
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.001))
+    gf.create_electrode(
+        w, "rod", name="r", position=(0.0, 0.0, 0.5), length=4.5, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="r", magnitude=1.0)
+    result, hits = _solve(w, segment_length=0.5, **engine_kw)
+    assert not hits
+    assert result.cluster_impedance("r")[0].real > 150.0
+
+
+@_FINDING
+def test_the_message_names_the_conductor_knob_for_a_conductor_piece() -> None:
+    """A sloped galvanic conductor ending 5 cm above h_1 (series path)."""
+    # audit A3S-02 (self-check of the fix)
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.5), length=1.0)
+    gf.create_junction(w, name="j", position=(10.0, 0.0, 1.95))
+    gf.create_conductor(
+        w,
+        name="c",
+        start="a",
+        end="j",
+        cross_section=50e-6,
+        discretize_segment_length=1.0,
+        coupling_to_soil="galvanic",
+    )
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    with pytest.raises(BackendCapabilityError, match="conductor 'c'") as info:
+        _solve(w, segment_length=0.5, kernel="point")
+    assert "Conductor.discretize_segment_length" in str(info.value)
+    result, hits = _solve(w, segment_length=0.5)  # the line kernel solves it
+    assert not hits and result.cluster_impedance("a")[0].real > 0.0

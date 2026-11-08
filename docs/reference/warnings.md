@@ -35,8 +35,8 @@ the built-in exceptions with a fixed meaning.
 numerics when the backend cannot represent the world: an unsupported
 number of soil layers, electrodes with a concrete-shell coefficient,
 junctions, an explicitly requested kernel the backend does not
-implement, or a horizontal wire so close to the layer interface that the
-point form of the cross-layer path cannot evaluate it (see
+implement, or a horizontal wire so close to the layer interface, on
+either side of it, that the point form cannot evaluate it (see
 `PointKernelInterfaceWarning`). The message names the backends that can. **Remedy:** choose
 one of them (see the [backend registry](api/registry.md)); three or more
 distinct layers need `mom_sommerfeld`.
@@ -83,17 +83,38 @@ line kernel of the image family (the default), which has no such bias.
 
 ### `PointKernelInterfaceWarning`
 
-`groundfield.solver.PointKernelInterfaceWarning`. **Emitted** on the
-point form of the cross-layer path (`kernel="point"` of the image
-family and of `solve_mutual_*`, the `mom` family; two-layer soil with an
-electrode that reaches the interface) when a horizontal wire lies within
-0.6 segment lengths of the interface $h_1$: the three-point rule of the
-diagonal samples the layered correction where it varies quickly, and the
-impedance reads 3–17 % low in the measured cases. Closer still, where
-the rule would reach across the interface or above the surface, the
-solve raises `BackendCapabilityError` instead. **Remedy:** the exact line
-kernel of the image family (the default), or segments shorter than the
-distance of the wire to the interface.
+`groundfield.solver.PointKernelInterfaceWarning`. **Emitted** for the
+point form (`kernel="point"` of the image family and of
+`solve_mutual_*`, the `mom` family) when a horizontal wire lies within
+0.6 segment lengths of the layer interface $h_1$, on either side of it.
+With an electrode that reaches the interface (the cross-layer path) the
+three-point rule of the diagonal samples the layered correction where it
+varies quickly; with every wire above $h_1$ the diagonal takes the image
+of a segment in the interface as a point source $2|z - h_1|$ away, while
+its image line runs much closer to the wire. Measured: 3–17 % low on the
+cross-layer path, −2.5 % and −0.4 % for a ring 0.2 m above $h_1$
+(1000/30 and 30/1000 Ω·m, ds = 0.5 m). Closer than 0.387 segment
+lengths, or where the rule would reach above the surface, the solve
+raises `BackendCapabilityError` instead: a ring 1 µm above $h_1$ read
+−1931 Ω where the line kernel gives 4.18 Ω (audit A3S-02).
+**Remedy:** the exact line kernel of the image family (the default), or
+segments shorter than the distance of the wire to the interface.
+
+### `InterfaceContactWarning`
+
+`groundfield.solver.InterfaceContactWarning`. **Emitted** by every
+segment backend and `solve_mutual_*` when a rod head or tip lies within
+one wire radius of a layer interface. The thin-wire model has no end
+face: a rod that ends exactly at the interface is a wire entirely on one
+side of it, and one that reaches past it by a fraction of its radius
+touches the other layer through a short part only, while the solid rod
+with a flat end is continuous in between. Against an axisymmetric model
+of the solid rod (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads
++21 % with its tip at the interface, +7 % 1 mm above it, −4.6 % 1 mm
+below it, and within a few per cent beyond two radii, as anywhere else.
+`diagnose()` reports the same ends under `interface_contact`.
+**Remedy:** keep rod ends a few wire radii from an interface, or bracket
+the result by moving the end by ±2 wire radii.
 
 ### `SeriesTruncationWarning`
 
@@ -185,8 +206,8 @@ near-ideal short. **Remedy:** give the cross section in m².
 
 `gf.DiagnosticsWarning`. **Emitted** by `diagnose(...).warn()`: one
 aggregated warning with all findings, one line per cause (thin-wire
-ratio, resolution, problem size, close or interpenetrating wires, inert
-settings, series truncation). The solve emits the discretisation
+ratio, resolution, problem size, close or interpenetrating wires, rod
+ends at a layer interface, inert settings, series truncation). The solve emits the discretisation
 findings as individual warnings. **Remedy:** follow the advice in each
 line; see [Diagnostics](api/diagnostics.md).
 

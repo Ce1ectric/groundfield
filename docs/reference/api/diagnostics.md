@@ -14,7 +14,7 @@ a comparison of several engines, is [Validation](validation.md).
 | `expected_segments(world, engine)` | segments the discretiser will produce, per electrode and in total |
 | `check_segment_resolution(world, engine)` | thin-wire ratio, electrodes smaller than a segment, size budget (strings) |
 | `check_segment_budget(world, engine)` | raises `ResourceLimitError` above `HARD_LIMIT` (used by the solver) |
-| `diagnose(world, engine, result=None)` | all of the above plus close wires, inert settings, series truncation |
+| `diagnose(world, engine, result=None)` | all of the above plus close wires, rod ends at a layer interface, inert settings, series truncation |
 
 ## Mathematical and physical context
 
@@ -31,6 +31,14 @@ The checks guard the assumptions of the thin-wire model (see
   the sum of their radii violate the point-source assumption that a
   source sees another wire only through its midpoint; the exact
   line-source kernel stays physical there.
+- **Interface contact.** The thin-wire model has no end face. A rod
+  whose head or tip lies within one wire radius of a layer interface is
+  either entirely on one side of it (end at the interface) or touches the
+  other layer through a part shorter than its radius; the solid rod is
+  continuous in between. Against an axisymmetric model of the solid rod
+  (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads +21 % with its tip
+  at the interface and −4.6 % 1 mm past it (category
+  `interface_contact`, also `InterfaceContactWarning` at the solve).
 - **Size.** The dense reaction matrix of $N$ segments has $N^2$
   entries; the work per excitation grows like $N^2$ and the direct
   solve like $N^3$. Above `SOFT_LIMIT` (5 000 segments) the report

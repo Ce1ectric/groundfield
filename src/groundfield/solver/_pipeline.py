@@ -328,10 +328,19 @@ def discretise(
     ------
     groundfield.diagnostics.ResourceLimitError
         If the predicted segment count exceeds the hard limit.
+
+    Warns
+    -----
+    InterfaceContactWarning
+        If a rod head or tip lies within one wire radius of one of the
+        ``layer_interfaces`` (a limit of the thin-wire model, audit
+        A3S-05).
     """
     from groundfield.diagnostics import check_segment_budget
+    from groundfield.solver._guards import _warn_rod_ends_near_interfaces
 
     check_segment_budget(world, engine, layer_interfaces)
+    _warn_rod_ends_near_interfaces(world.electrodes, layer_interfaces)
     ds = engine.segment_length
     segments: list[_Segment] = []
     owner_segments: dict[str, list[int]] = {}

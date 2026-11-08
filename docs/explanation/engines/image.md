@@ -125,6 +125,13 @@ cent on impedances but tens of per cent on touch, step and mesh voltages
 near a grid corner or a star tip, with the step voltage
 **under**-estimated — the non-conservative direction for a safety
 assessment. Rings and single rods are exact by symmetry or nearly so.
+In the table the touch voltage has its feet 1 m outside the corner or tip
+and the step starts at the surface point **above** the corner or tip and
+reaches 1 m outwards (grid corner −28 % with either kernel); the warning
+text and `groundfield.postprocess.safety` quote the step from 1 m to 2 m
+outside instead, next to the touch voltage at 1 m: +20 % / −21 % at the
+grid corner with the default line kernel (+19 % / −21 % with the point
+kernel).
 
 The safety helpers therefore warn: `touch_voltage`, `step_voltage` and
 `touch_voltage_envelope` emit `UniformCurrentFieldWarning` when a result of

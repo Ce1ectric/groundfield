@@ -1,0 +1,21 @@
+# Stream fix3solver (audit round 3 fixes: solver, layered Green's function,
+# world, diagnostics, post-processing).
+#
+# No stored quantity moves, so this file declares no change. Checked with
+# GF_GOLDEN_STRICT=1 against the snapshot of the stream's base
+# (release/calver 4f4652d) after every commit: all stored cases
+# bit-identical.
+#
+# * A3S-01 (closed-form 1/R terms of the layered correction regularised at
+#   the wire radius on the diagonal and at 1 mm off it, instead of
+#   h_1/200): only entries whose closed-form distance is below h_1/200
+#   change. No stored case has a segment within h_1/400 of an interface or
+#   two segments closer than h_1/200 (img2_rod_crosslayer and
+#   mutual_three_rods_crosslayer: h_1 = 1 m, clamp 5 mm < every distance).
+# * A3S-02 (point-form guard above h_1): no stored point-kernel case has a
+#   horizontal wire within 0.6 segment lengths of an interface (also checked
+#   with PointKernelInterfaceWarning as an error).
+# * A3S-04 (field evaluation on the canonical stack): no stored case has a
+#   layered soil of one resistivity.
+# * A3S-03, A3S-05, the World name index and the safety texts: validation,
+#   warnings, performance and documentation; no numbers involved.

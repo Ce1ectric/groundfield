@@ -28,6 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver._discretize import _Segment
 
 __all__ = [
+    "InterfaceContactWarning",
     "PointKernelInterfaceWarning",
     "ShallowSegmentWarning",
 ]
@@ -498,21 +499,42 @@ CROSS_LAYER_WARN_DISTANCE = 0.6
 class PointKernelInterfaceWarning(UserWarning):
     """A horizontal segment lies close to a layer interface (point form).
 
-    On the cross-layer path of a two-layer soil (an electrode reaches the
-    interface :math:`h_1`) the point form of the reaction matrix
-    (``kernel="point"`` of the image family and the ``mom`` family)
-    averages the layered correction on the diagonal over a 3-point rule
-    along the *depth* axis, :math:`\\pm 0.387 L` around the segment
-    midpoint, whatever the segment's orientation. For a horizontal segment
-    within :math:`0.6 L` of :math:`h_1` the rule samples the correction
-    next to the interface, where it varies quickly: measured −3 % … −17 %
-    against the exact line kernel (a 20 m strip and a ring r = 3 m in
-    300/50 and 100/1000 Ω·m). Closer still, where the rule reaches across
-    the interface or above the soil surface, the solve raises
-    :class:`~groundfield.solver.registry.BackendCapabilityError` (up to
-    −552 %, negative impedances; audit round 2). The exact line kernel,
+    The point form of the reaction matrix (``kernel="point"`` of the image
+    family, the ``mom`` family and ``solve_mutual_*`` with the point kernel)
+    cannot represent a horizontal wire next to a layer interface, on either
+    side of it:
+
+    * on the cross-layer path of a two-layer soil (an electrode reaches the
+      interface :math:`h_1`) it averages the layered correction on the
+      diagonal over a 3-point rule along the *depth* axis,
+      :math:`\\pm 0.387 L` around the segment midpoint, whatever the
+      segment's orientation;
+    * with every segment above :math:`h_1` (the Tagg/Sunde series, and the
+      Sommerfeld diagonal of ``mom_sommerfeld``) it takes the image of a
+      segment in the interface as a point source :math:`2|z - h_1|` away,
+      where the image *line* of a horizontal segment is much closer to the
+      wire than that point (audit A3S-02).
+
+    A horizontal segment within :math:`0.6 L` of :math:`h_1` draws this
+    warning: measured −3 % … −17 % against the exact line kernel on the
+    cross-layer path (a 20 m strip and a ring r = 3 m in 300/50 and
+    100/1000 Ω·m), −2.5 % and −0.4 % above :math:`h_1` (a ring r = 3 m,
+    ``segment_length = 0.5`` m, 0.2 m above :math:`h_1` = 5 m in 1000/30
+    and 30/1000 Ω·m). Closer still (:math:`|z - h_1| < 0.387 L`), or where
+    the 3-point rule reaches above the soil surface, the solve raises
+    :class:`~groundfield.solver.registry.BackendCapabilityError` instead
+    (negative impedances: −552 % on the cross-layer path; −1931 Ω instead
+    of 4.18 Ω for the ring 1 µm above :math:`h_1`). The exact line kernel,
     the default of the image family, integrates these segments exactly.
     """
+
+
+def _conductor_hint(segments: "Sequence[_Segment]", mask: np.ndarray) -> str:
+    """Name the conductor knob when a flagged segment belongs to a conductor."""
+    flagged = np.flatnonzero(mask)
+    if any(getattr(segments[int(k)], "conductor_name", None) for k in flagged):
+        return "; for a conductor piece refine Conductor.discretize_segment_length"
+    return ""
 
 
 def _check_point_cross_layer_diagonal(
@@ -608,6 +630,7 @@ def _check_point_cross_layer_diagonal(
     hint = ""
     if np.isfinite(finer).any():
         hint = f" (here below {float(np.min(finer[np.isfinite(finer)])):.3g} m)"
+    hint += _conductor_hint(segments, in_air | across | near)
     if in_air.any() or across.any():
         from groundfield.solver.registry import BackendCapabilityError
 
@@ -639,4 +662,248 @@ def _check_point_cross_layer_diagonal(
         "samples the layered correction next to the interface there "
         "(-3 % ... -17 % against the exact line kernel). " + remedy + hint + ".",
         PointKernelInterfaceWarning,
+    )
+
+
+def _check_point_interface_diagonal(
+    segments: "Sequence[_Segment]",
+    points: np.ndarray,
+    lengths: np.ndarray,
+    directions: np.ndarray | None,
+    h_1: float,
+    *,
+    backend: str,
+    remedy: str,
+    cross_layer: bool | None = None,
+) -> None:
+    """Point-form guard for horizontal wires on either side of an interface.
+
+    The point form of the reaction-matrix diagonal fails for a horizontal
+    wire next to the layer interface :math:`h_1` on both of its paths:
+
+    * **cross-layer path** (a segment at or below :math:`h_1`): the 3-point
+      depth rule of the layered correction, see
+      :func:`_check_point_cross_layer_diagonal`, which this function calls;
+    * **every segment above** :math:`h_1` (the Tagg/Sunde series of
+      ``image_2layer`` and ``mom``, the series diagonal of
+      ``mom_sommerfeld`` with two layers and its Sommerfeld diagonal with
+      three or more): the image of a segment in the interface enters the
+      diagonal as a point source :math:`2|z - h_1|` away, while the image
+      *line* of a horizontal segment runs parallel to the wire at that
+      distance. A ring r = 3 m (``segment_length = 0.5`` m) 1 µm / 1 mm /
+      1 cm / 5 cm / 0.1 m above :math:`h_1` = 5 m read −1931 / −945 /
+      −57.9 / 21.2 / 31.6 Ω instead of 4.18 / 4.77 / 15.4 / 28.0 / 33.5 Ω
+      (1000/30 Ω·m) and +853 % … +0.1 % in 30/1000 Ω·m (audit A3S-02);
+      0.2 m above it −2.5 % and −0.4 %.
+
+    The thresholds are those of the cross-layer path, with
+    :math:`q = |z - h_1| / (0.387 L)`: :math:`q < 1` raises for every
+    segment, :math:`|z - h_1| < 0.6 L` warns for horizontal (non-vertical)
+    segments. Vertical segments never reach either: a rod ends at or above
+    the interface, so its segment midpoints keep :math:`L/2` from it.
+
+    Above the interface the error of the point form grows smoothly with
+    :math:`L/|z - h_1|` and with a conductive lower layer, and depends on
+    the gap in wire radii, so no single threshold separates good from bad
+    values (rings of 3 m and 25 m, ``h_1`` = 2 m, ``segment_length`` 0.5 /
+    2 / 5 m, three contrasts, against the line kernel at the same segment
+    length): for :math:`q \\approx 0.25` −13 … −24 % (1000/30 Ω·m) and
+    +0.5 … +2.6 % (lower layer resistive), for :math:`q` = 0.52 and a gap of
+    1 cm −15 % (audit A3S-02), but for :math:`q` = 0.63 … 0.69 and gaps of
+    0.5 … 1.2 m only −3.0 … +0.9 %. The error threshold of the cross-layer
+    path is therefore conservative here: it also refuses such coarse but
+    accurate cases (a ring r = 25 m 1.2 m above ``h_1`` with 5 m segments,
+    +0.9 %); a finer ``segment_length`` (the message names one) or the line
+    kernel solves them. In the warning band (:math:`1 \\le q < 1.55`) the
+    measured deviation is −2.6 … 0 %, at most 1 % beyond the usual offset
+    of the point kernel.
+
+    Parameters
+    ----------
+    segments
+        The leakage segments (for the owner names in the message).
+    points, lengths
+        Midpoints in m, shape ``(N, 3)``, and lengths in m, shape ``(N,)``.
+    directions
+        Unit tangents, shape ``(N, 3)``; ``None`` treats every segment as
+        horizontal.
+    h_1
+        Depth of the interface in m (the shallowest one; every segment lies
+        above it when ``cross_layer`` is false).
+    backend
+        Label of the solve for the message.
+    remedy
+        Sentence naming the alternatives.
+    cross_layer
+        Whether the solve runs on the cross-layer path; ``None`` decides by
+        the deepest midpoint (``z_max >= h_1``).
+
+    Raises
+    ------
+    groundfield.solver.registry.BackendCapabilityError
+        If a segment midpoint lies within ``0.387 L`` of the interface (or,
+        on the cross-layer path, the 3-point rule reaches above the soil
+        surface).
+
+    Warns
+    -----
+    PointKernelInterfaceWarning
+        If a horizontal segment lies within ``0.6 L`` of the interface.
+    """
+    z = np.asarray(points, dtype=float)[:, 2]
+    if cross_layer is None:
+        cross_layer = bool(z.size and float(z.max()) >= h_1)
+    if cross_layer:
+        _check_point_cross_layer_diagonal(
+            segments,
+            points,
+            lengths,
+            directions,
+            h_1,
+            backend=backend,
+            remedy=remedy,
+        )
+        return
+    L = np.asarray(lengths, dtype=float)
+    if directions is None:
+        horizontal = np.ones(z.shape, dtype=bool)
+    else:
+        horizontal = np.abs(np.asarray(directions, dtype=float)[:, 2]) < 1.0 - 1e-9
+    gap = np.abs(z - h_1)
+    across = gap < CROSS_LAYER_DIAGONAL_SPREAD * L
+    near = horizontal & ~across & (gap < CROSS_LAYER_WARN_DISTANCE * L)
+    if not (across.any() or near.any()):
+        return
+    finer = np.where(horizontal, gap / CROSS_LAYER_WARN_DISTANCE, np.inf)
+    hint = ""
+    if np.isfinite(finer).any():
+        hint = f" (here below {float(np.min(finer[np.isfinite(finer)])):.3g} m)"
+    hint += _conductor_hint(segments, across | near)
+
+    def example(mask: np.ndarray) -> str:
+        k = int(np.flatnonzero(mask)[0])
+        return (
+            f"{_segment_owner_label(segments[k])}, segment at z = {z[k]:.4g} m, "
+            f"length {L[k]:.3g} m"
+        )
+
+    def counted(mask: np.ndarray) -> str:
+        n = int(mask.sum())
+        return f"{n} segment{'s' if n != 1 else ''}"
+
+    if across.any():
+        from groundfield.solver.registry import BackendCapabilityError
+
+        raise BackendCapabilityError(
+            f"Backend {backend} cannot solve this world: the point form of the "
+            "reaction matrix takes the image of every segment in the layer "
+            "interface as a point source 2|z - h_1| away, and "
+            f"{counted(across)} lie closer than 0.387 segment lengths to the "
+            f"layer interface at h_1 = {h_1:.4g} m (e.g. {example(across)}), "
+            "where the image line of a horizontal wire runs much closer to the "
+            "wire than that point. Measured against the exact line kernel for a "
+            "ring 1 um ... 0.1 m above h_1: -1931 instead of 4.18 Ohm ... -5.8 % "
+            "(1000/30 Ohm m), +853 % ... +0.1 % (30/1000 Ohm m). " + remedy + hint + "."
+        )
+    from groundfield.solver.registry import warn_external
+
+    warn_external(
+        f"{backend}: {counted(near)} of horizontal wires lie closer to the "
+        f"layer interface at h_1 = {h_1:.4g} m than 0.6 segment lengths (e.g. "
+        f"{example(near)}); the point form takes the image of each segment in "
+        "the interface as a point source there (-2.5 % and -0.4 % against the "
+        "exact line kernel for a ring 0.2 m above h_1, 1000/30 and 30/1000 "
+        "Ohm m). " + remedy + hint + ".",
+        PointKernelInterfaceWarning,
+    )
+
+
+# ---------------------------------------------------------------------
+# Rod ends at a layer interface: a limit of the thin-wire model
+# ---------------------------------------------------------------------
+
+
+class InterfaceContactWarning(UserWarning):
+    """A rod head or tip lies within one wire radius of a layer interface.
+
+    The thin-wire model carries the current on the wire axis and has no
+    end face. A rod that ends exactly at the interface :math:`h_1` is
+    therefore a wire entirely on one side of it, and a rod that reaches
+    past the interface by a few micrometres touches the other layer only
+    through a part much shorter than its radius. The solid rod with a flat
+    end face is continuous in between: its end face carries the contact.
+    Against an axisymmetric finite-volume model of the solid rod (4.5 m,
+    :math:`a` = 8 mm, 1000/30 Ω·m, audit A3S-05) the thin wire reads
+    +21 % with its tip at the interface, +7 % 1 mm above it and −4.6 %
+    1 mm below it; beyond two radii it is within a few per cent, like
+    anywhere else (+0.9 % in homogeneous soil). Every segment backend
+    shares this limit; it concerns the end of a rod only (a horizontal
+    wire at the interface is continuous across it).
+
+    Remedy: keep rod ends a few wire radii from an interface, or bracket
+    the result by moving the end by :math:`\\pm 2a`.
+    """
+
+
+def _rod_ends_near_interfaces(
+    electrodes: "Sequence[object]", interfaces: "Sequence[float] | None"
+) -> list[tuple[str, str, float, float, float]]:
+    """Rod heads and tips within one wire radius of an interface.
+
+    Parameters
+    ----------
+    electrodes
+        Electrodes of the world; only :class:`RodElectrode` has ends that
+        are not horizontal.
+    interfaces
+        Physical interface depths in m (the canonical stack).
+
+    Returns
+    -------
+    list of tuple
+        ``(electrode, "head" | "tip", z_end, h, wire_radius)`` in m, one
+        entry per end with ``|z_end - h| <= wire_radius`` (to round-off).
+    """
+    from groundfield.geometry.electrodes import RodElectrode
+
+    if not interfaces:
+        return []
+    out = []
+    for e in electrodes:
+        if not isinstance(e, RodElectrode):
+            continue
+        a = float(e.wire_radius)
+        head = float(e.position[2])
+        for which, z_end in (("head", head), ("tip", head + float(e.length))):
+            for h in interfaces:
+                # Inclusive, to round-off: a tip placed exactly one radius
+                # from h (h = z_tip - a) is within reach.
+                if abs(z_end - float(h)) <= a * (1.0 + 1e-9):
+                    out.append((e.name, which, z_end, float(h), a))
+    return out
+
+
+def _warn_rod_ends_near_interfaces(
+    electrodes: "Sequence[object]", interfaces: "Sequence[float] | None"
+) -> None:
+    """Emit :class:`InterfaceContactWarning` for rod ends at an interface."""
+    hits = _rod_ends_near_interfaces(electrodes, interfaces)
+    if not hits:
+        return
+    from groundfield.solver.registry import warn_external
+
+    name, which, z_end, h, a = hits[0]
+    n = len(hits)
+    warn_external(
+        f"{n} rod end{'s' if n != 1 else ''} lie{'' if n != 1 else 's'} within "
+        f"one wire radius of a layer interface (e.g. electrode '{name}', {which} "
+        f"at z = {z_end:.6g} m, interface at {h:.6g} m, wire radius "
+        f"{a * 1e3:.3g} mm). The thin-wire model has no end face: a rod ending "
+        "at the interface does not touch the layer beyond it, one reaching "
+        "past it by a fraction of its radius touches it through a short part "
+        "only. Against a solid rod with a flat end (4.5 m, a = 8 mm, "
+        "1000/30 Ohm m): +21 % with the tip at the interface, +7 % 1 mm above "
+        "it, -4.6 % 1 mm below it. Keep rod ends a few wire radii from an "
+        "interface, or bracket the result by moving the end by +-2a.",
+        InterfaceContactWarning,
     )

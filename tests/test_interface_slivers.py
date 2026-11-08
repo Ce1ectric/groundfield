@@ -239,13 +239,19 @@ def test_rod_resistance_is_smooth_in_the_tip_penetration(
 
 @_FINDING
 def test_a_tip_twelve_millimetres_into_a_conductive_layer_is_felt() -> None:
-    """p = 12 mm (1.5 a): the base ignored the lower layer completely."""
-    # audit A2S-01
+    """p = 12 mm (1.5 a): the base ignored the lower layer completely.
+
+    The bound on the 12 -> 16.1 mm step was 2 % while the h_1/200 clamp of
+    the diagonal (audit A3S-01) flattened the curve below 12.5 mm; the solid
+    rod falls 7.7 % from 8 to 16 mm (141.16 -> 130.23 Ohm, audit p20), the
+    thin wire now 3.5 % from 12 to 16.1 mm.
+    """
+    # audit A2S-01, A3S-01
     touching = _tip_z(-0.001, "image_2layer")  # tip 1 mm above h_1
     penetrating = _tip_z(0.012, "image_2layer")  # tip 12 mm below h_1
     deeper = _tip_z(0.0161, "image_2layer")  # tip 16.1 mm below h_1
     assert penetrating < 0.8 * touching, (touching, penetrating, deeper)
-    assert deeper < penetrating < 1.02 * deeper
+    assert deeper < penetrating < 1.05 * deeper
 
 
 @_FINDING
@@ -321,3 +327,191 @@ def test_parallel_pair_integral_of_parts_much_shorter_than_their_distance() -> N
         one = galerkin_pairs(rod, idx, stub, idx)[0]
         slope = (1.0 / math.hypot(a, L) - 1.0 / a) / L
         assert one == pytest.approx(math.asinh(L / a) / L + 0.5 * eps * slope, rel=1e-9)
+
+
+# ---------------------------------------------------------------------
+# Audit A3S-01: the contact value against an independent solid-rod model
+# ---------------------------------------------------------------------
+#
+# Axisymmetric finite-volume model of the solid rod (flat end faces, a = 8 mm)
+# of the round-3 audit (script p20; two grids agree to 0.03 %; homogeneous
+# control: thin wire +0.9 %). Tip: rod 0.5-5.0 m, h_1 = 5.0 - p, 1000/30 Ohm m.
+# Head: rod (5 - q)-9.5 m, h_1 = 5 m, 30/1000 Ohm m (the head part q lies in
+# the conductive top layer).
+_SOLID_ROD_TIP = {0.004: 148.548, 0.008: 141.159}
+_SOLID_ROD_HEAD = {0.004: 147.475, 0.008: 140.343}
+
+
+def _head_z(q: float, backend: str, kernel: str | None = None) -> float:
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=5.0))
+    gf.create_electrode(
+        w,
+        "rod",
+        name="r",
+        position=(0.0, 0.0, 5.0 - q),
+        length=4.5 + q,
+        wire_radius=_WIRE_RADIUS,
+    )
+    gf.create_source(w, attached_to="r")
+    kw: dict = {"backend": backend, "segment_length": 0.5}
+    if kernel is not None:
+        kw["kernel"] = kernel
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return w.solve(gf.Engine(**kw)).cluster_impedance("r")[0].real
+
+
+@_FINDING
+@pytest.mark.parametrize("p", sorted(_SOLID_ROD_TIP))
+@pytest.mark.parametrize(("backend", "kernel"), _CONFIGS)
+def test_rod_tip_contact_against_the_solid_rod_reference(
+    backend: str, kernel: str | None, p: float
+) -> None:
+    """Tip 4 / 8 mm below h_1: line -1.2 / +0.7 %, point -2.6 / -0.8 %, mom -3.6 / -1.6 %.
+
+    Before (diagonal clamped at h_1/200 = 25 mm): -10.7 / -6.8 % (line) ...
+    -12.7 / -9.1 % (``mom``).
+    """
+    # audit A3S-01
+    value = _tip_z(p, backend, kernel)
+    assert value == pytest.approx(_SOLID_ROD_TIP[p], rel=0.04), value
+
+
+@_FINDING
+@pytest.mark.parametrize("q", sorted(_SOLID_ROD_HEAD))
+@pytest.mark.parametrize(("backend", "kernel"), _CONFIGS)
+def test_rod_head_contact_against_the_solid_rod_reference(
+    backend: str, kernel: str | None, q: float
+) -> None:
+    """Head 4 / 8 mm above h_1: line -1.1 / +0.7 %; before -10.3 / -6.5 %."""
+    # audit A3S-01
+    value = _head_z(q, backend, kernel)
+    assert value == pytest.approx(_SOLID_ROD_HEAD[q], rel=0.04), value
+
+
+@_FINDING
+@pytest.mark.parametrize(("rho_1", "rho_2"), [(1000.0, 30.0), (10000.0, 10.0)])
+def test_rod_tip_contact_does_not_depend_on_the_interface_clamp(
+    monkeypatch: pytest.MonkeyPatch, rho_1: float, rho_2: float
+) -> None:
+    """Contact limit (tip 1 um below h_1): 149.2 and 180.7 Ohm (were 133.5, 123.2).
+
+    The comparison value raises ``lambda_max_factor`` of the diagonal
+    correction until its 1/R clamp lies below the wire radius (and changes
+    its quadrature); the solver's value must not depend on that.
+    """
+    # audit A3S-01
+    import groundfield.coupling.layered_green as lg
+
+    def solve() -> float:
+        w = gf.create_world(
+            soil=gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=5.0 - 1e-6)
+        )
+        gf.create_electrode(
+            w, "rod", name="r", position=(0, 0, 0.5), length=4.5, wire_radius=0.008
+        )
+        gf.create_source(w, attached_to="r")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            eng = gf.Engine(backend="image_2layer", segment_length=0.5)
+            return w.solve(eng).cluster_impedance("r")[0].real
+
+    shipped = solve()
+    original = lg.two_layer_layered_correction_real_space
+
+    def unclamped(s, z, z_s, *, lambda_max_factor=200.0, **kw):  # noqa: ANN001
+        char = max(min(kw["h_1"], s + z + z_s + 1e-9), 1e-3)
+        lmf = max(lambda_max_factor, 4.0 * char / max(s, 1e-12))
+        return original(s, z, z_s, lambda_max_factor=lmf, **kw)
+
+    monkeypatch.setattr(lg, "two_layer_layered_correction_real_space", unclamped)
+    assert shipped == pytest.approx(solve(), rel=1e-5)
+
+
+# ---------------------------------------------------------------------
+# Audit A3S-05: the step at zero penetration is a thin-wire limit
+# ---------------------------------------------------------------------
+#
+# The thin wire has no end face. Against the solid rod (flat end, same
+# model as above; tip p below h_1, line kernel): +3.3 % at p = -16 mm,
+# +3.9 % at -8 mm, +7.2 % at -1 mm, +21.4 % at p = 0, -4.6 % at +1 mm,
+# +0.7 % at +8 mm (point kernel and mom alike, +19.0 ... +20.5 % at p = 0).
+# Rod ends within one wire radius of an interface warn.
+
+
+def _tip_solve_warnings(p: float, backend: str, kernel: str | None) -> list:
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0 - p))
+    gf.create_electrode(
+        w, "rod", name="r", position=(0.0, 0.0, 0.5), length=4.5, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="r")
+    kw: dict = {"backend": backend, "segment_length": 0.5}
+    if kernel is not None:
+        kw["kernel"] = kernel
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        res = w.solve(gf.Engine(**kw))
+    assert res.cluster_impedance("r")[0].real > 0.0
+    return [r for r in rec if issubclass(r.category, gf.solver.InterfaceContactWarning)]
+
+
+@_FINDING
+@pytest.mark.parametrize(
+    ("p", "warned"),
+    [
+        (0.0, True),
+        (-1e-3, True),
+        (1e-3, True),
+        (-0.008, True),
+        (0.008, True),
+        (-0.0082, False),
+        (0.0082, False),
+        (-0.016, False),
+        (0.016, False),
+    ],
+)
+@pytest.mark.parametrize(("backend", "kernel"), _CONFIGS)
+def test_rod_tip_within_one_wire_radius_of_the_interface_warns(
+    backend: str, kernel: str | None, p: float, warned: bool
+) -> None:
+    """+21 % at the interface against the solid rod: warned, not silently returned."""
+    # audit A3S-05
+    hits = _tip_solve_warnings(p, backend, kernel)
+    assert bool(hits) is warned
+    if warned:
+        text = str(hits[0].message)
+        assert "electrode 'r', tip" in text and "end face" in text
+
+
+@_FINDING
+@pytest.mark.parametrize(("q", "warned"), [(0.0, True), (0.008, True), (0.02, False)])
+def test_rod_head_within_one_wire_radius_of_the_interface_warns(
+    q: float, warned: bool
+) -> None:
+    # audit A3S-05
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=5.0))
+    gf.create_electrode(
+        w, "rod", name="r", position=(0.0, 0.0, 5.0 - q), length=4.5, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="r")
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        w.solve(gf.Engine(segment_length=0.5))
+    hits = [r for r in rec if issubclass(r.category, gf.solver.InterfaceContactWarning)]
+    assert bool(hits) is warned
+    if warned:
+        assert "head" in str(hits[0].message)
+
+
+@_FINDING
+def test_no_physical_interface_no_contact_warning() -> None:
+    """TwoLayerSoil(rho, rho, h) has no interface to touch."""
+    # audit A3S-05
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=5.0))
+    gf.create_electrode(
+        w, "rod", name="r", position=(0.0, 0.0, 0.5), length=4.5, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="r")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", gf.solver.InterfaceContactWarning)
+        w.solve(gf.Engine(segment_length=0.5))
