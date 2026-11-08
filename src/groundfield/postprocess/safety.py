@@ -82,10 +82,11 @@ Validity envelope
   ``surface_z = 0.0`` therefore models bare-foot contact at the
   ground surface.
 * :func:`permissible_touch_voltage_en50522` interpolates
-  EN 50522:2022, Table B.4 for fault durations
-  :math:`50\\,\\mathrm{ms} \\le t_f \\le 10\\,\\mathrm{s}` and clamps
-  outside; the standard allows 80 V for durations considerably longer
-  than 10 s (``long_duration=True``).
+  EN 50522:2022, Table B.4 (the curve of Figure 8) for fault durations
+  :math:`50\\,\\mathrm{ms} \\le t_f \\le 10\\,\\mathrm{s}`, clamps to
+  725 V below 50 ms and returns 80 V for every :math:`t_f > 10\\,\\mathrm{s}`
+  including an uncleared fault (the value the standard allows for
+  current-flow durations considerably longer than 10 s).
 
 References
 ----------
@@ -760,7 +761,8 @@ def touch_voltage_spectrum(
 # duration t_f in s -> permissible touch voltage U_Tp in V, the
 # tabulated form of the curve in Figure 8 (values rounded to 5 V in the
 # standard). Verified against the standard text in review pass 10
-# (10.42). The plateau of 85 V at 5 s and 10 s is explicit.
+# (10.42) and again for user decision Q4. The plateau of 85 V at 5 s and
+# 10 s is explicit; the curve ends at 10 s.
 _EN50522_TP_GRID: tuple[tuple[float, float], ...] = (
     (0.05, 725.0),
     (0.10, 655.0),
@@ -786,9 +788,14 @@ _EN50522_IB_GRID: tuple[tuple[float, float], ...] = (
     (10.00, 0.050),
 )
 
-#: Permissible touch voltage in V that EN 50522:2022 allows for current
-#: flow durations considerably longer than 10 s.
+#: Permissible touch voltage in V for fault durations beyond the 10 s end
+#: of Figure 8 / Table B.4: EN 50522:2022 allows 80 V for current-flow
+#: durations considerably longer than 10 s (note to Figure 8 in 5.4.1; B.3
+#: after Table B.4). User decision Q4: used for every t_f > 10 s.
 _EN50522_TP_LONG_DURATION = 80.0
+
+#: End of the curve of Figure 8 / Table B.4 in s.
+_EN50522_CURVE_END_S = 10.0
 
 
 def _loglog(
@@ -812,37 +819,37 @@ def _loglog(
     return float(math.exp(np.interp(math.log(t), np.log(ts), np.log(vs))))
 
 
-def permissible_touch_voltage_en50522(
-    t_clear_s: float, *, long_duration: bool = False
-) -> float:
+def permissible_touch_voltage_en50522(t_clear_s: float) -> float:
     """Permissible touch voltage :math:`U_{Tp}(t_f)` per EN 50522:2022.
 
     Returns the maximum admissible touch voltage as a function of the
-    fault duration :math:`t_f`, interpolated in EN 50522:2022, Table B.4
-    (DIN EN 50522 (VDE 0101-2):2023-10), the tabulated form of the curve
-    in Figure 8 of the standard:
+    fault duration :math:`t_f`. Up to 10 s it follows the curve of
+    Figure 8 in its tabulated form, Table B.4 (DIN EN 50522
+    (VDE 0101-2):2023-10),
 
     .. math::
 
-        \\{(t_k, U_{Tp,k})\\} \\;=\\;
+        \\{(t_k, U_{Tp,k})\\} \;=\;
         \\{(0.05, 725),\\ (0.10, 655),\\ (0.20, 525),\\
         (0.50, 225),\\ (1.00, 115),\\ (2.00, 95),\\
         (5.00, 85),\\ (10.0, 85)\\},
 
-    in s and V (rounded to 5 V in the standard). Between the anchors the
-    helper interpolates linearly in :math:`\\log t`–:math:`\\log U`;
-    outside the table it clamps to the end values.
+    in s and V (rounded to 5 V in the standard), interpolated linearly in
+    :math:`\\log t`–:math:`\\log U` between the anchors and clamped to
+    725 V below 50 ms. Beyond the end of the curve,
+
+    .. math::
+
+        U_{Tp}(t_f) \;=\; 80\\,\\mathrm{V}
+        \\qquad \\text{for } t_f > 10\\,\\mathrm{s},
+
+    including an earth fault that is not cleared (``math.inf``).
 
     Parameters
     ----------
     t_clear_s
-        Fault duration :math:`t_f` in s. Must be > 0; ``math.inf`` is
-        accepted together with ``long_duration=True``.
-    long_duration
-        For current-flow durations considerably longer than 10 s the
-        standard allows a permissible touch voltage of 80 V. ``True``
-        returns that value and requires ``t_clear_s > 10``; the default
-        keeps the 85 V end value of Table B.4 beyond 10 s.
+        Fault duration :math:`t_f` in s, ``> 0``; ``math.inf`` for an
+        earth fault that is not cleared.
 
     Returns
     -------
@@ -852,34 +859,45 @@ def permissible_touch_voltage_en50522(
     Raises
     ------
     ValueError
-        If ``t_clear_s`` is not strictly positive, is infinite without
-        ``long_duration=True``, or is at most 10 s with
-        ``long_duration=True``.
+        If ``t_clear_s`` is NaN or not strictly positive.
 
     Notes
     -----
+    Where the values come from in EN 50522:2022:
+
+    * 5.4.1, Figure 8: :math:`U_{Tp}` as a function of the fault
+      duration; Annex B, B.3, Table B.4: the values of that curve from
+      0.05 s to 10 s. The curve is not defined beyond 10 s.
+    * The note to Figure 8 (5.4.1) and the paragraph after Table B.4
+      (B.3): for a current-flow duration considerably longer than 10 s,
+      80 V may be used as the permissible touch voltage.
+    * 5.4.1 assumes that every earth fault is cleared, automatically or
+      by hand, so that no touch voltage of very long or unlimited
+      duration occurs. A resonant-earthed network can carry its earth
+      fault for hours, which is where the 80 V value matters.
+
+    The helper uses 80 V for every :math:`t_f > 10\\,\\mathrm{s}` instead
+    of continuing the 85 V end value of Table B.4: 80 V is below 85 V,
+    on the safe side where the curve gives no value. Hence the step from
+    85 V at 10 s to 80 V just above. Up to the 2026.11 development
+    snapshots an opt-in keyword selected the 80 V and the default
+    returned 85 V; v0.15.0 returned 85 V and rejected ``math.inf``.
+
     Review pass 10 (10.42) checked the anchors against the standard
     text: they are the published values. A secondary reproduction quoted
     in the review (716 / 654 / 537 / 220 / 117 / 96 / 86 / 85 V) does not
-    match EN 50522:2022. The curve is a design reference; compare it
-    with :func:`touch_voltage` (or, with additional resistances, use
+    match EN 50522:2022. Compare the value with :func:`touch_voltage`,
+    :func:`touch_voltage_at_part` or :func:`touch_voltage_envelope`
+    (or, with additional resistances, use
     :func:`permissible_prospective_touch_voltage_en50522`).
     """
-    if long_duration:
-        if not (t_clear_s > 10.0):
-            raise ValueError(
-                "long_duration=True applies to current-flow durations "
-                f"considerably longer than 10 s, got t_clear_s={t_clear_s!r}."
-            )
+    t = float(t_clear_s)
+    if math.isnan(t) or t <= 0.0:
+        raise ValueError(f"t_clear_s must be > 0 (s), got {t_clear_s!r}.")
+    # user decision Q4: 80 V beyond the end of Figure 8 / Table B.4.
+    if t > _EN50522_CURVE_END_S:
         return _EN50522_TP_LONG_DURATION
-    if not math.isfinite(t_clear_s) or t_clear_s <= 0.0:
-        hint = (
-            " (pass long_duration=True for faults that are not cleared)"
-            if t_clear_s == math.inf
-            else ""
-        )
-        raise ValueError(f"t_clear_s must be > 0 and finite, got {t_clear_s!r}{hint}.")
-    return _loglog(float(t_clear_s), _EN50522_TP_GRID)
+    return _loglog(t, _EN50522_TP_GRID)
 
 
 def permissible_prospective_touch_voltage_en50522(
@@ -889,7 +907,6 @@ def permissible_prospective_touch_voltage_en50522(
     R_F1: float = 0.0,
     rho_s: float | None = None,
     HF: float = 1.0,
-    long_duration: bool = False,
 ) -> float:
     """Permissible prospective touch voltage :math:`U_{vTp}` (EN 50522:2022, B.4).
 
@@ -900,7 +917,7 @@ def permissible_prospective_touch_voltage_en50522(
 
     .. math::
 
-        U_{vTp}(t_f) \\;=\\; U_{Tp}(t_f) \\;+\\;
+        U_{vTp}(t_f) \;=\; U_{Tp}(t_f) \;+\;
         \\frac{I_B(t_f)}{HF}\\,R_A,
         \\qquad
         R_A = R_H + R_{F1} + R_{F2},
@@ -908,15 +925,17 @@ def permissible_prospective_touch_voltage_en50522(
         R_{F2} = 1.5\\,\\mathrm{m}^{-1}\\cdot\\rho_s,
 
     with :math:`U_{Tp}` from :func:`permissible_touch_voltage_en50522`
-    (Table B.4) and the permissible body current :math:`I_B(t_f)` of
-    Table B.1 (0.05 s: 900 mA, 0.1 s: 800 mA, 0.2 s: 600 mA,
-    0.5 s: 200 mA, 1 s: 80 mA, 2 s: 60 mA, 5 s: 51 mA, 10 s: 50 mA;
-    interpolated log-log and clamped like :math:`U_{Tp}`).
+    (Table B.4 up to 10 s, 80 V beyond) and the permissible body current
+    :math:`I_B(t_f)` of Table B.1 (0.05 s: 900 mA, 0.1 s: 800 mA,
+    0.2 s: 600 mA, 0.5 s: 200 mA, 1 s: 80 mA, 2 s: 60 mA, 5 s: 51 mA,
+    10 s: 50 mA; interpolated log-log, 900 mA below 50 ms, and held at
+    50 mA beyond 10 s).
 
     Parameters
     ----------
     t_f
-        Fault duration in s, > 0.
+        Fault duration in s, ``> 0``; ``math.inf`` for an earth fault
+        that is not cleared.
     R_H
         Hand resistance (e.g. gloves) in Ω, ``>= 0``.
     R_F1
@@ -929,10 +948,6 @@ def permissible_prospective_touch_voltage_en50522(
     HF
         Heart-current factor of the current path, ``> 0``; 1 for left
         hand to feet, the path the standard uses here.
-    long_duration
-        Use the 80 V of :func:`permissible_touch_voltage_en50522` for
-        durations considerably longer than 10 s (the body current is
-        then held at its 10 s value, 50 mA).
 
     Returns
     -------
@@ -953,6 +968,12 @@ def permissible_prospective_touch_voltage_en50522(
 
     >>> permissible_prospective_touch_voltage_en50522(0.5, rho_s=500.0)
     375.0
+
+    An earth fault that is not cleared, 1000 Ω shoes:
+    80 V + 0.05 A · 1000 Ω = 130 V.
+
+    >>> permissible_prospective_touch_voltage_en50522(math.inf, R_F1=1000.0)
+    130.0
     """
     for name, value in (("R_H", R_H), ("R_F1", R_F1)):
         if not math.isfinite(value) or value < 0.0:
@@ -961,7 +982,9 @@ def permissible_prospective_touch_voltage_en50522(
         raise ValueError(f"rho_s must be finite and >= 0 Ohm m, got {rho_s!r}.")
     if not math.isfinite(HF) or HF <= 0.0:
         raise ValueError(f"HF must be finite and > 0, got {HF!r}.")
-    u_tp = permissible_touch_voltage_en50522(t_f, long_duration=long_duration)
-    i_b = _loglog(min(float(t_f), 10.0), _EN50522_IB_GRID, exact_anchors=True)
+    u_tp = permissible_touch_voltage_en50522(t_f)
+    i_b = _loglog(
+        min(float(t_f), _EN50522_CURVE_END_S), _EN50522_IB_GRID, exact_anchors=True
+    )
     r_a = R_H + R_F1 + (0.0 if rho_s is None else 1.5 * float(rho_s))
     return u_tp + i_b / HF * r_a
