@@ -320,10 +320,23 @@ class KvsConfig(CabinetConfig):
 
 
 class PenConfig(GeneratorConfig):
-    """PEN cable backbone (distributed conductor, ADR-0003)."""
+    """PEN cable backbone (distributed conductor, ADR-0003).
+
+    Every PEN section (substation to cabinet, trunk) and service drop runs
+    horizontally at ``z = depth_m`` between the horizontal positions of
+    the connection points of its two end electrodes, i.e. in the cable
+    trench; the short vertical risers to the electrode heads are not
+    modelled. Up to 0.15.0 ``depth_m`` was ignored and the sections ran
+    straight between the connection points (e.g. from the substation ring
+    at 0.6 m to a cabinet rod head at 0 m).
+    """
 
     wire_radius_m: float = Field(default=0.005, description="PEN wire radius in m.")
-    depth_m: float = Field(default=0.6, description="PEN burial depth in m.")
+    depth_m: float = Field(
+        default=0.6,
+        gt=0.0,
+        description="PEN burial depth in m (z of the cable axis, > 0).",
+    )
     coupling_to_soil: str = Field(
         default="isolated",
         description=(
@@ -964,6 +977,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
     ) -> None:
         """Star backbone: substation → each cabinet, building → nearest cabinet."""
         conductor = _pen_conductor(cfg.pen)
+        depth = float(cfg.pen.depth_m)
         wired = [c for c in cabinets if c.anchor is not None]
         for cab in wired:
             branches.append(
@@ -973,6 +987,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     start=substation.name,
                     end=cab.name,
                     conductor=conductor,
+                    axis_z_m=depth,
                 )
             )
         for b in buildings:
@@ -990,6 +1005,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     start=cab.name,
                     end=b.name,
                     conductor=conductor,
+                    axis_z_m=depth,
                 )
             )
 
@@ -1025,6 +1041,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         topology = cfg.pen_topology
         assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
         conductor = _pen_conductor(cfg.pen)
+        depth = float(cfg.pen.depth_m)
         wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
             substation_xy=cfg.substation.position,
@@ -1072,6 +1089,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         start=previous.name,
                         end=cab.name,
                         conductor=conductor,
+                        axis_z_m=depth,
                     )
                 )
                 taps.append(cab)
@@ -1104,6 +1122,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         start=taps[tap_idx].name,
                         end=b.name,
                         conductor=conductor,
+                        axis_z_m=depth,
                     )
                 )
                 any_service_drop = True

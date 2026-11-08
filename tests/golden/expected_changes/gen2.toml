@@ -92,3 +92,31 @@ quantities = ["world/json"]
 findings = ["10.12"]
 reason = "Empty concrete_shell_corrections; the grid mesh carries concrete_shell_coefficient_ohm_m."
 allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/*", "I/*", "potential/*", "ps/I"]
+findings = ["10.55"]
+reason = """PenConfig.depth_m is honoured (same class as F48, observed by GEN-1): the
+PEN main section and the five service drops run horizontally at z = 0.6 m
+instead of straight between the anchors' connection points (substation ring
+0.6 m, cabinet rod head 0 m, foundations 0.8 m). The default PEN is isolated
+and non-inductive, so only its resistance moves with the slightly shorter
+sections: <= 3.5e-7 relative. Evidence: deliver/evidence/gen2/epen_depth.out"""
+min_rel_change = 1e-9
+max_rel_change = 1e-5
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["world/json"]
+findings = ["10.55"]
+reason = "PEN conductor end points at z = 0.6 m."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "I/trafo_*", "I/residential_*", "I/kvs_*", "phi/aux_rod_0", "I/aux_rod_0", "phi/probe_rod_0"]
+findings = ["10.55"]
+reason = """PenConfig.depth_m honoured (PEN sections horizontal at 0.6 m), on top of the
+10.17 change; resistive PEN, effect below 1e-5."""
+max_rel_change = 1e-5
