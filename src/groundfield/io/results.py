@@ -161,17 +161,35 @@ def load_result(path: str | os.PathLike[str]) -> FieldResult:
     Raises
     ------
     ResultFormatError
-        If the file is not JSON, not a groundfield result file, uses a
-        schema version newer than :data:`RESULT_SCHEMA_VERSION`, or
-        lacks the ``result`` body.
+        If the file is not UTF-8 JSON (or nests too deeply for the JSON
+        parser), not a groundfield result file, uses a schema version
+        newer than :data:`RESULT_SCHEMA_VERSION`, or lacks the
+        ``result`` body.
     pydantic.ValidationError
         If the ``result`` body does not validate as a
-        :class:`FieldResult`.
+        :class:`FieldResult`, including malformed tagged metadata (see
+        :mod:`groundfield.solver.result`). Both error types subclass
+        :class:`ValueError`.
+
+    Notes
+    -----
+    The reader accepts only what :func:`save_result` writes, so a file
+    from an untrusted source cannot make it allocate more than a small
+    multiple of the file size or create object, datetime or void
+    arrays. No pickle is involved at any point.
     """
     source = Path(path)
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ResultFormatError(f"{source} is not UTF-8 text: {exc}") from exc
+    try:
+        payload = json.loads(text)
+    except RecursionError as exc:
+        raise ResultFormatError(
+            f"{source} nests JSON values too deeply to be a result file."
+        ) from exc
+    except ValueError as exc:  # json.JSONDecodeError and over-long integers
         raise ResultFormatError(f"{source} is not a JSON file: {exc}") from exc
     if not isinstance(payload, dict) or "format" not in payload:
         raise ResultFormatError(

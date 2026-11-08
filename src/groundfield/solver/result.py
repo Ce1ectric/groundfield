@@ -39,6 +39,19 @@ reserved: a metadata value that is a single-key mapping with one of the
 keys above is decoded on validation. The versioned file format around
 this JSON is :func:`groundfield.io.save_result` /
 :func:`groundfield.io.load_result`.
+
+The decoder reads only what the encoder writes, so a result file from
+an untrusted source cannot allocate more memory than a small multiple
+of its own size: ``$ndarray`` dtypes are limited to bool, integer,
+``float16`` … ``float64``, ``complex64`` / ``complex128`` and unicode
+strings (no object, datetime, void, structured or sub-array dtypes);
+the shape must match the number of items before anything is allocated;
+every item must be a scalar of the dtype's kind; a string array may
+take at most 64 bytes per character of its items (plus 4 KiB); and
+metadata may nest at most :data:`MAX_METADATA_DEPTH` levels. A tag that
+breaks these rules raises :class:`ValueError` naming the metadata key
+(a ``pydantic.ValidationError`` when it is read through validation).
+The encoder applies the same limits, so every file it writes loads.
 """
 
 from __future__ import annotations
@@ -48,6 +61,7 @@ import hashlib
 import json
 import math
 import platform
+import re
 import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Union
@@ -75,6 +89,7 @@ if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
     from groundfield.world import World
 
 __all__ = [
+    "MAX_METADATA_DEPTH",
     "FieldResult",
     "PointSource",
     "SourceRecord",
@@ -246,6 +261,26 @@ _TAG_TUPLE = "$tuple"
 _TAG_DICT = "$dict"
 _TAG_NDARRAY = "$ndarray"
 _TAGS = frozenset({_TAG_FLOAT, _TAG_COMPLEX, _TAG_TUPLE, _TAG_DICT, _TAG_NDARRAY})
+_FLOAT_SPELLINGS = ("inf", "-inf", "nan")
+
+#: Deepest nesting of containers (lists, mappings, tuples, tagged
+#: objects) the metadata codec writes and reads.
+MAX_METADATA_DEPTH = 100
+
+#: ``numpy.dtype.str`` of every array dtype the codec stores: an optional
+#: byte-order character, then bool, integer of 1-8 bytes, float of 2, 4
+#: or 8 bytes, complex of 8 or 16 bytes, or unicode of at least one
+#: character. ``float128`` / ``complex256`` are excluded because their
+#: items have no lossless Python scalar; object, datetime, timedelta,
+#: void, bytes, structured and sub-array dtypes never match.
+_NDARRAY_DTYPE = re.compile(r"[<>|=]?(?:b1|[iu][1248]|f[248]|c(?:8|16)|U[1-9]\d{0,8})")
+
+#: A string array may take at most this many bytes per character of its
+#: JSON items (two quotes and a separator counted per item) ...
+_NDARRAY_MAX_EXPANSION = 64
+#: ... or this many bytes in total, whichever is larger. Together with
+#: the shape check this keeps the decoded size linear in the file size.
+_NDARRAY_FREE_BYTES = 4096
 
 
 def _encode_float(value: float) -> Any:
@@ -256,17 +291,44 @@ def _encode_float(value: float) -> Any:
     return {_TAG_FLOAT: "inf" if value > 0 else "-inf"}
 
 
-def _encode_metadata(value: Any, path: str) -> Any:
+def _check_depth(depth: int, path: str) -> None:
+    if depth > MAX_METADATA_DEPTH:
+        raise ValueError(
+            f"{path}: metadata is nested deeper than {MAX_METADATA_DEPTH} levels."
+        )
+
+
+def _check_string_array_size(itemsize: int, items: list[str], path: str) -> None:
+    """Bound the bytes of a unicode array by the text of its items."""
+    nbytes = itemsize * len(items)
+    text = sum(len(item) + 3 for item in items)
+    if nbytes > max(_NDARRAY_FREE_BYTES, _NDARRAY_MAX_EXPANSION * text):
+        raise ValueError(
+            f"{path}: {_TAG_NDARRAY} string array of width {itemsize // 4} "
+            f"with {len(items)} items takes {nbytes} bytes, more than "
+            f"{_NDARRAY_MAX_EXPANSION} bytes per character of its items; "
+            "store the strings at the width of the longest item "
+            "(numpy.array(list_of_strings))."
+        )
+
+
+def _encode_metadata(value: Any, path: str, depth: int = 0) -> Any:
     """Encode a metadata value into standard-JSON-compatible data."""
+    _check_depth(depth, path)
+    inner = depth + 1
     if isinstance(value, np.ndarray):
-        if value.dtype.kind not in "biufcU":
+        if not _NDARRAY_DTYPE.fullmatch(value.dtype.str):
             raise TypeError(
                 f"{path}: numpy arrays of dtype {value.dtype} cannot be "
-                "stored losslessly in FieldResult.metadata."
+                "stored losslessly in FieldResult.metadata (bool, integer, "
+                "float16/32/64, complex64/128 and unicode arrays can)."
             )
+        items = value.ravel().tolist()
+        if value.dtype.kind == "U":
+            _check_string_array_size(value.dtype.itemsize, items, path)
         data = [
-            _encode_metadata(item, f"{path}[{i}]")
-            for i, item in enumerate(value.ravel().tolist())
+            _encode_metadata(item, f"{path}[{i}]", inner)
+            for i, item in enumerate(items)
         ]
         return {
             _TAG_NDARRAY: {
@@ -286,22 +348,25 @@ def _encode_metadata(value: Any, path: str) -> Any:
     if isinstance(value, tuple):
         return {
             _TAG_TUPLE: [
-                _encode_metadata(v, f"{path}[{i}]") for i, v in enumerate(value)
+                _encode_metadata(v, f"{path}[{i}]", inner) for i, v in enumerate(value)
             ]
         }
     if isinstance(value, list):
-        return [_encode_metadata(v, f"{path}[{i}]") for i, v in enumerate(value)]
+        return [_encode_metadata(v, f"{path}[{i}]", inner) for i, v in enumerate(value)]
     if isinstance(value, Mapping):
         plain = all(isinstance(k, str) for k in value) and not (
             len(value) == 1 and next(iter(value)) in _TAGS
         )
         if plain:
-            return {k: _encode_metadata(v, f"{path}[{k!r}]") for k, v in value.items()}
+            return {
+                k: _encode_metadata(v, f"{path}[{k!r}]", inner)
+                for k, v in value.items()
+            }
         return {
             _TAG_DICT: [
                 [
-                    _encode_metadata(k, f"{path} key"),
-                    _encode_metadata(v, f"{path}[{k!r}]"),
+                    _encode_metadata(k, f"{path} key", inner),
+                    _encode_metadata(v, f"{path}[{k!r}]", inner),
                 ]
                 for k, v in value.items()
             ]
@@ -313,29 +378,133 @@ def _encode_metadata(value: Any, path: str) -> Any:
     )
 
 
-def _decode_metadata(value: Any) -> Any:
-    """Inverse of :func:`_encode_metadata`."""
+def _is_real(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _ndarray_item_fits(kind: str, item: Any) -> bool:
+    """True if ``item`` is a scalar the encoder writes for ``kind``."""
+    if kind == "b":
+        return isinstance(item, bool)
+    if kind in "iu":
+        return isinstance(item, int) and not isinstance(item, bool)
+    if kind == "f":
+        return _is_real(item)
+    if kind == "c":
+        return _is_real(item) or isinstance(item, complex)
+    return isinstance(item, str)
+
+
+def _decode_ndarray(body: Any, path: str, depth: int) -> np.ndarray:
+    """Decode an ``$ndarray`` body; validate everything before allocating."""
+    bad = f"{path}: {_TAG_NDARRAY} tag"
+    if not isinstance(body, dict) or set(body) != {"dtype", "shape", "data"}:
+        raise ValueError(
+            f"{bad} needs a mapping with exactly the keys 'dtype', 'shape' and 'data'."
+        )
+    spec, shape, data = body["dtype"], body["shape"], body["data"]
+    if not isinstance(spec, str) or not _NDARRAY_DTYPE.fullmatch(spec):
+        raise ValueError(
+            f"{bad} has dtype {spec!r}; only bool, integer, float16/32/64, "
+            "complex64/128 and unicode dtypes are stored (no object, "
+            "datetime, void, bytes, structured or sub-array dtypes)."
+        )
+    try:
+        dtype = np.dtype(spec)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"{bad} has dtype {spec!r}, which numpy cannot build."
+        ) from None
+    if not isinstance(shape, list) or not all(
+        isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in shape
+    ):
+        raise ValueError(f"{bad} has shape {shape!r}; expected non-negative integers.")
+    size = math.prod(shape)
+    if not isinstance(data, list) or len(data) != size:
+        n_items = len(data) if isinstance(data, list) else type(data).__name__
+        raise ValueError(
+            f"{bad} has shape {shape} ({size} items) but data of {n_items} items."
+        )
+    items = [_decode_metadata(v, f"{path}[{i}]", depth + 1) for i, v in enumerate(data)]
+    for i, item in enumerate(items):
+        if not _ndarray_item_fits(dtype.kind, item):
+            raise ValueError(
+                f"{bad}: item {i} ({type(item).__name__}) does not match "
+                f"dtype {spec!r}."
+            )
+    if dtype.kind == "U":
+        _check_string_array_size(dtype.itemsize, items, path)
+    try:
+        return np.array(items, dtype=dtype).reshape(tuple(shape))
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{bad}: data do not fit dtype {spec!r} ({exc}).") from None
+
+
+def _decode_tag(tag: str, body: Any, path: str, depth: int) -> Any:
+    """Decode the body of one tagged object written by the encoder."""
+    inner = depth + 1
+    bad = f"{path}: {tag} tag"
+    if tag == _TAG_FLOAT:
+        if isinstance(body, str) and body in _FLOAT_SPELLINGS:
+            return float(body)
+        raise ValueError(f"{bad} must hold 'inf', '-inf' or 'nan', got {body!r}.")
+    if tag == _TAG_COMPLEX:
+        if isinstance(body, list) and len(body) == 2:
+            # scalar parts: no extra nesting level (the encoder counts none)
+            parts = [_decode_metadata(v, path, depth) for v in body]
+            if all(_is_real(p) for p in parts):
+                return complex(parts[0], parts[1])
+        raise ValueError(f"{bad} must hold two real numbers, got {body!r}.")
+    if tag == _TAG_TUPLE:
+        if isinstance(body, list):
+            return tuple(
+                _decode_metadata(v, f"{path}[{i}]", inner) for i, v in enumerate(body)
+            )
+        raise ValueError(f"{bad} must hold a list, got {type(body).__name__}.")
+    if tag == _TAG_DICT:
+        if not isinstance(body, list) or not all(
+            isinstance(pair, list) and len(pair) == 2 for pair in body
+        ):
+            raise ValueError(f"{bad} must hold a list of [key, value] pairs.")
+        out: dict[Any, Any] = {}
+        for raw_key, raw_value in body:
+            key = _decode_metadata(raw_key, f"{path} key", inner)
+            try:
+                hash(key)
+            except TypeError:
+                raise ValueError(
+                    f"{bad} has an unhashable key of type {type(key).__name__}."
+                ) from None
+            out[key] = _decode_metadata(raw_value, f"{path}[{key!r}]", inner)
+        return out
+    return _decode_ndarray(body, path, depth)
+
+
+def _decode_metadata(value: Any, path: str = "metadata", depth: int = 0) -> Any:
+    """Inverse of :func:`_encode_metadata`.
+
+    Raises
+    ------
+    ValueError
+        If a tagged object is malformed or describes data the encoder
+        cannot have written (see the module docstring), or if the value
+        is nested deeper than :data:`MAX_METADATA_DEPTH`. The message
+        names the metadata key.
+    """
+    _check_depth(depth, path)
     if isinstance(value, list):
-        return [_decode_metadata(v) for v in value]
+        return [
+            _decode_metadata(v, f"{path}[{i}]", depth + 1) for i, v in enumerate(value)
+        ]
     if not isinstance(value, dict):
         return value
     if len(value) == 1:
         tag, body = next(iter(value.items()))
-        if tag == _TAG_FLOAT and isinstance(body, str):
-            return float(body)
-        if tag == _TAG_COMPLEX and isinstance(body, list) and len(body) == 2:
-            return complex(_decode_metadata(body[0]), _decode_metadata(body[1]))
-        if tag == _TAG_TUPLE and isinstance(body, list):
-            return tuple(_decode_metadata(v) for v in body)
-        if tag == _TAG_DICT and isinstance(body, list):
-            return {
-                _decode_metadata(pair[0]): _decode_metadata(pair[1]) for pair in body
-            }
-        if tag == _TAG_NDARRAY and isinstance(body, dict):
-            items = [_decode_metadata(v) for v in body["data"]]
-            dtype = np.dtype(body["dtype"])
-            return np.array(items, dtype=dtype).reshape(tuple(body["shape"]))
-    return {k: _decode_metadata(v) for k, v in value.items()}
+        if tag in _TAGS:
+            return _decode_tag(tag, body, path, depth)
+    return {
+        k: _decode_metadata(v, f"{path}[{k!r}]", depth + 1) for k, v in value.items()
+    }
 
 
 class FieldResult(BaseModel):
@@ -409,7 +578,7 @@ class FieldResult(BaseModel):
             return value
         if len(value) == 1 and _TAG_DICT in value:
             return _decode_metadata(value)
-        return {k: _decode_metadata(v) for k, v in value.items()}
+        return {k: _decode_metadata(v, f"metadata[{k!r}]", 1) for k, v in value.items()}
 
     @field_serializer("metadata", when_used="json")
     def _store_metadata(self, value: dict[str, Any]) -> Any:
