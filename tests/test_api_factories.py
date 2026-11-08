@@ -317,3 +317,18 @@ def test_create_engine_forwards_backend_options() -> None:
     )
     assert eng.backend_options().epsabs == 1e-7
     assert gf.create_engine().options == gf.Engine().options
+
+
+@pytest.mark.finding("10.37")
+def test_create_conductor_reaches_the_skin_effect_model() -> None:
+    """The opt-in skin effect is reachable through the factory (self-attack
+    of the fix1 stream: only ``Conductor(...)`` accepted it)."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=2.0)
+    gf.create_electrode(world, "rod", name="g2", position=(30, 0, 0.5), length=2.0)
+    plain = gf.create_conductor(world, start="g1", end="g2", cross_section=50e-6)
+    skin = gf.create_conductor(
+        world, start="g1", end="g2", cross_section=50e-6, resistance_model="skin"
+    )
+    assert (plain.resistance_model, skin.resistance_model) == ("dc", "skin")
+    assert "resistance_model" not in plain.model_dump(mode="json")

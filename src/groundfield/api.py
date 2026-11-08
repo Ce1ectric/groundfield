@@ -62,6 +62,7 @@ from groundfield.conductors.conductor import (
     Conductor,
     ConductorType,
     InductanceModel,
+    ResistanceModel,
     SoilCoupling,
 )
 from groundfield.geometry.electrodes import (
@@ -445,6 +446,7 @@ def create_conductor(
     coupling_to_soil: SoilCoupling = "isolated",
     inductance_model: InductanceModel | None = None,
     lumped_series_resistance_ohm: float | None = None,
+    resistance_model: ResistanceModel = "dc",
 ) -> Conductor:
     """Create a conductor and register it with ``world``.
 
@@ -477,7 +479,9 @@ def create_conductor(
     discretize_segment_length
         Maximum sub-segment length in m for the distributed-conductor
         model (see ADR-0003). ``None`` (default) keeps the conductor
-        lumped (single segment, leakage only at the end electrodes).
+        lumped (single segment, leakage only at the end electrodes). A
+        galvanic conductor leaks along its length also with a single
+        sub-piece (a value at least the conductor length).
     coupling_to_soil
         ``"isolated"`` (default) — the conductor does not exchange
         current with the soil along its length. ``"galvanic"`` — every
@@ -487,11 +491,18 @@ def create_conductor(
     inductance_model
         ``None`` (default) keeps the longitudinal-branch impedance
         purely resistive (DC behaviour). ``"neumann"`` activates the
-        Neumann self- and mutual-inductance integral for every
-        distributed-conductor segment pair (ADR-0004) — the system
+        Neumann self- and mutual-inductance integral between the
+        branches of every inductive conductor — the segments of a
+        distributed conductor, or one branch from start to end for a
+        lumped one (ADR-0004, review pass 10, 10.24) — and the system
         becomes frequency-dependent and complex per frequency.
     lumped_series_resistance_ohm
         Optional additional lumped series resistance in Ω.
+    resistance_model
+        ``"dc"`` (default): the series resistance is the DC value.
+        ``"skin"``: the AC resistance of a solid round wire with skin
+        effect, opt-in (review pass 10, 10.37); needs a finite
+        ``cross_section`` (see :class:`~groundfield.conductors.Conductor`).
 
     Returns
     -------
@@ -530,6 +541,7 @@ def create_conductor(
         coupling_to_soil=coupling_to_soil,
         inductance_model=inductance_model,
         lumped_series_resistance_ohm=lumped_series_resistance_ohm,
+        resistance_model=resistance_model,
     )
     world.add_conductor(cond)
     return cond
