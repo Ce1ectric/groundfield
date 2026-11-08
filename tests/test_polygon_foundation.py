@@ -87,19 +87,30 @@ def test_polygon_ring_is_one_electrode_no_internal_bonds():
 # ---------------------------------------------------------------------
 
 
+@pytest.mark.finding("10.12")
 def test_lumped_shell_uses_polygon_perimeter():
-    """R_shell = C / L_perim with L_perim of the *polygon*."""
+    """R_shell = C / L_perim with L_perim of the *polygon*.
+
+    Since 2026.11 the lumped shell is the coefficient C on the encased
+    electrode (no ``World.concrete_shell_corrections`` entry, 10.12); the
+    image family adds exactly C / L under a uniform leakage current."""
+    from groundfield.geometry.electrodes import shell_resistance_from_coefficient
+
     kw = dict(
         concrete_rho_ohm_m=100.0, concrete_thickness_m=0.05, concrete_model="lumped"
     )
     w_rect, _ = _foundation_world({"size_xy_m": RECT_SIZE, **kw}, source=False)
     w_poly, _ = _foundation_world({"polygon_xy_m": RECT_POLY, **kw}, source=False)
-    (r_rect,) = w_rect.concrete_shell_corrections.values()
-    (r_poly,) = w_poly.concrete_shell_corrections.values()
+    assert w_rect.concrete_shell_corrections == w_poly.concrete_shell_corrections == {}
+    (rect,) = w_rect.electrodes
+    (poly,) = w_poly.electrodes
+    r_rect = shell_resistance_from_coefficient(rect)
+    r_poly = shell_resistance_from_coefficient(poly)
     assert r_poly == pytest.approx(r_rect, rel=1e-12)
 
     # Analytic check: C / L, with C = rho_c/(2 pi) ln(r_b/r_a).
     coeff = 100.0 / (2.0 * math.pi) * math.log((0.0075 + 0.05) / 0.0075)
+    assert poly.concrete_shell_coefficient_ohm_m == pytest.approx(coeff, rel=1e-15)
     assert r_poly == pytest.approx(coeff / 36.0, rel=1e-12)
 
 
@@ -119,15 +130,15 @@ def test_distributed_shell_rides_on_every_ring_segment():
     assert _z(world, anchor).real > _z(w_bare, a_bare).real
 
 
+@pytest.mark.finding("10.12")
 def test_transparent_shell_recovers_the_bare_ring():
     r"""$\rho_c = \rho_\text{soil}$ — the concrete is indistinguishable
-    from soil, so both shell paths must return the bare-wire result.
-
-    * ``distributed`` — the inflated wire radius and the added radial
-      diagonal $C/\Delta s$ cancel exactly.
-    * ``lumped`` — the inflated radius alone *under*-states the
-      spreading impedance; the missing part is exactly the lumped
-      shell resistance the TN generator injects on the service drop.
+    from soil, so both shell models must return the bare-wire result: the
+    inflated wire radius and the added radial diagonal $C/\Delta s$
+    cancel. Up to 0.15.0 the ``lumped`` model applied only the inflated
+    radius here and left the shell resistance in a registry for the TN
+    generator's PEN drops (10.12); it now carries the same coefficient as
+    ``distributed``.
 
     This pins the whole ADR-0012 bookkeeping on the polygon ring.
     """
@@ -137,16 +148,11 @@ def test_transparent_shell_recovers_the_bare_ring():
     z_bare = _z(w_bare, a_bare).real
 
     kw = dict(concrete_rho_ohm_m=rho, concrete_thickness_m=0.05)
-    w_dist, a_dist = _foundation_world(
-        {"polygon_xy_m": RECT_POLY, "concrete_model": "distributed", **kw}, soil=soil
-    )
-    assert _z(w_dist, a_dist).real == pytest.approx(z_bare, rel=1e-5)
-
-    w_lump, a_lump = _foundation_world(
-        {"polygon_xy_m": RECT_POLY, "concrete_model": "lumped", **kw}, soil=soil
-    )
-    (r_shell,) = w_lump.concrete_shell_corrections.values()
-    assert _z(w_lump, a_lump).real + r_shell == pytest.approx(z_bare, rel=1e-3)
+    for model in ("distributed", "lumped"):
+        world, anchor = _foundation_world(
+            {"polygon_xy_m": RECT_POLY, "concrete_model": model, **kw}, soil=soil
+        )
+        assert _z(world, anchor).real == pytest.approx(z_bare, rel=1e-5)
 
 
 # ---------------------------------------------------------------------

@@ -247,6 +247,30 @@ class LvNetworkLayout(
             data, {"kvs_placements": "cabinet_placements"}, "LvNetworkLayout"
         )
 
+    def __setstate__(self, state: dict) -> None:
+        """Unpickle, also layouts pickled by v0.15.0.
+
+        A v0.15.0 pickle (``OrtsnetzLayout``) stores its cabinets under
+        ``kvs_placements``; they are moved to :attr:`cabinet_placements`
+        as plain :class:`CabinetPlacement` objects (audit L6: the layout
+        unpickled, but ``to_world`` raised ``AttributeError``).
+        """
+        values = state.get("__dict__")
+        if isinstance(values, dict) and "kvs_placements" in values:
+            values = dict(values)
+            legacy = values.pop("kvs_placements") or []
+            if "cabinet_placements" not in values:
+                values["cabinet_placements"] = [
+                    CabinetPlacement(name=p.name, position_xy=tuple(p.position_xy))
+                    for p in legacy
+                ]
+            fields_set = set(state.get("__pydantic_fields_set__") or ())
+            if "kvs_placements" in fields_set:
+                fields_set.discard("kvs_placements")
+                fields_set.add("cabinet_placements")
+            state = {**state, "__dict__": values, "__pydantic_fields_set__": fields_set}
+        super().__setstate__(state)
+
     @property
     def kvs_placements(self) -> list[CabinetPlacement]:
         """Deprecated alias of :attr:`cabinet_placements`."""
@@ -575,8 +599,9 @@ class LvNetworkLayout(
         probabilities and distributions in the grounding specs) use
         ``numpy.random.default_rng(seed)`` in the order substation,
         cabinets, houses, auxiliary electrode. Each house's foundation
-        electrodes are shaped after its footprint first (see
-        ``foundation_outline`` in :meth:`to_world`).
+        electrodes are shaped after its footprint once its draws are made
+        (see ``foundation_outline`` in :meth:`to_world`), so the outline
+        does not change which optional electrodes a seed produces.
 
         Returns
         -------
@@ -652,14 +677,13 @@ class LvNetworkLayout(
             if foundation_mask is not None and not foundation_mask[i]:
                 continue
             centroid = fp.centroid_xy_m()
-            house = house_spec.with_footprint(
-                fp, site_xy=centroid, outline=foundation_outline
-            ).plan_site(
+            house = house_spec.plan_site(
                 f"house_{i:03d}",
                 role="building",
                 position_xy=centroid,
                 rng=rng,
                 footprint=fp,
+                outline=foundation_outline,
             )
             sites.append(house)
             houses[i] = house
@@ -795,8 +819,11 @@ class LvNetworkLayout(
             Discretisation length in m of the PEN conductors (``None``:
             lumped).
         include_source
-            Add the current source at the substation (and, with an
-            auxiliary electrode, the counter-source on it).
+            Add the current source at the substation. With an
+            auxiliary electrode it is a two-terminal source that
+            returns its current through that electrode
+            (``Source.return_to``; up to 0.15.0 a second, 180° source on
+            the auxiliary electrode stood in for it).
         source_magnitude_a
             Source current in A.
         seed

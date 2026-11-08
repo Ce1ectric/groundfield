@@ -69,11 +69,14 @@ from groundfield.generators.electrode_specs import (
 )
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators.measurement import (
+    MEASUREMENT_H_TERMINAL,
+    MEASUREMENT_S_TERMINAL,
     MeasurementInjectionConfig,
     MeasurementLeadConfig,
     MeasurementProbeConfig,
     MeasurementSetupConfig,
     buried_lead,
+    measured_impedance,
     neighbour_substation_grounding,
     overhead_lead,
     single_rod_grounding,
@@ -169,6 +172,9 @@ __all__ = [
     "buried_lead",
     "single_rod_grounding",
     "neighbour_substation_grounding",
+    "measured_impedance",
+    "MEASUREMENT_H_TERMINAL",
+    "MEASUREMENT_S_TERMINAL",
     # Placement
     "ManhattanGridPlacement",
     "ExplicitPlacement",

@@ -306,17 +306,25 @@ def test_overhead_lead_lies_above_ground() -> None:
 
 
 @pytest.mark.finding("10.55")
+@pytest.mark.finding("10.17")
 def test_lead_stays_connected_to_its_anchors() -> None:
+    """The feed lead runs from the instrument terminal ``meas_H`` (at the
+    substation position, 10.17) to the auxiliary electrode."""
     world = _lead_world(buried_lead(depth_m=0.6))
     lead = _feed(world)
-    assert (lead.start_electrode, lead.end_electrode) == ("trafo_ring_0", "aux_rod_0")
-    sub = world.get_electrode("trafo_ring_0").connection_point
+    assert (lead.start_electrode, lead.end_electrode) == ("meas_H", "aux_rod_0")
+    terminal = world.get_junction("meas_H").position
     aux = world.get_electrode("aux_rod_0").connection_point
-    assert lead.start[:2] == sub[:2] and lead.end[:2] == aux[:2]
+    assert lead.start == terminal == (0.0, 0.0, 0.6)
+    assert lead.end[:2] == aux[:2]
 
 
 @pytest.mark.finding("10.55")
+@pytest.mark.finding("10.17")
 def test_lead_depth_changes_the_inductive_coupling() -> None:
+    """The lead's height enters its self-inductance with the earth-return
+    image, i.e. the loop impedance the test current sees (the two-pole
+    reading E-H of the instrument)."""
     engine = gf.create_engine(
         backend="image",
         segment_length=2.0,
@@ -329,8 +337,8 @@ def test_lead_depth_changes_the_inductive_coupling() -> None:
         ("overhead", overhead_lead()),
     ):
         res = engine.solve(_lead_world(lead))
-        z[label] = res.electrode_potentials["trafo_ring_0"][0]
-    assert abs(z["buried"] - z["overhead"]) > 1e-6 * abs(z["buried"])
+        z[label] = res.input_impedance()[0]
+    assert abs(z["buried"] - z["overhead"]) > 1e-3 * abs(z["buried"])
 
 
 @pytest.mark.finding("10.55")

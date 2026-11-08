@@ -158,3 +158,72 @@ def test_foundation_outline_is_recorded_in_the_plan() -> None:
     (house,) = plan.sites_with_role("building")
     assert house.footprint == GARAGE
     assert house.electrodes[0].spec.size_xy_m == (6.0, 4.0)
+
+
+def _square(cx: float, cy: float, osm_id: int, w: float = 10.0, h: float = 10.0):
+    return gf.BuildingFootprint(
+        polygon_xy_m=[
+            (cx - w / 2, cy - h / 2),
+            (cx + w / 2, cy - h / 2),
+            (cx + w / 2, cy + h / 2),
+            (cx - w / 2, cy + h / 2),
+        ],
+        osm_id=osm_id,
+    )
+
+
+def test_footprint_outline_does_not_shift_the_random_draws() -> None:
+    """Audit M2: with a stochastic foundation size the ``"ombr"`` default
+    skipped the size draw, the random stream shifted and optional rods
+    moved to other houses (6 -> 8 rods) although the footprints were exact
+    10 x 10 m squares. The draws are made first, the footprint shapes the
+    resolved foundation afterwards."""
+    from groundfield.generators import RodElectrodeSpec, Uniform
+
+    footprints = [
+        _square(30.0 + 25.0 * (i // 2), 18.0 if i % 2 == 0 else -18.0, 500 + i)
+        for i in range(12)
+    ]
+    spec = GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style="ring", size_m=Uniform(low=9.9999, high=10.0001)
+            ),
+            RodElectrodeSpec(length_m=1.5, presence_prob=0.5, offset_xy_m=(5.0, 0.0)),
+        ]
+    )
+    layout = LvNetworkLayout.from_footprints(footprints, substation_xy=(0.0, 0.0))
+    layout.add_pen_cable(start="substation", end_xy=(200.0, 0.0))
+    layout.connect_all_buildings()
+    rods = {}
+    for outline in ("spec", "ombr", "polygon"):
+        world = layout.to_world(
+            seed=3, house_grounding=spec, foundation_outline=outline
+        )
+        rods[outline] = sorted(
+            e.name
+            for e in world.electrodes
+            if e.name.startswith("house") and e.kind == "rod"
+        )
+    assert rods["ombr"] == rods["spec"] == rods["polygon"]
+    assert 0 < len(rods["spec"]) < 12
+
+
+def test_a_degenerate_footprint_gets_a_minimum_foundation() -> None:
+    """Audit L5: a mapped wall (10 m x 5 mm) became a 10 m x 5 mm mesh and
+    the whole ``to_world`` failed (segment shorter than the wire radius);
+    v0.15.0 (fixed 10 x 10 m spec foundation) built the layout. The OMBR
+    side is widened to MIN_FOUNDATION_SIDE_M (1 m), with a warning."""
+    layout = _layout(
+        [_square(40.0, 18.0, 1, 10.0, 8.0), _square(70.0, 18.0, 2, 10.0, 0.005)]
+    )
+    with pytest.warns(UserWarning, match="widened"):
+        world = layout.to_world(seed=0)
+    (mesh,) = _foundations(world, "house_001_foundation")
+    assert sorted(mesh.size) == pytest.approx([1.0, 10.0])
+    res = gf.create_engine(backend="image", segment_length=1.0).solve(world)
+    assert np.isfinite(res.input_impedance()[0])
+
+    from groundfield.generators.grounding import MIN_FOUNDATION_SIDE_M
+
+    assert MIN_FOUNDATION_SIDE_M == 1.0

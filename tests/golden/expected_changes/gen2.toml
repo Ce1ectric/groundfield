@@ -1,0 +1,122 @@
+# Expected golden-value changes of work stream GEN-2 (measurement loop
+# through junctions, PEN junctions, one concrete-shell mechanism, PEN depth).
+# Format: tests/golden/README.md.
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/substation_*", "phi/house_*", "I/substation_*", "I/house_*"]
+findings = ["10.38"]
+reason = """PEN cable joints are leakage-free junction nodes instead of 5 cm driven
+rods. The five joint rods of the test street (one corner, four taps) leaked
+0.53 % of the 1 A test current; the substation and house electrodes now carry
+all of it: substation potential +0.33 %, leakage currents +0.43 ... +0.57 %
+(30-house street at 5 % foundation penetration: 3.7 % leaked, +3.5 %).
+Evidence: deliver/evidence/gen2/e1038_layout_joints.out"""
+min_rel_change = 1e-3
+max_rel_change = 1e-2
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/pen_0_*", "I/pen_0_*"]
+findings = ["10.38"]
+reason = """The joint rods pen_0_node_1 and pen_0_tap_1 ... pen_0_tap_4 are no
+electrodes any more (they are junctions, reported in
+metadata['junction_potentials'])."""
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = "The five joint rods move from 'electrodes' to 'junctions'."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/aux_rod_0", "I/aux_rod_0"]
+findings = ["10.17"]
+reason = """The measurement leads end on leakage-free instrument terminals (meas_H,
+meas_S) and the source drives the test current between the substation and
+meas_H. The feed lead no longer bonds the auxiliary rod to the substation, so
+the rod takes the whole -1 A back from the soil: I(aux_rod_0) +2.41e-2 A
+(v0.15.0) -> -1 A, phi(aux_rod_0) +1.500 V -> -59.18 V. The core2a bound (1.1)
+and this one add up. Evidence: deliver/evidence/gen2/e1017_golden_measurement.out"""
+min_rel_change = 10.0
+max_rel_change = 42.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
+findings = ["10.17"]
+reason = """The probe lead no longer bonds the probe rod to the substation: the rod
+floats with zero current at the field potential of its position,
+phi 1.50075 V (v0.15.0, substation potential) -> 2.3e-3 V, I 9.1e-3 A -> 0."""
+min_rel_change = 0.5
+max_rel_change = 1.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "I/trafo_*", "I/residential_*", "I/kvs_*"]
+findings = ["10.17"]
+reason = """With the loop closed through the soil the network carries the whole 1 A
+again (base 1c3fc57: 99.95 % went through the feed lead); against v0.15.0
+(remote-earth return) the auxiliary rod at 150 m lowers the network potentials
+by 1.8 ... 1.9 % and moves the leakage currents by 1.3 ... 6.2 %."""
+min_rel_change = 1e-3
+max_rel_change = 0.1
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["world/json"]
+findings = ["10.17"]
+reason = """Junctions meas_H and meas_S (substation position, lead height, meas_S 1 cm
+beside meas_H); the leads start on them."""
+allow_shape_change = true
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["Z_G"]
+findings = ["10.12"]
+reason = """concrete_model="lumped" puts the Sunde coefficient C = rho_c/(2 pi) ln(r_b/r_a)
+(32.42 Ohm m) on the foundation instead of World.concrete_shell_corrections,
+which solve_mutual_matrix never read. Each diagonal entry gains C / L_perim =
+0.8104 Ohm (1.9202 -> 2.7306 Ohm, +42.2 %); the off-diagonal entries stay.
+Evidence: deliver/evidence/gen2/e1012_ap1_station_concrete.out (AP1-like site:
+house diagonals +42 / +19 / +2.8 % at rho_1 = 30 / 100 / 1000 Ohm m)."""
+min_rel_change = 0.1
+max_rel_change = 0.5
+
+[[change]]
+cases = ["mutual_foundations_lumped_concrete"]
+quantities = ["world/json"]
+findings = ["10.12"]
+reason = "Empty concrete_shell_corrections; the grid mesh carries concrete_shell_coefficient_ohm_m."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/*", "I/*", "potential/*", "ps/I"]
+findings = ["10.55"]
+reason = """PenConfig.depth_m is honoured (same class as F48, observed by GEN-1): the
+PEN main section and the five service drops run horizontally at z = 0.6 m
+instead of straight between the anchors' connection points (substation ring
+0.6 m, cabinet rod head 0 m, foundations 0.8 m). The default PEN is isolated
+and non-inductive, so only its resistance moves with the slightly shorter
+sections: <= 3.5e-7 relative. Evidence: deliver/evidence/gen2/epen_depth.out"""
+min_rel_change = 1e-9
+max_rel_change = 1e-5
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["world/json"]
+findings = ["10.55"]
+reason = "PEN conductor end points at z = 0.6 m."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "I/trafo_*", "I/residential_*", "I/kvs_*", "phi/aux_rod_0", "I/aux_rod_0", "phi/probe_rod_0"]
+findings = ["10.55"]
+reason = """PenConfig.depth_m honoured (PEN sections horizontal at 0.6 m), on top of the
+10.17 change; resistive PEN, effect below 1e-5."""
+max_rel_change = 1e-5

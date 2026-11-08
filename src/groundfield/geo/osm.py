@@ -50,10 +50,15 @@ Requests are bounded and validated (review finding 10.05):
 * endpoints must use ``https`` (plain ``http`` only for a local
   instance on ``localhost``);
 * the response is streamed and capped at ``max_response_bytes``
-  (default :data:`DEFAULT_MAX_RESPONSE_BYTES`);
+  (default :data:`DEFAULT_MAX_RESPONSE_BYTES`, which also bounds the
+  memory of decoding it);
 * an HTTP-200 payload whose ``remark`` reports an Overpass runtime
-  error, or that is not a JSON object with an ``elements`` list, raises
-  :class:`OverpassError` and is not cached;
+  error, or that does not have the structure of an Overpass result — a
+  JSON object with an ``elements`` list of objects whose ``type``,
+  ``id``, ``tags``, ``geometry`` and ``members`` have the Overpass types,
+  and whose vertices are finite WGS84 coordinates — raises
+  :class:`OverpassError` before anything is cached or parsed; a cached
+  payload that fails this check is fetched again;
 * cache files are written atomically (temporary file + rename); an
   unreadable cache file is re-fetched with a warning;
 * the cache key of a non-default endpoint includes the endpoint (the
@@ -140,8 +145,16 @@ MAX_TIMEOUT_S = 900
 MAX_RADIUS_M = 10_000.0
 """Largest accepted search radius in m (one LV / MV network area)."""
 
-DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
-"""Default cap on the size of an Overpass response (64 MiB)."""
+DEFAULT_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+"""Default cap on the size of an Overpass response (16 MiB).
+
+The cap bounds the memory of decoding the body as well: parsed JSON takes
+about 6 times its size for building payloads and up to 25 times for a
+hostile body of empty objects (measured with :mod:`tracemalloc`), i.e. at
+most about 0.4 GiB. The largest payload of the AP1 catalogue (196 LV
+networks) is 3 MiB; pass a larger ``max_response_bytes`` for wide areas.
+Until the first 2026.11 consolidation the default was 64 MiB (up to
+1.6 GiB parsed, audit L7)."""
 
 MAX_RETRIES = 5
 """Largest accepted ``max_retries``."""
@@ -392,7 +405,17 @@ def _cache_key(query: str, endpoint: str) -> str:
 
 
 def _check_payload(payload: Any) -> dict[str, Any]:
-    """Raise :class:`OverpassError` unless ``payload`` is a usable result."""
+    """Raise :class:`OverpassError` unless ``payload`` is a usable result.
+
+    Checks the top level (a JSON object with an ``elements`` list, no
+    runtime-error ``remark``) and every element: an object whose ``type``
+    is a string, ``id`` an integer, ``tags`` an object of string values,
+    ``geometry`` a list of vertices and ``members`` a list of objects (with
+    string ``type`` / ``role``, integer ``ref`` and their own
+    ``geometry``). A vertex is ``null`` (a node Overpass could not place;
+    the element is skipped when parsing) or an object with finite ``lat``
+    in [-90, 90] and ``lon`` in [-180, 180].
+    """
     if not isinstance(payload, dict):
         raise OverpassError(
             f"Overpass payload must be a JSON object, got {type(payload).__name__}."
@@ -403,7 +426,73 @@ def _check_payload(payload: Any) -> dict[str, Any]:
     remark = payload.get("remark")
     if isinstance(remark, str) and "error" in remark.lower():
         raise OverpassError(f"Overpass reported an error: {remark[:500]}")
+    for index, element in enumerate(elements or ()):
+        _check_element(element, f"elements[{index}]")
     return payload
+
+
+def _malformed(where: str, what: str) -> OverpassError:
+    return OverpassError(f"Overpass payload: {where}: {what}")
+
+
+def _check_element(element: Any, where: str) -> None:
+    """Structure of one Overpass element (see :func:`_check_payload`)."""
+    if not isinstance(element, dict):
+        raise _malformed(where, f"must be an object, got {type(element).__name__}.")
+    kind = element.get("type")
+    if kind is not None and not isinstance(kind, str):
+        raise _malformed(where, "'type' must be a string.")
+    ident = element.get("id")
+    if ident is not None and (isinstance(ident, bool) or not isinstance(ident, int)):
+        raise _malformed(where, "'id' must be an integer.")
+    tags = element.get("tags")
+    if tags is not None:
+        if not isinstance(tags, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in tags.items()
+        ):
+            raise _malformed(where, "'tags' must map strings to strings.")
+    _check_geometry(element.get("geometry"), where)
+    members = element.get("members")
+    if members is None:
+        return
+    if not isinstance(members, list):
+        raise _malformed(where, "'members' must be a list.")
+    for k, member in enumerate(members):
+        at = f"{where}.members[{k}]"
+        if not isinstance(member, dict):
+            raise _malformed(at, f"must be an object, got {type(member).__name__}.")
+        for key in ("type", "role"):
+            value = member.get(key)
+            if value is not None and not isinstance(value, str):
+                raise _malformed(at, f"{key!r} must be a string.")
+        ref = member.get("ref")
+        if ref is not None and (isinstance(ref, bool) or not isinstance(ref, int)):
+            raise _malformed(at, "'ref' must be an integer.")
+        _check_geometry(member.get("geometry"), at)
+
+
+def _check_geometry(geometry: Any, where: str) -> None:
+    """Vertices of a ``geometry`` list: ``null`` or finite WGS84 coordinates."""
+    if geometry is None:
+        return
+    if not isinstance(geometry, list):
+        raise _malformed(where, "'geometry' must be a list.")
+    for point in geometry:
+        if point is None:
+            continue
+        if not isinstance(point, dict):
+            raise _malformed(where, "a 'geometry' vertex must be an object.")
+        lat, lon = point.get("lat"), point.get("lon")
+        if not all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in (lat, lon)
+        ):
+            raise _malformed(
+                where, "a 'geometry' vertex needs numeric 'lat' and 'lon'."
+            )
+        if not (math.isfinite(lat) and -90.0 <= lat <= 90.0):
+            raise _malformed(where, f"vertex latitude {lat!r} is not in [-90, 90].")
+        if not (math.isfinite(lon) and -180.0 <= lon <= 180.0):
+            raise _malformed(where, f"vertex longitude {lon!r} is not in [-180, 180].")
 
 
 def _atomic_write_json(path: Path, payload: Any) -> None:
@@ -724,6 +813,14 @@ def parse_overpass_payload(
         Order matches the Overpass element order, which Overpass
         keeps deterministic for the same query.
 
+    Raises
+    ------
+    OverpassError
+        If the payload does not have the structure of an Overpass result
+        or a vertex is not a finite WGS84 coordinate (see the module
+        docstring). Elements whose geometry contains ``null`` vertices or
+        that do not form a valid polygon are skipped.
+
     Notes
     -----
     *Multipolygon relations* (``type=multipolygon``) are handled by
@@ -734,8 +831,6 @@ def parse_overpass_payload(
     """
     _check_payload(payload)
     elements = payload.get("elements", []) or []
-    if not all(isinstance(e, dict) for e in elements):
-        raise OverpassError("Overpass payload: every element must be a JSON object.")
     if isinstance(exclude_building_tags, str):
         exclude_building_tags = (exclude_building_tags,)
     excluded = frozenset(exclude_building_tags or ())

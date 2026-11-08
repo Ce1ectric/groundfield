@@ -100,6 +100,8 @@ from groundfield.generators.electrode_specs import (
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators.materialise import materialise_plan
 from groundfield.generators.measurement import (
+    MEASUREMENT_H_TERMINAL,
+    MEASUREMENT_S_TERMINAL,
     MeasurementLeadConfig,
     MeasurementSetupConfig,
     lead_axis_z,
@@ -114,6 +116,7 @@ from groundfield.generators.plan import (
     ConductorParameters,
     NetworkPlan,
     PlannedBranch,
+    PlannedJunction,
     PlannedMeasurement,
     PlannedSite,
     PlannedSource,
@@ -158,6 +161,24 @@ def _to_int(value: Union[int, Distribution], rng: np.random.Generator) -> int:
     if isinstance(value, Distribution):
         return int(round(float(value.sample(rng))))
     return int(round(float(value)))
+
+
+def _beside(
+    origin_xy: tuple[float, float], toward_xy: tuple[float, float], distance_m: float
+) -> tuple[float, float]:
+    """Point ``distance_m`` (m) to the left of ``origin_xy``, facing ``toward_xy``.
+
+    Returns ``origin_xy`` unchanged when the two points coincide.
+    """
+    dx = float(toward_xy[0]) - float(origin_xy[0])
+    dy = float(toward_xy[1]) - float(origin_xy[1])
+    norm = math.hypot(dx, dy)
+    if norm == 0.0:
+        return (float(origin_xy[0]), float(origin_xy[1]))
+    return (
+        float(origin_xy[0]) - distance_m * dy / norm,
+        float(origin_xy[1]) + distance_m * dx / norm,
+    )
 
 
 def _override_foundation_from_footprint(
@@ -299,10 +320,23 @@ class KvsConfig(CabinetConfig):
 
 
 class PenConfig(GeneratorConfig):
-    """PEN cable backbone (distributed conductor, ADR-0003)."""
+    """PEN cable backbone (distributed conductor, ADR-0003).
+
+    Every PEN section (substation to cabinet, trunk) and service drop runs
+    horizontally at ``z = depth_m`` between the horizontal positions of
+    the connection points of its two end electrodes, i.e. in the cable
+    trench; the short vertical risers to the electrode heads are not
+    modelled. Up to 0.15.0 ``depth_m`` was ignored and the sections ran
+    straight between the connection points (e.g. from the substation ring
+    at 0.6 m to a cabinet rod head at 0 m).
+    """
 
     wire_radius_m: float = Field(default=0.005, description="PEN wire radius in m.")
-    depth_m: float = Field(default=0.6, description="PEN burial depth in m.")
+    depth_m: float = Field(
+        default=0.6,
+        gt=0.0,
+        description="PEN burial depth in m (z of the cable axis, > 0).",
+    )
     coupling_to_soil: str = Field(
         default="isolated",
         description=(
@@ -454,11 +488,12 @@ class TnNetworkConfig(GeneratorConfig):
             "Optional grounding-resistance measurement setup. "
             "When set, the generator adds "
             "the auxiliary current electrode, the voltage probe, "
-            "and (optionally) the metallic feed / probe leads, and "
-            "re-routes the source's return path through the "
-            "auxiliary electrode. ``None`` keeps the historic "
-            "behaviour: source returns to remote earth, no probe "
-            "or aux electrode."
+            "and (optionally) the metallic feed / probe leads with "
+            "their instrument terminals, and makes the source return "
+            "its current through the auxiliary electrode (via the "
+            "feed lead when one is configured). ``None`` keeps the "
+            "historic behaviour: source returns to remote earth, no "
+            "probe or aux electrode."
         ),
     )
 
@@ -469,7 +504,9 @@ class TnNetworkConfig(GeneratorConfig):
             "``return_to`` electrode name. ``None`` (default) "
             "preserves the historic behaviour: ``return_to`` is "
             "derived automatically from :attr:`measurement` (the "
-            "auxiliary current electrode) or left as ``None`` for "
+            "end of the current loop: the feed lead's terminal "
+            "``meas_H``, else the auxiliary current electrode) or left "
+            "as ``None`` for "
             "remote-earth return. Setting this field takes "
             "precedence over the measurement-setup auto-routing — "
             ":meth:`TnNetworkGenerator.build` emits a "
@@ -713,20 +750,27 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         measurement = self._plan_measurement(cfg, substation, rng)
 
         # --- Source ---
+        # With a measurement set-up the source is the earth tester: it
+        # drives the test current between the substation (terminal E)
+        # and the end of the current loop — the terminal H of the feed
+        # lead, or the auxiliary electrode itself without a feed lead.
         # ``cfg.source_return_to`` is the explicit override of the
-        # source's ``return_to``; warn when it shadows the
-        # measurement-set-up auxiliary electrode.
+        # source's ``return_to``; warn when it shadows that terminal.
         return_to: Optional[str] = None
+        loop_end: Optional[str] = None
         if measurement is not None:
-            return_to = measurement.auxiliary.name
+            if measurement.feed_lead is not None:
+                return_to = loop_end = MEASUREMENT_H_TERMINAL
+            else:
+                return_to = measurement.auxiliary.name
+                loop_end = measurement.auxiliary.anchor
         if cfg.source_return_to is not None:
-            aux_anchor = None if measurement is None else measurement.auxiliary.anchor
-            if aux_anchor is not None and cfg.source_return_to != aux_anchor:
+            if loop_end is not None and cfg.source_return_to != loop_end:
                 warnings.warn(
                     "TnNetworkConfig.source_return_to="
                     f"{cfg.source_return_to!r} takes precedence over "
-                    "the measurement-setup auxiliary electrode "
-                    f"({aux_anchor!r}). The aux electrode and any "
+                    "the measurement-setup return terminal "
+                    f"({loop_end!r}). The aux electrode and any "
                     "metallic feed/probe leads remain in the world, "
                     "but the source's return current is routed to "
                     "the user-supplied electrode instead.",
@@ -824,9 +868,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         """Resolve the optional measurement set-up.
 
         Builds the auxiliary current electrode and the voltage probe
-        sites and the optional metallic feed / probe leads (each a
-        finite-impedance conductor from the substation to the remote
-        electrode). Returns ``None`` without a measurement set-up.
+        sites and the optional metallic feed / probe leads, each a
+        finite-impedance conductor from an instrument terminal (a
+        junction at the substation position) to the remote electrode.
+        Returns ``None`` without a measurement set-up.
         """
         meas = cfg.measurement
         if meas is None:
@@ -847,45 +892,80 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 "TnNetworkGenerator: measurement.probe.grounding "
                 "produced zero electrodes. Increase presence_prob."
             )
+        # The instrument stands at the substation position; each lead
+        # ends on a leakage-free terminal junction there (H: current,
+        # S: voltage), so it neither bonds the remote electrode to the
+        # substation nor short-circuits the voltmeter (10.17).
         feed_lead = probe_lead = None
+        terminals: list[PlannedJunction] = []
         if meas.injection.feed_lead is not None:
-            feed_lead = self._plan_lead(
+            terminal, feed_lead = self._plan_lead(
                 meas.injection.feed_lead,
                 "meas_feed_lead",
-                substation.name,
+                MEASUREMENT_H_TERMINAL,
+                substation.position_xy,
                 aux.name,
                 rng,
             )
+            terminals.append(terminal)
         if meas.probe.lead is not None:
-            probe_lead = self._plan_lead(
-                meas.probe.lead, "meas_probe_lead", substation.name, probe.name, rng
+            s_xy = substation.position_xy
+            if meas.injection.feed_lead is not None:
+                # Two leads towards one side (the in-line probe of the
+                # 61.8 % rule) lie side by side, touching, instead of
+                # through each other: coincident filaments have no finite
+                # mutual inductance.
+                s_xy = _beside(
+                    s_xy,
+                    meas.probe.position_xy,
+                    meas.injection.feed_lead.wire_radius_m
+                    + meas.probe.lead.wire_radius_m,
+                )
+            terminal, probe_lead = self._plan_lead(
+                meas.probe.lead,
+                "meas_probe_lead",
+                MEASUREMENT_S_TERMINAL,
+                s_xy,
+                probe.name,
+                rng,
             )
+            terminals.append(terminal)
         return PlannedMeasurement(
-            auxiliary=aux, probe=probe, feed_lead=feed_lead, probe_lead=probe_lead
+            auxiliary=aux,
+            probe=probe,
+            feed_lead=feed_lead,
+            probe_lead=probe_lead,
+            terminals=terminals,
         )
 
     def _plan_lead(
         self,
         lead: MeasurementLeadConfig,
         name: str,
-        start: str,
+        terminal: str,
+        instrument_xy: tuple[float, float],
         end: str,
         rng: np.random.Generator,
-    ) -> PlannedBranch:
-        """Resolve one measurement lead into a branch.
+    ) -> tuple[PlannedJunction, PlannedBranch]:
+        """Resolve one measurement lead and its instrument terminal.
 
         The lead runs horizontally at :func:`lead_axis_z` of its
-        (resolved) ``depth_m`` between the two anchors (F48).
+        (resolved) ``depth_m`` (F48) from the terminal junction at the
+        instrument to the remote site's anchor; the terminal sits at the
+        same height, so the lead has no riser.
         """
         depth = _to_float(lead.depth_m, rng)
-        return PlannedBranch(
+        z = lead_axis_z(depth, lead.coupling_to_soil)
+        junction = PlannedJunction(name=terminal, position_xy=instrument_xy, depth_m=z)
+        branch = PlannedBranch(
             name=name,
             role="measurement_lead",
-            start=start,
+            start=terminal,
             end=end,
             conductor=_lead_conductor(lead),
-            axis_z_m=lead_axis_z(depth, lead.coupling_to_soil),
+            axis_z_m=z,
         )
+        return junction, branch
 
     def _plan_star_backbone(
         self,
@@ -895,12 +975,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         buildings: list[PlannedSite],
         branches: list[PlannedBranch],
     ) -> None:
-        """Star backbone: substation → each cabinet, building → nearest cabinet.
-
-        The service drop of a building carries the building's lumped
-        concrete-shell resistance (ADR-0012 V1) as its series resistance.
-        """
+        """Star backbone: substation → each cabinet, building → nearest cabinet."""
         conductor = _pen_conductor(cfg.pen)
+        depth = float(cfg.pen.depth_m)
         wired = [c for c in cabinets if c.anchor is not None]
         for cab in wired:
             branches.append(
@@ -910,6 +987,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     start=substation.name,
                     end=cab.name,
                     conductor=conductor,
+                    axis_z_m=depth,
                 )
             )
         for b in buildings:
@@ -927,7 +1005,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     start=cab.name,
                     end=b.name,
                     conductor=conductor,
-                    concrete_shell_of=b.name,
+                    axis_z_m=depth,
                 )
             )
 
@@ -963,6 +1041,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         topology = cfg.pen_topology
         assert isinstance(topology, RadialTrunkTopology)  # pragma: no cover
         conductor = _pen_conductor(cfg.pen)
+        depth = float(cfg.pen.depth_m)
         wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
             substation_xy=cfg.substation.position,
@@ -1010,6 +1089,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         start=previous.name,
                         end=cab.name,
                         conductor=conductor,
+                        axis_z_m=depth,
                     )
                 )
                 taps.append(cab)
@@ -1042,7 +1122,7 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                         start=taps[tap_idx].name,
                         end=b.name,
                         conductor=conductor,
-                        concrete_shell_of=b.name,
+                        axis_z_m=depth,
                     )
                 )
                 any_service_drop = True

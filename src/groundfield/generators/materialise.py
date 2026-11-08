@@ -8,12 +8,13 @@ This module is the **single** place where generated networks become
 <groundfield.generators.grounding.GroundingSystemSpec.build_at>` call it.
 It owns, in one function each:
 
-* :func:`materialise_site` — the electrodes of a grounding site, the
-  bonds to its anchor and the lumped concrete-shell bookkeeping;
+* :func:`materialise_site` — the electrodes of a grounding site and
+  the bonds to its anchor;
 * :func:`materialise_electrode` — one electrode, including the
   foundation geometry (axis-aligned grid, rotated mesh, building
   outline) and the concrete shell of ADR-0012;
-* :func:`materialise_junction` — a PEN cable junction;
+* :func:`materialise_junction` — a PEN cable joint (a leakage-free
+  :class:`~groundfield.geometry.junction.Junction` node);
 * :func:`materialise_branch` — a conductor between two nodes (PEN
   sections, service drops, measurement leads);
 * :func:`materialise_plan` — everything, in a fixed order.
@@ -23,9 +24,10 @@ No random numbers are drawn here: every value of a plan is concrete.
 Order of construction
 ---------------------
 ``materialise_plan`` builds sites, measurement sites, junctions,
-branches, measurement leads and sources, each list in plan order. The
-order fixes the order of ``world.electrodes`` / ``world.conductors``
-(and therefore the canonical world JSON), not the physics.
+instrument terminals, branches, measurement leads and sources, each list
+in plan order. The order fixes the order of ``world.electrodes`` /
+``world.junctions`` / ``world.conductors`` (and therefore the canonical
+world JSON), not the physics.
 
 Concrete shell (ADR-0012)
 -------------------------
@@ -38,13 +40,16 @@ shell adds the per-length resistance coefficient
 
    C = \frac{\rho_c}{2\pi}\,\ln\frac{r_b}{r_a}\quad[\Omega\,\mathrm{m}],
 
-i.e. :math:`R_\text{shell} = C / L_\text{perim}` for a perimeter of
-length :math:`L_\text{perim}`. ``concrete_model="distributed"`` (V2)
-puts :math:`C` on every perimeter segment; ``"lumped"`` (V1) records
-:math:`R_\text{shell}` in ``world.concrete_shell_corrections`` under the
-site anchor (several encased electrodes of one site combine in parallel)
-for a branch with :attr:`PlannedBranch.concrete_shell_of
-<groundfield.generators.plan.PlannedBranch.concrete_shell_of>` to carry.
+which every encased (perimeter) wire carries as
+``concrete_shell_coefficient_ohm_m``; the solver adds :math:`C/\Delta s`
+to the diagonal of each of its segments, i.e. the lumped resistance
+:math:`R_\text{shell} = C / L` in series with an electrode of length
+:math:`L` under a uniform leakage current. Both ``concrete_model`` values
+use this one mechanism (review findings 10.12–10.14); they differ only
+in the owners of an axis-aligned ring foundation: ``"lumped"`` keeps one
+grid-mesh electrode (one uniform-current owner), ``"distributed"`` one
+owner per wire. Cross-braces of a mesh foundation are not encased and
+keep the bare radius :math:`r_a`.
 """
 
 from __future__ import annotations
@@ -55,10 +60,12 @@ from typing import Optional
 from groundfield.api import (
     create_conductor,
     create_electrode,
+    create_junction,
     create_source,
     create_world,
 )
 from groundfield.conductors.conductor import Conductor
+from groundfield.geometry.electrodes import concrete_shell_coefficient
 from groundfield.generators.electrode_specs import (
     ElectrodeSpec,
     FoundationElectrodeSpec,
@@ -76,7 +83,6 @@ from groundfield.world import World
 
 __all__ = [
     "MIN_POLYGON_EDGE_M",
-    "PEN_JUNCTION_ROD_LENGTH_M",
     "clean_polygon",
     "concrete_shell",
     "materialise_branch",
@@ -93,10 +99,6 @@ Shorter edges are merged away: a segment shorter than the
 (concrete-inflated) wire radius would trip the solver's thin-wire guard,
 and OSM footprints routinely carry centimetre-scale edges without
 physical meaning for the strip foundation."""
-
-PEN_JUNCTION_ROD_LENGTH_M = 0.05
-"""Length (m) of the rod that stands in for a PEN junction (see
-:func:`materialise_junction`)."""
 
 
 # ---------------------------------------------------------------------
@@ -159,9 +161,13 @@ def concrete_shell(
         :math:`r_b = r_a + t` in m when a shell is configured, else the
         bare wire radius :math:`r_a`.
     shell_total_ohm : float
-        :math:`R_\text{shell} = C / L_\text{perim}` in Ω (0 without shell).
+        :math:`R_\text{shell} = C / L_\text{perim}` in Ω (0 without
+        shell): the shell resistance of the whole perimeter under a
+        uniform leakage current. Informational; the solver sees the
+        coefficient.
     shell_coefficient_ohm_m : float
-        :math:`C = \rho_c/(2\pi)\,\ln(r_b/r_a)` in Ω·m (0 without shell).
+        :math:`C = \rho_c/(2\pi)\,\ln(r_b/r_a)` in Ω·m (0 without shell),
+        :func:`~groundfield.geometry.electrodes.concrete_shell_coefficient`.
     """
     if spec.concrete_rho_ohm_m is None:
         return float(spec.wire_radius_m), 0.0, 0.0
@@ -170,11 +176,10 @@ def concrete_shell(
     if rho_c <= 0.0 or t <= 0.0:
         return float(spec.wire_radius_m), 0.0, 0.0
     r_a = float(spec.wire_radius_m)
-    r_b = r_a + t
+    coefficient = concrete_shell_coefficient(rho_c, r_a, t)
     perimeter = float(perimeter_m)
-    coefficient = rho_c / (2.0 * math.pi) * math.log(r_b / r_a)
     r_shell = coefficient / perimeter if perimeter > 0.0 else 0.0
-    return r_b, float(r_shell), float(coefficient)
+    return r_a + t, float(r_shell), float(coefficient)
 
 
 # ---------------------------------------------------------------------
@@ -260,31 +265,6 @@ def materialise_electrode(
     )
 
 
-def _wire_shell_coefficient(
-    world: World,
-    spec: FoundationElectrodeSpec,
-    name: str,
-    *,
-    shell_total_ohm: float,
-    shell_coefficient_ohm_m: float,
-) -> float:
-    """Book a lumped (V1) shell; return the coefficient wires carry (V2).
-
-    ``concrete_model="lumped"`` records ``shell_total_ohm`` under the
-    electrode name and returns 0 (the wires carry no coefficient);
-    ``"distributed"`` returns the per-length coefficient.
-    """
-    if spec.concrete_model == "lumped":
-        if shell_total_ohm > 0.0:
-            world.concrete_shell_corrections[name] = shell_total_ohm
-        return 0.0
-    if spec.concrete_model == "distributed":
-        return shell_coefficient_ohm_m
-    raise ValueError(
-        f"Unknown concrete_model: {spec.concrete_model!r}"
-    )  # pragma: no cover
-
-
 def _materialise_foundation(
     world: World,
     spec: FoundationElectrodeSpec,
@@ -293,7 +273,17 @@ def _materialise_foundation(
     name: str,
     bond_conductor_type: str,
 ) -> None:
-    """Foundation electrode: building outline, axis-aligned grid or rotated mesh."""
+    """Foundation electrode: building outline, axis-aligned grid or per-wire mesh.
+
+    The concrete shell (ADR-0012) is the same for both
+    ``concrete_model`` values: every encased (perimeter) wire gets the
+    radius :math:`r_b` and the coefficient :math:`C`; cross-braces keep
+    the bare radius. ``"lumped"`` keeps the single
+    :class:`~groundfield.geometry.electrodes.GridMeshElectrode` (one
+    uniform-current owner) for an axis-aligned foundation whose wires are
+    all encased (``style="ring"``); ``"distributed"`` and every other
+    case use one owner per wire.
+    """
     depth = float(spec.depth_m)
     if spec.polygon_xy_m is not None:
         _materialise_polygon_foundation(
@@ -310,15 +300,8 @@ def _materialise_foundation(
         nx, ny = 1, 1
     else:
         nx, ny = spec.n_x, spec.n_y
-    effective_radius, shell_total_ohm, shell_coeff = concrete_shell(
+    effective_radius, _, shell_coefficient = concrete_shell(
         spec, perimeter_m=2.0 * (dx + dy)
-    )
-    strip_shell_coefficient = _wire_shell_coefficient(
-        world,
-        spec,
-        name,
-        shell_total_ohm=shell_total_ohm,
-        shell_coefficient_ohm_m=shell_coeff,
     )
 
     # A rectangle turned by a multiple of 90 deg is axis-aligned: realise
@@ -328,10 +311,14 @@ def _materialise_foundation(
     angle_deg, dx, dy, nx, ny = _canonical_right_angle(
         spec.orientation_deg or 0.0, dx, dy, nx, ny
     )
-    # A distributed shell needs per-wire primitives (the coefficient is
-    # carried per segment), so it always takes the per-wire path.
-    force_strip_path = strip_shell_coefficient > 0.0
-    if angle_deg == 0.0 and not force_strip_path:
+    # One grid-mesh primitive carries one radius and one coefficient, so
+    # it can hold a shell only when every wire is encased (no braces);
+    # the distributed model always takes one owner per wire.
+    encased = shell_coefficient > 0.0
+    single_owner = not encased or (
+        spec.concrete_model == "lumped" and nx == 1 and ny == 1
+    )
+    if angle_deg == 0.0 and single_owner:
         create_electrode(
             world,
             "grid_mesh",
@@ -341,6 +328,7 @@ def _materialise_foundation(
             n_x=nx,
             n_y=ny,
             wire_radius=effective_radius,
+            concrete_shell_coefficient_ohm_m=shell_coefficient,
         )
         return
     _materialise_rotated_foundation(
@@ -354,7 +342,8 @@ def _materialise_foundation(
         angle_deg=angle_deg,
         name=name,
         wire_radius=effective_radius,
-        concrete_shell_coefficient=strip_shell_coefficient,
+        brace_wire_radius=float(spec.wire_radius_m),
+        concrete_shell_coefficient=shell_coefficient,
         bond_conductor_type=bond_conductor_type,
     )
 
@@ -416,16 +405,7 @@ def _materialise_polygon_foundation(
         x0, y0 = verts[k]
         x1, y1 = verts[(k + 1) % len(verts)]
         perimeter += math.hypot(x1 - x0, y1 - y0)
-    effective_radius, shell_total_ohm, shell_coeff = concrete_shell(
-        spec, perimeter_m=perimeter
-    )
-    ring_coeff = _wire_shell_coefficient(
-        world,
-        spec,
-        name,
-        shell_total_ohm=shell_total_ohm,
-        shell_coefficient_ohm_m=shell_coeff,
-    )
+    effective_radius, _, shell_coefficient = concrete_shell(spec, perimeter_m=perimeter)
     create_electrode(
         world,
         "polyline",
@@ -433,7 +413,7 @@ def _materialise_polygon_foundation(
         vertices=[(cx + vx, cy + vy, depth) for vx, vy in verts],
         closed=True,
         wire_radius=effective_radius,
-        concrete_shell_coefficient_ohm_m=ring_coeff,
+        concrete_shell_coefficient_ohm_m=shell_coefficient,
     )
 
 
@@ -449,18 +429,22 @@ def _materialise_rotated_foundation(
     angle_deg: float,
     name: str,
     wire_radius: float,
+    brace_wire_radius: float,
     concrete_shell_coefficient: float,
     bond_conductor_type: str,
 ) -> None:
-    r"""Rotated rectangular foundation as bonded straight wires.
+    r"""Rotated (or per-wire) rectangular foundation as bonded straight wires.
 
     ``n_y + 1`` longitudinal wires (along the local :math:`+x` axis,
     rotated by ``angle_deg``) and ``n_x + 1`` transverse wires; with
     ``n_x = n_y = 1`` exactly the four perimeter edges. The first wire
     (local :math:`-y` edge) carries ``name`` and is the anchor; the
     others are ``f"{name}_w{j}"``, bonded to the anchor by
-    ``f"{name}_bond_{j}"``. Only perimeter wires carry the distributed
-    concrete-shell coefficient (internal braces are not encased).
+    ``f"{name}_bond_{j}"``. Only the perimeter wires are encased: they
+    carry ``wire_radius`` (the shell's outer radius :math:`r_b` when a
+    shell is configured) and the concrete-shell coefficient; internal
+    braces carry ``brace_wire_radius`` (the bare wire) and no
+    coefficient (review finding 10.13).
 
     Notes
     -----
@@ -492,7 +476,10 @@ def _materialise_rotated_foundation(
     sub_names: list[str] = []
     for j, local in enumerate(wires):
         sub_name = name if j == 0 else f"{name}_w{j}"
-        coefficient = concrete_shell_coefficient if j in perimeter else 0.0
+        if j in perimeter:
+            radius, coefficient = wire_radius, concrete_shell_coefficient
+        else:
+            radius, coefficient = brace_wire_radius, 0.0
         vertices = [to_world(lx, ly) for lx, ly in local]
         if len(vertices) == 2:
             create_electrode(
@@ -501,7 +488,7 @@ def _materialise_rotated_foundation(
                 name=sub_name,
                 start=vertices[0],
                 end=vertices[1],
-                wire_radius=wire_radius,
+                wire_radius=radius,
                 concrete_shell_coefficient_ohm_m=coefficient,
             )
         else:
@@ -511,7 +498,7 @@ def _materialise_rotated_foundation(
                 name=sub_name,
                 vertices=vertices,
                 closed=False,
-                wire_radius=wire_radius,
+                wire_radius=radius,
                 concrete_shell_coefficient_ohm_m=coefficient,
             )
         sub_names.append(sub_name)
@@ -527,7 +514,7 @@ def _materialise_rotated_foundation(
 
 
 def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
-    r"""Create the electrodes of one site, bond them and fold the shells.
+    """Create the electrodes of one site and bond them.
 
     Parameters
     ----------
@@ -546,11 +533,12 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
     -----
     Every non-anchor electrode is bonded to the anchor by a conductor of
     type ``site.bond_conductor_type`` (an ideal galvanic short), so the
-    site is one cluster. Lumped concrete shells (ADR-0012 V1) are booked
-    per electrode while the electrodes are created and then folded onto
-    the anchor: several encased electrodes of one site leak through
-    their own shells in parallel, so the site value is
-    :math:`(\sum_i 1/R_i)^{-1}`.
+    site is one cluster. A concrete shell lives on the encased wires of
+    its foundation (:func:`materialise_electrode`), so the current of a
+    bonded rod does not pass through it; nothing is written to
+    ``World.concrete_shell_corrections`` (up to 0.15.0 the lumped shells
+    of a site were folded there for the PEN service drop to carry,
+    review findings 10.12 / 10.13).
     """
     cx, cy = site.position_xy
     created: list[str] = []
@@ -576,13 +564,6 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
             end=name,
             conductor_type=site.bond_conductor_type,
         )
-    conductances = 0.0
-    for name in created:
-        r_i = world.concrete_shell_corrections.pop(name, 0.0)
-        if r_i > 0.0:
-            conductances += 1.0 / r_i
-    if conductances > 0.0:
-        world.concrete_shell_corrections[anchor] = 1.0 / conductances
     return anchor
 
 
@@ -592,21 +573,28 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
 
 
 def materialise_junction(world: World, junction: PlannedJunction) -> str:
-    """Create a PEN cable junction and return its node (electrode) name.
+    """Create a PEN cable joint and return its node name.
 
-    The solver has no leakage-free interior node yet, so a junction is a
-    short rod (:data:`PEN_JUNCTION_ROD_LENGTH_M`) at the cable depth. Its
-    leakage is small but not zero (review finding 10.38); this is the one
-    place to switch to a true junction node.
+    The joint is a leakage-free :class:`~groundfield.geometry.junction.Junction`
+    at ``(x, y, depth_m)``: a node of the conductor network with
+    Kirchhoff's current law and no soil contact. Up to 0.15.0 it was a
+    5 cm driven rod, which leaked 3 to 7 % of a test current through the
+    nominally isolated cable (review finding 10.38).
     """
-    create_electrode(
+    create_junction(
         world,
-        "rod",
-        name=junction.name,
         position=(junction.position_xy[0], junction.position_xy[1], junction.depth_m),
-        length=PEN_JUNCTION_ROD_LENGTH_M,
+        name=junction.name,
     )
     return junction.name
+
+
+def _node_point(world: World, name: str) -> tuple[float, float, float]:
+    """Connection point (m) of the electrode or junction called ``name``."""
+    for electrode in world.electrodes:
+        if electrode.name == name:
+            return electrode.connection_point
+    return world.get_junction(name).connection_point
 
 
 def materialise_branch(
@@ -632,13 +620,6 @@ def materialise_branch(
     start = nodes.get(branch.start, branch.start)
     end = nodes.get(branch.end, branch.end)
     p = branch.conductor
-    lumped: Optional[float] = None
-    if branch.concrete_shell_of is not None:
-        shell_ohm = world.concrete_shell_corrections.get(
-            nodes.get(branch.concrete_shell_of, "")
-        )
-        if shell_ohm is not None and shell_ohm > 0.0:
-            lumped = float(shell_ohm)
     if branch.axis_z_m is None:
         return create_conductor(
             world,
@@ -651,11 +632,10 @@ def materialise_branch(
             discretize_segment_length=p.segment_length_m,
             coupling_to_soil=p.coupling_to_soil,
             inductance_model=p.inductance_model,
-            lumped_series_resistance_ohm=lumped,
         )
     z = float(branch.axis_z_m)
-    sx, sy, _ = world.get_electrode(start).connection_point
-    ex, ey, _ = world.get_electrode(end).connection_point
+    sx, sy, _ = _node_point(world, start)
+    ex, ey, _ = _node_point(world, end)
     cond = Conductor(
         name=branch.name,
         start=(sx, sy, z),
@@ -668,7 +648,6 @@ def materialise_branch(
         discretize_segment_length=p.segment_length_m,
         coupling_to_soil=p.coupling_to_soil,
         inductance_model=p.inductance_model,
-        lumped_series_resistance_ohm=lumped,
     )
     world.add_conductor(cond)
     return cond
@@ -689,9 +668,10 @@ def materialise_plan(plan: NetworkPlan) -> World:
 
     Notes
     -----
-    Construction order: sites, measurement sites, junctions, branches,
-    measurement leads, sources (each in plan order). No random numbers
-    are drawn, so the same plan always gives the same world.
+    Construction order: sites, measurement sites, junctions, instrument
+    terminals, branches, measurement leads, sources (each in plan order).
+    No random numbers are drawn, so the same plan always gives the same
+    world.
     """
     world = create_world(name=plan.name, soil=plan.soil)
     nodes: dict[str, str] = {}
@@ -699,7 +679,7 @@ def materialise_plan(plan: NetworkPlan) -> World:
         anchor = materialise_site(world, site)
         if anchor is not None:
             nodes[site.name] = anchor
-    for junction in plan.junctions:
+    for junction in plan.all_junctions:
         nodes[junction.name] = materialise_junction(world, junction)
     for branch in plan.all_branches:
         materialise_branch(world, branch, nodes)

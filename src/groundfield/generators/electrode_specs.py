@@ -170,10 +170,13 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
       gets exactly one internal horizontal plus one internal
       vertical wire.
 
-    Both styles materialise as a
+    An axis-aligned foundation without concrete materialises as a
     :class:`groundfield.geometry.electrodes.GridMeshElectrode`;
     the ``"ring"`` style is just the special case ``n_x = n_y = 1``
-    of that primitive (one mesh = perimeter only).
+    of that primitive (one mesh = perimeter only). A rotated
+    foundation, and an encased one whose wires are not all encased
+    (mesh braces) or that uses ``concrete_model="distributed"``, is
+    built from one straight wire per mesh line, bonded to the first.
 
     For an asymmetric footprint set ``size_xy_m`` instead of
     ``size_m`` (when both are given, ``size_xy_m`` wins).
@@ -284,18 +287,22 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     concrete_model: Literal["lumped", "distributed"] = Field(
         default="lumped",
         description=(
-            "How the Sunde-shell impedance enters the linear system. "
-            '``"lumped"`` (default): total shell resistance is '
-            "injected as a single series resistor on the PEN service "
-            "drop. Zero solver-side risk; exact for the cluster "
-            "impedance when current distributes uniformly along the "
-            "foundation, which holds in the low-frequency range "
-            "($f \\le 1\\,\\mathrm{kHz}$). "
-            '``"distributed"``: per-segment radial impedance is '
-            "added to the MoM diagonal (ADR-0012 V2). More expensive "
-            "but right for non-uniform current distributions or "
-            "where the surface potential right at the building "
-            "matters."
+            "Uniform-current owners of an encased foundation. Both "
+            "values put the Sunde-shell coefficient "
+            "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every encased "
+            "(perimeter) wire, whose radius becomes r_b = r_a + t; the "
+            "solver adds C / ds to the diagonal of each segment, i.e. "
+            "the lumped shell resistance C / L in series with the wire. "
+            "Cross-braces are not encased. "
+            '``"lumped"`` (default): an axis-aligned ring foundation '
+            "stays one grid-mesh electrode (one uniform-current owner, "
+            "exactly the lumped series resistance C / L_perim). "
+            '``"distributed"``: one owner per wire, so the current may '
+            "distribute unevenly over the perimeter. Polygon, rotated "
+            "and mesh foundations are the same for both values. Up to "
+            "0.15.0 the lumped shell was a registry entry that only the "
+            "TN generator's PEN service drops read (review findings "
+            "10.12-10.14)."
         ),
     )
 
