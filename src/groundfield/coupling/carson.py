@@ -75,8 +75,13 @@ Accuracy against mpmath (review pass 10): the series and the
 quadrature are accurate to round-off for $a \\le 0.25$ and
 $a > 0.25$ respectively, the asymptote to
 $\\le 10^{-7}$ above $a = 15$; both regime boundaries are continuous to
-those levels. Until the calendar release 2026.11 the small-$a$ form
-kept only the leading terms (no $a^2$ term $-(\\pi/64)\\,a^2\\cos 2\\theta$
+those levels. At large $a$ and steep angles ($\\theta > 1.4$ rad, where
+the asymptote is not used) QUADPACK's Fourier rule limits the quadrature:
+1.5e-9 at $a = 8.9$ and 1.2e-7 at $a = 28$, $\\theta = 89.9°$ — two wires
+1 km apart at 1 kHz in 10 Ω·m (measured in audit round 3 of the calendar
+release against an independent quadrature of the $\\lambda$ integral).
+Until the calendar release 2026.11 the small-$a$ form kept only the
+leading terms (no $a^2$ term $-(\\pi/64)\\,a^2\\cos 2\\theta$
 of $Q$, constant rounded to $-0.0386$, $P$ and $Q$ off by up to
 $2.4\\cdot 10^{-4}$ and $3.0\\cdot 10^{-3}$ at $a = 0.25$) and the
 $\\theta = 0$ quadrature used 64 nodes on $[0, 30/p]$ ($6\\cdot 10^{-6}$
@@ -732,7 +737,13 @@ def carson_mixed_mutual_correction(
     bounded remainder of the buried wire's attenuation
     (:func:`_mixed_remainder`). Measured remainder: $10^{-5}$ to
     $4\\cdot 10^{-1}$ of $J$ (shallow conductors at 50 Hz in resistive
-    soil to deep ones at 5 kHz in 10 $\\Omega$m).
+    soil to deep ones at 5 kHz in 10 $\\Omega$m). The remainder is accurate
+    to round-off; the whole agrees with an independent quadrature of the
+    $\\lambda$ integral to 4.2e-9 for x ≤ 300 m ($q \\le 8.4$; f ≤ 1 kHz,
+    $\\rho \\ge 10\\,\\Omega$m, h and d from 1 mm to 10 m; 1e-10 at
+    50 Hz) and to 1.2e-7 at x = 1 km at 1 kHz in 10 $\\Omega$m
+    ($q = 28$), the accuracy of Carson's $J$ there (:func:`carson_p_q`;
+    audit round 3 of the calendar release).
 
     **Image baseline.** Relative to the anti-parallel
     (perfect-electric-conductor) image of

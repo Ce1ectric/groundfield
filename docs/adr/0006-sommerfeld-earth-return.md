@@ -439,7 +439,19 @@ Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
    quarter skin depth of the most conductive layer gets a composite outer
    rule (16 nodes per piece, at most 512 pieces, beyond that a
    `SommerfeldResolutionWarning`) and a correspondingly dense $S(\rho)$
-   table; lumped conductors now match their refined chains to 1e-4.
-   Frequencies with equal piece counts share one pass, so every frequency
-   still equals a single-frequency assembly bit for bit; segments below the
-   threshold keep the previous rule bit for bit.
+   table. Frequencies with equal piece counts share one pass, so every
+   frequency still equals a single-frequency assembly bit for bit;
+   segments below the threshold keep the previous rule bit for bit.
+7. **Accuracy of a segment's correction (third adversarial audit,
+   A3C-4).** The "1e-4" of item 6 was measured on buried conductors in
+   100 Ω·m. Against a refined rule (pieces δ/32, $S(\rho)$ spacing
+   0.005), at 50 Hz and 1 kHz, 0.3 … 60 skin depths up to 3 km, buried
+   in 100 Ω·m or in 1000/30 Ω·m and overhead at 10 m over 10 Ω·m, the
+   exact assembly is within 5.9e-4 in the earth-return resistance and
+   2.4e-4 in the reactance (worst: a 3 km overhead line at 1 kHz; buried
+   in 100 Ω·m 1.7e-4), the tabulated one within 3.3e-4 / 9.6e-5. The
+   spacing of the $S(\rho)$ table dominates. Below δ/4 the historic single
+   rule reaches 4.8e-4 at δ/4, so the correction steps by 3.5e-4
+   (resistance) and 1.2e-5 (reactance) where the composite rule takes
+   over; the step is kept because removing it would change every short
+   segment.

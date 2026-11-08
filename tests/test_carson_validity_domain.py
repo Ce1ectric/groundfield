@@ -339,3 +339,80 @@ def test_oblique_leads_couple_as_in_the_sommerfeld_model(angle_deg: float) -> No
     )
     z_somm = complex((1j * om * L_none + dZ_s[0])[:n, n:].sum())
     assert z_carson == pytest.approx(z_somm, rel=1e-9)
+
+
+def _chain(a, b, n: int) -> np.ndarray:
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    pts = a + np.linspace(0.0, 1.0, n + 1)[:, None] * (b - a)
+    return np.stack([pts[:-1], pts[1:]], axis=1)
+
+
+def _tiling_geometry() -> np.ndarray:
+    """Overhead lead, buried PEN, an oblique branch, a riser, an inclined
+    lead (the auditor's e08/e13 set) plus two leads 5 deg apart from one
+    point and a drop 1 deg off its main."""
+    return np.concatenate(
+        [
+            _chain((0, 0, -1.0), (60, 0, -1.0), 3),
+            _chain((0, 0.5, 0.7), (60, 0.5, 0.7), 4),
+            _chain((20, 0.5, 0.7), (50, 20, 0.7), 2),
+            _chain((60, 0.5, 0.7), (60, 0.5, 3.0), 1),
+            _chain((0, 3, -0.5), (40, 3, -6.0), 2),
+            _chain((0, 10, -0.2), (80, 10 + 80 * math.tan(math.radians(5)), -0.2), 4),
+            _chain((0, 10, -0.2), (80, 10, -0.2), 4),
+            _chain((10, 1.0, 0.7), (40, 1.0 + 30 * math.tan(math.radians(1)), 0.7), 3),
+        ]
+    )
+
+
+# audit round 3 (A3C-1 class; auditor's evidence e08 (b), e13)
+@pytest.mark.finding("10.20")
+@pytest.mark.parametrize("image", ["antiparallel", "none"])
+def test_carson_tiling_does_not_depend_on_the_segment_order(image: str) -> None:
+    """Near-parallel pairs that are not exactly parallel were projected on
+    the axis of the first segment of the pair: reversing the segment order
+    moved entries by up to 3.1 % of the largest one (a pair got an overlap
+    in one order and none in the other). Every order and direction now
+    gives the same matrix, up to round-off."""
+    seg = _tiling_geometry()
+    radii = np.full(len(seg), 0.005)
+    om = [2.0 * math.pi * 1000.0]
+    dz = build_carson_correction_matrices(
+        seg, radii, omegas=om, sigma_earth=0.01, image=image
+    )[0]
+    rng = np.random.default_rng(3)
+    for perm in (np.arange(len(seg))[::-1], rng.permutation(len(seg))):
+        flip = rng.random(len(seg)) < 0.5
+        s = seg[perm].copy()
+        s[flip] = s[flip][:, ::-1]
+        dzp = build_carson_correction_matrices(
+            s, radii[perm], omegas=om, sigma_earth=0.01, image=image
+        )[0]
+        sign = np.where(flip, -1.0, 1.0)
+        back = np.empty_like(dzp)
+        back[np.ix_(perm, perm)] = sign[:, None] * sign[None, :] * dzp
+        assert np.abs(back - dz).max() <= 1e-12 * np.abs(dz).max()
+
+
+# audit A3C-3: the documentation describes the validity domain
+@pytest.mark.finding("10.20")
+def test_docs_describe_the_carson_validity_domain() -> None:
+    """Audit round 3: the explanation and how-to pages still described
+    carson_series as Carson's correction "scaled by the geometric length of
+    each segment pair" (the heuristic removed in audit round 2)."""
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    pages = {
+        name: " ".join((root / "docs" / name).read_text(encoding="utf-8").split())
+        for name in ("explanation/earth-return.md", "how-to/inductive-coupling.md")
+    }
+    for text in pages.values():
+        assert "geometric length of each segment pair" not in text
+        assert "times the pair length" not in text
+        assert "8.1°" in text
+        assert "transmitted into the soil" in text
+    explanation = pages["explanation/earth-return.md"]
+    assert "Sommerfeld correction of a homogeneous earth" in explanation
+    assert "quarter skin depth" in explanation  # long-segment rule
+    assert "Wires beside each other" in explanation  # touching rule

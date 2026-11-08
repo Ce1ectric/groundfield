@@ -64,14 +64,25 @@ dependence of the internal impedance (skin effect) is provided by
 :meth:`groundfield.conductors.Conductor.internal_impedance_per_length`
 as a correction relative to this DC convention.
 
-**Wires lying side by side.** Two near-parallel segments whose axes
-stay closer than the sum of their radii over a common length (two
-conductors in one trench, a service drop routed back along its PEN
-main, coincident leads) are evaluated as touching wires at the axis
-distance $r_i + r_j$ in :func:`build_inductance_matrix`; the filament
-integral of such a pair diverges (two coincident 50 m leads read
-+587j Ω at 50 Hz, a TN network with drops along its PEN main had a
-negative input reactance).
+**Wires lying beside each other.** Where a point of one wire lies
+beside another wire (its foot on that wire's axis falls inside the
+wire) closer than the sum of the radii $r_i + r_j$ — two conductors in
+one trench, a service drop routed back along its PEN main, coincident
+leads, wires leaving a junction or crossing at a small angle — the
+distance from the other axis is taken as $r_i + r_j$ (touching wires)
+inside the Neumann integral of :func:`build_inductance_matrix`, or as
+the radius of the thicker wire where the thinner one runs inside it (a
+core inside a cable shield couples as a filament inside a thin tube).
+The filament integral diverges for coincident axes (two coincident 50 m
+leads read +587j Ω at 50 Hz) and exceeds the self inductance once the
+wires are closer than about their radius (an indefinite matrix, a TN
+network with drops along its PEN main had a negative input reactance).
+The rule acts pointwise and on both one-sided integrals, so the value
+is continuous in the geometry and independent of the order and
+direction of the segments (audit round 3 of the calendar release; the
+whole-pair switch of audit round 2 depended on which segment was the
+row). Chain neighbours and bends turning by less than 90° keep their
+closed forms.
 
 **Close pairs.** Nearly parallel wires close together whose directions
 differ by more than the closed form's tolerance, crossing and skew pairs
@@ -296,6 +307,69 @@ def _coaxial_gap_integral(l_a: float, l_b: float, gap: float) -> float:
     return F(l_a + l_b + gap) - F(l_a + gap) - F(l_b + gap) + F(gap)
 
 
+#: Filaments from one vertex at an angle below 0.81 deg (``cos > 1 - 1e-4``)
+#: use the cancellation-free form of :func:`_folded_vertex_mutual`; the
+#: direct form of :func:`_vertex_integral` loses about ``1e-16 / (1 - cos)``
+#: (2.7e-9 just above the coaxial tolerance of 4.5e-5 rad).
+_VERTEX_STABLE_COS = 1.0 - 1e-4
+
+
+def _folded_vertex_mutual(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    la: float,
+    lb: float,
+    ua: np.ndarray,
+    ub: np.ndarray,
+    dot: float,
+    tol: float,
+) -> float | None:
+    """Filaments from one vertex at a small angle (H), or ``None``.
+
+    Used below 0.81 deg (:data:`_VERTEX_STABLE_COS`), including pairs that
+    pass the coaxial test of :func:`_touching_mutual`
+    ($|\\,|\\cos\\varphi| - 1| \\le 10^{-9}$, an angle below 4.5e-5 rad) but
+    fold out of the common axis: the vertex formula of
+    :func:`_vertex_integral` holds, but its direct evaluation cancels.
+    With $\\sigma = \\sin(\\varepsilon/2)$ from the chord between the two
+    directions away from the vertex, $q = 4\\ell_a\\ell_b\\sigma^2$,
+    $R = \\sqrt{(\\ell_a - \\ell_b)^2 + q}$ the far-end distance and
+    $S = \\ell_a + \\ell_b + R$,
+
+    $$
+    I = \\ell_a \\ln\\frac{S}{\\ell_a + R - \\ell_b}
+      + \\ell_b \\ln\\frac{S}{\\ell_b + R - \\ell_a},
+    $$
+
+    where the smaller denominator is $q/(R + |\\ell_a - \\ell_b|)$ —
+    accurate down to any non-zero angle. Up to audit round 3 such pairs
+    went to the 16x16 rule (16 % off at 1.5e-6 rad, 3.8 % at 1e-5 rad).
+    Returns ``None`` when the pair shares no end point or the far end of
+    *b* lies on *a*'s axis (overlapping coaxial filaments: divergent).
+    """
+    for vertex_a, away_a in ((p1_a, ua), (p2_a, -ua)):
+        for vertex_b, far_b, away_b in ((p1_b, p2_b, ub), (p2_b, p1_b, -ub)):
+            if float(np.linalg.norm(vertex_a - vertex_b)) > tol:
+                continue
+            rel = far_b - vertex_a
+            if float(np.linalg.norm(rel - float(rel @ ua) * ua)) <= tol:
+                return None  # folded onto the axis: divergent
+            chord = away_a - away_b
+            q = la * lb * float(chord @ chord)  # 4 la lb sin^2(eps/2)
+            if q <= 0.0:
+                return None
+            diff = abs(la - lb)
+            R = math.sqrt(diff * diff + q)
+            S = la + lb + R
+            big, small = R + diff, q / (R + diff)
+            d_a, d_b = (big, small) if la >= lb else (small, big)
+            integral = la * math.log(S / d_a) + lb * math.log(S / d_b)
+            return MU_0 / (4.0 * math.pi) * dot * integral
+    return None
+
+
 def _touching_mutual(
     p1_a: np.ndarray,
     p2_a: np.ndarray,
@@ -307,9 +381,10 @@ def _touching_mutual(
     Returns the closed-form partial mutual inductance in H when the two
     straight filaments (i) lie on one axis without overlapping (any
     gap, including zero), or (ii) share an end point at a non-zero
-    angle. Returns ``None`` for every other pair (and for overlapping
-    coaxial pairs, whose filament integral diverges), so that the
-    caller falls back to its general rule.
+    angle (also below the coaxial tolerance, :func:`_folded_vertex_mutual`).
+    Returns ``None`` for every other pair (and for overlapping coaxial
+    pairs, whose filament integral diverges), so that the caller falls
+    back to its general rule.
     """
     da = p2_a - p1_a
     db = p2_b - p1_b
@@ -325,7 +400,11 @@ def _touching_mutual(
         rel1 = p1_b - p1_a
         perp = rel1 - float(rel1 @ ua) * ua
         if float(np.linalg.norm(perp)) > tol:
-            return None  # parallel, distinct axes: the Grover parallel form
+            # parallel on distinct axes (the Grover parallel form), or two
+            # filaments from one vertex at a tiny angle (audit A3C-4)
+            return _folded_vertex_mutual(
+                p1_a, p2_a, p1_b, p2_b, la, lb, ua, ub, dot, tol
+            )
         s1 = float(rel1 @ ua)
         s2 = float((p2_b - p1_a) @ ua)
         lo, hi = min(s1, s2), max(s1, s2)
@@ -334,15 +413,22 @@ def _touching_mutual(
         elif hi <= tol:
             gap = max(-hi, 0.0)
         else:
-            return None  # overlapping coaxial filaments: divergent
+            # overlapping coaxial filaments diverge; filaments from one
+            # vertex at a tiny angle do not (audit A3C-4)
+            return _folded_vertex_mutual(
+                p1_a, p2_a, p1_b, p2_b, la, lb, ua, ub, dot, tol
+            )
         sign = 1.0 if dot > 0.0 else -1.0
         return MU_0 / (4.0 * math.pi) * sign * _coaxial_gap_integral(la, lb, gap)
     for vertex_a, away_a in ((p1_a, ua), (p2_a, -ua)):
         for vertex_b, away_b in ((p1_b, ub), (p2_b, -ub)):
             if float(np.linalg.norm(vertex_a - vertex_b)) <= tol:
                 cos_eps = float(away_a @ away_b)
-                if cos_eps >= 1.0 - 1e-12:
-                    return None  # folded onto each other: divergent
+                if cos_eps > _VERTEX_STABLE_COS:
+                    # small angle: the direct form cancels (audit A3C-4)
+                    return _folded_vertex_mutual(
+                        p1_a, p2_a, p1_b, p2_b, la, lb, ua, ub, dot, tol
+                    )
                 return MU_0 / (4.0 * math.pi) * dot * _vertex_integral(la, lb, cos_eps)
     return None
 
@@ -419,6 +505,21 @@ def _touching_mutual_batch(
         coax_values = MU_0 / (4.0 * math.pi) * sign * integral
         values[ks[keep]] = coax_values[keep]
         valid[ks[keep]] = True
+        # Filaments from one vertex at a tiny angle (A3C-4): the scalar
+        # routine, for the few that share an end point with segment a.
+        for k in ks[~keep]:
+            if (
+                min(
+                    float(np.linalg.norm(va - vb))
+                    for va in (p1_a, p2_a)
+                    for vb in (p1_b[k], p2_b[k])
+                )
+                <= tol[k]
+            ):
+                val = _touching_mutual(p1_a, p2_a, p1_b[k], p2_b[k])
+                if val is not None:
+                    values[k] = val
+                    valid[k] = True
     # Pairs that only share an end point (bends): the scalar closed form,
     # for the partners that have an end point within ``tol`` of one of
     # segment a's (the scalar routine returns None for all others).
@@ -566,6 +667,11 @@ def _parallel_filaments_mutual(
 #: 0.5-2.3 %).
 _CLOSE_PAIR_FRACTION = 0.5
 
+#: ``1 - cos^2`` below which :func:`_close_pair_mutual` takes the closest
+#: approach of the axes from a cross product (angles below about 1e-3 rad);
+#: above it the direct form loses less than about 1e-16 / (1 - cos^2).
+_CLOSE_PAIR_ROBUST_DEN = 1e-6
+
 
 def _close_pair_mutual(
     p1_a: np.ndarray, p2_a: np.ndarray, p1_b: np.ndarray, p2_b: np.ndarray
@@ -579,9 +685,14 @@ def _close_pair_mutual(
     *b*'s line; the outer integral over *a* uses 16-point Gauss–Legendre
     panels graded geometrically, down to the local distance $\\rho$,
     towards the points where $P(s)$ passes an end of *b* or comes
-    closest to *b*'s line, and towards the ends of *a*. Accurate to
-    round-off for pairs that the 16x16 rule cannot resolve (nearly
-    parallel wires close together, crossing and skew pairs); not for
+    closest to *b*'s line, and towards the ends of *a*. Measured against
+    an adaptive mpmath reference: at most 5e-11 for directions differing
+    by more than 1e-6 rad (nearly parallel wires close together, crossing
+    and skew pairs, branches starting on a segment), 8.6e-11 at 1e-7 rad,
+    1.0e-9 for filaments crossing at 1e-8 rad — there the crossing point
+    of the two axes is only known to about 1e-16/1e-8 of the length
+    (audit round 3; before, the closest approach came from
+    $1 - \\cos^2\\varphi$, which cancels: 9.5e-4 at 1e-8 rad). Not for
     overlapping coaxial filaments, whose integral diverges.
     """
     da = p2_a - p1_a
@@ -596,6 +707,7 @@ def _close_pair_mutual(
     v0 = p1_a - p1_b
     c0 = float(v0 @ ub)  # t0(s) = c0 + s dot
     floor = 1e-30 * max(la, lb)
+    den = 1.0 - dot * dot
 
     def rho_at(x: float) -> float:
         v = v0 + x * ua
@@ -606,11 +718,22 @@ def _close_pair_mutual(
         x = (target - c0) / dot
         if 0.0 < x < la:
             points.add(x)
-    den = 1.0 - dot * dot
-    if den > 1e-14:
+    if den > _CLOSE_PAIR_ROBUST_DEN:
         x = (dot * c0 - float(v0 @ ua)) / den  # closest approach of the lines
         if 0.0 < x < la:
             points.add(x)
+    else:
+        # Nearly parallel axes (below about 1e-3 rad): 1 - dot^2 cancels, the
+        # closest approach comes from the cross product n = ua x ub instead,
+        # s* = ((p1_b - p1_a) x ub) . n / |n|^2 (audit round 3, A3C-4:
+        # crossing filaments at 1e-8 rad were 9.5e-4 off, the mark of the
+        # crossing point lost below 1 - dot^2 = 1e-14).
+        n = np.cross(ua, ub)
+        sin2 = float(n @ n)
+        if sin2 > 1e-300:
+            x = float(np.cross(p1_b - p1_a, ub) @ n) / sin2
+            if 0.0 < x < la:
+                points.add(x)
     marks = sorted(points)
     edges = [0.0]
     for lo, hi in zip(marks[:-1], marks[1:], strict=True):
@@ -706,6 +829,19 @@ def neumann_mutual(
        — are integrated semi-analytically instead (inner integral in
        closed form, outer panels graded towards the near-singular
        points; :func:`_close_pair_mutual`).
+
+    Accuracy (measured against adaptive mpmath references, audit round 3
+    of the calendar release): closed forms to round-off; filaments from
+    one vertex to round-off on axis-parallel geometry and to 4e-10 in a
+    general orientation down to 3e-9 rad (the angle itself carries about
+    1e-16/angle); close pairs as stated in :func:`_close_pair_mutual`
+    (5e-11 above 1e-6 rad, 1.0e-9 at 1e-8 rad). Pairs inside the
+    parallel tolerance — directions within ``parallel_tol`` in cos (4.5e-5
+    rad) and a lateral offset that varies by at most ``parallel_tol`` m
+    along the segment — use the parallel closed form at the offset of the
+    start point, off by about the relative variation of the offset
+    (4.2e-9 for wires 1 cm apart tilted by 1e-10 rad over 5 m, 1.7e-5 at
+    1 µm).
 
     The kernel $1/r$ is clamped at ``min_distance`` to suppress the
     integrable singularity for segments that touch — physically the
@@ -1009,16 +1145,20 @@ def _touching_wires(
     p2_b: np.ndarray,
     r_b: float,
 ) -> float:
-    """Scalar form of :func:`_interpenetrating_batch` for the loop oracle."""
-    vals, inside = _interpenetrating_batch(
+    """The beside rule (:func:`_beside_mutual`) for the loop oracle.
+
+    Returns the mutual of wires lying beside each other closer than
+    touching, or ``m`` (the filament value) where the rule does not act.
+    """
+    val = _beside_mutual(
         np.asarray(p1_a, dtype=float),
         np.asarray(p2_a, dtype=float),
         float(r_a),
-        np.asarray(p1_b, dtype=float)[None, :],
-        np.asarray(p2_b, dtype=float)[None, :],
-        np.array([float(r_b)]),
+        np.asarray(p1_b, dtype=float),
+        np.asarray(p2_b, dtype=float),
+        float(r_b),
     )
-    return float(vals[0]) if inside[0] else m
+    return m if val is None else val
 
 
 # ---------------------------------------------------------------------
@@ -1262,12 +1402,257 @@ def _apply_touching_exact(
     M_row[candidates[valid]] = values[valid]
 
 
-#: ``|cos phi|`` above which two segments count as near-parallel (8.1 deg):
-#: the interpenetration guard below and the Carson tiling share it.
+#: ``|cos phi|`` above which two segments count as near-parallel (8.1 deg)
+#: in the Carson tiling (its validity domain, audit round 2, A2C-1).
 _PARALLEL_COS_MIN = 0.99
 
+# ---------------------------------------------------------------------
+# Wires lying beside each other closer than touching (audit round 3)
+# ---------------------------------------------------------------------
 
-def _interpenetrating_batch(
+#: Pre-selection of the pairs checked by :func:`_beside_mutual`: closest
+#: points of the two segments within this factor of the touching distance.
+#: Generous on purpose — the decision itself is taken by the exact,
+#: order-free test of :func:`_beside_mutual`.
+_BESIDE_PREFILTER = 1.0 + 1e-6
+
+#: Relative margin below the touching distance $r_a + r_b$: two wires at
+#: exactly that axis distance (side by side, touching) keep their filament
+#: value bit for bit.
+_BESIDE_MARGIN = 1e-9
+
+_Point = tuple[float, float, float]
+
+
+def _canonical_segment(p1: np.ndarray, p2: np.ndarray) -> tuple[_Point, _Point]:
+    """End points of a segment in a fixed (lexicographic) order.
+
+    The beside rule is evaluated on these, so that its value does not
+    depend on the direction of either segment or on which of the two is
+    the row of the assembly (bit for bit).
+    """
+    a = (float(p1[0]), float(p1[1]), float(p1[2]))
+    b = (float(p2[0]), float(p2[1]), float(p2[2]))
+    return (a, b) if a <= b else (b, a)
+
+
+def _beside_plan(
+    a1: _Point,
+    a2: _Point,
+    b1: _Point,
+    b2: _Point,
+    d_touch: float,
+    r_thin: float,
+    r_thick: float,
+) -> tuple[bool, tuple]:
+    """Pieces of segment *a* for the one-sided integral of the beside rule.
+
+    Splits *a* at the points where it passes an end of *b* (its foot on
+    *b*'s axis leaves *b*), comes closest to *b*'s axis, or where its
+    distance $\\rho$ from that axis crosses the touching distance
+    $d = r_a + r_b$ or $r_\\text{thick} - r_\\text{thin}$. On each piece
+    the effective distance is constant in kind: $\\rho$ itself (free), $d$
+    (the stretch lies beside *b* closer than touching: wires lying side by
+    side), or $r_\\text{thick}$ (the thinner wire runs inside the thicker
+    one: a core inside a cable shield couples as a filament inside a thin
+    tube). Returns ``(clamped, plan)``: whether a stretch longer than the
+    vertex tolerance is clamped, and the data :func:`_beside_integral`
+    needs. The axis geometry is computed from cross products, which stay
+    accurate for nearly parallel axes (no $1 - \\cos^2$ cancellation).
+    """
+    ax, ay, az = a2[0] - a1[0], a2[1] - a1[1], a2[2] - a1[2]
+    bx, by, bz = b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]
+    la = math.hypot(ax, ay, az)
+    lb = math.hypot(bx, by, bz)
+    ua = (ax / la, ay / la, az / la)
+    ub = (bx / lb, by / lb, bz / lb)
+    dot = ua[0] * ub[0] + ua[1] * ub[1] + ua[2] * ub[2]
+    w = (a1[0] - b1[0], a1[1] - b1[1], a1[2] - b1[2])
+    c0 = w[0] * ub[0] + w[1] * ub[1] + w[2] * ub[2]  # foot t0(s) = c0 + s dot
+
+    def rho_at(x: float) -> float:
+        t0 = c0 + x * dot
+        return math.hypot(
+            w[0] + x * ua[0] - t0 * ub[0],
+            w[1] + x * ua[1] - t0 * ub[1],
+            w[2] + x * ua[2] - t0 * ub[2],
+        )
+
+    marks = {0.0, la}
+    if dot != 0.0:
+        for target in (0.0, lb):
+            x = (target - c0) / dot
+            if 0.0 < x < la:
+                marks.add(x)
+    n = (
+        ua[1] * ub[2] - ua[2] * ub[1],
+        ua[2] * ub[0] - ua[0] * ub[2],
+        ua[0] * ub[1] - ua[1] * ub[0],
+    )
+    sin2 = n[0] * n[0] + n[1] * n[1] + n[2] * n[2]
+    if sin2 > 1e-300:
+        # closest approach of the axes, s* = ((b1 - a1) x ub) . n / |n|^2,
+        # and their distance |(b1 - a1) . n| / |n|; rho(s)^2 = delta^2 +
+        # (s - s*)^2 |n|^2 on the line.
+        e = (-w[0], -w[1], -w[2])
+        exu = (
+            e[1] * ub[2] - e[2] * ub[1],
+            e[2] * ub[0] - e[0] * ub[2],
+            e[0] * ub[1] - e[1] * ub[0],
+        )
+        s_star = (exu[0] * n[0] + exu[1] * n[1] + exu[2] * n[2]) / sin2
+        if 0.0 < s_star < la:
+            marks.add(s_star)
+        delta = abs(e[0] * n[0] + e[1] * n[1] + e[2] * n[2]) / math.sqrt(sin2)
+        for d in (d_touch, r_thick - r_thin):
+            if d > delta:
+                half = math.sqrt((d - delta) * (d + delta) / sin2)
+                for x in (s_star - half, s_star + half):
+                    if 0.0 < x < la:
+                        marks.add(x)
+    edges = sorted(marks)
+    tol = _TOUCH_TOL_REL * max(la, lb)
+    d_clamp = d_touch * (1.0 - _BESIDE_MARGIN)
+    inside_rule = r_thin < r_thick
+    pieces: list[tuple[float, float, float]] = []  # (lo, hi, rho_e or nan)
+    clamped = False
+    for lo, hi in zip(edges[:-1], edges[1:], strict=True):
+        if hi <= lo:
+            continue
+        mid = 0.5 * (lo + hi)
+        t0 = c0 + mid * dot
+        rho_e = math.nan
+        if 0.0 <= t0 <= lb:
+            rho = rho_at(mid)
+            if rho < d_clamp:
+                inside = inside_rule and rho + r_thin <= r_thick
+                rho_e = r_thick if inside else d_touch
+                clamped = clamped or hi - lo > tol
+        pieces.append((lo, hi, rho_e))
+    return clamped, (la, lb, ua, ub, dot, w, c0, rho_at, pieces)
+
+
+def _beside_integral(plan: tuple) -> float:
+    """One-sided integral of the beside rule over segment *a*, in m.
+
+    $\\int_0^{\\ell_a} [\\operatorname{asinh}((\\ell_b - t_0)/\\rho_e) +
+    \\operatorname{asinh}(t_0/\\rho_e)]\\,ds$: the inner integral over *b*
+    in closed form at the effective distance $\\rho_e$ of
+    :func:`_beside_plan`, the outer one with 16-point Gauss–Legendre panels
+    graded geometrically towards the ends of every piece, starting at the
+    local length scale of the integrand there ($\\rho_e$ on a clamped
+    piece, $\\rho$ on a free one; as in :func:`_close_pair_mutual`).
+    """
+    la, lb, ua, ub, dot, w, c0, rho_at, pieces = plan
+    floor = 1e-30 * max(la, lb)
+    p_lo: list[float] = []
+    p_hi: list[float] = []
+    p_rho: list[float] = []
+    for lo, hi, rho_e in pieces:
+        free = math.isnan(rho_e)
+        mid = 0.5 * (lo + hi)
+        left, step = [lo], rho_e if not free else max(rho_at(lo), floor)
+        while left[-1] + step < mid:
+            left.append(left[-1] + step)
+            step *= 2.0
+        right, step = [hi], rho_e if not free else max(rho_at(hi), floor)
+        while right[-1] - step > mid:
+            right.append(right[-1] - step)
+            step *= 2.0
+        cuts = left + [mid] + right[::-1]
+        p_lo += cuts[:-1]
+        p_hi += cuts[1:]
+        p_rho += [rho_e] * (len(cuts) - 1)
+    lo_arr = np.asarray(p_lo)[:, None]
+    half = 0.5 * (np.asarray(p_hi)[:, None] - lo_arr)
+    x = (lo_arr + half * (_GL_NODES[None, :] + 1.0)).ravel()
+    wts = (half * _GL_WEIGHTS[None, :]).ravel()
+    t0 = c0 + x * dot
+    rho = np.sqrt(
+        (w[0] + x * ua[0] - t0 * ub[0]) ** 2
+        + (w[1] + x * ua[1] - t0 * ub[1]) ** 2
+        + (w[2] + x * ua[2] - t0 * ub[2]) ** 2
+    )
+    rho_e = np.repeat(np.asarray(p_rho), _GL_NODES.size)
+    free = np.isnan(rho_e)
+    rho_e[free] = np.maximum(rho[free], floor)
+    g = np.arcsinh((lb - t0) / rho_e) + np.arcsinh(t0 / rho_e)
+    return float(wts @ g)
+
+
+def _beside_mutual(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    r_a: float,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    r_b: float,
+) -> float | None:
+    """Mutual inductance of two wires lying beside each other, in H.
+
+    Two wires whose axes come closer than the sum of their radii
+    $r_a + r_b$ along a stretch where they lie beside each other (the
+    foot of a point of one wire on the other wire's axis falls inside the
+    other wire) — coincident or overlapping leads, two cables in one
+    trench, a service drop routed back along its PEN main, wires leaving a
+    junction or crossing at a small angle — have no meaningful filament
+    mutual inductance: it diverges for coincident axes and exceeds the
+    self inductance of the wires once they are closer than about their
+    radius (an indefinite inductance matrix, a negative loop reactance).
+    Along such a stretch the distance from the other wire's axis is taken
+    as the distance of touching wires, $r_a + r_b$, pointwise inside the
+    Neumann integral; where the thinner wire runs inside the thicker one
+    ($\\rho + r_\\text{thin} \\le r_\\text{thick}$: a core inside a cable
+    shield) as the thicker wire's radius — a filament inside a thin tube
+    couples to it as at the tube radius (the geometric mean distance of a
+    point inside a circle from the circle). Elsewhere the integrand is the
+    filament one, so the value is continuous in the geometry, and pairs
+    that only meet end to end (chain neighbours, bends of less than 90°)
+    are not affected.
+
+    The one-sided integral over *a* (inner integral over *b* in closed
+    form) and the one over *b* differ where the rule acts; their mean is
+    used, evaluated on the end points in a fixed order — the value is the
+    same, bit for bit, for either order of the two segments and either
+    direction of each (up to the sign of the orientation factor). Returns
+    ``None`` when the rule does not act (no stretch beside the partner
+    closer than touching), so that the caller keeps its closed form or
+    quadrature value.
+    """
+    d_touch = float(r_a) + float(r_b)
+    if not d_touch > 0.0:
+        return None
+    da = (
+        float(p2_a[0]) - float(p1_a[0]),
+        float(p2_a[1]) - float(p1_a[1]),
+        float(p2_a[2]) - float(p1_a[2]),
+    )
+    db = (
+        float(p2_b[0]) - float(p1_b[0]),
+        float(p2_b[1]) - float(p1_b[1]),
+        float(p2_b[2]) - float(p1_b[2]),
+    )
+    la = math.hypot(*da)
+    lb = math.hypot(*db)
+    dot = (
+        da[0] / la * (db[0] / lb)
+        + da[1] / la * (db[1] / lb)
+        + da[2] / la * (db[2] / lb)
+    )
+    if dot == 0.0:
+        return None  # orthogonal: zero whatever the distance
+    a1, a2 = _canonical_segment(p1_a, p2_a)
+    b1, b2 = _canonical_segment(p1_b, p2_b)
+    r_thin, r_thick = min(float(r_a), float(r_b)), max(float(r_a), float(r_b))
+    clamped_a, plan_a = _beside_plan(a1, a2, b1, b2, d_touch, r_thin, r_thick)
+    clamped_b, plan_b = _beside_plan(b1, b2, a1, a2, d_touch, r_thin, r_thick)
+    if not (clamped_a or clamped_b):
+        return None
+    total = _beside_integral(plan_a) + _beside_integral(plan_b)
+    return MU_0 / (4.0 * math.pi) * dot * (0.5 * total)
+
+
+def _beside_batch(
     p1_a: np.ndarray,
     p2_a: np.ndarray,
     r_a: float,
@@ -1275,67 +1660,31 @@ def _interpenetrating_batch(
     p2_b: np.ndarray,
     r_b: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Mutual inductance of interpenetrating parallel wires (vectorised).
+    """:func:`_beside_mutual` of one segment against K partners.
 
-    Two near-parallel segments (``|cos phi| > 0.99``) whose projections
-    overlap and whose axes stay closer than the sum of their radii
-    $r_a + r_b$ over the overlap are wires lying side by side (two
-    conductors in one trench, a service drop routed back along its PEN
-    main, two leads laid on top of each other). Their filament integral
-    grows like $\\ln(1/d)$ as the axis distance $d \\to 0$ and diverges
-    for coincident or overlapping coaxial filaments, where the 16x16
-    rule only stops at its $10^{-6}$ m floor: two coincident 50 m leads
-    read +587j Ω at 50 Hz, and a TN network whose drops ran back along
-    the PEN main had a negative input reactance (a non-positive-definite
-    inductance matrix). Such pairs are evaluated as parallel filaments
-    at the axis distance $r_a + r_b$ (touching wires) over the projected
-    overlap — the closed form of :func:`parallel_segments_mutual` with
-    offsets — which keeps the matrix positive definite.
-
-    Returns ``(values, mask)`` over the K partners *b*: ``values[k]`` in
-    H where ``mask[k]``.
+    The partners whose closest points come within the touching distance
+    (pre-selected with the clamped two-segment distance,
+    :func:`groundfield.conductors.proximity.segment_distance`) are
+    evaluated by the scalar rule; returns ``(values, mask)``, ``values[k]``
+    in H where ``mask[k]``.
     """
     K = p1_b.shape[0]
     values = np.zeros(K, dtype=float)
     mask = np.zeros(K, dtype=bool)
     if K == 0:
         return values, mask
-    da = p2_a - p1_a
-    la = float(np.linalg.norm(da))
-    db = p2_b - p1_b
-    lb = np.linalg.norm(db, axis=1)
-    if la <= 0.0:
-        return values, mask
-    ua = da / la
-    dots = (db @ ua) / np.where(lb > 0.0, lb, 1.0)
-    rel1 = p1_b - p1_a
-    rel2 = p2_b - p1_a
-    s1 = rel1 @ ua
-    s2 = rel2 @ ua
-    perp1 = np.linalg.norm(rel1 - s1[:, None] * ua, axis=1)
-    perp2 = np.linalg.norm(rel2 - s2[:, None] * ua, axis=1)
-    lo = np.minimum(s1, s2)
-    hi = np.maximum(s1, s2)
-    overlap = np.minimum(hi, la) - np.maximum(lo, 0.0)
-    d_min = r_a + np.asarray(r_b, dtype=float)
-    mask = (
-        (lb > 0.0)
-        & (np.abs(dots) > _PARALLEL_COS_MIN)
-        & (overlap > _TOUCH_TOL_REL * np.maximum(la, lb))
-        & (np.maximum(perp1, perp2) < (1.0 - 1e-9) * d_min)
-    )
-    if not mask.any():
-        return values, mask
-    d = d_min[mask]
-    b1, b2 = lo[mask], hi[mask]
+    from groundfield.conductors.proximity import segment_distance
 
-    def F(x: np.ndarray) -> np.ndarray:
-        return x * np.arcsinh(x / d) - np.hypot(x, d)
-
-    sign = np.where(dots[mask] > 0.0, 1.0, -1.0)
-    values[mask] = (
-        MU_0 / (4.0 * math.pi) * sign * (F(b2) - F(b2 - la) - F(b1) + F(b1 - la))
+    r_b = np.asarray(r_b, dtype=float)
+    dist, _, _ = segment_distance(
+        np.broadcast_to(p1_a, (K, 3)), np.broadcast_to(p2_a, (K, 3)), p1_b, p2_b
     )
+    near = dist <= (float(r_a) + r_b) * _BESIDE_PREFILTER + 1e-12
+    for k in np.flatnonzero(near):
+        val = _beside_mutual(p1_a, p2_a, r_a, p1_b[k], p2_b[k], float(r_b[k]))
+        if val is not None:
+            values[k] = val
+            mask[k] = True
     return values, mask
 
 
@@ -1384,11 +1733,10 @@ def _inductance_blocks(
     for some inputs, and keeping both is what makes every legacy call
     of :func:`build_inductance_matrix` bit-identical.
 
-    With ``wire_radii``, interpenetrating parallel pairs (axes closer
-    than the sum of the radii over a common length, direct or against
-    a mirrored partner) are evaluated as touching wires
-    (:func:`_interpenetrating_batch`); without radii the filament
-    integral is kept. ``diagonal=False`` leaves the diagonal of the
+    With ``wire_radii``, pairs that lie beside each other closer than the
+    sum of their radii (direct or against a mirrored partner) get the
+    beside rule (:func:`_beside_mutual`: touching wires, or a wire inside
+    a tube); without radii the filament integral is kept. ``diagonal=False`` leaves the diagonal of the
     direct block at zero (off-diagonal mutuals only, no radii needed).
     """
     M = p1.shape[0]
@@ -1454,10 +1802,10 @@ def _inductance_blocks(
                     ua[slc],
                 )
             if radii is not None:
-                vals, inside = _interpenetrating_batch(
+                vals, beside = _beside_batch(
                     p1[i], p2[i], radii[i], p1[slc], p2[slc], radii[slc]
                 )
-                M_pri[inside] = vals[inside]
+                M_pri[beside] = vals[beside]
             L_dir[i, slc] = M_pri
             L_dir[slc, i] = M_pri
         if want_image:
@@ -1485,10 +1833,10 @@ def _inductance_blocks(
                     ua_img[slc],
                 )
             if radii is not None:
-                vals, inside = _interpenetrating_batch(
+                vals, beside = _beside_batch(
                     p1[i], p2[i], radii[i], p1_img[slc], p2_img[slc], radii[slc]
                 )
-                M_img[inside] = vals[inside]
+                M_img[beside] = vals[beside]
             L_img[i, slc] = M_img
             L_img[slc, i] = M_img
     return L_dir, L_img
@@ -1518,7 +1866,11 @@ def build_inductance_matrix(
         (in m, $z$ positive into the soil) of every
         distributed-conductor longitudinal-branch segment.
     wire_radii
-        Per-branch wire radii in metres, shape ``(M,)``.
+        Per-branch wire radii in metres, shape ``(M,)``: the thin-wire
+        self terms, and the distance of touching wires $r_i + r_j$ (or
+        the thicker radius for a wire inside another) taken where two
+        wires lie beside each other closer than that (module docstring,
+        "Wires lying beside each other").
     use_image
         Legacy switch: ``True`` is ``image="additive"``, ``False`` is
         ``image="none"``. Pass either this or ``image``, not both.
@@ -1608,8 +1960,8 @@ def _image_inductance_matrix(
     ``image="additive"`` and subtracts for ``image="antiparallel"`` —
     computed by the same code path, so that an earth-return correction
     can move between conventions exactly (with ``wire_radii``, a mirrored
-    partner that interpenetrates a segment is evaluated as a touching
-    wire, as in :func:`build_inductance_matrix`). Raises for segments
+    partner lying beside a segment closer than touching gets the beside
+    rule, as in :func:`build_inductance_matrix`). Raises for segments
     that cross or lie in the soil surface (singular image).
     """
     _check_touching_rule(touching)
@@ -1713,7 +2065,19 @@ def _carson_pair_plan(
             sign = 1.0 if dot > 0.0 else -1.0
             d_vec = midpoints[j] - midpoints[i]
             # Near-parallel: transmission-line tiling (WP-C3).
-            u = unit_axes[i]
+            if np.array_equal(unit_axes[j], sign * unit_axes[i]):
+                u, ref = unit_axes[i], midpoints[i]
+            else:
+                # Not exactly parallel: project on the bisector of the two
+                # axes from the mean of the mid-points, so that the overlap
+                # and the distance do not depend on which segment comes
+                # first (audit round 3: on the axis of segment i, reversing
+                # the segment order moved entries by up to 3.1 % of the
+                # largest one, and a pair could get an overlap in one order
+                # and none in the other).
+                w = unit_axes[i] + sign * unit_axes[j]
+                u = w / np.linalg.norm(w)
+                ref = 0.5 * (midpoints[i] + midpoints[j])
             axial = float(d_vec @ u)
             perp = d_vec - axial * u
             d_perp_horiz = math.hypot(perp[0], perp[1])
@@ -1722,11 +2086,11 @@ def _carson_pair_plan(
                 d_perp_horiz < max(radii[i], radii[j], 1e-3) and d_perp_vert < 1e-6
             )
             # Axial overlap of the two segment intervals along u.
-            t_i0 = float((seg_endpoints[i, 0] - midpoints[i]) @ u)
-            t_i1 = float((seg_endpoints[i, 1] - midpoints[i]) @ u)
+            t_i0 = float((seg_endpoints[i, 0] - ref) @ u)
+            t_i1 = float((seg_endpoints[i, 1] - ref) @ u)
             lo_i, hi_i = min(t_i0, t_i1), max(t_i0, t_i1)
-            t_j0 = float((seg_endpoints[j, 0] - midpoints[i]) @ u)
-            t_j1 = float((seg_endpoints[j, 1] - midpoints[i]) @ u)
+            t_j0 = float((seg_endpoints[j, 0] - ref) @ u)
+            t_j1 = float((seg_endpoints[j, 1] - ref) @ u)
             lo_j, hi_j = min(t_j0, t_j1), max(t_j0, t_j1)
             overlap = min(hi_i, hi_j) - max(lo_i, lo_j)
             if same_axis:
@@ -1750,8 +2114,8 @@ def _direct_mutual_matrix(
     """Off-diagonal free-space Neumann mutuals $L_\\text{dir}$ (zero diagonal).
 
     The direct block of :func:`build_inductance_matrix` (same code path,
-    exact touching pairs, interpenetrating pairs as touching wires when
-    ``wire_radii`` is given), used to move a correction of a pair on
+    exact touching pairs, the beside rule for wires closer than touching
+    when ``wire_radii`` is given), used to move a correction of a pair on
     opposite sides of the surface between image conventions.
     """
     M = seg_endpoints.shape[0]
@@ -2000,7 +2364,11 @@ def build_carson_correction_matrix(
     - **Near-parallel pairs on distinct axes** (``|cosφ| > 0.99``) of
       near-horizontal segments: mutual correction per metre at the
       **perpendicular** horizontal axis separation, weighted by the
-      **axial overlap length** of the two segment intervals.
+      **axial overlap length** of the two segment intervals — measured
+      along the bisector of the two axes for a pair that is not exactly
+      parallel, so that the order of the segments does not matter
+      (audit round 3 of the calendar release; on the first segment's axis
+      the entries moved by up to 3.1 % of the largest one).
       Non-overlapping (e.g. staggered or end-to-end) pairs contribute
       zero. Two different conductors that overlap on one axis are
       wires lying side by side: the mutual at the distance of touching
@@ -2023,7 +2391,7 @@ def build_carson_correction_matrix(
       turning 8.1 deg against the feed lead changed the reading
       17.6-fold). At the domain boundary the result steps from the
       per-metre tiling to the Sommerfeld value, by the model error of
-      the tiling there (two 1 km leads 2 m apart, 1 kHz: 12 %).
+      the tiling there (two 1 km leads 2 m apart, 1 kHz: 13 %).
       Orthogonal pairs contribute zero by symmetry.
 
     Earth-conductivity sign convention
