@@ -53,8 +53,8 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
-      - name: Lint, blocking subset (F, E9, B)
-        run: ruff check --select F,E9,B --output-format github .
+      - name: Lint, blocking subset (F, E9, B, W605)
+        run: ruff check --select F,E9,B,W605 --output-format github .
 
       - name: Lint, full standard (report only)
         run: ruff check --statistics --exit-zero .
