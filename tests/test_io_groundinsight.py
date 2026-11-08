@@ -990,6 +990,84 @@ def test_metadata_of_hand_built_fits_is_strict_json() -> None:
     assert payload["metadata"]["fit_quality"]["rms_relative"] is None
 
 
+def _fits_with_unknown_quality() -> dict[str, object]:
+    """Hand-built fits whose rms error is unknown (NaN), one sample NaN."""
+    f = np.geomspace(1.0, 1000.0, 10)
+    values = np.zeros(f.size, dtype=complex)
+    values[3] = complex(np.nan, 0.0)
+    return {
+        "vector": VectorFitResult(
+            poles=np.array([-300.0]),
+            residues=np.array([100.0]),
+            R_inf=1.0,
+            L_inf=0.0,
+            rms_error=float("nan"),
+            fit_frequencies=f,
+            fit_values=values,
+        ),
+        "standard": RhoFStandardFit(
+            k1=0.05,
+            k2=1e-4,
+            k3=2e-3,
+            k4=1e-6,
+            k5=1e-6,
+            rms_error=float("nan"),
+            rms_relative=float("nan"),
+            sample_rho=np.array([30.0, 1000.0]),
+            sample_f=np.array([0.0, 1000.0]),
+            sample_Z=np.array([1.0, complex(np.inf, 0.0)]),
+        ),
+    }
+
+
+@pytest.mark.finding("10.19")
+@pytest.mark.parametrize("kind", ["vector", "standard"])
+def test_unknown_fit_quality_and_samples_are_written_as_null(
+    kind: str, tmp_path
+) -> None:
+    """``rms_error_Ohm`` was written with ``float(...)``, so a fit whose rms
+    error is unknown exported ``NaN``, which strict JSON parsers reject;
+    a non-finite sample did the same. Every non-finite number of the
+    document is ``null`` now, ``save_bustype_json`` writes strict JSON and
+    ``fit_quality_summary`` reports the rms error as unknown."""
+    # audit A2G-08
+    fit = _fits_with_unknown_quality()[kind]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        payload = to_bustype_dict(
+            fit, name="h", system_type="TN", voltage_level=0.4, rho_at_fit=100.0
+        )
+        path = save_bustype_json(
+            fit,
+            tmp_path / "h.json",
+            name="h",
+            system_type="TN",
+            voltage_level=0.4,
+            rho_at_fit=100.0,
+        )
+    json.dumps(payload, allow_nan=False)  # ValueError: Out of range float values
+    assert payload["metadata"]["fit_quality"]["rms_error_Ohm"] is None
+    assert None in payload["samples"]["Z_real_Ohm"]
+
+    def refuse(constant: str):
+        raise ValueError(f"non-strict JSON constant {constant}")
+
+    doc = json.loads(path.read_text(encoding="utf-8"), parse_constant=refuse)
+    spec = load_bustype_json(path)
+    assert spec.to_dict()["samples"] == doc["samples"]
+    assert "rms=unknown" in fit_quality_summary(spec)
+
+
+@pytest.mark.finding("10.19")
+def test_export_refuses_a_voltage_level_that_is_not_finite() -> None:
+    """A NaN voltage level would make the document non-strict JSON."""
+    # audit A2G-08
+    with pytest.raises(ValueError, match="voltage_level must be a finite number"):
+        to_bustype_dict(
+            _make_rho_f_fit(), name="h", system_type="TN", voltage_level=float("nan")
+        )
+
+
 # ---------------------------------------------------------------------
 # 12. rho_at_fit convention for layered soil (10.84)
 # ---------------------------------------------------------------------

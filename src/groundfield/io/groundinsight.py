@@ -222,7 +222,8 @@ class BusTypeSpec:
         Dict with the parallel tabular representation. Keys
         ``"frequency_Hz"``, ``"rho_Ohm_m"``, ``"Z_real_Ohm"``,
         ``"Z_imag_Ohm"`` each map to a list of floats of equal
-        length. Provided so a future tabular ingest path on the
+        length (``null`` in the JSON document for a value that is not
+        finite). Provided so a future tabular ingest path on the
         ``groundinsight`` side can be served immediately.
     metadata
         Free-form metadata dict; populated by the exporters with
@@ -248,7 +249,12 @@ class BusTypeSpec:
     # --- serialisation ------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-ready ``dict`` matching schema v1."""
+        """Return a JSON-ready ``dict`` matching schema v1.
+
+        The result is strict JSON: every number that is not finite (a
+        sample, a fit-quality figure of a hand-built fit, ...) is written
+        as ``None`` (JSON ``null``).
+        """
         return {
             "schema": SCHEMA_NAME,
             "schema_version": SCHEMA_VERSION,
@@ -258,12 +264,10 @@ class BusTypeSpec:
             "voltage_level": float(self.voltage_level),
             "impedance_formula": self.impedance_formula,
             "samples": {
-                "frequency_Hz": [float(x) for x in self.samples["frequency_Hz"]],
-                "rho_Ohm_m": [float(x) for x in self.samples["rho_Ohm_m"]],
-                "Z_real_Ohm": [float(x) for x in self.samples["Z_real_Ohm"]],
-                "Z_imag_Ohm": [float(x) for x in self.samples["Z_imag_Ohm"]],
+                key: [_finite_or_none(x) for x in self.samples[key]]
+                for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm")
             },
-            "metadata": dict(self.metadata),
+            "metadata": _strict_json(dict(self.metadata)),
         }
 
     @classmethod
@@ -458,8 +462,22 @@ def _finite_or_none(value: Any) -> Optional[float]:
     """``float(value)``, or ``None`` when missing or not finite (strict JSON)."""
     if value is None:
         return None
-    value = float(value)
+    try:
+        value = float(value)
+    except OverflowError:  # an integer beyond the float range
+        return None
     return value if math.isfinite(value) else None
+
+
+def _strict_json(value: Any) -> Any:
+    """Copy of a JSON-like structure with every non-finite float as ``None``."""
+    if isinstance(value, dict):
+        return {key: _strict_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_strict_json(item) for item in value]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return value
 
 
 def _metadata_from_vector_fit(
@@ -473,7 +491,7 @@ def _metadata_from_vector_fit(
     return {
         "fit_method": "vector_fit",
         "fit_quality": {
-            "rms_error_Ohm": float(fit.rms_error),
+            "rms_error_Ohm": _finite_or_none(fit.rms_error),
             "rms_relative": _finite_or_none(fit.rms_relative),
         },
         "quantity": fit.quantity,
@@ -502,7 +520,7 @@ def _metadata_from_rho_f_standard(
     return {
         "fit_method": "rho_f_standard",
         "fit_quality": {
-            "rms_error_Ohm": float(fit.rms_error),
+            "rms_error_Ohm": _finite_or_none(fit.rms_error),
             "rms_relative": _finite_or_none(fit.rms_relative),
             "max_relative": _finite_or_none(fit.max_relative),
         },
@@ -634,6 +652,14 @@ def _build_spec(
             "RhoFStandardFit or VectorFitResult"
         )
     _check_rho_at_fit(fit, rho_at_fit, caller)
+    try:
+        level = float(voltage_level)
+    except (TypeError, ValueError, OverflowError):
+        level = math.nan
+    if not math.isfinite(level):
+        raise ValueError(
+            f"{caller}: voltage_level must be a finite number, got {voltage_level!r}."
+        )
     from groundfield.io._formula import _significant_digits, parse_impedance_formula
 
     try:
@@ -684,7 +710,7 @@ def _build_spec(
         name=str(name),
         description=description,
         system_type=str(system_type),
-        voltage_level=float(voltage_level),
+        voltage_level=level,
         impedance_formula=formula,
         samples=samples,
         metadata=metadata,
@@ -744,7 +770,9 @@ def to_bustype_dict(
     -------
     dict
         JSON-ready ``dict`` matching ``schema_version = 1`` of
-        ``groundfield.bustype``, including ``metadata["passivity"]``
+        ``groundfield.bustype`` (strict JSON: a number that is not
+        finite, such as the unknown rms error of a hand-built fit, is
+        ``None``), including ``metadata["passivity"]``
         with the keys ``passed``, ``min_re_Z_Ohm``, ``f_at_min_Hz``,
         ``rho_at_min_Ohm_m``, ``f_checked_Hz``, ``rho_checked_Ohm_m``
         and ``n_points``.
@@ -753,7 +781,8 @@ def to_bustype_dict(
     ------
     ValueError
         If ``rho_at_fit`` is missing for a vector fit or not a positive
-        finite number, or if the fit has non-finite coefficients.
+        finite number, if ``voltage_level`` is not finite, or if the fit
+        has non-finite coefficients.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
     TypeError
@@ -857,11 +886,11 @@ def save_bustype_json(
         require_passive=require_passive,
         caller="save_bustype_json",
     ).to_dict()
+    text = json.dumps(payload, indent=indent, sort_keys=False, allow_nan=False)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=indent, sort_keys=False)
-        fh.write("\n")
+        fh.write(text + "\n")
     return p
 
 
@@ -1185,8 +1214,9 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
     md = spec.metadata
     method = md.get("fit_method", "unknown")
     fq = md.get("fit_quality", {})
-    rms = fq.get("rms_error_Ohm", math.nan)
-    parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms:.3e} Ω"]
+    rms = _finite_or_none(fq.get("rms_error_Ohm"))
+    rms_text = "unknown" if rms is None else f"{rms:.3e} Ω"
+    parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms_text}"]
     if fq.get("rms_relative") is not None:
         parts.append(f"rms_rel={fq['rms_relative']:.2%}")
     if fq.get("max_relative") is not None:
