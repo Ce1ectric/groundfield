@@ -3425,14 +3425,14 @@ below implemented the decisions that change code.
 
 | Q | Question | Decision | Where |
 |---|---|---|---|
-| 20 | Encase the cross-braces of mesh foundation electrodes in the concrete shell, as DIN 18014 lays the foundation earth electrode with its connections in the concrete? | yes | stream `d2gen` |
-| 21 | Deprecate `FoundationElectrodeSpec.concrete_model`, which only chooses one or four current owners of a ring foundation (≤ 0.06 % apart up to aspect ratio 4)? | yes | stream `d2gen` |
+| 20 | Encase the cross-braces of mesh foundation electrodes in the concrete shell, as DIN 18014 lays the foundation earth electrode with its connections in the concrete? | yes | streams `d2gen`, `f2gen` |
+| 21 | Deprecate `FoundationElectrodeSpec.concrete_model`, which only chooses one or four current owners of a ring foundation (≤ 0.06 % apart up to aspect ratio 4)? | yes | streams `d2gen`, `f2gen` |
 | 22 | Keep the PEN routing of `TnNetworkGenerator` (an own cable per cabinet, a service drop taps the cable that feeds its building)? Place cabinets per building group in the future? | routing kept; cabinets per building group in the next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
-| 23 | `fem` whose equivalent hemisphere puts current into a more conductive layer that the electrodes do not touch (−38 … −98 %): error instead of warning? | error | stream `d2solver` |
+| 23 | `fem` whose equivalent hemisphere puts current into a more conductive layer that the electrodes do not touch (−38 … −98 %): error instead of warning? | error; extended after the audit to a more conductive layer within the electrodes' horizontal half-extent (coordinator, for the author's review) | streams `d2solver`, `f2solver` |
 | 24 | Point-form guard near a layer interface: keep the conservative thresholds (warning within 0.6 segment lengths, error within 0.387)? | kept | [known limitations](../reference/known-limitations.md#current-ansatz-and-source-kernels) |
 | 25 | Accept the step of `carson_series` at the 8.1° boundary of its validity domain as a documented limit? | accepted | [known limitations](../reference/known-limitations.md#earth-return-and-conductors), [earth return](../explanation/earth-return.md) |
 | 26 | Accept that the simulated in-line fall-of-potential reading moves because the leads now couple as wires lying side by side (Im Z_meas 0.063 → 0.054 Ω at 50 Hz)? | accepted | release notes, 10.46 |
-| 27 | Warn when `perfect_mirror` couples conductors on opposite sides of the soil surface through its additive image? | warning | stream `d2solver` |
+| 27 | Warn when `perfect_mirror` couples conductors on opposite sides of the soil surface through its additive image? | warning | streams `d2solver`, `f2solver` |
 | 28 | Count powers of numbers (`10**40`) in the rule on nested exponents of the formula parser, as groundinsight does? | yes; already the rule (`(f*10**40)**2` is rejected, `tests/test_formula_security.py::test_exponents_of_nested_powers_multiply_to_at_most_max_pow`) | no change |
 | 29 | Only document that printing a parsed formula or passing it to `lambdify` lets SymPy evaluate parts of an untrusted formula again? | documented | [IO reference](../reference/api/io.md) |
 | 30 | One current per wire line for grids and stars in the image family (−3 … −5 %)? | next release, with its own validation | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
@@ -3441,7 +3441,42 @@ below implemented the decisions that change code.
 | 33 | No internal inductance of a solid wire for cable shields (100 m coaxial pair 31.97 instead of 26.97 µH)? | next release, together with 32 | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
 | 34 | Tighten the rule for segments up to a quarter skin depth under `sommerfeld` (step of 3.5e-4 at δ/4)? | next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
 | 35 | Radial trunk: a building in a substation slot taps its feeder's trunk instead of getting its own line from the substation? | next release, together with 22 | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
-| 36 | Presets of the effective-resistivity weights per electrode class, with the values of the AP2 hand-over? | yes | stream `d2soil` |
+| 36 | Presets of the effective-resistivity weights per electrode class, with the values of the AP2 hand-over? | yes | streams `d2soil`, `f2gen` |
+
+
+!!! warning "Corrections (adversarial audit of the decision streams)"
+    An adversarial audit of the three decision streams below (audits D2A and
+    D2B, fixed by the streams `f2solver` and `f2gen`) corrected these
+    statements; the release notes describe the release:
+
+    - **d2solver, Q23:** the rule also covers a more conductive layer below
+      the hemisphere but within the electrodes' horizontal half-extent (the
+      error is continuous across a_eq, −67.9 % on both sides for a 10 m ring
+      over 1000/30 Ω·m), and every layer rule of `fem` uses one contact
+      predicate (a rod end on an interface does not touch the layer beyond;
+      a horizontal wire touches the layers within its wire radius). More
+      resistive spanned layers are −1 … +48 % off, not +3 … +45 %; none of
+      the rejected worlds was silent before, they warned. `fem` also refuses
+      strips and rings deeper than its formulas reach, driven
+      `MeshElectrode`s and electrodes out of the soil.
+    - **d2gen, Q20:** the brace table is measured against the bare braces of
+      the development line, which were never released; in 0.15.0 the braces
+      had the shell radius without the shell resistance. Against 0.15.0 see
+      *Numbers that change* of the release notes. The hand assembly that
+      reproduces the solve is a check of the generator with the same kernel
+      and owner model, not an independent method (an independent boundary-
+      element model confirms the numbers; with one current per segment the
+      brace effect is +49.2 / +318.5 % instead of +46.9 / +307 %).
+    - **d2gen, Q21:** `concrete_model` changes the impedance of an
+      axis-aligned rectangle without cross-braces by less than 0.7 % up to
+      aspect ratio 4 and 1.6 % up to 50 over the AP1 soils (5 mm wire at
+      0.8 m, bare or in concrete of 30 … 1000 Ω·m up to 0.2 m thick), not by
+      at most 0.16 % / 0.67 %; it also affects `style="mesh"` with
+      `n_x = n_y = 1`.
+    - **d2soil, Q36:** the medians 1.8 % / 5.0 % are over all 39 AP1 soils
+      with the homogeneous ones at zero (2.1 % / 5.5 % over the 36 two-layer
+      soils); that the hand-over's 1.7 % / 15.7 % are this metric is an
+      inference.
 
 ## Stream `d2solver`: User decisions Q23, Q27, Q31: fem and more conductive layers, perfect_mirror across the surface, per-engine size notice
 

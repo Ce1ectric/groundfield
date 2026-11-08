@@ -129,20 +129,33 @@ shows what agrees with independent references and how well.
 
 - **`fem` is experimental.** It replaces every cluster by an equivalent
   hemisphere: biased for clusters with several electrodes (−35 % for a
-  2 m ring with three 4 m rods; −55 % for two bonded rods of which one
-  reaches into a more conductive top layer), blind to the coupling between
-  clusters, and off where a layer interface lies within the electrode or
-  the hemisphere. It raises when an electrode reaches a layer its
-  hemisphere does not, when more than half of the hemisphere lies in a
-  layer the electrodes do not touch, and when the hemisphere spans a more
-  conductive layer that no electrode touches (user decision Q23; −97 … +5 %
-  before — a structural rule that also rejects near-equal layers such as
-  100 over 120 Ω·m). It warns where the spanned, untouched layer is more
-  resistive (+3 … +45 %) and for a more conductive layer below the
-  hemisphere but within the electrode's extent (−11 … −47 % for a 10 m ring
-  over 1000/30 Ω·m with $h_1$ = 9 … 5 m) (`groundfield.solver.fem`). It
-  ignores inductance, `return_to`, junctions and concrete shells
-  (`BackendCapabilityWarning` or `BackendCapabilityError`).
+  2 m ring with three 4 m rods), blind to the coupling between clusters,
+  and off where a layer interface lies within the electrode, the
+  hemisphere or the electrode's horizontal extent. It raises when an
+  electrode touches a layer its hemisphere does not reach, when more than
+  half of the hemisphere lies in a layer the electrodes do not touch, and
+  when a more conductive layer that no electrode touches lies above the
+  hemisphere radius or the electrodes' horizontal half-extent (user
+  decision Q23; −97 … +13 % before, a structural rule that also rejects
+  near-equal layers such as 100 over 120 Ω·m). It warns and is off by
+  −1 … +48 % where a spanned, untouched layer is more resistive, −16 … +16 %
+  for a more resistive layer within the half-extent, −44 … −78 % for a rod
+  that reaches 1 µm … 8 cm into a more conductive top layer, −22 … +23 % for
+  a wire within its radius of an interface (partial contact counts as
+  contact) and −55 … −75 % for two bonded rods of which one reaches into a
+  more conductive top layer. Just beyond the half-extent it is silent at
+  −9.8 … −0.8 % (rings), and an interface just below a horizontal electrode
+  buried almost as deep as its half-extent is covered by no rule (+34 % for
+  a 2 m ring 0.1 m above it in 1000/30 Ω·m, +250 % 7 mm above it). Its
+  closed forms: a strip deeper than half its length, a ring deeper than its
+  radius and a driven `MeshElectrode` raise; Dwight's rod formula ignores
+  the depth of the rod head (+3.9 % at 0.5 m … +10 % at 10 m) and Sverak's
+  grid formula reads +6 … +21 % high. `Engine.solve` reports the size of
+  `fem` worlds in segments of the integral engines, which `fem` does not use
+  (about 2 400 mesh nodes per driven cluster), and `fem` does not refuse a
+  world above `Engine.max_segments`. It ignores inductance, `return_to`,
+  junctions and concrete shells (`BackendCapabilityWarning` or
+  `BackendCapabilityError`; `groundfield.solver.fem`).
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are
   represented by the image family and `solve_mutual_*` only. Each wire
   carries its own radial shell; where wires meet — the corners of a ring,
@@ -224,9 +237,10 @@ shows what agrees with independent references and how well.
   `ResourceLimitError` before any allocation; the dense system grows like
   $N^2$ in memory and work per excitation. Raise the limit per engine to
   solve a larger world on purpose. The notice that a solve may take
-  minutes appears from `Engine.warn_segments` (default `SOFT_LIMIT` =
-  5 000); it is not checked against `max_segments`, so a notice size
-  above the hard limit never shows.
+  minutes comes from `Engine.solve` (not from `solve_mutual_*`, which
+  enforce the limit but emit no notice) from `Engine.warn_segments` on
+  (default `SOFT_LIMIT` = 5 000); it is not checked against
+  `max_segments`, so a notice size above the hard limit never shows.
 - **Touching electrodes.** `diagnose` reports wires of different
   electrodes that are closer than five times the sum of their radii, but
   not two electrodes that meet at a common segment end point (for example

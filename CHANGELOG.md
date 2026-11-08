@@ -105,7 +105,7 @@ reproduces 0.15.0, it is named.
 | 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor; the `sommerfeld` correction of a segment longer than a quarter skin depth is integrated piecewise | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2096 + 3.7840j Ω (equal to its 10 m chain); two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω; a lumped 3 km conductor at 1 kHz (100 Ω·m) had +13.4 % earth-return resistance against its refined chain, now ≤ 1e-4; distributed conductors with pieces longer than 40 m (1 kHz, 100 Ω·m) move by 1e-4 and more | service drops shorter than the PEN segment length, lumped leads, long lumped or coarsely divided conductors under `sommerfeld` |
 | 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
 | 10.30, 10.48 | `cim` reads the length-weighted potential; equal adjacent layers are merged in every backend | a rod split unevenly at h₁ = 2 m −3.9 % in `cim`; a rod through an equal-resistivity interface +0.07 % (`mom` family), +0.42 % (`cim`); `TwoLayerSoil(ρ, ρ, h)` in `image_2layer` was 3.8e-4 (point kernel) and 3.3e-7 (line kernel) from homogeneous soil, now equal bit for bit | `cim` and declared equal layers; not AP1 |
-| 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise, and so does a hemisphere that spans a more conductive layer no electrode touches (user decision Q23) | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases and the −97 … +5 % conductive-layer cases (a warning before) now raise | every layered `fem` result |
+| 10.49, 10.23 | `fem` truncation keeps its radial resolution; electrodes below the hemisphere's layer raise, and so do a more conductive layer that no electrode touches within the hemisphere or the electrodes' horizontal half-extent (user decision Q23), strips and rings deeper than their formulas reach and electrodes out of the soil | layered `fem` +0.16 … +1.64 % (golden `fem_rod_two_layer_deep`); the silent +633 … +3138 % cases, the −97 … +13 % conductive-layer cases (a warning before) and the silent +369 … +6120 % deep strips now raise | every layered `fem` result |
 | 10.75 | `mom` and `mom_sommerfeld` honour `return_to` and junctions | the return current flows through the return electrode instead of remote earth | `mom` family worlds with two-terminal sources |
 | 10.32, 10.28 | every interface cut is kept, however short the part beyond it, and the diagonal of a piece at the interface is evaluated at the wire radius, so a rod tip or head next to the interface is in contact with the layer it reaches and a wire lying at the interface is continuous across it | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 137.4 Ω (−29 %), within −1.2 % of a solid-rod reference; a ring (r = 3 m) at h₁ = 5 m: 9.56 Ω (0.15.0, point kernel) → 4.18 Ω, continuous across h₁ (the point form raises there); a rod end within one wire radius of h₁ warns (`InterfaceContactWarning`, the thin-wire model has no end face); with `kernel="point"` and `mom` rod tips up to about 0.1 m past h₁ move as well (+0.4 % at 50 mm, +0.05 % at 100 mm, h₁ = 5 m) (golden: none) | rods whose tip or head lies within 16 mm of an interface (0.1 m with the point form), horizontal wires at an interface; not AP1 |
 | 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
@@ -427,23 +427,48 @@ reproduces 0.15.0, it is named.
   hemisphere's layer, for clusters below a top layer that holds most of the
   hemisphere (audit A2E-2) and for driven polyline and star electrodes.
 - ⚠ **`fem` and more conductive layers (10.23; user decision Q23):** `fem`
-  raises `BackendCapabilityError` when the equivalent hemisphere of a cluster
-  spans a layer that no electrode of the cluster touches and that conducts
-  better than every layer the electrodes touch. The hemisphere injects the
-  current straight into that layer and the result is too low: −97 … +5 %
-  against `image_2layer` and `mom` (which agree within 2.5 %) in the measured
-  cases — rods, strips and rings below a more conductive top layer from 22 mm
-  thickness, rings whose hemisphere reaches a more conductive lower layer
-  (−92 % for a 10 m ring at 0.8 m over 1000/30 Ω·m at h₁ = 2 m). Up to now
-  these worlds only warned (`FemReductionWarning`). The rule is
-  structural, independent of the size of the contrast (100/120 Ω·m raises as
-  well, where `fem` was −7 … +5 % off), on the canonical layer stack; an
-  electrode exactly on an interface touches both layers. More resistive
-  spanned layers keep the warning (+3 … +45 %). The message names the
-  cluster, the layer, the electrodes' ρ, a_eq, the measured range and a
-  backend that solves the world. Tests:
-  `tests/test_fem.py::test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans`
-  and four siblings.
+  raises `BackendCapabilityError` when a layer that no electrode of a cluster
+  touches and that conducts better than every layer the electrodes touch
+  lies above the deeper of the hemisphere radius a_eq and the electrodes'
+  horizontal half-extent. The hemisphere then injects the current straight
+  into that layer and the result is too low: −97 … +5 % against
+  `image_2layer` and `mom` (which agree within 2.5 %) where the hemisphere
+  spans the layer — rods, strips and rings below a more conductive top layer
+  from 22 mm thickness, rings whose hemisphere reaches a more conductive
+  lower layer (−92 % for a 10 m ring at 0.8 m over 1000/30 Ω·m at
+  h₁ = 2 m) — and −78 … +1 % (rings, strips; a 20 m grid −60 … +13 %) where
+  the layer lies below the hemisphere but within the half-extent (extended
+  there by the coordinator after the audit of the decision streams, D2A-03,
+  because the error is continuous across a_eq: −67.9 % on both sides for the
+  10 m ring; for the author's review). Up to now these worlds only warned
+  (`FemReductionWarning`). The rule is structural, independent of the size
+  of the contrast (100/120 Ω·m raises as well, where `fem` was −7 … +5 %
+  off), on the canonical layer stack, with one contact predicate for every
+  layer rule of `fem`: a horizontal wire touches the layers within its wire
+  radius, a rod the layers its axis passes through (an end on an interface
+  does not count, as in the thin-wire model of the integral engines; a rod
+  head on a conductive top layer raises, −92.9 % before). More resistive
+  layers keep the warning (−1 … +48 % spanned, −16 … +16 % within the
+  half-extent). The message names the cluster, the layer, the electrodes' ρ,
+  a_eq, the measured range and only backends whose own checks accept the
+  world. Tests:
+  `tests/test_fem.py::test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans`,
+  `::test_fem_rejects_a_more_conductive_layer_within_the_electrode_extent`,
+  `::test_fem_a_rod_head_on_the_interface_does_not_touch_the_layer_above`,
+  `::test_fem_names_only_a_backend_that_solves_the_world` and siblings.
+- ⚠ **`fem` within the range of its formulas and in the soil (10.23; audit of
+  the decision streams):** a driven strip deeper than half its length, a
+  driven ring deeper than its radius and any driven `MeshElectrode` raise
+  `BackendCapabilityError`: Dwight's strip series diverges there (+369 % and
+  +6120 % for a 1.88 m strip at 5 m and 9.8 m, silent before), the ring
+  formula assumes a depth well below the diameter (−4 … −6 % at a depth of
+  2 D), and the mesh formula is +118 … +193 % at every depth. Electrodes at
+  or above the soil surface, in the surface plane or reaching above it raise
+  `ValueError` as in every other backend (a ring 0.5 m in the air was solved
+  like a ring 1 mm deep); a rod with its head at z = 0 stays valid. Tests:
+  `tests/test_fem.py::test_fem_rejects_an_electrode_deeper_than_its_formula_reaches`,
+  `::test_fem_rejects_a_driven_mesh_electrode`,
+  `::test_fem_rejects_an_electrode_above_the_surface_like_every_backend`.
 - **A world without a current source (10.66, audit A2S-05)** raises the same
   `ValueError` in every backend and entry point (`fem` solved it to zeros).
 - **`compare_engines` (10.71)** compares complex impedances at every frequency;
