@@ -69,8 +69,9 @@ Two further consequences of the point form:
   than the same rod 1 mm above it). Since 2026.11 the point kernel takes
   the Galerkin self term below $L/a = 2.990$, where both coincide
   (`SELF_TERM_CROSSOVER`; every segment with $L/a \ge 2.990$ keeps its
-  value bit for bit), and interface cuts that would leave a piece shorter
-  than the wire diameter are dropped (finding 10.32).
+  value bit for bit). Every interface cut is kept, however short the
+  piece beyond it; the self term of such a piece is evaluated without
+  cancellation (finding 10.32, second adversarial audit A2S-01).
 - The self image $1/(2z)$ is the $L \ll 4z$ limit of the image line; for
   segments longer than four times their depth it is biased high
   (`ShallowSegmentWarning`).

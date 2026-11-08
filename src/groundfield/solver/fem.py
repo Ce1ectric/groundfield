@@ -517,6 +517,17 @@ def _unreachable_layers(
 # ---------------------------------------------------------------------
 
 
+#: Electrode classes with a closed-form equivalent hemisphere
+#: (:func:`equivalent_hemisphere_radius`).
+_REDUCIBLE_ELECTRODES = (
+    RodElectrode,
+    RingElectrode,
+    StripElectrode,
+    GridMeshElectrode,
+    MeshElectrode,
+)
+
+
 def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) -> float:
     """Equivalent-hemisphere radius giving the same homogeneous-soil
     resistance as ``electrode``.
@@ -1242,8 +1253,11 @@ def solve_fem(
         10.23), or if every electrode of the cluster lies below an
         interface at a depth between ``a_eq/2`` and ``a_eq`` (more than
         half of the hemisphere in a layer the electrodes do not touch,
-        audit round 2, A2E-2): the reduction cannot represent it. A
-        subclass of ``ValueError`` and ``NotImplementedError``.
+        audit round 2, A2E-2): the reduction cannot represent it. Also
+        if a driven cluster contains an electrode without a closed-form
+        hemisphere radius (polyline and star electrodes; the generators
+        build mesh foundations of polylines). A subclass of
+        ``ValueError`` and ``NotImplementedError``.
 
     Warns
     -----
@@ -1365,6 +1379,28 @@ def solve_fem(
     a_eq_per_cluster: dict[str, float] = {}
     Z_per_cluster: dict[str, float] = {}
     mesh_per_cluster: dict[str, dict[str, float]] = {}
+
+    # A driven electrode without a closed-form hemisphere radius (polyline,
+    # star) is a limit of the reduction, reported like every other one
+    # before any mesh is built; the generators build mesh foundations of
+    # polyline wires since audit round 2 (A2G-04).
+    irreducible = [
+        ename
+        for root in active_clusters
+        for ename in clusters[root]
+        if not isinstance(world.get_electrode(ename), _REDUCIBLE_ELECTRODES)
+    ]
+    if irreducible:
+        from groundfield.solver.registry import BackendCapabilityError
+
+        kinds = sorted({type(world.get_electrode(n)).__name__ for n in irreducible})
+        shown = ", ".join(repr(n) for n in irreducible[:5])
+        more = f" and {len(irreducible) - 5} more" if len(irreducible) > 5 else ""
+        raise BackendCapabilityError(
+            "Backend 'fem' cannot solve this world: the equivalent-hemisphere "
+            f"reduction has no closed form for {', '.join(kinds)} (driven "
+            f"electrode(s) {shown}{more}). Use backend='image' or 'mom'."
+        )
 
     for root in active_clusters:
         # Build a single equivalent hemisphere from the parallel

@@ -34,8 +34,9 @@ $$
 no longer than `Engine.segment_length`. Grid and mesh wires are split
 so that wire crossings fall on segment end points, and every wire is
 cut at the soil-layer interfaces so that each segment lies in one
-layer; a piece shorter than two wire radii next to an interface is
-merged with its neighbour (`SLIVER_RADII`). How the current is
+layer; every interface cut is kept, however short the piece beyond it,
+so a rod tip that reaches a few millimetres into a layer is in contact
+with it. How the current is
 distributed over the segments — uniform per unit length on each
 electrode (image family) or one unknown per segment (`mom` family) — is
 a property of the backend, see [Solver](solver.md) and
@@ -100,4 +101,3 @@ solve, for example to check a model before a long computation.
         - concrete_shell_coefficient
         - shell_resistance_from_coefficient
         - shell_coefficient_from_resistance
-        - SLIVER_RADII

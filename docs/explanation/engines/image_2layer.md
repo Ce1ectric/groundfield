@@ -100,8 +100,16 @@ reported potential is the length-weighted average over the whole
 electrode. Up to 0.15.0 one uniform density ran across the interface,
 which put a 12 m rod through $h_1 = 5$ m in 1000 / 30 Ω·m soil 566 % above
 the per-segment `mom` solution (`tests/test_cross_layer_owners.py`).
-Interface cuts that would leave a piece shorter than the wire diameter are
-dropped (10.32), so no sliver segment destabilises the self term.
+Every interface cut is kept, however short the piece beyond it: the
+Galerkin self term and the line kernel's parallel-pair integral are
+evaluated without cancellation for such pieces, so the impedance is
+continuous in the depth of a rod tip. (Earlier in 2026.11 cuts that would
+leave a piece shorter than the wire diameter were dropped, which ignored
+the contact with the other layer: a 4.5 m rod in 1000 / 30 Ω·m read 195.0 Ω
+with its tip 15.9 mm into the lower layer and 128.6 Ω at 16.1 mm; second
+adversarial audit, A2S-01.) What remains is the onset of the contact
+itself, between a tip that ends at the interface and one that reaches
+past it, which `mom` shows as well.
 
 !!! warning "Point kernel next to the interface"
 

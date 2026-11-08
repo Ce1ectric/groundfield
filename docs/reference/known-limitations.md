@@ -50,9 +50,12 @@ shows what agrees with independent references and how well.
   layer interface need segments much shorter than $2\lvert z - h_1\rvert$:
   a ring 5 cm below the interface of 100 over 1000 Ω·m reads −46 % at
   0.5 m segments (changelog 2026.11.0, 10.28). With an electrode through
-  the layer interface, horizontal point-kernel segments longer than
-  about twice their depth raise a `ValueError` in the layered Green's
-  function; use the line kernel or shorter segments.
+  the layer interface (the cross-layer path), a horizontal point-kernel
+  segment within 0.6 segment lengths of the interface warns with
+  `PointKernelInterfaceWarning` (3–17 % low in the measured cases); one
+  closer still, or one whose three-point rule would reach above the
+  surface, raises `BackendCapabilityError`. Use the line kernel or
+  shorter segments.
 - **Line kernel in two-layer soil.** Tagg/Sunde images farther than six
   segment lengths and the smooth part of the cross-layer correction stay
   in point form: a straight 10 m strip deviates by up to 0.05 % from its

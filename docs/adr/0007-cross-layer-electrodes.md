@@ -289,9 +289,16 @@ Findings 10.15 (F02), 10.25, 10.26, 10.28, 10.32 and 10.50 (F43).
    `mom`. `solve_mutual_matrix` / `solve_mutual_field` follow the same
    split, and the diagonal of the mutual matrix is the length-weighted
    cluster impedance over all owners (10.26).
-2. **Slivers.** An interface cut that would leave a piece shorter than
-   the wire diameter is dropped (`SLIVER_RADII = 2`), and the point
-   kernel takes the Galerkin self term below $L/a = 2.99$ (10.32).
+2. **Slivers.** The point kernel takes the Galerkin self term below
+   $L/a = 2.99$ (10.32). Every interface cut is kept, however short the
+   piece beyond it. (A first version dropped cuts that would leave a
+   piece shorter than the wire diameter, `SLIVER_RADII = 2`; that
+   ignored the contact with the other layer — a 4.5 m rod in
+   1000 / 30 Ω·m jumped from 195.0 to 128.6 Ω between 15.9 and 16.1 mm of
+   tip penetration — and was replaced before the release, second
+   adversarial audit A2S-01. The Galerkin self term and the line
+   kernel's parallel-pair integral are evaluated without cancellation
+   for such pieces.)
 3. **Reciprocity and the line kernel.** With the exact line kernel
    (ADR-0015) the direct term of a pair in different layers carries the
    transmitted resistivity $2\rho_1\rho_2/(\rho_1+\rho_2)$ and the

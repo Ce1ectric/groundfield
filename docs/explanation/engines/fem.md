@@ -91,6 +91,17 @@ The registry marks `fem` experimental; the reduction itself is guarded
   rod through the top layer. The hemisphere would inject the current into
   the wrong layer; a 3 m rod through $h_1 = 2$ m was +1092 % off in
   v0.15.0, silently (benchmark B7 records the exclusion).
+- **Error** (`BackendCapabilityError`): every electrode of a driven
+  cluster lies below an interface at a depth between $a_\text{eq}/2$ and
+  $a_\text{eq}$, so more than half of the hemisphere sits in a layer the
+  electrodes do not touch (a 3 m rod below $h_1 = 0.4$ m in
+  1000 / 30 Ω·m read 31.1 Ω against 10.5 Ω from `mom`, +197 %; second
+  adversarial audit, A2E-2). Thinner top layers keep the warning below
+  (+16 … +46 % and −38 … −58 % measured).
+- **Error** (`BackendCapabilityError`): a driven cluster contains a star
+  or polyline electrode, which has no closed-form hemisphere radius. The
+  generators build mesh foundations of polyline wires, so generated
+  networks cannot be solved with `fem`.
 - **Warning** (`FemReductionWarning`, once per solve, naming every reason
   and the cluster members): a cluster with several electrodes (radii
   summed); several clusters (each solved alone, transfer impedances 0,
@@ -99,9 +110,9 @@ The registry marks `fem` experimental; the reduction itself is guarded
   half-extent of the electrode. Escalate with
   `warnings.simplefilter("error", FemReductionWarning)` when `fem` serves
   as a check.
-- Star and polyline electrodes and concrete shells are not reducible and
-  are rejected; distributed and inductive conductors are solved as lumped
-  branches with a `BackendCapabilityWarning`.
+- Concrete shells are rejected; distributed and inductive conductors are
+  solved as lumped branches, and `resistance_model="skin"` is ignored, each
+  with a `BackendCapabilityWarning`.
 
 ## Validity range
 

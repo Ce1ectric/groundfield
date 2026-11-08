@@ -34,8 +34,10 @@ the built-in exceptions with a fixed meaning.
 `NotImplementedError`. **Raised** by `Engine.solve` before any
 numerics when the backend cannot represent the world: an unsupported
 number of soil layers, electrodes with a concrete-shell coefficient,
-junctions, or an explicitly requested kernel the backend does not
-implement. The message names the backends that can. **Remedy:** choose
+junctions, an explicitly requested kernel the backend does not
+implement, or a horizontal wire so close to the layer interface that the
+point form of the cross-layer path cannot evaluate it (see
+`PointKernelInterfaceWarning`). The message names the backends that can. **Remedy:** choose
 one of them (see the [backend registry](api/registry.md)); three or more
 distinct layers need `mom_sommerfeld`.
 
@@ -78,6 +80,20 @@ image at distance $2z$ instead of the image line, which overestimates
 it by more than 13 % and biases the impedance high. The message
 quantifies the worst case. **Remedy:** shorter segments, or the exact
 line kernel of the image family (the default), which has no such bias.
+
+### `PointKernelInterfaceWarning`
+
+`groundfield.solver.PointKernelInterfaceWarning`. **Emitted** on the
+point form of the cross-layer path (`kernel="point"` of the image
+family and of `solve_mutual_*`, the `mom` family; two-layer soil with an
+electrode that reaches the interface) when a horizontal wire lies within
+0.6 segment lengths of the interface $h_1$: the three-point rule of the
+diagonal samples the layered correction where it varies quickly, and the
+impedance reads 3–17 % low in the measured cases. Closer still, where
+the rule would reach across the interface or above the surface, the
+solve raises `BackendCapabilityError` instead. **Remedy:** the exact line
+kernel of the image family (the default), or segments shorter than the
+distance of the wire to the interface.
 
 ### `SeriesTruncationWarning`
 

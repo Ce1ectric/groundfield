@@ -419,6 +419,40 @@ def test_fem_warns_when_clusters_are_solved_without_coupling() -> None:
     assert texts and "2 clusters" in texts[0]
 
 
+@pytest.mark.finding("10.23")
+def test_fem_rejects_a_driven_polyline_with_a_capability_error() -> None:
+    """A driven electrode without a hemisphere formula is a capability limit.
+
+    The generators build mesh foundations of polyline wires (audit round 2,
+    A2G-04); fem raised a bare ``TypeError`` from inside the reduction for
+    every generated network. It now raises ``BackendCapabilityError`` before
+    meshing, naming the electrode, while a passive polyline still solves.
+    """
+    import warnings
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(
+        w, "polyline", name="wire", vertices=[(0, 0, 0.7), (5, 0, 0.7), (5, 5, 0.7)]
+    )
+    gf.create_source(w, attached_to="wire", magnitude=1.0)
+    eng = gf.create_engine(backend="fem", frequencies=[50.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(gf.BackendCapabilityError, match="'wire'"):
+            w.solve(eng)
+
+    passive = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(passive, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
+    gf.create_electrode(
+        passive, "polyline", name="wire", vertices=[(20, 0, 0.7), (25, 0, 0.7)]
+    )
+    gf.create_source(passive, attached_to="g1", magnitude=1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = passive.solve(eng)
+    assert res.electrode_potentials["wire"][0] == 0j
+
+
 @pytest.mark.finding("10.66")
 def test_fem_rejects_a_world_without_a_source_like_every_backend() -> None:
     """fem alone solved a source-free world to zeros through Engine.solve.
