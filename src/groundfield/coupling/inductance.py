@@ -2065,7 +2065,19 @@ def _carson_pair_plan(
             sign = 1.0 if dot > 0.0 else -1.0
             d_vec = midpoints[j] - midpoints[i]
             # Near-parallel: transmission-line tiling (WP-C3).
-            u = unit_axes[i]
+            if np.array_equal(unit_axes[j], sign * unit_axes[i]):
+                u, ref = unit_axes[i], midpoints[i]
+            else:
+                # Not exactly parallel: project on the bisector of the two
+                # axes from the mean of the mid-points, so that the overlap
+                # and the distance do not depend on which segment comes
+                # first (audit round 3: on the axis of segment i, reversing
+                # the segment order moved entries by up to 3.1 % of the
+                # largest one, and a pair could get an overlap in one order
+                # and none in the other).
+                w = unit_axes[i] + sign * unit_axes[j]
+                u = w / np.linalg.norm(w)
+                ref = 0.5 * (midpoints[i] + midpoints[j])
             axial = float(d_vec @ u)
             perp = d_vec - axial * u
             d_perp_horiz = math.hypot(perp[0], perp[1])
@@ -2074,11 +2086,11 @@ def _carson_pair_plan(
                 d_perp_horiz < max(radii[i], radii[j], 1e-3) and d_perp_vert < 1e-6
             )
             # Axial overlap of the two segment intervals along u.
-            t_i0 = float((seg_endpoints[i, 0] - midpoints[i]) @ u)
-            t_i1 = float((seg_endpoints[i, 1] - midpoints[i]) @ u)
+            t_i0 = float((seg_endpoints[i, 0] - ref) @ u)
+            t_i1 = float((seg_endpoints[i, 1] - ref) @ u)
             lo_i, hi_i = min(t_i0, t_i1), max(t_i0, t_i1)
-            t_j0 = float((seg_endpoints[j, 0] - midpoints[i]) @ u)
-            t_j1 = float((seg_endpoints[j, 1] - midpoints[i]) @ u)
+            t_j0 = float((seg_endpoints[j, 0] - ref) @ u)
+            t_j1 = float((seg_endpoints[j, 1] - ref) @ u)
             lo_j, hi_j = min(t_j0, t_j1), max(t_j0, t_j1)
             overlap = min(hi_i, hi_j) - max(lo_i, lo_j)
             if same_axis:
