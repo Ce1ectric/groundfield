@@ -22,8 +22,8 @@ Conversions
 - A ``.. math::`` block becomes a ``$$`` display block.
 - ``:ref:`` and ``:term:`` become their plain text.
 
-Fenced code blocks and doctest blocks (``>>>`` up to the next blank
-line) are left unchanged.
+Fenced code blocks, doctest blocks (``>>>`` up to the next blank line)
+and reST inline literals (double backquotes) are left unchanged.
 
 Usage
 -----
@@ -64,6 +64,7 @@ _ROLE_RE = re.compile(
 _TITLE_RE = re.compile(r"(?P<title>.+?)\s*<(?P<target>[^<>]+)>\s*")
 _MATH_DIRECTIVE_RE = re.compile(r"^(?P<indent>[ \t]*)\.\. math::[ \t]*(?P<inline>.*)$")
 _DIRECTIVE_OPTION_RE = re.compile(r"^\s*:[a-z-]+:")
+_LITERAL_RE = re.compile(r"(``.+?``)", re.DOTALL)
 
 Resolver = Callable[[str], "str | None"]
 
@@ -131,8 +132,13 @@ def convert(text: str, resolve: Resolver | None = None) -> str:
 
     def flush() -> None:
         if pending:
-            joined = "\n".join(pending)
-            out.extend(_ROLE_RE.sub(lambda m: _role(m, resolve), joined).split("\n"))
+            parts = _LITERAL_RE.split("\n".join(pending))
+            # even indices: text, odd indices: ``inline literals`` (kept)
+            converted = "".join(
+                part if k % 2 else _ROLE_RE.sub(lambda m: _role(m, resolve), part)
+                for k, part in enumerate(parts)
+            )
+            out.extend(converted.split("\n"))
             pending.clear()
 
     in_fence = False

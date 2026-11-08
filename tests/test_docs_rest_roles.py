@@ -85,6 +85,10 @@ def test_code_and_doctests_are_left_alone() -> None:
     )
     out = convert(text, _identity)
     assert ":class:`A`" in out and ":class:`B`" in out
+    literal = "use ``:class:`X` `` in Sphinx, :class:`Y` here"
+    assert convert(literal, _identity).startswith(
+        "use ``:class:`X` `` in Sphinx, <autoref"
+    )
     assert out.endswith('<autoref identifier="C" optional><code>C</code></autoref>')
 
 
