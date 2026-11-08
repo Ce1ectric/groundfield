@@ -80,7 +80,7 @@ is named.
 
 | Finding | What moves | Size | Who is affected |
 |---|---|---|---|
-| 10.28, 10.33 | the exact line-source kernel is the default of `image` and `image_2layer`, of `FieldResult.potential` and of `solve_mutual_*` | 3 m rod +0.60 % (surface potential up to +1.9 %), two-layer ring +1.23 %, two rods joined by a bare conductor with 5 m segments: currents 10.9 %, cluster impedance 8.4 % (golden `defaults_rod_hom`, `defaults_two_layer_ring_auto`, `defaults_mixed_cluster_inductive`) | every image-family study, the AP1 catalogue (Z_G, potentials); `Engine(kernel="point")` reproduces 0.15.0 |
+| 10.28, 10.33 | the exact line-source kernel is the default of `image` and `image_2layer` (also through the deprecated alias `cim`), of `FieldResult.potential` and of `solve_mutual_*` | 3 m rod +0.60 % (surface potential up to +1.9 %), two-layer ring +1.23 %, ring r = 2 m through `cim` +0.85 %, two rods joined by a bare conductor with 5 m segments: currents 10.9 %, cluster impedance 8.4 % (golden `defaults_rod_hom`, `defaults_two_layer_ring_auto`, `defaults_mixed_cluster_inductive`) | every image-family study, the AP1 catalogue (Z_G, potentials); `Engine(kernel="point")` reproduces 0.15.0 |
 | 10.15, F02 | an electrode through the layer interface has one current per layer in `image_2layer` and `solve_mutual_*` | a 12 m rod through h₁ = 5 m was +566 % (1000/30 Ω·m), +148 % and +123 % off; now +0.11 … +0.31 % (point kernel) and +0.7 … +1.3 % (line kernel) from `mom` (golden `img2_rod_crosslayer` −46.5 %, `mutual_three_rods_crosslayer`) | rods through h₁; not the AP1 station rods (4 m from 0.6 m depth, h₁ ≥ 5 m) |
 | 10.12–10.14, F08 | one concrete-shell mechanism, also in `solve_mutual_*`, the layout builder and station and cabinet foundations | AP1-like site (ρ_c = 100 Ω·m, 5 cm): house Z_G diagonal +42 / +19 / +2.8 % and network input impedance +13.6 / +8.8 / +2.2 % at ρ₁ = 30 / 100 / 1000 Ω·m; mesh foundations with `"distributed"`: +2.6 … +12 % (golden `mutual_foundations_lumped_concrete` +42.2 %) | every world with `concrete_rho_ohm_m`, including AP1 runs with concrete shells |
 | 10.26, 10.29, 10.34 | `solve_mutual_matrix`: length-weighted diagonal over all members and layers, the other clusters float, reciprocal `offdiag="galerkin"` without probe points | AP1-like site: house diagonal up to 0.10 %, station 0.000 %, galerkin off-diagonal up to 0.09 %; rods split at h₁ were −3.8 / −9.1 % off (golden `mutual_foundations_distributed_concrete` R 1.6 %) | AP1 mutual matrices Z_G |
@@ -307,7 +307,8 @@ is named.
 **Solver**
 
 - ⚠ **Default kernel (10.28):** `Engine.kernel` defaults to `None`, the
-  backend's preferred kernel: `"line"` for the image family. A 16-house solve
+  backend's preferred kernel: `"line"` for the image family, also through the
+  deprecated alias `cim`. A 16-house solve
   takes 2.7× (with `numba`) or 5.7× (without) the time of the point kernel.
 - ⚠ **Two-terminal sources (10.16, 10.75, F01/F30):** `image`,
   `image_2layer`, `mom` and `mom_sommerfeld` inject +I at `attached_to` and −I
@@ -440,7 +441,7 @@ replacement, and is removed in `2027.5.0` at the earliest.
 
 | Deprecated | Replacement |
 |---|---|
-| backend `cim` (10.76) | `image` (auto-dispatch; `cim` already ran `image_2layer`) |
+| backend `cim` (10.76) | `image` (auto-dispatch; `cim` already ran `image_2layer`, whose default kernel is now `"line"`, see *Numbers that change*) |
 | backend `bem` (10.76) | `mom` (identical point-matching system) |
 | backend `image_nlayer` (10.76) | `image` (auto-dispatch by soil) |
 | `Engine.tolerance`, `Engine.max_iterations` (10.51) | none, they have no effect |
@@ -526,7 +527,9 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   1.1–4.7 % non-reciprocal) are reciprocal. Tests:
   `tests/test_mom_family.py::test_two_port_transfer_impedance_is_reciprocal`,
   `tests/test_reciprocity.py`.
-- **`cim` is bit-identical to `image_2layer` (10.30).** Test:
+- **`cim` is bit-identical to `image_2layer` (10.30)** of the same release,
+  default line kernel included (against 0.15.0 both move, see *Numbers that
+  change*). Test:
   `tests/test_cim.py::test_cim_is_bit_identical_to_image_2layer_for_unequal_segments`.
 - **Layer stacks (10.48):** physically two-layer or homogeneous
   `MultiLayerSoil` stacks no longer raise. Tests: `tests/test_layer_stack.py`,
