@@ -30,7 +30,7 @@ voltage is
     U_T \\;=\\; U_E \\;-\\; \\varphi(\\mathbf{r}_\\text{feet}).
 
 The touched parts are the accessible metal parts above ground: a
-station housing or its door, a mast, a fence, a house connection box.
+station housing or its door, a mast, a fence, a service connection box.
 :func:`touch_voltage_at_part` takes such a part as a touch point — its
 horizontal position and the electrode or junction it is bonded to — and
 puts the feet on the circle of radius ``distance`` around it, optionally
@@ -675,7 +675,7 @@ def touch_voltage_at_part(
     person touches and the person's feet, standing 1 m away from the
     part. The touch points of an installation are its accessible metal
     parts above ground — a station housing or its door, a mast, a fence
-    post, a cable cabinet, a house connection box — not the buried
+    post, a cable cabinet, a service connection box — not the buried
     electrode. This helper takes one such part: its horizontal position
     :math:`\\mathbf p` and the electrode or junction it is bonded to,
     whose potential :math:`U_\\text{part}` it carries. The feet stand on
@@ -691,7 +691,7 @@ def touch_voltage_at_part(
     :math:`\\theta_k = 2\\pi k / n`, or only in the given ``directions``;
     foot positions inside an outline of ``exclude`` (the housing or the
     building itself, where nobody can stand) are dropped. A part bonded
-    to a node far from the faulted earth — a house connection box on the
+    to a node far from the faulted earth — a service connection box on the
     PEN junction of a house, a cable screen led out of a station —
     carries a transferred potential; ``U_T`` is then most of the earth
     potential rise.

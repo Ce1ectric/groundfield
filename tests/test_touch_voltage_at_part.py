@@ -5,7 +5,7 @@ and the feet of a person standing 1 m away from it. The electrode-anchored
 helpers (``touch_voltage``, ``touch_voltage_envelope``) put the feet 1 m
 from the buried wires, a proxy when the touched parts are not known. Where
 they are known — the door of a station housing, a mast, a fence post, a
-house connection box bonded to the PEN — ``touch_voltage_at_part`` puts the
+service connection box bonded to the PEN — ``touch_voltage_at_part`` puts the
 feet on the circle of radius ``distance`` around the part, optionally only
 in given directions or outside the outlines where nobody can stand (the
 housing or building itself), and takes the potential of the electrode or
@@ -82,12 +82,12 @@ def _pen_world(*, source_at: str = "station", inductive: bool = False) -> gf.Wor
     """Station rod, a PEN cable 40 m long to a house connection junction."""
     w = gf.create_world(soil=gf.HomogeneousSoil(rho=RHO))
     gf.create_electrode(w, "rod", name="station", position=(0.0, 0.0, 0.5), length=3.0)
-    gf.create_junction(w, name="house_connection", position=(40.0, 0.0, 0.7))
+    gf.create_junction(w, name="service_box", position=(40.0, 0.0, 0.7))
     gf.create_conductor(
         w,
         name="pen",
         start="station",
-        end="house_connection",
+        end="service_box",
         resistivity=2.83e-8,
         cross_section=150e-6,
         inductance_model="neumann" if inductive else None,
@@ -205,7 +205,7 @@ def test_part_at_a_rod_head_against_the_analytic_surface_potential() -> None:
 
 @pytest.mark.finding("10.21")
 def test_part_bonded_to_a_pen_junction_carries_the_transferred_potential() -> None:
-    """Transferred potential (U_T,V): a house connection box on the west wall
+    """Transferred potential (U_T,V): a service connection box on the west wall
     of a house 40 m from the station, bonded to the PEN that ends on a
     junction there; the fault current flows into the station earth.
 
@@ -222,12 +222,12 @@ def test_part_bonded_to_a_pen_junction_carries_the_transferred_potential() -> No
         res,
         w,
         position=(40.0, 0.0),
-        bonded_to="house_connection",
+        bonded_to="service_box",
         exclude=[house],
         return_points=True,
     )
     u_e = complex(res.electrode_potentials["station"][0])
-    u_j = complex(res.metadata["junction_potentials"]["house_connection"][0])
+    u_j = complex(res.metadata["junction_potentials"]["service_box"][0])
     assert u_j == pytest.approx(u_e, rel=1e-12)
     # 13 of 24 feet: 90 deg to 270 deg, the two on the wall included
     np.testing.assert_allclose(np.degrees(angles), 90.0 + 15.0 * np.arange(13))
@@ -245,12 +245,10 @@ def test_a_junction_part_carries_the_junction_potential() -> None:
     potential exceed the station's by R I; the part bonded to the junction
     sees that difference, the part bonded to the station does not."""
     # user decision Q3
-    w = _pen_world(source_at="house_connection")
+    w = _pen_world(source_at="service_box")
     res = _solve(w)
     kwargs = {"position": (40.0, 0.0), "directions": [(-1.0, 0.0)]}
-    _, at_junction = touch_voltage_at_part(
-        res, w, bonded_to="house_connection", **kwargs
-    )
+    _, at_junction = touch_voltage_at_part(res, w, bonded_to="service_box", **kwargs)
     _, at_station = touch_voltage_at_part(res, w, bonded_to="station", **kwargs)
     r_i = w.get_conductor("pen").series_resistance * 100.0
     assert at_junction[0] - at_station[0] == pytest.approx(r_i, rel=1e-9)
@@ -261,16 +259,16 @@ def test_frequency_index_selects_the_potentials_of_that_frequency() -> None:
     """Inductive PEN, source at the junction: the junction potential
     depends on the frequency; every index uses its own potentials."""
     # user decision Q3
-    w = _pen_world(source_at="house_connection", inductive=True)
+    w = _pen_world(source_at="service_box", inductive=True)
     res = _solve(w, freqs=(50.0, 1000.0))
-    u_j = [complex(v) for v in res.metadata["junction_potentials"]["house_connection"]]
+    u_j = [complex(v) for v in res.metadata["junction_potentials"]["service_box"]]
     assert abs(u_j[1] - u_j[0]) > 1e-3 * abs(u_j[0])
     for k in range(2):
         _, u, feet = touch_voltage_at_part(
             res,
             w,
             position=(40.0, 0.0),
-            bonded_to="house_connection",
+            bonded_to="service_box",
             n_angles=6,
             frequency_index=k,
             return_points=True,

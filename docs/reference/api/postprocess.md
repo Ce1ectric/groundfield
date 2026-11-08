@@ -15,24 +15,40 @@ segments are known, and the potential anywhere in or on the soil is the
 superposition $\varphi(\mathbf{r}) = \sum_k G(\mathbf{r}, \mathbf{r}_k)\,I_k$
 with the Green's function of the soil (homogeneous or two-layer).
 
-**Touch and step voltage** (EN 50522:2022, IEC 61936-1). A cluster at
-the earth potential rise $U_E = \varphi_\text{cluster}$ is touched by a
-person whose feet stand on the surface at distance $d$ (default 1 m)
-from the electrode's footprint, the horizontal projection of its wires:
+**Touch and step voltage** (EN 50522:2022, IEC 61936-1). A person
+touches an accessible conductive part at the potential
+$U_\text{part}$ of the earthing system it is bonded to and stands on the
+surface 1 m away from it (EN 50522's conventional position):
 
 $$
-U_T = U_E - \varphi(\mathbf{r}_\text{feet}),
+U_T = U_\text{part} - \varphi(\mathbf{r}_\text{feet}),
 \qquad
 U_S = \varphi(\mathbf{r}_1) - \varphi(\mathbf{r}_1 + d_\text{step}\,\hat{\mathbf{e}}).
 $$
 
-`touch_voltage_envelope` evaluates $U_T$ on a ring of directions and in
-the centres of closed meshes (the analogue of the IEEE 80 mesh voltage).
-`permissible_touch_voltage_en50522(t_f)` interpolates Table B.4 of
-EN 50522:2022 (80 V for long-duration faults with
-`long_duration=True`), `permissible_prospective_touch_voltage_en50522`
-adds the body and footwear resistances of Annex B.4. For a fault current
-with harmonics, `touch_voltage_spectrum` returns the true-RMS value
+`touch_voltage_at_part` evaluates $U_T$ at a touch point, an accessible
+metal part above ground (a station housing or door, a mast, a fence
+post, a service connection box): the feet stand on the circle of radius
+$d$ (default 1 m) around the part, optionally only in given directions
+or outside the outlines where nobody can stand, and $U_\text{part}$ is
+the potential of the electrode or junction the part is bonded to — a
+PEN junction at a house gives the transferred potential. Where the
+parts are not known, `touch_voltage` and `touch_voltage_envelope` take
+the electrode itself as the touched part, $U_\text{part} = U_E =
+\varphi_\text{cluster}$, with the feet at distance $d$ from its
+footprint, the horizontal projection of its wires; the envelope walks
+all around it. It samples nothing inside the footprint by default (there
+stands the station, the house, the steel structure or the mast); for
+open-air grids such as a substation yard, `interior="meshes"` adds the
+centres of the meshes (the analogue of the IEEE 80 mesh voltage) and of
+a ring, `interior=True` also the inside of closed polylines.
+`permissible_touch_voltage_en50522(t_f)` follows Figure 8 / Table B.4 of
+EN 50522:2022 up to 10 s and returns 80 V for every $t_f > 10$ s,
+including an uncleared fault (`math.inf`), the value the standard allows
+for current-flow durations considerably longer than 10 s;
+`permissible_prospective_touch_voltage_en50522` adds the body and
+footwear resistances of Annex B.4. For a fault current with harmonics,
+`touch_voltage_spectrum` returns the true-RMS value
 $U_{T,\text{rms}} = \sqrt{\sum_k \lvert U_{T,k}\rvert^2}$ over the
 frequencies of the spectrum.
 
@@ -96,9 +112,10 @@ assert U_Tp == 225.0 and abs(U_T) > U_Tp        # this earth needs a closer look
 assert 0 < U_S.real < U_T.real
 ```
 
-The how-to guides and tutorial T08 show the complete assessment
-(envelope, prospective touch voltage, spectrum); tutorial T04 the
-frequency response and the `rho-f` fits.
+The how-to guide [Assess touch voltages](../../how-to/assess-touch-voltages.md)
+and tutorial T08 show the complete assessment (touch points, transferred
+potential, envelope, prospective touch voltage, spectrum); tutorial T04
+the frequency response and the `rho-f` fits.
 
 ## Safety (touch and step voltage)
 
