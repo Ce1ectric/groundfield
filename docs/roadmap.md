@@ -53,6 +53,11 @@ limits a result, the reference documentation states the limit.
 - **Concrete shells in the `mom` family.** `mom` and `mom_sommerfeld` reject
   electrodes with a concrete shell; the shell is modelled by the image family
   and `solve_mutual_*` (10.12–10.14).
+- **Overlapping inductive conductors in `diagnose()`.** Conductors that lie
+  side by side or overlap (two cables in one trench, a service drop along its
+  PEN main) are evaluated as touching wires since 2026.11; `diagnose()` reports
+  close and interpenetrating leakage wires but not overlapping insulated
+  inductive conductors, so an unintended overlap goes unnoticed.
 - **Memory of the cross-layer path.** Worlds with rods that reach the lower
   layer need more memory than the within-layer path; this path was not
   optimised further in 2026.11.0 (10.56).
