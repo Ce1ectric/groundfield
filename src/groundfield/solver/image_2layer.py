@@ -415,6 +415,9 @@ def _layered_green_matrices(
             s_grid += dy2
             del dy2
             np.sqrt(s_grid, out=s_grid)
+            # The closed-form 1/R terms regularised at the 1 mm of the
+            # point forms they combine with (audit A3S-01), not at the
+            # h_1/200 of the truncation plan.
             vals = two_layer_layered_correction_group(
                 s_grid.ravel(),
                 z_i,
@@ -423,6 +426,7 @@ def _layered_green_matrices(
                 rho_2=rho_2,
                 h_1=h_1,
                 rho_baseline=rho_baseline_j,
+                min_distance=_MIN_DISTANCE,
             )
             delta_Z[np.ix_(rows, cols)] = vals.reshape(s_grid.shape) / (2.0 * np.pi)
 
@@ -445,8 +449,11 @@ def _layered_green_matrices(
         return phi_hom_matrix, delta_Z
 
     # Diagonal: 3×3 Gauss-Legendre along the segment axis (line-self
-    # peak regularised at the wire radius). Identical segments (same
-    # depth, length, radius, baseline) share one evaluation.
+    # peak regularised at the wire radius: evaluated at s = a, whose
+    # 1/R terms need no further clamp — audit A3S-01, the h_1/200 clamp
+    # of the truncation plan took 68-84 % of the interface image of a
+    # part touching h_1). Identical segments (same depth, length,
+    # radius, baseline) share one evaluation.
     gl3_nodes, gl3_weights = np.polynomial.legendre.leggauss(3)
     gl3_nodes = 0.5 * (gl3_nodes + 1.0)
     gl3_weights = 0.5 * gl3_weights
@@ -477,6 +484,7 @@ def _layered_green_matrices(
                         rho_2=rho_2,
                         h_1=h_1,
                         rho_baseline=rho_baseline_i,
+                        min_distance=a_i,
                     )
                 )
         diag_cache[key] = delta_G / (2.0 * np.pi)
@@ -580,6 +588,12 @@ def _add_line_interface_images(
     for k in range(n):
         key = (round(float(line.mid[k, 2]), 9), round(float(a[k]), 9), bool(lower[k]))
         if key not in cache:
+            # Evaluated at s = a without the h_1/200 clamp of the truncation
+            # plan (``min_distance = a``), so that it contains exactly the
+            # point image ``coeff / sqrt(a² + d²)`` exchanged below (audit
+            # A3S-01: the clamp took 68-84 % of the layered correction of
+            # every part within h_1/400 of the interface — a ring at h_1 =
+            # 5 m read -5.29 Ohm).
             cache[key] = two_layer_layered_correction_real_space(
                 s=float(a[k]),
                 z=float(line.mid[k, 2]),
@@ -588,6 +602,7 @@ def _add_line_interface_images(
                 rho_2=rho_2,
                 h_1=h_1,
                 rho_baseline=float(rho_per_segment[k]),
+                min_distance=float(a[k]),
             ) / (2.0 * np.pi)
         delta_Z[k, k] = cache[key] + coeff[k] * (self_image[k] - point_image[k])
 

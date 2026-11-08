@@ -1016,6 +1016,9 @@ def sommerfeld_kernel_value(
         rho_1_local = float(stack.rhos[0])
         rho_2_local = float(stack.rhos[1])
         h_1_local = float(stack.h[0])
+        # Distances floored at 1 mm like every other branch here: the
+        # closed-form 1/R terms of the delegated kernel are clamped at
+        # min(h_1/200, 1 mm) instead of h_1/200 (audit A3S-01).
         G_phys = two_layer_real_space_kernel(
             s=s,
             z=z,
@@ -1024,6 +1027,7 @@ def sommerfeld_kernel_value(
             rho_2=rho_2_local,
             h_1=h_1_local,
             lambda_max_factor=lambda_max_factor,
+            min_distance=_MIN_DISTANCE,
         )
         # G_phys has rho/2·(1/r + ...) structure; the existing caller
         # forms Z = rho_1/(4π)·G_old, so we want G_old = 2·G_phys/rho_1.
