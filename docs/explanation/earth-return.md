@@ -43,7 +43,7 @@ the frequency range of the package: comparable to or larger than the
 extent of a low-voltage network. The return current therefore spreads deep
 and wide, and neither a perfect mirror nor a perfectly conducting earth
 describes it. `FieldResult.metadata["penetration_depth"]` reports $\delta$
-for every frequency of a solve.
+for every frequency of a solve with inductive conductors.
 
 The soil-side galvanic coupling (leakage, potentials) is unaffected: the
 field kernel stays real and quasi-static, the earth return acts on the

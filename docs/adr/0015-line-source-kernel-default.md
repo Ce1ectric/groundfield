@@ -76,9 +76,10 @@ release, with `kernel="point"` reproducing the old numbers.
 ## Consequences
 
 **Numbers change.** Grounding resistances of single electrodes rise by
-about 1–2 % (the point kernel's bias); network quantities move less where
-the bias of the electrodes partly cancels. The generated kernel check of
-the validation page shows the size per geometry and segment length; the
+about 1–2 % at typical segment lengths (the point kernel's bias); network
+quantities move less — the input impedance of a synthetic 30-house network
+by +0.35 % (performance page). The generated kernel check of the
+validation page shows the size per geometry and segment length; the
 release notes list the moved golden cases. What remains against the true
 thin-wire solution is the uniform-current ansatz itself (about +0.9 % for
 the 3 m rod of benchmark B2, larger near grid corners for field
