@@ -595,7 +595,9 @@ def _reduce_rows(
     averages are identical, so historic results are unchanged there.
     """
     N_a = len(active_elecs)
-    Z = np.empty((N_a, N_a))
+    # Square for the multi-port matrix; rectangular for the coupling of
+    # the floating core to outside anchors (_solve_unit_excitations).
+    Z = np.empty((N_a, phi_all.shape[1]))
     for i, name_i in enumerate(active_elecs):
         idxs_i = elec_to_segidx[name_i]
         w_i = seg_lengths[idxs_i]
@@ -1025,3 +1027,200 @@ def _solve_cluster_currents(
         for k, root in enumerate(system.active_clusters):
             node_potentials[root] = complex(sol[N_a + k])
     return elec_total
+
+
+# ---------------------------------------------------------------------
+# Unit excitations of one geometry (solve_mutual_*, audit A2S-03)
+# ---------------------------------------------------------------------
+
+
+def _augmented_solutions(
+    A: np.ndarray,
+    B_re: np.ndarray,
+    B_im: np.ndarray,
+    system: _ActiveSystem,
+    *,
+    omega: float,
+    inductance_matrix: np.ndarray | None,
+    carson_correction: np.ndarray | None,
+    n_finite_branches: int,
+) -> np.ndarray:
+    """:func:`_augmented_solution` for several right-hand sides at once.
+
+    ``B_re`` and ``B_im`` have one column per excitation; returns the
+    complex solutions column by column, from one factorisation of the
+    augmented matrix. One column reproduces :func:`_augmented_solution`
+    (the same ``numpy.linalg.solve`` call).
+    """
+    use_inductive = (
+        inductance_matrix is not None and omega != 0.0 and system.n_branches > 0
+    )
+    n_rhs = B_re.shape[1]
+    if not use_inductive:
+        sol = np.linalg.solve(A, np.hstack([B_re, B_im]))
+        return sol[:, :n_rhs] + 1j * sol[:, n_rhs:]
+    A_c = _branch_impedance_matrix(
+        A,
+        system,
+        omega=omega,
+        inductance_matrix=inductance_matrix,
+        carson_correction=carson_correction,
+        n_finite_branches=n_finite_branches,
+    )
+    return np.linalg.solve(A_c, B_re + 1j * B_im)
+
+
+def _solve_unit_excitations(
+    *,
+    electrodes,
+    anchors: list[str],
+    cluster_id: dict[str, str],
+    seg_points: np.ndarray,
+    seg_lengths: np.ndarray,
+    wire_radii: np.ndarray,
+    elec_to_segidx: dict[str, list[int]],
+    self_kernel,
+    finite_branches: list[tuple[str, str, float]],
+    pseudo_owners: list[str],
+    omega: float = 0.0,
+    inductance_matrix: np.ndarray | None = None,
+    carson_correction: np.ndarray | None = None,
+    shell_coefficients: np.ndarray | None = None,
+) -> list[dict[str, complex]]:
+    """Owner currents for 1 A into each anchor, the other clusters floating.
+
+    The result equals one :func:`_solve_cluster_currents` call with
+    ``floating=True`` per anchor (finding 10.29), at the cost of about
+    one: every source-free component that floats (a bonded group or a
+    network with branches, :func:`_floating_cluster_set`) is part of the
+    system of *every* excitation, so the multi-port matrix of this
+    *floating core*, the augmented matrix and its factorisation are
+    built once and every excitation is one right-hand side.
+
+    * An anchor in the core changes only the right-hand side (1 A at its
+      node).
+    * Any other anchor is a single owner without branches: KCL fixes its
+      current to exactly 1 A, and its coupling to the core, the column
+      ``Z_{core, anchor}`` of the multi-port matrix (all such columns in
+      one kernel call), moves to the right-hand side. Its own row only
+      returns its potential, which the callers evaluate from the
+      segment currents anyway.
+    * Without a floating core every system is one anchor alone and the
+      per-anchor solve is kept (linear in the number of anchors, results
+      unchanged).
+
+    Up to audit round 2 (A2S-03) every excitation rebuilt the core's
+    multi-port matrix with all floating owners as columns and factorised
+    the full augmented system again: the cost grew with the square of
+    the number of bonded grounding nodes (256 ring-and-rod nodes: 24.3 s
+    without floating, 199.9 s with it).
+
+    Parameters
+    ----------
+    anchors
+        Owner (electrode) names, one excitation each; every one must have
+        leakage segments.
+
+    The other parameters are those of :func:`_solve_cluster_currents`.
+
+    Returns
+    -------
+    list[dict[str, complex]]
+        Owner currents in A per anchor (every owner, zero where inactive).
+    """
+    template = {e.name: 0j for e in electrodes}
+    for pn in pseudo_owners:
+        template[pn] = 0j
+    common = dict(
+        electrodes=electrodes,
+        cluster_id=cluster_id,
+        elec_to_segidx=elec_to_segidx,
+        finite_branches=finite_branches,
+        pseudo_owners=pseudo_owners,
+        floating=True,
+    )
+    core = _active_system(elec_input_current={}, **common)
+    if core is None:
+        return [
+            _solve_cluster_currents(
+                elec_input_current={
+                    **{e.name: 0j for e in electrodes},
+                    anchor: 1.0 + 0j,
+                },
+                seg_points=seg_points,
+                seg_lengths=seg_lengths,
+                wire_radii=wire_radii,
+                self_kernel=self_kernel,
+                omega=omega,
+                inductance_matrix=inductance_matrix,
+                carson_correction=carson_correction,
+                shell_coefficients=shell_coefficients,
+                **common,
+            )
+            for anchor in anchors
+        ]
+
+    shell_diag = _shell_diagonal(shell_coefficients, seg_lengths)
+    Z = _multiport_matrix(
+        core,
+        seg_points=seg_points,
+        seg_lengths=seg_lengths,
+        wire_radii=wire_radii,
+        elec_to_segidx=elec_to_segidx,
+        self_kernel=self_kernel,
+        shell_diag=shell_diag,
+        multiport_cache=None,
+    )
+    A = _augmented_matrix(Z, core, cluster_id)
+    N_a = core.n_owners
+    n = A.shape[0]
+    core_nodes = set(core.active_clusters)
+    outside = [a for a in dict.fromkeys(anchors) if cluster_id[a] not in core_nodes]
+    coupling: dict[str, np.ndarray] = {}
+    if outside:
+        # Z[core owner, outside anchor] for every outside anchor at once.
+        excitation = _uniform_excitation(
+            outside, elec_to_segidx, seg_lengths, seg_points.shape[0]
+        )
+        phi = self_kernel(seg_points, seg_lengths, wire_radii, excitation)
+        if shell_diag is not None:
+            phi = phi + shell_diag[:, None] * excitation
+        Z_out = _reduce_rows(core.active_elecs, elec_to_segidx, seg_lengths, phi)
+        coupling = {a: Z_out[:, k] for k, a in enumerate(outside)}
+    B_re = np.zeros((n, len(anchors)))
+    B_im = np.zeros((n, len(anchors)))
+    for k, anchor in enumerate(anchors):
+        if anchor in coupling:
+            B_re[:N_a, k] = -coupling[anchor]
+        else:
+            B_re[N_a + core.cluster_idx[cluster_id[anchor]], k] = 1.0
+    sol = _augmented_solutions(
+        A,
+        B_re,
+        B_im,
+        core,
+        omega=omega,
+        inductance_matrix=inductance_matrix,
+        carson_correction=carson_correction,
+        n_finite_branches=len(finite_branches),
+    )
+    out: list[dict[str, complex]] = []
+    for k, anchor in enumerate(anchors):
+        elec_total = dict(template)
+        for i, name in enumerate(core.active_elecs):
+            elec_total[name] = complex(sol[i, k])
+        if anchor in coupling:
+            elec_total[anchor] = 1.0 + 0j
+            system = core
+        else:
+            system = _ActiveSystem(
+                cluster_input={cluster_id[anchor]: 1.0 + 0j},
+                active_clusters=core.active_clusters,
+                cluster_idx=core.cluster_idx,
+                active_elecs=core.active_elecs,
+                active_branch_indices=core.active_branch_indices,
+                active_branches=core.active_branches,
+            )
+        _zero_net_current(elec_total, system, cluster_id, finite_branches)
+        out.append(elec_total)
+    return out

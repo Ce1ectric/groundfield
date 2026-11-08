@@ -72,7 +72,7 @@ from groundfield.solver._pipeline import (
     discretise,
 )
 from groundfield.solver._series import ImageSeries
-from groundfield.solver._topology import _solve_cluster_currents
+from groundfield.solver._topology import _solve_unit_excitations
 from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -424,40 +424,41 @@ def _prepare(
     )
 
 
-def _unit_excitation(
-    world: "World", problem: _MutualProblem, anchor: str
-) -> tuple[dict[str, complex], np.ndarray]:
-    """Owner currents and segment currents for 1 A into ``anchor``.
+def _unit_excitations(
+    world: "World", problem: _MutualProblem, anchors: list[str]
+) -> list[tuple[dict[str, complex], np.ndarray]]:
+    """Owner and segment currents for 1 A into each anchor.
 
-    Each gnode is an isolated galvanic cluster, so injecting 1 A into
-    cluster ``j`` activates only that cluster; the per-segment leakage
-    column is non-zero on cluster-``j`` segments only — exactly what
-    the historic single-source solve produced.
+    The other clusters float (10.29), as in :meth:`Engine.solve` with one
+    source: zero net current, equalising currents inside bonded groups and
+    between the layer owners of a rod through the interface. The floating
+    core is factorised once for all anchors
+    (:func:`~groundfield.solver._topology._solve_unit_excitations`; audit
+    round 2, A2S-03: every excitation rebuilt and refactorised it, so the
+    cost grew with the square of the number of bonded grounding nodes).
 
     Raises
     ------
     KeyError
-        If ``anchor`` is not an electrode of ``world``.
+        If an anchor is not an electrode of ``world``.
     """
     disc, topo, arrays = problem.disc, problem.topo, problem.arrays
-    if anchor not in disc.owner_segments:
-        raise KeyError(f"Anchor '{anchor}' is not an electrode in world.")
-    elec_input_current = {e.name: 0j for e in world.electrodes}
-    elec_input_current[anchor] = 1.0 + 0j
+    for anchor in anchors:
+        if anchor not in disc.owner_segments:
+            raise KeyError(f"Anchor '{anchor}' is not an electrode in world.")
     Z_seg_full = problem.Z_seg_full
 
     # A linear ``self_kernel``-equivalent backed by the precomputed
-    # matrix. The shell augmentation is applied on top by
-    # ``_solve_cluster_currents`` (bulk kernel, then
-    # ``phi += shell_diag · currents``), so the kernel is *bulk-only* —
-    # the same operation order as the live solver.
+    # matrix. The shell augmentation is applied on top by the solver
+    # (bulk kernel, then ``phi += shell_diag · currents``), so the kernel
+    # is *bulk-only* — the same operation order as the live solver.
     def _cached_bulk_self_kernel(seg_pts, seg_lens, wr, currents):  # noqa: ANN001
         return Z_seg_full @ currents
 
     has_inductance = problem.branches.has_inductance
-    elec_total = _solve_cluster_currents(
+    totals = _solve_unit_excitations(
         electrodes=world.electrodes,
-        elec_input_current=elec_input_current,
+        anchors=list(anchors),
         cluster_id=topo.cluster_id,
         seg_points=arrays.points,
         seg_lengths=arrays.lengths,
@@ -470,13 +471,11 @@ def _unit_excitation(
         inductance_matrix=problem.branches.inductance_matrix,
         carson_correction=problem.carson_dz,
         shell_coefficients=arrays.shell_coefficients,
-        # The other clusters float (10.29), as in Engine.solve: zero net
-        # current, equalising currents inside bonded groups and between
-        # the layer owners of a rod through the interface.
-        floating=True,
     )
-    sc = _segment_currents(elec_total, disc.owner_segments, arrays.lengths)
-    return elec_total, sc
+    return [
+        (elec_total, _segment_currents(elec_total, disc.owner_segments, arrays.lengths))
+        for elec_total in totals
+    ]
 
 
 def _field_of_columns(
@@ -688,8 +687,9 @@ def solve_mutual_matrix(
     T = np.zeros((n_segments, nG), dtype=complex)  # leakage column per excitation
     PH = np.zeros((n_segments, nG), dtype=complex)  # segment potentials per excitation
     Z = np.zeros((nG, nG), dtype=complex)
+    excitations = _unit_excitations(world, problem, list(anchors))
     for j, anchor_j in enumerate(anchors):
-        elec_total, sc = _unit_excitation(world, problem, anchor_j)
+        elec_total, sc = excitations[j]
         T[:, j] = sc
         if sc.any():
             # Segment potentials as in the post-solve step of the live
@@ -887,8 +887,8 @@ def solve_mutual_field(
 
     # Per-excitation leakage columns T (no diagonal/self term needed).
     T = np.zeros((n_segments, nG), dtype=complex)
-    for j, anchor_j in enumerate(anchors):
-        _, T[:, j] = _unit_excitation(world, problem, anchor_j)
+    for j, (_, sc) in enumerate(_unit_excitations(world, problem, list(anchors))):
+        T[:, j] = sc
 
     # Potential at the M field points per excitation (nG) — one kernel pass.
     return _field_of_columns(

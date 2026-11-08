@@ -427,3 +427,164 @@ def test_frequency_index_out_of_range_is_harmless_without_inductance() -> None:
     Z0 = solve_mutual_matrix(world, engine, anchors=names)
     Z5 = solve_mutual_matrix(world, engine, anchors=names, frequency_index=5)
     np.testing.assert_array_equal(Z0, Z5)
+
+
+# ---------------------------------------------------------------------
+# Audit round 2, A2S-03: the floating core is factorised once
+# ---------------------------------------------------------------------
+
+
+def _mixed_site(soil: object, *, inductive: bool = False, shell: bool = False):
+    """Single rings, bonded ring+rod groups, one group joined by a finite bond."""
+    import warnings
+
+    w = gf.create_world(soil=soil)
+    anchors: list[str] = []
+    kw = {"concrete_shell_coefficient_ohm_m": 38.0} if shell else {}
+    for k in range(3):  # single electrodes: no floating partner
+        gf.create_electrode(
+            w, "ring", name=f"s{k}", center=(30.0 * k, 0.0, 0.8), radius=3.0, **kw
+        )
+        anchors.append(f"s{k}")
+    for k in range(3):  # bonded groups: the floating core
+        x = 30.0 * k
+        gf.create_electrode(
+            w, "ring", name=f"b{k}", center=(x, 30.0, 0.8), radius=3.0, **kw
+        )
+        gf.create_electrode(
+            w, "rod", name=f"b{k}_rod", position=(x + 3.0, 30.0, 0.8), length=6.0
+        )
+        gf.create_conductor(w, start=f"b{k}", end=f"b{k}_rod", name=f"b{k}_bond")
+        anchors.append(f"b{k}")
+    # a passive network: two rings joined by a finite conductor
+    gf.create_electrode(w, "ring", name="n0", center=(0.0, 60.0, 0.8), radius=3.0)
+    gf.create_electrode(w, "ring", name="n1", center=(40.0, 60.0, 0.8), radius=3.0)
+    extra = {}
+    if inductive:
+        extra = {"discretize_segment_length": 8.0, "inductance_model": "neumann"}
+    gf.create_conductor(
+        w, start="n0", end="n1", name="pen", cross_section=50e-6, **extra
+    )
+    anchors.append("n0")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        w.check(require_source=False)
+    return w, anchors
+
+
+def _excitations_both_ways(world, engine, anchors):
+    from groundfield.solver import _topology, mutual
+
+    problem = mutual._prepare(world, engine, 0, where="test")
+    Z_seg = problem.Z_seg_full
+    common = dict(
+        electrodes=world.electrodes,
+        cluster_id=problem.topo.cluster_id,
+        seg_points=problem.arrays.points,
+        seg_lengths=problem.arrays.lengths,
+        wire_radii=problem.arrays.radii,
+        elec_to_segidx=problem.disc.owner_segments,
+        self_kernel=lambda p, l, r, c: Z_seg @ c,  # noqa: E741
+        finite_branches=problem.topo.finite_branches,
+        pseudo_owners=problem.topo.pseudo_owners,
+        omega=problem.omega if problem.branches.has_inductance else 0.0,
+        inductance_matrix=problem.branches.inductance_matrix,
+        carson_correction=problem.carson_dz,
+        shell_coefficients=problem.arrays.shell_coefficients,
+    )
+    batched = _topology._solve_unit_excitations(anchors=anchors, **common)
+    per_anchor = [
+        _topology._solve_cluster_currents(
+            elec_input_current={**{e.name: 0j for e in world.electrodes}, a: 1.0 + 0j},
+            floating=True,
+            **common,
+        )
+        for a in anchors
+    ]
+    return batched, per_anchor
+
+
+@pytest.mark.finding("10.29")
+@pytest.mark.parametrize(
+    "case",
+    ["homogeneous", "two_layer_crossing", "inductive_1khz", "concrete_shell"],
+)
+def test_shared_factorisation_equals_one_floating_solve_per_anchor(case: str) -> None:
+    """Every owner current of every excitation, as the per-anchor solve."""
+    # audit A2S-03
+    import warnings
+
+    soil = gf.HomogeneousSoil(rho=100.0)
+    freqs = [50.0]
+    kw = {}
+    if case == "two_layer_crossing":
+        soil = gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=4.0)  # rods cross h_1
+    if case == "inductive_1khz":
+        freqs = [1000.0]
+        kw = {"inductive": True}
+    if case == "concrete_shell":
+        kw = {"shell": True}
+    world, anchors = _mixed_site(soil, **kw)
+    engine = gf.Engine(segment_length=2.0, frequencies=freqs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        batched, reference = _excitations_both_ways(world, engine, anchors)
+    for got, want in zip(batched, reference, strict=True):
+        assert got.keys() == want.keys()
+        scale = max(abs(v) for v in want.values())
+        for name in want:
+            assert abs(got[name] - want[name]) <= 1e-12 * scale, (
+                name,
+                got[name],
+                want[name],
+            )
+    if case == "inductive_1khz":
+        assert any(abs(v.imag) > 1e-9 for d in batched for v in d.values())
+
+
+@pytest.mark.finding("10.29")
+@pytest.mark.parametrize("n_groups", [4, 12])
+def test_one_core_assembly_and_factorisation_for_all_anchors(
+    monkeypatch: pytest.MonkeyPatch, n_groups: int
+) -> None:
+    """The base assembled and factorised the floating core once per anchor.
+
+    ``n_groups`` bonded ring+rod groups and as many single rings, all of
+    them anchors: one multi-port assembly over the core's owners, one
+    coupling call for the single rings, one augmented system.
+    """
+    # audit A2S-03
+    import warnings
+
+    from groundfield.solver import _topology
+
+    counts = {"multiport_columns": 0, "augmented": 0}
+    original_mp = _topology._multiport_matrix
+    original_aug = _topology._augmented_matrix
+
+    def counting_mp(system, **kwargs):  # noqa: ANN001, ANN202
+        counts["multiport_columns"] += system.n_owners
+        return original_mp(system, **kwargs)
+
+    def counting_aug(Z, system, cluster_id):  # noqa: ANN001, ANN202
+        counts["augmented"] += 1
+        return original_aug(Z, system, cluster_id)
+
+    monkeypatch.setattr(_topology, "_multiport_matrix", counting_mp)
+    monkeypatch.setattr(_topology, "_augmented_matrix", counting_aug)
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    anchors = []
+    for k in range(n_groups):
+        x = 25.0 * k
+        gf.create_electrode(w, "ring", name=f"h{k}", center=(x, 0.0, 0.8), radius=4.0)
+        gf.create_electrode(
+            w, "rod", name=f"h{k}_rod", position=(x + 4.0, 0.0, 0.8), length=3.0
+        )
+        gf.create_conductor(w, start=f"h{k}", end=f"h{k}_rod", name=f"b{k}")
+        gf.create_electrode(w, "ring", name=f"s{k}", center=(x, 25.0, 0.8), radius=4.0)
+        anchors += [f"h{k}", f"s{k}"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solve_mutual_matrix(w, gf.Engine(segment_length=2.0, kernel="point"), anchors)
+    assert counts["augmented"] == 1
+    assert counts["multiport_columns"] == 2 * n_groups  # the core's owners, once
