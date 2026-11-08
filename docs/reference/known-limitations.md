@@ -133,9 +133,13 @@ shows what agrees with independent references and how well.
   plane. **`perfect_mirror`** is a frequency-independent diagnostic
   baseline, not a model of buried conductors below 1 kHz. Use the default
   `sommerfeld` for numbers.
-- **Cost of the exact Sommerfeld assembly** grows with the number of
-  segment pairs and frequencies; `sommerfeld_assembly="tabulated"` is the
-  faster option for large networks (opt-in in this release).
+- **Cost of the Sommerfeld assembly** grows with the number of segment
+  pairs and frequencies. The default `sommerfeld_assembly="tabulated"`
+  shares one table of the spectral integral per pair of depth groups and
+  frequency (17–25× less CPU than the per-pair rule on TN networks of 8
+  and 30 houses); blocks of fewer than 64 sub-segment pairs and
+  conductors in the surface plane keep the per-pair rule (`"exact"`),
+  whose cost grows with every pair.
 - **Skin effect** is opt-in (`resistance_model="skin"`, solid round
   conductors); the proximity effect between conductors is not modelled.
 
@@ -180,9 +184,11 @@ shows what agrees with independent references and how well.
 
 ## Diagnostics and problem size
 
-- **Problem size.** More than 20 000 segments (`HARD_LIMIT`) raise
+- **Problem size.** More segments or nodal unknowns than the engine's
+  limit (`Engine.max_segments`, default `HARD_LIMIT` = 20 000) raise
   `ResourceLimitError` before any allocation; the dense system grows like
-  $N^2$ in memory and work per excitation.
+  $N^2$ in memory and work per excitation. Raise the limit per engine to
+  solve a larger world on purpose.
 - **Touching electrodes.** `diagnose` reports wires of different
   electrodes that are closer than five times the sum of their radii, but
   not two electrodes that meet at a common segment end point (for example

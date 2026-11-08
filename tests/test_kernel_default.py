@@ -94,7 +94,7 @@ def test_direct_backend_and_mutual_calls_use_the_default_kernel() -> None:
     assert direct.cluster_impedance("g") == via_engine.cluster_impedance("g")
     w = _rod_world(soil)
     w.sources.clear()
-    Z = gf.solve_mutual_matrix(w, engine, ["g"], [[0.0, 0.0, 0.0]])
+    Z = gf.solve_mutual_matrix(w, engine, ["g"])
     assert Z[0, 0] == pytest.approx(via_engine.cluster_impedance("g")[0], rel=1e-12)
 
 

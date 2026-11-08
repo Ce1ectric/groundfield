@@ -131,7 +131,9 @@ def test_branch_assembly_reads_the_engine_option() -> None:
     from groundfield.solver import _pipeline
 
     w = _pen_world()
-    eng = gf.create_engine(backend="image", frequencies=[50.0, 1000.0])
+    eng = gf.create_engine(
+        backend="image", frequencies=[50.0, 1000.0], sommerfeld_assembly="exact"
+    )
     disc = _pipeline.discretise(w, eng)
     topo = _pipeline.build_topology(w, disc)
     exact = _pipeline.assemble_branches(w, eng, topo).earth_correction
@@ -151,7 +153,7 @@ def test_solve_with_an_engine_that_selects_the_tabulated_assembly() -> None:
     kw = dict(backend="image", segment_length=0.5, frequencies=[50.0, 1000.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res_exact = gf.Engine(**kw).solve(_pen_world())
+        res_exact = gf.Engine(**kw, sommerfeld_assembly="exact").solve(_pen_world())
         res_tab = gf.Engine(**kw, sommerfeld_assembly="tabulated").solve(_pen_world())
     assert (
         res_tab.metadata["provenance"]["engine"]["sommerfeld_assembly"] == "tabulated"
@@ -164,8 +166,11 @@ def test_solve_with_an_engine_that_selects_the_tabulated_assembly() -> None:
 
 
 def test_the_assembly_is_a_validated_engine_field() -> None:
-    """``Engine.sommerfeld_assembly``: default, validation, JSON (coup2 request)."""
-    assert gf.Engine().sommerfeld_assembly == "exact"
+    """``Engine.sommerfeld_assembly``: default, validation, JSON (coup2 request).
+
+    The default is ``"tabulated"`` since the user decision Q16 (2026-11-08).
+    """
+    assert gf.Engine().sommerfeld_assembly == "tabulated"
     assert gf.create_engine(sommerfeld_assembly="tabulated").sommerfeld_assembly == (
         "tabulated"
     )
@@ -177,7 +182,7 @@ def test_the_assembly_is_a_validated_engine_field() -> None:
     old = {
         k: v for k, v in gf.Engine().model_dump().items() if k != "sommerfeld_assembly"
     }
-    assert gf.Engine.model_validate(old).sommerfeld_assembly == "exact"
+    assert gf.Engine.model_validate(old).sommerfeld_assembly == "tabulated"
 
 
 @pytest.mark.slow

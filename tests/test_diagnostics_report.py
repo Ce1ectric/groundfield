@@ -242,7 +242,7 @@ def test_mutual_matrix_path_is_guarded_too(monkeypatch: pytest.MonkeyPatch) -> N
     gf.create_electrode(w, "ring", name="g1", center=(0.0, 0.0, 0.7), radius=5.0)
     monkeypatch.setattr(diagnostics, "HARD_LIMIT", 50)
     with pytest.raises(diagnostics.ResourceLimitError):
-        solve_mutual_matrix(w, _engine(0.5), ["g1"], np.array([[0.0, 0.0, 0.7]]))
+        solve_mutual_matrix(w, _engine(0.5), ["g1"])
 
 
 def test_expected_segments_is_exact_for_rods_split_at_the_interface() -> None:

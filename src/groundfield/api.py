@@ -748,6 +748,7 @@ def create_engine(
     kernel: KernelKind | None = None,
     options: Mapping[str, Any] | None = None,
     sommerfeld_assembly: Literal["exact", "tabulated"] | None = None,
+    max_segments: int | None = None,
 ) -> Engine:
     """Create a configured :class:`~groundfield.Engine`.
 
@@ -810,11 +811,16 @@ def create_engine(
         :class:`~groundfield.solver.MomSommerfeldOptions`; forwarded to
         :attr:`Engine.options <groundfield.Engine.options>`.
     sommerfeld_assembly
-        ``"exact"`` (engine default) or ``"tabulated"`` assembly of the
+        ``"tabulated"`` (engine default since 2026.11) or ``"exact"``
+        (per segment pair, the default up to 0.15.0) assembly of the
         Sommerfeld earth-return correction of inductive conductors
         (:attr:`Engine.sommerfeld_assembly
-        <groundfield.Engine.sommerfeld_assembly>`); ``"tabulated"`` is the
-        faster choice for large networks.
+        <groundfield.Engine.sommerfeld_assembly>`).
+    max_segments
+        Resource limit of the engine: the largest number of leakage
+        segments and of nodal unknowns it solves (:attr:`Engine.max_segments
+        <groundfield.Engine.max_segments>`). Default: the module constant
+        ``groundfield.diagnostics.HARD_LIMIT`` (20 000).
 
     Returns
     -------
@@ -846,6 +852,7 @@ def create_engine(
         "image_max_terms": image_max_terms,
         "image_series_tol": image_series_tol,
         "sommerfeld_assembly": sommerfeld_assembly,
+        "max_segments": max_segments,
     }
     engine_kwargs.update({k: v for k, v in explicit.items() if v is not None})
     if kernel is not None:

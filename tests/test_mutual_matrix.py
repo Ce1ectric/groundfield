@@ -1,7 +1,7 @@
 """Regression tests for :func:`groundfield.solve_mutual_matrix`.
 
-With probe points, the single-assembly mutual matrix reproduces the
-historic per-excitation construction (one :meth:`Engine.solve` per
+With ``offdiag="probe"`` the single-assembly mutual matrix reproduces
+the historic per-excitation construction (one :meth:`Engine.solve` per
 gnode; diagonal from :meth:`FieldResult.cluster_impedance`, off-diagonal
 from :meth:`FieldResult.potential` at the probe points) to round-off
 (``max|Z_new - Z_ref| < 1e-9``), for the homogeneous limit, a
@@ -9,9 +9,12 @@ within-layer two-layer soil and a cross-layer two-layer soil (a deep rod
 piercing a thin upper layer, the ADR-0007 path).
 
 The diagonal is the length-weighted cluster impedance over all members
-(review pass 10, 10.26); without probe points the off-diagonal is the
-reciprocal reaction of the leakage distributions (``offdiag="galerkin"``,
-10.34), which reproduces the solve of the clusters joined by branches.
+(review pass 10, 10.26); the off-diagonal is by default the reciprocal
+reaction of the leakage distributions (``offdiag="galerkin"``, 10.34),
+which reproduces the solve of the clusters joined by branches. It is the
+default of every call since the user decision Q15 (2026-11-08): probe
+points without ``offdiag="probe"`` are ignored with a
+``ProbePointsIgnoredWarning``.
 """
 
 from __future__ import annotations
@@ -95,7 +98,9 @@ def test_mutual_matrix_matches_per_excitation(soil, length, label) -> None:
         segment_length=_SEGMENT_LENGTH,
         frequencies=_FREQUENCIES,
     )
-    Z_new = solve_mutual_matrix(world, engine, [a[0] for a in _ANCHORS], _PROBE_POINTS)
+    Z_new = solve_mutual_matrix(
+        world, engine, [a[0] for a in _ANCHORS], _PROBE_POINTS, offdiag="probe"
+    )
 
     assert Z_new.shape == (3, 3)
     assert np.max(np.abs(Z_new - Z_ref)) < 1e-9, (
@@ -120,6 +125,7 @@ def test_mutual_matrix_unsymmetrized_matches_reference() -> None:
         [a[0] for a in _ANCHORS],
         _PROBE_POINTS,
         symmetrize=False,
+        offdiag="probe",
     )
     assert np.max(np.abs(Z_new - Z_ref)) < 1e-9
 
@@ -133,13 +139,7 @@ def test_mutual_matrix_diagonal_is_cluster_impedance() -> None:
         segment_length=_SEGMENT_LENGTH,
         frequencies=_FREQUENCIES,
     )
-    Z = solve_mutual_matrix(
-        world,
-        engine,
-        [a[0] for a in _ANCHORS],
-        _PROBE_POINTS,
-        symmetrize=False,
-    )
+    Z = solve_mutual_matrix(world, engine, [a[0] for a in _ANCHORS], symmetrize=False)
     # Self-impedance is real, positive and dominates its row/column.
     for k in range(3):
         assert Z[k, k].real > 0.0
@@ -156,6 +156,7 @@ def test_mutual_matrix_rejects_bad_probe_shape() -> None:
             engine,
             [a[0] for a in _ANCHORS],
             np.zeros((2, 3)),  # nG = 3 expected
+            offdiag="probe",
         )
 
 
@@ -164,7 +165,7 @@ def test_mutual_matrix_rejects_unknown_anchor() -> None:
     world = _build_world(soil, 3.0)
     engine = gf.create_engine(backend="image", frequencies=_FREQUENCIES)
     with pytest.raises(KeyError, match="not an electrode"):
-        solve_mutual_matrix(world, engine, ["g0", "g1", "ghost"], _PROBE_POINTS)
+        solve_mutual_matrix(world, engine, ["g0", "g1", "ghost"])
 
 
 # ---------------------------------------------------------------------
@@ -228,8 +229,7 @@ def test_diagonal_is_the_weighted_cluster_impedance(
         backend="image", segment_length=segment_length, image_max_terms=500
     )
     world = _house_and_far_rod(soil, split_rod=split_rod)
-    probes = np.array([[6.0, 5.0, 0.0], [40.0, 0.0, 0.0]])
-    Z = solve_mutual_matrix(world, engine, ["house", "far"], probes)
+    Z = solve_mutual_matrix(world, engine, ["house", "far"])
 
     reference = _house_and_far_rod(soil, split_rod=split_rod)
     gf.create_source(reference, attached_to="house", magnitude=1.0)
@@ -253,7 +253,9 @@ def test_non_image_backend_is_rejected(backend) -> None:
     )
     names = [a[0] for a in _ANCHORS]
     with pytest.raises(ValueError, match="image family"):
-        solve_mutual_matrix(world, engine, names, _PROBE_POINTS)
+        solve_mutual_matrix(world, engine, names)
+    with pytest.raises(ValueError, match="image family"):
+        solve_mutual_matrix(world, engine, names, _PROBE_POINTS, offdiag="probe")
     with pytest.raises(ValueError, match="image family"):
         solve_mutual_field(world, engine, names, _PROBE_POINTS)
 
@@ -280,7 +282,9 @@ def test_galerkin_offdiagonal_is_reciprocal(soil, length) -> None:
     Z = solve_mutual_matrix(world, engine, names, offdiag="galerkin", symmetrize=False)
     assert np.linalg.norm(Z - Z.T) / np.linalg.norm(Z) < 1e-10
     # Same diagonal as the probe call: the definitions differ off the diagonal only.
-    Zp = solve_mutual_matrix(world, engine, names, _PROBE_POINTS, symmetrize=False)
+    Zp = solve_mutual_matrix(
+        world, engine, names, _PROBE_POINTS, symmetrize=False, offdiag="probe"
+    )
     np.testing.assert_allclose(np.diag(Z), np.diag(Zp), rtol=1e-13)
 
 
@@ -330,25 +334,63 @@ def test_galerkin_matrix_reproduces_the_joined_network(soil) -> None:
     np.testing.assert_allclose(u_reduced, u_solve, rtol=1e-10)
 
 
+@pytest.mark.finding("10.34")
 def test_offdiag_selection_and_validation() -> None:
-    """``offdiag=None`` follows the probe points; inconsistent calls raise."""
+    """``offdiag="galerkin"`` is the default; ``"probe"`` needs probe points."""
+    # user decision Q15
     world = _build_world(gf.HomogeneousSoil(rho=100.0), 3.0)
     engine = gf.create_engine(backend="image", segment_length=_SEGMENT_LENGTH)
     names = [a[0] for a in _ANCHORS]
-    np.testing.assert_array_equal(
-        solve_mutual_matrix(world, engine, names, _PROBE_POINTS),
-        solve_mutual_matrix(world, engine, names, _PROBE_POINTS, offdiag="probe"),
-    )
     np.testing.assert_array_equal(
         solve_mutual_matrix(world, engine, names),
         solve_mutual_matrix(world, engine, names, offdiag="galerkin"),
     )
     with pytest.raises(ValueError, match="needs probe_points"):
         solve_mutual_matrix(world, engine, names, offdiag="probe")
-    with pytest.raises(ValueError, match="not used with offdiag='galerkin'"):
-        solve_mutual_matrix(world, engine, names, _PROBE_POINTS, offdiag="galerkin")
-    with pytest.raises(ValueError, match="offdiag must be"):
-        solve_mutual_matrix(world, engine, names, offdiag="center")
+    for bad in ("center", None):
+        with pytest.raises(ValueError, match="offdiag must be"):
+            solve_mutual_matrix(world, engine, names, offdiag=bad)
+
+
+@pytest.mark.finding("10.34")
+@pytest.mark.parametrize("explicit", [False, True])
+def test_galerkin_is_the_default_whatever_the_call(explicit: bool) -> None:
+    """Probe points without ``offdiag="probe"`` are ignored, with a warning.
+
+    Every 0.15.0 call (the AP1 pipeline among them) passes probe points;
+    up to the user decision Q15 that selected the probe definition. Now
+    the call returns the reciprocal galerkin matrix bit for bit and warns,
+    naming ``offdiag="probe"`` as the way back.
+    """
+    # user decision Q15
+    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0)
+    world = _build_world(soil, 3.0)
+    engine = gf.create_engine(backend="image", segment_length=_SEGMENT_LENGTH)
+    names = [a[0] for a in _ANCHORS]
+    kwargs = {"offdiag": "galerkin"} if explicit else {}
+    with pytest.warns(UserWarning, match="offdiag='probe'") as record:
+        Z = solve_mutual_matrix(world, engine, names, _PROBE_POINTS, **kwargs)
+    galerkin = solve_mutual_matrix(world, engine, names)
+    from groundfield.solver.mutual import ProbePointsIgnoredWarning
+
+    assert [w.category for w in record] == [ProbePointsIgnoredWarning]
+    np.testing.assert_array_equal(Z, galerkin)
+    probe = solve_mutual_matrix(world, engine, names, _PROBE_POINTS, offdiag="probe")
+    off = ~np.eye(len(names), dtype=bool)
+    assert np.max(np.abs(probe[off] / galerkin[off] - 1.0)) > 1e-3
+    np.testing.assert_allclose(np.diag(probe), np.diag(galerkin), rtol=1e-13)
+
+
+@pytest.mark.finding("10.34")
+def test_ignored_probe_points_are_not_validated() -> None:
+    """Points the call does not use cannot make it fail (0.15.0 scripts run)."""
+    # user decision Q15
+    world = _build_world(gf.HomogeneousSoil(rho=100.0), 3.0)
+    engine = gf.create_engine(backend="image", segment_length=_SEGMENT_LENGTH)
+    names = [a[0] for a in _ANCHORS]
+    with pytest.warns(UserWarning, match="probe_points are ignored"):
+        Z = solve_mutual_matrix(world, engine, names, np.zeros((2, 3)))
+    np.testing.assert_array_equal(Z, solve_mutual_matrix(world, engine, names))
 
 
 # ---------------------------------------------------------------------

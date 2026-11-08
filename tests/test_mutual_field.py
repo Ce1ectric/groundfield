@@ -92,7 +92,9 @@ def test_mutual_field_offdiag_matches_mutual_matrix():
     world = _build_world(soil, 3.0)
     anchors = [a[0] for a in _ANCHORS]
     probe = np.array([[x, y, 0.5] for _, x, y in _ANCHORS])
-    Z = solve_mutual_matrix(world, engine, anchors, probe, symmetrize=False)
+    Z = solve_mutual_matrix(
+        world, engine, anchors, probe, symmetrize=False, offdiag="probe"
+    )
     R = solve_mutual_field(world, engine, anchors, probe)
     nG = len(anchors)
     off = [(i, j) for i in range(nG) for j in range(nG) if i != j]

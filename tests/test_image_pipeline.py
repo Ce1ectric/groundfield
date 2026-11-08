@@ -77,7 +77,8 @@ def test_image_series_is_shared_by_solver_field_and_mutual(monkeypatch) -> None:
     w2 = gf.create_world(soil=soil)
     gf.create_electrode(w2, "rod", name="a", position=(0.0, 0.0, 0.5), length=2.0)
     gf.create_electrode(w2, "rod", name="b", position=(9.0, 0.0, 0.5), length=2.0)
-    gf.solve_mutual_matrix(w2, eng, ["a", "b"], np.array([[0.0, 0, 0], [9.0, 0, 0]]))
+    probes = np.array([[0.0, 0, 0], [9.0, 0, 0]])
+    gf.solve_mutual_matrix(w2, eng, ["a", "b"], probes, offdiag="probe")
     assert users
 
 

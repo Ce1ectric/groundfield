@@ -54,7 +54,8 @@ what ran.
 | `segment_length` | `0.5` | maximum segment length in m |
 | `kernel` | `None` | `None`: the backend's preferred kernel (`"line"` for the image family); `"line"` or `"point"` explicitly; `"point"` reproduces the numbers of releases up to 0.15.0 |
 | `earth_inductive_model` | `"sommerfeld"` | earth return of inductive conductors: `"sommerfeld"`, `"carson_series"`, `"perfect_mirror"` (see [Coupling](coupling.md)) |
-| `sommerfeld_assembly` | `"exact"` | `"tabulated"`: faster assembly of the Sommerfeld correction for large networks |
+| `sommerfeld_assembly` | `"tabulated"` | assembly of the Sommerfeld correction of inductive conductors: `"tabulated"` (one table of the spectral integral per pair of depth groups and frequency; default since 2026.11) or `"exact"` (one quadrature per segment pair, the default up to 0.15.0) |
+| `max_segments` | `None` | resource limit of this engine: the largest number of leakage segments and of nodal unknowns it solves, `ResourceLimitError` above it before anything is allocated; `None` takes `groundfield.diagnostics.HARD_LIMIT` (20 000); recorded in `metadata["max_segments"]` |
 | `image_max_terms`, `image_series_tol` | 300, 10⁻⁶ | cap and stop tolerance of the Tagg/Sunde series (tail bound $\lvert K\rvert^{n+1}/(1-\lvert K\rvert)$) |
 | `options` | `{}` | backend-specific settings, e.g. `{"mom_sommerfeld": {"epsrel": 1e-9}}`, `{"fem": {"n_radial": 120}}` |
 
@@ -82,6 +83,13 @@ assert abs(Z[0, 0] - result.cluster_impedance("a")[0]) < 1e-9    # 51.40 Ω
 assert abs(Z[1, 0] - result.electrode_potentials["b"][0]) < 1e-9  # 2.26 Ω
 assert result.metadata["effective_backend"] == "image_2layer"
 ```
+
+`solve_mutual_matrix` returns the galerkin off-diagonal (the reaction of
+the leakage distributions: reciprocal, and the matrix that reproduces a
+solve of the clusters joined by branches) for every call since 2026.11.
+`offdiag="probe"` with `probe_points` samples the potential at one point
+per cluster instead, the definition up to 0.15.0; probe points passed
+without it are ignored with a `ProbePointsIgnoredWarning`.
 
 `FieldResult.potential(points, frequency_index=0)` evaluates the
 potential in V at arbitrary points of shape `(M, 3)` (homogeneous and

@@ -44,6 +44,7 @@ CORE_KEYS = {
     "earth_inductive_model",
     "solve_time_s",
     "series",
+    "max_segments",  # user decision Q17 (10.06)
     "provenance",
 }
 

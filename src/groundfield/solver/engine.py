@@ -120,6 +120,11 @@ __all__ = [
 #: ``series``
 #:     Image-series controls of the engine, ``{"max_terms", "tol"}``,
 #:     for the post-solve field evaluation.
+#: ``max_segments``
+#:     Problem-size limit the solve was checked against
+#:     (:attr:`Engine.max_segments`, or
+#:     :data:`groundfield.diagnostics.HARD_LIMIT` when the engine leaves
+#:     it at ``None``); ``fem`` has no segments and is not limited by it.
 #: ``provenance``
 #:     Versions, platform, engine configuration, world fingerprint and
 #:     UTC timestamp (see :func:`groundfield.solver.result.solve_provenance`).
@@ -134,6 +139,7 @@ CORE_METADATA_KEYS: tuple[str, ...] = (
     "earth_inductive_model",
     "solve_time_s",
     "series",
+    "max_segments",
     "provenance",
 )
 
@@ -341,6 +347,24 @@ class Engine(BaseModel):
         Frequency list in Hz. Default ``[50.0]``.
     segment_length
         Maximum segment length used to discretise the geometry, in m.
+    max_segments
+        Resource limit of this engine: the largest problem size it
+        solves, counted as the number of leakage segments and as the
+        number of unknowns of the dense nodal system (current owners,
+        nodes and branches, every conductor sub-piece included). A world
+        above it raises :class:`~groundfield.diagnostics.ResourceLimitError`
+        before anything of that size is allocated, in every segment
+        backend and in :func:`~groundfield.solver.mutual.solve_mutual_matrix`
+        / ``solve_mutual_field``. ``None`` (default) takes
+        :data:`groundfield.diagnostics.HARD_LIMIT` (20 000), read at
+        solve time; a positive integer raises or lowers the limit for
+        this engine only (user decision Q17 of 2026.11, finding 10.06).
+        The dense reaction matrix of $N$ segments takes $8N^2$ bytes
+        (3.0 GiB at 20 000), the nodal system of $n$ unknowns $16n^2$
+        bytes; :func:`~groundfield.diagnostics.expected_segments` predicts
+        both. The limit is recorded in ``FieldResult.metadata
+        ["max_segments"]``; ``fem`` meshes a volume and is not limited by
+        it.
     tolerance, max_iterations
         **Deprecated, no effect** (no backend reads them). A non-default
         value warns; both fields will be removed no earlier than
@@ -385,8 +409,8 @@ class Engine(BaseModel):
           carries no image: the correction holds the whole earth
           effect, so conductors in or crossing the surface plane are
           solved too (since 2026.11). Supports layered earth; see
-          :attr:`sommerfeld_assembly` for the faster tabulated
-          assembly. Limits: $\\sigma \\to 0$ → free space (no image);
+          :attr:`sommerfeld_assembly` for the assembly (tabulated by
+          default). Limits: $\\sigma \\to 0$ → free space (no image);
           $\\sigma \\to \\infty$ → screened (buried) / anti-parallel
           PEC image (overhead). Validated against Pollaczek's
           analytic $K_0$ mutual and Carson's line impedance
@@ -428,13 +452,29 @@ class Engine(BaseModel):
     sommerfeld_assembly
         Assembly of the Sommerfeld earth-return correction of inductive
         conductors (``earth_inductive_model="sommerfeld"``):
-        ``"exact"`` (default) integrates every segment pair with its own
-        quadrature; ``"tabulated"`` shares one table of the spectral
-        integral per pair of depth groups and frequency and is the
-        faster choice for large networks (see
+
+        - ``"tabulated"`` (default since 2026.11, user decision Q16) —
+          one table of the spectral integral $S(\\rho)$ per pair of depth
+          groups and frequency (cubic spline, 100 nodes), the outer
+          quadrature of all segment pairs vectorised. Blocks of fewer
+          than 64 sub-segment pairs and blocks whose $\\lambda$ grid
+          cannot resolve their largest distance (conductors in the
+          surface plane) keep the per-pair rule.
+        - ``"exact"`` — every segment pair with its own quadrature and
+          24 interpolation nodes of $S(\\rho)$; the default up to 0.15.0.
+
+        On a TN network of 8 houses with an inductive PEN (78 inductive
+        branches, four frequencies) the tabulated solve took 1.0 s CPU
+        instead of 16.6 s, and its input impedance is within 2e-10 of
+        two independent refined references (per-pair rule with 200
+        nodes, tables of 400 nodes, both with a refined $\\lambda$ grid;
+        they agree to 2e-10), the per-pair rule within 1.2e-8. Read by every
+        backend that assembles the inductive branches through the shared
+        pipeline (the image family, ``mom``, ``mom_sommerfeld``) and by
+        ``solve_mutual_*``; see
         :func:`~groundfield.coupling.sommerfeld_inductance.build_sommerfeld_correction_matrices`,
-        ``method``). Read by every backend that assembles the inductive
-        branches through the shared pipeline.
+        ``method``. The Sommerfeld fallback of ``carson_series`` for
+        oblique pairs is always tabulated.
 
     kernel
         Green's-function kernel of the image family (``image``,
@@ -562,14 +602,28 @@ class Engine(BaseModel):
             "(mom_sommerfeld: MomSommerfeldOptions, fem: FemOptions)."
         ),
     )
+    # user decision Q16 (2026-11-08): the tabulated assembly is the default.
     sommerfeld_assembly: Literal["exact", "tabulated"] = Field(
-        default="exact",
+        default="tabulated",
         description=(
             "Assembly of the Sommerfeld earth-return correction of inductive "
-            "conductors: 'exact' (per segment pair) or 'tabulated' (one "
-            "table per pair of depth groups and frequency; faster for large "
-            "networks). See coupling.sommerfeld_inductance."
-            "build_sommerfeld_correction_matrices(method=...)."
+            "conductors: 'tabulated' (default since 2026.11; one table per "
+            "pair of depth groups and frequency, faster and closer to a "
+            "converged reference) or 'exact' (one quadrature per segment "
+            "pair, the default up to 0.15.0). See coupling."
+            "sommerfeld_inductance.build_sommerfeld_correction_matrices"
+            "(method=...)."
+        ),
+    )
+    max_segments: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Resource limit of this engine: the largest number of leakage "
+            "segments and of unknowns of the dense nodal system it solves; a "
+            "larger world raises ResourceLimitError before allocating. None "
+            "(default) takes groundfield.diagnostics.HARD_LIMIT (20 000), "
+            "read at solve time."
         ),
     )
 
@@ -640,6 +694,17 @@ class Engine(BaseModel):
     def _validate_backend(cls, value: str) -> str:
         """Accept registered names and aliases only (with a suggestion)."""
         _registry.get_backend(value)
+        return value
+
+    @field_validator("max_segments", mode="before")
+    @classmethod
+    def _reject_bool_limit(cls, value: Any) -> Any:
+        """A boolean is not a segment count (``True`` would be a limit of 1)."""
+        if isinstance(value, bool):
+            raise ValueError(
+                "Engine.max_segments must be a positive integer (a number of "
+                f"segments) or None for the default, got {value!r}."
+            )
         return value
 
     @field_validator("tolerance", "max_iterations")
@@ -1023,6 +1088,12 @@ class Engine(BaseModel):
             If the backend cannot represent the world (soil layer count,
             concrete-shell electrodes, explicitly requested kernel). The
             message names the registered backends that can.
+        ResourceLimitError
+            If the predicted number of segments or of nodal unknowns
+            exceeds :attr:`max_segments` (default
+            :data:`groundfield.diagnostics.HARD_LIMIT`); raised before
+            anything of that size is allocated (subclass of
+            ``ValueError``).
 
         Warns
         -----
@@ -1078,10 +1149,13 @@ class Engine(BaseModel):
         # Surfaces thin-wire violations, degenerate electrode sizes
         # and segment-budget overruns as warnings *before* the solve
         # spends minutes on a misconfigured world.
-        from groundfield.diagnostics import check_segment_resolution
+        from groundfield.diagnostics import _hard_limit, check_segment_resolution
 
         for finding in check_segment_resolution(world, self):
             warn_external(finding, UserWarning)
+        # The resource limit the backend checks the problem size against
+        # (Engine.max_segments or the module default; user decision Q17).
+        max_segments = _hard_limit(self)
 
         # Snapshot before dispatch: the record and the fingerprint
         # describe the world as the caller built it, even if a backend
@@ -1126,6 +1200,7 @@ class Engine(BaseModel):
                 "tol": float(self.image_series_tol),
             },
         )
+        md["max_segments"] = max_segments
         md["provenance"] = provenance
         return result
 
