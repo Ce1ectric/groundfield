@@ -53,7 +53,7 @@ import warnings
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import numpy as np
 from pydantic import (
@@ -79,6 +79,7 @@ from groundfield.solver.registry import (
 )
 from groundfield.solver.result import FieldResult, SourceRecord, solve_provenance
 from groundfield.utils.logging import get_logger
+from groundfield.utils.suggest import did_you_mean
 
 if TYPE_CHECKING:  # pragma: no cover
     from groundfield.world import World
@@ -393,15 +394,32 @@ class Engine(BaseModel):
         against the backend's options model:
         ``{"mom_sommerfeld": MomSommerfeldOptions(...)}`` (quadrature
         accuracy) and ``{"fem": FemOptions(...)}`` (mesh and
-        truncation). Plain mappings are accepted and validated; unknown
-        option names raise with a suggestion. Options for a backend
-        other than the selected one (or one it forwards to) emit
+        truncation). Plain mappings are accepted and validated into the
+        options models; unknown option names raise with a suggestion.
+        Options for a backend other than the selected one (or one it
+        forwards to) emit
         :class:`~groundfield.solver.registry.BackendOptionsWarning`.
-        The 0.15.0 flat fields ``sommerfeld_lambda_max_factor``,
-        ``sommerfeld_epsabs``, ``sommerfeld_epsrel`` and
-        ``sommerfeld_max_osc_panels`` are still accepted (constructor
-        and JSON) and mapped onto ``options["mom_sommerfeld"]``; a
-        non-default value emits a :class:`DeprecationWarning`.
+        Entries put into the mapping in place
+        (``engine.options["fem"] = {...}``) bypass that validation; they
+        are validated when they are read (:meth:`backend_options`,
+        :meth:`solve`). The 0.15.0 flat fields
+        ``sommerfeld_lambda_max_factor``, ``sommerfeld_epsabs``,
+        ``sommerfeld_epsrel`` and ``sommerfeld_max_osc_panels`` are
+        still accepted (constructor, JSON, attribute access and
+        :meth:`model_copy`) and mapped onto
+        ``options["mom_sommerfeld"]`` with a :class:`DeprecationWarning`
+        (the constructor drops a value equal to the default silently, so
+        engine JSON of 0.15.0 loads without warnings).
+    sommerfeld_assembly
+        Assembly of the Sommerfeld earth-return correction of inductive
+        conductors (``earth_inductive_model="sommerfeld"``):
+        ``"exact"`` (default) integrates every segment pair with its own
+        quadrature; ``"tabulated"`` shares one table of the spectral
+        integral per pair of depth groups and frequency and is the
+        faster choice for large networks (see
+        :func:`~groundfield.coupling.sommerfeld_inductance.build_sommerfeld_correction_matrices`,
+        ``method``). Read by every backend that assembles the inductive
+        branches through the shared pipeline.
 
     kernel
         Green's-function kernel of the image family (``image``,
@@ -441,6 +459,14 @@ class Engine(BaseModel):
         JSON, from ``with_frequencies`` or from a result's provenance
         block runs exactly like the original.
 
+    Notes
+    -----
+    Every field is validated on construction, on assignment
+    (``engine.frequencies = []`` raises) and in :meth:`model_copy`
+    (unlike pydantic's default ``model_copy``, which stores ``update``
+    unchecked). Lists mutated in place are checked when the engine
+    solves.
+
     Examples
     --------
     >>> eng = Engine(backend="fem", options={"fem": {"n_radial": 120}})
@@ -448,7 +474,7 @@ class Engine(BaseModel):
     120
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     backend: str = Field(default="image")
     frequencies: list[float] = Field(
@@ -510,12 +536,25 @@ class Engine(BaseModel):
             "falls below this value."
         ),
     )
-    options: dict[str, SerializeAsAny[BackendOptions]] = Field(
+    # The annotation states the accepted input (option models or plain
+    # mappings, audit A1-06); after validation every value is the
+    # backend's options model.
+    options: Mapping[str, SerializeAsAny[BackendOptions] | Mapping[str, Any]] = Field(
         default_factory=dict,
         description=(
             "Backend-specific settings keyed by backend name, validated "
             "against the backend's registered options model "
             "(mom_sommerfeld: MomSommerfeldOptions, fem: FemOptions)."
+        ),
+    )
+    sommerfeld_assembly: Literal["exact", "tabulated"] = Field(
+        default="exact",
+        description=(
+            "Assembly of the Sommerfeld earth-return correction of inductive "
+            "conductors: 'exact' (per segment pair) or 'tabulated' (one "
+            "table per pair of depth groups and frequency; faster for large "
+            "networks). See coupling.sommerfeld_inductance."
+            "build_sommerfeld_correction_matrices(method=...)."
         ),
     )
 
@@ -646,13 +685,153 @@ class Engine(BaseModel):
         BackendOptions or None
             The validated options model of the backend, or ``None`` for
             a backend without backend-specific options.
+
+        Raises
+        ------
+        ValueError
+            If an entry put into :attr:`options` in place does not
+            validate (unknown backend or option name, wrong value).
         """
         key = _registry.options_key(self.backend if name is None else name)
         model = _registry.get_backend(key).options_model
         if model is None:
             return None
-        stored = self.options.get(key)
+        stored = self._checked_options().get(key)
         return stored if stored is not None else model()
+
+    def _checked_options(self) -> dict[str, BackendOptions]:
+        """:attr:`options` with entries mutated in place validated (A1-04)."""
+        options = self.options
+        checked = {
+            key: entry
+            for key, entry in options.items()
+            if isinstance(entry, BackendOptions) and _registry.options_key(key) == key
+        }
+        if len(checked) == len(options):
+            return checked
+        return type(self)._validate_options(options)
+
+    # ------------------------------------------------------------------
+    # Copies
+    # ------------------------------------------------------------------
+
+    def model_copy(
+        self, *, update: Mapping[str, Any] | None = None, deep: bool = False
+    ) -> Self:
+        """Copy of the engine with ``update`` validated like the constructor.
+
+        pydantic's ``model_copy`` stores ``update`` without validation; a
+        deprecated flat name such as ``sommerfeld_epsrel`` was then
+        shadowed by its property and silently ignored (audit A1-02), and
+        an empty frequency list or a raw option mapping went through
+        (A1-04).
+
+        Parameters
+        ----------
+        update
+            Field values to change. Validated together with the unchanged
+            fields; the deprecated flat ``sommerfeld_*`` names are mapped
+            onto ``options["mom_sommerfeld"]`` with a
+            :class:`DeprecationWarning`.
+        deep
+            Deep copy instead of a shallow one.
+
+        Returns
+        -------
+        Engine
+            The copy (the receiver is not changed).
+
+        Raises
+        ------
+        ValueError
+            If a key of ``update`` is not a field (with a suggestion), a
+            value does not validate, or a flat name contradicts
+            ``update["options"]``.
+
+        Notes
+        -----
+        Only warnings that the update introduces are emitted; those of
+        the unchanged fields (e.g. a non-monotonic frequency list) were
+        emitted when the engine was built.
+        """
+        if not update:
+            return super().model_copy(deep=deep)
+        fields = type(self).model_fields
+        unknown = [
+            k for k in update if k not in fields and k not in _LEGACY_SOMMERFELD_FIELDS
+        ]
+        if unknown:
+            key = str(unknown[0])
+            raise ValueError(
+                f"Engine.model_copy: {key!r} is not a field."
+                f"{did_you_mean(key, fields)} Fields: {', '.join(fields)}."
+            )
+        changes = dict(update)
+        flat = {
+            _LEGACY_SOMMERFELD_FIELDS[k]: changes.pop(k)
+            for k in list(changes)
+            if k in _LEGACY_SOMMERFELD_FIELDS
+        }
+        if flat:
+            changes["options"] = self._options_with_flat(
+                changes.get("options", self.options), flat, explicit="options" in update
+            )
+        # The unchanged fields as set on this engine (not the defaults), so
+        # the copy keeps pydantic's ``model_fields_set`` semantics.
+        base = {name: self.__dict__[name] for name in self.model_fields_set}
+        with warnings.catch_warnings(record=True) as before:
+            warnings.simplefilter("always")
+            type(self).model_validate(base)
+        with warnings.catch_warnings(record=True) as after:
+            warnings.simplefilter("always")
+            copy = type(self).model_validate({**base, **changes})
+        seen = {(w.category, str(w.message)) for w in before}
+        for w in after:
+            if (w.category, str(w.message)) not in seen:
+                warn_external(str(w.message), w.category)
+        return super(Engine, copy).model_copy(deep=True) if deep else copy
+
+    @staticmethod
+    def _options_with_flat(
+        options: Any, flat: dict[str, Any], *, explicit: bool
+    ) -> dict[str, Any]:
+        """``options`` with the flat ``sommerfeld_*`` values merged in."""
+        if not isinstance(options, Mapping):
+            raise ValueError(
+                "Engine.options must be a mapping backend name -> options, "
+                f"got {type(options).__name__}."
+            )
+        merged = dict(options)
+        key = next(
+            (k for k in merged if _registry.options_key(k) == "mom_sommerfeld"),
+            "mom_sommerfeld",
+        )
+        entry = merged.pop(key, {})
+        if isinstance(entry, BaseModel):
+            entry = entry.model_dump(exclude_unset=True)
+        if not isinstance(entry, Mapping):
+            raise ValueError(
+                "Engine.options['mom_sommerfeld'] must be a mapping or a "
+                f"MomSommerfeldOptions, got {type(entry).__name__}."
+            )
+        clash = sorted(
+            k for k in flat if explicit and k in entry and entry[k] != flat[k]
+        )
+        if clash:
+            raise ValueError(
+                f"mom_sommerfeld option(s) {clash} given twice (flat "
+                "sommerfeld_* name and options) with different values."
+            )
+        merged["mom_sommerfeld"] = {**entry, **flat}
+        names = ", ".join(f"sommerfeld_{k}" for k in sorted(flat))
+        warn_external(
+            f"Engine field(s) {names} are deprecated; pass "
+            "options={'mom_sommerfeld': {...}} (or a MomSommerfeldOptions) "
+            "instead. The flat fields will be removed no earlier than "
+            f"{DEPRECATION_REMOVAL}.",
+            DeprecationWarning,
+        )
+        return merged
 
     # ------------------------------------------------------------------
     # Frequencies
@@ -805,8 +984,10 @@ class Engine(BaseModel):
         ValueError
             If ``world.soil`` is unset, ``world`` contains no electrodes,
             fails :meth:`World.check <groundfield.world.World.check>`
-            (short-circuited source, zero or non-finite magnitude), or
-            :attr:`backend` is not registered.
+            (short-circuited source, zero or non-finite magnitude),
+            :attr:`backend` is not registered, :attr:`frequencies` was
+            emptied or given a non-finite or negative entry in place, or
+            an entry put into :attr:`options` in place does not validate.
         KeyError
             If a source terminal or conductor end names no node of
             ``world`` (:meth:`World.check <groundfield.world.World.check>`).
@@ -830,6 +1011,8 @@ class Engine(BaseModel):
             raise ValueError("World has no soil model. Set one before calling solve().")
         if not world.electrodes:
             raise ValueError("World contains no electrodes.")
+        # Assignments are validated; a list mutated in place is not (A1-04).
+        _check_frequency_values(self.frequencies)
         # Central validation of references and excitation (10.66) for
         # every backend and entry point. A world without a source stays
         # solvable here (all results zero); World.solve and the image
