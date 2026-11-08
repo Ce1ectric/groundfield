@@ -46,6 +46,13 @@ _DEFAULT_BOUNDARY_VALUES: dict[str, Any] = {
     "reference_node": None,
 }
 
+#: Name prefixes of the solver's internal owners and nodes: ``__layer_`` for
+#: the part of an electrode in one soil layer, ``__cond_`` for the pseudo-nodes
+#: of a distributed conductor. A user node (electrode or junction) with such a
+#: name could take the place of an internal one and broke the solve with a
+#: singular matrix (audit A3S-03), so these prefixes are reserved.
+RESERVED_NAME_PREFIXES: tuple[str, ...] = ("__layer_", "__cond_")
+
 if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
     from groundfield.solver.engine import Engine
     from groundfield.solver.result import FieldResult
@@ -153,7 +160,14 @@ class World(BaseModel):
         """Add an electrode and check for unique name.
 
         Electrodes and junctions share one node namespace.
+
+        Raises
+        ------
+        ValueError
+            If the name is already taken by an electrode or a junction, or
+            starts with a reserved prefix (:data:`~groundfield.world.RESERVED_NAME_PREFIXES`).
         """
+        _check_reserved_name(electrode.name, "Electrode")
         if any(e.name == electrode.name for e in self.electrodes):
             raise ValueError(f"Electrode name '{electrode.name}' already taken.")
         if any(j.name == electrode.name for j in self.junctions):
@@ -170,8 +184,10 @@ class World(BaseModel):
         ------
         ValueError
             If the name is already taken by an electrode or a junction
-            (one node namespace).
+            (one node namespace), or starts with a reserved prefix
+            (:data:`~groundfield.world.RESERVED_NAME_PREFIXES`).
         """
+        _check_reserved_name(junction.name, "Junction")
         if any(j.name == junction.name for j in self.junctions):
             raise ValueError(f"Junction name '{junction.name}' already taken.")
         if any(e.name == junction.name for e in self.electrodes):
@@ -306,6 +322,8 @@ class World(BaseModel):
             JSON or edited through its lists with two electrodes of one
             name failed in the solver with a singular matrix, an electrode
             and a junction of one name were merged into one node).
+            An electrode or junction name starts with a reserved prefix
+            (:data:`~groundfield.world.RESERVED_NAME_PREFIXES`, audit A3S-03).
             A source feeds a conductor or returns to its own node; both
             terminals of a source are bonded into one galvanic cluster by
             ideal conductors (the source is short-circuited); a current
@@ -369,6 +387,8 @@ class World(BaseModel):
             kinds.setdefault(e.name, []).append("electrode")
         for j in self.junctions:
             kinds.setdefault(j.name, []).append("junction")
+        for name, k in kinds.items():
+            _check_reserved_name(name, k[0].capitalize(), world=self.name)
         clashes = [
             f"{name!r} ({' and '.join(k)})" for name, k in kinds.items() if len(k) > 1
         ]
@@ -661,3 +681,33 @@ class World(BaseModel):
             f"sources={len(self.sources)}, "
             f"boundary.far_field={self.boundary.far_field}"
         )
+
+
+def _check_reserved_name(name: str, kind: str, *, world: str | None = None) -> None:
+    """Reject a node name with a reserved prefix (audit A3S-03).
+
+    Parameters
+    ----------
+    name
+        Name of an electrode or junction.
+    kind
+        ``"Electrode"`` or ``"Junction"`` (for the message).
+    world
+        Name of the world, if the check runs on a whole world.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` starts with one of :data:`~groundfield.world.RESERVED_NAME_PREFIXES`.
+    """
+    for prefix in RESERVED_NAME_PREFIXES:
+        if name.startswith(prefix):
+            where = f"World {world!r}: " if world is not None else ""
+            raise ValueError(
+                f"{where}{kind} name {name!r} starts with the reserved prefix "
+                f"{prefix!r}: the solver names the part of an electrode in one "
+                "soil layer '__layer_<electrode>__L<k>' and the nodes of a "
+                "distributed conductor '__cond_<conductor>__...', and a user "
+                "node of such a name could take the place of an internal one "
+                "(the solve failed with a singular matrix). Rename it."
+            )

@@ -284,3 +284,92 @@ def test_check_reports_names_used_twice(edit, needle: str) -> None:
     assert needle in str(info.value)
     with pytest.raises(ValueError, match="used more than once"):
         world.solve(gf.Engine(segment_length=0.5))
+
+
+# ---------------------------------------------------------------------
+# Audit A3S-03: names with the solver's reserved prefixes
+# ---------------------------------------------------------------------
+#
+# The solver names the part of an electrode in one soil layer
+# ``__layer_<electrode>__L<k>`` and the nodes of a distributed conductor
+# ``__cond_<conductor>__...``. An electrode called ``__layer_r__L1`` next to
+# a rod ``r`` through h_1, or ``__cond_pen__seg_0`` next to a galvanic
+# conductor ``pen``, passed World.check() and the solve died with
+# numpy.linalg.LinAlgError (singular matrix): the internal owner took the
+# user electrode's place.
+
+
+def _layer_clash_payload() -> dict:
+    import json
+
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
+    gf.create_electrode(w, "rod", name="r", position=(0, 0, 0.5), length=3.0)
+    gf.create_electrode(w, "rod", name="x", position=(30, 0, 0.5), length=1.0)
+    gf.create_source(w, attached_to="r")
+    data = json.loads(w.model_dump_json())
+    data["electrodes"][1]["name"] = "__layer_r__L1"
+    return data
+
+
+def _conductor_clash_payload() -> dict:
+    import json
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.5), length=2.0)
+    gf.create_electrode(w, "rod", name="b", position=(30, 0, 0.5), length=2.0)
+    gf.create_conductor(
+        w,
+        name="pen",
+        start="a",
+        end="b",
+        cross_section=50e-6,
+        discretize_segment_length=10.0,
+        coupling_to_soil="galvanic",
+    )
+    gf.create_electrode(w, "rod", name="x", position=(0, 40, 0.5), length=1.0)
+    gf.create_source(w, attached_to="a")
+    data = json.loads(w.model_dump_json())
+    data["electrodes"][2]["name"] = "__cond_pen__seg_0"
+    return data
+
+
+@pytest.mark.finding("10.66")
+@pytest.mark.parametrize(
+    ("payload", "prefix"),
+    [(_layer_clash_payload, "__layer_"), (_conductor_clash_payload, "__cond_")],
+    ids=["layer", "cond"],
+)
+def test_check_rejects_a_name_with_a_reserved_prefix(payload, prefix: str) -> None:  # noqa: ANN001
+    # audit A3S-03
+    world = gf.World.model_validate(payload())
+    with pytest.raises(ValueError, match="reserved prefix") as info:
+        world.check()
+    assert repr(prefix) in str(info.value)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ValueError, match="reserved prefix"):
+            world.solve(gf.Engine(segment_length=0.5))
+
+
+@pytest.mark.finding("10.66")
+@pytest.mark.parametrize("name", ["__layer_r__L1", "__cond_pen__seg_0", "__cond_x"])
+def test_reserved_prefixes_are_rejected_when_a_node_is_added(name: str) -> None:
+    # audit A3S-03
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    with pytest.raises(ValueError, match="reserved prefix"):
+        gf.create_electrode(w, "rod", name=name, position=(0, 0, 0.5), length=1.0)
+    with pytest.raises(ValueError, match="reserved prefix"):
+        gf.create_junction(w, name=name, position=(0.0, 0.0, -1.0))
+    assert not w.electrodes and not w.junctions
+
+
+@pytest.mark.finding("10.66")
+def test_names_that_only_resemble_the_prefixes_stay_legal() -> None:
+    # audit A3S-03: only the two exact prefixes are reserved
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    for name in ("_layer_r", "__layer", "layer__L1", "__conductor", "x__cond_y"):
+        gf.create_electrode(
+            w, "rod", name=name, position=(len(w.electrodes) * 20.0, 0, 0.5), length=1.0
+        )
+    gf.create_source(w, attached_to="_layer_r")
+    w.check()
