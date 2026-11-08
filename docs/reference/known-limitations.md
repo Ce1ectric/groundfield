@@ -40,7 +40,12 @@ shows what agrees with independent references and how well.
   4 × 4 meshes +3.9 %, 40 m × 40 m with 8 × 8 meshes +5.3 %, 4-arm star
   +4.3 %); the generators build mesh foundations as one electrode per
   wire line, which brings them to +1.1 % (+0.3 … +0.5 % with
-  `kernel="point"`, the kernel `mom` uses). Surface
+  `kernel="point"`, the kernel `mom` uses); against one current per
+  segment an encased mesh foundation is at most 0.6 % high, a rectangle
+  without cross-braces up to 2.15 % with one owner (the default of the
+  deprecated `concrete_model`) and 0.91 % with one owner per side (narrow
+  rectangles: 20 m × 1 m in wet concrete, 150 m × 7.5 m bare in 30 over
+  200 Ω·m). Surface
   potentials near grids, meshes, stars, strip ends and bonded
   multi-electrode clusters are worse. Against the per-segment `mom`
   solution, with the default line kernel, touch voltage with the feet 1 m

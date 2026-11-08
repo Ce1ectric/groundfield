@@ -85,7 +85,7 @@ reproduces 0.15.0, it is named.
 |---|---|---|---|
 | 10.28, 10.33 | the exact line-source kernel is the default of `image` and `image_2layer` (also through the deprecated alias `cim`), of `FieldResult.potential` and of `solve_mutual_*` | 3 m rod +0.60 % (surface potential up to +1.9 %), two-layer ring +1.23 %, ring r = 2 m through `cim` +0.85 %, two rods joined by a bare conductor with 5 m segments: currents 10.9 %, cluster impedance 8.4 % (golden `defaults_rod_hom`, `defaults_two_layer_ring_auto`, `defaults_mixed_cluster_inductive`) | every image-family study, the AP1 catalogue (Z_G, potentials); `Engine(kernel="point")` reproduces 0.15.0 |
 | 10.15, F02 | an electrode through the layer interface has one current per layer in `image_2layer` and `solve_mutual_*` | a 12 m rod through h₁ = 5 m was +566 % (1000/30 Ω·m), +148 % and +123 % off; now +0.11 … +0.31 % (point kernel) and +0.7 … +1.3 % (line kernel) from `mom` (golden `img2_rod_crosslayer` −46.5 %, `mutual_three_rods_crosslayer`) | rods through h₁; not the AP1 station rods (4 m from 0.6 m depth, h₁ ≥ 5 m) |
-| 10.12–10.14, F08 | one concrete-shell mechanism, also in `solve_mutual_*`, the layout builder and station and cabinet foundations | AP1-like site (ρ_c = 100 Ω·m, 5 cm): house Z_G diagonal +42 / +19 / +2.8 % and network input impedance +13.6 / +8.8 / +2.2 % at ρ₁ = 30 / 100 / 1000 Ω·m; mesh foundations with `"distributed"`: +2.6 … +12 % (golden `mutual_foundations_lumped_concrete` +42.2 %) | every world with `concrete_rho_ohm_m`, including AP1 runs with concrete shells |
+| 10.12–10.14, F08 | one concrete-shell mechanism, also in `solve_mutual_*`, the layout builder and station and cabinet foundations | AP1-like site (ρ_c = 100 Ω·m, 5 cm): house Z_G diagonal +42 / +19 / +2.8 % and network input impedance +13.6 / +8.8 / +2.2 % at ρ₁ = 30 / 100 / 1000 Ω·m; generated mesh foundations: see the Q20 row (golden `mutual_foundations_lumped_concrete` +42.2 %) | every world with `concrete_rho_ohm_m`, including AP1 runs with concrete shells |
 | 10.26, 10.29, 10.34 | `solve_mutual_matrix`: length-weighted diagonal over all members and layers, the other clusters float, and the reciprocal galerkin off-diagonal for every call (probe points are ignored with `ProbePointsIgnoredWarning` unless `offdiag="probe"`; user decision Q15) | AP1-like site: house diagonal up to 0.10 %, station 0.000 %; the probe off-diagonal missed the input impedance of the joined network by −0.15 … −0.88 % (single entries up to 41 %), galerkin reproduces it to 7e-13; AP1 catalogue path \|Z_ons\| at 50 Hz −0.05 … +0.29 % up to 20 % penetration, up to +2.67 % at 40 %; rods split at h₁ were −3.8 / −9.1 % off (golden `mutual_foundations_distributed_concrete` R 1.6 %, Z_G of four mutual cases 7.7e-4 … 8.8e-4) | AP1 mutual matrices Z_G; `offdiag="probe"` reproduces the 0.15.0 off-diagonal |
 | 10.25 | `potential` and `solve_mutual_*` sum the image series with the engine's controls (was 100 terms) | K = −0.94 with `image_max_terms=2000`: potential 100 m from a ring 0.8 % | high-contrast two-layer studies with a raised term cap |
 | 10.16, 10.17, F01/F30 | `Source.return_to` is honoured; measurement leads end on junction nodes at the instrument | auxiliary rod 20 m away: the probe at 61.8 % now reads the remote impedance to −1.6e-3 (0.15.0: −9.9 %); with leads the old reading was 2.8e-4 Ω instead of 1.6096 Ω (golden `gen_tn_measurement_overhead_leads`: auxiliary rod −1 A instead of +0.024 A, network potentials −1.8 %) | simulated fall-of-potential measurements (AP1 Phase B), every world with `return_to` |
@@ -109,7 +109,7 @@ reproduces 0.15.0, it is named.
 | 10.75 | `mom` and `mom_sommerfeld` honour `return_to` and junctions | the return current flows through the return electrode instead of remote earth | `mom` family worlds with two-terminal sources |
 | 10.32, 10.28 | every interface cut is kept, however short the part beyond it, and the diagonal of a piece at the interface is evaluated at the wire radius, so a rod tip or head next to the interface is in contact with the layer it reaches and a wire lying at the interface is continuous across it | a 4.5 m rod (a = 8 mm) in 1000/30 Ω·m with its tip 12 mm into the lower layer: 193.3 → 137.4 Ω (−29 %), within −1.2 % of a solid-rod reference; a ring (r = 3 m) at h₁ = 5 m: 9.56 Ω (0.15.0, point kernel) → 4.18 Ω, continuous across h₁ (the point form raises there); a rod end within one wire radius of h₁ warns (`InterfaceContactWarning`, the thin-wire model has no end face); with `kernel="point"` and `mom` rod tips up to about 0.1 m past h₁ move as well (+0.4 % at 50 mm, +0.05 % at 100 mm, h₁ = 5 m) (golden: none) | rods whose tip or head lies within 16 mm of an interface (0.1 m with the point form), horizontal wires at an interface; not AP1 |
 | 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
-| 10.13 (user decision Q20) | the cross-braces of an encased mesh foundation carry the concrete shell like its perimeter (DIN 18014) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m −1.1 / −0.03 / +1.5 / +47 / +307 % at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, in 30 over 100 Ω·m (h₁ = 5 m) +1.3 / +6.2 / +12 / +154 / +861 %; `medium_industry` mesh (20 m, 3 × 3) −1.3 … +298 % and +1.0 … +671 % (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell (the default building catalogue), not ring and building-outline foundations, not AP1 |
+| 10.12–10.14, 10.39, 10.28 (user decision Q20) | encased mesh foundations: every wire, cross-braces included, carries r_b and the shell coefficient C (in 0.15.0 every wire had r_b, but `"lumped"` put C on no wire and kept the shell in a registry that only the TN service drops read, `"distributed"` put C on the perimeter only) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, default engine of each version: +7.0 / +15 / +23 / +157 / +782 % against 0.15.0 `"lumped"`, +2.2 / +4.2 / +6.6 / +68 / +399 % against `"distributed"` (point kernel on both: +6.2 … +781 % and +1.5 … +398 %); in 30 over 100 Ω·m (h₁ = 5 m) up to +1701 % and +1045 %; four such houses on the default TN network (100 Ω·m): −3.8 / −5.2 / −6.5 / −14 / −11 % (`"lumped"`, whose shell sat on the service drop) and −0.3 / +1.0 / +2.5 / +35 / +121 % (`"distributed"`); of this, the rule for the braces alone (against the bare braces of the development line, never released) +1.5 / +47 / +307 % at 150 / 1000 / 5000 Ω·m (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell, not ring and building-outline foundations (AP1: see the 10.12–10.14 row) |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.1 / −0.2 % for 30 / 100 / 200 houses (star) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -305,10 +305,12 @@ reproduces 0.15.0, it is named.
   250) and 5 / 10 / 20 / 40 % foundation electrodes (q50 fit per group). An
   explicit `w0` or `beta` replaces that weight only; an unknown name raises
   `ValueError` naming the closest presets. For the AP1 station in the 39 AP1
-  soils, R = c·ρ_eff misses the field solution by a median 1.8 % and at most
-  15.7 % with `"station"` (hand-over 1.7 % / 15.7 %, reproduced as 1.71 % /
-  15.69 % with the 0.14.0 point kernel at the catalogue's 1.5 m segments),
-  against 5.0 % / 35.9 % with `"lv_network"` and 11.9 % / 41.9 % over ρ₁.
+  soils, R = c·ρ_eff misses the field solution by a median 1.8 % (over all
+  39 soils, the homogeneous ones at zero; 2.1 % over the 36 two-layer soils)
+  and at most 15.7 % with `"station"`, against 5.0 % / 35.9 % with
+  `"lv_network"` and 11.9 % / 41.9 % over ρ₁; the hand-over's 1.7 % / 15.7 %
+  appear to be this metric with the 0.14.0 point kernel at 1.5 m segments,
+  which gives 1.71 % / 15.69 % (the hand-over does not name its metric).
   Tests: `tests/test_effective_resistivity.py`.
 - **Impedance quantity (10.18, 10.19):** `quantity="input" | "cluster" |
   "electrode"` and `source=` on `sweep`, `convergence_study` and the rho-f
@@ -544,16 +546,19 @@ reproduces 0.15.0, it is named.
   foundation earth electrode per DIN 18014 lies in the concrete together with
   its connections, so every wire of an encased
   `FoundationElectrodeSpec(style="mesh")`, perimeter and cross-braces, carries
-  the outer radius r_b = r_a + t and the shell coefficient C; up to now the
-  braces stayed bare, and a foundation could not exceed the spreading
-  resistance of its braces alone however dry the concrete (9.60 Ω for the
-  default house mesh in 100 Ω·m). Without a shell nothing changes. See
-  *Numbers that change*. `generators.materialise.concrete_shell` takes
+  the outer radius r_b = r_a + t and the shell coefficient C. In 0.15.0 the
+  braces had r_b but no C (with `"lumped"` no wire had C), and the 2026.11
+  development line kept them bare (r_a, no C), so a foundation could not
+  exceed the spreading resistance of its braces alone however dry the
+  concrete (9.60 Ω for the default house mesh in 100 Ω·m). Without a shell
+  nothing changes. Against 0.15.0 see *Numbers that change*. `generators.materialise.concrete_shell` takes
   `encased_length_m` (was `perimeter_m`, added in this release cycle) and
   reports C over every encased wire. Tests:
   `tests/test_concrete_one_mechanism.py::test_mesh_braces_are_encased`,
   `::test_encased_mesh_equals_the_assembly_of_its_wires`,
-  `::test_shell_of_a_mesh_foundation_spans_every_wire`.
+  `::test_shell_of_a_mesh_foundation_spans_every_wire`,
+  `::test_the_concrete_shell_page_states_the_change_against_0150`,
+  `::test_the_brace_effect_names_its_model_and_second_method`.
 - ⚠ **PEN cables of `TnNetworkGenerator` (10.38):** every cable cabinet has its
   own cable, as the topology documents (cabinets on one line: separate cables
   in one trench); a service drop taps the cable that feeds its building at the
@@ -639,7 +644,7 @@ replacement, and is removed in `2027.5.0` at the earliest.
 | `from_osm(kvs_lat_lons=, kvs_xys=)`, `to_world(kvs_grounding=)` | `cabinet_lat_lons=`, `cabinet_xys=`, `cabinet_grounding=` |
 | `source_magnitude_A=` of `to_world`, `measured_grounding_impedance`, `verify_current_balance`, and the `*_A` result keys of `verify_current_balance` | `source_magnitude_a=` and `*_a` keys |
 | `HomogeneousSoilSpec.resistivity`, `SoilLayerSpec.resistivity`, `SoilLayerSpec.thickness_m` | `rho`, `rho`, `h` |
-| `FoundationElectrodeSpec(concrete_model="distributed")` (user decision Q21) | none, drop the argument: the field no longer selects a shell model and only chooses one current owner (`"lumped"`, the default, silent) or one per side for an axis-aligned `style="ring"` rectangle, at most 0.16 % apart up to aspect ratio 4 and 0.67 % up to 50 over the AP1 soils (0.06 % / 0.3 % for a bare ring in homogeneous soil); warns also from JSON and a `model_copy` that sets it. Test: `tests/test_foundation_owners.py` |
+| `FoundationElectrodeSpec(concrete_model="distributed")` (user decision Q21) | none, drop the argument: the field no longer selects a shell model and only chooses one current owner (`"lumped"`, the default, silent) or one per side for an axis-aligned rectangle without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`); over the AP1 soils, for a 5 mm wire at 0.8 m, bare or in concrete of 30 … 1000 Ω·m up to 0.2 m thick, less than 0.7 % apart up to aspect ratio 4 (sides up to 80 m) and 1.6 % up to 50 (up to 150 m, short side at least 1 m), less than 0.33 % / 0.92 % bare or with the default 5 cm shell; warns also from JSON and from a `model_copy` that sets it (an invalid value raises there as in the constructor). Test: `tests/test_foundation_owners.py` |
 
 Configurations and worlds written by 0.15.0 still load. `solve_cim` and
 `solve_bem` warn and delegate; their results carry the metadata of the backend
