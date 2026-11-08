@@ -53,8 +53,9 @@
   resistivity changes) has one uniform-current owner per layer, all in its
   cluster, so the current density may differ above and below the interface.
   A 12 m rod through h₁ = 5 m now equals the manual split into two bonded rods
-  and lies +0.11 … +0.31 % from `mom` (0.15.0: +566 % in 1000/30 Ω·m, +148 % in
-  1000/100, +123 % in 100/1000). `TwoLayerSoil(ρ, ρ, h)` stays bit-identical to
+  and lies +0.11 … +0.31 % from `mom` with the point kernel (+0.7 … +1.3 % with
+  the line kernel, its offset from point-matching methods; 0.15.0: +566 % in
+  1000/30 Ω·m, +148 % in 1000/100, +123 % in 100/1000). `TwoLayerSoil(ρ, ρ, h)` stays bit-identical to
   the homogeneous backend. Who is affected: rods through h₁ — not the AP1
   station rods (4 m from 0.6 m, h₁ ≥ 5 m). Golden cases: `img2_rod_crosslayer`
   (−46.5 %), `line_img2_rod_crosslayer` (−48.2 %), `mutual_three_rods_crosslayer`.
@@ -72,7 +73,7 @@
   (`metadata["series"]`, the engine defaults for results without the record)
   instead of a hard-coded 100 terms / 1e-6, and warn with
   `SeriesTruncationWarning` when the series is truncated. For K = −0.94 and
-  `image_max_terms=2000` the potential at 100 m moved by 0.83 %. The backend
+  `image_max_terms=2000` the potential 100 m from a ring moved by 0.8 %. The backend
   entry points `solve_image_2layer` / `solve_image_nlayer` take the engine's
   controls instead of private defaults 100 / 200 (10.74). Golden cases: none
   (the cases use the default 300 terms).
