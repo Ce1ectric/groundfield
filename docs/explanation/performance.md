@@ -128,7 +128,7 @@ bit-identical) and the resolved λ grid; the tabulated assembly shares one
 table of the spectral integral per pair of depth groups and frequency and
 agrees with a converged reference better than the per-pair rule
 (substation impedance $5\cdot 10^{-10}$ against $1.1\cdot 10^{-8}$ on W3;
-input impedance of the 8-house TN network $4\cdot 10^{-10}$ against
+input impedance of the 8-house TN network $2\cdot 10^{-10}$ against
 $1.2\cdot 10^{-8}$; finding 10.60). It is the default since 2026.11. `carson_series` moved by its own fix
 (F32) and is no faster than necessary to be a check: it is an
 approximation for long parallel lines, not a replacement of `sommerfeld`

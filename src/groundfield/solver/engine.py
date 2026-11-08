@@ -465,9 +465,10 @@ class Engine(BaseModel):
 
         On a TN network of 8 houses with an inductive PEN (78 inductive
         branches, four frequencies) the tabulated solve took 1.0 s CPU
-        instead of 16.6 s, and its input impedance is within 4e-10 of
-        two refined references (per-pair rule with 200 nodes, tables of
-        400 nodes), the per-pair rule within 1.2e-8. Read by every
+        instead of 16.6 s, and its input impedance is within 2e-10 of
+        two independent refined references (per-pair rule with 200
+        nodes, tables of 400 nodes, both with a refined $\\lambda$ grid;
+        they agree to 2e-10), the per-pair rule within 1.2e-8. Read by every
         backend that assembles the inductive branches through the shared
         pipeline (the image family, ``mom``, ``mom_sommerfeld``) and by
         ``solve_mutual_*``; see
