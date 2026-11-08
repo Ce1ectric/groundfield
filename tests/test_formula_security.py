@@ -1390,7 +1390,7 @@ def test_formulas_within_every_limit_parse_and_evaluate_quickly(text: str) -> No
     """The class of A2G-01/02, not the examples: formulas that satisfy every
     limit, the nesting rule included, took 3.3 s, 2.7 s and 2.2 s to parse
     on the base of this change (SymPy evaluated the expression being built)
-    and the first one 4.7 s to evaluate through ``lambdify``. The parser
+    and the first one 4.7 s to 6.8 s to evaluate through ``lambdify``. The parser
     now builds every node unevaluated, and ``evaluate_spec`` translates the
     tree into NumPy operations directly."""
     # audit A2G-01, A2G-02
@@ -1522,7 +1522,7 @@ def test_parsing_and_evaluation_never_let_sympy_evaluate() -> None:
 
 def test_evaluate_spec_does_not_use_sympy_code_generation(monkeypatch) -> None:
     """``lambdify`` prints the expression, and SymPy's printers order terms
-    and factors with evaluation switched on (4.7 s for the first
+    and factors with evaluation switched on (4.7 s to 6.8 s for the first
     within-limit formula above). ``evaluate_spec`` and the exporter's
     passivity check translate the tree into NumPy operations instead."""
     # audit A2G-02

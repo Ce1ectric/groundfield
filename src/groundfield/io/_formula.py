@@ -84,14 +84,18 @@ minute). So the parser never lets SymPy evaluate:
 
 Every node therefore costs a bounded amount of work, and the time and
 memory of a parse, accepted or rejected, grow linearly with the size of
-the formula. The values are those of the formula to about ``1e-16``
-relative (floating-point rounding of the coefficients).
+the formula. Every number of the expression is the float64 nearest to
+its value computed at 128 bits (relative error at most ``1.1e-16``).
 
 Do not hand an expression parsed from untrusted text to SymPy functions
-that evaluate it (``simplify``, ``expand``, ``subs``, ``doit``, ``evalf``
-of sub-expressions, also ``lambdify``, whose printer negates and
-reorders sub-expressions): they run the algorithms the parser avoids.
-:func:`formula_function` evaluates a parsed expression with NumPy.
+that evaluate it: ``simplify``, ``expand``, ``subs``, ``doit``, ``evalf``
+of sub-expressions, but also ``lambdify`` and SymPy's printers (``str``,
+``repr``, LaTeX), which order and negate sub-expressions with SymPy's
+evaluation switched on and so run the algorithms the parser avoids
+(for a 1 439-character formula within every limit ``str()`` took
+4.9 s and ``lambdify`` 6.8 s, :func:`formula_function` 2 ms).
+:func:`formula_function` evaluates a parsed expression with NumPy; to
+show a formula, show its text.
 
 Resource bounds
 ---------------
