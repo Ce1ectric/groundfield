@@ -229,3 +229,58 @@ def test_a_world_without_a_source_raises_in_every_backend(
         warnings.simplefilter("ignore")
         with pytest.raises(ValueError, match="no current source"):
             engine.solve(w) if entry == "engine" else w.solve(engine)
+
+
+def _payload() -> dict:
+    import json
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="a", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_electrode(w, "rod", name="b", position=(50.0, 0.0, 0.5), length=3.0)
+    gf.create_conductor(w, start="a", end="b", name="c1", cross_section=50e-6)
+    gf.create_conductor(w, start="a", end="b", name="c2", cross_section=50e-6)
+    gf.create_source(w, attached_to="a")
+    gf.create_source(w, attached_to="b", name="s2")
+    return json.loads(w.model_dump_json())
+
+
+@pytest.mark.finding("10.66")
+@pytest.mark.parametrize(
+    ("edit", "needle"),
+    [
+        (
+            lambda d: d["electrodes"][1].update(name="a"),
+            "'a' (electrode and electrode)",
+        ),
+        (
+            lambda d: d.update(
+                junctions=[
+                    {"name": "b", "kind": "junction", "position": [0.0, 0.0, -1.0]}
+                ]
+            ),
+            "'b' (electrode and junction)",
+        ),
+        (lambda d: d["conductors"][1].update(name="c1"), "conductor name(s)"),
+        (
+            lambda d: d["sources"][1].update(name=d["sources"][0]["name"]),
+            "source name(s)",
+        ),
+    ],
+    ids=["two-electrodes", "electrode-and-junction", "two-conductors", "two-sources"],
+)
+def test_check_reports_names_used_twice(edit, needle: str) -> None:
+    """Uniqueness was enforced by the add_* methods only.
+
+    A world loaded from JSON with two electrodes of one name passed check()
+    and failed in the solver with a singular matrix; an electrode and a
+    junction of one name were silently merged into one node.
+    """
+    # audit A2S-06
+    data = _payload()
+    edit(data)
+    world = gf.World.model_validate(data)
+    with pytest.raises(ValueError, match="used more than once") as info:
+        world.check()
+    assert needle in str(info.value)
+    with pytest.raises(ValueError, match="used more than once"):
+        world.solve(gf.Engine(segment_length=0.5))

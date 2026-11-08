@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
@@ -299,6 +300,12 @@ class World(BaseModel):
             A source terminal or a conductor end names no node of the
             world; the message names the closest node names.
         ValueError
+            A name is used twice: two electrodes, two junctions, an
+            electrode and a junction (one node namespace), two conductors
+            or two sources (audit round 2, A2S-06: a world loaded from
+            JSON or edited through its lists with two electrodes of one
+            name failed in the solver with a singular matrix, an electrode
+            and a junction of one name were merged into one node).
             A source feeds a conductor or returns to its own node; both
             terminals of a source are bonded into one galvanic cluster by
             ideal conductors (the source is short-circuited); a current
@@ -309,6 +316,7 @@ class World(BaseModel):
             The world contains a :class:`~groundfield.sources.VoltageSource`:
             no backend implements impressed voltages.
         """
+        self._check_unique_names()
         if require_source and self.soil is None:
             raise ValueError("World has no soil model. Set one before calling solve().")
         if require_source and not self.electrodes:
@@ -348,6 +356,36 @@ class World(BaseModel):
                 "potential and current would be zero and every impedance "
                 "nan. Add one with gf.create_source(world, attached_to=...)."
             )
+
+    def _check_unique_names(self) -> None:
+        """Reject a name used twice in one namespace (audit round 2, A2S-06).
+
+        :meth:`add_electrode`, :meth:`add_junction`, :meth:`add_conductor`
+        and :meth:`add_source` enforce this when objects are added; a world
+        loaded from JSON or edited through its lists is checked here.
+        """
+        kinds: dict[str, list[str]] = {}
+        for e in self.electrodes:
+            kinds.setdefault(e.name, []).append("electrode")
+        for j in self.junctions:
+            kinds.setdefault(j.name, []).append("junction")
+        clashes = [
+            f"{name!r} ({' and '.join(k)})" for name, k in kinds.items() if len(k) > 1
+        ]
+        if clashes:
+            raise ValueError(
+                f"World {self.name!r}: node name(s) used more than once: "
+                f"{', '.join(clashes)}. Electrodes and junctions share one "
+                "namespace; rename them."
+            )
+        for label, items in (("conductor", self.conductors), ("source", self.sources)):
+            counts = Counter(x.name for x in items)
+            twice = sorted(name for name, n in counts.items() if n > 1)
+            if twice:
+                raise ValueError(
+                    f"World {self.name!r}: {label} name(s) used more than once: "
+                    f"{', '.join(repr(n) for n in twice)}; rename them."
+                )
 
     def _check_short_circuited_sources(self) -> None:
         """Reject a two-terminal source whose terminals share a cluster."""
