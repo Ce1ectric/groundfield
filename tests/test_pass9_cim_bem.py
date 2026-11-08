@@ -51,7 +51,6 @@ caller.
 from __future__ import annotations
 
 import inspect
-import re
 import warnings
 from pathlib import Path
 
@@ -404,96 +403,13 @@ def test_three_layer_still_rejected(backend: str) -> None:
 # =====================================================================
 # F17 — the documentation must describe the code
 # =====================================================================
+# The page checks of docs/engines/{index,cim,bem}.md and docs/concepts.md
+# moved with the pages to tests/test_explanation_pages.py (docs/explanation/,
+# release 2026.11); only the ADR check stays here.
 
 
 def _read(rel: str) -> str:
     return (DOCS / rel).read_text(encoding="utf-8")
-
-
-def test_engines_index_routes_multilayer_to_mom_sommerfeld() -> None:
-    """The n ≥ 3 decision-tree branch must not point at cim/bem (F17).
-
-    Pre-fix (``docs/engines/index.md:62-65``):
-    ``├─ primary → cim`` and
-    ``├─ alternative weighting→ bem``, although both raise
-    ``NotImplementedError`` for n ≥ 3 since 0.11.0.
-    """
-    text = _read("engines/index.md")
-    block = text.split("n_layers ≥ 3")[1].split("```")[0]
-
-    assert "mom_sommerfeld" in block
-    assert re.search(r"primary\s*→\s*mom_sommerfeld", block)
-    assert not re.search(r"→\s*cim\b", block)
-    assert not re.search(r"→\s*bem\b", block)
-    assert "NotImplementedError" in block
-
-    # The n = 2 branch must not sell bem as an alternative kernel.
-    two_layer = text.split("n_layers = 2")[1].split("n_layers ≥ 3")[0]
-    assert not re.search(r"→\s*bem\b", two_layer)
-
-    # And the family map must warn about the two alias backends.
-    assert "reduces_to" in text
-    assert "not count them twice" in text or "aliases" in text
-
-
-def test_cim_page_no_longer_advertises_multilayer() -> None:
-    """``docs/engines/cim.md`` must match the code (F17/F34/F39)."""
-    text = _read("engines/cim.md")
-
-    # Stale claims (pre-fix cim.md:125, :141, :146, :150-151, :174).
-    assert "the genuine matrix-pencil fit runs" not in text
-    assert "tested up to $n = 8$" not in text
-    assert (
-        "| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, or `MultiLayerSoil` |"
-    ) not in text
-    assert "it covers the $n \\ge 3$ regime" not in text
-
-    # Honest replacements.
-    assert "NotImplementedError" in text
-    assert "not an independent cross-check" in text
-    assert "cim_fit_used" in text
-    assert "ComplexImageFitWarning" in text
-    # The asymptote story is documented, not just fixed in code.
-    assert "K_1" in text and "asymptote" in text
-
-    # The worked example must not be a 3-layer cim solve.
-    example = text.split("## Example")[1]
-    first_block = example.split("```python")[1].split("```")[0]
-    assert "MultiLayerSoil" not in first_block
-
-
-def test_bem_page_no_longer_advertises_multilayer() -> None:
-    """``docs/engines/bem.md`` must match the code (F17/F34)."""
-    text = _read("engines/bem.md")
-
-    assert "($n \\ge 3$) → homogeneous self-kernel" not in text
-    assert (
-        "| Soil model | `HomogeneousSoil`, `TwoLayerSoil`, `MultiLayerSoil` |"
-    ) not in text
-    assert "| `cim` ($n \\ge 3$) | $\\le 5\\,\\%$ |" not in text
-
-    assert "NotImplementedError" in text
-    assert "not an independent cross-check" in text
-    assert "reduces_to" in text
-
-
-def test_concepts_backend_table_matches_the_code() -> None:
-    """The eight-backend table must not claim ``any layered`` (F17)."""
-    text = _read("concepts.md")
-    rows = {
-        m.group(1): m.group(2).strip()
-        for m in re.finditer(r"^\|\s*`(\w+)`\s*\|([^|]*)\|", text, flags=re.MULTILINE)
-    }
-    assert "cim" in rows and "bem" in rows
-    for backend in ("cim", "bem"):
-        assert rows[backend] != "any layered", (
-            f"concepts.md still lists {backend} as 'any layered'"
-        )
-        assert "2-layer" in rows[backend]
-    assert "mom_sommerfeld" in rows
-
-    assert "only engine that" in text or "only $n \\ge 3$" in text
-    assert "not independent checks" in text
 
 
 def test_adr_0002_selection_heuristic_is_amended() -> None:

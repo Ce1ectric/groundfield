@@ -52,7 +52,7 @@ fast = ["numba (>=0.60)"]
 Documentation = "https://ce1ectric.github.io/groundfield/"
 Repository = "https://github.com/Ce1ectric/groundfield"
 Issues = "https://github.com/Ce1ectric/groundfield/issues"
-Changelog = "https://ce1ectric.github.io/groundfield/changelog/"
+Changelog = "https://ce1ectric.github.io/groundfield/latest/changelog/"
 
 [tool.poetry]
 # Only the package itself goes into the wheel. Maintenance tools live in

@@ -27,6 +27,8 @@ repos:
     rev: 34071b78c181af3bf5af955c1426466e096fc3db  # frozen: 0.9.1
     hooks:
       - id: nbstripout
+        # The tutorials keep their executed outputs: the docs show them.
+        exclude: ^docs/tutorials/
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0

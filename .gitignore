@@ -195,8 +195,10 @@ THIRD_PARTY_LICENSES_RAW.txt
 #  docs/graphify.md for the workflow.
 graphify-out/
 
-# audit reports
+# audit reports (local, never versioned) — but the audit history pages of the docs are
 audit*
+!docs/audit/
+!docs/audit/**
 
 # Profiler output (cProfile / pstats dumps carry local paths; finding 10.11)
 profile.out
