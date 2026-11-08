@@ -840,8 +840,17 @@ def _first_clause(text: str, backend: str) -> str:
     return text if len(text) <= 240 else text[:237] + "..."
 
 
+#: Prefix of a :func:`_backend_refusal` result that is a refusal by the
+#: engine's resource limit, not by the world.
+_LIMIT = "limit: "
+
+
 def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | None:
     """Why ``backend`` would refuse ``world``, or ``None`` if it accepts it.
+
+    A refusal by the engine's resource limit (``Engine.max_segments``) is
+    a setting of the engine, not of the world: it is returned with the
+    prefix :data:`_LIMIT`, and the later checks are not run.
 
     Runs the backend's own checks without solving (audit D2A-06): the
     capability check of the registry, the discretisation with its resource
@@ -854,6 +863,7 @@ def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | No
     ``solver/mom_sommerfeld.py``, ``solver/image_2layer.py``) and resolves
     the kernel like :meth:`Engine.solve <groundfield.solver.engine.Engine.solve>`.
     """
+    from groundfield.diagnostics import ResourceLimitError
     from groundfield.solver._guards import (
         _check_point_interface_diagonal,
         _check_segment_depths,
@@ -886,6 +896,8 @@ def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | No
             disc = discretise(world, engine, None if h_1 is None else (h_1,))
             build_topology(world, disc)  # adds the galvanic conductor segments
             _check_segment_depths(disc.segments, where=backend, kernel=kernel)
+        except ResourceLimitError as exc:
+            return _LIMIT + _first_clause(str(exc), backend)
         except (ValueError, NotImplementedError) as exc:
             return _first_clause(str(exc), backend)
         if h_1 is None:
@@ -926,10 +938,15 @@ def _remedy(world: "World", engine: "Engine") -> str:
         n_layers, ("mom_sommerfeld",)
     )
     refusals = {b: _backend_refusal(world, engine, b) for b in candidates}
-    accepted = [b for b in candidates if refusals[b] is None]
+    limited = {
+        b: r[len(_LIMIT) :]
+        for b, r in refusals.items()
+        if r is not None and r.startswith(_LIMIT)
+    }
+    accepted = [b for b in candidates if refusals[b] is None or b in limited]
     by_reason: dict[str, list[str]] = {}
     for b, reason in refusals.items():
-        if reason is not None:
+        if reason is not None and b not in limited:
             by_reason.setdefault(reason, []).append(f"'{b}'")
     refused = " ".join(
         f"{' and '.join(names)} refuse{'s' if len(names) == 1 else ''} this "
@@ -947,6 +964,13 @@ def _remedy(world: "World", engine: "Engine") -> str:
         text = "Use backend='mom' (one current per segment) or 'image_2layer'."
     else:
         text = "Use backend=" + " or ".join(f"'{b}'" for b in accepted) + "."
+    if limited:
+        names = " and ".join(f"'{b}'" for b in limited)
+        text += (
+            f" This engine's resource limit refuses the world for {names} "
+            f"({next(iter(limited.values()))}): raise Engine.max_segments or "
+            "coarsen segment_length (their other checks were not run)."
+        )
     return f"{text} {refused}" if refused else text
 
 

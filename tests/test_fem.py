@@ -612,6 +612,34 @@ def test_fem_names_only_a_backend_that_solves_the_world(world, named, refusing) 
 
 
 @pytest.mark.finding("10.23")
+def test_fem_remedy_is_not_refused_by_the_engines_resource_limit() -> None:
+    """The resource limit is a setting of the engine, not of the world.
+
+    A fem engine with ``max_segments=50`` makes the dry check of 'mom' and
+    'image_2layer' stop at their resource limit; the message must still
+    name them (with the limit as a remedy), not claim that no backend
+    solves the world.
+    """
+    # audit D2A-06
+    w = _electrode_world(
+        gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0),
+        "ring",
+        center=(0, 0, 0.8),
+        radius=10.0,
+    )
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(gf.BackendCapabilityError) as info:
+            gf.Engine(backend="fem", segment_length=0.5, max_segments=50).solve(w)
+    text = str(info.value)
+    assert "No backend solves" not in text, text
+    assert "Use backend='mom' (one current per segment) or 'image_2layer'" in text, text
+    assert "Engine.max_segments" in text, text
+
+
+@pytest.mark.finding("10.23")
 def test_fem_q23_uses_the_canonical_layer_stack() -> None:
     """Equal resistivities are no interface: the merged top layer is named."""
     # user decision Q23
