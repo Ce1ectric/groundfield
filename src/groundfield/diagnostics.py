@@ -188,7 +188,8 @@ class Diagnostic:
     ----------
     category
         Cause: ``"thin_wire"``, ``"resolution"``, ``"budget"``,
-        ``"proximity"``, ``"inert"`` or ``"series"``.
+        ``"proximity"``, ``"interface_contact"``, ``"inert"`` or
+        ``"series"``.
     severity
         ``"warning"`` (the result is likely biased or the setting has no
         effect) or ``"info"`` (worth knowing, usually harmless).
@@ -245,6 +246,16 @@ _CAUSES: dict[str, tuple[str, tuple[str, str], str, str]] = {
         ("setting has", "settings have"),
         "no effect on the solve",
         "",
+    ),
+    "interface_contact": (
+        "interface contact",
+        ("rod end lies", "rod ends lie"),
+        "within one wire radius of a layer interface",
+        "the thin-wire model has no end face, so the contact with the layer "
+        "beyond is all or nothing there (a solid 4.5 m rod, a = 8 mm, in "
+        "1000/30 Ohm m: +21 % with the tip at the interface, -4.6 % 1 mm past "
+        "it, audit A3S-05); keep rod ends a few wire radii from an interface "
+        "or bracket the result by moving the end by +-2a",
     ),
 }
 
@@ -938,6 +949,32 @@ def _proximity_findings(world: "World", engine: "Engine | None") -> list[Diagnos
     return out
 
 
+def _interface_contact_findings(world: "World") -> list[Diagnostic]:
+    """Rod heads and tips within one wire radius of a layer interface (A3S-05)."""
+    from groundfield.solver._guards import _rod_ends_near_interfaces
+
+    if world.soil is None:
+        return []
+    hits = _rod_ends_near_interfaces(world.electrodes, _layer_interfaces(world.soil))
+    return [
+        Diagnostic(
+            "interface_contact",
+            "warning",
+            (name,),
+            f"'{name}' {which} at z = {z_end:.6g} m, interface at {h:.6g} m "
+            f"({(z_end - h) * 1e3:+.3g} mm, wire radius {a * 1e3:.3g} mm)",
+            {
+                "end": which,
+                "z_end_m": z_end,
+                "interface_m": h,
+                "offset_m": z_end - h,
+                "wire_radius_m": a,
+            },
+        )
+        for name, which, z_end, h, a in hits
+    ]
+
+
 def _inert_findings(world: "World") -> list[Diagnostic]:
     from groundfield.soil.models import _EPS_R_DEFAULT
 
@@ -1080,6 +1117,11 @@ def diagnose(
         kernel and information with the exact line kernel (which
         integrates near pairs), ``crossing`` / ``touching`` (wires that
         meet without a bond in the model) are information.
+    ``interface_contact``
+        A rod head or tip within one wire radius of a physical layer
+        interface, where the thin-wire model (no end face) deviates from
+        the solid rod by up to +21 % (audit A3S-05); the solve warns with
+        :class:`~groundfield.solver.InterfaceContactWarning` too.
     ``inert``
         Settings the solve ignores: conductors not attached at both ends,
         the deprecated concrete-shell registry, non-default boundary
@@ -1098,6 +1140,7 @@ def diagnose(
         report.findings.extend(_resolution_findings(world, engine))
     if proximity and (engine is None or check_budget_ok(world, engine)):
         report.findings.extend(_proximity_findings(world, engine))
+    report.findings.extend(_interface_contact_findings(world))
     report.findings.extend(_inert_findings(world))
     if result is not None:
         report.findings.extend(_series_findings(result))

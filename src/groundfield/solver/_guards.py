@@ -28,6 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver._discretize import _Segment
 
 __all__ = [
+    "InterfaceContactWarning",
     "PointKernelInterfaceWarning",
     "ShallowSegmentWarning",
 ]
@@ -788,4 +789,95 @@ def _check_point_interface_diagonal(
         "exact line kernel for a ring 0.2 m above h_1, 1000/30 and 30/1000 "
         "Ohm m). " + remedy + hint + ".",
         PointKernelInterfaceWarning,
+    )
+
+
+# ---------------------------------------------------------------------
+# Rod ends at a layer interface: a limit of the thin-wire model
+# ---------------------------------------------------------------------
+
+
+class InterfaceContactWarning(UserWarning):
+    """A rod head or tip lies within one wire radius of a layer interface.
+
+    The thin-wire model carries the current on the wire axis and has no
+    end face. A rod that ends exactly at the interface :math:`h_1` is
+    therefore a wire entirely on one side of it, and a rod that reaches
+    past the interface by a few micrometres touches the other layer only
+    through a part much shorter than its radius. The solid rod with a flat
+    end face is continuous in between: its end face carries the contact.
+    Against an axisymmetric finite-volume model of the solid rod (4.5 m,
+    :math:`a` = 8 mm, 1000/30 Ω·m, audit A3S-05) the thin wire reads
+    +21 % with its tip at the interface, +7 % 1 mm above it and −4.6 %
+    1 mm below it; beyond two radii it is within a few per cent, like
+    anywhere else (+0.9 % in homogeneous soil). Every segment backend
+    shares this limit; it concerns the end of a rod only (a horizontal
+    wire at the interface is continuous across it).
+
+    Remedy: keep rod ends a few wire radii from an interface, or bracket
+    the result by moving the end by :math:`\\pm 2a`.
+    """
+
+
+def _rod_ends_near_interfaces(
+    electrodes: "Sequence[object]", interfaces: "Sequence[float] | None"
+) -> list[tuple[str, str, float, float, float]]:
+    """Rod heads and tips within one wire radius of an interface.
+
+    Parameters
+    ----------
+    electrodes
+        Electrodes of the world; only :class:`RodElectrode` has ends that
+        are not horizontal.
+    interfaces
+        Physical interface depths in m (the canonical stack).
+
+    Returns
+    -------
+    list of tuple
+        ``(electrode, "head" | "tip", z_end, h, wire_radius)`` in m, one
+        entry per end with ``|z_end - h| <= wire_radius`` (to round-off).
+    """
+    from groundfield.geometry.electrodes import RodElectrode
+
+    if not interfaces:
+        return []
+    out = []
+    for e in electrodes:
+        if not isinstance(e, RodElectrode):
+            continue
+        a = float(e.wire_radius)
+        head = float(e.position[2])
+        for which, z_end in (("head", head), ("tip", head + float(e.length))):
+            for h in interfaces:
+                # Inclusive, to round-off: a tip placed exactly one radius
+                # from h (h = z_tip - a) is within reach.
+                if abs(z_end - float(h)) <= a * (1.0 + 1e-9):
+                    out.append((e.name, which, z_end, float(h), a))
+    return out
+
+
+def _warn_rod_ends_near_interfaces(
+    electrodes: "Sequence[object]", interfaces: "Sequence[float] | None"
+) -> None:
+    """Emit :class:`InterfaceContactWarning` for rod ends at an interface."""
+    hits = _rod_ends_near_interfaces(electrodes, interfaces)
+    if not hits:
+        return
+    from groundfield.solver.registry import warn_external
+
+    name, which, z_end, h, a = hits[0]
+    n = len(hits)
+    warn_external(
+        f"{n} rod end{'s' if n != 1 else ''} lie{'' if n != 1 else 's'} within "
+        f"one wire radius of a layer interface (e.g. electrode '{name}', {which} "
+        f"at z = {z_end:.6g} m, interface at {h:.6g} m, wire radius "
+        f"{a * 1e3:.3g} mm). The thin-wire model has no end face: a rod ending "
+        "at the interface does not touch the layer beyond it, one reaching "
+        "past it by a fraction of its radius touches it through a short part "
+        "only. Against a solid rod with a flat end (4.5 m, a = 8 mm, "
+        "1000/30 Ohm m): +21 % with the tip at the interface, +7 % 1 mm above "
+        "it, -4.6 % 1 mm below it. Keep rod ends a few wire radii from an "
+        "interface, or bracket the result by moving the end by +-2a.",
+        InterfaceContactWarning,
     )

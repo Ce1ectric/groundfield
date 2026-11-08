@@ -376,3 +376,24 @@ def test_diagnose_reports_a_nodal_system_beyond_the_limit(
     budget = report.by_category("budget")
     assert budget and budget[0].data["n_unknowns"] == 1999 + 4
     assert not diagnostics.check_budget_ok(_chain_world(1000, "isolated"), _engine(0.5))
+
+
+@pytest.mark.finding("10.70", "10.32")
+def test_diagnose_reports_a_rod_end_at_the_interface() -> None:
+    """Thin-wire limit at a rod end (audit A3S-05), without an engine too."""
+    # audit A3S-05
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0))
+    gf.create_electrode(
+        w, "rod", name="tip", position=(0, 0, 0.5), length=4.5, wire_radius=0.008
+    )
+    gf.create_electrode(
+        w, "rod", name="far", position=(20, 0, 0.5), length=4.0, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="tip")
+    for report in (diagnostics.diagnose(w), diagnostics.diagnose(w, _engine(0.5))):
+        found = report.by_category("interface_contact")
+        assert [d.subjects for d in found] == [("tip",)]
+        assert found[0].severity == "warning"
+        assert found[0].data["end"] == "tip"
+        assert found[0].data["offset_m"] == pytest.approx(0.0, abs=1e-12)
+        assert "interface contact: 1 rod end lies within one wire radius" in str(report)

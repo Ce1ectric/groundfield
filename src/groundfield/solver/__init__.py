@@ -31,12 +31,16 @@ solve_mutual_matrix, solve_mutual_field
     Multi-port grounding matrices of the image family.
 register_backend, get_backend, available_backends, BackendCapabilities
     The backend registry, with its error, warning and options classes.
+InterfaceContactWarning
+    Diagnostic warning category: a rod head or tip lies within one wire
+    radius of a layer interface, where the thin-wire model (no end face)
+    deviates from the solid rod by up to +21 % (audit A3S-05).
 PointKernelInterfaceWarning
-    Diagnostic warning category: on the cross-layer path of a two-layer
-    soil the point form of the reaction matrix (``kernel="point"`` and the
-    ``mom`` family) meets a horizontal wire within 0.6 segment lengths of
-    the layer interface (-3 % ... -17 % against the exact line kernel;
-    closer still the solve raises).
+    Diagnostic warning category: the point form of the reaction matrix
+    (``kernel="point"`` and the ``mom`` family) meets a horizontal wire
+    within 0.6 segment lengths of a layer interface, on either side of it
+    (-3 % ... -17 % against the exact line kernel; closer still the solve
+    raises).
 ShallowSegmentWarning
     Diagnostic warning category: a leakage segment is longer than four
     times its burial depth, so the point-image stand-in for the
@@ -56,7 +60,10 @@ reduction step.
 
 from __future__ import annotations
 
-from groundfield.solver._guards import PointKernelInterfaceWarning
+from groundfield.solver._guards import (
+    InterfaceContactWarning,
+    PointKernelInterfaceWarning,
+)
 from groundfield.solver.engine import CORE_METADATA_KEYS, Backend, Engine
 from groundfield.solver.image import ShallowSegmentWarning, solve_image
 from groundfield.solver.image_2layer import solve_image_2layer
@@ -96,6 +103,7 @@ __all__ = [
     "MomSommerfeldOptions",
     "FemOptions",
     "CORE_METADATA_KEYS",
+    "InterfaceContactWarning",
     "PointKernelInterfaceWarning",
     "ShallowSegmentWarning",
     "solve_image",
