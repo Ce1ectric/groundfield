@@ -225,7 +225,7 @@ _N_RHO_NODES = 24
 # pair's S(rho) table nodes are spaced _RHO_NODE_SPACING apart in
 # t = ln(rho + z) (the 24 nodes of a short pair over a km-long range left
 # 1-2e-3). Measured against a refined reference: piece = delta/4 is
-# within 5e-5 (earth-return resistance) and 1e-6 (reactance).
+# within 7e-5 (earth-return resistance) and 1e-6 (reactance).
 _PIECE_SKIN_FRACTION = 0.25
 _RHO_NODE_SPACING = 0.08
 # Pieces per segment at most (the outer grid has (16 n)^2 nodes per
