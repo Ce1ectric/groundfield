@@ -1,0 +1,13 @@
+# Stream fix1 (audit round 1 fixes and cross-stream follow-ups, wave 3).
+#
+# No stored quantity moves, so this file declares no change. Checked with
+# GF_GOLDEN_STRICT=1 against the snapshot of the stream's base
+# (release/calver 1c3fc57): all stored cases bit-identical.
+#
+# * 10.24 (galvanic conductor with one sub-piece leaks): no stored case has a
+#   galvanic distributed conductor shorter than its discretize_segment_length;
+#   isolated single sub-pieces keep the lumped branch.
+# * 10.60 (solve_mutual_* assemble one frequency): bit-identical by
+#   construction of the multi-frequency branch correction.
+# * A1-08 (error types), A1-02 / A1-04 (engine validation), F08 (advisory),
+#   A1-01 / A1-05 (result files): no numbers involved.
