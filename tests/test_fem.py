@@ -1226,6 +1226,100 @@ def test_fem_keeps_electrodes_that_start_at_the_surface(kind, params) -> None:
     assert math.isfinite(res.cluster_impedance("g1")[0].real)
 
 
+# ---------------------------------------------------------------------
+# The closed forms of the equivalent hemisphere outside their range
+# (audit D2A, O-1): a burial depth beyond the electrode's half-extent,
+# and the MeshElectrode formula
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("kind", "params", "needle"),
+    [
+        # 1.88 m strip at 5 m / 9.8 m: fem +369 % / +6120 % against image,
+        # silently (audit O-1); Dwight's wire series diverges beyond z = l/2
+        ("strip", dict(start=(0, 0, 5.0), end=(1.88, 0, 5.0)), "half its length"),
+        ("strip", dict(start=(0, 0, 9.8), end=(1.88, 0, 9.8)), "half its length"),
+        # 10 m strip just below z = l/2 = 5 m (+0.1 % ... +3 % up to z = l)
+        ("strip", dict(start=(0, 0, 5.01), end=(10, 0, 5.01)), "half its length"),
+        # rings deeper than their radius: -5.4 % (r = 0.5 m at 2 m) and
+        # -4.6 % (r = 2 m at 8 m) against image, ever lower with depth
+        ("ring", dict(center=(0, 0, 2.0), radius=0.5), "its radius"),
+        ("ring", dict(center=(0, 0, 8.0), radius=2.0), "its radius"),
+    ],
+)
+def test_fem_rejects_an_electrode_deeper_than_its_formula_reaches(
+    kind, params, needle
+) -> None:
+    """The hemisphere formulas assume a burial depth small against the electrode.
+
+    Dwight's wire formula is the series of the wire and its image in
+    s/l (s = 2 z the image distance, l the length) and converges for
+    s < l only; his ring formula assumes s << D. ``fem`` used them at any
+    depth and read +369 % / +6120 % for a 1.88 m strip at 5 m / 9.8 m in
+    homogeneous soil, silently (audit D2A, O-1). It now raises when the
+    burial depth exceeds the electrode's horizontal half-extent (half the
+    strip length, the ring radius) and names the backends that solve the
+    world.
+    """
+    # audit D2A O-1
+    w = _electrode_world(gf.HomogeneousSoil(rho=10.0), kind, **params)
+    with pytest.raises(gf.BackendCapabilityError, match=needle) as info:
+        gf.create_engine(backend="fem", segment_length=0.25).solve(w)
+    text = str(info.value)
+    assert "'g1'" in text and "Use backend='image' or 'mom'" in text, text
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("kind", "params"),
+    [
+        ("strip", dict(start=(0, 0, 0.8), end=(1.88, 0, 0.8))),  # -0.2 %
+        ("strip", dict(start=(0, 0, 5.0), end=(10, 0, 5.0))),  # z = l/2: -0.1 %
+        ("ring", dict(center=(0, 0, 2.0), radius=2.0)),  # z = r: +0.7 %
+        ("ring", dict(center=(0, 0, 0.8), radius=2.0)),  # benchmark B3
+        # Sverak's grid formula stays bounded with depth: +11.2 % at 20 m
+        ("grid_mesh", dict(corner=(0, 0, 20.0), size=(20, 20), n_x=4, n_y=4)),
+    ],
+)
+def test_fem_keeps_electrodes_within_their_formula(kind, params) -> None:
+    """Guard: within the range the result is unchanged (no error)."""
+    # audit D2A O-1
+    res, _ = _fem_warnings(
+        _electrode_world(gf.HomogeneousSoil(rho=10.0), kind, **params)
+    )
+    assert math.isfinite(res.cluster_impedance("g1")[0].real)
+
+
+@pytest.mark.finding("10.23")
+def test_fem_rejects_a_driven_mesh_electrode() -> None:
+    """MeshElectrode's formula, one strip along the diagonal, misses its wires.
+
+    +118 % ... +193 % against image for 10 m and 20 m meshes at 0.8 m
+    (spacing = size ... 1 m), at every depth (audit D2A, O-1); the
+    GridMeshElectrode of the same wires reads -1.4 ... +21 % (Sverak). A
+    driven mesh raises, a passive one is not reduced and still solves.
+    """
+    # audit D2A O-1
+    import warnings
+
+    w = _electrode_world(
+        gf.HomogeneousSoil(rho=100.0), "mesh", corner=(0, 0, 0.8), size=(10, 10)
+    )
+    with pytest.raises(gf.BackendCapabilityError, match="GridMeshElectrode") as info:
+        gf.create_engine(backend="fem", segment_length=0.5).solve(w)
+    assert "'g1'" in str(info.value) and "'image'" in str(info.value)
+    passive = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(passive, "rod", name="g1", position=(0, 0, 0), length=3.0)
+    gf.create_electrode(passive, "mesh", name="m", corner=(20, 0, 0.8), size=(10, 10))
+    gf.create_source(passive, attached_to="g1", magnitude=1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = gf.create_engine(backend="fem", segment_length=0.5).solve(passive)
+    assert res.electrode_potentials["m"][0] == 0j
+
+
 @pytest.mark.finding("10.66")
 def test_fem_rejects_a_world_without_a_source_like_every_backend() -> None:
     """fem alone solved a source-free world to zeros through Engine.solve.

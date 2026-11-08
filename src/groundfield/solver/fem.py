@@ -653,13 +653,14 @@ def _unreachable_layers(
                 offenders, key=lambda e: _depth_range(world.get_electrode(e))[1]
             )
             z_deep = _depth_range(world.get_electrode(deepest))[1]
-            h = unreached[deepest][0]
-            if h < z_deep:
+            crossed = [b[0] for b in bounds[1:] if a_eq < b[0] < z_deep]
+            if crossed:  # the interface named up to 563ead7
                 where = (
                     f"electrode '{deepest}' reaches z = {z_deep:.3g} m, below the "
-                    f"layer interface at h = {h:.3g} m"
+                    f"layer interface at h = {crossed[0]:.3g} m"
                 )
             else:  # a horizontal wire within its radius above the interface
+                h = unreached[deepest][0]
                 where = (
                     f"electrode '{deepest}' lies at z = {z_deep:.4g} m, within its "
                     f"wire radius of {world.get_electrode(deepest).wire_radius:.3g} m "
@@ -821,7 +822,7 @@ def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | No
     )
 
     stack = as_layer_stack(world.soil)
-    h_1 = float(stack.h[0])
+    h_1 = float(stack.h[0]) if stack.n_layers >= 2 else None
     requested = engine.kernel
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -833,11 +834,13 @@ def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | No
             kernel = effective_kernel(
                 resolved.spec, requested if requested is not None else DEFAULT_KERNEL
             )
-            disc = discretise(world, engine, (h_1,))
+            disc = discretise(world, engine, None if h_1 is None else (h_1,))
             build_topology(world, disc)  # adds the galvanic conductor segments
             _check_segment_depths(disc.segments, where=backend, kernel=kernel)
         except (ValueError, NotImplementedError) as exc:
             return _first_clause(str(exc), backend)
+        if h_1 is None:
+            return None
         arrays = SegmentArrays.from_segments(disc.segments)
         z_max = float(arrays.points[:, 2].max())
         if backend == "mom_sommerfeld" and stack.n_layers >= 3 and z_max >= h_1:
@@ -869,8 +872,10 @@ def _backend_refusal(world: "World", engine: "Engine", backend: str) -> str | No
 
 def _remedy(world: "World", engine: "Engine") -> str:
     """The backend(s) that solve ``world`` per their own checks (D2A-06)."""
-    stack = as_layer_stack(world.soil)
-    candidates = ("mom", "image_2layer") if stack.n_layers <= 2 else ("mom_sommerfeld",)
+    n_layers = as_layer_stack(world.soil).n_layers
+    candidates = {1: ("image", "mom"), 2: ("mom", "image_2layer")}.get(
+        n_layers, ("mom_sommerfeld",)
+    )
     refusals = {b: _backend_refusal(world, engine, b) for b in candidates}
     accepted = [b for b in candidates if refusals[b] is None]
     by_reason: dict[str, list[str]] = {}
@@ -892,8 +897,83 @@ def _remedy(world: "World", engine: "Engine") -> str:
     elif accepted == ["mom", "image_2layer"]:
         text = "Use backend='mom' (one current per segment) or 'image_2layer'."
     else:
-        text = f"Use backend='{accepted[0]}'."
+        text = "Use backend=" + " or ".join(f"'{b}'" for b in accepted) + "."
     return f"{text} {refused}" if refused else text
+
+
+#: Measured consequence of a burial depth beyond the electrode's half-extent
+#: (evidence f2solver/depth_validity.out: the formula against the exact
+#: uniform-current wire and ring, which ``image`` reproduces to 1e-5).
+_DEPTH_RANGE_EFFECT = (
+    "The closed forms of the equivalent hemisphere assume a burial depth "
+    "small against the electrode: Dwight's series of a wire and its image "
+    "converges only above half the wire length, his ring formula needs a depth "
+    "below the ring radius (s << D, s twice the depth). Deeper, fem reads "
+    "+0.2 % (1.25 times half the length) to +474 % (5.3 times) for strips and "
+    "+0.4 % (1.5 times the radius) to -28 % (20 times) for rings against the "
+    "exact uniform-current value that 'image' computes."
+)
+
+#: Measured consequence of the MeshElectrode formula (evidence
+#: f2solver/mesh_formula.out: fem against image and mom at 0.8 m).
+_MESH_FORMULA_EFFECT = (
+    "Its closed form, one strip along the diagonal, ignores the wires of the "
+    "mesh: +118 % to +193 % against 'image' for 10 m and 20 m meshes at 0.8 m "
+    "(spacing from the size down to 1 m), at every depth. fem reduces a "
+    "GridMeshElectrode with Sverak's formula (-1 % to +21 % for the same "
+    "wires)."
+)
+
+
+def _formula_range_issues(
+    world: "World", clusters: dict[str, list[str]], active_clusters: list[str]
+) -> tuple[list[str], list[str]]:
+    """Driven electrodes whose hemisphere formula is used outside its range.
+
+    Audit D2A, O-1: the closed forms of :func:`equivalent_hemisphere_radius`
+    were used at any depth (a 1.88 m strip at 5 m read +369 % in homogeneous
+    soil, silently). Structural limits, from the formulas:
+
+    * strip: Dwight's wire formula is the series of the wire and its image in
+      $x = s/l$ ($s = 2t$ the image distance, $l$ the length) and converges
+      for $x < 1$ only — a burial depth $t$ up to half the length (formula
+      error $\\le 0.1\\,\\%$ there);
+    * ring: Dwight's formula needs $s \\ll D$; up to $t = r$ ($s = D$) its
+      error stays within $+1.0\\,\\%$, beyond it the ring reads ever lower;
+    * MeshElectrode: one strip along the diagonal, wrong at every depth
+      (+118 % … +193 %), so a driven mesh is refused;
+    * rod and grid: no depth limit (Dwight's rod ignores the head depth,
+      +3.9 % at 0.5 m … +10 % at 10 m; Sverak's grid formula is bounded,
+      +6 % … +21 %; both conservative).
+
+    Returns
+    -------
+    tuple[list[str], list[str]]
+        Descriptions of electrodes too deep for their formula, and of
+        driven mesh electrodes.
+    """
+    deep: list[str] = []
+    meshes: list[str] = []
+    for root in active_clusters:
+        for name in clusters[root]:
+            e = world.get_electrode(name)
+            if isinstance(e, MeshElectrode):
+                meshes.append(f"electrode '{name}' is a MeshElectrode")
+            elif isinstance(e, StripElectrode):
+                t, half = float(e.start[2]), 0.5 * float(e.length)
+                if t > half:
+                    deep.append(
+                        f"electrode '{name}' (strip, {e.length:.3g} m long) lies at "
+                        f"z = {t:.3g} m, deeper than half its length ({half:.3g} m)"
+                    )
+            elif isinstance(e, RingElectrode):
+                t, r = float(e.center[2]), float(e.radius)
+                if t > r:
+                    deep.append(
+                        f"electrode '{name}' (ring) lies at z = {t:.3g} m, deeper "
+                        f"than its radius ({r:.3g} m)"
+                    )
+    return deep, meshes
 
 
 def _unreachable_message(
@@ -955,6 +1035,30 @@ def equivalent_hemisphere_radius(electrode: "_ElectrodeBase", rho_top: float) ->
         the top-layer resistivity is the natural choice — the FEM
         then re-solves the actual layered problem on the equivalent
         hemisphere.
+
+    Returns
+    -------
+    float
+        Hemisphere radius $a_{\\text{eq}}$ in m.
+
+    Notes
+    -----
+    Range of the closed forms in depth (audit D2A, O-1; evidence
+    ``f2solver/depth_validity.out``, against the exact uniform-current wire
+    and ring and ``image`` / ``mom``): the strip formula is Dwight's series
+    of the wire and its image in $s/l$ ($s = 2t$, $l$ the length), which
+    converges for a burial depth $t < l/2$ only (error within
+    $\\pm 0.2\\,\\%$ there; +0.2 … +0.4 % at $t = 1.25\\,l/2$, +2.6 … +5.4 %
+    at $t = l$, up to +474 % at $t = 5.3\\,l/2$); the ring formula needs
+    $s \\ll D$ (+0.05 … +1.0 % up to $t = r$; −0.5 … −0.7 % at $t = 2r$,
+    −3.8 … −6.1 % at $4r$, −17 … −28 % at $20r$); the grid formula
+    (Sverak) stays bounded, +6 % … +21 %
+    from 0.25 m to 20 m depth; the rod formula ignores the head depth
+    (+3.9 % at 0.5 m … +10 % at 10 m); the ``MeshElectrode`` formula, one
+    strip along the diagonal, misses the wires of the mesh (+118 % …
+    +193 % at 0.8 m). :func:`solve_fem` refuses the strip and the ring
+    beyond their range and every driven ``MeshElectrode``; this function
+    returns the formula's value regardless.
     """
     if isinstance(electrode, RodElectrode):
         R = dw.rod(rho=rho_top, length=electrode.length, radius=electrode.wire_radius)
@@ -1672,7 +1776,12 @@ def solve_fem(
         that solves the world. Also if a driven cluster contains an
         electrode without a closed-form hemisphere radius (polyline and
         star electrodes; the generators build mesh foundations of
-        polylines). A subclass of ``ValueError`` and
+        polylines), or one whose closed form is used outside its range: a
+        strip deeper than half its length, a ring deeper than its radius,
+        any ``MeshElectrode`` (audit D2A, O-1; see
+        :func:`equivalent_hemisphere_radius`). The message names the
+        backends whose own checks accept the world, or says that none
+        does (audit D2A-06). A subclass of ``ValueError`` and
         ``NotImplementedError``.
     ValueError
         If an electrode, driven or passive, lies at or above the soil
@@ -1824,6 +1933,24 @@ def solve_fem(
             "Backend 'fem' cannot solve this world: the equivalent-hemisphere "
             f"reduction has no closed form for {', '.join(kinds)} (driven "
             f"electrode(s) {shown}{more}). Use backend='image' or 'mom'."
+        )
+
+    # Audit D2A, O-1: a hemisphere formula outside its range is a limit of
+    # the reduction as well, reported before any mesh is built.
+    deep, meshes = _formula_range_issues(world, clusters, active_clusters)
+    if deep or meshes:
+        from groundfield.solver.registry import BackendCapabilityError
+
+        parts = []
+        if deep:
+            parts.append("; ".join(deep) + ". " + _DEPTH_RANGE_EFFECT)
+        if meshes:
+            parts.append("; ".join(meshes) + ". " + _MESH_FORMULA_EFFECT)
+        raise BackendCapabilityError(
+            "Backend 'fem' cannot solve this world: "
+            + " ".join(parts)
+            + " "
+            + _remedy(world, engine)
         )
 
     for root in active_clusters:
