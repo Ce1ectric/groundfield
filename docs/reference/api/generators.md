@@ -66,19 +66,22 @@ kernel), one current per wire is +1.1 % with the default line kernel
 and +0.3 … +0.5 % with `kernel="point"` for 10 m 2 × 2 to 30 m 4 × 4
 meshes; one current for the whole mesh was +2.4 … +3.7 % (point kernel
 +1.5 … +3.1 %) and depended on the orientation.
+A rectangle without cross-braces (`style="ring"`, or `"mesh"` with
+`n_x = n_y = 1`) is one strip per side at every orientation (user
+decision Q38); up to that decision an axis-aligned one was one
+`grid_mesh` electrode connected at its centre, and per side its input
+impedance is lower by less than 1 % up to aspect ratio 4 and 2 % up to 50
+for a short side of at least 1 m over the soils of the AP1 grid, equal for
+a square (scope and numbers on the
+[concrete-shell page](../../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces)).
 `electrode_currents[<name>]` and `grounding_impedance(<name>)` therefore
-refer to the first wire; use `cluster_impedance` or the sum over the
-wires for the foundation. An axis-aligned rectangle without cross-braces
-(`style="ring"`, or `"mesh"` with `n_x = n_y = 1`) stays one `grid_mesh`
-electrode and a polygon outline one closed wire; the deprecated
-`concrete_model="distributed"` makes the axis-aligned rectangle one wire
-per side, less than 1 % apart up to aspect ratio 4 and 2 % up to 50 for a
-short side of at least 1 m over the soils of the AP1 grid (scope and
-numbers on the
-[concrete-shell page](../../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces);
-drop the argument, see [Deprecations](../deprecations.md)); an outline
-narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with a
-warning, for both `foundation_outline="ombr"` and `"polygon"`.
+refer to the first wire (the local −y side, whose start, a corner of the
+rectangle, is the connection point of conductors attached to `<name>`);
+use `cluster_impedance` or the sum over the wires for the foundation. A
+polygon outline is one closed wire. The deprecated `concrete_model` has
+no effect (drop the argument, see [Deprecations](../deprecations.md)); an
+outline narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with
+a warning, for both `foundation_outline="ombr"` and `"polygon"`.
 
 In `TnNetworkGenerator` every cable cabinet has its own PEN cable, as
 the topology documents: from the substation (`StarCabinetTopology`), or

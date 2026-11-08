@@ -80,14 +80,16 @@ def _shells(world: gf.World) -> dict[str, float]:
 @pytest.mark.parametrize("order", [[FOUNDATION, ROD], [ROD, FOUNDATION]])
 def test_shell_sits_on_the_foundation_in_either_order(order):
     """The F16 case (foundation at index 1) and its control: the shell is
-    on the foundation wire, never on the rod, and no registry is used."""
+    on the foundation wires, never on the rod, and no registry is used. The
+    ring is one strip per side since user decision Q38 (one grid mesh up to
+    then): four wires, one coefficient."""
     world, anchor = _build(order, rho_c=150.0)
     assert anchor is not None
     assert world.concrete_shell_corrections == {}
     shells = _shells(world)
-    assert len(shells) == 1
-    (name,) = shells
-    assert "foundation" in name and "rod" not in name
+    assert len(shells) == 4
+    assert all("foundation" in name and "rod" not in name for name in shells)
+    assert len(set(shells.values())) == 1
 
 
 def test_no_shell_without_concrete():
@@ -110,9 +112,10 @@ def test_shells_of_several_encased_electrodes_combine_in_parallel():
     """
     world_two, _ = _build([FOUNDATION, FOUNDATION], rho_c=150.0)
     shells = _shells(world_two)
-    assert len(shells) == 2
-    a, b = shells.values()
-    assert a == b > 0.0
+    # two foundations of four sides each (user decision Q38)
+    assert len(shells) == 8
+    (c,) = set(shells.values())
+    assert c > 0.0
 
 
 # ---------------------------------------------------------------------
@@ -132,8 +135,8 @@ def test_shell_scales_with_concrete_resistivity(order):
     """
     world_a, anchor_a = _build(order, rho_c=150.0)
     world_b, anchor_b = _build(order, rho_c=5000.0)
-    (c_low,) = _shells(world_a).values()
-    (c_high,) = _shells(world_b).values()
+    (c_low,) = set(_shells(world_a).values())
+    (c_high,) = set(_shells(world_b).values())
     assert c_high == pytest.approx(c_low * 5000.0 / 150.0, rel=1e-12)
 
     def z(world, anchor):

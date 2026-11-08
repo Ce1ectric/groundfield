@@ -75,11 +75,11 @@ The older module alias `groundfield.generators.tn_ortsnetz`
 (`TnOrtsnetzGenerator`, `TnOrtsnetzConfig`) keeps working with a
 warning as before.
 
-Fields (user decision Q21):
+Fields (user decisions Q21 and Q38):
 
 | Deprecated (v0.15.0) | Replacement | Note |
 |---|---|---|
-| `FoundationElectrodeSpec.concrete_model` | none — drop the argument | no longer a shell model: both values put the same concrete shell on every wire of the foundation. It only chooses the current owners of an axis-aligned rectangle without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`), one for the whole rectangle (`"lumped"`, the default) or one per side (`"distributed"`). Over the soils of the AP1 grid, for a 5 mm wire at 0.8 m, bare or in concrete of 30 to 1 000 Ω·m up to 0.2 m thick, the two differ by less than 1 % up to aspect ratio 4 (short side at least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at least 1 m, sides up to 150 m); bare or with the default 5 cm shell by less than 0.4 % and 1 % ([concrete shells](../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces)). `"distributed"` warns from the constructor, `model_validate` and JSON input, and from a `model_copy` whose `update` sets it, also through `copy.replace` on Python ≥ 3.13 (an invalid value raises there as in the constructor); `"lumped"` and the JSON and pickles of 0.15.0 load silently. Assigning the attribute (`spec.concrete_model = "distributed"`), unpickling, `model_construct` and pydantic's deprecated `copy(update=...)` do not validate and do not warn |
+| `FoundationElectrodeSpec.concrete_model` | none — drop the argument | no effect since 2026.11: both values put the same concrete shell on every wire of the foundation, and every rectangle without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`) is one owner per side at every orientation, which is what `"distributed"` did (user decision Q38; up to then the default `"lumped"` made an axis-aligned one a single grid-mesh owner, see [concrete shells](../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces) for the size of that change). `"distributed"` warns from the constructor, `model_validate` and JSON input, and from a `model_copy` whose `update` sets it, also through `copy.replace` on Python ≥ 3.13 (an invalid value raises there as in the constructor); `"lumped"` and the JSON and pickles of 0.15.0 load silently. Assigning the attribute (`spec.concrete_model = "distributed"`), unpickling, `model_construct` and pydantic's deprecated `copy(update=...)` do not validate and do not warn |
 
 ## Removed in 2026.11.0
 

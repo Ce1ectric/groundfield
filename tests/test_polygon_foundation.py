@@ -11,7 +11,9 @@ rectangle* (OMBR) of a building footprint
 Following the real polygon removes both artefacts. The tests below pin
 
 1. the *equivalence* of a rectangular polygon with the historic
-   ``GridMeshElectrode`` ring (no regression on the existing model),
+   one-owner ring, a ``GridMeshElectrode`` (no regression on the existing
+   model; the rectangle given by its size is one owner per side since user
+   decision Q38),
 2. the concrete-shell bookkeeping on the polygon perimeter,
 3. the geometric correctness (perimeter, L-shape bias),
 4. the degenerate-edge cleanup, and
@@ -63,16 +65,34 @@ def _z(world, anchor, ds=0.5):
 # ---------------------------------------------------------------------
 
 
-def test_rectangular_polygon_matches_grid_mesh_ring_exactly():
-    """A polygon that *is* the rectangle must reproduce the old ring."""
+def test_rectangular_polygon_matches_the_one_owner_ring_exactly():
+    """A polygon that *is* the rectangle must reproduce the old ring: one
+    owner, as one ``GridMeshElectrode``. Up to user decision Q38 the
+    generators built the rectangle given by its size that way (this test was
+    ``test_rectangular_polygon_matches_grid_mesh_ring_exactly``); since then
+    it is one strip per side, 6.5e-6 lower for this 10 m x 8 m ring (evidence
+    d3gen ``q38_polygon_vs_rectangle.out``)."""
     w_rect, a_rect = _foundation_world({"size_xy_m": RECT_SIZE})
     w_poly, a_poly = _foundation_world({"polygon_xy_m": RECT_POLY})
+    w_grid = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(
+        w_grid,
+        "grid_mesh",
+        name="g",
+        corner=(-5.0, -4.0, 0.7),
+        size=RECT_SIZE,
+        n_x=1,
+        n_y=1,
+        wire_radius=0.0075,
+    )
+    gf.create_source(w_grid, attached_to="g", magnitude=1.0)
 
-    assert type(w_rect.electrodes[0]).__name__ == "GridMeshElectrode"
+    assert [type(e).__name__ for e in w_rect.electrodes] == ["StripElectrode"] * 4
     assert type(w_poly.electrodes[0]).__name__ == "PolylineElectrode"
 
-    z_rect, z_poly = _z(w_rect, a_rect), _z(w_poly, a_poly)
-    assert abs(z_poly - z_rect) <= 1e-12 * abs(z_rect)
+    z_rect, z_poly, z_grid = _z(w_rect, a_rect), _z(w_poly, a_poly), _z(w_grid, "g")
+    assert abs(z_poly - z_grid) <= 1e-12 * abs(z_grid)
+    assert 0.0 < 1.0 - z_rect.real / z_poly.real < 1e-5
 
 
 def test_polygon_ring_is_one_electrode_no_internal_bonds():
@@ -102,9 +122,12 @@ def test_lumped_shell_uses_polygon_perimeter():
     w_rect, _ = _foundation_world({"size_xy_m": RECT_SIZE, **kw}, source=False)
     w_poly, _ = _foundation_world({"polygon_xy_m": RECT_POLY, **kw}, source=False)
     assert w_rect.concrete_shell_corrections == w_poly.concrete_shell_corrections == {}
-    (rect,) = w_rect.electrodes
+    # The rectangle is one strip per side (user decision Q38): their shells
+    # C / L_k in parallel.
+    r_rect = 1.0 / sum(
+        1.0 / shell_resistance_from_coefficient(side) for side in w_rect.electrodes
+    )
     (poly,) = w_poly.electrodes
-    r_rect = shell_resistance_from_coefficient(rect)
     r_poly = shell_resistance_from_coefficient(poly)
     assert r_poly == pytest.approx(r_rect, rel=1e-12)
 

@@ -44,9 +44,10 @@ which every wire of an encased foundation carries as
 ``concrete_shell_coefficient_ohm_m``, with the radius :math:`r_b`; the
 solver adds :math:`C/\Delta s` to the diagonal of each of its segments,
 i.e. the lumped resistance :math:`R_\text{shell} = C / L` in series with an
-electrode of length :math:`L` under a uniform leakage current. Both
-``concrete_model`` values use this one mechanism (review findings
-10.12–10.14). The cross-braces of a mesh foundation are encased like its
+electrode of length :math:`L` under a uniform leakage current. This one
+mechanism (review findings 10.12–10.14) does not depend on the deprecated
+``concrete_model``, which has no effect at all since user decision Q38.
+The cross-braces of a mesh foundation are encased like its
 perimeter: a foundation earth electrode per DIN 18014 lies in the concrete
 together with its connections (user decision Q20 of 2026.11). In 0.15.0
 every wire got :math:`r_b` but the braces no coefficient (and with
@@ -58,45 +59,48 @@ a site are never encased.
 Owners of a foundation
 ----------------------
 The image family solves for one uniform leakage current per electrode
-(an *owner*). A foundation's owners depend only on its structure and on
-``concrete_model`` — never on its orientation, on whether the outline is
-given as a rectangle or as a polygon, or on whether a shell is configured
-(audit A2G-04, review finding 10.39):
+(an *owner*). A foundation's owners depend only on its structure — never
+on its orientation, on whether a shell is configured (audit A2G-04, review
+finding 10.39) or on ``concrete_model`` (user decision Q38):
 
-* a mesh foundation (cross-braces) has one owner per wire line, for both
-  ``concrete_model`` values. One owner over perimeter and braces puts the
-  same current density on both and is +1.6 / +2.5 / +3.2 % high for
-  2 × 2 / 3 × 3 / 4 × 4 cells (10 / 20 / 30 m, line kernel, 1 m segments)
-  against the equipotential reference of the same segments (one owner
-  per segment; with the point kernel identical to ``mom``); one owner per
-  wire is +0.3 / +0.5 / +0.6 %. Against ``mom`` itself (point kernel) one
-  owner per wire is +1.1 % with the default line kernel and +0.3 / +0.5 /
-  +0.5 % with the point kernel;
+* a mesh foundation (cross-braces) has one owner per wire line. One owner
+  over perimeter and braces puts the same current density on both and is
+  +1.6 / +2.5 / +3.2 % high for 2 × 2 / 3 × 3 / 4 × 4 cells (10 / 20 / 30 m,
+  line kernel, 1 m segments) against the equipotential reference of the
+  same segments (one owner per segment; with the point kernel identical
+  to ``mom``); one owner per wire is +0.3 / +0.5 / +0.6 %. Against ``mom``
+  itself (point kernel) one owner per wire is +1.1 % with the default line
+  kernel and +0.3 / +0.5 / +0.5 % with the point kernel;
 * a rectangle without cross-braces (``style="ring"``, or ``"mesh"`` with
-  ``n_x = n_y = 1``) has one owner per side with ``"distributed"`` at
-  every angle, also without a shell; with ``"lumped"`` it is one owner
-  (one :class:`~groundfield.geometry.electrodes.GridMeshElectrode`,
-  exactly the lumped series resistance :math:`C/L_\text{perim}` of the
-  shell) when axis-aligned and one owner per side when rotated. For a
-  perimeter one owner and one per side differ, over the soils of the AP1
-  grid for a 5 mm wire at 0.8 m, bare or in concrete of 30 to 1000 Ω·m up
-  to 0.2 m thick, by less than 1 % up to aspect ratio 4 (short side at
-  least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at
+  ``n_x = n_y = 1``) has one owner per side, at every angle (user decision
+  Q38 of 2026.11). Up to then the default ``"lumped"`` made an
+  axis-aligned one a single owner (one
+  :class:`~groundfield.geometry.electrodes.GridMeshElectrode`, connected
+  at its centre) and only ``"distributed"`` or a rotation split it. The
+  four bonded owners carry the split of the current among the sides that
+  dissipates least (the owner matrix is symmetric and positive definite),
+  and the single owner's split, in proportion to the side lengths, is one
+  of those they can take: per side the input impedance is never higher,
+  and equal for a square. Over the soils of the AP1 grid, for a 5 mm wire
+  at 0.8 m, bare or in concrete of 30 to 1000 Ω·m up to 0.2 m thick, it
+  is lower by less than 1 % up to aspect ratio 4 (short side at least
+  1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at
   least 1 m, sides up to 150 m); bare or with the default 5 cm shell by
-  less than 0.4 % and 1 % (audit R2B-01). This
-  choice is all ``concrete_model`` still does, and the field is deprecated
-  (user decision Q21; ``"distributed"`` warns). (One closed polyline would make
-  the rotated lumped ring one owner too, but the touch-voltage envelope
-  of :mod:`groundfield.postprocess.safety` does not sample inside a
-  closed polyline by default and would lose the interior point that
-  decides the envelope of rings of 20 m and more.)
-* a building outline (``polygon_xy_m``) is one closed polyline (one
-  owner) for both values.
+  less than 0.4 % and 1 % (largest decreases found −0.686 / −1.529 % and
+  −0.320 / −0.907 %; audit R2B-01). Against one current per segment, at
+  the largest cases of that scope, the single owner was 0.55 … 2.16 % high
+  and one per side is 0.23 … 0.90 % high;
+* a building outline (``polygon_xy_m``) is one closed polyline, one
+  owner; a rectangular outline therefore reads like the single owner of a
+  rectangle did, above the same rectangle given by its size.
 
 A foundation of several wires is bonded to its first wire, the anchor:
 the local :math:`-y` side of a rectangle, which starts at the local
 :math:`(-d_x/2, -d_y/2)` corner (the connection point of incoming
-conductors).
+conductors). Per-electrode results under the foundation's name (its
+current, :meth:`~groundfield.solver.result.FieldResult.grounding_impedance`)
+therefore refer to that side; the cluster-level results refer to the
+whole foundation.
 """
 
 from __future__ import annotations
@@ -335,11 +339,12 @@ def _materialise_foundation(
     The owners follow the module rule (see *Owners of a foundation*): a
     mesh with cross-braces is one owner per wire line; a rectangle without
     braces (a ring, or a mesh with ``n_x = n_y = 1``) is one owner per
-    side, except an axis-aligned ``"lumped"`` one (one grid mesh); neither
-    depends on whether a shell is configured. The concrete shell (ADR-0012)
-    is the same for both ``concrete_model`` values: every wire of the
-    foundation, the cross-braces of a mesh included (user decision Q20, DIN
-    18014), gets the radius :math:`r_b` and the coefficient :math:`C`.
+    side, at every angle (user decision Q38); a building outline is one
+    closed polyline. None of them depends on whether a shell is configured
+    or on the deprecated ``concrete_model``, which has no effect. The
+    concrete shell (ADR-0012) puts the radius :math:`r_b` and the
+    coefficient :math:`C` on every wire of the foundation, the cross-braces
+    of a mesh included (user decision Q20, DIN 18014).
     """
     depth = float(spec.depth_m)
     if spec.polygon_xy_m is not None:
@@ -368,20 +373,9 @@ def _materialise_foundation(
     angle_deg, dx, dy, nx, ny = _canonical_right_angle(
         spec.orientation_deg or 0.0, dx, dy, nx, ny
     )
-    braced = nx > 1 or ny > 1
-    if angle_deg == 0.0 and not braced and spec.concrete_model == "lumped":
-        create_electrode(
-            world,
-            "grid_mesh",
-            name=name,
-            corner=(centre_xy[0] - dx / 2.0, centre_xy[1] - dy / 2.0, depth),
-            size=(dx, dy),
-            n_x=1,
-            n_y=1,
-            wire_radius=effective_radius,
-            concrete_shell_coefficient_ohm_m=shell_coefficient,
-        )
-        return
+    # One owner per wire line at every angle; for a rectangle without
+    # cross-braces one per side (user decision Q38: the axis-aligned
+    # "lumped" one was a single GridMeshElectrode up to then).
     _materialise_foundation_wires(
         world,
         centre_xy=centre_xy,

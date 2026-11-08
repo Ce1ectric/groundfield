@@ -13,27 +13,29 @@ reference (one owner per segment; equal to ``mom`` point matching) it is
 +1.5 / +2.4 % high for 2 x 2 / 3 x 3 cells, one owner per wire +0.3 /
 +0.4 % (evidence ``mesh_owner_granularity.out``).
 
-Rule since 2026.11 (the owners never depend on whether a shell is
-configured):
+Rule since 2026.11 (the owners depend only on the structure: never on the
+orientation, on whether a shell is configured or on ``concrete_model``):
 
-* a mesh foundation (cross-braces) has one owner per wire line at every
-  angle, for both ``concrete_model`` values;
+* a mesh foundation (cross-braces) has one owner per wire line;
 * a rectangle without cross-braces (``style="ring"``, or ``"mesh"`` with
-  ``n_x = n_y = 1``) has one owner per side with ``"distributed"`` at
-  every angle; with ``"lumped"`` one ``grid_mesh`` owner when axis-aligned
-  and one owner per side when rotated (less than 1 % apart up to aspect
-  ratio 4 and 2 % up to 50 over the AP1 soils for a short side of at least
-  1 m, bare or in concrete up to 0.2 m thick; audit D2B-02, R2B-01);
-* a ``polygon_xy_m`` outline is one closed polyline for both values.
+  ``n_x = n_y = 1``) has one owner per side (user decision Q38). Up to then
+  the default ``"lumped"`` made an axis-aligned one a single ``grid_mesh``
+  owner and only ``"distributed"`` (or a rotation) split it; per side its
+  input impedance is lower, by less than 1 % up to aspect ratio 4 and 2 %
+  up to 50 over the AP1 soils for a short side of at least 1 m, bare or in
+  concrete up to 0.2 m thick (audit D2B-02, R2B-01), and equal for a
+  square;
+* a ``polygon_xy_m`` outline is one closed polyline.
 
-Since that choice is all ``concrete_model`` still does, the field is
-deprecated (user decision Q21): ``"distributed"`` warns at the user's line,
-the default and the files of 0.15.0 load silently, and the generators do
-not repeat the warning.
+``concrete_model`` therefore has no effect. It is deprecated (user
+decisions Q21 and Q38): ``"distributed"`` warns at the user's line, the
+default and the files of 0.15.0 load silently, and the generators do not
+repeat the warning.
 """
 
 from __future__ import annotations
 
+import json
 import pathlib
 import pickle
 import re
@@ -125,25 +127,29 @@ def test_vanishing_shell_on_a_mesh_foundation_is_continuous(
     assert shell == pytest.approx(bare, rel=tolerance)
 
 
-# audit A2G-04
+# audit A2G-04, user decision Q38
 @pytest.mark.finding("10.12")
+@pytest.mark.parametrize("model", ["lumped", "distributed"])
 @pytest.mark.parametrize("thickness_m", [0.05, 1e-4], ids=["t=5cm", "t=0.1mm"])
-def test_vanishing_shell_on_a_distributed_ring_is_continuous(
-    thickness_m: float,
+def test_vanishing_shell_on_a_ring_is_continuous(
+    model: str, thickness_m: float
 ) -> None:
     """A bare ``"distributed"`` ring was one owner, an encased one four:
-    -0.24 % for a 20 x 2 m ring."""
-    bare = _z(_site(_ring(concrete_model="distributed")), "point")
-    shell = _z(
-        _site(
-            _ring(
-                concrete_model="distributed",
-                concrete_rho_ohm_m=RHO,
-                concrete_thickness_m=thickness_m,
-            )
-        ),
-        "point",
-    )
+    -0.24 % for a 20 x 2 m ring. Since user decision Q38 every ring is four
+    owners for both values (the test ran for ``"distributed"`` only)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        bare = _z(_site(_ring(concrete_model=model)), "point")
+        shell = _z(
+            _site(
+                _ring(
+                    concrete_model=model,
+                    concrete_rho_ohm_m=RHO,
+                    concrete_thickness_m=thickness_m,
+                )
+            ),
+            "point",
+        )
     assert shell == pytest.approx(bare, rel=1e-9)
 
 
@@ -181,39 +187,33 @@ def test_mesh_foundation_does_not_depend_on_its_orientation(
     assert values == pytest.approx([values[0]] * 4, rel=1e-6)
 
 
-# audit A2G-04
+# audit A2G-04, user decision Q38
 @pytest.mark.finding("10.39")
 @pytest.mark.parametrize("rho_c", [None, 1000.0])
-def test_distributed_ring_does_not_depend_on_its_orientation(
-    rho_c: float | None,
+@pytest.mark.parametrize("model", ["lumped", "distributed"])
+def test_ring_does_not_depend_on_its_orientation(
+    rho_c: float | None, model: str
 ) -> None:
-    """A bare distributed ring was one owner at 0 deg and four at 30 deg."""
-    values = [
-        _z(
-            _site(
-                _ring(
-                    orientation_deg=angle,
-                    concrete_model="distributed",
-                    concrete_rho_ohm_m=rho_c,
+    """A bare distributed ring was one owner at 0 deg and four at 30 deg.
+    Up to user decision Q38 the default ``"lumped"`` kept the axis-aligned
+    ring (and the one at 90 deg) one grid-mesh owner, 0.24 % above the
+    rotated one for this 20 x 2 m ring (the documented exception, pinned by
+    ``test_lumped_ring_keeps_its_axis_aligned_single_owner``, removed)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        values = [
+            _z(
+                _site(
+                    _ring(
+                        orientation_deg=angle,
+                        concrete_model=model,
+                        concrete_rho_ohm_m=rho_c,
+                    )
                 )
             )
-        )
-        for angle in (None, 30.0, 90.0)
-    ]
+            for angle in (None, 30.0, 90.0)
+        ]
     assert values == pytest.approx([values[0]] * 3, rel=1e-6)
-
-
-# audit A2G-04
-@pytest.mark.finding("10.39")
-def test_lumped_ring_keeps_its_axis_aligned_single_owner() -> None:
-    """Documented exception: a rotated lumped ring stays one owner per side
-    (a closed polyline would drop the interior sample of the default
-    touch-voltage envelope, which decides it for rings of 20 m and more).
-    The difference to the single axis-aligned owner is 0.24 % for this
-    20 x 2 m ring (aspect ratio 10)."""
-    z_axis = _z(_site(_ring()))
-    z_turned = _z(_site(_ring(orientation_deg=30.0)))
-    assert 0.0 < z_axis / z_turned - 1.0 < 3e-3
 
 
 # ---------------------------------------------------------------------
@@ -242,21 +242,155 @@ def test_mesh_foundation_is_one_owner_per_wire(
     assert len(bonds) == 5
 
 
-# audit A2G-04
+# audit A2G-04, user decision Q38
 @pytest.mark.finding("10.39")
 @pytest.mark.parametrize("angle", [None, 30.0])
 @pytest.mark.parametrize("rho_c", [None, 150.0])
 @pytest.mark.parametrize("model", ["lumped", "distributed"])
 def test_ring_owners(angle: float | None, rho_c: float | None, model: str) -> None:
-    world = _site(
-        _ring(orientation_deg=angle, concrete_rho_ohm_m=rho_c, concrete_model=model)
-    )
-    owners = _owners(world)
-    if model == "lumped" and angle is None:
-        assert [e.kind for e in owners] == ["grid_mesh"]
-    else:
-        assert [e.kind for e in owners] == ["strip"] * 4
+    """Four strips for both values at every angle; up to user decision Q38
+    the axis-aligned ``"lumped"`` ring was one ``grid_mesh``."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        spec = _ring(
+            orientation_deg=angle, concrete_rho_ohm_m=rho_c, concrete_model=model
+        )
+    owners = _owners(_site(spec))
+    assert [e.kind for e in owners] == ["strip"] * 4
     assert sum(e.total_length() for e in owners) == pytest.approx(44.0)
+
+
+_SIDES = ["h_foundation_0"] + [f"h_foundation_0_w{j}" for j in (1, 2, 3)]
+
+
+# user decision Q38
+@pytest.mark.finding("10.39")
+@pytest.mark.parametrize("style", ["ring", "mesh"])
+@pytest.mark.parametrize("angle", [None, 90.0, 30.0])
+@pytest.mark.parametrize("rho_c", [None, 150.0])
+def test_rectangle_without_braces_is_one_owner_per_side(
+    style: str, angle: float | None, rho_c: float | None
+) -> None:
+    """Every rectangle without cross-braces is one strip per side, bonded to
+    the anchor as a rotated one, with the default value too. Up to user
+    decision Q38 the default made an axis-aligned one (also at 90 deg, which
+    is realised as the axis-aligned rectangle with swapped sides) one
+    ``grid_mesh`` connected at its centre."""
+    spec = FoundationElectrodeSpec(
+        style=style,
+        size_xy_m=(20.0, 2.0),
+        n_x=1,
+        n_y=1,
+        depth_m=0.7,
+        wire_radius_m=0.005,
+        orientation_deg=angle,
+        concrete_rho_ohm_m=rho_c,
+    )
+    world = _site(spec)
+    owners = _owners(world)
+    assert [e.name for e in owners] == _SIDES
+    assert [e.kind for e in owners] == ["strip"] * 4
+    assert sum(e.total_length() for e in owners) == pytest.approx(44.0)
+    bonds = [
+        (c.name, c.start_electrode, c.end_electrode)
+        for c in world.conductors
+        if c.name.startswith("h_foundation_0_bond")
+    ]
+    assert bonds == [
+        (f"h_foundation_0_bond_{j}", "h_foundation_0", f"h_foundation_0_w{j}")
+        for j in (1, 2, 3)
+    ]
+    radius = 0.005 if rho_c is None else 0.055
+    assert [e.wire_radius for e in owners] == pytest.approx([radius] * 4)
+    coefficients = {e.concrete_shell_coefficient_ohm_m for e in owners}
+    assert len(coefficients) == 1 and (coefficients.pop() > 0.0) == (rho_c is not None)
+    # The anchor is the local -y side; it starts at the local (-dx/2, -dy/2)
+    # corner, the connection point of incoming conductors (it was the centre
+    # of the grid mesh).
+    corner = {None: (-10.0, -1.0), 90.0: (-1.0, -10.0)}.get(angle)
+    if corner is not None:
+        assert owners[0].connection_point == pytest.approx((*corner, 0.7))
+
+
+def _solved(spec: FoundationElectrodeSpec) -> dict[str, object]:
+    """Every result of one generated foundation that a user reads."""
+    world = _site(spec, gf.TwoLayerSoil(rho_1=200.0, rho_2=50.0, h_1=4.0))
+    engine = gf.create_engine(frequencies=[50.0, 1000.0])
+    points = np.array(
+        [[x, y, 0.0] for x in (-14.0, -3.0, 0.0, 7.0) for y in (-4.0, 0.0, 2.5)]
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = engine.solve(world)
+        _, touch, feet = gf.touch_voltage_envelope(
+            result,
+            world,
+            electrode="h_foundation_0",
+            interior="meshes",
+            return_points=True,
+        )
+        return {
+            "fingerprint": gf.world_fingerprint(world),
+            "input impedance": np.asarray(result.input_impedance()),
+            "cluster impedance": np.asarray(result.cluster_impedance("h_foundation_0")),
+            "potentials": np.array([result.electrode_potentials[n] for n in _SIDES]),
+            "currents": np.array([result.electrode_currents[n] for n in _SIDES]),
+            "field": np.array([result.potential(points, k) for k in (0, 1)]),
+            "touch voltages": np.asarray(touch),
+            "feet": np.asarray(feet),
+        }
+
+
+# user decision Q38
+@pytest.mark.finding("10.39")
+@pytest.mark.parametrize("angle", [None, 90.0, 30.0])
+@pytest.mark.parametrize("rho_c", [None, 150.0])
+def test_both_concrete_model_values_give_the_same_results(
+    angle: float | None, rho_c: float | None
+) -> None:
+    """``concrete_model`` has no effect: the same world, bit for bit the same
+    impedances, potentials, currents, field and touch voltages (the
+    envelope with its interior sample, the centre of the rectangle). Up to
+    user decision Q38 the two values differed for an axis-aligned rectangle
+    (0.24 % for this 20 x 2 m one in homogeneous soil)."""
+    results = {}
+    for model in ("lumped", "distributed"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            spec = _ring(
+                orientation_deg=angle, concrete_rho_ohm_m=rho_c, concrete_model=model
+            )
+        results[model] = _solved(spec)
+    lumped, distributed = results["lumped"], results["distributed"]
+    assert lumped["fingerprint"] == distributed["fingerprint"]
+    for key, value in lumped.items():
+        if key != "fingerprint":
+            assert np.array_equal(value, distributed[key]), key
+    # 24 directions on the offset curve plus the one cell centre
+    assert len(lumped["touch voltages"]) == 25
+
+
+# user decision Q38
+@pytest.mark.finding("10.12")
+@pytest.mark.parametrize("model", ["lumped", "distributed"])
+def test_json_round_trip_of_either_value_builds_the_same_foundation(
+    model: str,
+) -> None:
+    """A spec written with either value loads back with it (``"distributed"``
+    with the warning, ``"lumped"`` silently) and builds the world of a spec
+    without the argument."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        spec = _ring(concrete_rho_ohm_m=150.0, concrete_model=model)
+    text = spec.model_dump_json()
+    assert json.loads(text)["concrete_model"] == model
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        restored = FoundationElectrodeSpec.model_validate_json(text)
+    assert len(_concrete_model_warnings(caught)) == (model == "distributed")
+    assert restored == spec and restored.concrete_model == model
+    reference = _site(_ring(concrete_rho_ohm_m=150.0))
+    assert gf.world_fingerprint(_site(restored)) == gf.world_fingerprint(reference)
 
 
 # audit A2G-04
@@ -324,7 +458,7 @@ def test_documented_margin_of_mesh_foundations_against_mom(
 
 
 # ---------------------------------------------------------------------
-# concrete_model is deprecated (user decision Q21)
+# concrete_model is deprecated and has no effect (user decisions Q21, Q38)
 # ---------------------------------------------------------------------
 
 V0150_CONFIG = pathlib.Path(__file__).parent / "data" / "v0150_tn_network_config.json"
@@ -346,106 +480,123 @@ def _distributed_ring(**kw: object) -> FoundationElectrodeSpec:
         return _ring(concrete_model="distributed", **kw)
 
 
-# user decision Q21
+# user decisions Q21 and Q38
 @pytest.mark.finding("10.12")
 def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
-    """The non-default value keeps working and warns: what the field still
-    does, how much it changes, the earliest removal, what to do."""
+    """The non-default value keeps working and warns: that it has no effect
+    since 2026.11, what every rectangle without cross-braces is now, the
+    earliest removal, what to do. Up to user decision Q38 the message said
+    that the value chose one owner per side for an axis-aligned rectangle
+    and quoted how far the two values differed."""
     with pytest.warns(DeprecationWarning, match="concrete_model") as caught:
         spec = _ring(concrete_model="distributed")
     (warning,) = [w for w in caught if "concrete_model" in str(w.message)]
     assert warning.filename == __file__  # the user's line, not groundfield's
-    message = str(warning.message)
+    message = " ".join(str(warning.message).split())
     for part in (
-        # audit D2B-05: every foundation whose owners the value changes
-        "rectangle without cross-braces",
-        "style='ring'",
-        "n_x = n_y = 1",
-        "one per side",
-        # audit D2B-02, R2B-01: the bound with its scope
-        "less than 1 % up to aspect ratio 4 (short side at least 1 m, sides up to 80 m)",
-        "2 % up to aspect ratio 50 (short side at least 1 m, sides up to 150 m)",
-        "up to 0.2 m thick",
-        "0.4 % and 1 %",
+        "has no effect since groundfield 2026.11",
+        # audit D2B-05: every foundation the owner rule covers
+        "every rectangle without cross-braces (style='ring', or style='mesh' "
+        "with n_x = n_y = 1) is one uniform-current owner per side",
+        "at every orientation",
+        "what 'distributed' did",
         "2027.5",
         "drop the argument",
     ):
         assert part in message, part
+    assert "differ" not in message and " % " not in message
     assert spec.concrete_model == "distributed"
     world = _site(spec)
     assert [e.kind for e in _owners(world)] == ["strip"] * 4
 
 
 def _quoted_bounds(text: str) -> dict[str, float]:
-    """The envelope a text quotes: all shells and the default shell."""
-    text = " ".join(text.split())
-    found = re.search(
-        r"less than ([0-9.]+) % up to aspect ratio 4 .*?and ([0-9.]+) % up to "
-        r"aspect ratio 50 .*?by less than ([0-9.]+) % and ([0-9.]+) %",
-        text,
-    )
+    """The bound a text quotes for the change: all shells, the default shell."""
+    found = _SCOPE.search(" ".join(text.split()))
     assert found, text
     return {
         "4": float(found.group(1)),
-        "50": float(found.group(2)),
-        "4-default": float(found.group(3)),
-        "50-default": float(found.group(4)),
+        "50": float(found.group(3)),
+        "4-default": float(found.group(5)),
+        "50-default": float(found.group(6)),
     }
 
 
-def _lumped_over_distributed(
+def _per_side_over_one_owner(
     size_xy_m: tuple[float, float],
     soil: object,
     rho_c: float | None,
     thickness_m: float,
     style: str = "ring",
 ) -> float:
-    """Z(lumped) / Z(distributed) - 1 of the generated rectangle (default
-    engine, 0.8 m, 5 mm wire)."""
+    """Z(one owner per side) / Z(one owner) - 1 of a rectangle without
+    cross-braces (default engine, 0.8 m, 5 mm wire): the generated
+    foundation against one ``GridMeshElectrode`` with the same radius and
+    shell coefficient, the world the generators built for the default value
+    up to user decision Q38 (evidence d3gen ``q38_change_cases.py``: the same
+    world fingerprint on the base)."""
+    from groundfield.geometry.electrodes import concrete_shell_coefficient
+
+    spec = FoundationElectrodeSpec(
+        style=style,
+        size_xy_m=size_xy_m,
+        n_x=1,
+        n_y=1,
+        depth_m=0.8,
+        wire_radius_m=0.005,
+        concrete_rho_ohm_m=rho_c,
+        concrete_thickness_m=thickness_m,
+    )
+    per_side = _site(spec, soil)
+    one_owner = gf.World(soil=soil)
+    dx, dy = size_xy_m
+    gf.create_electrode(
+        one_owner,
+        "grid_mesh",
+        name="h_foundation_0",
+        corner=(-dx / 2.0, -dy / 2.0, 0.8),
+        size=(dx, dy),
+        n_x=1,
+        n_y=1,
+        wire_radius=0.005 if rho_c is None else 0.005 + thickness_m,
+        concrete_shell_coefficient_ohm_m=(
+            0.0
+            if rho_c is None
+            else concrete_shell_coefficient(rho_c, 0.005, thickness_m)
+        ),
+    )
+    one_owner.add_source(
+        gf.CurrentSource(name="s", attached_to="h_foundation_0", magnitude=1.0)
+    )
+    engine = gf.create_engine(frequencies=[50.0])
     values = []
-    for model in ("lumped", "distributed"):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            spec = FoundationElectrodeSpec(
-                style=style,
-                size_xy_m=size_xy_m,
-                n_x=1,
-                n_y=1,
-                depth_m=0.8,
-                wire_radius_m=0.005,
-                concrete_rho_ohm_m=rho_c,
-                concrete_thickness_m=thickness_m,
-                concrete_model=model,
-            )
-        world = gf.World(soil=soil)
-        anchor = GroundingSystemSpec(electrodes=[spec]).build_at(
-            world, (0.0, 0.0), "h", np.random.default_rng(0)
-        )
-        world.add_source(gf.CurrentSource(name="s", attached_to=anchor, magnitude=1.0))
-        engine = gf.create_engine(frequencies=[50.0])
+    for world in (per_side, one_owner):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             values.append(complex(engine.solve(world).input_impedance()[0]).real)
     return values[0] / values[1] - 1.0
 
 
-# audit D2B-02, audit R2B-01, audit R2B-02
-@pytest.mark.finding("10.12")
+# audit D2B-02, audit R2B-01, audit R2B-02, user decision Q38
+@pytest.mark.finding("10.39")
 @pytest.mark.parametrize(
     ("size_xy_m", "soil", "rho_c", "thickness_m", "bound", "measured"),
     [
         # the largest value found in each clause of the scope (evidence f3gen
-        # r2b_scope_scan.py, r2b_scope_refine.py, r2b_scope_refine_analyse.out)
-        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", 0.006906),
-        ((16.0, 1.0), (1000.0, 30.0, 10.0), 30.0, 0.2, "50", 0.015531),
-        ((80.0, 20.0), (30.0, 200.0, 5.0), 30.0, 0.05, "4-default", 0.003207),
-        ((150.0, 7.75), (30.0, 200.0, 5.0), None, 0.05, "50-default", 0.009150),
-        ((7.0, 1.75), (100.0, 100.0, None), None, 0.05, "4-default", 0.000887),
-        ((25.0, 1.0), (100.0, 100.0, None), None, 0.05, "50-default", 0.003308),
-        # ... and the cases with which the auditor broke the earlier bounds
-        ((10.0, 2.5), (100.0, 100.0, None), None, 0.05, "4-default", 0.00084),
-        ((40.0, 10.0), (30.0, 200.0, 5.0), None, 0.05, "4-default", 0.00253),
-        ((50.0, 1.0), (1000.0, 30.0, 30.0), 30.0, 0.2, "50", 0.01241),
+        # r2b_scope_scan.py, r2b_scope_refine.py; signed: d3gen
+        # q38_signed_analyse.out, q38_change_cases_*.out)
+        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", -0.00685883),
+        ((16.0, 1.0), (1000.0, 30.0, 10.0), 30.0, 0.2, "50", -0.01529391),
+        ((80.0, 20.0), (30.0, 200.0, 5.0), 30.0, 0.05, "4-default", -0.00319643),
+        ((150.0, 7.75), (30.0, 200.0, 5.0), None, 0.05, "50-default", -0.00906661),
+        ((7.0, 1.75), (100.0, 100.0, None), None, 0.05, "4-default", -0.00088626),
+        ((25.0, 1.0), (100.0, 100.0, None), None, 0.05, "50-default", -0.00329717),
+        # ... the cases with which the auditor broke the earlier bounds
+        ((10.0, 2.5), (100.0, 100.0, None), None, 0.05, "4-default", -0.00084104),
+        ((40.0, 10.0), (30.0, 200.0, 5.0), None, 0.05, "4-default", -0.00252437),
+        ((50.0, 1.0), (1000.0, 30.0, 30.0), 30.0, 0.2, "50", -0.01225323),
+        # ... and a square, which does not change (symmetry)
+        ((10.0, 10.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", 0.0),
     ],
     ids=[
         "4x1-wet-t0.2",
@@ -457,9 +608,10 @@ def _lumped_over_distributed(
         "10x2.5-hom",
         "40x10-bare",
         "50x1-wet-t0.2",
+        "10x10-wet-t0.2",
     ],
 )
-def test_the_quoted_concrete_model_bound_holds(
+def test_the_quoted_size_of_the_owner_change_holds(
     size_xy_m: tuple[float, float],
     soil: tuple[float, float, float | None],
     rho_c: float | None,
@@ -467,64 +619,58 @@ def test_the_quoted_concrete_model_bound_holds(
     bound: str,
     measured: float,
 ) -> None:
-    """The bounds of the deprecation (0.16 % up to aspect ratio 4, 0.67 % up
-    to 50) held only for the six rings measured; the auditor found 0.38 % and
-    1.24 %. The second bounds (0.7 % / 1.6 %; 0.33 % / 0.92 %) were scan
-    maxima, not maxima of the scope (16 m x 1 m 1.553 %, 150 m x 7.75 m
-    0.915 %, 25 m x 1 m bare in homogeneous soil 0.331 % against "0.33 %";
-    audit R2B-02). The bound is quoted with a margin over the largest value
-    found in each clause of the stated scope (short side at least 1 m,
-    sides up to 80 m / 150 m, bare or 30 ... 1000 ohm m up to 0.2 m thick,
-    the 39 AP1 soils, 0.8 m, 5 mm); the field description says the same,
-    and a mesh without braces behaves like the ring (audit D2B-05)."""
+    """User decision Q38 turned the bound between the two ``concrete_model``
+    values into the size of this release's change for axis-aligned
+    rectangles without cross-braces built with the default value: one owner
+    became one owner per side, and per side is never higher (the one-owner
+    current distribution is one of those the four owners can take, and the
+    bonded owners minimise the dissipation; equal for a square). The bound
+    keeps its scope and margin (audit D2B-02, R2B-01/02: the earlier
+    quotes broke at 0.38 / 1.24 %, then at 16 m x 1 m 1.553 % and 25 m x 1 m
+    0.331 %, as lumped / distributed - 1); the quoted texts state it as a
+    decrease, and a mesh without braces changes like the ring (D2B-05)."""
     r1, r2, h = soil
     model = (
         gf.HomogeneousSoil(rho=r1)
         if h is None
         else gf.TwoLayerSoil(rho_1=r1, rho_2=r2, h_1=h)
     )
-    diff = _lumped_over_distributed(size_xy_m, model, rho_c, thickness_m)
-    assert diff == pytest.approx(measured, abs=5e-6)
-    for text in (
-        _CONCRETE_MODEL_DEPRECATION,
-        FoundationElectrodeSpec.model_fields["concrete_model"].description,
-    ):
-        assert abs(diff) < _quoted_bounds(text)[bound] / 100.0
-    mesh = _lumped_over_distributed(size_xy_m, model, rho_c, thickness_m, style="mesh")
-    assert mesh == pytest.approx(diff, abs=1e-12)
+    change = _per_side_over_one_owner(size_xy_m, model, rho_c, thickness_m)
+    assert change == pytest.approx(measured, abs=1e-8 if measured else 1e-12)
+    assert change <= 1e-12
+    for text in _texts_with_the_scope().values():
+        assert abs(change) < _quoted_bounds(text)[bound] / 100.0
+    mesh = _per_side_over_one_owner(size_xy_m, model, rho_c, thickness_m, "mesh")
+    assert mesh == change
 
 
 _DOCS = pathlib.Path(__file__).parents[1] / "docs"
 _SCOPE = re.compile(
-    r"less than ([0-9.]+) % up to aspect ratio 4 \(short side at least ([0-9.]+) m, "
-    r"sides up to 80 m\) and ([0-9.]+) % up to aspect ratio 50 \(short side at "
-    r"least ([0-9.]+) m, sides up to 150 m\); bare or with the default 5 cm shell "
-    r"by less than ([0-9.]+) % and ([0-9.]+) %"
+    r"lower by less than ([0-9.]+) % up to aspect ratio 4 \(short side at least "
+    r"([0-9.]+) m, sides up to 80 m\) and ([0-9.]+) % up to aspect ratio 50 "
+    r"\(short side at least ([0-9.]+) m, sides up to 150 m\); bare or with the "
+    r"default 5 cm shell by less than ([0-9.]+) % and ([0-9.]+) %"
 )
 
 
 def _texts_with_the_scope() -> dict[str, str]:
-    """Every text that quotes the bound with its scope, whitespace folded."""
+    """Every text that quotes the size of the change with its scope,
+    whitespace folded. Up to user decision Q38 the warning and the
+    deprecations page quoted it too, as the bound between the two values;
+    they now only say that the field has no effect."""
     from groundfield.generators import materialise
 
     def read(*parts: str) -> str:
         return _DOCS.joinpath(*parts).read_text(encoding="utf-8")
 
-    deprecations = next(
-        line
-        for line in read("reference", "deprecations.md").splitlines()
-        if line.startswith("| `FoundationElectrodeSpec.concrete_model`")
-    )
     adr = read("adr", "0012-foundation-concrete-encasement.md")
     page = read("explanation", "concrete-shells.md")
     texts = {
-        "warning": _CONCRETE_MODEL_DEPRECATION,
         "field description": FoundationElectrodeSpec.model_fields[
             "concrete_model"
         ].description,
         "materialise module": materialise.__doc__,
-        "deprecations page": deprecations,
-        "ADR-0012": adr.split("### User decision Q21", 1)[1],
+        "ADR-0012": adr.split("### User decision Q38", 1)[1],
         "concrete-shell page": page.split(
             "## Owners of a rectangle without cross-braces", 1
         )[1].split("\n## ", 1)[0],
@@ -532,29 +678,31 @@ def _texts_with_the_scope() -> dict[str, str]:
     return {name: " ".join(text.split()) for name, text in texts.items()}
 
 
-# audit R2B-01, audit R2B-02
-@pytest.mark.finding("10.12")
-def test_every_text_quotes_the_bound_with_the_short_side_in_both_clauses() -> None:
+# audit R2B-01, audit R2B-02, user decision Q38
+@pytest.mark.finding("10.39")
+def test_every_text_quotes_the_size_of_the_change_with_the_short_side() -> None:
     """The aspect-ratio-4 clause named no shortest side, but the scan behind
-    it started at 4 m x 1 m: narrower rectangles exceed the bound (3.6 m x
-    0.9 m 0.729 %, 2 m x 0.5 m 1.016 % with 0.2 m of wet concrete over
-    1000 / 30 ohm m; 1.2 m x 0.3 m 0.331 % with the default shell). Every
-    text now quotes one bound, with a short side of at least 1 m in both
-    clauses (the materialise docstring also quoted "bare in homogeneous soil
-    by less than 0.09 % and 0.33 %", broken by 25 m x 1 m at 0.331 %), and
-    the short summaries give the same numbers."""
+    it started at 4 m x 1 m: narrower rectangles exceed the bound (2 m x
+    0.5 m: 1.0158 % as lumped / distributed - 1, -1.0056 % as the change
+    one owner -> per side, with 0.2 m of wet concrete over 1000 / 30 ohm m).
+    Every text quotes one bound, with a short side of at least 1 m in both
+    clauses, and the short summaries give the same numbers. Since user
+    decision Q38 it is the size of the change one owner -> one owner per
+    side, a decrease ("lower by"); up to then it was the difference between
+    the two values of ``concrete_model`` (this test was
+    ``test_every_text_quotes_the_bound_with_the_short_side_in_both_clauses``)."""
     quoted, problems = {}, []
     for name, text in _texts_with_the_scope().items():
         found = _SCOPE.search(text)
         if found is None:
-            problems.append(f"{name}: no bound with the short side in both clauses")
+            problems.append(f"{name}: no decrease with the short side in both clauses")
         else:
             quoted[name] = tuple(float(g) for g in found.groups())
         if "bare in homogeneous soil by less than" in text:
             problems.append(f"{name}: a bare-homogeneous bound without margin")
     summary = (
-        "less than 1 % apart up to aspect ratio 4 and 2 % up to 50 for a short "
-        "side of at least 1 m"
+        "lower by less than 1 % up to aspect ratio 4 and 2 % up to 50 for a "
+        "short side of at least 1 m"
     )
     generators_page = (_DOCS / "reference" / "api" / "generators.md").read_text(
         encoding="utf-8"
@@ -568,34 +716,32 @@ def test_every_text_quotes_the_bound_with_the_short_side_in_both_clauses() -> No
     assert not problems, problems
     assert set(quoted.values()) == {(1.0, 1.0, 2.0, 1.0, 0.4, 1.0)}, quoted
     # The short side matters: below 1 m the bound of aspect ratio 4 fails.
-    narrow = _lumped_over_distributed(
+    narrow = _per_side_over_one_owner(
         (2.0, 0.5), gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0), 30.0, 0.2
     )
-    assert narrow == pytest.approx(0.010158, abs=5e-6)
-    assert narrow > quoted["warning"][0] / 100.0
+    assert narrow == pytest.approx(-0.01005593, abs=1e-8)
+    assert abs(narrow) > quoted["field description"][0] / 100.0
 
 
-# audit R2B-07
-@pytest.mark.finding("10.12")
+# audit R2B-07, user decision Q38
+@pytest.mark.finding("10.39")
 def test_the_owner_section_states_its_model_uncertainty() -> None:
-    """The largest values of the bound sit at the 0.2 m shell, whose outer
+    """The largest values of the change sit at the 0.2 m shell, whose outer
     radius (0.205 m) makes segment length / wire radius 2.4 at the default
     0.5 m segments, below the thin-wire limit of 5 (the solve warns). There an
     independent solver that averages the potential over the wire surface
-    gives 0.598 / 1.468 % instead of 0.691 / 1.553 %, and the comparison with
-    one current per segment is not converged; the page said "an independent
-    thin-wire boundary-element solution reproduces the largest cases to 0.01
-    points" and stated no model uncertainty."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        spec = FoundationElectrodeSpec(
-            style="ring",
-            size_xy_m=(16.0, 1.0),
-            depth_m=0.8,
-            wire_radius_m=0.005,
-            concrete_rho_ohm_m=30.0,
-            concrete_thickness_m=0.2,
-        )
+    gives -0.594 / -1.447 % instead of -0.686 / -1.529 % (0.598 / 1.468 %
+    against 0.691 / 1.553 % as lumped / distributed - 1, as the texts said
+    up to user decision Q38), and the comparison with one current per segment
+    is not converged."""
+    spec = FoundationElectrodeSpec(
+        style="ring",
+        size_xy_m=(16.0, 1.0),
+        depth_m=0.8,
+        wire_radius_m=0.005,
+        concrete_rho_ohm_m=30.0,
+        concrete_thickness_m=0.2,
+    )
     world = _site(spec, gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=10.0))
     with pytest.warns(
         UserWarning, match=r"segment_length / wire_radius below 5.* 2\.4"
@@ -606,40 +752,62 @@ def test_the_owner_section_states_its_model_uncertainty() -> None:
     assert "reproduces the largest cases to 0.01 points" not in page
     for text in (page, adr):
         assert "below the thin-wire limit of 5" in text
-        assert "0.598" in text and "1.468" in text
+        assert "−0.594" in text and "−1.447" in text
+        assert "−0.686" in text and "−1.529" in text
     assert "segment length over wire radius is 2.4" in page
     assert "is not converged" in adr
     assert "refining its segments to 0.083 m" in page
 
 
-# audit D2B-05
+# user decision Q38 (replaces audit D2B-05's
+# test_the_texts_name_every_foundation_whose_owners_concrete_model_changes:
+# the value changes no owner any more)
 @pytest.mark.finding("10.12")
-def test_the_texts_name_every_foundation_whose_owners_concrete_model_changes() -> None:
-    """A ``style="mesh"`` foundation with ``n_x = n_y = 1`` is one grid mesh
-    with "lumped" and four strips with "distributed", like a ring, but the
-    warning and the field description spoke of ``style="ring"`` only and
-    counted mesh foundations among those the value does not change."""
-
-    def owners(model: str, **kw: object) -> list[str]:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            spec = FoundationElectrodeSpec(
-                size_xy_m=(10.0, 6.0), concrete_model=model, **kw
-            )
-        return [e.kind for e in _owners(_site(spec))]
-
-    assert owners("lumped", style="mesh", n_x=1, n_y=1) == ["grid_mesh"]
-    assert owners("distributed", style="mesh", n_x=1, n_y=1) == ["strip"] * 4
-    # one brace is enough: one owner per wire line for both values
-    braced = owners("lumped", style="mesh", n_x=1, n_y=2)
-    assert braced == owners("distributed", style="mesh", n_x=1, n_y=2)
-    assert braced == ["strip"] * 3 + ["polyline"] * 2
+@pytest.mark.parametrize("angle", [None, 30.0])
+@pytest.mark.parametrize("rho_c", [None, 150.0])
+def test_concrete_model_has_no_effect_on_any_foundation(
+    angle: float | None, rho_c: float | None
+) -> None:
+    """Rings, meshes without and with braces and polygon outlines build the
+    same world for both values. Up to user decision Q38 a ``style="mesh"``
+    foundation with ``n_x = n_y = 1`` was one grid mesh with ``"lumped"`` and
+    four strips with ``"distributed"``, like a ring (audit D2B-05); the
+    warning and the field description now say that the field has no effect
+    and name every foundation of the owner rule."""
+    outline = ((-6.0, -4.5), (6.0, -4.5), (6.0, 4.5), (-6.0, 4.5))
+    variants = {
+        "ring": dict(style="ring"),
+        "mesh 1 x 1": dict(style="mesh", n_x=1, n_y=1),
+        "mesh 1 x 2": dict(style="mesh", n_x=1, n_y=2),
+        "mesh 2 x 2": dict(style="mesh"),
+        "polygon": dict(style="ring", polygon_xy_m=outline),
+    }
+    kinds = {}
+    for name, kw in variants.items():
+        worlds = []
+        for model in ("lumped", "distributed"):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                spec = FoundationElectrodeSpec(
+                    size_xy_m=(10.0, 6.0),
+                    orientation_deg=angle,
+                    concrete_rho_ohm_m=rho_c,
+                    concrete_model=model,
+                    **kw,
+                )
+            worlds.append(_site(spec))
+        assert gf.world_fingerprint(worlds[0]) == gf.world_fingerprint(worlds[1]), name
+        kinds[name] = [e.kind for e in _owners(worlds[0])]
+    assert kinds["ring"] == kinds["mesh 1 x 1"] == ["strip"] * 4
+    assert kinds["mesh 1 x 2"] == ["strip"] * 3 + ["polyline"] * 2
+    assert kinds["mesh 2 x 2"] == ["polyline"] * 6
+    assert kinds["polygon"] == ["polyline"]
     description = FoundationElectrodeSpec.model_fields["concrete_model"].description
     for text in (_CONCRETE_MODEL_DEPRECATION, description):
         flat = " ".join(text.split())
+        assert "no effect" in flat, flat
         assert "rectangle without cross-braces" in flat, flat
         assert "n_x = n_y = 1" in flat, flat
-    assert "mesh foundations (one owner per wire)" not in " ".join(description.split())
 
 
 # user decision Q21

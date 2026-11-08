@@ -10,8 +10,10 @@ crossings, so crossings fall on segment ends as in ``GridMeshElectrode``.
 GEOS reports axis-aligned squares (and rectangles that are long in y) at
 +90 deg, which sent them to the rotated path while the same rectangle at
 0 deg used the grid-mesh path. The OMBR angle of a square is now chosen
-canonically, and a foundation at a multiple of 90 deg is realised on the
-grid-mesh path.
+canonically, and a foundation at a multiple of 90 deg is realised as the
+axis-aligned one with swapped sides. Since audit A2G-04 (meshes) and user
+decision Q38 (rectangles without cross-braces) no foundation uses a grid
+mesh any more: both are one wire per line at every angle.
 """
 
 from __future__ import annotations
@@ -59,7 +61,9 @@ def test_rotated_mesh_has_no_clamp_and_converges_smoothly(angle: float) -> None:
 
 
 def test_distributed_shell_mesh_at_zero_degrees_has_no_clamp() -> None:
-    # A distributed concrete shell forces the per-wire path even at 0 deg.
+    # An encased mesh at 0 deg: one wire per line (since audit A2G-04 at
+    # every angle and for both values; concrete_model has no effect, user
+    # decision Q38).
     spec = FoundationElectrodeSpec(
         size_xy_m=(10.0, 10.0),
         style="mesh",
@@ -162,15 +166,24 @@ def _world_electrodes(spec: FoundationElectrodeSpec) -> str:
     )
 
 
+@pytest.mark.parametrize("style", ["mesh", "ring"])
 @pytest.mark.parametrize("angle", [90.0, -90.0])
-def test_foundation_at_right_angles_uses_the_grid_mesh_path(angle: float) -> None:
+def test_foundation_at_right_angles_is_the_axis_aligned_one(
+    angle: float, style: str
+) -> None:
+    """Was ``test_foundation_at_right_angles_uses_the_grid_mesh_path`` (mesh
+    only); the ring case pins user decision Q38 (one strip per side at 90
+    deg, as at 0 deg; a grid mesh at both up to then)."""
     turned = FoundationElectrodeSpec(
-        size_xy_m=(10.0, 12.0), orientation_deg=angle, style="mesh", n_x=3, n_y=2
+        size_xy_m=(10.0, 12.0), orientation_deg=angle, style=style, n_x=3, n_y=2
     )
     straight = FoundationElectrodeSpec(
-        size_xy_m=(12.0, 10.0), style="mesh", n_x=2, n_y=3
+        size_xy_m=(12.0, 10.0), style=style, n_x=2, n_y=3
     )
     assert _world_electrodes(turned) == _world_electrodes(straight)
+    if style == "ring":
+        kinds = json.loads(_world_electrodes(straight))
+        assert [e["kind"] for e in kinds] == ["strip"] * 4
 
 
 def test_axis_aligned_footprint_square_gives_an_axis_aligned_foundation() -> None:
