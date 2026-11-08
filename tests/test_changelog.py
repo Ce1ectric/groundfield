@@ -55,6 +55,18 @@ def _section(version: str) -> str:
     return body.split("\n## [", 1)[0]
 
 
+def _notes_2026_11() -> str:
+    """Release notes of 2026.11.0: the ``[Unreleased]`` block until the
+    release tool has turned it into ``## [2026.11.0] - <date>``.
+
+    The tests below hold before and after the release commit, so the
+    release workflow, which runs them on the tag, passes.
+    """
+    if "\n## [2026.11.0] - " in _text(CHANGELOG):
+        return _section("2026.11.0")
+    return _unreleased()
+
+
 @pytest.mark.finding("10.93")
 def test_docs_page_includes_the_marked_section() -> None:
     text = _text(CHANGELOG)
@@ -95,7 +107,7 @@ def test_release_headings_follow_keep_a_changelog() -> None:
 
 @pytest.mark.finding("10.93")
 def test_unreleased_block_has_the_mandatory_blocks() -> None:
-    body = _unreleased()
+    body = _notes_2026_11()
     for heading in (
         "### Numbers that change",
         "### Security",
@@ -112,7 +124,7 @@ def test_unreleased_block_has_the_mandatory_blocks() -> None:
 
 @pytest.mark.finding("10.93")
 def test_every_fixed_entry_names_its_test() -> None:
-    fixed = _unreleased().split("\n### Fixed\n", 1)[1].split("\n### ", 1)[0]
+    fixed = _notes_2026_11().split("\n### Fixed\n", 1)[1].split("\n### ", 1)[0]
     entries = re.split(r"\n- ", "\n" + fixed)[1:]
     assert entries
     for entry in entries:
@@ -140,7 +152,7 @@ def test_corrected_0150_statements_keep_their_footnotes() -> None:
     for label in ("c-cim", "c-f16", "c-f17", "c-f47", "c-f48", "c-f53"):
         assert f"[^{label}]" in section.split(f"[^{label}]:", 1)[0], label
         assert f"\n[^{label}]: Correction (2026.11.0)" in section, label
-    corrections = _unreleased().split(
+    corrections = _notes_2026_11().split(
         "\n### Corrections to the 0.15.0 release notes\n", 1
     )[1]
     for finding in ("F47", "F48", "F53", "F54", "F16", "F08", "F17", "`cim`"):

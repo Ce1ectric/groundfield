@@ -667,7 +667,16 @@ def test_release_of_the_real_project_files(tmp_path: Path) -> None:
     """The tool handles the repository's own pyproject, CITATION and CHANGELOG."""
     repo = _make_repo(tmp_path)
     for rel in RELEASE_FILES:
-        repo.write(rel, (REPO / rel).read_text(encoding="utf-8"))
+        text = (REPO / rel).read_text(encoding="utf-8")
+        if rel == "CHANGELOG.md":
+            # Right after a release the real [Unreleased] block is empty and
+            # the tool refuses it; give the copy one entry so that the test
+            # runs on the tag as well (the release workflow tests the tag).
+            head, marker, tail = text.partition("\n## [Unreleased]\n")
+            if "\n### " not in tail.split("\n## [", 1)[0]:
+                tail = "\n### Fixed\n\n- A placeholder entry of this test.\n" + tail
+            text = head + marker + tail
+        repo.write(rel, text)
     repo.commit_all("real files")
     old_pyproject = tomllib.loads(repo.read("pyproject.toml"))
     old_changelog = repo.read("CHANGELOG.md")
