@@ -37,9 +37,18 @@ Python expression built from
 * powers ``base ** n`` whose exponent ``n`` is a numeric literal
   (``2``, ``-1``, ``0.5``, ``(1/2)``, ``(-3/2)``, the sign before the
   fraction or its numerator) with $|n| \le$ :data:`MAX_POW`, so power
-  towers such as ``9**9**9`` cannot be written;
+  towers such as ``9**9**9`` cannot be written; a fractional exponent
+  ``p/q`` (also ``sqrt``, ``q = 2``) applied to an *exact* number, i.e.
+  to an integer or fraction base or to the rational coefficient ``c`` of
+  a product base ``c*f*...``, needs $q \le$ :data:`MAX_ROOT_DENOMINATOR`
+  and (digits of the number) $\times\, q \le$ :data:`MAX_RADICAND_DIGITS`
+  (``12**(1/3)`` and ``(2*f)**(3/2)`` are fine, a 300-digit integer under
+  ``**(63/64)`` is not; written as a float, ``2.0**(1/100)``, a number is
+  not limited);
 * calls ``sqrt(x)``, ``exp(x)`` and ``log(x)`` with exactly one
-  positional argument.
+  positional argument; ``log`` may not appear inside the argument of
+  ``exp``, because SymPy rewrites ``exp(c*log(x))`` as the power
+  ``x**c``, whose exponent ``c`` is no literal.
 
 Resource bounds
 ---------------
@@ -68,6 +77,31 @@ Resource bounds
   the cost of a formula, accepted or rejected, is bounded independently
   of its structure;
 * division by a numeric zero, ``0 ** -n`` and ``log(0)`` are rejected.
+
+SymPy evaluates some functions of numbers eagerly, in time that the
+bounds above do not limit: it simplifies a fractional power of an exact
+number by factorising the number, keeping a radicand of up to ``q - 1``
+times its digits (the 300-digit integer ``10**300 - 1`` under ``63/64``
+gives a radicand of about 18 800 digits, and SymPy tests a 16 280-digit
+factor of it for primality; ``18**(10**30/(10**30 + 1))`` needs
+``2**(10**30)``; products merge such powers and add their exponents),
+and its ``log`` of a complex number ``r + r*j`` takes the
+square root of ``2*r**2``. Without the rules below, 15 strings of the
+formula corpus ran for more than 20 s each. So
+
+* no exact number is ever left under a fractional power: a fractional
+  power of a symbol-free base is evaluated numerically, and the rational
+  coefficient ``c`` of a product base is taken out as the float
+  ``|c|**(p/q)`` (``(-c*f)**(p/q) = |c|**(p/q) * (-f)**(p/q)``); a sum
+  with a float coefficient gets float coefficients throughout (SymPy
+  before 1.14 takes the largest coefficient of such a sum out of the
+  power); otherwise powers of symbols, sums and functions keep their
+  exact form;
+* ``log`` of a symbol-free argument other than a positive rational or a
+  float is evaluated numerically (``log(2)`` stays exact);
+* a number created this way is a float of 17 significant digits per real
+  and imaginary part (every float64 prints exactly), on SymPy's principal
+  branch, and parts below ``2**-100`` times the magnitude are dropped.
 
 The resulting expression contains only ``Add``, ``Mul``, ``Pow``,
 numbers, ``I``, ``pi``, ``E``, ``exp``, ``log`` and the caller's
@@ -101,6 +135,8 @@ __all__ = [
     "MAX_DEPTH",
     "MAX_LITERAL_CHARS",
     "MAX_POW",
+    "MAX_ROOT_DENOMINATOR",
+    "MAX_RADICAND_DIGITS",
     "MAX_LOG10_MAGNITUDE",
     "MAX_RATIONAL_DIGITS",
     "MAX_WORK",
@@ -123,6 +159,26 @@ MAX_LITERAL_CHARS = 400
 
 MAX_POW = 64
 """Maximum magnitude of a literal exponent in ``base ** n``."""
+
+MAX_ROOT_DENOMINATOR = 64
+"""Maximum denominator ``q`` of a fractional exponent ``p/q`` of an exact number.
+
+Applies to an integer or fraction base and to the rational coefficient of
+a product base (``sqrt`` has ``q = 2``); the same limit as groundinsight's
+formula guard.
+"""
+
+MAX_RADICAND_DIGITS = 300
+"""Maximum digits times ``q`` of an exact number under a fractional power ``p/q``.
+
+Digits of a fraction count numerator and denominator. SymPy would keep a
+radicand of up to ``q - 1`` times the digits of the number and test it for
+primality: ``27*p*q`` under ``63/64`` takes 3 ms with two 3-digit primes
+``p``, ``q`` (7 digits), 0.33 s with two 10-digit primes, 2.6 s with two
+20-digit primes and more than 15 s with two 50-digit primes. The parser
+never lets SymPy do this (see the module notes); the limit keeps absurd
+exact numbers out and is the same as in groundinsight's formula guard.
+"""
 
 MAX_LOG10_MAGNITUDE = 300.0
 """Bound on ``|log10|x||`` for every non-zero number and symbol-free value."""
@@ -158,6 +214,8 @@ left-to-right order of the text (the parsed expression is unchanged)."""
 
 _MAX_EXP_ARGUMENT = MAX_LOG10_MAGNITUDE * math.log(10.0)  # about 690.8
 _MAX_SIGNIFICANT_DIGITS = 17  # float64 carries at most 17 significant digits
+_NUMERIC_DIGITS = 17
+"""Significant digits of a float the parser computes (prints every float64 exactly)."""
 
 _CONSTANTS = {"j": sp.I, "I": sp.I, "pi": sp.pi, "E": sp.E}
 _FUNCTIONS = {"sqrt": sp.sqrt, "exp": sp.exp, "log": sp.log}
@@ -245,10 +303,14 @@ def parse_impedance_formula(
     bounds; powers, exponentials and the common denominator of a sum are
     checked before they are computed; values come from a numeric shadow
     evaluation that visits every node once; and the bookkeeping is capped
-    at :data:`MAX_WORK` steps. So the time and memory a formula costs,
-    accepted or rejected, are bounded by the size limits (audit 1 of the
-    calendar release found sums and products inside those limits that
-    took 13 s to 105 s).
+    at :data:`MAX_WORK` steps. No exact number is left under a fractional
+    power and ``log`` inside ``exp`` is rejected, so SymPy never
+    factorises a number or rewrites ``exp(c*log(x))`` as a power. So the
+    time and memory a formula costs, accepted or rejected, are bounded by
+    the size limits (audit 1 of the calendar release found sums and
+    products inside those limits that took 13 s to 105 s, the
+    groundinsight stream rational powers of large integers that ran for
+    more than 20 s).
     """
     names = _check_symbol_names(symbols)
     src = _normalise(text)
@@ -323,13 +385,19 @@ def _parse_tree(src: str) -> ast.Expression:
 
 
 def _check_tree(tree: ast.Expression, src: str, names: tuple[str, ...]) -> None:
-    """Check size, depth, node types and names before anything is built."""
+    """Check size, depth, node types and names before anything is built.
+
+    Also rejects ``log`` inside the argument of ``exp``: SymPy rewrites
+    ``exp(c*log(x))`` as ``x**c`` while it builds ``exp``, with an exponent
+    ``c`` that is no literal (``exp(log(2*f)*10**12)`` builds
+    ``2**(10**12)``).
+    """
     allowed_names = set(names) | set(_CONSTANTS) | set(_FUNCTIONS)
     unknown: set[str] = set()
     n_nodes = 0
-    stack: list[tuple[ast.AST, int]] = [(tree, 1)]
+    stack: list[tuple[ast.AST, int, bool]] = [(tree, 1, False)]
     while stack:
-        node, depth = stack.pop()
+        node, depth, inside_exp = stack.pop()
         n_nodes += 1
         if n_nodes > MAX_NODES:
             raise FormulaError(f"formula has more than {MAX_NODES} syntax nodes")
@@ -342,11 +410,20 @@ def _check_tree(tree: ast.Expression, src: str, names: tuple[str, ...]) -> None:
             )
         if isinstance(node, ast.Name) and node.id not in allowed_names:
             unknown.add(node.id)
+        called = _called_name(node)
+        if called == "log" and inside_exp:
+            raise FormulaError(
+                f"log() inside exp() is not allowed{_column(node)}: "
+                f"{_snippet(src, node)}; SymPy rewrites exp(c*log(x)) as the "
+                "power x**c, whose exponent c is no literal. Write the power "
+                "x**c with a literal exponent instead"
+            )
+        inside_exp = inside_exp or called == "exp"
         family = _chain_family(node)
         for child in ast.iter_child_nodes(node):
             same_chain = family is not None and child is getattr(node, "left", None)
             same_chain = same_chain and _chain_family(child) == family
-            stack.append((child, depth if same_chain else depth + 1))
+            stack.append((child, depth if same_chain else depth + 1, inside_exp))
     if unknown:
         raise FormulaError(
             f"formula contains unrecognised free symbols {sorted(unknown)!r}; "
@@ -354,6 +431,13 @@ def _check_tree(tree: ast.Expression, src: str, names: tuple[str, ...]) -> None:
             "unit j (or I), the constants pi and E, and the functions sqrt, "
             "exp and log"
         )
+
+
+def _called_name(node: ast.AST) -> str | None:
+    """Return the name a call node calls (``None`` for other nodes)."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id
+    return None
 
 
 def _chain_family(node: ast.AST) -> str | None:
@@ -395,6 +479,47 @@ def _snippet(src: str, node: ast.AST, limit: int = 60) -> str:
 def _digits(n: int) -> float:
     """``log10|n|`` of a non-zero Python integer (exact for big integers)."""
     return math.log10(abs(n))
+
+
+def _decimal_digits(n: int) -> int:
+    """Return the number of decimal digits of a Python integer (``0`` has one)."""
+    n = abs(n)
+    if n < 10:
+        return 1
+    count = int(math.log10(n)) + 1  # may be one off next to a power of ten
+    if n >= 10**count:
+        return count + 1
+    if n < 10 ** (count - 1):
+        return count - 1
+    return count
+
+
+def _float_coefficients(total: sp.Expr) -> sp.Expr:
+    """Return a sum with a float coefficient with all its coefficients as floats.
+
+    SymPy before 1.14 takes the largest coefficient ``c`` of such a sum out
+    of a power, ``(2.0*f + c)**e -> c**e * (2.0/c*f + 1)**e``, and would
+    factorise an exact ``c`` under a fractional ``e``. Coefficients of
+    magnitude one and sums without a float coefficient are left as they
+    are.
+    """
+    terms = [term.as_coeff_Mul() for term in total.args]
+    if not any(coefficient.is_Float for coefficient, _ in terms):
+        return total
+    return sp.Add(
+        *(
+            sp.Float(float(c), _NUMERIC_DIGITS) * rest
+            if c.is_Rational and abs(c) != 1
+            else c * rest
+            for c, rest in terms
+        )
+    )
+
+
+def _rational_digits(x: sp.Rational) -> int:
+    """Return the digits of the numerator plus, for a fraction, the denominator."""
+    digits = _decimal_digits(int(x.p))
+    return digits if x.q == 1 else digits + _decimal_digits(int(x.q))
 
 
 def _float_log10(atom: sp.Float) -> float:
@@ -573,6 +698,24 @@ class _Builder:
     def _is_zero(self, expr: sp.Expr, node: ast.AST) -> bool:
         """Whether ``expr`` is a symbol-free expression of value zero."""
         return not self._profile(expr, node).symbolic and self._value(expr, node) == 0
+
+    def _numeric(self, value: Any) -> sp.Expr:
+        """Return an mpmath value as SymPy floats of 17 significant digits.
+
+        A real or imaginary part below ``2**-100`` times the magnitude is
+        rounding noise of the shadow evaluation (``(-4)**(1/2)`` has the
+        real part ``2*cos(pi/2)``) and is dropped.
+        """
+        ctx = self._ctx
+        magnitude = abs(value)
+        noise = magnitude * ctx.ldexp(1, -_ZERO_SUM_BITS)
+        result: sp.Expr = sp.Integer(0)
+        real, imag = ctx.re(value), ctx.im(value)
+        if abs(real) > noise:
+            result += sp.Float(float(real), _NUMERIC_DIGITS)
+        if abs(imag) > noise:
+            result += sp.Float(float(imag), _NUMERIC_DIGITS) * sp.I
+        return result
 
     # ------------------------------------------------------------------
     # syntax tree -> SymPy
@@ -830,7 +973,51 @@ class _Builder:
                 f"{MAX_RATIONAL_DIGITS} digits",
                 node,
             )
+        if exponent.is_Rational and not exponent.is_Integer:
+            return self._bounded(self._fractional_power(base, exponent, node), node)
         return self._bounded(base**exponent, node)
+
+    def _fractional_power(
+        self, base: sp.Expr, exponent: sp.Rational, node: ast.AST
+    ) -> sp.Expr:
+        """Return ``base**(p/q)`` for a non-integer ``p/q`` without an exact root.
+
+        SymPy simplifies a fractional power of an exact number by
+        factorising the number and keeps a radicand of up to ``q - 1``
+        times its digits; a product merges such powers and adds their
+        exponents (``12**(58/59)*12**(60/61)*...``). So a symbol-free base
+        is powered numerically, and the rational coefficient ``c`` of a
+        product base is taken out as the float ``|c|**(p/q)``, which is
+        exact for the principal branch: ``(c*x)**e = c**e * x**e`` for
+        ``c > 0``, and ``(c*x)**e = |c|**e * (-x)**e`` for ``c < 0``.
+        Before that, an exact number must satisfy the limits
+        :data:`MAX_ROOT_DENOMINATOR` and :data:`MAX_RADICAND_DIGITS`.
+        """
+        p, q = int(exponent.p), int(exponent.q)
+        coefficient, rest = base.as_coeff_Mul()
+        exact = coefficient.is_Rational and coefficient not in (0, 1, -1)
+        if exact:
+            digits = _rational_digits(coefficient)
+            if q > MAX_ROOT_DENOMINATOR or digits * q > MAX_RADICAND_DIGITS:
+                raise self._fail(
+                    f"fractional power of an exact number with {digits} digits "
+                    f"and denominator {q} in the exponent (limits: denominator "
+                    f"<= {MAX_ROOT_DENOMINATOR}, digits x denominator <= "
+                    f"{MAX_RADICAND_DIGITS}); write the number as a float, "
+                    "e.g. 2.0 instead of 2, to evaluate the power numerically",
+                    node,
+                )
+        ctx = self._ctx
+        power = ctx.mpf(p) / q
+        if not self._profile(base, node).symbolic:
+            return self._numeric(ctx.power(self._value(base, node), power))
+        if not exact:
+            if base.is_Add:
+                base = self._bounded(_float_coefficients(base), node)
+            return base**exponent
+        magnitude = abs(coefficient)
+        factor = self._numeric(ctx.power(self._value(magnitude, node), power))
+        return factor * (rest if coefficient > 0 else -rest) ** exponent
 
     def _call(self, node: ast.Call) -> sp.Expr:
         func = node.func
@@ -847,6 +1034,8 @@ class _Builder:
                 node,
             )
         arg = self.build(node.args[0])
+        if func.id == "sqrt":
+            return self._bounded(self._fractional_power(arg, sp.S.Half, node), node)
         if not self._profile(arg, node).symbolic:
             value = self._value(arg, node)
             if func.id == "exp" and abs(value) > _MAX_EXP_ARGUMENT:
@@ -856,6 +1045,11 @@ class _Builder:
                 )
             if func.id == "log" and value == 0:
                 raise self._fail("log(0) is undefined", node)
+            if func.id == "log" and not (
+                arg.is_Float or (arg.is_Rational and arg.is_positive)
+            ):
+                # SymPy's log of r + r*j takes sqrt(2*r**2) and factorises it
+                return self._bounded(self._numeric(self._ctx.log(value)), node)
         return self._bounded(_FUNCTIONS[func.id](arg), node)
 
 
