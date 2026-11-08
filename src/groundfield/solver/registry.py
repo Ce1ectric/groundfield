@@ -83,6 +83,7 @@ import importlib
 import os
 import warnings
 from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -210,6 +211,8 @@ class BackendCapabilities:
     soils
         Soil layer counts the backend solves: ``"homogeneous"`` (one
         layer), ``"two_layer"``, ``"multi_layer"`` (three or more).
+        Any set of names is accepted (``{"homogeneous"}``); the
+        collections are stored as :class:`frozenset`.
     conductors
         Conductor models the backend honours: ``"lumped"`` (a single
         series branch), ``"distributed"`` (``discretize_segment_length``
@@ -235,11 +238,13 @@ class BackendCapabilities:
         (volume methods); those accept any kernel setting.
     """
 
-    soils: frozenset[str]
-    conductors: frozenset[str] = frozenset(_CONDUCTOR_FEATURES)
+    # Annotated with the accepted input type (audit A1-06): a set literal
+    # type-checks; __post_init__ stores a frozenset.
+    soils: AbstractSet[str]
+    conductors: AbstractSet[str] = frozenset(_CONDUCTOR_FEATURES)
     concrete_shells: bool = False
     two_terminal_sources: bool = False
-    kernels: frozenset[str] = frozenset({"point"})
+    kernels: AbstractSet[str] = frozenset({"point"})
     junctions: bool = False
 
     def __post_init__(self) -> None:
@@ -1114,7 +1119,7 @@ def _register_builtins() -> None:
         capabilities=BackendCapabilities(
             soils={"homogeneous", "two_layer", "multi_layer"},
             conductors={"lumped"},
-            kernels=(),
+            kernels=frozenset(),
         ),
         options_model=FemOptions,
         experimental=True,

@@ -51,20 +51,24 @@ Assignments are validated too (``validate_assignment=True``).
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Any, ClassVar, Literal, Self, Union
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Self, Union
 
 from pydantic import (
-    AliasChoices,
     BaseModel,
     ConfigDict,
     Discriminator,
     Field,
+    ModelWrapValidatorHandler,
     Tag,
+    ValidationError,
     field_validator,
     model_validator,
 )
 
 from groundfield.utils.deprecation import warn_deprecated, warn_inert
+
+if TYPE_CHECKING:  # pragma: no cover - type-hint imports only
+    from pydantic_core import InitErrorDetails
 from groundfield.utils.suggest import did_you_mean
 
 __all__ = [
@@ -98,23 +102,58 @@ class _ModelLayerBase(BaseModel):
     """Shared configuration and deprecated-name handling of the soil models.
 
     Subclasses list their renamed fields in ``_renamed`` (old name →
-    canonical name) and declare the canonical field with
-    ``validation_alias=AliasChoices(new, old)``; this base class warns
-    when an old name is used as a keyword or JSON key, rejects a call
-    that passes both names, and translates old names in
-    :meth:`model_copy` (which pydantic does not validate).
+    canonical name). This base class translates an old name used as a
+    keyword or JSON key to the canonical field with a
+    :class:`DeprecationWarning`, rejects a call that passes both names,
+    and translates old names in :meth:`model_copy` (which pydantic does
+    not validate).
+
+    The translation happens in a model validator, not through
+    ``validation_alias=AliasChoices(...)``: with an alias choice the
+    pydantic mypy plugin types ``__init__`` as ``**kwargs`` and a
+    misspelled keyword is no longer a type error (audit A1-09). Type
+    checkers therefore report the deprecated keywords as well. A value
+    given under a deprecated name that fails validation is reported
+    under that name, as before.
     """
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     _renamed: ClassVar[dict[str, str]] = {}
 
-    @model_validator(mode="before")
+    @model_validator(mode="wrap")
     @classmethod
-    def _accept_deprecated_names(cls, data: Any) -> Any:
-        if isinstance(data, Mapping):
-            cls._check_deprecated_names(data)
-        return data
+    def _accept_deprecated_names(
+        cls, data: Any, handler: ModelWrapValidatorHandler[Self]
+    ) -> Self:
+        if not isinstance(data, Mapping):
+            return handler(data)
+        found = cls._check_deprecated_names(data)
+        if not found:
+            return handler(data)
+        given = {cls._renamed[old]: old for old in found}  # canonical -> given
+        data = {cls._renamed.get(k, k): v for k, v in data.items()}
+        try:
+            return handler(data)
+        except ValidationError as exc:
+            errors: list[InitErrorDetails] = []
+            for e in exc.errors():
+                loc = e["loc"]
+                if loc and loc[0] in given:
+                    loc = (given[str(loc[0])], *loc[1:])
+                detail: InitErrorDetails = {
+                    "type": e["type"],
+                    "loc": loc,
+                    "input": e["input"],
+                }
+                if "ctx" in e:
+                    detail["ctx"] = e["ctx"]
+                errors.append(detail)
+            try:
+                renamed = ValidationError.from_exception_data(exc.title, errors)
+            except Exception:  # noqa: BLE001 - keep the original on any doubt
+                raise exc from None
+            raise renamed from None
 
     @classmethod
     def _check_deprecated_names(cls, data: Mapping[str, Any]) -> list[str]:
@@ -212,7 +251,6 @@ class HomogeneousSoil(_SoilBase):
         ...,
         gt=0.0,
         allow_inf_nan=False,
-        validation_alias=AliasChoices("rho", "resistivity"),
         description="Resistivity ρ in Ω·m.",
     )
     relative_permittivity: float = Field(
@@ -302,14 +340,12 @@ class SoilLayer(_ModelLayerBase):
         ...,
         gt=0.0,
         allow_inf_nan=False,
-        validation_alias=AliasChoices("rho", "resistivity"),
         description="Resistivity ρ in Ω·m.",
     )
     h: float | None = Field(
         default=None,
         gt=0.0,
         allow_inf_nan=False,
-        validation_alias=AliasChoices("h", "thickness"),
         description="Layer thickness in m; None for the semi-infinite bottom layer.",
     )
     relative_permittivity: float = Field(
