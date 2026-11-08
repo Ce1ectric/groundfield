@@ -219,29 +219,58 @@ with `n_x = n_y = 1`). `"lumped"` (the default) makes it one
 difference of the input impedance, `"lumped"` over `"distributed"` minus
 one, is never negative and is largest for narrow rectangles, conductive
 upper layers over resistive ones, and thick, wet shells. Over the 39 soils
-of the AP1 grid, for a 5 mm wire at 0.8 m (the generator defaults):
+of the AP1 grid, for a 5 mm wire at 0.8 m (the generator defaults) and a
+short side of at least 1 m, the largest values found are:
 
-| Scope | aspect ratio ≤ 4, sides ≤ 80 m | aspect ratio ≤ 50, sides ≤ 150 m, short side ≥ 1 m |
+| Scope | aspect ratio ≤ 4, sides ≤ 80 m | aspect ratio ≤ 50, sides ≤ 150 m |
 |---|---|---|
-| bare, homogeneous soil | 0.088 % (6 m × 1.5 m) | 0.329 % (30 m × 1 m) |
-| bare or shell up to 5 cm (the default), $\rho_c$ = 30 … 1 000 Ω·m | 0.321 % (80 m × 20 m, 30 / 200 Ω·m, $h_1$ = 5 m) | 0.914 % (150 m × 7.5 m, same soil) |
-| bare or shell up to 0.2 m, $\rho_c$ = 30 … 1 000 Ω·m | 0.691 % (4 m × 1 m, 0.2 m at 30 Ω·m, 1 000 / 30 Ω·m, $h_1$ = 5 m) | 1.529 % (20 m × 1 m, same shell, $h_1$ = 10 m) |
+| bare, homogeneous soil | 0.089 % (7 m × 1.75 m) | 0.331 % (25 m × 1 m) |
+| bare or shell up to 5 cm (the default), $\rho_c$ = 30 … 1 000 Ω·m | 0.321 % (80 m × 20 m, 5 cm at 30 Ω·m, 30 / 200 Ω·m, $h_1$ = 5 m) | 0.915 % (150 m × 7.75 m, bare, same soil) |
+| bare or shell up to 0.2 m, $\rho_c$ = 30 … 1 000 Ω·m | 0.691 % (4 m × 1 m, 0.2 m at 30 Ω·m, 1 000 / 30 Ω·m, $h_1$ = 5 m) | 1.553 % (16 m × 1 m, same shell, $h_1$ = 10 m) |
 
-The scan covers 37 rectangles (aspect ratio 2 to 50), bare wires and
-shells of 0.015 / 0.05 / 0.1 / 0.2 m with 65 values of $\rho_c$ from 30 to
-1 000 Ω·m. Drier concrete brings the two together (0.04 % at 5 000 Ω·m for
-the 20 m × 1 m case); wetter concrete, down to a perfectly conducting
-shell, separates them up to 1.66 %; a shallower foundation (0.5 m) or a
-thicker wire (10 mm) moves the largest cases by up to +0.10 percentage
-points (0.79 % for the 4 m × 1 m case at 0.5 m). `Engine.solve` of the
-generated rectangles (both styles) reproduces the scan to 7e-16, and an
-independent thin-wire boundary-element solution reproduces the largest
-cases to 0.01 points. Against one current per segment (the moment-method
-reference) one owner per side is the closer model: for the largest cases
-above one owner is 0.55 … 2.15 % high, one per side 0.23 … 0.91 %
-(groundfield's per-segment assembly and the boundary-element solution
-agree to 0.02 points) — input for the decision which model remains when
-the field is removed.
+The warning, the field description and the
+[deprecations page](../reference/deprecations.md) quote a bound with a
+margin over these values: the two differ by less than 1 % up to aspect
+ratio 4 (short side at least 1 m, sides up to 80 m) and 2 % up to aspect
+ratio 50 (short side at least 1 m, sides up to 150 m); bare or with the
+default 5 cm shell by less than 0.4 % and 1 %. The values come from a
+coarse scan of the scope (30 rectangles with short sides of 1 to 37.5 m
+and aspect ratios 1 to 50, bare and with 5 cm and 0.2 m shells, 61 values
+of $\rho_c$) refined around each maximum, 13 524 owner matrices in all.
+Every case is largest for the wettest concrete of the scope (30 Ω·m), and
+the largest cases grow with the shell thickness; drier concrete brings the
+two together
+(0.04 % at 5 000 Ω·m for the 16 m × 1 m case), a perfectly conducting
+shell separates them up to 1.69 %. A foundation at 0.5 … 1.5 m or a wire
+of 2.5 … 10 mm raises the largest cases by at most 0.10 percentage points
+(0.79 % for 4 m × 1 m at 0.5 m, 1.00 % for 150 m × 7.75 m with a 10 mm
+wire). Below a short side of 1 m the difference keeps growing (2 m ×
+0.5 m: 1.02 %, 10 m × 0.5 m: 2.27 % with the 0.2 m shell; 1.2 m × 0.3 m:
+0.33 % with the default shell), which is why the scope names the short
+side. `Engine.solve` of the generated rectangles (both styles) reproduces
+the scan to 4e-14 points; the line kernel at 0.25 m or 1 m segments and
+the point kernel stay within the bound (0.51 … 0.70 % and 1.40 … 1.56 %
+for the two largest cases).
+
+**Model uncertainty.** The largest values belong to the 0.2 m shell, whose
+outer radius of 0.205 m is not thin against the segments: at the default
+0.5 m, segment length over wire radius is 2.4, below the thin-wire limit of
+5, and the engine warns. There the numbers depend on how the solver places
+the radius: an independent thin-wire boundary-element solution (audit R2B)
+that averages the potential over the wire surface gives 0.598 % and
+1.468 % instead of 0.691 % and 1.553 %; for the bare and 5 cm cases of the
+table it agrees with groundfield to 0.001 points. Against one current per
+segment, all segments at one potential (the moment-method reference), one
+owner per side is the closer model: one owner is 0.55 % (80 m × 20 m,
+bare) to 2.16 % (16 m × 1 m) high, one per side 0.23 … 0.90 % (groundfield's
+per-segment assembly at 0.25 m segments; for the bare cases the
+boundary-element solution agrees to 0.001 points). For the 0.2 m shell
+this comparison is uncertain by about 0.2 points: at 0.25 m segments the
+boundary-element solution lies up to 0.23 points lower, and refining its
+segments to 0.083 m — shorter than the radius, which groundfield refuses —
+moves it by up to 0.17 points (4 m × 1 m: one owner +0.85 → +1.01 %, one
+per side +0.25 → +0.41 %). This is input for the decision which model
+remains when the field is removed.
 
 ## Converting between the conventions
 

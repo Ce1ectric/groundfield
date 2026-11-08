@@ -79,11 +79,11 @@ given as a rectangle or as a polygon, or on whether a shell is configured
   exactly the lumped series resistance :math:`C/L_\text{perim}` of the
   shell) when axis-aligned and one owner per side when rotated. For a
   perimeter one owner and one per side differ, over the soils of the AP1
-  grid for a 5 mm wire at 0.8 m, by less than 0.7 % up to aspect ratio 4
-  (sides up to 80 m) and 1.6 % up to 50 (up to 150 m, short side at least
-  1 m), bare or in concrete of 30 to 1000 Ω·m up to 0.2 m thick; bare or
-  with the default 5 cm shell by less than 0.33 % and 0.92 %, bare in
-  homogeneous soil by less than 0.09 % and 0.33 % (audit D2B-02). This
+  grid for a 5 mm wire at 0.8 m, bare or in concrete of 30 to 1000 Ω·m up
+  to 0.2 m thick, by less than 1 % up to aspect ratio 4 (short side at
+  least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at
+  least 1 m, sides up to 150 m); bare or with the default 5 cm shell by
+  less than 0.4 % and 1 % (audit R2B-01). This
   choice is all ``concrete_model`` still does, and the field is deprecated
   (user decision Q21; ``"distributed"`` warns). (One closed polyline would make
   the rotated lumped ring one owner too, but the touch-voltage envelope

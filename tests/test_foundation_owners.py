@@ -21,10 +21,9 @@ configured):
 * a rectangle without cross-braces (``style="ring"``, or ``"mesh"`` with
   ``n_x = n_y = 1``) has one owner per side with ``"distributed"`` at
   every angle; with ``"lumped"`` one ``grid_mesh`` owner when axis-aligned
-  and one owner per side when rotated (less than 0.7 % apart up to aspect
-  ratio 4 and 1.6 % up to 50 over the AP1 soils, bare or in concrete up to
-  0.2 m thick; 0.09 % and 0.33 % for a bare ring in homogeneous soil;
-  audit D2B-02);
+  and one owner per side when rotated (less than 1 % apart up to aspect
+  ratio 4 and 2 % up to 50 over the AP1 soils for a short side of at least
+  1 m, bare or in concrete up to 0.2 m thick; audit D2B-02, R2B-01);
 * a ``polygon_xy_m`` outline is one closed polyline for both values.
 
 Since that choice is all ``concrete_model`` still does, the field is
@@ -363,11 +362,11 @@ def test_distributed_concrete_model_warns_at_the_callers_line() -> None:
         "style='ring'",
         "n_x = n_y = 1",
         "one per side",
-        # audit D2B-02: the envelope with its scope
-        "less than 0.7 % up to aspect ratio 4 (sides up to 80 m)",
-        "1.6 % up to aspect ratio 50 (up to 150 m, short side at least 1 m)",
+        # audit D2B-02, R2B-01: the bound with its scope
+        "less than 1 % up to aspect ratio 4 (short side at least 1 m, sides up to 80 m)",
+        "2 % up to aspect ratio 50 (short side at least 1 m, sides up to 150 m)",
         "up to 0.2 m thick",
-        "0.33 % and 0.92 %",
+        "0.4 % and 1 %",
         "2027.5",
         "drop the argument",
     ):
@@ -430,27 +429,31 @@ def _lumped_over_distributed(
     return values[0] / values[1] - 1.0
 
 
-# audit D2B-02
+# audit D2B-02, audit R2B-01, audit R2B-02
 @pytest.mark.finding("10.12")
 @pytest.mark.parametrize(
     ("size_xy_m", "soil", "rho_c", "thickness_m", "bound", "measured"),
     [
-        # the largest case of each scope of the envelope scan (evidence f2gen
-        # q21_envelope_scan.py / q21_envelope_analyse.out) ...
-        ((80.0, 20.0), (30.0, 200.0, 5.0), None, 0.05, "4-default", 0.00321),
-        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", 0.00691),
-        ((150.0, 7.5), (30.0, 200.0, 5.0), None, 0.05, "50-default", 0.00914),
-        ((20.0, 1.0), (1000.0, 30.0, 10.0), 30.0, 0.2, "50", 0.01529),
+        # the largest value found in each clause of the scope (evidence f3gen
+        # r2b_scope_scan.py, r2b_scope_refine.py, r2b_scope_refine_analyse.out)
+        ((4.0, 1.0), (1000.0, 30.0, 5.0), 30.0, 0.2, "4", 0.006906),
+        ((16.0, 1.0), (1000.0, 30.0, 10.0), 30.0, 0.2, "50", 0.015531),
+        ((80.0, 20.0), (30.0, 200.0, 5.0), 30.0, 0.05, "4-default", 0.003207),
+        ((150.0, 7.75), (30.0, 200.0, 5.0), None, 0.05, "50-default", 0.009150),
+        ((7.0, 1.75), (100.0, 100.0, None), None, 0.05, "4-default", 0.000887),
+        ((25.0, 1.0), (100.0, 100.0, None), None, 0.05, "50-default", 0.003308),
         # ... and the cases with which the auditor broke the earlier bounds
         ((10.0, 2.5), (100.0, 100.0, None), None, 0.05, "4-default", 0.00084),
         ((40.0, 10.0), (30.0, 200.0, 5.0), None, 0.05, "4-default", 0.00253),
         ((50.0, 1.0), (1000.0, 30.0, 30.0), 30.0, 0.2, "50", 0.01241),
     ],
     ids=[
-        "80x20-bare",
         "4x1-wet-t0.2",
-        "150x7.5-bare",
-        "20x1-wet-t0.2",
+        "16x1-wet-t0.2",
+        "80x20-wet-t5cm",
+        "150x7.75-bare",
+        "7x1.75-hom",
+        "25x1-hom",
         "10x2.5-hom",
         "40x10-bare",
         "50x1-wet-t0.2",
@@ -466,11 +469,14 @@ def test_the_quoted_concrete_model_bound_holds(
 ) -> None:
     """The bounds of the deprecation (0.16 % up to aspect ratio 4, 0.67 % up
     to 50) held only for the six rings measured; the auditor found 0.38 % and
-    1.24 %. The envelope over the stated scope (sides up to 80 m / 150 m,
-    short side at least 1 m, bare or 30 ... 1000 ohm m up to 0.2 m thick, the
-    39 AP1 soils, 0.8 m, 5 mm) is quoted with that scope; the field
-    description says the same, and a mesh without braces behaves like the
-    ring (audit D2B-05)."""
+    1.24 %. The second bounds (0.7 % / 1.6 %; 0.33 % / 0.92 %) were scan
+    maxima, not maxima of the scope (16 m x 1 m 1.553 %, 150 m x 7.75 m
+    0.915 %, 25 m x 1 m bare in homogeneous soil 0.331 % against "0.33 %";
+    audit R2B-02). The bound is quoted with a margin over the largest value
+    found in each clause of the stated scope (short side at least 1 m,
+    sides up to 80 m / 150 m, bare or 30 ... 1000 ohm m up to 0.2 m thick,
+    the 39 AP1 soils, 0.8 m, 5 mm); the field description says the same,
+    and a mesh without braces behaves like the ring (audit D2B-05)."""
     r1, r2, h = soil
     model = (
         gf.HomogeneousSoil(rho=r1)
@@ -486,6 +492,124 @@ def test_the_quoted_concrete_model_bound_holds(
         assert abs(diff) < _quoted_bounds(text)[bound] / 100.0
     mesh = _lumped_over_distributed(size_xy_m, model, rho_c, thickness_m, style="mesh")
     assert mesh == pytest.approx(diff, abs=1e-12)
+
+
+_DOCS = pathlib.Path(__file__).parents[1] / "docs"
+_SCOPE = re.compile(
+    r"less than ([0-9.]+) % up to aspect ratio 4 \(short side at least ([0-9.]+) m, "
+    r"sides up to 80 m\) and ([0-9.]+) % up to aspect ratio 50 \(short side at "
+    r"least ([0-9.]+) m, sides up to 150 m\); bare or with the default 5 cm shell "
+    r"by less than ([0-9.]+) % and ([0-9.]+) %"
+)
+
+
+def _texts_with_the_scope() -> dict[str, str]:
+    """Every text that quotes the bound with its scope, whitespace folded."""
+    from groundfield.generators import materialise
+
+    def read(*parts: str) -> str:
+        return _DOCS.joinpath(*parts).read_text(encoding="utf-8")
+
+    deprecations = next(
+        line
+        for line in read("reference", "deprecations.md").splitlines()
+        if line.startswith("| `FoundationElectrodeSpec.concrete_model`")
+    )
+    adr = read("adr", "0012-foundation-concrete-encasement.md")
+    page = read("explanation", "concrete-shells.md")
+    texts = {
+        "warning": _CONCRETE_MODEL_DEPRECATION,
+        "field description": FoundationElectrodeSpec.model_fields[
+            "concrete_model"
+        ].description,
+        "materialise module": materialise.__doc__,
+        "deprecations page": deprecations,
+        "ADR-0012": adr.split("### User decision Q21", 1)[1],
+        "concrete-shell page": page.split(
+            "## Owners of a rectangle without cross-braces", 1
+        )[1].split("\n## ", 1)[0],
+    }
+    return {name: " ".join(text.split()) for name, text in texts.items()}
+
+
+# audit R2B-01, audit R2B-02
+@pytest.mark.finding("10.12")
+def test_every_text_quotes_the_bound_with_the_short_side_in_both_clauses() -> None:
+    """The aspect-ratio-4 clause named no shortest side, but the scan behind
+    it started at 4 m x 1 m: narrower rectangles exceed the bound (3.6 m x
+    0.9 m 0.729 %, 2 m x 0.5 m 1.016 % with 0.2 m of wet concrete over
+    1000 / 30 ohm m; 1.2 m x 0.3 m 0.331 % with the default shell). Every
+    text now quotes one bound, with a short side of at least 1 m in both
+    clauses (the materialise docstring also quoted "bare in homogeneous soil
+    by less than 0.09 % and 0.33 %", broken by 25 m x 1 m at 0.331 %), and
+    the short summaries give the same numbers."""
+    quoted, problems = {}, []
+    for name, text in _texts_with_the_scope().items():
+        found = _SCOPE.search(text)
+        if found is None:
+            problems.append(f"{name}: no bound with the short side in both clauses")
+        else:
+            quoted[name] = tuple(float(g) for g in found.groups())
+        if "bare in homogeneous soil by less than" in text:
+            problems.append(f"{name}: a bare-homogeneous bound without margin")
+    summary = (
+        "less than 1 % apart up to aspect ratio 4 and 2 % up to 50 for a short "
+        "side of at least 1 m"
+    )
+    generators_page = (_DOCS / "reference" / "api" / "generators.md").read_text(
+        encoding="utf-8"
+    )
+    for name, text in {
+        "class docstring": FoundationElectrodeSpec.__doc__,
+        "generators page": generators_page,
+    }.items():
+        if summary not in " ".join(text.split()):
+            problems.append(f"{name}: no short summary with the short side")
+    assert not problems, problems
+    assert set(quoted.values()) == {(1.0, 1.0, 2.0, 1.0, 0.4, 1.0)}, quoted
+    # The short side matters: below 1 m the bound of aspect ratio 4 fails.
+    narrow = _lumped_over_distributed(
+        (2.0, 0.5), gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0), 30.0, 0.2
+    )
+    assert narrow == pytest.approx(0.010158, abs=5e-6)
+    assert narrow > quoted["warning"][0] / 100.0
+
+
+# audit R2B-07
+@pytest.mark.finding("10.12")
+def test_the_owner_section_states_its_model_uncertainty() -> None:
+    """The largest values of the bound sit at the 0.2 m shell, whose outer
+    radius (0.205 m) makes segment length / wire radius 2.4 at the default
+    0.5 m segments, below the thin-wire limit of 5 (the solve warns). There an
+    independent solver that averages the potential over the wire surface
+    gives 0.598 / 1.468 % instead of 0.691 / 1.553 %, and the comparison with
+    one current per segment is not converged; the page said "an independent
+    thin-wire boundary-element solution reproduces the largest cases to 0.01
+    points" and stated no model uncertainty."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        spec = FoundationElectrodeSpec(
+            style="ring",
+            size_xy_m=(16.0, 1.0),
+            depth_m=0.8,
+            wire_radius_m=0.005,
+            concrete_rho_ohm_m=30.0,
+            concrete_thickness_m=0.2,
+        )
+    world = _site(spec, gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=10.0))
+    with pytest.warns(
+        UserWarning, match=r"segment_length / wire_radius below 5.* 2\.4"
+    ):
+        gf.create_engine(frequencies=[50.0]).solve(world)
+    texts = _texts_with_the_scope()
+    page, adr = texts["concrete-shell page"], texts["ADR-0012"]
+    assert "reproduces the largest cases to 0.01 points" not in page
+    for text in (page, adr):
+        assert "below the thin-wire limit of 5" in text
+        assert "0.598" in text and "1.468" in text
+    assert "segment length over wire radius is 2.4" in page
+    assert "is not converged" in adr
+    assert "refining its segments to 0.083 m" in page
 
 
 # audit D2B-05

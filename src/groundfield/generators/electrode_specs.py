@@ -63,15 +63,16 @@ __all__ = [
     "rod_circle",
 ]
 
-# User decision Q21 (2026.11). The numbers are the envelope of the largest
-# relative difference of the input impedance between the two values over the
-# scope they name (audit D2B-02, evidence of stream f2gen:
-# q21_envelope_scan.py over 37 rectangles, 5 wire radii, 39 soils and
-# rho_c = 30 ... 1000 ohm m; q21_envelope_verify.py checks the largest cases
-# with Engine.solve and an independent BEM): 0.691 % (4 m x 1 m, t = 0.2 m,
-# rho_c = 30 ohm m, 1000/30 ohm m, h_1 = 5 m) and 1.529 % (20 m x 1 m, the
-# same shell, h_1 = 10 m); 0.321 % (80 m x 20 m) and 0.914 % (150 m x 7.5 m)
-# bare or with the default 5 cm shell (30/200 ohm m, h_1 = 5 m).
+# User decision Q21 (2026.11). The numbers bound the relative difference of
+# the input impedance between the two values over the scope they name, with
+# a margin over the largest values found (audit R2B-01/02, evidence of
+# stream f3gen: r2b_scope_scan.py and r2b_scope_refine.py search the scope,
+# r2b_corner_cases.py checks the largest cases with Engine.solve and an
+# independent BEM): 0.691 % (4 m x 1 m, t = 0.2 m, rho_c = 30 ohm m,
+# 1000/30 ohm m, h_1 = 5 m) and 1.553 % (16 m x 1 m, the same shell,
+# h_1 = 10 m); 0.321 % (80 m x 20 m) and 0.915 % (150 m x 7.75 m) bare or
+# with the default 5 cm shell (30/200 ohm m, h_1 = 5 m). Below a short side
+# of 1 m the difference grows (2 m x 0.5 m: 1.02 %).
 _CONCRETE_MODEL_DEPRECATION = (
     "FoundationElectrodeSpec.concrete_model is deprecated. It no longer "
     "selects a concrete-shell model (both values put the same shell on the "
@@ -80,11 +81,12 @@ _CONCRETE_MODEL_DEPRECATION = (
     "n_x = n_y = 1): one per side for 'distributed', one for the whole "
     "rectangle for 'lumped' (the default). Over the soils of the AP1 grid, "
     "for a 5 mm wire at 0.8 m, bare or in concrete of 30 to 1000 ohm m up to "
-    "0.2 m thick, the two differ by less than 0.7 % up to aspect ratio 4 "
-    "(sides up to 80 m) and 1.6 % up to aspect ratio 50 (up to 150 m, short "
-    "side at least 1 m); bare or with the default 5 cm shell by less than "
-    "0.33 % and 0.92 %. The field will be removed no earlier than groundfield "
-    f"{DEPRECATION_REMOVAL}; drop the argument."
+    "0.2 m thick, the two differ by less than 1 % up to aspect ratio 4 "
+    "(short side at least 1 m, sides up to 80 m) and 2 % up to aspect ratio "
+    "50 (short side at least 1 m, sides up to 150 m); bare or with the "
+    "default 5 cm shell by less than 0.4 % and 1 %. The field will be "
+    f"removed no earlier than groundfield {DEPRECATION_REMOVAL}; drop the "
+    "argument."
 )
 
 
@@ -212,9 +214,9 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     per side when rotated, and so is a ``"mesh"`` with ``n_x = n_y = 1``
     (a rectangle without cross-braces); ``concrete_model="distributed"``
     (deprecated) makes the axis-aligned rectangle one wire per side as
-    well, less than 0.7 % apart up to aspect ratio 4 and 1.6 % up to 50
-    (see :attr:`concrete_model` for the scope). A ``polygon_xy_m`` outline
-    is one closed polyline.
+    well, less than 1 % apart up to aspect ratio 4 and 2 % up to 50 for a
+    short side of at least 1 m (see :attr:`concrete_model` for the scope).
+    A ``polygon_xy_m`` outline is one closed polyline.
 
     With a shell (:attr:`concrete_rho_ohm_m`) every wire of the
     foundation, the cross-braces of a mesh included, is encased (DIN
@@ -355,15 +357,15 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             '``"distributed"`` one owner per side. Over the soils of the '
             "AP1 grid, for a 5 mm wire at 0.8 m, bare or in concrete of 30 "
             "to 1000 Ω·m up to 0.2 m thick, the two differ by less than "
-            "0.7 % up to aspect ratio 4 (sides up to 80 m) and 1.6 % up to "
-            "aspect ratio 50 (up to 150 m, short side at least 1 m); bare or "
-            "with the default 5 cm shell by less than 0.33 % and 0.92 % "
-            "(audit D2B-02). Rotated rectangles (one owner per side), "
-            "meshes with cross-braces (one owner per wire) and polygon "
-            "outlines (one closed wire) are the same for both values (audit "
-            "A2G-04). Up to 0.15.0 the lumped shell was a registry entry "
-            "that only the TN generator's PEN service drops read (review "
-            "findings 10.12-10.14)."
+            "1 % up to aspect ratio 4 (short side at least 1 m, sides up to "
+            "80 m) and 2 % up to aspect ratio 50 (short side at least 1 m, "
+            "sides up to 150 m); bare or with the default 5 cm shell by less "
+            "than 0.4 % and 1 % (audit R2B-01). Rotated rectangles (one "
+            "owner per side), meshes with cross-braces (one owner per wire) "
+            "and polygon outlines (one closed wire) are the same for both "
+            "values (audit A2G-04). Up to 0.15.0 the lumped shell was a "
+            "registry entry that only the TN generator's PEN service drops "
+            "read (review findings 10.12-10.14)."
         ),
     )
 

@@ -446,19 +446,31 @@ one owner (`"lumped"`, one grid mesh) or one per side (`"distributed"`)
 for an axis-aligned rectangle without cross-braces (`style="ring"`, or
 `"mesh"` with `n_x = n_y = 1`). Over the 39 soils of the AP1 grid, for a
 5 mm wire at 0.8 m, bare or in concrete of 30 to 1 000 Ω·m up to 0.2 m
-thick, the two differ by less than 0.7 % up to aspect ratio 4 (sides up
-to 80 m) and 1.6 % up to aspect ratio 50 (up to 150 m, short side at least
-1 m); bare or with the default 5 cm shell by less than 0.33 % and 0.92 %
-(audit D2B-02: a scan of 37 rectangles, the largest cases checked with
-`Engine.solve` and an independent boundary-element solution; the first
-version of this decision quoted 0.16 % and 0.67 %, measured on six rings
-only). The field is deprecated like the
+thick, the two differ by less than 1 % up to aspect ratio 4 (short side at
+least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at
+least 1 m, sides up to 150 m); bare or with the default 5 cm shell by less
+than 0.4 % and 1 %. The bound lies above the largest values found, 0.691 /
+1.553 % and 0.321 / 0.915 % (audit R2B-01: a scan of the scope refined
+around its maxima, the largest cases checked with `Engine.solve` and an
+independent boundary-element solution). The first version of this
+decision quoted 0.16 % and 0.67 %, measured on six rings; the second 0.7 %
+and 1.6 %, the maxima of a coarser scan, without a shortest side for
+aspect ratio 4 (2 m × 0.5 m reaches 1.02 %). The largest values belong to
+the 0.2 m shell, whose outer radius of 0.205 m is not thin against the
+default 0.5 m segments (ratio 2.4, below the thin-wire limit of 5): there an
+independent solution that averages the potential over the wire surface
+gives 0.598 / 1.468 % instead of 0.691 / 1.553 %, and the comparison with one
+current per segment on the
+[concrete-shell page](../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces)
+is not converged. The field is deprecated like the
 flat `sommerfeld_*` fields of the engine: `"distributed"` keeps working
 and emits a `DeprecationWarning` at the user's line; the default
 `"lumped"` — also in the configuration JSON and pickles of 0.15.0 — is
 accepted silently; a `model_copy` validates an `update` of the field like
-the constructor (another value raises, audit D2B-04) and warns only when it
-sets the deprecated value, so the copies made by the generators do not
+the constructor (another value raises, audit D2B-04; only that field, so a
+subclass with fields of its own copies as before, audit R2B-05) and warns
+only when it sets the deprecated value, also through `copy.replace` on
+Python ≥ 3.13 (audit R2B-06), so the copies made by the generators do not
 repeat the warning. Assigning the attribute and unpickling do not validate
 and do not warn. Removal no earlier than 2027.5
 (`tests/test_foundation_owners.py`).
