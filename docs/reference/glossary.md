@@ -53,6 +53,7 @@ practice. Names of releases up to 0.15.0 that were German (`kvs`,
 | two-layer soil | Zweischichtboden | | upper layer $\rho_1$, thickness $h_1$, half-space $\rho_2$ |
 | layer thickness | Schichtdicke | $h_1$ | m |
 | reflection coefficient | Reflexionsfaktor | $K$ | $(\rho_2 - \rho_1)/(\rho_2 + \rho_1)$ |
+| effective resistivity | effektiver spezifischer Erdwiderstand | $\rho_\text{eff}$ | Ω·m; $\rho_1^{1-w}\rho_2^{w}$ with $w = w_0 (h_1/10\ \mathrm{m})^{-\beta}$ in $[0, 1]$ (AP1 calibration $w_0 = 0.13$, $\beta = 0.8$), $\rho$ for homogeneous soil: the `rho` of a groundinsight bus and of a BusType in layered soil (`effective_resistivity`) |
 | remote earth | Bezugserde | | potential reference, $\varphi \to 0$ far away |
 | soil surface | Erdoberfläche | $z = 0$ | depth $z$ positive downwards |
 | skin depth (in the soil) | Eindringtiefe | $\delta$ | $\sqrt{2\rho/(\omega\mu_0)}$ |
@@ -101,7 +102,7 @@ practice. Names of releases up to 0.15.0 that were German (`kvs`,
 | kernel | how a segment's current enters the Green's function: `"line"` (exact uniform line source) or `"point"` (midpoint point source) |
 | segment | straight piece of a discretised wire, at most `segment_length` long |
 | owner | electrode and soil layer that carries one unknown current in the image family |
-| BusType | groundinsight's model of a network node with an impedance formula in `f` and `rho` |
+| BusType | groundinsight's model of a network node with an impedance formula in `f` and `rho` (for layered soil the effective resistivity $\rho_\text{eff}$) |
 
 ## German → English
 
@@ -109,7 +110,8 @@ Auxiliary index for German search terms: Aufteilungsfaktor → split
 factor; Ausbreitungswiderstand → spreading resistance; Banderder → strip
 electrode; Berührungsspannung → touch voltage; Betonummantelung →
 concrete encasement; Bezugserde → remote earth; Durchdringung →
-penetration; EFH → single-family house; Eindringtiefe → skin depth;
+penetration; effektiver spezifischer Erdwiderstand → effective
+resistivity; EFH → single-family house; Eindringtiefe → skin depth;
 Eingangsimpedanz → input impedance; Erder → earth electrode;
 Erdrückleitung → earth return; Erdseil → earth wire; Erdungsanlage →
 earthing system; Erdungsimpedanz → grounding impedance; Erdungsleiter →
