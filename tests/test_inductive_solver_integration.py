@@ -59,12 +59,15 @@ def _pen_world(
     return w
 
 
-def _series_impedance(w: gf.World, model: str, freqs: list[float]) -> np.ndarray:
+def _series_impedance(
+    w: gf.World, model: str, freqs: list[float], **engine_kw: object
+) -> np.ndarray:
     eng = gf.create_engine(
         backend="image",
         segment_length=0.5,
         frequencies=freqs,
         earth_inductive_model=model,
+        **engine_kw,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -119,7 +122,11 @@ def test_skin_model_raises_the_pen_resistance_at_1khz() -> None:
 def test_sommerfeld_pair_work_does_not_grow_with_the_number_of_frequencies(
     monkeypatch,
 ) -> None:
-    """The solver builds the Sommerfeld matrices for all frequencies at once."""
+    """The solver builds the Sommerfeld matrices for all frequencies at once.
+
+    The per-pair rule (``sommerfeld_assembly="exact"``; the default is the
+    tabulated assembly since the user decision Q16).
+    """
     from groundfield.coupling import sommerfeld_inductance as si
 
     calls = {"n": 0}
@@ -130,10 +137,12 @@ def test_sommerfeld_pair_work_does_not_grow_with_the_number_of_frequencies(
         return original(*args, **kwargs)
 
     monkeypatch.setattr(si, "_pair_values_none", counting)
-    _series_impedance(_pen_world(60.0, dsl=10.0), "sommerfeld", [50.0])
+    world, exact = _pen_world(60.0, dsl=10.0), {"sommerfeld_assembly": "exact"}
+    _series_impedance(world, "sommerfeld", [50.0], **exact)
     one = calls["n"]
+    assert one > 0
     calls["n"] = 0
-    _series_impedance(_pen_world(60.0, dsl=10.0), "sommerfeld", [50.0, 250.0, 1000.0])
+    _series_impedance(world, "sommerfeld", [50.0, 250.0, 1000.0], **exact)
     assert calls["n"] == one
 
 

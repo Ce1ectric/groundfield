@@ -409,8 +409,8 @@ class Engine(BaseModel):
           carries no image: the correction holds the whole earth
           effect, so conductors in or crossing the surface plane are
           solved too (since 2026.11). Supports layered earth; see
-          :attr:`sommerfeld_assembly` for the faster tabulated
-          assembly. Limits: $\\sigma \\to 0$ → free space (no image);
+          :attr:`sommerfeld_assembly` for the assembly (tabulated by
+          default). Limits: $\\sigma \\to 0$ → free space (no image);
           $\\sigma \\to \\infty$ → screened (buried) / anti-parallel
           PEC image (overhead). Validated against Pollaczek's
           analytic $K_0$ mutual and Carson's line impedance
@@ -452,13 +452,28 @@ class Engine(BaseModel):
     sommerfeld_assembly
         Assembly of the Sommerfeld earth-return correction of inductive
         conductors (``earth_inductive_model="sommerfeld"``):
-        ``"exact"`` (default) integrates every segment pair with its own
-        quadrature; ``"tabulated"`` shares one table of the spectral
-        integral per pair of depth groups and frequency and is the
-        faster choice for large networks (see
+
+        - ``"tabulated"`` (default since 2026.11, user decision Q16) —
+          one table of the spectral integral $S(\\rho)$ per pair of depth
+          groups and frequency (cubic spline, 100 nodes), the outer
+          quadrature of all segment pairs vectorised. Blocks of fewer
+          than 64 sub-segment pairs and blocks whose $\\lambda$ grid
+          cannot resolve their largest distance (conductors in the
+          surface plane) keep the per-pair rule.
+        - ``"exact"`` — every segment pair with its own quadrature and
+          24 interpolation nodes of $S(\\rho)$; the default up to 0.15.0.
+
+        On a TN network of 8 houses with an inductive PEN (78 inductive
+        branches, four frequencies) the tabulated solve took 1.0 s CPU
+        instead of 16.6 s, and its input impedance is within 4e-10 of
+        two refined references (per-pair rule with 200 nodes, tables of
+        400 nodes), the per-pair rule within 1.2e-8. Read by every
+        backend that assembles the inductive branches through the shared
+        pipeline (the image family, ``mom``, ``mom_sommerfeld``) and by
+        ``solve_mutual_*``; see
         :func:`~groundfield.coupling.sommerfeld_inductance.build_sommerfeld_correction_matrices`,
-        ``method``). Read by every backend that assembles the inductive
-        branches through the shared pipeline.
+        ``method``. The Sommerfeld fallback of ``carson_series`` for
+        oblique pairs is always tabulated.
 
     kernel
         Green's-function kernel of the image family (``image``,
@@ -586,14 +601,17 @@ class Engine(BaseModel):
             "(mom_sommerfeld: MomSommerfeldOptions, fem: FemOptions)."
         ),
     )
+    # user decision Q16 (2026-11-08): the tabulated assembly is the default.
     sommerfeld_assembly: Literal["exact", "tabulated"] = Field(
-        default="exact",
+        default="tabulated",
         description=(
             "Assembly of the Sommerfeld earth-return correction of inductive "
-            "conductors: 'exact' (per segment pair) or 'tabulated' (one "
-            "table per pair of depth groups and frequency; faster for large "
-            "networks). See coupling.sommerfeld_inductance."
-            "build_sommerfeld_correction_matrices(method=...)."
+            "conductors: 'tabulated' (default since 2026.11; one table per "
+            "pair of depth groups and frequency, faster and closer to a "
+            "converged reference) or 'exact' (one quadrature per segment "
+            "pair, the default up to 0.15.0). See coupling."
+            "sommerfeld_inductance.build_sommerfeld_correction_matrices"
+            "(method=...)."
         ),
     )
     max_segments: int | None = Field(

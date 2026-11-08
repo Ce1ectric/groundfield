@@ -25,3 +25,21 @@ findings = ["10.34"]
 reason = "User decision Q15: solve_mutual_matrix uses the reciprocal galerkin off-diagonal whatever the call; probe points without offdiag='probe' are ignored with a ProbePointsIgnoredWarning."
 min_rel_change = 3e-4
 max_rel_change = 2e-3
+
+# --- Q16 (10.60): tabulated Sommerfeld assembly as the engine default ------
+# Engine.sommerfeld_assembly = "tabulated". Of the inductive golden cases
+# only the 1 km lumped PEN moves: its composite outer rule (26 pieces at
+# 1 kHz) gives a block above the 64-pair threshold of the tabulated path;
+# the other cases (4 and 3 segments) keep the per-pair rule there and stay
+# identical. Measured (q16_golden_inductive_accuracy.txt): all quantities
+# <= 2.4e-6 (I, phi, Zin), Zc 1.9e-9; against the refined per-pair
+# reference (200 S(rho) nodes) the tabulated result is 4.2e-7 off, the
+# per-pair rule 2.0e-6.
+
+[[change]]
+cases = ["cond_lumped_long_pen_sommerfeld"]
+quantities = ["*"]
+findings = ["10.60"]
+reason = "User decision Q16: the Sommerfeld earth-return correction is assembled with the tabulated rule by default (one S(rho) table per pair of depth groups and frequency) instead of the per-pair rule."
+min_rel_change = 1e-7
+max_rel_change = 1e-5

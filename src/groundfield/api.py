@@ -811,11 +811,11 @@ def create_engine(
         :class:`~groundfield.solver.MomSommerfeldOptions`; forwarded to
         :attr:`Engine.options <groundfield.Engine.options>`.
     sommerfeld_assembly
-        ``"exact"`` (engine default) or ``"tabulated"`` assembly of the
+        ``"tabulated"`` (engine default since 2026.11) or ``"exact"``
+        (per segment pair, the default up to 0.15.0) assembly of the
         Sommerfeld earth-return correction of inductive conductors
         (:attr:`Engine.sommerfeld_assembly
-        <groundfield.Engine.sommerfeld_assembly>`); ``"tabulated"`` is the
-        faster choice for large networks.
+        <groundfield.Engine.sommerfeld_assembly>`).
     max_segments
         Resource limit of the engine: the largest number of leakage
         segments and of nodal unknowns it solves (:attr:`Engine.max_segments
