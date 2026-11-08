@@ -757,6 +757,11 @@ _CHILD_GUARD_S = 120.0
 
 _CHILD = """
 import json, sys, time
+try:
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS, (int(sys.argv[1]), int(sys.argv[1])))
+except (ImportError, ValueError, OSError):  # no such limit on this platform
+    pass
 from groundfield.io._formula import FormulaError, parse_impedance_formula
 text = sys.stdin.read()
 t0 = time.perf_counter()
@@ -770,10 +775,15 @@ print(json.dumps({"seconds": time.perf_counter() - t0, "outcome": outcome}))
 
 
 def _parse_in_child(text: str, guard_s: float = _CHILD_GUARD_S) -> tuple[float, str]:
-    """Parse ``text`` in a fresh interpreter; ``(seconds, outcome)``."""
+    """Parse ``text`` in a fresh, memory-limited interpreter; ``(seconds, outcome)``.
+
+    The child has the address-space limit of the worker; an exception other
+    than :class:`FormulaError` ends it with a non-zero exit code, which fails
+    the calling test with the child's traceback.
+    """
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", _CHILD],
+            [sys.executable, "-c", _CHILD, str(WORKER_MEMORY_LIMIT_BYTES)],
             input=text,
             capture_output=True,
             text=True,
@@ -848,10 +858,10 @@ def test_long_product_chains_parse_in_bounded_time(
 ) -> None:
     """Audit 1, H2: accepted formulas whose partial product was re-evaluated
     with ``evalf`` after every factor (on the base 2 802 and 2 857 calls,
-    13 s and 55 s in a fresh process on the shared container); now values
-    are carried along and long chains are multiplied pairwise. The number
-    of ``evalf`` calls (SymPy's own, at most about one per factor) is the
-    load-independent check, the time in a fresh process the coarse one."""
+    13 s and 55 s in a fresh process on the shared container). The parser
+    computes every number itself and builds the product unevaluated, so
+    SymPy's ``evalf`` is never called (the load-independent check); the
+    time in a fresh process is the coarse one."""
     import sympy as sp
     from sympy.core.evalf import EvalfMixin
 
@@ -872,7 +882,7 @@ def test_long_product_chains_parse_in_bounded_time(
     monkeypatch.setattr(EvalfMixin, "evalf", counting)
     expr = parse_impedance_formula(text)
     monkeypatch.undo()
-    assert len(calls) <= 2 * n_factors, len(calls)
+    assert calls == []  # the parser computes numbers itself (audit 2)
     assert not expr.free_symbols
     if expected is None:
         log10_value = sum(math.log10(math.log(k)) for k in range(2, 334))
@@ -1183,17 +1193,27 @@ def test_log_inside_exp_is_rejected(text: str) -> None:
         parse_impedance_formula(text)
 
 
-def test_exp_and_log_without_nesting_are_unchanged() -> None:
+def test_exp_and_log_of_symbols_stay_functions_and_of_numbers_become_floats() -> None:
+    """``exp`` and ``log`` of an expression in ``f`` or ``rho`` stay functions,
+    built unevaluated; of a number they are evaluated by the parser (audit 2:
+    SymPy's ``exp.eval`` and ``log.eval`` are never run)."""
     import sympy as sp
 
     from groundfield.io._formula import parse_impedance_formula
 
     f, rho = sp.Symbol("f"), sp.Symbol("rho")
-    assert parse_impedance_formula("exp(-f/1000)*log(rho)") == sp.exp(
-        -f / 1000
-    ) * sp.log(rho)
-    assert parse_impedance_formula("log(exp(f))") == sp.log(sp.exp(f))
-    assert parse_impedance_formula("log(2)*E**2") == sp.log(2) * sp.exp(2)
+    expr = parse_impedance_formula("exp(-f/1000)*log(rho)")
+    assert expr.func is sp.Mul and len(expr.args) == 2
+    exp_part, log_part = expr.args
+    assert exp_part.func is sp.exp and log_part == sp.log(rho)
+    assert exp_part.args[0].args == (sp.Float(-0.001, 17), f)
+    nested = parse_impedance_formula("log(exp(f))")
+    assert nested.func is sp.log and nested.args[0].func is sp.exp
+    assert nested.args[0].args == (f,)
+    value = parse_impedance_formula("log(2)*E**2")
+    assert value.is_Float and float(value) == pytest.approx(
+        math.log(2.0) * math.e**2, rel=1e-15
+    )
 
 
 @pytest.mark.parametrize(
@@ -1205,16 +1225,16 @@ def test_exp_and_log_without_nesting_are_unchanged() -> None:
         ("log(j)", complex(0.0, math.pi / 2)),
         ("log(2*pi)", complex(math.log(2 * math.pi))),
         ("log(sqrt(3))", complex(0.5 * math.log(3.0))),
+        ("log(2)", complex(math.log(2.0))),
+        ("log(3/4*E)", complex(math.log(0.75) + 1.0)),
     ],
 )
-def test_log_of_a_number_other_than_a_positive_rational_is_a_float(
-    text: str, value: complex
-) -> None:
+def test_log_of_a_number_is_a_float(text: str, value: complex) -> None:
     """SymPy's ``log`` of a complex number ``r + r*j`` computes
     ``Abs(r + r*j)``, a square root of ``2*r**2`` that it factorises
-    (1.2 s for 900-digit fractions on the base of this change). Symbol-free
-    arguments other than positive rationals and floats are evaluated
-    numerically; ``log(2)`` stays exact."""
+    (1.2 s for 900-digit fractions before the fixsec stream). The parser
+    evaluates ``log`` of every number itself (since audit 2 also of a
+    positive rational: ``log(2)`` is a float)."""
     import sympy as sp
 
     from groundfield.io._formula import parse_impedance_formula
@@ -1222,7 +1242,6 @@ def test_log_of_a_number_other_than_a_positive_rational_is_a_float(
     expr = parse_impedance_formula(text)
     assert not expr.atoms(sp.log), expr
     assert complex(expr) == pytest.approx(value, rel=1e-15, abs=1e-300)
-    assert parse_impedance_formula("log(2)") == sp.log(2)
 
 
 @pytest.mark.parametrize(
@@ -1276,3 +1295,494 @@ def test_exporter_formulas_never_reach_fractional_powers_exp_or_log() -> None:
                     exponent = exponent.operand
                 assert isinstance(exponent, ast.Constant), entry["id"]
                 assert type(exponent.value) is int, entry["id"]
+
+
+# ---------------------------------------------------------------------
+# Audit 2 of the calendar release: the parser built the expression with
+# SymPy's evaluation switched on, so SymPy ran algorithms without a cost
+# bound (A2G-01, A2G-02), and it read float literals with huge exponents
+# through ``float`` (A2G-03). Every node is now built with
+# ``evaluate=False`` and every number is computed by the parser in bounded
+# floating point.
+# ---------------------------------------------------------------------
+
+
+def _nest(levels: int, inner: str, tail: str, n: int = 64) -> str:
+    """``(((inner)**n + tail)**n + tail)...`` with ``levels`` powers."""
+    x = inner
+    for _ in range(levels):
+        x = f"({x}**{n}{tail})"
+    return x
+
+
+_SYMBOL_FREE_2 = _nest(2, "(pi/4 + j/2)", " + pi/4 + j/2")
+_SYMBOLIC_3 = _nest(3, "(f/4 + j/2)", "/1000 + j/2")
+
+#: Audit A2G-01: SymPy's ``exp.eval`` asks whether the factors of its
+#: argument are comparable, which expands the powers of complex sums
+#: (``as_real_imag``), recursively: 67 characters ran for more than 60 s.
+AUDIT2_EXP_CASES = {
+    "exp-of-symbol-free-product-depth-2": f"exp(pi*{_SYMBOL_FREE_2}**64/1e30)",
+    "exp-of-symbolic-sum-with-symbol-free-term": (
+        f"exp(f + pi*{_SYMBOL_FREE_2}**64/1e30)"
+    ),
+    "exp-of-symbol-free-power-depth-2": f"exp({_SYMBOL_FREE_2}**64/1e30)",
+}
+#: Audit A2G-02: ``Pow._eval_power`` computes ``re`` and ``arg`` of the inner
+#: base of ``(b**e)**(p/q)``: 75 characters ran for more than 60 s.
+AUDIT2_POWER_CASES = {
+    "half-power-of-odd-power-depth-3": f"({_SYMBOLIC_3}**63)**(1/2)",
+    "sqrt-of-odd-power-depth-3": f"sqrt({_SYMBOLIC_3}**63)",
+    "float-exponent-of-odd-power-depth-3": f"({_SYMBOLIC_3}**63)**0.5",
+    "third-power-of-even-power-depth-3": f"({_SYMBOLIC_3}**64)**(1/3)",
+}
+AUDIT2_CASES = AUDIT2_EXP_CASES | AUDIT2_POWER_CASES
+
+
+@pytest.mark.parametrize("text", list(AUDIT2_CASES.values()), ids=list(AUDIT2_CASES))
+def test_nested_powers_of_audit_2_are_rejected_quickly(text: str) -> None:
+    """The audit's strings nest powers whose exponents multiply to 4096 and
+    more; like groundinsight's guard, the parser bounds the product of
+    nested exponents by ``MAX_POW`` and refuses them before anything is
+    built. On the base of this change each ran for more than 60 s (in a
+    fresh process, > 10 s with a 1 GiB limit in the stream's probe)."""
+    # audit A2G-01, A2G-02
+    assert len(text) < 120
+    seconds, outcome = _parse_in_child(text, _EAGER_GUARD_S)
+    assert outcome.startswith("rejected: power would create the exponent"), outcome
+    assert "through nested powers" in outcome
+    assert seconds < 0.5, f"{seconds:.2f} s"
+
+
+def _within_limit_terms(kind: str, count: int) -> str:
+    """Distinct terms that satisfy every limit, the nesting rule included.
+
+    Each nests six powers ``**2`` (exponent product 64); the constants
+    differ per term, so SymPy's cache cannot share the work between terms.
+    """
+    if kind == "sqrt":
+        return " + ".join(
+            f"sqrt({_nest(5, '(f/4 + j/2)', f'/{1000 + k} + j/2', 2)}**2)"
+            for k in range(count)
+        )
+    if kind == "exp-product":
+        return "*".join(
+            f"exp(pi*{_nest(5, '(pi/4 + j/2)', f' + pi/{4 + k} + j/2', 2)}**2/1e30)"
+            for k in range(count)
+        )
+    return " + ".join(
+        f"exp(f + pi*{_nest(5, '(pi/4 + j/2)', f' + pi/{4 + k} + j/2', 2)}**2/1e30)"
+        for k in range(count)
+    )
+
+
+WITHIN_LIMIT_CASES = {
+    "sum-of-14-square-roots-of-nested-powers": _within_limit_terms("sqrt", 14),
+    "product-of-17-exp-of-symbol-free-powers": _within_limit_terms("exp-product", 17),
+    "sum-of-12-exp-of-symbolic-sums": _within_limit_terms("exp-sum", 12),
+}
+
+
+@pytest.mark.parametrize(
+    "text", list(WITHIN_LIMIT_CASES.values()), ids=list(WITHIN_LIMIT_CASES)
+)
+def test_formulas_within_every_limit_parse_and_evaluate_quickly(text: str) -> None:
+    """The class of A2G-01/02, not the examples: formulas that satisfy every
+    limit, the nesting rule included, took 3.3 s, 2.7 s and 2.2 s to parse
+    on the base of this change (SymPy evaluated the expression being built)
+    and the first one 4.7 s to 6.8 s to evaluate through ``lambdify``. The parser
+    now builds every node unevaluated, and ``evaluate_spec`` translates the
+    tree into NumPy operations directly."""
+    # audit A2G-01, A2G-02
+    _within_documented_limits(text)
+    seconds, outcome = _parse_in_child(text, _EAGER_GUARD_S)
+    assert outcome == "accepted", outcome
+    assert seconds < 0.5, f"{seconds:.2f} s"
+    z, seconds = _evaluate_in_child(text)
+    assert seconds < 0.5, f"{seconds:.2f} s"
+    assert np.all(np.isfinite(z[:3]))
+
+
+_EVALUATE_CHILD = """
+import json, sys, time
+try:
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS, (int(sys.argv[1]), int(sys.argv[1])))
+except (ImportError, ValueError, OSError):
+    pass
+from groundfield.io.groundinsight import BusTypeSpec, evaluate_spec
+text = sys.stdin.read()
+empty = {"frequency_Hz": [], "rho_Ohm_m": [], "Z_real_Ohm": [], "Z_imag_Ohm": []}
+spec = BusTypeSpec("probe", None, "TN", 0.4, text, empty, {})
+evaluate_spec(spec, [50.0], 100.0)  # parse once: the time below is evaluation
+t0 = time.perf_counter()
+z = evaluate_spec(spec, [0.0, 16.7, 50.0, 150.0, 1000.0, 10000.0], 137.0)
+print(json.dumps({"seconds": time.perf_counter() - t0,
+                  "z": [[float(v.real), float(v.imag)] for v in z]}))
+"""
+
+
+def _evaluate_in_child(text: str) -> tuple[np.ndarray, float]:
+    """``evaluate_spec`` of ``text`` in a fresh, memory-limited interpreter."""
+    proc = subprocess.run(
+        [sys.executable, "-c", _EVALUATE_CHILD, str(WORKER_MEMORY_LIMIT_BYTES)],
+        input=text,
+        capture_output=True,
+        text=True,
+        timeout=_EAGER_GUARD_S,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    z = np.array([complex(*pair) for pair in out["z"]])
+    return z, float(out["seconds"])
+
+
+#: Entry points of SymPy's evaluation; none may run while a formula is parsed.
+_SPY_CHILD = r"""
+import json, sys
+try:
+    import resource
+    resource.setrlimit(resource.RLIMIT_AS, (int(sys.argv[1]), int(sys.argv[1])))
+except (ImportError, ValueError, OSError):
+    pass
+import importlib
+import sympy
+from sympy.core import add, basic, evalf, expr, mul, numbers, power
+from sympy.functions.elementary import exponential
+from sympy.printing import printer
+from groundfield.io._formula import formula_function, parse_impedance_formula
+
+assumptions = importlib.import_module("sympy.core.assumptions")
+
+calls, facts = {}, set()
+
+
+def spy(owner, name):
+    original = owner.__dict__[name]
+    is_classmethod = isinstance(original, classmethod)
+    function = original.__func__ if is_classmethod else original
+
+    def wrapper(*args, **kwargs):
+        key = owner.__name__ + "." + name
+        calls[key] = calls.get(key, 0) + 1
+        return function(*args, **kwargs)
+
+    setattr(owner, name, classmethod(wrapper) if is_classmethod else wrapper)
+
+
+for owner, name in [
+    (add.Add, "flatten"), (mul.Mul, "flatten"), (power.Pow, "_eval_power"),
+    (numbers.Integer, "_eval_power"), (numbers.Rational, "_eval_power"),
+    (numbers.Float, "_eval_power"), (exponential.exp, "eval"),
+    (exponential.log, "eval"), (evalf.EvalfMixin, "evalf"),
+    (basic.Basic, "subs"), (basic.Basic, "xreplace"), (expr.Expr, "expand"),
+    (expr.Expr, "as_real_imag"), (printer.Printer, "doprint"),
+]:
+    spy(owner, name)
+ask = assumptions._ask
+
+
+def spy_ask(fact, obj):
+    facts.add(fact)
+    return ask(fact, obj)
+
+
+assumptions._ask = spy_ask
+texts = json.loads(sys.stdin.read())
+for text in texts:
+    expr = parse_impedance_formula(text)
+    formula_function(expr)([0.0, 50.0], 100.0)
+print(json.dumps({"calls": calls, "facts": sorted(facts)}))
+"""
+
+
+def test_parsing_and_evaluation_never_let_sympy_evaluate() -> None:
+    """The class fix of audit 2: while every accepted corpus formula and the
+    within-limit stress formulas are parsed and evaluated, no SymPy
+    evaluation entry point runs (``Add``/``Mul`` flattening, ``_eval_power``,
+    ``exp.eval``, ``log.eval``, ``evalf``, ``subs``, ``xreplace``,
+    ``expand``, ``as_real_imag``, the printers) and the only assumption
+    SymPy derives is ``commutative`` (for unevaluated ``exp``/``log``
+    nodes). On the base of this change all of them ran, thousands of times.
+    In a fresh, memory-limited process."""
+    # audit A2G-01, A2G-02
+    texts = [e["formula"] for e in ACCEPT] + list(WITHIN_LIMIT_CASES.values())
+    proc = subprocess.run(
+        [sys.executable, "-c", _SPY_CHILD, str(WORKER_MEMORY_LIMIT_BYTES)],
+        input=json.dumps(texts),
+        capture_output=True,
+        text=True,
+        timeout=_EAGER_GUARD_S * 4,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert out["calls"] == {}
+    assert set(out["facts"]) <= {"commutative"}
+
+
+def test_evaluate_spec_does_not_use_sympy_code_generation(monkeypatch) -> None:
+    """``lambdify`` prints the expression, and SymPy's printers order terms
+    and factors with evaluation switched on (4.7 s to 6.8 s for the first
+    within-limit formula above). ``evaluate_spec`` and the exporter's
+    passivity check translate the tree into NumPy operations instead."""
+    # audit A2G-02
+    import importlib
+
+    import sympy
+
+    lambdify_module = importlib.import_module("sympy.utilities.lambdify")
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("lambdify called")
+
+    monkeypatch.setattr(sympy, "lambdify", forbidden)
+    monkeypatch.setattr(lambdify_module, "lambdify", forbidden)
+    for entry in ACCEPT[::7]:
+        z = evaluate_spec(_spec(entry["formula"]), F_HZ, RHO)
+        expected = _expected(entry)
+        np.testing.assert_allclose(
+            z, expected, rtol=1e-13, atol=1e-13 * np.max(np.abs(expected))
+        )
+    from groundfield.postprocess.vector_fitting import VectorFitResult
+
+    fit = VectorFitResult(
+        poles=np.array([-300.0, -100.0 + 900.0j, -100.0 - 900.0j]),
+        residues=np.array([200.0, 50.0 - 300.0j, 50.0 + 300.0j]),
+        R_inf=5.0,
+        L_inf=1e-4,
+        rms_error=0.0,
+        fit_frequencies=np.array([1.0, 1000.0]),
+        fit_values=np.zeros(2, dtype=complex),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        payload = to_bustype_dict(
+            fit, name="x", system_type="TN", voltage_level=0.4, rho_at_fit=100.0
+        )
+    assert "passivity" in payload["metadata"]
+
+
+@pytest.mark.parametrize(
+    "text, accepted",
+    [
+        ("(f**8)**8", True),
+        ("((f**8)**8)**2", False),
+        ("((f**2)**2)**2*sqrt(f)**64", True),  # products do not multiply
+        ("(sqrt(f)**64)**2", True),  # 1/2 * 64 * 2 = 64
+        ("((f + j)**64 + 1)**2", False),  # also through sums
+        ("exp(f**32)**2", True),
+        ("exp(f**64)**2", False),  # also through function calls
+        ("((2**8)**8)**2", False),  # also for numbers
+        ("(f*10**40)**2", False),  # the exponent of 10**40 counts
+        ("(f*1e40)**2", True),  # a float literal is no power
+        ("(f*rho)**(-64)", True),
+        ("((f*rho)**-8)**-8", True),
+    ],
+)
+def test_exponents_of_nested_powers_multiply_to_at_most_max_pow(
+    text: str, accepted: bool
+) -> None:
+    """The bound groundinsight's guard applies (``(f**8)**8`` is ``f**64``):
+    the exponents along nested powers multiply, through sums, products and
+    calls, and the product is at most ``MAX_POW`` (``sqrt`` counts 1/2)."""
+    # audit A2G-01, A2G-02
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    if accepted:
+        parse_impedance_formula(text)
+    else:
+        with pytest.raises(FormulaError, match="through nested powers") as excinfo:
+            parse_impedance_formula(text)
+        assert "write such numbers as float literals" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "text, fragment",
+    [
+        ("1/(f - f)", "division by zero"),
+        ("1/(2*f*rho - 2*f*rho)", "division by zero"),
+        ("rho/(f/3 + f/5 - 8*f/15)", "division by zero"),
+        ("(f - f)**-1", "zero raised to a negative power"),
+        ("log(rho - rho)", r"log\(0\) is undefined"),
+        ("exp(f - f + 1000)", "exp argument larger than 690.8"),
+        ("f*rho - rho*f + (1e300 + 1e300)", "number outside the bound"),
+    ],
+)
+def test_terms_that_cancel_within_one_sum_are_collected(
+    text: str, fragment: str
+) -> None:
+    """Without SymPy's evaluation the parser collects like terms of a sum
+    itself (equal factors in the same order, exact coefficients added
+    exactly), so a divisor, a ``log`` argument or an ``exp`` argument that
+    cancels to a number is checked like that number."""
+    # audit A2G-01, A2G-02
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    with pytest.raises(FormulaError, match=fragment):
+        parse_impedance_formula(text)
+
+
+def test_parsed_expression_is_unevaluated_with_numbers_as_floats() -> None:
+    """Symbol-free parts are single floats, the numeric factors of a product
+    form one coefficient, terms keep the order of the text; no Rational
+    other than an exponent, no ``pi`` and no ``E`` remain."""
+    # audit A2G-01, A2G-02
+    import sympy as sp
+
+    from groundfield.io._formula import parse_impedance_formula
+
+    f, rho = sp.Symbol("f"), sp.Symbol("rho")
+    expr = parse_impedance_formula("2*pi*f*j/1000 + 403191/50000 + f**(-3/2)*rho")
+    assert expr.func is sp.Add and len(expr.args) == 3
+    scaled, power_term, constant = expr.args
+    coefficient, symbol = scaled.args
+    assert symbol == f
+    assert complex(coefficient) == pytest.approx(2j * math.pi / 1000, rel=1e-16)
+    assert power_term.args == (sp.Pow(f, sp.Rational(-3, 2)), rho)
+    assert constant == sp.Float(403191 / 50000, 17)
+    for node in sp.preorder_traversal(expr):
+        assert not node.is_NumberSymbol
+        if node.is_Rational and not node.is_Integer:
+            assert node == sp.Rational(-3, 2)
+    assert parse_impedance_formula("f - f + 1000") == sp.Float(1000.0, 17)
+    assert parse_impedance_formula("2*f + 3*f - rho*f + f*rho") == sp.Add(
+        sp.Mul(sp.Float(5.0, 17), f, evaluate=False),
+        sp.Mul(sp.S.NegativeOne, rho, f, evaluate=False),
+        sp.Mul(f, rho, evaluate=False),
+        evaluate=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "text, reference",
+    [
+        ("(f - 100)**0.5", lambda f, rho: np.sqrt(f - 100 + 0j)),
+        ("log(f - 100) + rho", lambda f, rho: np.log(f - 100 + 0j) + rho),
+        ("f**(1/3)*rho**(-1/2)", lambda f, rho: np.cbrt(f) / np.sqrt(rho)),
+        ("exp(-f/1000 + j*rho/100)", lambda f, rho: np.exp(-f / 1000 + 1j * rho / 100)),
+        ("1/(2*pi*f*j + 300)", lambda f, rho: 1 / (2j * np.pi * f + 300)),
+    ],
+)
+def test_formula_function_takes_the_principal_branch_where_real_arithmetic_has_none(
+    text: str, reference
+) -> None:
+    """A root or a logarithm of a negative number takes SymPy's principal
+    branch (``lambdify`` with real input gave ``nan`` there); everything
+    else is computed as before."""
+    from groundfield.io._formula import formula_function, parse_impedance_formula
+
+    f = np.array([1.0, 16.7, 50.0, 1000.0])
+    function = formula_function(parse_impedance_formula(text))
+    np.testing.assert_allclose(function(f, 137.0), reference(f, 137.0), rtol=1e-14)
+    assert function(f, 137.0).dtype == complex
+
+
+@pytest.mark.parametrize(
+    "text, value_at_zero",
+    [
+        ("1/(1 + 1/f)", 0.0),
+        ("1/(1 + 1/f) + j*rho", 137j),
+        ("1/log(f)**4", 0.0),
+        ("exp(-1/f)*rho", 0.0),
+        ("log(f) + rho", -np.inf),
+    ],
+)
+def test_formula_function_keeps_the_real_limits_at_singular_points(
+    text: str, value_at_zero: complex
+) -> None:
+    """Real values are computed in real arithmetic, as ``lambdify`` does, so
+    the limits of real infinities survive at ``f = 0`` (a differential fuzz
+    of 400 random formulas found complex arithmetic turning them into
+    ``nan``)."""
+    from groundfield.io._formula import formula_function, parse_impedance_formula
+
+    function = formula_function(parse_impedance_formula(text))
+    with np.errstate(divide="ignore"):
+        z = function(np.array([0.0, 50.0]), 137.0)
+    assert z[0] == value_at_zero
+    assert np.isfinite(z[1])
+
+
+def test_formula_function_validates_its_input() -> None:
+    import sympy as sp
+
+    from groundfield.io._formula import formula_function, parse_impedance_formula
+
+    constant = formula_function(parse_impedance_formula("2 + 3*j"))
+    assert constant(np.zeros(3), 1.0).shape == ()
+    assert complex(constant(0.0, 1.0)) == 2 + 3j
+    with pytest.raises(TypeError, match="takes 2 arguments"):
+        constant(1.0)
+    with pytest.raises(ValueError, match="symbol 'l'"):
+        formula_function(sp.Symbol("l") + 1)
+    with pytest.raises(ValueError, match="sub-expression of type sin"):
+        formula_function(sp.sin(sp.Symbol("f")))
+    with pytest.raises(ValueError, match="reserved"):
+        formula_function(sp.Symbol("f"), symbols=("f", "pi"))
+    three = formula_function(
+        parse_impedance_formula("f*l", symbols=("f", "l")), ("f", "l")
+    )
+    assert complex(three(2.0, 3.0)) == 6.0
+
+
+#: Audit A2G-03 and the same class elsewhere: numeric literals whose exact
+#: value is outside the float range (``1e-<320 nines>`` is valid Python and
+#: rounds to 0.0); the exponent overflowed an int-to-float conversion.
+HUGE_LITERALS = {
+    "float": "1e-" + "9" * 320,
+    "float-in-product": "f*1e-" + "9" * 390,
+    "imaginary": "1e-" + "9" * 390 + "j",
+    "positive-exponent": "1e+" + "9" * 390,
+    "exponent-literal": "f**1e-" + "9" * 390,
+    "small-exponent-literal": "f**1e-400",
+    "exponent-fraction": "f**(1/1" + "0" * 398 + ")",
+    "hex-literal": "0x" + "f" * 398,
+    "imaginary-integer": "1" + "0" * 350 + "j",
+    "subnormal": "4.9e-324*f",
+}
+
+
+@pytest.mark.parametrize("text", list(HUGE_LITERALS.values()), ids=list(HUGE_LITERALS))
+def test_numeric_literals_outside_the_bounds_raise_formula_error(text: str) -> None:
+    """``1e-<320 nines>`` raised :class:`OverflowError`, which leaked through
+    ``load_bustype_json`` (audit A2G-03); every literal is now bounded by its
+    exact decimal value, before any float is formed. First in a fresh
+    process (a crash fails the test with its traceback), then in-process."""
+    # audit A2G-03
+    from groundfield.io._formula import FormulaError, parse_impedance_formula
+
+    seconds, outcome = _parse_in_child(text, _EAGER_GUARD_S)
+    assert outcome.startswith("rejected: "), outcome
+    assert seconds < 0.5
+    with pytest.raises(FormulaError, match="outside the bound|not finite"):
+        parse_impedance_formula(text)
+
+
+def test_load_bustype_json_reports_a_huge_literal_as_evaluate_spec_error(
+    tmp_path: Path,
+) -> None:
+    """``load_bustype_json`` documents :class:`EvaluateSpecError` for a bad
+    formula; the 320-nines literal raised :class:`OverflowError`."""
+    # audit A2G-03
+    path = tmp_path / "crafted.json"
+    doc = _document("0.5 + f*1e-" + "9" * 390)
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(EvaluateSpecError, match="outside the bound"):
+        load_bustype_json(path)
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [("voltage_level", 10**400), ("voltage_level", "inf"), ("schema_version", 1e400)],
+)
+def test_bustype_header_numbers_outside_the_float_range_raise_value_error(
+    field: str, value
+) -> None:
+    """The numeric header fields of a BusType document raise ValueError,
+    not OverflowError, when they are outside the float range."""
+    # audit A2G-03
+    doc = _document("rho + j*f")
+    doc[field] = value
+    with pytest.raises(ValueError, match=field) as excinfo:
+        BusTypeSpec.from_dict(doc)
+    assert not isinstance(excinfo.value, OverflowError)

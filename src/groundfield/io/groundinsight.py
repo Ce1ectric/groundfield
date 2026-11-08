@@ -111,6 +111,7 @@ from __future__ import annotations
 
 import json
 import math
+import numbers
 import os
 import warnings
 from dataclasses import dataclass
@@ -222,7 +223,8 @@ class BusTypeSpec:
         Dict with the parallel tabular representation. Keys
         ``"frequency_Hz"``, ``"rho_Ohm_m"``, ``"Z_real_Ohm"``,
         ``"Z_imag_Ohm"`` each map to a list of floats of equal
-        length. Provided so a future tabular ingest path on the
+        length (``null`` in the JSON document for a value that is not
+        finite). Provided so a future tabular ingest path on the
         ``groundinsight`` side can be served immediately.
     metadata
         Free-form metadata dict; populated by the exporters with
@@ -248,7 +250,12 @@ class BusTypeSpec:
     # --- serialisation ------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-ready ``dict`` matching schema v1."""
+        """Return a JSON-ready ``dict`` matching schema v1.
+
+        The result is strict JSON: every number that is not finite (a
+        sample, a fit-quality figure of a hand-built fit, ...) is written
+        as ``None`` (JSON ``null``).
+        """
         return {
             "schema": SCHEMA_NAME,
             "schema_version": SCHEMA_VERSION,
@@ -258,12 +265,10 @@ class BusTypeSpec:
             "voltage_level": float(self.voltage_level),
             "impedance_formula": self.impedance_formula,
             "samples": {
-                "frequency_Hz": [float(x) for x in self.samples["frequency_Hz"]],
-                "rho_Ohm_m": [float(x) for x in self.samples["rho_Ohm_m"]],
-                "Z_real_Ohm": [float(x) for x in self.samples["Z_real_Ohm"]],
-                "Z_imag_Ohm": [float(x) for x in self.samples["Z_imag_Ohm"]],
+                key: [_finite_or_none(x) for x in self.samples[key]]
+                for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm")
             },
-            "metadata": dict(self.metadata),
+            "metadata": _strict_json(dict(self.metadata)),
         }
 
     @classmethod
@@ -282,23 +287,41 @@ class BusTypeSpec:
         Raises
         ------
         ValueError
-            If the schema name or version does not match.
+            If the payload is not a schema-v1 BusType document: not a
+            ``dict``, a wrong schema name or version, a missing ``name``,
+            ``system_type`` or ``voltage_level``, a ``voltage_level`` that
+            is not a finite number, or ``samples`` / ``metadata`` that are
+            not objects (sample lists hold numbers or ``None``).
         EvaluateSpecError
             If ``impedance_formula`` is missing or outside the allowed
             formula grammar. The formula is parsed, never evaluated as
             code; the message names the offending element.
         """
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"a BusType document is a JSON object, got {type(payload).__name__}"
+            )
         if payload.get("schema") != SCHEMA_NAME:
             raise ValueError(
                 f"unexpected schema name: got {payload.get('schema')!r}, "
                 f"expected {SCHEMA_NAME!r}"
             )
-        version = int(payload.get("schema_version", 0))
+        try:
+            version = int(payload.get("schema_version", 0))
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError(
+                "unsupported schema_version "
+                f"{str(payload.get('schema_version'))[:40]!r}; this groundfield "
+                f"build only reads v{SCHEMA_VERSION}"
+            ) from None
         if version != SCHEMA_VERSION:
             raise ValueError(
                 f"unsupported schema_version {version}; this groundfield "
                 f"build only reads v{SCHEMA_VERSION}"
             )
+        for key in ("name", "system_type", "voltage_level"):
+            if key not in payload:
+                raise ValueError(f"BusType document has no {key!r}")
         name = str(payload["name"])
         formula = payload.get("impedance_formula")
         if formula is None:
@@ -308,19 +331,43 @@ class BusTypeSpec:
         formula = formula if isinstance(formula, str) else str(formula)
         _parse_formula(formula, context=f"BusType document {name!r}")
         samples = payload.get("samples") or {}
+        try:
+            voltage_level = float(payload["voltage_level"])
+        except (TypeError, ValueError, OverflowError):
+            voltage_level = math.nan
+        if not math.isfinite(voltage_level):
+            raise ValueError(
+                f"BusType document {name!r}: voltage_level must be a finite "
+                f"number, got {str(payload['voltage_level'])[:40]!r}"
+            )
+        metadata = payload.get("metadata") or {}
+        if not isinstance(samples, dict) or not isinstance(metadata, dict):
+            raise ValueError(
+                f"BusType document {name!r}: samples and metadata must be JSON objects"
+            )
+        sample_lists: dict[str, list[Any]] = {}
+        for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm"):
+            values = samples.get(key, [])
+            if isinstance(values, np.ndarray):
+                values = values.tolist()
+            if not isinstance(values, (list, tuple)) or not all(
+                value is None
+                or (isinstance(value, numbers.Real) and not isinstance(value, bool))
+                for value in values
+            ):
+                raise ValueError(
+                    f"BusType document {name!r}: samples[{key!r}] must be a list "
+                    "of numbers (null for a value that is not finite)"
+                )
+            sample_lists[key] = list(values)
         return cls(
             name=name,
             description=payload.get("description"),
             system_type=str(payload["system_type"]),
-            voltage_level=float(payload["voltage_level"]),
+            voltage_level=voltage_level,
             impedance_formula=formula,
-            samples={
-                "frequency_Hz": list(samples.get("frequency_Hz", [])),
-                "rho_Ohm_m": list(samples.get("rho_Ohm_m", [])),
-                "Z_real_Ohm": list(samples.get("Z_real_Ohm", [])),
-                "Z_imag_Ohm": list(samples.get("Z_imag_Ohm", [])),
-            },
-            metadata=dict(payload.get("metadata", {})),
+            samples=sample_lists,
+            metadata=dict(metadata),
         )
 
 
@@ -441,8 +488,22 @@ def _finite_or_none(value: Any) -> Optional[float]:
     """``float(value)``, or ``None`` when missing or not finite (strict JSON)."""
     if value is None:
         return None
-    value = float(value)
+    try:
+        value = float(value)
+    except OverflowError:  # an integer beyond the float range
+        return None
     return value if math.isfinite(value) else None
+
+
+def _strict_json(value: Any) -> Any:
+    """Copy of a JSON-like structure with every non-finite float as ``None``."""
+    if isinstance(value, dict):
+        return {key: _strict_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_strict_json(item) for item in value]
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return value
 
 
 def _metadata_from_vector_fit(
@@ -456,7 +517,7 @@ def _metadata_from_vector_fit(
     return {
         "fit_method": "vector_fit",
         "fit_quality": {
-            "rms_error_Ohm": float(fit.rms_error),
+            "rms_error_Ohm": _finite_or_none(fit.rms_error),
             "rms_relative": _finite_or_none(fit.rms_relative),
         },
         "quantity": fit.quantity,
@@ -485,7 +546,7 @@ def _metadata_from_rho_f_standard(
     return {
         "fit_method": "rho_f_standard",
         "fit_quality": {
-            "rms_error_Ohm": float(fit.rms_error),
+            "rms_error_Ohm": _finite_or_none(fit.rms_error),
             "rms_relative": _finite_or_none(fit.rms_relative),
             "max_relative": _finite_or_none(fit.max_relative),
         },
@@ -505,15 +566,15 @@ def _metadata_from_rho_f_standard(
 
 
 def _formula_evaluator(expr: "sympy.Expr"):
-    """NumPy evaluator ``(f, rho) -> Z`` of a parsed impedance formula."""
-    import sympy as sp
+    """NumPy evaluator ``(f, rho) -> Z`` of a parsed impedance formula.
 
-    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
+    Built by :func:`~groundfield.io._formula.formula_function` from the
+    expression tree, without SymPy's code printer (``lambdify``), which
+    evaluates sub-expressions of the unevaluated tree.
+    """
+    from groundfield.io._formula import formula_function
 
-    def evaluate(f: Any, rho: Any) -> np.ndarray:
-        return np.asarray(func(f, rho), dtype=complex)
-
-    return evaluate
+    return formula_function(expr, ("f", "rho"))
 
 
 def _passivity_report(
@@ -617,6 +678,14 @@ def _build_spec(
             "RhoFStandardFit or VectorFitResult"
         )
     _check_rho_at_fit(fit, rho_at_fit, caller)
+    try:
+        level = float(voltage_level)
+    except (TypeError, ValueError, OverflowError):
+        level = math.nan
+    if not math.isfinite(level):
+        raise ValueError(
+            f"{caller}: voltage_level must be a finite number, got {voltage_level!r}."
+        )
     from groundfield.io._formula import _significant_digits, parse_impedance_formula
 
     try:
@@ -667,7 +736,7 @@ def _build_spec(
         name=str(name),
         description=description,
         system_type=str(system_type),
-        voltage_level=float(voltage_level),
+        voltage_level=level,
         impedance_formula=formula,
         samples=samples,
         metadata=metadata,
@@ -727,7 +796,9 @@ def to_bustype_dict(
     -------
     dict
         JSON-ready ``dict`` matching ``schema_version = 1`` of
-        ``groundfield.bustype``, including ``metadata["passivity"]``
+        ``groundfield.bustype`` (strict JSON: a number that is not
+        finite, such as the unknown rms error of a hand-built fit, is
+        ``None``), including ``metadata["passivity"]``
         with the keys ``passed``, ``min_re_Z_Ohm``, ``f_at_min_Hz``,
         ``rho_at_min_Ohm_m``, ``f_checked_Hz``, ``rho_checked_Ohm_m``
         and ``n_points``.
@@ -736,7 +807,8 @@ def to_bustype_dict(
     ------
     ValueError
         If ``rho_at_fit`` is missing for a vector fit or not a positive
-        finite number, or if the fit has non-finite coefficients.
+        finite number, if ``voltage_level`` is not finite, or if the fit
+        has non-finite coefficients.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
     TypeError
@@ -840,11 +912,11 @@ def save_bustype_json(
         require_passive=require_passive,
         caller="save_bustype_json",
     ).to_dict()
+    text = json.dumps(payload, indent=indent, sort_keys=False, allow_nan=False)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=indent, sort_keys=False)
-        fh.write("\n")
+        fh.write(text + "\n")
     return p
 
 
@@ -870,14 +942,21 @@ def load_bustype_json(path: Union[str, Path]) -> BusTypeSpec:
     Raises
     ------
     ValueError
-        If the schema name or version does not match.
+        If the file is not valid JSON (also: nested too deeply to be
+        read) or not a schema-v1 BusType document, see
+        :meth:`BusTypeSpec.from_dict`.
     EvaluateSpecError
         If ``impedance_formula`` is missing or outside the allowed
         formula grammar.
     """
     p = Path(path)
     with p.open("r", encoding="utf-8") as fh:
-        payload = json.load(fh)
+        try:
+            payload = json.load(fh)
+        except RecursionError:
+            raise ValueError(
+                f"BusType document {p.name!r} is nested too deeply to be read"
+            ) from None
     return BusTypeSpec.from_dict(payload)
 
 
@@ -1092,8 +1171,11 @@ def evaluate_spec(
     Parses the stored ``impedance_formula`` with the allow-list parser
     (see the module docstring; the text is never evaluated as code) and
     evaluates the resulting expression with NumPy at the provided
-    ``rho`` and ``f`` values. Useful for cheap sanity checks that do
-    not require ``groundinsight`` to be installed.
+    ``rho`` and ``f`` values, node by node through
+    :func:`~groundfield.io._formula.formula_function` (complex
+    arithmetic, principal branch for roots and logarithms; SymPy's code
+    generation is not used). Useful for cheap sanity checks that do not
+    require ``groundinsight`` to be installed.
 
     Parameters
     ----------
@@ -1124,7 +1206,7 @@ def evaluate_spec(
         ValueError`` blocks keep working because
         :class:`EvaluateSpecError` inherits from :class:`ValueError`.
     """
-    import sympy as sp
+    from groundfield.io._formula import formula_function
 
     # Defensive entry-point validation. Hand-rolled BusTypeSpec-like
     # dicts (e.g. constructed in a CLI helper from a YAML campaign
@@ -1148,9 +1230,9 @@ def evaluate_spec(
         formula if isinstance(formula, str) else str(formula),
         context="evaluate_spec: spec.impedance_formula",
     )
-    func = sp.lambdify((sp.Symbol("f"), sp.Symbol("rho")), expr, modules=["numpy"])
+    func = formula_function(expr, ("f", "rho"))
     f_arr = np.asarray(frequencies, dtype=float)
-    out = np.asarray(func(f_arr, float(rho)), dtype=complex)
+    out = func(f_arr, float(rho))
     return np.broadcast_to(out, f_arr.shape).copy()
 
 
@@ -1165,8 +1247,9 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
     md = spec.metadata
     method = md.get("fit_method", "unknown")
     fq = md.get("fit_quality", {})
-    rms = fq.get("rms_error_Ohm", math.nan)
-    parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms:.3e} Ω"]
+    rms = _finite_or_none(fq.get("rms_error_Ohm"))
+    rms_text = "unknown" if rms is None else f"{rms:.3e} Ω"
+    parts = [f"name={spec.name!r}", f"method={method}", f"rms={rms_text}"]
     if fq.get("rms_relative") is not None:
         parts.append(f"rms_rel={fq['rms_relative']:.2%}")
     if fq.get("max_relative") is not None:

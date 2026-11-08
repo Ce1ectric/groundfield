@@ -1,4 +1,4 @@
-r"""Safe parsing and rendering of impedance-formula strings.
+r"""Safe parsing, evaluation and rendering of impedance-formula strings.
 
 A ``groundinsight`` ``BusType`` carries its impedance as a text formula
 $Z(f, \rho)$ in the frequency ``f`` (Hz) and the soil resistivity ``rho``
@@ -12,10 +12,12 @@ Such text arrives from JSON files and databases and is therefore
 *untrusted input*. SymPy's string parser (``sympify`` / ``parse_expr``)
 evaluates the text as Python code, so a crafted formula can run
 arbitrary code or exhaust memory (review finding 10.01). This module
-never hands text to ``sympify``, ``parse_expr``, ``eval`` or ``exec``.
+never hands text to ``sympify``, ``parse_expr``, ``eval`` or ``exec``:
 :func:`parse_impedance_formula` parses the text with :func:`ast.parse`,
-which executes nothing, checks the syntax tree against an allow-list
-and **builds** the SymPy expression node by node.
+which executes nothing, checks the syntax tree against an allow-list and
+**builds** the SymPy expression node by node without letting SymPy
+evaluate anything; :func:`formula_function` turns the expression into a
+NumPy function without SymPy's code generation.
 :func:`format_impedance_formula` is the inverse direction: it renders a
 SymPy expression in the same grammar with a fixed number of significant
 digits per coefficient. :func:`round_coefficients` applies the same
@@ -36,79 +38,107 @@ Python expression built from
 * operators: unary ``+`` / ``-`` and binary ``+ - * /``;
 * powers ``base ** n`` whose exponent ``n`` is a numeric literal
   (``2``, ``-1``, ``0.5``, ``(1/2)``, ``(-3/2)``, the sign before the
-  fraction or its numerator) with $|n| \le$ :data:`MAX_POW`, so power
-  towers such as ``9**9**9`` cannot be written; a fractional exponent
-  ``p/q`` (also ``sqrt``, ``q = 2``) applied to an *exact* number, i.e.
-  to an integer or fraction base or to the rational coefficient ``c`` of
-  a product base ``c*f*...``, needs $q \le$ :data:`MAX_ROOT_DENOMINATOR`
-  and (digits of the number) $\times\, q \le$ :data:`MAX_RADICAND_DIGITS`
-  (``12**(1/3)`` and ``(2*f)**(3/2)`` are fine, a 300-digit integer under
-  ``**(63/64)`` is not; written as a float, ``2.0**(1/100)``, a number is
-  not limited);
+  fraction or its numerator) with $|n| \le$ :data:`MAX_POW`; the
+  exponents of nested powers multiply, through sums, products and
+  function calls, and their product is bounded by :data:`MAX_POW` as
+  well (``(f**8)**8`` is fine, ``((f**8)**8)**2`` and
+  ``((f + j)**64 + 1)**2`` are not; ``sqrt`` counts as ``1/2``);
 * calls ``sqrt(x)``, ``exp(x)`` and ``log(x)`` with exactly one
   positional argument; ``log`` may not appear inside the argument of
-  ``exp``, because SymPy rewrites ``exp(c*log(x))`` as the power
-  ``x**c``, whose exponent ``c`` is no literal.
+  ``exp`` (``exp(c*log(x))`` is the power ``x**c`` with an exponent ``c``
+  that is no literal; groundinsight refuses it as well).
+
+How the expression is built
+---------------------------
+SymPy simplifies while it constructs an expression: ``Pow(b, e)`` asks
+for the real part and the argument of ``b``, ``exp(x)`` asks whether
+the factors of ``x`` are comparable and expands powers of complex sums
+to find out, an integer under a fractional power is factorised, ``log``
+of ``r + r*j`` takes ``sqrt(2*r**2)``. None of these algorithms has a
+cost bound in the size of the formula; three rounds of rules against
+particular inputs left others open (the second audit of the calendar
+release found 67- and 75-character formulas that ran for more than a
+minute). So the parser never lets SymPy evaluate:
+
+* every node is created with ``evaluate=False`` (``Add``, ``Mul``,
+  ``Pow``, ``exp``, ``log``), so SymPy only stores its arguments; the
+  parser asks SymPy no questions about the expression (no assumptions,
+  no ``subs``, ``simplify``, ``expand`` or ``evalf``);
+* numbers are computed by the parser itself, in floating point
+  (:mod:`mpmath`, 128 bits), with the bounds below checked at every
+  step: every symbol-free sub-expression becomes one number, stored as
+  SymPy floats of 17 significant digits (real and imaginary part,
+  SymPy's principal branch for roots and logarithms; parts below
+  ``2**-100`` times the magnitude are dropped), so ``3/4``, ``sqrt(2)``,
+  ``log(2)`` and ``E**2`` become floats;
+* within one product ``a*b/c*...`` (also across parentheses and unary
+  minus) the numeric factors are multiplied into one coefficient, so
+  ``2*pi*f*j/1000`` becomes ``0.0062831853071795865*I*f``; within one
+  sum ``a + b - c + ...`` the numbers are added and terms with equal
+  factors (in the same order) are collected, so ``f - f + 1000`` is
+  the number 1000; nothing else is rearranged: no expansion, no
+  distribution over sums, no merging of powers;
+* the result contains only ``Add``, ``Mul``, ``Pow`` (literal exponent),
+  ``exp``, ``log``, SymPy floats, the integer ``-1``, ``I`` and the
+  caller's symbols.
+
+Every node therefore costs a bounded amount of work, and the time and
+memory of a parse, accepted or rejected, grow linearly with the size of
+the formula. Every number of the expression is the float64 nearest to
+its value computed at 128 bits (relative error at most ``1.1e-16``).
+
+Do not hand an expression parsed from untrusted text to SymPy functions
+that evaluate it: ``simplify``, ``expand``, ``subs``, ``doit``, ``evalf``
+of sub-expressions, but also ``lambdify`` and SymPy's printers (``str``,
+``repr``, LaTeX), which order and negate sub-expressions with SymPy's
+evaluation switched on and so run the algorithms the parser avoids
+(for a 1 439-character formula within every limit ``str()`` took
+4.9 s and ``lambdify`` 6.8 s, :func:`formula_function` 2 ms).
+:func:`formula_function` evaluates a parsed expression with NumPy; to
+show a formula, show its text.
 
 Resource bounds
 ---------------
 * at most :data:`MAX_CHARS` characters, :data:`MAX_NODES` syntax-tree
   nodes and a nesting depth of :data:`MAX_DEPTH`;
 * every numeric literal has at most :data:`MAX_LITERAL_CHARS`
-  characters;
-* every number of the expression, and every symbol-free sub-expression
-  of it, is zero or lies within $10^{-300} \le |x| \le 10^{300}$
-  (:data:`MAX_LOG10_MAGNITUDE`); the numerator and denominator of an
-  exact fraction have at most :data:`MAX_RATIONAL_DIGITS` digits;
-* nothing large is computed before it is bounded: powers and ``exp``
-  are checked first, including the symbol-free factor of a symbolic
-  base that SymPy raises to the power (``(10**60*f)**64``,
-  ``(exp(600)*f)**64``); before a sum is built, the least common
-  multiple of the denominators of its fractions is bounded (adding
-  fractions with distinct large denominators would otherwise build an
-  ever larger common denominator); a product is checked after every
-  factor;
-* values are bounded with a numeric shadow evaluation of every
-  symbol-free node (:mod:`mpmath`, 128 bits), computed once from the
-  values of its children, never by re-evaluating a sub-tree; a
-  symbol-free sum smaller than $2^{-100}$ times its largest term
-  counts as zero;
-* the bookkeeping of one parse is capped at :data:`MAX_WORK` steps, so
-  the cost of a formula, accepted or rejected, is bounded independently
-  of its structure;
-* division by a numeric zero, ``0 ** -n`` and ``log(0)`` are rejected.
+  characters, its exact decimal value is checked (``1e-<320 nines>``
+  is refused, not read as zero);
+* every number the parser computes or keeps (literals, coefficients,
+  values of symbol-free sub-expressions) is zero or lies within
+  $10^{-300} \le |x| \le 10^{300}$ (:data:`MAX_LOG10_MAGNITUDE`); a
+  power ``base**n`` must not create a larger number from the numbers in
+  its base (``n`` times their largest ``|log10|`` at most 300: the
+  bound SymPy's distribution of ``(c*f)**n`` into ``c**n * f**n`` would
+  reach); ``exp`` of a number takes arguments up to about 690.8 in
+  magnitude;
+* the bookkeeping of one parse is capped at :data:`MAX_WORK` steps;
+* division by zero, ``0 ** -n`` and ``log(0)`` are refused, also when the
+  zero comes from collected terms (``1/(f - f)``).
 
-SymPy evaluates some functions of numbers eagerly, in time that the
-bounds above do not limit: it simplifies a fractional power of an exact
-number by factorising the number, keeping a radicand of up to ``q - 1``
-times its digits (the 300-digit integer ``10**300 - 1`` under ``63/64``
-gives a radicand of about 18 800 digits, and SymPy tests a 16 280-digit
-factor of it for primality; ``18**(10**30/(10**30 + 1))`` needs
-``2**(10**30)``; products merge such powers and add their exponents),
-and its ``log`` of a complex number ``r + r*j`` takes the
-square root of ``2*r**2``. Without the rules below, 15 strings of the
-formula corpus ran for more than 20 s each. So
+Exact numbers
+-------------
+groundinsight checks the same formulas with SymPy's own (exact)
+arithmetic; two of its limits on exact numbers are kept so that both
+parsers refuse the same strings of the shared formula corpus. A number is
+*exact* if it is written with integer literals (``3``, ``2j``) and
+``+ - * /`` and integer powers of exact numbers; ``pi``, ``E`` and ``j``
+may appear as factors of an exact coefficient (``2*pi`` has the exact
+coefficient 2), float literals, roots and function values are not exact.
 
-* no exact number is ever left under a fractional power: a fractional
-  power of a symbol-free base is evaluated numerically, and the rational
-  coefficient ``c`` of a product base is taken out as the float
-  ``|c|**(p/q)`` (``(-c*f)**(p/q) = |c|**(p/q) * (-f)**(p/q)``); a sum
-  with a float coefficient gets float coefficients throughout (SymPy
-  before 1.14 takes the largest coefficient of such a sum out of the
-  power); otherwise powers of symbols, sums and functions keep their
-  exact form;
-* ``log`` of a symbol-free argument other than a positive rational or a
-  float is evaluated numerically (``log(2)`` stays exact);
-* a number created this way is a float of 17 significant digits per real
-  and imaginary part (every float64 prints exactly), on SymPy's principal
-  branch, and parts below ``2**-100`` times the magnitude are dropped.
-
-The resulting expression contains only ``Add``, ``Mul``, ``Pow``,
-numbers, ``I``, ``pi``, ``E``, ``exp``, ``log`` and the caller's
-symbols, so code that :func:`sympy.lambdify` generates from it contains
-nothing else either. The formulas written by every ``groundfield``
-exporter up to 0.15.0 (rational coefficients with up to 254-digit
-integers) and by the current one stay inside this grammar.
+* A fractional power ``p/q`` (also ``sqrt``, ``q = 2``) of an exact
+  number, i.e. of an exact base or of the exact coefficient ``c`` of a
+  product base ``c*f*...``, needs $q \le$ :data:`MAX_ROOT_DENOMINATOR`
+  and (digits of the number) $\times\, q \le$ :data:`MAX_RADICAND_DIGITS`
+  (``12**(1/3)`` and ``(2*f)**(3/2)`` are fine, a 300-digit integer under
+  ``**(63/64)`` is not; written as a float, ``2.0**(1/100)``, a number is
+  not limited). SymPy would factorise such numbers.
+* The numerator and denominator of an exact fraction have at most
+  :data:`MAX_RATIONAL_DIGITS` digits, and so has the least common
+  multiple of the denominators of the exact coefficients of one sum
+  (SymPy would add them exactly). The formulas written by every
+  ``groundfield`` exporter up to 0.15.0 (rational coefficients with up
+  to 254-digit integers) and by the current one stay inside these limits.
 """
 
 from __future__ import annotations
@@ -116,18 +146,23 @@ from __future__ import annotations
 import ast
 import math
 import numbers
+import re
 import string
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from fractions import Fraction
 from typing import Any, NamedTuple
 
 import mpmath
+import numpy as np
 import sympy as sp
+from mpmath.libmp import from_rational, round_nearest
 from sympy.printing.str import StrPrinter
 
 __all__ = [
     "FormulaError",
     "parse_impedance_formula",
+    "formula_function",
     "format_impedance_formula",
     "round_coefficients",
     "MAX_CHARS",
@@ -158,14 +193,18 @@ MAX_LITERAL_CHARS = 400
 """Maximum length of a single numeric literal in characters."""
 
 MAX_POW = 64
-"""Maximum magnitude of a literal exponent in ``base ** n``."""
+"""Maximum magnitude of a literal exponent in ``base ** n``.
+
+Also the bound on the product of the exponents of nested powers
+(``(f**8)**8`` has the product 64), the limit groundinsight's guard
+applies as well.
+"""
 
 MAX_ROOT_DENOMINATOR = 64
 """Maximum denominator ``q`` of a fractional exponent ``p/q`` of an exact number.
 
-Applies to an integer or fraction base and to the rational coefficient of
-a product base (``sqrt`` has ``q = 2``); the same limit as groundinsight's
-formula guard.
+Applies to an exact base and to the exact coefficient of a product base
+(``sqrt`` has ``q = 2``); the same limit as groundinsight's formula guard.
 """
 
 MAX_RADICAND_DIGITS = 300
@@ -181,7 +220,7 @@ exact numbers out and is the same as in groundinsight's formula guard.
 """
 
 MAX_LOG10_MAGNITUDE = 300.0
-"""Bound on ``|log10|x||`` for every non-zero number and symbol-free value."""
+"""Bound on ``|log10|x||`` for every non-zero number the parser computes or keeps."""
 
 MAX_RATIONAL_DIGITS = 1_000
 """Maximum digits of the numerator and denominator of an exact fraction.
@@ -193,32 +232,24 @@ Formulas written by the 0.15.0 exporter contain fractions with up to
 MAX_WORK = 200_000
 """Maximum bookkeeping steps of one parse.
 
-A step is one argument of a node whose value or size is recorded, or one
-term of a sum whose common denominator is accumulated. The longest
-exporter formulas need a few thousand; quadratic patterns, such as a
-product of several hundred factors, are rejected instead of being worked
-through.
+A step is one node that is built, one factor or term that is carried
+into a product or a sum, or one argument of a SymPy node. The longest
+exporter formulas need a few thousand.
 """
 
 _SHADOW_PREC = 128
-"""Binary precision of the numeric shadow evaluation of symbol-free nodes."""
+"""Binary precision of the numbers the parser computes."""
 
 _ZERO_SUM_BITS = 100
-"""A symbol-free sum below ``2**-100`` times its largest term counts as zero."""
-
-_BALANCED_PRODUCT_MIN = 32
-"""Product chains with at least this many ``*`` / ``/`` are multiplied pairwise.
-
-Shorter chains, which include every product an exporter writes, keep the
-left-to-right order of the text (the parsed expression is unchanged)."""
+"""A sum below ``2**-100`` times its largest term counts as zero (not exact sums)."""
 
 _MAX_EXP_ARGUMENT = MAX_LOG10_MAGNITUDE * math.log(10.0)  # about 690.8
 _MAX_SIGNIFICANT_DIGITS = 17  # float64 carries at most 17 significant digits
 _NUMERIC_DIGITS = 17
-"""Significant digits of a float the parser computes (prints every float64 exactly)."""
+"""Significant digits of a float the parser stores (prints every float64 exactly)."""
 
-_CONSTANTS = {"j": sp.I, "I": sp.I, "pi": sp.pi, "E": sp.E}
-_FUNCTIONS = {"sqrt": sp.sqrt, "exp": sp.exp, "log": sp.log}
+_CONSTANT_NAMES = ("j", "I", "pi", "E")
+_FUNCTIONS = ("sqrt", "exp", "log")
 _ALLOWED_CHARACTERS = frozenset(string.ascii_letters + string.digits + "_.+-*/() \t")
 _ALLOWED_NODES = (
     ast.Expression,
@@ -246,6 +277,9 @@ _CHARACTER_HINTS = {
     "π": "write 'pi'",
     ",": "functions take exactly one argument",
 }
+_DECIMAL_LITERAL = re.compile(
+    r"(?P<int>[0-9]*)(?:\.(?P<frac>[0-9]*))?(?:[eE](?P<exp>[+-]?[0-9]+))?"
+)
 
 
 class FormulaError(ValueError):
@@ -266,7 +300,7 @@ def parse_impedance_formula(
     *,
     symbols: Iterable[str] = ("f", "rho"),
 ) -> sp.Expr:
-    r"""Parse an impedance formula without executing it.
+    r"""Parse an impedance formula without executing or evaluating it.
 
     Parameters
     ----------
@@ -283,34 +317,36 @@ def parse_impedance_formula(
     Returns
     -------
     sympy.Expr
-        Expression whose free symbols are plain :class:`sympy.Symbol`
-        objects named after a subset of ``symbols``; ``j`` and ``I``
-        become :data:`sympy.I`.
+        Unevaluated expression that keeps the structure of the formula:
+        symbol-free sub-expressions are SymPy floats, the numeric factors
+        of a product form one coefficient, like terms of a sum are
+        collected (see the module notes). Its free symbols are plain
+        :class:`sympy.Symbol` objects named after a subset of
+        ``symbols``; ``j`` and ``I`` become :data:`sympy.I`. Evaluate it
+        with :func:`formula_function`, not with SymPy.
 
     Raises
     ------
     FormulaError
         If the text is not a string, violates the grammar or exceeds a
-        resource bound (see the module docstring).
+        resource bound (see the module docstring). No other exception
+        escapes for any text.
     ValueError
         If ``symbols`` contains an invalid or reserved name.
 
     Notes
     -----
     Parsing never calls ``sympify``, ``parse_expr``, ``eval``, ``exec``
-    or ``compile`` on the text (only :func:`ast.parse`). Every number of
-    the expression built so far stays within the magnitude and digit
-    bounds; powers, exponentials and the common denominator of a sum are
-    checked before they are computed; values come from a numeric shadow
-    evaluation that visits every node once; and the bookkeeping is capped
-    at :data:`MAX_WORK` steps. No exact number is left under a fractional
-    power and ``log`` inside ``exp`` is rejected, so SymPy never
-    factorises a number or rewrites ``exp(c*log(x))`` as a power. So the
-    time and memory a formula costs, accepted or rejected, are bounded by
-    the size limits (audit 1 of the calendar release found sums and
-    products inside those limits that took 13 s to 105 s, the
-    groundinsight stream rational powers of large integers that ran for
-    more than 20 s).
+    or ``compile`` on the text (only :func:`ast.parse`), never lets SymPy
+    evaluate a node (every node is built with ``evaluate=False``) and
+    computes every number itself in bounded floating-point arithmetic. So
+    the time and memory a formula costs, accepted or rejected, grow
+    linearly with its size: audit 1 of the calendar release found sums and
+    products that took 13 s to 105 s, the groundinsight stream rational
+    powers of large integers that ran for more than 20 s, and audit 2
+    67- and 75-character formulas (``exp`` of symbol-free powers of
+    complex sums, fractional powers of symbolic powers) that ran for more
+    than a minute, all while SymPy evaluated the expression being built.
     """
     names = _check_symbol_names(symbols)
     src = _normalise(text)
@@ -318,12 +354,18 @@ def parse_impedance_formula(
     _check_tree(tree, src, names)
     builder = _Builder(src, {name: sp.Symbol(name) for name in names})
     try:
-        expr = builder.build(tree.body)
+        return builder.expression(builder.build(tree.body))
+    except FormulaError:
+        raise
     except RecursionError:  # pragma: no cover - guarded by MAX_DEPTH
         raise FormulaError("formula is nested too deeply") from None
-    if expr.has(sp.nan, sp.zoo, sp.oo, -sp.oo):
-        raise FormulaError("formula evaluates to an infinite or undefined value")
-    return expr
+    except (ArithmeticError, ValueError, TypeError, MemoryError) as exc:
+        # Defensive: every bound is checked before it could be exceeded,
+        # but no arithmetic error may escape as anything but FormulaError.
+        raise FormulaError(
+            f"formula cannot be evaluated within the bounds ({type(exc).__name__}: "
+            f"{str(exc)[:200]})"
+        ) from None
 
 
 def _check_symbol_names(symbols: Iterable[str]) -> tuple[str, ...]:
@@ -334,7 +376,7 @@ def _check_symbol_names(symbols: Iterable[str]) -> tuple[str, ...]:
     for name in names:
         if not isinstance(name, str) or not name.isidentifier() or not name.isascii():
             raise ValueError(f"invalid symbol name {name!r}")
-    reserved = sorted(set(names) & (set(_CONSTANTS) | set(_FUNCTIONS)))
+    reserved = sorted(set(names) & (set(_CONSTANT_NAMES) | set(_FUNCTIONS)))
     if reserved:
         raise ValueError(f"symbol names {reserved} are reserved")
     return names
@@ -380,19 +422,17 @@ def _parse_tree(src: str) -> ast.Expression:
     except SyntaxError as exc:
         where = f" at column {exc.offset}" if exc.offset else ""
         raise FormulaError(f"not a valid expression{where}: {exc.msg}") from None
-    except (ValueError, MemoryError, RecursionError) as exc:
+    except (ValueError, MemoryError, RecursionError, OverflowError) as exc:
         raise FormulaError(f"not a valid expression: {exc}") from None
 
 
 def _check_tree(tree: ast.Expression, src: str, names: tuple[str, ...]) -> None:
-    """Check size, depth, node types and names before anything is built.
+    """Check size, depth, node types, names and literal lengths before building.
 
-    Also rejects ``log`` inside the argument of ``exp``: SymPy rewrites
-    ``exp(c*log(x))`` as ``x**c`` while it builds ``exp``, with an exponent
-    ``c`` that is no literal (``exp(log(2*f)*10**12)`` builds
-    ``2**(10**12)``).
+    Also rejects ``log`` inside the argument of ``exp`` (see the module
+    notes).
     """
-    allowed_names = set(names) | set(_CONSTANTS) | set(_FUNCTIONS)
+    allowed_names = set(names) | set(_CONSTANT_NAMES) | set(_FUNCTIONS)
     unknown: set[str] = set()
     n_nodes = 0
     stack: list[tuple[ast.AST, int, bool]] = [(tree, 1, False)]
@@ -410,13 +450,20 @@ def _check_tree(tree: ast.Expression, src: str, names: tuple[str, ...]) -> None:
             )
         if isinstance(node, ast.Name) and node.id not in allowed_names:
             unknown.add(node.id)
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float, complex):
+            spelling = _literal_text(src, node)
+            if len(spelling) > MAX_LITERAL_CHARS:
+                raise FormulaError(
+                    f"numeric literal longer than {MAX_LITERAL_CHARS} characters"
+                    f"{_column(node)}: {_snippet(src, node)}"
+                )
         called = _called_name(node)
         if called == "log" and inside_exp:
             raise FormulaError(
                 f"log() inside exp() is not allowed{_column(node)}: "
-                f"{_snippet(src, node)}; SymPy rewrites exp(c*log(x)) as the "
-                "power x**c, whose exponent c is no literal. Write the power "
-                "x**c with a literal exponent instead"
+                f"{_snippet(src, node)}; exp(c*log(x)) is the power x**c, "
+                "whose exponent c is no literal. Write the power x**c with a "
+                "literal exponent instead"
             )
         inside_exp = inside_exp or called == "exp"
         family = _chain_family(node)
@@ -431,6 +478,29 @@ def _check_tree(tree: ast.Expression, src: str, names: tuple[str, ...]) -> None:
             "unit j (or I), the constants pi and E, and the functions sqrt, "
             "exp and log"
         )
+
+
+def _segment(src: str, node: ast.AST) -> str | None:
+    """Source text of ``node`` (``None`` if the node has no position).
+
+    The normalised formula is one line of ASCII characters, so the column
+    offsets of the syntax tree index the string directly; this costs the
+    length of the segment, while :func:`ast.get_source_segment` splits the
+    whole source into lines on every call.
+    """
+    start = getattr(node, "col_offset", None)
+    end = getattr(node, "end_col_offset", None)
+    if start is None or end is None:
+        return None
+    if getattr(node, "lineno", 1) != 1 or getattr(node, "end_lineno", 1) != 1:
+        return ast.get_source_segment(src, node)  # pragma: no cover - one line
+    return src[start:end]
+
+
+def _literal_text(src: str, node: ast.Constant) -> str:
+    """Spelling of a numeric literal without digit-group underscores."""
+    segment = _segment(src, node)
+    return (segment if segment is not None else repr(node.value)).replace("_", "")
 
 
 def _called_name(node: ast.AST) -> str | None:
@@ -471,14 +541,9 @@ def _column(node: ast.AST) -> str:
 
 def _snippet(src: str, node: ast.AST, limit: int = 60) -> str:
     """Source text of ``node``, shortened to ``limit`` characters."""
-    seg = ast.get_source_segment(src, node) if hasattr(node, "lineno") else None
+    seg = _segment(src, node)
     seg = seg if seg is not None else src
     return repr(seg if len(seg) <= limit else seg[: limit - 3] + "...")
-
-
-def _digits(n: int) -> float:
-    """``log10|n|`` of a non-zero Python integer (exact for big integers)."""
-    return math.log10(abs(n))
 
 
 def _decimal_digits(n: int) -> int:
@@ -494,95 +559,109 @@ def _decimal_digits(n: int) -> int:
     return count
 
 
-def _float_coefficients(total: sp.Expr) -> sp.Expr:
-    """Return a sum with a float coefficient with all its coefficients as floats.
-
-    SymPy before 1.14 takes the largest coefficient ``c`` of such a sum out
-    of a power, ``(2.0*f + c)**e -> c**e * (2.0/c*f + 1)**e``, and would
-    factorise an exact ``c`` under a fractional ``e``. Coefficients of
-    magnitude one and sums without a float coefficient are left as they
-    are.
-    """
-    terms = [term.as_coeff_Mul() for term in total.args]
-    if not any(coefficient.is_Float for coefficient, _ in terms):
-        return total
-    return sp.Add(
-        *(
-            sp.Float(float(c), _NUMERIC_DIGITS) * rest
-            if c.is_Rational and abs(c) != 1
-            else c * rest
-            for c, rest in terms
-        )
-    )
-
-
-def _rational_digits(x: sp.Rational) -> int:
+def _rational_digits(x: Fraction) -> int:
     """Return the digits of the numerator plus, for a fraction, the denominator."""
-    digits = _decimal_digits(int(x.p))
-    return digits if x.q == 1 else digits + _decimal_digits(int(x.q))
+    digits = _decimal_digits(x.numerator)
+    return digits if x.denominator == 1 else digits + _decimal_digits(x.denominator)
 
 
-def _float_log10(atom: sp.Float) -> float:
-    """``log10|x|`` of a non-zero SymPy float (``inf`` if not finite)."""
-    value = float(atom)
-    if math.isfinite(value) and value != 0.0:
-        return math.log10(abs(value))
-    _sign, mantissa, exponent, bits = atom._mpf_
-    if not mantissa:  # mpmath special values: zero handled by the caller
+def _fraction_log10(x: Fraction) -> float:
+    """``|log10|x||`` of a non-zero fraction (exact for big integers)."""
+    return abs(math.log10(abs(x.numerator)) - math.log10(x.denominator))
+
+
+def _decimal_log10(text: str) -> float | None:
+    """``log10|x|`` of a decimal literal from its text; ``None`` for zero.
+
+    The exponent is read as an integer and bounded before any float is
+    formed: ``1e-<320 nines>`` is ``-inf``-like (``math.inf`` here),
+    not ``0.0`` and not an :class:`OverflowError`.
+    """
+    match = _DECIMAL_LITERAL.fullmatch(text)
+    if match is None:  # pragma: no cover - Python accepted the literal
         return math.inf
-    # outside the float64 range: |x| = mantissa * 2**exponent
-    return (exponent + bits) * math.log10(2.0)
+    whole, fraction = match["int"], match["frac"] or ""
+    digits = (whole + fraction).lstrip("0")
+    if not digits:
+        return None
+    exponent = (match["exp"] or "0").lstrip("+-").lstrip("0")
+    if len(exponent) > 6:  # |exponent| >= 10**6: far outside every bound
+        return math.inf
+    shift = int(match["exp"] or "0") - len(fraction)
+    return math.log10(int(digits)) + shift
 
 
-def _number_profile(atom: sp.Expr) -> tuple[float, float]:
-    """``(|log10|x||, fraction digits)`` of a SymPy number (``inf`` if not finite)."""
-    if atom.is_zero:
-        return 0.0, 0.0
-    if atom.is_Integer:
-        return _digits(int(atom.p)), 0.0
-    if atom.is_Rational:
-        p, q = _digits(int(atom.p)), _digits(int(atom.q))
-        return abs(p - q), max(p, q)
-    if atom.is_Float:
-        return abs(_float_log10(atom)), 0.0
-    return math.inf, 0.0  # nan, zoo, oo
+class _Number(NamedTuple):
+    """A number of the formula.
 
-
-class _Profile(NamedTuple):
-    """Size bookkeeping of one SymPy node (cached per node by :class:`_Builder`).
-
-    ``atoms``: largest ``|log10|`` of a number atom in the node; ``scale``:
-    largest ``|log10|`` of a number atom or of the value of a non-zero
-    symbol-free sub-expression; ``fraction_digits``: largest digit count
-    of a numerator or denominator of a fraction in the node.
+    ``value``: mpmath complex at :data:`_SHADOW_PREC` bits. ``exact``: the
+    exact rational coefficient (``2*pi`` has 2; ``pi``, ``E`` and ``j``
+    count as 1), ``None`` if the number is not exact (a float literal, a
+    root or a function value is involved). ``rational``: the number *is*
+    ``exact`` (no ``pi``, ``E`` or ``j`` factor).
     """
 
-    symbolic: bool
-    atoms: float
-    scale: float
-    fraction_digits: float
+    value: Any
+    exact: Fraction | None
+    rational: bool
+
+
+class _Part(NamedTuple):
+    """A built sub-expression ``coefficient * factor_1 * factor_2 * ...``.
+
+    ``factors``: unevaluated SymPy nodes that contain a free symbol (empty
+    for a number). ``inner``: largest ``|log10|`` of a number inside the
+    factors (the coefficient excluded). ``degree``: product of the
+    exponents of nested powers (1 without powers).
+    """
+
+    coefficient: _Number
+    factors: tuple[sp.Expr, ...]
+    inner: float
+    degree: float
+
+
+class _Accumulator:
+    """Running sum of the numbers that belong to one term of a sum."""
+
+    __slots__ = ("value", "largest", "exact", "rational", "count", "factors", "inner")
+
+    def __init__(self, factors: tuple[sp.Expr, ...], zero: Any) -> None:
+        self.value = zero
+        self.largest = zero.real
+        self.exact: Fraction | None = Fraction(0)
+        self.rational = True
+        self.count = 0
+        self.factors = factors
+        self.inner = 0.0
 
 
 class _Builder:
-    """Build a SymPy expression from an allow-listed syntax tree.
+    """Build an unevaluated SymPy expression from an allow-listed syntax tree.
 
-    Bounds are kept with a numeric *shadow* evaluation: every symbol-free
-    node gets an :mod:`mpmath` value of :data:`_SHADOW_PREC` bits,
-    computed once from the cached values of its children (or, for a
-    product, from the previous partial product and the new factor), never
-    by evaluating a whole sub-tree again. Every step costs bookkeeping
-    proportional to the arguments of the node it creates; the total is
-    capped by :data:`MAX_WORK`.
+    Numbers are computed here, in :mod:`mpmath` at :data:`_SHADOW_PREC`
+    bits, and bounded at every step; SymPy only stores nodes
+    (``evaluate=False``). Every step costs bookkeeping proportional to the
+    arguments it touches; the total is capped by :data:`MAX_WORK`.
     """
 
     def __init__(self, src: str, symbols: dict[str, sp.Symbol]) -> None:
         self._src = src
         self._symbols = symbols
-        self._ctx = mpmath.MPContext()
-        self._ctx.prec = _SHADOW_PREC
-        self._values: dict[sp.Basic, Any] = {}
-        self._profiles: dict[sp.Basic, _Profile] = {}
         self._work = 0
+        ctx = mpmath.MPContext()
+        ctx.prec = _SHADOW_PREC
+        self._ctx = ctx
+        self._noise = ctx.ldexp(1, -_ZERO_SUM_BITS)
+        self._zero = _Number(ctx.mpc(0), Fraction(0), True)
+        self._one = _Number(ctx.mpc(1), Fraction(1), True)
+        unit = _Number(ctx.mpc(0, 1), Fraction(1), False)
+        self._constants = {
+            "j": unit,
+            "I": unit,
+            "pi": _Number(ctx.mpc(+ctx.pi), Fraction(1), False),
+            "E": _Number(ctx.mpc(+ctx.e), Fraction(1), False),
+        }
 
     def _fail(self, message: str, node: ast.AST) -> FormulaError:
         return FormulaError(f"{message}{_column(node)}: {_snippet(self._src, node)}")
@@ -596,57 +675,8 @@ class _Builder:
             )
 
     # ------------------------------------------------------------------
-    # numeric shadow evaluation and size bookkeeping
+    # numbers
     # ------------------------------------------------------------------
-
-    def _value(self, expr: sp.Expr, node: ast.AST) -> Any:
-        """Value of a symbol-free expression (mpmath ``mpf`` / ``mpc``)."""
-        cached = self._values.get(expr)
-        if cached is not None:
-            return cached
-        ctx = self._ctx
-        self._spend(1 + len(expr.args), node)
-        try:
-            if expr.is_Integer:
-                value = ctx.mpf(int(expr.p))
-            elif expr.is_Rational:
-                value = ctx.mpf(int(expr.p)) / int(expr.q)
-            elif expr.is_Float:
-                value = ctx.make_mpf(expr._mpf_)
-            elif expr is sp.I:
-                value = ctx.mpc(0, 1)
-            elif expr is sp.pi:
-                value = +ctx.pi
-            elif expr is sp.E:
-                value = +ctx.e
-            elif expr.is_Add:
-                terms = [self._value(arg, node) for arg in expr.args]
-                value = ctx.fsum(terms)
-                largest = max(abs(t) for t in terms)
-                if abs(value) <= largest * ctx.ldexp(1, -_ZERO_SUM_BITS):
-                    value = ctx.mpf(0)  # cancels within the working precision
-            elif expr.is_Mul:
-                value = ctx.fprod(self._value(arg, node) for arg in expr.args)
-            elif expr.is_Pow:
-                base = self._value(expr.base, node)
-                if expr.exp.is_Integer:
-                    value = base ** int(expr.exp)
-                else:
-                    value = ctx.power(base, self._value(expr.exp, node))
-            elif isinstance(expr, sp.exp):
-                value = ctx.exp(self._value(expr.args[0], node))
-            elif isinstance(expr, sp.log):
-                value = ctx.log(self._value(expr.args[0], node))
-            elif expr.is_Number:  # nan, zoo, oo
-                value = ctx.inf
-            else:  # pragma: no cover - the grammar builds nothing else
-                raise self._fail(
-                    f"cannot bound a sub-expression of type {type(expr).__name__}", node
-                )
-        except (ZeroDivisionError, ValueError, OverflowError):
-            value = ctx.inf
-        self._values[expr] = value
-        return value
 
     def _log10_size(self, value: Any) -> float:
         """``|log10|value||``; 0 for zero, ``inf`` if not finite."""
@@ -657,84 +687,236 @@ class _Builder:
             return math.inf
         return abs(float(self._ctx.log10(magnitude)))
 
-    def _profile(self, expr: sp.Expr, node: ast.AST) -> _Profile:
-        """Cached :class:`_Profile` of ``expr`` (computed from its arguments)."""
-        cached = self._profiles.get(expr)
-        if cached is not None:
-            return cached
-        self._spend(1 + len(expr.args), node)
-        if expr.is_Symbol:
-            profile = _Profile(True, 0.0, 0.0, 0.0)
-        elif expr.is_Number:
-            size, fraction = _number_profile(expr)
-            profile = _Profile(False, size, size, fraction)
-        else:
-            parts = [self._profile(arg, node) for arg in expr.args]
-            symbolic = any(p.symbolic for p in parts)
-            atoms = max((p.atoms for p in parts), default=0.0)
-            scale = max((p.scale for p in parts), default=0.0)
-            fraction = max((p.fraction_digits for p in parts), default=0.0)
-            if not symbolic:
-                scale = max(scale, self._log10_size(self._value(expr, node)))
-            profile = _Profile(symbolic, atoms, scale, fraction)
-        self._profiles[expr] = profile
-        return profile
+    def _from_fraction(self, x: Fraction) -> Any:
+        """The value of an exact fraction, correctly rounded."""
+        mpf = self._ctx.make_mpf(
+            from_rational(x.numerator, x.denominator, _SHADOW_PREC, round_nearest)
+        )
+        return self._ctx.mpc(mpf)
 
-    def _bounded(self, expr: sp.Expr, node: ast.AST) -> sp.Expr:
-        """Reject numbers or symbol-free values outside the bounds."""
-        profile = self._profile(expr, node)
-        if profile.scale > MAX_LOG10_MAGNITUDE:
+    def _number(self, value: Any, exact: Fraction | None, rational: bool) -> _Number:
+        """A number whose value comes from ``exact`` when it is rational."""
+        if rational and exact is not None:
+            value = self._from_fraction(exact)
+        elif value == 0:
+            return self._zero
+        return _Number(value, exact, rational)
+
+    def _checked(self, number: _Number, node: ast.AST) -> _Number:
+        """Reject a number outside the magnitude or digit bounds."""
+        too_large = self._log10_size(number.value) > MAX_LOG10_MAGNITUDE
+        exact = number.exact
+        if exact is not None and exact != 0:
+            too_large = too_large or _fraction_log10(exact) > MAX_LOG10_MAGNITUDE
+        if too_large:
             raise self._fail(
                 "number outside the bound "
                 f"1e-{MAX_LOG10_MAGNITUDE:g} <= |x| <= 1e{MAX_LOG10_MAGNITUDE:g}",
                 node,
             )
-        if profile.fraction_digits > MAX_RATIONAL_DIGITS:
-            raise self._fail(
-                f"fraction with more than {MAX_RATIONAL_DIGITS} digits", node
+        if exact is not None and exact.denominator != 1:
+            digits = max(
+                _decimal_digits(exact.numerator), _decimal_digits(exact.denominator)
             )
-        return expr
+            if digits > MAX_RATIONAL_DIGITS:
+                raise self._fail(
+                    f"fraction with more than {MAX_RATIONAL_DIGITS} digits", node
+                )
+        return number
 
-    def _is_zero(self, expr: sp.Expr, node: ast.AST) -> bool:
-        """Whether ``expr`` is a symbol-free expression of value zero."""
-        return not self._profile(expr, node).symbolic and self._value(expr, node) == 0
+    def _multiply(self, a: _Number, b: _Number, node: ast.AST) -> _Number:
+        if a.value == 0 or b.value == 0:
+            return self._zero
+        both = a.exact is not None and b.exact is not None
+        exact = a.exact * b.exact if both else None
+        product = self._number(a.value * b.value, exact, a.rational and b.rational)
+        return self._checked(product, node)
+
+    def _divide(self, a: _Number, b: _Number, node: ast.AST) -> _Number:
+        if b.value == 0:
+            raise self._fail("division by zero", node)
+        if a.value == 0:
+            return self._zero
+        both = a.exact is not None and b.exact is not None
+        exact = a.exact / b.exact if both else None
+        quotient = self._number(a.value / b.value, exact, a.rational and b.rational)
+        return self._checked(quotient, node)
+
+    def _negate(self, a: _Number) -> _Number:
+        exact = None if a.exact is None else -a.exact
+        return _Number(-a.value, exact, a.rational)
+
+    def _integer_power(self, a: _Number, n: int, node: ast.AST) -> _Number:
+        if a.value == 0:
+            if n < 0:
+                raise self._fail("zero raised to a negative power", node)
+            return self._one if n == 0 else self._zero
+        if n == 0:
+            return self._one
+        scale = self._log10_size(a.value)
+        if a.exact is not None and a.exact != 0:
+            scale = max(scale, _fraction_log10(a.exact))
+        if abs(n) * scale > MAX_LOG10_MAGNITUDE:
+            raise self._fail(
+                "power would create a number outside the bound "
+                f"|x| <= 1e{MAX_LOG10_MAGNITUDE:g}",
+                node,
+            )
+        exact = a.exact
+        if exact is not None:
+            digits = max(
+                _decimal_digits(exact.numerator), _decimal_digits(exact.denominator)
+            )
+            if exact.denominator != 1 and abs(n) * digits > MAX_RATIONAL_DIGITS:
+                raise self._fail(
+                    "power would create a fraction with more than "
+                    f"{MAX_RATIONAL_DIGITS} digits",
+                    node,
+                )
+            exact = exact**n
+        power = self._number(a.value**n, exact, a.rational)
+        return self._checked(power, node)
+
+    def _root_limits(self, exact: Fraction | None, q: int, node: ast.AST) -> None:
+        """Limits for an exact number under a fractional power with denominator q."""
+        if exact is None or exact in (0, 1, -1):
+            return
+        digits = _rational_digits(exact)
+        if q > MAX_ROOT_DENOMINATOR or digits * q > MAX_RADICAND_DIGITS:
+            raise self._fail(
+                f"fractional power of an exact number with {digits} digits "
+                f"and denominator {q} in the exponent (limits: denominator "
+                f"<= {MAX_ROOT_DENOMINATOR}, digits x denominator <= "
+                f"{MAX_RADICAND_DIGITS}); write the number as a float, "
+                "e.g. 2.0 instead of 2, to evaluate the power numerically",
+                node,
+            )
+
+    def _real_power(
+        self, a: _Number, exponent: Fraction | float, node: ast.AST
+    ) -> _Number:
+        """``a**exponent`` for a non-integer exponent, on the principal branch."""
+        if isinstance(exponent, Fraction):
+            self._root_limits(a.exact, exponent.denominator, node)
+            power = self._ctx.mpf(exponent.numerator) / exponent.denominator
+        else:
+            power = self._ctx.mpf(exponent)
+        if a.value == 0:
+            if exponent < 0:
+                raise self._fail("zero raised to a negative power", node)
+            return self._zero
+        if abs(float(exponent)) * self._log10_size(a.value) > MAX_LOG10_MAGNITUDE:
+            raise self._fail(
+                "power would create a number outside the bound "
+                f"|x| <= 1e{MAX_LOG10_MAGNITUDE:g}",
+                node,
+            )
+        value = self._ctx.power(a.value, power)
+        return self._checked(self._number(value, None, False), node)
+
+    def _function(self, name: str, a: _Number, node: ast.AST) -> _Number:
+        """``exp`` or ``log`` of a number."""
+        if name == "exp":
+            if abs(a.value) > _MAX_EXP_ARGUMENT:
+                raise self._fail(
+                    f"exp argument larger than {_MAX_EXP_ARGUMENT:.1f} in magnitude",
+                    node,
+                )
+            value = self._ctx.exp(a.value)
+        else:
+            if a.value == 0:
+                raise self._fail("log(0) is undefined", node)
+            value = self._ctx.log(a.value)
+        return self._checked(self._number(value, None, False), node)
+
+    # ------------------------------------------------------------------
+    # SymPy nodes (never evaluated)
+    # ------------------------------------------------------------------
 
     def _numeric(self, value: Any) -> sp.Expr:
         """Return an mpmath value as SymPy floats of 17 significant digits.
 
         A real or imaginary part below ``2**-100`` times the magnitude is
-        rounding noise of the shadow evaluation (``(-4)**(1/2)`` has the
-        real part ``2*cos(pi/2)``) and is dropped.
+        rounding noise (``(-4)**(1/2)`` has the real part ``2*cos(pi/2)``)
+        and is dropped.
         """
         ctx = self._ctx
-        magnitude = abs(value)
-        noise = magnitude * ctx.ldexp(1, -_ZERO_SUM_BITS)
-        result: sp.Expr = sp.Integer(0)
+        noise = abs(value) * self._noise
         real, imag = ctx.re(value), ctx.im(value)
-        if abs(real) > noise:
-            result += sp.Float(float(real), _NUMERIC_DIGITS)
-        if abs(imag) > noise:
-            result += sp.Float(float(imag), _NUMERIC_DIGITS) * sp.I
-        return result
+        has_real, has_imag = abs(real) > noise, abs(imag) > noise
+        if not (has_real or has_imag):
+            return sp.S.Zero
+        if not has_imag:
+            return sp.Float(float(real), _NUMERIC_DIGITS)
+        if imag == 1:
+            imaginary = sp.I
+        elif imag == -1:
+            imaginary = sp.Mul(sp.S.NegativeOne, sp.I, evaluate=False)
+        else:
+            imaginary = sp.Mul(
+                sp.Float(float(imag), _NUMERIC_DIGITS), sp.I, evaluate=False
+            )
+        if not has_real:
+            return imaginary
+        return sp.Add(sp.Float(float(real), _NUMERIC_DIGITS), imaginary, evaluate=False)
+
+    def _coefficient_expression(self, value: Any) -> sp.Expr | None:
+        """The coefficient of a product as a SymPy factor (``None`` for 1)."""
+        if value == 1:
+            return None
+        if value == -1:
+            return sp.S.NegativeOne
+        if value == self._ctx.mpc(0, -1):
+            return sp.Mul(sp.S.NegativeOne, sp.I, evaluate=False)
+        return self._numeric(value)
+
+    def expression(self, part: _Part) -> sp.Expr:
+        """The unevaluated SymPy expression of a built part."""
+        if not part.factors:
+            return self._numeric(part.coefficient.value)
+        items = list(part.factors)
+        coefficient = self._coefficient_expression(part.coefficient.value)
+        if coefficient is not None:
+            items.insert(0, coefficient)
+        if len(items) == 1:
+            return items[0]
+        return sp.Mul(*items, evaluate=False)
+
+    def _scale(self, part: _Part) -> float:
+        """Largest ``|log10|`` of a number in the part (coefficient included)."""
+        return max(self._log10_size(part.coefficient.value), part.inner)
+
+    @staticmethod
+    def _inverse(factor: sp.Expr) -> sp.Expr:
+        """``1/factor`` as a power (``(b**e)**-1`` is ``b**-e``)."""
+        if isinstance(factor, sp.Pow):
+            return sp.Pow(factor.base, -factor.exp, evaluate=False)
+        return sp.Pow(factor, sp.S.NegativeOne, evaluate=False)
+
+    def _constant(self, number: _Number, degree: float = 1.0) -> _Part:
+        return _Part(number, (), 0.0, degree)
 
     # ------------------------------------------------------------------
-    # syntax tree -> SymPy
+    # syntax tree -> parts
     # ------------------------------------------------------------------
 
-    def build(self, node: ast.AST) -> sp.Expr:
+    def build(self, node: ast.AST) -> _Part:
+        self._spend(1, node)
         if isinstance(node, ast.Constant):
-            return self._literal(node)
+            return self._constant(self._literal(node))
         if isinstance(node, ast.Name):
             if node.id in self._symbols:
-                return self._symbols[node.id]
-            if node.id in _CONSTANTS:
-                return _CONSTANTS[node.id]
+                return _Part(self._one, (self._symbols[node.id],), 0.0, 1.0)
+            if node.id in self._constants:
+                return self._constant(self._constants[node.id])
             raise self._fail(
                 f"function {node.id!r} must be called with one argument", node
             )
         if isinstance(node, ast.UnaryOp):
             operand = self.build(node.operand)
-            return -operand if isinstance(node.op, ast.USub) else operand
+            if isinstance(node.op, ast.USub):
+                return operand._replace(coefficient=self._negate(operand.coefficient))
+            return operand
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
             return self._power(node)
         if _chain_family(node) == "sum":
@@ -745,7 +927,7 @@ class _Builder:
             return self._call(node)
         raise self._fail(
             f"{_node_label(node)} is not allowed", node
-        )  # pragma: no cover
+        )  # pragma: no cover - _check_tree ran first
 
     @staticmethod
     def _chain(node: ast.BinOp) -> tuple[ast.AST, list[ast.BinOp]]:
@@ -757,137 +939,134 @@ class _Builder:
             node = node.left
         return node, links[::-1]
 
-    def _sum(self, node: ast.BinOp) -> sp.Expr:
-        """``a + b - c + ...`` in one step, its common denominator bounded first."""
-        head, links = self._chain(node)
-        terms = [self.build(head)]
-        common = self._common_denominator(1, terms[0], node)
-        for link in links:
-            term = self.build(link.right)
-            terms.append(-term if isinstance(link.op, ast.Sub) else term)
-            common = self._common_denominator(common, term, link)
-        return self._bounded(sp.Add(*terms), node)
-
-    def _common_denominator(self, common: int, term: sp.Expr, node: ast.AST) -> int:
-        """Fold the fraction denominators of ``term`` into ``common``.
-
-        Adding fractions (numbers, or the coefficients of like terms)
-        needs their least common multiple; with distinct large prime
-        denominators it grows with every term (audit 1, H1: 222 terms of
-        900 digits took more than a minute before the result was
-        rejected). The least common multiple of the fraction coefficients
-        of all terms bounds every denominator the sum can create; it is
-        accumulated term by term, before the sum is built, and the formula
-        is rejected as soon as it has more than :data:`MAX_RATIONAL_DIGITS`
-        digits.
-        """
-        for item in term.args if term.is_Add else (term,):
-            self._spend(1, node)
-            coefficient = item.as_coeff_Mul()[0]
-            if coefficient.is_Rational and coefficient.q != 1:
-                q = int(coefficient.q)
-                common = common // math.gcd(common, q) * q
-                if _digits(common) > MAX_RATIONAL_DIGITS:
-                    raise self._fail(
-                        f"fraction with more than {MAX_RATIONAL_DIGITS} digits", node
-                    )
-        return common
-
-    def _seed_product(
-        self,
-        product: sp.Expr,
-        left: sp.Expr,
-        right: sp.Expr,
-        divide: bool,
-        node: ast.AST,
-    ) -> None:
-        """Record the value of ``left * right`` (or ``left / right``) directly.
-
-        Saves the re-evaluation of a growing symbol-free product (audit 1,
-        H2: quadratic in the number of factors).
-        """
-        if (
-            product not in self._values
-            and not self._profile(left, node).symbolic
-            and not self._profile(right, node).symbolic
-        ):
-            a, b = self._value(left, node), self._value(right, node)
-            self._values[product] = a / b if divide else a * b
-
-    def _product(self, node: ast.BinOp) -> sp.Expr:
-        """``a * b / c * ...`` factor by factor, bounded after each step.
-
-        The value of a symbol-free partial product is the previous value
-        times (or over) the factor's value, so no step re-evaluates the
-        product so far. Chains longer than :data:`_BALANCED_PRODUCT_MIN`
-        factors are multiplied pairwise instead (:meth:`_balanced_product`).
-        """
-        head, links = self._chain(node)
-        if len(links) >= _BALANCED_PRODUCT_MIN:
-            return self._balanced_product(head, links, node)
-        result = self.build(head)
-        for link in links:
-            factor = self.build(link.right)
-            divide = isinstance(link.op, ast.Div)
-            if divide and self._is_zero(factor, link):
-                raise self._fail("division by zero", link)
-            product = result / factor if divide else result * factor
-            self._seed_product(product, result, factor, divide, link)
-            result = self._bounded(product, link)
-        return result
-
-    def _balanced_product(
-        self, head: ast.AST, links: list[ast.BinOp], node: ast.AST
-    ) -> sp.Expr:
-        """Multiply a long chain pairwise, bounding every partial product.
-
-        SymPy sorts the arguments of a product whenever one is added, so
-        multiplying ``n`` factors one at a time costs ``O(n**2 log n)``
-        (audit 1, H2: 332 logarithms took 4.8 s after the bookkeeping was
-        made linear); pairwise merging costs ``O(n log**2 n)`` and every
-        merge combines two bounded operands.
-        """
-        factors = [self.build(head)]
-        for link in links:
-            factor = self.build(link.right)
-            if isinstance(link.op, ast.Div):
-                if self._is_zero(factor, link):
-                    raise self._fail("division by zero", link)
-                inverse = sp.Integer(1) / factor
-                self._seed_product(inverse, sp.Integer(1), factor, True, link)
-                factor = self._bounded(inverse, link)
-            factors.append(factor)
-        while len(factors) > 1:
-            merged = []
-            for left, right in zip(factors[0::2], factors[1::2], strict=False):
-                product = left * right
-                self._seed_product(product, left, right, False, node)
-                merged.append(self._bounded(product, node))
-            if len(factors) % 2:
-                merged.append(factors[-1])
-            factors = merged
-        return factors[0]
-
-    def _literal(self, node: ast.Constant) -> sp.Expr:
+    def _literal(self, node: ast.Constant) -> _Number:
+        """A numeric literal, bounded by its exact decimal value."""
         value = node.value
-        seg = (ast.get_source_segment(self._src, node) or repr(value)).replace("_", "")
-        if len(seg) > MAX_LITERAL_CHARS:
-            raise self._fail(
-                f"numeric literal longer than {MAX_LITERAL_CHARS} characters", node
-            )
+        text = _literal_text(self._src, node)
+        ctx = self._ctx
         if type(value) is int:
-            return self._bounded(sp.Integer(value), node)
-        if type(value) is float:
-            if not math.isfinite(value):
+            number = self._number(None, Fraction(value), True)
+            return self._checked(number, node)
+        if type(value) is float or type(value) is complex:
+            imaginary = type(value) is complex
+            digits = text[:-1] if imaginary else text  # an imaginary literal ends in j
+            if not math.isfinite(value.imag if imaginary else value):
                 raise self._fail("numeric literal is not finite", node)
-            return self._bounded(sp.Float(seg), node)
-        if type(value) is complex:
-            if not math.isfinite(value.imag):
-                raise self._fail("numeric literal is not finite", node)
-            imag_text = seg[:-1]  # a Python imaginary literal ends in j or J
-            imag = sp.Integer(imag_text) if imag_text.isdigit() else sp.Float(imag_text)
-            return self._bounded(imag * sp.I, node)
+            size = _decimal_log10(digits)
+            if size is not None and abs(size) > MAX_LOG10_MAGNITUDE:
+                raise self._fail(
+                    "number outside the bound "
+                    f"1e-{MAX_LOG10_MAGNITUDE:g} <= |x| <= 1e{MAX_LOG10_MAGNITUDE:g}",
+                    node,
+                )
+            if size is None:
+                return self._zero
+            if imaginary and digits.isdigit():  # 2j: an exact coefficient times j
+                exact = Fraction(int(digits))
+                return _Number(
+                    ctx.mpc(0, self._from_fraction(exact).real), exact, False
+                )
+            part = ctx.mpf(digits)
+            return _Number(
+                ctx.mpc(0, part) if imaginary else ctx.mpc(part), None, False
+            )
         raise self._fail(f"literal of type {type(value).__name__} is not allowed", node)
+
+    def _sum(self, node: ast.BinOp) -> _Part:
+        """``a + b - c + ...``: numbers added, like terms collected."""
+        head, links = self._chain(node)
+        zero = self._zero.value
+        terms: dict[tuple[sp.Expr, ...], _Accumulator] = {}
+        common = 1  # least common multiple of the exact denominators
+        degree = 1.0
+        operands = [(head, False, node)] + [
+            (link.right, isinstance(link.op, ast.Sub), link) for link in links
+        ]
+        for operand, subtract, where in operands:
+            part = self.build(operand)
+            self._spend(1 + len(part.factors), where)
+            number = self._negate(part.coefficient) if subtract else part.coefficient
+            degree = max(degree, part.degree)
+            if number.exact is not None and number.exact.denominator != 1:
+                q = number.exact.denominator
+                common = common // math.gcd(common, q) * q
+                if _decimal_digits(common) > MAX_RATIONAL_DIGITS:
+                    raise self._fail(
+                        f"fraction with more than {MAX_RATIONAL_DIGITS} digits", where
+                    )
+            if number.value == 0:
+                continue
+            term = terms.get(part.factors)
+            if term is None:
+                term = terms[part.factors] = _Accumulator(part.factors, zero)
+            term.value += number.value
+            term.largest = max(term.largest, abs(number.value))
+            term.count += 1
+            term.inner = max(term.inner, part.inner)
+            if term.count == 1:
+                term.exact, term.rational = number.exact, number.rational
+            elif term.rational and number.rational:
+                term.exact = term.exact + number.exact
+            else:
+                term.exact, term.rational = None, False
+        constant = self._zero
+        symbolic: list[_Part] = []
+        for factors, term in terms.items():
+            number = self._collected(term, node)
+            if number is None:
+                continue
+            if factors:
+                symbolic.append(_Part(number, factors, term.inner, 1.0))
+            else:
+                constant = number
+        if not symbolic:
+            return self._constant(constant, degree)
+        if len(symbolic) == 1 and constant.value == 0:
+            return symbolic[0]._replace(degree=degree)
+        args = [self.expression(part) for part in symbolic]
+        if constant.value != 0:
+            args.append(self._numeric(constant.value))
+        self._spend(len(args), node)
+        inner = max(
+            [self._scale(part) for part in symbolic]
+            + [self._log10_size(constant.value)]
+        )
+        return _Part(self._one, (sp.Add(*args, evaluate=False),), inner, degree)
+
+    def _collected(self, term: _Accumulator, node: ast.AST) -> _Number | None:
+        """The number of one collected term; ``None`` if the term cancels."""
+        if term.count == 0:
+            return None
+        if term.rational and term.exact is not None:
+            if term.exact == 0:
+                return None
+            return self._checked(self._number(None, term.exact, True), node)
+        if term.count > 1 and abs(term.value) <= term.largest * self._noise:
+            return None  # cancels within the working precision
+        if term.value == 0:
+            return None
+        return self._checked(_Number(term.value, term.exact, term.rational), node)
+
+    def _product(self, node: ast.BinOp) -> _Part:
+        """``a * b / c * ...``: numeric factors in one coefficient, bounded per step."""
+        head, links = self._chain(node)
+        part = self.build(head)
+        coefficient = part.coefficient
+        factors = list(part.factors)
+        inner, degree = part.inner, part.degree
+        for link in links:
+            right = self.build(link.right)
+            self._spend(1 + len(right.factors), link)
+            if isinstance(link.op, ast.Div):
+                coefficient = self._divide(coefficient, right.coefficient, link)
+                factors.extend(self._inverse(factor) for factor in right.factors)
+            else:
+                coefficient = self._multiply(coefficient, right.coefficient, link)
+                factors.extend(right.factors)
+            inner, degree = max(inner, right.inner), max(degree, right.degree)
+        if coefficient.value == 0:
+            return self._constant(self._zero, degree)
+        return _Part(coefficient, tuple(factors), inner, degree)
 
     @staticmethod
     def _signed_int(node: ast.AST) -> int | None:
@@ -900,26 +1079,33 @@ class _Builder:
             return sign * node.value
         return None
 
-    @classmethod
-    def _exponent(cls, node: ast.AST) -> sp.Number | None:
+    def _exponent(self, node: ast.AST) -> Fraction | float | None:
         """Literal exponent ``[+-]int``, ``[+-]float`` or ``[+-]int/int``.
 
         Python reads ``(-3/2)`` as ``(-3)/2``; the sign may stand before
-        the fraction or before its numerator.
+        the fraction or before its numerator. An integral float becomes an
+        integer exponent.
         """
         sign = 1
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
             sign = -1 if isinstance(node.op, ast.USub) else 1
             node = node.operand
         if isinstance(node, ast.Constant) and type(node.value) is int:
-            return sp.Integer(sign * node.value)
+            return Fraction(sign * node.value)
         if isinstance(node, ast.Constant) and type(node.value) is float:
             if not math.isfinite(node.value):
                 return None
+            size = _decimal_log10(_literal_text(self._src, node))
+            if size is not None and abs(size) > MAX_LOG10_MAGNITUDE:
+                raise self._fail(
+                    "exponent outside the bound "
+                    f"1e-{MAX_LOG10_MAGNITUDE:g} <= |n| <= {MAX_POW}",
+                    node,
+                )
             value = sign * node.value
-            return sp.Integer(int(value)) if value.is_integer() else sp.Float(value)
+            return Fraction(int(value)) if value.is_integer() else value
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-            numerator = cls._signed_int(node.left)
+            numerator = self._signed_int(node.left)
             denominator = node.right
             if (
                 numerator is not None
@@ -927,99 +1113,72 @@ class _Builder:
                 and type(denominator.value) is int
                 and denominator.value != 0
             ):
-                return sp.Rational(sign * numerator, denominator.value)
+                exponent = Fraction(sign * numerator, denominator.value)
+                if exponent != 0 and _fraction_log10(exponent) > MAX_LOG10_MAGNITUDE:
+                    raise self._fail(
+                        "exponent outside the bound "
+                        f"1e-{MAX_LOG10_MAGNITUDE:g} <= |n| <= {MAX_POW}",
+                        node,
+                    )
+                return exponent
         return None
 
-    def _power_scale(self, base: sp.Expr, profile: _Profile, node: ast.AST) -> float:
-        """Largest ``|log10|`` the power multiplies by its exponent.
+    @staticmethod
+    def _exponent_expression(exponent: Fraction | float) -> sp.Expr:
+        if isinstance(exponent, Fraction):
+            if exponent.denominator == 1:
+                return sp.Integer(exponent.numerator)
+            return sp.Rational(exponent.numerator, exponent.denominator)
+        return sp.Float(exponent)
 
-        The number atoms of the base, the value of a symbol-free base, and
-        the symbol-free factor of a product base: SymPy distributes an
-        integer power over a product, so ``(exp(600)*f)**64`` would create
-        ``exp(38400)`` (audit 1, L1).
-        """
-        scale = profile.atoms
-        if not profile.symbolic:
-            return max(scale, self._log10_size(self._value(base, node)))
-        if base.is_Mul:
-            free = [arg for arg in base.args if not self._profile(arg, node).symbolic]
-            if free:
-                value = self._ctx.fprod(self._value(arg, node) for arg in free)
-                scale = max(scale, self._log10_size(value))
-        return scale
-
-    def _power(self, node: ast.BinOp) -> sp.Expr:
+    def _power(self, node: ast.BinOp) -> _Part:
         exponent = self._exponent(node.right)
         if exponent is None or abs(exponent) > MAX_POW:
             raise self._fail(
                 f"exponent must be a numeric literal with |n| <= {MAX_POW}", node
             )
-        base = self.build(node.left)
-        n = abs(float(exponent))
-        if exponent < 0 and self._is_zero(base, node):
-            raise self._fail("zero raised to a negative power", node)
-        # SymPy raises every numeric factor of the base to the power, so
-        # bound the result before it is computed.
-        profile = self._profile(base, node)
-        if n * self._power_scale(base, profile, node) > MAX_LOG10_MAGNITUDE:
+        return self._raise(self.build(node.left), exponent, node)
+
+    def _raise(self, base: _Part, exponent: Fraction | float, node: ast.AST) -> _Part:
+        """``base**exponent``: bounds first, then a number or an unevaluated power."""
+        size = abs(float(exponent))
+        degree = size * base.degree
+        if degree > MAX_POW:
+            raise self._fail(
+                f"power would create the exponent {degree:g} through nested "
+                "powers (the exponents of nested powers multiply, also those "
+                f"of numbers such as 10**6; limit {MAX_POW}); write such "
+                "numbers as float literals, e.g. 1e6",
+                node,
+            )
+        integral = isinstance(exponent, Fraction) and exponent.denominator == 1
+        if not base.factors:
+            number = base.coefficient
+            if integral:
+                number = self._integer_power(number, int(exponent), node)
+            else:
+                number = self._real_power(number, exponent, node)
+            return self._constant(number, degree)
+        if exponent == 0:
+            return self._constant(self._one, degree)
+        scale = self._scale(base)
+        if size * scale > MAX_LOG10_MAGNITUDE:
             raise self._fail(
                 "power would create a number outside the bound "
                 f"|x| <= 1e{MAX_LOG10_MAGNITUDE:g}",
                 node,
             )
-        if n * profile.fraction_digits > MAX_RATIONAL_DIGITS:
-            raise self._fail(
-                f"power would create a fraction with more than "
-                f"{MAX_RATIONAL_DIGITS} digits",
-                node,
-            )
-        if exponent.is_Rational and not exponent.is_Integer:
-            return self._bounded(self._fractional_power(base, exponent, node), node)
-        return self._bounded(base**exponent, node)
+        if isinstance(exponent, Fraction) and not integral:
+            self._root_limits(base.coefficient.exact, exponent.denominator, node)
+        if exponent == 1:
+            return base._replace(degree=degree)
+        self._spend(2, node)
+        power = sp.Pow(
+            self.expression(base), self._exponent_expression(exponent), evaluate=False
+        )
+        return _Part(self._one, (power,), size * scale, degree)
 
-    def _fractional_power(
-        self, base: sp.Expr, exponent: sp.Rational, node: ast.AST
-    ) -> sp.Expr:
-        """Return ``base**(p/q)`` for a non-integer ``p/q`` without an exact root.
-
-        SymPy simplifies a fractional power of an exact number by
-        factorising the number and keeps a radicand of up to ``q - 1``
-        times its digits; a product merges such powers and adds their
-        exponents (``12**(58/59)*12**(60/61)*...``). So a symbol-free base
-        is powered numerically, and the rational coefficient ``c`` of a
-        product base is taken out as the float ``|c|**(p/q)``, which is
-        exact for the principal branch: ``(c*x)**e = c**e * x**e`` for
-        ``c > 0``, and ``(c*x)**e = |c|**e * (-x)**e`` for ``c < 0``.
-        Before that, an exact number must satisfy the limits
-        :data:`MAX_ROOT_DENOMINATOR` and :data:`MAX_RADICAND_DIGITS`.
-        """
-        p, q = int(exponent.p), int(exponent.q)
-        coefficient, rest = base.as_coeff_Mul()
-        exact = coefficient.is_Rational and coefficient not in (0, 1, -1)
-        if exact:
-            digits = _rational_digits(coefficient)
-            if q > MAX_ROOT_DENOMINATOR or digits * q > MAX_RADICAND_DIGITS:
-                raise self._fail(
-                    f"fractional power of an exact number with {digits} digits "
-                    f"and denominator {q} in the exponent (limits: denominator "
-                    f"<= {MAX_ROOT_DENOMINATOR}, digits x denominator <= "
-                    f"{MAX_RADICAND_DIGITS}); write the number as a float, "
-                    "e.g. 2.0 instead of 2, to evaluate the power numerically",
-                    node,
-                )
-        ctx = self._ctx
-        power = ctx.mpf(p) / q
-        if not self._profile(base, node).symbolic:
-            return self._numeric(ctx.power(self._value(base, node), power))
-        if not exact:
-            if base.is_Add:
-                base = self._bounded(_float_coefficients(base), node)
-            return base**exponent
-        magnitude = abs(coefficient)
-        factor = self._numeric(ctx.power(self._value(magnitude, node), power))
-        return factor * (rest if coefficient > 0 else -rest) ** exponent
-
-    def _call(self, node: ast.Call) -> sp.Expr:
+    def _call(self, node: ast.Call) -> _Part:
         func = node.func
         if not (
             isinstance(func, ast.Name)
@@ -1035,22 +1194,169 @@ class _Builder:
             )
         arg = self.build(node.args[0])
         if func.id == "sqrt":
-            return self._bounded(self._fractional_power(arg, sp.S.Half, node), node)
-        if not self._profile(arg, node).symbolic:
-            value = self._value(arg, node)
-            if func.id == "exp" and abs(value) > _MAX_EXP_ARGUMENT:
-                raise self._fail(
-                    f"exp argument larger than {_MAX_EXP_ARGUMENT:.1f} in magnitude",
-                    node,
-                )
-            if func.id == "log" and value == 0:
-                raise self._fail("log(0) is undefined", node)
-            if func.id == "log" and not (
-                arg.is_Float or (arg.is_Rational and arg.is_positive)
-            ):
-                # SymPy's log of r + r*j takes sqrt(2*r**2) and factorises it
-                return self._bounded(self._numeric(self._ctx.log(value)), node)
-        return self._bounded(_FUNCTIONS[func.id](arg), node)
+            return self._raise(arg, Fraction(1, 2), node)
+        if not arg.factors:
+            return self._constant(
+                self._function(func.id, arg.coefficient, node), arg.degree
+            )
+        self._spend(2, node)
+        function = sp.exp if func.id == "exp" else sp.log
+        call = function(self.expression(arg), evaluate=False)
+        return _Part(self._one, (call,), self._scale(arg), arg.degree)
+
+
+# ---------------------------------------------------------------------
+# Numeric evaluation
+# ---------------------------------------------------------------------
+
+
+def formula_function(
+    expr: sp.Expr,
+    symbols: Iterable[str] = ("f", "rho"),
+) -> Callable[..., np.ndarray]:
+    r"""Return a NumPy function of an expression from :func:`parse_impedance_formula`.
+
+    The expression tree is translated node by node into NumPy operations;
+    SymPy is not asked to print, simplify or evaluate anything, so the
+    cost is linear in the size of the expression (``sympy.lambdify``
+    prints the expression, and its printer negates and reorders
+    sub-expressions with SymPy's evaluation switched on).
+
+    Parameters
+    ----------
+    expr : sympy.Expr
+        Expression made of ``Add``, ``Mul``, ``Pow`` with a numeric
+        exponent, ``exp``, ``log``, numbers, ``I``, ``pi``, ``E`` and
+        symbols named in ``symbols``, as :func:`parse_impedance_formula`
+        returns it.
+    symbols : iterable of str, optional
+        Names of the arguments of the returned function, in order
+        (default ``f`` and ``rho``: frequency in Hz and soil resistivity
+        in $\Omega\,\mathrm{m}$ by the ``groundinsight`` convention).
+
+    Returns
+    -------
+    callable
+        ``function(*values) -> numpy.ndarray`` of complex values,
+        broadcast over the arguments; a constant expression gives a 0-d
+        array. Real values are computed in real arithmetic (``float64``,
+        as ``lambdify`` with NumPy does: ``1/(1 + 1/f)`` is 0 at
+        ``f = 0``); a fractional power or a logarithm of a negative
+        number takes SymPy's principal branch in complex arithmetic,
+        where real arithmetic gives ``nan``.
+
+    Raises
+    ------
+    ValueError
+        If ``symbols`` is invalid, or the expression contains a node type
+        outside the list above or a symbol that is not in ``symbols``.
+    """
+    names = _check_symbol_names(symbols)
+    position = {name: index for index, name in enumerate(names)}
+    program = _compile(expr, position)
+
+    def function(*values: Any) -> np.ndarray:
+        if len(values) != len(names):
+            raise TypeError(
+                f"the formula function takes {len(names)} arguments "
+                f"({', '.join(names)}), got {len(values)}"
+            )
+        arrays = [_numeric_array(value) for value in values]
+        return np.asarray(program(arrays), dtype=complex)
+
+    return function
+
+
+def _numeric_array(value: Any) -> np.ndarray:
+    """``value`` as a float64 array, or complex128 if it has complex entries."""
+    array = np.asarray(value)
+    return array.astype(complex if np.iscomplexobj(array) else float)
+
+
+def _real_exponent_power(base: Any, x: float) -> np.ndarray:
+    """``base**x`` on the principal branch for a non-integer real ``x``.
+
+    A base without negative or complex entries takes the real power
+    (correctly rounded by the C library); the complex power
+    ``exp(x*log(base))`` would lose about ``|x*log(base)|`` units in the
+    last place (4e-14 relative at 1e295). Negative or complex entries take
+    the complex power, positive entries of such a base the real one.
+    """
+    base = _numeric_array(base)
+    if not np.iscomplexobj(base) and not np.any(base < 0.0):
+        return np.power(base, x)
+    base = base.astype(complex)
+    positive = (base.imag == 0.0) & (base.real > 0.0)
+    power = base**x
+    if positive.any():
+        real = np.power(np.where(positive, base.real, 1.0), x)
+        power = np.where(positive, real, power)
+    return power
+
+
+def _logarithm(argument: Any) -> np.ndarray:
+    """Natural logarithm on the principal branch (real for non-negative input)."""
+    argument = _numeric_array(argument)
+    if not np.iscomplexobj(argument) and not np.any(argument < 0.0):
+        return np.log(argument)
+    return np.log(argument.astype(complex))
+
+
+def _compile(expr: sp.Basic, position: dict[str, int]) -> Callable[[list], Any]:
+    """Translate an allow-listed expression tree into nested closures."""
+    if isinstance(expr, sp.Symbol):
+        if expr.name not in position:
+            raise ValueError(
+                f"the expression contains the symbol {expr.name!r}, which is not "
+                f"one of the arguments {sorted(position)}"
+            )
+        index = position[expr.name]
+        return lambda values: values[index]
+    if expr is sp.I:
+        return lambda values: 1j
+    if isinstance(expr, (sp.Float, sp.Rational)) or expr in (sp.pi, sp.E):
+        number = float(expr)
+        return lambda values: number
+    if isinstance(expr, (sp.Add, sp.Mul)):
+        parts = [_compile(arg, position) for arg in expr.args]
+        first, rest = parts[0], parts[1:]
+        if isinstance(expr, sp.Add):
+
+            def add(values: list) -> Any:
+                total = first(values)
+                for part in rest:
+                    total = total + part(values)
+                return total
+
+            return add
+
+        def multiply(values: list) -> Any:
+            total = first(values)
+            for part in rest:
+                total = total * part(values)
+            return total
+
+        return multiply
+    if isinstance(expr, sp.Pow):
+        base = _compile(expr.base, position)
+        exponent = expr.exp
+        if exponent.is_Integer:
+            n = int(exponent)
+            return lambda values: _numeric_array(base(values)) ** n
+        if isinstance(exponent, (sp.Rational, sp.Float)):
+            x = float(exponent)
+            return lambda values: _real_exponent_power(base(values), x)
+        raise ValueError(f"cannot evaluate a power with the exponent {exponent!r}")
+    if isinstance(expr, sp.exp):
+        argument = _compile(expr.args[0], position)
+        return lambda values: np.exp(_numeric_array(argument(values)))
+    if isinstance(expr, sp.log) and len(expr.args) == 1:
+        argument = _compile(expr.args[0], position)
+        return lambda values: _logarithm(argument(values))
+    raise ValueError(
+        f"cannot evaluate a sub-expression of type {type(expr).__name__} "
+        "(only Add, Mul, Pow, exp, log, numbers and symbols)"
+    )
 
 
 # ---------------------------------------------------------------------
