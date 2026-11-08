@@ -29,6 +29,7 @@ from __future__ import annotations
 import inspect
 import itertools
 import math
+import warnings
 from collections.abc import Mapping
 
 import numpy as np
@@ -602,3 +603,99 @@ def test_accepts_the_soil_of_a_result() -> None:
     gf.create_source(world, attached_to="g")
     result = gf.create_engine(segment_length=0.5).solve(world)
     assert gf.effective_resistivity(result.soil) == user_rho_eff(100.0, 30.0, 5.0)
+
+
+# ---------------------------------------------------------------------
+# the station preset against field computations (user decision Q36)
+# ---------------------------------------------------------------------
+
+#: The 39 soils of the AP1 grid: the 36 two-layer soils and one
+#: homogeneous soil per rho_1 == rho_2 (30, 100, 200 Ohm m).
+AP1_SOILS_39 = AP1_GRID + [(rho, rho, 10.0) for rho in (30.0, 100.0, 200.0)]
+
+
+def _ap1_station(r1: float, r2: float, h1: float) -> gf.World:
+    """The AP1 station electrode as the AP1 pipeline builds it: a 4 m x 4 m
+    ring (7.5 mm) and three 4 m rods (12.5 mm) on a circle of 1.5 m, both
+    at 0.6 m depth, bonded; purely resistive."""
+    from groundfield.generators import (
+        FoundationElectrodeSpec,
+        GroundingSystemSpec,
+        rod_circle,
+    )
+
+    spec = GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style="ring",
+                size_xy_m=(4.0, 4.0),
+                depth_m=0.6,
+                wire_radius_m=0.0075,
+                concrete_rho_ohm_m=None,
+            ),
+            *rod_circle(
+                3, radius_m=1.5, length_m=4.0, depth_m=0.6, wire_radius_m=0.0125
+            ),
+        ],
+        bond_conductor_type="bare_copper",
+    )
+    soil = gf.HomogeneousSoil(rho=r1) if r1 == r2 else _two_layer(r1, r2, h1)
+    world = gf.create_world(soil=soil)
+    anchor = spec.build_at(world, (0.0, 0.0), "station", np.random.default_rng(0))
+    gf.create_source(world, attached_to=anchor, magnitude=1.0)
+    return world
+
+
+@pytest.fixture(scope="module")
+def ap1_station_resistance() -> np.ndarray:
+    """50 Hz input resistance of the AP1 station in the 39 AP1 soils."""
+    engine = gf.create_engine(frequencies=[50.0], segment_length=0.5)
+    with warnings.catch_warnings():
+        # advisory: the rod tips end 0.4 m above the interface at h_1 = 5 m
+        warnings.filterwarnings("ignore", "image_2layer: deepest segment", UserWarning)
+        z = [engine.solve(_ap1_station(*s)).input_impedance()[0] for s in AP1_SOILS_39]
+    return np.array(z).real
+
+
+def _proportional_errors(resistance: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Relative error of R = c * x over the two-layer soils, c = R / rho of
+    the homogeneous soils (a resistive electrode scales exactly with rho)."""
+    two = np.array([r1 != r2 for r1, r2, _ in AP1_SOILS_39])
+    rho = np.array([r1 for r1, _, _ in AP1_SOILS_39])
+    c = resistance[~two] / rho[~two]
+    np.testing.assert_allclose(c, c[0], rtol=1e-12)
+    return np.abs(c[0] * x[two] - resistance[two]) / resistance[two]
+
+
+def test_the_station_preset_reproduces_the_handover_for_the_ap1_station(
+    ap1_station_resistance,
+) -> None:
+    """The hand-over reports for the station preset a median error of 1.7 %
+    and a maximum of 15.7 % over the AP1 soils; R = c * rho_eff reproduces
+    them (median over the 39 soils, the homogeneous ones exact; measured
+    1.83 % and 15.69 % with the line kernel, 1.71 % and 15.69 % with the
+    point kernel of 0.14.0 at 1.5 m segments). The AP1 calibration
+    "lv_network" and the upper layer rho_1 describe the station far worse
+    (max 35.9 % and 41.9 %)."""
+    # user decision Q36
+    errors = {}
+    for label, kwargs in (
+        ("station", {"preset": "station"}),
+        ("lv_network", {}),
+        ("rho_1", {"w0": 0.0}),
+    ):
+        x = np.array(
+            [
+                gf.effective_resistivity(rho_1=a, rho_2=b, h_1=c, **kwargs)
+                for a, b, c in AP1_SOILS_39
+            ]
+        )
+        errors[label] = _proportional_errors(ap1_station_resistance, x)
+    station = errors["station"]
+    median_39 = float(np.median(np.concatenate([station, np.zeros(3)])))
+    assert median_39 == pytest.approx(0.017, abs=0.003)
+    assert station.max() == pytest.approx(0.157, abs=0.005)
+    assert errors["lv_network"].max() > 2.0 * station.max()
+    assert errors["rho_1"].max() > 2.5 * station.max()
+    rms = {k: float(np.sqrt(np.mean(v**2))) for k, v in errors.items()}
+    assert rms["station"] < 0.06 < 0.11 < rms["lv_network"] < rms["rho_1"]
