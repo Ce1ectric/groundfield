@@ -32,7 +32,17 @@ RNG via :attr:`WorldGenerator.rng`. Explicit ``rng=`` arguments to
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Generic, Optional, TypeVar, Union
+from types import UnionType
+from typing import (
+    Annotated,
+    Any,
+    Generic,
+    Optional,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+)
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
@@ -189,7 +199,7 @@ def _has_dist(value: Any) -> bool:
     return False
 
 
-def _sample_value(value: Any, rng: np.random.Generator) -> Any:
+def _sample_value(value: Any, rng: np.random.Generator, annotation: Any = None) -> Any:
     """Recursive sample helper used by :meth:`GeneratorConfig.sample`.
 
     Every :class:`Distribution` is replaced by one draw. Pydantic models
@@ -197,34 +207,91 @@ def _sample_value(value: Any, rng: np.random.Generator) -> Any:
     order, dicts in **sorted key order** (so a mapping re-serialised with
     another key order draws the same values). Objects without any
     distribution are returned unchanged (identity preserved).
+
+    ``annotation`` is the declared type of the slot ``value`` sits in. A
+    draw for an integer slot (``int | AnyDistribution``, also as a dict or
+    list item, e.g. ``building_counts``) is stored as ``int(round(x))``,
+    the value the generators build with; it stayed a float before, which
+    made ``model_dump_json`` warn (stream DOC-B).
     """
     if isinstance(value, Distribution):
-        return value.sample(rng)
+        drawn = value.sample(rng)
+        if _integer_slot(annotation) and isinstance(drawn, (int, float)):
+            return int(round(float(drawn)))
+        return drawn
     if isinstance(value, BaseModel):
+        fields = type(value).model_fields
         update: dict[str, Any] = {}
         for name, item in value.__dict__.items():
-            new_item = _sample_value(item, rng)
+            info = fields.get(name)
+            new_item = _sample_value(
+                item, rng, None if info is None else info.annotation
+            )
             if new_item is not item:
                 update[name] = new_item
         return value.model_copy(update=update) if update else value
+    item_annotation = _item_annotation(annotation)
     if isinstance(value, list):
-        items = [_sample_value(v, rng) for v in value]
+        items = [_sample_value(v, rng, item_annotation) for v in value]
         return (
             value if all(a is b for a, b in zip(items, value, strict=True)) else items
         )
     if isinstance(value, tuple):
-        items = [_sample_value(v, rng) for v in value]
+        items = [_sample_value(v, rng, item_annotation) for v in value]
         if all(a is b for a, b in zip(items, value, strict=True)):
             return value
         return tuple(items)
     if isinstance(value, dict):
         resolved = {
-            key: _sample_value(value[key], rng) for key in sorted(value, key=str)
+            key: _sample_value(value[key], rng, item_annotation)
+            for key in sorted(value, key=str)
         }
         if all(resolved[k] is value[k] for k in value):
             return value
         return {key: resolved[key] for key in value}
     return value
+
+
+def _strip(annotation: Any) -> tuple[Any, tuple[Any, ...]]:
+    """``(origin, args)`` of an annotation, through ``Annotated`` and ``Optional``."""
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    return get_origin(annotation), get_args(annotation)
+
+
+def _is_distribution_type(annotation: Any) -> bool:
+    origin, args = _strip(annotation)
+    if origin in (Union, UnionType):
+        return all(_is_distribution_type(a) for a in args)
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    return isinstance(annotation, type) and issubclass(annotation, Distribution)
+
+
+def _integer_slot(annotation: Any) -> bool:
+    """``True`` when the plain values a slot accepts are integers only."""
+    origin, args = _strip(annotation)
+    if origin in (Union, UnionType):
+        plain = [
+            a for a in args if a is not type(None) and not _is_distribution_type(a)
+        ]
+        return bool(plain) and all(a is int for a in plain)
+    return annotation is int
+
+
+def _item_annotation(annotation: Any) -> Any:
+    """Declared type of the items of a list / tuple / dict slot (or ``None``)."""
+    origin, args = _strip(annotation)
+    if origin is dict and len(args) == 2:
+        return args[1]
+    if origin in (list, tuple) and args:
+        return args[0]
+    if origin in (Union, UnionType):
+        for a in args:
+            item = _item_annotation(a)
+            if item is not None:
+                return item
+    return None
 
 
 # ---------------------------------------------------------------------
