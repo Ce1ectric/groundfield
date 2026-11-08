@@ -1982,7 +1982,7 @@ def test_fem_keeps_electrodes_within_their_formula(kind, params) -> None:
 @pytest.mark.parametrize(
     ("radius", "depth"),
     [
-        pytest.param(0.5, 0.8, id="r=0.5-at-0.8"),  # +0.4 % against image
+        pytest.param(0.5, 0.8, id="r=0.5-at-0.8"),  # -0.05 % against image
         pytest.param(0.5, 1.0, id="r=0.5-at-D"),  # -0.9 %
         pytest.param(2.0, 3.0, id="r=2-at-1.5r"),  # +0.2 %
     ],
