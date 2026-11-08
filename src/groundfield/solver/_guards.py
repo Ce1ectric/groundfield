@@ -16,6 +16,7 @@ Moved out of :mod:`groundfield.solver.image` (review pass 10, 10.75 /
 
 from __future__ import annotations
 
+import math
 import warnings
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from groundfield.solver._discretize import _Segment
 
 __all__ = [
+    "PointKernelInterfaceWarning",
     "ShallowSegmentWarning",
 ]
 
@@ -474,3 +476,167 @@ def _check_segment_depths(
             ShallowSegmentWarning,
             stacklevel=stacklevel,
         )
+
+
+# ---------------------------------------------------------------------
+# Point form of the cross-layer path (ADR-0007): diagonal quadrature
+# ---------------------------------------------------------------------
+
+#: Depth offset, in segment lengths, of the outer nodes of the 3-point
+#: Gauss–Legendre rule with which the point form of the cross-layer path
+#: (ADR-0007; ``kernel="point"`` and the ``mom`` family) averages the
+#: layered correction on the reaction-matrix diagonal: ``sqrt(3/5)/2``.
+#: The rule runs along the depth axis whatever the segment's orientation.
+CROSS_LAYER_DIAGONAL_SPREAD = 0.5 * math.sqrt(0.6)
+
+#: A horizontal segment whose midpoint lies closer to a layer interface
+#: than this many segment lengths draws :class:`PointKernelInterfaceWarning`
+#: on the point-form cross-layer path.
+CROSS_LAYER_WARN_DISTANCE = 0.6
+
+
+class PointKernelInterfaceWarning(UserWarning):
+    """A horizontal segment lies close to a layer interface (point form).
+
+    On the cross-layer path of a two-layer soil (an electrode reaches the
+    interface :math:`h_1`) the point form of the reaction matrix
+    (``kernel="point"`` of the image family and the ``mom`` family)
+    averages the layered correction on the diagonal over a 3-point rule
+    along the *depth* axis, :math:`\\pm 0.387 L` around the segment
+    midpoint, whatever the segment's orientation. For a horizontal segment
+    within :math:`0.6 L` of :math:`h_1` the rule samples the correction
+    next to the interface, where it varies quickly: measured −3 % … −17 %
+    against the exact line kernel (a 20 m strip and a ring r = 3 m in
+    300/50 and 100/1000 Ω·m). Closer still, where the rule reaches across
+    the interface or above the soil surface, the solve raises
+    :class:`~groundfield.solver.registry.BackendCapabilityError` (up to
+    −552 %, negative impedances; audit round 2). The exact line kernel,
+    the default of the image family, integrates these segments exactly.
+    """
+
+
+def _check_point_cross_layer_diagonal(
+    segments: "Sequence[_Segment]",
+    points: np.ndarray,
+    lengths: np.ndarray,
+    directions: np.ndarray | None,
+    h_1: float,
+    *,
+    backend: str,
+    remedy: str,
+) -> None:
+    """Reject segments the point-form cross-layer diagonal cannot represent.
+
+    The diagonal rule evaluates the layered correction at the depths
+    :math:`z \\pm 0.387 L` (:data:`CROSS_LAYER_DIAGONAL_SPREAD`). It is
+    the segment's own extent for a vertical segment (rods are cut at the
+    interface, so their rule never leaves the segment's layer) but not
+    for a horizontal one. Measured against the exact line kernel (docb and
+    fix2 evidence: rod through :math:`h_1` plus a 20 m strip, 300/50 Ω·m;
+    a ring r = 3 m below :math:`h_1`, 100/1000 Ω·m), with
+    :math:`q = |z - h_1| / (0.387 L)`:
+
+    * the rule reaches above the soil surface (:math:`z < 0.387 L`):
+      ``layered_green`` raised a bare ``ValueError`` about negative depths;
+    * the rule reaches across the interface (:math:`q < 1`): −14 % …
+      −552 % (negative impedances, ``mom`` alike);
+    * :math:`1 \\le q < 1.55` (:math:`|z - h_1| < 0.6 L`): −3 % … −17 %;
+    * :math:`q \\ge 1.8`: −0.9 % … −2.1 %, the usual offset between
+      point matching and the line kernel.
+
+    The first two raise for every segment, the third warns for horizontal
+    (non-vertical) segments.
+
+    Parameters
+    ----------
+    segments
+        The leakage segments (for the owner names in the message).
+    points, lengths
+        Midpoints in m, shape ``(N, 3)``, and lengths in m, shape ``(N,)``.
+    directions
+        Unit tangents, shape ``(N, 3)``; ``None`` treats every segment as
+        horizontal.
+    h_1
+        Interface depth in m.
+    backend
+        Label of the solve for the message (e.g. ``"image_2layer
+        (kernel='point')"``).
+    remedy
+        Sentence naming the alternatives (the line kernel, a finer
+        segment length).
+
+    Raises
+    ------
+    groundfield.solver.registry.BackendCapabilityError
+        If the diagonal rule of a segment reaches above the soil surface or
+        across the interface.
+
+    Warns
+    -----
+    PointKernelInterfaceWarning
+        If a horizontal segment lies within ``0.6 L`` of the interface.
+    """
+    z = np.asarray(points, dtype=float)[:, 2]
+    L = np.asarray(lengths, dtype=float)
+    spread = CROSS_LAYER_DIAGONAL_SPREAD * L
+    if directions is None:
+        horizontal = np.ones(z.shape, dtype=bool)
+    else:
+        horizontal = np.abs(np.asarray(directions, dtype=float)[:, 2]) < 1.0 - 1e-9
+    gap = np.abs(z - h_1)
+    in_air = z < spread
+    across = gap < spread
+    near = horizontal & ~across & (gap < CROSS_LAYER_WARN_DISTANCE * L)
+    if not (in_air.any() or across.any() or near.any()):
+        return
+    finer = np.minimum(
+        np.where(horizontal, z / CROSS_LAYER_DIAGONAL_SPREAD, np.inf),
+        np.where(horizontal, gap / CROSS_LAYER_WARN_DISTANCE, np.inf),
+    )
+
+    def example(mask: np.ndarray) -> str:
+        k = int(np.flatnonzero(mask)[0])
+        return (
+            f"{_segment_owner_label(segments[k])}, segment at z = {z[k]:.3g} m, "
+            f"length {L[k]:.3g} m"
+        )
+
+    def counted(mask: np.ndarray) -> str:
+        n = int(mask.sum())
+        return f"{n} segment{'s' if n != 1 else ''}"
+
+    hint = ""
+    if np.isfinite(finer).any():
+        hint = f" (here below {float(np.min(finer[np.isfinite(finer)])):.3g} m)"
+    if in_air.any() or across.any():
+        from groundfield.solver.registry import BackendCapabilityError
+
+        parts = []
+        if in_air.any():
+            parts.append(
+                f"{counted(in_air)} reach above the soil surface (e.g. "
+                f"{example(in_air)})"
+            )
+        if across.any():
+            parts.append(
+                f"{counted(across)} reach across the layer interface at "
+                f"h_1 = {h_1:.3g} m (e.g. {example(across)})"
+            )
+        raise BackendCapabilityError(
+            f"Backend {backend} cannot solve this world: the point form of the "
+            "cross-layer reaction matrix averages the layered correction on "
+            "its diagonal over +-0.387 segment lengths in depth, and "
+            + "; ".join(parts)
+            + ". Measured against the exact line kernel: -14 % ... -552 % "
+            "(negative impedances). " + remedy + hint + "."
+        )
+    from groundfield.solver.registry import warn_external
+
+    warn_external(
+        f"{backend}: {counted(near)} of horizontal wires lie closer to the "
+        f"layer interface at h_1 = {h_1:.3g} m than 0.6 segment lengths (e.g. "
+        f"{example(near)}); the point form of the cross-layer reaction matrix "
+        "samples the layered correction next to the interface there "
+        "(-3 % ... -17 % against the exact line kernel). " + remedy + hint + ".",
+        PointKernelInterfaceWarning,
+    )

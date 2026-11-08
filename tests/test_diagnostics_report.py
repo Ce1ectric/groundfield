@@ -267,3 +267,112 @@ def test_expected_segments_does_not_materialise_huge_electrodes() -> None:
     assert pred["total"] >= 62832
     assert peak < 5 * 2**20
     assert math.isfinite(pred["total"])
+
+
+# ---------------------------------------------------------------------
+# Audit round 2, A2S-02: conductor sub-pieces count against the limit
+# ---------------------------------------------------------------------
+
+
+def _chain_world(n_pieces: int, coupling: str, inductance_model=None) -> gf.World:
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="a", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_electrode(w, "rod", name="b", position=(100.0, 0.0, 0.5), length=3.0)
+    kw = {} if inductance_model is None else {"inductance_model": inductance_model}
+    gf.create_conductor(
+        w,
+        start="a",
+        end="b",
+        name="pen",
+        cross_section=50e-6,
+        discretize_segment_length=100.0 / n_pieces,
+        coupling_to_soil=coupling,
+        **kw,
+    )
+    gf.create_source(w, attached_to="a")
+    return w
+
+
+@pytest.mark.finding("10.06")
+@pytest.mark.parametrize("coupling", ["isolated", "galvanic"])
+def test_conductor_chain_beyond_the_limit_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, coupling: str
+) -> None:
+    """1000 isolated sub-pieces = 1000 branches + 999 interior nodes.
+
+    The base counted 12 segments for the isolated chain and solved it (the
+    dense nodal system grows with the square of the piece count: 407 MiB
+    for 2000 pieces); the galvanic chain was rejected through its leakage
+    segments already.
+    """
+    # audit A2S-02
+    monkeypatch.setattr(diagnostics, "HARD_LIMIT", 200)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(diagnostics.ResourceLimitError, match="unknowns|segments"):
+            _chain_world(1000, coupling).solve(_engine(0.5))
+
+
+@pytest.mark.finding("10.06")
+@pytest.mark.parametrize("inductance_model", [None, "neumann"])
+def test_a_chain_in_millimetre_pieces_is_rejected_before_allocation(
+    inductance_model,
+) -> None:
+    """A 100 m PEN with discretize_segment_length in mm: 100 000 pieces.
+
+    Rejected at the default limit in closed form, quickly and without
+    allocating the chain (the inductive one before the inductance
+    assembly).
+    """
+    # audit A2S-02
+    w = _chain_world(100_000, "isolated", inductance_model)
+    tracemalloc.start()
+    t0 = time.perf_counter()
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with pytest.raises(diagnostics.ResourceLimitError, match="200003 unknowns"):
+                w.solve(_engine(0.5))
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert time.perf_counter() - t0 < 5.0
+    assert peak < 20 * 2**20  # bytes
+
+
+@pytest.mark.finding("10.06")
+@pytest.mark.parametrize(("coupling", "expected"), [("isolated", 23), ("galvanic", 35)])
+def test_nodal_unknowns_are_the_size_of_the_solved_system(
+    monkeypatch: pytest.MonkeyPatch, coupling: str, expected: int
+) -> None:
+    """Two rods and a chain of 10 pieces: the predicted and solved sizes agree."""
+    # audit A2S-02
+    from groundfield.solver import _topology
+
+    sizes: list[int] = []
+    original = _topology._augmented_matrix
+
+    def recording(Z, system, cluster_id):  # noqa: ANN001, ANN202
+        A = original(Z, system, cluster_id)
+        sizes.append(A.shape[0])
+        return A
+
+    monkeypatch.setattr(_topology, "_augmented_matrix", recording)
+    w = _chain_world(10, coupling)
+    engine = _engine(0.5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        w.solve(engine)
+    assert expected_segments(w, engine)["nodal_unknowns"] == expected == sizes[0]
+
+
+@pytest.mark.finding("10.06")
+def test_diagnose_reports_a_nodal_system_beyond_the_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # audit A2S-02
+    monkeypatch.setattr(diagnostics, "HARD_LIMIT", 200)
+    report = diagnostics.diagnose(_chain_world(1000, "isolated"), _engine(0.5))
+    budget = report.by_category("budget")
+    assert budget and budget[0].data["n_unknowns"] == 1999 + 4
+    assert not diagnostics.check_budget_ok(_chain_world(1000, "isolated"), _engine(0.5))

@@ -124,51 +124,49 @@ def _multiport_diagonal(
     return float((lengths @ phi) / lengths.sum())
 
 
-def test_rod_split_at_layer_interface_reports_weighted_potential() -> None:
-    """F10: the mixed-length case of the audit — rod split at ``h_1``.
+def test_two_layer_backend_reports_weighted_potential() -> None:
+    """F10: the mixed-length case of the audit in the two-layer backend.
 
     ``TwoLayerSoil(200, 200, h_1=5)`` has ``K = 0``, so the two-layer
-    backend must reproduce the homogeneous kernel exactly. The
-    interface split of the 4.55 m rod produces five 0.900 m segments
-    plus a 0.05 m remainder: 1.1 % of the electrode length used to
-    receive 1/6 = 16.7 % of the weight in the reported potential.
-
-    The audit case of 0.14.1 was a 4.509 m rod (0.009 m remainder;
-    40.70144871 Ω reported vs 45.68625169 Ω enforced, -10.9 %). Since
-    review pass 10 (10.32) a remainder shorter than the wire diameter is
-    no longer split off, so this test uses a 0.05 m remainder.
+    backend must reproduce the homogeneous kernel exactly. The audit case
+    of 0.14.1 was a rod split at ``h_1`` (a 4.509 m rod, 0.009 m remainder;
+    40.70144871 Ω reported vs 45.68625169 Ω enforced, -10.9 %). Since audit
+    round 2 (A2S-07) wires are cut only where the resistivity changes, so a
+    ``K = 0`` soil cuts nothing; the mixed lengths come from an L-shaped
+    polyline with a 0.05 m leg instead (five 0.900 m segments, one 0.050 m
+    segment and the closing edge).
     """
     rho = 200.0
     soil = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=5.0)
     world = gf.create_world(soil=soil)
-    rod = gf.create_electrode(
+    poly = gf.create_electrode(
         world,
-        "rod",
-        name="r",
-        position=(0.0, 0.0, 0.5),
-        length=4.55,
+        "polyline",
+        name="p",
+        vertices=[(0.0, 0.0, 0.5), (4.5, 0.0, 0.5), (4.5, 0.05, 0.5)],
         wire_radius=0.008,
     )
-    gf.create_source(world, attached_to="r", magnitude=1.0)
-    result = gf.create_engine(
-        backend="image_2layer", segment_length=1.0, kernel="point"
-    ).solve(world)
+    gf.create_source(world, attached_to="p", magnitude=1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # the 0.05 m leg is below ds
+        result = gf.create_engine(
+            backend="image_2layer", segment_length=1.0, kernel="point"
+        ).solve(world)
 
-    segs = _discretize_electrode(rod, 1.0, (soil.h_1,))
+    segs = _discretize_electrode(poly, 1.0, (soil.h_1,))
     lengths = np.array([s.length for s in segs])
     assert lengths.min() == pytest.approx(0.05, abs=1e-9), (
-        "geometry precondition: the interface split must produce the "
-        "0.05 m remainder segment"
+        "geometry precondition: the 0.05 m leg is one segment"
     )
 
-    z_reported = result.grounding_impedance("r")[0]
-    z_reference = _multiport_diagonal(rod, rho, 1.0, (soil.h_1,))
+    z_reported = result.grounding_impedance("p")[0]
+    z_reference = _multiport_diagonal(poly, rho, 1.0)
 
     # The reported impedance is the impedance the solver enforced.
     assert z_reported.real == pytest.approx(z_reference, rel=1e-12)
-    assert z_reported.real == pytest.approx(45.25955625, rel=1e-8)
-    # ... and not the unweighted mean (42.38288286 Ω, -6.4 %).
-    assert abs(z_reported.real - 42.38288286) > 1.0
+    assert z_reported.real == pytest.approx(148.2227484894, rel=1e-8)
+    # ... and not the unweighted mean (137.8034912712 Ω, -7.0 %).
+    assert abs(z_reported.real - 137.8034912712) > 1.0
 
 
 def test_grounding_impedance_equals_multiport_diagonal() -> None:

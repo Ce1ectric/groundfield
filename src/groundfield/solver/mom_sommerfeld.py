@@ -155,7 +155,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
-from groundfield.solver._guards import _MIN_DISTANCE
+from groundfield.solver._guards import _MIN_DISTANCE, _check_point_cross_layer_diagonal
 from groundfield.solver._kernels import HalfSpaceKernel
 from groundfield.solver._layered import (
     LayerStack,
@@ -1578,6 +1578,19 @@ class _SommerfeldGreen(_PointMatchingGreen):
                     "Use backend='image_2layer' for n=2 cross-layer "
                     "worlds; for n>=3 thicken the upper layer."
                 )
+        elif stack.n_layers == 2 and self.z_max >= float(stack.h[0]):
+            # The n = 2 diagonal is the point form of the cross-layer path.
+            _check_point_cross_layer_diagonal(
+                segments,
+                arrays.points,
+                arrays.lengths,
+                arrays.directions,
+                float(stack.h[0]),
+                backend="'mom_sommerfeld'",
+                remedy="Use backend='image_2layer' with its default line kernel, "
+                "which integrates these segments exactly, or a finer "
+                "segment_length",
+            )
         Z = _build_Z_sommerfeld(
             arrays.points,
             arrays.lengths,

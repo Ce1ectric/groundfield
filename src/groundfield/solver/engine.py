@@ -1002,7 +1002,9 @@ class Engine(BaseModel):
         ValueError
             If ``world.soil`` is unset, ``world`` contains no electrodes,
             fails :meth:`World.check <groundfield.world.World.check>`
-            (short-circuited source, zero or non-finite magnitude),
+            (no current source, short-circuited source, zero or non-finite
+            magnitude; the same for every backend and for
+            :meth:`World.solve <groundfield.world.World.solve>`),
             :attr:`backend` is not registered, :attr:`frequencies` was
             emptied or given a non-finite or negative entry in place, or
             an entry put into :attr:`options` in place does not validate.
@@ -1032,10 +1034,10 @@ class Engine(BaseModel):
         # Assignments are validated; a list mutated in place is not (A1-04).
         _check_frequency_values(self.frequencies)
         # Central validation of references and excitation (10.66) for
-        # every backend and entry point. A world without a source stays
-        # solvable here (all results zero); World.solve and the image
-        # pipeline require one.
-        world.check(require_source=False)
+        # every backend and entry point, a current source included: a world
+        # without one solved to zeros in fem only and raised in every other
+        # backend (audit round 2, A2S-05).
+        world.check()
 
         resolved = _registry.resolve_backend(self.backend, world)
         _log.info(

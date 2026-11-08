@@ -29,12 +29,17 @@ Validity envelope
   image_nlayer / mom / mom_sommerfeld / cim / bem). FEM is
   supported but its mesh is generated independently — the
   ``segment_length`` knob does not directly control its accuracy.
-* The function clones the engine via :meth:`Engine.model_copy`,
-  so the original engine is not mutated.
+* The function copies the engine per step (the original engine is not
+  mutated) without the validating :meth:`Engine.model_copy`, whose
+  warning capture resets every module's "shown once" registry: a
+  warning that a plain loop over the same engines shows once was shown
+  once per step (audit round 2, A2S-08). The segment lengths are
+  validated here instead.
 """
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 import pandas as pd
@@ -74,7 +79,7 @@ def convergence_study(
         World to solve. **Not modified.**
     engine
         Base engine. Cloned per refinement step via
-        :meth:`Engine.model_copy`; the original is left untouched.
+        an internal copy per step; the original is left untouched.
     segment_lengths
         Sequence of segment lengths in metres. Must be strictly
         positive and contain at least two distinct values.
@@ -113,8 +118,10 @@ def convergence_study(
         raise ValueError(
             f"segment_lengths must contain at least 2 values, got {len(ds_list)}."
         )
-    if any(not (ds > 0) for ds in ds_list):
-        raise ValueError(f"segment_lengths must be strictly positive, got {ds_list}.")
+    if any(not (ds > 0 and math.isfinite(ds)) for ds in ds_list):
+        raise ValueError(
+            f"segment_lengths must be finite and strictly positive, got {ds_list}."
+        )
     if len(set(ds_list)) < 2:
         raise ValueError("segment_lengths must contain at least 2 distinct values.")
 
@@ -123,7 +130,9 @@ def convergence_study(
 
     rows: list[dict[str, Any]] = []
     for ds in ds_list:
-        eng = engine.model_copy(update={"segment_length": ds})
+        # Not the validating model_copy (A2S-08, see the module docstring);
+        # ds is validated above.
+        eng = engine._with(segment_length=ds)
         result = world.solve(eng)
         n_seg = len(result.point_sources)
         for f_idx, f_hz in enumerate(result.frequencies):

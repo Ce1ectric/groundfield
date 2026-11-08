@@ -130,6 +130,7 @@ __all__ = [
     "as_layer_stack",
     "canonical_layer_stack",
     "canonical_soil",
+    "interface_depths",
     "reflection_gamma",
 ]
 
@@ -295,6 +296,33 @@ def _canonical_groups(
                 continue
         groups.append([i])
     return groups
+
+
+def interface_depths(soil: SoilModel) -> tuple[float, ...]:
+    """Depths of the physical layer interfaces of ``soil`` in m.
+
+    The interfaces of the canonical stack (:func:`canonical_layer_stack`):
+    only where the resistivity changes. Every segment-based backend cuts
+    wires at these depths and the pre-flight prediction
+    (:func:`groundfield.diagnostics.expected_segments`) counts with the
+    same ones, so both agree (audit round 2, A2S-07: a declared interface
+    between layers of one resistivity was counted but not cut).
+
+    Parameters
+    ----------
+    soil
+        Homogeneous, two-layer or multilayer soil model.
+
+    Returns
+    -------
+    tuple of float
+        Interface depths in m, increasing; empty for a soil that is
+        homogeneous after canonicalisation.
+    """
+    stack = as_layer_stack(soil)
+    if stack.n_layers <= 1:
+        return ()
+    return tuple(float(z) for z in np.cumsum(stack.h))
 
 
 def _relative_permittivities(soil: SoilModel) -> list[float]:

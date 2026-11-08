@@ -117,9 +117,12 @@ def test_builtin_backends_are_registered_with_their_capabilities() -> None:
         "image_2layer",
         "image_nlayer",
     }
-    # fem reduces every conductor to a lumped branch without inductance.
+    # fem reduces every conductor to a lumped branch without inductance and
+    # skin effect (audit round 2, A2C-4: the skin model is a feature too).
     assert caps["fem"].conductors == frozenset({"lumped"})
-    assert caps["mom"].conductors == frozenset({"lumped", "distributed", "inductive"})
+    assert caps["mom"].conductors == frozenset(
+        {"lumped", "distributed", "inductive", "skin"}
+    )
     # fem has no source kernel; every other backend uses one.
     assert caps["fem"].kernels == frozenset()
     assert "point" in caps["mom"].kernels
@@ -529,3 +532,78 @@ def test_two_layer_backend_accepts_an_equal_resistivity_two_layer_soil() -> None
     gf.create_source(w, attached_to="r")
     res = w.solve(gf.create_engine(backend="image_2layer"))
     assert res.cluster_impedance("r")[0].real > 0.0
+
+
+# ---------------------------------------------------------------------
+# Audit round 2, A2C-4: the skin model is a conductor feature
+# ---------------------------------------------------------------------
+
+
+def _skin_pen_world() -> "gf.World":
+    import math
+
+    from groundfield.conductors import Conductor
+
+    area = 150e-6
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="g1", position=(0.0, 0.0, 0.5), length=3.0)
+    gf.create_electrode(w, "rod", name="g2", position=(300.0, 0.0, 0.5), length=3.0)
+    w.add_conductor(
+        Conductor(
+            name="pen",
+            start=(0.0, 0.0, 0.7),
+            end=(300.0, 0.0, 0.7),
+            start_electrode="g1",
+            end_electrode="g2",
+            wire_radius=math.sqrt(area / math.pi),
+            resistivity=2.82e-8,
+            cross_section=area,
+            resistance_model="skin",
+        )
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    return w
+
+
+@pytest.mark.finding("10.37")
+@pytest.mark.parametrize("backend", ["fem", "image", "mom"])
+def test_a_backend_that_ignores_the_skin_model_says_so(backend: str) -> None:
+    """fem returned the DC value at 1 kHz without a word (image/mom: +54.9 %)."""
+    # audit A2C-4
+    import warnings
+
+    from groundfield.solver.registry import BackendCapabilityWarning
+
+    def u12(f: float) -> tuple[complex, list[str]]:
+        eng = gf.create_engine(backend=backend, frequencies=[f], segment_length=0.5)
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            res = _skin_pen_world().solve(eng)
+        texts = [
+            str(r.message)
+            for r in rec
+            if issubclass(r.category, BackendCapabilityWarning)
+        ]
+        u = res.electrode_potentials["g1"][0] - res.electrode_potentials["g2"][0]
+        return u, texts
+
+    u_dc, _ = u12(0.0)
+    u_1k, texts = u12(1000.0)
+    honoured = abs(u_1k) > 1.1 * abs(u_dc)
+    reported = any("skin" in t for t in texts)
+    assert honoured != reported, (backend, abs(u_dc), abs(u_1k), texts)
+    assert reported is (backend == "fem")
+
+
+@pytest.mark.finding("10.37")
+def test_registered_backend_without_the_skin_feature_warns() -> None:
+    """Third-party capabilities: 'skin' is a feature like 'inductive'."""
+    # audit A2C-4
+    from groundfield.solver import registry
+
+    caps = registry.BackendCapabilities(
+        soils={"homogeneous"}, conductors={"lumped", "distributed", "inductive"}
+    )
+    assert "skin" not in caps.conductors
+    assert "skin" in registry.BackendCapabilities(soils={"homogeneous"}).conductors
+    assert registry._conductor_features(_skin_pen_world()) == {"lumped", "skin"}

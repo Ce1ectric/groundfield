@@ -356,3 +356,30 @@ def test_a_crafted_file_is_rejected_before_its_array_is_allocated(tmp_path) -> N
     with pytest.raises(MALFORMED, match=_names("$ndarray")):
         load_result(path)
     assert os.path.getsize(path) < 1000
+
+
+@pytest.mark.finding("A1-01")
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"$complex": [10**400, 0]},
+        {"$complex": [0, -(10**400)]},
+        {"$tuple": [{"$complex": [1, 10**400]}]},
+        {"$dict": [[{"$complex": [10**400, 0]}, 1]]},
+        {
+            "$ndarray": {
+                "dtype": "<c16",
+                "shape": [1],
+                "data": [{"$complex": [10**400, 1]}],
+            }
+        },
+    ],
+    ids=["complex-re", "complex-im", "tuple", "dict-key", "ndarray-item"],
+)
+def test_a_complex_tag_beyond_the_float_range_is_a_value_error(
+    tmp_path: Path, value: dict
+) -> None:
+    """A 400-digit integer escaped as a bare OverflowError (not a ValueError)."""
+    # audit A2S-04
+    with pytest.raises(ValueError, match="outside the float range"):
+        load_result(_crafted(tmp_path, value))

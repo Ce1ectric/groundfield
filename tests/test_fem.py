@@ -12,6 +12,8 @@ than bit-exact identity.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 import groundfield as gf
@@ -209,6 +211,85 @@ def test_fem_rejects_an_electrode_below_its_hemisphere(
         solve_fem(w, eng)
 
 
+def _a_eq_of_rod(top: float = 0.5, length: float = 3.0) -> float:
+    from groundfield.solver.fem import equivalent_hemisphere_radius
+
+    rod = gf.RodElectrode(name="g1", position=(0.0, 0.0, top), length=length)
+    return equivalent_hemisphere_radius(rod, 100.0)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize(
+    ("rho_1", "rho_2", "fraction"),
+    [
+        (1000.0, 30.0, None),  # the auditors' case: h_1 = 0.4 m (+197 % vs mom)
+        (1000.0, 30.0, 0.55),  # +51 % vs image_2layer
+        (1000.0, 30.0, 1.0),  # h_1 = a_eq: joins the through case
+        (30.0, 1000.0, 0.8),  # -85 %
+    ],
+)
+def test_fem_rejects_a_rod_below_a_top_layer_holding_most_of_its_hemisphere(
+    rho_1, rho_2, fraction
+) -> None:
+    """A rod wholly below an interface between a_eq/2 and a_eq: raise.
+
+    The guard of 10.23 compared the interface with the hemisphere radius
+    only: a 3 m rod 0.5-3.5 m below h_1 = 0.4 m < a_eq warned and returned
+    31.1 Ohm (mom: 10.5 Ohm, +197 %).
+    """
+    # audit A2E-2
+    from groundfield.solver.registry import BackendCapabilityError
+
+    h_1 = 0.4 if fraction is None else fraction * _a_eq_of_rod()
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1))
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    eng = gf.create_engine(backend="fem", segment_length=0.5)
+    with pytest.raises(BackendCapabilityError, match="'g1'.*of its equivalent"):
+        eng.solve(w)
+
+
+@pytest.mark.finding("10.23")
+@pytest.mark.parametrize("fraction", [0.2, 0.45])
+def test_fem_only_warns_below_a_thin_top_layer(fraction: float) -> None:
+    """h_1 <= a_eq/2: the hemisphere lies mostly in the rod's layer (+16 %, +38 %)."""
+    # audit A2E-2
+    h_1 = fraction * _a_eq_of_rod()
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=h_1))
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=3.0)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res, texts = _fem_warnings(w)
+    assert texts and "lies above the electrode's lowest point" in texts[0]
+    assert math.isfinite(res.electrode_potentials["g1"][0].real)
+
+
+@pytest.mark.finding("10.23")
+def test_fem_guard_applies_to_a_bonded_cluster_wholly_below_the_interface() -> None:
+    """Two bonded rods (radii summed): wholly below raises, one above warns."""
+    # audit A2E-2
+    from groundfield.solver.registry import BackendCapabilityError
+
+    a_sum = 2.0 * _a_eq_of_rod()
+
+    def world(top_b: float) -> gf.World:
+        w = gf.create_world(
+            soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.7 * a_sum)
+        )
+        gf.create_electrode(
+            w, "rod", name="g1", position=(0, 0, 0.7 * a_sum + 0.1), length=3.0
+        )
+        gf.create_electrode(w, "rod", name="g2", position=(3, 0, top_b), length=3.0)
+        gf.create_conductor(w, start="g1", end="g2", name="bond")
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        return w
+
+    eng = gf.create_engine(backend="fem", segment_length=0.5)
+    with pytest.raises(BackendCapabilityError, match="every electrode of the cluster"):
+        eng.solve(world(0.7 * a_sum + 0.1))
+    _, texts = _fem_warnings(world(0.2))  # g2 starts in the top layer
+    assert texts
+
+
 @pytest.mark.finding("10.23", "F01")
 @pytest.mark.parametrize(
     ("electrode", "z_mom"),
@@ -338,15 +419,19 @@ def test_fem_warns_when_clusters_are_solved_without_coupling() -> None:
     assert texts and "2 clusters" in texts[0]
 
 
-@pytest.mark.finding("10.23")
-def test_fem_does_not_warn_about_clusters_when_nothing_is_driven() -> None:
-    """Without a source every result is exactly zero; nothing is misrepresented."""
+@pytest.mark.finding("10.66")
+def test_fem_rejects_a_world_without_a_source_like_every_backend() -> None:
+    """fem alone solved a source-free world to zeros through Engine.solve.
+
+    Every other backend raised (10.66); since audit round 2 (A2S-05) fem
+    raises the same error, and nothing has to be said about clusters.
+    """
+    # audit A2S-05
     w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
     gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
     gf.create_electrode(w, "ring", name="p", center=(4.0, 0, 0.8), radius=1.5)
-    res, texts = _fem_warnings(w)
-    assert texts == []
-    assert res.electrode_potentials["p"][0] == 0j
+    with pytest.raises(ValueError, match="no current source"):
+        _fem_warnings(w)
 
 
 @pytest.mark.finding("10.23")

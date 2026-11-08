@@ -453,8 +453,15 @@ def _decode_tag(tag: str, body: Any, path: str, depth: int) -> Any:
             # scalar parts: no extra nesting level (the encoder counts none)
             parts = [_decode_metadata(v, path, depth) for v in body]
             if all(_is_real(p) for p in parts):
-                return complex(parts[0], parts[1])
-        raise ValueError(f"{bad} must hold two real numbers, got {body!r}.")
+                try:
+                    return complex(parts[0], parts[1])
+                except OverflowError:
+                    # A JSON integer beyond the float range (audit round 2,
+                    # A2S-04: it escaped load_result as a bare OverflowError).
+                    raise ValueError(
+                        f"{bad} holds a number outside the float range (|x| > 1.8e308)."
+                    ) from None
+        raise ValueError(f"{bad} must hold two real numbers, got {body!r:.80}.")
     if tag == _TAG_TUPLE:
         if isinstance(body, list):
             return tuple(

@@ -54,7 +54,18 @@ def test_rod_through_the_interface_is_independent_of_ds() -> None:
 
 
 def test_point_kernel_keeps_its_numbers_near_the_interface() -> None:
-    """``kernel="point"`` reproduces 0.15.0, including its ds dependence."""
-    assert _z(_ring_below_interface(), "g", 0.5, "point") == pytest.approx(
-        29.6772, abs=5e-4
+    """``kernel="point"`` reproduces 0.15.0 where its diagonal rule fits.
+
+    At ds = 0.5 m the point form's diagonal rule (+-0.19 m in depth) reaches
+    across the interface 5 cm above the ring: 0.15.0 returned 29.68 Ohm
+    (line kernel 55.64 Ohm, -47 %); since audit round 2 the solve raises
+    (docb item, ``tests/test_cross_layer_point_form.py``). At ds = 0.05 m
+    the number is that of 0.15.0.
+    """
+    from groundfield.solver.registry import BackendCapabilityError
+
+    with pytest.raises(BackendCapabilityError, match="kernel=None or 'line'"):
+        _z(_ring_below_interface(), "g", 0.5, "point")
+    assert _z(_ring_below_interface(), "g", 0.05, "point") == pytest.approx(
+        54.6429, abs=5e-4
     )

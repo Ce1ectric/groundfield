@@ -180,9 +180,48 @@ def line_potential_pairs(
 # ---------------------------------------------------------------------
 
 
+#: Below this ratio :math:`L/a` :func:`galerkin_self` uses the form without
+#: cancellation. Only a part cut off at a layer interface can be that short
+#: (the regular discretisation requires :math:`L > a`), so every other
+#: segment keeps the historic arithmetic bit for bit.
+_GALERKIN_SHORT_RATIO = 0.25
+
+
 def galerkin_self(L: np.ndarray, a: np.ndarray) -> np.ndarray:
-    """Self term ``(2/L)[arsinh(L/a) - sqrt(1 + (a/L)²) + a/L]`` in 1/m."""
-    return 2.0 * (np.arcsinh(L / a) - np.sqrt(1.0 + (a / L) ** 2) + a / L) / L
+    r"""Self term ``(2/L)[arsinh(L/a) - sqrt(1 + (a/L)²) + a/L]`` in 1/m.
+
+    The potential of a uniform line current of length :math:`L` averaged
+    over its own surface (radius :math:`a`), per unit current density and
+    without the factor :math:`\rho/(4\pi)`. It tends to :math:`1/a` (a
+    sphere of radius :math:`a`) for :math:`L \to 0`. Below
+    :math:`L/a = 0.25` it is evaluated as
+    :math:`(2/L)[\operatorname{arsinh} x - x/(1 + \sqrt{1 + x^2})]`,
+    :math:`x = L/a`, which avoids the cancellation of
+    :math:`\sqrt{1 + (a/L)^2} - a/L` (that form loses all digits for
+    :math:`L/a \lesssim 10^{-8}`; a part cut off at a layer interface can
+    be that short, audit round 2, A2S-01).
+
+    Parameters
+    ----------
+    L
+        Segment lengths in m, ``> 0``.
+    a
+        Wire radii in m, ``> 0``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Self terms in 1/m.
+    """
+    out = 2.0 * (np.arcsinh(L / a) - np.sqrt(1.0 + (a / L) ** 2) + a / L) / L
+    x = np.asarray(L / a)
+    short = x < _GALERKIN_SHORT_RATIO
+    if np.any(short):
+        Ls = np.broadcast_to(L, x.shape)[short]
+        xs = x[short]
+        out = np.array(out, dtype=float, copy=True)
+        out[short] = 2.0 * (np.arcsinh(xs) - xs / (1.0 + np.sqrt(1.0 + xs * xs))) / Ls
+    return out
 
 
 #: Ratio :math:`L/a` at which the collocation self term :math:`2\ln(L/a)/L`
@@ -236,8 +275,29 @@ def _g2(u: np.ndarray, d: np.ndarray) -> np.ndarray:
     return u * np.arcsinh(u / d) - np.sqrt(u * u + d * d)
 
 
+#: A segment shorter than this fraction of the axis distance ``d`` of a
+#: parallel pair is integrated numerically in :func:`_parallel_pairs`: the
+#: closed form subtracts second antiderivatives of size ``d`` to obtain a
+#: value of size ``L_i L_j / d`` and loses every digit when both segments
+#: are much shorter than ``d`` (two parts of 1e-11 m cut off at a layer
+#: interface, 8 mm apart: 0 instead of 125 1/m; audit round 2, A2S-01).
+#: Regular segments are longer than the wire radius and pairs farther
+#: apart than ``NEAR_FACTOR`` lengths are no near pairs, so this never
+#: touches them.
+_SHORT_PARALLEL_RATIO = 1e-3
+_SHORT_NODES = 0.5 * (leggauss(6)[0] + 1.0)  # 6-point rule on [0, 1]
+_SHORT_WEIGHTS = 0.5 * leggauss(6)[1]
+
+
 def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
-    """Closed-form Galerkin integral of (anti-)parallel segment pairs."""
+    """Galerkin integral of (anti-)parallel segment pairs.
+
+    Closed form, except for pairs with a segment shorter than
+    :data:`_SHORT_PARALLEL_RATIO` times the axis distance: that segment is
+    integrated with a 6-point Gauss–Legendre rule (exact to round-off,
+    the integrand is smooth on its scale) and the other one in closed
+    form, or both numerically when both are short.
+    """
     w = Aj - Ai
     ya = np.einsum("pk,pk->p", w, ti)
     yb = ya + Lj * np.einsum("pk,pk->p", tj, ti)
@@ -245,7 +305,47 @@ def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
     y2 = np.maximum(ya, yb)
     d = np.sqrt(np.maximum(np.einsum("pk,pk->p", w, w) - ya * ya, 0.0) + a2)
     val = _g2(Li - y1, d) - _g2(-y1, d) - _g2(Li - y2, d) + _g2(-y2, d)
-    return val / (Li * Lj)
+    val = val / (Li * Lj)
+    short_i = Li < _SHORT_PARALLEL_RATIO * d
+    short_j = Lj < _SHORT_PARALLEL_RATIO * d
+    if np.any(short_i | short_j):
+        val[short_i | short_j] = _short_parallel_pairs(
+            Li, Lj, y1, y2, d, short_i, short_j
+        )[short_i | short_j]
+    return val
+
+
+def _short_parallel_pairs(Li, Lj, y1, y2, d, short_i, short_j) -> np.ndarray:
+    """Parallel-pair integral when a segment is much shorter than ``d``.
+
+    Segment ``i`` covers ``[0, L_i]`` and segment ``j`` covers
+    ``[y_1, y_2]`` of the axis of ``i``. Returns the mean of
+    ``1/sqrt((y - s)² + d²)`` over both segments (in 1/m) for every pair;
+    only the entries of the masked pairs are meaningful.
+    """
+    x, w = _SHORT_NODES, _SHORT_WEIGHTS
+    out = np.zeros(Li.shape[0])
+    both = short_i & short_j
+    if np.any(both):
+        s = Li[both, None, None] * x[None, :, None]
+        y = y1[both, None, None] + (y2 - y1)[both, None, None] * x[None, None, :]
+        f = 1.0 / np.sqrt((y - s) ** 2 + d[both, None, None] ** 2)
+        out[both] = np.einsum("pmn,m,n->p", f, w, w)
+    only_i = short_i & ~short_j
+    if np.any(only_i):
+        s = Li[only_i, None] * x[None, :]
+        dd = d[only_i, None]
+        inner = np.arcsinh((y2[only_i, None] - s) / dd) - np.arcsinh(
+            (y1[only_i, None] - s) / dd
+        )
+        out[only_i] = (inner @ w) / Lj[only_i]
+    only_j = short_j & ~short_i
+    if np.any(only_j):
+        y = y1[only_j, None] + (y2 - y1)[only_j, None] * x[None, :]
+        dd = d[only_j, None]
+        inner = np.arcsinh((Li[only_j, None] - y) / dd) + np.arcsinh(y / dd)
+        out[only_j] = (inner @ w) / Li[only_j]
+    return out
 
 
 def _graded_rule(n_nodes: int = 8) -> tuple[np.ndarray, np.ndarray]:

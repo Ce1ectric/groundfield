@@ -75,6 +75,7 @@ from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoi
 from groundfield.solver._discretize import _LayerOwners
 from groundfield.solver._guards import (
     _MIN_DISTANCE,
+    _check_point_cross_layer_diagonal,
     _check_segment_depths,
     _require_image_separation,
 )
@@ -722,11 +723,14 @@ def _as_two_layer(soil: MultiLayerSoil) -> TwoLayerSoil:
 def _owner_interfaces(soil: TwoLayerSoil) -> tuple[float, ...]:
     """Interfaces at which electrodes get one owner per layer (10.15).
 
-    Only an interface where the resistivity changes: ``TwoLayerSoil(rho,
-    rho, h)`` is homogeneous soil and keeps one owner per electrode, so it
-    reproduces the homogeneous backend exactly.
+    Only an interface where the resistivity changes
+    (:func:`~groundfield.solver._layered.interface_depths`):
+    ``TwoLayerSoil(rho, rho, h)`` is homogeneous soil and keeps one owner
+    per electrode, so it reproduces the homogeneous backend exactly.
     """
-    return (float(soil.h_1),) if soil.rho_1 != soil.rho_2 else ()
+    from groundfield.solver._layered import interface_depths
+
+    return interface_depths(soil)
 
 
 def _crosses_interface(world: "World", layer_interfaces) -> bool:
@@ -831,7 +835,10 @@ class _TwoLayerGreen:
         self.tol = tol
         self.ds = ds
         self.kernel = kernel
-        self.layer_interfaces = (soil.h_1,)
+        # Wires are cut where the resistivity changes only, like in every
+        # other backend: TwoLayerSoil(rho, rho, h) is cut nowhere, as
+        # homogeneous soil (audit round 2, A2S-07).
+        self.layer_interfaces = _owner_interfaces(soil) or None
         self.soil_resistivity = float(soil.rho_1)
         self.reference_resistivity = float(soil.rho_1)
         self.series = ImageSeries.for_soil(soil, max_terms, tol)
@@ -872,6 +879,21 @@ class _TwoLayerGreen:
                 "segment_length.",
                 UserWarning,
                 stacklevel=stacklevel,
+            )
+        if cross_layer and self.kernel != "line" and self.layer_interfaces:
+            # The point form of the cross-layer diagonal cannot represent a
+            # horizontal wire next to h_1 or the surface (audit round 2).
+            # Without a physical interface (rho_1 == rho_2) the layered
+            # correction vanishes and nothing is to be checked.
+            _check_point_cross_layer_diagonal(
+                segments,
+                arrays.points,
+                arrays.lengths,
+                arrays.directions,
+                h_1,
+                backend="'image_2layer' (kernel='point')",
+                remedy="Use the default kernel (kernel=None or 'line'), which "
+                "integrates these segments exactly, or a finer segment_length",
             )
         # Tag every segment with its layer index (0 = upper, 1 = lower).
         for s in segments:

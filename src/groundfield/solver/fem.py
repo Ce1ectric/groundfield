@@ -13,7 +13,11 @@ reduction injects the current into the wrong layer (+1092 % for a 3 m
 rod through $h_1$ = 2 m; −85 % … +3138 % over the measured contrasts)
 and the backend raises
 :class:`~groundfield.solver.registry.BackendCapabilityError` instead of
-returning a number. It is **not** a valid cross-check either when a
+returning a number. The same holds for a cluster that lies wholly below
+a top layer holding more than half of its hemisphere
+($a_\\text{eq}/2 < h_1 \\le a_\\text{eq}$; +51 % … +130 % and
+−81 % … −98 % for a 3 m rod, audit round 2).
+It is **not** a valid cross-check either when a
 cluster has several electrodes (radii summed, −35 % for a 2 m ring with
 three 4 m rods in homogeneous soil), when the world has several
 clusters (each solved alone, transfer impedances 0) or when a layer
@@ -290,7 +294,10 @@ class FemReductionWarning(UserWarning):
     * a layer interface above the electrode's deepest point that the
       hemisphere, which spans the soil from the surface, crosses as well
       (−70 % for a 10 m strip and −47 % for a ring r = 5 m, both at
-      0.8 m below ``h_1`` = 0.5 m, 30/1000 Ω·m; audit round 1, F01);
+      0.8 m below ``h_1`` = 0.5 m, 30/1000 Ω·m; audit round 1, F01).
+      A cluster wholly below such an interface at a depth above
+      ``a_eq/2`` — more than half of the hemisphere in a layer the
+      electrodes do not touch — raises instead (audit round 2, A2E-2);
     * a layer interface below the electrode and its hemisphere but
       within the electrode's horizontal half-extent (ring radius, half
       the strip length or grid diagonal): the electrode's current
@@ -433,20 +440,36 @@ def _unreachable_layers(
     active_clusters: list[str],
     a_eq_per_cluster: dict[str, float],
 ) -> list[str]:
-    """Clusters whose electrodes reach a layer their hemisphere does not.
+    """Clusters whose electrodes and hemisphere sit in different layers.
 
     The equivalent hemisphere injects the cluster current from the soil
-    surface down to the radius ``a_eq``. An electrode that reaches below
-    a layer interface lying above ``a_eq`` — a rod through or entirely
-    below the top layer — injects into a layer the hemisphere never
-    touches. Against ``mom``, rods through or below a 1 … 2.5 m top layer
-    are off by +633 % to +3138 % under a conductive lower layer
-    (1000/30 Ω·m) and by −10 % to −85 % over a resistive one (100/300,
-    100/1000 Ω·m); only near-equal layers stay within a few percent
-    (100/120 Ω·m: −1.5 % to −4.1 %; review pass 10, 10.23). The check is
-    structural, independent of the contrast. Interfaces are taken from
-    the canonical layer stack (10.48), so a declared interface between
-    equal resistivities is none.
+    surface down to the radius ``a_eq``. Two configurations are of the
+    same error class and raise:
+
+    * an electrode reaches below a layer interface that lies above
+      ``a_eq`` — a rod through or below the top layer — and injects into
+      a layer the hemisphere never touches. Against ``mom``, rods through
+      or below a 1 … 2.5 m top layer are off by +633 % to +3138 % under a
+      conductive lower layer (1000/30 Ω·m) and by −10 % to −85 % over a
+      resistive one (100/300, 100/1000 Ω·m); only near-equal layers stay
+      within a few percent (100/120 Ω·m: −1.5 % to −4.1 %; review pass
+      10, 10.23);
+    * every electrode of the cluster lies below an interface at depth
+      ``h`` with ``a_eq/2 < h <= a_eq``: more than half of the hemisphere
+      lies in a layer the electrodes do not touch (audit round 2, A2E-2).
+      A 3 m rod (``a_eq`` = 0.44 m) 0.5 m below the surface under a top
+      layer of ``h/a_eq`` = 0.55 … 0.8: +51 % … +130 % against
+      ``image_2layer`` in 1000/30 and 10000/30 Ω·m, −81 % … −98 % in
+      30/1000 and 30/10000 Ω·m. At ``h = a_eq`` the rule joins the first
+      one. A thinner top layer, ``h <= a_eq/2``, holds the smaller part
+      of the hemisphere and only warns (rod: +16 % … +46 % under 1000/30
+      and 10000/30, −38 % … −58 % under 100/1000 Ω·m; a much more
+      conductive top layer lowers the result far more, −65 % … −97 % in
+      30/1000 and 30/10000 Ω·m; see :class:`FemReductionWarning`).
+
+    The checks are structural, independent of the contrast. Interfaces
+    are taken from the canonical layer stack (10.48), so a declared
+    interface between equal resistivities is none.
 
     Returns
     -------
@@ -468,6 +491,23 @@ def _unreachable_layers(
                 f"layer interface at h = {crossed[0]:.3g} m, but the "
                 f"equivalent hemisphere of its cluster ends at a_eq = "
                 f"{a_eq:.3g} m above it"
+            )
+            continue
+        z_top = min(_depth_range(world.get_electrode(e))[0] for e in clusters[root])
+        covering = [float(d) for d in interfaces if 0.5 * a_eq < d <= min(a_eq, z_top)]
+        if covering:
+            h = covering[-1]
+            names = sorted(clusters[root])
+            what = (
+                f"electrode '{names[0]}'"
+                if len(names) == 1
+                else f"every electrode of the cluster of '{names[0]}'"
+            )
+            found.append(
+                f"{what} lies below the layer interface at h = {h:.3g} m "
+                f"(top at z = {z_top:.3g} m), but {100.0 * h / a_eq:.0f} % of "
+                f"its equivalent hemisphere (a_eq = {a_eq:.3g} m) lies above "
+                "it, in a layer the electrodes do not touch"
             )
     return found
 
@@ -1198,9 +1238,12 @@ def solve_fem(
     BackendCapabilityError
         If an electrode of a driven cluster reaches below a layer
         interface that lies above the cluster's hemisphere radius
-        ``a_eq`` (rod through or below the top layer): the reduction
-        cannot represent it (review pass 10, 10.23). A subclass of
-        ``ValueError`` and ``NotImplementedError``.
+        ``a_eq`` (rod through or below the top layer, review pass 10,
+        10.23), or if every electrode of the cluster lies below an
+        interface at a depth between ``a_eq/2`` and ``a_eq`` (more than
+        half of the hemisphere in a layer the electrodes do not touch,
+        audit round 2, A2E-2): the reduction cannot represent it. A
+        subclass of ``ValueError`` and ``NotImplementedError``.
 
     Warns
     -----
@@ -1358,9 +1401,10 @@ def solve_fem(
             "Backend 'fem' cannot solve this world: "
             + "; ".join(unreachable)
             + ". The equivalent-hemisphere reduction injects the cluster "
-            "current from the soil surface, so it never reaches that layer "
-            "(rods through or below the top layer: -85 % to +3138 % against "
-            "'mom' over the contrasts 1000/30 ... 100/1000 Ohm m). " + remedy
+            "current from the soil surface down to a_eq, into other layers "
+            "than the electrodes (rods through or below the top layer: "
+            "-98 % to +3138 % against 'mom' and 'image_2layer' over the "
+            "contrasts 10000/30 ... 30/10000 Ohm m). " + remedy
         )
 
     for root in active_clusters:
