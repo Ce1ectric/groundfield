@@ -3442,3 +3442,122 @@ below implemented the decisions that change code.
 | 34 | Tighten the rule for segments up to a quarter skin depth under `sommerfeld` (step of 3.5e-4 at δ/4)? | next release | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
 | 35 | Radial trunk: a building in a substation slot taps its feeder's trunk instead of getting its own line from the substation? | next release, together with 22 | [roadmap](../roadmap.md#scheduled-for-the-next-release) |
 | 36 | Presets of the effective-resistivity weights per electrode class, with the values of the AP2 hand-over? | yes | stream `d2soil` |
+
+## Stream `d2solver`: User decisions Q23, Q27, Q31: fem and more conductive layers, perfect_mirror across the surface, per-engine size notice
+
+### Changed
+
+- ⚠ `fem` (experimental) raises `BackendCapabilityError` when the equivalent
+  hemisphere of a cluster spans a layer that no electrode of the cluster
+  touches and that conducts better than every layer the electrodes touch
+  (user decision Q23, finding 10.23). The hemisphere injects the current
+  straight into that layer and the result is too low: −97 … +5 % against
+  `image_2layer` and `mom` in the measured cases (rods, strips and rings
+  below a more conductive top layer from 22 mm thickness, rings above a more
+  conductive lower layer; −92 % for a 10 m ring at 0.8 m over 1000/30 Ω·m at
+  h₁ = 2 m). Up to now a `FemReductionWarning` or silent. The rule is
+  structural (near-equal 100/120 Ω·m raises as well), uses the canonical
+  layer stack, and an electrode exactly on an interface touches both layers;
+  the message names the cluster, the layer, the electrodes' ρ, a_eq, the
+  measured range and a backend that solves the world. More resistive spanned
+  layers keep the warning (+3 … +45 %). Tests:
+  `tests/test_fem.py::test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans`
+  and four siblings.
+- `earth_inductive_model="perfect_mirror"` emits one `UserWarning` per solve
+  when inductive conductor segments lie on both sides of the soil surface,
+  naming the number of such pairs and the conductors and pointing to
+  `"sommerfeld"` (user decision Q27, finding 10.46): its additive image has
+  no physical basis for an overhead/buried pair (2.28 / 2.77 times the
+  mutual reactance of `sommerfeld` at 50 Hz / 1 kHz for a lead 1 m above a
+  PEN 0.7 m deep). Numbers do not change. Tests:
+  `tests/test_inductive_solver_integration.py::test_perfect_mirror_warns_for_inductive_pairs_across_the_surface`
+  and siblings.
+
+### Added
+
+- `Engine.warn_segments` (`int | None`, default `None` =
+  `diagnostics.SOFT_LIMIT`, 5 000, read at solve time): the size of the soft
+  notice "solve time may run from seconds to minutes" per engine, counted
+  like `max_segments` (segments and nodal unknowns); honoured by the solve's
+  pre-flight warning, `check_segment_resolution` and `diagnose()`
+  (`report.context["warn_segments"]`). Not checked against `max_segments`
+  (a notice above the hard limit never appears). Booleans rejected; kept by
+  JSON, copies and the provenance (user decision Q31, finding 10.06). Tests:
+  `tests/test_resource_limit.py::test_warn_segments_is_a_validated_engine_field`
+  and four siblings.
+
+### Numbers that change
+
+| What | Size | Who is affected | Golden cases |
+|---|---|---|---|
+| none (Q23 turns results into errors, Q27 adds a warning, Q31 moves a notice) | — | `fem` users with a conductive layer spanned by the hemisphere get an error instead of a −97 … +5 % result | none |
+
+## Stream `d2gen`: User decisions Q20, Q21: encased mesh braces, concrete_model deprecated
+
+### Changed
+
+- ⚠ **Mesh foundations: the cross-braces are encased (user decision Q20).** A
+  foundation earth electrode per DIN 18014 lies in the concrete together with
+  its connections, so every wire of an encased
+  `FoundationElectrodeSpec(style="mesh")` — the perimeter and the cross-braces —
+  carries the outer radius $r_b = r_a + t$ and the shell coefficient $C$; up to
+  now the braces stayed bare, and a foundation could not exceed the spreading
+  resistance of its braces alone however dry the concrete. Without a shell
+  nothing changes. See *Numbers that change*. Tests:
+  `tests/test_concrete_one_mechanism.py::test_mesh_braces_are_encased`,
+  `::test_encased_mesh_equals_the_assembly_of_its_wires`,
+  `::test_shell_of_a_mesh_foundation_spans_every_wire`.
+- `groundfield.generators.materialise.concrete_shell` takes `encased_length_m`
+  (the keyword `perimeter_m` of the earlier 2026.11 work is gone) and reports
+  the shell resistance $C/L$ over every encased wire.
+
+### Deprecated
+
+- **`FoundationElectrodeSpec.concrete_model` (user decision Q21).** The field
+  no longer selects a shell model; it only chooses one current owner
+  (`"lumped"`, the default) or one per side (`"distributed"`) for an
+  axis-aligned `style="ring"` rectangle, at most 0.16 % apart up to aspect
+  ratio 4 and 0.67 % up to 50 over the soils of the AP1 grid, bare or in
+  concrete of 30 to 1 000 Ω·m (0.06 % / 0.3 % for a bare ring in homogeneous
+  soil). `"distributed"` keeps working and emits a `DeprecationWarning` at the
+  user's line (constructor, `model_validate`, JSON, `model_copy` that sets it);
+  `"lumped"` and the configuration JSON and pickles of 0.15.0 load silently;
+  the generators do not repeat the warning. Drop the argument; removal no
+  earlier than 2027.5. Tests: `tests/test_foundation_owners.py`.
+
+### Numbers that change
+
+| Q20 (10.13) | the cross-braces of an encased mesh foundation carry the concrete shell like its perimeter (DIN 18014; user decision Q20) | default house mesh (10 m, 2 × 2, 0.8 m, r_a 5 mm, t 5 cm) in 100 Ω·m −1.1 / −0.03 / +1.5 / +47 / +307 % at ρ_c = 50 / 100 / 150 / 1 000 / 5 000 Ω·m, in 30 / 100 Ω·m (h₁ = 5 m) +1.3 / +6.2 / +12 / +154 / +861 %; `medium_industry` mesh (20 m, 3 × 3) −1.3 … +298 % and +1.0 … +671 %; no golden case moves | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell (the default building catalogue), not ring and building-outline foundations, not AP1 |
+
+## Stream `d2soil`: User decision Q36: effective-resistivity presets per electrode class
+
+### Added
+- **Effective-resistivity presets per electrode class (user decision Q36).**
+  `gf.effective_resistivity(soil, preset=...)` takes the weights
+  $(w_0, \beta)$ from the read-only mapping
+  `groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS`, with the values of the AP2
+  hand-over (2026-10-20, AP1 catalogue computed with groundfield 0.14.0):
+  `"lv_network"` (0.13, 0.8; the default, the AP1 calibration),
+  `"station"` (0.06, 1.3; the station electrode alone) and
+  `"lv_group_<g>_p<pp>"` for the four LV network groups (perimeter equivalent
+  $n_U$, thresholds 20 / 100 / 250) and 5 / 10 / 20 / 40 % foundation
+  electrodes (method A, q50). An explicit `w0` or `beta` replaces that weight
+  only; an unknown name raises `ValueError` naming the closest presets. For
+  the AP1 station in the 39 AP1 soils, $R = c\,\rho_\text{eff}$ misses the
+  field solution by a median 1.8 % and at most 15.7 % with `"station"`
+  (hand-over: 1.7 %, 15.7 %), against 5.0 % and 35.9 % with `"lv_network"`.
+  Tests: `tests/test_effective_resistivity.py` (presets section,
+  `test_the_station_preset_reproduces_the_handover_for_the_ap1_station`,
+  `test_the_documented_tables_hold_the_presets`).
+
+### Changed
+- `effective_resistivity`: `w0` and `beta` default to `None`, the value of
+  the preset; every call keeps its value bit for bit (default preset
+  `"lv_network"` = 0.13, 0.8). The IO reference example fits the station over
+  $\rho_\text{eff}$ with `preset="station"` (`max_relative` 7.48 % instead of
+  13.41 %); Soil reference, ADR-0008 (amendment item 5) and glossary
+  describe the presets and that a BusType and its bus must use the same one.
+
+### Numbers that change
+
+none (no library value moves; golden unchanged).

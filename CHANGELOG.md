@@ -67,7 +67,9 @@ The first calendar-versioned release. It implements review pass 10 against
 0.15.0 (findings 10.01–10.95; [audit history, pass 10][pass-10]) and closes the
 pass-9 findings F01, F02 and F32 that 0.15.0 left open. The release notes the
 work streams wrote, with every measurement and test, are reproduced on the
-pass-10 page. Many results move on purpose: read *Numbers that change* first.
+pass-10 page, which also lists the author's decisions on the questions the
+release preparation left open. Many results move on purpose: read *Numbers
+that change* first.
 
 ### Numbers that change
 
@@ -303,10 +305,11 @@ reproduces 0.15.0, it is named.
   250) and 5 / 10 / 20 / 40 % foundation electrodes (q50 fit per group). An
   explicit `w0` or `beta` replaces that weight only; an unknown name raises
   `ValueError` naming the closest presets. For the AP1 station in the 39 AP1
-  soils, R = c·ρ_eff misses the field solution by a median 2.1 % and at most
-  15.7 % with `"station"` (hand-over 1.7 % / 15.7 %, reproduced with the
-  0.14.0 point kernel), against 5.5 % / 35.9 % with `"lv_network"` and
-  12.4 % / 41.9 % over ρ₁. Tests: `tests/test_effective_resistivity.py`.
+  soils, R = c·ρ_eff misses the field solution by a median 1.8 % and at most
+  15.7 % with `"station"` (hand-over 1.7 % / 15.7 %, reproduced as 1.71 % /
+  15.69 % with the 0.14.0 point kernel at the catalogue's 1.5 m segments),
+  against 5.0 % / 35.9 % with `"lv_network"` and 11.9 % / 41.9 % over ρ₁.
+  Tests: `tests/test_effective_resistivity.py`.
 - **Impedance quantity (10.18, 10.19):** `quantity="input" | "cluster" |
   "electrode"` and `source=` on `sweep`, `convergence_study` and the rho-f
   helpers. Test: `tests/test_impedance_quantity.py`.
