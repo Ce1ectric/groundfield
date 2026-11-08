@@ -151,7 +151,7 @@ work package 1 progresses.
   the corner offset is small compared with the full feeder length
   and the residual error in the longitudinal branch impedance
   stays well below 1 % at 50 Hz.
-  
+
 - **penetration depth** Calculate the depth of the earth current as it is used in Carson integrals. It should be possible to create the earth current depth of any soild multilayer problem to use an equivilent for the typical formulas for calculating the self and coupling impedances of a cable or overheadline with earth return part.
 
 ### Integration

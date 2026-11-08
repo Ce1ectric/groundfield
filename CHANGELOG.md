@@ -787,7 +787,7 @@ The three findings of review pass 9 that corrupt data or crash
   layer mis-weighted the layers (attribution 0.51 instead of 0.08 at 10 kHz);
   `reflection_coefficient_layered` uses the bottom-up cascade.
 - ⚠ Grids whose segment length gave a half-integer number of segments per
-  span returned 1.97× to 2.89× their resistance.
+  span returned 1.97 to 2.89 times the correct resistance.
 - The cross-layer two-layer solve of IEEE Std 80 Grid 3 needed about 263 GiB;
   it now runs in well under 1 GB.
 - `PolylineElectrode` rejects zero-length edges; a closed ring of two vertices

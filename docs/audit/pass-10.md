@@ -19,7 +19,8 @@ The tenth review pass ran against 0.15.0. Its change concept was decided on 2026
     This page was moved verbatim from `CHANGELOG.md` when the release notes were
     condensed in 2026.11.0 (source: commit `30a122d`). Only the markup was adapted:
     reST roles are rendered as code or math, relative links point to the current
-    pages, and each block stands under a heading that names where it was published.
+    pages, trailing whitespace is removed, and each block stands under a heading
+    that names where it was published.
     Paths, test names and numbers are those of the time; the code has changed since.
 
 ## Change concept (decided 2026-11-07)
