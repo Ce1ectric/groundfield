@@ -1,66 +1,66 @@
 # World
 
-The :class:`groundfield.World` class is the top-level container for
-the entire physics of a grounding problem: soil model, electrodes,
-conductors, sources, boundary conditions and (since 0.6.0) the
-ADR-0012 concrete-shell registry. It is intentionally **free of
-numerics** — the numerical evaluation (backend selection, mesh
-resolution, frequency list, tolerances) is configured in a
-[`Engine`](solver.md) and applied to the world via
-``world.solve(engine)``.
+`groundfield.World` is the container of the physical model: the soil,
+the electrodes, the leakage-free junction nodes, the conductors between
+them, the sources and the boundary conditions. It holds no numerics;
+backend, frequencies and discretisation belong to the
+[`Engine`](solver.md), and `world.solve(engine)` runs one against the
+other.
 
-## Concrete-shell registry — cleanup contract (0.7.0)
+## Mathematical and physical context
 
-The public :attr:`World.concrete_shell_corrections` dict accumulates
-one entry per foundation electrode that was materialised with a
-non-``None`` ``concrete_rho_ohm_m`` field (ADR-0012 V1 "lumped"
-path). Re-using a single ``World`` across multiple
-``TnNetworkGenerator.build`` calls — the canonical Monte-Carlo
-pattern over the moisture distribution — would otherwise leak stale
-shell resistances from earlier samples into later ones. The
-explicit :meth:`World.reset_concrete_corrections` helper clears the
-registry and returns a shallow copy of the dropped entries.
+A world describes one boundary-value problem of the quasi-static
+grounding field ($f < 1\,\mathrm{kHz}$):
+
+- in the soil, $\nabla\cdot(\sigma\nabla\varphi) = 0$ with
+  $\varphi \to 0$ at remote earth and no current through the soil
+  surface;
+- every **galvanic cluster** (electrodes joined by ideal conductors) is
+  one equipotential body, and the current it leaks is the integral of
+  the current density over its surface;
+- the **conductor network** (conductors with impedance, junctions)
+  obeys Kirchhoff's current law at every node and
+  $\varphi_a - \varphi_b = Z_b I_b$ along every branch;
+- the **sources** impress currents between a node and remote earth or
+  between two nodes.
+
+The names of electrodes and junctions share one namespace: they are the
+nodes that conductors and sources refer to.
+
+## Checks before a solve
+
+`World.check()` validates the model before any backend runs: every
+source terminal and conductor end must name an existing node (the error
+suggests the closest names), the two terminals of a source must not be
+bonded into one cluster, and a world needs at least one electrode and
+one current source with a finite, non-zero magnitude. A
+`VoltageSource` raises `NotImplementedError` (no backend implements an
+impressed voltage). Every solve calls the check; the solver pipeline
+also rejects junctions without a conductor path to an electrode. The
+[diagnostics](diagnostics.md) module adds advisory checks (problem size,
+segment resolution, close wires).
+
+## Sources are restored after a solve
+
+`world.solve(engine)` works on a snapshot of the sources: the source
+objects returned by `create_source` stay attached to the world, so a
+parameter loop can edit them between solves.
 
 ```python
 import groundfield as gf
 
-world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-# ... populate via TnNetworkGenerator.build(world=world) ...
-dropped = world.reset_concrete_corrections()
-# ... rebuild with a different moisture sample ...
-```
+world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+gf.create_electrode(world, "rod", name="g1", position=(0.0, 0.0, 0.0), length=3.0)
+src = gf.create_source(world, attached_to="g1", magnitude=10.0)
+engine = gf.create_engine(frequencies=[50.0])
 
-Calling the helper on a fresh world is an idempotent no-op.
-
-## Source handles stay live across a solve (0.15.0)
-
-``World.solve(engine)`` snapshots every :attr:`World.sources` entry
-before the backend runs and restores it afterwards, so solving never
-rewrites the input world (opt out with ``snapshot_sources=False`` if a
-sweep cannot afford the deep copy). Since 0.15.0 that roll-back is
-**identity-preserving**: the recorded field values are written back onto
-the very objects ``create_source`` returned, and ``world.sources`` keeps
-its list object. The canonical parameter sweep therefore behaves as it
-reads:
-
-```python
-import groundfield as gf
-
-world  = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-src    = gf.create_source(world, attached_to="g1", magnitude=10.0)
-engine = gf.create_engine(backend="image")
-
+potentials = []
 for current in (10.0, 20.0, 40.0):
-    src.magnitude = current       # ``src`` is still world.sources[0]
-    print(world.solve(engine).electrode_potentials["g1"][0])
-```
+    src.magnitude = current            # src is still world.sources[0]
+    potentials.append(world.solve(engine).electrode_potentials["g1"][0])
 
-Up to 0.14.x the snapshot list was rebound onto the world, which
-detached the caller's handle after the first solve: every later
-mutation of ``src`` was a silent no-op and the loop above printed the
-same potential three times. Backend-side mutations of the source list
-(insert / remove / replace / wholesale rebind) are still rolled back.
+assert abs(potentials[2] / potentials[0] - 4.0) < 1e-12   # linear problem
+```
 
 ## API reference
 

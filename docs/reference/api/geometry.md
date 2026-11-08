@@ -1,128 +1,102 @@
 # Geometry
 
-The ``geometry`` subpackage describes the physical shape of every
-buried metallic object — rods, rings, strips, polylines, stars, mesh
-and grid-mesh electrodes — together with the wire-segment
-representation that the field solver consumes.
+The `geometry` package describes the buried metal: parametric
+electrodes (rod, ring, strip, polyline, star, mesh, grid mesh), the
+leakage-free `Junction` node, and the discretisation of every electrode
+into straight wire segments that the solvers consume.
 
-## Physical background
+| Kind | Class | Parameters (m) | Typical use |
+|---|---|---|---|
+| `rod` | `RodElectrode` | `position` (top end), `length` | driven rod (Tiefenerder) |
+| `ring` | `RingElectrode` | `center`, `radius` | ring earth around a building or substation |
+| `strip` | `StripElectrode` | `start`, `end` | horizontal earth strip, counterpoise |
+| `polyline` | `PolylineElectrode` | `vertices`, `closed` | foundation earth following a building outline |
+| `star` | `StarElectrode` | `center`, `n_arms`, `arm_length`, `orientation_deg` | star earth (Sternerder) |
+| `mesh` | `MeshElectrode` | `corner`, `size`, `spacing` | mesh with a given spacing |
+| `grid_mesh` | `GridMeshElectrode` | `corner`, `size`, `n_x`, `n_y` | substation grid with a given number of wires |
 
-A grounding electrode is a finite metal body buried in conducting
-soil. For frequencies below 1 kHz it can be treated as a thin-wire
-boundary along which the potential is enforced and the current
-distribution is unknown (or, in the cheaper image backends,
-prescribed as uniform). All standard geometries are reduced to a
-collection of straight cylindrical segments
+Every kind also takes `wire_radius` (default 5 mm) and
+`concrete_shell_coefficient_ohm_m` (default 0, see below).
+
+## Mathematical and physical context
+
+An electrode is a **thin wire**: its radius $a$ is small against its
+length and against the distance to other wires, so the current leaving
+the surface can be represented by a current on the wire axis and the
+potential is evaluated on the surface (at distance $a$). Each geometry
+is cut into straight segments
 
 $$
-\Gamma_i = \{ \mathbf{x}(\xi) = \mathbf{x}_i^{(0)}
-                  + \xi\,(\mathbf{x}_i^{(1)} - \mathbf{x}_i^{(0)}) :
-                  \xi \in [0, 1] \},\qquad i = 1\ldots N,
+\Gamma_i = \{\mathbf{x}_i^{(0)} + \xi\,(\mathbf{x}_i^{(1)} - \mathbf{x}_i^{(0)}) : \xi \in [0, 1]\},
+\qquad i = 1 \ldots N,
 $$
 
-each carrying a wire radius $a_i$ and a material tag. The
-discretisation length $\Delta s$ is set by
-:attr:`groundfield.solver.engine.Engine.segment_length`. The
-geometry layer is intentionally decoupled from the solver, so the
-same electrodes can be fed into the closed-form image backend, MoM,
-or FEM without modification.
+no longer than `Engine.segment_length`. Grid and mesh wires are split
+so that wire crossings fall on segment end points, and every wire is
+cut at the soil-layer interfaces so that each segment lies in one
+layer; a piece shorter than two wire radii next to an interface is
+merged with its neighbour (`SLIVER_RADII`). Whether the current is
+uniform along each segment (image family) or solved for by point
+matching (`mom` family) is a property of the backend, see
+[source kernels](../../explanation/kernels.md).
 
-For mesh and grid electrodes the segment count per wire is aligned to a
-whole multiple of the mesh-span count, so the grid crossings fall on
-segment **endpoints** rather than on the midpoint point sources. This
-avoids a discretisation trap in which a longitudinal and a transverse
-segment midpoint would coincide on a crossing — collapsing to the
-singularity clamp and inflating the grid resistance by ~2× for the
-uniform-current image backend. The effective $\Delta s$ is therefore
-never coarser than requested and the grid resistance is stable for any
-`segment_length` (see `notebooks/44_grid_discretization_robustness.ipynb`).
+**Concrete encasement.** A foundation earth in concrete adds the
+radial resistance of the concrete shell. Every electrode kind carries
+it as a per-length coefficient
+
+$$
+C = \frac{\rho_c}{2\pi}\,\ln\frac{a + t}{a} \quad [\Omega\,\mathrm{m}],
+$$
+
+for concrete resistivity $\rho_c$, bare wire radius $a$ and shell
+thickness $t$; the electrode's `wire_radius` is then the outer radius
+$a + t$ (the soil sees the shell surface), and every segment of length
+$\Delta s$ adds the series resistance $C/\Delta s$ of its shell to its
+self term. Only the image family (`image`, `image_2layer`) and
+`solve_mutual_*` represent a non-zero coefficient; the other backends
+reject such a world before they run. The helpers
+`concrete_shell_coefficient`, `shell_resistance_from_coefficient` and
+`shell_coefficient_from_resistance` convert between the coefficient and
+a lumped resistance; the physics is explained in
+[concrete shells](../../explanation/concrete-shells.md) and ADR-0012.
+
+**Validity.** Thin-wire approximation ($a \ll$ segment length and
+wire spacing); wires must be in the soil ($z > 0$) — the solver rejects
+segments in the air and warns about leakage segments that are long
+compared with their depth.
 
 ## Example
 
 ```python
 import groundfield as gf
+from groundfield.references import dwight1936
 
-world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-
-# Vertical driven rod
-rod = gf.create_electrode(
-    world, "rod", name="g1",
-    position=(0.0, 0.0, 0.0), length=1.5, wire_radius=0.005,
-)
-
-# Buried ring earth at house-foundation depth
-ring = gf.create_electrode(
-    world, "ring", name="g2",
-    center=(10.0, 0.0, 0.8), radius=2.0, wire_radius=0.005,
-)
-
-# Rectangular mesh (e.g. substation grid)
-mesh = gf.create_electrode(
-    world, "grid_mesh", name="g3",
-    corner=(-10.0, -10.0, 0.5), size=(20.0, 20.0),
-    n_x=11, n_y=11, wire_radius=0.005,
-)
-
-# Pre-solve resolution / segment-budget check
-for warning in gf.check_segment_resolution(
-    world, gf.create_engine(backend="image", segment_length=0.1)
-):
-    print("WARN:", warning)
-```
-
-For programmatic generation of large typical worlds (5 – 200
-single-family houses, stochastic electrode mixes) see
-[Generators](generators.md).
-
-### Strip electrode concrete shell (new in 0.6.0)
-
-:class:`StripElectrode` carries an optional
-``concrete_shell_coefficient_ohm_m`` field (default ``0.0`` —
-historic behaviour). When set, the per-meter Sunde coefficient
-$C = \rho_c/(2\pi)\,\ln(r_b/r_a)$ in Ω·m enters the
-``image`` / ``image_2layer`` self-action: every segment of length
-$\Delta s$ in this strip has its MoM diagonal augmented by
-$C/\Delta s$, the radial voltage drop through the concrete shell.
-This is the V2 distributed path of
-[ADR-0012](../adr/0012-foundation-concrete-encasement.md). The
-field is populated automatically by
-:meth:`~groundfield.generators.grounding.GroundingSystemSpec.build_at`
-when a :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
-with ``concrete_model="distributed"`` is materialised; it is not
-intended to be set by hand on isolated strip electrodes outside
-the generator pipeline (but does work there, see the closed-form
-verification in ``tests/test_concrete_encasement.py``).
-
-### Star electrode (Sternerder)
-
-:class:`StarElectrode` is the classic $n$-point star: ``n_arms`` equal
-horizontal wires of length $L$ radiate from a common centre node at one
-depth, uniformly spaced by $360^\circ / n$. All arms share the centre,
-so the star is a single galvanic cluster. Its closed-form grounding
-resistance follows Dwight (1936, Eqs. 23–26),
-
-$$
-R = \frac{\rho}{2\,n\,\pi\,L}\,
-    \Bigl(\ln\tfrac{2L}{a} + \ln\tfrac{2L}{s}
-          + c_0 + c_1\tfrac{s}{L}
-          + c_2\tfrac{s^2}{L^2} + c_3\tfrac{s^4}{L^4}\Bigr),
-\qquad s = 2t,
-$$
-
-with per-$n$ coefficients $c_k$ tabulated for $n \in \{3, 4, 6, 8\}$ in
-:func:`groundfield.references.dwight1936.n_point_star` ($a$ = wire
-radius, $t$ = burial depth, $s = 2t$ the image distance). The image
-backend reproduces this to ~1 % (see
-``tests/test_dwight_references.py``).
-
-```python
+world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
 star = gf.create_electrode(
-    world, "star", name="g4",
-    center=(0.0, 0.0, 0.5), n_arms=4, arm_length=5.0,
-    orientation_deg=0.0, wire_radius=0.005,
+    world, "star", name="star", center=(0.0, 0.0, 0.5), n_arms=4, arm_length=5.0
 )
+gf.create_source(world, attached_to="star", magnitude=1.0)
+result = gf.create_engine(segment_length=0.5).solve(world)
+
+assert abs(star.total_length() - 20.0) < 1e-12       # four arms of 5 m
+R = result.input_impedance()[0].real                  # 10.05 Ω
+R_ref = dwight1936.n_point_star(rho=100.0, arm_length=5.0, radius=0.005, depth=0.5, n_arms=4)
+assert abs(R - R_ref) / R_ref < 1e-3                  # Dwight (1936), Eqs. 23-26
 ```
+
+The geometry queries `segments(ds)`, `segment_count(ds)`,
+`wire_polylines()`, `bounds()`, `total_length()` and
+`min_feature_length()` are available on every electrode without a
+solve, for example to check a model before a long computation.
 
 ## API reference
 
 ::: groundfield.geometry
+
+::: groundfield.geometry.electrodes
+    options:
+      members:
+        - concrete_shell_coefficient
+        - shell_resistance_from_coefficient
+        - shell_coefficient_from_resistance
+        - SLIVER_RADII
