@@ -40,13 +40,18 @@ shell adds the per-length resistance coefficient
 
    C = \frac{\rho_c}{2\pi}\,\ln\frac{r_b}{r_a}\quad[\Omega\,\mathrm{m}],
 
-which every encased (perimeter) wire carries as
-``concrete_shell_coefficient_ohm_m``; the solver adds :math:`C/\Delta s`
-to the diagonal of each of its segments, i.e. the lumped resistance
-:math:`R_\text{shell} = C / L` in series with an electrode of length
-:math:`L` under a uniform leakage current. Both ``concrete_model`` values
-use this one mechanism (review findings 10.12–10.14). Cross-braces of a
-mesh foundation are not encased and keep the bare radius :math:`r_a`.
+which every wire of an encased foundation carries as
+``concrete_shell_coefficient_ohm_m``, with the radius :math:`r_b`; the
+solver adds :math:`C/\Delta s` to the diagonal of each of its segments,
+i.e. the lumped resistance :math:`R_\text{shell} = C / L` in series with an
+electrode of length :math:`L` under a uniform leakage current. Both
+``concrete_model`` values use this one mechanism (review findings
+10.12–10.14). The cross-braces of a mesh foundation are encased like its
+perimeter: a foundation earth electrode per DIN 18014 lies in the concrete
+together with its connections (user decision Q20 of 2026.11; up to then
+the braces kept the bare radius :math:`r_a` and no coefficient). Without a
+shell every wire keeps :math:`r_a`. Rods and other electrodes of a site
+are never encased.
 
 Owners of a foundation
 ----------------------
@@ -179,7 +184,7 @@ def clean_polygon(
 
 
 def concrete_shell(
-    spec: FoundationElectrodeSpec, *, perimeter_m: float
+    spec: FoundationElectrodeSpec, *, encased_length_m: float
 ) -> tuple[float, float, float]:
     r"""Effective radius, lumped resistance and coefficient of a shell.
 
@@ -187,9 +192,10 @@ def concrete_shell(
     ----------
     spec
         Resolved foundation spec (concrete values only).
-    perimeter_m
-        Length in m of the encased wire (the foundation perimeter;
-        internal cross-braces are not encased).
+    encased_length_m
+        Total length :math:`L` in m of the encased wire: every wire of the
+        foundation — the perimeter of a ring or of a building outline,
+        the perimeter plus the cross-braces of a mesh (user decision Q20).
 
     Returns
     -------
@@ -197,13 +203,18 @@ def concrete_shell(
         :math:`r_b = r_a + t` in m when a shell is configured, else the
         bare wire radius :math:`r_a`.
     shell_total_ohm : float
-        :math:`R_\text{shell} = C / L_\text{perim}` in Ω (0 without
-        shell): the shell resistance of the whole perimeter under a
-        uniform leakage current. Informational; the solver sees the
-        coefficient.
+        :math:`R_\text{shell} = C / L` in Ω (0 without shell): the shell
+        resistance of the whole foundation under a uniform leakage
+        current, equal to the per-wire shells :math:`C / L_j` in
+        parallel. Informational; the solver sees the coefficient.
     shell_coefficient_ohm_m : float
         :math:`C = \rho_c/(2\pi)\,\ln(r_b/r_a)` in Ω·m (0 without shell),
         :func:`~groundfield.geometry.electrodes.concrete_shell_coefficient`.
+
+    Notes
+    -----
+    Up to the user decision Q20 of 2026.11 the braces of a mesh were bare
+    and the length was the perimeter (keyword ``perimeter_m``).
     """
     if spec.concrete_rho_ohm_m is None:
         return float(spec.wire_radius_m), 0.0, 0.0
@@ -213,8 +224,8 @@ def concrete_shell(
         return float(spec.wire_radius_m), 0.0, 0.0
     r_a = float(spec.wire_radius_m)
     coefficient = concrete_shell_coefficient(rho_c, r_a, t)
-    perimeter = float(perimeter_m)
-    r_shell = coefficient / perimeter if perimeter > 0.0 else 0.0
+    length = float(encased_length_m)
+    r_shell = coefficient / length if length > 0.0 else 0.0
     return r_a + t, float(r_shell), float(coefficient)
 
 
@@ -315,9 +326,9 @@ def _materialise_foundation(
     mesh is one owner per wire line; a ring is one owner per side, except
     an axis-aligned ``"lumped"`` ring (one grid mesh); neither depends on
     whether a shell is configured. The concrete shell (ADR-0012) is the
-    same for both ``concrete_model`` values: every encased (perimeter)
-    wire gets the radius :math:`r_b` and the coefficient :math:`C`;
-    cross-braces keep the bare radius.
+    same for both ``concrete_model`` values: every wire of the foundation,
+    the cross-braces of a mesh included (user decision Q20, DIN 18014),
+    gets the radius :math:`r_b` and the coefficient :math:`C`.
     """
     depth = float(spec.depth_m)
     if spec.polygon_xy_m is not None:
@@ -335,8 +346,9 @@ def _materialise_foundation(
         nx, ny = 1, 1
     else:
         nx, ny = spec.n_x, spec.n_y
+    # Every wire is encased: ny + 1 lines of length dx, nx + 1 of length dy.
     effective_radius, _, shell_coefficient = concrete_shell(
-        spec, perimeter_m=2.0 * (dx + dy)
+        spec, encased_length_m=(ny + 1) * dx + (nx + 1) * dy
     )
 
     # A rectangle turned by a multiple of 90 deg is axis-aligned: realise
@@ -370,7 +382,6 @@ def _materialise_foundation(
         angle_deg=angle_deg,
         name=name,
         wire_radius=effective_radius,
-        brace_wire_radius=float(spec.wire_radius_m),
         concrete_shell_coefficient=shell_coefficient,
         bond_conductor_type=bond_conductor_type,
     )
@@ -435,7 +446,9 @@ def _materialise_polygon_foundation(
         x0, y0 = verts[k]
         x1, y1 = verts[(k + 1) % len(verts)]
         perimeter += math.hypot(x1 - x0, y1 - y0)
-    effective_radius, _, shell_coefficient = concrete_shell(spec, perimeter_m=perimeter)
+    effective_radius, _, shell_coefficient = concrete_shell(
+        spec, encased_length_m=perimeter
+    )
     create_electrode(
         world,
         "polyline",
@@ -477,7 +490,6 @@ def _materialise_foundation_wires(
     angle_deg: float,
     name: str,
     wire_radius: float,
-    brace_wire_radius: float,
     concrete_shell_coefficient: float,
     bond_conductor_type: str,
 ) -> None:
@@ -488,11 +500,12 @@ def _materialise_foundation_wires(
     ``n_x = n_y = 1`` exactly the four perimeter edges. The first wire
     (local :math:`-y` edge) carries ``name`` and is the anchor; the
     others are ``f"{name}_w{j}"``, bonded to the anchor by
-    ``f"{name}_bond_{j}"``. Only the perimeter wires are encased: they
-    carry ``wire_radius`` (the shell's outer radius :math:`r_b` when a
-    shell is configured) and the concrete-shell coefficient; internal
-    braces carry ``brace_wire_radius`` (the bare wire) and no
-    coefficient (review finding 10.13).
+    ``f"{name}_bond_{j}"``. Every wire, perimeter and cross-braces alike,
+    carries ``wire_radius`` (the shell's outer radius :math:`r_b` when a
+    shell is configured, else the bare :math:`r_a`) and the concrete-shell
+    coefficient ``concrete_shell_coefficient`` (user decision Q20: the
+    braces lie in the concrete too, DIN 18014; up to then they kept
+    :math:`r_a` and no coefficient, review finding 10.13).
 
     Notes
     -----
@@ -521,14 +534,9 @@ def _materialise_foundation_wires(
     # Local vertices of every wire: longitudinal wires at each y, through
     # every x; transverse wires at each x, through every y.
     wires = [[(x, y) for x in xs] for y in ys] + [[(x, y) for y in ys] for x in xs]
-    perimeter = {0, n_y, n_y + 1, n_y + 1 + n_x}
     created: list[Any] = []
     for j, local in enumerate(wires):
         sub_name = name if j == 0 else f"{name}_w{j}"
-        if j in perimeter:
-            radius, coefficient = wire_radius, concrete_shell_coefficient
-        else:
-            radius, coefficient = brace_wire_radius, 0.0
         vertices = [to_world(lx, ly) for lx, ly in local]
         if len(vertices) == 2:
             wire = create_electrode(
@@ -537,8 +545,8 @@ def _materialise_foundation_wires(
                 name=sub_name,
                 start=vertices[0],
                 end=vertices[1],
-                wire_radius=radius,
-                concrete_shell_coefficient_ohm_m=coefficient,
+                wire_radius=wire_radius,
+                concrete_shell_coefficient_ohm_m=concrete_shell_coefficient,
             )
         else:
             wire = create_electrode(
@@ -547,8 +555,8 @@ def _materialise_foundation_wires(
                 name=sub_name,
                 vertices=vertices,
                 closed=False,
-                wire_radius=radius,
-                concrete_shell_coefficient_ohm_m=coefficient,
+                wire_radius=wire_radius,
+                concrete_shell_coefficient_ohm_m=concrete_shell_coefficient,
             )
         created.append(wire)
     _bond_to_anchor(world, name, created, bond_conductor_type)

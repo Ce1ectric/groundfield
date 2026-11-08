@@ -276,7 +276,12 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "— right for ring/strip/rod electrodes which always run "
             "in trenches, wrong for foundation electrodes which sit "
             "inside a Streifenfundament (DIN 18014). Set this field "
-            "to enable the concrete-shell model defined in ADR-0012."
+            "to enable the concrete-shell model defined in ADR-0012: "
+            "every wire of the foundation, the cross-braces of a "
+            "``style='mesh'`` foundation included, gets the outer radius "
+            "r_b = r_a + t and the shell coefficient "
+            "C = rho_c / (2 pi) ln(r_b / r_a) (user decision Q20 of "
+            "2026.11; up to then the braces stayed bare)."
         ),
     )
     concrete_thickness_m: Union[float, AnyDistribution] = Field(
@@ -297,11 +302,11 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         description=(
             "Uniform-current owners of a perimeter-only foundation. "
             "Both values put the Sunde-shell coefficient "
-            "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every encased "
-            "(perimeter) wire, whose radius becomes r_b = r_a + t; the "
-            "solver adds C / ds to the diagonal of each segment, i.e. "
-            "the lumped shell resistance C / L in series with the wire. "
-            "Cross-braces are not encased. "
+            "C = rho_c / (2 pi) ln(r_b / r_a) (Ohm m) on every wire of an "
+            "encased foundation, cross-braces included, whose radius "
+            "becomes r_b = r_a + t; the solver adds C / ds to the diagonal "
+            "of each segment, i.e. the lumped shell resistance C / L in "
+            "series with the wire. "
             '``"lumped"`` (default): an axis-aligned ring foundation is '
             "one grid-mesh owner (exactly the lumped series resistance "
             "C / L_perim); a rotated one is one owner per side. "

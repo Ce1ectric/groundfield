@@ -15,8 +15,10 @@ which only the TN generator's PEN service drops read: ``solve_mutual_*``
 (the AP1 Z_G path), the layout builder and every substation or cabinet
 foundation dropped the shell (findings 10.12, 10.14), and the service drop
 sent the current of bonded rods through the foundation's shell (10.13).
-Since 2026.11 both models put :math:`C` on the encased wires themselves;
-cross-braces of a mesh foundation are not encased and keep the bare radius.
+Since 2026.11 both models put :math:`C` on the encased wires themselves.
+Every wire of an encased foundation is encased, the cross-braces of a mesh
+foundation included (user decision Q20: a foundation earth electrode per
+DIN 18014 lies in the concrete with its connections); rods stay bare.
 """
 
 from __future__ import annotations
@@ -189,23 +191,136 @@ def test_mixed_site_lumped_equals_distributed(rho_c: float) -> None:
     assert z_in("lumped").real == pytest.approx(z_in("distributed").real, rel=0.02)
 
 
-@pytest.mark.finding("10.13")
-@pytest.mark.parametrize("model", ["lumped", "distributed"])
-@pytest.mark.parametrize("orientation_deg", [None, 30.0])
-def test_mesh_braces_are_not_encased(model: str, orientation_deg: float | None) -> None:
-    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
-    spec = _foundation(model, 500.0, style="mesh", n_x=2, n_y=2)
-    spec = spec.model_copy(update={"orientation_deg": orientation_deg})
+def _mesh_wires(spec: FoundationElectrodeSpec, soil: object | None = None) -> list:
+    """The wires of one mesh foundation built with build_at."""
+    world = gf.create_world(
+        soil=soil if soil is not None else gf.HomogeneousSoil(rho=100.0)
+    )
     GroundingSystemSpec(electrodes=[spec]).build_at(
         world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0)
     )
-    wires = [e for e in world.electrodes if e.name.startswith("h_foundation")]
+    return [e for e in world.electrodes if e.name.startswith("h_foundation")]
+
+
+# user decision Q20
+@pytest.mark.finding("10.13")
+@pytest.mark.parametrize("model", ["lumped", "distributed"])
+@pytest.mark.parametrize("orientation_deg", [None, 30.0])
+def test_mesh_braces_are_encased(model: str, orientation_deg: float | None) -> None:
+    """DIN 18014: a foundation earth electrode lies in the concrete with its
+    connections, so the braces carry the shell like the perimeter. Up to
+    the user decision Q20 the two braces kept r_a and C = 0."""
+    spec = _foundation(model, 500.0, style="mesh", n_x=2, n_y=2)
+    wires = _mesh_wires(spec.model_copy(update={"orientation_deg": orientation_deg}))
     assert len(wires) == 6  # 4 perimeter wires + 2 braces
-    encased = [e for e in wires if e.concrete_shell_coefficient_ohm_m > 0.0]
-    braces = [e for e in wires if e.concrete_shell_coefficient_ohm_m == 0.0]
-    assert len(encased) == 4 and len(braces) == 2
-    assert all(e.wire_radius == pytest.approx(R_A + T) for e in encased)
-    assert all(e.wire_radius == pytest.approx(R_A) for e in braces)
+    assert sum(e.total_length() for e in wires) == pytest.approx(60.0)
+    for wire in wires:
+        assert wire.wire_radius == pytest.approx(R_A + T)
+        assert wire.concrete_shell_coefficient_ohm_m == pytest.approx(
+            _coefficient(500.0), rel=1e-15
+        )
+
+
+@pytest.mark.finding("10.13")
+@pytest.mark.parametrize("orientation_deg", [None, 30.0])
+def test_bare_mesh_wires_keep_the_wire_radius(orientation_deg: float | None) -> None:
+    """Without a shell nothing changes: every wire has r_a and C = 0."""
+    spec = _foundation("lumped", None, style="mesh", n_x=3, n_y=2)
+    wires = _mesh_wires(spec.model_copy(update={"orientation_deg": orientation_deg}))
+    assert len(wires) == 7
+    assert all(e.wire_radius == R_A for e in wires)
+    assert all(e.concrete_shell_coefficient_ohm_m == 0.0 for e in wires)
+
+
+# user decision Q20
+@pytest.mark.finding("10.13")
+def test_shell_of_a_mesh_foundation_spans_every_wire() -> None:
+    """The lumped shell resistance of the whole foundation is C over the
+    whole encased length: the per-wire C / L_j in parallel give C / 60 m for
+    a 10 m 2 x 2 mesh (C / 40 m, the perimeter, before Q20), the value
+    ``concrete_shell`` reports for that length."""
+    from groundfield.generators.materialise import concrete_shell
+    from groundfield.geometry.electrodes import shell_resistance_from_coefficient
+
+    spec = _foundation("lumped", 1000.0, style="mesh", n_x=2, n_y=2)
+    shells = [
+        shell_resistance_from_coefficient(e)
+        for e in _mesh_wires(spec)
+        if e.concrete_shell_coefficient_ohm_m > 0.0
+    ]
+    in_parallel = 1.0 / sum(1.0 / r for r in shells)
+    assert in_parallel == pytest.approx(_coefficient(1000.0) / 60.0, rel=1e-12)
+    assert concrete_shell(spec, encased_length_m=60.0) == pytest.approx(
+        (R_A + T, _coefficient(1000.0) / 60.0, _coefficient(1000.0)), rel=1e-15
+    )
+
+
+def _house_mesh(rho_c: float) -> FoundationElectrodeSpec:
+    """The generator's default house mesh (10 m, 2 x 2, 0.8 m, 5 mm) in a shell."""
+    return FoundationElectrodeSpec(
+        style="mesh",
+        size_m=10.0,
+        depth_m=0.8,
+        n_x=2,
+        n_y=2,
+        wire_radius_m=0.005,
+        concrete_rho_ohm_m=rho_c,
+        concrete_thickness_m=T,
+    )
+
+
+def _assembled_mesh_impedance(soil: object, rho_c: float) -> float:
+    """Second method: the six wire lines of the house mesh built by hand as
+    separate shell-free electrodes of radius r_b, their mutual matrix from
+    ``solve_mutual_matrix`` (galerkin), the shell added as ``diag(C / L_j)``
+    and the wires bonded: ``1 / (1^T Z^-1 1)``."""
+    r_a, depth, xs = 0.005, 0.8, (-5.0, 0.0, 5.0)
+    lines = [[(x, y) for x in xs] for y in xs] + [[(x, y) for y in xs] for x in xs]
+    world = gf.create_world(soil=soil)
+    names = []
+    for k, local in enumerate(lines):
+        names.append(f"w{k}")
+        gf.create_electrode(
+            world,
+            "polyline",
+            name=names[-1],
+            vertices=[(x, y, depth) for x, y in local],
+            closed=False,
+            wire_radius=r_a + T,
+        )
+    z = np.asarray(
+        gf.solve_mutual_matrix(world, gf.create_engine(frequencies=[50.0]), names)
+    )
+    z = z + np.eye(len(names)) * _coefficient(rho_c, r_a=r_a) / 10.0  # L_j = 10 m
+    ones = np.ones(len(names))
+    return float((1.0 / (ones @ np.linalg.solve(z, ones))).real)
+
+
+# user decision Q20
+@pytest.mark.finding("10.13")
+@pytest.mark.parametrize(
+    "soil",
+    [gf.HomogeneousSoil(rho=100.0), gf.TwoLayerSoil(rho_1=30.0, rho_2=100.0, h_1=5.0)],
+    ids=["homogeneous", "two-layer"],
+)
+@pytest.mark.parametrize("rho_c", [150.0, 5000.0])
+def test_encased_mesh_equals_the_assembly_of_its_wires(
+    soil: object, rho_c: float
+) -> None:
+    """Two methods agree to round-off: ``Engine.solve`` on the generated
+    default house mesh and the hand assembly of its six encased wires. With
+    the braces bare (up to Q20) the solve was -1.4 / -75 % (100 ohm m) and
+    -11 / -90 % (30 / 100 ohm m, h_1 = 5 m) below the assembly at
+    rho_c = 150 / 5000 ohm m (evidence d2gen ``brace_effect_base.out``)."""
+    world = gf.create_world(soil=soil)
+    anchor = GroundingSystemSpec(electrodes=[_house_mesh(rho_c)]).build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0)
+    )
+    gf.create_source(world, attached_to=anchor, magnitude=1.0)
+    z_solve = gf.create_engine(frequencies=[50.0]).solve(world).input_impedance()[0]
+    assert z_solve.real == pytest.approx(
+        _assembled_mesh_impedance(soil, rho_c), rel=1e-12
+    )
 
 
 @pytest.mark.finding("10.13")
