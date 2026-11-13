@@ -3650,3 +3650,29 @@ corrected); in short:
   both clauses, a margin over the largest values found and its model
   uncertainty; `model_copy` of subclasses; `copy.replace` warns at the
   caller's line on Python ≥ 3.13.
+
+## Stream `d3gen`: User decision Q38: one current owner per side
+
+Every rectangular foundation without cross-braces (`style="ring"`, or
+`"mesh"` with `n_x = n_y = 1`) is one strip per side, bonded to its local −y
+side, at every orientation; `FoundationElectrodeSpec.concrete_model` keeps
+its validation and loads from JSON but has no effect (`"distributed"` warns,
+`"lumped"` stays silent). Up to this change the default `"lumped"` made an
+axis-aligned rectangle one `GridMeshElectrode`. The release notes carry the
+details; in short:
+
+- **Size:** the input impedance is never higher and unchanged for a square on
+  its own. Over the AP1 soils (short side at least 1 m) the largest decreases
+  are −0.32 / −0.91 % bare or with the default shell and −0.69 / −1.53 % in up
+  to 0.2 m of wet concrete (aspect ratio up to 4 / 50), confirmed by the
+  side-matrix algebra and an independent boundary-element solver; the AP1
+  station −0.0009 … −0.0026 %.
+- **Connection point and names:** conductors attached to the foundation by
+  name start at the corner of its −y side instead of its centre, and the
+  electrode named after the foundation is that side (`cluster_impedance` for
+  the foundation), as for meshes and rotated rectangles.
+- **`fem`:** the four strips are reduced as a cluster; no new rule (user
+  decision Q37), the changes are listed in the `fem` row of the release notes
+  and in the known limitations.
+- **Golden:** only `mutual_foundations_lumped_concrete` moves (Z_G 5.2e-4,
+  R 1.6 %, structure of the world), now equal to the `distributed` case.

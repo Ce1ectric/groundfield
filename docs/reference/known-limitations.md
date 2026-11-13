@@ -41,12 +41,13 @@ shows what agrees with independent references and how well.
   +4.3 %); the generators build mesh foundations as one electrode per
   wire line, which brings them to +1.1 % (+0.3 … +0.5 % with
   `kernel="point"`, the kernel `mom` uses); against one current per
-  segment an encased mesh foundation is at most 0.6 % high, a rectangle
-  without cross-braces with a short side of at least 1 m up to 2.2 % with
-  one owner (the default of the deprecated `concrete_model`) and 0.9 %
-  with one owner per side (narrow rectangles: 16 m × 1 m in 0.2 m of wet
-  concrete, 150 m × 7.75 m bare in 30 over 200 Ω·m); narrower ones more
-  (10 m × 0.5 m: +2.9 % / +0.6 %). For shells as thick as 0.2 m, whose
+  segment an encased mesh foundation is at most 0.6 % high and a rectangle
+  without cross-braces — one owner per side since user decision Q38 — with
+  a short side of at least 1 m at most 0.9 % (150 m × 7.75 m bare in 30
+  over 200 Ω·m; 0.6 % for 16 m × 1 m in 0.2 m of wet concrete; the single
+  owner that the default built for an axis-aligned one up to then was up
+  to 2.2 % high); narrower ones more (10 m × 0.5 m: +0.6 %, one owner
+  +2.9 %). For shells as thick as 0.2 m, whose
   outer radius is not thin against the segments (the engine warns), these
   numbers carry about 0.2 percentage points of model uncertainty. Surface
   potentials near grids, meshes, stars, strip ends and bonded
@@ -167,7 +168,13 @@ shows what agrees with independent references and how well.
   6 200 with a 1 km layer stack), and `fem` does not refuse a world above
   `Engine.max_segments`. It ignores inductance, `return_to`, junctions and
   concrete shells (`BackendCapabilityWarning` or `BackendCapabilityError`;
-  `groundfield.solver.fem`). The reduction gets no further rules; the next
+  `groundfield.solver.fem`). Generated rectangular foundations without
+  cross-braces are four bonded strips (user decision Q38): their radii are
+  summed (−32 % for a 10 m square ring in 100 Ω·m, +21 % as one grid
+  before), the layer rule takes half a side as their half-extent, so three
+  layered worlds that the grid form refused are solved with the warning
+  only (−42 … −58 %), and a rectangle with a side shorter than twice its
+  depth is refused. The reduction gets no further rules; the next
   release replaces it by a conforming axisymmetric model
   ([roadmap](../roadmap.md#scheduled-for-the-next-release), user decision
   Q37).
@@ -239,7 +246,13 @@ shows what agrees with independent references and how well.
   minimum bounding rectangle; `foundation_outline="polygon"` follows the
   outline (ring-style specs only). Outlines smaller than 1 m are widened
   with a warning. Every `building=*` object is a footprint unless excluded
-  with `exclude_building_tags`.
+  with `exclude_building_tags`. A rectangle is one owner per side (user
+  decision Q38), a building outline one owner: a rectangular outline reads
+  like the single owner did, above the same rectangle given by its size
+  (6.5e-6 for 10 m × 8 m; up to 0.33 % bare in homogeneous soil and 1.55 %
+  in 0.2 m of wet concrete for narrow ones). The connection point of a
+  rectangular foundation is the start of its local −y side, a corner; that
+  of an outline its first vertex.
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a
   modelling choice, not a measured value.
