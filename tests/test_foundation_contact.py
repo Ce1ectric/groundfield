@@ -1146,6 +1146,198 @@ def test_layout_drops_tap_the_cable_next_to_any_site_foundation(case: str) -> No
         assert not inside, j.name
 
 
+def _box(xc: float, yc: float, w: float, h: float) -> list[tuple[float, float]]:
+    return [
+        (xc - w / 2, yc - h / 2),
+        (xc + w / 2, yc - h / 2),
+        (xc + w / 2, yc + h / 2),
+        (xc - w / 2, yc + h / 2),
+    ]
+
+
+def _inside_site(world: gf.World, root: str, xy) -> bool:
+    """Whether ``xy`` lies strictly inside the site foundation ``root``
+    (even-odd ray casting against its wires; a point on a wire is not
+    inside). An independent check of the generator's own outline test."""
+    sides = [
+        (a, b)
+        for wire in _wires_of(world, root)
+        for a, b in zip(_plan(wire)[:-1], _plan(wire)[1:], strict=True)
+    ]
+    x, y = float(xy[0]), float(xy[1])
+    for (ax, ay), (bx, by) in sides:
+        d = np.array([bx - ax, by - ay])
+        t = float(np.clip(((x - ax) * d[0] + (y - ay) * d[1]) / (d @ d), 0.0, 1.0))
+        if math.hypot(x - ax - t * d[0], y - ay - t * d[1]) < 1e-6:
+            return False
+    inside = False
+    for (ax, ay), (bx, by) in sides:
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
+
+
+def _layout_with_site(
+    houses, *, cabinet=None, station=None, end_xy=None, cable_kw=None
+) -> tuple[LvNetworkLayout, gf.World]:
+    """A layout with ring-outline houses, a router-made cable from the
+    station (a rod, or a ring foundation of ``station``) to the cabinet
+    (``cabinet`` = ``(xy, foundation kwargs)``) or to ``end_xy``."""
+    fps = [
+        gf.BuildingFootprint(polygon_xy_m=h, building_use="residential", osm_id=k + 1)
+        for k, h in enumerate(houses)
+    ]
+    lay = LvNetworkLayout.from_footprints(
+        fps, substation_xy=(0.0, 0.0), obstacle_clearance_m=0.0
+    )
+    if cabinet is not None:
+        end = lay.add_cabinet(cabinet[0], name="kvs_0")
+        lay.add_pen_cable(start="substation", end=end, **(cable_kw or {}))
+    else:
+        lay.add_pen_cable(start="substation", end_xy=end_xy, **(cable_kw or {}))
+    lay.connect_buildings()
+
+    def ring(kw):
+        if kw is None:
+            return GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)])
+        return GroundingSystemSpec(
+            electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.6, **kw)]
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = lay.to_world(
+            house_grounding=GroundingSystemSpec(
+                electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.8)]
+            ),
+            substation_grounding=ring(station),
+            cabinet_grounding=ring(None if cabinet is None else cabinet[1]),
+            foundation_outline="polygon",
+        )
+    return lay, world
+
+
+# audit R6A-01
+@pytest.mark.parametrize("rot", [0.0, 30.0])
+def test_no_layout_drop_starts_inside_a_cabinet_foundation_behind_a_short_bridge(
+    rot: float,
+) -> None:
+    """A router-made cable to a cabinet with a 2 m ring at (80.5, 0.5) m runs
+    (0, 0) -> (80.5, 0) -> (80.5, 0.5) m: its last corner lies inside the
+    ring. Base: the house south-east of the cabinet was tapped at that
+    corner (a 3.007 m drop from inside the ring across its south wire), and
+    the built cable ran into the ring to the corner and back out to the
+    wire. Now the polyline is clipped where it enters the ring, (79.5, 0) m
+    at 0 degrees, the corner is merged into the cabinet: the cable ends on
+    the ring's west side, and the house's drop leaves the cabinet's ring at
+    the closest pair, 2.5 m at 0 degrees."""
+    houses = [_box(82.3, -6.0, 5.4, 6.0), _box(40.0, 8.0, 8.0, 6.0)]
+    lay, world = _layout_with_site(
+        houses, cabinet=((80.5, 0.5), {"size_m": 2.0, "orientation_deg": rot})
+    )
+    assert lay.pen_cables[0].waypoints == [(0.0, 0.0), (80.5, 0.0), (80.5, 0.5)]
+    root = "kvs_0_foundation_0"
+    for drop in _drops(world):
+        assert not _inside_site(world, root, drop.start[:2]), drop.name
+    for j in world.junctions:
+        assert not _inside_site(world, root, j.connection_point[:2]), j.name
+    pen = [c for c in world.conductors if c.name.startswith("pen_")]
+    last = [c for c in pen if c.end_electrode.startswith(root)]
+    (last,) = last
+    assert not _inside_site(world, root, last.start[:2])
+    # Nothing of the cable runs inside the ring and back out.
+    shared = sum(
+        _collinear_overlap(a, b) for k, a in enumerate(pen) for b in pen[k + 1 :]
+    )
+    assert shared < 1e-9
+    (drop,) = [d for d in _drops(world) if d.name == "service_000"]
+    assert drop.start_electrode.startswith(root)
+    if rot == 0.0:
+        assert last.end[:2] == pytest.approx((79.5, 0.0))
+        assert math.dist(drop.start[:2], drop.end[:2]) == pytest.approx(2.5)
+
+
+# audit R6A-01
+def test_no_layout_drop_starts_inside_the_station_ring_with_a_fine_router_grid() -> (
+    None
+):
+    """With ``min_segment_length_m=1.5`` the router's first leg (0, 0) ->
+    (1.5, 0) m ends inside the 4 m station ring. Base: the house west of the
+    station was tapped at (1.5, 1.5) m inside the ring (a 5.50 m drop across
+    its west wire). Now the corner (1.5, 0) m is merged into the station, the
+    cable leaves the ring at (1.5, 2) m, and the house is fed from the
+    station's west wire, 2 m."""
+    houses = [_box(-6.0, 3.0, 4.0, 3.0), _box(10.0, 30.0, 6.0, 6.0)]
+    lay, world = _layout_with_site(
+        houses,
+        station={"size_m": 4.0},
+        end_xy=(1.5, 40.0),
+        cable_kw={"min_segment_length_m": 1.5},
+    )
+    assert lay.pen_cables[0].waypoints[:2] == [(0.0, 0.0), (1.5, 0.0)]
+    root = "substation_foundation_0"
+    for drop in _drops(world):
+        assert not _inside_site(world, root, drop.start[:2]), drop.name
+    for j in world.junctions:
+        assert not _inside_site(world, root, j.connection_point[:2]), j.name
+    first = next(c for c in world.conductors if c.name == "pen_0_seg_0")
+    assert first.start[:2] == pytest.approx((1.5, 2.0))
+    (drop,) = [d for d in _drops(world) if d.name == "service_000"]
+    assert drop.start_electrode.startswith(root)
+    assert math.dist(drop.start[:2], drop.end[:2]) == pytest.approx(2.0)
+
+
+def _r6a_cabinet_case(case: int):
+    """Audit R6A's cabinet family (``cases_cabinet.py``): a router-made
+    cable from a rod station to a cabinet with a 2 m ring (0 degrees for
+    even cases, 1 ... 89 for odd ones) 60 ... 120 m out, houses on both
+    sides of the street."""
+    rng = np.random.default_rng(9100 + case)
+    end = (
+        float(rng.uniform(60, 120)),
+        float(rng.choice([rng.uniform(-3, 3), rng.uniform(10, 40)])),
+    )
+    houses = []
+    for x in np.arange(5.0, end[0] + 12.0, 11.0):
+        for side in (1, -1):
+            if rng.random() < 0.7:
+                w, h = rng.uniform(5, 9), rng.uniform(5, 8)
+                y0 = side * rng.uniform(2.5, 7.0)
+                houses.append(
+                    _box(float(x + rng.uniform(-2, 2)), y0 + side * h / 2, w, h)
+                )
+    rot = float(rng.uniform(1, 89)) if case % 2 else 0.0
+    return houses, end, rot
+
+
+# audit R6A-01
+def test_no_layout_drop_or_junction_lies_inside_a_cabinet_foundation_in_random_layouts() -> (
+    None
+):
+    """Audit R6A's scan of 200 random layouts with a 2 m cabinet ring: on the
+    base 82 of 2 540 drops started inside the ring (71 at a corner, 11 at a
+    tap) and 79 junctions lay inside it. Now in the same 200 layouts:
+    no drop start and no junction strictly inside the cabinet's foundation;
+    layouts the router refuses (no Manhattan path, houses on the station)
+    are skipped, as in the audit (6 of 200)."""
+    checked = 0
+    for case in range(200):
+        houses, end, rot = _r6a_cabinet_case(case)
+        try:
+            _, world = _layout_with_site(
+                houses, cabinet=(end, {"size_m": 2.0, "orientation_deg": rot})
+            )
+        except (ValueError, RuntimeError):
+            continue
+        checked += 1
+        root = "kvs_0_foundation_0"
+        for drop in _drops(world):
+            assert not _inside_site(world, root, drop.start[:2]), (case, drop.name)
+        for j in world.junctions:
+            assert not _inside_site(world, root, j.connection_point[:2]), (case, j.name)
+    assert checked == 194
+
+
 # user decision Q41, audit R5A-01
 @pytest.mark.parametrize("dy", [0.0, 2e-6, 1e-4, 1e-3, 9e-3])
 def test_a_drop_beside_a_trunk_leaves_it_at_its_end(dy: float) -> None:

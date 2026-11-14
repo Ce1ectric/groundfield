@@ -73,6 +73,7 @@ __all__ = [
     "inside_outlines",
     "join",
     "nearest_point",
+    "segment_enters",
     "wire_pieces",
 ]
 
@@ -691,3 +692,54 @@ def convex_outline(
 
     hull = half(pts) + half(pts[::-1])
     return tuple(hull + hull[:1])
+
+
+def segment_enters(
+    a: Sequence[float],
+    b: Sequence[float],
+    outlines: Sequence[Outline],
+    tol: float = 1e-9,
+) -> bool:
+    """Whether the plan segment ``a -> b`` passes inside one of ``outlines``.
+
+    True when a point of the segment lies strictly inside an outline
+    (:func:`inside_outlines`); a segment that only touches an outline (runs
+    along a side, through a corner, tangent to a circle) does not enter it.
+    """
+    ax, ay = float(a[0]), float(a[1])
+    dx, dy = float(b[0]) - ax, float(b[1]) - ay
+    dd = dx * dx + dy * dy
+    for outline in outlines:
+        if outline.circle is not None:
+            cx, cy, r = outline.circle
+            t = 0.0 if dd == 0.0 else ((cx - ax) * dx + (cy - ay) * dy) / dd
+            t = min(max(t, 0.0), 1.0)
+            if math.hypot(ax + t * dx - cx, ay + t * dy - cy) < r - tol:
+                return True
+            continue
+        # Parameters where the segment meets the outline; the pieces between
+        # them lie wholly inside or outside it: test their midpoints.
+        ts = {0.0, 1.0}
+        pts = outline.xy
+        for (px, py), (qx, qy) in zip(pts[:-1], pts[1:], strict=True):
+            ex, ey = qx - px, qy - py
+            den = dx * ey - dy * ex
+            rx, ry = px - ax, py - ay
+            if den != 0.0:
+                t = (rx * ey - ry * ex) / den
+                u = (rx * dy - ry * dx) / den
+                if -1e-12 <= t <= 1.0 + 1e-12 and -1e-12 <= u <= 1.0 + 1e-12:
+                    ts.add(min(max(t, 0.0), 1.0))
+            elif dd > 0.0:
+                for vx, vy in ((px, py), (qx, qy)):
+                    t = ((vx - ax) * dx + (vy - ay) * dy) / dd
+                    if 0.0 < t < 1.0:
+                        ts.add(t)
+        params = sorted(ts)
+        probes = [
+            0.5 * (t0 + t1) for t0, t1 in zip(params[:-1], params[1:], strict=True)
+        ]
+        for t in probes or [0.0]:
+            if inside_outlines((ax + t * dx, ay + t * dy), [outline], tol):
+                return True
+    return False

@@ -60,9 +60,11 @@ from groundfield.generators.layout.routing import (
 )
 from groundfield.generators._contact import (
     FoundationWire,
+    Outline,
     closest_pair,
     join,
     nearest_point,
+    segment_enters,
 )
 from groundfield.generators._pen_routing import min_section_length
 from groundfield.generators.materialise import _site_geometry, materialise_plan
@@ -700,9 +702,11 @@ class LvNetworkLayout(
         #    than the shortest cable section are merged (a tap a few
         #    millimetres from a corner or from another tap left a section
         #    the Conductor model refuses, audit A3SG-01). A cable or drop
-        #    ends at the point of a site's foundation nearest to it (user
-        #    decision Q41): a house with a foundation is tapped at the
-        #    closest pair between its cable and its foundation wires.
+        #    ends at the point of a site's horizontal electrodes nearest to
+        #    it (user decisions Q41, Q43): a house with a foundation, ring
+        #    or strip is tapped at the closest pair between its cable and
+        #    their wires. Corners inside a site's foundation are part of the
+        #    site (audit R6A-01).
         conductor = ConductorParameters(
             conductor_type="pen",
             wire_radius_m=pen_wire_radius_m,
@@ -717,16 +721,21 @@ class LvNetworkLayout(
             for site in sites
             if site.role in ("substation", "cabinet")
         }
-        wires = {name: g[1] for name, g in geometry.items() if g[1]}
-        meet = _Meeting({name: g[0] for name, g in geometry.items()}, wires)
-        taps = self._service_taps(houses, wires, min_length)
+        wires = {name: g.wires for name, g in geometry.items() if g.wires}
+        outlines = {name: g.outlines for name, g in geometry.items() if g.outlines}
+        meet = _Meeting({name: g.point for name, g in geometry.items()}, wires)
+        built = {
+            cable.name: self._built_segments(cable, wires, outlines)
+            for cable in self.pen_cables
+        }
+        taps = self._service_taps(houses, wires, min_length, built)
         junctions: list[PlannedJunction] = []
         branches: list[PlannedBranch] = []
         cable_nodes: dict[str, list[tuple[str, tuple[float, float]]]] = {}
         for cable in self.pen_cables:
             nodes = self._merge_close_nodes(
                 cable.name,
-                self._cable_nodes(cable, junctions, taps),
+                self._cable_nodes(cable, junctions, taps, built[cable.name].merged),
                 junctions,
                 anchor_points,
                 min_length,
@@ -829,23 +838,27 @@ class LvNetworkLayout(
         junctions at its corners and tap points, so the cable follows its
         Manhattan polyline; each :class:`BuildingConnection` becomes one
         conductor from the tap junction to the house foundation. A
-        conductor routed to a foundation ends at the point of the
-        foundation nearest to it (user decision Q41): a house with a
-        foundation is tapped at the closest pair in plan of its cable and
-        its foundation wires (not at the tap point of its
+        conductor routed to a site with a horizontal earth electrode (a
+        foundation, since user decision Q43 also a circular ring or a
+        strip) ends at the point of that electrode nearest to it (user
+        decision Q41): such a house is tapped at the closest pair in plan of
+        its cable and its horizontal wires (not at the tap point of its
         :class:`BuildingConnection`, the cable point nearest to the
-        centroid), and its drop ends there on the foundation, at the wire's
-        depth, attached to that wire; a cable leaves a substation or a
-        cabinet with a foundation at the foundation's point nearest to the
-        cable's next node. Taps lie on the layout polyline, from the
-        projection of that point onto it on (the polyline inside the site's
-        foundation is not a cable), so no tap on the first or last segment
-        lies inside a site foundation and a rotated, polygon or offset site
-        foundation leaves the taps of the houses on the cable (audits
-        R4A-03, R5A-02); a tap at the projection is the site itself; a waypoint (a corner of the cable) inside a site
-        foundation stays a node of the cable, and houses may tap it there
-        (audit R6A-01; a known limitation). Sites without a foundation keep the
-        connection point of their anchor.
+        centroid), and its drop ends there, at the wire's depth, attached to
+        that wire; a cable leaves a substation or a cabinet with horizontal
+        electrodes (the default substation ring) at their point nearest to
+        the cable's next node. Taps lie on the layout polyline where the
+        cable is built: it leaves a site where its polyline leaves the
+        site's closed electrodes (a rectangle, a building outline, a circle)
+        for the last time, the corners before that are part of the site
+        (audit R6A-01: a router corner inside a small cabinet ring was a
+        node that houses tapped), and the segment that leaves the site is
+        clipped at the projection onto it of the site's point nearest to its
+        far waypoint, so no tap and no corner lies inside a site foundation
+        and a rotated, polygon or offset site foundation leaves the taps of
+        the houses on the cable (audits R4A-03, R5A-02); a tap at the
+        projection, or at the site's waypoint, is the site itself. A site
+        with rods only keeps the connection point of its anchor.
 
         Parameters
         ----------
@@ -932,111 +945,177 @@ class LvNetworkLayout(
         houses: dict[int, PlannedSite],
         wires: dict[str, list[FoundationWire]],
         min_length: float = 0.0,
+        built: Optional[dict[str, "_BuiltCable"]] = None,
     ) -> dict[int, tuple[float, float]]:
-        """Tap point of every connection on its cable (user decision Q41).
+        """Tap point of every connection on its cable (user decisions Q41, Q43).
 
-        A house with a foundation is tapped at the closest pair in plan
-        between its cable and the wires of its foundation; any other house
-        at the tap point of its :class:`BuildingConnection` (the cable point
-        nearest to the footprint centroid). Taps lie on the waypoint line,
-        where the cable's junctions are; where the cable starts or ends at a
-        site with a foundation, its first (last) segment is clipped at the
-        projection onto it of the foundation's point nearest to the next
-        (previous) waypoint (:meth:`_built_segments`), so no tap on that
-        segment lies inside a site foundation (audit R4A-03) and a rotated,
-        polygon or offset site foundation still lets the houses tap the
-        cable (audit R5A-02); a tap closer than ``min_length`` (m) to the
-        clip point is the site itself; a waypoint (a corner of the cable) inside a site
-        foundation stays a node of the cable, and houses may tap it there
-        (audit R6A-01; a known limitation).
+        A house with horizontal earth electrodes (a foundation, a ring, a
+        strip) is tapped at the closest pair in plan between its cable and
+        their wires; any other house at the tap point of its
+        :class:`BuildingConnection` (the cable point nearest to the footprint
+        centroid). Taps lie on the waypoint line, where the cable's junctions
+        are, and only where the cable is built (:meth:`_built_segments`):
+        where it starts or ends at a site with horizontal electrodes, the
+        waypoints inside the site's closed electrodes are merged into the
+        site (audit R6A-01) and the first (last) segment that leaves it is
+        clipped at the projection onto it of the site's point nearest to the
+        segment's far waypoint, so no tap lies inside a site foundation
+        (audit R4A-03) and a rotated, polygon or offset site foundation still
+        lets the houses tap the cable (audit R5A-02). A tap that the pair (or
+        the connection) puts where the cable is not built moves to the
+        nearest built point; a tap closer than ``min_length`` (m) to the clip
+        point is the site itself (or the segment's far waypoint, when the
+        clip lies there).
         """
         cables = {cable.name: cable for cable in self.pen_cables}
-        built = {name: self._built_segments(c, wires) for name, c in cables.items()}
+        if built is None:
+            built = {
+                name: self._built_segments(c, wires, {}) for name, c in cables.items()
+            }
         out: dict[int, tuple[float, float]] = {}
         for c in self.connections:
             house = houses.get(c.house_idx)
             cable = cables.get(c.cable_name)
             foundation = wires.get(house.name) if house is not None else None
-            if foundation and cable is not None and cable.segments():
-                segments = cable.segments()
+            if cable is None or not cable.segments():
+                out[c.house_idx] = (float(c.tap_point_xy[0]), float(c.tap_point_xy[1]))
+                continue
+            segments = cable.segments()
+            clipped = built[cable.name]
+            if foundation:
                 i, t, _ = closest_pair(segments, foundation)
                 tap = _point_at(segments[i], t)
-                clipped, sites = built[cable.name]
-                if sites and _off_segment(tap, clipped[i]):
-                    # The pair lies where the built cable does not run.
-                    i, t, _ = closest_pair(clipped, foundation)
-                    tap = _point_at(clipped[i], t)
-                for point, waypoint, other in sites:
-                    if math.dist(tap, point) < min_length:
-                        # The site, unless the clip lies at the segment's
-                        # other waypoint (a site foundation beyond it): then
-                        # the cable reaches the house there.
-                        tap = (
-                            other if math.dist(point, other) < min_length else waypoint
-                        )
-                out[c.house_idx] = tap
             else:
-                out[c.house_idx] = (
-                    float(c.tap_point_xy[0]),
-                    float(c.tap_point_xy[1]),
-                )
+                tap = (float(c.tap_point_xy[0]), float(c.tap_point_xy[1]))
+                i = None
+            if clipped.sites and clipped.off(tap, i):
+                # The pair (or the connection's tap) lies where the built
+                # cable does not run: inside a site, or on the part of a
+                # segment the clip cut off.
+                kept = clipped.kept()
+                if foundation:
+                    j, t, _ = closest_pair(kept, foundation)
+                    tap = _point_at(kept[j], t)
+                else:
+                    tap = min(
+                        (_foot_on_segment(tap, seg) for seg in kept),
+                        key=lambda q: math.dist(q, tap),
+                    )
+            if not foundation and tap == tuple(c.tap_point_xy):
+                out[c.house_idx] = (float(tap[0]), float(tap[1]))
+                continue
+            for point, waypoint, other in clipped.sites:
+                if math.dist(tap, point) < min_length:
+                    # The site, unless the clip lies at the segment's
+                    # other waypoint (a site foundation beyond it): then
+                    # the cable reaches the house there.
+                    tap = other if math.dist(point, other) < min_length else waypoint
+            out[c.house_idx] = tap
         return out
 
     def _built_segments(
-        self, cable: PenCable, wires: dict[str, list[FoundationWire]]
-    ) -> tuple[
-        list[tuple[tuple[float, float], tuple[float, float]]],
-        list[tuple[tuple[float, float], tuple[float, float], tuple[float, float]]],
-    ]:
+        self,
+        cable: PenCable,
+        wires: dict[str, list[FoundationWire]],
+        outlines: Optional[dict[str, list[Outline]]] = None,
+    ) -> "_BuiltCable":
         """Segments of ``cable`` where taps may lie, and where it meets its sites.
 
-        The cable leaves a site with a foundation at the foundation's point
-        nearest to the next waypoint (user decision Q41), which lies off the
-        waypoint line when the foundation is rotated, a polygon or offset.
-        The taps stay on the waypoint line, where the cable's junctions are:
-        the first (last) segment is clipped at the projection of that
-        contact onto it (audit R5A-02). The clipped part lies outside the
-        foundation: every point between the projection and the next
-        waypoint is closer to that waypoint than the contact, the nearest
-        point of the foundation to it (audit R4A-03). For an axis-aligned
-        site foundation centred on its waypoint the projection is the
-        contact itself. Returns the segments and, for each site with a
-        foundation at an end, the clip point, the site's waypoint and the
-        segment's other waypoint.
+        The cable leaves a site with horizontal electrodes at their point
+        nearest to the next node (user decisions Q41, Q43), which lies off the
+        waypoint line when the site foundation is rotated, a polygon or
+        offset. The taps stay on the waypoint line, where the cable's
+        junctions are. The cable leaves a start site where its polyline
+        leaves the site's closed electrodes (``outlines``: a rectangle, a
+        building outline, a circle) for the last time, on the last segment
+        that passes inside them; the waypoints before that segment's far
+        waypoint are merged into the site — a corner of a router-made cable
+        inside a small cabinet ring, or a cable that overshoots a cabinet
+        and turns back into it (audit R6A-01) — and that segment is clipped
+        at the projection onto it of the site's point nearest to its far
+        waypoint (audit R5A-02). The clipped part
+        lies outside the site: every point between the projection and the
+        outside waypoint is closer to that waypoint than the contact, the
+        nearest point of the site to it (audit R4A-03). For an axis-aligned
+        site foundation centred on its waypoint, whose next waypoint lies
+        outside, the projection is the contact itself and nothing is merged.
+        The same, mirrored, at the cable's end site: the cable reaches it on
+        the first segment (not before the start site's) that passes inside
+        it. A segment that only touches a site (along a side, through a
+        corner) does not pass inside it.
         """
         segments = [(tuple(a), tuple(b)) for a, b in cable.segments()]
-        sites: list[
-            tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
-        ] = []
+        outlines = outlines or {}
+        built = _BuiltCable(list(segments), [], frozenset())
         if not segments:
-            return segments, sites
+            return built
+        points = [tuple(float(v) for v in wp) for wp in cable.waypoints]
+        m = len(points) - 1
         start = wires.get(cable.start_anchor)
         end = wires.get(cable.end_anchor) if cable.end_anchor is not None else None
-        first, last = segments[0], segments[-1]
+        merged: set[int] = set()
+        # The last segment that passes inside the start site, the first one
+        # (not before it) that passes inside the end site: the cable leaves
+        # the start site on segment k_start - 1 and reaches the end site on
+        # segment k_end; the waypoints between them and the sites are part
+        # of the sites.
+        k_start = 1
         if start:
-            clip = _foot_on_segment(nearest_point(first[1], start).xy, first)
-            sites.append((clip, first[0], first[1]))
-            segments[0] = (clip, segments[0][1])
+            inside = outlines.get(cable.start_anchor, [])
+            entering = [
+                j for j, (a, b) in enumerate(segments) if segment_enters(a, b, inside)
+            ]
+            k_start = (entering[-1] if entering else 0) + 1
+        k_end = m - 1
         if end:
-            clip = _foot_on_segment(nearest_point(last[0], end).xy, last)
-            sites.append((clip, last[1], last[0]))
-            segments[-1] = (segments[-1][0], clip)
-        return segments, sites  # type: ignore[return-value]
+            inside = outlines.get(cable.end_anchor, [])  # type: ignore[arg-type]
+            entering = [
+                j for j in range(k_start - 1, m) if segment_enters(*segments[j], inside)
+            ]
+            k_end = entering[0] if entering else m - 1
+        # The clips are taken on the segments of the waypoint line.
+        clips: dict[int, list[tuple[int, tuple[float, float]]]] = {}
+        if start:
+            seg = segments[k_start - 1]
+            clip = _foot_on_segment(nearest_point(points[k_start], start).xy, seg)
+            built.sites.append((clip, points[0], points[k_start]))
+            clips.setdefault(k_start - 1, []).append((0, clip))
+            merged.update(range(1, k_start))
+        if end:
+            seg = segments[k_end]
+            clip = _foot_on_segment(nearest_point(points[k_end], end).xy, seg)
+            built.sites.append((clip, points[m], points[k_end]))
+            clips.setdefault(k_end, []).append((1, clip))
+            merged.update(range(k_end + 1, m))
+        for j, seg in enumerate(segments):
+            a, b = seg
+            for side, clip in clips.get(j, []):
+                if side == 0:
+                    a = clip
+                else:
+                    b = clip
+            skipped = (start and j < k_start - 1) or (end and j > k_end)
+            built.segments[j] = None if skipped else (a, b)
+        built.merged = frozenset(merged)
+        return built
 
     def _cable_nodes(
         self,
         cable: PenCable,
         junctions: list[PlannedJunction],
         taps: Optional[dict[int, tuple[float, float]]] = None,
+        merged: frozenset[int] = frozenset(),
     ) -> list[tuple[str, tuple[float, float]]]:
         """Ordered nodes of a cable; new junctions are appended to ``junctions``.
 
         The first waypoint is the start site; the last one is the end
         site when the cable ends at a cabinet; every other corner and
         every tap point on the cable is a junction
-        (``f"{cable}_node_{k}"`` / ``f"{cable}_tap_{n}"``). ``taps`` maps a
-        house index to its tap point (:meth:`_service_taps`); default the
-        tap points of the connections.
+        (``f"{cable}_node_{k}"`` / ``f"{cable}_tap_{n}"``), except the
+        corners in ``merged`` (waypoint indices inside a site's foundation,
+        :meth:`_built_segments`), which are part of that site and no node
+        (audit R6A-01). ``taps`` maps a house index to its tap point
+        (:meth:`_service_taps`); default the tap points of the connections.
         """
         taps_for_cable = sorted(
             {
@@ -1060,12 +1139,18 @@ class LvNetworkLayout(
             if k == len(cable.waypoints) - 1 and cable.end_anchor is not None:
                 nodes.append((self._resolve_anchor(cable.end_anchor), wp_t))
                 continue
+            if k in merged:
+                # A corner inside the site foundation: walked for the taps,
+                # then dropped (part of the site).
+                nodes.append(("", wp_t))
+                continue
             node_name = f"{cable.name}_node_{k}"
             junctions.append(PlannedJunction(name=node_name, position_xy=wp_t))
             nodes.append((node_name, wp_t))
-        return self._insert_tap_nodes_on_cable(
+        out = self._insert_tap_nodes_on_cable(
             cable=cable, nodes=nodes, tap_lookup=tap_lookup, junctions=junctions
         )
+        return [node for node in out if node[0]] if merged else out
 
     @staticmethod
     def _merge_close_nodes(
@@ -1150,11 +1235,18 @@ class LvNetworkLayout(
         Walks the cable in segment order and inserts every tap that
         falls inside the segment (sorted along the segment
         direction so adjacent stubs on a long bus segment stay in
-        physical order).
+        physical order). A tap at the waypoint of the cable's start or end
+        site is that site, also where the polyline passes the waypoint on
+        an earlier segment (a cable that overshoots its cabinet and turns
+        back to it; audit R6A-01).
         """
         if not tap_lookup:
             return nodes
         taps_remaining = set(tap_lookup.keys())
+        sites = [nodes[0][1]] + ([nodes[-1][1]] if cable.end_anchor is not None else [])
+        for tap_pos in list(taps_remaining):
+            if any(_approximately_equal(tap_pos, p) for p in sites):
+                taps_remaining.discard(tap_pos)
         out: list[tuple[str, tuple[float, float]]] = []
         for j in range(len(nodes) - 1):
             a0, p0 = nodes[j]
@@ -1232,13 +1324,54 @@ class OrtsnetzLayout(LvNetworkLayout):
 # ---------------------------------------------------------------------
 
 
-class _Meeting:
-    """Where the conductors of a layout meet its nodes (user decision Q41).
+class _BuiltCable:
+    """Where a layout cable is built (:meth:`LvNetworkLayout._built_segments`).
 
-    A junction is met at its position and depth, a site without a
-    foundation at the connection point of its anchor, a site with a
-    foundation at the point of its wires nearest to the conductor's other
-    end (two foundations at their closest pair), at the wire's depth.
+    Attributes
+    ----------
+    segments
+        The waypoint segments, with the first / last one that leaves a site
+        clipped and ``None`` for those inside a site.
+    sites
+        For each end at a site with horizontal electrodes: the clip point,
+        the site's waypoint and the far waypoint of the clipped segment.
+    merged
+        Indices of the waypoints inside a site (part of the site, no node).
+    """
+
+    def __init__(
+        self,
+        segments: list,
+        sites: list[
+            tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+        ],
+        merged: frozenset[int],
+    ) -> None:
+        self.segments = segments
+        self.sites = sites
+        self.merged = merged
+
+    def kept(self) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+        """The segments where the cable is built."""
+        return [seg for seg in self.segments if seg is not None]
+
+    def off(self, point: tuple[float, float], index: Optional[int]) -> bool:
+        """Whether ``point`` (on segment ``index`` of the waypoint line, or
+        anywhere for ``None``) lies where the cable is not built."""
+        if index is not None:
+            seg = self.segments[index]
+            return seg is None or _off_segment(point, seg)
+        return all(_off_segment(point, seg) for seg in self.kept())
+
+
+class _Meeting:
+    """Where the conductors of a layout meet its nodes (user decisions Q41, Q43).
+
+    A junction is met at its position and depth, a site with rods only at
+    the connection point of its anchor, a site with horizontal electrodes
+    (foundation, ring, strip) at the point of their wires nearest to the
+    conductor's other end (two such sites at their closest pair), at the
+    wire's depth.
     """
 
     def __init__(
