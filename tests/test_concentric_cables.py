@@ -122,10 +122,13 @@ def _loop_inductance(world: gf.World, model: str) -> float:
 @pytest.mark.parametrize("model", ["sommerfeld", "perfect_mirror", "carson_series"])
 @pytest.mark.parametrize("ds", [None, 10.0], ids=["lumped", "distributed"])
 def test_marked_shield_reads_the_analytic_coaxial_loop(model: str, ds) -> None:
-    """26.97 µH analytic; the solver -0.02 % (lumped) / -0.22 % (10 m
-    sub-pieces), the finite length. Base e6124cd: 31.97 µH (+18.5 %)."""
+    """26.97 µH analytic; the solver -2.2e-4 (the finite length and the
+    end terms of the thin-wire self terms; carson_series -7e-5), lumped and
+    in 10 m sub-pieces alike (audit W1A-02: the pieces read -0.2 % on the
+    snapshot 6f63deb, which the former bound of 3e-3 hid). Base e6124cd:
+    31.97 µH (+18.5 %)."""
     loop = _loop_inductance(_loop_world("cable_shield", ds), model)
-    assert loop == pytest.approx(COAX, rel=3e-3)
+    assert loop == pytest.approx(COAX, rel=3e-4)
     assert loop < COAX + 0.5 * MU0 * LENGTH / (8.0 * math.pi)
 
 
@@ -291,3 +294,158 @@ def test_the_marker_survives_a_json_round_trip() -> None:
     assert _loop_inductance(back, "sommerfeld") == pytest.approx(
         _loop_inductance(world, "sommerfeld"), rel=1e-12
     )
+
+
+# ---------------------------------------------------------------------
+# Pieces of conductors lying on one axis (audit W1A-02)
+# ---------------------------------------------------------------------
+
+
+def _axis_pieces(n: int, x0: float = 0.0, x1: float = LENGTH) -> np.ndarray:
+    xs = np.linspace(x0, x1, n + 1)
+    return np.array(
+        [[[xs[k], 0.0, DEPTH], [xs[k + 1], 0.0, DEPTH]] for k in range(n)], dtype=float
+    )
+
+
+def _matrix_loop(
+    n_core: int, n_shield: int, marked: bool, image: str = "none"
+) -> float:
+    """Loop inductance (core out, shield back) from the matrix of the pieces,
+    with one conductor label per conductor."""
+    seg = np.concatenate([_axis_pieces(n_core), _axis_pieces(n_shield)])
+    radii = np.array([R_CORE] * n_core + [R_SHIELD] * n_shield)
+    shields = np.array([False] * n_core + [marked] * n_shield)
+    L = build_inductance_matrix(
+        seg,
+        radii,
+        image=image,
+        shields=shields,
+        include_internal=~shields,
+        conductors=np.array([0] * n_core + [1] * n_shield),
+    )
+    s = np.array([1.0] * n_core + [-1.0] * n_shield)
+    return float(s @ L @ s)
+
+
+# audit W1A-02, user decisions Q32 / Q33
+@pytest.mark.parametrize("shield_type", ["cable_shield", "generic"])
+@pytest.mark.parametrize("ds", [10.0, 5.0, 1.0, 0.25])
+def test_the_coax_loop_does_not_depend_on_the_conductor_pieces(
+    shield_type: str, ds: float
+) -> None:
+    """The core and shield pieces of a coax (and of a touching unmarked
+    pair) add up to the lumped loop: every pair of pieces of two conductors
+    lying on one axis couples at the on-axis distance (the shield radius or
+    r_c + r_s), also end to end and apart. Snapshot 6f63deb: 26.912 /
+    26.852 / 26.374 / 24.608 uH marked (-0.2 / -0.4 / -2.2 / -8.7 %),
+    43.400 ... 40.343 uH unmarked, against 26.966 / 43.472 uH lumped."""
+    lumped = _loop_inductance(_loop_world(shield_type, None), "perfect_mirror")
+    loop = _loop_inductance(_loop_world(shield_type, ds), "perfect_mirror")
+    assert loop == pytest.approx(lumped, rel=1e-4)
+    assert lumped == pytest.approx(
+        COAX if shield_type == "cable_shield" else TOUCHING, rel=3e-4
+    )
+
+
+# audit W1A-02, user decisions Q32 / Q33
+@pytest.mark.parametrize("model", ["sommerfeld", "carson_series"])
+def test_the_coax_pieces_add_up_under_every_earth_model(model: str) -> None:
+    lumped = _loop_inductance(_loop_world("cable_shield", None), model)
+    loop = _loop_inductance(_loop_world("cable_shield", 1.0), model)
+    assert loop == pytest.approx(lumped, rel=1e-4)
+
+
+# audit W1A-02, user decision Q32
+@pytest.mark.parametrize("marked", [True, False])
+@pytest.mark.parametrize("image", ["none", "additive", "antiparallel"])
+def test_matrix_pieces_on_one_axis_add_up(marked: bool, image: str) -> None:
+    """Core and shield in different pieces (100 / 37 / 7 / 1 m and 1 m /
+    0.5 m), the loop of the matrix equals the lumped one to round-off; the
+    lumped mutual is the closed form at the on-axis distance."""
+    lumped = _matrix_loop(1, 1, marked, image)
+    for n_core, n_shield in ((10, 10), (3, 14), (100, 200)):
+        assert _matrix_loop(n_core, n_shield, marked, image) == pytest.approx(
+            lumped, rel=1e-10
+        )
+    d = R_SHIELD if marked else R_CORE + R_SHIELD
+    L = build_inductance_matrix(
+        np.concatenate([_axis_pieces(1), _axis_pieces(1)]),
+        np.array([R_CORE, R_SHIELD]),
+        image="none",
+        shields=np.array([False, marked]),
+    )
+    assert L[0, 1] == pytest.approx(parallel_segments_mutual(LENGTH, d), rel=1e-13)
+
+
+# audit W1A-02, user decision Q32
+def test_a_shield_made_of_two_conductors_equals_one_shield() -> None:
+    """A shield of two conductors meeting end to end at 40 m around one
+    core: the two shield halves continue one tube (filament on the axis,
+    no lateral distance), each couples to the core at the shield radius."""
+    core = _axis_pieces(10)
+    shield = np.concatenate([_axis_pieces(4, 0.0, 40.0), _axis_pieces(6, 40.0, LENGTH)])
+    seg = np.concatenate([core, shield])
+    radii = np.array([R_CORE] * 10 + [R_SHIELD] * 10)
+    shields = np.array([False] * 10 + [True] * 10)
+    labels = np.array(["core"] * 10 + ["shield_a"] * 4 + ["shield_b"] * 6)
+    L = build_inductance_matrix(
+        seg,
+        radii,
+        image="none",
+        shields=shields,
+        include_internal=~shields,
+        conductors=labels,
+    )
+    s = np.array([1.0] * 10 + [-1.0] * 10)
+    assert float(s @ L @ s) == pytest.approx(_matrix_loop(1, 1, True), rel=1e-10)
+
+
+# audit W1A-02 (guard: worlds without conductors beside each other)
+def test_conductors_meeting_end_to_end_on_one_axis_keep_the_filament() -> None:
+    """A PEN main split into conductors at its taps lies on one axis but no
+    two of its conductors lie beside each other: the labels change nothing,
+    and a straight wire in pieces keeps the self inductance of the whole."""
+    seg = np.concatenate([_axis_pieces(5, 0.0, 50.0), _axis_pieces(7, 50.0, LENGTH)])
+    radii = np.full(12, 0.008)
+    plain = build_inductance_matrix(seg, radii, image="additive")
+    labelled = build_inductance_matrix(
+        seg, radii, image="additive", conductors=np.array([0] * 5 + [1] * 7)
+    )
+    assert np.array_equal(plain, labelled)
+    whole = build_inductance_matrix(_axis_pieces(1), radii[:1], image="none")
+    pieces = build_inductance_matrix(seg, radii, image="none", conductors=np.zeros(12))
+    assert pieces.sum() == pytest.approx(whole.sum(), rel=1e-13)
+
+
+# audit W1A-02, user decision Q32
+def test_the_on_axis_rule_is_free_of_order_and_direction() -> None:
+    """Permuting and reversing the pieces permutes the core-shield block
+    bit for bit (up to the orientation sign), and the loop oracle agrees
+    with the vectorised assembly."""
+    seg = np.concatenate([_axis_pieces(4), _axis_pieces(3, 10.0, LENGTH - 20.0)])
+    radii = np.array([R_CORE] * 4 + [R_SHIELD] * 3)
+    shields = np.array([False] * 4 + [True] * 3)
+    labels = np.array([0] * 4 + [1] * 3)
+    for image in ("none", "additive", "antiparallel"):
+        kw = dict(image=image, shields=shields, include_internal=~shields)
+        L = build_inductance_matrix(seg, radii, conductors=labels, **kw)
+        oracle = _build_inductance_matrix_loop(seg, radii, conductors=labels, **kw)
+        assert np.array_equal(L, oracle)
+    L = build_inductance_matrix(
+        seg, radii, conductors=labels, image="none", shields=shields
+    )
+    perm = np.array([5, 2, 0, 6, 3, 1, 4])
+    flip = np.array([1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0])
+    seg_p = seg[perm].copy()
+    seg_p[flip < 0] = seg_p[flip < 0][:, ::-1, :]
+    L_p = build_inductance_matrix(
+        seg_p,
+        radii[perm],
+        conductors=labels[perm],
+        image="none",
+        shields=shields[perm],
+    )
+    expected = L[np.ix_(perm, perm)] * np.outer(flip, flip)
+    cross = labels[perm][:, None] != labels[perm][None, :]
+    assert np.array_equal(L_p[cross], expected[cross])

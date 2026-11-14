@@ -262,9 +262,18 @@ the surface plane are rejected under this image convention, as before.
   metre: 26.97 µH for 100 m with a 5 mm core and a 15 mm shield
   (31.97 µH with the internal inductance of a solid shield, as up to
   Q33). Two unmarked conductors on one axis are separate cables and
-  touch (43.47 µH for the same pair). At the low level,
+  touch (43.47 µH for the same pair). A wire inside a shield couples at
+  the shield radius at every axial offset, and for two other conductors
+  lying beside each other a point lies beside the partner when its foot
+  falls inside the partner's whole conductor: the sub-pieces of the two
+  conductors then add up to the lumped pair (audit W1A-02; before, the
+  coax in 1 m pieces read 2.2 % low). At the low level,
   `build_inductance_matrix(..., shields=[False, True],
-  include_internal=[True, False])` does the same. The
+  include_internal=[True, False], conductors=[0, 1])` does the same: the
+  marker leaves the self terms alone, so a shield needs
+  `include_internal=False` (else it keeps the 50 nH/m of a solid wire,
+  31.97 µH), and `conductors` labels the pieces of each conductor (without
+  it every segment is a conductor of its own). The
   value does not depend on the order or the direction of the segments,
   is continuous in the geometry, and leaves chain neighbours, bends
   turning by less than 90° and pairs farther apart unchanged. For unequal

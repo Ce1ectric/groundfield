@@ -583,11 +583,24 @@ def _assemble_inductance_matrix(
         extra = {}
         if shields.any():
             extra = {"shields": shields, "include_internal": ~shields}
+        # audit W1A-02: the pieces of two conductors lying beside each other
+        # along one axis (a core inside a shield, two cables drawn on one
+        # axis) couple at the on-axis distance, so they add up to the lumped
+        # pair; a branch of unknown conductor counts as a conductor of its own.
+        label_of: dict[object, int] = {}
+        labels = [
+            label_of.setdefault(
+                name if (name := getattr(b, "conductor", None)) is not None else k,
+                len(label_of),
+            )
+            for k, b in records
+        ]
         L_sub = build_inductance_matrix(
             seg_endpoints,
             radii,
             image=IMAGE_OF_EARTH_MODEL[earth_model],
             touching=SOLVER_TOUCHING,
+            conductors=np.array(labels, dtype=int),
             **extra,
         )
         L_full[np.ix_(idx, idx)] = L_sub

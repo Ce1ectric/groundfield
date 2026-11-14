@@ -508,7 +508,9 @@ class _DistributedBranch:
     branch endpoints in 3-D, the wire radius and whether the conductor is
     a cable shield (``conductor_type="cable_shield"``: a thinner wire on
     its axis is a core inside it, and its self term has no internal
-    inductance of a solid wire; user decisions Q32 and Q33).
+    inductance of a solid wire; user decisions Q32 and Q33), and the name
+    of the conductor (the pieces of two conductors lying beside each other
+    along one axis couple at the on-axis distance; audit W1A-02).
     """
 
     node_a: str
@@ -519,6 +521,7 @@ class _DistributedBranch:
     wire_radius: float
     inductive: bool  # True if the parent conductor enables Neumann coupling
     shield: bool = False  # True for conductor_type == "cable_shield"
+    conductor: str | None = None  # name of the parent conductor (audit W1A-02)
 
 
 def _conductor_node_name(conductor_name: str, k: int) -> str:
@@ -676,6 +679,7 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
                     wire_radius=conductor.wire_radius,
                     inductive=inductive,
                     shield=shield,
+                    conductor=conductor.name,
                 )
             )
     else:
@@ -700,6 +704,7 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
                     wire_radius=conductor.wire_radius,
                     inductive=inductive,
                     shield=shield,
+                    conductor=conductor.name,
                 )
             )
 
