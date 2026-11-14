@@ -755,9 +755,11 @@ def test_layout_houses_without_a_foundation_keep_the_rod_head() -> None:
 # ---------------------------------------------------------------------
 
 
-def _collinear_overlap(a, b, tol: float = 1e-3) -> float:
+def _collinear_overlap(a, b, tol: float = MIN_DROP_LENGTH_M) -> float:
     """Plan length in m over which the straight conductors ``a`` and ``b``
-    run on one line (within ``tol``)."""
+    run on one line: both ends of ``b`` within ``tol`` of the line of ``a``
+    (default one minimum section, 1 cm: the tolerance of the router's rule
+    that a drop leaves a cable it would run along, audit R5A-01)."""
     a0, a1 = np.asarray(a.start[:2]), np.asarray(a.end[:2])
     b0, b1 = np.asarray(b.start[:2]), np.asarray(b.end[:2])
     la, lb = np.linalg.norm(a1 - a0), np.linalg.norm(b1 - b0)
@@ -1001,6 +1003,254 @@ def test_layout_tap_never_lies_inside_a_site_foundation(end_site: str) -> None:
     x_drop = 0.5 if cab_xy is None else 58.5
     assert drop.start[:2] == pytest.approx((x_drop, 2.0))
     assert drop.end[:2] == pytest.approx((x_drop, 6.0))
+
+
+def _segment_distance(a0, a1, b0, b1) -> float:
+    """Exact plan distance in m between the segments ``a0 a1`` and ``b0 b1``
+    (zero when they cross; otherwise the smallest of the four end-point
+    projections)."""
+    a0, a1, b0, b1 = (np.asarray(p, dtype=float)[:2] for p in (a0, a1, b0, b1))
+
+    def orient(p, q, r) -> float:
+        return float((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]))
+
+    if (
+        orient(a0, a1, b0) * orient(a0, a1, b1) < 0.0
+        and orient(b0, b1, a0) * orient(b0, b1, a1) < 0.0
+    ):
+        return 0.0
+
+    def to_segment(p, s0, s1) -> float:
+        d = s1 - s0
+        n2 = float(d @ d)
+        t = 0.0 if n2 == 0.0 else float(np.clip((p - s0) @ d / n2, 0.0, 1.0))
+        return float(np.hypot(*(p - (s0 + t * d))))
+
+    return min(
+        to_segment(a0, b0, b1),
+        to_segment(a1, b0, b1),
+        to_segment(b0, a0, a1),
+        to_segment(b1, a0, a1),
+    )
+
+
+_SITE_FOUNDATIONS = {
+    "station rotated 30": ("station", {"size_m": 4.0, "orientation_deg": 30.0}),
+    "station polygon": (
+        "station",
+        {"polygon_xy_m": ((-2.0, -2.0), (2.5, -1.0), (2.0, 2.0), (-1.5, 2.5))},
+    ),
+    "station offset": ("station", {"size_m": 4.0, "offset_xy_m": (0.0, 3.0)}),
+    "cabinet rotated 30": ("cabinet", {"size_m": 2.0, "orientation_deg": 30.0}),
+    "cabinet polygon": (
+        "cabinet",
+        {"polygon_xy_m": ((-1.0, -1.0), (1.2, -0.5), (1.0, 1.0), (-0.8, 1.3))},
+    ),
+}
+
+
+# user decision Q41, audit R5A-02 (regression of the R4A-03 fix)
+@pytest.mark.parametrize("case", list(_SITE_FOUNDATIONS))
+def test_layout_drops_tap_the_cable_next_to_any_site_foundation(case: str) -> None:
+    """Two houses north of an 80 m layout cable whose station (or end
+    cabinet) has a rotated, polygon or offset foundation. ``e91f3c0`` tapped
+    the waypoint line: 6 m drops (up to 0.13 m above the closest pair of the
+    built cable, whose first / last section is slanted). Snapshot
+    ``f7db449``: the taps were computed on the slanted section, refused by
+    the axis-aligned cable, and the drops fell back to the station, the
+    cabinet or the far end node, 14.9 … 36.5 m. Now the taps stay on the
+    waypoint line, clipped at the projection of the site contact on it."""
+    where, spec = _SITE_FOUNDATIONS[case]
+    site = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.6, **spec)]
+    )
+    plain = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", size_m=4.0, depth_m=0.6)]
+    )
+    xs = [20.0, 40.0] if where == "station" else [40.0, 60.0]
+    footprints = [
+        gf.BuildingFootprint(
+            polygon_xy_m=[(x - 4, 6), (x + 4, 6), (x + 4, 14), (x - 4, 14)],
+            building_use="residential",
+            osm_id=k + 1,
+        )
+        for k, x in enumerate(xs)
+    ]
+    lay = LvNetworkLayout.from_footprints(
+        footprints, substation_xy=(0.0, 0.0), obstacle_clearance_m=0.0
+    )
+    if where == "station":
+        lay.add_pen_cable(start="substation", end_xy=(80.0, 0.0))
+    else:
+        lay.add_pen_cable(
+            start="substation", end=lay.add_cabinet((80.0, 0.0), name="kvs_0")
+        )
+    lay.connect_buildings()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = lay.to_world(
+            house_grounding=GroundingSystemSpec(
+                electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.8)]
+            ),
+            substation_grounding=site if where == "station" else plain,
+            cabinet_grounding=site,
+            foundation_outline="polygon",
+        )
+    cable = [c for c in world.conductors if c.name.startswith("pen_")]
+    junctions = {j.name for j in world.junctions}
+    drops = _drops(world)
+    assert len(drops) == 2
+    for drop in drops:
+        house = _plan(world.get_electrode(drop.end_electrode))
+        assert drop.start_electrode in junctions, drop.name
+        assert (
+            min(
+                math.dist(_nearest_foot(c, drop.start[:2]), drop.start[:2])
+                for c in cable
+            )
+            < 1e-9
+        )
+        pair = min(
+            _segment_distance(c.start, c.end, a, b)
+            for c in cable
+            for a, b in zip(house[:-1], house[1:], strict=True)
+        )
+        assert drop.length <= pair + 0.2, (drop.name, drop.length, pair)
+    # No tap or corner junction inside the site foundation (R4A-03): even-odd
+    # ray casting against the site's ring wires.
+    root = "substation_foundation_0" if where == "station" else "kvs_0_foundation_0"
+    sides = [
+        (a, b)
+        for wire in _wires_of(world, root)
+        for a, b in zip(_plan(wire)[:-1], _plan(wire)[1:], strict=True)
+    ]
+    for j in world.junctions:
+        x, y, _ = j.connection_point
+        inside = False
+        for (ax, ay), (bx, by) in sides:
+            if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+                inside = not inside
+        assert not inside, j.name
+
+
+# user decision Q41, audit R5A-01
+@pytest.mark.parametrize("dy", [0.0, 2e-6, 1e-4, 1e-3, 9e-3])
+def test_a_drop_beside_a_trunk_leaves_it_at_its_end(dy: float) -> None:
+    """Radial feeder along +x with cabinets at 60 and 120 m; house 8, a 10 m
+    ring at (150, 5 + dy) m, is fed by the cabinet at 60 m and its -y side
+    lies ``dy`` beside the trunk line. Snapshot ``f7db449``: at dy = 0 the
+    drop leaves the trunk at kvs_f0_1 (25 m), from dy = 2 um its drop runs
+    85 m from kvs_f0_0, 60 m of it within 0.7 mm of the trunk (the rule
+    tested collinearity to 1e-6 m). Now a section counts as shared when
+    both its ends lie within one minimum section (1 cm) of the drop line."""
+    positions = (
+        [(10.0, 40.0)]
+        + [(70.0 + 12.0 * k, 40.0) for k in range(7)]
+        + [(150.0, 5.0 + dy), (200.0, 40.0)]
+    )
+    world = _build(
+        building_types=[_ring_house((10.0, 10.0))],
+        building_counts={"residential": len(positions)},
+        placement=ExplicitPlacement(positions=positions),
+        pen_topology=RadialTrunkTopology(
+            n_feeders=1, slots_per_substation=1, slots_per_cabinet=8
+        ),
+    )
+    trunks = [c for c in _cables(world) if c.name.startswith("pen_trunk_")]
+    for drop in _drops(world):
+        near = _length_within(drop, trunks, MIN_DROP_LENGTH_M)
+        assert near < 0.5, (drop.name, near)
+    (drop,) = [
+        d for d in _drops(world) if d.name == "pen_service_residential_8_foundation_0"
+    ]
+    assert drop.start_electrode == "kvs_f0_1_rod_0"
+    assert drop.length == pytest.approx(25.0, abs=1e-3)
+
+
+def _length_within(drop: gf.Conductor, cables, tol: float, step: float = 0.01) -> float:
+    """Plan length in m of ``drop`` that lies within ``tol`` of a cable
+    (sampled every ``step`` m, exact distances to the straight cables)."""
+    points = _sample(np.array([drop.start[:2], drop.end[:2]]), step)
+    lines = [np.array([c.start[:2], c.end[:2]]) for c in cables]
+    close = np.zeros(len(points), dtype=bool)
+    for line in lines:
+        a, b = line
+        d = b - a
+        t = np.clip((points - a) @ d / (d @ d), 0.0, 1.0)
+        close |= np.hypot(*(points - (a + t[:, None] * d)).T) <= tol
+    return float(close.sum()) * drop.length / max(len(points) - 1, 1)
+
+
+_ROD_STATION = SubstationConfig(
+    position=(50.0, 100.0),
+    grounding=GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)]),
+)
+
+
+# user decision Q41, audit R5A-03 (star)
+def test_a_main_to_a_cabinet_on_a_house_wire_is_joined_where_it_crosses() -> None:
+    """A main from the substation at (50, 100) m runs south to a cabinet at
+    (50, -5) m on the south wire of house 0 (10 m ring at (50, 0) m) and
+    crosses the house's north wire at (50, 5) m. Snapshot ``f7db449`` (and
+    ``e91f3c0``): the tie of the two zero distances went to the cabinet's
+    node, the 1 cm step back left 1 cm, the house got a 1 cm drop on the
+    main and the main crossed it unjoined. Now the main is joined to the
+    house where it crosses it."""
+    world = _build(
+        building_types=[_ring_house((10.0, 10.0))],
+        building_counts={"residential": 2},
+        placement=ExplicitPlacement(positions=[(50.0, 0.0), (50.0, 40.0)]),
+        cabinets=CabinetConfig(
+            placement=ExplicitPlacement(positions=[(50.0, -5.0)]), fixed_count=1
+        ),
+        substation=_ROD_STATION,
+    )
+    assert "pen_service_residential_0_foundation_0" not in {
+        d.name for d in _drops(world)
+    }
+    joints = [
+        c.end[:2]
+        for c in _cables(world)
+        if c.end_electrode.startswith("residential_0_foundation_0")
+    ]
+    assert joints == [pytest.approx((50.0, 5.0))]
+    assert all(d.length > 1.0 for d in _drops(world))
+
+
+# user decision Q41, audit R5A-03 (radial)
+def test_a_trunk_beyond_a_cabinet_on_a_house_wire_is_joined() -> None:
+    """Radial feeder along +x; the cabinet kvs_f0_0 at (60, 0) m lies on the
+    west wire of house 1 at (65, 0) m, which it feeds; the trunk on to
+    kvs_f0_1 crosses the house's east wire at (70, 0) m. Snapshot
+    ``f7db449``: a 1 cm drop from a tap 1 cm before the cabinet, the trunk
+    through the house unjoined. Now that trunk is joined to the house where
+    it crosses its east wire, and the house has no drop."""
+    positions = [(20.0, 15.0), (65.0, 0.0)] + [
+        (80.0 + 10.0 * k, 20.0) for k in range(8)
+    ]
+    world = _build(
+        building_types=[_ring_house((10.0, 10.0))],
+        building_counts={"residential": len(positions)},
+        placement=ExplicitPlacement(positions=positions),
+        pen_topology=RadialTrunkTopology(
+            n_feeders=1, slots_per_substation=1, slots_per_cabinet=8
+        ),
+        substation=SubstationConfig(
+            position=(0.0, 0.0),
+            grounding=GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)]),
+        ),
+    )
+    assert "pen_service_residential_1_foundation_0" not in {
+        d.name for d in _drops(world)
+    }
+    joints = [
+        c.end[:2]
+        for c in _cables(world)
+        if c.name.startswith("pen_trunk_f0_1")
+        and c.end_electrode.startswith("residential_1_foundation_0")
+    ]
+    assert joints == [pytest.approx((70.0, 0.0))]
+    assert all(d.length > 1.0 for d in _drops(world))
 
 
 # user decision Q41, audit R4A-05

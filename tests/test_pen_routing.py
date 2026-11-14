@@ -700,15 +700,18 @@ def test_random_networks_build_and_route_as_documented(
         }
         anchors = {s.anchor for s in plan.sites if s.role == "building"}
         assert anchors <= connected
-        # No drop runs along a cable (audits R4A-02, R4B-01): the snapshot
-        # e91f3c0 had 14 such drops in 50 radial networks of 60 houses. The
-        # one exception is rule 3's bound: a foundation that touches the
-        # cable's end node from beyond (8 mm past a cabinet rod, one of the
-        # 400 networks) is tapped one minimum section before the node, and
-        # its drop shares that section with the cable.
+        # No drop runs along a cable farther than one minimum section
+        # (audits R4A-02, R4B-01, R5B-06): the snapshot e91f3c0 had 14 such
+        # drops in 50 radial networks of 60 houses. "Along" uses the
+        # router's own tolerance, both ends of a cable section within one
+        # minimum section of the drop's line (audit R5A-01; 1 µm before).
+        # The one overlap left is rule 3's bound: a foundation that touches
+        # the cable's end node from beyond (8 mm past a cabinet rod, star,
+        # 200 houses, network 60) is tapped one minimum section before the
+        # node, and its drop shares that 1 cm with the cable.
         cables = [c for c in pen if _is_main(c)]
         for d in _drops(world):
-            shared = max(_overlap(d, c, tol=1e-3) for c in cables)
+            shared = max(_overlap(d, c, tol=MIN_DROP_LENGTH_M) for c in cables)
             assert shared <= MIN_DROP_LENGTH_M * (1 + 1e-6), (d.name, shared)
         if topology != "star":
             continue

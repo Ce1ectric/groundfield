@@ -503,10 +503,13 @@ class PenRouter:
     ) -> tuple[_End, _End]:
         """Ends of a drop from a node that does not run along ``cables``.
 
-        A drop from a node that would run along a section of ``cables`` (on
-        its line, sharing more than :attr:`min_length`) starts where it
-        leaves the cable instead: at the section's end node farther along
-        the drop (repeated until it runs along none). In the radial topology
+        A drop from a node that would run along a section of ``cables`` —
+        both ends of the section within :attr:`min_length` of the drop's
+        line, sharing more than :attr:`min_length` with it (audit R5A-01: an
+        exact collinearity test let a drop 2 µm beside a trunk run along it
+        for 60 m) — starts where it leaves the cable instead: at the
+        section's end node farther along the drop (repeated until it runs
+        along none). In the radial topology
         the drop of a building beyond a later cabinet on the feeder's axis,
         or of a substation slot beyond the trunk's end, leaves the trunk at
         its last node instead of running along it from the tap source
@@ -526,7 +529,7 @@ class PenRouter:
                 along = []
                 for point in (sec.start.xy, sec.end.xy):
                     px, py = point[0] - sx, point[1] - sy
-                    if abs(-uy * px + ux * py) > 1e-6:
+                    if abs(-uy * px + ux * py) > self.min_length:
                         break
                     along.append(ux * px + uy * py)
                 else:
@@ -573,9 +576,12 @@ class PenRouter:
         near = self._nearest_on_path(building, cables, origin)
         if crossing and not self._is_joint(near):
             # Rule 4 for cables that do not feed the building (the trunks of
-            # the radial topology): one that crosses it is joined there.
+            # the radial topology): one that crosses it is joined there. A
+            # set: the list membership test cost O(trunks x path) per
+            # building (audit R5A-04).
+            own = set(cables)
             others = self._near(
-                building, [cable for cable in crossing if cable not in cables]
+                building, [cable for cable in crossing if cable not in own]
             )
             if others:
                 cross = self._nearest_on_path(building, others, origin)
@@ -630,20 +636,77 @@ class PenRouter:
         if along >= self.min_length:
             return _Nearest(distance, section, t, None, meet)
         start, end, snapped = self._snap(section, at_start, building)
-        if wires is None or snapped >= self.min_length or length < 2 * self.min_length:
+        if wires is None or snapped >= self.min_length:
             return _Nearest(snapped, section, t, node, end, start)
-        # The foundation touches the cable at the node (a cabinet or a tap
-        # inside the outline): meet it min_length along the section (a hair
-        # more, so that round-off cannot leave a shorter section).
-        step = self.min_length * (1.0 + 1e-9) / length
-        t = step if at_start else 1.0 - step
-        (ax, ay), (bx, by) = section.start.xy, section.end.xy
-        point = (ax + t * (bx - ax), ay + t * (by - ay))
-        contact = nearest_point(point, wires)
+        if length >= 2 * self.min_length:
+            # The foundation touches the cable at the node (a cabinet or a
+            # tap inside the outline): meet it min_length along the section
+            # (a hair more, so that round-off cannot leave a shorter
+            # section).
+            step = self.min_length * (1.0 + 1e-9) / length
+            t = step if at_start else 1.0 - step
+            (ax, ay), (bx, by) = section.start.xy, section.end.xy
+            point = (ax + t * (bx - ax), ay + t * (by - ay))
+            contact = nearest_point(point, wires)
+            near = _Nearest(
+                contact.distance,
+                section,
+                t,
+                None,
+                _End(building, contact.xy, contact.electrode),
+            )
+            if self._is_joint(near):
+                return near
+        else:
+            near = _Nearest(snapped, section, t, node, end, start)
+        # The cable only touches the foundation at the node and leaves it
+        # there (a cabinet on a wire): where it crosses the foundation
+        # elsewhere it is joined there (audit R5A-03: the node won the tie
+        # of the two zero distances, the house got a 1 cm drop and the
+        # crossing stayed unjoined).
+        inner = self._interior_joint(building, sections, wires)
+        return near if inner is None else inner
+
+    def _interior_joint(
+        self,
+        building: str,
+        sections: Sequence[_Section],
+        wires: PreparedWires,
+    ) -> _Nearest | None:
+        """Where ``sections`` pass through the building's foundation away
+        from their nodes (rule 4), or ``None``.
+
+        The closest pair of the foundation wires and the sections without
+        :attr:`min_length` (a hair more) at either end; a pair closer than
+        :attr:`min_length` is a joint, at least :attr:`min_length` from
+        every node of the path (rule 3).
+        """
+        trim = self.min_length * (1.0 + 1e-9)
+        inner: list[tuple[_Section, float, float]] = []
+        pieces = []
+        for section in sections:
+            length = self._distance(section.start.xy, section.end.xy)
+            if length <= 2.0 * trim:
+                continue
+            lo, hi = trim / length, 1.0 - trim / length
+            (ax, ay), (bx, by) = section.start.xy, section.end.xy
+            inner.append((section, lo, hi))
+            pieces.append(
+                (
+                    (ax + lo * (bx - ax), ay + lo * (by - ay)),
+                    (ax + hi * (bx - ax), ay + hi * (by - ay)),
+                )
+            )
+        if not pieces:
+            return None
+        i, u, contact = closest_pair(pieces, wires)
+        if not contact.distance < self.min_length:
+            return None
+        section, lo, hi = inner[i]
         return _Nearest(
             contact.distance,
             section,
-            t,
+            lo + u * (hi - lo),
             None,
             _End(building, contact.xy, contact.electrode),
         )
