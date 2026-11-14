@@ -464,13 +464,16 @@ Every rectangle without cross-braces (`style="ring"`, or `"mesh"` with
 `n_x = n_y = 1`) is one strip per side, bonded to the local $-y$ side, at
 every orientation and for both values of `concrete_model`, which therefore
 has no effect; the warning of `"distributed"` says so. Up to the decision
-the default `"lumped"` made an axis-aligned one a single
-`GridMeshElectrode` (rotated ones were one strip per side for both
-values). Rationale: of the two owner models, one per side is the closer
-one to one current per segment (at the largest cases of the scope 0.23 …
-0.90 % high against 0.55 … 2.16 % for one owner), it does not depend on
-the orientation, and it is what rotated rectangles and, wire by wire,
-meshes already were. Polygon outlines (one closed polyline), meshes with
+the default `"lumped"` made an axis-aligned one — also one at a multiple of
+90°, which was built as the axis-aligned rectangle with swapped sides — a
+single `GridMeshElectrode` (rectangles at other angles were one strip per
+side for both values; audit D3B-04). Rationale: of the two owner models,
+one per side is the closer one to one current per segment (at the largest
+decreases of the scope 0.23 … 0.90 % high against 0.55 … 2.16 % for one
+owner; over the whole scope at most 1.4 % high, 150 m × 3 m bare in 30 /
+200 Ω·m, against up to 2.1 %, audit D3B-01), it does not depend on the
+orientation, and it is what rotated rectangles and, wire by wire, meshes
+already were. Polygon outlines (one closed polyline), meshes with
 cross-braces and `RingElectrodeSpec` circles are unchanged.
 
 Size of the change for an axis-aligned rectangle built with the default
@@ -507,14 +510,19 @@ Consequences: the AP1 station (4 m × 4 m ring with three rods) changes by
 −0.0009 … −0.0026 % over the 39 AP1 soils, its houses (building outlines)
 not at all; the golden case `mutual_foundations_lumped_concrete` equals
 `mutual_foundations_distributed_concrete` (its passive foundation carries
-equalising currents: $Z_G$ 5.2e-4, the field next to it 1.6 %). The
+equalising currents: $Z_G$ 5.2e-4; the field at its edges +5.9 / −5.1 %,
+1.6 % of the largest value of the case's field, the golden harness's
+norm-wise measure, audit D3B-02). The
 electrode named after the foundation is the $-y$ side, so its current and
 `grounding_impedance` refer to that side (as for rotated rectangles and
 meshes); cluster quantities (`cluster_impedance`, `input_impedance`,
 `solve_mutual_matrix`, the touch-voltage helpers, which take the whole
 foundation) keep their meaning. Its connection point, where conductors
 attached by name start, moves from the centre of the rectangle to the
-corner at the start of the $-y$ side. `fem` reduces the four strips as a
+corner at the start of the $-y$ side; the generators' cables and service
+drops end at the point of the foundation nearest to each conductor
+instead (user decision Q41, ADR-0009 amendment 2026.11), so that corner is
+no longer where they meet the house. `fem` reduces the four strips as a
 cluster of four electrodes (see the
 [fem page](../explanation/engines/fem.md)). Tests:
 `tests/test_foundation_owners.py` (`# user decision Q38`).

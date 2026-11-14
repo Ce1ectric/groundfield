@@ -36,6 +36,7 @@ repeat the warning.
 from __future__ import annotations
 
 import json
+import math
 import pathlib
 import pickle
 import re
@@ -1141,3 +1142,138 @@ def test_a_drawn_negative_side_is_rejected_when_the_site_is_built() -> None:
         GroundingSystemSpec(electrodes=[spec]).build_at(
             world, (0.0, 0.0), "h", np.random.default_rng(5)
         )
+
+
+def _flat_doc(path: str) -> str:
+    root = pathlib.Path(__file__).resolve().parents[1]
+    return " ".join((root / path).read_text(encoding="utf-8").split())
+
+
+# audit D3B-01
+@pytest.mark.finding("10.39")
+def test_one_owner_per_side_against_one_current_per_segment_holds_in_the_scope() -> (
+    None
+):
+    """The texts said one owner per side is at most 0.9 % above one current
+    per segment (short side >= 1 m); 150 m x 3 m (aspect ratio 50, inside
+    the scope), bare, 5 mm at 0.8 m in 30 over 200 ohm m (h1 = 5 m) is
+    +1.336 % (groundfield's per-segment assembly at 1 m segments; the
+    independent boundary-element solution of audit D3B gives the same to
+    0.001 points). The texts quote "at most 1.4 %" and the scope table."""
+    dx, dy, ds = 150.0, 3.0, 1.0
+    corners = [
+        (-dx / 2, -dy / 2),
+        (dx / 2, -dy / 2),
+        (dx / 2, dy / 2),
+        (-dx / 2, dy / 2),
+    ]
+    world = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=200.0, h_1=5.0))
+    names, side, lengths = [], [], []
+    for k in range(4):
+        (x0, y0), (x1, y1) = corners[k], corners[(k + 1) % 4]
+        n = max(1, round(math.hypot(x1 - x0, y1 - y0) / ds))
+        for m in range(n):
+            a = (x0 + (x1 - x0) * m / n, y0 + (y1 - y0) * m / n, 0.8)
+            b = (x0 + (x1 - x0) * (m + 1) / n, y0 + (y1 - y0) * (m + 1) / n, 0.8)
+            gf.create_electrode(
+                world, "strip", name=f"s{len(names)}", start=a, end=b, wire_radius=0.005
+            )
+            names.append(f"s{len(names)}")
+            side.append(k)
+            lengths.append(math.dist(a, b))
+    engine = gf.create_engine(frequencies=[50.0], segment_length=ds)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p = np.asarray(gf.solve_mutual_matrix(world, engine, names)).real
+    lengths, side = np.asarray(lengths), np.asarray(side)
+    l_side = np.array([lengths[side == k].sum() for k in range(4)])
+    t = np.zeros((len(names), 4))
+    t[np.arange(len(names)), side] = lengths / l_side[side]
+
+    def z_in(z: np.ndarray) -> float:
+        one = np.ones(z.shape[0])
+        return float(1.0 / (one @ np.linalg.solve(z, one)))
+
+    per_side = 100.0 * (z_in(t.T @ p @ t) / z_in(p) - 1.0)
+    assert per_side == pytest.approx(1.336, abs=0.002)
+    assert "at most 1.4 % high over that scope" in " ".join(
+        materialise_module_doc().split()
+    )
+    page = _flat_doc("docs/explanation/concrete-shells.md")
+    assert "one owner per side is at most 1.4 % high" in page
+    assert "+1.336 % (150 m × 3 m, same soil)" in page
+    adr = _flat_doc("docs/adr/0012-foundation-concrete-encasement.md")
+    assert "at most 1.4 % high, 150 m × 3 m bare" in adr
+
+
+def materialise_module_doc() -> str:
+    from groundfield.generators import materialise
+
+    return materialise.__doc__ or ""
+
+
+# audit D3B-02
+@pytest.mark.finding("10.39")
+def test_the_texts_quote_the_field_change_at_the_passive_foundation() -> None:
+    """concrete-shells.md and ADR-0012 said the field next to the passive
+    foundation of ``mutual_foundations_lumped_concrete`` moves by 1.6 %: the
+    golden harness's max |change| / max |R|. At the edges of the passive
+    foundation it moves by +5.94 / -5.11 % (golden engine, point kernel)."""
+
+    def pair(one_owner: bool) -> np.ndarray:
+        w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=100.0, h_1=5.0))
+        c = gf.geometry.electrodes.concrete_shell_coefficient(100.0, 0.0075, 0.05)
+        anchors = []
+        for k, x in enumerate((0.0, 30.0)):
+            if one_owner:
+                name = f"h{k}_foundation_0"
+                gf.create_electrode(
+                    w,
+                    "grid_mesh",
+                    name=name,
+                    corner=(x - 5.0, -5.0, 0.7),
+                    size=(10.0, 10.0),
+                    n_x=1,
+                    n_y=1,
+                    wire_radius=0.0575,
+                    concrete_shell_coefficient_ohm_m=c,
+                )
+                anchors.append(name)
+            else:
+                spec = GroundingSystemSpec(
+                    electrodes=[
+                        FoundationElectrodeSpec(
+                            style="ring",
+                            size_m=10.0,
+                            depth_m=0.7,
+                            wire_radius_m=0.0075,
+                            concrete_rho_ohm_m=100.0,
+                            concrete_thickness_m=0.05,
+                        )
+                    ],
+                    bond_conductor_type="bare_copper",
+                )
+                anchors.append(
+                    spec.build_at(w, (x, 0.0), f"h{k}", np.random.default_rng(1))
+                )
+        engine = gf.create_engine(
+            backend="image",
+            kernel="point",
+            segment_length=2.0,
+            image_max_terms=500,
+            frequencies=[50.0],
+        )
+        points = np.array([[-5.0, 0.0, 0.0], [5.0, 0.0, 0.0]])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return np.asarray(gf.solve_mutual_field(w, engine, anchors, points)).real
+
+    change = 100.0 * (pair(False)[:, 1] / pair(True)[:, 1] - 1.0)
+    assert change == pytest.approx([5.94, -5.11], abs=0.01)
+    for path in (
+        "docs/explanation/concrete-shells.md",
+        "docs/adr/0012-foundation-concrete-encasement.md",
+    ):
+        text = _flat_doc(path)
+        assert "+5.9 / −5.1 %" in text
+        assert "the field next to the passive foundation by 1.6 %" not in text
