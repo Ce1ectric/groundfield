@@ -220,10 +220,13 @@ def test_explicit_placement_honoured() -> None:
 
 
 def test_manhattan_grid_default_centred_at_origin() -> None:
+    # 30 m spacing: with 10 m the 10 m foundations of the four houses touch
+    # the substation ring (radius 4 m), which the generators meet at its
+    # nearest point since user decision Q43 (a drop of no length).
     cfg = TnNetworkConfig(
         building_counts={"residential": 4},
         placement=ManhattanGridPlacement(
-            spacing_x_m=10.0, spacing_y_m=10.0, n_per_row=2
+            spacing_x_m=30.0, spacing_y_m=30.0, n_per_row=2
         ),
     )
     world = TnNetworkGenerator(cfg, seed=0).build()

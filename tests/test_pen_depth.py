@@ -13,6 +13,7 @@ depth field), observed by the GEN-1 stream.
 
 from __future__ import annotations
 
+import math
 import warnings
 
 import pytest
@@ -73,6 +74,14 @@ def test_pen_sections_run_at_the_configured_depth(depth: float) -> None:
                 assert (
                     x0 == x1 == point[0] and min(y0, y1) <= point[1] <= max(y0, y1)
                 ) or (y0 == y1 == point[1] and min(x0, x1) <= point[0] <= max(x0, x1))
+            elif name == "trafo_ring_0":
+                # User decision Q43: the point of the substation ring
+                # nearest to the conductor, at the PEN depth.
+                ring = world.get_electrode(name)
+                cx, cy, _ = ring.center
+                assert math.hypot(point[0] - cx, point[1] - cy) == pytest.approx(
+                    ring.radius, abs=1e-12
+                )
             else:
                 assert point[:2] == _node_point(world, name)[:2]
 

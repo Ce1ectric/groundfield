@@ -3,17 +3,22 @@ r"""Routing of the PEN cables of generated TN networks (private).
 Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
 (since 2026.11; this module states exactly what the router guarantees):
 
-0. **Where a cable meets a site** (user decision Q41 of 2026.11): a site
-   with a foundation (the wires of its
-   :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
-   electrodes, :func:`~groundfield.generators.materialise.site_foundation_wires`)
-   is met at the point of the foundation nearest to the cable — a cable
-   leaving it at the point nearest to the cable's other end, a drop at the
-   closest pair below — and the conductor is attached to the wire that
-   holds the point (:class:`~groundfield.generators.plan.PlannedContact`);
-   ties go to the lowest wire index, then to the smallest arc position along
-   the wire (:mod:`groundfield.generators._contact`). Any other site (rods,
-   rings, strips) is met at the connection point of its anchor electrode.
+0. **Where a cable meets a site** (user decisions Q41 and Q43 of 2026.11):
+   a site with horizontal earth electrodes (the wires of its
+   :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`,
+   :class:`~groundfield.generators.electrode_specs.RingElectrodeSpec` and
+   :class:`~groundfield.generators.electrode_specs.StripElectrodeSpec`
+   electrodes, :func:`~groundfield.generators.materialise.site_contact_wires`;
+   foundations since Q41, circular rings and strips since Q43) is met at
+   the point of those wires nearest to the cable — a cable leaving it at
+   the point nearest to the cable's other end, a drop at the closest pair
+   below — and the conductor is attached to the wire that holds the point
+   (:class:`~groundfield.generators.plan.PlannedContact`); ties go to the
+   lowest wire index, then to the smallest arc position along the wire, and
+   a circle is met at its exact nearest point
+   (:mod:`groundfield.generators._contact`). A site with rods only
+   (vertical) is met at the connection point of its anchor, the head of its
+   first rod.
 1. **Every cabinet has its own cable**, as its topology documents: in the
    star topology a straight cable from the substation to the cabinet
    (``pen_main_<anchor>``), in the radial-trunk topology the trunk
@@ -245,10 +250,11 @@ class PenRouter:
     conductor
         Conductor parameters of every cable.
     wires
-        Foundation wires (plan) of the nodes that have a foundation
-        (:func:`~groundfield.generators.materialise.site_foundation_wires`);
-        a cable or drop ends at the point of these wires nearest to it (user
-        decision Q41). Nodes without an entry end at ``node_xy``.
+        Horizontal wires (plan) of the nodes that have horizontal earth
+        electrodes — foundations, rings, strips
+        (:func:`~groundfield.generators.materialise.site_contact_wires`); a
+        cable or drop ends at the point of these wires nearest to it (user
+        decisions Q41, Q43). Nodes without an entry end at ``node_xy``.
 
     Attributes
     ----------

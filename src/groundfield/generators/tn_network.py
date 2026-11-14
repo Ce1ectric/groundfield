@@ -585,17 +585,17 @@ class TnNetworkConfig(GeneratorConfig):
 def _router(cfg: "TnNetworkConfig", sites: list[PlannedSite]) -> PenRouter:
     """PEN router over ``sites`` (the first is the substation).
 
-    A site with a foundation is met at the point of its foundation wires
-    nearest to each cable (user decision Q41); any other site at the
-    connection point of its anchor.
+    A site with horizontal earth electrodes (foundation, ring, strip) is met
+    at the point of their wires nearest to each cable (user decisions Q41,
+    Q43); a site with rods only at the connection point of its anchor.
     """
     node_xy = {}
     wires = {}
     for site in sites:
-        point, foundation = _site_geometry(site)
+        point, horizontal, _ = _site_geometry(site)
         if point is not None:
             node_xy[site.name] = (point[0], point[1])
-            wires[site.name] = foundation
+            wires[site.name] = horizontal
     return PenRouter(
         sites[0].name,
         node_xy,

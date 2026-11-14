@@ -243,7 +243,10 @@ def test_a_drop_starts_at_the_nearest_point_of_its_feeding_cable() -> None:
     (before user decision Q41: a 5 m drop from a tap at (-17.5, 0) m to the
     (-17.5, -5) m corner). House 1 beside the substation is fed from the
     substation (the end of its cabinet's cable), not from the cabinet 180 m
-    away: 3.5 m from the ring to the point of the foundation nearest to it."""
+    away: 3.5 m from the ring to the point of the foundation nearest to it.
+    The main leaves the substation ring at (-4, 0) m, its point nearest to
+    the cabinet (user decision Q43; at its connection point (4, 0) m before,
+    8 m longer, through the ring)."""
     world = _build(building_counts={"residential": 2}, placement=_TWO_HOUSES)
     drops = {c.name: c for c in _drops(world)}
     assert set(drops) == {"pen_service_residential_1_foundation_0"}
@@ -255,8 +258,10 @@ def test_a_drop_starts_at_the_nearest_point_of_its_feeding_cable() -> None:
     assert far.start_electrode == "trafo_ring_0"
     assert far.end[:2] == pytest.approx((7.5, 0.0))
     assert math.dist(far.start, far.end) == pytest.approx(3.5)
+    assert joint.start_electrode == "trafo_ring_0"
+    assert mains["pen_main_kvs_0_rod_0"].start[:2] == (-4.0, 0.0)
     total = sum(math.dist(c.start, c.end) for c in _pen(world))
-    assert total == pytest.approx(184.0 + 3.5)
+    assert total == pytest.approx(176.0 + 3.5)
 
 
 # stream DOC-B
@@ -386,19 +391,21 @@ def test_star_topology_wires_every_cabinet_directly_to_the_substation() -> None:
 @pytest.mark.finding("10.38")
 def test_collinear_cabinets_have_separate_cables_in_one_trench() -> None:
     """The two cabinets of the default 30-house network lie west of the
-    substation on one line: two cables along one route (144 m in common),
-    evaluated as touching wires, so the inductive network stays passive."""
+    substation on one line: two cables along one route (136 m in common,
+    from the point of the substation ring nearest to them, user decision
+    Q43), evaluated as touching wires, so the inductive network stays
+    passive."""
     world = _build(pen=PenConfig(inductance_model="neumann"))
     mains = {c.name: c for c in _pen(world) if c.name.startswith("pen_main_")}
     assert _overlap(
         mains["pen_main_kvs_0_rod_0"], mains["pen_main_kvs_1_rod_0"]
-    ) == pytest.approx(21.5)
+    ) == pytest.approx(13.5)
     total = sum(
         _overlap(mains["pen_main_kvs_0_rod_0"], c)
         for name, c in mains.items()
         if _cable(name) == "pen_main_kvs_1_rod_0"
     )
-    assert total == pytest.approx(144.0)
+    assert total == pytest.approx(136.0)
     engine = gf.create_engine(
         segment_length=2.0,
         frequencies=[50.0, 1000.0],
@@ -423,13 +430,15 @@ def test_z_in_of_a_100_house_network_drops_against_the_old_routing() -> None:
     (-5, -5) m corner instead of its centre: 0.200357 ohm (-0.039 %). Since
     user decision Q41 each drop ends at the point of the ring nearest to its
     cable, and the rings on the main are joined to it where it crosses
-    them: 0.200346 ohm (-0.006 % against Q38)."""
+    them: 0.200346 ohm (-0.006 % against Q38). Since user decision Q43 the
+    mains and drops leave the substation ring at its point nearest to them:
+    0.200191 ohm (-0.078 %; 1 m segments 0.200191 ohm, -0.077 %)."""
     world = _build(building_types=[_RING_HOUSE], building_counts={"residential": 100})
     engine = gf.create_engine(backend="image", segment_length=2.0, frequencies=[50.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         z = complex(np.asarray(engine.solve(world).input_impedance())[0]).real
-    assert z == pytest.approx(0.200346, rel=1e-5)
+    assert z == pytest.approx(0.200191, rel=1e-5)
     assert z < 0.202724
 
 
@@ -732,6 +741,12 @@ def test_random_networks_build_and_route_as_documented(
                 _root(c.end_electrode) for c in cable
             }
             assert _root(d.start_electrode) in ends, d.name
+            if d.start_electrode == "trafo_ring_0":
+                # A drop from the substation leaves its ring at the point
+                # nearest to the building (user decision Q43), not on the
+                # cable, which leaves it at its point nearest to the cabinet.
+                assert math.hypot(*d.start[:2]) == pytest.approx(4.0, abs=1e-12)
+                continue
             foot = _nearest_on(cable, d.end[:2])
             assert math.dist(d.start[:2], foot) <= MIN_DROP_LENGTH_M * (1 + 1e-6)
 

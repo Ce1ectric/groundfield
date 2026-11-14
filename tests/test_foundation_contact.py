@@ -830,6 +830,12 @@ def test_every_star_drop_starts_on_its_cable_not_on_a_neighbours_foundation(
     world = _guard_world("default", n, "star", 0)
     cables = _cables(world)
     for drop in _drops(world):
+        if drop.start_electrode == "trafo_ring_0":
+            # A drop from the substation leaves its ring at the point nearest
+            # to the building, the cables at their points nearest to their
+            # cabinets (user decision Q43).
+            assert math.hypot(*drop.start[:2]) == pytest.approx(4.0, abs=1e-12)
+            continue
         foot = min(
             (_nearest_foot(c, drop.start[:2]) for c in cables),
             key=lambda p: math.dist(p, drop.start[:2]),
@@ -1288,7 +1294,7 @@ def test_a_contact_off_its_wire_or_on_a_rod_is_rejected() -> None:
     x, y = branch["end_contact"]["position_xy"]
     wire = branch["end_contact"]["electrode"]
     for contact, match in (
-        ({"electrode": branch["end"] + "_rod_1", "position_xy": (x, y)}, "not a foundation wire"),
+        ({"electrode": branch["end"] + "_rod_1", "position_xy": (x, y)}, "not a foundation, ring or strip wire"),
         ({"electrode": branch["end"] + "_nothing", "position_xy": (x, y)}, "no electrode"),
         ({"electrode": wire, "position_xy": (x + 50.0, y)}, "from the wire"),
         ({"electrode": wire, "position_xy": (x + 0.011, y + 0.011)}, "from the wire"),
@@ -1390,4 +1396,4 @@ def test_the_materialiser_text_states_the_weaker_check_without_foundation_wires(
     doc = _flat_text(materialise_branch.__doc__ or "")
     assert "Without it any strip or polyline electrode is accepted" not in doc
     assert "need not belong to that site" in doc
-    assert "without it, an electrode that is no strip or polyline" in doc
+    assert "without it, an electrode that is no strip, polyline or ring" in doc
