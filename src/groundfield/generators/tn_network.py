@@ -61,18 +61,21 @@ Geometric layout
   :class:`PlacementSpec` (defaults to a Manhattan grid along the
   substation row). Their grounding follows :attr:`CabinetConfig.grounding`.
 * PEN backbone (star topology): each cable cabinet has its own cable
-  from the substation; each building is fed by the *nearest* cable
-  cabinet by Manhattan distance, through a service drop that taps that
-  cabinet's cable at the point nearest to the building (a T-joint;
-  rules in :mod:`groundfield.generators._pen_routing`). Every conductor
-  routed to a foundation ends at the point of the foundation nearest to it
-  (user decision Q41): a drop is the closest pair of its cable and the
+  (main) from the substation. A building that a main crosses is joined
+  to it there, without a drop, and fed by that main's cabinet (the
+  nearest of the cabinets whose mains cross it, ties to the lower
+  cabinet index; audits R4A-02, R4B-01); every other building is fed by
+  the *nearest* cable cabinet by Manhattan distance, through a service
+  drop that taps that cabinet's cable at the point nearest to the
+  building (a T-joint, or the substation / the cabinet; rules in
+  :mod:`groundfield.generators._pen_routing`). Every conductor routed to a
+  foundation ends at the point of the foundation nearest to it (user
+  decision Q41): a drop is the closest pair of its cable and the
   foundation wires, a cable leaves a substation with a foundation at its
-  point nearest to the cabinet, and a building that a cable crosses is
-  joined to it and fed by it, without a drop — in the star topology a
-  building that a main crosses is fed by that main's cabinet instead of
-  its nearest one (the nearest of the cabinets whose mains cross it), in
-  the radial topology every trunk counts (audits R4A-02, R4B-01).
+  point nearest to the cabinet. In the radial topology every trunk counts
+  for the crossing rule. No drop runs along a cable farther than one
+  minimum section (1 cm); a drop may pass over other buildings'
+  foundations, 0.2 m above their wires.
 
 Validity envelope
 -----------------
@@ -460,12 +463,16 @@ class TnNetworkConfig(GeneratorConfig):
     pen_topology: PenTopology = Field(
         default_factory=StarCabinetTopology,
         description=(
-            "PEN backbone topology. ``StarCabinetTopology`` (default) "
-            "reproduces the legacy v0.6 behaviour: every cabinet is "
-            "wired directly to the substation and every building is "
-            "fed by its nearest cabinet by Manhattan distance, its "
-            "service drop tapping that cabinet's cable at the point "
-            "nearest to the building. "
+            "PEN backbone topology. ``StarCabinetTopology`` (default): "
+            "every cabinet is wired directly to the substation by a "
+            "cable of its own; a building that a cabinet's cable "
+            "crosses is joined to it without a service drop and fed by "
+            "that cabinet (the nearest of the cabinets whose cables "
+            "cross it), every other building is fed by its nearest "
+            "cabinet by Manhattan distance, its service drop tapping "
+            "that cabinet's cable at the point nearest to the building "
+            "(the closest pair of cable and foundation, user decision "
+            "Q41). "
             "``RadialTrunkTopology`` lays out the substation as a "
             "radial set of LV feeders (Manhattan-aligned) with a "
             "finite slot budget per source — once a feeder's slots "
@@ -1021,22 +1028,23 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         branches: list[PlannedBranch],
         junctions: list[PlannedJunction],
     ) -> None:
-        """Star backbone: substation → each cabinet, building → nearest cabinet.
+        """Star backbone: substation → each cabinet → its buildings.
 
         Every cabinet has its own straight cable from the substation
         (``pen_main_<anchor>``; collinear cabinets get separate cables in
-        one trench). Every building is fed by its nearest cabinet
-        (Manhattan metric between the site positions); its service drop
-        taps that cabinet's cable at the point nearest to the building —
-        the closest pair of cable and foundation wires (user decision
-        Q41), or the point nearest to the connection point of a building
-        without a foundation — at a leakage-free tap junction
-        ``pen_tap_<k>``, or the substation / the cabinet when the nearest
-        point is an end of the cable, and never another building's drop.
-        A building that a main crosses is joined to it and fed by it: by
-        the nearest of the cabinets whose mains cross it, ties to the lower
-        cabinet index (audit R4A-02). The full rules are in
-        :mod:`._pen_routing`.
+        one trench). A building that a main crosses is joined to it and fed
+        by it, without a drop: by the nearest of the cabinets whose mains
+        cross it, ties to the lower cabinet index (audit R4A-02). Every
+        other building is fed by its nearest cabinet (Manhattan metric
+        between the site positions); its service drop taps that cabinet's
+        cable at the point nearest to the building — the closest pair of
+        cable and foundation wires (user decision Q41), or the point
+        nearest to the anchor of a building without a foundation — at a
+        leakage-free tap junction ``pen_tap_<k>``, or the substation / the
+        cabinet when the nearest point is an end of the cable, never
+        another building's drop, and a drop from the cabinet leaves another
+        main it would run along at that main's node (audit R4B-01). The
+        full rules are in :mod:`._pen_routing`.
         """
         wired = [c for c in cabinets if c.anchor is not None]
         router = _router(cfg, [substation, *wired, *buildings])
@@ -1115,8 +1123,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
            no cable of its own, a later trunk runs on past the building's
            tap source) is joined to it there without a drop (audit
            R4A-02), and a drop from a node that would run along a trunk
-           starts where it leaves it (audit R4B-01). A drop never starts
-           on another building's drop (:mod:`._pen_routing`).
+           (both ends of a trunk section within one minimum section of its
+           line, audit R5A-01) starts where it leaves it (audit R4B-01). A
+           drop never starts on another building's drop
+           (:mod:`._pen_routing`).
 
         Raises
         ------

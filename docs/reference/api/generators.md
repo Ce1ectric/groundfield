@@ -96,12 +96,29 @@ substation or cabinet at the end of the cable; a building in a
 substation slot of the radial trunk is connected to the substation. The
 router guarantees that a drop never starts on another building's drop,
 never runs along a cable (the one it taps, a trunk, another cabinet's
-main), and that no cable section is shorter than 1 cm (a tap closer to a
-node is that node; longer for PEN radii above 7.3 mm, so that every
-section stays a finite resistance). A drop may share its route with
-another drop, as cables in one trench do; the inductive coupling treats
-such overlapping conductors as touching wires. The layout builder merges
-cable nodes closer than the same length.
+main) farther than one minimum section, and that no cable section is
+shorter than that minimum section, 1 cm (a tap closer to a node is that
+node; longer for PEN radii above 7.3 mm, so that every section stays a
+finite resistance). "Along" means both ends of a cable section within
+1 cm of the drop's line; the one overlap left is that 1 cm, where a
+foundation touches the end node of its cable from beyond and is tapped
+1 cm before the node. A drop may share its route with another drop, as
+cables in one trench do; the inductive coupling treats such overlapping
+conductors as touching wires. A drop may also pass over other buildings'
+foundations, 0.2 m above their wires (PEN at 0.6 m, foundations at
+0.8 m): the contact of a house lies at the corner of the side facing its
+cable (the tie rule below), so a drop to a house behind others of its
+grid column runs above their side wires. In the default grids of 10 to
+200 houses that is 0 … 80 % of the drops (star, 30 mesh houses: 14 of 25
+drops, 150 m in all, up to 40 m over 4 houses; star 150: 70 of 141 drops,
+2 450 m, up to 65 m over 7 houses); drops are not routed around
+foundations. A drop has no inductive coupling to these wires in the
+field model (an electrode carries no current along itself), a bare one
+leaks next to them through the soil; moved 1 m aside as a whole, those
+drops change the input impedance by at most 0.02 % with an insulated PEN
+and by up to −0.30 % with a bare one (default grids of 30 and 150 houses,
+50 Hz and 1 kHz; see the [known limitations](../known-limitations.md)). The layout
+builder merges cable nodes closer than the same length.
 
 **Where conductors meet a foundation** (user decision Q41). Every
 conductor the generators route to a foundation ends at the point of that
@@ -126,16 +143,20 @@ in the layout builder:
   to the lower cabinet index) instead of its nearest one; a main that
   crosses a building it does not feed stays unjoined (no cross-tie between
   cabinets through a house); where the foundation touches the cable at a
-  node (a cabinet inside the outline) the joint lies 1 cm from the node
-  (audits R4A-02, R4B-01);
+  node (a cabinet on a wire) and the cable crosses it elsewhere, it is
+  joined where it crosses (audit R5A-03), otherwise the joint lies 1 cm
+  from the node (audits R4A-02, R4B-01);
 - a drop whose closest pair lies at such a joint starts there, on the
   cable (audit R4A-01); a drop from a node that would run along a trunk or
-  another main starts where it leaves it, at its node at the end of the
+  another main (both ends of a section within 1 cm of the drop's line,
+  audit R5A-01) starts where it leaves it, at its node at the end of the
   shared stretch (audit R4B-01);
-- the layout builder takes the closest pair on the cable as built: a cable
-  leaving a site with a foundation starts at the foundation's point
-  nearest to its next waypoint, and a tap at that point is the site
-  (audit R4A-03);
+- the layout builder keeps its taps on the layout polyline, where the
+  cable's junctions are: a cable leaving a site with a foundation starts
+  at the foundation's point nearest to its next waypoint, the polyline is
+  clipped at the projection of that point onto it, so no tap lies inside
+  the site foundation, also for a rotated, polygon or offset one, and a
+  tap at the projection is the site (audits R4A-03, R5A-02);
 - ties go to the lowest wire index, then to the smallest arc position
   along the wire: a cable parallel to the side facing it meets the side
   at the start of the range of equal distance, for a side it passes along
@@ -145,8 +166,11 @@ Sites without a foundation (rods, rings, strips) keep the connection point
 of their anchor, and so does everything attached by name
 (`site_anchor_point`, `create_conductor(start=<foundation>)`).
 `site_foundation_wires(site)` returns the wires the rule uses.
-`materialise_branch` rejects a `PlannedContact` that names no foundation
-wire of the site or lies farther from it than one minimum cable section
+`materialise_plan` rejects a `PlannedContact` that names no foundation
+wire of the branch's site (a direct `materialise_branch` call without
+`foundation_wires` checks only that it names a strip or polyline
+electrode; a `NetworkPlan` rejects another site's electrode when it is
+validated) or lies farther from its wire than one minimum cable section
 (1 cm; a joined cable's point may lie that far off the wire it crosses;
 audit R4A-05). `LvNetworkLayout.plot(world=...)` draws the drops as built
 (tap to foundation contact) instead of the layout's centroid stubs.

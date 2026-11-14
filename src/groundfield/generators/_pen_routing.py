@@ -36,9 +36,16 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    (rule 4) — the joint on the cable (audit R4A-01). A building fed from
    the substation itself (a substation slot of the radial trunk) has no
    feeding cable: its drop starts at the substation. A drop from a node
-   that would run along a trunk of the radial topology starts where it
-   leaves the trunk, at the trunk's node at the end of the shared stretch
-   (audit R4B-01). A drop never starts on another building's drop.
+   that would run along a cable it does not tap — a trunk of the radial
+   topology (the substation slots, a building beyond a later cabinet on
+   the feeder's axis), or in the star topology the main of another
+   cabinet (collinear cabinets) — starts where it leaves that cable, at
+   the cable's node at the end of the shared stretch (audit R4B-01). "Along"
+   means: both ends of a section of the cable within
+   :attr:`PenRouter.min_length` of the drop's line, sharing more than
+   :attr:`PenRouter.min_length` with it (audit R5A-01; before, collinear
+   within 1 µm, so a drop 2 µm beside a trunk ran along it for 60 m). A
+   drop never starts on another building's drop.
 3. **No section shorter than** :attr:`PenRouter.min_length`: a tap
    closer than that to an existing node of the path (along the path)
    snaps to the node, so every cable section and every drop is at least
@@ -63,27 +70,49 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    instead of its nearest cabinet (audit R4A-02). A main that crosses a
    building it does not feed stays unjoined (no cross-tie between two
    cabinets through a house). Where the foundation touches the path at a
-   node (a cabinet inside the outline) the joint moves along the path to
-   :attr:`PenRouter.min_length` from the node. Two nodes closer than
+   node (a cabinet on or next to a wire), a crossing of the path through
+   the foundation away from its nodes is the joint (audit R5A-03: the
+   node won the tie of the two zero distances and the house got a 1 cm
+   drop); without one the joint moves along the path to
+   :attr:`PenRouter.min_length` from the node, if the path is still that
+   close to the foundation there. Two nodes closer than
    :attr:`PenRouter.min_length` cannot be joined by a cable: the router
    raises :class:`ValueError` naming both (a site on top of another).
 
-What follows: a drop never runs along a cable — it leaves an interior
-tap perpendicularly, an end node at an angle of at least 90° to the cable
-it taps, a trunk at the end of the stretch it would share with it, or a
-snapped node towards a point at least :attr:`PenRouter.min_length` off the
-cable (sharing at most that length with it: a foundation that touches the
-end node of the path from beyond is tapped one minimum section before the
-node) — so the DOC-B defect (two service drops from a cabinet 180 m out
-running back along the main, coaxial with it) cannot recur; since user
-decision Q41 a drop neither runs along a side of its own foundation nor
-crosses it (audit D3A-02), and since audits R4A-02 / R4B-01 no drop runs
-along a trunk or another cabinet's main (the drops of the substation slots
-did, through the houses the trunk crosses). A drop *may* run along another
-building's drop, or pass over another building's foundation on its way
-(a house behind a house that the cable crosses). Overlapping conductors
-lie in one trench; the inductive coupling evaluates them as touching wires
-(finite mutual inductance, passive network).
+What follows: no drop runs along a cable farther than one minimum section
+(:attr:`PenRouter.min_length`, 1 cm for the default PEN; "along" as in
+rule 2) — it leaves an interior tap perpendicularly, an end node at an
+angle of at least 90° to the cable it taps, a cable it does not tap at the
+end of the stretch it would share with it, or a snapped node towards a
+point at least :attr:`PenRouter.min_length` off the cable (sharing at most
+that length with it: a foundation that touches the end node of the path
+from beyond is tapped one minimum section before the node, and its drop
+shares that 1 cm with the cable) — so the DOC-B defect (two service drops
+from a cabinet 180 m out running back along the main, coaxial with it)
+cannot recur; since user decision Q41 a drop neither runs along a side of
+its own foundation nor crosses it (audit D3A-02), and since audits R4A-02
+/ R4B-01 no drop runs along a trunk or another cabinet's main (the drops
+of the substation slots did, through the houses the trunk crosses). A drop
+that leaves a node at a smaller angle to a cable (2 cm off a trunk 60 m on)
+is not "along" it and keeps its route. A drop *may* run along another
+building's drop, and it may pass over other buildings' foundations on its
+way: the tie rule puts the contact of a house at the corner of its facing
+side, so a drop to a house behind others of its grid column runs above
+their side wires, 0.2 m above them in
+:class:`~groundfield.generators.tn_network.TnNetworkGenerator` (PEN at
+0.6 m, foundations at 0.8 m). In the default grids (2 × 2 mesh or 10 m ring
+houses, 25 m × 30 m, 30 to 200 houses) that is 0 … 56 % of the drops (star,
+30 mesh houses: 14 of 25 drops, 150 m in all, up to 40 m over 4 houses;
+star 150: 70 of 141 drops, 2 450 m, up to 65 m over 7 houses; radial 150:
+69 of 140 drops, 1 595 m); drops are not routed around foundations. The
+field model has no inductive coupling between a drop and these wires (an
+electrode carries no current along itself); a bare PEN leaks next to them
+through the soil. Moved 1 m aside as a whole, those drops change the input
+impedance by at most 0.02 % with an insulated PEN and by up to −0.30 % with
+a bare one (default grids of 30 and 150 houses, 50 Hz and 1 kHz,
+``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
+trench; the inductive coupling evaluates them as touching wires (finite
+mutual inductance, passive network).
 
 Coordinates are horizontal positions: the points where the materialised
 conductors end (they run at the PEN depth, ``axis_z_m``).

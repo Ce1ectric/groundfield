@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import pathlib
 import warnings
 
 import numpy as np
@@ -1333,3 +1334,54 @@ def test_the_closest_pair_prefilter_changes_no_bit(monkeypatch) -> None:
     )
     full = [closest_pair(s, w) for s, w in cases]
     assert fast == full
+
+
+# ---------------------------------------------------------------------
+# Texts (audits R5B-01, R5B-06, R5B-13)
+# ---------------------------------------------------------------------
+
+
+def _flat_text(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _doc(*parts: str) -> str:
+    root = pathlib.Path(__file__).resolve().parents[1]
+    return _flat_text(root.joinpath(*parts).read_text(encoding="utf-8"))
+
+
+# user decision Q41, audits R5B-01, R5B-06
+def test_the_texts_state_the_drops_over_other_foundations_and_the_1_cm_bound() -> None:
+    """The texts said a drop may pass over another building's foundation for
+    "the house behind a house on the main, 5 m", and "no drop runs along a
+    cable" without its 1 cm bound. In the default grids 0 ... 80 % of the
+    drops run 0.2 m above other houses' side wires (star, 30 mesh houses: 14
+    of 25 drops, 150 m; over_foundations/extent.py of stream f6gen), and a
+    foundation that touches the end node of its cable from beyond is tapped
+    1 cm before the node, its drop sharing that 1 cm with the cable."""
+    from groundfield.generators import _pen_routing
+
+    for text in (
+        _flat_text(_pen_routing.__doc__ or ""),
+        _doc("docs", "reference", "api", "generators.md"),
+        _doc("docs", "adr", "0009-world-generators.md"),
+    ):
+        assert "0.2 m above their wires" in text or "0.2 m above them" in text
+        assert "14 of 25" in text
+        assert "farther than one minimum section" in text
+    assert "0 … 80 %" in _doc("docs", "reference", "api", "generators.md")
+
+
+# user decision Q41, audit R5B-13
+def test_the_materialiser_text_states_the_weaker_check_without_foundation_wires() -> (
+    None
+):
+    """``materialise_branch`` said that without ``foundation_wires`` "any
+    strip or polyline electrode is accepted" while its Raises section named
+    the site's foundation wires only."""
+    from groundfield.generators.materialise import materialise_branch
+
+    doc = _flat_text(materialise_branch.__doc__ or "")
+    assert "Without it any strip or polyline electrode is accepted" not in doc
+    assert "need not belong to that site" in doc
+    assert "without it, an electrode that is no strip or polyline" in doc
