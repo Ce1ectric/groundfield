@@ -95,13 +95,13 @@ nearest to the building: a leakage-free tap junction
 substation or cabinet at the end of the cable; a building in a
 substation slot of the radial trunk is connected to the substation. The
 router guarantees that a drop never starts on another building's drop,
-never runs along the cable it taps, and that no cable section is
-shorter than 1 cm (a tap closer to a node is that node; longer for PEN
-radii above 7.3 mm, so that every section stays a finite resistance). A
-drop may share its route with another cable — another cabinet's cable,
-a trunk, another drop — as cables in one trench do; the inductive
-coupling treats such overlapping conductors as touching wires. The
-layout builder merges cable nodes closer than the same length.
+never runs along a cable (the one it taps, a trunk, another cabinet's
+main), and that no cable section is shorter than 1 cm (a tap closer to a
+node is that node; longer for PEN radii above 7.3 mm, so that every
+section stays a finite resistance). A drop may share its route with
+another drop, as cables in one trench do; the inductive coupling treats
+such overlapping conductors as touching wires. The layout builder merges
+cable nodes closer than the same length.
 
 **Where conductors meet a foundation** (user decision Q41). Every
 conductor the generators route to a foundation ends at the point of that
@@ -116,9 +116,26 @@ in the layout builder:
   the point (`PlannedBranch.end_contact`, a `PlannedContact`);
 - a cable leaving a substation or cabinet with a foundation starts at the
   foundation's point nearest to its next node;
-- a cable that crosses or touches a foundation in plan is joined to the
-  wire there, without a drop; where the foundation touches the cable at
-  a node (a cabinet inside the outline) the joint lies 1 cm from the node;
+- a building that a cable crosses is joined to it and fed by it: a cable
+  of the building's feeding path that crosses or touches its foundation in
+  plan is joined to the wire there, and the building gets no drop; every
+  trunk of the radial topology counts as a cable of the feeding path for
+  this rule (a building in a substation slot has no cable of its own), and
+  in the star topology a building that a main crosses is fed by that
+  main's cabinet (the nearest of the cabinets whose mains cross it, ties
+  to the lower cabinet index) instead of its nearest one; a main that
+  crosses a building it does not feed stays unjoined (no cross-tie between
+  cabinets through a house); where the foundation touches the cable at a
+  node (a cabinet inside the outline) the joint lies 1 cm from the node
+  (audits R4A-02, R4B-01);
+- a drop whose closest pair lies at such a joint starts there, on the
+  cable (audit R4A-01); a drop from a node that would run along a trunk or
+  another main starts where it leaves it, at its node at the end of the
+  shared stretch (audit R4B-01);
+- the layout builder takes the closest pair on the cable as built: a cable
+  leaving a site with a foundation starts at the foundation's point
+  nearest to its next waypoint, and a tap at that point is the site
+  (audit R4A-03);
 - ties go to the lowest wire index, then to the smallest arc position
   along the wire: a cable parallel to the side facing it meets the side
   at the start of the range of equal distance, for a side it passes along
@@ -128,6 +145,11 @@ Sites without a foundation (rods, rings, strips) keep the connection point
 of their anchor, and so does everything attached by name
 (`site_anchor_point`, `create_conductor(start=<foundation>)`).
 `site_foundation_wires(site)` returns the wires the rule uses.
+`materialise_branch` rejects a `PlannedContact` that names no foundation
+wire of the site or lies farther from it than one minimum cable section
+(1 cm; a joined cable's point may lie that far off the wire it crosses;
+audit R4A-05). `LvNetworkLayout.plot(world=...)` draws the drops as built
+(tap to foundation contact) instead of the layout's centroid stubs.
 
 **Measurement set-up.** A fall-of-potential measurement is a
 two-terminal source between the earthing system and an auxiliary

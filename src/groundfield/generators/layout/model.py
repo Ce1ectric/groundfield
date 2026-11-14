@@ -837,8 +837,10 @@ class LvNetworkLayout(
         centroid), and its drop ends there on the foundation, at the wire's
         depth, attached to that wire; a cable leaves a substation or a
         cabinet with a foundation at the foundation's point nearest to the
-        cable's next node. Sites without a foundation keep the connection
-        point of their anchor.
+        cable's next node, and the closest pair is taken on the cable as
+        built from there, so no tap lies inside the site's foundation (a
+        tap at that point is the site itself, audit R4A-03). Sites without
+        a foundation keep the connection point of their anchor.
 
         Parameters
         ----------

@@ -68,8 +68,11 @@ Geometric layout
   routed to a foundation ends at the point of the foundation nearest to it
   (user decision Q41): a drop is the closest pair of its cable and the
   foundation wires, a cable leaves a substation with a foundation at its
-  point nearest to the cabinet, and a cable that crosses a house's
-  foundation is joined to it there without a drop.
+  point nearest to the cabinet, and a building that a cable crosses is
+  joined to it and fed by it, without a drop — in the star topology a
+  building that a main crosses is fed by that main's cabinet instead of
+  its nearest one (the nearest of the cabinets whose mains cross it), in
+  the radial topology every trunk counts (audits R4A-02, R4B-01).
 
 Validity envelope
 -----------------
@@ -1030,7 +1033,10 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         without a foundation — at a leakage-free tap junction
         ``pen_tap_<k>``, or the substation / the cabinet when the nearest
         point is an end of the cable, and never another building's drop.
-        The full rules are in :mod:`._pen_routing`.
+        A building that a main crosses is joined to it and fed by it: by
+        the nearest of the cabinets whose mains cross it, ties to the lower
+        cabinet index (audit R4A-02). The full rules are in
+        :mod:`._pen_routing`.
         """
         wired = [c for c in cabinets if c.anchor is not None]
         router = _router(cfg, [substation, *wired, *buildings])
@@ -1057,12 +1063,20 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                 key=lambda c: abs(c.position_xy[0] - bx) + abs(c.position_xy[1] - by),
             )
             fed[cab.name].append(b)
+        every_main = list(mains.values())
         for cab in wired:
             by_name = {b.name: b for b in fed[cab.name]}
             cables = [mains[cab.name]]
             for name in router.drop_order(list(by_name), cables, cab.name):
+                # A drop from the cabinet does not run along another main
+                # (audit R4B-01); a main that crosses a building it does not
+                # feed is not joined to it.
                 router.connect_drop(
-                    name, cables, cab.name, name=f"pen_service_{by_name[name].anchor}"
+                    name,
+                    cables,
+                    cab.name,
+                    name=f"pen_service_{by_name[name].anchor}",
+                    avoid=every_main,
                 )
         branches.extend(router.branches())
         junctions.extend(router.junctions)
@@ -1096,8 +1110,13 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
            to the building (the closest pair of trunk and foundation
            wires, user decision Q41; a leakage-free tap junction, or a
            cabinet), so it never runs back along the trunk; the drop of a
-           building in a substation slot starts at the substation. A drop
-           never starts on another building's drop (:mod:`._pen_routing`).
+           building in a substation slot starts at the substation. A
+           building that a trunk crosses (any trunk: a substation slot has
+           no cable of its own, a later trunk runs on past the building's
+           tap source) is joined to it there without a drop (audit
+           R4A-02), and a drop from a node that would run along a trunk
+           starts where it leaves it (audit R4B-01). A drop never starts
+           on another building's drop (:mod:`._pen_routing`).
 
         Raises
         ------

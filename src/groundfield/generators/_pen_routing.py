@@ -31,11 +31,14 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    (:class:`~groundfield.generators.plan.PlannedJunction`) that splits
    the cable section; the parts after the split are named
    ``<cable>_s<k>``. When the nearest point is an end of the path the
-   drop starts at that node (the substation or the cabinet, or a building
-   the cable runs through), at the node's point nearest to the building. A
-   building fed from the substation itself (a substation slot of the
-   radial trunk) has no feeding cable: its drop starts at the substation.
-   A drop never starts on another building's drop.
+   drop starts at that node: the substation or the cabinet, at its point
+   nearest to the building, or — at a building the cable runs through
+   (rule 4) — the joint on the cable (audit R4A-01). A building fed from
+   the substation itself (a substation slot of the radial trunk) has no
+   feeding cable: its drop starts at the substation. A drop from a node
+   that would run along a trunk of the radial topology starts where it
+   leaves the trunk, at the trunk's node at the end of the shared stretch
+   (audit R4B-01). A drop never starts on another building's drop.
 3. **No section shorter than** :attr:`PenRouter.min_length`: a tap
    closer than that to an existing node of the path (along the path)
    snaps to the node, so every cable section and every drop is at least
@@ -45,30 +48,42 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    :class:`~groundfield.conductors.conductor.Conductor` model treats a
    conductor as an ideal short and refuses it as a distributed
    conductor).
-4. **A building on its feeding path** — its connection point, or a wire of
-   its foundation, closer than :attr:`PenRouter.min_length` to the path in
-   plan, away from the path's nodes; a cable that crosses the foundation —
-   splits the path there: the cable is joined to the anchor (a building
-   without a foundation) or to the wire it crosses or touches, and the
-   building gets no drop (the drop shrinks to nothing at the crossing).
-   Where the foundation touches the path at a node (a cabinet inside the
-   outline) the joint moves along the path to :attr:`PenRouter.min_length`
-   from the node. Two nodes closer than :attr:`PenRouter.min_length`
-   cannot be joined by a cable: the router raises :class:`ValueError`
-   naming both (a site on top of another).
+4. **A building that a cable crosses is joined to it and fed by it** — a
+   cable of the building's feeding path passes its connection point, or a
+   wire of its foundation, closer than :attr:`PenRouter.min_length` in
+   plan, away from the path's nodes (it crosses or touches the
+   foundation): the path is split there, the cable is joined to the
+   anchor (a building without a foundation) or to the wire it crosses or
+   touches, and the building gets no drop. For this rule every trunk of
+   the radial topology counts as a cable of the feeding path (a building
+   in a substation slot has none of its own; a trunk beyond the
+   building's tap source runs on past it), and the star topology feeds a
+   building that a main crosses from that main's cabinet (the nearest of
+   the cabinets whose mains cross it, ties to the lower cabinet index)
+   instead of its nearest cabinet (audit R4A-02). A main that crosses a
+   building it does not feed stays unjoined (no cross-tie between two
+   cabinets through a house). Where the foundation touches the path at a
+   node (a cabinet inside the outline) the joint moves along the path to
+   :attr:`PenRouter.min_length` from the node. Two nodes closer than
+   :attr:`PenRouter.min_length` cannot be joined by a cable: the router
+   raises :class:`ValueError` naming both (a site on top of another).
 
-What follows: a drop never runs along the cable it taps — it leaves an
-interior tap perpendicularly, or an end node at an angle of at least
-90° to the cable, or a snapped node towards a point at least
-:attr:`PenRouter.min_length` off the cable (sharing at most that length
-with it) — so the DOC-B defect (two service drops from a cabinet 180 m out
-running back along the main, coaxial with it) cannot recur; and since user
+What follows: a drop never runs along a cable — it leaves an interior
+tap perpendicularly, an end node at an angle of at least 90° to the cable
+it taps, a trunk at the end of the stretch it would share with it, or a
+snapped node towards a point at least :attr:`PenRouter.min_length` off the
+cable (sharing at most that length with it: a foundation that touches the
+end node of the path from beyond is tapped one minimum section before the
+node) — so the DOC-B defect (two service drops from a cabinet 180 m out
+running back along the main, coaxial with it) cannot recur; since user
 decision Q41 a drop neither runs along a side of its own foundation nor
-crosses it (audit D3A-02). A drop *may* run along another cable: a
-cable of another cabinet, a trunk of the radial topology (the drops of
-the substation slots), another building's drop. Such conductors lie in
-one trench; the inductive coupling evaluates overlapping conductors as
-touching wires (finite mutual inductance, passive network).
+crosses it (audit D3A-02), and since audits R4A-02 / R4B-01 no drop runs
+along a trunk or another cabinet's main (the drops of the substation slots
+did, through the houses the trunk crosses). A drop *may* run along another
+building's drop, or pass over another building's foundation on its way
+(a house behind a house that the cable crosses). Overlapping conductors
+lie in one trench; the inductive coupling evaluates them as touching wires
+(finite mutual inductance, passive network).
 
 Coordinates are horizontal positions: the points where the materialised
 conductors end (they run at the PEN depth, ``axis_z_m``).
@@ -283,6 +298,7 @@ class PenRouter:
         *,
         name: str,
         crossing: Sequence[str] = (),
+        avoid: Sequence[str] | None = None,
     ) -> None:
         """Connect ``building`` to the nearest point of its feeding path.
 
@@ -308,6 +324,10 @@ class PenRouter:
             building in a substation slot they are its feeding path, and a
             trunk beyond the building's tap source that crosses it is joined
             too (audit R4A-02).
+        avoid
+            Cables a drop from a node must not run along (default
+            ``crossing``): such a drop starts where it leaves the cable
+            (audit R4B-01). The star topology passes all mains.
 
         Raises
         ------
@@ -319,8 +339,9 @@ class PenRouter:
         if near.node is not None:
             assert near.start is not None and near.building is not None
             start, end = near.start, near.building
-            if crossing:
-                start, end = self._leave_cables(start, end, building, crossing)
+            avoid = crossing if avoid is None else avoid
+            if avoid:
+                start, end = self._leave_cables(start, end, building, avoid)
             distance = self._distance(start.xy, end.xy)
             if distance < self.min_length:
                 raise self._coincide_error(building, start.node, distance)
@@ -485,11 +506,13 @@ class PenRouter:
         A drop from a node that would run along a section of ``cables`` (on
         its line, sharing more than :attr:`min_length`) starts where it
         leaves the cable instead: at the section's end node farther along
-        the drop (repeated until it runs along none). The radial topology
-        passes its trunks: the drop of a building beyond a later cabinet on
-        the feeder's axis, or of a substation slot beyond the trunk's end,
-        leaves the trunk at its last node instead of running back along it
-        to the tap source (audit R4B-01).
+        the drop (repeated until it runs along none). In the radial topology
+        the drop of a building beyond a later cabinet on the feeder's axis,
+        or of a substation slot beyond the trunk's end, leaves the trunk at
+        its last node instead of running along it from the tap source
+        (audit R4B-01). Cables that start or end at the drop's node run
+        away from it at an angle and share no length with it; the section
+        a drop taps is never among the shared ones (rule 2).
         """
         sections = [sec for cable in cables for sec in self._cables[cable]]
         for _ in range(len(sections) + 1):

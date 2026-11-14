@@ -185,12 +185,14 @@ class RadialTrunkTopology(PickleUpgrade, BaseModel):
     Trunk segments (substation → cabinet and cabinet → cabinet, one
     cable each) and service drops are realised as straight conductors at
     the PEN depth. A building fed by a cabinet taps the trunk from the
-    substation to its cabinet at the point nearest to the building's
-    connection point (a leakage-free tap junction, or the cabinet); a
-    building in a substation slot is connected to the substation. A drop
-    may run along the trunk or another drop (one trench), never along
-    the cable it taps. The
-    Manhattan-ness of the layout is reflected in (a) the discrete
+    substation to its cabinet at the point nearest to the building (the
+    closest pair of trunk and foundation, user decision Q41; a
+    leakage-free tap junction, or the cabinet); a building in a substation
+    slot is connected to the substation. A building that a trunk crosses
+    is joined to it there without a drop (audit R4A-02). A drop may run
+    along another drop (one trench), never along a trunk: a drop from a
+    node that would run along a trunk leaves it at the end of the shared
+    stretch (audit R4B-01). The Manhattan-ness of the layout is reflected in (a) the discrete
     feeder directions which keep the trunk axis-aligned and (b) the
     angular feeder assignment, which steers buildings toward the
     geometrically closest street axis. Corner-routed service drops
