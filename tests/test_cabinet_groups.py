@@ -397,3 +397,61 @@ def test_a_feeder_without_a_trunk_feeds_its_slots_from_the_substation() -> None:
     drops = _drops(world)
     assert len(drops) == 10
     assert all(d.start_electrode.startswith("trafo") for d in drops)
+
+
+# ---------------------------------------------------------------------
+# Planning time: the segment-box prefilter of the router
+# ---------------------------------------------------------------------
+
+
+# user decisions Q22, Q35 (planning time)
+def test_the_segment_box_gap_agrees_with_dense_sampling() -> None:
+    """The router's distance between a cable's line and a building's
+    bounding box against 4 000-point sampling of the segment with exact
+    distances to the box: never above the sampled value, at most one step
+    below it, zero exactly when they meet."""
+    from groundfield.generators._pen_routing import _segment_box_gap
+
+    rng = np.random.default_rng(3535)
+    for _ in range(400):
+        a, b = (tuple(map(float, p)) for p in rng.uniform(-50.0, 50.0, (2, 2)))
+        x0, y0 = rng.uniform(-30.0, 20.0, 2)
+        w, h = rng.uniform(0.0, 15.0, 2)
+        box = (float(x0), float(y0), float(x0 + w), float(y0 + h))
+        t = np.linspace(0.0, 1.0, 4001)[:, None]
+        pts = np.asarray(a) + t * (np.asarray(b) - np.asarray(a))
+        gx = np.maximum.reduce(
+            [box[0] - pts[:, 0], np.zeros(len(pts)), pts[:, 0] - box[2]]
+        )
+        gy = np.maximum.reduce(
+            [box[1] - pts[:, 1], np.zeros(len(pts)), pts[:, 1] - box[3]]
+        )
+        sampled = float(np.min(np.hypot(gx, gy)))
+        step = math.dist(a, b) / 4000
+        gap = _segment_box_gap(a, b, box)
+        assert gap <= sampled + 1e-12
+        assert gap >= sampled - step - 1e-12
+
+
+# user decisions Q22, Q35 (planning time)
+def test_the_segment_box_prefilter_changes_no_bit(monkeypatch) -> None:
+    """Without the prefilter (every cable whose bounding box comes near a
+    building is tested exactly) the plans of the default star networks of
+    200 and 1 000 houses and of the radial one of 200 are the same, bit for
+    bit. The prefilter keeps the planning time of large star networks
+    near the former one: the long mains of cabinets at the far ends of
+    their groups have bounding boxes over many buildings."""
+    from groundfield.generators import _pen_routing
+
+    def plans():
+        out = []
+        for n, topo in ((200, None), (1000, None), (200, RadialTrunkTopology())):
+            kw: dict[str, object] = {"building_counts": {"residential": n}}
+            if topo is not None:
+                kw["pen_topology"] = topo
+            out.append(_plan(**kw).model_dump_json())
+        return out
+
+    fast = plans()
+    monkeypatch.setattr(_pen_routing, "_segment_box_gap", lambda a, b, box: 0.0)
+    assert plans() == fast

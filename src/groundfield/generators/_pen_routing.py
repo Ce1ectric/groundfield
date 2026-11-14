@@ -295,6 +295,7 @@ class PenRouter:
         # Buildings a cable runs through, joined to it by rule 4.
         self._joined: set[str] = set()
         self._boxes: dict[str, tuple[float, float, float, float]] = {}
+        self._lines: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
 
     # ------------------------------------------------------------------
     # Building the network
@@ -326,6 +327,7 @@ class PenRouter:
             max(a.xy[0], b.xy[0]) + m,
             max(a.xy[1], b.xy[1]) + m,
         )
+        self._lines[name] = (a.xy, b.xy)
 
     def connect_drop(
         self,
@@ -451,9 +453,14 @@ class PenRouter:
         ]
 
     def _near(self, building: str, cables: Sequence[str]) -> list[str]:
-        """The cables of ``cables`` whose bounding box comes within
-        :attr:`min_length` of the building's: the others cannot pass through
-        it (a cheap filter, audit R4A-06)."""
+        """The cables of ``cables`` that come within :attr:`min_length` of
+        the building's bounding box: the others cannot pass through it (a
+        cheap filter, audit R4A-06). A cable's sections stay within
+        :attr:`min_length` of the straight line between its ends (a joint at
+        a connection point lies that far off it), so a cable whose line is
+        farther than twice that from the box is left out too: the long
+        mains of cabinets at the far ends of their building groups (user
+        decisions Q22, Q35) have bounding boxes over many buildings."""
         wires = self.wires.get(building)
         if wires is None:
             bx0, by0 = bx1, by1 = self.xy[building]
@@ -463,10 +470,12 @@ class PenRouter:
         out = []
         for cable in cables:
             x0, y0, x1, y1 = self._boxes[cable]
-            if not (
-                x1 < bx0 - pad or x0 > bx1 + pad or y1 < by0 - pad or y0 > by1 + pad
-            ):
-                out.append(cable)
+            if x1 < bx0 - pad or x0 > bx1 + pad or y1 < by0 - pad or y0 > by1 + pad:
+                continue
+            a, b = self._lines[cable]
+            if _segment_box_gap(a, b, (bx0, by0, bx1, by1)) > 2.0 * pad:
+                continue
+            out.append(cable)
         return out
 
     # ------------------------------------------------------------------
@@ -793,6 +802,56 @@ class PenRouter:
         sections = self._cables[section.cable]
         index = next(i for i, s in enumerate(sections) if s is section)
         sections.insert(index + 1, tail)
+
+
+def _segment_box_gap(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    box: tuple[float, float, float, float],
+) -> float:
+    """Plan distance in m between the segment ``a b`` and an axis-aligned box.
+
+    Zero when the segment meets the box; otherwise the smallest distance of
+    a segment end to the box or of a box corner to the segment (the distance
+    of two disjoint convex sets is attained at a vertex of one of them).
+    """
+    x0, y0, x1, y1 = box
+    ax, ay = a
+    dx, dy = b[0] - ax, b[1] - ay
+    # Liang-Barsky clip: does the segment meet the box?
+    lo, hi = 0.0, 1.0
+    meets = True
+    for p, q in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
+        if p == 0.0:
+            if q < 0.0:
+                meets = False
+                break
+            continue
+        r = q / p
+        if p < 0.0:
+            lo = max(lo, r)
+        else:
+            hi = min(hi, r)
+        if lo > hi:
+            meets = False
+            break
+    if meets:
+        return 0.0
+
+    def to_box(x: float, y: float) -> float:
+        return math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1))
+
+    def to_segment(x: float, y: float) -> float:
+        dd = dx * dx + dy * dy
+        t = 0.0 if dd == 0.0 else ((x - ax) * dx + (y - ay) * dy) / dd
+        t = min(max(t, 0.0), 1.0)
+        return math.hypot(x - ax - t * dx, y - ay - t * dy)
+
+    return min(
+        to_box(ax, ay),
+        to_box(b[0], b[1]),
+        *(to_segment(x, y) for x in (x0, x1) for y in (y0, y1)),
+    )
 
 
 def _contact(end: _End) -> PlannedContact | None:
