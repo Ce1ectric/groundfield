@@ -48,6 +48,7 @@ from groundfield.generators import (
     PenConfig,
     RadialTrunkTopology,
     RodElectrodeSpec,
+    StarCabinetTopology,
     SubstationConfig,
     TnNetworkConfig,
     TnNetworkGenerator,
@@ -56,6 +57,12 @@ from groundfield.generators._pen_routing import MIN_DROP_LENGTH_M, min_section_l
 from groundfield.generators.plan import ConductorParameters, NetworkPlan
 
 _TWO_HOUSES = ManhattanGridPlacement(spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=2)
+# The cabinet placement of the default configuration up to user decisions Q22
+# and Q35 (a strip along the substation row): the routing tests below keep
+# their geometry with it; tests/test_cabinet_groups.py tests the default.
+_FORMER_CABINETS = CabinetConfig(
+    placement=ManhattanGridPlacement(spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=10)
+)
 _RING_HOUSE = BuildingTypeSpec(
     name="residential",
     grounding=GroundingSystemSpec(
@@ -243,8 +250,15 @@ def test_a_drop_starts_at_the_nearest_point_of_its_feeding_cable() -> None:
     (before user decision Q41: a 5 m drop from a tap at (-17.5, 0) m to the
     (-17.5, -5) m corner). House 1 beside the substation is fed from the
     substation (the end of its cabinet's cable), not from the cabinet 180 m
-    away: 3.5 m from the ring to the point of the foundation nearest to it."""
-    world = _build(building_counts={"residential": 2}, placement=_TWO_HOUSES)
+    away: 3.5 m from the ring to the point of the foundation nearest to it.
+    The main leaves the substation ring at (-4, 0) m, its point nearest to
+    the cabinet (user decision Q43; at its connection point (4, 0) m before,
+    8 m longer, through the ring)."""
+    world = _build(
+        building_counts={"residential": 2},
+        placement=_TWO_HOUSES,
+        cabinets=_FORMER_CABINETS,
+    )
     drops = {c.name: c for c in _drops(world)}
     assert set(drops) == {"pen_service_residential_1_foundation_0"}
     mains = {c.name: c for c in _pen(world) if _is_main(c)}
@@ -255,8 +269,10 @@ def test_a_drop_starts_at_the_nearest_point_of_its_feeding_cable() -> None:
     assert far.start_electrode == "trafo_ring_0"
     assert far.end[:2] == pytest.approx((7.5, 0.0))
     assert math.dist(far.start, far.end) == pytest.approx(3.5)
+    assert joint.start_electrode == "trafo_ring_0"
+    assert mains["pen_main_kvs_0_rod_0"].start[:2] == (-4.0, 0.0)
     total = sum(math.dist(c.start, c.end) for c in _pen(world))
-    assert total == pytest.approx(184.0 + 3.5)
+    assert total == pytest.approx(176.0 + 3.5)
 
 
 # stream DOC-B
@@ -312,13 +328,15 @@ def test_inductive_pen_network_is_passive(building_types: list | None) -> None:
 def test_tap_junctions_are_plan_junctions_and_round_trip() -> None:
     """Five default houses on a row 20 m beside the main (since user
     decision Q41 the default row lies on the main, whose houses are joined
-    to it without a tap)."""
+    to it without a tap; the cabinet on the substation row as up to user
+    decisions Q22 and Q35)."""
     gen = TnNetworkGenerator(
         TnNetworkConfig(
             building_counts={"residential": 5},
             placement=ManhattanGridPlacement(
                 spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=10, centre_xy=(0.0, 20.0)
             ),
+            cabinets=_FORMER_CABINETS,
         ),
         seed=0,
     )
@@ -347,6 +365,7 @@ def test_a_building_on_top_of_a_node_is_rejected_clearly() -> None:
         building_types=[rod_house],
         building_counts={"residential": 2},
         placement=ExplicitPlacement(positions=[(-60.0, 10.0), (-180.0, 0.0)]),
+        cabinets=_FORMER_CABINETS,
     )
     with pytest.raises(ValueError, match="coincides"):
         TnNetworkGenerator(cfg, seed=0).build()
@@ -354,6 +373,7 @@ def test_a_building_on_top_of_a_node_is_rejected_clearly() -> None:
         building_types=[_RING_HOUSE_AT_SITE],
         building_counts={"residential": 2},
         placement=ExplicitPlacement(positions=[(-60.0, 10.0), (-180.0, 0.0)]),
+        cabinets=_FORMER_CABINETS,
     )
     world = TnNetworkGenerator(cfg, seed=0).build()
     last = [c for c in _pen(world) if c.end_electrode == "kvs_0_rod_0"][-1]
@@ -385,20 +405,23 @@ def test_star_topology_wires_every_cabinet_directly_to_the_substation() -> None:
 # audit A3SG-02
 @pytest.mark.finding("10.38")
 def test_collinear_cabinets_have_separate_cables_in_one_trench() -> None:
-    """The two cabinets of the default 30-house network lie west of the
-    substation on one line: two cables along one route (144 m in common),
-    evaluated as touching wires, so the inductive network stays passive."""
-    world = _build(pen=PenConfig(inductance_model="neumann"))
+    """The two cabinets of the 30-house network on the former cabinet strip
+    (the default up to user decisions Q22 and Q35) lie west of the
+    substation on one line: two cables along one route (136 m in common,
+    from the point of the substation ring nearest to them, user decision
+    Q43), evaluated as touching wires, so the inductive network stays
+    passive."""
+    world = _build(pen=PenConfig(inductance_model="neumann"), cabinets=_FORMER_CABINETS)
     mains = {c.name: c for c in _pen(world) if c.name.startswith("pen_main_")}
     assert _overlap(
         mains["pen_main_kvs_0_rod_0"], mains["pen_main_kvs_1_rod_0"]
-    ) == pytest.approx(21.5)
+    ) == pytest.approx(13.5)
     total = sum(
         _overlap(mains["pen_main_kvs_0_rod_0"], c)
         for name, c in mains.items()
         if _cable(name) == "pen_main_kvs_1_rod_0"
     )
-    assert total == pytest.approx(144.0)
+    assert total == pytest.approx(136.0)
     engine = gf.create_engine(
         segment_length=2.0,
         frequencies=[50.0, 1000.0],
@@ -423,13 +446,21 @@ def test_z_in_of_a_100_house_network_drops_against_the_old_routing() -> None:
     (-5, -5) m corner instead of its centre: 0.200357 ohm (-0.039 %). Since
     user decision Q41 each drop ends at the point of the ring nearest to its
     cable, and the rings on the main are joined to it where it crosses
-    them: 0.200346 ohm (-0.006 % against Q38)."""
+    them: 0.200346 ohm (-0.006 % against Q38). Since user decision Q43 the
+    mains and drops leave the substation ring at its point nearest to them:
+    0.200191 ohm (-0.078 %; 1 m segments 0.200191 ohm, -0.077 %). Since user
+    decisions Q22 and Q35 the five cabinets stand at the far ends of their
+    building groups and the houses tap their group's main: 0.202100 ohm
+    (+0.95 %; 1 m segments 0.202101 ohm): the PEN is 62 % shorter (3.37 km
+    against 8.86 km), but the houses share their main instead of having a
+    drop of their own (bonded by ideal conductors instead, the two sets of
+    electrodes differ by -0.09 %; evidence q22/z100_ideal_pen.py)."""
     world = _build(building_types=[_RING_HOUSE], building_counts={"residential": 100})
     engine = gf.create_engine(backend="image", segment_length=2.0, frequencies=[50.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         z = complex(np.asarray(engine.solve(world).input_impedance())[0]).real
-    assert z == pytest.approx(0.200346, rel=1e-5)
+    assert z == pytest.approx(0.202100, rel=1e-5)
     assert z < 0.202724
 
 
@@ -460,13 +491,25 @@ def test_no_drop_starts_on_another_drop_in_the_radial_default_grid() -> None:
     """Base: 22 of the drops of this network started on another house's drop.
     The five houses whose foundations the trunks cross are joined to the
     trunk there and have no drop (audit R4A-02; the snapshot e91f3c0 gave
-    them drops along the trunk): 25 drops for 30 houses."""
+    them drops along the trunk): 25 drops for 30 houses. Since user
+    decisions Q22 and Q35 the houses in a substation slot tap their
+    feeder's trunk; a drop whose closest pair lies at the joint of a house
+    the trunk crosses starts there, on the trunk (audit R4A-01: 4 drops)."""
     world = _build(**_CASES["radial-default-grid-ring-houses"])
     drops = _drops(world)
     assert len(drops) == 25
     houses = {c.end_electrode for c in drops}
     assert not any(c.start_electrode in houses for c in drops)
-    assert not any(c.start_electrode.startswith("residential_") for c in drops)
+    trunk = [c for c in _pen(world) if _is_main(c)]
+    joints = {c.start_electrode for c in trunk} | {c.end_electrode for c in trunk}
+    at_joints = [c for c in drops if c.start_electrode.startswith("residential_")]
+    assert len(at_joints) == 4
+    for c in at_joints:
+        assert c.start_electrode in joints
+        assert (
+            min(math.dist(_nearest_on([t], c.start[:2]), c.start[:2]) for t in trunk)
+            < 1e-9
+        )
 
 
 # audit A3SG-03
@@ -637,18 +680,18 @@ def _random_positions(rng: np.random.Generator, n: int) -> list[tuple[float, flo
 
 
 def _feeding_cables(plan: NetworkPlan) -> dict[str, str]:
-    """Cable of the nearest cabinet (Manhattan) of every building anchor (star)."""
-    cabinets = [s for s in plan.sites if s.role == "cabinet" and s.anchor is not None]
+    """Cable of the cabinet of every building anchor's group (star, user
+    decisions Q22 and Q35: group ``k`` of ``StarCabinetTopology.group_buildings``
+    is fed by cabinet ``kvs_<k>``)."""
+    cabinets = [s for s in plan.sites if s.role == "cabinet"]
+    buildings = [s for s in plan.sites if s.role == "building" and s.anchor]
+    groups = StarCabinetTopology.group_buildings(
+        plan.sites[0].position_xy, [b.position_xy for b in buildings], len(cabinets)
+    )
     out = {}
-    for b in plan.sites:
-        if b.role != "building" or b.anchor is None:
-            continue
-        bx, by = b.position_xy
-        best = min(
-            cabinets,
-            key=lambda c: abs(c.position_xy[0] - bx) + abs(c.position_xy[1] - by),
-        )
-        out[b.anchor] = f"pen_main_{best.anchor}"
+    for group, cab in zip(groups, cabinets, strict=False):
+        for i in group:
+            out[buildings[i].anchor] = f"pen_main_{cab.anchor}"
     return out
 
 
@@ -732,6 +775,12 @@ def test_random_networks_build_and_route_as_documented(
                 _root(c.end_electrode) for c in cable
             }
             assert _root(d.start_electrode) in ends, d.name
+            if d.start_electrode == "trafo_ring_0":
+                # A drop from the substation leaves its ring at the point
+                # nearest to the building (user decision Q43), not on the
+                # cable, which leaves it at its point nearest to the cabinet.
+                assert math.hypot(*d.start[:2]) == pytest.approx(4.0, abs=1e-12)
+                continue
             foot = _nearest_on(cable, d.end[:2])
             assert math.dist(d.start[:2], foot) <= MIN_DROP_LENGTH_M * (1 + 1e-6)
 

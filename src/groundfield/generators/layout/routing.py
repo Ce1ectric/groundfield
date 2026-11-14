@@ -101,11 +101,13 @@ class BuildingConnection(BaseModel):
     tap_point_xy
         The tap point on the cable polyline nearest to the house centroid
         (Manhattan), the end of ``stub_waypoints``. The materialised drop
-        of a house with a foundation taps the cable at the closest pair of
-        cable and foundation wires instead (user decision Q41, see
-        :meth:`LvNetworkLayout.to_world
+        of a house with a foundation, ring or strip taps the cable at the
+        closest pair of cable and those wires instead (user decisions Q41,
+        Q43, see :meth:`LvNetworkLayout.to_world
         <groundfield.generators.layout.LvNetworkLayout.to_world>`); a house
-        without a foundation is tapped here.
+        with rods only is tapped here, or at the nearest point where the
+        cable is built when this point lies inside a site foundation (audit
+        R6A-01).
     """
 
     model_config = ConfigDict(extra="forbid")

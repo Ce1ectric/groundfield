@@ -13,12 +13,14 @@ depth field), observed by the GEN-1 stream.
 
 from __future__ import annotations
 
+import math
 import warnings
 
 import pytest
 
 import groundfield as gf
 from groundfield.generators import (
+    CabinetConfig,
     HomogeneousSoilSpec,
     ManhattanGridPlacement,
     PenConfig,
@@ -32,12 +34,18 @@ pytestmark = pytest.mark.finding("10.55")
 
 def _world(depth_m: float = 0.6, **kw: object) -> gf.World:
     # The houses stand on a row 20 m beside the main: since user decision
-    # Q41 the default row on the main is joined to it without drops.
+    # Q41 the default row on the main is joined to it without drops. The
+    # cabinet on the substation row, as up to user decisions Q22 and Q35.
     cfg = TnNetworkConfig(
         soil=HomogeneousSoilSpec(rho=100.0),
         building_counts={"residential": 4},
         placement=ManhattanGridPlacement(
             spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=10, centre_xy=(0.0, 20.0)
+        ),
+        cabinets=CabinetConfig(
+            placement=ManhattanGridPlacement(
+                spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=10
+            )
         ),
         pen=PenConfig(depth_m=depth_m, **kw),
     )
@@ -73,6 +81,14 @@ def test_pen_sections_run_at_the_configured_depth(depth: float) -> None:
                 assert (
                     x0 == x1 == point[0] and min(y0, y1) <= point[1] <= max(y0, y1)
                 ) or (y0 == y1 == point[1] and min(x0, x1) <= point[0] <= max(x0, x1))
+            elif name == "trafo_ring_0":
+                # User decision Q43: the point of the substation ring
+                # nearest to the conductor, at the PEN depth.
+                ring = world.get_electrode(name)
+                cx, cy, _ = ring.center
+                assert math.hypot(point[0] - cx, point[1] - cy) == pytest.approx(
+                    ring.radius, abs=1e-12
+                )
             else:
                 assert point[:2] == _node_point(world, name)[:2]
 

@@ -1,15 +1,33 @@
-r"""Where generated conductors meet a foundation (private; user decision Q41).
+r"""Where generated conductors meet a site (private; user decisions Q41, Q43).
 
 Since user decision Q41 of 2026.11 every conductor that the generators route
 to a foundation — a PEN service drop, a cable that leaves a substation or a
 cabinet — ends at the point of that foundation nearest to the conductor: the
-connection lug on the side facing the cable. This module computes that point
-in plan (the horizontal projection) for the wires of a foundation:
+connection lug on the side facing the cable. Since user decision Q43 the same
+holds for every horizontal earth electrode of a site: a circular ring
+(:class:`~groundfield.generators.electrode_specs.RingElectrodeSpec`, e.g. the
+default substations of both generators) and a strip; rods (vertical) keep
+their head. This module computes that point in plan (the horizontal
+projection) for the wires of a site:
 
 * :func:`nearest_point` — the point of the wires nearest to a point;
 * :func:`closest_pair` — the closest pair between straight segments (the
   sections of a cable, or the wires of another foundation) and the wires:
   the segment, the parameter on it and the point on the wires.
+
+Circles
+-------
+A circular wire is searched as an inscribed polygon whose sagitta
+:math:`r\,(1 - \cos(\pi/n))` is at most :data:`CIRCLE_SAGITTA_M` (vertices
+at the four axis points, so its bounding box is the circle's), and the point
+found is refined to the exact closest point of the circle: for a point
+:math:`P` the radial point :math:`C + r\,(P - C)/|P - C|`; for a straight
+segment the first intersection with the circle (smallest arc position) if it
+crosses or touches it, else the radial point through the segment point
+nearest to the centre (outside) or through the end point farthest from it
+(inside), over every segment of the search. The choice between two wires of
+one site that lie within the sagitta of the same distance is made on the
+polygon.
 
 Geometry
 --------
@@ -43,18 +61,27 @@ from dataclasses import dataclass
 import numpy as np
 
 __all__ = [
+    "CIRCLE_SAGITTA_M",
     "TIE_TOLERANCE_M",
     "Contact",
     "FoundationWire",
+    "Outline",
     "PreparedWires",
+    "circle_polygon",
     "closest_pair",
+    "convex_outline",
+    "inside_outlines",
     "join",
     "nearest_point",
+    "segment_enters",
     "wire_pieces",
 ]
 
 TIE_TOLERANCE_M = 1e-9
 """Distances (m) closer than this to the smallest one tie."""
+
+CIRCLE_SAGITTA_M = 1e-3
+"""Largest sagitta (m) of the polygon a circular wire is searched on."""
 
 _PARALLEL = 1e-12
 """Relative cross product below which two segments count as parallel."""
@@ -62,26 +89,153 @@ _PARALLEL = 1e-12
 
 @dataclass(frozen=True)
 class FoundationWire:
-    """One wire of a foundation, in plan.
+    """One horizontal wire of a site, in plan.
+
+    The wires of a site's foundations (user decision Q41) and, since user
+    decision Q43, of its other horizontal earth electrodes: circular rings
+    and strips.
 
     Attributes
     ----------
     electrode
         Name of the electrode (wire) in the world.
     index
-        Position of the wire among the wires of the site's foundations (world
+        Position of the wire among the horizontal wires of the site (world
         order); the lower index wins a tie.
     xy
         Plan vertices ``(x, y)`` in m from the wire's connection point (its
         first vertex), closed loops with the first vertex repeated at the end.
+        For a circle the inscribed polygon of :func:`circle_polygon`.
     z
         Depth of the wire in m (positive into the soil).
+    circle
+        ``(x, y, r)`` in m — centre and radius of a circular wire, whose
+        points are refined to the exact circle (module docstring); ``None``
+        for a straight or polygonal wire.
     """
 
     electrode: str
     index: int
     xy: tuple[tuple[float, float], ...]
     z: float
+    circle: tuple[float, float, float] | None = None
+
+
+def circle_polygon(
+    cx: float, cy: float, radius: float
+) -> tuple[tuple[float, float], ...]:
+    """Inscribed polygon of a circle for the closest-point search.
+
+    Parameters
+    ----------
+    cx, cy
+        Centre in m.
+    radius
+        Radius in m.
+
+    Returns
+    -------
+    tuple of (x, y)
+        ``n + 1`` vertices in m from the circle's connection point
+        :math:`(c_x + r, c_y)` counter-clockwise, the first repeated at the
+        end; ``n`` a multiple of 4, at least 64, with a sagitta of at most
+        :data:`CIRCLE_SAGITTA_M`. The four axis points are exact vertices.
+    """
+    r = float(radius)
+    cos_step = 1.0 - CIRCLE_SAGITTA_M / r
+    n = 64 if cos_step <= -1.0 else math.ceil(math.pi / math.acos(cos_step))
+    n = max(64, 4 * math.ceil(n / 4))
+    quarter = n // 4
+    exact = {0: (1.0, 0.0), quarter: (0.0, 1.0), 2 * quarter: (-1.0, 0.0)}
+    exact[3 * quarter] = (0.0, -1.0)
+    out = []
+    for k in range(n + 1):
+        c, s = exact.get(k % n) or (
+            math.cos(2.0 * math.pi * k / n),
+            math.sin(2.0 * math.pi * k / n),
+        )
+        out.append((cx + r * c, cy + r * s))
+    return tuple(out)
+
+
+def _arc_on_circle(
+    xy: tuple[float, float], circle: tuple[float, float, float]
+) -> float:
+    """Arc position in m of a point of a circle, counter-clockwise from +x."""
+    cx, cy, r = circle
+    angle = math.atan2(xy[1] - cy, xy[0] - cx)
+    if angle < 0.0:
+        angle += 2.0 * math.pi
+    return r * angle
+
+
+def _radial(
+    point: Sequence[float], circle: tuple[float, float, float]
+) -> tuple[float, float]:
+    """Point of the circle on the ray from its centre through ``point``
+    (the connection point when ``point`` is the centre)."""
+    cx, cy, r = circle
+    dx, dy = float(point[0]) - cx, float(point[1]) - cy
+    d = math.hypot(dx, dy)
+    if d == 0.0:
+        return (cx + r, cy)
+    return (cx + r * (dx / d), cy + r * (dy / d))
+
+
+def _segment_circle(
+    a: Sequence[float], b: Sequence[float], circle: tuple[float, float, float]
+) -> tuple[float, float, tuple[float, float]]:
+    """Exact closest pair of the segment ``a -> b`` and a circle.
+
+    Returns ``(distance, t, xy)``: the plan distance in m, the parameter of
+    the pair's point on the segment and the pair's point on the circle. A
+    segment that crosses or touches the circle meets it at the intersection
+    with the smallest arc position (distance 0); one inside it at the radial
+    point through its end farther from the centre; one outside it at the
+    radial point through its point nearest to the centre.
+    """
+    cx, cy, r = circle
+    ax, ay = float(a[0]) - cx, float(a[1]) - cy
+    dx, dy = float(b[0]) - float(a[0]), float(b[1]) - float(a[1])
+    dd = dx * dx + dy * dy
+    s0 = 0.0 if dd == 0.0 else min(max(-(ax * dx + ay * dy) / dd, 0.0), 1.0)
+    g0 = math.hypot(ax + s0 * dx, ay + s0 * dy)
+    ga, gb = math.hypot(ax, ay), math.hypot(ax + dx, ay + dy)
+    gmax = max(ga, gb)
+    if g0 > r:
+        xy = _radial((cx + ax + s0 * dx, cy + ay + s0 * dy), circle)
+        return g0 - r, s0, xy
+    if gmax < r:
+        # Inside: the end point farther from the centre (ties: smaller arc).
+        ends = []
+        for dist, t in ((r - ga, 0.0), (r - gb, 1.0)):
+            xy = _radial((cx + ax + t * dx, cy + ay + t * dy), circle)
+            ends.append((dist, _arc_on_circle(xy, circle), t, xy))
+        low = min(e[0] for e in ends)
+        ends = [e for e in ends if e[0] <= low + TIE_TOLERANCE_M]
+        ends.sort(key=lambda e: (e[1], e[2]))
+        dist, _, t, xy = ends[0]
+        return dist, t, xy
+    # Crossing or touching: the roots of |w + s d| = r within [0, 1].
+    wd = ax * dx + ay * dy
+    ww = ax * ax + ay * ay
+    disc = max(wd * wd - dd * (ww - r * r), 0.0)
+    root = math.sqrt(disc)
+    roots = [] if dd == 0.0 else [(-wd - root) / dd, (-wd + root) / dd]
+    cand = []
+    for s in roots:
+        s = min(max(s, 0.0), 1.0)
+        xy = _radial((cx + ax + s * dx, cy + ay + s * dy), circle)
+        gap = math.hypot(cx + ax + s * dx - xy[0], cy + ay + s * dy - xy[1])
+        cand.append((gap, _arc_on_circle(xy, circle), s, xy))
+    if not cand:  # a point segment on the circle
+        xy = _radial((cx + ax, cy + ay), circle)
+        return abs(ga - r), 0.0, xy
+    low = min(c[0] for c in cand)
+    cand = [c for c in cand if c[0] <= low + TIE_TOLERANCE_M]
+    cand.sort(key=lambda c: (c[1], c[2]))
+    gap, _, s, xy = cand[0]
+    return gap, s, xy
 
 
 @dataclass(frozen=True)
@@ -215,6 +369,16 @@ def nearest_point(point: Sequence[float], wires: Sequence[FoundationWire]) -> Co
     p = np.asarray(point, dtype=float)[:2]
     dist, u = _point_segment_distance(p[None, :], a, d)
     k = _pick(dist, index, arc0 + u * length, np.arange(len(dist), dtype=float))
+    circle = owner[k].circle
+    if circle is not None:
+        # The exact point of the circle (user decision Q43).
+        cx, cy, r = circle
+        return Contact(
+            xy=_radial(p, circle),
+            electrode=owner[k].electrode,
+            distance=abs(math.hypot(float(p[0]) - cx, float(p[1]) - cy) - r),
+            z=float(owner[k].z),
+        )
     xy = a[k] + u[k] * d[k]
     return Contact(
         xy=(float(xy[0]), float(xy[1])),
@@ -295,6 +459,28 @@ def closest_pair(
     order = np.broadcast_to(keep.astype(float)[:, None, None], u.shape)
     flat = _pick(dist.ravel(), idx.ravel(), arc.ravel(), order.ravel())
     i, j, c = np.unravel_index(flat, u.shape)
+    circle = owner[j].circle
+    if circle is not None:
+        # The exact closest pair of the circle and the segments (user
+        # decision Q43): the polygon chose the wire; every segment of the
+        # search is paired with the circle itself. Ties: smallest arc
+        # position on the circle, then the first segment.
+        pairs = []
+        for k in range(seg.shape[0]):
+            gap, t_k, xy_k = _segment_circle(seg[k, 0], seg[k, 1], circle)
+            pairs.append((gap, _arc_on_circle(xy_k, circle), k, t_k, xy_k))
+        low = min(p[0] for p in pairs)
+        gap, _, k, t_k, xy_k = min(
+            (p for p in pairs if p[0] <= low + TIE_TOLERANCE_M),
+            key=lambda p: (p[1], p[2]),
+        )
+        contact = Contact(
+            xy=(float(xy_k[0]), float(xy_k[1])),
+            electrode=owner[j].electrode,
+            distance=float(gap),
+            z=float(owner[j].z),
+        )
+        return int(keep[k]), float(t_k), contact
     xy = q[i, j, c]
     # The point of segment i nearest to the contact.
     _, t = _point_segment_distance(
@@ -341,6 +527,14 @@ def wire_pieces(
     wires: Sequence[FoundationWire],
 ) -> tuple[list[tuple[tuple[float, float], tuple[float, float]]], list[str]]:
     """Straight pieces of ``wires`` in wire order, with the wire of each."""
+    segments, owners = _pieces(wires)
+    return segments, [wire.electrode for wire in owners]
+
+
+def _pieces(
+    wires: Sequence[FoundationWire],
+) -> tuple[list[tuple[tuple[float, float], tuple[float, float]]], list[FoundationWire]]:
+    """Straight pieces of ``wires`` in wire order, with the wire object of each."""
     if isinstance(wires, PreparedWires):
         wires = wires.wires
     segments, owners = [], []
@@ -348,7 +542,7 @@ def wire_pieces(
         for a, b in zip(wire.xy[:-1], wire.xy[1:], strict=True):
             if a != b:
                 segments.append((a, b))
-                owners.append(wire.electrode)
+                owners.append(wire)
     return segments, owners
 
 
@@ -373,10 +567,11 @@ def join(
     Returns
     -------
     tuple
-        ``((xy_a, wire_a), (xy_b, wire_b))``: a node without a foundation is
-        met at its connection point (wire ``None``), a node with one at the
-        point of its wires nearest to the other end, two foundations at
-        their closest pair (user decision Q41).
+        ``((xy_a, wire_a), (xy_b, wire_b))``: a node without horizontal
+        wires is met at its connection point (wire ``None``), a node with
+        them at the point of its wires nearest to the other end, two such
+        nodes at their closest pair (user decisions Q41, Q43; circles
+        exactly, two disjoint circles on the line of their centres).
     """
     pa = (float(a_xy[0]), float(a_xy[1]))
     pb = (float(b_xy[0]), float(b_xy[1]))
@@ -388,8 +583,163 @@ def join(
     if not b_wires:
         ca = nearest_point(pb, a_wires)
         return (ca.xy, ca.electrode), (pb, None)
-    segments, owners = wire_pieces(a_wires)
+    segments, owners = _pieces(a_wires)
     i, t, cb = closest_pair(segments, b_wires)
     (x0, y0), (x1, y1) = segments[i]
     xy = (x0 + t * (x1 - x0), y0 + t * (y1 - y0))
-    return (xy, owners[i]), (cb.xy, cb.electrode)
+    a_wire = owners[i]
+    if a_wire.circle is None:
+        return (xy, a_wire.electrode), (cb.xy, cb.electrode)
+    # A circle at end a (user decision Q43): pair the circle itself with the
+    # wire of b that the polygon search chose.
+    b_list = b_wires.wires if isinstance(b_wires, PreparedWires) else b_wires
+    b_wire = next(w for w in b_list if w.electrode == cb.electrode)
+    if b_wire.circle is not None:
+        (xa, ya, ra), (xb, yb, rb) = a_wire.circle, b_wire.circle
+        gap = math.hypot(xb - xa, yb - ya)
+        if gap > ra + rb:
+            ux, uy = (xb - xa) / gap, (yb - ya) / gap
+            pa = (xa + ra * ux, ya + ra * uy)
+            pb = (xb - rb * ux, yb - rb * uy)
+        else:  # nested or overlapping circles: the polygon pair, on the circles
+            pa, pb = _radial(xy, a_wire.circle), _radial(cb.xy, b_wire.circle)
+        return (pa, a_wire.electrode), (pb, b_wire.electrode)
+    b_segments, _ = _pieces([b_wire])
+    k, tb, ca = closest_pair(b_segments, [a_wire])
+    (x0, y0), (x1, y1) = b_segments[k]
+    xb = (x0 + tb * (x1 - x0), y0 + tb * (y1 - y0))
+    return (ca.xy, a_wire.electrode), (xb, b_wire.electrode)
+
+
+@dataclass(frozen=True)
+class Outline:
+    """Closed plan outline of a horizontal electrode: the area it encloses.
+
+    Attributes
+    ----------
+    xy
+        Closed polygon ``(x, y)`` in m, the first vertex repeated at the end
+        (a rectangle's four corners, a building outline, the polygon of
+        :func:`circle_polygon` for a circle).
+    circle
+        ``(x, y, r)`` in m of a circle, tested exactly; ``None`` for a
+        polygon.
+    """
+
+    xy: tuple[tuple[float, float], ...]
+    circle: tuple[float, float, float] | None = None
+
+
+def inside_outlines(
+    point: Sequence[float], outlines: Sequence[Outline], tol: float = 1e-9
+) -> bool:
+    """Whether ``point`` lies strictly inside one of ``outlines`` (plan).
+
+    A point within ``tol`` (m) of an outline lies on it, not inside. Circles
+    are tested exactly, polygons by the even-odd rule.
+    """
+    x, y = float(point[0]), float(point[1])
+    for outline in outlines:
+        if outline.circle is not None:
+            cx, cy, r = outline.circle
+            if math.hypot(x - cx, y - cy) < r - tol:
+                return True
+            continue
+        pts = outline.xy
+        on_edge = False
+        flag = False
+        for (ax, ay), (bx, by) in zip(pts[:-1], pts[1:], strict=True):
+            dx, dy = bx - ax, by - ay
+            dd = dx * dx + dy * dy
+            t = 0.0 if dd == 0.0 else ((x - ax) * dx + (y - ay) * dy) / dd
+            t = min(max(t, 0.0), 1.0)
+            if math.hypot(x - ax - t * dx, y - ay - t * dy) <= tol:
+                on_edge = True
+                break
+            if (ay > y) != (by > y) and x < ax + (y - ay) * dx / dy:
+                flag = not flag
+        if flag and not on_edge:
+            return True
+    return False
+
+
+def convex_outline(
+    points: Sequence[Sequence[float]],
+) -> tuple[tuple[float, float], ...]:
+    """Closed convex hull (counter-clockwise, monotone chain) of plan points.
+
+    The outline of a rectangular foundation from the vertices of its wires
+    (every vertex lies on the rectangle or inside it).
+    """
+    pts = sorted({(float(p[0]), float(p[1])) for p in points})
+    if len(pts) < 3:
+        return tuple(pts)
+
+    def half(seq: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        out: list[tuple[float, float]] = []
+        for p in seq:
+            while (
+                len(out) >= 2
+                and (
+                    (out[-1][0] - out[-2][0]) * (p[1] - out[-2][1])
+                    - (out[-1][1] - out[-2][1]) * (p[0] - out[-2][0])
+                )
+                <= 0.0
+            ):
+                out.pop()
+            out.append(p)
+        return out[:-1]
+
+    hull = half(pts) + half(pts[::-1])
+    return tuple(hull + hull[:1])
+
+
+def segment_enters(
+    a: Sequence[float],
+    b: Sequence[float],
+    outlines: Sequence[Outline],
+    tol: float = 1e-9,
+) -> bool:
+    """Whether the plan segment ``a -> b`` passes inside one of ``outlines``.
+
+    True when a point of the segment lies strictly inside an outline
+    (:func:`inside_outlines`); a segment that only touches an outline (runs
+    along a side, through a corner, tangent to a circle) does not enter it.
+    """
+    ax, ay = float(a[0]), float(a[1])
+    dx, dy = float(b[0]) - ax, float(b[1]) - ay
+    dd = dx * dx + dy * dy
+    for outline in outlines:
+        if outline.circle is not None:
+            cx, cy, r = outline.circle
+            t = 0.0 if dd == 0.0 else ((cx - ax) * dx + (cy - ay) * dy) / dd
+            t = min(max(t, 0.0), 1.0)
+            if math.hypot(ax + t * dx - cx, ay + t * dy - cy) < r - tol:
+                return True
+            continue
+        # Parameters where the segment meets the outline; the pieces between
+        # them lie wholly inside or outside it: test their midpoints.
+        ts = {0.0, 1.0}
+        pts = outline.xy
+        for (px, py), (qx, qy) in zip(pts[:-1], pts[1:], strict=True):
+            ex, ey = qx - px, qy - py
+            den = dx * ey - dy * ex
+            rx, ry = px - ax, py - ay
+            if den != 0.0:
+                t = (rx * ey - ry * ex) / den
+                u = (rx * dy - ry * dx) / den
+                if -1e-12 <= t <= 1.0 + 1e-12 and -1e-12 <= u <= 1.0 + 1e-12:
+                    ts.add(min(max(t, 0.0), 1.0))
+            elif dd > 0.0:
+                for vx, vy in ((px, py), (qx, qy)):
+                    t = ((vx - ax) * dx + (vy - ay) * dy) / dd
+                    if 0.0 < t < 1.0:
+                        ts.add(t)
+        params = sorted(ts)
+        probes = [
+            0.5 * (t0 + t1) for t0, t1 in zip(params[:-1], params[1:], strict=True)
+        ]
+        for t in probes or [0.0]:
+            if inside_outlines((ax + t * dx, ay + t * dy), [outline], tol):
+                return True
+    return False

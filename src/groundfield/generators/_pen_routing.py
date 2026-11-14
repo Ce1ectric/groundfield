@@ -3,17 +3,22 @@ r"""Routing of the PEN cables of generated TN networks (private).
 Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
 (since 2026.11; this module states exactly what the router guarantees):
 
-0. **Where a cable meets a site** (user decision Q41 of 2026.11): a site
-   with a foundation (the wires of its
-   :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
-   electrodes, :func:`~groundfield.generators.materialise.site_foundation_wires`)
-   is met at the point of the foundation nearest to the cable — a cable
-   leaving it at the point nearest to the cable's other end, a drop at the
-   closest pair below — and the conductor is attached to the wire that
-   holds the point (:class:`~groundfield.generators.plan.PlannedContact`);
-   ties go to the lowest wire index, then to the smallest arc position along
-   the wire (:mod:`groundfield.generators._contact`). Any other site (rods,
-   rings, strips) is met at the connection point of its anchor electrode.
+0. **Where a cable meets a site** (user decisions Q41 and Q43 of 2026.11):
+   a site with horizontal earth electrodes (the wires of its
+   :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`,
+   :class:`~groundfield.generators.electrode_specs.RingElectrodeSpec` and
+   :class:`~groundfield.generators.electrode_specs.StripElectrodeSpec`
+   electrodes, :func:`~groundfield.generators.materialise.site_contact_wires`;
+   foundations since Q41, circular rings and strips since Q43) is met at
+   the point of those wires nearest to the cable — a cable leaving it at
+   the point nearest to the cable's other end, a drop at the closest pair
+   below — and the conductor is attached to the wire that holds the point
+   (:class:`~groundfield.generators.plan.PlannedContact`); ties go to the
+   lowest wire index, then to the smallest arc position along the wire, and
+   a circle is met at its exact nearest point
+   (:mod:`groundfield.generators._contact`). A site with rods only
+   (vertical) is met at the connection point of its anchor, the head of its
+   first rod.
 1. **Every cabinet has its own cable**, as its topology documents: in the
    star topology a straight cable from the substation to the cabinet
    (``pen_main_<anchor>``), in the radial-trunk topology the trunk
@@ -33,9 +38,11 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    ``<cable>_s<k>``. When the nearest point is an end of the path the
    drop starts at that node: the substation or the cabinet, at its point
    nearest to the building, or — at a building the cable runs through
-   (rule 4) — the joint on the cable (audit R4A-01). A building fed from
-   the substation itself (a substation slot of the radial trunk) has no
-   feeding cable: its drop starts at the substation. A drop from a node
+   (rule 4) — the joint on the cable (audit R4A-01). A building in a
+   substation slot of the radial trunk taps its feeder's trunk (user
+   decisions Q22, Q35; up to then its drop started at the substation); on a
+   feeder without a trunk it has no feeding cable and its drop starts at
+   the substation. A drop from a node
    that would run along a cable it does not tap — a trunk of the radial
    topology (the substation slots, a building beyond a later cabinet on
    the feeder's axis), or in the star topology the main of another
@@ -101,16 +108,19 @@ side, so a drop to a house behind others of its grid column runs above
 their side wires, 0.2 m above them in
 :class:`~groundfield.generators.tn_network.TnNetworkGenerator` (PEN at
 0.6 m, foundations at 0.8 m). In the default grids (2 × 2 mesh or 10 m ring
-houses, 25 m × 30 m, 30 to 200 houses) that is 0 … 56 % of the drops (star,
-30 mesh houses: 14 of 25 drops, 150 m in all, up to 40 m over 4 houses;
-star 150: 70 of 141 drops, 2 450 m, up to 65 m over 7 houses; radial 150:
-69 of 140 drops, 1 595 m); drops are not routed around foundations. The
+houses, 25 m × 30 m, 10 to 200 houses, cabinets per building group since
+user decisions Q22 and Q35) that is 0 … 100 % of the drops (star, 30
+houses: all 20 drops, each over 5 m above a side wire of the middle-row
+house it passes on its way from the main, 100 m in all; star 50, 150 and
+200: none; radial 150: 87 of 140 drops, 1 805 m, up to 40 m over 4
+houses); drops are not routed around foundations (user decision Q42). The
 field model has no inductive coupling between a drop and these wires (an
 electrode carries no current along itself); a bare PEN leaks next to them
 through the soil. Moved 1 m aside as a whole, those drops change the input
-impedance by at most 0.02 % with an insulated PEN and by up to −0.30 % with
-a bare one (default grids of 30 and 150 houses, 50 Hz and 1 kHz,
-``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
+impedance by at most 0.006 % with an insulated PEN (nothing in the star
+30-house grid, whose drops are perpendicular to their mains) and by up to
+−0.40 % with a bare one (default grids of 30 and 150 houses, 50 Hz and
+1 kHz, ``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
 trench; the inductive coupling evaluates them as touching wires (finite
 mutual inductance, passive network).
 
@@ -245,10 +255,11 @@ class PenRouter:
     conductor
         Conductor parameters of every cable.
     wires
-        Foundation wires (plan) of the nodes that have a foundation
-        (:func:`~groundfield.generators.materialise.site_foundation_wires`);
-        a cable or drop ends at the point of these wires nearest to it (user
-        decision Q41). Nodes without an entry end at ``node_xy``.
+        Horizontal wires (plan) of the nodes that have horizontal earth
+        electrodes — foundations, rings, strips
+        (:func:`~groundfield.generators.materialise.site_contact_wires`); a
+        cable or drop ends at the point of these wires nearest to it (user
+        decisions Q41, Q43). Nodes without an entry end at ``node_xy``.
 
     Attributes
     ----------
@@ -287,6 +298,7 @@ class PenRouter:
         # Buildings a cable runs through, joined to it by rule 4.
         self._joined: set[str] = set()
         self._boxes: dict[str, tuple[float, float, float, float]] = {}
+        self._lines: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
 
     # ------------------------------------------------------------------
     # Building the network
@@ -318,6 +330,7 @@ class PenRouter:
             max(a.xy[0], b.xy[0]) + m,
             max(a.xy[1], b.xy[1]) + m,
         )
+        self._lines[name] = (a.xy, b.xy)
 
     def connect_drop(
         self,
@@ -403,17 +416,21 @@ class PenRouter:
         origin: str,
         *,
         crossing: Sequence[str] = (),
+        paths: Mapping[str, Sequence[str]] | None = None,
     ) -> list[str]:
         """``buildings`` sorted by their distance to their feeding path.
 
         Buildings on the path come first (they split it before the taps of
         the others are placed); ties keep the given order. ``crossing``: see
-        :meth:`connect_drop`.
+        :meth:`connect_drop`. ``paths`` gives a building its own feeding
+        cables instead of ``cables`` (the radial substation slots, each
+        tapping its feeder's trunk).
         """
 
         def key(item: tuple[int, str]) -> tuple[float, int]:
             k, name = item
-            return self._nearest(name, cables, origin, crossing).distance, k
+            own = cables if paths is None else paths.get(name, cables)
+            return self._nearest(name, own, origin, crossing).distance, k
 
         return [name for _, name in sorted(enumerate(buildings), key=key)]
 
@@ -439,9 +456,14 @@ class PenRouter:
         ]
 
     def _near(self, building: str, cables: Sequence[str]) -> list[str]:
-        """The cables of ``cables`` whose bounding box comes within
-        :attr:`min_length` of the building's: the others cannot pass through
-        it (a cheap filter, audit R4A-06)."""
+        """The cables of ``cables`` that come within :attr:`min_length` of
+        the building's bounding box: the others cannot pass through it (a
+        cheap filter, audit R4A-06). A cable's sections stay within
+        :attr:`min_length` of the straight line between its ends (a joint at
+        a connection point lies that far off it), so a cable whose line is
+        farther than twice that from the box is left out too: the long
+        mains of cabinets at the far ends of their building groups (user
+        decisions Q22, Q35) have bounding boxes over many buildings."""
         wires = self.wires.get(building)
         if wires is None:
             bx0, by0 = bx1, by1 = self.xy[building]
@@ -451,10 +473,12 @@ class PenRouter:
         out = []
         for cable in cables:
             x0, y0, x1, y1 = self._boxes[cable]
-            if not (
-                x1 < bx0 - pad or x0 > bx1 + pad or y1 < by0 - pad or y0 > by1 + pad
-            ):
-                out.append(cable)
+            if x1 < bx0 - pad or x0 > bx1 + pad or y1 < by0 - pad or y0 > by1 + pad:
+                continue
+            a, b = self._lines[cable]
+            if _segment_box_gap(a, b, (bx0, by0, bx1, by1)) > 2.0 * pad:
+                continue
+            out.append(cable)
         return out
 
     # ------------------------------------------------------------------
@@ -781,6 +805,56 @@ class PenRouter:
         sections = self._cables[section.cable]
         index = next(i for i, s in enumerate(sections) if s is section)
         sections.insert(index + 1, tail)
+
+
+def _segment_box_gap(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    box: tuple[float, float, float, float],
+) -> float:
+    """Plan distance in m between the segment ``a b`` and an axis-aligned box.
+
+    Zero when the segment meets the box; otherwise the smallest distance of
+    a segment end to the box or of a box corner to the segment (the distance
+    of two disjoint convex sets is attained at a vertex of one of them).
+    """
+    x0, y0, x1, y1 = box
+    ax, ay = a
+    dx, dy = b[0] - ax, b[1] - ay
+    # Liang-Barsky clip: does the segment meet the box?
+    lo, hi = 0.0, 1.0
+    meets = True
+    for p, q in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
+        if p == 0.0:
+            if q < 0.0:
+                meets = False
+                break
+            continue
+        r = q / p
+        if p < 0.0:
+            lo = max(lo, r)
+        else:
+            hi = min(hi, r)
+        if lo > hi:
+            meets = False
+            break
+    if meets:
+        return 0.0
+
+    def to_box(x: float, y: float) -> float:
+        return math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1))
+
+    def to_segment(x: float, y: float) -> float:
+        dd = dx * dx + dy * dy
+        t = 0.0 if dd == 0.0 else ((x - ax) * dx + (y - ay) * dy) / dd
+        t = min(max(t, 0.0), 1.0)
+        return math.hypot(x - ax - t * dx, y - ay - t * dy)
+
+    return min(
+        to_box(ax, ay),
+        to_box(b[0], b[1]),
+        *(to_segment(x, y) for x in (x0, x1) for y in (y0, y1)),
+    )
 
 
 def _contact(end: _End) -> PlannedContact | None:

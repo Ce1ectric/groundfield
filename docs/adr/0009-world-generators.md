@@ -335,21 +335,45 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    (R4B-01; "along": both ends of a section within 1 cm of the drop's
    line, R5A-01), and the layout builder keeps its taps on the layout
    polyline, clipped at the projection of a site's foundation contact, so
-   none lies inside a site foundation (R4A-03, R5A-02); ties go to the
-   lowest wire index, then to the smallest arc position along the wire.
+   none lies inside a site foundation (R4A-03, R5A-02); the cable is built
+   from where its polyline leaves the start site's closed electrodes for
+   the last time to where it first enters the end site's, the corners in
+   between are part of the sites (audit R6A-01: a router corner inside a
+   2 m cabinet ring was a node that houses tapped, 82 of 2 540 drops of
+   200 random layouts); ties go to the lowest wire index, then to the
+   smallest arc position along the wire. Since user decision Q43 the
+   same nearest-point rule holds for every horizontal earth electrode of a
+   site — a `RingElectrodeSpec` circle (the default substations, met at the
+   exact point of the circle) and a strip, the nearest of all of them at a
+   site with several (`site_contact_wires`) — and only a site with rods
+   alone keeps the head of its first rod.
    A drop is straight: it may pass over other buildings' foundations,
-   0.2 m above their wires (default grids of 10 to 200 houses: 0 … 80 %
-   of the drops; star 30 mesh houses 14 of 25 drops over 150 m); a drop
+   0.2 m above their wires (default grids of 10 to 200 houses: 0 … 100 %
+   of the drops; star 30 houses all 20 drops, 5 m each, 100 m); a drop
    has no inductive coupling to an electrode's wires in the field model,
    and moving those drops 1 m aside changes the input impedance by at most
-   0.02 % with an insulated PEN and by up to −0.30 % with a bare one;
-   routing drops around foundations is left to a later release. Before,
+   0.006 % with an insulated PEN and by up to −0.40 % with a bare one;
+   drops keep the shortest connection and are not routed around
+   foundations (user decision Q42). Before,
    every conductor ended at the connection point of the site's anchor — a
    corner of a rectangular foundation since A2G-04 / Q38 — so 47 of 282
    drops of a ring-house test set ran along a side of their own foundation
    and houses beyond their cable were connected across the house (audit
-   D3A-02). Sites without a foundation and everything attached by name
-   keep the connection point. The fall-of-potential measurement
+   D3A-02). Everything attached by name keeps the connection point.
+   **Cabinets per building group** (user decisions Q22 and Q35): the star
+   topology places one cabinet per building group, at the far end of the
+   houses it feeds — the buildings are cut into runs of consecutive
+   bearings around the substation (from the widest angular gap, sizes
+   differing by at most one, `StarCabinetTopology.group_buildings`), and
+   each cabinet stands on the ray through its group's centroid,
+   `CabinetConfig.end_clearance_m` (1 m) beyond the group's farthest point —
+   instead of on a fixed strip along the substation row (both cabinets of
+   the default 30-house grid stood west of the substation, the eastern
+   houses got drops of 3.5 … 106.5 m from it); a given
+   `CabinetConfig.placement` keeps the former positions and the
+   nearest-cabinet rule. In the radial topology a building in a substation
+   slot taps its feeder's trunk instead of getting its own line from the
+   substation. The fall-of-potential measurement
    is wired as in the field: instrument terminals `meas_H` / `meas_S` as
    junctions, the feed lead from `meas_H` to the auxiliary electrode, the
    probe lead to `meas_S`, one two-terminal source from the station to

@@ -397,12 +397,14 @@ def test_the_topology_texts_state_the_crossing_rule() -> None:
     that every radial building gets a drop; since user decision Q41 and audit
     R4A-02 a building that a cable crosses is joined to it and fed by it,
     without a drop (1 of 50 and 3 of 150 houses of the default star grids
-    change cabinet; 6 of 30 radial houses have no drop)."""
+    changed cabinet with the former cabinet strip, none of 10 ... 200 and
+    58 of 1 000 with building groups, user decisions Q22, Q35; 6 of 30
+    radial houses have no drop)."""
     from groundfield.generators import pen_topology, tn_network
 
     star = _flat(StarCabinetTopology.__doc__)
     assert "crosses" in star and "connection point" not in star
-    assert "1 of 50 and 3 of 150" in star
+    assert "1 of 50 and 3 of 150" in star and "58 of 1 000" in star
     field = _flat(TnNetworkConfig.model_fields["pen_topology"].description)
     assert "legacy v0.6 behaviour" not in field and "crosses" in field
     module = _flat(pen_topology.__doc__)

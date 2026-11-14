@@ -1,0 +1,84 @@
+# Stream W1GEN — the user's answers Q22 / Q35 (cable cabinets per building group,
+# at the far end of the houses they feed; substation slots of the radial trunk tap
+# their feeder's trunk) and Q43 (conductors meet a RingElectrodeSpec circle or a
+# strip at its nearest point, like a foundation since Q41) of 2026-11-14, and the
+# layout clip of audit R6A-01. See ../README.md for the format.
+#
+# Only the two TnNetworkGenerator cases move. Measured against snapshots of the
+# base e6124cd and of the Q43 commit 7afa834 (GF_GOLDEN_STRICT against each:
+# deliver/evidence/w1gen/golden/golden_summary.out); every other case, the layout
+# case included (its cable leaves the substation ring towards +x, at the ring's
+# connection point, and no corner lies inside a site), is bit-identical. The
+# harness compares with v0.15.0, where this share cannot be told apart from the
+# earlier ones (gen2, fix2gen, d3gen, f4gen), hence no min_rel_change; the bounds
+# add to theirs.
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/*", "potential/*"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35 and Q43: the five default houses stand west of the
+substation on the row of the main; their cabinet moves from (-180, 0) m on the former
+cabinet strip to the far end of the group, 1 m beyond the westmost house, (-118.5, 0) m,
+and the main leaves the substation ring at (-4, 0) m instead of (4, 0) m (Q43). The
+cabinet rod, 62.5 m from the houses before, now stands next to them and adds little
+earthing: the substation potential for 1 A rises from 1.158650 to 1.172281 V (+1.18 %;
+Q43 alone -0.115 %). Measured against the base: potentials <= 1.36e-2, surface potential
+1.29e-2 (norm-wise)."""
+max_rel_change = 2.0e-2
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["I/*", "ps/*"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35 and Q43: the leakage current of the cabinet rod falls
+from 16.90 to 6.30 mA (-62.7 %) when the cabinet moves from 62.5 m beyond the houses to
+1 m beyond them; the houses' currents move by <= 4.7e-2, the point-source currents by the
+cabinet's 0.627, the point-source positions by the cabinet's 61.5 m (0.342 of the
+largest coordinate)."""
+max_rel_change = 0.8
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35, Q43: the cabinet at (-118.5, 0) m, a shorter main that
+starts on the substation ring at its nearest point."""
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "phi/aux_rod_0"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35 and Q43: the three default houses stand west of the
+substation; their cabinet moves from (-180, 0) m to (-118.5, 0) m, 1 m beyond the
+westmost house, and the main leaves the substation ring at (-4, 0) m: the substation
+potential rises from 1.445709 to 1.471134 V (+1.76 %; Q43 alone -0.073 %). Measured
+against the base: potentials <= 1.91e-2."""
+max_rel_change = 2.5e-2
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["I/trafo_*", "I/residential_*", "I/kvs_*"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35: the cabinet rod's leakage current falls from 22.27 to
+8.52 mA (-61.7 %) next to the houses; the houses' currents move by <= 4.3e-2."""
+max_rel_change = 0.8
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35 and Q43: the floating probe rod 50 m east reads the field
+of the moved network, 1.4896e-3 -> 3.2284e-3 V (+117 %; Q43 alone -2.3 %); its current
+is round-off around
+zero (1.6e-19 A on the base, 1.7e-18 A changed), whose relative change means nothing."""
+max_rel_change = 20.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = """User decisions Q22 / Q35, Q43: the cabinet at (-118.5, 0) m, a shorter main that
+starts on the substation ring at its nearest point."""
+allow_shape_change = true

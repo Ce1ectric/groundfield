@@ -114,36 +114,42 @@ foundation's name (its current,
 therefore refer to that side; the cluster-level results refer to the
 whole foundation.
 
-Where conductors meet a foundation
-----------------------------------
-Every conductor the generators route to a foundation ends at the point of
-the foundation nearest to it (user decision Q41 of 2026.11): a service
-drop is the shortest connection in plan between its feeding cable and the
-wires of the building's foundation (their closest pair), a cable leaving a
-substation or a cabinet with a foundation starts at the foundation's point
-nearest to the cable's next node; the conductor is attached to the wire
-that holds the point (:class:`~groundfield.generators.plan.PlannedContact`,
-:func:`site_foundation_wires`). Ties go to the lowest wire index, then to
-the smallest arc position along the wire: a cable parallel to the side
-facing it meets that side at the start of the range of equal distance,
-for a side it passes along its whole length the corner where the wire
-starts. Physically the conductor is a finite-impedance branch of the nodal
-analysis (ADR-0003) and, with an inductance model, a Neumann filament
-(ADR-0004): where it ends on the foundation does not change the galvanic
-model, whose bonded wires are one cluster, but sets the length of the
-drop and its coupling to the foundation's wires and to the other
-conductors — at 1 kHz the reactance of a small ring-house network changed
-by +8 … +18 % when the drops ran from the corners (audit D3A-02). Sites
-without a foundation (rods, rings, strips) keep the connection point of
-their anchor (:func:`site_anchor_point`), and so does everything attached
-by name in user code.
+Where conductors meet a site
+----------------------------
+Every conductor the generators route to a site with a horizontal earth
+electrode ends at the point of that electrode nearest to it: at a
+foundation since user decision Q41 of 2026.11, at a circular ring
+(:class:`~groundfield.generators.electrode_specs.RingElectrodeSpec`, e.g.
+the default substations of both generators) and a strip since user
+decision Q43. A service drop is the shortest connection in plan between its
+feeding cable and the horizontal wires of the building (their closest pair),
+a cable leaving a substation or a cabinet starts at the point of its
+horizontal wires nearest to the cable's next node; the conductor is attached
+to the wire that holds the point
+(:class:`~groundfield.generators.plan.PlannedContact`,
+:func:`site_contact_wires`). A site with horizontal electrodes and rods is
+met on the horizontal ones; rods (vertical) keep their head, so a site with
+rods only keeps the connection point of its anchor
+(:func:`site_anchor_point`), and so does everything attached by name in
+user code. Ties go to the lowest wire index, then to the smallest arc
+position along the wire: a cable parallel to the side facing it meets that
+side at the start of the range of equal distance, for a side it passes
+along its whole length the corner where the wire starts. A circle is met at
+its exact nearest point (:mod:`groundfield.generators._contact`).
+Physically the conductor is a finite-impedance branch of the nodal analysis
+(ADR-0003) and, with an inductance model, a Neumann filament (ADR-0004):
+where it ends on the electrode does not change the galvanic model, whose
+bonded wires are one cluster, but sets the length of the conductor and its
+coupling to the electrode's wires and to the other conductors — at 1 kHz
+the reactance of a small ring-house network changed by +8 … +18 % when the
+drops ran from the corners (audit D3A-02).
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Collection, Mapping
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 from groundfield.api import (
     create_conductor,
@@ -161,7 +167,12 @@ from groundfield.generators.electrode_specs import (
     RodElectrodeSpec,
     StripElectrodeSpec,
 )
-from groundfield.generators._contact import FoundationWire
+from groundfield.generators._contact import (
+    FoundationWire,
+    Outline,
+    circle_polygon,
+    convex_outline,
+)
 from groundfield.generators.plan import (
     NetworkPlan,
     PlannedBranch,
@@ -182,7 +193,7 @@ __all__ = [
     "materialise_plan",
     "materialise_site",
     "site_anchor_point",
-    "site_foundation_wires",
+    "site_contact_wires",
 ]
 
 MIN_POLYGON_EDGE_M = 0.5
@@ -619,11 +630,13 @@ def site_anchor_point(site: PlannedSite) -> Optional[tuple[float, float, float]]
     without present electrodes). For a rectangular foundation it is a
     corner — the start of its local :math:`-y` side (meshes since audit
     A2G-04, rectangles without cross-braces since user decision Q38) — and
-    for a building outline its first vertex. The generators connect their
-    cables to a site with a foundation at the point of the foundation
-    nearest to each cable instead (:func:`site_foundation_wires`, user
-    decision Q41); this point stays the end of everything attached to the
-    site by name.
+    for a building outline its first vertex, for a circular ring its
+    :math:`+x` point, for a strip its start, for a rod its head. The
+    generators connect their cables to a site with a horizontal electrode (a
+    foundation, a ring, a strip) at the point of those electrodes nearest to
+    each cable instead (:func:`site_contact_wires`, user decisions Q41,
+    Q43); this point stays the end of everything attached to the site by
+    name, and of the generators' conductors at a site with rods only.
     """
     if site.anchor is None:
         return None
@@ -632,8 +645,14 @@ def site_anchor_point(site: PlannedSite) -> Optional[tuple[float, float, float]]
     return tuple(float(v) for v in _node_point(scratch, anchor))  # type: ignore[return-value]
 
 
-def site_foundation_wires(site: PlannedSite) -> list[FoundationWire]:
-    """The wires of the foundations of ``site``, in plan (user decision Q41).
+_HORIZONTAL_SPECS = (FoundationElectrodeSpec, RingElectrodeSpec, StripElectrodeSpec)
+"""Electrode specs a generated conductor meets at their nearest point (user
+decisions Q41, Q43): foundations, circular rings and strips; rods keep their
+head."""
+
+
+def site_contact_wires(site: PlannedSite) -> list[FoundationWire]:
+    """The horizontal wires of ``site``, in plan (user decisions Q41, Q43).
 
     Parameters
     ----------
@@ -645,42 +664,61 @@ def site_foundation_wires(site: PlannedSite) -> list[FoundationWire]:
     list of FoundationWire
         One entry per electrode built from a
         :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
-        of the site (every side or mesh line of a rectangle, the closed
-        outline of a building), in world order: its name, its index in this
-        list, its plan vertices from its connection point and its depth.
-        Empty for a site without a foundation (rods, rings, strips).
+        (every side or mesh line of a rectangle, the closed outline of a
+        building), a
+        :class:`~groundfield.generators.electrode_specs.RingElectrodeSpec`
+        (the circle; ``circle`` holds its centre and radius, ``xy`` the
+        inscribed search polygon of
+        :func:`~groundfield.generators._contact.circle_polygon`) or a
+        :class:`~groundfield.generators.electrode_specs.StripElectrodeSpec`
+        of the site, in world order: its name, its index in this list, its
+        plan vertices from its connection point and its depth. Empty for a
+        site with rods only.
 
     Notes
     -----
-    New in 2026.11. The generators end every conductor they route to a site
-    with a foundation at the point of these wires nearest to the conductor
-    (:mod:`groundfield.generators._contact`); a site without a foundation
-    keeps the connection point of its anchor (:func:`site_anchor_point`).
-    The site is materialised into a scratch world, so the wires are exactly
-    those of the materialised plan.
+    New in 2026.11 (as ``site_foundation_wires`` with the foundations only,
+    user decision Q41; renamed and extended to rings and strips by user
+    decision Q43). The generators end every conductor they route to a site
+    with horizontal electrodes at the point of these wires nearest to the
+    conductor (:mod:`groundfield.generators._contact`); a site with rods only
+    keeps the connection point of its anchor, the head of its first rod
+    (:func:`site_anchor_point`). The site is materialised into a scratch
+    world, so the wires are exactly those of the materialised plan.
     """
-    return _site_geometry(site, anchor=False)[1]
+    return _site_geometry(site, anchor=False).wires
 
 
-def _site_geometry(
-    site: PlannedSite, *, anchor: bool = True
-) -> tuple[Optional[tuple[float, float, float]], list[FoundationWire]]:
-    """Anchor connection point and foundation wires of ``site``, in one pass.
+class SiteGeometry(NamedTuple):
+    """Plan geometry of a site where generated conductors meet it."""
+
+    point: Optional[tuple[float, float, float]]
+    """Connection point in m of the anchor (``None``: no electrodes)."""
+    wires: list[FoundationWire]
+    """Horizontal wires (:func:`site_contact_wires`)."""
+    outlines: list[Outline]
+    """Areas enclosed by the closed horizontal electrodes: a rectangle, a
+    building outline, a circle (strips enclose none)."""
+
+
+def _site_geometry(site: PlannedSite, *, anchor: bool = True) -> SiteGeometry:
+    """Anchor connection point, horizontal wires and outlines of ``site``.
 
     The electrodes are materialised into one scratch world without the
     bonds, so the anchor's connection point is the one of
     :func:`site_anchor_point` (``None`` for a site without electrodes) and
-    the wires are those of :func:`site_foundation_wires`. With
-    ``anchor=False`` only the foundation specs are materialised.
+    the wires are those of :func:`site_contact_wires`. With ``anchor=False``
+    only the horizontal electrode specs are materialised.
     """
     scratch = create_world(soil=HomogeneousSoil(rho=100.0))
     cx, cy = site.position_xy
     point: Optional[tuple[float, float, float]] = None
     wires: list[FoundationWire] = []
+    outlines: list[Outline] = []
     for planned in site.electrodes:
         spec = planned.spec
-        is_foundation = isinstance(spec, FoundationElectrodeSpec)
-        if not is_foundation and not (anchor and point is None):
+        horizontal = isinstance(spec, _HORIZONTAL_SPECS)
+        if not horizontal and not (anchor and point is None):
             continue
         first = len(scratch.electrodes)
         materialise_electrode(
@@ -692,19 +730,32 @@ def _site_geometry(
         )
         if anchor and point is None:
             point = tuple(float(v) for v in scratch.electrodes[first].connection_point)  # type: ignore[assignment]
-        if not is_foundation:
+        if not horizontal:
             continue
+        runs: list[tuple[tuple[float, float], ...]] = []
         for electrode in scratch.electrodes[first:]:
+            z = float(electrode.connection_point[2])
+            if isinstance(spec, RingElectrodeSpec):
+                ex, ey, _ = electrode.center
+                circle = (float(ex), float(ey), float(electrode.radius))
+                xy = circle_polygon(*circle)
+                outlines.append(Outline(xy=xy, circle=circle))
+                wires.append(FoundationWire(electrode.name, len(wires), xy, z, circle))
+                continue
             (run,) = electrode.wire_polylines()
-            wires.append(
-                FoundationWire(
-                    electrode=electrode.name,
-                    index=len(wires),
-                    xy=tuple((float(x), float(y)) for x, y, _ in run),
-                    z=float(electrode.connection_point[2]),
+            xy = tuple((float(x), float(y)) for x, y, _ in run)
+            runs.append(xy)
+            wires.append(FoundationWire(electrode.name, len(wires), xy, z))
+        if isinstance(spec, FoundationElectrodeSpec):
+            if spec.polygon_xy_m is not None:
+                # One closed polyline along the building outline.
+                outlines.append(Outline(xy=runs[0]))
+            else:
+                # A rectangle (sides, or the lines of a mesh): its corners.
+                outlines.append(
+                    Outline(xy=convex_outline([p for run in runs for p in run]))
                 )
-            )
-    return point, wires
+    return SiteGeometry(point, wires, outlines)
 
 
 def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
@@ -740,12 +791,14 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
 def _materialise_site(
     world: World, site: PlannedSite
 ) -> tuple[Optional[str], set[str]]:
-    """:func:`materialise_site`, and the names of its foundation wires.
+    """:func:`materialise_site`, and the names of its horizontal wires.
 
     The second item holds every electrode built from a
-    :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
-    of the site: the wires a :class:`~groundfield.generators.plan.PlannedContact`
-    may name (audit R4A-05).
+    :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`,
+    :class:`~groundfield.generators.electrode_specs.RingElectrodeSpec` or
+    :class:`~groundfield.generators.electrode_specs.StripElectrodeSpec` of
+    the site: the wires a :class:`~groundfield.generators.plan.PlannedContact`
+    may name (audit R4A-05; rings and strips since user decision Q43).
     """
     cx, cy = site.position_xy
     created: list[Any] = []
@@ -763,7 +816,7 @@ def _materialise_site(
         )
         # The first primitive of an electrode spec carries its name.
         created.append(world.electrodes[first])
-        if isinstance(spec, FoundationElectrodeSpec):
+        if isinstance(spec, _HORIZONTAL_SPECS):
             foundation.update(e.name for e in world.electrodes[first:])
     if not created:
         return None, foundation
@@ -846,19 +899,20 @@ def _check_contact(
 ) -> Any:
     """The wire a contact names, after checking that the contact is on it.
 
-    A contact must name a foundation wire of the site the branch ends at
-    (``foundation_wires[site]`` when given, as :func:`materialise_plan`
-    does; otherwise any horizontal wire, a strip or polyline electrode) and
-    lie within one minimum cable section of it in plan: a joined cable's
+    A contact must name a horizontal wire of the site the branch ends at — a
+    wire of its foundation, ring or strip (``foundation_wires[site]`` when
+    given, as :func:`materialise_plan` does; otherwise any horizontal wire,
+    a strip, polyline or ring electrode) — and lie within one minimum cable
+    section of it in plan (of the exact circle for a ring): a joined cable's
     point (rule 4 of the PEN router) lies up to
     :func:`~groundfield.generators._pen_routing.min_section_length` off the
     wire it crosses or touches, 1 cm for wire radii up to 7.3 mm (audit
-    R4A-05).
+    R4A-05; rings and strips since user decision Q43).
 
     Raises
     ------
     ValueError
-        If the electrode is unknown, not a foundation wire of the site, or
+        If the electrode is unknown, not a horizontal wire of the site, or
         farther than that from the point.
     """
     from groundfield.generators._pen_routing import (
@@ -875,24 +929,30 @@ def _check_contact(
             raise ValueError(
                 f"materialise_branch: {label} meets {contact.electrode!r}, "
                 "which is no electrode of the world; a contact names a "
-                "foundation wire of the site the branch ends at."
+                "horizontal wire of the site the branch ends at."
             ) from None
+    kind = getattr(wire, "kind", None)
     if foundation_wires is not None and site is not None:
         allowed = contact.electrode in foundation_wires.get(site, ())
     else:
-        allowed = getattr(wire, "kind", None) in ("strip", "polyline")
+        allowed = kind in ("strip", "polyline", "ring")
     if not allowed:
         raise ValueError(
             f"materialise_branch: {label} meets {contact.electrode!r}, which "
-            f"is not a foundation wire of site {site!r}; a contact names a "
-            "wire of a FoundationElectrodeSpec of that site."
+            f"is not a foundation, ring or strip wire of site {site!r}; a "
+            "contact names a wire of a FoundationElectrodeSpec, "
+            "RingElectrodeSpec or StripElectrodeSpec of that site."
         )
     tolerance = (
         MIN_DROP_LENGTH_M if branch is None else min_section_length(branch.conductor)
     )
     x, y = (float(v) for v in contact.position_xy)
     off = math.inf
-    for run in wire.wire_polylines():
+    if kind == "ring":
+        # The exact circle (user decision Q43).
+        cx, cy, _ = (float(v) for v in wire.center)
+        off = abs(math.hypot(x - cx, y - cy) - float(wire.radius))
+    for run in [] if kind == "ring" else wire.wire_polylines():
         pts = [(float(p[0]), float(p[1])) for p in run]
         for (ax, ay), (bx, by) in zip(pts[:-1], pts[1:], strict=True):
             dx, dy = bx - ax, by - ay
@@ -934,11 +994,11 @@ def materialise_branch(
         ``world``; saves a search through the world per end (the
         materialiser of a large network passes it).
     foundation_wires
-        Optional map from site name to the names of its foundation wires
-        (:func:`materialise_plan` passes it); a contact must name one of
-        the wires of the site the branch ends at. Without it the check is
-        weaker: the contact must name a strip or polyline electrode, which
-        need not belong to that site (a
+        Optional map from site name to the names of its horizontal wires
+        (foundations, rings, strips; :func:`materialise_plan` passes it); a
+        contact must name one of the wires of the site the branch ends at.
+        Without it the check is weaker: the contact must name a strip,
+        polyline or ring electrode, which need not belong to that site (a
         :class:`~groundfield.generators.plan.NetworkPlan` rejects a contact
         on another site's electrode when it is validated).
 
@@ -951,17 +1011,18 @@ def materialise_branch(
     -----
     An end with a :class:`~groundfield.generators.plan.PlannedContact` is
     the contact's point on the wire it names, and the conductor is attached
-    to that wire (user decision Q41); an end without one is the connection
+    to that wire (user decisions Q41, Q43); an end without one is the connection
     point of the node (the site's anchor electrode, or the junction). With
     ``axis_z_m`` both ends are moved to that depth.
 
     Raises
     ------
     ValueError
-        If a contact names an electrode that is not a foundation wire of the
-        site the branch ends at (with ``foundation_wires``; without it, an
-        electrode that is no strip or polyline), or lies farther from that
-        wire in plan than one minimum cable section
+        If a contact names an electrode that is not a horizontal wire
+        (foundation, ring, strip) of the site the branch ends at (with
+        ``foundation_wires``; without it, an electrode that is no strip,
+        polyline or ring), or lies farther from that wire in plan (from the
+        exact circle of a ring) than one minimum cable section
         (:func:`~groundfield.generators._pen_routing.min_section_length` of
         the branch's conductor: 1 cm for wire radii up to 7.3 mm; audit
         R4A-05).
