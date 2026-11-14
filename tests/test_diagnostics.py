@@ -523,3 +523,95 @@ def test_diagnose_still_flags_two_foundations_that_touch() -> None:
     assert {tuple(sorted(f.subjects)) for f in found} == {
         ("a_foundation_0", "b_foundation_0")
     }
+
+
+def _encased_site_world(**spec):
+    """One generated foundation (a site of its own) and a source on it."""
+    import numpy as np
+
+    from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+    from groundfield.generators.materialise import materialise_site
+
+    site = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(depth_m=0.8, **spec)]
+    ).plan_site(
+        "house", role="building", position_xy=(0.0, 0.0), rng=np.random.default_rng(0)
+    )
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_source(world, attached_to=materialise_site(world, site), magnitude=1.0)
+    return world
+
+
+def _proximity(world, kernel: str = "point") -> list:
+    engine = gf.create_engine(frequencies=[50.0], segment_length=0.5, kernel=kernel)
+    return [f for f in gf.diagnose(world, engine).findings if f.category == "proximity"]
+
+
+# audit R4A-04
+@pytest.mark.finding("10.44")
+@pytest.mark.parametrize("kernel", ["point", "line"])
+def test_diagnose_still_flags_the_close_opposite_sides_of_a_narrow_encased_ring(
+    kernel: str,
+) -> None:
+    """10 m x 1 m ring in a 0.2 m shell (r_b = 0.205 m): the long sides are
+    1 m apart, inside 5 (r_i + r_j) = 2.05 m. Base 500127c: 'close' findings;
+    snapshot e91f3c0: none (every wire of the foundation was one owner). The
+    corner artefacts of D3A-04 meet at a shared vertex; the opposite sides do
+    not."""
+    found = _proximity(
+        _encased_site_world(
+            style="ring",
+            size_xy_m=(10.0, 1.0),
+            concrete_rho_ohm_m=100.0,
+            concrete_thickness_m=0.2,
+        ),
+        kernel,
+    )
+    pairs = {tuple(sorted(f.subjects)) for f in found}
+    assert pairs == {("house_foundation_0", "house_foundation_0_w1")}
+    (finding,) = found
+    assert finding.data["distance_m"] == pytest.approx(1.0)
+    assert finding.severity == ("warning" if kernel == "point" else "info")
+
+
+# audit R4A-04
+@pytest.mark.finding("10.44")
+def test_diagnose_flags_the_parallel_wires_of_a_fine_encased_mesh() -> None:
+    """4 m mesh with 20 x 20 cells (0.2 m) in a 5 cm shell (r_b = 55 mm,
+    threshold 0.55 m): base 519 findings (crossings and parallel wires),
+    snapshot none. Now the wires 0.2 m and 0.4 m apart in each direction,
+    2 x (20 + 19) = 78 pairs, and none at the crossings."""
+    found = _proximity(
+        _encased_site_world(
+            style="mesh",
+            size_m=4.0,
+            n_x=20,
+            n_y=20,
+            concrete_rho_ohm_m=150.0,
+            concrete_thickness_m=0.05,
+        )
+    )
+    assert len(found) == 78
+    assert {round(f.data["distance_m"], 6) for f in found} == {0.2, 0.4}
+
+
+# audit R4A-04
+@pytest.mark.finding("10.44")
+def test_diagnose_still_flags_unbonded_strips_whose_names_look_like_one_foundation() -> (
+    None
+):
+    """Two separate, unbonded strips 'earth' and 'earth_w1' 3 cm apart. Base:
+    a 'close' warning with the point kernel; snapshot: nothing (the names
+    alone made them one owner). Only wires bonded to the anchor by its
+    ``<name>_bond_<k>`` conductors are grouped."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(
+        world, "strip", name="earth", start=(0, 0, 0.8), end=(10, 0, 0.8)
+    )
+    gf.create_electrode(
+        world, "strip", name="earth_w1", start=(0, 0.03, 0.8), end=(10, 0.03, 0.8)
+    )
+    gf.create_source(world, attached_to="earth", magnitude=1.0)
+    (finding,) = _proximity(world)
+    assert set(finding.subjects) == {"earth", "earth_w1"}
+    assert finding.severity == "warning"

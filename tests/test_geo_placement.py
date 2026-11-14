@@ -224,15 +224,16 @@ def test_axis_aligned_mesh_foundation_is_one_owner_per_wire() -> None:
 
 
 # audit D3A-05, user decision Q41 (item 5)
-@pytest.mark.parametrize("style", ["ring", "mesh"])
-def test_right_angles_build_the_axis_aligned_world(style: str) -> None:
+@pytest.mark.parametrize(("style", "n"), [("ring", 1), ("mesh", 2)])
+def test_right_angles_build_the_axis_aligned_world(style: str, n: int) -> None:
     """``orientation_deg`` = 0, +-1e-10, 360 and -360 build the axis-aligned
     rectangle bit for bit (``None``). Was ``test_zero_orientation_uses_
     axis_aligned_path``, which pinned a fast path that user decision Q38
     removed and could no longer fail (audit D3A-05). 90, 180 and 270 deg are
     rotations with the exact cos / sin since the audit (D3B-04): the world
     differs from the swapped rectangle (another side is the anchor), its
-    corners do not (no round-off)."""
+    vertices do not (no round-off). The mesh case is a braced 2 x 2 mesh
+    (audit R4A: with ``n_x = n_y = 1`` it was a ring)."""
 
     def world(angle, size):
         w = create_world(soil=TwoLayerSoil(rho_1=100.0, rho_2=50.0, h_1=2.0))
@@ -240,8 +241,8 @@ def test_right_angles_build_the_axis_aligned_world(style: str) -> None:
             electrodes=[
                 FoundationElectrodeSpec(
                     style=style,
-                    n_x=1,
-                    n_y=1,
+                    n_x=n,
+                    n_y=n,
                     size_xy_m=size,
                     depth_m=0.8,
                     orientation_deg=angle,
@@ -260,13 +261,19 @@ def test_right_angles_build_the_axis_aligned_world(style: str) -> None:
         for a in (0.0, 1e-10, -1e-10, 360.0, -360.0)
     }
     assert same == {ref}
+
+    def vertices(w):
+        return {
+            tuple(p) for e in w.electrodes for run in e.wire_polylines() for p in run
+        }
+
     swapped = world(None, (6.0, 10.0))
     for angle in (90.0, -90.0, 270.0):
         turned = world(angle, (10.0, 6.0))
         assert world_fingerprint(turned) != world_fingerprint(swapped)
-        corners = {p for e in turned.electrodes for p in (e.start, e.end)}
-        assert corners == {p for e in swapped.electrodes for p in (e.start, e.end)}
-    assert [e.kind for e in world(0.0, (10.0, 6.0)).electrodes] == ["strip"] * 4
+        assert vertices(turned) == vertices(swapped)
+    kinds = [e.kind for e in world(0.0, (10.0, 6.0)).electrodes]
+    assert kinds == (["strip"] * 4 if n == 1 else ["polyline"] * 6)
 
 
 # ---------------------------------------------------------------------

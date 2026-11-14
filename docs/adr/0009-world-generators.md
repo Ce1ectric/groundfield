@@ -322,8 +322,16 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    in plan of its feeding cable and the foundation wires, a cable leaving
    a substation or cabinet with a foundation starts at the foundation's
    point nearest to the next node, the conductor is attached to the wire
-   that holds the point (`PlannedContact`), and a cable that crosses a
-   foundation is joined to it there without a drop; ties go to the lowest
+   that holds the point (`PlannedContact`), and a building that a cable
+   crosses is joined to it and fed by it, without a drop — a cable of its
+   feeding path, every trunk of the radial topology, and in the star
+   topology the main that crosses it, whose cabinet then feeds it (the
+   nearest of them, ties to the lower index; a main that does not feed the
+   building stays unjoined, audits R4A-02, R4B-01); a drop whose closest
+   pair lies at such a joint starts there on the cable (R4A-01), a drop
+   from a node does not run along a trunk or another main (R4B-01), and
+   the layout builder takes the closest pair on the cable as built, not on
+   its waypoint inside a site foundation (R4A-03); ties go to the lowest
    wire index, then to the smallest arc position along the wire. Before,
    every conductor ended at the connection point of the site's anchor — a
    corner of a rectangular foundation since A2G-04 / Q38 — so 47 of 282

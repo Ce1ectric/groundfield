@@ -23,6 +23,8 @@ AP1 topology suite stays grouped in one folder.
 
 from __future__ import annotations
 
+import re
+
 import math
 import warnings
 
@@ -268,11 +270,27 @@ def test_radial_trunk_inserts_cabinet_when_budget_overflows() -> None:
         e for e in world.electrodes if e.name.startswith("kvs_f") and "_rod_0" in e.name
     ]
     assert len(kvs_rod_electrodes) == 4
-    # 4 trunk segments substation → KVS, named ``pen_trunk_fX_0``.
-    trunks = [c for c in world.conductors if c.name.startswith("pen_trunk_")]
-    assert len(trunks) == 4
-    # 16 service drops.
-    assert len(_service_drops(world)) == 16
+    # 4 trunk segments substation → KVS, named ``pen_trunk_fX_0`` (split
+    # into sections ``_s<k>`` where they run through a house).
+    trunks = {
+        re.sub(r"_s[0-9]+$", "", c.name)
+        for c in world.conductors
+        if c.name.startswith("pen_trunk_")
+    }
+    assert trunks == {f"pen_trunk_f{i}_0" for i in range(4)}
+    # 16 houses: a house that a trunk crosses is joined to it there without a
+    # drop (the houses at 25 m and 50 m on each axis, audit R4A-02); the
+    # others have a service drop.
+    joined = {
+        end.split("_w")[0]
+        for c in world.conductors
+        if c.name.startswith("pen_trunk_")
+        for end in (c.start_electrode, c.end_electrode)
+        if end.startswith("residential_")
+    }
+    drops = _service_drops(world)
+    assert len(joined) == 8 and len(drops) == 8
+    assert not {f"pen_service_{j}" for j in joined} & drops
 
 
 def test_radial_trunk_source_attached_to_substation() -> None:

@@ -491,12 +491,17 @@ def touch_voltage(
         whose connection point is a corner of the rectangle (in 0.15.0 one
         grid mesh connected at its centre): the feet then stand around that
         corner. For 100 A into a generated ring at 0.8 m in 100 Ω·m the
-        largest value on the circle (default engine, the same at 0.5 m and
-        0.25 m segments) is 270.89 V round the corner of a 10 m × 10 m ring
-        against 245.22 V round its centre, 229.71 against 159.61 V for
-        20 m × 5 m, 91.10 against 111.38 V for 30 m × 30 m and, in 5 cm of
-        150 Ω·m concrete, 134.24 against 119.32 V for 40 m × 10 m (audit
-        D3A-03). Use the default ``"footprint"`` for generated foundations;
+        largest value on the circle (default engine, 0.5 m segments;
+        :func:`touch_voltage_at_part` on the same circle gives the same) is
+        270.89 V round the corner of a 10 m × 10 m ring against 245.22 V
+        round its centre, 229.71 against 161.76 V for 20 m × 5 m, 91.10
+        against 111.38 V for 30 m × 30 m and, in 5 cm of 150 Ω·m concrete,
+        134.24 against 120.12 V for 40 m × 10 m (audit D3A-03; with the
+        point kernel at 0.25 m segments 1.3 … 2.2 % lower). 0.15.0, whose
+        circle went round the centre of one grid mesh, gave 240.82, 156.07
+        and 109.87 V for the bare rings, and 60.30 V for the encased one,
+        whose shell it did not model (audit R4B-09). Use the default
+        ``"footprint"`` for generated foundations;
         it takes the whole foundation and does not depend on the
         connection point.
 

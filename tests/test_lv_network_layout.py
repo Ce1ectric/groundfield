@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 import warnings
 
+import numpy as np
 import pytest
 
 import groundfield as gf
@@ -1477,3 +1478,52 @@ def test_a_cable_between_two_sites_closer_than_a_section_is_rejected() -> None:
     )
     with pytest.raises(ValueError, match="shortest cable section"):
         layout.plan(substation_grounding=ring, cabinet_grounding=ring)
+
+
+# user decision Q41, audit R4B-11 (stream f4gen open point 4)
+@pytest.mark.finding("10.38")
+def test_plot_draws_the_drops_as_built_from_the_world() -> None:
+    """``plot(world=...)`` draws each service drop from its tap on the cable
+    to its end on the foundation (the materialised conductor); without a
+    world the layout's stubs (centroid to cable) as before."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fps = [
+        BuildingFootprint(
+            polygon_xy_m=[(10.0, 6.0), (22.0, 6.0), (22.0, 14.0), (10.0, 14.0)],
+            building_use="residential",
+        )
+    ]
+    layout = LvNetworkLayout.from_footprints(fps, substation_xy=(0.0, 0.0))
+    layout.add_pen_cable(start="substation", end_xy=(60.0, 0.0))
+    layout.connect_buildings()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = layout.to_world(
+            house_grounding=gf.generators.GroundingSystemSpec(
+                electrodes=[
+                    gf.generators.FoundationElectrodeSpec(style="ring", depth_m=0.8)
+                ]
+            ),
+            foundation_outline="polygon",
+        )
+    (drop,) = [c for c in world.conductors if c.name.startswith("service_")]
+
+    def dashed(ax):
+        return [
+            tuple(map(tuple, np.asarray(line.get_xydata())))
+            for line in ax.get_lines()
+            if line.get_linestyle() == "--"
+        ]
+
+    ax = layout.plot(world=world)
+    assert dashed(ax) == [((drop.start[0], drop.start[1]), (drop.end[0], drop.end[1]))]
+    assert drop.end[1] == pytest.approx(6.0)  # on the outline, not the centroid
+    plt.close(ax.figure)
+    ax = layout.plot()
+    (stub,) = dashed(ax)
+    assert stub[0] == pytest.approx(fps[0].centroid_xy_m())
+    plt.close(ax.figure)

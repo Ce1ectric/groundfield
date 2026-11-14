@@ -1218,9 +1218,12 @@ def test_the_texts_quote_the_field_change_at_the_passive_foundation() -> None:
     """concrete-shells.md and ADR-0012 said the field next to the passive
     foundation of ``mutual_foundations_lumped_concrete`` moves by 1.6 %: the
     golden harness's max |change| / max |R|. At the edges of the passive
-    foundation it moves by +5.94 / -5.11 % (golden engine, point kernel)."""
+    foundation it moves by +5.49 / -4.70 % with 1 m segments (both kernels;
+    the default line kernel gives the same at 2 m) and by +5.94 / -5.11 %
+    with the golden engine's 2 m segments and the point kernel; the texts
+    quoted the latter as the change (audit R4B-13: a segmentation effect)."""
 
-    def pair(one_owner: bool) -> np.ndarray:
+    def pair(one_owner: bool, segment_length: float) -> np.ndarray:
         w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=100.0, h_1=5.0))
         c = gf.geometry.electrodes.concrete_shell_coefficient(100.0, 0.0075, 0.05)
         anchors = []
@@ -1259,7 +1262,7 @@ def test_the_texts_quote_the_field_change_at_the_passive_foundation() -> None:
         engine = gf.create_engine(
             backend="image",
             kernel="point",
-            segment_length=2.0,
+            segment_length=segment_length,
             image_max_terms=500,
             frequencies=[50.0],
         )
@@ -1268,12 +1271,42 @@ def test_the_texts_quote_the_field_change_at_the_passive_foundation() -> None:
             warnings.simplefilter("ignore")
             return np.asarray(gf.solve_mutual_field(w, engine, anchors, points)).real
 
-    change = 100.0 * (pair(False)[:, 1] / pair(True)[:, 1] - 1.0)
-    assert change == pytest.approx([5.94, -5.11], abs=0.01)
+    for segment_length, expected in ((2.0, [5.94, -5.11]), (1.0, [5.49, -4.70])):
+        change = 100.0 * (
+            pair(False, segment_length)[:, 1] / pair(True, segment_length)[:, 1] - 1.0
+        )
+        assert change == pytest.approx(expected, abs=0.01)
     for path in (
         "docs/explanation/concrete-shells.md",
         "docs/adr/0012-foundation-concrete-encasement.md",
     ):
         text = _flat_doc(path)
-        assert "+5.9 / −5.1 %" in text
+        assert "+5.5 / −4.7 %" in text and "+5.9 / −5.1 %" in text
         assert "the field next to the passive foundation by 1.6 %" not in text
+        assert "golden engine, point kernel; +5.5" not in text
+
+
+# audits R4B-05, R4B-06
+@pytest.mark.finding("10.39")
+def test_the_texts_quote_one_owner_up_to_2_2_percent_and_the_scanned_rectangle() -> (
+    None
+):
+    """The texts quoted one owner "up to 2.1 %" over the scope next to
+    "2.16 % (16 m x 1 m)" in the same sentence (groundfield's per-segment
+    assembly +2.106 / +2.160 % at 0.5 / 0.25 m segments, audit R4B's BEM
+    +2.103 / +2.153 %), and "150 m x 2.9 m: +1.335 %" for the scanned
+    145 m x 2.9 m (150 m x 2.9 m is aspect 51.7, outside the scope: +1.350 %)."""
+    for path in (
+        "docs/explanation/concrete-shells.md",
+        "docs/adr/0012-foundation-concrete-encasement.md",
+    ):
+        text = _flat_doc(path)
+        assert "up to 2.1 %" not in text and "up to 2.2 %" in text, path
+    text = _flat_doc("docs/explanation/concrete-shells.md")
+    assert "150 m × 2.9 m: +1.335 %" not in text
+    assert "145 m × 2.9 m: +1.335 %" in text
+    from groundfield.generators import FoundationElectrodeSpec as spec
+    from groundfield.generators import materialise
+
+    for doc in (materialise.__doc__, spec.model_fields["concrete_model"].description):
+        assert "2.1 %" not in " ".join((doc or "").split())

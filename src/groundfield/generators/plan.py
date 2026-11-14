@@ -238,8 +238,13 @@ class PlannedContact(BaseModel):
         Name of the electrode (a wire of the site's foundation) that holds
         the point; the branch is attached to it.
     position_xy
-        Plan position ``(x, y)`` in m of the point on that wire: the point
-        of the foundation nearest to the branch.
+        Plan position ``(x, y)`` in m where the branch ends: the point of
+        the foundation nearest to the branch, on that wire — or, where the
+        generator joins a cable to a foundation wire that it crosses or
+        touches (and where a drop starts at such a joint), the cable's
+        point, which lies at most one minimum cable section off the wire
+        (:func:`~groundfield.generators._pen_routing.min_section_length`:
+        1 cm for wire radii up to 7.3 mm).
 
     Notes
     -----
@@ -248,6 +253,9 @@ class PlannedContact(BaseModel):
     the branch ends at the point of the foundation nearest to it instead of
     the connection point of the site's anchor electrode (a corner of a
     rectangular foundation, the first vertex of a building outline).
+    :func:`~groundfield.generators.materialise.materialise_branch` rejects a
+    contact that names no foundation wire of the site or lies farther than
+    that from it (audit R4A-05).
     """
 
     model_config = ConfigDict(extra="forbid")

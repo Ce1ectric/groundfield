@@ -29,6 +29,7 @@ class _PlotMixin:
         annotate_houses: bool = False,
         foundation_mask: Optional[list[bool]] = None,
         figsize: tuple[float, float] = (12.0, 8.0),
+        world: Optional[World] = None,
     ) -> "_mpl_axes.Axes":
         """Render the layout with matplotlib.
 
@@ -41,6 +42,15 @@ class _PlotMixin:
             remaining houses get a faded fill (no foundation).
             Combine with :meth:`foundation_mask` to visualise
             different penetration scenarios.
+        world
+            Optional world built from this layout (:meth:`to_world`). Its
+            service drops are drawn as built: from the tap on the cable to
+            the point of the foundation nearest to the cable (user
+            decision Q41), marked at the tap. Without it the layout's
+            stubs are drawn: from the footprint centroid to the cable point
+            nearest to it, which the built drops of houses with a
+            foundation do not follow (they end on the foundation and tap
+            the cable at the closest pair of cable and foundation).
 
         Returns
         -------
@@ -106,9 +116,37 @@ class _PlotMixin:
             for x, y in cable.waypoints:
                 ax.plot(x, y, marker="o", color=colour, markersize=3, zorder=5)
 
-        # Service drops.
+        # Service drops: as built (from the world), or the layout's stubs.
         drew_stub_label = False
-        for c in self.connections:
+        drops = (
+            []
+            if world is None
+            else [c for c in world.conductors if c.name.startswith("service_")]
+        )
+        cable_of = {
+            f"service_{c.house_idx:03d}": c.cable_name for c in self.connections
+        }
+        for d in drops:
+            colour = cable_colours.get(cable_of.get(d.name, ""), "saddlebrown")
+            ax.plot(
+                [d.start[0], d.end[0]],
+                [d.start[1], d.end[1]],
+                color=colour,
+                lw=1.0,
+                ls="--",
+                zorder=3,
+                label=("PEN service drop" if not drew_stub_label else None),
+            )
+            drew_stub_label = True
+            ax.plot(
+                d.start[0],
+                d.start[1],
+                marker="x",
+                color=colour,
+                markersize=6,
+                zorder=6,
+            )
+        for c in self.connections if world is None else []:
             colour = cable_colours.get(c.cable_name, "saddlebrown")
             xs = [p[0] for p in c.stub_waypoints]
             ys = [p[1] for p in c.stub_waypoints]

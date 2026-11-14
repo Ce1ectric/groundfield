@@ -93,7 +93,8 @@ finding 10.39) or on ``concrete_model`` (user decision Q38):
   owner per side is at most 1.4 % high over that scope (+1.34 % for
   150 m × 3 m, bare, in 30 over 200 Ω·m with :math:`h_1` = 5 m; +1.35 %
   in a 0.2 m shell) and at most 0.25 % up to aspect ratio 4 bare or with
-  the default shell; the single owner was up to 2.1 % high (audit D3B-01;
+  the default shell; the single owner was up to 2.2 % high (audits D3B-01,
+  R4B-05;
   at the largest decreases above 0.23 … 0.90 % against 0.55 … 2.16 %);
 * a building outline (``polygon_xy_m``) is one closed polyline, one
   owner; a rectangular outline therefore reads like the single owner of a
@@ -141,6 +142,7 @@ by name in user code.
 from __future__ import annotations
 
 import math
+from collections.abc import Collection, Mapping
 from typing import Any, Optional
 
 from groundfield.api import (
@@ -732,8 +734,22 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
     of a site were folded there for the PEN service drop to carry,
     review findings 10.12 / 10.13).
     """
+    return _materialise_site(world, site)[0]
+
+
+def _materialise_site(
+    world: World, site: PlannedSite
+) -> tuple[Optional[str], set[str]]:
+    """:func:`materialise_site`, and the names of its foundation wires.
+
+    The second item holds every electrode built from a
+    :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
+    of the site: the wires a :class:`~groundfield.generators.plan.PlannedContact`
+    may name (audit R4A-05).
+    """
     cx, cy = site.position_xy
     created: list[Any] = []
+    foundation: set[str] = set()
     for planned in site.electrodes:
         spec = planned.spec
         name = site.electrode_name(planned)
@@ -747,8 +763,10 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
         )
         # The first primitive of an electrode spec carries its name.
         created.append(world.electrodes[first])
+        if isinstance(spec, FoundationElectrodeSpec):
+            foundation.update(e.name for e in world.electrodes[first:])
     if not created:
-        return None
+        return None, foundation
     anchor = created[0]
     for k, electrode in enumerate(created[1:], start=1):
         create_conductor(
@@ -758,7 +776,7 @@ def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
             end=electrode,
             conductor_type=site.bond_conductor_type,
         )
-    return anchor.name
+    return anchor.name, foundation
 
 
 # ---------------------------------------------------------------------
@@ -797,23 +815,99 @@ def _branch_end(
     name: str,
     contact: Optional[PlannedContact],
     index: Optional[dict[str, Any]],
+    *,
+    branch: Optional[PlannedBranch] = None,
+    site: Optional[str] = None,
+    foundation_wires: Optional[Mapping[str, Collection[str]]] = None,
 ) -> tuple[tuple[float, float, float], str]:
     """End point (m) and attached node name of one end of a branch.
 
     Without a contact the connection point of the node; with one the
     contact's point on the named wire, at the wire's depth (user decision
-    Q41).
+    Q41), after :func:`_check_contact`.
     """
     if contact is None:
         point = node.connection_point if not isinstance(node, str) else None
         if point is None:
             point = _node_point(world, name)
         return tuple(float(v) for v in point), name  # type: ignore[return-value]
-    wire = (index or {}).get(contact.electrode) or world.get_electrode(
-        contact.electrode
-    )
+    wire = _check_contact(world, contact, index, branch, site, foundation_wires)
     x, y = contact.position_xy
     return (float(x), float(y), float(wire.connection_point[2])), contact.electrode
+
+
+def _check_contact(
+    world: World,
+    contact: PlannedContact,
+    index: Optional[dict[str, Any]],
+    branch: Optional[PlannedBranch],
+    site: Optional[str],
+    foundation_wires: Optional[Mapping[str, Collection[str]]],
+) -> Any:
+    """The wire a contact names, after checking that the contact is on it.
+
+    A contact must name a foundation wire of the site the branch ends at
+    (``foundation_wires[site]`` when given, as :func:`materialise_plan`
+    does; otherwise any horizontal wire, a strip or polyline electrode) and
+    lie within one minimum cable section of it in plan: a joined cable's
+    point (rule 4 of the PEN router) lies up to
+    :func:`~groundfield.generators._pen_routing.min_section_length` off the
+    wire it crosses or touches, 1 cm for wire radii up to 7.3 mm (audit
+    R4A-05).
+
+    Raises
+    ------
+    ValueError
+        If the electrode is unknown, not a foundation wire of the site, or
+        farther than that from the point.
+    """
+    from groundfield.generators._pen_routing import (
+        MIN_DROP_LENGTH_M,
+        min_section_length,
+    )
+
+    label = f"branch {branch.name!r}" if branch is not None else "a branch"
+    wire = (index or {}).get(contact.electrode)
+    if wire is None:
+        try:
+            wire = world.get_electrode(contact.electrode)
+        except KeyError:
+            raise ValueError(
+                f"materialise_branch: {label} meets {contact.electrode!r}, "
+                "which is no electrode of the world; a contact names a "
+                "foundation wire of the site the branch ends at."
+            ) from None
+    if foundation_wires is not None and site is not None:
+        allowed = contact.electrode in foundation_wires.get(site, ())
+    else:
+        allowed = getattr(wire, "kind", None) in ("strip", "polyline")
+    if not allowed:
+        raise ValueError(
+            f"materialise_branch: {label} meets {contact.electrode!r}, which "
+            f"is not a foundation wire of site {site!r}; a contact names a "
+            "wire of a FoundationElectrodeSpec of that site."
+        )
+    tolerance = (
+        MIN_DROP_LENGTH_M if branch is None else min_section_length(branch.conductor)
+    )
+    x, y = (float(v) for v in contact.position_xy)
+    off = math.inf
+    for run in wire.wire_polylines():
+        pts = [(float(p[0]), float(p[1])) for p in run]
+        for (ax, ay), (bx, by) in zip(pts[:-1], pts[1:], strict=True):
+            dx, dy = bx - ax, by - ay
+            length2 = dx * dx + dy * dy
+            t = 0.0 if length2 == 0.0 else ((x - ax) * dx + (y - ay) * dy) / length2
+            t = min(max(t, 0.0), 1.0)
+            off = min(off, math.hypot(x - (ax + t * dx), y - (ay + t * dy)))
+    if not off <= tolerance * (1.0 + 1e-9):
+        raise ValueError(
+            f"materialise_branch: {label} meets {contact.electrode!r} at "
+            f"({x:g}, {y:g}) m, {off:.3g} m from the wire in plan; a contact "
+            f"lies on its wire, at most {tolerance:g} m off (the point of a "
+            "cable joined to a wire it crosses)."
+        )
+    return wire
 
 
 def materialise_branch(
@@ -822,6 +916,7 @@ def materialise_branch(
     nodes: dict[str, str],
     *,
     index: Optional[dict[str, Any]] = None,
+    foundation_wires: Optional[Mapping[str, Collection[str]]] = None,
 ) -> Conductor:
     """Create the conductor of one branch.
 
@@ -838,6 +933,10 @@ def materialise_branch(
         Optional map from electrode / junction name to the object in
         ``world``; saves a search through the world per end (the
         materialiser of a large network passes it).
+    foundation_wires
+        Optional map from site name to the names of its foundation wires
+        (:func:`materialise_plan` passes it); a contact must name one of
+        them. Without it any strip or polyline electrode is accepted.
 
     Returns
     -------
@@ -851,6 +950,16 @@ def materialise_branch(
     to that wire (user decision Q41); an end without one is the connection
     point of the node (the site's anchor electrode, or the junction). With
     ``axis_z_m`` both ends are moved to that depth.
+
+    Raises
+    ------
+    ValueError
+        If a contact names an electrode that is not a foundation wire of the
+        site the branch ends at, or lies farther from that wire in plan than
+        one minimum cable section
+        (:func:`~groundfield.generators._pen_routing.min_section_length` of
+        the branch's conductor: 1 cm for wire radii up to 7.3 mm; audit
+        R4A-05).
     """
     start = nodes.get(branch.start, branch.start)
     end = nodes.get(branch.end, branch.end)
@@ -877,9 +986,25 @@ def materialise_branch(
             inductance_model=p.inductance_model,
         )
     (sx, sy, sz), start = _branch_end(
-        world, start_node, start, branch.start_contact, index
+        world,
+        start_node,
+        start,
+        branch.start_contact,
+        index,
+        branch=branch,
+        site=branch.start,
+        foundation_wires=foundation_wires,
     )
-    (ex, ey, ez), end = _branch_end(world, end_node, end, branch.end_contact, index)
+    (ex, ey, ez), end = _branch_end(
+        world,
+        end_node,
+        end,
+        branch.end_contact,
+        index,
+        branch=branch,
+        site=branch.end,
+        foundation_wires=foundation_wires,
+    )
     if branch.axis_z_m is not None:
         sz = ez = float(branch.axis_z_m)
     cond = Conductor(
@@ -921,8 +1046,9 @@ def materialise_plan(plan: NetworkPlan) -> World:
     """
     world = create_world(name=plan.name, soil=plan.soil)
     nodes: dict[str, str] = {}
+    foundation_wires: dict[str, set[str]] = {}
     for site in plan.all_sites:
-        anchor = materialise_site(world, site)
+        anchor, foundation_wires[site.name] = _materialise_site(world, site)
         if anchor is not None:
             nodes[site.name] = anchor
     for junction in plan.all_junctions:
@@ -930,7 +1056,9 @@ def materialise_plan(plan: NetworkPlan) -> World:
     index: dict[str, Any] = {e.name: e for e in world.electrodes}
     index.update((j.name, j) for j in world.junctions)
     for branch in plan.all_branches:
-        materialise_branch(world, branch, nodes, index=index)
+        materialise_branch(
+            world, branch, nodes, index=index, foundation_wires=foundation_wires
+        )
     for source in plan.sources:
         kwargs: dict = {}
         if source.name is not None:

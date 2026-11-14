@@ -656,7 +656,12 @@ def test_connection_point_anchor_of_a_generated_ring_is_its_corner() -> None:
     for quoted in (
         "270.89 V",
         "245.22 V",
-        "229.71 against 159.61 V",
+        "229.71 against 161.76 V",
         "91.10 against 111.38 V",
+        "134.24 against 120.12 V",
+        "240.82, 156.07 and 109.87 V",
     ):
         assert quoted in flat
+    # audit R4B-09: the centre values are this release's circle round the
+    # centre of the four strips, not the grid mesh of 77c58bd (159.61 V)
+    assert "159.61" not in flat
