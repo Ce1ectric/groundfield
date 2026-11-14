@@ -43,11 +43,12 @@ shows what agrees with independent references and how well.
   `kernel="point"`, the kernel `mom` uses); against one current per
   segment an encased mesh foundation is at most 0.6 % high and a rectangle
   without cross-braces — one owner per side since user decision Q38 — with
-  a short side of at least 1 m at most 0.9 % (150 m × 7.75 m bare in 30
-  over 200 Ω·m; 0.6 % for 16 m × 1 m in 0.2 m of wet concrete; the single
-  owner that the default built for an axis-aligned one up to then was up
-  to 2.2 % high); narrower ones more (10 m × 0.5 m: +0.6 %, one owner
-  +2.9 %). For shells as thick as 0.2 m, whose
+  a short side of at least 1 m, an aspect ratio up to 50 and sides up to
+  150 m at most 1.4 % over the AP1 soils, bare or encased (150 m × 3 m bare
+  in 30 over 200 Ω·m: +1.34 %; 0.9 % for 150 m × 7.75 m; at most 0.25 % up
+  to aspect ratio 4; the single owner that the default built for an
+  axis-aligned one up to then was up to 2.1 % high); narrower ones more
+  (150 m × 1 m: +1.65 %). For shells as thick as 0.2 m, whose
   outer radius is not thin against the segments (the engine warns), these
   numbers carry about 0.2 percentage points of model uncertainty. Surface
   potentials near grids, meshes, stars, strip ends and bonded
@@ -249,10 +250,29 @@ shows what agrees with independent references and how well.
   with `exclude_building_tags`. A rectangle is one owner per side (user
   decision Q38), a building outline one owner: a rectangular outline reads
   like the single owner did, above the same rectangle given by its size
-  (6.5e-6 for 10 m × 8 m; up to 0.33 % bare in homogeneous soil and 1.55 %
-  in 0.2 m of wet concrete for narrow ones). The connection point of a
-  rectangular foundation is the start of its local −y side, a corner; that
-  of an outline its first vertex.
+  (6.8e-6 for 10 m × 8 m with the default engine, 6.5e-6 with the point
+  kernel; up to 0.33 % bare in homogeneous soil and 1.55 % in 0.2 m of wet
+  concrete for narrow ones). The connection point of a rectangular
+  foundation is the start of its local −y side, a corner (also at multiples
+  of 90°, which are exact rotations), that of an outline its first vertex;
+  conductors attached by name and `anchor="connection_point"` use it. The
+  generators end their cables and service drops at the point of the
+  foundation nearest to each conductor instead (user decision Q41).
+- **Generated service drops** are straight conductors from the closest
+  point of the feeding cable to the closest point of the building's
+  foundation (horizontal at the PEN depth in `TnNetworkGenerator`). A cable
+  parallel to the facing side meets it at the corner where that side's wire
+  starts (the tie rule), and a cable that crosses a foundation is joined to
+  it without a drop. Where a drop ends changes the galvanic model only
+  through its length, but it changes the inductive coupling of drops and
+  cables: the reactance of networks with an inductive PEN at 1 kHz depends
+  on it by a few per cent (−6 … +3 % between the anchor corner and the
+  nearest point; +6 … +14 % against drops to the centre of ring houses, as
+  in 0.15.0). Sites without a foundation — rods, `RingElectrodeSpec`
+  circles and strips, among them the default substations of both
+  generators — keep the connection point of their anchor.
+  `LvNetworkLayout.plot` still draws the layout's drop stubs (centroid to
+  tap), not the drops of the materialised world.
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a
   modelling choice, not a measured value.

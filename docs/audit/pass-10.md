@@ -3468,6 +3468,15 @@ the first vertex for building outlines; the author decided on 2026-11-14:
 | 41 | Where do the conductors the generators route to a foundation end: at the centre as in 0.15.0, at the corner of the anchor side, or at the point of the foundation nearest to the conductor? | at the nearest point, for every foundation form (rectangles, building outlines, the substation's foundation), already in 2026.11.0 | stream `f4gen` |
 
 
+!!! warning "Correction to question 38 (audit D3B-01)"
+    The 0.9 % of question 38 was measured at the cases where the owner change
+    is largest. Over the whole scope of the owner texts (short side at least
+    1 m, aspect ratio up to 50, sides up to 150 m, the AP1 soils) one owner
+    per side is at most 1.4 % above one current per segment (150 m × 3 m bare
+    in 30 over 200 Ω·m: +1.34 %) and one owner per rectangle at most 2.1 %;
+    one per side is closer everywhere, so the decision stands.
+
+
 !!! warning "Corrections (adversarial audits of the decision streams)"
     Two adversarial audits of the three decision streams below (D2A / D2B,
     fixed by the streams `f2solver` and `f2gen`; R2A / R2B, fixed by
@@ -3687,3 +3696,35 @@ details; in short:
   and in the known limitations.
 - **Golden:** only `mutual_foundations_lumped_concrete` moves (Z_G 5.2e-4,
   R 1.6 %, structure of the world), now equal to the `distributed` case.
+
+## Stream `f4gen`: User decision Q41 and the fixes of audits D3A, D3B
+
+Every conductor that `TnNetworkGenerator` and the layout builder route to a
+foundation ends at the point of that foundation nearest to the conductor: a
+service drop is the closest pair of its feeding cable and the building's
+foundation wires, a cable leaving a site with a foundation starts at the
+foundation's point nearest to its next node, and the conductor is attached to
+the wire that holds the point. Ties go to the lowest wire index, then to the
+smallest arc position; a cable crossing a foundation is joined to it without
+a drop. Sites without a foundation keep their connection point, and so does
+everything attached by name. In short:
+
+- **Drops:** of 282 drops of audit D3A's ring-house set, 47 ran along their
+  own foundation and 45 across it; now none (total length 11 968 → 10 530 m,
+  closest pair checked against 2 mm sampling).
+- **Networks:** −0.005 … −0.012 % at 50 Hz with the resistive PEN; with a
+  Neumann PEN at 1 kHz \|Z\| −0.71 … +0.74 % and Im −3.1 … +3.3 %
+  (`carson_series` and `sommerfeld`); ring-house networks keep +5.7 … +14.0 %
+  more reactance than drops to the centre as in 0.15.0 — the geometry of a
+  drop that ends at the facing side.
+- **The AP1 case** (layout of building outlines with the AP1 station):
+  −0.026 … −0.147 %, drops 215.9 → 140.6 m.
+- **Fixes:** right angles are exact rotations and keep the anchor side
+  (D3B-04, D3A-05); non-positive foundation sides raise (D3A-01);
+  `diagnose()` treats the wires of one foundation as one owner (D3A-04); the
+  per-side bound is 1.4 % (D3B-01, see the correction above); the texts on
+  the connection point, the golden field change and the `fem` ranges are
+  corrected (D3A-03, D3A-06, D3B-02, D3B-03, D3B-05 … D3B-07).
+- **Golden:** `gen_tn_default` (≤ 2.9e-4), `gen_layout_builder` (≤ 1.1e-3)
+  and `gen_tn_measurement_overhead_leads` (≤ 1.6e-4) move; the other 46
+  cases are bit-identical.
