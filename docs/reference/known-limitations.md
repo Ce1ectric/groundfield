@@ -47,7 +47,7 @@ shows what agrees with independent references and how well.
   150 m at most 1.4 % over the AP1 soils, bare or encased (150 m × 3 m bare
   in 30 over 200 Ω·m: +1.34 %; 0.9 % for 150 m × 7.75 m; at most 0.25 % up
   to aspect ratio 4; the single owner that the default built for an
-  axis-aligned one up to then was up to 2.1 % high); narrower ones more
+  axis-aligned one up to then was up to 2.2 % high, 2.16 % for 16 m × 1 m in a 0.2 m shell); narrower ones more
   (150 m × 1 m: +1.65 %). For shells as thick as 0.2 m, whose
   outer radius is not thin against the segments (the engine warns), these
   numbers carry about 0.2 percentage points of model uncertainty. Surface
@@ -258,21 +258,29 @@ shows what agrees with independent references and how well.
   conductors attached by name and `anchor="connection_point"` use it. The
   generators end their cables and service drops at the point of the
   foundation nearest to each conductor instead (user decision Q41).
-- **Generated service drops** are straight conductors from the closest
-  point of the feeding cable to the closest point of the building's
-  foundation (horizontal at the PEN depth in `TnNetworkGenerator`). A cable
-  parallel to the facing side meets it at the corner where that side's wire
-  starts (the tie rule), and a cable that crosses a foundation is joined to
-  it without a drop. Where a drop ends changes the galvanic model only
-  through its length, but it changes the inductive coupling of drops and
-  cables: the reactance of networks with an inductive PEN at 1 kHz depends
-  on it by a few per cent (−6 … +3 % between the anchor corner and the
-  nearest point; +6 … +14 % against drops to the centre of ring houses, as
-  in 0.15.0). Sites without a foundation — rods, `RingElectrodeSpec`
-  circles and strips, among them the default substations of both
-  generators — keep the connection point of their anchor.
-  `LvNetworkLayout.plot` still draws the layout's drop stubs (centroid to
-  tap), not the drops of the materialised world.
+- **Generated service drops** are straight conductors from the closest point
+  of the feeding cable to the closest point of the building's foundation
+  (horizontal at the PEN depth in `TnNetworkGenerator`). A cable parallel to
+  the facing side meets it at the corner where that side's wire starts (the
+  tie rule). A building that a cable of its feeding path crosses is joined to
+  it and fed by it without a drop (radial: any trunk; star: the main that
+  crosses it, whose cabinet then feeds it), and no drop runs along a cable; a
+  drop may pass over another building's foundation (the house behind a house
+  on the main: 5 m over its side, 0.2 m above the wire). With an isolated PEN
+  the end of a drop changes the resistive model only through its length (a
+  few 0.01 %); a galvanic (bare) PEN leaks along its drops, so their route
+  moves its earthing too (radial default networks, 50 Hz: Re up to +7.8 %
+  against −0.03 % isolated). The inductive coupling of drops and cables
+  depends on where the drops end: with a Neumann PEN at 1 kHz (seed 1,
+  default grid, `sommerfeld` default and `carson_series`) the reactance moved
+  by −3.1 … +16.3 % (star) and −8.6 … +37.7 % (radial) between the anchor
+  corner and the nearest point, and lies −10.8 … +14.0 % from drops to the
+  centre as in 0.15.0 (12 m × 8 m ring houses +5.7 … +14.0 %, default 10 m
+  ring houses star +0.6 … +10.4 %, radial −10.8 … −1.1 %). Sites without a
+  foundation — rods, `RingElectrodeSpec` circles and strips, among them the
+  default substations of both generators — keep the connection point of
+  their anchor. `LvNetworkLayout.plot(world=...)` draws the drops as built;
+  without a world it draws the layout's stubs (centroid to tap).
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a
   modelling choice, not a measured value.

@@ -3712,13 +3712,16 @@ everything attached by name. In short:
 - **Drops:** of 282 drops of audit D3A's ring-house set, 47 ran along their
   own foundation and 45 across it; now none (total length 11 968 → 10 530 m,
   closest pair checked against 2 mm sampling).
-- **Networks:** −0.005 … −0.012 % at 50 Hz with the resistive PEN; with a
+- **Networks** (six star networks; the radial topology and the 10-house
+  network move further, see the f5gen section): −0.005 … −0.012 % at 50 Hz
+  with the resistive PEN; with a
   Neumann PEN at 1 kHz \|Z\| −0.71 … +0.74 % and Im −3.1 … +3.3 %
   (`carson_series` and `sommerfeld`); ring-house networks keep +5.7 … +14.0 %
   more reactance than drops to the centre as in 0.15.0 — the geometry of a
   drop that ends at the facing side.
-- **The AP1 case** (layout of building outlines with the AP1 station):
-  −0.026 … −0.147 %, drops 215.9 → 140.6 m.
+- **A layout of building outlines with an AP1-like station:** −0.026 …
+  −0.147 %, drops 215.9 → 140.6 m. The AP1 catalogue itself attaches its
+  drops and bonds by name and is not changed by Q41 (audit R4B-14).
 - **Fixes:** right angles are exact rotations and keep the anchor side
   (D3B-04, D3A-05); non-positive foundation sides raise (D3A-01);
   `diagnose()` treats the wires of one foundation as one owner (D3A-04); the
@@ -3728,3 +3731,38 @@ everything attached by name. In short:
 - **Golden:** `gen_tn_default` (≤ 2.9e-4), `gen_layout_builder` (≤ 1.1e-3)
   and `gen_tn_measurement_overhead_leads` (≤ 1.6e-4) move; the other 46
   cases are bit-identical.
+
+## Stream `f5gen`: Fixes of audits R4A, R4B (user decision Q41)
+
+The audits of stream `f4gen` found three routing paths that broke the rule —
+drops that started on the foundation of a house the cable crosses (R4A-01),
+radial drops from the substation that lay on the trunk through the houses it
+crosses (R4A-02, R4B-01: 6 drops over 195 m in the default 30-house network),
+layout taps inside the station foundation (R4A-03) — an over-broad
+`diagnose()` grouping (R4A-04), unchecked plan contacts (R4A-05), a slower
+planner (R4A-06) and scoped or stale numbers (R4B-02 … R4B-14). In short:
+
+- **Crossings:** a building that a cable crosses is joined to it and fed by
+  it, without a drop: a cable of its feeding path, every trunk of the radial
+  topology, and in the star topology the main that crosses it, whose cabinet
+  then feeds it (coordinator decision: no cross-ties between cabinets
+  through a house; 1 of 50 and 3 of 150 default houses change cabinet). No
+  drop runs along a cable: a drop from a node that would run along a trunk
+  or another main starts where it leaves it (needed by the random stress
+  set). The strict guard finds no drop on a cable in the default grids,
+  audit D3A's set and 400 random networks, star and radial.
+- **Numbers, scoped** (seed 1, 100 Ω·m, default grid; `sommerfeld` and
+  `carson_series`, two segment lengths): Q41 moves resistive networks by
+  −0.005 … −0.12 % (star) and −0.03 … +0.13 % (radial) at 50 Hz; with a
+  Neumann PEN at 1 kHz Im −3.1 … +16.3 % (star; the 10-house network with 5
+  of its houses on the main +14.2 / +16.3 %) and −8.6 … +37.7 % (radial;
+  default 30 houses +10.4 %). Radial networks react to where the drops end
+  much more than star ones.
+- **Other fixes:** `diagnose()` groups only the wires bonded by a
+  foundation's `_bond_` conductors and leaves out only pairs that meet at a
+  shared corner; plan contacts off their wire, unknown or on a rod are
+  rejected; planning one cabinet feeding 1000 houses 3.14 → 0.89 s;
+  `LvNetworkLayout.plot(world=...)` draws the drops as built; one owner up to
+  2.2 %, the scanned 145 m × 2.9 m rectangle, the passive-field change
+  +5.5 / −4.7 % and the provenance of the touch-voltage values corrected.
+- **Golden:** nothing moves against `f4gen`.

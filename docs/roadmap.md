@@ -52,7 +52,7 @@ Each item that changes numbers comes with its own validation.
 - **Cable cabinets per building group and T-joints on the radial trunk.**
   `TnNetworkGenerator` places its cabinets at fixed positions: both cabinets
   of the default 30-house network lie west of the substation, so the eastern
-  houses are fed by service drops of 6 … 109 m straight from the substation
+  houses are fed by service drops of 3.5 … 106.5 m straight from the substation
   (every drop taps the cable that feeds its building, review finding 10.38),
   which doubles the PEN length against the earlier routing. Cabinets will be
   placed per building group (at the far end of the houses they feed), and a
