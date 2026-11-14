@@ -264,22 +264,45 @@ shows what agrees with independent references and how well.
   the facing side meets it at the corner where that side's wire starts (the
   tie rule). A building that a cable of its feeding path crosses is joined to
   it and fed by it without a drop (radial: any trunk; star: the main that
-  crosses it, whose cabinet then feeds it), and no drop runs along a cable; a
-  drop may pass over another building's foundation (the house behind a house
-  on the main: 5 m over its side, 0.2 m above the wire). With an isolated PEN
-  the end of a drop changes the resistive model only through its length (a
-  few 0.01 %); a galvanic (bare) PEN leaks along its drops, so their route
-  moves its earthing too (radial default networks, 50 Hz: Re up to +7.8 %
-  against −0.03 % isolated). The inductive coupling of drops and cables
-  depends on where the drops end: with a Neumann PEN at 1 kHz (seed 1,
-  default grid, `sommerfeld` default and `carson_series`) the reactance moved
-  by −3.1 … +16.3 % (star) and −8.6 … +37.7 % (radial) between the anchor
-  corner and the nearest point, and lies −10.8 … +14.0 % from drops to the
-  centre as in 0.15.0 (12 m × 8 m ring houses +5.7 … +14.0 %, default 10 m
-  ring houses star +0.6 … +10.4 %, radial −10.8 … −1.1 %). Sites without a
-  foundation — rods, `RingElectrodeSpec` circles and strips, among them the
-  default substations of both generators — keep the connection point of
-  their anchor. `LvNetworkLayout.plot(world=...)` draws the drops as built;
+  crosses it, whose cabinet then feeds it), and no drop runs along a cable
+  farther than one minimum section (1 cm; "along" means both ends of a cable
+  section within 1 cm of the drop's line, so a drop that leaves a node at a
+  small angle to a cable and stays within 1 cm of it only over part of the
+  section keeps its route; a foundation that touches the end node of its
+  cable from beyond is tapped 1 cm before the node and its drop shares that
+  1 cm).
+  Drops are not routed around foundations: since the contact lies at the
+  corner of the side facing the cable, a drop to a house behind others of its
+  grid column runs 0.2 m above their side wires (PEN 0.6 m, foundations
+  0.8 m) — in the default grids of 10 to 200 houses 0 … 80 % of the drops
+  (star, 30 mesh houses: 14 of 25 drops, 150 m, up to 40 m over 4 houses;
+  150 houses: 70 of 141, 2 450 m, up to 65 m over 7 houses; radial 150: 69 of
+  140, 1 595 m). The field model has no inductive coupling between a drop and
+  an electrode (electrodes carry no current along themselves); a bare PEN
+  couples through the soil. Moved 1 m aside as a whole, those drops change
+  |Z| by at most 0.02 % with an insulated PEN (0 with the default resistive
+  one) and by up to −0.30 % with a bare one (default grids of 30 and 150
+  houses, 50 Hz and 1 kHz, `carson_series` and `sommerfeld`); a built detour
+  around them adds its own length (insulated Neumann PEN: reactance up to
+  +1.0 %, |Z| up to +0.23 % at 1 kHz). With an isolated PEN the end of a
+  drop changes the resistive model only through its length (radial default
+  grid with 2 ring houses, 50 Hz: −0.025 %); the joints and the star
+  reassignment of user decision Q41 move it by −0.12 … +0.13 % (star 50
+  houses −0.117 %, radial 30 / 50 houses +0.118 / +0.125 %). A galvanic
+  (bare) PEN leaks along its drops, so their route moves its earthing too
+  (the radial default grid with 2 ring houses, 50 Hz: Re +7.8 % against
+  −0.025 % isolated). The inductive coupling of drops and cables depends on
+  where the drops end: with a Neumann PEN at 1 kHz (seed 1, default grid,
+  `sommerfeld` default and `carson_series`) the reactance moved by −3.1 …
+  +16.3 % (star) and −8.6 … +37.7 % (radial) between the anchor corner and
+  the nearest point, and lies −10.8 … +14.0 % from drops to the centre as in
+  0.15.0 (12 m × 8 m ring houses +5.7 … +14.0 %; default 10 m ring houses:
+  star +1.2 … +2.1 % for the 30-house network — the networks of 1 … 5 houses
+  have no drop, all on the main, and move by +0.6 … +10.4 % through the joint
+  and the Q38 owner —, radial −10.8 … −1.1 %). Sites without a foundation —
+  rods, `RingElectrodeSpec` circles and strips, among them the default
+  substations of both generators — keep the connection point of their
+  anchor. `LvNetworkLayout.plot(world=...)` draws the drops as built;
   without a world it draws the layout's stubs (centroid to tap).
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a

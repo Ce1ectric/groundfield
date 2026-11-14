@@ -56,8 +56,9 @@ Each item that changes numbers comes with its own validation.
   (every drop taps the cable that feeds its building, review finding 10.38),
   which doubles the PEN length against the earlier routing. Cabinets will be
   placed per building group (at the far end of the houses they feed), and a
-  building in a substation slot of `RadialTrunkTopology` will tap its feeder's
-  trunk instead of getting its own line from the substation.
+  building in a substation slot of `RadialTrunkTopology` that no trunk
+  crosses (those are joined to the trunk since user decision Q41) will tap
+  its feeder's trunk instead of getting its own line from the substation.
 - **Concentric cables by an explicit marker, without the internal inductance
   of the shield.** A thinner conductor drawn on the axis of a thicker one is
   read as a core inside a cable shield and couples at the shield radius
@@ -102,6 +103,22 @@ limits a result, the reference documentation states the limit.
   gets no further rules; a conforming axisymmetric model replaces it in the
   next release (see above, user decision Q37), and a full 3-D volume method
   remains deferred (see below).
+- **Service drops around foundations** (question for the author). Drops
+  are straight; the contact lies at the corner of the side facing the cable,
+  so in the default grids 0 … 80 % of the drops run 0.2 m above the side
+  wires of other houses of their column. Moved 1 m aside they change \|Z\|
+  by at most 0.02 % (insulated PEN) and −0.30 % (bare PEN); the question is
+  whether the generators should follow the street geometry (drops along
+  property lines, around foundations) or keep the shortest connection.
+- **The nearest-point rule for sites without a foundation** (question for
+  the author). User decision Q41 covers foundations; `RingElectrodeSpec`
+  circles and strips — among them the default substations of both
+  generators — keep the connection point of their anchor.
+- **One owner per straight wire for building outlines** (question for the
+  author, with the solver item of one current per wire line). A rectangle
+  given by its size is one owner per side (user decision Q38), the same
+  rectangle given as an outline one owner (up to 0.33 % bare and 1.55 % in
+  0.2 m of wet concrete above it); the AP1 houses are outlines.
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the

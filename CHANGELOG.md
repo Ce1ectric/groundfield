@@ -111,7 +111,7 @@ reproduces 0.15.0, it is named.
 | 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
 | 10.12–10.14, 10.39, 10.28 (user decision Q20) | encased mesh foundations: every wire, cross-braces included, carries r_b and the shell coefficient C (in 0.15.0 every wire had r_b, but `"lumped"` put C on no wire and kept the shell in a registry that only the TN service drops read, `"distributed"` put C on the perimeter only) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, default engine of each version: +7.0 / +15 / +23 / +157 / +782 % against 0.15.0 `"lumped"`, +2.2 / +4.2 / +6.6 / +68 / +399 % against `"distributed"` (point kernel on both: +6.2 … +781 % and +1.5 … +398 %); in 30 over 100 Ω·m (h₁ = 5 m) up to +1701 % and +1045 %; four such houses on the default TN network (100 Ω·m): −3.8 / −5.2 / −6.5 / −14 / −11 % (`"lumped"`, whose shell sat on the service drop) and −0.3 / +1.0 / +2.5 / +35 / +121 % (`"distributed"`), of which −1.7 % without any shell (10.38, 10.28); the rule for the braces alone, against the 0.15.0 `"distributed"` model (braces with r_b, no C): +5.9 / +66 / +393 % at 150 / 1000 / 5000 Ω·m (against the bare braces of the development line, never released: +1.5 / +47 / +307 %) (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell, not ring and building-outline foundations (AP1: see the 10.12–10.14 row) |
 | 10.39 (user decision Q38) | an axis-aligned rectangular foundation without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`) with the default `concrete_model` is one current owner per side instead of one grid mesh, connected at the corner of its −y side instead of its centre (the generators' conductors at its nearest point since user decision Q41) | input impedance of a foundation on its own never higher, unchanged for a square; largest decreases over the AP1 soils (5 mm wire at 0.8 m, short side ≥ 1 m, aspect ratio ≤ 4 / ≤ 50): −0.32 / −0.91 % bare or with the default 5 cm shell (80 m × 20 m with 5 cm of 30 Ω·m concrete / 150 m × 7.75 m bare, both in 30 over 200 Ω·m), −0.69 / −1.53 % in up to 0.2 m of wet concrete (4 m × 1 m / 16 m × 1 m in 0.2 m of 30 Ω·m concrete over 1000 / 30 Ω·m), −0.09 / −0.33 % bare in homogeneous soil; AP1 station −0.0009 … −0.0026 %; TN networks with 1 / 2 / 5 / 30 / 100 ring-foundation houses +0.023 / +0.007 / +0.024 / −0.038 / −0.039 % (with Q41 +0.012 / −0.005 / +0.012 / −0.044 / −0.044 %); touch-voltage envelope of 20 m × 5 m and 40 m × 10 m rings −0.4 … −4.3 % (the centre +0.5 … +6.9 %); `fem` see the 10.49 row (golden `mutual_foundations_lumped_concrete`: Z_G 5.2e-4, R 1.6 %, now equal to the `distributed` case) | generated `style="ring"` foundations and meshes with `n_x = n_y = 1` at multiples of 90° with the default value, OMBR foundations of axis-aligned footprints with these specs (not the layout builder's default braced mesh), the AP1 station; not building outlines (the AP1 houses), braced meshes or rectangles at other angles |
-| 10.38 (user decision Q41) | conductors the generators route to a foundation end at its nearest point (closest pair of cable and foundation for service drops; the foundation's point nearest to the next node for cables leaving a site); a building that a cable of its feeding path crosses (radial: any trunk; star: the main that crosses it, whose cabinet then feeds it) is joined to it without a drop; no drop runs along a cable | seed 1, 100 Ω·m, default grid; default resistive PEN at 50 Hz: star −0.005 … −0.12 % (10 / 30 / 50 / 100 / 150 / 200 mesh houses −0.008 / −0.006 / −0.117 / −0.006 / −0.055 / −0.005 %, 1 … 200 ring houses −0.005 … −0.012 %), radial −0.03 … +0.13 %; Neumann PEN at 1 kHz (`carson_series` and `sommerfeld`, the default; isolated and galvanic): star Re −0.43 … +1.6 %, Im −3.1 … +16.3 %, \|Z\| −0.71 … +3.3 % (the 10-house network, 5 of its 10 houses on the main: X +14.2 % `carson_series`, +16.3 % `sommerfeld`, bare PEN at 50 Hz +2.0 %; without it Im −3.1 … +3.5 %), radial Re −0.47 … +8.4 %, Im −8.6 … +37.7 %, \|Z\| −0.67 … +9.0 % (default 30 houses, isolated, `sommerfeld`: Im +10.4 %); against drops to the centre as in 0.15.0, Im at 1 kHz: 12 m × 8 m ring houses (audit D3A) +5.7 … +14.0 %, default 10 m ring houses star +0.6 … +10.4 %, radial −10.8 … −1.1 %; a layout of building outlines with an AP1-like station −0.026 … −0.147 % at 50 Hz, drops 215.9 → 140.6 m; golden `gen_tn_default` ≤ 2.9e-4, `gen_layout_builder` ≤ 1.1e-3, `gen_tn_measurement_overhead_leads` ≤ 1.6e-4 (the probe reading 4.3e-3) | `TnNetworkGenerator` and layout-builder worlds with foundations; not sites without a foundation, not worlds built by hand (the AP1 catalogue attaches its drops by name and does not change) |
+| 10.38 (user decision Q41) | conductors the generators route to a foundation end at its nearest point (closest pair of cable and foundation for service drops; the foundation's point nearest to the next node for cables leaving a site); a building that a cable of its feeding path crosses (radial: any trunk; star: the main that crosses it, whose cabinet then feeds it) is joined to it without a drop; no drop runs along a cable farther than 1 cm | seed 1, 100 Ω·m, default grid; default resistive PEN at 50 Hz: star −0.005 … −0.12 % (10 / 30 / 50 / 100 / 150 / 200 mesh houses −0.008 / −0.006 / −0.117 / −0.006 / −0.055 / −0.005 %, 1 … 200 ring houses −0.005 … −0.012 %), radial −0.03 … +0.13 %; Neumann PEN at 1 kHz (`carson_series` and `sommerfeld`, the default; isolated and galvanic): star Re −0.43 … +1.6 %, Im −3.1 … +16.3 %, \|Z\| −0.71 … +3.3 % (the 10-house network, 5 of its 10 houses on the main: X +14.2 % `carson_series`, +16.3 % `sommerfeld`, bare PEN at 50 Hz +2.0 %; without it Im −3.1 … +3.5 %), radial Re −0.47 … +8.4 %, Im −8.6 … +37.7 %, \|Z\| −0.67 … +9.0 % (default 30 houses, isolated, `sommerfeld`: Im +10.4 %); against drops to the centre as in 0.15.0, Im at 1 kHz: 12 m × 8 m ring houses (audit D3A) +5.7 … +14.0 %, default 10 m ring houses star +1.2 … +2.1 % (the 30-house network; the networks of 1 … 5 houses have no drop, all on the main: +0.6 … +10.4 % from the joint and the Q38 owner), radial −10.8 … −1.1 %; a layout of building outlines with an AP1-like station −0.026 … −0.147 % at 50 Hz, drops 215.9 → 140.6 m; golden `gen_tn_default` ≤ 2.9e-4, `gen_layout_builder` ≤ 1.1e-3, `gen_tn_measurement_overhead_leads` ≤ 1.6e-4 (the probe reading 4.3e-3) | `TnNetworkGenerator` and layout-builder worlds with foundations; not sites without a foundation, not worlds built by hand (the AP1 catalogue attaches its drops by name and does not change) |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -622,20 +622,27 @@ reproduces 0.15.0, it is named.
   point (`PlannedBranch.start_contact` / `end_contact`, a `PlannedContact`).
   Ties go to the lowest wire index, then to the smallest arc position along
   the wire, so a cable parallel to the side facing it meets that side at the
-  corner where its wire starts. A building that a cable crosses is joined to
-  it and fed by it, without a drop: a cable of its feeding path, every trunk
-  of `RadialTrunkTopology` (a building in a substation slot has no cable of
-  its own, and a trunk beyond its tap source runs on past it), and in the
-  star topology the main that crosses it, whose cabinet then feeds it
-  instead of its nearest one (the nearest of the cabinets whose mains cross
-  it, ties to the lower index; 1 of 50 and 3 of 150 houses of the default
-  grids); a main that does not feed the building stays unjoined, and where
-  the foundation touches the cable at a node the joint lies 1 cm from it. A
-  drop whose closest pair lies at such a joint starts there on the cable,
-  and no drop runs along a cable: a drop from a node that would run along a
-  trunk or another main starts where it leaves it. The layout builder takes
-  the closest pair on the cable as built, from the foundation contact of a
-  site, so no tap lies inside a site foundation. Up to then every conductor ended at the connection point
+  corner where its wire starts. A building that a cable crosses is joined to it and fed by it, without a
+  drop: a cable of its feeding path, every trunk of `RadialTrunkTopology` (a
+  building in a substation slot has no cable of its own, and a trunk beyond
+  its tap source runs on past it), and in the star topology the main that
+  crosses it, whose cabinet then feeds it instead of its nearest one (the
+  nearest of the cabinets whose mains cross it, ties to the lower index; 1 of
+  50 and 3 of 150 houses of the default grids); a main that does not feed the
+  building stays unjoined. Where the foundation touches the cable at a node
+  (a cabinet on a wire), a crossing of the cable through the foundation
+  elsewhere is the joint; otherwise the joint lies 1 cm from the node. A drop
+  whose closest pair lies at such a joint starts there on the cable, and no
+  drop runs along a cable farther than one minimum section (1 cm): a drop
+  from a node that would run along a trunk or another main — both ends of a
+  section within 1 cm of the drop's line — starts where it leaves it; the one
+  overlap left is that 1 cm, where a foundation touches the end node of its
+  cable from beyond and is tapped 1 cm before the node. A drop may pass over
+  other buildings' foundations, 0.2 m above their wires (see the known
+  limitations). The layout builder keeps its taps on the layout polyline,
+  clipped at the projection of a site's foundation contact onto it, so no tap
+  lies inside a site foundation, also next to a rotated, polygon or offset
+  one. Up to then every conductor ended at the connection point
   of the site's anchor — a corner of a rectangular foundation (meshes since
   audit A2G-04, rings since Q38), the first vertex of a building outline: 47
   of 282 drops of a ring-house test set ran along a side of their own
@@ -647,8 +654,9 @@ reproduces 0.15.0, it is named.
   `PlannedContact` that names no foundation wire of its site or lies farther
   than one minimum section from it, and `LvNetworkLayout.plot(world=...)`
   draws the service drops as built (without a world, the layout's stubs).
-  Planning 1000 default houses takes 0.79 s (star) / 0.46 s (radial) against
-  0.33 / 0.19 s in 0.15.0 on the test machine. Tests:
+  Planning 1000 default houses takes 0.8 s (star) / 0.4 s (radial) against
+  0.2 s before user decision Q41 (0.15.0 had no planning step); 8000 radial
+  houses 18.4 s against 5.9 s. Tests:
   `tests/test_foundation_contact.py`,
   `tests/test_lv_network_layout.py::test_plot_draws_the_drops_as_built_from_the_world`.
 - Rectangular foundations at multiples of 90° are rotated with the exact
@@ -1026,9 +1034,13 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `tests/test_foundation_owners.py`.
 - ⚠ **Overlapping PEN cables (10.38):** service drops ran from the cabinet back
   along the main, coaxial with it, which made an inductive 2-house network
-  non-passive (Im Z_in −0.633 Ω at 1 kHz); drops now tap their feeding cable,
-  and conductors lying side by side are touching wires (10.46). Tests:
-  `tests/test_pen_routing.py`, `tests/test_interpenetrating_wires.py`.
+  non-passive (Im Z_in −0.633 Ω at 1 kHz); drops now tap their feeding cable
+  and run along no cable farther than one minimum section (1 cm; "along":
+  both ends of a cable section within 1 cm of the drop's line — a test to
+  1 µm let a drop 2 µm beside a trunk run 60 m along it, audit R5A-01), and
+  conductors lying side by side are touching wires (10.46). Tests:
+  `tests/test_pen_routing.py`, `tests/test_interpenetrating_wires.py`,
+  `tests/test_foundation_contact.py::test_a_drop_beside_a_trunk_leaves_it_at_its_end`.
 - **Outlines without area (10.05, 10.54, audit A2G-06)** crashed the
   generators; they are skipped on ingest and widened with a warning by the
   generators, and polygon foundations of outlines narrower than 1 m are

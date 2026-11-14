@@ -3473,7 +3473,9 @@ the first vertex for building outlines; the author decided on 2026-11-14:
     is largest. Over the whole scope of the owner texts (short side at least
     1 m, aspect ratio up to 50, sides up to 150 m, the AP1 soils) one owner
     per side is at most 1.4 % above one current per segment (150 m × 3 m bare
-    in 30 over 200 Ω·m: +1.34 %) and one owner per rectangle at most 2.1 %;
+    in 30 over 200 Ω·m: +1.34 %) and one owner per rectangle up to
+    2.2 % (16 m × 1 m in a 0.2 m shell of 30 Ω·m over 1000 / 30 Ω·m: +2.106 /
+    +2.160 % at 0.5 / 0.25 m segments);
     one per side is closer everywhere, so the decision stands.
 
 
@@ -3703,34 +3705,39 @@ Every conductor that `TnNetworkGenerator` and the layout builder route to a
 foundation ends at the point of that foundation nearest to the conductor: a
 service drop is the closest pair of its feeding cable and the building's
 foundation wires, a cable leaving a site with a foundation starts at the
-foundation's point nearest to its next node, and the conductor is attached to
-the wire that holds the point. Ties go to the lowest wire index, then to the
-smallest arc position; a cable crossing a foundation is joined to it without
-a drop. Sites without a foundation keep their connection point, and so does
-everything attached by name. In short:
+foundation's point nearest to its next node, and the conductor is attached
+to the wire that holds the point. Ties go to the lowest wire index, then to
+the smallest arc position. Sites without a foundation keep their connection
+point, and so does everything attached by name. The first version joined a
+cable that crosses a foundation to it without a drop; the audits of the
+stream completed that rule (see the f5gen and f6gen sections). In short:
 
-- **Drops:** of 282 drops of audit D3A's ring-house set, 47 ran along their
-  own foundation and 45 across it; now none (total length 11 968 → 10 530 m,
-  closest pair checked against 2 mm sampling).
-- **Networks** (six star networks; the radial topology and the 10-house
-  network move further, see the f5gen section): −0.005 … −0.012 % at 50 Hz
-  with the resistive PEN; with a
-  Neumann PEN at 1 kHz \|Z\| −0.71 … +0.74 % and Im −3.1 … +3.3 %
-  (`carson_series` and `sommerfeld`); ring-house networks keep +5.7 … +14.0 %
-  more reactance than drops to the centre as in 0.15.0 — the geometry of a
-  drop that ends at the facing side.
+- **Drops:** of the 282 drops of audit D3A's ring-house set (11 968.5 m),
+  47 ran along their own foundation and 45 across it; the first version had
+  264 drops (10 529.6 m), none along or across its own foundation, but 18
+  radial substation-slot drops on the trunk; now 246 drops (9 963.5 m), none
+  on a cable (closest pair checked against 2 mm sampling).
+- **Networks** (seed 1, 100 Ω·m, default grid; values after the audit
+  fixes, see the f5gen section): the resistive PEN at 50 Hz moves by
+  −0.005 … −0.12 % (star) and −0.03 … +0.13 % (radial); with a Neumann PEN
+  at 1 kHz \|Z\| by −0.71 … +3.3 % (star) and −0.67 … +9.0 % (radial). The
+  12 m × 8 m ring houses of audit D3A have +5.7 … +14.0 % more reactance
+  than drops to the centre as in 0.15.0; the default 10 m ring networks
+  with drops +1.2 … +2.1 % (star, 30 houses) and −10.8 … −1.1 % (radial).
 - **A layout of building outlines with an AP1-like station:** −0.026 …
   −0.147 %, drops 215.9 → 140.6 m. The AP1 catalogue itself attaches its
   drops and bonds by name and is not changed by Q41 (audit R4B-14).
 - **Fixes:** right angles are exact rotations and keep the anchor side
   (D3B-04, D3A-05); non-positive foundation sides raise (D3A-01);
-  `diagnose()` treats the wires of one foundation as one owner (D3A-04); the
+  `diagnose()` leaves out the pairs of one foundation's wires that meet at
+  its corners (D3A-04; since audit R4A-04 only wires bonded by the
+  foundation's `_bond_` conductors and only pairs at a shared vertex); the
   per-side bound is 1.4 % (D3B-01, see the correction above); the texts on
   the connection point, the golden field change and the `fem` ranges are
   corrected (D3A-03, D3A-06, D3B-02, D3B-03, D3B-05 … D3B-07).
 - **Golden:** `gen_tn_default` (≤ 2.9e-4), `gen_layout_builder` (≤ 1.1e-3)
-  and `gen_tn_measurement_overhead_leads` (≤ 1.6e-4) move; the other 46
-  cases are bit-identical.
+  and `gen_tn_measurement_overhead_leads` (≤ 1.6e-4, the probe reading
+  4.3e-3) move; the other 46 cases are bit-identical.
 
 ## Stream `f5gen`: Fixes of audits R4A, R4B (user decision Q41)
 
@@ -3747,10 +3754,13 @@ planner (R4A-06) and scoped or stale numbers (R4B-02 … R4B-14). In short:
   topology, and in the star topology the main that crosses it, whose cabinet
   then feeds it (coordinator decision: no cross-ties between cabinets
   through a house; 1 of 50 and 3 of 150 default houses change cabinet). No
-  drop runs along a cable: a drop from a node that would run along a trunk
-  or another main starts where it leaves it (needed by the random stress
-  set). The strict guard finds no drop on a cable in the default grids,
-  audit D3A's set and 400 random networks, star and radial.
+  drop runs along a cable farther than one minimum section (1 cm): a drop
+  from a node that would run along a trunk or another main starts where it
+  leaves it (needed by the random stress set). The guard, with the router's
+  1 cm tolerance since audit R5A-01, finds no drop along a cable in the
+  default grids and audit D3A's set; in the 400 random networks one drop
+  shares the 1 cm of rule 3's bound (a foundation 8 mm beyond a cabinet rod
+  at the cable's end), which the guard allows.
 - **Numbers, scoped** (seed 1, 100 Ω·m, default grid; `sommerfeld` and
   `carson_series`, two segment lengths): Q41 moves resistive networks by
   −0.005 … −0.12 % (star) and −0.03 … +0.13 % (radial) at 50 Hz; with a
@@ -3766,3 +3776,31 @@ planner (R4A-06) and scoped or stale numbers (R4B-02 … R4B-14). In short:
   2.2 %, the scanned 145 m × 2.9 m rectangle, the passive-field change
   +5.5 / −4.7 % and the provenance of the touch-voltage values corrected.
 - **Golden:** nothing moves against `f4gen`.
+
+## Stream `f6gen`: Fixes of audits R5A, R5B (user decision Q41)
+
+The second audit round found one regression of the first round's fixes and
+three smaller routing gaps — layout taps next to a rotated, polygon or
+offset station or cabinet foundation were computed on the slanted first
+section and refused, so the drops fell back to the station, the cabinet or
+the far end of the cable, 14.0 … 36.5 m instead of 6.0 m (R5A-02); "along a
+cable" was tested to 1 µm, so a drop 2 µm beside a trunk ran 60 m along it
+(R5A-01); a cable touching a house at its end node and crossing it elsewhere
+gave it a 1 cm drop (R5A-03); radial planning grew faster than the network
+(R5A-04) — and texts that stated the pre-fix rules or unscoped numbers
+(R5B-01 … R5B-13). In short:
+
+- **Layout:** the taps stay on the layout polyline, clipped at the
+  projection of the site contact onto it; no tap inside a site foundation;
+  audit R5A's 40 random layouts: drops more than 1 cm longer than the
+  closest pair of the built cable 30 → 6 (`e91f3c0`: 7).
+- **Routing:** "along" means both ends of a cable section within one
+  minimum section (1 cm) of the drop's line, the guards use the same value;
+  a crossing beyond a touching node is the joint; set lookup (radial 8000
+  houses 43.6 → 18.4 s, plans bit-identical). The default grids, audit
+  D3A's set and the 260 random networks of the stress tests are unchanged.
+- **Drops over other foundations:** 0 … 80 % of the drops of the default
+  grids run 0.2 m above other houses' side wires; moved 1 m aside they change
+  \|Z\| by at most 0.02 % (insulated PEN) and −0.30 % (bare PEN). Routing
+  drops around foundations is left to the next release.
+- **Golden:** nothing moves.
