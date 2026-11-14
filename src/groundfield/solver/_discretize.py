@@ -505,7 +505,10 @@ class _DistributedBranch:
     Carries the topology used by the nodal-analysis system
     (``node_a``, ``node_b``, ``R``) plus the geometric information
     required by the inductive-coupling assembly (ADR-0004): the
-    branch endpoints in 3-D and the wire radius.
+    branch endpoints in 3-D, the wire radius and whether the conductor is
+    a cable shield (``conductor_type="cable_shield"``: a thinner wire on
+    its axis is a core inside it, and its self term has no internal
+    inductance of a solid wire; user decisions Q32 and Q33).
     """
 
     node_a: str
@@ -515,6 +518,7 @@ class _DistributedBranch:
     p_b: np.ndarray  # shape (3,)
     wire_radius: float
     inductive: bool  # True if the parent conductor enables Neumann coupling
+    shield: bool = False  # True for conductor_type == "cable_shield"
 
 
 def _conductor_node_name(conductor_name: str, k: int) -> str:
@@ -628,6 +632,7 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
     segments: list[_Segment] = []
     branches: list[_DistributedBranch] = []
     inductive = getattr(conductor, "inductance_model", None) is not None
+    shield = bool(getattr(conductor, "is_shield", False))
 
     if conductor.coupling_to_soil == "galvanic":
         # Each sub-piece becomes a one-segment pseudo-electrode at its
@@ -670,6 +675,7 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
                     p_b=pb,
                     wire_radius=conductor.wire_radius,
                     inductive=inductive,
+                    shield=shield,
                 )
             )
     else:
@@ -693,6 +699,7 @@ def _discretize_conductor(conductor) -> tuple[list[_Segment], list[_DistributedB
                     p_b=node_positions[k + 1],
                     wire_radius=conductor.wire_radius,
                     inductive=inductive,
+                    shield=shield,
                 )
             )
 

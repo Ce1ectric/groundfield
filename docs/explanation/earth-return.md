@@ -27,8 +27,10 @@ $$
   $L_{ij} = \frac{\mu_0}{4\pi}\int_i\int_j \frac{\mathrm d\mathbf l_i\cdot\mathrm d\mathbf l_j}{r}$
   between every pair of branches, closed forms for parallel, skew,
   touching and coaxial pairs (Grover 1946), thin-wire self terms with the
-  DC internal inductance $\mu_0\ell/(8\pi)$ of a solid round conductor —
-  plus the **image** of the earth model (below).
+  DC internal inductance $\mu_0\ell/(8\pi)$ of a solid round conductor
+  (none for a cable shield, `conductor_type="cable_shield"`, a
+  thin-walled tube; user decision Q33) — plus the **image** of the earth
+  model (below).
 - $\Delta Z$ — the earth-return correction: how much the finite
   conductivity of the soil changes the magnetic field of the image.
 
@@ -251,13 +253,18 @@ the surface plane are rejected under this image convention, as before.
   is taken as $r_i + r_j$ — two wires touching side by side, as two
   cables in one trench lie — pointwise inside the Neumann integral, both
   one-sided integrals averaged. Where the thinner wire runs inside the
-  thicker one (a core on the axis of a cable shield) the thicker radius is
-  used instead: a filament inside a thin tube couples to it as at the tube
-  radius, and the loop gives the coaxial inductance
-  $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per metre when the
-  shield carries no internal inductance (`build_inductance_matrix(...,
-  include_internal=[True, False])`; in a solve every conductor carries
-  that of a solid wire, $\mu_0/(8\pi)$ per metre, also the shield). The
+  thicker one and the thicker one is a cable shield
+  (`conductor_type="cable_shield"`, user decision Q32) the shield radius
+  is used instead: a core inside a shield is a filament inside a thin
+  tube and couples to it as at the tube radius, and since the shield
+  carries no internal inductance (Q33) the loop gives the coaxial
+  inductance $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per
+  metre: 26.97 µH for 100 m with a 5 mm core and a 15 mm shield
+  (31.97 µH with the internal inductance of a solid shield, as up to
+  Q33). Two unmarked conductors on one axis are separate cables and
+  touch (43.47 µH for the same pair). At the low level,
+  `build_inductance_matrix(..., shields=[False, True],
+  include_internal=[True, False])` does the same. The
   value does not depend on the order or the direction of the segments,
   is continuous in the geometry, and leaves chain neighbours, bends
   turning by less than 90° and pairs farther apart unchanged. For unequal

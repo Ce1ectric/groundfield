@@ -22,10 +22,12 @@ The rule now acts pointwise inside the Neumann integral: along a stretch
 where a point of one wire lies beside the other wire (its foot on the other
 axis falls inside the other wire) closer than r_a + r_b, the distance is
 taken as r_a + r_b (touching wires), or as the radius of the thicker wire
-where the thinner one runs inside it (a filament inside a thin tube); both
-one-sided integrals are averaged, on end points in a fixed order. The
-Carson tiling gives two conductors overlapping on one axis the earth-return
-mutual of touching wires.
+where the thinner one runs inside it and the thicker one is marked as a
+cable shield (a filament inside a thin tube; the marker since user decision
+Q32, before it every thinner wire inside a thicker one was a core in a
+shield); both one-sided integrals are averaged, on end points in a fixed
+order. The Carson tiling gives two conductors overlapping on one axis the
+earth-return mutual of touching wires.
 """
 
 from __future__ import annotations
@@ -200,7 +202,7 @@ def test_loop_reference_applies_the_same_guard() -> None:
 # ---------------------------------------------------------------------
 
 
-def _one_sided_reference(a1, a2, b1, b2, d, r_thin, r_thick) -> float:
+def _one_sided_reference(a1, a2, b1, b2, d, r_thin, r_thick, inside=True) -> float:
     """Independent quadrature of one side of the beside rule (m).
 
     Break points of the integrand's state (beside closer than touching,
@@ -219,7 +221,7 @@ def _one_sided_reference(a1, a2, b1, b2, d, r_thin, r_thick) -> float:
         rho = float(np.linalg.norm(v - t0 * ub))
         st = 0
         if 0.0 <= t0 <= lb and rho < d:
-            st = 2 if (r_thin < r_thick and rho + r_thin <= r_thick) else 1
+            st = 2 if (inside and r_thin < r_thick and rho + r_thin <= r_thick) else 1
         return st, t0, rho
 
     def key(s: float):
@@ -250,11 +252,15 @@ def _one_sided_reference(a1, a2, b1, b2, d, r_thin, r_thick) -> float:
     )
 
 
-def _beside_reference(p1a, p2a, ra, p1b, p2b, rb) -> float:
-    """mu0/(4 pi) cos(phi) (I_ab + I_ba) / 2 with the independent quadrature."""
+def _beside_reference(p1a, p2a, ra, p1b, p2b, rb, shields=(False, False)) -> float:
+    """mu0/(4 pi) cos(phi) (I_ab + I_ba) / 2 with the independent quadrature.
+
+    ``shields`` marks cable shields: the inside reading needs the thicker
+    wire to be one (user decision Q32)."""
     d, r_thin, r_thick = ra + rb, min(ra, rb), max(ra, rb)
-    i_ab = _one_sided_reference(p1a, p2a, p1b, p2b, d, r_thin, r_thick)
-    i_ba = _one_sided_reference(p1b, p2b, p1a, p2a, d, r_thin, r_thick)
+    inside = shields[0] if ra > rb else shields[1]
+    i_ab = _one_sided_reference(p1a, p2a, p1b, p2b, d, r_thin, r_thick, inside)
+    i_ba = _one_sided_reference(p1b, p2b, p1a, p2a, d, r_thin, r_thick, inside)
     ua = (np.asarray(p2a, float) - p1a) / np.linalg.norm(np.asarray(p2a, float) - p1a)
     ub = (np.asarray(p2b, float) - p1b) / np.linalg.norm(np.asarray(p2b, float) - p1b)
     return 1e-7 * float(ua @ ub) * 0.5 * (i_ab + i_ba)
@@ -339,6 +345,11 @@ BESIDE_CASES = {
         (0.005, 0.015),
     ),
 }
+# user decision Q32: the thicker wire of these cases is a cable shield
+BESIDE_CASES["unmarked_cables_on_one_axis"] = BESIDE_CASES["core_in_shield"]
+BESIDE_CASES["unmarked_off_axis"] = BESIDE_CASES["core_off_axis"]
+#: Shield flags (a, b) per case; the others mark no shield.
+BESIDE_SHIELDS = {"core_in_shield": (False, True), "core_off_axis": (False, True)}
 
 
 # audit A3C-1
@@ -347,8 +358,13 @@ def test_beside_rule_matches_an_independent_quadrature(name: str) -> None:
     from groundfield.coupling.inductance import _beside_mutual
 
     seg, (ra, rb) = BESIDE_CASES[name]
-    got = _beside_mutual(seg[0, 0], seg[0, 1], ra, seg[1, 0], seg[1, 1], rb)
-    ref = _beside_reference(seg[0, 0], seg[0, 1], ra, seg[1, 0], seg[1, 1], rb)
+    sa, sb = BESIDE_SHIELDS.get(name, (False, False))
+    got = _beside_mutual(
+        seg[0, 0], seg[0, 1], ra, seg[1, 0], seg[1, 1], rb, shield_a=sa, shield_b=sb
+    )
+    ref = _beside_reference(
+        seg[0, 0], seg[0, 1], ra, seg[1, 0], seg[1, 1], rb, shields=(sa, sb)
+    )
     assert got == pytest.approx(ref, rel=1e-11, abs=0)
 
 
@@ -362,7 +378,8 @@ def test_beside_rule_does_not_depend_on_the_order_or_direction(name, image) -> N
     ordinary pair evaluated from the row segment)."""
     seg, radii = BESIDE_CASES[name]
     radii = np.asarray(radii, dtype=float)
-    ref = build_inductance_matrix(seg, radii, image=image)[0, 1]
+    shields = np.array(BESIDE_SHIELDS.get(name, (False, False)))
+    ref = build_inductance_matrix(seg, radii, image=image, shields=shields)[0, 1]
     for swap in (False, True):
         for flip_a in (False, True):
             for flip_b in (False, True):
@@ -371,10 +388,10 @@ def test_beside_rule_does_not_depend_on_the_order_or_direction(name, image) -> N
                     s[0] = s[0, ::-1]
                 if flip_b:
                     s[1] = s[1, ::-1]
-                r = radii
+                r, sh = radii, shields
                 if swap:
-                    s, r = s[::-1].copy(), radii[::-1].copy()
-                m = build_inductance_matrix(s, r, image=image)[0, 1]
+                    s, r, sh = s[::-1].copy(), radii[::-1].copy(), shields[::-1].copy()
+                m = build_inductance_matrix(s, r, image=image, shields=sh)[0, 1]
                 expected = (-1.0) ** (flip_a + flip_b) * ref
                 if image == "none":
                     assert m == expected
@@ -725,18 +742,23 @@ def test_chain_neighbours_and_bends_keep_their_closed_forms() -> None:
 
 # audit A3C-5
 def test_wire_inside_another_couples_at_the_radius_of_the_thicker_wire() -> None:
-    """A core (r = 5 mm) on the axis of a shield (r = 15 mm), 100 m: the
-    mutual of a filament inside a thin tube, at the tube radius (audit
-    round 3: at r_c + r_s, loop inductance +36 %). With the internal
-    inductance on the core only (a thin-walled shield has none) the loop
-    is the analytic coax mu0/(2 pi) (ln(r_s/r_c) + 1/4) per metre, up to
-    the finite length (r_s / l)."""
+    """A core (r = 5 mm) on the axis of a shield (r = 15 mm, marked as a
+    cable shield since user decision Q32), 100 m: the mutual of a filament
+    inside a thin tube, at the tube radius (audit round 3: at r_c + r_s,
+    loop inductance +36 %). With the internal inductance on the core only
+    (a thin-walled shield has none, Q33) the loop is the analytic coax
+    mu0/(2 pi) (ln(r_s/r_c) + 1/4) per metre, up to the finite length
+    (r_s / l)."""
     length, rc, rs = 100.0, 0.005, 0.015
     seg = np.array(
         [[[0, 0, 0.7], [length, 0, 0.7]], [[0, 0, 0.7], [length, 0, 0.7]]], float
     )
     L = build_inductance_matrix(
-        seg, np.array([rc, rs]), image="none", include_internal=np.array([True, False])
+        seg,
+        np.array([rc, rs]),
+        image="none",
+        include_internal=np.array([True, False]),
+        shields=np.array([False, True]),
     )
     assert L[0, 1] == pytest.approx(
         parallel_segments_mutual(length, rs), rel=1e-12, abs=0
@@ -752,7 +774,10 @@ def test_wire_inside_another_uses_the_geometric_mean_distance() -> None:
     seg = np.array(
         [[[0, 0, 0.7], [length, 0, 0.7]], [[0, 0, 0.7], [length, 0, 0.7]]], float
     )
-    L = build_inductance_matrix(seg, np.array([rc, rs]), image="none")
+    # user decision Q32: the reading needs the shield marker
+    L = build_inductance_matrix(
+        seg, np.array([rc, rs]), image="none", shields=np.array([False, True])
+    )
     loop = L[0, 0] + L[1, 1] - 2 * L[0, 1]
     loop_gmd = L[0, 0] + L[1, 1] - 2 * parallel_segments_mutual(length, rs)
     assert loop == pytest.approx(loop_gmd, rel=0.05)

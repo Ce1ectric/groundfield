@@ -194,11 +194,13 @@ sections; it matters for harmonics up to 1 kHz.
 - A conductor without `inductance_model` is purely resistive.
 - Two conductors closer than the sum of their radii — cables in one
   trench drawn on one axis, a service drop along its main — couple as
-  wires touching side by side; a thinner conductor inside a thicker one
-  (a core on the axis of a cable shield) couples as a filament inside a
-  tube, at the radius of the thicker one. Two separate cables of
-  different radii drawn on one axis are therefore read as one concentric
-  cable: draw them at least $r_1 + r_2$ apart.
+  wires touching side by side. A concentric cable is a core drawn on the
+  axis of a thicker conductor with `conductor_type="cable_shield"`: the
+  core couples to the shield as a filament inside a tube, at the shield
+  radius, and the shield carries no internal inductance of a solid wire
+  (user decisions Q32 and Q33; a 100 m coax with 5 mm core and 15 mm
+  shield: loop inductance 26.97 µH). Without the marker two conductors
+  on one axis are two separate cables touching each other.
 - The leads of a measurement (tutorial
   [T07](../tutorials/T07_fall_of_potential_measurement.ipynb)) couple
   like cables; lay the probe lead at an angle to the feed lead.
