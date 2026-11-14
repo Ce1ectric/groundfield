@@ -36,9 +36,16 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    (rule 4) — the joint on the cable (audit R4A-01). A building fed from
    the substation itself (a substation slot of the radial trunk) has no
    feeding cable: its drop starts at the substation. A drop from a node
-   that would run along a trunk of the radial topology starts where it
-   leaves the trunk, at the trunk's node at the end of the shared stretch
-   (audit R4B-01). A drop never starts on another building's drop.
+   that would run along a cable it does not tap — a trunk of the radial
+   topology (the substation slots, a building beyond a later cabinet on
+   the feeder's axis), or in the star topology the main of another
+   cabinet (collinear cabinets) — starts where it leaves that cable, at
+   the cable's node at the end of the shared stretch (audit R4B-01). "Along"
+   means: both ends of a section of the cable within
+   :attr:`PenRouter.min_length` of the drop's line, sharing more than
+   :attr:`PenRouter.min_length` with it (audit R5A-01; before, collinear
+   within 1 µm, so a drop 2 µm beside a trunk ran along it for 60 m). A
+   drop never starts on another building's drop.
 3. **No section shorter than** :attr:`PenRouter.min_length`: a tap
    closer than that to an existing node of the path (along the path)
    snaps to the node, so every cable section and every drop is at least
@@ -63,27 +70,49 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    instead of its nearest cabinet (audit R4A-02). A main that crosses a
    building it does not feed stays unjoined (no cross-tie between two
    cabinets through a house). Where the foundation touches the path at a
-   node (a cabinet inside the outline) the joint moves along the path to
-   :attr:`PenRouter.min_length` from the node. Two nodes closer than
+   node (a cabinet on or next to a wire), a crossing of the path through
+   the foundation away from its nodes is the joint (audit R5A-03: the
+   node won the tie of the two zero distances and the house got a 1 cm
+   drop); without one the joint moves along the path to
+   :attr:`PenRouter.min_length` from the node, if the path is still that
+   close to the foundation there. Two nodes closer than
    :attr:`PenRouter.min_length` cannot be joined by a cable: the router
    raises :class:`ValueError` naming both (a site on top of another).
 
-What follows: a drop never runs along a cable — it leaves an interior
-tap perpendicularly, an end node at an angle of at least 90° to the cable
-it taps, a trunk at the end of the stretch it would share with it, or a
-snapped node towards a point at least :attr:`PenRouter.min_length` off the
-cable (sharing at most that length with it: a foundation that touches the
-end node of the path from beyond is tapped one minimum section before the
-node) — so the DOC-B defect (two service drops from a cabinet 180 m out
-running back along the main, coaxial with it) cannot recur; since user
-decision Q41 a drop neither runs along a side of its own foundation nor
-crosses it (audit D3A-02), and since audits R4A-02 / R4B-01 no drop runs
-along a trunk or another cabinet's main (the drops of the substation slots
-did, through the houses the trunk crosses). A drop *may* run along another
-building's drop, or pass over another building's foundation on its way
-(a house behind a house that the cable crosses). Overlapping conductors
-lie in one trench; the inductive coupling evaluates them as touching wires
-(finite mutual inductance, passive network).
+What follows: no drop runs along a cable farther than one minimum section
+(:attr:`PenRouter.min_length`, 1 cm for the default PEN; "along" as in
+rule 2) — it leaves an interior tap perpendicularly, an end node at an
+angle of at least 90° to the cable it taps, a cable it does not tap at the
+end of the stretch it would share with it, or a snapped node towards a
+point at least :attr:`PenRouter.min_length` off the cable (sharing at most
+that length with it: a foundation that touches the end node of the path
+from beyond is tapped one minimum section before the node, and its drop
+shares that 1 cm with the cable) — so the DOC-B defect (two service drops
+from a cabinet 180 m out running back along the main, coaxial with it)
+cannot recur; since user decision Q41 a drop neither runs along a side of
+its own foundation nor crosses it (audit D3A-02), and since audits R4A-02
+/ R4B-01 no drop runs along a trunk or another cabinet's main (the drops
+of the substation slots did, through the houses the trunk crosses). A drop
+that leaves a node at a smaller angle to a cable (2 cm off a trunk 60 m on)
+is not "along" it and keeps its route. A drop *may* run along another
+building's drop, and it may pass over other buildings' foundations on its
+way: the tie rule puts the contact of a house at the corner of its facing
+side, so a drop to a house behind others of its grid column runs above
+their side wires, 0.2 m above them in
+:class:`~groundfield.generators.tn_network.TnNetworkGenerator` (PEN at
+0.6 m, foundations at 0.8 m). In the default grids (2 × 2 mesh or 10 m ring
+houses, 25 m × 30 m, 30 to 200 houses) that is 0 … 56 % of the drops (star,
+30 mesh houses: 14 of 25 drops, 150 m in all, up to 40 m over 4 houses;
+star 150: 70 of 141 drops, 2 450 m, up to 65 m over 7 houses; radial 150:
+69 of 140 drops, 1 595 m); drops are not routed around foundations. The
+field model has no inductive coupling between a drop and these wires (an
+electrode carries no current along itself); a bare PEN leaks next to them
+through the soil. Moved 1 m aside as a whole, those drops change the input
+impedance by at most 0.02 % with an insulated PEN and by up to −0.30 % with
+a bare one (default grids of 30 and 150 houses, 50 Hz and 1 kHz,
+``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
+trench; the inductive coupling evaluates them as touching wires (finite
+mutual inductance, passive network).
 
 Coordinates are horizontal positions: the points where the materialised
 conductors end (they run at the PEN depth, ``axis_z_m``).
@@ -503,10 +532,13 @@ class PenRouter:
     ) -> tuple[_End, _End]:
         """Ends of a drop from a node that does not run along ``cables``.
 
-        A drop from a node that would run along a section of ``cables`` (on
-        its line, sharing more than :attr:`min_length`) starts where it
-        leaves the cable instead: at the section's end node farther along
-        the drop (repeated until it runs along none). In the radial topology
+        A drop from a node that would run along a section of ``cables`` —
+        both ends of the section within :attr:`min_length` of the drop's
+        line, sharing more than :attr:`min_length` with it (audit R5A-01: an
+        exact collinearity test let a drop 2 µm beside a trunk run along it
+        for 60 m) — starts where it leaves the cable instead: at the
+        section's end node farther along the drop (repeated until it runs
+        along none). In the radial topology
         the drop of a building beyond a later cabinet on the feeder's axis,
         or of a substation slot beyond the trunk's end, leaves the trunk at
         its last node instead of running along it from the tap source
@@ -526,7 +558,7 @@ class PenRouter:
                 along = []
                 for point in (sec.start.xy, sec.end.xy):
                     px, py = point[0] - sx, point[1] - sy
-                    if abs(-uy * px + ux * py) > 1e-6:
+                    if abs(-uy * px + ux * py) > self.min_length:
                         break
                     along.append(ux * px + uy * py)
                 else:
@@ -573,9 +605,12 @@ class PenRouter:
         near = self._nearest_on_path(building, cables, origin)
         if crossing and not self._is_joint(near):
             # Rule 4 for cables that do not feed the building (the trunks of
-            # the radial topology): one that crosses it is joined there.
+            # the radial topology): one that crosses it is joined there. A
+            # set: the list membership test cost O(trunks x path) per
+            # building (audit R5A-04).
+            own = set(cables)
             others = self._near(
-                building, [cable for cable in crossing if cable not in cables]
+                building, [cable for cable in crossing if cable not in own]
             )
             if others:
                 cross = self._nearest_on_path(building, others, origin)
@@ -630,20 +665,77 @@ class PenRouter:
         if along >= self.min_length:
             return _Nearest(distance, section, t, None, meet)
         start, end, snapped = self._snap(section, at_start, building)
-        if wires is None or snapped >= self.min_length or length < 2 * self.min_length:
+        if wires is None or snapped >= self.min_length:
             return _Nearest(snapped, section, t, node, end, start)
-        # The foundation touches the cable at the node (a cabinet or a tap
-        # inside the outline): meet it min_length along the section (a hair
-        # more, so that round-off cannot leave a shorter section).
-        step = self.min_length * (1.0 + 1e-9) / length
-        t = step if at_start else 1.0 - step
-        (ax, ay), (bx, by) = section.start.xy, section.end.xy
-        point = (ax + t * (bx - ax), ay + t * (by - ay))
-        contact = nearest_point(point, wires)
+        if length >= 2 * self.min_length:
+            # The foundation touches the cable at the node (a cabinet or a
+            # tap inside the outline): meet it min_length along the section
+            # (a hair more, so that round-off cannot leave a shorter
+            # section).
+            step = self.min_length * (1.0 + 1e-9) / length
+            t = step if at_start else 1.0 - step
+            (ax, ay), (bx, by) = section.start.xy, section.end.xy
+            point = (ax + t * (bx - ax), ay + t * (by - ay))
+            contact = nearest_point(point, wires)
+            near = _Nearest(
+                contact.distance,
+                section,
+                t,
+                None,
+                _End(building, contact.xy, contact.electrode),
+            )
+            if self._is_joint(near):
+                return near
+        else:
+            near = _Nearest(snapped, section, t, node, end, start)
+        # The cable only touches the foundation at the node and leaves it
+        # there (a cabinet on a wire): where it crosses the foundation
+        # elsewhere it is joined there (audit R5A-03: the node won the tie
+        # of the two zero distances, the house got a 1 cm drop and the
+        # crossing stayed unjoined).
+        inner = self._interior_joint(building, sections, wires)
+        return near if inner is None else inner
+
+    def _interior_joint(
+        self,
+        building: str,
+        sections: Sequence[_Section],
+        wires: PreparedWires,
+    ) -> _Nearest | None:
+        """Where ``sections`` pass through the building's foundation away
+        from their nodes (rule 4), or ``None``.
+
+        The closest pair of the foundation wires and the sections without
+        :attr:`min_length` (a hair more) at either end; a pair closer than
+        :attr:`min_length` is a joint, at least :attr:`min_length` from
+        every node of the path (rule 3).
+        """
+        trim = self.min_length * (1.0 + 1e-9)
+        inner: list[tuple[_Section, float, float]] = []
+        pieces = []
+        for section in sections:
+            length = self._distance(section.start.xy, section.end.xy)
+            if length <= 2.0 * trim:
+                continue
+            lo, hi = trim / length, 1.0 - trim / length
+            (ax, ay), (bx, by) = section.start.xy, section.end.xy
+            inner.append((section, lo, hi))
+            pieces.append(
+                (
+                    (ax + lo * (bx - ax), ay + lo * (by - ay)),
+                    (ax + hi * (bx - ax), ay + hi * (by - ay)),
+                )
+            )
+        if not pieces:
+            return None
+        i, u, contact = closest_pair(pieces, wires)
+        if not contact.distance < self.min_length:
+            return None
+        section, lo, hi = inner[i]
         return _Nearest(
             contact.distance,
             section,
-            t,
+            lo + u * (hi - lo),
             None,
             _End(building, contact.xy, contact.electrode),
         )

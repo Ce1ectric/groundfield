@@ -327,12 +327,23 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    feeding path, every trunk of the radial topology, and in the star
    topology the main that crosses it, whose cabinet then feeds it (the
    nearest of them, ties to the lower index; a main that does not feed the
-   building stays unjoined, audits R4A-02, R4B-01); a drop whose closest
-   pair lies at such a joint starts there on the cable (R4A-01), a drop
-   from a node does not run along a trunk or another main (R4B-01), and
-   the layout builder takes the closest pair on the cable as built, not on
-   its waypoint inside a site foundation (R4A-03); ties go to the lowest
-   wire index, then to the smallest arc position along the wire. Before,
+   building stays unjoined, audits R4A-02, R4B-01; a cable that touches
+   the foundation at a node and crosses it elsewhere is joined where it
+   crosses, R5A-03); a drop whose closest pair lies at such a joint
+   starts there on the cable (R4A-01), a drop from a node does not run
+   along a trunk or another main farther than one minimum section, 1 cm
+   (R4B-01; "along": both ends of a section within 1 cm of the drop's
+   line, R5A-01), and the layout builder keeps its taps on the layout
+   polyline, clipped at the projection of a site's foundation contact, so
+   none lies inside a site foundation (R4A-03, R5A-02); ties go to the
+   lowest wire index, then to the smallest arc position along the wire.
+   A drop is straight: it may pass over other buildings' foundations,
+   0.2 m above their wires (default grids of 10 to 200 houses: 0 … 80 %
+   of the drops; star 30 mesh houses 14 of 25 drops over 150 m); a drop
+   has no inductive coupling to an electrode's wires in the field model,
+   and moving those drops 1 m aside changes the input impedance by at most
+   0.02 % with an insulated PEN and by up to −0.30 % with a bare one;
+   routing drops around foundations is left to a later release. Before,
    every conductor ended at the connection point of the site's anchor — a
    corner of a rectangular foundation since A2G-04 / Q38 — so 47 of 282
    drops of a ring-house test set ran along a side of their own foundation

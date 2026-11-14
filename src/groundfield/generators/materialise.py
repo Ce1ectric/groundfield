@@ -936,7 +936,11 @@ def materialise_branch(
     foundation_wires
         Optional map from site name to the names of its foundation wires
         (:func:`materialise_plan` passes it); a contact must name one of
-        them. Without it any strip or polyline electrode is accepted.
+        the wires of the site the branch ends at. Without it the check is
+        weaker: the contact must name a strip or polyline electrode, which
+        need not belong to that site (a
+        :class:`~groundfield.generators.plan.NetworkPlan` rejects a contact
+        on another site's electrode when it is validated).
 
     Returns
     -------
@@ -955,8 +959,9 @@ def materialise_branch(
     ------
     ValueError
         If a contact names an electrode that is not a foundation wire of the
-        site the branch ends at, or lies farther from that wire in plan than
-        one minimum cable section
+        site the branch ends at (with ``foundation_wires``; without it, an
+        electrode that is no strip or polyline), or lies farther from that
+        wire in plan than one minimum cable section
         (:func:`~groundfield.generators._pen_routing.min_section_length` of
         the branch's conductor: 1 cm for wire radii up to 7.3 mm; audit
         R4A-05).

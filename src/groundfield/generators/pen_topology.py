@@ -3,9 +3,10 @@ r"""PEN backbone topologies for the TN low-voltage generator.
 The :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
 historically wires its PEN backbone as a *star* of cable cabinets
 around the substation: every cable cabinet (German *KVS*) is connected
-to the substation directly and every building connects to its
-*nearest* cabinet by Manhattan distance. That topology stays the
-default (:class:`StarCabinetTopology`).
+to the substation directly and a building connects to its *nearest*
+cabinet by Manhattan distance — unless a cabinet's cable crosses it,
+then that cable's cabinet feeds it (user decision Q41, audit R4A-02).
+That topology stays the default (:class:`StarCabinetTopology`).
 
 This module adds a second topology that matches the typical layout
 of a German low-voltage distribution network (*TN-Ortsnetz*):
@@ -25,9 +26,12 @@ of a German low-voltage distribution network (*TN-Ortsnetz*):
   and cabinets are placed on that axis. The straight-line conductor
   between two trunk anchors is therefore already axis-aligned.
   A building fed by a cabinet taps the trunk from the substation to
-  that cabinet at the point nearest to the building's connection
-  point (a T-joint), a building in a substation slot is connected to
-  the substation, each by a single straight service drop.
+  that cabinet at the point nearest to the building (the closest pair
+  of trunk and foundation wires, user decision Q41: a T-joint, or the
+  cabinet), a building in a substation slot gets its own drop from
+  the substation; a building that a trunk crosses (any trunk) is
+  joined to it there and gets no drop (audit R4A-02; 6 of the 30
+  houses of the default grid).
 
 Physical interpretation
 -----------------------
@@ -88,13 +92,23 @@ class StarCabinetTopology(PickleUpgrade, BaseModel):
     """Star PEN topology (default).
 
     The substation feeds each cable cabinet directly, through a cable of
-    its own (cabinets in a line get separate cables in one trench).
-    Every building is fed by its nearest cabinet (Manhattan metric): its
-    service drop taps that cabinet's cable at the point nearest to the
-    building's connection point (a T-joint, or the substation / the
-    cabinet at the cable's ends), never another building's drop. Cabinet
-    placement and count come from
-    :class:`groundfield.generators.tn_network.CabinetConfig`.
+    its own (cabinets in a line get separate cables in one trench). A
+    building that a cabinet's cable (main) crosses is joined to that main
+    where it crosses the foundation, without a service drop, and is fed
+    by that main's cabinet — the nearest of the cabinets whose mains
+    cross it, ties to the lower cabinet index (user decision Q41, audit
+    R4A-02; 1 of 50 and 3 of 150 houses of the default grids are fed
+    this way by another cabinet than their nearest); a main that crosses
+    a building it does not feed stays unjoined. Every other building is
+    fed by its nearest cabinet (Manhattan metric between the site
+    positions): its service drop taps that cabinet's cable at the point
+    nearest to the building — the closest pair of cable and foundation
+    wires, or the point nearest to the anchor of a building without a
+    foundation; a T-joint, or the substation / the cabinet at the cable's
+    ends — never another building's drop, and leaves the main of another
+    cabinet it would run along at that main's node (audit R4B-01); the
+    rules are in :mod:`groundfield.generators._pen_routing`. Cabinet
+    placement and count come from :class:`groundfield.generators.tn_network.CabinetConfig`.
 
     The JSON tag is ``kind="star_cabinet"``; configurations written with
     the former tag ``"star_kvs"`` still load (with a
@@ -189,10 +203,12 @@ class RadialTrunkTopology(PickleUpgrade, BaseModel):
     closest pair of trunk and foundation, user decision Q41; a
     leakage-free tap junction, or the cabinet); a building in a substation
     slot is connected to the substation. A building that a trunk crosses
-    is joined to it there without a drop (audit R4A-02). A drop may run
-    along another drop (one trench), never along a trunk: a drop from a
-    node that would run along a trunk leaves it at the end of the shared
-    stretch (audit R4B-01). The Manhattan-ness of the layout is reflected in (a) the discrete
+    (any trunk) is joined to it there without a drop (audit R4A-02). A
+    drop may run along another drop (one trench), never along a trunk
+    farther than one minimum section (1 cm): a drop from a node that
+    would run along a trunk — both ends of a trunk section within 1 cm of
+    its line (audit R5A-01) — leaves it at the end of the shared stretch
+    (audit R4B-01). The Manhattan-ness of the layout is reflected in (a) the discrete
     feeder directions which keep the trunk axis-aligned and (b) the
     angular feeder assignment, which steers buildings toward the
     geometrically closest street axis. Corner-routed service drops

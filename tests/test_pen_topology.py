@@ -377,3 +377,38 @@ def test_radial_trunk_raises_when_all_buildings_dropped() -> None:
         warnings.simplefilter("ignore")
         with pytest.raises(ValueError, match="dropped every building"):
             gen.build()
+
+
+# ---------------------------------------------------------------------
+# Texts (user decision Q41, audit R5B-02)
+# ---------------------------------------------------------------------
+
+
+def _flat(text: str | None) -> str:
+    return " ".join((text or "").split())
+
+
+# user decision Q41, audit R5B-02
+@pytest.mark.finding("10.38")
+def test_the_topology_texts_state_the_crossing_rule() -> None:
+    """The star topology's docstring, the ``pen_topology`` field and the
+    topology module said every building is fed by its nearest cabinet at the
+    point nearest to its connection point ("the legacy v0.6 behaviour"), and
+    that every radial building gets a drop; since user decision Q41 and audit
+    R4A-02 a building that a cable crosses is joined to it and fed by it,
+    without a drop (1 of 50 and 3 of 150 houses of the default star grids
+    change cabinet; 6 of 30 radial houses have no drop)."""
+    from groundfield.generators import pen_topology, tn_network
+
+    star = _flat(StarCabinetTopology.__doc__)
+    assert "crosses" in star and "connection point" not in star
+    assert "1 of 50 and 3 of 150" in star
+    field = _flat(TnNetworkConfig.model_fields["pen_topology"].description)
+    assert "legacy v0.6 behaviour" not in field and "crosses" in field
+    module = _flat(pen_topology.__doc__)
+    assert "each by a single straight service drop" not in module
+    assert "joined to it there and gets no drop" in module
+    generator = _flat(tn_network.__doc__)
+    assert "A building that a main crosses is joined" in generator
+    star_backbone = _flat(tn_network.TnNetworkGenerator._plan_star_backbone.__doc__)
+    assert "building → nearest cabinet" not in star_backbone
