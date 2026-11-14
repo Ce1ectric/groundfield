@@ -716,3 +716,34 @@ def test_a_layout_drop_from_the_station_leaves_its_foundation_at_the_nearest_poi
     assert _on_wire(drop.start[:2], world.get_electrode(drop.start_electrode))
     sampled = _min_distance(_sample(outline, 0.01), ring)
     assert math.dist(drop.start[:2], drop.end[:2]) == pytest.approx(sampled, abs=0.01)
+
+
+# user decision Q41 (attack of stream f4gen)
+def test_layout_houses_without_a_foundation_keep_the_rod_head() -> None:
+    """Rod-only houses in the layout builder: the drop ends at the rod head,
+    attached to the rod, as before the decision (the first version of the
+    decision raised a KeyError for them)."""
+    fps = [
+        gf.BuildingFootprint(
+            polygon_xy_m=[
+                (20 + 25 * i, 8),
+                (30 + 25 * i, 8),
+                (30 + 25 * i, 16),
+                (20 + 25 * i, 16),
+            ],
+            osm_id=i,
+        )
+        for i in range(3)
+    ]
+    layout = LvNetworkLayout.from_footprints(fps, substation_xy=(0.0, 0.0))
+    layout.add_pen_cable(start="substation", end_xy=(110.0, 0.0))
+    layout.connect_buildings()
+    rods = GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = layout.to_world(house_grounding=rods)
+    drops = _drops(world)
+    assert len(drops) == 3
+    for drop in drops:
+        rod = world.get_electrode(drop.end_electrode)
+        assert rod.kind == "rod" and drop.end == rod.connection_point

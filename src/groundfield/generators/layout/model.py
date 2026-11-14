@@ -60,11 +60,7 @@ from groundfield.generators.layout.routing import (
 )
 from groundfield.generators._contact import FoundationWire, closest_pair, join
 from groundfield.generators._pen_routing import min_section_length
-from groundfield.generators.materialise import (
-    materialise_plan,
-    site_anchor_point,
-    site_foundation_wires,
-)
+from groundfield.generators.materialise import _site_geometry, materialise_plan
 from groundfield.generators.plan import (
     ConductorParameters,
     NetworkPlan,
@@ -710,14 +706,14 @@ class LvNetworkLayout(
             segment_length_m=pen_segment_length_m,
         )
         min_length = min_section_length(conductor)
+        geometry = {site.name: _site_geometry(site) for site in sites}
         anchor_points = {
-            site.name: site_anchor_point(site)
+            site.name: geometry[site.name][0]
             for site in sites
             if site.role in ("substation", "cabinet")
         }
-        wires = {site.name: site_foundation_wires(site) for site in sites}
-        wires = {name: w for name, w in wires.items() if w}
-        meet = _Meeting(anchor_points, wires)
+        wires = {name: g[1] for name, g in geometry.items() if g[1]}
+        meet = _Meeting({name: g[0] for name, g in geometry.items()}, wires)
         taps = self._service_taps(houses, wires)
         junctions: list[PlannedJunction] = []
         branches: list[PlannedBranch] = []
