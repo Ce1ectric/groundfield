@@ -962,9 +962,14 @@ class LvNetworkLayout(
                     # The pair lies where the built cable does not run.
                     i, t, _ = closest_pair(clipped, foundation)
                     tap = _point_at(clipped[i], t)
-                for point, waypoint in sites:
+                for point, waypoint, other in sites:
                     if math.dist(tap, point) < min_length:
-                        tap = waypoint
+                        # The site, unless the clip lies at the segment's
+                        # other waypoint (a site foundation beyond it): then
+                        # the cable reaches the house there.
+                        tap = (
+                            other if math.dist(point, other) < min_length else waypoint
+                        )
                 out[c.house_idx] = tap
             else:
                 out[c.house_idx] = (
@@ -977,7 +982,7 @@ class LvNetworkLayout(
         self, cable: PenCable, wires: dict[str, list[FoundationWire]]
     ) -> tuple[
         list[tuple[tuple[float, float], tuple[float, float]]],
-        list[tuple[tuple[float, float], tuple[float, float]]],
+        list[tuple[tuple[float, float], tuple[float, float], tuple[float, float]]],
     ]:
         """Segments of ``cable`` where taps may lie, and where it meets its sites.
 
@@ -992,10 +997,13 @@ class LvNetworkLayout(
         point of the foundation to it (audit R4A-03). For an axis-aligned
         site foundation centred on its waypoint the projection is the
         contact itself. Returns the segments and, for each site with a
-        foundation at an end, the clip point and the site's waypoint.
+        foundation at an end, the clip point, the site's waypoint and the
+        segment's other waypoint.
         """
         segments = [(tuple(a), tuple(b)) for a, b in cable.segments()]
-        sites: list[tuple[tuple[float, float], tuple[float, float]]] = []
+        sites: list[
+            tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+        ] = []
         if not segments:
             return segments, sites
         start = wires.get(cable.start_anchor)
@@ -1003,11 +1011,11 @@ class LvNetworkLayout(
         first, last = segments[0], segments[-1]
         if start:
             clip = _foot_on_segment(nearest_point(first[1], start).xy, first)
-            sites.append((clip, first[0]))
+            sites.append((clip, first[0], first[1]))
             segments[0] = (clip, segments[0][1])
         if end:
             clip = _foot_on_segment(nearest_point(last[0], end).xy, last)
-            sites.append((clip, last[1]))
+            sites.append((clip, last[1], last[0]))
             segments[-1] = (segments[-1][0], clip)
         return segments, sites  # type: ignore[return-value]
 

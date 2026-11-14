@@ -1042,6 +1042,12 @@ _SITE_FOUNDATIONS = {
         {"polygon_xy_m": ((-2.0, -2.0), (2.5, -1.0), (2.0, 2.0), (-1.5, 2.5))},
     ),
     "station offset": ("station", {"size_m": 4.0, "offset_xy_m": (0.0, 3.0)}),
+    # attack of stream f6gen: the station's foundation beyond the cable's
+    # first waypoint; the clip lands on that waypoint, the drops start there
+    "station beyond the first waypoint": (
+        "station",
+        {"size_m": 4.0, "offset_xy_m": (90.0, -3.0)},
+    ),
     "cabinet rotated 30": ("cabinet", {"size_m": 2.0, "orientation_deg": 30.0}),
     "cabinet polygon": (
         "cabinet",
