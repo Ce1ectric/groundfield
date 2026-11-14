@@ -930,11 +930,23 @@ def test_a_house_that_a_main_crosses_is_fed_by_that_main() -> None:
 
 # user decision Q41, audit R4A-02 (star, several mains)
 def test_a_house_on_several_mains_is_fed_by_the_nearest_of_their_cabinets() -> None:
-    """Default star network of 50 houses: house 20 at (-112.5, 0) m lies on
+    """Star network of 50 houses with the former default cabinets (on the
+    substation row): house 20 at (-112.5, 0) m lies on
     the mains of kvs_0 (-180, 0) and kvs_1 (-140, 0) m; its nearest cabinet is
     kvs_2 (-100, 0) m. It is joined to the main of kvs_1, the nearer of the
     two cabinets whose mains cross it; the main of kvs_0 passes it unjoined."""
-    world = _guard_world("default", 50, "star", 0)
+    cfg = TnNetworkConfig(
+        building_counts={"residential": 50},
+        # The cabinet strip of the default up to user decisions Q22 and Q35.
+        cabinets=CabinetConfig(
+            placement=ManhattanGridPlacement(
+                spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=10
+            )
+        ),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = TnNetworkGenerator(cfg).build(rng=0)
     assert "pen_service_residential_20_foundation_0" not in {
         d.name for d in _drops(world)
     }

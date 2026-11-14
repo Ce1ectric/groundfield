@@ -57,25 +57,39 @@ Geometric layout
   i.e. all buildings of the first type fill the grid first. This
   keeps the layout deterministic and reproducible. Use
   :class:`ExplicitPlacement` if you need a specific spatial mix.
-* Cable cabinets are placed via their own
-  :class:`PlacementSpec` (defaults to a Manhattan grid along the
-  substation row). Their grounding follows :attr:`CabinetConfig.grounding`.
+* Cable cabinets (star topology) stand per building group by default
+  (user decisions Q22 and Q35 of 2026.11): the buildings are cut into one
+  group per cabinet — runs of consecutive bearings around the
+  substation, starting after the widest angular gap, of sizes that differ
+  by at most one
+  (:meth:`~groundfield.generators.pen_topology.StarCabinetTopology.group_buildings`)
+  — and each group's cabinet stands at its far end, on the ray from the
+  substation through the group's centroid, :attr:`CabinetConfig.end_clearance_m`
+  (1 m) beyond the farthest point of the group's buildings along that
+  ray; in the default grid of 30 houses at (-118.5, 0) and (118.5, 0) m.
+  A :attr:`CabinetConfig.placement` places them as before (the former
+  default was a Manhattan strip along the substation row, which put both
+  cabinets of the 30-house grid west of the substation). Their grounding
+  follows :attr:`CabinetConfig.grounding`.
 * PEN backbone (star topology): each cable cabinet has its own cable
   (main) from the substation. A building that a main crosses is joined
   to it there, without a drop, and fed by that main's cabinet (the
   nearest of the cabinets whose mains cross it, ties to the lower
   cabinet index; audits R4A-02, R4B-01); every other building is fed by
-  the *nearest* cable cabinet by Manhattan distance, through a service
-  drop that taps that cabinet's cable at the point nearest to the
-  building (a T-joint, or the substation / the cabinet; rules in
+  its group's cabinet (with a given placement: the *nearest* cable
+  cabinet by Manhattan distance), through a service drop that taps that
+  cabinet's cable at the point nearest to the building (a T-joint, or the
+  substation / the cabinet; rules in
   :mod:`groundfield.generators._pen_routing`). Every conductor routed to a
-  foundation ends at the point of the foundation nearest to it (user
-  decision Q41): a drop is the closest pair of its cable and the
-  foundation wires, a cable leaves a substation with a foundation at its
-  point nearest to the cabinet. In the radial topology every trunk counts
-  for the crossing rule. No drop runs along a cable farther than one
-  minimum section (1 cm); a drop may pass over other buildings'
-  foundations, 0.2 m above their wires.
+  site with a horizontal earth electrode ends at the point of that
+  electrode nearest to it (foundations, user decision Q41; circular rings
+  and strips, user decision Q43): a drop is the closest pair of its cable
+  and the building's horizontal wires, a cable leaves the substation (the
+  default ring) at its point nearest to the cabinet. In the radial
+  topology every trunk counts for the crossing rule, and a building in a
+  substation slot taps its feeder's trunk (Q22, Q35). No drop runs along a
+  cable farther than one minimum section (1 cm); a drop may pass over
+  other buildings' foundations, 0.2 m above their wires.
 
 Validity envelope
 -----------------
@@ -112,7 +126,11 @@ from groundfield.generators.electrode_specs import (
 )
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators._pen_routing import PenRouter
-from groundfield.generators.materialise import _site_geometry, materialise_plan
+from groundfield.generators.materialise import (
+    SiteGeometry,
+    _site_geometry,
+    materialise_plan,
+)
 from groundfield.generators.measurement import (
     MEASUREMENT_H_TERMINAL,
     MEASUREMENT_S_TERMINAL,
@@ -244,7 +262,12 @@ def _default_building_placement() -> PlacementSpec:
 
 
 def _default_cabinet_placement() -> PlacementSpec:
-    """Default cabinet placement: a wide Manhattan strip along the substation row."""
+    """The cabinet placement of the default configuration up to 2026.11.
+
+    A wide Manhattan strip along the substation row; since user decisions
+    Q22 and Q35 the default places one cabinet per building group instead
+    (:attr:`CabinetConfig.placement` ``None``).
+    """
     return ManhattanGridPlacement(
         spacing_x_m=40.0,
         spacing_y_m=1.0,
@@ -272,19 +295,45 @@ class CabinetConfig(GeneratorConfig):
     Attributes
     ----------
     placement
-        Where to place the cabinets (star topology only).
+        Where to place the cabinets (star topology only). ``None`` (the
+        default since 2026.11, user decisions Q22 and Q35): one cabinet per
+        building group, at the far end of the houses it feeds — the
+        buildings are grouped by
+        :meth:`~groundfield.generators.pen_topology.StarCabinetTopology.group_buildings`
+        (consecutive bearings around the substation, sizes differing by at
+        most one), and the cabinet of a group stands on the ray from the
+        substation through the group's centroid, ``end_clearance_m`` beyond
+        the farthest point of the group's buildings along that ray (their
+        horizontal earth electrodes, or the anchor of a building with rods
+        only); it feeds its group. A placement places the cabinets as up to
+        2026.11 (the strip along the substation row of the former default,
+        ``ManhattanGridPlacement(spacing_x_m=40, spacing_y_m=1,
+        n_per_row=10)``, reproduces that world bit for bit), and every
+        building is fed by its nearest cabinet (Manhattan metric). In both
+        cases a building that a cabinet's cable crosses is fed by that cable
+        (user decision Q41). A configuration stored before 2026.11 carries
+        the former default placement and keeps its cabinets.
     count_per_100_buildings
         Number of cabinets per 100 buildings; the count is
-        ``ceil(count_per_100_buildings * n_buildings / 100)``, at least 1.
+        ``ceil(count_per_100_buildings * n_buildings / 100)``, at least 1
+        (with building groups at most one per building).
     fixed_count
         Optional fixed cabinet count (overrides the rate).
     grounding
         Grounding system of every cabinet.
+    end_clearance_m
+        Distance in m from the far end of a building group to its cabinet
+        (building groups only).
     """
 
-    placement: PlacementSpec = Field(
-        default_factory=_default_cabinet_placement,
-        description="Where to place the cable cabinets.",
+    placement: Optional[PlacementSpec] = Field(
+        default=None,
+        description=(
+            "Where to place the cable cabinets (star topology). None: one "
+            "cabinet per building group, at the far end of the houses it "
+            "feeds (user decisions Q22, Q35); a placement: the given "
+            "positions, every building fed by its nearest cabinet."
+        ),
     )
     count_per_100_buildings: Union[float, AnyDistribution] = Field(
         default=5.0,
@@ -304,6 +353,13 @@ class CabinetConfig(GeneratorConfig):
     grounding: GroundingSystemSpec = Field(
         default_factory=_default_cabinet_grounding,
         description="Per-cabinet grounding system.",
+    )
+    end_clearance_m: Union[float, AnyDistribution] = Field(
+        default=1.0,
+        description=(
+            "Distance in m beyond the far end of its building group at which "
+            "a cabinet stands (placement=None only)."
+        ),
     )
 
     _field_renames: ClassVar[dict[str, str]] = {
@@ -465,19 +521,23 @@ class TnNetworkConfig(GeneratorConfig):
         description=(
             "PEN backbone topology. ``StarCabinetTopology`` (default): "
             "every cabinet is wired directly to the substation by a "
-            "cable of its own; a building that a cabinet's cable "
-            "crosses is joined to it without a service drop and fed by "
-            "that cabinet (the nearest of the cabinets whose cables "
-            "cross it), every other building is fed by its nearest "
-            "cabinet by Manhattan distance, its service drop tapping "
-            "that cabinet's cable at the point nearest to the building "
-            "(the closest pair of cable and foundation, user decision "
-            "Q41). "
+            "cable of its own; by default the cabinets stand per "
+            "building group, at the far end of the houses they feed "
+            "(user decisions Q22, Q35; ``CabinetConfig.placement``); a "
+            "building that a cabinet's cable crosses is joined to it "
+            "without a service drop and fed by that cabinet (the nearest "
+            "of the cabinets whose cables cross it), every other building "
+            "is fed by its group's cabinet (with a given placement: its "
+            "nearest cabinet by Manhattan distance), its service drop "
+            "tapping that cabinet's cable at the point nearest to the "
+            "building (the closest pair of cable and foundation, user "
+            "decision Q41). "
             "``RadialTrunkTopology`` lays out the substation as a "
             "radial set of LV feeders (Manhattan-aligned) with a "
             "finite slot budget per source — once a feeder's slots "
             "are exhausted a cabinet is inserted along the trunk axis "
-            "to host the next batch of building taps. When "
+            "to host the next batch of building taps; a building in a "
+            "substation slot taps its feeder's trunk (Q22, Q35). When "
             "``RadialTrunkTopology`` is selected the parent "
             ":attr:`CabinetConfig.placement` / ``fixed_count`` / "
             "``count_per_100_buildings`` fields are ignored — the "
@@ -582,17 +642,79 @@ class TnNetworkConfig(GeneratorConfig):
 # ---------------------------------------------------------------------
 
 
-def _router(cfg: "TnNetworkConfig", sites: list[PlannedSite]) -> PenRouter:
+def _far_end(
+    substation_xy: tuple[float, float],
+    group: list[PlannedSite],
+    geometry: dict[str, SiteGeometry],
+    clearance_m: float,
+) -> tuple[float, float]:
+    """Position in m of the cabinet of a building group (Q22, Q35).
+
+    On the ray from the substation through the centroid of the group's
+    building positions (through the group's building farthest from the
+    substation when the centroid is the substation, ties to the first of
+    the group; :math:`+x` when every building stands on it),
+    ``clearance_m`` beyond the farthest point of the group's buildings along
+    the ray: the vertices of their horizontal wires (a circle by its centre
+    and radius), or the anchor of a building with rods only.
+    """
+    sx, sy = substation_xy
+    n = len(group)
+    ux = sum(float(b.position_xy[0]) for b in group) / n - sx
+    uy = sum(float(b.position_xy[1]) for b in group) / n - sy
+    norm = math.hypot(ux, uy)
+    spread = max(
+        math.hypot(float(b.position_xy[0]) - sx, float(b.position_xy[1]) - sy)
+        for b in group
+    )
+    if norm <= 1e-9 * max(1.0, spread):
+        far = max(
+            enumerate(group),
+            key=lambda kb: (
+                math.hypot(kb[1].position_xy[0] - sx, kb[1].position_xy[1] - sy),
+                -kb[0],
+            ),
+        )[1]
+        ux, uy = float(far.position_xy[0]) - sx, float(far.position_xy[1]) - sy
+        norm = math.hypot(ux, uy)
+        if norm == 0.0:
+            ux, uy, norm = 1.0, 0.0, 1.0
+    ux, uy = ux / norm, uy / norm
+    reach = -math.inf
+    for b in group:
+        site = geometry[b.name]
+        for wire in site.wires:
+            if wire.circle is not None:
+                cx, cy, r = wire.circle
+                reach = max(reach, (cx - sx) * ux + (cy - sy) * uy + r)
+            else:
+                for x, y in wire.xy:
+                    reach = max(reach, (x - sx) * ux + (y - sy) * uy)
+        if not site.wires and site.point is not None:
+            px, py = site.point[0], site.point[1]
+            reach = max(reach, (px - sx) * ux + (py - sy) * uy)
+    distance = reach + float(clearance_m)
+    return (sx + distance * ux, sy + distance * uy)
+
+
+def _router(
+    cfg: "TnNetworkConfig",
+    sites: list[PlannedSite],
+    geometry: Optional[dict[str, SiteGeometry]] = None,
+) -> PenRouter:
     """PEN router over ``sites`` (the first is the substation).
 
     A site with horizontal earth electrodes (foundation, ring, strip) is met
     at the point of their wires nearest to each cable (user decisions Q41,
     Q43); a site with rods only at the connection point of its anchor.
+    ``geometry`` holds the sites already materialised for it.
     """
     node_xy = {}
     wires = {}
+    geometry = geometry or {}
     for site in sites:
-        point, horizontal, _ = _site_geometry(site)
+        known = geometry.get(site.name)
+        point, horizontal, _ = known if known is not None else _site_geometry(site)
         if point is not None:
             node_xy[site.name] = (point[0], point[1])
             wires[site.name] = horizontal
@@ -779,7 +901,19 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             )
         else:
             n_cabinets = self._resolve_cabinet_count(cfg, n_buildings, rng)
-            cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
+            groups: Optional[list[list[PlannedSite]]] = None
+            geometry: dict[str, SiteGeometry] = {}
+            if cfg.cabinets.placement is not None:
+                cabinet_positions = cfg.cabinets.placement.generate(n_cabinets, rng)
+            else:
+                # One cabinet per building group, at the far end of the
+                # houses it feeds (user decisions Q22, Q35).
+                geometry = {
+                    site.name: _site_geometry(site) for site in [substation, *buildings]
+                }
+                groups, cabinet_positions = self._group_cabinets(
+                    cfg, substation, buildings, n_cabinets, geometry, rng
+                )
             cabinets = [
                 cfg.cabinets.grounding.plan_site(
                     f"kvs_{k}", role="cabinet", position_xy=site_xy, rng=rng
@@ -794,7 +928,14 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     "fixed_count > 0."
                 )
             self._plan_star_backbone(
-                cfg, substation, cabinets, buildings, branches, junctions
+                cfg,
+                substation,
+                cabinets,
+                buildings,
+                branches,
+                junctions,
+                groups=groups,
+                geometry=geometry,
             )
 
         # --- Optional measurement set-up ---
@@ -1019,6 +1160,42 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         )
         return junction, branch
 
+    def _group_cabinets(
+        self,
+        cfg: TnNetworkConfig,
+        substation: PlannedSite,
+        buildings: list[PlannedSite],
+        n_cabinets: int,
+        geometry: dict[str, SiteGeometry],
+        rng: np.random.Generator,
+    ) -> tuple[list[list[PlannedSite]], list[tuple[float, float]]]:
+        """Building groups and the positions of their cabinets (Q22, Q35).
+
+        The wired buildings are grouped by
+        :meth:`~groundfield.generators.pen_topology.StarCabinetTopology.group_buildings`;
+        group ``k`` is fed by cabinet ``kvs_<k>``, which stands at
+        :func:`_far_end` of the group. With more cabinets than buildings
+        every building is a group of its own and the remaining cabinets are
+        not placed (a :class:`UserWarning`).
+        """
+        wired = [b for b in buildings if b.anchor is not None]
+        if n_cabinets > len(wired):
+            warnings.warn(
+                f"TnNetworkGenerator: {n_cabinets} cable cabinets for "
+                f"{len(wired)} buildings; one cabinet per building group places "
+                f"{len(wired)} of them.",
+                UserWarning,
+                stacklevel=4,
+            )
+        origin = (float(substation.position_xy[0]), float(substation.position_xy[1]))
+        index_groups = StarCabinetTopology.group_buildings(
+            origin, [b.position_xy for b in wired], n_cabinets
+        )
+        clearance = _to_float(cfg.cabinets.end_clearance_m, rng)
+        groups = [[wired[i] for i in group] for group in index_groups]
+        positions = [_far_end(origin, group, geometry, clearance) for group in groups]
+        return groups, positions
+
     def _plan_star_backbone(
         self,
         cfg: TnNetworkConfig,
@@ -1027,6 +1204,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         buildings: list[PlannedSite],
         branches: list[PlannedBranch],
         junctions: list[PlannedJunction],
+        *,
+        groups: Optional[list[list[PlannedSite]]] = None,
+        geometry: Optional[dict[str, SiteGeometry]] = None,
     ) -> None:
         """Star backbone: substation → each cabinet → its buildings.
 
@@ -1035,11 +1215,14 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         one trench). A building that a main crosses is joined to it and fed
         by it, without a drop: by the nearest of the cabinets whose mains
         cross it, ties to the lower cabinet index (audit R4A-02). Every
-        other building is fed by its nearest cabinet (Manhattan metric
-        between the site positions); its service drop taps that cabinet's
-        cable at the point nearest to the building — the closest pair of
-        cable and foundation wires (user decision Q41), or the point
-        nearest to the anchor of a building without a foundation — at a
+        other building is fed by the cabinet of its building group
+        (``groups[k]`` by ``cabinets[k]``, user decisions Q22, Q35), or —
+        with a given cabinet placement, or when its group's cabinet has no
+        electrodes — by its nearest cabinet (Manhattan metric between the
+        site positions); its service drop taps that cabinet's cable at the
+        point nearest to the building — the closest pair of cable and the
+        building's horizontal wires (user decisions Q41, Q43), or the point
+        nearest to the anchor of a building with rods only — at a
         leakage-free tap junction ``pen_tap_<k>``, or the substation / the
         cabinet when the nearest point is an end of the cable, never
         another building's drop, and a drop from the cabinet leaves another
@@ -1047,25 +1230,32 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         full rules are in :mod:`._pen_routing`.
         """
         wired = [c for c in cabinets if c.anchor is not None]
-        router = _router(cfg, [substation, *wired, *buildings])
+        router = _router(cfg, [substation, *wired, *buildings], geometry)
         mains: dict[str, str] = {}
         for cab in wired:
             mains[cab.name] = f"pen_main_{cab.anchor}"
             router.add_cable(substation.name, cab.name, name=mains[cab.name])
         fed: dict[str, list[PlannedSite]] = {c.name: [] for c in wired}
         cabinet_of = {mains[c.name]: c for c in wired}
+        group_cabinet: dict[str, PlannedSite] = {}
+        for group, cab in zip(groups or [], cabinets, strict=False):
+            if cab.anchor is not None:
+                group_cabinet.update((b.name, cab) for b in group)
         for b in buildings:
             if b.anchor is None:
                 continue
             bx, by = b.position_xy
             # A building that a main crosses is joined to it and fed by it
             # (no drop); several: the nearest of their cabinets, ties to the
-            # lower cabinet index. Any other building is fed by its nearest
-            # cabinet (audit R4A-02).
+            # lower cabinet index. Any other building is fed by the cabinet
+            # of its group, else by its nearest cabinet (audit R4A-02).
             crossed = [
                 cabinet_of[m]
                 for m in router.crossing(b.name, [mains[c.name] for c in wired])
             ]
+            if not crossed and b.name in group_cabinet:
+                fed[group_cabinet[b.name].name].append(b)
+                continue
             cab = min(
                 crossed or wired,
                 key=lambda c: abs(c.position_xy[0] - bx) + abs(c.position_xy[1] - by),
@@ -1118,7 +1308,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
            to the building (the closest pair of trunk and foundation
            wires, user decision Q41; a leakage-free tap junction, or a
            cabinet), so it never runs back along the trunk; the drop of a
-           building in a substation slot starts at the substation. A
+           building in a substation slot taps its feeder's whole trunk the
+           same way (user decisions Q22, Q35), and starts at the
+           substation only on a feeder without a trunk. A
            building that a trunk crosses (any trunk: a substation slot has
            no cable of its own, a later trunk runs on past the building's
            tap source) is joined to it there without a drop (audit
@@ -1139,6 +1331,9 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         fed: dict[str, list[PlannedSite]] = {}
         # Trunk cables from the substation to every tap source.
         paths: dict[str, list[str]] = {substation.name: []}
+        # The whole trunk of the feeder of every building in a substation
+        # slot, which it taps (user decisions Q22, Q35).
+        slot_paths: dict[str, list[str]] = {}
         wired = [b for b in buildings if b.anchor is not None]
         groups = topology.assign_buildings_to_feeders(
             substation_xy=cfg.substation.position,
@@ -1207,6 +1402,8 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
                     )
                 budgets[tap_idx] = max(0, budgets[tap_idx] - 1)
                 fed.setdefault(taps[tap_idx].name, []).append(wired[building_idx])
+                if tap_idx == 0:
+                    slot_paths[wired[building_idx].name] = path
                 any_service_drop = True
         if not any_service_drop:
             raise ValueError(
@@ -1220,16 +1417,25 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         trunks = [name for name, _, _ in trunk]
         for tap, fed_buildings in fed.items():
             by_name = {b.name: b for b in fed_buildings}
-            cables = paths[tap]
+            # A building in a substation slot taps its feeder's trunk (user
+            # decisions Q22, Q35; up to then its drop started at the
+            # substation); without a trunk (no cabinet on the feeder) it is
+            # still fed from the substation. Any other building taps the
+            # trunk from the substation to its tap source.
+            own = {
+                name: (slot_paths[name] if tap == substation.name else paths[tap])
+                for name in by_name
+            }
             # For the crossing rule every trunk counts as a feeding cable: a
             # trunk that crosses a building is joined there and the building
-            # gets no drop -- a building in a substation slot has no feeding
-            # cable of its own, and a trunk beyond a building's tap source
-            # runs on past it (audit R4A-02).
-            for name in router.drop_order(list(by_name), cables, tap, crossing=trunks):
+            # gets no drop -- a trunk beyond a building's tap source runs on
+            # past it (audit R4A-02).
+            for name in router.drop_order(
+                list(by_name), paths[tap], tap, crossing=trunks, paths=own
+            ):
                 router.connect_drop(
                     name,
-                    cables,
+                    own[name],
                     tap,
                     name=f"pen_service_{by_name[name].anchor}",
                     crossing=trunks,

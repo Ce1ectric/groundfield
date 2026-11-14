@@ -3,10 +3,14 @@ r"""PEN backbone topologies for the TN low-voltage generator.
 The :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
 historically wires its PEN backbone as a *star* of cable cabinets
 around the substation: every cable cabinet (German *KVS*) is connected
-to the substation directly and a building connects to its *nearest*
-cabinet by Manhattan distance — unless a cabinet's cable crosses it,
-then that cable's cabinet feeds it (user decision Q41, audit R4A-02).
-That topology stays the default (:class:`StarCabinetTopology`).
+to the substation directly. Since user decisions Q22 and Q35 of 2026.11
+the cabinets stand per building group, at the far end of the houses they
+feed, and each feeds its group (:meth:`StarCabinetTopology.group_buildings`);
+with a given cabinet placement a building connects to its *nearest*
+cabinet by Manhattan distance as before. In both cases a building that a
+cabinet's cable crosses is fed by that cable's cabinet (user decision
+Q41, audit R4A-02). That topology stays the default
+(:class:`StarCabinetTopology`).
 
 This module adds a second topology that matches the typical layout
 of a German low-voltage distribution network (*TN-Ortsnetz*):
@@ -28,10 +32,11 @@ of a German low-voltage distribution network (*TN-Ortsnetz*):
   A building fed by a cabinet taps the trunk from the substation to
   that cabinet at the point nearest to the building (the closest pair
   of trunk and foundation wires, user decision Q41: a T-joint, or the
-  cabinet), a building in a substation slot gets its own drop from
-  the substation; a building that a trunk crosses (any trunk) is
-  joined to it there and gets no drop (audit R4A-02; 6 of the 30
-  houses of the default grid).
+  cabinet), a building in a substation slot taps its feeder's trunk
+  (user decisions Q22, Q35; up to then it got its own drop from the
+  substation, which it still gets on a feeder without a trunk); a
+  building that a trunk crosses (any trunk) is joined to it there and
+  gets no drop (audit R4A-02; 6 of the 30 houses of the default grid).
 
 Physical interpretation
 -----------------------
@@ -92,23 +97,32 @@ class StarCabinetTopology(PickleUpgrade, BaseModel):
     """Star PEN topology (default).
 
     The substation feeds each cable cabinet directly, through a cable of
-    its own (cabinets in a line get separate cables in one trench). A
+    its own (cabinets in a line get separate cables in one trench). By
+    default (``CabinetConfig.placement`` ``None``, user decisions Q22 and
+    Q35 of 2026.11) the cabinets stand per building group: the buildings
+    are grouped by :meth:`group_buildings` (runs of consecutive bearings
+    around the substation, one per cabinet), and the cabinet of a group
+    stands at the group's far end — on the ray from the substation
+    through the group's centroid, ``CabinetConfig.end_clearance_m`` beyond
+    the farthest point of its buildings along that ray — and feeds the
+    group. With a given placement every building is fed by its nearest
+    cabinet (Manhattan metric between the site positions), as before. A
     building that a cabinet's cable (main) crosses is joined to that main
     where it crosses the foundation, without a service drop, and is fed
     by that main's cabinet — the nearest of the cabinets whose mains
     cross it, ties to the lower cabinet index (user decision Q41, audit
-    R4A-02; 1 of 50 and 3 of 150 houses of the default grids are fed
-    this way by another cabinet than their nearest); a main that crosses
-    a building it does not feed stays unjoined. Every other building is
-    fed by its nearest cabinet (Manhattan metric between the site
-    positions): its service drop taps that cabinet's cable at the point
-    nearest to the building — the closest pair of cable and foundation
-    wires, or the point nearest to the anchor of a building without a
-    foundation; a T-joint, or the substation / the cabinet at the cable's
-    ends — never another building's drop, and leaves the main of another
-    cabinet it would run along at that main's node (audit R4B-01); the
-    rules are in :mod:`groundfield.generators._pen_routing`. Cabinet
-    placement and count come from :class:`groundfield.generators.tn_network.CabinetConfig`.
+    R4A-02; with building groups no house of the default grids of 10 to
+    200 houses and 58 of 1 000, with the former cabinet strip 1 of 50 and
+    3 of 150); a main that crosses a building it does not feed stays
+    unjoined. A service drop taps its cabinet's cable at the point
+    nearest to the building — the closest pair of cable and the
+    building's horizontal wires, or the point nearest to the anchor of a
+    building with rods only; a T-joint, or the substation / the cabinet
+    at the cable's ends — never another building's drop, and leaves the
+    main of another cabinet it would run along at that main's node
+    (audit R4B-01); the rules are in
+    :mod:`groundfield.generators._pen_routing`. Cabinet placement and count
+    come from :class:`groundfield.generators.tn_network.CabinetConfig`.
 
     The JSON tag is ``kind="star_cabinet"``; configurations written with
     the former tag ``"star_kvs"`` still load (with a
@@ -130,6 +144,76 @@ class StarCabinetTopology(PickleUpgrade, BaseModel):
             warn_renamed("kind='star_kvs'", "kind='star_cabinet'", stacklevel=4)
             return "star_cabinet"
         return value
+
+    @staticmethod
+    def group_buildings(
+        substation_xy: tuple[float, float],
+        building_positions: list[tuple[float, float]],
+        n_groups: int,
+    ) -> list[list[int]]:
+        r"""Building groups of the cabinets: consecutive bearings, equal sizes.
+
+        The rule of the default cabinet placement (user decisions Q22 and
+        Q35 of 2026.11): the buildings are ordered by their bearing
+        :math:`\theta = \operatorname{atan2}(y - y_s, x - x_s)` around the
+        substation, counter-clockwise, starting after the widest angular gap
+        between two neighbouring bearings (so that no group straddles an
+        empty direction; ties to the gap that starts at the smaller bearing
+        from the :math:`+x` axis, gaps within :math:`10^{-9}` rad tie), and
+        cut into ``n_groups`` runs of consecutive buildings whose sizes differ
+        by at most one (the first runs take the extra buildings). Buildings
+        of equal bearing are ordered by their distance to the substation,
+        then by index. In the default grid of 30 houses (three rows of ten,
+        the substation in the middle row) the two groups are the western and
+        the eastern half.
+
+        Parameters
+        ----------
+        substation_xy
+            Substation position in m.
+        building_positions
+            Building positions in m (one per building, in index order).
+        n_groups
+            Number of groups (cabinets), at least 1; at most one group per
+            building.
+
+        Returns
+        -------
+        list of lists of int
+            Building indices per group, each in bearing order; the groups in
+            the order of their bearings.
+        """
+        n = len(building_positions)
+        if n == 0:
+            return []
+        n_groups = max(1, min(int(n_groups), n))
+        sx, sy = substation_xy
+        keyed = []
+        for i, (bx, by) in enumerate(building_positions):
+            dx, dy = float(bx) - sx, float(by) - sy
+            bearing = math.atan2(dy, dx) if (dx or dy) else 0.0
+            if bearing < 0.0:
+                bearing += 2.0 * math.pi
+            keyed.append((bearing, math.hypot(dx, dy), i))
+        keyed.sort()
+        bearings = [b for b, _, _ in keyed]
+        gaps = [
+            (bearings[(k + 1) % n] - bearings[k]) % (2.0 * math.pi) for k in range(n)
+        ]
+        if n == 1 or max(gaps) == 0.0:
+            start = 0
+        else:
+            widest = max(gaps)
+            first = next(k for k, g in enumerate(gaps) if g >= widest - 1e-9)
+            start = (first + 1) % n
+        order = [keyed[(start + k) % n][2] for k in range(n)]
+        size, extra = divmod(n, n_groups)
+        groups, at = [], 0
+        for g in range(n_groups):
+            take = size + (1 if g < extra else 0)
+            groups.append(order[at : at + take])
+            at += take
+        return groups
 
 
 class StarKvsTopology(StarCabinetTopology):
@@ -202,7 +286,9 @@ class RadialTrunkTopology(PickleUpgrade, BaseModel):
     substation to its cabinet at the point nearest to the building (the
     closest pair of trunk and foundation, user decision Q41; a
     leakage-free tap junction, or the cabinet); a building in a substation
-    slot is connected to the substation. A building that a trunk crosses
+    slot taps its feeder's whole trunk the same way (user decisions Q22,
+    Q35; up to then it was connected to the substation, as it still is on
+    a feeder without a cabinet). A building that a trunk crosses
     (any trunk) is joined to it there without a drop (audit R4A-02). A
     drop may run along another drop (one trench), never along a trunk
     farther than one minimum section (1 cm): a drop from a node that

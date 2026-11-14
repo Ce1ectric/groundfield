@@ -38,9 +38,11 @@ Rules of :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
    ``<cable>_s<k>``. When the nearest point is an end of the path the
    drop starts at that node: the substation or the cabinet, at its point
    nearest to the building, or — at a building the cable runs through
-   (rule 4) — the joint on the cable (audit R4A-01). A building fed from
-   the substation itself (a substation slot of the radial trunk) has no
-   feeding cable: its drop starts at the substation. A drop from a node
+   (rule 4) — the joint on the cable (audit R4A-01). A building in a
+   substation slot of the radial trunk taps its feeder's trunk (user
+   decisions Q22, Q35; up to then its drop started at the substation); on a
+   feeder without a trunk it has no feeding cable and its drop starts at
+   the substation. A drop from a node
    that would run along a cable it does not tap — a trunk of the radial
    topology (the substation slots, a building beyond a later cabinet on
    the feeder's axis), or in the star topology the main of another
@@ -409,17 +411,21 @@ class PenRouter:
         origin: str,
         *,
         crossing: Sequence[str] = (),
+        paths: Mapping[str, Sequence[str]] | None = None,
     ) -> list[str]:
         """``buildings`` sorted by their distance to their feeding path.
 
         Buildings on the path come first (they split it before the taps of
         the others are placed); ties keep the given order. ``crossing``: see
-        :meth:`connect_drop`.
+        :meth:`connect_drop`. ``paths`` gives a building its own feeding
+        cables instead of ``cables`` (the radial substation slots, each
+        tapping its feeder's trunk).
         """
 
         def key(item: tuple[int, str]) -> tuple[float, int]:
             k, name = item
-            return self._nearest(name, cables, origin, crossing).distance, k
+            own = cables if paths is None else paths.get(name, cables)
+            return self._nearest(name, own, origin, crossing).distance, k
 
         return [name for _, name in sorted(enumerate(buildings), key=key)]
 
