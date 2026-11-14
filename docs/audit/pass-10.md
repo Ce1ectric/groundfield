@@ -3468,6 +3468,21 @@ the first vertex for building outlines; the author decided on 2026-11-14:
 | 41 | Where do the conductors the generators route to a foundation end: at the centre as in 0.15.0, at the corner of the anchor side, or at the point of the foundation nearest to the conductor? | at the nearest point, for every foundation form (rectangles, building outlines, the substation's foundation), already in 2026.11.0 | stream `f4gen` |
 
 
+The hand-over of 2026-11-14 left three questions; the author answered them
+the same evening and decided to integrate (almost) every open roadmap item
+into 2026.11.0 before the release — everything scheduled for the next
+release, the items left open, and the full 3-D FEM; out of scope stay the
+`BranchType` export to groundinsight, the import of measurement setups from
+groundmeas, the AP1 reference-case library and scaling the LU solve to
+10 000 segments.
+
+| Q | Question | Decision | Where |
+|---|---|---|---|
+| 42 | Route service drops around foundations (street geometry) instead of the shortest connection? | no, keep the shortest connection | — |
+| 43 | Apply the nearest-point rule of Q41 also to sites earthed by a `RingElectrodeSpec` circle or a strip (the default substations)? | yes | stream `w1gen` |
+| 44 | One current per straight wire for building outlines? | yes, together with Q30 (one current per wire line in the solver) | stream `w1sol` |
+
+
 !!! warning "Correction to question 38 (audit D3B-01)"
     The 0.9 % of question 38 was measured at the cases where the owner change
     is largest. Over the whole scope of the owner texts (short side at least
