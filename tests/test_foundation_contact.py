@@ -674,3 +674,45 @@ def test_inductive_networks_with_nearest_point_drops_stay_passive() -> None:
         warnings.simplefilter("ignore")
         z = np.asarray(engine.solve(world).input_impedance())
     assert np.all(z.real > 0.0) and np.all(z.imag > 0.0)
+
+
+# user decision Q41
+def test_a_layout_drop_from_the_station_leaves_its_foundation_at_the_nearest_point() -> (
+    None
+):
+    """A house east of a cable that runs west from the station: its closest
+    point to the cable is the cable's start at the station, so the drop
+    leaves the station. It runs between the closest pair of the station ring
+    and the house outline, (0, 2) m on the ring's +y side to the outline's
+    first vertex (0, 15) m (first version: from the ring's (-2, -2) m
+    corner, the anchor's connection point)."""
+    layout = LvNetworkLayout.from_footprints(
+        [_l_footprint(6.0, 20.0, 0)], substation_xy=(0.0, 0.0)
+    )
+    layout.add_pen_cable(start="substation", end_xy=(-80.0, 0.0))
+    layout.connect_buildings()
+    station = GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(style="ring", size_xy_m=(4.0, 4.0), depth_m=0.6),
+            *rod_circle(3, radius_m=1.5, length_m=4.0, depth_m=0.6),
+        ]
+    )
+    house = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.8)]
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = layout.to_world(
+            house_grounding=house,
+            substation_grounding=station,
+            foundation_outline="polygon",
+        )
+    (drop,) = _drops(world)
+    ring = [_plan(w) for w in _wires_of(world, "substation_foundation_0")]
+    outline = _plan(world.get_electrode(drop.end_electrode))
+    assert drop.start_electrode == "substation_foundation_0_w1"
+    assert drop.start[:2] == pytest.approx((0.0, 2.0))
+    assert drop.end[:2] == pytest.approx((0.0, 15.0))
+    assert _on_wire(drop.start[:2], world.get_electrode(drop.start_electrode))
+    sampled = _min_distance(_sample(outline, 0.01), ring)
+    assert math.dist(drop.start[:2], drop.end[:2]) == pytest.approx(sampled, abs=0.01)

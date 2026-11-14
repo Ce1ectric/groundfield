@@ -762,7 +762,10 @@ class LvNetworkLayout(
             if tap is None:
                 continue
             tap_xy = dict(cable_nodes[c.cable_name])[tap]
-            _, end_contact = meet.contacts(tap, tap_xy, house.name, None)
+            # A tap at the substation or a cabinet with a foundation leaves
+            # it at its point nearest to the house (two foundations: their
+            # closest pair).
+            start_contact, end_contact = meet.contacts(tap, tap_xy, house.name, None)
             branches.append(
                 PlannedBranch(
                     name=f"service_{c.house_idx:03d}",
@@ -771,6 +774,7 @@ class LvNetworkLayout(
                     end=house.name,
                     conductor=conductor,
                     cable=c.cable_name,
+                    start_contact=start_contact,
                     end_contact=end_contact,
                 )
             )
