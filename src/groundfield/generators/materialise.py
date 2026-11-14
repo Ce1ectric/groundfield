@@ -657,12 +657,28 @@ def site_foundation_wires(site: PlannedSite) -> list[FoundationWire]:
     The site is materialised into a scratch world, so the wires are exactly
     those of the materialised plan.
     """
+    return _site_geometry(site, anchor=False)[1]
+
+
+def _site_geometry(
+    site: PlannedSite, *, anchor: bool = True
+) -> tuple[Optional[tuple[float, float, float]], list[FoundationWire]]:
+    """Anchor connection point and foundation wires of ``site``, in one pass.
+
+    The electrodes are materialised into one scratch world without the
+    bonds, so the anchor's connection point is the one of
+    :func:`site_anchor_point` (``None`` for a site without electrodes) and
+    the wires are those of :func:`site_foundation_wires`. With
+    ``anchor=False`` only the foundation specs are materialised.
+    """
     scratch = create_world(soil=HomogeneousSoil(rho=100.0))
     cx, cy = site.position_xy
+    point: Optional[tuple[float, float, float]] = None
     wires: list[FoundationWire] = []
     for planned in site.electrodes:
         spec = planned.spec
-        if not isinstance(spec, FoundationElectrodeSpec):
+        is_foundation = isinstance(spec, FoundationElectrodeSpec)
+        if not is_foundation and not (anchor and point is None):
             continue
         first = len(scratch.electrodes)
         materialise_electrode(
@@ -672,6 +688,10 @@ def site_foundation_wires(site: PlannedSite) -> list[FoundationWire]:
             name=site.electrode_name(planned),
             bond_conductor_type=site.bond_conductor_type,
         )
+        if anchor and point is None:
+            point = tuple(float(v) for v in scratch.electrodes[first].connection_point)  # type: ignore[assignment]
+        if not is_foundation:
+            continue
         for electrode in scratch.electrodes[first:]:
             (run,) = electrode.wire_polylines()
             wires.append(
@@ -682,7 +702,7 @@ def site_foundation_wires(site: PlannedSite) -> list[FoundationWire]:
                     z=float(electrode.connection_point[2]),
                 )
             )
-    return wires
+    return point, wires
 
 
 def materialise_site(world: World, site: PlannedSite) -> Optional[str]:

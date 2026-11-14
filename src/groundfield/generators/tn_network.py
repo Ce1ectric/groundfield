@@ -106,11 +106,7 @@ from groundfield.generators.electrode_specs import (
 )
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators._pen_routing import PenRouter
-from groundfield.generators.materialise import (
-    materialise_plan,
-    site_anchor_point,
-    site_foundation_wires,
-)
+from groundfield.generators.materialise import _site_geometry, materialise_plan
 from groundfield.generators.measurement import (
     MEASUREMENT_H_TERMINAL,
     MEASUREMENT_S_TERMINAL,
@@ -586,10 +582,10 @@ def _router(cfg: "TnNetworkConfig", sites: list[PlannedSite]) -> PenRouter:
     node_xy = {}
     wires = {}
     for site in sites:
-        point = site_anchor_point(site)
+        point, foundation = _site_geometry(site)
         if point is not None:
             node_xy[site.name] = (point[0], point[1])
-            wires[site.name] = site_foundation_wires(site)
+            wires[site.name] = foundation
     return PenRouter(
         sites[0].name,
         node_xy,
