@@ -40,34 +40,6 @@ Each item that changes numbers comes with its own validation.
   `metadata["rho_preset"]`), so a bus paired with the wrong preset is
   detectable (user decision Q39).
 
-- **One current per wire line for grids and stars in the image family.**
-  The image family solves one uniform current per electrode; a
-  `grid_mesh` or star electrode is therefore 3.9 % (20 m × 20 m, 4 × 4
-  meshes), 5.3 % (40 m × 40 m, 8 × 8) and 4.3 % (4-arm star) above the
-  per-segment `mom` solution, and its near-field potentials are off by tens
-  of per cent. The generators build mesh foundations as one electrode per
-  wire line since 2026.11 (+1.1 %, point kernel +0.3 … +0.5 %); doing the same
-  inside the solver for every grid and star will move their results by
-  −3 … −5 % (second adversarial audit, A2G-04).
-- **Cable cabinets per building group and T-joints on the radial trunk.**
-  `TnNetworkGenerator` places its cabinets at fixed positions: both cabinets
-  of the default 30-house network lie west of the substation, so the eastern
-  houses are fed by service drops of 3.5 … 106.5 m straight from the substation
-  (every drop taps the cable that feeds its building, review finding 10.38),
-  which doubles the PEN length against the earlier routing. Cabinets will be
-  placed per building group (at the far end of the houses they feed), and a
-  building in a substation slot of `RadialTrunkTopology` that no trunk
-  crosses (those are joined to the trunk since user decision Q41) will tap
-  its feeder's trunk instead of getting its own line from the substation.
-- **Concentric cables by an explicit marker, without the internal inductance
-  of the shield.** A thinner conductor drawn on the axis of a thicker one is
-  read as a core inside a cable shield and couples at the shield radius
-  (2026.11, review finding 10.46); two separate cables of different radii drawn
-  on one axis are therefore read as one concentric cable. The next release
-  binds this reading to an explicit marker (`conductor_type="cable_shield"`)
-  and gives a shield no internal inductance of a solid wire: a 100 m coaxial
-  pair with 5 mm core and 15 mm shield radius now reads a loop inductance of
-  31.97 µH instead of the 26.97 µH of a thin-walled shield.
 - **Tighter rule for long segments under `sommerfeld`.** A segment longer
   than a quarter skin depth gets a composite outer rule; the shorter ones
   keep the historic single rule, which reaches 4.8e-4 at a quarter skin
@@ -103,28 +75,6 @@ limits a result, the reference documentation states the limit.
   gets no further rules; a conforming axisymmetric model replaces it in the
   next release (see above, user decision Q37), and a full 3-D volume method
   remains deferred (see below).
-- **Cable corners inside a site foundation.** The layout builder clips a
-  cable's first and last segment at the site's foundation contact, but a
-  router corner inside a small cabinet ring stays a node that houses may
-  tap (82 of 2 540 drops in 200 random layouts, audit R6A-01). The polyline
-  will be clipped where it leaves the foundation, merging such corners into
-  the site.
-- **Service drops around foundations** (question for the author). Drops
-  are straight; the contact lies at the corner of the side facing the cable,
-  so in the default grids 0 … 80 % of the drops run 0.2 m above the side
-  wires of other houses of their column. Moved 1 m aside they change \|Z\|
-  by at most 0.02 % (insulated PEN) and −0.30 % (bare PEN); the question is
-  whether the generators should follow the street geometry (drops along
-  property lines, around foundations) or keep the shortest connection.
-- **The nearest-point rule for sites without a foundation** (question for
-  the author). User decision Q41 covers foundations; `RingElectrodeSpec`
-  circles and strips — among them the default substations of both
-  generators — keep the connection point of their anchor.
-- **One owner per straight wire for building outlines** (question for the
-  author, with the solver item of one current per wire line). A rectangle
-  given by its size is one owner per side (user decision Q38), the same
-  rectangle given as an outline one owner (up to 0.33 % bare and 1.55 % in
-  0.2 m of wet concrete above it); the AP1 houses are outlines.
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the
@@ -154,7 +104,7 @@ limits a result, the reference documentation states the limit.
 | Full-3-D FEM backend | deferred; a conforming axisymmetric model replaces the equivalent-hemisphere reduction of `fem` in the next release (user decision Q37) |
 | Scaling the integral solvers to ~10 000 segments | partly: the image-family kernels need memory linear in the segment count (10.56); the dense LU solve remains |
 | `ParameterSweep` API | partly: `sweep(..., n_jobs=...)` runs the sweep in a process pool (10.64) |
-| TN-Ortsnetz topology generator | implemented in 0.7.0; the corner-routed service drop is open |
+| TN-Ortsnetz topology generator | implemented in 0.7.0; service drops keep the shortest connection (user decision Q42), cabinets per building group (user decisions Q22, Q35) |
 | Penetration depth for multilayer soil | open |
 | Export of `BusType` and `BranchType` into groundinsight databases | `BusType`: `save_bustype_to_db`; `BranchType` open |
 | Import of measurement geometries from groundmeas | open |

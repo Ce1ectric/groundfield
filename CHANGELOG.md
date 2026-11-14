@@ -94,13 +94,13 @@ reproduces 0.15.0, it is named.
 | 10.54, 10.39 | layout foundations follow the footprint; rotated mesh foundations split at their crossings | substation impedance 0 / +0.45 / +5.31 % in three test streets; mesh foundations +1.0 … +1.2 % (−9.5 % where the clamp fired) | layout and OSM worlds; `foundation_outline="spec"` reproduces 0.15.0 |
 | 10.53 | reproducible draws; masks of footprints without OSM id keyed by outline | reordering the footprints moved Z by 2.8 % before | `sample_world`, masks of footprints without `osm_id` |
 | 10.55 | `MeasurementLeadConfig.depth_m` and `PenConfig.depth_m` are honoured | coupled imaginary part of the probe +37 % (overhead) and +21 % (buried) at 1 kHz; inductive PEN at 1 kHz X 0.736 → 0.167 Ω; bare PEN −1.4 % (golden `gen_tn_default` ≤ 3.5e-7) | generator worlds with leads or inductive PEN |
-| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope follows that offset curve and samples no interior unless asked (`interior="meshes"` for open-air grids; user decision Q3) | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V; star 275 → 818 V; 10 m ring envelope 139.4 V unchanged (182.6 V in its centre with `interior="meshes"`); rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point"` reproduces 0.15.0 |
+| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope follows that offset curve and samples no interior unless asked (`interior="meshes"` for open-air grids; user decision Q3) | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V (98.7 V with one current per wire line, user decision Q30); star 275 → 818 V; 10 m ring envelope 139.4 V unchanged (182.6 V in its centre with `interior="meshes"`); rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point"` reproduces 0.15.0 |
 | 10.42 | the permissible touch voltage beyond 10 s is the 80 V of the note to Figure 8 of EN 50522 (user decision Q4) | `permissible_touch_voltage_en50522(t_f > 10 s)` 85 → 80 V (−5.9 %); `math.inf` (fault not cleared) raised, now 80 V; prospective value with 1000 Ω shoes on 100 Ω·m 142.5 → 137.5 V | assessments with fault durations above 10 s, resonant-earthed networks |
 | 10.18, 10.19 | `sweep`, `convergence_study` and the rho-f helpers use the input impedance | the cluster impedance of a station was 1.26 / 1.79 / 3.09 × the input impedance with 1 / 3 / 8 houses on a PEN; a ring with two bonded rods was fitted 17 % too high | sweeps of TN worlds and BusTypes exported with the rho-f helpers; the AP1 catalogue computes its own driving-point impedance |
 | 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
 | 10.73, 10.01 | exported formulas are partial fractions with float coefficients; parsed formulas hold their numbers as floats and are evaluated without `lambdify` | at most half a unit in the last printed digit; evaluated formulas at most 4.1e-16 (exporter output) and 3.3e-15 (hand-written) | text diffs of BusType files, hand-written formulas |
 | 10.20, F32 | `carson_series` on the anti-parallel image; a pair across the surface couples through the field transmitted into the soil; oblique, inclined and vertical segments (beyond 8.1°) get the Sommerfeld correction | the earth-return reactance of a 1 km PEN was 2.04 × (50 Hz) and 2.19 × (1 kHz) Carson's; 30-house network \|Z\| −16.4 % at 1 kHz (0.15.0's world; −18.9 % with the release's generator changes) (golden `cond_galvanic_neumann_carson_series` 0.60 %); an overhead lead 1 m above a PEN at 0.7 m: mutual reactance was 35.9 % low (1 kHz, 100 Ω·m); a probe lead turning 8.1° against the feed lead changed the reading 17.6-fold | `carson_series` studies, measurement leads over buried conductors |
-| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series; wires closer than the sum of their radii are touching wires; close non-parallel pairs are integrated semi-analytically | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases; two coincident 50 m leads 1.87 H → 82 µH of mutual inductance; near-parallel pairs 1 cm apart were +200 … +250 %; a core inside a cable shield couples at the shield radius (loop inductance was +36 %); the generator's in-line fall-of-potential reading Im Z_meas 0.063 → 0.054 Ω (50 Hz, `sommerfeld`) | inductive studies with inclined, vertical or closely spaced conductors, simulated measurements with leads (AP1 Phase B) |
+| 10.46 | exact touching segment pairs, exact removal of the additive image, Carson's small-a series; wires closer than the sum of their radii are touching wires; close non-parallel pairs are integrated semi-analytically | Im Z +6.0 % for a conductor inclined by 30° and +18.4 % for a steep riser (default `sommerfeld`, point kernel), Re Z unchanged; at most 3.2e-6 in the golden cases; two coincident 50 m leads 1.87 H → 82 µH of mutual inductance; near-parallel pairs 1 cm apart were +200 … +250 %; a core inside a cable shield couples at the shield radius (loop inductance was +36 %; since user decision Q32 only with the `cable_shield` marker); the generator's in-line fall-of-potential reading Im Z_meas 0.063 → 0.054 Ω (50 Hz, `sommerfeld`) | inductive studies with inclined, vertical or closely spaced conductors, simulated measurements with leads (AP1 Phase B) |
 | 10.35, 10.36, F52 | Sommerfeld kernel for three or more layers and below h₁; λ grid of distant pairs | a three-layer earth with ρ₂ = ρ₃ was +17 … +25 % in X′; pair entries 200 m and 400 m apart were −24 % and +274 % off (golden at most 2.1e-5) | `sommerfeld` on `MultiLayerSoil`, deep conductors, large networks |
 | 10.24 | inductance of lumped and single-segment Neumann conductors; leakage of a one-piece galvanic conductor; the `sommerfeld` correction of a segment longer than a quarter skin depth is integrated piecewise | 300 m PEN at 1 kHz 0.0564 + 0j Ω → 0.2096 + 3.7840j Ω (equal to its 10 m chain); two rods joined by a bare one-piece conductor 22.74 → 5.54 Ω; a lumped 3 km conductor at 1 kHz (100 Ω·m) had +13.4 % earth-return resistance against its refined chain, now ≤ 1e-4; distributed conductors with pieces longer than 40 m (1 kHz, 100 Ω·m) move by 1e-4 and more | service drops shorter than the PEN segment length, lumped leads, long lumped or coarsely divided conductors under `sommerfeld` |
 | 10.45 | `references.pollaczek` uses the exact buried amplitude and the K₀ head | R′ at 1 kHz +0.15 % (1 m) and +1.0 % (3 m) in homogeneous soil, up to +1.4 % for a conductor in the upper layer and +3.5 % below the interface; X′ at most −0.09 % | callers of the Pollaczek references |
@@ -111,7 +111,12 @@ reproduces 0.15.0, it is named.
 | 10.12, 10.39 | generated mesh foundations are one current owner per wire line at every orientation, bare or encased | bare axis-aligned mesh foundations −1.2 % (10 m, 2 × 2) to −2.5 % (30 m, 4 × 4), now +1.1 % against `mom` with the default line kernel (+0.3 … +0.5 % with the point kernel); generated networks −0.7 … −0.8 % in every node potential and up to 4.7 % in surface potentials; largest touch voltage over the default house mesh −3.6 % (golden `gen_tn_default`, `gen_layout_builder`, `gen_tn_measurement_overhead_leads`) | generator and layout-builder worlds with mesh foundations; not AP1 (lumped polygon foundations) |
 | 10.12–10.14, 10.39, 10.28 (user decision Q20) | encased mesh foundations: every wire, cross-braces included, carries r_b and the shell coefficient C (in 0.15.0 every wire had r_b, but `"lumped"` put C on no wire and kept the shell in a registry that only the TN service drops read, `"distributed"` put C on the perimeter only) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, default engine of each version: +7.0 / +15 / +23 / +157 / +782 % against 0.15.0 `"lumped"`, +2.2 / +4.2 / +6.6 / +68 / +399 % against `"distributed"` (point kernel on both: +6.2 … +781 % and +1.5 … +398 %); in 30 over 100 Ω·m (h₁ = 5 m) up to +1701 % and +1045 %; four such houses on the default TN network (100 Ω·m): −3.8 / −5.2 / −6.5 / −14 / −11 % (`"lumped"`, whose shell sat on the service drop) and −0.3 / +1.0 / +2.5 / +35 / +121 % (`"distributed"`), of which −1.7 % without any shell (10.38, 10.28); the rule for the braces alone, against the 0.15.0 `"distributed"` model (braces with r_b, no C): +5.9 / +66 / +393 % at 150 / 1000 / 5000 Ω·m (against the bare braces of the development line, never released: +1.5 / +47 / +307 %) (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell, not ring and building-outline foundations (AP1: see the 10.12–10.14 row) |
 | 10.39 (user decision Q38) | an axis-aligned rectangular foundation without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`) with the default `concrete_model` is one current owner per side instead of one grid mesh, connected at the corner of its −y side instead of its centre (the generators' conductors at its nearest point since user decision Q41) | input impedance of a foundation on its own never higher, unchanged for a square; largest decreases over the AP1 soils (5 mm wire at 0.8 m, short side ≥ 1 m, aspect ratio ≤ 4 / ≤ 50): −0.32 / −0.91 % bare or with the default 5 cm shell (80 m × 20 m with 5 cm of 30 Ω·m concrete / 150 m × 7.75 m bare, both in 30 over 200 Ω·m), −0.69 / −1.53 % in up to 0.2 m of wet concrete (4 m × 1 m / 16 m × 1 m in 0.2 m of 30 Ω·m concrete over 1000 / 30 Ω·m), −0.09 / −0.33 % bare in homogeneous soil; AP1 station −0.0009 … −0.0026 %; TN networks with 1 / 2 / 5 / 30 / 100 ring-foundation houses +0.023 / +0.007 / +0.024 / −0.038 / −0.039 % (with Q41 +0.012 / −0.005 / +0.012 / −0.044 / −0.044 %); touch-voltage envelope of 20 m × 5 m and 40 m × 10 m rings −0.4 … −4.3 % (the centre +0.5 … +6.9 %); `fem` see the 10.49 row (golden `mutual_foundations_lumped_concrete`: Z_G 5.2e-4, R 1.6 %, now equal to the `distributed` case) | generated `style="ring"` foundations and meshes with `n_x = n_y = 1` at multiples of 90° with the default value, OMBR foundations of axis-aligned footprints with these specs (not the layout builder's default braced mesh), the AP1 station; not building outlines (the AP1 houses), braced meshes or rectangles at other angles |
-| 10.38 (user decision Q41) | conductors the generators route to a foundation end at its nearest point (closest pair of cable and foundation for service drops; the foundation's point nearest to the next node for cables leaving a site); a building that a cable of its feeding path crosses (radial: any trunk; star: the main that crosses it, whose cabinet then feeds it) is joined to it without a drop; no drop runs along a cable farther than 1 cm (one minimum section; "along" as defined in the known limitations) | seed 1, 100 Ω·m, default grid; default resistive PEN at 50 Hz: star −0.005 … −0.12 % (10 / 30 / 50 / 100 / 150 / 200 mesh houses −0.008 / −0.006 / −0.117 / −0.006 / −0.055 / −0.005 %, 1 … 200 ring houses −0.005 … −0.012 %), radial −0.03 … +0.13 %; Neumann PEN at 1 kHz (`carson_series` and `sommerfeld`, the default; isolated and galvanic): star Re −0.43 … +1.6 %, Im −3.1 … +16.3 %, \|Z\| −0.71 … +3.3 % (the 10-house network, 5 of its 10 houses on the main: X +14.2 % `carson_series`, +16.3 % `sommerfeld`, bare PEN at 50 Hz +2.0 %; without it Im −3.1 … +3.5 %), radial Re −0.47 … +8.4 %, Im −8.6 … +37.7 %, \|Z\| −0.67 … +9.0 % (default 30 houses, isolated, `sommerfeld`: Im +10.4 %); against drops to the centre as in 0.15.0, Im at 1 kHz: 12 m × 8 m ring houses (audit D3A) +5.7 … +14.0 %, default 10 m ring houses star +1.2 … +2.1 % (the 30-house network; the networks of 1 … 5 houses have no drop, all on the main: +0.6 … +10.4 % from the joint and the Q38 owner), radial −10.8 … −1.1 %; a layout of building outlines with an AP1-like station −0.026 … −0.147 % at 50 Hz, drops 215.9 → 140.6 m; golden `gen_tn_default` ≤ 2.9e-4, `gen_layout_builder` ≤ 1.1e-3, `gen_tn_measurement_overhead_leads` ≤ 1.6e-4 (the probe reading 4.3e-3) | `TnNetworkGenerator` and layout-builder worlds with foundations; not sites without a foundation, not worlds built by hand (the AP1 catalogue attaches its drops by name and does not change) |
+| 10.38 (user decision Q41) | conductors the generators route to a foundation end at its nearest point (closest pair of cable and foundation for service drops; the foundation's point nearest to the next node for cables leaving a site); a building that a cable of its feeding path crosses (radial: any trunk; star: the main that crosses it, whose cabinet then feeds it) is joined to it without a drop; no drop runs along a cable farther than 1 cm (one minimum section; "along" as defined in the known limitations) | seed 1, 100 Ω·m, default grid; default resistive PEN at 50 Hz: star −0.005 … −0.12 % (10 / 30 / 50 / 100 / 150 / 200 mesh houses −0.008 / −0.006 / −0.117 / −0.006 / −0.055 / −0.005 %, 1 … 200 ring houses −0.005 … −0.012 %), radial −0.03 … +0.13 %; Neumann PEN at 1 kHz (`carson_series` and `sommerfeld`, the default; isolated and galvanic): star Re −0.43 … +1.6 %, Im −3.1 … +16.3 %, \|Z\| −0.71 … +3.3 % (the 10-house network, 5 of its 10 houses on the main: X +14.2 % `carson_series`, +16.3 % `sommerfeld`, bare PEN at 50 Hz +2.0 %; without it Im −3.1 … +3.5 %), radial Re −0.47 … +8.4 %, Im −8.6 … +37.7 %, \|Z\| −0.67 … +9.0 % (default 30 houses, isolated, `sommerfeld`: Im +10.4 %); against drops to the centre as in 0.15.0, Im at 1 kHz: 12 m × 8 m ring houses (audit D3A) +5.7 … +14.0 %, default 10 m ring houses star +1.2 … +2.1 % (the 30-house network; the networks of 1 … 5 houses have no drop, all on the main: +0.6 … +10.4 % from the joint and the Q38 owner), radial −10.8 … −1.1 %; a layout of building outlines with an AP1-like station −0.026 … −0.147 % at 50 Hz, drops 215.9 → 140.6 m; golden `gen_tn_default` ≤ 2.9e-4, `gen_layout_builder` ≤ 1.1e-3, `gen_tn_measurement_overhead_leads` ≤ 1.6e-4 (the probe reading 4.3e-3) | `TnNetworkGenerator` and layout-builder worlds with foundations; not sites without a foundation, not worlds built by hand (the AP1 catalogue attaches its drops by name and does not change) (default-grid values measured before user decisions Q22, Q35 and Q43, see the next rows) |
+| 10.22 (Q30) | grids built by hand: one owner per wire line | −1.2 % (10 m 2 × 2) … −4.0 % (40 m 8 × 8) … −5.5 % (100 m 20 × 20) in 100 Ω·m, −1.2 … −2.0 % in 1000/100/5, −1.7 … −4.8 % in 5 cm of wet concrete; against one current per segment +1.6 … +4.9 % → +0.36 … +0.70 %; 20 m grid corner: touch +20 % → +6.4 %, step −21 % → −7.6 % (from above the corner −28 % → −11 %), mesh voltage +22 % → +8.6 % (against `mom`); touch-voltage envelope of the 10.21 note 111.44 → 98.72 V; the references example 2.39 → 2.31 Ω | `GridMeshElectrode` / `MeshElectrode` worlds (not generated foundations) | `img2_grid_upper_resistive`, `cim_grid_unequal_segments` |
+| 10.22 (Q30, Q44) | polylines one owner per straight run, stars per arm | rectangle outlines −0.000 … −0.31 % bare, −0.62 % in wet concrete (16 m × 1 m), L-shape −0.13 / −0.19 %; T06 outlines alone ≤ −0.004 %; T06 layout with the AP1 station −0.03 … −0.40 % (one current per segment: +0.14 … +0.51 % → +0.07 … +0.12 % above it); stars alone 0, in a cluster member currents up to 3.4 % | building outlines (the AP1 houses), hand-built polylines, stars next to other electrodes | `img_mixed_cluster_hom`, `line_img_mixed_cluster_hom` |
+| 10.46 (Q32) | unmarked conductors of different radii on one axis touch | coax pair 31.97 → 43.47 µH loop | worlds with conductors drawn on one axis without the marker | none |
+| 10.46 (Q33) | shield without internal inductance | −50 nH/m per `cable_shield` conductor; coax 31.97 → 26.97 µH; `buried_lead()` two-pole −2.5 % in X | `cable_shield` conductors with `inductance_model` | none |
+| Q22 / Q35, Q43 (10.38) | cabinets per building group at the far end of their houses, radial substation slots tap the trunk; mains and drops meet rings and strips at their nearest point; layout cables reach a site where the polyline enters it | default grids (10 … 150 houses, 100 Ω·m): resistive PEN at 50 Hz star +0.02 … +0.85 %, radial −0.01 … +0.49 % (Q43 alone −0.05 … −0.13 %); isolated Neumann PEN (n ≤ 50, `carson_series` and `sommerfeld`): 50 Hz \|Z\| −0.03 … +0.97 %, Im −9.9 … +82 %; 1 kHz star Re −6.0 … +5.6 %, Im −9.1 … +70 %, \|Z\| −1.4 … +13.1 %, radial Re −0.5 … +8.3 %, Im −9.6 … +96 %, \|Z\| −1.2 … +15.4 % (default star 30 houses X +64 / +55 %: the houses share their main instead of parallel drops; Q43 alone Im −4 … −11 %); 100 ring houses +0.88 %; T06 layout −0.026 % (100 Ω·m), T07 Z_meas +1.51 %; the AP1-like layout (foundation station) unchanged; golden `gen_tn_default` ≤ 1.4e-2 (cabinet rod current −63 %), `gen_tn_measurement_overhead_leads` ≤ 1.9e-2 | `TnNetworkGenerator` worlds (cabinet positions and feeding with the default `placement=None`; radial substation slots; every default substation ring); layout worlds with ring / strip sites or router corners inside a site; not a given cabinet placement apart from Q43, not foundation stations |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -372,6 +377,10 @@ reproduces 0.15.0, it is named.
 - `groundfield.utils`: `suggest`, `did_you_mean`, `warn_deprecated`,
   `warn_inert`, `InertConfigurationWarning`, `REMOVAL_VERSION`.
 - The package ships a `py.typed` marker (10.02).
+- `WireSegments.wires`, `.wire_index`, `.n_wires` (the straight wire of
+  every segment); `geometry.primitives.COLLINEAR_SIN_TOL`.
+- `Conductor.is_shield`; `build_inductance_matrix(shields=...)`.
+- `FieldResult.metadata["wire_owners"]`.
 
 ### Changed
 
@@ -580,7 +589,8 @@ reproduces 0.15.0, it is named.
   `electrode_currents[<name>]` and `grounding_impedance(<name>)` refer to the
   first wire, use `cluster_impedance` for the foundation. A rectangle
   without cross-braces is one wire per side as well (user decision Q38), a
-  polygon outline one closed wire.
+  polygon outline one closed wire (solved as one owner per straight side
+  since user decisions Q30/Q44).
 - ⚠ **Foundations without cross-braces are one current owner per side
   (user decision Q38).** Every `FoundationElectrodeSpec(style="ring")`, or
   `"mesh"` with `n_x = n_y = 1`, is one strip per side, bonded to its local
@@ -651,13 +661,15 @@ reproduces 0.15.0, it is named.
   foundation (rods, `RingElectrodeSpec` circles and strips, among them the
   default substations of both generators), `site_anchor_point`,
   `connection_point` and everything attached by name are unchanged;
-  `site_foundation_wires(site)` is new, `materialise_branch` rejects a
+  `site_contact_wires(site)` is new (named `site_foundation_wires` before user decision Q43), `materialise_branch` rejects a
   `PlannedContact` that names no foundation wire of its site or lies farther
   than one minimum section from it, and `LvNetworkLayout.plot(world=...)`
   draws the service drops as built (without a world, the layout's stubs).
   Planning 1000 default houses takes 0.8 s (star) / 0.4 s (radial) against
   0.2 s before user decision Q41 (0.15.0 had no planning step); 8000 radial
-  houses with `max_feeder_length_m=1e5` 18.4 s against 5.9 s. Tests:
+  houses with `max_feeder_length_m=1e5` 18.4 s against 5.9 s. With the
+  cabinets per building group (user decisions Q22, Q35; quiet machine)
+  1000 / 8000 star houses take 0.88 / 14.6 s, radial 0.98 / 17.2 s. Tests:
   `tests/test_foundation_contact.py`,
   `tests/test_lv_network_layout.py::test_plot_draws_the_drops_as_built_from_the_world`.
 - Rectangular foundations at multiples of 90° are rotated with the exact
@@ -669,6 +681,77 @@ reproduces 0.15.0, it is named.
   round-off. Tests:
   `tests/test_rotated_foundations.py::test_foundation_at_right_angles_is_the_rotated_rectangle_without_round_off`,
   `tests/test_geo_placement.py::test_right_angles_build_the_axis_aligned_world`.
+- ⚠ **One uniform current per straight wire in the image family (user
+  decisions Q30, Q44; review finding 10.22, audit A2G-04).** `image`,
+  `image_2layer` (with its cross-layer path) and `solve_mutual_*` give every
+  grid (`GridMeshElectrode`, `MeshElectrode`) one uniform-current owner per
+  full wire line, a star one per arm, a polyline one per straight run
+  (consecutive edges that continue in the same direction are one wire); the
+  owners of an electrode are ideally bonded and every result stays per
+  electrode (`metadata["wire_owners"]` counts them). Rods, strips and rings
+  are one wire; generated mesh foundations (one electrode per wire line
+  already) do not change. Grids are 1.2 … 5.5 % lower (10 m 2 × 2 … 100 m
+  20 × 20), from +1.6 … +4.9 % to +0.36 … +0.70 % above one current per
+  segment (+0.29 … +0.66 % against `mom` with the point kernel); the corner
+  touch voltage of the 20 m grid with 4 × 4 meshes is +6.4 % against `mom`
+  (+20 % before), the step −7.6 % (−21 %). Stars do not change on their own
+  (equal arm currents). A building outline is one owner per side and equals
+  the rectangle given by its size. A source-free grid, star or polyline
+  floats: its wires exchange equalising currents at one potential and its
+  net current is exactly zero (it was left out before). Tests:
+  `tests/test_wire_line_owners.py`.
+- ⚠ **Concentric cables need the `cable_shield` marker (user decision Q32;
+  10.46, audit A3C-5).** A thinner conductor on the axis of a thicker one is
+  a core inside a shield, coupled at the shield radius, only if the thicker
+  one has `conductor_type="cable_shield"`; two conductors of other types on
+  one axis are separate cables that touch (a 100 m pair of 5 mm and 15 mm
+  radius: loop 31.97 → 43.47 µH, the analytic 43.48 µH of two touching solid
+  wires). `build_inductance_matrix(..., shields=...)` marks shields at the
+  low level. Tests: `tests/test_concentric_cables.py`,
+  `tests/test_interpenetrating_wires.py`.
+- ⚠ **A cable shield has no internal inductance of a solid wire (user
+  decision Q33).** The self terms of a `cable_shield` conductor drop
+  μ₀ℓ/(8π) (50 nH/m); the 100 m coax with 5 mm core and 15 mm shield reads
+  the analytic coaxial loop inductance 26.97 µH instead of 31.97 µH
+  (26.966 µH solved). `Conductor.internal_impedance_per_length` of a `"dc"`
+  shield has no inductive part; `resistance_model="skin"` on a shield raises
+  `ValueError`. The generator's `buried_lead()` is a shield: two-pole
+  readings with buried leads −2.5 % in reactance, three-pole unchanged.
+  Tests: `tests/test_concentric_cables.py`.
+- **Benchmark B11** (`image_2layer`, point kernel): refinement bound
+  0.5 % → 0.6 % (the coarse step is 0.54 % with one owner per wire line,
+  0.43 % before; the default line kernel 0.12 %). Validation page
+  re-measured.
+- ⚠ **Cable cabinets per building group, at the far end of the houses they feed
+  (user decisions Q22, Q35).** `TnNetworkGenerator` (star topology) orders the
+  buildings by bearing around the substation, from the widest angular gap on,
+  cuts them into one run of consecutive bearings per cabinet (sizes differ by at
+  most one, `StarCabinetTopology.group_buildings`) and places each cabinet on the
+  ray through its group's centroid, `CabinetConfig.end_clearance_m` (new, 1 m)
+  beyond the group's farthest point; the cabinet feeds its group (a building that
+  a main crosses stays fed by that main, Q41). Up to then the cabinets stood on a
+  strip along the substation row: both cabinets of the default 30-house network
+  west of the substation, the eastern houses fed by drops of 3.5 … 106.5 m from
+  the substation; now at (−118.5, 0) and (118.5, 0) m with 20 drops of 25 m
+  (before 25 drops, 1 140 m). `CabinetConfig.placement` is optional (default
+  `None`); a given placement keeps the former positions and nearest-cabinet
+  feeding, and a configuration stored before carries the former strip and keeps
+  its cabinets. In `RadialTrunkTopology` a building in a substation slot taps its
+  feeder's trunk at the closest pair instead of getting its own line from the
+  substation (feeders without a trunk unchanged; default 30 houses: drops
+  1 115 → 778 m, 14 → 4 from the substation). Tests: `tests/test_cabinet_groups.py`.
+- ⚠ **The nearest-point rule for rings and strips (user decision Q43).** Every
+  conductor the generators route to a site earthed by a `RingElectrodeSpec`
+  circle or a strip — among them the default substations of both generators —
+  ends at the point of that electrode nearest to it (a circle exactly), as at a
+  foundation since Q41; a site with horizontal electrodes and rods is met on the
+  horizontal ones, a site with several at the nearest of all; rods keep their
+  head. The default mains leave the substation ring at its point nearest to their
+  cabinets (the western ones at (−4, 0) m instead of through the ring from
+  (4, 0) m). `site_foundation_wires` is renamed `site_contact_wires` and lists
+  rings and strips. Tests: `tests/test_site_contact.py`.
+- Q42: service drops keep the shortest connection (not routed around
+  foundations) — no code change.
 - ⚠ **Mesh foundations: the cross-braces are encased (user decision Q20).** A
   foundation earth electrode per DIN 18014 lies in the concrete together with
   its connections, so every wire of an encased
@@ -1093,6 +1176,16 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   the harness's norm-wise measure; D3B-02, R4B-13). Tests:
   `tests/test_foundation_owners.py::test_one_owner_per_side_against_one_current_per_segment_holds_in_the_scope`,
   `::test_the_texts_quote_the_field_change_at_the_passive_foundation`.
+- The layout builder builds a cable from where its polyline leaves the start
+  site's closed electrodes for the last time to where it first enters the end
+  site's; the corners in between are part of the sites. A router corner inside a
+  small cabinet ring was a node that houses tapped — 82 of 2 540 drops of 200
+  random layouts with a 2 m cabinet ring started inside it, 79 junctions lay
+  inside it — and a tap at a cabinet's waypoint that the polyline passes earlier
+  was inserted there (audit R6A-01). Tests:
+  `tests/test_foundation_contact.py::test_no_layout_drop_starts_inside_a_cabinet_foundation_behind_a_short_bridge`,
+  `::test_no_layout_drop_starts_inside_the_station_ring_with_a_fine_router_grid`,
+  `::test_no_layout_drop_or_junction_lies_inside_a_cabinet_foundation_in_random_layouts`.
 
 ### Corrections to the 0.15.0 release notes
 

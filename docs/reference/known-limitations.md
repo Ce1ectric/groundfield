@@ -32,37 +32,37 @@ shows what agrees with independent references and how well.
 
 ## Current ansatz and source kernels
 
-- **Uniform current per electrode (image family).** `image` and
-  `image_2layer` assume a uniform current per unit length on each
-  electrode (and soil layer). Impedances of rods and rings are within
-  about 1 % of the per-segment `mom` solution, those of grids and stars a
-  few per cent above it (default line kernel: 20 m × 20 m grid with
-  4 × 4 meshes +3.9 %, 40 m × 40 m with 8 × 8 meshes +5.3 %, 4-arm star
-  +4.3 %); the generators build mesh foundations as one electrode per
-  wire line, which brings them to +1.1 % (+0.3 … +0.5 % with
-  `kernel="point"`, the kernel `mom` uses); against one current per
-  segment an encased mesh foundation is at most 0.6 % high and a rectangle
-  without cross-braces — one owner per side since user decision Q38 — with
-  a short side of at least 1 m, an aspect ratio up to 50 and sides up to
-  150 m at most 1.4 % over the AP1 soils, bare or encased (150 m × 3 m bare
+- **Uniform current per straight wire (image family).** `image` and
+  `image_2layer` assume a uniform current per unit length on each straight
+  wire of an electrode (and soil layer): a full wire line of a grid, an arm
+  of a star, a straight run of a polyline (user decisions Q30, Q44);
+  rods, strips and rings are one wire. Impedances of rods and rings are
+  within about 1 % of the per-segment `mom` solution, grids +0.36 … +0.70 %
+  above one current per segment with the default line kernel (10 m 2 × 2 …
+  40 m 8 × 8; +0.43 … +0.89 % in 5 cm of wet concrete; +0.29 … +0.66 %
+  against `mom` with the point kernel), stars a few per cent above it,
+  growing with the number of arms (+1.8 % for 3, +3.5 % for 4, +10.5 % for
+  8 arms of 10 m in 100 Ω·m; up to +12.6 % in 1000 over 100 Ω·m and
+  +19.7 % in wet concrete): the current crowds to the tips, which one
+  current per arm cannot represent. Rectangles without cross-braces,
+  given by their size or as an outline (one owner per side), with a short
+  side of at least 1 m, an aspect ratio up to 50 and sides up to 150 m are
+  at most 1.4 % high over the AP1 soils, bare or encased (150 m × 3 m bare
   in 30 over 200 Ω·m: +1.34 %; 0.9 % for 150 m × 7.75 m; at most 0.25 % up
-  to aspect ratio 4; the single owner that the default built for an
-  axis-aligned one up to then was up to 2.2 % high, 2.16 % for 16 m × 1 m in a 0.2 m shell); narrower ones more
-  (150 m × 1 m: +1.65 %). For shells as thick as 0.2 m, whose
-  outer radius is not thin against the segments (the engine warns), these
-  numbers carry about 0.2 percentage points of model uncertainty. Surface
-  potentials near grids, meshes, stars, strip ends and bonded
-  multi-electrode clusters are worse. Against the per-segment `mom`
+  to aspect ratio 4); narrower ones more (150 m × 1 m: +1.65 %). For shells
+  as thick as 0.2 m these numbers carry about 0.2 percentage points of
+  model uncertainty. Surface potentials near grids, stars, strip ends and
+  bonded multi-electrode clusters are worse. Against the per-segment `mom`
   solution, with the default line kernel, touch voltage with the feet 1 m
-  outside the footprint and step voltage from 1 m to 2 m outside: a
-  20 m × 20 m grid with 4 × 4 meshes at a corner +20 % / −21 % (the step
-  from the point above the corner 1 m outwards −28 %, as in the
-  [`image` engine table](../explanation/engines/image.md#validation)); a
-  4-arm star with 5 m arms beyond a tip +8 % / −9 %; rings, rods and
-  closed loops within 2 % (the point kernel isolates the ansatz: +19 % /
-  −21 %, +7 % / −10 %, within 1 %; `groundfield.postprocess.safety`).
-  The safety functions warn with `UniformCurrentFieldWarning`; use
-  `backend="mom"` for such field values.
+  outside the footprint and step voltage from 1 m to 2 m outside: a 20 m ×
+  20 m grid with 4 × 4 meshes at a corner +6.4 % / −7.6 % (the step from
+  the point above the corner 1 m outwards −11 %, the step at the middle of
+  an edge +5.8 %); a 4-arm star with 5 m arms beyond a tip +8 % / −9 %
+  (between two arms touch −17 %, step +40 %); rings, rods and closed loops
+  within 2 % (the point kernel isolates the ansatz: +5 % / −8 %,
+  +7 % / −10 %, within 1 %; `groundfield.postprocess.safety`). The safety
+  functions warn with `UniformCurrentFieldWarning`; use `backend="mom"`
+  for such field values.
 - **Point kernel** (`kernel="point"`, and always in `mom` and
   `mom_sommerfeld`). Its row sums carry an error of about $-0.23/L$, so
   grounding resistances converge 0.9–1.9 % below the exact
@@ -214,6 +214,15 @@ shows what agrees with independent references and how well.
   whose cost grows with every pair.
 - **Skin effect** is opt-in (`resistance_model="skin"`, solid round
   conductors); the proximity effect between conductors is not modelled.
+- **Concentric cables** are read only with the marker: a thinner conductor
+  on the axis of a conductor with `conductor_type="cable_shield"` is its
+  core and couples at the shield radius; the shield has no internal
+  inductance of a solid wire (user decisions Q32, Q33). Any two other
+  conductors drawn on one axis are separate cables touching each other.
+  The skin effect of a shield (a tube) is not modelled
+  (`resistance_model="skin"` raises for a shield); a core off the axis
+  inside the shield couples at the shield radius, a three-core cable in
+  one shield is three cores at the shield radius each.
 
 ## Post-processing and export
 
@@ -247,12 +256,12 @@ shows what agrees with independent references and how well.
   minimum bounding rectangle; `foundation_outline="polygon"` follows the
   outline (ring-style specs only). Outlines smaller than 1 m are widened
   with a warning. Every `building=*` object is a footprint unless excluded
-  with `exclude_building_tags`. A rectangle is one owner per side (user
-  decision Q38), a building outline one owner: a rectangular outline reads
-  like the single owner did, above the same rectangle given by its size
-  (6.8e-6 for 10 m × 8 m with the default engine, 6.5e-6 with the point
-  kernel; up to 0.33 % bare in homogeneous soil and 1.55 % in 0.2 m of wet
-  concrete for narrow ones). The connection point of a rectangular
+  with `exclude_building_tags`. A rectangle is one owner per side (user decision Q38) and so is a building
+  outline (one owner per straight side, user decisions Q30 and Q44): a
+  rectangular outline equals the same rectangle given by its size. The
+  twelve outlines of the tutorial T06 layout moved by at most −0.004 % each
+  with that decision, the layout with an AP1-like station by
+  −0.03 … −0.40 %. The connection point of a rectangular
   foundation is the start of its local −y side, a corner (also at multiples
   of 90°, which are exact rotations), that of an outline its first vertex;
   conductors attached by name and `anchor="connection_point"` use it. The
@@ -271,20 +280,23 @@ shows what agrees with independent references and how well.
   section keeps its route; a foundation that touches the end node of its
   cable from beyond is tapped 1 cm before the node and its drop shares that
   1 cm).
-  Drops are not routed around foundations: since the contact lies at the
-  corner of the side facing the cable, a drop to a house behind others of its
-  grid column runs 0.2 m above their side wires (PEN 0.6 m, foundations
-  0.8 m) — in the default grids of 10 to 200 houses 0 … 80 % of the drops
-  (star, 30 mesh houses: 14 of 25 drops, 150 m, up to 40 m over 4 houses;
-  150 houses: 70 of 141, 2 450 m, up to 65 m over 7 houses; radial 150: 69 of
-  140, 1 595 m). The field model has no inductive coupling between a drop and
-  an electrode (electrodes carry no current along themselves); a bare PEN
-  couples through the soil. Moved 1 m aside as a whole, those drops change
-  |Z| by at most 0.02 % with an insulated PEN (0 with the default resistive
-  one) and by up to −0.30 % with a bare one (default grids of 30 and 150
-  houses, 50 Hz and 1 kHz, `carson_series` and `sommerfeld`); a built detour
-  around them adds its own length (insulated Neumann PEN, 30-house grids:
-  reactance up to +1.0 % at 50 Hz and +0.7 % at 1 kHz, |Z| up to +0.23 %). With an isolated PEN the end of a
+  Drops keep the shortest connection and are not routed around foundations (user
+  decision Q42): since the contact lies at the corner of the side facing the
+  cable, a drop to a house behind another runs 0.2 m above that house's side wire
+  (PEN 0.6 m, foundations 0.8 m) — with the cabinets per building group 0 … 100 %
+  of the drops of the default grids of 10 to 200 houses (star, 30 houses: all 20
+  drops, 5 m each over the middle-row house next to the main, 100 m; star 50, 150,
+  200: none; radial 150: 87 of 140, 1 805 m). The field model has no inductive
+  coupling between a drop and an electrode; a bare PEN couples through the soil.
+  Moved 1 m aside as a whole, those drops change |Z| by at most 0.006 % with an
+  insulated PEN and by up to −0.40 % with a bare one (default grids of 30 and 150
+  houses, 50 Hz and 1 kHz, `carson_series` and `sommerfeld`). Every site with a
+  horizontal earth electrode — foundation, `RingElectrodeSpec` circle, strip — is
+  met at its nearest point (Q41, Q43); only sites with rods alone keep the head
+  of their first rod. A house whose horizontal electrode touches or crosses the
+  substation's (e.g. 10 m houses 5 m from the default 4 m ring) cannot be fed
+  (a drop of no length; the generator raises and names both sites). The following values were measured before user decisions
+  Q22, Q35 and Q43 (see the release notes for the change they bring): with an isolated PEN the end of a
   drop changes the resistive model only through its length (radial default
   grid with 2 ring houses, 50 Hz: −0.025 %); the joints and the star
   reassignment of user decision Q41 move it by −0.12 … +0.13 % (star 50
@@ -299,16 +311,21 @@ shows what agrees with independent references and how well.
   0.15.0 (12 m × 8 m ring houses +5.7 … +14.0 %; default 10 m ring houses:
   star +1.2 … +2.1 % for the 30-house network — the networks of 1 … 5 houses
   have no drop, all on the main, and move by +0.6 … +10.4 % through the joint
-  and the Q38 owner —, radial −10.8 … −1.1 %). Sites without a foundation —
-  rods, `RingElectrodeSpec` circles and strips, among them the default
-  substations of both generators — keep the connection point of their
-  anchor. In the layout builder a corner of a cable that lies inside a site
-  foundation (a small cabinet ring on a router corner) stays a node of the
-  cable, and houses may tap it there: in 200 random layouts with a 2 m
-  cabinet ring 82 of 2 540 drops start inside the ring (audit R6A-01; also
-  before user decision Q41). `LvNetworkLayout.plot(world=...)` draws the
+  and the Q38 owner —, radial −10.8 … −1.1 %). `LvNetworkLayout.plot(world=...)` draws the
   drops as built; without a world it draws the layout's stubs (centroid to
   tap).
+- **Cabinets per building group.** The star topology groups the buildings by
+  bearing around the substation (equal sizes, from the widest gap) and puts each
+  cabinet on the ray through its group's centroid, 1 m beyond the group; a group
+  that spans a wide angle (three cabinets for the 50-house grid) has drops up to
+  113 m to its outer houses, a single group around the substation (one cabinet for
+  a row through it) has its cabinet on one side only, the houses of the other side
+  fed from the substation. The houses share their group's main (a tree): with an
+  inductive PEN the network reactance at 1 kHz is +55 … +64 % (default star 30
+  houses, `sommerfeld` / `carson_series`) above the former cabinet strip with its
+  parallel drops; results of default `TnNetworkGenerator` networks therefore depend
+  on this topology choice, which a given `CabinetConfig.placement` can replace.
+  Planning 8 000 default star houses takes 14.6 s (6.9 s with the former strip).
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a
   modelling choice, not a measured value.

@@ -58,8 +58,10 @@ a site are never encased.
 
 Owners of a foundation
 ----------------------
-The image family solves for one uniform leakage current per electrode
-(an *owner*). A foundation's owners depend only on its structure — never
+The image family solves for one uniform leakage current per straight wire
+of an electrode (an *owner*; since user decisions Q30/Q44 also inside a
+grid, star or polyline electrode, whose collinear consecutive edges form one
+wire). A foundation's owners depend only on its structure — never
 on its orientation, on whether a shell is configured (audit A2G-04, review
 finding 10.39) or on ``concrete_model`` (user decision Q38):
 
@@ -96,9 +98,10 @@ finding 10.39) or on ``concrete_model`` (user decision Q38):
   the default shell; the single owner was up to 2.2 % high (audits D3B-01,
   R4B-05;
   at the largest decreases above 0.23 … 0.90 % against 0.55 … 2.16 %);
-* a building outline (``polygon_xy_m``) is one closed polyline, one
-  owner; a rectangular outline therefore reads like the single owner of a
-  rectangle did, above the same rectangle given by its size.
+* a building outline (``polygon_xy_m``) is one closed polyline, which the
+  image family solves as one owner per straight side since user decisions
+  Q30/Q44 (up to then one owner for the whole outline); a rectangular
+  outline therefore equals the same rectangle given by its size.
 
 A foundation of several wires is bonded to its first wire, the anchor:
 the local :math:`-y` side of a rectangle, which starts at the local
@@ -489,7 +492,7 @@ def _materialise_polygon_foundation(
     depth: float,
     name: str,
 ) -> None:
-    """Foundation along the building outline (one closed polyline)."""
+    """Foundation along the building outline (one closed polyline, solved as one owner per straight side, user decisions Q30/Q44)."""
     cx, cy = centre_xy
     verts = clean_polygon(spec.polygon_xy_m, min_edge_m=MIN_POLYGON_EDGE_M)
     if len(verts) < 3:

@@ -214,7 +214,8 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     with the default value; per side its input impedance is lower by less
     than 1 % up to aspect ratio 4 and 2 % up to 50 for a short side of at
     least 1 m, and equal for a square (see :attr:`concrete_model` for the
-    scope). A ``polygon_xy_m`` outline is one closed polyline (one owner).
+    scope). A ``polygon_xy_m`` outline is one closed polyline, solved as
+    one owner per straight side (user decisions Q30/Q44).
 
     The first wire of a rectangle (the anchor, named after the foundation)
     is its local :math:`-y` side; its connection point, where conductors
@@ -375,7 +376,8 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "5 cm shell by less than 0.4 % and 1 % (audit R2B-01). Rectangles "
             "rotated by an angle other than a multiple of 90 degrees, meshes "
             "with cross-braces (one owner per wire) and polygon outlines (one "
-            "closed wire) did not change. Against one current per segment one "
+            "closed wire, one owner per straight side since user decisions "
+            "Q30/Q44) did not change. Against one current per segment one "
             "owner per side is at most 1.4 % high over that scope (audit "
             "D3B-01), the single owner up to 2.2 %. Up to 0.15.0 "
             "the lumped shell was a registry entry that only the TN "
