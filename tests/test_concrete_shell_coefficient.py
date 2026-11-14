@@ -66,16 +66,40 @@ def _world(kind: str, coefficient: float, soil=None) -> gf.World:
     ids=["homogeneous", "two_layer"],
 )
 def test_every_electrode_kind_carries_the_shell(kind, soil) -> None:
-    """The image family adds exactly ``C / L`` to a single-owner electrode."""
+    """The image family adds exactly ``C / L`` to a single-owner electrode.
+
+    A rod and a ring are one owner. A grid was one owner up to the user
+    decision Q30 of 2026.11 (rebuilt here with the solver's private
+    comparison switch); since then each wire line is an owner of its own,
+    all bonded: the shell adds ``C / L_w`` to the potential of wire ``w``,
+    which is at least ``C / L`` for the grid (equal for a current in
+    proportion to the wire lengths, Cauchy-Schwarz) and more where the
+    current crowds to the outer wires (+1.5 ... +3.5 % for these grids).
+    """
+    from groundfield.solver._discretize import _one_owner_per_wire_off
+
     engine = gf.create_engine(backend="image", segment_length=0.5)
     impedance = {}
-    for coefficient in (0.0, _C):
-        world = _world(kind, coefficient, soil)
-        gf.create_source(world, attached_to="e", magnitude=1.0)
-        impedance[coefficient] = engine.solve(world).cluster_impedance("e")[0]
+    for one_owner in (True, False):
+        for coefficient in (0.0, _C):
+            world = _world(kind, coefficient, soil)
+            gf.create_source(world, attached_to="e", magnitude=1.0)
+            if one_owner:
+                with _one_owner_per_wire_off():
+                    res = engine.solve(world)
+            else:
+                res = engine.solve(world)
+            impedance[one_owner, coefficient] = res.cluster_impedance("e")[0]
     electrode = _world(kind, _C, soil).electrodes[0]
     shell = _C / electrode.total_length()
-    assert impedance[_C].real - impedance[0.0].real == pytest.approx(shell, rel=1e-9)
+    one = impedance[True, _C].real - impedance[True, 0.0].real
+    assert one == pytest.approx(shell, rel=1e-9)
+    # user decision Q30
+    split = impedance[False, _C].real - impedance[False, 0.0].real
+    if kind in ("rod", "ring"):
+        assert split == pytest.approx(shell, rel=1e-9)
+    else:
+        assert shell * (1.0 + 1e-3) < split < shell * 1.05
     assert shell_resistance_from_coefficient(electrode) == pytest.approx(
         shell, rel=1e-15
     )
@@ -87,23 +111,50 @@ def test_mutual_matrix_consumes_the_shell(kind) -> None:
     """``solve_mutual_matrix`` sees the shell of every electrode kind.
 
     The diagonal grows by ``C / L``; with one owner per cluster the
-    off-diagonal reaction does not change.
+    off-diagonal reaction does not change. The rectangular polyline is one
+    owner per side since the user decision Q30 (its one owner of the
+    releases before is rebuilt with the private comparison switch): the
+    sides share the current a little differently with the shell, the
+    diagonal grows by 7e-5 more than ``C / L``, the off-diagonal and, since
+    the passive polyline floats with equalising currents between its sides,
+    the far rod's diagonal move by at most 2e-4.
     """
+    from groundfield.solver._discretize import _one_owner_per_wire_off
+
     soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=100.0, h_1=5.0)
     engine = gf.create_engine(backend="image", segment_length=1.0)
     Z = {}
-    for coefficient in (0.0, _C):
-        world = _world(kind, coefficient, soil)
-        gf.create_electrode(
-            world, "rod", name="far", position=(30.0, 0.0, 0.5), length=3.0
-        )
-        Z[coefficient] = gf.solve_mutual_matrix(world, engine, ["e", "far"])
+    for one_owner in (True, False):
+        for coefficient in (0.0, _C):
+            world = _world(kind, coefficient, soil)
+            gf.create_electrode(
+                world, "rod", name="far", position=(30.0, 0.0, 0.5), length=3.0
+            )
+            if one_owner:
+                with _one_owner_per_wire_off():
+                    Z[one_owner, coefficient] = gf.solve_mutual_matrix(
+                        world, engine, ["e", "far"]
+                    )
+            else:
+                Z[one_owner, coefficient] = gf.solve_mutual_matrix(
+                    world, engine, ["e", "far"]
+                )
     electrode = _world(kind, _C, soil).electrodes[0]
-    assert Z[_C][0, 0].real - Z[0.0][0, 0].real == pytest.approx(
-        _C / electrode.total_length(), rel=1e-9
+    shell = _C / electrode.total_length()
+    assert Z[True, _C][0, 0].real - Z[True, 0.0][0, 0].real == pytest.approx(
+        shell, rel=1e-9
     )
-    np.testing.assert_allclose(Z[_C][0, 1], Z[0.0][0, 1], rtol=1e-12)
-    np.testing.assert_allclose(Z[_C][1, 1], Z[0.0][1, 1], rtol=1e-12)
+    np.testing.assert_allclose(Z[True, _C][0, 1], Z[True, 0.0][0, 1], rtol=1e-12)
+    np.testing.assert_allclose(Z[True, _C][1, 1], Z[True, 0.0][1, 1], rtol=1e-12)
+    # user decision Q30
+    split = Z[False, _C][0, 0].real - Z[False, 0.0][0, 0].real
+    rtol = 1e-9 if kind != "polyline" else 1e-3
+    assert split == pytest.approx(shell, rel=rtol)
+    assert split >= shell * (1.0 - 1e-12)
+    np.testing.assert_allclose(Z[False, _C][0, 1], Z[False, 0.0][0, 1], rtol=rtol)
+    # the passive polyline floats with equalising currents between its
+    # sides, which the shell changes: the far rod moves by 2e-4
+    np.testing.assert_allclose(Z[False, _C][1, 1], Z[False, 0.0][1, 1], rtol=rtol)
 
 
 @pytest.mark.finding("10.12")
