@@ -105,9 +105,11 @@ matrix: its diagonal rises because the lumped shell now reaches
 sites. Since user decision Q38 its two square rings are one owner per side
 as well, so the passive one carries equalising currents among its sides:
 the matrix moves by a further 5.2e-4, and the field at the edges of the
-passive foundation by +5.9 / −5.1 % (golden engine, point kernel; +5.5 /
-−4.7 % with the default line kernel), 1.6 % of the largest value of the
-case's field (the norm-wise measure of the golden harness; audit D3B-02).
+passive foundation by +5.5 / −4.7 % (the default line kernel at 2 m and
+1 m segments, the point kernel at 1 m; the golden engine's point kernel at
+2 m segments gives +5.9 / −5.1 %, an effect of the coarse segments, not of
+the kernel; audit R4B-13), 1.6 % of the largest value of the case's field
+(the norm-wise measure of the golden harness; audit D3B-02).
 
 ## Cross-braces of mesh foundations
 
@@ -300,7 +302,8 @@ solution agrees to 0.001 points). Over the whole scope (audit D3B-01: 80
 rectangles with short sides of 1 to 150 m, the 39 AP1 soils, bare and with
 5 cm and 0.2 m shells, 61 values of $\rho_c$, 9 360 segment matrices;
 segments of 0.5 m up to sides of 50 m, 1 m beyond) one owner per side is at
-most 1.4 % high, the single owner up to 2.1 %, and one current per segment
+most 1.4 % high, the single owner up to 2.2 % (2.16 % for 16 m × 1 m),
+and one current per segment
 is never above one owner per side nor one owner per side above one owner:
 
 | Scope (short side ≥ 1 m) | aspect ratio ≤ 4, sides ≤ 80 m | aspect ratio ≤ 50, sides ≤ 150 m |
@@ -310,7 +313,9 @@ is never above one owner per side nor one owner per side above one owner:
 | bare or shell up to 0.2 m, $\rho_c$ = 30 … 1 000 Ω·m | +0.253 % (6 m × 1.5 m, 0.2 m of 30 Ω·m, 1 000 / 30 Ω·m, $h_1$ = 5 m) | +1.347 % (150 m × 3 m, 0.2 m of 30 Ω·m) |
 
 The largest values sit at the corner of the scope, the longest and
-narrowest rectangle (150 m × 2.9 m: +1.335 %, 125 m × 2.5 m: +1.323 %);
+narrowest rectangle (145 m × 2.9 m: +1.335 %, 125 m × 2.5 m: +1.323 %;
+150 m × 2.9 m, aspect ratio 51.7 and so outside the scope, +1.350 %, audit
+R4B-06);
 narrower ones than the scope allows lie higher (150 m × 1 m: +1.65 %,
 audit D3B). The independent boundary-element solution of audit D3B gives
 the same bare and 5 cm values to 0.001 points, at the scan's segments and

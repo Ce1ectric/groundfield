@@ -471,7 +471,9 @@ side for both values; audit D3B-04). Rationale: of the two owner models,
 one per side is the closer one to one current per segment (at the largest
 decreases of the scope 0.23 … 0.90 % high against 0.55 … 2.16 % for one
 owner; over the whole scope at most 1.4 % high, 150 m × 3 m bare in 30 /
-200 Ω·m, against up to 2.1 %, audit D3B-01), it does not depend on the
+200 Ω·m, against up to 2.2 % — 2.16 % for 16 m × 1 m in a 0.2 m shell of
+30 Ω·m over 1 000 / 30 Ω·m at 0.25 m segments, audits D3B-01, R4B-05), it
+does not depend on the
 orientation, and it is what rotated rectangles and, wire by wire, meshes
 already were. Polygon outlines (one closed polyline), meshes with
 cross-braces and `RingElectrodeSpec` circles are unchanged.
@@ -510,9 +512,11 @@ Consequences: the AP1 station (4 m × 4 m ring with three rods) changes by
 −0.0009 … −0.0026 % over the 39 AP1 soils, its houses (building outlines)
 not at all; the golden case `mutual_foundations_lumped_concrete` equals
 `mutual_foundations_distributed_concrete` (its passive foundation carries
-equalising currents: $Z_G$ 5.2e-4; the field at its edges +5.9 / −5.1 %,
-1.6 % of the largest value of the case's field, the golden harness's
-norm-wise measure, audit D3B-02). The
+equalising currents: $Z_G$ 5.2e-4; the field at its edges +5.5 / −4.7 %
+— +5.9 / −5.1 % with the golden engine's 2 m segments and the point
+kernel, a segmentation effect (audit R4B-13) —, 1.6 % of the largest value
+of the case's field, the golden harness's norm-wise measure, audit
+D3B-02). The
 electrode named after the foundation is the $-y$ side, so its current and
 `grounding_impedance` refer to that side (as for rotated rectangles and
 meshes); cluster quantities (`cluster_impedance`, `input_impedance`,

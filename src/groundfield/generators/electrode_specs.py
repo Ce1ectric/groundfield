@@ -377,7 +377,7 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "with cross-braces (one owner per wire) and polygon outlines (one "
             "closed wire) did not change. Against one current per segment one "
             "owner per side is at most 1.4 % high over that scope (audit "
-            "D3B-01), the single owner was up to 2.1 %. Up to 0.15.0 "
+            "D3B-01), the single owner up to 2.2 %. Up to 0.15.0 "
             "the lumped shell was a registry entry that only the TN "
             "generator's PEN service drops read (review findings 10.12-10.14)."
         ),

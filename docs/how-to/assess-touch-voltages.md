@@ -139,8 +139,10 @@ foundation of the generators since 2026.11 — the start of its local −y
 side, the electrode named after the foundation (meshes since audit A2G-04,
 rectangles without cross-braces since user decision Q38) — so the circle
 goes round that corner: 100 A into a generated 20 m × 5 m ring at 0.8 m in
-100 Ω·m give 229.71 V there against 159.61 V round its centre (audit
-D3A-03). Keep the default for generated foundations.
+100 Ω·m give 229.71 V there against 161.76 V round its centre (default
+engine, 0.5 m segments; 0.15.0, round the centre of one grid mesh:
+156.07 V; audits D3A-03, R4B-09). Keep the default for generated
+foundations.
 
 ## Compare with the permissible touch voltage
 

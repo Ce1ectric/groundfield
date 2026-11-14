@@ -93,7 +93,8 @@ finding 10.39) or on ``concrete_model`` (user decision Q38):
   owner per side is at most 1.4 % high over that scope (+1.34 % for
   150 m × 3 m, bare, in 30 over 200 Ω·m with :math:`h_1` = 5 m; +1.35 %
   in a 0.2 m shell) and at most 0.25 % up to aspect ratio 4 bare or with
-  the default shell; the single owner was up to 2.1 % high (audit D3B-01;
+  the default shell; the single owner was up to 2.2 % high (audits D3B-01,
+  R4B-05;
   at the largest decreases above 0.23 … 0.90 % against 0.55 … 2.16 %);
 * a building outline (``polygon_xy_m``) is one closed polyline, one
   owner; a rectangular outline therefore reads like the single owner of a
