@@ -259,8 +259,15 @@ BENCHMARKS: dict[str, Benchmark] = {
         case="grid 40 × 40 m, 4 × 4 meshes, z = 0.8 m, 2L(1000, 30, 5), ds ∈ {5, 2.5, 1.25} m",
         reference="the backend itself at ds / 2 (convergence contract)",
         bounds={
+            # user decision Q30: one owner per wire line moves the coarse
+            # step of the point kernel from 0.43 % to 0.54 % (evidence w1sol
+            # b11_refinement.out; the default line kernel 0.12 % / 0.09 %).
             "image_2layer": Bound(
-                5e-3, "abs(Z(ds)/Z(ds/2) - 1)", "0.43 % / 0.39 %", "not monotone"
+                6e-3,
+                "abs(Z(ds)/Z(ds/2) - 1)",
+                "0.54 % / 0.35 %",
+                "not monotone (point kernel); 0.43 % / 0.39 % with one owner "
+                "for the grid before user decision Q30",
             ),
             "mom": Bound(1e-2, "abs(Z(ds)/Z(ds/2) - 1)", "0.86 % / 0.14 %"),
             "mom_sommerfeld": Bound(

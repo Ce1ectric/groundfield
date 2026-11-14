@@ -268,7 +268,8 @@ world above the limit (its problem is the mesh of each driven cluster).
 
 `gf.UniformCurrentFieldWarning`. **Emitted** by the touch- and
 step-voltage functions when a result of the image family (one uniform
-current per electrode) is evaluated near a grid, mesh, star, strip end,
+current per straight wire of an electrode) is evaluated near a grid, mesh,
+star, strip end,
 open polyline or bonded multi-electrode cluster, where the real current
 crowds to edges and tips; the field values there are impedance-grade,
 not field-grade. **Remedy:** re-solve with `backend="mom"` for those

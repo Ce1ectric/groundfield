@@ -79,7 +79,8 @@ see the [quickstart](../../getting-started/quickstart.md)). Two families:
   to check (a fit above 5 % warns with `RhoFStandardQualityWarning`).
 
 **Validity.** Quasi-static range $f < 1\,\mathrm{kHz}$. The image family
-assumes a uniform current per unit length on each electrode: near grids,
+assumes a uniform current per unit length on each straight wire of an
+electrode (user decision Q30): near grids,
 meshes, stars, strip ends and bonded multi-electrode clusters its surface
 potentials are impedance-grade, not field-grade, and the safety helpers
 warn with `UniformCurrentFieldWarning` (re-solve with `backend="mom"` for

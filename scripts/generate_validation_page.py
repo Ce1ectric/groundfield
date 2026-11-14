@@ -852,7 +852,9 @@ def render_page(data: dict[str, Any]) -> str:
     w("")
     w(
         "The image family assumes a uniform current per unit length on each "
-        "electrode. For that model the resistance of a straight wire and of a "
+        "straight wire of an electrode (a wire line of a grid, an arm of a "
+        "star, a straight run of a polyline; user decision Q30 of 2026.11). "
+        "For that model the resistance of a straight wire and of a "
         "ring has a closed form, so the error of the **kernel** can be separated "
         "from the error of the **ansatz**. Signed deviation from the exact "
         'uniform-current resistance (`kernel="line"` is the default since '

@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
  "environment": {
-  "date": "2026-11-08",
+  "date": "2026-11-14",
   "groundfield": "2026.11.0",
   "python": "3.12.3",
   "numpy": "2.5.4",
@@ -686,15 +686,15 @@
    "benchmark": "B11",
    "backend": "image_2layer",
    "case": "5->2.5",
-   "value": 0.004254291970106294,
-   "bound": 0.005
+   "value": 0.005410918857084779,
+   "bound": 0.006
   },
   {
    "benchmark": "B11",
    "backend": "image_2layer",
    "case": "2.5->1.25",
-   "value": 0.0039225696436669955,
-   "bound": 0.005
+   "value": 0.0035142524763910332,
+   "bound": 0.006
   },
   {
    "benchmark": "B11",
@@ -978,19 +978,19 @@
    "case": "grid",
    "backend": "image",
    "kernel": "point",
-   "impedance": 2.424798026939432,
-   "touch": 1.1151574948858243,
-   "step": 0.2647471393294094,
-   "mesh": 0.6337670360741625
+   "impedance": 2.360637556335385,
+   "touch": 0.9855577829068709,
+   "step": 0.3255504597163674,
+   "mesh": 0.5628983768695315
   },
   {
    "case": "grid",
    "backend": "image",
    "kernel": "line",
-   "impedance": 2.43777529392987,
-   "touch": 1.1272888743364722,
-   "step": 0.2641775094611709,
-   "mesh": 0.6469565465048734
+   "impedance": 2.3735077507592943,
+   "touch": 0.9976063342312973,
+   "step": 0.32447990707576646,
+   "mesh": 0.5760509776319045
   },
   {
    "case": "grid",
@@ -1005,8 +1005,8 @@
    "case": "star",
    "backend": "image",
    "kernel": "point",
-   "impedance": 5.561885931261593,
-   "touch": 3.7276582013177126,
+   "impedance": 5.561885931261594,
+   "touch": 3.7276582013177135,
    "step": 0.6093711453046802,
    "mesh": null
   },
@@ -1014,9 +1014,9 @@
    "case": "star",
    "backend": "image",
    "kernel": "line",
-   "impedance": 5.61035207800364,
-   "touch": 3.773246235774905,
-   "step": 0.6071802458971252,
+   "impedance": 5.610352078003639,
+   "touch": 3.773246235774904,
+   "step": 0.6071802458971256,
    "mesh": null
   },
   {

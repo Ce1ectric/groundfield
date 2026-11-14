@@ -28,7 +28,7 @@ they evaluate $G$ and which current ansatz they use:
 
 | Backend | Green's function | Current ansatz |
 |---|---|---|
-| `image` | free space + surface image, closed form | uniform current per unit length on each electrode (one unknown per electrode and soil layer); exact line-source kernel by default |
+| `image` | free space + surface image, closed form | uniform current per unit length on each straight wire of an electrode (one unknown per wire line of a grid, arm of a star, straight run of a polyline, and soil layer; user decision Q30); exact line-source kernel by default |
 | `image_2layer` | Tagg/Sunde image series, closed form; layered Sommerfeld correction for wires through the interface | as `image` |
 | `mom` | the same closed-form kernels | point matching: one unknown current per segment, midpoint point sources |
 | `mom_sommerfeld` | numerical Sommerfeld quadrature of the layered Green's function, any number of layers | as `mom` |

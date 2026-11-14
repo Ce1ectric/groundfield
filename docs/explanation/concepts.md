@@ -56,9 +56,9 @@ earth ([sources and measurement](sources-and-measurement.md)).
 - **Thin wires**: the wire radius is small against the segment length and
   the distance to other wires; the current flows on the axis, the
   potential is observed on the surface.
-- **Current model**: uniform leakage per unit length per electrode (and
-  layer) in the image family — impedance-grade, not field-grade near grids
-  and stars ([`image`](engines/image.md#field-quantities-and-the-uniform-current-ansatz));
+- **Current model**: uniform leakage per unit length per straight wire of
+  an electrode (and layer) in the image family — impedance-grade, not
+  field-grade near grids and stars ([`image`](engines/image.md#field-quantities-and-the-uniform-current-ansatz));
   one current per segment in the `mom` family.
 - **Remote earth** as the potential reference.
 - **Conductor impedance** from partial inductances and an earth-return
