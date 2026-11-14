@@ -83,6 +83,7 @@ from dataclasses import dataclass
 from groundfield.conductors.conductor import _IDEAL_RESISTANCE_THRESHOLD, Conductor
 from groundfield.generators._contact import (
     FoundationWire,
+    PreparedWires,
     closest_pair,
     join,
     nearest_point,
@@ -224,7 +225,12 @@ class PenRouter:
     ) -> None:
         self.root = root
         self.xy = {name: (float(x), float(y)) for name, (x, y) in node_xy.items()}
-        self.wires = {name: list(w) for name, w in (wires or {}).items() if w}
+        # Prepared once per node: the closest-pair search runs twice per
+        # building (drop order and drop) and on every cable it may cross
+        # (audit R4A-06).
+        self.wires = {
+            name: PreparedWires.of(list(w)) for name, w in (wires or {}).items() if w
+        }
         self.depth_m = float(depth_m)
         self.conductor = conductor
         self.min_length = min_section_length(conductor)
@@ -236,6 +242,7 @@ class PenRouter:
         self._splits: dict[str, int] = {}
         # Buildings a cable runs through, joined to it by rule 4.
         self._joined: set[str] = set()
+        self._boxes: dict[str, tuple[float, float, float, float]] = {}
 
     # ------------------------------------------------------------------
     # Building the network
@@ -257,6 +264,16 @@ class PenRouter:
         if distance < self.min_length:
             raise self._coincide_error(end, start, distance)
         self._cables[name] = [_Section(name, a, b, "pen", name)]
+        # Plan bounding box of the cable: its sections stay on the straight
+        # line (a joint at a building's connection point lies within
+        # min_length of it, hence the margin).
+        m = self.min_length
+        self._boxes[name] = (
+            min(a.xy[0], b.xy[0]) - m,
+            min(a.xy[1], b.xy[1]) - m,
+            max(a.xy[0], b.xy[0]) + m,
+            max(a.xy[1], b.xy[1]) + m,
+        )
 
     def connect_drop(
         self,
@@ -365,29 +382,28 @@ class PenRouter:
         list of str
             The crossing cables, in the order of ``cables``.
         """
+        return [
+            cable
+            for cable in self._near(building, cables)
+            if self._is_joint(self._nearest_on_path(building, [cable], self.root))
+        ]
+
+    def _near(self, building: str, cables: Sequence[str]) -> list[str]:
+        """The cables of ``cables`` whose bounding box comes within
+        :attr:`min_length` of the building's: the others cannot pass through
+        it (a cheap filter, audit R4A-06)."""
         wires = self.wires.get(building)
         if wires is None:
-            points = [self.xy[building]]
+            bx0, by0 = bx1, by1 = self.xy[building]
         else:
-            points = [xy for wire in wires for xy in wire.xy]
-        pad = self.min_length
-        x0 = min(p[0] for p in points) - pad
-        x1 = max(p[0] for p in points) + pad
-        y0 = min(p[1] for p in points) - pad
-        y1 = max(p[1] for p in points) + pad
+            bx0, by0, bx1, by1 = wires[6]
+        pad = self.min_length * (1.0 + 1e-6) + 1e-9
         out = []
         for cable in cables:
-            ends = [
-                xy for sec in self._cables[cable] for xy in (sec.start.xy, sec.end.xy)
-            ]
-            if (
-                max(p[0] for p in ends) < x0
-                or min(p[0] for p in ends) > x1
-                or max(p[1] for p in ends) < y0
-                or min(p[1] for p in ends) > y1
+            x0, y0, x1, y1 = self._boxes[cable]
+            if not (
+                x1 < bx0 - pad or x0 > bx1 + pad or y1 < by0 - pad or y0 > by1 + pad
             ):
-                continue  # the bounding boxes do not meet
-            if self._is_joint(self._nearest_on_path(building, [cable], self.root)):
                 out.append(cable)
         return out
 
@@ -535,7 +551,9 @@ class PenRouter:
         if crossing and not self._is_joint(near):
             # Rule 4 for cables that do not feed the building (the trunks of
             # the radial topology): one that crosses it is joined there.
-            others = [cable for cable in crossing if cable not in cables]
+            others = self._near(
+                building, [cable for cable in crossing if cable not in cables]
+            )
             if others:
                 cross = self._nearest_on_path(building, others, origin)
                 if self._is_joint(cross):

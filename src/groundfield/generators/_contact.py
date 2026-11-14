@@ -46,6 +46,7 @@ __all__ = [
     "TIE_TOLERANCE_M",
     "Contact",
     "FoundationWire",
+    "PreparedWires",
     "closest_pair",
     "join",
     "nearest_point",
@@ -106,12 +107,42 @@ class Contact:
     z: float
 
 
+class PreparedWires(tuple):
+    """The straight pieces of a foundation's wires, computed once.
+
+    :func:`_wire_segments` of ``wires`` (starts, directions, wire indices,
+    arc offsets, lengths, owners) and the plan bounding box of the wires;
+    :func:`closest_pair` and :func:`nearest_point` accept it in place of
+    the wires (the PEN router prepares every building once, audit R4A-06).
+    """
+
+    __slots__ = ()
+
+    @classmethod
+    def of(cls, wires: Sequence[FoundationWire]) -> "PreparedWires":
+        """Prepare ``wires`` (a :class:`PreparedWires` stays as it is)."""
+        if isinstance(wires, PreparedWires):
+            return wires
+        parts = _wire_segments(wires)
+        a, d = parts[0], parts[1]
+        ends = np.concatenate([a, a + d])
+        box = (*ends.min(axis=0), *ends.max(axis=0))
+        return cls((*parts, tuple(float(v) for v in box), tuple(wires)))
+
+    @property
+    def wires(self) -> tuple[FoundationWire, ...]:
+        """The wires themselves."""
+        return self[7]
+
+
 def _wire_segments(
     wires: Sequence[FoundationWire],
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[FoundationWire]
 ]:
     """Segments of every wire: start, direction, wire index, arc offset, length."""
+    if isinstance(wires, PreparedWires):
+        return wires[:6]  # type: ignore[return-value]
     starts, dirs, index, arc0, length, owner = [], [], [], [], [], []
     for wire in wires:
         pts = np.asarray(wire.xy, dtype=float).reshape(-1, 2)
@@ -227,8 +258,11 @@ def closest_pair(
     """
     if not segments:
         raise ValueError("closest_pair needs at least one segment.")
-    a, d, index, arc0, length, owner = _wire_segments(wires)
-    seg = np.asarray(segments, dtype=float).reshape(-1, 2, 2)
+    prepared = PreparedWires.of(wires)
+    a, d, index, arc0, length, owner = _wire_segments(prepared)
+    seg_all = np.asarray(segments, dtype=float).reshape(-1, 2, 2)
+    keep = _candidate_segments(seg_all, prepared)
+    seg = seg_all[keep]
     pa = seg[:, 0, :][:, None, :]  # (n, 1, 2) cable segment start
     pd = (seg[:, 1, :] - seg[:, 0, :])[:, None, :]  # (n, 1, 2) direction
     wa = a[None, :, :]  # (1, m, 2) wire segment start
@@ -258,7 +292,7 @@ def closest_pair(
     # already (0, u_a or u_b); its distance is 0 up to round-off.
     arc = arc0[None, :, None] + u * length[None, :, None]
     idx = np.broadcast_to(index[None, :, None], u.shape)
-    order = np.broadcast_to(np.arange(n, dtype=float)[:, None, None], u.shape)
+    order = np.broadcast_to(keep.astype(float)[:, None, None], u.shape)
     flat = _pick(dist.ravel(), idx.ravel(), arc.ravel(), order.ravel())
     i, j, c = np.unravel_index(flat, u.shape)
     xy = q[i, j, c]
@@ -272,13 +306,43 @@ def closest_pair(
         distance=float(dist[i, j, c]),
         z=float(owner[j].z),
     )
-    return int(i), float(t[0]), contact
+    return int(keep[i]), float(t[0]), contact
+
+
+def _candidate_segments(seg: np.ndarray, wires: "PreparedWires") -> np.ndarray:
+    """Indices of the segments that can hold the closest pair (or a tie).
+
+    A segment whose bounding box is farther from the wires' bounding box
+    than an upper bound of the closest distance (the distance from the
+    wires' first vertex to the nearest segment), plus the tie tolerance,
+    holds no candidate of :func:`closest_pair`'s pick: leaving it out
+    changes nothing, and the candidates evaluated keep their values and
+    their order keys (audit R4A-06).
+    """
+    n = seg.shape[0]
+    if n <= 8:
+        return np.arange(n)
+    x0, y0, x1, y1 = wires[6]
+    first = wires[0][0]
+    dist, _ = _point_segment_distance(
+        first[None, :], seg[:, 0, :], seg[:, 1, :] - seg[:, 0, :]
+    )
+    bound = float(np.min(dist)) + TIE_TOLERANCE_M
+    lo = np.minimum(seg[:, 0, :], seg[:, 1, :])
+    hi = np.maximum(seg[:, 0, :], seg[:, 1, :])
+    gx = np.maximum(0.0, np.maximum(lo[:, 0] - x1, x0 - hi[:, 0]))
+    gy = np.maximum(0.0, np.maximum(lo[:, 1] - y1, y0 - hi[:, 1]))
+    # Margin: round-off of the gap and of the distances (relative 1e-12).
+    scale = 1e-12 * (1.0 + float(np.max(np.abs(seg))) + abs(x0) + abs(y1))
+    return np.flatnonzero(np.hypot(gx, gy) <= bound + scale)
 
 
 def wire_pieces(
     wires: Sequence[FoundationWire],
 ) -> tuple[list[tuple[tuple[float, float], tuple[float, float]]], list[str]]:
     """Straight pieces of ``wires`` in wire order, with the wire of each."""
+    if isinstance(wires, PreparedWires):
+        wires = wires.wires
     segments, owners = [], []
     for wire in wires:
         for a, b in zip(wire.xy[:-1], wire.xy[1:], strict=True):

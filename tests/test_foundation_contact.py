@@ -1045,3 +1045,41 @@ def test_a_contact_off_its_wire_or_on_a_rod_is_rejected() -> None:
         "end_contact": {"electrode": wire, "position_xy": (x + 0.006, y + 0.006)},
     }
     NetworkPlan.model_validate(data).to_world()
+
+
+# audit R4A-06
+def test_the_closest_pair_prefilter_changes_no_bit(monkeypatch) -> None:
+    """The bounding-box prefilter of the closest-pair search (planning time)
+    against the full search over every segment: identical index, parameter
+    and contact, bit for bit, for 400 random paths of 9 to 60 sections
+    (ties included: axis-aligned paths along the sides)."""
+    from groundfield.generators import _contact
+    from groundfield.generators._contact import FoundationWire, closest_pair
+
+    rng = np.random.default_rng(20261114)
+    cases = []
+    for k in range(400):
+        n = int(rng.integers(9, 61))
+        if k % 4 == 0:  # an axis-aligned path through and along a rectangle
+            xs = np.sort(rng.choice(np.arange(-80.0, 81.0, 2.5), n + 1, replace=False))
+            pts = np.stack([xs, np.full(n + 1, rng.choice([-5.0, 0.0, 6.0]))], axis=1)
+        else:
+            pts = np.cumsum(rng.uniform(-8, 8, (n + 1, 2)), axis=0)
+        segments = [
+            (tuple(a), tuple(b)) for a, b in zip(pts[:-1], pts[1:], strict=True)
+        ]
+        cx, cy = rng.uniform(-10, 10, 2)
+        dx, dy = rng.uniform(1, 12, 2)
+        corners = [(cx - dx / 2, cy - dy / 2), (cx + dx / 2, cy - dy / 2),
+                   (cx + dx / 2, cy + dy / 2), (cx - dx / 2, cy + dy / 2)]  # fmt: skip
+        wires = [
+            FoundationWire(f"w{j}", j, (corners[j], corners[(j + 1) % 4]), 0.8)
+            for j in range(4)
+        ]
+        cases.append((segments, wires))
+    fast = [closest_pair(s, w) for s, w in cases]
+    monkeypatch.setattr(
+        _contact, "_candidate_segments", lambda seg, wires: np.arange(seg.shape[0])
+    )
+    full = [closest_pair(s, w) for s, w in cases]
+    assert fast == full
