@@ -365,9 +365,13 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    houses it feeds — the buildings are cut into runs of consecutive
    bearings around the substation (from the widest angular gap, sizes
    differing by at most one, `StarCabinetTopology.group_buildings`), and
-   each cabinet stands on the ray through its group's centroid,
-   `CabinetConfig.end_clearance_m` (1 m) beyond the group's farthest point —
-   instead of on a fixed strip along the substation row (both cabinets of
+   each cabinet stands on the ray through its group's far-end building (the
+   largest projection on the direction of the group's centroid),
+   `CabinetConfig.end_clearance_m` (1 m) beyond that building's electrodes,
+   rods included, plus the plan extent of its own grounding, and raises
+   when it would come closer than that to another site (audits W1B-01,
+   W1B-02; the ray through the centroid missed every building of a group
+   of about 180°) — instead of on a fixed strip along the substation row (both cabinets of
    the default 30-house grid stood west of the substation, the eastern
    houses got drops of 3.5 … 106.5 m from it); a given
    `CabinetConfig.placement` keeps the former positions and the

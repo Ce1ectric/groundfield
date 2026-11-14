@@ -96,10 +96,20 @@ angular gap between two neighbouring bearings, and cut into as many runs
 of consecutive bearings as there are cabinets (`count_per_100_buildings`
 or `fixed_count`), of sizes that differ by at most one
 (`StarCabinetTopology.group_buildings`); the cabinet of a group stands on
-the ray from the substation through the group's centroid,
-`CabinetConfig.end_clearance_m` (1 m) beyond the farthest point of the
-group's buildings along that ray (the vertices of their horizontal
-electrodes), and feeds the group. In the default grid of 30 houses (three
+the ray from the substation through the group's far-end building — the
+one with the largest projection of its position on the direction of the
+group's centroid, ties to the one nearest to that direction —
+`CabinetConfig.end_clearance_m` (1 m, positive) beyond that building's
+earth electrodes along the ray (horizontal wires and rods) plus the plan
+extent of the cabinet's own grounding, and feeds the group (audits W1B-01,
+W1B-02). Through the centroid, as before, the ray of a group of about
+180° passed no building: 10 houses and one small commercial building had
+their cabinet 50.4 m from the nearest building (drops 527.4 m), now
+1.56 m (311.8 m). A cabinet whose electrodes would come closer than
+`end_clearance_m` to those of another site — a building of its own or of
+another group, the substation, another cabinet — raises a `ValueError`
+that names both (3 of 100 random layouts of 200 houses 12 m apart; none
+of the default grids and AP1 mixes). In the default grid of 30 houses (three
 rows of ten, 25 m × 30 m, the substation in the middle row) the groups
 are the western and the eastern half, with their cabinets at
 (−118.5, 0) m and (118.5, 0) m; each main runs along the middle row,

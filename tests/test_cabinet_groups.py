@@ -10,9 +10,12 @@ buildings are ordered by their bearing around the substation, starting
 after the widest angular gap, and cut into as many runs of consecutive
 bearings as there are cabinets, of sizes that differ by at most one; the
 cabinet of a group stands on the ray from the substation through the
-group's centroid, ``CabinetConfig.end_clearance_m`` (1 m) beyond the
-farthest point of the group's buildings along that ray, and feeds its
-group. A given ``CabinetConfig.placement`` keeps the former rule (every
+group's far-end building (the largest projection on the direction of the
+group's centroid), ``CabinetConfig.end_clearance_m`` (1 m) beyond that
+building's electrodes, rods included, and feeds its group; a cabinet that
+would come closer than that to another site raises (audits W1B-01, W1B-02;
+up to then the ray ran through the centroid, 1 m beyond the group's
+farthest foundation vertex). A given ``CabinetConfig.placement`` keeps the former rule (every
 building fed by its nearest cabinet). In ``RadialTrunkTopology`` a building
 in a substation slot that no trunk crosses taps its feeder's trunk instead
 of getting its own line from the substation.
@@ -35,10 +38,14 @@ import pytest
 import groundfield as gf
 from groundfield.generators import (
     CabinetConfig,
+    Discrete,
     ExplicitPlacement,
+    GroundingSystemSpec,
     HomogeneousSoilSpec,
     ManhattanGridPlacement,
     RadialTrunkTopology,
+    RingElectrodeSpec,
+    RodElectrodeSpec,
     StarCabinetTopology,
     TnNetworkConfig,
     TnNetworkGenerator,
@@ -136,9 +143,9 @@ def test_each_cabinet_feeds_its_group_from_the_far_end(n: int) -> None:
     """Default grids of 50 and 150 houses (3 and 8 cabinets): every
     building is fed by the main of its group's cabinet (a building that
     another main crosses by that main, user decision Q41); each cabinet
-    stands on the ray through its group's centroid, 1 m beyond the
-    farthest foundation vertex of the group along the ray (recomputed from
-    the built world's electrodes)."""
+    stands on the ray through its group's far-end building, 1 m beyond that
+    building's electrodes along the ray (recomputed from the built world's
+    electrodes; audit W1B-01)."""
     plan = _plan(building_counts={"residential": n})
     world = plan.to_world()
     buildings = [s for s in plan.sites if s.role == "building"]
@@ -152,6 +159,14 @@ def test_each_cabinet_feeds_its_group_from_the_far_end(n: int) -> None:
     for group, cab in zip(groups, cabinets, strict=True):
         own = f"pen_main_{cab.anchor}"
         for i in group:
+            if buildings[i].name not in feeding:
+                # A drop from the substation: the point of the group's main
+                # nearest to the house is the main's substation end (the
+                # closest-pair rule, user decision Q41).
+                _assert_nearest_point_is_the_substation_end(
+                    world, own, buildings[i].name
+                )
+                continue
             main = feeding[buildings[i].name]
             if main != own:
                 # Joined to another cabinet's main that crosses the house.
@@ -161,17 +176,38 @@ def test_each_cabinet_feeds_its_group_from_the_far_end(n: int) -> None:
                     if _cable(c.name) == main
                 )
                 crossed += 1
-        c = np.mean([buildings[i].position_xy for i in group], axis=0)
-        u = c / np.linalg.norm(c)
-        reach = max(
-            float(np.asarray(p[:2]) @ u)
-            for i in group
-            for e in world.electrodes
-            if _root(e.name) == buildings[i].name
-            for p in e.wire_polylines()[0]
-        )
-        assert cab.position_xy == pytest.approx(tuple((reach + 1.0) * u), abs=1e-9)
+    # The cabinet on the ray through its group's far-end building, 1 m
+    # beyond that building (audit W1B-01; up to then on the ray through the
+    # centroid, 1 m beyond the group's farthest foundation vertex).
+    expected = _expected_cabinet(plan, world)
+    for cab, (xy, far, _) in zip(cabinets, expected, strict=True):
+        assert cab.position_xy == pytest.approx(tuple(xy), abs=1e-9), far
     assert crossed <= n // 10
+
+
+def _assert_nearest_point_is_the_substation_end(
+    world: gf.World, main: str, house: str
+) -> None:
+    """The point of ``main`` nearest to the electrodes of ``house`` (2 mm
+    sampling of the house) is the main's start at the substation, within
+    one minimum section."""
+    from groundfield.generators._pen_routing import MIN_DROP_LENGTH_M
+
+    sections = [c for c in world.conductors if _cable(c.name) == main]
+    start = next(c for c in sections if _root(c.start_electrode) == "trafo")
+    points, _ = _site_samples(world, house)
+    best, foot = math.inf, None
+    for c in sections:
+        a, b = np.asarray(c.start[:2], float), np.asarray(c.end[:2], float)
+        d = b - a
+        t = np.clip((points - a) @ d / float(d @ d), 0.0, 1.0)
+        q = a + t[:, None] * d
+        dist = np.hypot(*(points - q).T)
+        k = int(np.argmin(dist))
+        if dist[k] < best:
+            best, foot = float(dist[k]), q[k]
+    assert foot is not None
+    assert math.dist(foot, start.start[:2]) <= MIN_DROP_LENGTH_M + 1e-3, (house, foot)
 
 
 # user decisions Q22, Q35
@@ -239,8 +275,9 @@ def test_more_cabinets_than_buildings_places_one_per_building() -> None:
 # user decisions Q22, Q35
 def test_random_layouts_are_reproducible_and_route_as_documented() -> None:
     """Explicit random positions (and a jittered grid): the same seed gives
-    the same world bit for bit, every building is connected, and no drop
-    runs along a cable."""
+    the same world bit for bit, every building is connected, the PEN is one
+    tree that feeds every house once (a drop, or joined to a main, never
+    both), and no drop runs along a cable."""
     rng = np.random.default_rng(35)
     for k in range(12):
         pts = [tuple(p) for p in rng.uniform(-150.0, 150.0, (40, 2))]
@@ -272,6 +309,330 @@ def test_random_layouts_are_reproducible_and_route_as_documented() -> None:
             for d in _drops(a)
             if d.start_electrode.startswith("trafo")
         }
+        # audit W1B-08: the routing checks the docstring promises (the
+        # base 6f63deb passed this test without them).
+        _assert_one_tree_feeding_every_house_once(a, houses)
+        _assert_no_drop_runs_along_a_cable(a)
+
+
+def _pen_node(name: str) -> str:
+    """Node of the PEN graph: the site of an electrode, or a junction."""
+    return _root(name)
+
+
+def _assert_one_tree_feeding_every_house_once(world: gf.World, houses: set) -> None:
+    """The PEN conductors form one tree through the substation; every house
+    is a node of it, fed either by one drop or by being joined to a main."""
+    pen = [c for c in world.conductors if c.name.startswith("pen_")]
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for c in pen:
+        a, b = find(_pen_node(c.start_electrode)), find(_pen_node(c.end_electrode))
+        assert a != b, f"{c.name} closes a loop"
+        parent[a] = b
+    roots = {find(n) for n in list(parent)}
+    assert len(roots) == 1, "the PEN is not one tree"
+    assert houses <= set(parent) and "trafo" in parent
+    drops_to: dict[str, int] = {}
+    for d in _drops(world):
+        drops_to[_root(d.end_electrode)] = drops_to.get(_root(d.end_electrode), 0) + 1
+    joined = {
+        _root(e)
+        for c in pen
+        if c.name.startswith("pen_main_")
+        for e in (c.start_electrode, c.end_electrode)
+    }
+    for house in houses:
+        assert drops_to.get(house, 0) + (house in joined) == 1, house
+
+
+def _cross(a, b) -> float:
+    """z component of the cross product of two plan vectors."""
+    return float(a[0] * b[1] - a[1] * b[0])
+
+
+def _collinear_overlap(c1: gf.Conductor, c2: gf.Conductor, tol: float) -> float:
+    """Length in m over which two straight conductors run on one line."""
+    a, b = np.asarray(c1.start[:2], float), np.asarray(c1.end[:2], float)
+    p, q = np.asarray(c2.start[:2], float), np.asarray(c2.end[:2], float)
+    d = b - a
+    length = float(np.hypot(*d))
+    if length == 0.0:
+        return 0.0
+    u = d / length
+    off = [abs(_cross(u, x - a)) for x in (p, q)]
+    if max(off) > tol:
+        return 0.0
+    s = sorted(float((x - a) @ u) for x in (p, q))
+    return max(0.0, min(length, s[1]) - max(0.0, s[0]))
+
+
+def _assert_no_drop_runs_along_a_cable(world: gf.World) -> None:
+    """No drop shares more than one minimum section (1 cm) with a main
+    (audits R4A-02, R4B-01; the router's tolerance)."""
+    from groundfield.generators._pen_routing import MIN_DROP_LENGTH_M
+
+    mains = [c for c in world.conductors if c.name.startswith("pen_main_")]
+    for d in _drops(world):
+        shared = max(
+            (_collinear_overlap(d, c, MIN_DROP_LENGTH_M) for c in mains), default=0.0
+        )
+        assert shared <= MIN_DROP_LENGTH_M * (1 + 1e-6), (d.name, shared)
+
+
+# ---------------------------------------------------------------------
+# Wide groups and the clearance of the cabinet's electrodes (audit W1B)
+# ---------------------------------------------------------------------
+
+_SAMPLE_M = 0.002
+"""Sampling step in m of the independent geometry checks below."""
+
+
+def _site_samples(world: gf.World, root: str) -> tuple[np.ndarray, np.ndarray]:
+    """Plan geometry of a site's electrodes, independent of the generator:
+    points (rod heads and 2 mm samples of every wire and ring circle) and
+    the straight wire segments ``(n, 2, 2)``."""
+    points: list[np.ndarray] = []
+    segments: list[tuple] = []
+    for e in world.electrodes:
+        if _root(e.name) != root:
+            continue
+        if e.kind == "rod":
+            points.append(np.asarray([e.connection_point[:2]], dtype=float))
+        elif e.kind == "ring":
+            cx, cy, _ = e.center
+            n = max(64, math.ceil(2.0 * math.pi * e.radius / _SAMPLE_M))
+            t = np.linspace(0.0, 2.0 * math.pi, n, endpoint=False)
+            points.append(
+                np.column_stack([cx + e.radius * np.cos(t), cy + e.radius * np.sin(t)])
+            )
+        else:
+            for run in e.wire_polylines():
+                xy = np.asarray(run, dtype=float)[:, :2]
+                for a, b in zip(xy[:-1], xy[1:], strict=True):
+                    segments.append((a, b))
+                    n = max(2, math.ceil(float(np.hypot(*(b - a))) / _SAMPLE_M) + 1)
+                    points.append(a + np.linspace(0.0, 1.0, n)[:, None] * (b - a))
+    return (
+        np.concatenate(points) if points else np.zeros((0, 2)),
+        np.asarray(segments, dtype=float).reshape(-1, 2, 2),
+    )
+
+
+def _points_to_segments(points: np.ndarray, segments: np.ndarray) -> float:
+    """Smallest exact plan distance of ``points`` to ``segments``."""
+    best = math.inf
+    for a, b in segments:
+        d = b - a
+        dd = float(d @ d)
+        t = np.zeros(len(points)) if dd == 0.0 else (points - a) @ d / dd
+        t = np.clip(t, 0.0, 1.0)
+        best = min(best, float(np.min(np.hypot(*(points - (a + t[:, None] * d)).T))))
+    return best
+
+
+def _site_gap(world: gf.World, a: str, b: str) -> float:
+    """Plan distance in m between the electrodes of two sites (sampled to
+    within 1 mm)."""
+    pa, sa = _site_samples(world, a)
+    pb, sb = _site_samples(world, b)
+    gap = math.inf
+    if len(pa) and len(pb):
+        diff = pa[:, None, :] - pb[None, :, :] if len(pa) * len(pb) < 4e6 else None
+        if diff is not None:
+            gap = float(np.min(np.hypot(diff[..., 0], diff[..., 1])))
+    if len(sb):
+        gap = min(gap, _points_to_segments(pa, sb))
+    if len(sa):
+        gap = min(gap, _points_to_segments(pb, sa))
+    return gap
+
+
+def _reach(world: gf.World, root: str, v: np.ndarray) -> float:
+    """Largest projection in m on the unit vector ``v`` of a site's
+    electrodes in plan: wire vertices, ring circles (centre and radius),
+    rod heads."""
+    best = -math.inf
+    for e in world.electrodes:
+        if _root(e.name) != root:
+            continue
+        if e.kind == "rod":
+            best = max(best, float(np.asarray(e.connection_point[:2]) @ v))
+        elif e.kind == "ring":
+            best = max(best, float(np.asarray(e.center[:2]) @ v) + e.radius)
+        else:
+            for run in e.wire_polylines():
+                best = max(best, float(np.max(np.asarray(run)[:, :2] @ v)))
+    return best
+
+
+def _expected_cabinet(plan, world: gf.World, clearance: float = 1.0) -> list:
+    """Cabinet positions by the rule of audit W1B-01 / W1B-02, recomputed:
+    the group's direction is its centroid's; the far-end building has the
+    largest projection of its position on it (ties: nearest to the ray);
+    the cabinet stands on the ray through that building, ``clearance`` m
+    beyond the largest projection of that building's electrodes on the ray,
+    rods included (the default cabinet rod has no plan extent)."""
+    buildings = [s for s in plan.sites if s.role == "building"]
+    n = len([s for s in plan.sites if s.role == "cabinet"])
+    out = []
+    groups = StarCabinetTopology.group_buildings(
+        (0.0, 0.0), [b.position_xy for b in buildings], n
+    )
+    for group in groups:
+        pos = np.asarray([buildings[i].position_xy for i in group], dtype=float)
+        u = pos.mean(axis=0)
+        u = u / np.hypot(*u)
+        proj = pos @ u
+        ties = [k for k in range(len(group)) if proj[k] >= proj.max() - 1e-9]
+        far = min(ties, key=lambda k: (abs(_cross(u, pos[k])), k))
+        v = pos[far] / np.hypot(*pos[far])
+        reach = _reach(world, buildings[group[far]].name, v)
+        out.append(((reach + clearance) * v, buildings[group[far]].name, group))
+    return out
+
+
+# audit W1B-01; user decisions Q22, Q35
+@pytest.mark.parametrize(
+    "counts",
+    [
+        {"residential": 10, "small_industry": 1},
+        {"residential": 10, "medium_industry": 1},
+        {"residential": 5, "small_industry": 5, "medium_industry": 1},
+    ],
+)
+def test_the_cabinet_of_a_wide_group_stands_next_to_its_far_end_building(
+    counts: dict,
+) -> None:
+    """AP1 combinations with one group of about 180 degrees: the ray through
+    the group's centroid passed no building, and the base ``6f63deb`` put
+    the cabinet 50.4 m from the nearest one (10 houses + 1 small commercial:
+    drops 527.4 m, base strip 334.9 m). The cabinet stands on the ray through
+    the group's far-end building, 1 m beyond that building's electrodes
+    along the ray (recomputed from the built world), next to it."""
+    plan = _plan(building_counts=counts)
+    world = plan.to_world()
+    cabinets = [s for s in plan.sites if s.role == "cabinet"]
+    buildings = [s for s in plan.sites if s.role == "building"]
+    for cab, (xy, far, group) in zip(
+        cabinets, _expected_cabinet(plan, world), strict=True
+    ):
+        assert cab.position_xy == pytest.approx(tuple(xy), abs=1e-9), far
+        nearest = min(_site_gap(world, cab.name, buildings[i].name) for i in group)
+        assert 1.0 - 1e-3 <= nearest <= 2.0, (cab.name, nearest)
+        assert _site_gap(world, cab.name, far) == pytest.approx(nearest, abs=1e-3)
+
+
+# audit W1B-02; user decisions Q22, Q35
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(building_counts={"small_industry": 30}),
+        dict(building_counts={"residential": 20, "medium_industry": 10}),
+        dict(
+            building_counts={"residential": 30},
+            cabinets=CabinetConfig(
+                grounding=GroundingSystemSpec(
+                    electrodes=[RingElectrodeSpec(radius_m=2.0, depth_m=0.6)]
+                )
+            ),
+        ),
+        dict(
+            building_counts={"residential": 30},
+            cabinets=CabinetConfig(
+                grounding=GroundingSystemSpec(
+                    electrodes=[
+                        RingElectrodeSpec(radius_m=1.5, depth_m=0.6),
+                        RodElectrodeSpec(length_m=1.5, offset_xy_m=(2.5, 0.0)),
+                    ]
+                ),
+                end_clearance_m=2.0,
+            ),
+        ),
+    ],
+    ids=["small_industry-rod", "medium_industry-rods", "cabinet-ring-2m", "ring+rod"],
+)
+def test_the_cabinet_electrodes_keep_the_end_clearance_from_every_electrode(
+    kw: dict,
+) -> None:
+    """The clearance counts every electrode of the group, rods included, and
+    the plan extent of the cabinet's own grounding. Base ``6f63deb``: the
+    cabinet rod stood on the rod of ``small_industry_19`` at (119.5, 0) m
+    (0.000 m), a 2 m cabinet ring crossed the outer house's foundation.
+    Here the cabinet's electrodes keep ``end_clearance_m`` from every other
+    electrode of the world (2 mm sampling)."""
+    plan = _plan(**kw)
+    world = plan.to_world()
+    clearance = _plan_clearance(kw)
+    sites = {_root(e.name) for e in world.electrodes}
+    for cab in (s for s in sites if s.startswith("kvs_")):
+        gap = min(_site_gap(world, cab, other) for other in sites if other != cab)
+        assert gap >= clearance - 1e-3, (cab, gap)
+
+
+def _plan_clearance(kw: dict) -> float:
+    """``end_clearance_m`` of a test configuration."""
+    cabinets = kw.get("cabinets")
+    return 1.0 if cabinets is None else float(cabinets.end_clearance_m)
+
+
+# audit W1B-02; user decisions Q22, Q35
+def test_a_cabinet_that_cannot_keep_the_clearance_raises_naming_the_sites() -> None:
+    """Four houses, two cabinets: the far-end house of the first group stands
+    at 5 degrees, a house of the second group at 6.5 degrees 0.8 m beyond
+    where that group's cabinet would stand. The generator raises and names
+    the cabinet, its far-end building and the site in the way."""
+    positions = [
+        (40.0, 0.0),
+        (50.0 * math.cos(math.radians(5.0)), 50.0 * math.sin(math.radians(5.0))),
+        (62.0 * math.cos(math.radians(6.5)), 62.0 * math.sin(math.radians(6.5))),
+        (0.0, 60.0),
+    ]
+    cfg = TnNetworkConfig(
+        soil=HomogeneousSoilSpec(rho=100.0),
+        building_counts={"residential": 4},
+        placement=ExplicitPlacement(positions=positions),
+        cabinets=CabinetConfig(fixed_count=2),
+    )
+    with pytest.raises(ValueError, match=r"'kvs_0'.*'residential_1'.*'residential_2'"):
+        TnNetworkGenerator(cfg, seed=0).plan()
+
+
+# audit W1B-05; user decisions Q22, Q35
+@pytest.mark.parametrize("value", [-5.0, -0.5, 0.0, float("nan"), float("inf")])
+def test_a_non_positive_or_infinite_end_clearance_is_rejected(value: float) -> None:
+    """Base ``6f63deb``: -5 m put both cabinets of the default network at the
+    centres of the outer houses of the middle row, 0 m on a foundation wire,
+    NaN failed late in the rod constructor."""
+    with pytest.raises(ValueError, match="end_clearance_m"):
+        CabinetConfig(end_clearance_m=value)
+
+
+# audit W1B-05; user decisions Q22, Q35
+def test_a_drawn_end_clearance_must_be_positive() -> None:
+    """A distribution is checked where it is drawn."""
+    cfg = TnNetworkConfig(
+        cabinets=CabinetConfig(end_clearance_m=Discrete(values=[-1.0]))
+    )
+    with pytest.raises(ValueError, match="end_clearance_m.*-1"):
+        TnNetworkGenerator(cfg, seed=0).plan()
+    cfg = TnNetworkConfig(
+        cabinets=CabinetConfig(end_clearance_m=Discrete(values=[2.0]))
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        plan = TnNetworkGenerator(cfg, seed=0).plan()
+    assert [s.position_xy for s in plan.sites if s.role == "cabinet"] == [
+        (-119.5, 0.0),
+        (119.5, 0.0),
+    ]
 
 
 # ---------------------------------------------------------------------
