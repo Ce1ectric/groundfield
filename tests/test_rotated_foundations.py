@@ -19,6 +19,7 @@ mesh any more: both are one wire per line at every angle.
 from __future__ import annotations
 
 import json
+import math
 import warnings
 
 import numpy as np
@@ -166,24 +167,101 @@ def _world_electrodes(spec: FoundationElectrodeSpec) -> str:
     )
 
 
+def _edges(spec: FoundationElectrodeSpec) -> set[frozenset]:
+    """Every straight wire piece of the generated foundation, unordered."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    GroundingSystemSpec(electrodes=[spec]).build_at(
+        world, site_xy=(3.0, 4.0), name_prefix="h", rng=np.random.default_rng(0)
+    )
+    out = set()
+    for e in world.electrodes:
+        (run,) = e.wire_polylines()
+        for a, b in zip(run[:-1], run[1:], strict=True):
+            out.add(frozenset((tuple(a), tuple(b))))
+    return out
+
+
+def _anchor_start(spec: FoundationElectrodeSpec) -> tuple[float, float, float]:
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    anchor = GroundingSystemSpec(electrodes=[spec]).build_at(
+        world, site_xy=(0.0, 0.0), name_prefix="h", rng=np.random.default_rng(0)
+    )
+    return world.get_electrode(anchor).connection_point
+
+
+# user decision Q41 (item 5), audit D3B-04
 @pytest.mark.parametrize("style", ["mesh", "ring"])
-@pytest.mark.parametrize("angle", [90.0, -90.0])
-def test_foundation_at_right_angles_is_the_axis_aligned_one(
+@pytest.mark.parametrize("angle", [90.0, -90.0, 180.0, 270.0, 450.0])
+def test_foundation_at_right_angles_is_the_rotated_rectangle_without_round_off(
     angle: float, style: str
 ) -> None:
-    """Was ``test_foundation_at_right_angles_uses_the_grid_mesh_path`` (mesh
-    only); the ring case pins user decision Q38 (one strip per side at 90
-    deg, as at 0 deg; a grid mesh at both up to then)."""
+    """Up to the audit a multiple of 90 deg was realised as the 0-deg
+    rectangle with swapped sides: the same wires, but another side became
+    the anchor, so its connection point jumped (20 m x 5 m ring: (2.483,
+    -10.004) m at 89.9 deg, (-2.5, -10) m at 90 deg; 20.6 m between 179.9
+    and 180 deg). Now it is rotated with the exact cos / sin: the wires are
+    those of the swapped rectangle (to 1e-12 m, exactly for a ring), the
+    local -y side stays the anchor, and its start is continuous in the
+    angle."""
     turned = FoundationElectrodeSpec(
         size_xy_m=(10.0, 12.0), orientation_deg=angle, style=style, n_x=3, n_y=2
     )
-    straight = FoundationElectrodeSpec(
-        size_xy_m=(12.0, 10.0), style=style, n_x=2, n_y=3
+    swapped = FoundationElectrodeSpec(
+        size_xy_m=(12.0, 10.0) if angle % 180 else (10.0, 12.0),
+        style=style,
+        n_x=2 if angle % 180 else 3,
+        n_y=3 if angle % 180 else 2,
     )
-    assert _world_electrodes(turned) == _world_electrodes(straight)
+    a, b = _edges(turned), _edges(swapped)
     if style == "ring":
-        kinds = json.loads(_world_electrodes(straight))
-        assert [e["kind"] for e in kinds] == ["strip"] * 4
+        assert a == b
+    else:
+        assert len(a) == len(b)
+        rounded = {frozenset(tuple(np.round(p, 9)) for p in e) for e in a}
+        assert rounded == {frozenset(tuple(np.round(p, 9)) for p in e) for e in b}
+    near = FoundationElectrodeSpec(
+        size_xy_m=(10.0, 12.0), orientation_deg=angle - 1e-7, style=style, n_x=3, n_y=2
+    )
+    assert math.dist(_anchor_start(turned), _anchor_start(near)) < 1e-6
+
+
+# user decision Q41 (item 5), audit D3B-04
+@pytest.mark.parametrize(
+    ("angle", "start"),
+    [
+        (90.0, (2.5, -10.0)),
+        (180.0, (10.0, 2.5)),
+        (270.0, (-2.5, 10.0)),
+        (-90.0, (-2.5, 10.0)),
+    ],
+)
+def test_right_angle_coordinates_are_exact(angle: float, start: tuple) -> None:
+    """The anchor of a 20 m x 5 m ring starts exactly at the rotated local
+    (-10, -2.5) m corner; the other side ends agree without round-off."""
+    spec = FoundationElectrodeSpec(
+        style="ring", size_xy_m=(20.0, 5.0), depth_m=0.8, orientation_deg=angle
+    )
+    assert _anchor_start(spec) == (*start, 0.8)
+    corners = {p for e in _edges(spec) for p in e}
+    expected = {
+        (x + 3.0, y + 4.0, 0.8)
+        for x in (-10.0, 10.0, -2.5, 2.5)
+        for y in (-10.0, 10.0, -2.5, 2.5)
+    }
+    assert corners <= expected and len(corners) == 4
+
+
+# user decision Q41 (item 5)
+@pytest.mark.parametrize("style", ["mesh", "ring"])
+def test_right_angles_give_the_impedance_of_the_swapped_rectangle(style: str) -> None:
+    turned = FoundationElectrodeSpec(
+        size_xy_m=(10.0, 12.0), orientation_deg=90.0, style=style, n_x=3, n_y=2
+    )
+    swapped = FoundationElectrodeSpec(size_xy_m=(12.0, 10.0), style=style, n_x=2, n_y=3)
+    z_turned, clamps, _ = _solve(turned, 1.0)
+    z_swapped, _, _ = _solve(swapped, 1.0)
+    assert not clamps
+    assert z_turned == pytest.approx(z_swapped, rel=1e-12)
 
 
 def test_axis_aligned_footprint_square_gives_an_axis_aligned_foundation() -> None:

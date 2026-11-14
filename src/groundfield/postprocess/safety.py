@@ -482,8 +482,23 @@ def touch_voltage(
     anchor
         ``"footprint"`` (default since review pass 10, 10.21) measures
         ``distance`` from the nearest wire; ``"connection_point"``
-        reproduces v0.15.0 and measures it from
-        :attr:`connection_point` (the centre of a grid or star).
+        measures it from :attr:`connection_point` of ``electrode``, the
+        rule of v0.15.0. For a hand-built grid mesh or star that is its
+        centre, as in v0.15.0. A rectangular foundation of the generators
+        is since 2026.11 several bonded wires — one per mesh line (audit
+        A2G-04), one per side without cross-braces (user decision Q38) —
+        and the electrode named after it is its local :math:`-y` side,
+        whose connection point is a corner of the rectangle (in 0.15.0 one
+        grid mesh connected at its centre): the feet then stand around that
+        corner. For 100 A into a generated ring at 0.8 m in 100 Ω·m the
+        largest value on the circle (default engine, the same at 0.5 m and
+        0.25 m segments) is 270.89 V round the corner of a 10 m × 10 m ring
+        against 245.22 V round its centre, 229.71 against 159.61 V for
+        20 m × 5 m, 91.10 against 111.38 V for 30 m × 30 m and, in 5 cm of
+        150 Ω·m concrete, 134.24 against 119.32 V for 40 m × 10 m (audit
+        D3A-03). Use the default ``"footprint"`` for generated foundations;
+        it takes the whole foundation and does not depend on the
+        connection point.
 
     Returns
     -------
@@ -619,9 +634,11 @@ def touch_voltage_envelope(
 
     Notes
     -----
-    ``n = n_angles`` plus the number of interior points. To reproduce
-    v0.15.0 (circle around the connection point) pass
-    ``anchor="connection_point"``. During the 2026.11 development the
+    ``n = n_angles`` plus the number of interior points. The rule of
+    v0.15.0 (circle around the connection point) is
+    ``anchor="connection_point"``; for a generated rectangular foundation
+    that connection point is a corner since 2026.11, no longer the centre
+    (see ``anchor`` in :func:`touch_voltage`). During the 2026.11 development the
     mesh sampling was the default (``interior=None``); it is now the
     explicit ``interior="meshes"``.
     """

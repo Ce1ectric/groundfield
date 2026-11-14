@@ -223,37 +223,50 @@ def test_axis_aligned_mesh_foundation_is_one_owner_per_wire() -> None:
     assert kinds == ["polyline"] * 6
 
 
-def test_zero_orientation_uses_axis_aligned_path() -> None:
-    """``orientation_deg = 0.0`` builds the axis-aligned rectangle: one
-    strip per side along x and y, bonded to the anchor, as ``None`` does.
-    Up to user decision Q38 the default value made it one
-    ``GridMeshElectrode`` (the "fast path" this test pinned)."""
-    world = create_world(
-        name="zero_deg",
-        soil=TwoLayerSoil(rho_1=100.0, rho_2=50.0, h_1=2.0),
-    )
-    gs = GroundingSystemSpec(
-        electrodes=[
-            FoundationElectrodeSpec(
-                style="ring",
-                size_xy_m=(10.0, 6.0),
-                depth_m=0.8,
-                orientation_deg=0.0,
-            )
-        ],
-    )
-    gs.build_at(
-        world,
-        site_xy=(0.0, 0.0),
-        name_prefix="house",
-        rng=np.random.default_rng(0),
-    )
-    kinds = [e.kind for e in world.electrodes]
-    assert kinds == ["strip"] * 4
-    for e in world.electrodes:
-        (x0, y0, _), (x1, y1, _) = e.start, e.end
-        assert x0 == x1 or y0 == y1
-    assert world.electrodes[0].start == (-5.0, -3.0, 0.8)
+# audit D3A-05, user decision Q41 (item 5)
+@pytest.mark.parametrize("style", ["ring", "mesh"])
+def test_right_angles_build_the_axis_aligned_world(style: str) -> None:
+    """``orientation_deg`` = 0, +-1e-10, 360 and -360 build the axis-aligned
+    rectangle bit for bit (``None``). Was ``test_zero_orientation_uses_
+    axis_aligned_path``, which pinned a fast path that user decision Q38
+    removed and could no longer fail (audit D3A-05). 90, 180 and 270 deg are
+    rotations with the exact cos / sin since the audit (D3B-04): the world
+    differs from the swapped rectangle (another side is the anchor), its
+    corners do not (no round-off)."""
+
+    def world(angle, size):
+        w = create_world(soil=TwoLayerSoil(rho_1=100.0, rho_2=50.0, h_1=2.0))
+        GroundingSystemSpec(
+            electrodes=[
+                FoundationElectrodeSpec(
+                    style=style,
+                    n_x=1,
+                    n_y=1,
+                    size_xy_m=size,
+                    depth_m=0.8,
+                    orientation_deg=angle,
+                )
+            ]
+        ).build_at(
+            w, site_xy=(0.0, 0.0), name_prefix="house", rng=np.random.default_rng(0)
+        )
+        return w
+
+    from groundfield import world_fingerprint
+
+    ref = world_fingerprint(world(None, (10.0, 6.0)))
+    same = {
+        world_fingerprint(world(a, (10.0, 6.0)))
+        for a in (0.0, 1e-10, -1e-10, 360.0, -360.0)
+    }
+    assert same == {ref}
+    swapped = world(None, (6.0, 10.0))
+    for angle in (90.0, -90.0, 270.0):
+        turned = world(angle, (10.0, 6.0))
+        assert world_fingerprint(turned) != world_fingerprint(swapped)
+        corners = {p for e in turned.electrodes for p in (e.start, e.end)}
+        assert corners == {p for e in swapped.electrodes for p in (e.start, e.end)}
+    assert [e.kind for e in world(0.0, (10.0, 6.0)).electrodes] == ["strip"] * 4
 
 
 # ---------------------------------------------------------------------

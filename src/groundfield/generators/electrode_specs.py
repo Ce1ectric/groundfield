@@ -86,6 +86,13 @@ _CONCRETE_MODEL_DEPRECATION = (
 # ---------------------------------------------------------------------
 
 
+_PositiveFloat = Annotated[float, Field(gt=0.0)]
+"""A float that must be positive (sides of a foundation rectangle, audit
+D3A-01: four strips accept a negative side and build the mirrored
+rectangle, the grid mesh of the default ring up to user decision Q38
+refused it)."""
+
+
 class _ElectrodeSpecBase(BaseModel):
     """Common Pydantic configuration for every electrode spec.
 
@@ -201,12 +208,21 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
     the point kernel, the kernel of ``mom``). A rectangle without
     cross-braces (``"ring"``, or ``"mesh"`` with ``n_x = n_y = 1``) is one
     straight wire per side, bonded to the first, at every angle (user
-    decision Q38). Up to then an axis-aligned one was one
+    decision Q38). Up to then an axis-aligned one (also one turned by a
+    multiple of 90°) was one
     :class:`groundfield.geometry.electrodes.GridMeshElectrode` (one owner)
     with the default value; per side its input impedance is lower by less
     than 1 % up to aspect ratio 4 and 2 % up to 50 for a short side of at
     least 1 m, and equal for a square (see :attr:`concrete_model` for the
     scope). A ``polygon_xy_m`` outline is one closed polyline (one owner).
+
+    The first wire of a rectangle (the anchor, named after the foundation)
+    is its local :math:`-y` side; its connection point, where conductors
+    attached to the foundation by name start, is the corner at the start
+    of that side (a building outline: its first vertex). The generators
+    end their cables and service drops at the point of the foundation
+    nearest to each conductor instead (user decision Q41, see
+    :mod:`groundfield.generators.materialise`).
 
     With a shell (:attr:`concrete_rho_ohm_m`) every wire of the
     foundation, the cross-braces of a mesh included, is encased (DIN
@@ -224,12 +240,16 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "perimeter plus internal cross-braces (default)."
         ),
     )
-    size_m: Union[float, AnyDistribution] = Field(
-        default=10.0, description="Side length in m (square)."
+    size_m: Union[_PositiveFloat, AnyDistribution] = Field(
+        default=10.0,
+        description=(
+            "Side length in m (square), > 0; a distribution is checked when "
+            "it is drawn (audit D3A-01)."
+        ),
     )
-    size_xy_m: Optional[tuple[float, float]] = Field(
+    size_xy_m: Optional[tuple[_PositiveFloat, _PositiveFloat]] = Field(
         default=None,
-        description="(dx, dy) — overrides ``size_m`` for rectangular footprints.",
+        description="(dx, dy) in m, > 0 — overrides ``size_m`` for rectangular footprints.",
     )
     polygon_xy_m: Optional[tuple[tuple[float, float], ...]] = Field(
         default=None,
@@ -278,8 +298,10 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
         description=(
             "Rotation of the foundation rectangle around its centre, "
             "in degrees. ``None`` (the default) and ``0.0`` keep it "
-            "axis-aligned; a multiple of 90 degrees is the axis-aligned "
-            "rectangle with swapped sides. The orientation changes only "
+            "axis-aligned; a multiple of 90 degrees is rotated with the "
+            "exact cosine and sine (coordinates without round-off, the local "
+            "-y side stays the anchor; up to audit D3B-04 it was built as the "
+            "axis-aligned rectangle with swapped sides). The orientation changes only "
             "the geometry, never the owners (see the class docstring): a "
             "foundation built from several wires bonds them internally, "
             "so the spec still emits a single bondable anchor (the first "
@@ -350,9 +372,12 @@ class FoundationElectrodeSpec(_ElectrodeSpecBase):
             "it is lower by less than 1 % up to aspect ratio 4 (short side at "
             "least 1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short "
             "side at least 1 m, sides up to 150 m); bare or with the default "
-            "5 cm shell by less than 0.4 % and 1 % (audit R2B-01). Rotated "
-            "rectangles, meshes with cross-braces (one owner per wire) and "
-            "polygon outlines (one closed wire) did not change. Up to 0.15.0 "
+            "5 cm shell by less than 0.4 % and 1 % (audit R2B-01). Rectangles "
+            "rotated by an angle other than a multiple of 90 degrees, meshes "
+            "with cross-braces (one owner per wire) and polygon outlines (one "
+            "closed wire) did not change. Against one current per segment one "
+            "owner per side is at most 1.4 % high over that scope (audit "
+            "D3B-01), the single owner was up to 2.1 %. Up to 0.15.0 "
             "the lumped shell was a registry entry that only the TN "
             "generator's PEN service drops read (review findings 10.12-10.14)."
         ),

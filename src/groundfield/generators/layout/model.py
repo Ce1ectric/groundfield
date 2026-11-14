@@ -58,12 +58,18 @@ from groundfield.generators.layout.routing import (
     PenCable,
     _RoutingMixin,
 )
+from groundfield.generators._contact import FoundationWire, closest_pair, join
 from groundfield.generators._pen_routing import min_section_length
-from groundfield.generators.materialise import materialise_plan, site_anchor_point
+from groundfield.generators.materialise import (
+    materialise_plan,
+    site_anchor_point,
+    site_foundation_wires,
+)
 from groundfield.generators.plan import (
     ConductorParameters,
     NetworkPlan,
     PlannedBranch,
+    PlannedContact,
     PlannedJunction,
     PlannedMeasurement,
     PlannedSite,
@@ -692,7 +698,10 @@ class LvNetworkLayout(
         #    point, one branch between consecutive nodes. Nodes closer
         #    than the shortest cable section are merged (a tap a few
         #    millimetres from a corner or from another tap left a section
-        #    the Conductor model refuses, audit A3SG-01).
+        #    the Conductor model refuses, audit A3SG-01). A cable or drop
+        #    ends at the point of a site's foundation nearest to it (user
+        #    decision Q41): a house with a foundation is tapped at the
+        #    closest pair between its cable and its foundation wires.
         conductor = ConductorParameters(
             conductor_type="pen",
             wire_radius_m=pen_wire_radius_m,
@@ -706,23 +715,30 @@ class LvNetworkLayout(
             for site in sites
             if site.role in ("substation", "cabinet")
         }
+        wires = {site.name: site_foundation_wires(site) for site in sites}
+        wires = {name: w for name, w in wires.items() if w}
+        meet = _Meeting(anchor_points, wires)
+        taps = self._service_taps(houses, wires)
         junctions: list[PlannedJunction] = []
         branches: list[PlannedBranch] = []
         cable_nodes: dict[str, list[tuple[str, tuple[float, float]]]] = {}
         for cable in self.pen_cables:
             nodes = self._merge_close_nodes(
                 cable.name,
-                self._cable_nodes(cable, junctions),
+                self._cable_nodes(cable, junctions, taps),
                 junctions,
                 anchor_points,
                 min_length,
+                meet,
             )
             cable_nodes[cable.name] = nodes
-            for j, ((a0, _p0), (a1, _p1)) in enumerate(
+            meet.junctions(junctions)
+            for j, ((a0, p0), (a1, p1)) in enumerate(
                 zip(nodes[:-1], nodes[1:], strict=True)
             ):
                 if a0 == a1:
                     continue
+                c0, c1 = meet.contacts(a0, p0, a1, p1)
                 branches.append(
                     PlannedBranch(
                         name=f"{cable.name}_seg_{j}",
@@ -731,17 +747,22 @@ class LvNetworkLayout(
                         end=a1,
                         conductor=conductor,
                         cable=cable.name,
+                        start_contact=c0,
+                        end_contact=c1,
                     )
                 )
 
-        # 6. Service drops: tap node on the cable -> house.
+        # 6. Service drops: tap node on the cable -> house (its foundation
+        #    point nearest to the tap node, user decision Q41).
         for c in self.connections:
             house = houses.get(c.house_idx)
             if house is None or house.anchor is None:
                 continue
-            tap = self._tap_anchor_for(c, cable_nodes)
+            tap = self._tap_anchor_for(c, cable_nodes, taps.get(c.house_idx))
             if tap is None:
                 continue
+            tap_xy = dict(cable_nodes[c.cable_name])[tap]
+            _, end_contact = meet.contacts(tap, tap_xy, house.name, None)
             branches.append(
                 PlannedBranch(
                     name=f"service_{c.house_idx:03d}",
@@ -750,6 +771,7 @@ class LvNetworkLayout(
                     end=house.name,
                     conductor=conductor,
                     cable=c.cable_name,
+                    end_contact=end_contact,
                 )
             )
 
@@ -801,7 +823,17 @@ class LvNetworkLayout(
         :class:`PenCable` becomes a chain of straight conductors between
         junctions at its corners and tap points, so the cable follows its
         Manhattan polyline; each :class:`BuildingConnection` becomes one
-        conductor from the tap junction to the house foundation.
+        conductor from the tap junction to the house foundation. A
+        conductor routed to a foundation ends at the point of the
+        foundation nearest to it (user decision Q41): a house with a
+        foundation is tapped at the closest pair in plan of its cable and
+        its foundation wires (not at the tap point of its
+        :class:`BuildingConnection`, the cable point nearest to the
+        centroid), and its drop ends there on the foundation, at the wire's
+        depth, attached to that wire; a cable leaves a substation or a
+        cabinet with a foundation at the foundation's point nearest to the
+        cable's next node. Sites without a foundation keep the connection
+        point of their anchor.
 
         Parameters
         ----------
@@ -883,19 +915,58 @@ class LvNetworkLayout(
     # Cable decomposition (plan helpers)
     # ------------------------------------------------------------------
 
+    def _service_taps(
+        self,
+        houses: dict[int, PlannedSite],
+        wires: dict[str, list[FoundationWire]],
+    ) -> dict[int, tuple[float, float]]:
+        """Tap point of every connection on its cable (user decision Q41).
+
+        A house with a foundation is tapped at the closest pair in plan
+        between its cable and the wires of its foundation; any other house
+        at the tap point of its :class:`BuildingConnection` (the cable point
+        nearest to the footprint centroid).
+        """
+        cables = {cable.name: cable for cable in self.pen_cables}
+        out: dict[int, tuple[float, float]] = {}
+        for c in self.connections:
+            house = houses.get(c.house_idx)
+            cable = cables.get(c.cable_name)
+            foundation = wires.get(house.name) if house is not None else None
+            if foundation and cable is not None and cable.segments():
+                segments = cable.segments()
+                i, t, _ = closest_pair(segments, foundation)
+                (x0, y0), (x1, y1) = segments[i]
+                out[c.house_idx] = (x0 + t * (x1 - x0), y0 + t * (y1 - y0))
+            else:
+                out[c.house_idx] = (
+                    float(c.tap_point_xy[0]),
+                    float(c.tap_point_xy[1]),
+                )
+        return out
+
     def _cable_nodes(
-        self, cable: PenCable, junctions: list[PlannedJunction]
+        self,
+        cable: PenCable,
+        junctions: list[PlannedJunction],
+        taps: Optional[dict[int, tuple[float, float]]] = None,
     ) -> list[tuple[str, tuple[float, float]]]:
         """Ordered nodes of a cable; new junctions are appended to ``junctions``.
 
         The first waypoint is the start site; the last one is the end
         site when the cable ends at a cabinet; every other corner and
         every tap point on the cable is a junction
-        (``f"{cable}_node_{k}"`` / ``f"{cable}_tap_{n}"``).
+        (``f"{cable}_node_{k}"`` / ``f"{cable}_tap_{n}"``). ``taps`` maps a
+        house index to its tap point (:meth:`_service_taps`); default the
+        tap points of the connections.
         """
         taps_for_cable = sorted(
             {
-                tuple(c.tap_point_xy): c.house_idx
+                (
+                    tuple(c.tap_point_xy)
+                    if taps is None or c.house_idx not in taps
+                    else taps[c.house_idx]
+                ): c.house_idx
                 for c in self.connections
                 if c.cable_name == cable.name
             }.items(),
@@ -925,6 +996,7 @@ class LvNetworkLayout(
         junctions: list[PlannedJunction],
         anchor_points: dict[str, Optional[tuple[float, float, float]]],
         min_length: float,
+        meet: Optional["_Meeting"] = None,
     ) -> list[tuple[str, tuple[float, float]]]:
         """Merge the nodes of a cable that are closer than ``min_length``.
 
@@ -934,7 +1006,8 @@ class LvNetworkLayout(
         remaining node (:meth:`_tap_anchor_for`). Junctions before a site
         anchor at the end of the cable give way to it. Distances are
         measured between the points the conductors attach to (the anchor's
-        connection point, a junction at its depth).
+        connection point, or the point of a site's foundation nearest to the
+        other node, user decision Q41; a junction at its depth).
 
         Raises
         ------
@@ -942,17 +1015,14 @@ class LvNetworkLayout(
             If the two site anchors at the ends of the cable are closer
             than ``min_length``.
         """
-        depth = {j.name: (j.position_xy, j.depth_m) for j in junctions}
-
-        def point(name: str) -> tuple[float, float, float]:
-            anchor = anchor_points.get(name)
-            if anchor is not None:
-                return anchor
-            (x, y), z = depth[name]
-            return (x, y, z)
+        if meet is None:
+            meet = _Meeting(anchor_points, {})
+        meet.junctions(junctions)
+        node_xy = dict(nodes)
 
         def gap(a: str, b: str) -> float:
-            return math.dist(point(a), point(b))
+            pa, pb = meet.points(a, node_xy[a], b, node_xy[b])
+            return math.dist(pa, pb)
 
         kept: list[tuple[str, tuple[float, float]]] = []
         dropped: set[str] = set()
@@ -1043,14 +1113,15 @@ class LvNetworkLayout(
         self,
         connection: BuildingConnection,
         cable_node_map: dict[str, list[tuple[str, tuple[float, float]]]],
+        tap_xy: Optional[tuple[float, float]] = None,
     ) -> Optional[str]:
         """Find the cable-node anchor closest to a connection's
-        tap point.
+        tap point (``tap_xy``, default the connection's own).
         """
         nodes = cable_node_map.get(connection.cable_name, [])
         if not nodes:
             return None
-        tap = connection.tap_point_xy
+        tap = connection.tap_point_xy if tap_xy is None else tap_xy
         # Exact match first.
         for anchor, (x, y) in nodes:
             if math.isclose(x, tap[0], abs_tol=1e-6) and math.isclose(
@@ -1081,6 +1152,70 @@ class OrtsnetzLayout(LvNetworkLayout):
 # ---------------------------------------------------------------------
 # Free-floating helpers
 # ---------------------------------------------------------------------
+
+
+class _Meeting:
+    """Where the conductors of a layout meet its nodes (user decision Q41).
+
+    A junction is met at its position and depth, a site without a
+    foundation at the connection point of its anchor, a site with a
+    foundation at the point of its wires nearest to the conductor's other
+    end (two foundations at their closest pair), at the wire's depth.
+    """
+
+    def __init__(
+        self,
+        anchor_points: dict[str, Optional[tuple[float, float, float]]],
+        wires: dict[str, list[FoundationWire]],
+    ) -> None:
+        self.anchor_points = anchor_points
+        self.wires = wires
+        self.depth: dict[str, float] = {}
+        self._wire_z = {w.electrode: w.z for ws in wires.values() for w in ws}
+
+    def junctions(self, junctions: list[PlannedJunction]) -> None:
+        """Register (more) junctions with their depths."""
+        self.depth.update((j.name, j.depth_m) for j in junctions)
+
+    def _connection(self, name: str, xy: Optional[tuple[float, float]]):
+        """Plan point and depth of a node without a contact."""
+        anchor = self.anchor_points.get(name)
+        if anchor is not None:
+            return (anchor[0], anchor[1]), anchor[2]
+        if name in self.depth and xy is not None:
+            return (float(xy[0]), float(xy[1])), self.depth[name]
+        raise KeyError(name)
+
+    def _ends(self, a, xa, b, xb):
+        wa, wb = self.wires.get(a), self.wires.get(b)
+        pa = xa if wa else self._connection(a, xa)[0]
+        pb = xb if wb else self._connection(b, xb)[0]
+        if pa is None and wa:
+            pa = wa[0].xy[0]
+        if pb is None and wb:
+            pb = wb[0].xy[0]
+        return join(pa, wa, pb, wb)
+
+    def points(self, a, xa, b, xb) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        """3-D end points in m of a conductor between the nodes ``a``, ``b``.
+
+        ``xa`` / ``xb`` are the plan positions of the nodes (the waypoint
+        of a junction, ``None`` for a house).
+        """
+        (ca, ea), (cb, eb) = self._ends(a, xa, b, xb)
+        za = self._wire_z[ea] if ea is not None else self._connection(a, xa)[1]
+        zb = self._wire_z[eb] if eb is not None else self._connection(b, xb)[1]
+        return (*ca, za), (*cb, zb)
+
+    def contacts(
+        self, a, xa, b, xb
+    ) -> tuple[Optional[PlannedContact], Optional[PlannedContact]]:
+        """Plan contacts of the two ends (``None`` at a connection point)."""
+        (ca, ea), (cb, eb) = self._ends(a, xa, b, xb)
+        return (
+            None if ea is None else PlannedContact(electrode=ea, position_xy=ca),
+            None if eb is None else PlannedContact(electrode=eb, position_xy=cb),
+        )
 
 
 def _approximately_equal(

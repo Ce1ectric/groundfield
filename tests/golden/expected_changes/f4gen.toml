@@ -1,0 +1,78 @@
+# Stream F4GEN — the user's answer Q41 of 2026-11-14: every conductor the
+# generators route to a foundation ends at the point of that foundation
+# nearest to the conductor (service drops: the closest pair of feeding cable
+# and foundation wires; cables leaving a substation or cabinet with a
+# foundation: its point nearest to the next node). See ../README.md for the
+# format.
+#
+# Only the three generator cases move. Measured against the snapshot of the
+# base 500127c (deliver/evidence/f4gen/golden_vs_base.json, GF_GOLDEN_STRICT
+# against that snapshot: 46 of 49 cases bit-identical); every other case is
+# bit-identical. The harness compares with v0.15.0, where this share cannot
+# be told apart from the earlier ones (gen2, fix2gen, d3gen), hence no
+# min_rel_change; the bounds add to theirs.
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["phi/*", "I/*", "potential/*", "ps/I"]
+findings = ["10.38"]
+reason = """User decision Q41: the five default houses (2 x 2 mesh) stand on the row of the
+PEN main, which runs along the brace of each mesh: the main is joined to the brace where
+it meets it (no service drop) instead of a 5 m drop to the (-5, -5) m corner of each
+house. Measured against the base: potentials <= 1.41e-4, leakage currents <= 2.85e-4,
+surface potential 1.11e-4, point-source currents 1.63e-4 (norm-wise)."""
+max_rel_change = 3.5e-4
+
+[[change]]
+cases = ["gen_tn_default"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = """User decision Q41: the main is split at the five houses (sections end on the
+brace wire <house>_foundation_0_w1), the five tap junctions and drops are gone."""
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["phi/*", "I/*"]
+findings = ["10.38"]
+reason = """User decision Q41: each of the four drops of the test street runs from the
+closest point of the cable to the house's 2 x 2 mesh, perpendicular to the corner of the
+side facing the cable (13.0 m in plan) instead of from the projection of the centroid to the
+-y corner (13.9 m diagonals; for the two houses south of the cable 23.5 m across the house
+to the far corner); the cable leaves the substation ring at its connection point as before
+(a ring electrode, not a foundation). Measured against the base: potentials <= 7.99e-4,
+leakage currents <= 1.10e-3 (evidence golden_cases_geometry_*.out)."""
+max_rel_change = 1.4e-3
+
+[[change]]
+cases = ["gen_layout_builder"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = "User decision Q41: tap junctions at the closest pairs, drops end on the facing wire."
+allow_shape_change = true
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/trafo_*", "phi/residential_*", "phi/kvs_*", "phi/aux_rod_0", "I/trafo_*", "I/residential_*", "I/kvs_*"]
+findings = ["10.38"]
+reason = """User decision Q41: the three default houses on the row of the main are joined
+to it at their braces (no drops); with the overhead measurement leads coupled to the PEN
+(perfect mirror) the network moves by <= 1.46e-4 (potentials) and <= 1.61e-4 (leakage)
+against the base."""
+max_rel_change = 2.0e-4
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["phi/probe_rod_0", "I/probe_rod_0"]
+findings = ["10.38"]
+reason = """User decision Q41: the floating probe rod 50 m out reads the field of the moved
+PEN geometry, 1.496e-3 V, moved by 4.3e-3; its current is round-off around zero (1.1e-18 A
+on the base, 1.2e-18 A changed), whose relative change means nothing."""
+max_rel_change = 2.0
+
+[[change]]
+cases = ["gen_tn_measurement_overhead_leads"]
+quantities = ["world/json"]
+findings = ["10.38"]
+reason = "User decision Q41: the main is split at the three houses, no tap junctions or drops."
+allow_shape_change = true

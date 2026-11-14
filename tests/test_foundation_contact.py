@@ -1,0 +1,676 @@
+"""Generated conductors end at the foundation point nearest to them (Q41).
+
+User decision Q41 of 2026-11-14: every conductor that the generators route
+to a foundation — a PEN service drop of ``TnNetworkGenerator`` or of the
+layout builder, a cable that leaves a substation or a cabinet — ends at the
+point of that foundation nearest to the conductor (the connection lug on the
+side facing the cable), for every foundation form: rectangles (ring or mesh,
+any orientation), building outlines, the substation's foundation. A service
+drop is the shortest connection in plan between its feeding cable and the
+foundation wires (the closest pair); ties go to the lowest wire index, then
+to the smallest arc position along the wire.
+
+Before (base ``500127c``) the generators attached every conductor at the
+connection point of the site's anchor electrode: the start of the local -y
+side of a rectangle (a corner; meshes since audit A2G-04, rings since user
+decision Q38) or the first vertex of an outline. 47 of the 282 drops of the
+audit D3A setup ran along a side of their own foundation (up to 8 m), and a
+house beyond its cable was connected at its far corner, the drop crossing
+the house (audits D3A-02, D3B-03).
+
+The checks below use a second, independent method: dense sampling of the
+wires and cables in plan.
+"""
+
+from __future__ import annotations
+
+import itertools
+import math
+import warnings
+
+import numpy as np
+import pytest
+
+import groundfield as gf
+from groundfield.generators import (
+    BuildingTypeSpec,
+    CabinetConfig,
+    ExplicitPlacement,
+    FoundationElectrodeSpec,
+    GroundingSystemSpec,
+    HomogeneousSoilSpec,
+    LvNetworkLayout,
+    ManhattanGridPlacement,
+    PenConfig,
+    RadialTrunkTopology,
+    RodElectrodeSpec,
+    StarCabinetTopology,
+    SubstationConfig,
+    TnNetworkConfig,
+    TnNetworkGenerator,
+    rod_circle,
+)
+from groundfield.generators._pen_routing import MIN_DROP_LENGTH_M
+
+pytestmark = pytest.mark.finding("10.38")
+
+# ---------------------------------------------------------------------
+# Independent reference: dense sampling in plan
+# ---------------------------------------------------------------------
+
+_STEP_M = 0.002
+
+
+def _sample(points: np.ndarray, step: float = _STEP_M) -> np.ndarray:
+    """Points every ``step`` m along a polyline (plan coordinates)."""
+    out = [points[:1]]
+    for a, b in zip(points[:-1], points[1:], strict=True):
+        n = max(1, math.ceil(float(np.hypot(*(b - a))) / step))
+        out.append(a + np.linspace(0.0, 1.0, n + 1)[1:, None] * (b - a))
+    return np.concatenate(out)
+
+
+def _wires_of(
+    world: gf.World, root: str
+) -> list[gf.geometry.electrodes._ElectrodeBase]:
+    """The wires of the foundation called ``root`` (anchor and ``_w<j>``)."""
+    return [
+        e for e in world.electrodes if e.name == root or e.name.startswith(f"{root}_w")
+    ]
+
+
+def _plan(electrode) -> np.ndarray:
+    (run,) = electrode.wire_polylines()
+    return np.asarray(run)[:, :2]
+
+
+def _min_distance(points: np.ndarray, polylines: list[np.ndarray]) -> float:
+    """Smallest plan distance from sampled ``points`` to the polylines.
+
+    The points are samples of one geometry, the distance to each straight
+    piece of the other is exact (projection): the result is the sampled
+    minimum, at most one sampling step above the exact one.
+    """
+    best = math.inf
+    for line in polylines:
+        for a, b in zip(line[:-1], line[1:], strict=True):
+            d = b - a
+            t = np.clip((points - a) @ d / (d @ d), 0.0, 1.0)
+            dist = np.hypot(*(points - (a + t[:, None] * d)).T)
+            best = min(best, float(dist.min()))
+    return best
+
+
+def _on_wire(point: tuple[float, float], electrode, tol: float = 1e-9) -> bool:
+    """Whether ``point`` lies on the wire (plan)."""
+    pts = _plan(electrode)
+    p = np.asarray(point, dtype=float)
+    for a, b in zip(pts[:-1], pts[1:], strict=True):
+        d = b - a
+        t = np.clip((p - a) @ d / (d @ d), 0.0, 1.0)
+        if np.hypot(*(p - (a + t * d))) <= tol:
+            return True
+    return False
+
+
+def _foundation_of(world: gf.World, wire: str) -> str:
+    """Root name of the foundation that the wire ``wire`` belongs to."""
+    return wire.split("_w")[0] if "_foundation_" in wire else wire
+
+
+def _overlap_along(drop, wires, tol: float = 0.3) -> float:
+    """Length in m over which ``drop`` runs within ``tol`` of, and parallel
+    to, a wire (the metric of audit D3A, ``drop_overlap.py``)."""
+    s, t = np.asarray(drop.start[:2]), np.asarray(drop.end[:2])
+    total = 0.0
+    for w in wires:
+        pts = _plan(w)
+        for b0, b1 in zip(pts[:-1], pts[1:], strict=True):
+            da, db = t - s, b1 - b0
+            la, lb = np.linalg.norm(da), np.linalg.norm(db)
+            if la < 1e-9 or lb < 1e-9:
+                continue
+            ua, ub = da / la, db / lb
+            if abs(abs(ua @ ub) - 1.0) > 1e-6:
+                continue
+            n = np.array([-ub[1], ub[0]])
+            if abs((s - b0) @ n) > tol:
+                continue
+            t0, t1 = sorted([(s - b0) @ ub, (t - b0) @ ub])
+            total += max(0.0, min(t1, lb) - max(t0, 0.0))
+    return total
+
+
+def _hull(points: np.ndarray) -> np.ndarray:
+    """Convex hull (counter-clockwise) of plan points, monotone chain."""
+    pts = sorted({(round(float(x), 9), round(float(y), 9)) for x, y in points})
+
+    def half(seq):
+        out: list[tuple[float, float]] = []
+        for p in seq:
+            while (
+                len(out) >= 2
+                and (
+                    (out[-1][0] - out[-2][0]) * (p[1] - out[-2][1])
+                    - (out[-1][1] - out[-2][1]) * (p[0] - out[-2][0])
+                )
+                <= 0.0
+            ):
+                out.pop()
+            out.append(p)
+        return out[:-1]
+
+    return np.asarray(half(pts) + half(pts[::-1]))
+
+
+def _crosses_interior(drop, wires) -> bool:
+    """Whether the drop passes over the inside of its (convex) foundation."""
+    hull = _hull(np.concatenate([_plan(w) for w in wires]))
+    s, t = np.asarray(drop.start[:2]), np.asarray(drop.end[:2])
+    probe = s + np.linspace(0.0, 1.0, 401)[1:-1, None] * (t - s)
+    edges = np.roll(hull, -1, axis=0) - hull
+    rel = probe[:, None, :] - hull[None, :, :]
+    cross = edges[None, :, 0] * rel[..., 1] - edges[None, :, 1] * rel[..., 0]
+    return bool(np.any(np.all(cross > 1e-6, axis=1)))
+
+
+def _ring_house(size=(12.0, 8.0), **kw) -> BuildingTypeSpec:
+    return BuildingTypeSpec(
+        name="residential",
+        grounding=GroundingSystemSpec(
+            electrodes=[
+                FoundationElectrodeSpec(style="ring", size_xy_m=size, depth_m=0.8, **kw)
+            ]
+        ),
+    )
+
+
+def _build(**kw) -> gf.World:
+    params: dict[str, object] = {"soil": HomogeneousSoilSpec(rho=100.0)}
+    params.update(kw)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return TnNetworkGenerator(TnNetworkConfig(**params), seed=1).build()
+
+
+def _drops(world: gf.World) -> list[gf.Conductor]:
+    return [
+        c for c in world.conductors if c.name.startswith(("pen_service_", "service_"))
+    ]
+
+
+# ---------------------------------------------------------------------
+# The closest pair (unit level, two methods)
+# ---------------------------------------------------------------------
+
+
+# user decision Q41
+def test_closest_pair_agrees_with_dense_sampling() -> None:
+    """The analytic segment-segment solver against 2 mm sampling: 300 random
+    cable paths of one to three sections against rotated rectangles."""
+    from groundfield.generators._contact import FoundationWire, closest_pair
+
+    rng = np.random.default_rng(20261114)
+    worst = 0.0
+    for _ in range(300):
+        segments = [
+            (tuple(rng.uniform(-20, 20, 2)), tuple(rng.uniform(-20, 20, 2)))
+            for _ in range(int(rng.integers(1, 4)))
+        ]
+        cx, cy = rng.uniform(-10, 10, 2)
+        dx, dy = rng.uniform(1, 12, 2)
+        c, s = (
+            math.cos(rng.uniform(0, 2 * math.pi)),
+            math.sin(rng.uniform(0, 2 * math.pi)),
+        )
+        c, s = c / math.hypot(c, s), s / math.hypot(c, s)
+        local = [
+            (-dx / 2, -dy / 2),
+            (dx / 2, -dy / 2),
+            (dx / 2, dy / 2),
+            (-dx / 2, dy / 2),
+        ]
+        corners = [(cx + c * x - s * y, cy + s * x + c * y) for x, y in local]
+        wires = [
+            FoundationWire(f"w{k}", k, (corners[k], corners[(k + 1) % 4]), 0.8)
+            for k in range(4)
+        ]
+        i, t, contact = closest_pair(segments, wires)
+        (x0, y0), (x1, y1) = segments[i]
+        cable_point = (x0 + t * (x1 - x0), y0 + t * (y1 - y0))
+        assert math.dist(cable_point, contact.xy) == pytest.approx(
+            contact.distance, abs=1e-9
+        )
+        sampled = _min_distance(
+            np.concatenate([_sample(np.array(seg)) for seg in segments]),
+            [np.array([corners[k], corners[(k + 1) % 4]]) for k in range(4)],
+        )
+        # The exact minimum is never above the sampled one and at most one
+        # sampling step below it.
+        assert contact.distance <= sampled + 1e-12
+        worst = max(worst, sampled - contact.distance)
+    assert worst < _STEP_M
+
+
+# user decision Q41
+def test_ties_go_to_the_lowest_wire_then_the_smallest_arc() -> None:
+    from groundfield.generators._contact import (
+        FoundationWire,
+        closest_pair,
+        nearest_point,
+    )
+
+    sides = [((-5.0, 5.0), (5.0, 5.0)), ((5.0, 5.0), (5.0, 15.0)),
+             ((5.0, 15.0), (-5.0, 15.0)), ((-5.0, 15.0), (-5.0, 5.0))]  # fmt: skip
+    wires = [FoundationWire(f"w{k}", k, side, 0.8) for k, side in enumerate(sides)]
+    # A cable parallel to the first side: the whole side is 5 m away; the
+    # start of the side (arc 0) wins.
+    i, t, contact = closest_pair([((-50.0, 0.0), (50.0, 0.0))], wires)
+    assert (contact.electrode, contact.xy, contact.distance) == ("w0", (-5.0, 5.0), 5.0)
+    assert t == pytest.approx(0.45)
+    # A cable through the house crosses w1 and w3: the lower index wins.
+    _, _, contact = closest_pair([((-50.0, 10.0), (50.0, 10.0))], wires)
+    assert contact.electrode == "w1" and contact.xy == pytest.approx((5.0, 10.0))
+    assert contact.distance == pytest.approx(0.0, abs=1e-12)
+    # A corner shared by two wires: the lower index (the end of w1).
+    contact = nearest_point((20.0, 20.0), wires)
+    assert (contact.electrode, contact.xy) == ("w1", (5.0, 15.0))
+
+
+# ---------------------------------------------------------------------
+# TnNetworkGenerator: service drops
+# ---------------------------------------------------------------------
+
+_D3A_PLACEMENT = ManhattanGridPlacement(
+    spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=6, jitter_m=4.0
+)
+
+
+def _d3a_world(n: int, topology: str, seed: int, **kw) -> gf.World:
+    cfg = TnNetworkConfig(
+        building_types=[_ring_house(**kw)],
+        building_counts={"residential": n},
+        placement=_D3A_PLACEMENT,
+        pen_topology=StarCabinetTopology()
+        if topology == "star"
+        else RadialTrunkTopology(),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return TnNetworkGenerator(cfg).build(rng=seed)
+
+
+# user decision Q41, audit D3A-02
+@pytest.mark.parametrize(
+    ("n", "topology", "seed"),
+    list(itertools.product([5, 12, 30], ["star", "radial"], [0, 1, 2])),
+)
+def test_no_service_drop_runs_along_or_across_its_foundation(
+    n: int, topology: str, seed: int
+) -> None:
+    """The 282 drops of the audit D3A setup (12 m x 8 m ring houses on a
+    jittered grid): base 47 of them ran along a side of their own
+    foundation (up to 8 m), and houses beyond their cable were connected at
+    the far corner across the house."""
+    world = _d3a_world(n, topology, seed)
+    for drop in _drops(world):
+        wires = _wires_of(world, _foundation_of(world, drop.end_electrode))
+        assert _overlap_along(drop, wires) < 1e-6, drop.name
+        assert not _crosses_interior(drop, wires), drop.name
+
+
+# user decision Q41
+@pytest.mark.parametrize("topology", ["star", "radial"])
+@pytest.mark.parametrize("angle", [None, 30.0, 90.0])
+def test_service_drops_are_the_closest_pair_of_cable_and_foundation(
+    topology: str, angle: float | None
+) -> None:
+    """Every drop ends on a wire of its own house at the point nearest to
+    the drop's start, and a drop from a tap junction is as short as the
+    plan distance between its feeding cable and the foundation (2 mm
+    sampling)."""
+    world = _d3a_world(12, topology, 1, orientation_deg=angle)
+    conductors = {c.name: c for c in world.conductors}
+    cables: dict[str, list[gf.Conductor]] = {}
+    for c in world.conductors:
+        if c.name.startswith(("pen_main_", "pen_trunk_")):
+            cables.setdefault(c.name.split("_s")[0], []).append(c)
+    by_end = {}
+    for c in conductors.values():
+        if c.name.startswith(("pen_main_", "pen_trunk_")):
+            by_end.setdefault(c.end_electrode, []).append(c.name.split("_s")[0])
+    drops = _drops(world)
+    assert drops
+    for drop in drops:
+        wire = world.get_electrode(drop.end_electrode)
+        assert _on_wire(drop.end[:2], wire)
+        root = _foundation_of(world, drop.end_electrode)
+        assert root.startswith("residential_") and drop.name.endswith(root)
+        lines = [_plan(w) for w in _wires_of(world, root)]
+        start = np.asarray([drop.start[:2]])
+        assert math.dist(drop.start[:2], drop.end[:2]) == pytest.approx(
+            _min_distance(start, lines), abs=_STEP_M
+        )
+        if not drop.start_electrode.startswith("pen_tap_"):
+            continue
+        (cable,) = set(by_end[drop.start_electrode])
+        path = np.concatenate(
+            [_sample(np.array([c.start[:2], c.end[:2]]), 0.01) for c in cables[cable]]
+        )
+        assert math.dist(drop.start[:2], drop.end[:2]) == pytest.approx(
+            _min_distance(path, lines), abs=0.01
+        )
+
+
+# user decision Q41
+def test_a_drop_is_attached_to_the_wire_that_holds_its_end() -> None:
+    """A house north of its cable is met on its -y side (the anchor, named
+    after the foundation), a house south of it on its +y side (``_w1``); the
+    sides stay bonded to the anchor."""
+    world = _build(
+        building_types=[_ring_house()],
+        building_counts={"residential": 2},
+        placement=ExplicitPlacement(positions=[(-40.0, 15.0), (-80.0, -15.0)]),
+        cabinets=CabinetConfig(
+            placement=ExplicitPlacement(positions=[(-150.0, 0.0)]), fixed_count=1
+        ),
+    )
+    drops = {d.name: d for d in _drops(world)}
+    north = drops["pen_service_residential_0_foundation_0"]
+    south = drops["pen_service_residential_1_foundation_0"]
+    assert north.end_electrode == "residential_0_foundation_0"
+    assert north.start[:2] == pytest.approx((-46.0, 0.0))
+    assert north.end == pytest.approx((-46.0, 11.0, 0.6))
+    assert south.end_electrode == "residential_1_foundation_0_w1"
+    assert south.end == pytest.approx((-86.0, -11.0, 0.6))
+    bonds = {c.name: (c.start_electrode, c.end_electrode) for c in world.conductors}
+    assert bonds["residential_1_foundation_0_bond_1"] == (
+        "residential_1_foundation_0",
+        "residential_1_foundation_0_w1",
+    )
+
+
+# user decision Q41, audit D3B-03
+def test_a_house_on_the_main_is_joined_where_the_main_crosses_it() -> None:
+    """A 10 m ring house centred on the main. Base: a 5 m drop from the main
+    to the (-5, -5) m corner (the 0.15.0 grid mesh had its centre on the main
+    and no drop). The main crosses the -x side (``_w2``, x = -65 m) and the
+    +x side (``_w3``, x = -55 m); the lower index wins and the main is joined
+    to ``_w2`` there, without a drop."""
+    house = BuildingTypeSpec(
+        name="residential",
+        grounding=GroundingSystemSpec(
+            electrodes=[FoundationElectrodeSpec(style="ring", size_m=10.0, depth_m=0.8)]
+        ),
+    )
+    world = _build(
+        building_types=[house],
+        building_counts={"residential": 1},
+        placement=ExplicitPlacement(positions=[(-60.0, 0.0)]),
+        cabinets=CabinetConfig(
+            placement=ExplicitPlacement(positions=[(-150.0, 0.0)]), fixed_count=1
+        ),
+    )
+    assert _drops(world) == []
+    sections = {c.name: c for c in world.conductors if c.name.startswith("pen_main_")}
+    first, second = (
+        sections["pen_main_kvs_0_rod_0"],
+        sections["pen_main_kvs_0_rod_0_s1"],
+    )
+    assert (
+        first.end_electrode == second.start_electrode == "residential_0_foundation_0_w2"
+    )
+    assert first.end[:2] == pytest.approx((-65.0, 0.0))
+    assert second.start[:2] == pytest.approx((-65.0, 0.0))
+
+
+# user decision Q41
+def test_a_cabinet_inside_a_foundation_meets_it_one_section_from_the_cabinet() -> None:
+    """50 default houses with five cabinets on the middle row: the rod of
+    ``kvs_3`` at (-60, 0) m stands inside house 22, on the brace of its
+    2 x 2 mesh, which its cable runs along. The cable is joined to the
+    foundation one minimum section length before the cabinet instead of a
+    drop of no length (the first attempt of the decision raised "coincides")."""
+    cfg = TnNetworkConfig(
+        building_counts={"residential": 50},
+        cabinets=CabinetConfig(
+            count_per_100_buildings=10.0,
+            placement=ManhattanGridPlacement(
+                spacing_x_m=40.0, spacing_y_m=1.0, n_per_row=10
+            ),
+        ),
+    )
+    world = TnNetworkGenerator(cfg, seed=0).build()
+    pen = [c for c in world.conductors if c.conductor_type == "pen"]
+    assert min(c.length for c in pen) >= MIN_DROP_LENGTH_M - 1e-12
+    joined = [
+        c for c in pen
+        if c.end_electrode == "kvs_3_rod_0" and c.start_electrode.startswith("residential_22")
+    ]  # fmt: skip
+    (last,) = joined
+    assert last.length == pytest.approx(MIN_DROP_LENGTH_M)
+
+
+# user decision Q41
+def test_sites_without_a_foundation_keep_their_connection_point() -> None:
+    """Houses with a rod only: the drop ends at the rod head (its connection
+    point), attached to the rod, as before the decision."""
+    house = BuildingTypeSpec(
+        name="residential",
+        grounding=GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)]),
+    )
+    world = _build(
+        building_types=[house],
+        building_counts={"residential": 3},
+        placement=ManhattanGridPlacement(
+            spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=3
+        ),
+    )
+    for drop in _drops(world):
+        rod = world.get_electrode(drop.end_electrode)
+        assert rod.kind == "rod"
+        assert drop.end[:2] == pytest.approx(rod.connection_point[:2])
+
+
+# user decision Q41
+def test_cables_leave_a_substation_foundation_at_its_nearest_point() -> None:
+    """AP1-like substation: a 4 m x 4 m ring at 0.6 m with three 4 m rods.
+    Each cabinet cable starts at the point of the ring nearest to its
+    cabinet, attached to that side; the connection point of the anchor (the
+    (-2, -2) m corner) is no longer the start of every cable."""
+    substation = SubstationConfig(
+        grounding=GroundingSystemSpec(
+            electrodes=[
+                FoundationElectrodeSpec(
+                    style="ring",
+                    size_xy_m=(4.0, 4.0),
+                    depth_m=0.6,
+                    wire_radius_m=0.0075,
+                ),
+                *rod_circle(
+                    3, radius_m=1.5, length_m=4.0, depth_m=0.6, wire_radius_m=0.0125
+                ),
+            ]
+        )
+    )
+    world = _build(
+        substation=substation,
+        building_counts={"residential": 2},
+        placement=ExplicitPlacement(positions=[(-40.0, 20.0), (25.0, 60.0)]),
+        cabinets=CabinetConfig(
+            placement=ExplicitPlacement(positions=[(-100.0, 0.0), (30.0, 100.0)]),
+            fixed_count=2,
+        ),
+    )
+    mains = {c.name: c for c in world.conductors if c.name.startswith("pen_main_")}
+    west = mains["pen_main_kvs_0_rod_0"]
+    north = mains["pen_main_kvs_1_rod_0"]
+    assert west.start_electrode == "trafo_foundation_0_w2"
+    assert west.start[:2] == pytest.approx((-2.0, 0.0))
+    assert north.start_electrode == "trafo_foundation_0_w1"
+    # The nearest point of the +y side to (30, 100): its +x end.
+    assert north.start[:2] == pytest.approx((2.0, 2.0))
+    lines = [_plan(w) for w in _wires_of(world, "trafo_foundation_0")]
+    for cable, cabinet in ((west, (-100.0, 0.0)), (north, (30.0, 100.0))):
+        assert math.dist(cable.start[:2], cabinet) == pytest.approx(
+            _min_distance(np.asarray([cabinet]), lines), abs=_STEP_M
+        )
+
+
+# ---------------------------------------------------------------------
+# Layout builder
+# ---------------------------------------------------------------------
+
+
+def _l_footprint(cx: float, cy: float, osm_id: int) -> gf.BuildingFootprint:
+    """An L-shaped outline, 12 m x 10 m with a 5 m x 4 m notch."""
+    pts = [(0, 0), (12, 0), (12, 6), (7, 6), (7, 10), (0, 10)]
+    return gf.BuildingFootprint(
+        polygon_xy_m=[(cx + x - 6.0, cy + y - 5.0) for x, y in pts],
+        building_use="residential",
+        osm_id=osm_id,
+    )
+
+
+# user decision Q41
+def test_layout_drops_are_the_closest_pair_of_cable_and_building_outline() -> None:
+    """AP1-like layout: building outlines (``foundation_outline="polygon"``)
+    in a 5 cm shell of 100 ohm m, the station ring 4 m x 4 m with three rods.
+    Each drop runs from its cable to the point of the outline nearest to the
+    cable; each cable leaves the station at the point of the ring nearest to
+    its next node."""
+    fps = [_l_footprint(20.0 + 25.0 * i, 15.0 if i % 2 else -15.0, i) for i in range(4)]
+    layout = LvNetworkLayout.from_footprints(fps, substation_xy=(0.0, 0.0))
+    layout.add_pen_cable(start="substation", end_xy=(110.0, 0.0))
+    layout.add_pen_cable(start="substation", end_xy=(0.0, -60.0))
+    layout.connect_buildings()
+    house = GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style="ring",
+                depth_m=0.8,
+                concrete_rho_ohm_m=100.0,
+                concrete_thickness_m=0.05,
+            )
+        ]
+    )
+    station = GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style="ring", size_xy_m=(4.0, 4.0), depth_m=0.6, wire_radius_m=0.0075
+            ),
+            *rod_circle(
+                3, radius_m=1.5, length_m=4.0, depth_m=0.6, wire_radius_m=0.0125
+            ),
+        ]
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = layout.to_world(
+            house_grounding=house,
+            substation_grounding=station,
+            foundation_outline="polygon",
+            seed=0,
+        )
+    drops = _drops(world)
+    assert len(drops) == 4
+    cables = {c.name: [] for c in layout.pen_cables}
+    for c in world.conductors:
+        if c.name.startswith("pen_"):
+            cables[c.name.rsplit("_seg_", 1)[0]].append(c)
+    for drop in drops:
+        outline = world.get_electrode(drop.end_electrode)
+        assert outline.kind == "polyline" and _on_wire(drop.end[:2], outline)
+        (connection,) = [
+            c for c in layout.connections if f"service_{c.house_idx:03d}" == drop.name
+        ]
+        path = np.concatenate(
+            [
+                _sample(np.array([c.start[:2], c.end[:2]]), 0.01)
+                for c in cables[connection.cable_name]
+            ]
+        )
+        plan_length = math.dist(drop.start[:2], drop.end[:2])
+        assert plan_length == pytest.approx(
+            _min_distance(path, [_plan(outline)]), abs=0.01
+        )
+        assert drop.end[2] == pytest.approx(0.8)
+    starts = [
+        c
+        for c in world.conductors
+        if c.conductor_type == "pen" and c.start_electrode.startswith("substation_")
+    ]
+    assert {c.start[:2] for c in starts} == {(2.0, 0.0), (0.0, -2.0)}
+
+
+# ---------------------------------------------------------------------
+# Plan data
+# ---------------------------------------------------------------------
+
+
+# user decision Q41
+def test_plan_contacts_round_trip_and_are_checked() -> None:
+    from groundfield.generators.plan import NetworkPlan, PlannedContact
+
+    plan = TnNetworkGenerator(
+        TnNetworkConfig(
+            building_types=[_ring_house()], building_counts={"residential": 4}
+        ),
+        seed=0,
+    ).plan()
+    contacts = [b.end_contact for b in plan.branches if b.end_contact is not None]
+    assert contacts and all(isinstance(c, PlannedContact) for c in contacts)
+    again = NetworkPlan.model_validate_json(plan.model_dump_json())
+    assert gf.world_fingerprint(again.to_world()) == gf.world_fingerprint(
+        plan.to_world()
+    )
+    data = plan.model_dump()
+    drop = next(b for b in data["branches"] if b["end_contact"] is not None)
+    drop["end_contact"]["electrode"] = "trafo_ring_0"
+    with pytest.raises(ValueError, match="contact names an electrode of the site"):
+        NetworkPlan.model_validate(data)
+
+
+# user decision Q41 (item 4: not changed)
+def test_the_connection_point_of_a_foundation_stays_its_corner() -> None:
+    """``site_anchor_point`` and conductors attached by name still use the
+    connection point of the anchor: the start of the local -y side."""
+    from groundfield.generators.materialise import site_anchor_point
+
+    plan = TnNetworkGenerator(
+        TnNetworkConfig(
+            building_types=[_ring_house()],
+            building_counts={"residential": 1},
+            placement=ExplicitPlacement(positions=[(30.0, 20.0)]),
+        ),
+        seed=0,
+    ).plan()
+    house = plan.site("residential_0")
+    assert site_anchor_point(house) == (24.0, 16.0, 0.8)
+    world = plan.to_world()
+    lead = gf.create_conductor(
+        world, name="lead", start="residential_0_foundation_0", end="trafo_ring_0"
+    )
+    assert lead.start == (24.0, 16.0, 0.8)
+
+
+# user decision Q41
+def test_inductive_networks_with_nearest_point_drops_stay_passive() -> None:
+    """Ring houses with a Neumann PEN at 1 kHz (perfect mirror)."""
+    world = _build(
+        building_types=[_ring_house()],
+        building_counts={"residential": 6},
+        placement=ManhattanGridPlacement(
+            spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=5
+        ),
+        pen=PenConfig(inductance_model="neumann", segment_length_m=5.0),
+    )
+    engine = gf.create_engine(
+        segment_length=2.0,
+        frequencies=[50.0, 1000.0],
+        earth_inductive_model="perfect_mirror",
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        z = np.asarray(engine.solve(world).input_impedance())
+    assert np.all(z.real > 0.0) and np.all(z.imag > 0.0)

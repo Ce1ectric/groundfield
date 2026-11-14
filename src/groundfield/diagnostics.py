@@ -966,12 +966,42 @@ def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
     return out
 
 
+def _foundation_roots(world: "World") -> dict[str, str]:
+    """Name of the foundation every wire of a generated foundation belongs to.
+
+    A generated rectangular foundation is several bonded wires (the anchor
+    ``<name>`` and ``<name>_w<j>``, see
+    :func:`groundfield.postprocess._footprint.foundation_wires`); the
+    proximity check treats them as one owner, whose wires meet at corners
+    and crossings by design (audit D3A-04). Other electrodes map to
+    themselves.
+    """
+    from groundfield.postprocess._footprint import _WIRE_NAME, foundation_wires
+
+    names = {e.name for e in world.electrodes}
+    roots = {
+        m.group("root")
+        for m in (_WIRE_NAME.match(n) for n in names)
+        if m is not None and m.group("root") in names
+    }
+    out = {n: n for n in names}
+    for root in sorted(roots):
+        for member in foundation_wires(world, root):
+            out[member.name] = root
+    return out
+
+
 def _leakage_wires(world: "World", engine: "Engine | None"):
-    """End points, radii and owner names of every leakage wire segment."""
+    """End points, radii and owner names of every leakage wire segment.
+
+    The wires of one generated foundation share one owner name (its anchor),
+    so their corners and crossings are not reported (audit D3A-04).
+    """
     import numpy as np
 
     ends, radii, names = [], [], []
     interfaces = _layer_interfaces(world.soil)
+    owner = _foundation_roots(world)
     for e in world.electrodes:
         if engine is not None:
             geo = e.segments(float(engine.segment_length), interfaces)
@@ -986,7 +1016,7 @@ def _leakage_wires(world: "World", engine: "Engine | None"):
             seg = np.concatenate(parts, axis=0)
         ends.append(seg)
         radii.extend([float(e.wire_radius)] * len(seg))
-        names.extend([e.name] * len(seg))
+        names.extend([owner[e.name]] * len(seg))
     for c in world.conductors:
         n = _conductor_segment_count(c)
         if n == 0:
@@ -1212,7 +1242,10 @@ def diagnose(
         ``report.context["warn_segments"]`` hold the two sizes.
     ``proximity``
         Leakage wires of different owners closer than
-        :data:`PROXIMITY_REL_THRESHOLD` times the sum of their radii:
+        :data:`PROXIMITY_REL_THRESHOLD` times the sum of their radii (the
+        bonded wires of one generated foundation, ``<name>`` and
+        ``<name>_w<j>``, count as one owner: they meet at its corners and
+        crossings by design, audit D3A-04):
         ``interpenetrating`` / ``close`` are warnings with the point
         kernel and information with the exact line kernel (which
         integrates near pairs), ``crossing`` / ``touching`` (wires that

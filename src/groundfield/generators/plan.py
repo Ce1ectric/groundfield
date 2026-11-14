@@ -60,6 +60,7 @@ __all__ = [
     "ConductorParameters",
     "NetworkPlan",
     "PlannedBranch",
+    "PlannedContact",
     "PlannedElectrode",
     "PlannedJunction",
     "PlannedMeasurement",
@@ -228,6 +229,33 @@ class ConductorParameters(BaseModel):
     inductance_model: Optional[str] = None
 
 
+class PlannedContact(BaseModel):
+    """Where a branch meets a foundation of a site (user decision Q41).
+
+    Attributes
+    ----------
+    electrode
+        Name of the electrode (a wire of the site's foundation) that holds
+        the point; the branch is attached to it.
+    position_xy
+        Plan position ``(x, y)`` in m of the point on that wire: the point
+        of the foundation nearest to the branch.
+
+    Notes
+    -----
+    New in 2026.11. The generators set it on every branch end at a site with
+    a foundation (:class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`):
+    the branch ends at the point of the foundation nearest to it instead of
+    the connection point of the site's anchor electrode (a corner of a
+    rectangular foundation, the first vertex of a building outline).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    electrode: str
+    position_xy: tuple[float, float]
+
+
 class PlannedBranch(BaseModel):
     """A conductor between two nodes of the plan.
 
@@ -247,12 +275,17 @@ class PlannedBranch(BaseModel):
     cable
         Name of the routed cable the section belongs to (informational).
     axis_z_m
-        ``None`` (default): the conductor runs straight between the
-        connection points of its two end electrodes. A value: the
-        conductor runs horizontally at depth ``z = axis_z_m`` (m,
-        positive into the soil, negative above ground) between the
-        horizontal positions of those connection points; it stays
-        electrically connected to the two end electrodes.
+        ``None`` (default): the conductor runs straight between its two
+        end points (see ``start_contact``). A value: the conductor runs
+        horizontally at depth ``z = axis_z_m`` (m, positive into the soil,
+        negative above ground) between the horizontal positions of those
+        points; it stays electrically connected to the two end nodes.
+    start_contact, end_contact
+        ``None`` (default): the end point is the connection point of the
+        node (a site's anchor electrode, or a junction). A
+        :class:`PlannedContact` (only at a site): the branch ends at that
+        point of a foundation wire of the site, at the wire's depth (or at
+        ``axis_z_m``), and is attached to that wire (user decision Q41).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -264,6 +297,8 @@ class PlannedBranch(BaseModel):
     conductor: ConductorParameters
     cable: Optional[str] = None
     axis_z_m: Optional[float] = None
+    start_contact: Optional[PlannedContact] = None
+    end_contact: Optional[PlannedContact] = None
 
 
 class PlannedMeasurement(BaseModel):
@@ -376,12 +411,24 @@ class NetworkPlan(BaseModel):
             if name in nodes:
                 raise ValueError(f"NetworkPlan: node name {name!r} is used twice.")
             nodes.add(name)
+        sites = {s.name for s in self.all_sites}
         for branch in self.all_branches:
-            for end in (branch.start, branch.end):
+            for end, contact in (
+                (branch.start, branch.start_contact),
+                (branch.end, branch.end_contact),
+            ):
                 if end not in nodes:
                     raise ValueError(
                         f"NetworkPlan: branch {branch.name!r} ends at unknown "
                         f"node {end!r}."
+                    )
+                if contact is None:
+                    continue
+                if end not in sites or not contact.electrode.startswith(f"{end}_"):
+                    raise ValueError(
+                        f"NetworkPlan: branch {branch.name!r} meets "
+                        f"{contact.electrode!r} at node {end!r}; a contact "
+                        "names an electrode of the site the branch ends at."
                     )
         return self
 

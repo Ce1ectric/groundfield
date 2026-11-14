@@ -274,8 +274,8 @@ def test_rectangle_without_braces_is_one_owner_per_side(
     """Every rectangle without cross-braces is one strip per side, bonded to
     the anchor as a rotated one, with the default value too. Up to user
     decision Q38 the default made an axis-aligned one (also at 90 deg, which
-    is realised as the axis-aligned rectangle with swapped sides) one
-    ``grid_mesh`` connected at its centre."""
+    was realised as the axis-aligned rectangle with swapped sides up to
+    audit D3B-04) one ``grid_mesh`` connected at its centre."""
     spec = FoundationElectrodeSpec(
         style=style,
         size_xy_m=(20.0, 2.0),
@@ -305,9 +305,11 @@ def test_rectangle_without_braces_is_one_owner_per_side(
     coefficients = {e.concrete_shell_coefficient_ohm_m for e in owners}
     assert len(coefficients) == 1 and (coefficients.pop() > 0.0) == (rho_c is not None)
     # The anchor is the local -y side; it starts at the local (-dx/2, -dy/2)
-    # corner, the connection point of incoming conductors (it was the centre
-    # of the grid mesh).
-    corner = {None: (-10.0, -1.0), 90.0: (-1.0, -10.0)}.get(angle)
+    # corner, the connection point of conductors attached by name (it was the
+    # centre of the grid mesh). At 90 deg the rectangle is rotated exactly
+    # (audit D3B-04, user decision Q41): the corner is (1, -10) m, no longer
+    # the (-1, -10) m corner of the axis-aligned rectangle with swapped sides.
+    corner = {None: (-10.0, -1.0), 90.0: (1.0, -10.0)}.get(angle)
     if corner is not None:
         assert owners[0].connection_point == pytest.approx((*corner, 0.7))
 
@@ -1107,3 +1109,35 @@ def test_plan_and_configuration_json_keep_the_deprecated_value() -> None:
     assert gf.world_fingerprint(
         materialise_plan(restored_plan)
     ) == gf.world_fingerprint(materialise_plan(plan))
+
+
+# audit D3A-01
+@pytest.mark.finding("10.39")
+@pytest.mark.parametrize(
+    "size",
+    [dict(size_xy_m=(10.0, -1.0)), dict(size_m=-10.0), dict(size_xy_m=(0.0, 5.0))],
+    ids=["xy", "square", "zero"],
+)
+@pytest.mark.parametrize("style", ["ring", "mesh"])
+def test_a_non_positive_side_is_rejected(size: dict, style: str) -> None:
+    """Up to user decision Q38 the grid mesh of the default ring refused a
+    non-positive side; four strips accepted a negative one and built the
+    mirrored rectangle silently (10 m x -1 m: 9.47312 ohm like 10 m x 1 m;
+    size_m=-10: 5.24988 ohm like 10 m). The spec rejects it now."""
+    with pytest.raises(pydantic.ValidationError, match="greater than 0"):
+        FoundationElectrodeSpec(style=style, n_x=1, n_y=1, depth_m=0.8, **size)
+
+
+# audit D3A-01
+@pytest.mark.finding("10.39")
+def test_a_drawn_negative_side_is_rejected_when_the_site_is_built() -> None:
+    """``size_m=Normal(2, 3)`` with seed 5 draws -0.41 m: four strips built a
+    0.41 m ring (the grid mesh of the base before Q38 raised)."""
+    spec = FoundationElectrodeSpec(
+        style="ring", size_m=gf.generators.Normal(mean=2.0, std=3.0), depth_m=0.8
+    )
+    world = gf.World(soil=gf.HomogeneousSoil(rho=RHO))
+    with pytest.raises(ValueError, match="sides of the rectangle must be positive"):
+        GroundingSystemSpec(electrodes=[spec]).build_at(
+            world, (0.0, 0.0), "h", np.random.default_rng(5)
+        )

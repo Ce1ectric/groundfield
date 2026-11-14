@@ -64,7 +64,12 @@ Geometric layout
   from the substation; each building is fed by the *nearest* cable
   cabinet by Manhattan distance, through a service drop that taps that
   cabinet's cable at the point nearest to the building (a T-joint;
-  rules in :mod:`groundfield.generators._pen_routing`).
+  rules in :mod:`groundfield.generators._pen_routing`). Every conductor
+  routed to a foundation ends at the point of the foundation nearest to it
+  (user decision Q41): a drop is the closest pair of its cable and the
+  foundation wires, a cable leaves a substation with a foundation at its
+  point nearest to the cabinet, and a cable that crosses a house's
+  foundation is joined to it there without a drop.
 
 Validity envelope
 -----------------
@@ -101,7 +106,11 @@ from groundfield.generators.electrode_specs import (
 )
 from groundfield.generators.grounding import GroundingSystemSpec
 from groundfield.generators._pen_routing import PenRouter
-from groundfield.generators.materialise import materialise_plan, site_anchor_point
+from groundfield.generators.materialise import (
+    materialise_plan,
+    site_anchor_point,
+    site_foundation_wires,
+)
 from groundfield.generators.measurement import (
     MEASUREMENT_H_TERMINAL,
     MEASUREMENT_S_TERMINAL,
@@ -568,17 +577,25 @@ class TnNetworkConfig(GeneratorConfig):
 
 
 def _router(cfg: "TnNetworkConfig", sites: list[PlannedSite]) -> PenRouter:
-    """PEN router over ``sites`` (the first is the substation)."""
+    """PEN router over ``sites`` (the first is the substation).
+
+    A site with a foundation is met at the point of its foundation wires
+    nearest to each cable (user decision Q41); any other site at the
+    connection point of its anchor.
+    """
     node_xy = {}
+    wires = {}
     for site in sites:
         point = site_anchor_point(site)
         if point is not None:
             node_xy[site.name] = (point[0], point[1])
+            wires[site.name] = site_foundation_wires(site)
     return PenRouter(
         sites[0].name,
         node_xy,
         depth_m=float(cfg.pen.depth_m),
         conductor=_pen_conductor(cfg.pen),
+        wires=wires,
     )
 
 
@@ -1011,11 +1028,13 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         (``pen_main_<anchor>``; collinear cabinets get separate cables in
         one trench). Every building is fed by its nearest cabinet
         (Manhattan metric between the site positions); its service drop
-        taps that cabinet's cable at the point nearest to the building's
-        connection point — a leakage-free tap junction ``pen_tap_<k>``,
-        or the substation / the cabinet when the nearest point is an end
-        of the cable — and never another building's drop. The full rules
-        are in :mod:`._pen_routing`.
+        taps that cabinet's cable at the point nearest to the building —
+        the closest pair of cable and foundation wires (user decision
+        Q41), or the point nearest to the connection point of a building
+        without a foundation — at a leakage-free tap junction
+        ``pen_tap_<k>``, or the substation / the cabinet when the nearest
+        point is an end of the cable, and never another building's drop.
+        The full rules are in :mod:`._pen_routing`.
         """
         wired = [c for c in cabinets if c.anchor is not None]
         router = _router(cfg, [substation, *wired, *buildings])
@@ -1069,11 +1088,11 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
            one cable per segment) and the service drops as straight PEN
            conductors. The drop of a building fed by a cabinet taps the
            trunk from the substation to that cabinet at the point nearest
-           to the building's connection point (a leakage-free tap
-           junction, or a cabinet), so it never runs back along the
-           trunk; the drop of a building in a substation slot starts at
-           the substation. A drop never starts on another building's
-           drop (:mod:`._pen_routing`).
+           to the building (the closest pair of trunk and foundation
+           wires, user decision Q41; a leakage-free tap junction, or a
+           cabinet), so it never runs back along the trunk; the drop of a
+           building in a substation slot starts at the substation. A drop
+           never starts on another building's drop (:mod:`._pen_routing`).
 
         Raises
         ------
