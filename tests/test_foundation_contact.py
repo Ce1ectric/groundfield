@@ -747,3 +747,301 @@ def test_layout_houses_without_a_foundation_keep_the_rod_head() -> None:
     for drop in drops:
         rod = world.get_electrode(drop.end_electrode)
         assert rod.kind == "rod" and drop.end == rod.connection_point
+
+
+# ---------------------------------------------------------------------
+# Audits R4A / R4B: the drop taps its cable, crossed buildings are joined,
+# no drop lies on a cable
+# ---------------------------------------------------------------------
+
+
+def _collinear_overlap(a, b, tol: float = 1e-3) -> float:
+    """Plan length in m over which the straight conductors ``a`` and ``b``
+    run on one line (within ``tol``)."""
+    a0, a1 = np.asarray(a.start[:2]), np.asarray(a.end[:2])
+    b0, b1 = np.asarray(b.start[:2]), np.asarray(b.end[:2])
+    la, lb = np.linalg.norm(a1 - a0), np.linalg.norm(b1 - b0)
+    if la < 1e-12 or lb < 1e-12:
+        return 0.0
+    ua = (a1 - a0) / la
+    normal = np.array([-ua[1], ua[0]])
+    if abs((b0 - a0) @ normal) > tol or abs((b1 - a0) @ normal) > tol:
+        return 0.0
+    lo, hi = sorted([(b0 - a0) @ ua, (b1 - a0) @ ua])
+    return max(0.0, min(hi, la) - max(lo, 0.0))
+
+
+def _cables(world: gf.World) -> list[gf.Conductor]:
+    return [
+        c
+        for c in world.conductors
+        if c.name.startswith(("pen_main_", "pen_trunk_")) and c.length > 0
+    ]
+
+
+def _guard_world(kind: str, n: int, topology: str, seed: int) -> gf.World:
+    if kind == "d3a":
+        return _d3a_world(n, topology, seed)
+    cfg = TnNetworkConfig(
+        building_counts={"residential": n},
+        pen_topology=StarCabinetTopology()
+        if topology == "star"
+        else RadialTrunkTopology(),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return TnNetworkGenerator(cfg).build(rng=seed)
+
+
+# user decision Q41, audits R4A-02, R4B-01
+@pytest.mark.parametrize("topology", ["star", "radial"])
+@pytest.mark.parametrize(
+    ("kind", "n", "seed"),
+    [("default", n, s) for n in (30, 50, 150) for s in (0, 1)]
+    + [("d3a", n, s) for n in (5, 12, 30) for s in (0, 1, 2)],
+)
+def test_no_drop_lies_on_a_cable(kind: str, n: int, topology: str, seed: int) -> None:
+    """No service drop runs along a cabinet cable or a trunk. Snapshot
+    ``e91f3c0``: the substation-slot drops of the radial networks ran along
+    the trunk through the houses it crosses (default 30 houses: 6 drops,
+    195 m; D3A's set: 18 drops, 566 m), and in the star default grid of 50 /
+    150 houses a house on the row between collinear cabinets got a drop
+    along the mains of the cabinets beyond its own (7.5 m)."""
+    world = _guard_world(kind, n, topology, seed)
+    cables = _cables(world)
+    for drop in _drops(world):
+        along = sum(_collinear_overlap(drop, c) for c in cables)
+        assert along < 1e-6, (drop.name, along)
+
+
+# user decision Q41, audit R4A-01
+@pytest.mark.parametrize("n", [30, 50, 150])
+def test_every_star_drop_starts_on_its_cable_not_on_a_neighbours_foundation(
+    n: int,
+) -> None:
+    """Default star networks: a drop whose closest pair lies at the joint of
+    a house that the main crosses started on that house's foundation, 5 m
+    from the cable (snapshot: 10 / 16 / 70 drops for n = 30 / 50 / 150). Now
+    every drop starts on a cable, at its tap point: the foot of the drop's
+    end on the cable, up to the snapping distance."""
+    world = _guard_world("default", n, "star", 0)
+    cables = _cables(world)
+    for drop in _drops(world):
+        foot = min(
+            (_nearest_foot(c, drop.start[:2]) for c in cables),
+            key=lambda p: math.dist(p, drop.start[:2]),
+        )
+        assert math.dist(foot, drop.start[:2]) < 1e-9, drop.name
+        if drop.start_electrode.startswith("residential_"):
+            # It starts at the joint of the crossed house, on its own
+            # foundation wire's contact with the cable.
+            assert _on_wire(
+                drop.start[:2], world.get_electrode(drop.start_electrode), 0.01
+            )
+
+
+def _nearest_foot(conductor: gf.Conductor, point) -> tuple[float, float]:
+    """Point of the straight conductor nearest to ``point`` (plan)."""
+    a, b = np.asarray(conductor.start[:2]), np.asarray(conductor.end[:2])
+    d = b - a
+    t = float(np.clip((np.asarray(point) - a) @ d / (d @ d), 0.0, 1.0))
+    return (float(a[0] + t * d[0]), float(a[1] + t * d[1]))
+
+
+# user decision Q41, audit R4A-02 (radial)
+def test_radial_houses_on_a_trunk_are_joined_and_get_no_drop() -> None:
+    """Default radial network of 30 houses: the trunks pen_trunk_f0_0 and
+    pen_trunk_f2_0 cross houses 12 ... 17, which are fed from the substation
+    slots. Snapshot: none was joined, their drops from the substation ran
+    along the trunk (195 m); base 500127c: drops to the corner. Now each is
+    joined to the trunk where it crosses the house, without a drop."""
+    world = _guard_world("default", 30, "radial", 0)
+    drops = {d.name for d in _drops(world)}
+    ends = {
+        end.split("_w")[0]
+        for c in _cables(world)
+        for end in (c.start_electrode, c.end_electrode)
+        if c.name.startswith("pen_trunk_")
+    }
+    for k in range(12, 18):
+        root = f"residential_{k}_foundation_0"
+        assert root in ends
+        assert f"pen_service_{root}" not in drops
+    assert len(drops) == 24
+
+
+# user decision Q41, audit R4A-02 (radial, a trunk beyond the tap source)
+def test_a_trunk_beyond_the_tap_source_that_crosses_a_house_is_joined() -> None:
+    """Default radial network of 50 houses: house 28 is fed by the cabinet
+    kvs_f0_0 at (60, 0) m; the trunk on to kvs_f0_1 crosses it. Snapshot: its
+    drop ran 22.5 m along that trunk from the cabinet."""
+    world = _guard_world("default", 50, "radial", 0)
+    assert "pen_service_residential_28_foundation_0" not in {
+        d.name for d in _drops(world)
+    }
+    joined = [
+        c
+        for c in _cables(world)
+        if c.name.startswith("pen_trunk_f0_1")
+        and "residential_28_foundation_0" in (c.start_electrode + c.end_electrode)
+    ]
+    assert joined
+
+
+# user decision Q41, audits R4A-02, R4B-01 (star)
+def test_a_house_that_a_main_crosses_is_fed_by_that_main() -> None:
+    """A 10 m ring house at (-60, 0) m: the main of the cabinet at
+    (-150, 0) m runs through it, its nearest cabinet is the one at
+    (-62, 30) m. Snapshot: fed by the nearest cabinet with a 19.9 m drop,
+    the other main running through the house unjoined. Now it is joined to
+    the main that crosses it and fed by that main's cabinet."""
+    house = BuildingTypeSpec(
+        name="residential",
+        grounding=GroundingSystemSpec(
+            electrodes=[FoundationElectrodeSpec(style="ring", size_m=10.0, depth_m=0.8)]
+        ),
+    )
+    world = _build(
+        building_types=[house],
+        building_counts={"residential": 1},
+        placement=ExplicitPlacement(positions=[(-60.0, 0.0)]),
+        cabinets=CabinetConfig(
+            placement=ExplicitPlacement(positions=[(-150.0, 0.0), (-62.0, 30.0)]),
+            fixed_count=2,
+        ),
+    )
+    assert _drops(world) == []
+    main = [c for c in _cables(world) if c.name.startswith("pen_main_kvs_0_rod_0")]
+    assert any(
+        c.end_electrode == "residential_0_foundation_0_w2"
+        and c.end[:2] == pytest.approx((-65.0, 0.0))
+        for c in main
+    )
+
+
+# user decision Q41, audit R4A-02 (star, several mains)
+def test_a_house_on_several_mains_is_fed_by_the_nearest_of_their_cabinets() -> None:
+    """Default star network of 50 houses: house 20 at (-112.5, 0) m lies on
+    the mains of kvs_0 (-180, 0) and kvs_1 (-140, 0) m; its nearest cabinet is
+    kvs_2 (-100, 0) m. It is joined to the main of kvs_1, the nearer of the
+    two cabinets whose mains cross it; the main of kvs_0 passes it unjoined."""
+    world = _guard_world("default", 50, "star", 0)
+    assert "pen_service_residential_20_foundation_0" not in {
+        d.name for d in _drops(world)
+    }
+
+    def touches(prefix: str) -> bool:
+        return any(
+            "residential_20_foundation_0" in (c.start_electrode + c.end_electrode)
+            for c in _cables(world)
+            if c.name.startswith(prefix)
+        )
+
+    assert touches("pen_main_kvs_1_rod_0")
+    assert not touches("pen_main_kvs_0_rod_0")
+    assert not touches("pen_main_kvs_2_rod_0")
+
+
+# user decision Q41, audit R4A-03
+@pytest.mark.parametrize("end_site", ["station", "cabinet"])
+def test_layout_tap_never_lies_inside_a_site_foundation(end_site: str) -> None:
+    """A house outline (0.5, 6)-(8.5, 12) m north of a cable between a 4 m x
+    4 m station ring at (0, 0) and (60, 0) m. Snapshot: the closest pair was
+    taken on the layout polyline, which starts at the station's waypoint
+    inside the ring: the tap junction (0.5, 0) m lay inside the ring, and the
+    cable ran from the ring's +x side (2, 0) m back to it and forward again
+    over the same 1.5 m. Now the closest pair is taken on the cable as built
+    (from (2, 0) m): its point at the ring is the station, and the drop is
+    the closest pair of ring and outline, (0.5, 2) -> (0.5, 6) m. The same
+    holds at a cabinet with a foundation at the cable's end (a ring at
+    (60, 0) m, the outline from x = 58.5 m: snapshot tap (58.5, 0) m)."""
+    ring = FoundationElectrodeSpec(style="ring", size_xy_m=(4.0, 4.0), depth_m=0.6)
+    station = GroundingSystemSpec(
+        electrodes=[ring, *rod_circle(3, radius_m=1.5, length_m=4.0, depth_m=0.6)]
+    )
+    if end_site == "station":
+        outline = [(0.5, 6.0), (8.5, 6.0), (8.5, 12.0), (0.5, 12.0)]
+        sub_xy, cab_xy = (0.0, 0.0), None
+    else:
+        outline = [(58.5, 6.0), (66.5, 6.0), (66.5, 12.0), (58.5, 12.0)]
+        sub_xy, cab_xy = (-40.0, 0.0), (60.0, 0.0)
+    fp = gf.BuildingFootprint(
+        polygon_xy_m=outline, building_use="residential", osm_id=1
+    )
+    lay = LvNetworkLayout.from_footprints(
+        [fp], substation_xy=sub_xy, obstacle_clearance_m=0.0
+    )
+    if cab_xy is None:
+        lay.add_pen_cable(start="substation", end_xy=(60.0, 0.0))
+    else:
+        cabinet = lay.add_cabinet(cab_xy, name="kvs_0")
+        lay.add_pen_cable(start="substation", end=cabinet)
+    lay.connect_buildings()
+    house = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", depth_m=0.8)]
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        world = lay.to_world(
+            house_grounding=house,
+            substation_grounding=station,
+            cabinet_grounding=station,
+            foundation_outline="polygon",
+        )
+    centre = (0.0, 0.0) if cab_xy is None else cab_xy
+    for j in world.junctions:
+        x, y, _ = j.connection_point
+        assert not (abs(x - centre[0]) < 2.0 and abs(y - centre[1]) < 2.0), j.name
+    pen = [c for c in world.conductors if c.name.startswith("pen_")]
+    shared = sum(
+        _collinear_overlap(a, b) for k, a in enumerate(pen) for b in pen[k + 1 :]
+    )
+    assert shared < 1e-9
+    (drop,) = _drops(world)
+    x_drop = 0.5 if cab_xy is None else 58.5
+    assert drop.start[:2] == pytest.approx((x_drop, 2.0))
+    assert drop.end[:2] == pytest.approx((x_drop, 6.0))
+
+
+# user decision Q41, audit R4A-05
+def test_a_contact_off_its_wire_or_on_a_rod_is_rejected() -> None:
+    """Snapshot: a plan whose contact names an unknown wire raised a
+    KeyError, one on the site's rod built a drop attached to the rod that
+    ended 5 m from it, one 50 m off the wire a drop 50 m short."""
+    from groundfield.generators.plan import NetworkPlan
+
+    types = [
+        BuildingTypeSpec(
+            name="residential",
+            grounding=GroundingSystemSpec(
+                electrodes=[
+                    FoundationElectrodeSpec(style="ring", size_m=10.0),
+                    RodElectrodeSpec(length_m=2.0),
+                ]
+            ),
+        )
+    ]
+    plan = TnNetworkGenerator(
+        TnNetworkConfig(building_types=types, building_counts={"residential": 2}),
+        seed=0,
+    ).plan()
+    data = plan.model_dump()
+    i = next(k for k, b in enumerate(data["branches"]) if b["end_contact"] is not None)
+    branch = data["branches"][i]
+    x, y = branch["end_contact"]["position_xy"]
+    wire = branch["end_contact"]["electrode"]
+    for contact, match in (
+        ({"electrode": branch["end"] + "_rod_1", "position_xy": (x, y)}, "not a foundation wire"),
+        ({"electrode": branch["end"] + "_nothing", "position_xy": (x, y)}, "no electrode"),
+        ({"electrode": wire, "position_xy": (x + 50.0, y)}, "from the wire"),
+        ({"electrode": wire, "position_xy": (x + 0.011, y + 0.011)}, "from the wire"),
+    ):  # fmt: skip
+        data["branches"][i] = {**branch, "end_contact": contact}
+        with pytest.raises(ValueError, match=match):
+            NetworkPlan.model_validate(data).to_world()
+    # Within one minimum section of the wire (a joined cable's point): built.
+    data["branches"][i] = {
+        **branch,
+        "end_contact": {"electrode": wire, "position_xy": (x + 0.006, y + 0.006)},
+    }
+    NetworkPlan.model_validate(data).to_world()

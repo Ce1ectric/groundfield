@@ -58,7 +58,12 @@ from groundfield.generators.layout.routing import (
     PenCable,
     _RoutingMixin,
 )
-from groundfield.generators._contact import FoundationWire, closest_pair, join
+from groundfield.generators._contact import (
+    FoundationWire,
+    closest_pair,
+    join,
+    nearest_point,
+)
 from groundfield.generators._pen_routing import min_section_length
 from groundfield.generators.materialise import _site_geometry, materialise_plan
 from groundfield.generators.plan import (
@@ -714,7 +719,7 @@ class LvNetworkLayout(
         }
         wires = {name: g[1] for name, g in geometry.items() if g[1]}
         meet = _Meeting({name: g[0] for name, g in geometry.items()}, wires)
-        taps = self._service_taps(houses, wires)
+        taps = self._service_taps(houses, wires, min_length)
         junctions: list[PlannedJunction] = []
         branches: list[PlannedBranch] = []
         cable_nodes: dict[str, list[tuple[str, tuple[float, float]]]] = {}
@@ -919,15 +924,22 @@ class LvNetworkLayout(
         self,
         houses: dict[int, PlannedSite],
         wires: dict[str, list[FoundationWire]],
+        min_length: float = 0.0,
     ) -> dict[int, tuple[float, float]]:
         """Tap point of every connection on its cable (user decision Q41).
 
         A house with a foundation is tapped at the closest pair in plan
         between its cable and the wires of its foundation; any other house
         at the tap point of its :class:`BuildingConnection` (the cable point
-        nearest to the footprint centroid).
+        nearest to the footprint centroid). The cable is the one that is
+        built: where it starts or ends at a site with a foundation it runs
+        from the foundation's point nearest to its next waypoint, not from
+        the site's waypoint inside the foundation, so no tap lies inside a
+        site foundation; a tap closer than ``min_length`` (m) to that point
+        is the site itself (audit R4A-03).
         """
         cables = {cable.name: cable for cable in self.pen_cables}
+        built = {name: self._built_segments(c, wires) for name, c in cables.items()}
         out: dict[int, tuple[float, float]] = {}
         for c in self.connections:
             house = houses.get(c.house_idx)
@@ -936,14 +948,53 @@ class LvNetworkLayout(
             if foundation and cable is not None and cable.segments():
                 segments = cable.segments()
                 i, t, _ = closest_pair(segments, foundation)
-                (x0, y0), (x1, y1) = segments[i]
-                out[c.house_idx] = (x0 + t * (x1 - x0), y0 + t * (y1 - y0))
+                tap = _point_at(segments[i], t)
+                clipped, sites = built[cable.name]
+                if sites and _off_segment(tap, clipped[i]):
+                    # The pair lies where the built cable does not run.
+                    i, t, _ = closest_pair(clipped, foundation)
+                    tap = _point_at(clipped[i], t)
+                for point, waypoint in sites:
+                    if math.dist(tap, point) < min_length:
+                        tap = waypoint
+                out[c.house_idx] = tap
             else:
                 out[c.house_idx] = (
                     float(c.tap_point_xy[0]),
                     float(c.tap_point_xy[1]),
                 )
         return out
+
+    def _built_segments(
+        self, cable: PenCable, wires: dict[str, list[FoundationWire]]
+    ) -> tuple[
+        list[tuple[tuple[float, float], tuple[float, float]]],
+        list[tuple[tuple[float, float], tuple[float, float]]],
+    ]:
+        """Segments of ``cable`` as built, and where it meets its sites.
+
+        The first (last) segment starts (ends) at the point of the start
+        (end) site's foundation nearest to the next (previous) waypoint, as
+        the materialised cable does (user decision Q41). Returns the
+        segments and, for each site with a foundation at an end, that point
+        and the site's waypoint.
+        """
+        segments = [(tuple(a), tuple(b)) for a, b in cable.segments()]
+        sites: list[tuple[tuple[float, float], tuple[float, float]]] = []
+        if not segments:
+            return segments, sites
+        start = wires.get(cable.start_anchor)
+        end = wires.get(cable.end_anchor) if cable.end_anchor is not None else None
+        first, last = segments[0], segments[-1]
+        if start:
+            point = nearest_point(first[1], start).xy
+            sites.append((point, first[0]))
+            segments[0] = (point, segments[0][1])
+        if end:
+            point = nearest_point(last[0], end).xy
+            sites.append((point, last[1]))
+            segments[-1] = (segments[-1][0], point)
+        return segments, sites  # type: ignore[return-value]
 
     def _cable_nodes(
         self,
@@ -1216,6 +1267,32 @@ class _Meeting:
             None if ea is None else PlannedContact(electrode=ea, position_xy=ca),
             None if eb is None else PlannedContact(electrode=eb, position_xy=cb),
         )
+
+
+def _point_at(
+    segment: tuple[tuple[float, float], tuple[float, float]], t: float
+) -> tuple[float, float]:
+    """Point at the fraction ``t`` of a plan segment."""
+    (x0, y0), (x1, y1) = segment
+    return (x0 + t * (x1 - x0), y0 + t * (y1 - y0))
+
+
+def _off_segment(
+    point: tuple[float, float],
+    segment: tuple[tuple[float, float], tuple[float, float]],
+    tol: float = 1e-9,
+) -> bool:
+    """Whether ``point`` lies farther than ``tol`` (m) from the segment."""
+    (x0, y0), (x1, y1) = segment
+    dx, dy = x1 - x0, y1 - y0
+    length2 = dx * dx + dy * dy
+    t = (
+        0.0
+        if length2 == 0.0
+        else ((point[0] - x0) * dx + (point[1] - y0) * dy) / length2
+    )
+    t = min(max(t, 0.0), 1.0)
+    return math.hypot(point[0] - (x0 + t * dx), point[1] - (y0 + t * dy)) > tol
 
 
 def _approximately_equal(

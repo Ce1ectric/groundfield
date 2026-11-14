@@ -1039,12 +1039,21 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
             mains[cab.name] = f"pen_main_{cab.anchor}"
             router.add_cable(substation.name, cab.name, name=mains[cab.name])
         fed: dict[str, list[PlannedSite]] = {c.name: [] for c in wired}
+        cabinet_of = {mains[c.name]: c for c in wired}
         for b in buildings:
             if b.anchor is None:
                 continue
             bx, by = b.position_xy
+            # A building that a main crosses is joined to it and fed by it
+            # (no drop); several: the nearest of their cabinets, ties to the
+            # lower cabinet index. Any other building is fed by its nearest
+            # cabinet (audit R4A-02).
+            crossed = [
+                cabinet_of[m]
+                for m in router.crossing(b.name, [mains[c.name] for c in wired])
+            ]
             cab = min(
-                wired,
+                crossed or wired,
                 key=lambda c: abs(c.position_xy[0] - bx) + abs(c.position_xy[1] - by),
             )
             fed[cab.name].append(b)
@@ -1179,12 +1188,22 @@ class TnNetworkGenerator(WorldGenerator[TnNetworkConfig]):
         router = _router(cfg, [s for s in sites if s.anchor is not None])
         for name, start, end in trunk:
             router.add_cable(start, end, name=name)
+        trunks = [name for name, _, _ in trunk]
         for tap, fed_buildings in fed.items():
             by_name = {b.name: b for b in fed_buildings}
             cables = paths[tap]
-            for name in router.drop_order(list(by_name), cables, tap):
+            # For the crossing rule every trunk counts as a feeding cable: a
+            # trunk that crosses a building is joined there and the building
+            # gets no drop -- a building in a substation slot has no feeding
+            # cable of its own, and a trunk beyond a building's tap source
+            # runs on past it (audit R4A-02).
+            for name in router.drop_order(list(by_name), cables, tap, crossing=trunks):
                 router.connect_drop(
-                    name, cables, tap, name=f"pen_service_{by_name[name].anchor}"
+                    name,
+                    cables,
+                    tap,
+                    name=f"pen_service_{by_name[name].anchor}",
+                    crossing=trunks,
                 )
         branches.extend(router.branches())
         junctions.extend(router.junctions)

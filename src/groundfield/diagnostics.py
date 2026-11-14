@@ -108,6 +108,7 @@ References
 from __future__ import annotations
 
 import math
+import re
 import warnings
 from collections import Counter
 from collections.abc import Iterator, Sequence
@@ -966,42 +967,86 @@ def _resolution_findings(world: "World", engine: "Engine") -> list[Diagnostic]:
     return out
 
 
-def _foundation_roots(world: "World") -> dict[str, str]:
-    """Name of the foundation every wire of a generated foundation belongs to.
+_BOND_NAME = re.compile(r"^(?P<root>.+)_bond_[0-9]+$")
+"""Name of a conductor that bonds a wire to its foundation's anchor."""
 
-    A generated rectangular foundation is several bonded wires (the anchor
+
+def _foundation_roots(world: "World") -> dict[str, str]:
+    """Name of the foundation every bonded wire of a generated foundation
+    belongs to.
+
+    A generated rectangular foundation is several straight wires (the anchor
     ``<name>`` and ``<name>_w<j>``, see
-    :func:`groundfield.postprocess._footprint.foundation_wires`); the
-    proximity check treats them as one owner, whose wires meet at corners
-    and crossings by design (audit D3A-04). Other electrodes map to
-    themselves.
+    :func:`groundfield.postprocess._footprint.foundation_wires`), each
+    bonded to the anchor by a conductor ``<name>_bond_<k>``. Only a wire
+    bonded so maps to its anchor (audit R4A-04: names alone made unbonded
+    strips ``earth`` / ``earth_w1`` one owner); every other electrode maps
+    to itself.
     """
-    from groundfield.postprocess._footprint import _WIRE_NAME, foundation_wires
+    from groundfield.postprocess._footprint import _WIRE_NAME
 
     names = {e.name for e in world.electrodes}
-    roots = {
-        m.group("root")
-        for m in (_WIRE_NAME.match(n) for n in names)
-        if m is not None and m.group("root") in names
-    }
     out = {n: n for n in names}
-    for root in sorted(roots):
-        for member in foundation_wires(world, root):
-            out[member.name] = root
+    for c in world.conductors:
+        bond = _BOND_NAME.match(c.name)
+        if bond is None:
+            continue
+        root = bond.group("root")
+        wire = _WIRE_NAME.match(c.end_electrode or "")
+        if (
+            c.start_electrode == root
+            and root in names
+            and wire is not None
+            and wire.group("root") == root
+            and c.end_electrode in names
+        ):
+            out[c.end_electrode] = root
     return out
 
 
-def _leakage_wires(world: "World", engine: "Engine | None"):
-    """End points, radii and owner names of every leakage wire segment.
+def _shared_vertices(world: "World", owner: dict[str, str]):
+    """Vertices that two bonded wires of one foundation share.
 
-    The wires of one generated foundation share one owner name (its anchor),
-    so their corners and crossings are not reported (audit D3A-04).
+    Returns a map from a sorted pair of wire names to the array of their
+    common vertices (m, shape ``(k, 3)``): the corners where two sides meet
+    and the crossings of a mesh (its wires have a vertex at every crossing).
+    """
+    import numpy as np
+
+    groups: dict[str, list] = {}
+    for e in world.electrodes:
+        groups.setdefault(owner.get(e.name, e.name), []).append(e)
+    out: dict[tuple[str, str], Any] = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        where: dict[tuple[float, float, float], set[str]] = {}
+        for e in members:
+            for run in e.wire_polylines():
+                for v in np.asarray(run, dtype=float):
+                    key = tuple(float(x) for x in np.round(v, 6))
+                    where.setdefault(key, set()).add(e.name)
+        for key, wires in where.items():
+            if len(wires) < 2:
+                continue
+            ordered = sorted(wires)
+            for i, a in enumerate(ordered):
+                for b in ordered[i + 1 :]:
+                    out.setdefault((a, b), []).append(key)
+    return {k: np.asarray(v, dtype=float) for k, v in out.items()}
+
+
+def _leakage_wires(world: "World", engine: "Engine | None"):
+    """End points, radii and names of every leakage wire segment.
+
+    Electrode segments carry the electrode's own name; the grouping of the
+    bonded wires of one foundation is applied to the hits
+    (:func:`_proximity_findings`).
     """
     import numpy as np
 
     ends, radii, names = [], [], []
     interfaces = _layer_interfaces(world.soil)
-    owner = _foundation_roots(world)
     for e in world.electrodes:
         if engine is not None:
             geo = e.segments(float(engine.segment_length), interfaces)
@@ -1016,7 +1061,7 @@ def _leakage_wires(world: "World", engine: "Engine | None"):
             seg = np.concatenate(parts, axis=0)
         ends.append(seg)
         radii.extend([float(e.wire_radius)] * len(seg))
-        names.extend([owner[e.name]] * len(seg))
+        names.extend([e.name] * len(seg))
     for c in world.conductors:
         n = _conductor_segment_count(c)
         if n == 0:
@@ -1033,16 +1078,41 @@ def _leakage_wires(world: "World", engine: "Engine | None"):
 
 
 def _proximity_findings(world: "World", engine: "Engine | None") -> list[Diagnostic]:
+    import numpy as np
+
     from groundfield.conductors.proximity import find_close_wires
 
     ends, radii, names = _leakage_wires(world, engine)
     if len(names) < 2:
         return []
     hits = find_close_wires(ends, radii, names, rel_threshold=PROXIMITY_REL_THRESHOLD)
+    owner = _foundation_roots(world)
+    shared = (
+        _shared_vertices(world, owner) if any(k != v for k, v in owner.items()) else {}
+    )
     worst: dict[tuple[str, str], Any] = {}
     for h in hits:  # sorted worst first
-        key = tuple(sorted((h.name_a, h.name_b)))
-        worst.setdefault(key, h)
+        root_a = owner.get(h.name_a, h.name_a)
+        root_b = owner.get(h.name_b, h.name_b)
+        if root_a == root_b:
+            # Two bonded wires of one foundation: they meet at its corners
+            # and crossings by design (audit D3A-04). A pair whose closest
+            # points both lie within the threshold of a vertex the two
+            # wires share is that meeting; any other pair (the opposite
+            # sides of a narrow ring, the parallel wires of a fine mesh) is
+            # real proximity (audit R4A-04).
+            pair = tuple(sorted((h.name_a, h.name_b)))
+            corners = shared.get(pair)  # type: ignore[arg-type]
+            if corners is not None:
+                reach = PROXIMITY_REL_THRESHOLD * (radii[h.index_a] + radii[h.index_b])
+                da = np.linalg.norm(corners - np.asarray(h.point_a), axis=1)
+                db = np.linalg.norm(corners - np.asarray(h.point_b), axis=1)
+                if np.any(np.maximum(da, db) <= reach * (1.0 + 1e-9)):
+                    continue
+            key = pair
+        else:
+            key = tuple(sorted((root_a, root_b)))
+        worst.setdefault(key, h)  # type: ignore[arg-type]
     # The exact line kernel integrates near pairs (finding 10.28) and
     # stays physical for close parallel wires; the point kernel does not.
     point_kernel = engine is None or engine.kernel == "point"
@@ -1242,10 +1312,14 @@ def diagnose(
         ``report.context["warn_segments"]`` hold the two sizes.
     ``proximity``
         Leakage wires of different owners closer than
-        :data:`PROXIMITY_REL_THRESHOLD` times the sum of their radii (the
-        bonded wires of one generated foundation, ``<name>`` and
-        ``<name>_w<j>``, count as one owner: they meet at its corners and
-        crossings by design, audit D3A-04):
+        :data:`PROXIMITY_REL_THRESHOLD` times the sum of their radii. Two
+        wires of one generated foundation (``<name>`` and ``<name>_w<j>``,
+        bonded by ``<name>_bond_<k>``) are reported only away from the
+        vertices they share: they meet at its corners and crossings by
+        design (audit D3A-04), but the opposite sides of a narrow encased
+        ring or the parallel wires of a fine mesh are close wires like any
+        other (audit R4A-04); findings between foundations name their
+        anchors:
         ``interpenetrating`` / ``close`` are warnings with the point
         kernel and information with the exact line kernel (which
         integrates near pairs), ``crossing`` / ``touching`` (wires that

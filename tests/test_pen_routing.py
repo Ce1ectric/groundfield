@@ -457,10 +457,13 @@ def test_a_drop_taps_the_cable_of_its_own_cabinet() -> None:
 # audit A3SG-03
 @pytest.mark.finding("10.38")
 def test_no_drop_starts_on_another_drop_in_the_radial_default_grid() -> None:
-    """Base: 22 of the drops of this network started on another house's drop."""
+    """Base: 22 of the drops of this network started on another house's drop.
+    The five houses whose foundations the trunks cross are joined to the
+    trunk there and have no drop (audit R4A-02; the snapshot e91f3c0 gave
+    them drops along the trunk): 25 drops for 30 houses."""
     world = _build(**_CASES["radial-default-grid-ring-houses"])
     drops = _drops(world)
-    assert len(drops) == 30
+    assert len(drops) == 25
     houses = {c.end_electrode for c in drops}
     assert not any(c.start_electrode in houses for c in drops)
     assert not any(c.start_electrode.startswith("residential_") for c in drops)
@@ -469,14 +472,25 @@ def test_no_drop_starts_on_another_drop_in_the_radial_default_grid() -> None:
 # audit A3SG-03
 @pytest.mark.finding("10.38")
 def test_overlapping_drops_and_trunks_stay_passive() -> None:
-    """Drops of the substation slots run along the trunks (one trench)."""
+    """No drop runs along a trunk any more (audits R4A-02, R4B-01): the
+    houses the trunks cross are joined to them, and the substation slot
+    beyond the end of the east trunk (house 17, its -y side on the trunk's
+    line) starts its 2.5 m drop at the cabinet where the trunk ends instead
+    of running 58.5 m along the trunk from the substation (snapshot
+    e91f3c0; the A3SG-03 trench of the slot drops). The network stays
+    passive with the inductive PEN."""
     world = _build(
         **_CASES["radial-default-grid-ring-houses"],
         pen=PenConfig(inductance_model="neumann"),
     )
     trunks = [c for c in _pen(world) if c.name.startswith("pen_trunk_")]
     shared = sum(_overlap(d, t) for d in _drops(world) for t in trunks)
-    assert shared > 0.0
+    assert shared < 1e-9
+    (slot,) = [
+        d for d in _drops(world) if d.name == "pen_service_residential_17_foundation_0"
+    ]
+    assert slot.start_electrode == "kvs_f0_0_rod_0"
+    assert slot.length == pytest.approx(2.5)
     engine = gf.create_engine(
         segment_length=2.0,
         frequencies=[50.0, 1000.0],
@@ -686,13 +700,24 @@ def test_random_networks_build_and_route_as_documented(
         }
         anchors = {s.anchor for s in plan.sites if s.role == "building"}
         assert anchors <= connected
+        # No drop runs along a cable (audits R4A-02, R4B-01): the snapshot
+        # e91f3c0 had 14 such drops in 50 radial networks of 60 houses. The
+        # one exception is rule 3's bound: a foundation that touches the
+        # cable's end node from beyond (8 mm past a cabinet rod, one of the
+        # 400 networks) is tapped one minimum section before the node, and
+        # its drop shares that section with the cable.
+        cables = [c for c in pen if _is_main(c)]
+        for d in _drops(world):
+            shared = max(_overlap(d, c, tol=1e-3) for c in cables)
+            assert shared <= MIN_DROP_LENGTH_M * (1 + 1e-6), (d.name, shared)
         if topology != "star":
             continue
         # Star: every drop starts on the cable of the building's own cabinet,
-        # at the point nearest to the building (up to the snapping distance);
-        # a drop from a building the cable runs through starts at the point
-        # of that building's foundation nearest to its own (user decision
-        # Q41), not on the cable.
+        # at the point nearest to the building (up to the snapping distance),
+        # also where that point is the joint of a building the cable runs
+        # through (audit R4A-01: the snapshot e91f3c0 started such a drop on
+        # the joined building's foundation and this test skipped it). A
+        # building that a main crosses is joined to it and has no drop.
         own: dict[str, list[gf.Conductor]] = {}
         for c in pen:
             if _is_main(c):
@@ -704,8 +729,6 @@ def test_random_networks_build_and_route_as_documented(
                 _root(c.end_electrode) for c in cable
             }
             assert _root(d.start_electrode) in ends, d.name
-            if d.start_electrode.startswith("residential_"):
-                continue
             foot = _nearest_on(cable, d.end[:2])
             assert math.dist(d.start[:2], foot) <= MIN_DROP_LENGTH_M * (1 + 1e-6)
 
