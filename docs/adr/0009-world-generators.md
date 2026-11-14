@@ -304,16 +304,33 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    a footprint has no `osm_id`; `jitter_m` accepts a distribution
    (10.53, 10.55).
 4. **Geometry.** Layout foundations follow the building footprint (10.54);
-   rotated mesh foundations are polylines split at every crossing and
-   footprints at multiples of 90° are realised as the axis-aligned
-   rectangle with swapped sides (10.39); every rectangular foundation is
-   one wire per line at every angle (audit A2G-04 for meshes, user
-   decision Q38 for rectangles without cross-braces, which were one grid
-   mesh when axis-aligned);
+   rotated mesh foundations are polylines split at every crossing (10.39);
+   every rectangular foundation is one wire per line at every angle (audit
+   A2G-04 for meshes, user decision Q38 for rectangles without
+   cross-braces, which were one grid mesh when axis-aligned); a rectangle
+   at a multiple of 90° is rotated with the exact cosine and sine, so its
+   coordinates carry no round-off and its local −y side stays the anchor
+   (audit D3B-04; up to then it was the axis-aligned rectangle with
+   swapped sides, 10.39, whose anchor is another side);
    `PenConfig.depth_m` is honoured; measurement leads run horizontally at
    their configured depth (10.55).
 5. **Network wiring.** PEN cable joints are leakage-free junction nodes
-   instead of 5 cm pseudo-rods (10.38). The fall-of-potential measurement
+   instead of 5 cm pseudo-rods (10.38). Every cabinet has its own cable;
+   a service drop taps the cable that feeds its building (10.38). Every
+   conductor routed to a foundation ends at the point of that foundation
+   nearest to it (user decision Q41): a service drop is the closest pair
+   in plan of its feeding cable and the foundation wires, a cable leaving
+   a substation or cabinet with a foundation starts at the foundation's
+   point nearest to the next node, the conductor is attached to the wire
+   that holds the point (`PlannedContact`), and a cable that crosses a
+   foundation is joined to it there without a drop; ties go to the lowest
+   wire index, then to the smallest arc position along the wire. Before,
+   every conductor ended at the connection point of the site's anchor — a
+   corner of a rectangular foundation since A2G-04 / Q38 — so 47 of 282
+   drops of a ring-house test set ran along a side of their own foundation
+   and houses beyond their cable were connected across the house (audit
+   D3A-02). Sites without a foundation and everything attached by name
+   keep the connection point. The fall-of-potential measurement
    is wired as in the field: instrument terminals `meas_H` / `meas_S` as
    junctions, the feed lead from `meas_H` to the auxiliary electrode, the
    probe lead to `meas_S`, one two-terminal source from the station to

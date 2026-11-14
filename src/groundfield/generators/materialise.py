@@ -74,9 +74,11 @@ finding 10.39) or on ``concrete_model`` (user decision Q38):
 * a rectangle without cross-braces (``style="ring"``, or ``"mesh"`` with
   ``n_x = n_y = 1``) has one owner per side, at every angle (user decision
   Q38 of 2026.11). Up to then the default ``"lumped"`` made an
-  axis-aligned one a single owner (one
+  axis-aligned one — also one turned by a multiple of 90°, which was built
+  as the axis-aligned rectangle with swapped sides — a single owner (one
   :class:`~groundfield.geometry.electrodes.GridMeshElectrode`, connected
-  at its centre) and only ``"distributed"`` or a rotation split it. The
+  at its centre), and only ``"distributed"`` or a rotation by another
+  angle split it (audit D3B-04). The
   four bonded owners carry the split of the current among the sides that
   dissipates least (the owner matrix is symmetric and positive definite),
   and the single owner's split, in proportion to the side lengths, is one
@@ -87,20 +89,53 @@ finding 10.39) or on ``concrete_model`` (user decision Q38):
   1 m, sides up to 80 m) and 2 % up to aspect ratio 50 (short side at
   least 1 m, sides up to 150 m); bare or with the default 5 cm shell by
   less than 0.4 % and 1 % (largest decreases found −0.686 / −1.529 % and
-  −0.320 / −0.907 %; audit R2B-01). Against one current per segment, at
-  the largest cases of that scope, the single owner was 0.55 … 2.16 % high
-  and one per side is 0.23 … 0.90 % high;
+  −0.320 / −0.907 %; audit R2B-01). Against one current per segment one
+  owner per side is at most 1.4 % high over that scope (+1.34 % for
+  150 m × 3 m, bare, in 30 over 200 Ω·m with :math:`h_1` = 5 m; +1.35 %
+  in a 0.2 m shell) and at most 0.25 % up to aspect ratio 4 bare or with
+  the default shell; the single owner was up to 2.1 % high (audit D3B-01;
+  at the largest decreases above 0.23 … 0.90 % against 0.55 … 2.16 %);
 * a building outline (``polygon_xy_m``) is one closed polyline, one
   owner; a rectangular outline therefore reads like the single owner of a
   rectangle did, above the same rectangle given by its size.
 
 A foundation of several wires is bonded to its first wire, the anchor:
 the local :math:`-y` side of a rectangle, which starts at the local
-:math:`(-d_x/2, -d_y/2)` corner (the connection point of incoming
-conductors). Per-electrode results under the foundation's name (its
-current, :meth:`~groundfield.solver.result.FieldResult.grounding_impedance`)
+:math:`(-d_x/2, -d_y/2)` corner — its connection point, where conductors
+attached to the foundation by name start. A rectangle at a multiple of 90°
+is rotated with the exact cosine and sine, so its coordinates carry no
+round-off and the local :math:`-y` side stays the anchor (up to audit
+D3B-04 it was built as the 0° rectangle with swapped sides, whose anchor
+is another side: the connection point jumped by up to the rectangle's
+diagonal between 179.9° and 180°). Per-electrode results under the
+foundation's name (its current,
+:meth:`~groundfield.solver.result.FieldResult.grounding_impedance`)
 therefore refer to that side; the cluster-level results refer to the
 whole foundation.
+
+Where conductors meet a foundation
+----------------------------------
+Every conductor the generators route to a foundation ends at the point of
+the foundation nearest to it (user decision Q41 of 2026.11): a service
+drop is the shortest connection in plan between its feeding cable and the
+wires of the building's foundation (their closest pair), a cable leaving a
+substation or a cabinet with a foundation starts at the foundation's point
+nearest to the cable's next node; the conductor is attached to the wire
+that holds the point (:class:`~groundfield.generators.plan.PlannedContact`,
+:func:`site_foundation_wires`). Ties go to the lowest wire index, then to
+the smallest arc position along the wire: a cable parallel to the side
+facing it meets that side at the start of the range of equal distance,
+for a side it passes along its whole length the corner where the wire
+starts. Physically the conductor is a finite-impedance branch of the nodal
+analysis (ADR-0003) and, with an inductance model, a Neumann filament
+(ADR-0004): where it ends on the foundation does not change the galvanic
+model, whose bonded wires are one cluster, but sets the length of the
+drop and its coupling to the foundation's wires and to the other
+conductors — at 1 kHz the reactance of a small ring-house network changed
+by +8 … +18 % when the drops ran from the corners (audit D3A-02). Sites
+without a foundation (rods, rings, strips) keep the connection point of
+their anchor (:func:`site_anchor_point`), and so does everything attached
+by name in user code.
 """
 
 from __future__ import annotations
@@ -124,9 +159,11 @@ from groundfield.generators.electrode_specs import (
     RodElectrodeSpec,
     StripElectrodeSpec,
 )
+from groundfield.generators._contact import FoundationWire
 from groundfield.generators.plan import (
     NetworkPlan,
     PlannedBranch,
+    PlannedContact,
     PlannedJunction,
     PlannedSite,
 )
@@ -143,6 +180,7 @@ __all__ = [
     "materialise_plan",
     "materialise_site",
     "site_anchor_point",
+    "site_foundation_wires",
 ]
 
 MIN_POLYGON_EDGE_M = 0.5
@@ -353,10 +391,19 @@ def _materialise_foundation(
         )
         return
     if spec.size_xy_m is not None:
-        dx, dy = spec.size_xy_m
+        dx, dy = (float(v) for v in spec.size_xy_m)
     else:
         size = float(spec.size_m)
         dx, dy = size, size
+    # The sides are checked here, after the draws of a Distribution: four
+    # strips accept a negative side and build the mirrored rectangle (audit
+    # D3A-01; the grid mesh that the default ring was up to user decision
+    # Q38 refused it). ``not dx > 0`` also catches NaN.
+    if not (dx > 0.0 and dy > 0.0):
+        raise ValueError(
+            f"Foundation {name!r}: the sides of the rectangle must be positive, "
+            f"got {dx:g} m x {dy:g} m."
+        )
     # ``style="ring"`` is the perimeter only: one mesh cell.
     if spec.style == "ring":
         nx, ny = 1, 1
@@ -367,12 +414,6 @@ def _materialise_foundation(
         spec, encased_length_m=(ny + 1) * dx + (nx + 1) * dy
     )
 
-    # A rectangle turned by a multiple of 90 deg is axis-aligned: realise
-    # it with swapped sides (and mesh counts), so the same rectangle always
-    # gets the same discretisation whichever way it was described (10.39).
-    angle_deg, dx, dy, nx, ny = _canonical_right_angle(
-        spec.orientation_deg or 0.0, dx, dy, nx, ny
-    )
     # One owner per wire line at every angle; for a rectangle without
     # cross-braces one per side (user decision Q38: the axis-aligned
     # "lumped" one was a single GridMeshElectrode up to then).
@@ -384,7 +425,7 @@ def _materialise_foundation(
         dy=dy,
         n_x=nx,
         n_y=ny,
-        angle_deg=angle_deg,
+        angle_deg=float(spec.orientation_deg or 0.0),
         name=name,
         wire_radius=effective_radius,
         concrete_shell_coefficient=shell_coefficient,
@@ -395,36 +436,36 @@ def _materialise_foundation(
 _RIGHT_ANGLE_TOL_DEG = 1e-9
 """Angles closer than this (degrees) to a multiple of 90 count as one."""
 
+_QUARTER_TURNS = ((1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0))
+"""Exact ``(cos, sin)`` of 0, 90, 180 and 270 degrees."""
 
-def _canonical_right_angle(
-    angle_deg: float, dx: float, dy: float, nx: int, ny: int
-) -> tuple[float, float, float, int, int]:
-    """Map a rectangle turned by k·90° onto the equivalent 0° rectangle.
+
+def _rotation(angle_deg: float) -> tuple[float, float]:
+    """``(cos, sin)`` of a rotation, exact at multiples of 90 degrees.
 
     Parameters
     ----------
     angle_deg
         Rotation of the local ``+x`` axis in degrees.
-    dx, dy
-        Side lengths in m along local ``x`` / ``y``.
-    nx, ny
-        Mesh cells along local ``x`` / ``y``.
 
     Returns
     -------
-    tuple
-        ``(angle_deg, dx, dy, nx, ny)``. For an angle within
-        :data:`_RIGHT_ANGLE_TOL_DEG` of an even multiple of 90° the angle
-        becomes ``0.0``; for an odd multiple it becomes ``0.0`` with the
-        sides and mesh counts swapped. Any other angle is returned
-        unchanged.
+    tuple of float
+        ``(cos a, sin a)``. Within :data:`_RIGHT_ANGLE_TOL_DEG` of a multiple
+        of 90 degrees the exact values ``0`` and ``±1``, so the wires of a
+        rectangle at a right angle get coordinates without round-off (and
+        0 degrees, 360 degrees, ... build the axis-aligned rectangle bit for
+        bit). The rectangle is rotated like at any other angle: its local
+        :math:`-y` side stays the anchor, so the anchor and its connection
+        point are continuous in the orientation (audit D3B-04; up to then a
+        multiple of 90 degrees was realised as the 0-degree rectangle with
+        swapped sides, whose anchor was another side).
     """
     quarter_turns = round(angle_deg / 90.0)
-    if abs(angle_deg - 90.0 * quarter_turns) > _RIGHT_ANGLE_TOL_DEG:
-        return angle_deg, dx, dy, nx, ny
-    if quarter_turns % 2:
-        return 0.0, dy, dx, ny, nx
-    return 0.0, dx, dy, nx, ny
+    if abs(angle_deg - 90.0 * quarter_turns) <= _RIGHT_ANGLE_TOL_DEG:
+        return _QUARTER_TURNS[quarter_turns % 4]
+    rad = math.radians(angle_deg)
+    return math.cos(rad), math.sin(rad)
 
 
 def _materialise_polygon_foundation(
@@ -527,8 +568,7 @@ def _materialise_foundation_wires(
     coincide (10.39). Each wire is one uniform-current owner, at every
     orientation (audit A2G-04).
     """
-    cos_a = math.cos(math.radians(angle_deg))
-    sin_a = math.sin(math.radians(angle_deg))
+    cos_a, sin_a = _rotation(angle_deg)
     cx, cy = centre_xy
     half_x = 0.5 * dx
     half_y = 0.5 * dy
@@ -573,14 +613,96 @@ def site_anchor_point(site: PlannedSite) -> Optional[tuple[float, float, float]]
     """Connection point in m of the anchor electrode of ``site``.
 
     The site is materialised into a scratch world, so the point is exactly
-    the one the conductors of :func:`materialise_branch` attach to
-    (``None`` for a site without present electrodes).
+    the one a branch without a contact attaches to (``None`` for a site
+    without present electrodes). For a rectangular foundation it is a
+    corner — the start of its local :math:`-y` side (meshes since audit
+    A2G-04, rectangles without cross-braces since user decision Q38) — and
+    for a building outline its first vertex. The generators connect their
+    cables to a site with a foundation at the point of the foundation
+    nearest to each cable instead (:func:`site_foundation_wires`, user
+    decision Q41); this point stays the end of everything attached to the
+    site by name.
     """
     if site.anchor is None:
         return None
     scratch = create_world(soil=HomogeneousSoil(rho=100.0))
     anchor = materialise_site(scratch, site)
     return tuple(float(v) for v in _node_point(scratch, anchor))  # type: ignore[return-value]
+
+
+def site_foundation_wires(site: PlannedSite) -> list[FoundationWire]:
+    """The wires of the foundations of ``site``, in plan (user decision Q41).
+
+    Parameters
+    ----------
+    site
+        A planned site.
+
+    Returns
+    -------
+    list of FoundationWire
+        One entry per electrode built from a
+        :class:`~groundfield.generators.electrode_specs.FoundationElectrodeSpec`
+        of the site (every side or mesh line of a rectangle, the closed
+        outline of a building), in world order: its name, its index in this
+        list, its plan vertices from its connection point and its depth.
+        Empty for a site without a foundation (rods, rings, strips).
+
+    Notes
+    -----
+    New in 2026.11. The generators end every conductor they route to a site
+    with a foundation at the point of these wires nearest to the conductor
+    (:mod:`groundfield.generators._contact`); a site without a foundation
+    keeps the connection point of its anchor (:func:`site_anchor_point`).
+    The site is materialised into a scratch world, so the wires are exactly
+    those of the materialised plan.
+    """
+    return _site_geometry(site, anchor=False)[1]
+
+
+def _site_geometry(
+    site: PlannedSite, *, anchor: bool = True
+) -> tuple[Optional[tuple[float, float, float]], list[FoundationWire]]:
+    """Anchor connection point and foundation wires of ``site``, in one pass.
+
+    The electrodes are materialised into one scratch world without the
+    bonds, so the anchor's connection point is the one of
+    :func:`site_anchor_point` (``None`` for a site without electrodes) and
+    the wires are those of :func:`site_foundation_wires`. With
+    ``anchor=False`` only the foundation specs are materialised.
+    """
+    scratch = create_world(soil=HomogeneousSoil(rho=100.0))
+    cx, cy = site.position_xy
+    point: Optional[tuple[float, float, float]] = None
+    wires: list[FoundationWire] = []
+    for planned in site.electrodes:
+        spec = planned.spec
+        is_foundation = isinstance(spec, FoundationElectrodeSpec)
+        if not is_foundation and not (anchor and point is None):
+            continue
+        first = len(scratch.electrodes)
+        materialise_electrode(
+            scratch,
+            spec,
+            centre_xy=(cx + spec.offset_xy_m[0], cy + spec.offset_xy_m[1]),
+            name=site.electrode_name(planned),
+            bond_conductor_type=site.bond_conductor_type,
+        )
+        if anchor and point is None:
+            point = tuple(float(v) for v in scratch.electrodes[first].connection_point)  # type: ignore[assignment]
+        if not is_foundation:
+            continue
+        for electrode in scratch.electrodes[first:]:
+            (run,) = electrode.wire_polylines()
+            wires.append(
+                FoundationWire(
+                    electrode=electrode.name,
+                    index=len(wires),
+                    xy=tuple((float(x), float(y)) for x, y, _ in run),
+                    z=float(electrode.connection_point[2]),
+                )
+            )
+    return point, wires
 
 
 def materialise_site(world: World, site: PlannedSite) -> Optional[str]:
@@ -669,6 +791,31 @@ def _node_point(world: World, name: str) -> tuple[float, float, float]:
     return world.get_junction(name).connection_point
 
 
+def _branch_end(
+    world: World,
+    node: Any,
+    name: str,
+    contact: Optional[PlannedContact],
+    index: Optional[dict[str, Any]],
+) -> tuple[tuple[float, float, float], str]:
+    """End point (m) and attached node name of one end of a branch.
+
+    Without a contact the connection point of the node; with one the
+    contact's point on the named wire, at the wire's depth (user decision
+    Q41).
+    """
+    if contact is None:
+        point = node.connection_point if not isinstance(node, str) else None
+        if point is None:
+            point = _node_point(world, name)
+        return tuple(float(v) for v in point), name  # type: ignore[return-value]
+    wire = (index or {}).get(contact.electrode) or world.get_electrode(
+        contact.electrode
+    )
+    x, y = contact.position_xy
+    return (float(x), float(y), float(wire.connection_point[2])), contact.electrode
+
+
 def materialise_branch(
     world: World,
     branch: PlannedBranch,
@@ -696,6 +843,14 @@ def materialise_branch(
     -------
     Conductor
         The created conductor.
+
+    Notes
+    -----
+    An end with a :class:`~groundfield.generators.plan.PlannedContact` is
+    the contact's point on the wire it names, and the conductor is attached
+    to that wire (user decision Q41); an end without one is the connection
+    point of the node (the site's anchor electrode, or the junction). With
+    ``axis_z_m`` both ends are moved to that depth.
     """
     start = nodes.get(branch.start, branch.start)
     end = nodes.get(branch.end, branch.end)
@@ -704,7 +859,11 @@ def materialise_branch(
     else:
         start_node, end_node = start, end
     p = branch.conductor
-    if branch.axis_z_m is None:
+    if (
+        branch.axis_z_m is None
+        and branch.start_contact is None
+        and branch.end_contact is None
+    ):
         return create_conductor(
             world,
             name=branch.name,
@@ -717,21 +876,16 @@ def materialise_branch(
             coupling_to_soil=p.coupling_to_soil,
             inductance_model=p.inductance_model,
         )
-    z = float(branch.axis_z_m)
-    sx, sy, _ = (
-        start_node.connection_point
-        if not isinstance(start_node, str)
-        else _node_point(world, start)
+    (sx, sy, sz), start = _branch_end(
+        world, start_node, start, branch.start_contact, index
     )
-    ex, ey, _ = (
-        end_node.connection_point
-        if not isinstance(end_node, str)
-        else _node_point(world, end)
-    )
+    (ex, ey, ez), end = _branch_end(world, end_node, end, branch.end_contact, index)
+    if branch.axis_z_m is not None:
+        sz = ez = float(branch.axis_z_m)
     cond = Conductor(
         name=branch.name,
-        start=(sx, sy, z),
-        end=(ex, ey, z),
+        start=(sx, sy, sz),
+        end=(ex, ey, ez),
         start_electrode=start,
         end_electrode=end,
         conductor_type=p.conductor_type,

@@ -104,8 +104,10 @@ matrix: its diagonal rises because the lumped shell now reaches
 `solve_mutual_matrix`; the release notes give the magnitudes for AP1-type
 sites. Since user decision Q38 its two square rings are one owner per side
 as well, so the passive one carries equalising currents among its sides:
-the matrix moves by a further 5.2e-4 and the field next to the passive
-foundation by 1.6 %.
+the matrix moves by a further 5.2e-4, and the field at the edges of the
+passive foundation by +5.9 / −5.1 % (golden engine, point kernel; +5.5 /
+−4.7 % with the default line kernel), 1.6 % of the largest value of the
+case's field (the norm-wise measure of the golden harness; audit D3B-02).
 
 ## Cross-braces of mesh foundations
 
@@ -219,9 +221,11 @@ A rectangle without cross-braces (`style="ring"`, or `"mesh"` with
 `n_x = n_y = 1`) is one uniform-current owner per side: one strip per side,
 bonded to the local $-y$ side (the anchor), at every orientation, bare or
 encased (user decision of 2026.11, Q38). Up to that decision the default
-`concrete_model="lumped"` made an axis-aligned one a single owner — one
-`GridMeshElectrode`, the same current density on all four sides — and only
-`"distributed"` or a rotation split it; `concrete_model` has had no effect
+`concrete_model="lumped"` made an axis-aligned one — also one turned by a
+multiple of 90°, built as the axis-aligned rectangle with swapped sides — a
+single owner: one `GridMeshElectrode`, the same current density on all four
+sides; only `"distributed"` or a rotation by another angle split it (audit
+D3B-04). `concrete_model` has had no effect
 since (see [Deprecations](../reference/deprecations.md)). A building outline
 (`polygon_xy_m`) stays one closed polyline, one owner, so a rectangular
 outline now reads like the single owner did.
@@ -288,15 +292,37 @@ that averages the potential over the wire surface gives −0.594 % and
 0.083 m segments; for the bare and 5 cm cases of the table it agrees with
 groundfield to 0.001 points. Against one current per segment, all segments
 at one potential (the moment-method reference), one owner per side is the
-closer model, which is why the decision kept it: at the largest cases one
-owner was 0.55 % (80 m × 20 m, bare) to 2.16 % (16 m × 1 m) high, one per
-side is 0.23 … 0.90 % high (groundfield's per-segment assembly at 0.25 m
-segments; for the bare cases the boundary-element solution agrees to 0.001
-points). For the 0.2 m shell this comparison is uncertain by about 0.2
-points: at 0.25 m segments the boundary-element solution lies up to 0.23
-points lower, and refining its segments to 0.083 m — shorter than the
-radius, which groundfield refuses — moves it by up to 0.17 points (4 m ×
-1 m: one owner +0.85 → +1.01 %, one per side +0.25 → +0.41 %).
+closer model, which is why the decision kept it: at the largest decreases
+of the table one owner was 0.55 % (80 m × 20 m, bare) to 2.16 % (16 m × 1 m)
+high, one per side is 0.23 … 0.90 % high (groundfield's per-segment
+assembly at 0.25 m segments; for the bare cases the boundary-element
+solution agrees to 0.001 points). Over the whole scope (audit D3B-01: 80
+rectangles with short sides of 1 to 150 m, the 39 AP1 soils, bare and with
+5 cm and 0.2 m shells, 61 values of $\rho_c$, 9 360 segment matrices;
+segments of 0.5 m up to sides of 50 m, 1 m beyond) one owner per side is at
+most 1.4 % high, the single owner up to 2.1 %, and one current per segment
+is never above one owner per side nor one owner per side above one owner:
+
+| Scope (short side ≥ 1 m) | aspect ratio ≤ 4, sides ≤ 80 m | aspect ratio ≤ 50, sides ≤ 150 m |
+|---|---|---|
+| bare | +0.230 % (80 m × 20 m, 30 / 200 Ω·m, $h_1$ = 5 m) | +1.336 % (150 m × 3 m, same soil) |
+| bare or shell up to 5 cm, $\rho_c$ = 30 … 1 000 Ω·m | +0.231 % (80 m × 20 m, 5 cm of 30 Ω·m) | +1.339 % (150 m × 3 m, 5 cm of 30 Ω·m) |
+| bare or shell up to 0.2 m, $\rho_c$ = 30 … 1 000 Ω·m | +0.253 % (6 m × 1.5 m, 0.2 m of 30 Ω·m, 1 000 / 30 Ω·m, $h_1$ = 5 m) | +1.347 % (150 m × 3 m, 0.2 m of 30 Ω·m) |
+
+The largest values sit at the corner of the scope, the longest and
+narrowest rectangle (150 m × 2.9 m: +1.335 %, 125 m × 2.5 m: +1.323 %);
+narrower ones than the scope allows lie higher (150 m × 1 m: +1.65 %,
+audit D3B). The independent boundary-element solution of audit D3B gives
+the same bare and 5 cm values to 0.001 points, at the scan's segments and
+at half of them. For the 0.2 m shell the comparison is uncertain by about
+0.2 points, because the outer radius is not thin against the segments: at
+150 m × 3 m the two solutions agree (+1.346 / +1.347 %), at 6 m × 1.5 m
+the boundary-element value grows from +0.253 % to +0.334 % when its
+segments are halved to 0.25 m; for the cases of the table above it lies up
+to 0.23 points lower at 0.25 m segments, and refining its segments to
+0.083 m — shorter than the radius, which groundfield refuses — moves it by
+up to 0.17 points (4 m × 1 m: one owner +0.85 → +1.01 %, one per side
++0.25 → +0.41 %).
 
 ## Converting between the conventions
 

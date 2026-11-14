@@ -1440,11 +1440,15 @@ def test_taps_millimetres_apart_share_one_node(gap_m: float) -> None:
 @pytest.mark.finding("10.38")
 @pytest.mark.parametrize("offset_m", [1e-4, 2e-3, 4e-3])
 def test_a_tap_millimetres_from_a_cable_corner_is_the_corner(offset_m: float) -> None:
-    """The cable turns at (60, 0); the house's centroid projects ``offset_m``
-    before the corner. Base: a section of ``offset_m`` (ValidationError). The
-    corner and the tap are one node now."""
+    """The cable turns at (60, 0); the tap lies ``offset_m`` before the
+    corner. Base: a section of ``offset_m`` (ValidationError). The corner and
+    the tap are one node now. Since user decision Q41 the tap is the closest
+    pair of cable and foundation: the side facing the cable, y = -11 m, is
+    11 m from it between x = 60 - offset_m and 60 m, and the start of that
+    range (the corner of the side) wins, ``offset_m`` before the corner of
+    the cable (the house used to stand with its centroid there)."""
     layout = LvNetworkLayout.from_footprints(
-        [_rect_footprint(60.0 - offset_m, -15.0, dx=8.0, dy=8.0, osm_id=1)],
+        [_rect_footprint(64.0 - offset_m, -15.0, dx=8.0, dy=8.0, osm_id=1)],
         substation_xy=(0.0, 0.0),
     )
     layout.add_pen_cable(start="substation", end_xy=(60.0, 40.0))

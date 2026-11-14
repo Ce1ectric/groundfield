@@ -671,6 +671,12 @@ def plot_potential_radial(
     point). Multiple ``depths`` produce multiple curves — the typical
     "surface vs. deeper soil" comparison.
 
+    For a rectangular foundation of the generators the connection point
+    is a corner, the start of its local :math:`-y` side (since 2026.11:
+    meshes since audit A2G-04, rectangles without cross-braces since user
+    decision Q38; in 0.15.0 one grid mesh connected at its centre), so the
+    profile starts there; pass ``around=(x, y, z)`` for another start.
+
     Parameters
     ----------
     around

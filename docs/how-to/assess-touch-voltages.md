@@ -131,6 +131,17 @@ assert abs(abs(outside).max() - 113.6) < 0.1 and abs(abs(everywhere[24:]).max() 
 
 The value to assess is the largest of both, here 1 m outside a corner.
 
+The feet stand 1 m from the nearest wire of the whole foundation
+(`anchor="footprint"`, the default). `anchor="connection_point"` keeps the
+rule of 0.15.0, a circle round the electrode's connection point. That point
+is the centre of a hand-built grid mesh, but a corner of a rectangular
+foundation of the generators since 2026.11 — the start of its local −y
+side, the electrode named after the foundation (meshes since audit A2G-04,
+rectangles without cross-braces since user decision Q38) — so the circle
+goes round that corner: 100 A into a generated 20 m × 5 m ring at 0.8 m in
+100 Ω·m give 229.71 V there against 159.61 V round its centre (audit
+D3A-03). Keep the default for generated foundations.
+
 ## Compare with the permissible touch voltage
 
 `permissible_touch_voltage_en50522(t_f)` follows Figure 8 / Table B.4 of

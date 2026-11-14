@@ -76,9 +76,11 @@ a square (scope and numbers on the
 [concrete-shell page](../../explanation/concrete-shells.md#owners-of-a-rectangle-without-cross-braces)).
 `electrode_currents[<name>]` and `grounding_impedance(<name>)` therefore
 refer to the first wire (the local −y side, whose start, a corner of the
-rectangle, is the connection point of conductors attached to `<name>`);
-use `cluster_impedance` or the sum over the wires for the foundation. A
-polygon outline is one closed wire. The deprecated `concrete_model` has
+rectangle, is the connection point of conductors attached to `<name>` by
+name); use `cluster_impedance` or the sum over the wires for the
+foundation. A rectangle at a multiple of 90° is rotated exactly (no
+round-off), so the local −y side stays the first wire. A polygon outline
+is one closed wire. The deprecated `concrete_model` has
 no effect (drop the argument, see [Deprecations](../deprecations.md)); an
 outline narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with
 a warning, for both `foundation_outline="ombr"` and `"polygon"`.
@@ -88,7 +90,7 @@ the topology documents: from the substation (`StarCabinetTopology`), or
 one cable per trunk segment (`RadialTrunkTopology`). A service drop taps
 the cable path that feeds its own building — the cable of its cabinet,
 or the trunk from the substation to its tap source — at the point
-nearest to the building's connection point: a leakage-free tap junction
+nearest to the building: a leakage-free tap junction
 `pen_tap_<k>` that splits the cable into sections `<cable>_s<k>`, or the
 substation or cabinet at the end of the cable; a building in a
 substation slot of the radial trunk is connected to the substation. The
@@ -100,6 +102,32 @@ drop may share its route with another cable — another cabinet's cable,
 a trunk, another drop — as cables in one trench do; the inductive
 coupling treats such overlapping conductors as touching wires. The
 layout builder merges cable nodes closer than the same length.
+
+**Where conductors meet a foundation** (user decision Q41). Every
+conductor the generators route to a foundation ends at the point of that
+foundation nearest to it, for every form (rectangles at any orientation,
+building outlines, a substation's foundation), in `TnNetworkGenerator` and
+in the layout builder:
+
+- a service drop is the shortest connection in plan between its feeding
+  cable and the wires of the building's foundation (their closest pair):
+  the tap on the cable and the end on the foundation, at the PEN depth
+  (layout builder: at the wire's depth), attached to the wire that holds
+  the point (`PlannedBranch.end_contact`, a `PlannedContact`);
+- a cable leaving a substation or cabinet with a foundation starts at the
+  foundation's point nearest to its next node;
+- a cable that crosses or touches a foundation in plan is joined to the
+  wire there, without a drop; where the foundation touches the cable at
+  a node (a cabinet inside the outline) the joint lies 1 cm from the node;
+- ties go to the lowest wire index, then to the smallest arc position
+  along the wire: a cable parallel to the side facing it meets the side
+  at the start of the range of equal distance, for a side it passes along
+  its whole length the corner where that wire starts.
+
+Sites without a foundation (rods, rings, strips) keep the connection point
+of their anchor, and so does everything attached by name
+(`site_anchor_point`, `create_conductor(start=<foundation>)`).
+`site_foundation_wires(site)` returns the wires the rule uses.
 
 **Measurement set-up.** A fall-of-potential measurement is a
 two-terminal source between the earthing system and an auxiliary

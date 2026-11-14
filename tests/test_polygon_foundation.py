@@ -70,8 +70,10 @@ def test_rectangular_polygon_matches_the_one_owner_ring_exactly():
     owner, as one ``GridMeshElectrode``. Up to user decision Q38 the
     generators built the rectangle given by its size that way (this test was
     ``test_rectangular_polygon_matches_grid_mesh_ring_exactly``); since then
-    it is one strip per side, 6.5e-6 lower for this 10 m x 8 m ring (evidence
-    d3gen ``q38_polygon_vs_rectangle.out``)."""
+    it is one strip per side, 6.5e-6 lower for this 10 m x 8 m ring with the
+    point kernel of this test, 6.8e-6 with the default engine (audit D3B-06;
+    evidence d3gen ``q38_polygon_vs_rectangle.out``, f4gen
+    ``d3b06/polygon_vs_rectangle_branch.out``)."""
     w_rect, a_rect = _foundation_world({"size_xy_m": RECT_SIZE})
     w_poly, a_poly = _foundation_world({"polygon_xy_m": RECT_POLY})
     w_grid = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))

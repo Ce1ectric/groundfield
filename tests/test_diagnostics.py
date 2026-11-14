@@ -466,3 +466,60 @@ def test_top_level_exports_diagnostics() -> None:
     needed = {"world_statistics", "expected_segments", "check_segment_resolution"}
     assert needed.issubset(set(gf.__all__))
     assert all(hasattr(gf, name) for name in needed)
+
+
+# audit D3A-04
+@pytest.mark.finding("10.44")
+@pytest.mark.parametrize("kernel", ["line", "point"])
+@pytest.mark.parametrize("style", ["ring", "mesh"])
+def test_diagnose_does_not_flag_the_wires_of_one_foundation(
+    kernel: str, style: str
+) -> None:
+    """An encased 10 m ring (four bonded strips since user decision Q38) or
+    2 x 2 mesh: base 4 / 9 proximity findings ('close, axis distance 500
+    mm' at the corners), information with the line kernel, warnings with
+    the point kernel. Its wires meet by design; they are one owner here."""
+    import numpy as np
+
+    from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+
+    world = gf.World(soil=gf.HomogeneousSoil(rho=100.0))
+    GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style=style, size_m=10.0, depth_m=0.8, concrete_rho_ohm_m=150.0
+            )
+        ]
+    ).build_at(world, (0.0, 0.0), "h", np.random.default_rng(0))
+    engine = gf.create_engine(frequencies=[50.0], segment_length=0.5, kernel=kernel)
+    found = [
+        f for f in gf.diagnose(world, engine).findings if f.category == "proximity"
+    ]
+    assert found == [], [f.message for f in found]
+
+
+# audit D3A-04 (guard)
+@pytest.mark.finding("10.44")
+def test_diagnose_still_flags_two_foundations_that_touch() -> None:
+    """Two encased rings side by side, 0.1 m apart: different owners."""
+    import numpy as np
+
+    from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+
+    world = gf.World(soil=gf.HomogeneousSoil(rho=100.0))
+    spec = GroundingSystemSpec(
+        electrodes=[
+            FoundationElectrodeSpec(
+                style="ring", size_m=10.0, depth_m=0.8, concrete_rho_ohm_m=150.0
+            )
+        ]
+    )
+    spec.build_at(world, (0.0, 0.0), "a", np.random.default_rng(0))
+    spec.build_at(world, (10.1, 0.0), "b", np.random.default_rng(0))
+    engine = gf.create_engine(frequencies=[50.0], segment_length=0.5)
+    found = [
+        f for f in gf.diagnose(world, engine).findings if f.category == "proximity"
+    ]
+    assert {tuple(sorted(f.subjects)) for f in found} == {
+        ("a_foundation_0", "b_foundation_0")
+    }

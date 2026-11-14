@@ -626,3 +626,37 @@ def test_the_quoted_corner_deviations_are_those_of_the_default_kernel() -> None:
     assert f"touch 1 m outside {touch * 100:+.0f} %" in text, (touch, text)
     assert f"from 1 m to 2 m outside {step_out * 100:+.0f} %" in text, text
     assert f"1 m outwards {step_above * 100:+.0f} %" in text, text
+
+
+# audit D3A-03
+@pytest.mark.finding("10.21")
+def test_connection_point_anchor_of_a_generated_ring_is_its_corner() -> None:
+    """``anchor="connection_point"`` reproduced v0.15.0 for generated
+    foundations only while they were one grid mesh connected at the centre.
+    Since 2026.11 the electrode named after a rectangular foundation is its
+    -y side, connected at a corner: the circle of feet goes round that
+    corner (10 m ring, 100 A, 100 ohm m: 270.89 V instead of 245.22 V round
+    the centre). The texts say so and quote these numbers."""
+    from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+    from groundfield.postprocess import plotting
+
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    anchor = GroundingSystemSpec(
+        electrodes=[FoundationElectrodeSpec(style="ring", size_m=10.0, depth_m=0.8)]
+    ).build_at(w, (0.0, 0.0), "h", np.random.default_rng(0))
+    gf.create_source(w, attached_to=anchor, magnitude=100.0)
+    res = gf.create_engine(frequencies=[50.0], segment_length=0.5).solve(w)
+    assert w.get_electrode(anchor).connection_point == (-5.0, -5.0, 0.8)
+    _, env = touch_voltage_envelope(res, w, electrode=anchor, anchor="connection_point")
+    assert float(np.max(np.abs(env))) == pytest.approx(270.89, abs=0.005)
+    for doc in (touch_voltage.__doc__, plotting.plot_potential_radial.__doc__):
+        flat = " ".join(doc.split())
+        assert "corner" in flat and "Q38" in flat
+    flat = " ".join(touch_voltage.__doc__.split())
+    for quoted in (
+        "270.89 V",
+        "245.22 V",
+        "229.71 against 159.61 V",
+        "91.10 against 111.38 V",
+    ):
+        assert quoted in flat

@@ -18,6 +18,12 @@ its end node, never on another drop; no section is shorter than the
 router's minimum length (taps snap to nearby nodes); a drop never runs
 along the cable it taps. Cables of different cabinets and drops may share
 a route (one trench); the network stays passive.
+
+Since user decision Q41 a cable or drop ends at the point of a foundation
+nearest to it, attached to the wire that holds the point (a side or mesh
+line ``<foundation>_w<j>``, or the anchor ``<foundation>``); the checks
+below therefore compare foundations, not wire names. The scenarios of
+``tests/test_foundation_contact.py`` pin the rule itself.
 """
 
 from __future__ import annotations
@@ -98,6 +104,11 @@ def _drops(world: gf.World) -> list[gf.Conductor]:
     return [c for c in _pen(world) if c.name.startswith("pen_service_")]
 
 
+def _root(name: str) -> str:
+    """Foundation a wire belongs to (``<foundation>_w<j>`` -> ``<foundation>``)."""
+    return re.sub(r"_w[0-9]+$", "", name)
+
+
 def _overlap(c1: gf.Conductor, c2: gf.Conductor, tol: float = 1e-6) -> float:
     """Length in m over which two straight conductors run along each other."""
     ax, ay, bx, by = c1.start[0], c1.start[1], c1.end[0], c1.end[1]
@@ -127,11 +138,12 @@ def _check_routing(world: gf.World, substation_anchor: str) -> None:
     # No section or drop shorter than the router's minimum length.
     assert min(math.dist(c.start, c.end) for c in pen) >= MIN_DROP_LENGTH_M
     # Every drop starts on the mains (a node of a cabinet cable or trunk,
-    # or the substation), never on another drop.
-    nodes = {substation_anchor}
+    # or the substation), never on another drop. A node with a foundation
+    # is met at any of its wires (user decision Q41).
+    nodes = {_root(substation_anchor)}
     for c in mains:
-        nodes.update((c.start_electrode, c.end_electrode))
-    assert all(d.start_electrode in nodes for d in drops)
+        nodes.update((_root(c.start_electrode), _root(c.end_electrode)))
+    assert all(_root(d.start_electrode) in nodes for d in drops)
     # A drop never runs along the cable it taps (the cable whose section
     # ends at the drop's start: its tap junction, cabinet or a building the
     # cable runs through).
@@ -139,11 +151,17 @@ def _check_routing(world: gf.World, substation_anchor: str) -> None:
     tapped: dict[str, set[str]] = {}
     for c in mains:
         sections.setdefault(_cable(c.name), []).append(c)
-        tapped.setdefault(c.end_electrode, set()).add(_cable(c.name))
+        tapped.setdefault(_root(c.end_electrode), set()).add(_cable(c.name))
     for d in drops:
-        for cable in tapped.get(d.start_electrode, ()):
+        for cable in tapped.get(_root(d.start_electrode), ()):
             for c in sections[cable]:
-                assert _overlap(d, c) < 0.01, (d.name, c.name)
+                # Up to the snapping distance: a drop from a foundation
+                # that touches its cable next to a node (user decision Q41)
+                # may share that last minimum section with it.
+                assert _overlap(d, c) <= MIN_DROP_LENGTH_M * (1 + 1e-6), (
+                    d.name,
+                    c.name,
+                )
 
 
 # ---------------------------------------------------------------------
@@ -216,23 +234,29 @@ def test_routing_guarantees(case: str) -> None:
     _check_routing(_build(**_CASES[case]), "trafo_ring_0")
 
 
-# stream DOC-B
+# stream DOC-B, user decision Q41
 @pytest.mark.finding("10.38")
 def test_a_drop_starts_at_the_nearest_point_of_its_feeding_cable() -> None:
+    """Two default (2 x 2 mesh) houses on the row of the main. House 0 at
+    (-12.5, 0) m lies on the main, which runs along the brace of its mesh:
+    the main is joined to the brace at its start (-17.5, 0) m, no drop
+    (before user decision Q41: a 5 m drop from a tap at (-17.5, 0) m to the
+    (-17.5, -5) m corner). House 1 beside the substation is fed from the
+    substation (the end of its cabinet's cable), not from the cabinet 180 m
+    away: 3.5 m from the ring to the point of the foundation nearest to it."""
     world = _build(building_counts={"residential": 2}, placement=_TWO_HOUSES)
     drops = {c.name: c for c in _drops(world)}
-    near = drops["pen_service_residential_0_foundation_0"]
-    # A tap junction on the main, straight beside the house's connection point.
-    tap = world.get_junction(near.start_electrode)
-    assert tap.position[:2] == pytest.approx((-17.5, 0.0))
-    assert math.dist(near.start, near.end) == pytest.approx(5.0)
-    # The house beside the substation is fed from the substation (the end of
-    # its cabinet's cable), not from the cabinet 180 m away.
+    assert set(drops) == {"pen_service_residential_1_foundation_0"}
+    mains = {c.name: c for c in _pen(world) if _is_main(c)}
+    joint = mains["pen_main_kvs_0_rod_0"]
+    assert joint.end_electrode == "residential_0_foundation_0_w1"
+    assert joint.end[:2] == pytest.approx((-17.5, 0.0))
     far = drops["pen_service_residential_1_foundation_0"]
     assert far.start_electrode == "trafo_ring_0"
-    assert math.dist(far.start, far.end) < 10.0
+    assert far.end[:2] == pytest.approx((7.5, 0.0))
+    assert math.dist(far.start, far.end) == pytest.approx(3.5)
     total = sum(math.dist(c.start, c.end) for c in _pen(world))
-    assert total == pytest.approx(184.0 + 5.0 + math.hypot(3.5, 5.0))
+    assert total == pytest.approx(184.0 + 3.5)
 
 
 # stream DOC-B
@@ -286,8 +310,17 @@ def test_inductive_pen_network_is_passive(building_types: list | None) -> None:
 # stream DOC-B
 @pytest.mark.finding("10.38")
 def test_tap_junctions_are_plan_junctions_and_round_trip() -> None:
+    """Five default houses on a row 20 m beside the main (since user
+    decision Q41 the default row lies on the main, whose houses are joined
+    to it without a tap)."""
     gen = TnNetworkGenerator(
-        TnNetworkConfig(building_counts={"residential": 5}), seed=0
+        TnNetworkConfig(
+            building_counts={"residential": 5},
+            placement=ManhattanGridPlacement(
+                spacing_x_m=25.0, spacing_y_m=30.0, n_per_row=10, centre_xy=(0.0, 20.0)
+            ),
+        ),
+        seed=0,
     )
     plan = gen.plan()
     assert [j.name for j in plan.junctions] == [f"pen_tap_{k}" for k in range(5)]
@@ -297,18 +330,35 @@ def test_tap_junctions_are_plan_junctions_and_round_trip() -> None:
     assert [j.name for j in world.junctions] == [j.name for j in plan.junctions]
 
 
-# stream DOC-B
+# stream DOC-B, user decision Q41
 @pytest.mark.finding("10.38")
 def test_a_building_on_top_of_a_node_is_rejected_clearly() -> None:
     """A house whose connection point coincides with the cabinet's would get
-    a cable of no length (a Conductor validation error deep in the build)."""
+    a cable of no length (a Conductor validation error deep in the build).
+    Since user decision Q41 this is a house without a foundation (a rod at
+    the cabinet); a foundation that touches the cabinet is joined to its
+    cable one minimum section length before it
+    (``tests/test_foundation_contact.py``)."""
+    rod_house = BuildingTypeSpec(
+        name="residential",
+        grounding=GroundingSystemSpec(electrodes=[RodElectrodeSpec(length_m=2.0)]),
+    )
     cfg = TnNetworkConfig(
-        building_types=[_RING_HOUSE_AT_SITE],
+        building_types=[rod_house],
         building_counts={"residential": 2},
-        placement=ExplicitPlacement(positions=[(-60.0, 0.0), (-180.0, 0.0)]),
+        placement=ExplicitPlacement(positions=[(-60.0, 10.0), (-180.0, 0.0)]),
     )
     with pytest.raises(ValueError, match="coincides"):
         TnNetworkGenerator(cfg, seed=0).build()
+    cfg = TnNetworkConfig(
+        building_types=[_RING_HOUSE_AT_SITE],
+        building_counts={"residential": 2},
+        placement=ExplicitPlacement(positions=[(-60.0, 10.0), (-180.0, 0.0)]),
+    )
+    world = TnNetworkGenerator(cfg, seed=0).build()
+    last = [c for c in _pen(world) if c.end_electrode == "kvs_0_rod_0"][-1]
+    assert _root(last.start_electrode) == "residential_1_foundation_0"
+    assert last.length == pytest.approx(MIN_DROP_LENGTH_M)
 
 
 # ---------------------------------------------------------------------
@@ -369,14 +419,17 @@ def test_z_in_of_a_100_house_network_drops_against_the_old_routing() -> None:
     from the cabinets, measured with this solver): 0.202724 ohm; the
     nearest-point tree with chained cabinets (base): 0.206457 ohm (+1.8 %,
     against the documented direction); then 0.200434 ohm. Since user
-    decision Q38 each ring is one strip per side and its drop ends at its
-    (-5, -5) m corner instead of its centre: 0.200357 ohm (-0.039 %)."""
+    decision Q38 each ring is one strip per side and its drop ended at its
+    (-5, -5) m corner instead of its centre: 0.200357 ohm (-0.039 %). Since
+    user decision Q41 each drop ends at the point of the ring nearest to its
+    cable, and the rings on the main are joined to it where it crosses
+    them: 0.200346 ohm (-0.006 % against Q38)."""
     world = _build(building_types=[_RING_HOUSE], building_counts={"residential": 100})
     engine = gf.create_engine(backend="image", segment_length=2.0, frequencies=[50.0])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         z = complex(np.asarray(engine.solve(world).input_impedance())[0]).real
-    assert z == pytest.approx(0.200357, rel=1e-5)
+    assert z == pytest.approx(0.200346, rel=1e-5)
     assert z < 0.202724
 
 
@@ -628,24 +681,33 @@ def test_random_networks_build_and_route_as_documented(
             world = plan.to_world()
         _check_routing(world, "trafo_ring_0")
         pen = _pen(world)
-        connected = {c.start_electrode for c in pen} | {c.end_electrode for c in pen}
+        connected = {_root(c.start_electrode) for c in pen} | {
+            _root(c.end_electrode) for c in pen
+        }
         anchors = {s.anchor for s in plan.sites if s.role == "building"}
         assert anchors <= connected
         if topology != "star":
             continue
         # Star: every drop starts on the cable of the building's own cabinet,
-        # at the point nearest to the building (up to the snapping distance).
+        # at the point nearest to the building (up to the snapping distance);
+        # a drop from a building the cable runs through starts at the point
+        # of that building's foundation nearest to its own (user decision
+        # Q41), not on the cable.
         own: dict[str, list[gf.Conductor]] = {}
         for c in pen:
             if _is_main(c):
                 own.setdefault(_cable(c.name), []).append(c)
         feeding = _feeding_cables(plan)
         for d in _drops(world):
-            cable = own[feeding[d.end_electrode]]
-            ends = {c.start_electrode for c in cable} | {c.end_electrode for c in cable}
-            assert d.start_electrode in ends, d.name
+            cable = own[feeding[_root(d.end_electrode)]]
+            ends = {_root(c.start_electrode) for c in cable} | {
+                _root(c.end_electrode) for c in cable
+            }
+            assert _root(d.start_electrode) in ends, d.name
+            if d.start_electrode.startswith("residential_"):
+                continue
             foot = _nearest_on(cable, d.end[:2])
-            assert math.dist(d.start[:2], foot) < MIN_DROP_LENGTH_M
+            assert math.dist(d.start[:2], foot) <= MIN_DROP_LENGTH_M * (1 + 1e-6)
 
 
 def test_overlap_helper_is_symmetric_for_collinear_pieces() -> None:
