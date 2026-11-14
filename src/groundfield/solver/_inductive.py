@@ -61,7 +61,18 @@ conventions the three terms are assembled with:
   inductance $\\mu_0\\ell/(8\\pi)$ of a solid round conductor
   (``include_internal=True``), for distributed and lumped branches
   alike (the package-wide convention of
-  :mod:`groundfield.coupling.inductance`).
+  :mod:`groundfield.coupling.inductance`), except the branches of a
+  cable shield (``conductor_type="cable_shield"``): a thin-walled tube
+  has no internal inductance of a solid wire (user decision Q33 of
+  2026.11; a 100 m coaxial pair with 5 mm core and 15 mm shield radius
+  reads the analytic coaxial loop inductance 26.97 µH instead of
+  31.97 µH).
+- **Concentric cables** (user decision Q32 of 2026.11): a thinner
+  conductor on the axis of a ``"cable_shield"`` conductor, inside it,
+  is its core and couples to it at the shield radius; two conductors of
+  any other type on one axis are separate conductors and touch
+  (:mod:`groundfield.coupling.inductance`, "Wires lying beside each
+  other").
 - **Lumped and single-segment conductors** (10.24): a conductor with an
   ``inductance_model`` that the topology keeps as one lumped branch
   (``discretize_segment_length=None``, or one sub-segment) is one
@@ -145,6 +156,9 @@ class BranchGeometry:
     conductor
         Name of the conductor behind the branch, for messages (``None``
         if unknown).
+    shield
+        Whether the conductor is a cable shield
+        (``conductor_type="cable_shield"``, user decisions Q32 and Q33).
     """
 
     p_a: np.ndarray
@@ -152,6 +166,7 @@ class BranchGeometry:
     wire_radius: float
     inductive: bool
     conductor: str | None = None
+    shield: bool = False
 
 
 @dataclass(frozen=True)
@@ -561,11 +576,19 @@ def _assemble_inductance_matrix(
             [np.stack([b.p_a, b.p_b], axis=0) for _, b in records], axis=0
         )
         radii = np.array([b.wire_radius for _, b in records])
+        # user decisions Q32 / Q33: the concentric reading needs the shield
+        # marker, and a (thin-walled) shield has no internal inductance of
+        # a solid wire. Without shields the call is that of 2026.11 before.
+        shields = np.array([bool(getattr(b, "shield", False)) for _, b in records])
+        extra = {}
+        if shields.any():
+            extra = {"shields": shields, "include_internal": ~shields}
         L_sub = build_inductance_matrix(
             seg_endpoints,
             radii,
             image=IMAGE_OF_EARTH_MODEL[earth_model],
             touching=SOLVER_TOUCHING,
+            **extra,
         )
         L_full[np.ix_(idx, idx)] = L_sub
         if earth_model == "perfect_mirror":
@@ -729,7 +752,16 @@ def branch_records(
         p_b = np.array(c.end, dtype=float)
         length = float(np.linalg.norm(p_b - p_a))
         inductive = c.inductance_model is not None and length > 0.0
-        lumped.append(BranchGeometry(p_a, p_b, float(c.wire_radius), inductive, c.name))
+        lumped.append(
+            BranchGeometry(
+                p_a,
+                p_b,
+                float(c.wire_radius),
+                inductive,
+                c.name,
+                shield=c.is_shield,
+            )
+        )
         if c.resistance_model == "skin" and length > 0.0:
             skin.append(SkinTerm(k, length, c, inductive))
 

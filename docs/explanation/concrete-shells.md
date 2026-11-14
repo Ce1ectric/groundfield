@@ -229,8 +229,10 @@ single owner: one `GridMeshElectrode`, the same current density on all four
 sides; only `"distributed"` or a rotation by another angle split it (audit
 D3B-04). `concrete_model` has had no effect
 since (see [Deprecations](../reference/deprecations.md)). A building outline
-(`polygon_xy_m`) stays one closed polyline, one owner, so a rectangular
-outline now reads like the single owner did.
+(`polygon_xy_m`) stays one closed polyline; since the user decision Q44
+(with Q30) the image family gives it one owner per side as well, so a
+rectangular outline equals the rectangle given by its size. Up to then it
+was one owner and a rectangular outline read like the single owner did.
 
 The change of the input impedance, one owner per side over one owner minus
 one, is never positive. The four bonded owners carry the split of the
@@ -281,8 +283,11 @@ At the AP1 station (the ring of 4 m × 4 m at 0.6 m with three bonded 4 m
 rods) the change is −0.0009 … −0.0026 % over the 39 AP1 soils, at 2 m and at
 0.5 m segments (`Engine.solve` and the owner algebra of the seven wires
 agree to $10^{-15}$): the square ring alone would not change, the rods break
-its symmetry. The houses of the AP1 catalogue are building outlines and do
-not change.
+its symmetry. The houses of the AP1 catalogue are building outlines and did
+not change by Q38; one owner per side of an outline (user decision Q44)
+moves the twelve outlines of the tutorial T06 layout by at most −0.004 %
+each and the layout with the AP1 station by −0.03 … −0.40 % (5 cm of
+100 Ω·m concrete or bare, four soils; evidence of stream w1sol).
 
 **Model uncertainty.** The largest values belong to the 0.2 m shell, whose
 outer radius of 0.205 m is not thin against the segments: at the default

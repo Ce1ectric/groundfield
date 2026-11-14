@@ -537,8 +537,11 @@ def _per_side_over_one_owner(
     foundation against one ``GridMeshElectrode`` with the same radius and
     shell coefficient, the world the generators built for the default value
     up to user decision Q38 (evidence d3gen ``q38_change_cases.py``: the same
-    world fingerprint on the base)."""
+    world fingerprint on the base). Since user decision Q30 the image family
+    gives that grid one owner per wire line as well; its one-owner model is
+    rebuilt with the solver's private comparison switch."""
     from groundfield.geometry.electrodes import concrete_shell_coefficient
+    from groundfield.solver._discretize import _one_owner_per_wire_off
 
     spec = FoundationElectrodeSpec(
         style=style,
@@ -574,7 +577,7 @@ def _per_side_over_one_owner(
     engine = gf.create_engine(frequencies=[50.0])
     values = []
     for world in (per_side, one_owner):
-        with warnings.catch_warnings():
+        with warnings.catch_warnings(), _one_owner_per_wire_off():
             warnings.simplefilter("ignore")
             values.append(complex(engine.solve(world).input_impedance()[0]).real)
     return values[0] / values[1] - 1.0
@@ -1223,6 +1226,8 @@ def test_the_texts_quote_the_field_change_at_the_passive_foundation() -> None:
     with the golden engine's 2 m segments and the point kernel; the texts
     quoted the latter as the change (audit R4B-13: a segmentation effect)."""
 
+    from groundfield.solver._discretize import _one_owner_per_wire_off
+
     def pair(one_owner: bool, segment_length: float) -> np.ndarray:
         w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=100.0, h_1=5.0))
         c = gf.geometry.electrodes.concrete_shell_coefficient(100.0, 0.0075, 0.05)
@@ -1267,7 +1272,8 @@ def test_the_texts_quote_the_field_change_at_the_passive_foundation() -> None:
             frequencies=[50.0],
         )
         points = np.array([[-5.0, 0.0, 0.0], [5.0, 0.0, 0.0]])
-        with warnings.catch_warnings():
+        # the one-owner grid of the time (user decision Q30 split it by wire)
+        with warnings.catch_warnings(), _one_owner_per_wire_off():
             warnings.simplefilter("ignore")
             return np.asarray(gf.solve_mutual_field(w, engine, anchors, points)).real
 

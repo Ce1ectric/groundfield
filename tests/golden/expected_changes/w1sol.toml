@@ -1,0 +1,110 @@
+# Stream w1sol (wave 1 of the 2026.11 integration): one uniform current per
+# straight wire in the image family (user decisions Q30 and Q44) and
+# concentric cables by an explicit marker (Q32, Q33). See ../README.md for
+# the format. Every bound was measured with GF_GOLDEN_STRICT=1 against the
+# snapshot of the stream's base (release/calver e6124cd) and checked against
+# the committed baseline (v0.15.0) with every declaration
+# (evidence: /home/claude/deliver/evidence/w1sol/golden_*.txt).
+#
+# Q32 / Q33 move no stored case: no case has a conductor_type="cable_shield"
+# conductor or a thinner conductor on the axis of a thicker one, and every
+# inductive case stays bit-identical with the base.
+#
+# Q30 / Q44 move the cases with a grid, a polyline of several straight runs
+# or a star in an asymmetric field; the other cases are bit-identical with
+# the base (rods, strips and rings keep one owner, a generated mesh wire,
+# an open polyline with a vertex at every crossing, stays one owner).
+
+# --- Q30: grids, one owner per wire line --------------------------------
+# 10 m x 10 m grid, 2 x 2 meshes, 100 over 1000 Ohm m (image_2layer, 1 m):
+# Zc / phi -0.94 %, surface potential up to 6.5 %, segment currents up to
+# 30 % (the outer wire lines leak more per metre than the middle ones).
+
+[[change]]
+cases = ["img2_grid_upper_resistive"]
+quantities = ["Zc/*", "phi/*"]
+findings = ["10.22"]
+reason = "user decision Q30: a GridMeshElectrode is one uniform-current owner per wire line (was one owner)."
+min_rel_change = 5e-3
+max_rel_change = 0.012
+
+[[change]]
+cases = ["img2_grid_upper_resistive"]
+quantities = ["potential/*"]
+findings = ["10.22"]
+reason = "user decision Q30: the surface potential follows the current of the outer wire lines."
+min_rel_change = 0.03
+max_rel_change = 0.08
+
+[[change]]
+cases = ["img2_grid_upper_resistive", "cim_grid_unequal_segments"]
+quantities = ["ps/I"]
+findings = ["10.22"]
+reason = "user decision Q30: the segment currents are uniform per wire line, no longer per grid."
+min_rel_change = 0.15
+max_rel_change = 0.4
+
+# 6 m x 4 m grid, 2 x 2 meshes, 300 over 50 Ohm m (cim alias of image_2layer,
+# 0.7 m): Zc / phi -1.41 % (the 10.30 read-back of eng1 adds 5.6e-5).
+
+[[change]]
+cases = ["cim_grid_unequal_segments"]
+quantities = ["Zc/*", "phi/*"]
+findings = ["10.22"]
+reason = "user decision Q30: a GridMeshElectrode is one uniform-current owner per wire line (was one owner)."
+min_rel_change = 7e-3
+max_rel_change = 0.018
+
+# --- Q30 / Q44: polyline per straight run, star in an asymmetric field ---
+# Mixed cluster (ring, four rods, strip, an L-shaped open polyline and a
+# 3-arm star bonded to the ring, homogeneous 100 Ohm m, 0.5 m): the polyline
+# becomes two owners and the star's arms carry different currents next to
+# the cluster. Zc / phi -0.20 %, electrode currents up to 3.4 % (rod2, next
+# to the polyline), surface potential up to 2.4 %, step voltage 0.29 %,
+# touch voltage 0.26 %; segment currents up to 15 %. Point and line kernel.
+
+[[change]]
+cases = ["img_mixed_cluster_hom", "line_img_mixed_cluster_hom"]
+quantities = ["Zc/*", "phi/*"]
+findings = ["10.22"]
+reason = "user decisions Q30 / Q44: polylines one owner per straight run, stars one per arm."
+min_rel_change = 1e-3
+max_rel_change = 3e-3
+
+[[change]]
+cases = ["img_mixed_cluster_hom", "line_img_mixed_cluster_hom"]
+quantities = ["I/*"]
+findings = ["10.22"]
+reason = "user decisions Q30 / Q44: the current shares of the cluster members move with the owners."
+min_rel_change = 5e-4
+max_rel_change = 0.045
+
+[[change]]
+cases = ["img_mixed_cluster_hom", "line_img_mixed_cluster_hom"]
+quantities = ["potential/*"]
+findings = ["10.22"]
+reason = "user decisions Q30 / Q44: surface potential near the polyline and the star."
+min_rel_change = 0.012
+max_rel_change = 0.032
+
+[[change]]
+cases = ["img_mixed_cluster_hom"]
+quantities = ["safety/step"]
+findings = ["10.22"]
+reason = "user decisions Q30 / Q44: step voltage near the cluster."
+min_rel_change = 1e-3
+max_rel_change = 4e-3
+
+[[change]]
+cases = ["img_mixed_cluster_hom"]
+quantities = ["safety/touch_1m"]
+findings = ["10.22"]
+reason = "user decisions Q30 / Q44: touch voltage of the strip, ring and star (POST's 10.21 change dominates)."
+max_rel_change = 4e-3
+
+[[change]]
+cases = ["img_mixed_cluster_hom", "line_img_mixed_cluster_hom"]
+quantities = ["ps/I"]
+findings = ["10.22"]
+reason = "user decisions Q30 / Q44: segment currents uniform per straight wire (up to 15 %)."
+max_rel_change = 0.2

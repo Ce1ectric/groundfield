@@ -266,7 +266,9 @@ the following decisions refine it.
    `touching="quadrature"` reproduces 0.15.0.
 3. **Internal inductance.** Every self term carries the DC internal
    inductance $\mu_0\ell/(8\pi)$ of a solid round conductor, for
-   distributed and lumped branches alike (`include_internal=True`).
+   distributed and lumped branches alike (`include_internal=True`),
+   except a cable shield (`conductor_type="cable_shield"`), a
+   thin-walled tube without one (item 11, user decision Q33).
 4. **Lumped and single-segment conductors.** A conductor with an
    `inductance_model` that the topology keeps as one branch is one
    inductive branch from start to end, coupled to all others; up to
@@ -314,8 +316,8 @@ the following decisions refine it.
    couples to it as at the tube radius, which gives the coaxial loop
    inductance $\frac{\mu_0}{2\pi}(\ln\frac{r_s}{r_c} + \frac14)$ per
    metre when the shield carries no internal inductance (+36 % before;
-   a shield conductor in a solve still carries the internal inductance of
-   a solid wire, item 3). Both one-sided integrals (inner integral in
+   since user decision Q32 the reading needs the shield to be marked,
+   item 11). Both one-sided integrals (inner integral in
    closed form) are averaged, on end points in a fixed order, so every
    order and direction of the segments gives the same value bit for bit;
    the value is continuous in the geometry (4e-15 against an
@@ -347,3 +349,28 @@ the following decisions refine it.
     additive image gives 2.28 times (50 Hz) and 2.77 times (1 kHz) the
     mutual reactance of `sommerfeld`; `carson_series` gives 1.12 and 1.03
     times.
+11. **Concentric cables by an explicit marker (user decisions Q32 and
+    Q33).** Item 9 read every thinner wire on the axis of a thicker one
+    as a core inside a cable shield, so two separate cables of different
+    radii drawn on one axis were one concentric cable. The reading now
+    needs the thicker conductor to carry `conductor_type="cable_shield"`
+    (the existing type tag, which selected only a plot colour before);
+    two conductors of any other types on one axis are separate
+    conductors and touch, as every pair lying side by side
+    (`build_inductance_matrix(..., shields=...)` marks the segments at
+    the low level). A shield is a thin-walled tube: its self terms carry
+    no internal inductance of a solid wire, and
+    `Conductor.internal_impedance_per_length` of a `"dc"` shield has no
+    inductive part; the solid-round skin model (`resistance_model="skin"`)
+    is rejected for a shield. A 100 m coaxial pair (core 5 mm, shield
+    15 mm, 0.7 m deep) reads a loop inductance of 26.966 µH in a solve
+    (lumped, every earth-return model; 26.912 µH with 10 m sub-pieces)
+    against the analytic 26.972 µH of the infinitely long coax, instead of
+    31.966 µH with the internal inductance of a solid shield; unmarked,
+    the two cables read 43.471 µH, the 43.48 µH of two touching solid
+    wires. A shield without a core loses $\mu_0\ell/(8\pi)$ = 50 nH/m
+    of self inductance against the same conductor without the tag
+    (`buried_lead()` of the measurement generator builds its lead as a
+    shield: the two-pole reading of a three-house network with buried feed
+    and probe leads −2.5 % in reactance at 50 Hz and 1 kHz, the
+    three-pole reading unchanged to 1e-6).

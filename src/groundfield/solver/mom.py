@@ -1090,7 +1090,7 @@ def solve_mom(
     (10.48). The Green's-function kernel is taken from the matching
     image backend; only the resolution scheme (one current per segment,
     point matching at the segment midpoints, instead of one uniform
-    current per electrode) differs. Clusters without a source float
+    current per straight wire of an electrode) differs. Clusters without a source float
     (zero net current, 10.29). See the module docstring for the
     accuracy of the scheme and the shared solve flow.
 

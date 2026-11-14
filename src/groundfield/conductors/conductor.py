@@ -71,7 +71,7 @@ Point3D = tuple[float, float, float]
 
 ConductorType = Literal[
     "pen",  # PEN conductor in low-voltage networks
-    "cable_shield",  # cable shield
+    "cable_shield",  # cable shield: thin-walled tube around its core (Q32 / Q33)
     "bare_copper",  # bare copper wire
     "overhead",  # overhead line / earth wire
     "generic",  # fallback
@@ -135,8 +135,15 @@ class Conductor(BaseModel):
         cluster constraint, finite section → branch with
         $R_\\text{ser} = \\rho L / A$.
     conductor_type
-        Type tag from :data:`ConductorType`. Drives later choice of
-        coupling and impedance model.
+        Type tag from :data:`ConductorType`. ``"cable_shield"`` marks the
+        shield of a concentric cable, a thin-walled tube (user decisions
+        Q32 and Q33 of 2026.11): with ``inductance_model="neumann"`` a
+        thinner conductor drawn on its axis, inside it, is its core and
+        couples to it at the shield radius (the geometric mean distance of
+        a point inside a tube), and its self inductance carries no internal
+        inductance of a solid wire. Two conductors of other types on one
+        axis are separate conductors that touch. The other tags only
+        select plot styles.
     wire_radius
         Wire radius in metres. Default 5 mm. Used for the geometric
         thin-wire approximation in the segment self-action and as
@@ -343,7 +350,26 @@ class Conductor(BaseModel):
                     "combined with lumped_series_resistance_ohm (a lumped "
                     "override has no conductor geometry)."
                 )
+            if self.conductor_type == "cable_shield":
+                # user decision Q33: a shield is a thin-walled tube, which the
+                # solid-round Bessel solution does not describe.
+                raise ValueError(
+                    f"Conductor {self.name!r}: resistance_model='skin' models "
+                    "a solid round conductor; a 'cable_shield' is a thin-walled "
+                    "tube without the internal inductance of a solid wire, whose "
+                    "skin effect is not modelled. Use resistance_model='dc'."
+                )
         return self
+
+    @property
+    def is_shield(self) -> bool:
+        """Whether the conductor is a cable shield (``"cable_shield"``).
+
+        A shield is a thin-walled tube: no internal inductance of a solid
+        wire, and a thinner conductor on its axis is its core (user
+        decisions Q32 and Q33 of 2026.11).
+        """
+        return self.conductor_type == "cable_shield"
 
     @property
     def length(self) -> float:
@@ -428,8 +454,9 @@ class Conductor(BaseModel):
           uniform-current internal inductance $\mu_0/(8\pi)$ — the
           convention of
           :func:`groundfield.coupling.inductance.thin_wire_self_inductance`
-          with ``include_internal=True``. An ideal conductor has
-          $R' = 0$.
+          with ``include_internal=True``; a ``"cable_shield"`` (a
+          thin-walled tube) has none (user decision Q33). An ideal
+          conductor has $R' = 0$.
         - ``resistance_model="skin"``: the exact solid-round Bessel
           solution for the radius $\sqrt{A/\pi}$ of the conducting
           cross section
@@ -458,7 +485,8 @@ class Conductor(BaseModel):
             )
         length = self.length
         r_per_m = self.series_resistance / length if length > 0.0 else 0.0
-        z = r_per_m + 1j * 2.0 * math.pi * f * _MU_0 / (8.0 * math.pi)
+        l_int = 0.0 if self.is_shield else _MU_0 / (8.0 * math.pi)
+        z = r_per_m + 1j * 2.0 * math.pi * f * l_int
         if np.ndim(frequency) == 0:
             return complex(z)
         return z

@@ -60,7 +60,9 @@ foundation (`concrete_rho_ohm_m`) carries the concrete shell on every
 wire, its cross-braces included (DIN 18014, see
 [concrete shells](../../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
 The image
-family solves one uniform current per electrode. Against the
+family solves one uniform current per straight wire (since user decision
+Q30 also inside a grid, so a mesh electrode built by hand and the
+generated foundation of bonded wires are the same model). Against the
 per-segment `mom` solution (100 Ω·m, 1 m segments; `mom` uses the point
 kernel), one current per wire is +1.1 % with the default line kernel
 and +0.3 … +0.5 % with `kernel="point"` for 10 m 2 × 2 to 30 m 4 × 4

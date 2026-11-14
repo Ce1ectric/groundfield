@@ -23,6 +23,13 @@ the Green's-function object handed to :func:`solve_image_family`
    join the leakage segments as one-segment pseudo-owners. Junctions
    are nodes without leakage segments; a junction subnetwork without
    soil contact is rejected here.
+
+   3b. :func:`split_owners` — one uniform-current owner per straight
+   wire of every electrode (a wire line of a grid, an arm of a star, a
+   straight run of a polyline; user decisions Q30 and Q44 of 2026.11)
+   and, for electrodes through a layer interface, per soil layer
+   (10.15). The owners of an electrode are ideally bonded and merged
+   back into one per electrode before step 6.
 4. :func:`assemble_branches` — the frequency-dependent branch block:
    partial inductances (ADR-0004) and the earth-return correction
    closure (Carson series ADR-0005, Sommerfeld ADR-0006).
@@ -60,7 +67,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
-from groundfield.solver._discretize import _discretize_electrode
+from groundfield.solver._discretize import _discretize_electrode, _OwnerSplit
 from groundfield.solver._guards import _check_segment_depths
 from groundfield.solver._inductive import _assemble_inductance_matrix
 from groundfield.solver._line_kernel import LineSegments
@@ -863,8 +870,34 @@ def build_result(
     )
 
 
+def split_owners(
+    world: World,
+    disc: Discretisation,
+    topo: Topology,
+    owner_interfaces: Sequence[float] | None = None,
+) -> _OwnerSplit:
+    """Step 3b: one owner per straight wire and soil layer of every electrode.
+
+    A grid gets one uniform-current owner per full wire line, a star one
+    per arm, a polyline one per straight run (user decisions Q30 and Q44
+    of 2026.11); with ``owner_interfaces`` an electrode through a layer
+    interface gets one per layer (10.15). The owners of an electrode are
+    ideally bonded (its cluster); :meth:`_OwnerSplit.merge` restores one
+    owner per electrode after the solve. See
+    :class:`~groundfield.solver._discretize._OwnerSplit`.
+    """
+    return _OwnerSplit.split(
+        disc, topo, [e.name for e in world.electrodes], owner_interfaces
+    )
+
+
 def solve_image_family(
-    world: World, engine: Engine, green: ImageGreen, *, stacklevel: int = 3
+    world: World,
+    engine: Engine,
+    green: ImageGreen,
+    *,
+    stacklevel: int = 3,
+    owner_interfaces: Sequence[float] | None = None,
 ) -> FieldResult:
     """Run the image-family pipeline for one Green's-function object.
 
@@ -882,6 +915,12 @@ def solve_image_family(
         ``stacklevel`` that makes the pipeline's warnings point at the
         caller of the backend entry point (``solve_image`` /
         ``solve_image_2layer``).
+    owner_interfaces
+        Interface depths in m at which an electrode gets one owner per
+        soil layer (10.15; ``image_2layer`` passes them for worlds with an
+        electrode through the interface, which then report
+        ``metadata["layer_owners"]``). ``None``: one owner per straight
+        wire only (:func:`split_owners`).
 
     Returns
     -------
@@ -892,6 +931,7 @@ def solve_image_family(
     disc = discretise(world, engine, green.layer_interfaces)
     node_currents = inject(world, where=green.where, stacklevel=stacklevel)
     topo = build_topology(world, disc)
+    owners = split_owners(world, disc, topo, owner_interfaces)
     branches = assemble_branches(world, engine, topo)
     # Burial-depth validation (audit 2026-07-28, F26/F29): the galvanic
     # image construction needs a finite image separation 2 z >> a.
@@ -916,6 +956,8 @@ def solve_image_family(
         arrays=arrays,
         kernel=kernel,
     )
+    if owners:
+        owners.merge(disc, topo, solution.owner_currents, node_currents)
     metadata = {
         "world_name": world.name,
         "n_segments": len(disc.segments),
@@ -925,6 +967,11 @@ def solve_image_family(
         "earth_inductive_model": branches.earth_inductive_model,
         "kernel": engine.kernel,
     }
+    if owner_interfaces is not None:
+        metadata["layer_owners"] = dict(owners.n_layers)
+    if owners.n_wires:
+        # Owners per electrode with more than one straight wire (Q30).
+        metadata["wire_owners"] = dict(owners.n_wires)
     return build_result(
         world,
         engine,

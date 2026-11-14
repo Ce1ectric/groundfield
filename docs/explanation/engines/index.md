@@ -7,8 +7,8 @@ the data model (`World`, electrodes, conductors, sources, junctions), the
 solve pipeline and the network equations of bonded clusters, and they
 differ in two places: **which Green's function** they evaluate (closed-form
 image series or numerical Sommerfeld quadrature) and **which current model**
-they solve for (one uniform current per electrode, or one current per
-segment). This page explains the family, how to choose an engine and where
+they solve for (one uniform current per straight wire of an electrode,
+or one current per segment). This page explains the family, how to choose an engine and where
 the deprecated names come from. The theory of each engine has its own page:
 
 | Page | Engine | Soil | Green's function | Current model |
@@ -79,16 +79,19 @@ All integral engines discretise every wire into straight segments of
 length at most `Engine.segment_length` (and split them at layer
 interfaces). They then differ in the unknowns:
 
-- **Uniform current per electrode** (`image`, `image_2layer`). Each
-  electrode — since 2026.11 each electrode *per soil layer* it reaches —
-  carries one leakage current, spread uniformly per unit length over its
-  segments. The unknowns are a handful per electrode, the reaction matrix
-  is reduced with length weights to an electrode-by-electrode multiport
-  matrix, and the solve is cheap. The ansatz is exact for a ring by
-  symmetry and good for impedances of compact electrodes; it misplaces
-  current along grids, stars and long strips, which matters for surface
-  potentials near the electrode (touch and step voltages) more than for
-  impedances.
+- **Uniform current per straight wire** (`image`, `image_2layer`). Each
+  straight wire of an electrode — a full wire line of a grid, an arm of a
+  star, a straight run of a polyline (user decisions Q30 and Q44 of
+  2026.11), and each electrode *per soil layer* it reaches — carries one
+  leakage current, spread uniformly per unit length over its segments;
+  the wires of an electrode are ideally bonded. The unknowns are a
+  handful per electrode, the reaction matrix is reduced with length
+  weights to a wire-by-wire multiport matrix, and the solve is cheap. The
+  ansatz is exact for a ring by symmetry and good for impedances of
+  compact electrodes (grids about 1 % above one current per segment); it
+  misplaces current along each wire — towards the tips of a star and the
+  ends of a strip — which matters for surface potentials near the
+  electrode (touch and step voltages) more than for impedances.
 - **One current per segment** (`mom`, `mom_sommerfeld`). Point matching
   (collocation): one pulse current per segment, the potential matched at
   every segment midpoint. This resolves how the current distributes along

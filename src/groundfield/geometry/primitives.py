@@ -21,7 +21,13 @@ longer disagree about them:
   mesh spans (:func:`_segments_per_wire`), so wire crossings fall on
   segment end points rather than on the midpoint point sources;
 * a ring is cut into :math:`\\max(8, \\lceil 2\\pi r / \\Delta s \\rceil)`
-  equal arc segments represented by their chords' midpoints on the arc.
+  equal arc segments represented by their chords' midpoints on the arc;
+* every segment records the straight wire it lies on
+  (:attr:`WireSegments.wires`): a full wire line of a grid, an arm of a
+  star, a straight run of a polyline (its edges between two bends; a
+  vertex where the polyline continues straight on does not start a new
+  wire); a rod, a strip and a ring are one wire. The image family solves
+  one uniform current per wire (user decision Q30 of 2026.11).
 
 Coordinates are in metres with the :math:`z` axis pointing down into
 the soil (depth positive).
@@ -52,6 +58,15 @@ class WireSegments:
         length represented by the segment.
     directions
         Unit tangents of the segment axes, shape ``(N, 3)``.
+    wires
+        Index of the straight wire every segment lies on, shape ``(N,)``
+        (integers from 0), or ``None`` for one wire (all segments on wire
+        0). A grid numbers its full wire lines (longitudinal ones first),
+        a star its arms, a polyline its straight runs (consecutive edges
+        that continue in the same direction are one wire); a rod, a strip
+        and a ring are one wire. The image family gives
+        every wire of an electrode its own uniform current (user decision
+        Q30 of 2026.11), see :attr:`wire_index`.
 
     Notes
     -----
@@ -64,9 +79,24 @@ class WireSegments:
     midpoints: np.ndarray
     lengths: np.ndarray
     directions: np.ndarray
+    wires: np.ndarray | None = None
 
     def __len__(self) -> int:
         return int(self.lengths.shape[0])
+
+    @property
+    def wire_index(self) -> np.ndarray:
+        """Wire index per segment, shape ``(N,)`` (zeros for one wire)."""
+        if self.wires is None:
+            return np.zeros(len(self), dtype=int)
+        return np.asarray(self.wires, dtype=int)
+
+    @property
+    def n_wires(self) -> int:
+        """Number of distinct straight wires (0 without segments)."""
+        if not len(self):
+            return 0
+        return int(np.unique(self.wire_index).size)
 
     @property
     def starts(self) -> np.ndarray:
@@ -90,14 +120,23 @@ class WireSegments:
 
     @classmethod
     def concatenate(cls, parts: Iterable[WireSegments]) -> WireSegments:
-        """Join several containers in order."""
+        """Join several containers in order.
+
+        The wire indices are kept as they are (no offset): the parts of
+        one wire cut at a layer interface stay one wire. A caller that
+        joins different wires numbers them itself (:func:`_edge_wires`).
+        """
         parts = [p for p in parts if len(p)]
         if not parts:
             return cls.empty()
+        wires = None
+        if any(p.wires is not None for p in parts):
+            wires = np.concatenate([p.wire_index for p in parts])
         return cls(
             np.concatenate([p.midpoints for p in parts], axis=0),
             np.concatenate([p.lengths for p in parts]),
             np.concatenate([p.directions for p in parts], axis=0),
+            wires,
         )
 
 
@@ -174,15 +213,74 @@ def _straight_wire(
     )
 
 
+#: Largest sine of the angle between two consecutive polyline edges that
+#: still continue one straight wire (user decision Q30): exact collinearity
+#: up to the round-off of rotated coordinates, so a generated mesh wire with
+#: a vertex at every crossing stays one wire, while any visible bend of a
+#: building outline starts a new one.
+COLLINEAR_SIN_TOL = 1e-9
+
+
+def _straight_runs(
+    edges: Sequence[tuple[Sequence[float], Sequence[float]]], *, closed: bool
+) -> list[int]:
+    """Wire index of every edge of a polyline: one per straight run.
+
+    Consecutive edges that continue in the same direction (the sine of the
+    angle between them at most :data:`COLLINEAR_SIN_TOL`) belong to one
+    straight wire; a closed polyline also joins its last edge to its first.
+    The wires are numbered in the order of their first edge, so the first
+    edge is on wire 0.
+
+    Parameters
+    ----------
+    edges
+        ``(start, end)`` points in m of the consecutive edges.
+    closed
+        Whether the last edge ends where the first one starts.
+
+    Returns
+    -------
+    list[int]
+        Wire index per edge.
+    """
+    units = []
+    for start, end in edges:
+        d = np.asarray(end, dtype=float) - np.asarray(start, dtype=float)
+        n = float(np.linalg.norm(d))
+        units.append(d / n if n > 0.0 else d)
+
+    def continues(a: np.ndarray, b: np.ndarray) -> bool:
+        return (
+            float(np.dot(a, b)) > 0.0
+            and float(np.linalg.norm(np.cross(a, b))) <= COLLINEAR_SIN_TOL
+        )
+
+    wire = [0] * len(units)
+    for k in range(1, len(units)):
+        wire[k] = wire[k - 1] if continues(units[k - 1], units[k]) else wire[k - 1] + 1
+    if closed and len(units) > 2 and wire[-1] != 0 and continues(units[-1], units[0]):
+        last = wire[-1]
+        wire = [0 if w == last else w for w in wire]
+    return wire
+
+
 def _edge_wires(
     edges: Sequence[tuple[Sequence[float], Sequence[float]]],
     ds: float,
     *,
     skip_degenerate: bool,
+    edge_wires: Sequence[int] | None = None,
 ) -> WireSegments:
-    """Discretise a chain of straight edges (polyline / star arms)."""
+    """Discretise a chain of straight edges (polyline / star arms).
+
+    Every edge is a wire of its own (:attr:`WireSegments.wires`: the
+    position of the edge among the edges kept), unless ``edge_wires``
+    gives the wire index per edge (a polyline's straight runs,
+    :func:`_straight_runs`).
+    """
     parts: list[WireSegments] = []
-    for start, end in edges:
+    for k_edge, (start, end) in enumerate(edges):
         p0 = np.array(start, dtype=float)
         p1 = np.array(end, dtype=float)
         L = float(np.linalg.norm(p1 - p0))
@@ -193,9 +291,13 @@ def _edge_wires(
         seg_len = L / n
         # Historic per-segment arithmetic: p0 + ((k + 0.5) * seg_len) * dir.
         mids = p0[None, :] + ((np.arange(n) + 0.5) * seg_len)[:, None] * direction
+        wire = len(parts) if edge_wires is None else int(edge_wires[k_edge])
         parts.append(
             WireSegments(
-                mids, np.full(n, seg_len), np.broadcast_to(direction, (n, 3)).copy()
+                mids,
+                np.full(n, seg_len),
+                np.broadcast_to(direction, (n, 3)).copy(),
+                np.full(n, wire, dtype=int),
             )
         )
     return WireSegments.concatenate(parts)
@@ -264,10 +366,19 @@ def _grid_wires(
     directions = np.zeros((n_l + n_t, 3))
     directions[:n_l, 0] = 1.0
     directions[n_l:, 1] = 1.0
+    # One wire per full wire line: the longitudinal lines 0 .. nx_wires - 1,
+    # then the transverse ones (user decision Q30).
+    wires = np.concatenate(
+        [
+            np.repeat(np.arange(len(ys)), n_long),
+            len(ys) + np.repeat(np.arange(len(xs)), n_trans),
+        ]
+    )
     return WireSegments(
         np.concatenate([long_mids, trans_mids], axis=0),
         np.concatenate([np.full(n_l, seg_len_x), np.full(n_t, seg_len_y)]),
         directions,
+        wires,
     )
 
 

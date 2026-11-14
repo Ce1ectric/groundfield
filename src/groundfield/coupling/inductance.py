@@ -56,7 +56,9 @@ correction builders therefore take the same ``image=`` argument.
 default, the DC internal inductance of a solid round conductor,
 $\mu_0 \ell/(8\pi)$. Every function of this package that returns
 a self term uses this one convention, controlled by
-``include_internal`` (default ``True``). A per-unit-length
+``include_internal`` (default ``True``; the solver passes ``False`` for
+the conductors of ``conductor_type="cable_shield"``, thin-walled tubes,
+user decision Q33). A per-unit-length
 reference that includes the internal flux uses the geometric mean
 radius $\mathrm{GMR} = a\,e^{-1/4}$; with ``include_internal=False``
 the matching reference uses $\mathrm{GMR} = a$. The frequency
@@ -71,9 +73,11 @@ one trench, a service drop routed back along its PEN main, coincident
 leads, wires leaving a junction or crossing at a small angle — the
 distance from the other axis is taken as $r_i + r_j$ (touching wires)
 inside the Neumann integral of :func:`build_inductance_matrix`, or as
-the radius of the thicker wire where the thinner one runs inside it (a
-core inside a cable shield couples as a filament inside a thin tube).
-The filament integral diverges for coincident axes (two coincident 50 m
+the radius of the thicker wire where the thinner one runs inside it and
+the thicker one is marked as a cable shield (``shields=``; a core inside
+a cable shield couples as a filament inside a thin tube). The marker is
+explicit since the user decision Q32 of 2026.11: two unmarked wires on
+one axis are separate conductors that touch. The filament integral diverges for coincident axes (two coincident 50 m
 leads read +587j Ω at 50 Hz) and exceeds the self inductance once the
 wires are closer than about their radius (an indefinite matrix, a TN
 network with drops along its PEN main had a negative input reactance).
@@ -1001,6 +1005,25 @@ def _include_internal_array(include_internal, M: int) -> np.ndarray:
     return arr
 
 
+def _shield_array(shields, M: int) -> np.ndarray | None:
+    """Broadcast ``shields`` (``None``, bool or per-segment array) to (M,).
+
+    ``None`` and ``False`` mark no segment (returns ``None``, the
+    assembly of the 2026.11 development line before user decision Q32 for
+    every pair that is not a core inside a shield).
+    """
+    if shields is None:
+        return None
+    arr = np.asarray(shields, dtype=bool)
+    if arr.ndim == 0:
+        return np.full(M, bool(arr)) if bool(arr) else None
+    if arr.shape != (M,):
+        raise ValueError(
+            f"shields must be a bool or have shape ({M},), got {arr.shape}"
+        )
+    return arr if arr.any() else None
+
+
 def _check_image_geometry(
     p1: np.ndarray, p2: np.ndarray, wire_radii: np.ndarray, *, where: str
 ) -> None:
@@ -1064,6 +1087,7 @@ def _build_inductance_matrix_loop(
     image: ImageConvention | None = None,
     include_internal: bool | np.ndarray = True,
     touching: TouchingRule = "exact",
+    shields: bool | np.ndarray | None = None,
 ) -> np.ndarray:
     """Reference (loop-based) implementation of :func:`build_inductance_matrix`.
 
@@ -1078,6 +1102,8 @@ def _build_inductance_matrix_loop(
     _check_touching_rule(touching)
     M = seg_endpoints.shape[0]
     internal = _include_internal_array(include_internal, M)
+    shield = _shield_array(shields, M)
+    flags = np.zeros(M, dtype=bool) if shield is None else shield
     L = np.zeros((M, M), dtype=float)
     sign = -1.0 if mode == "antiparallel" else 1.0
     opposite = _opposite_sides(
@@ -1121,7 +1147,16 @@ def _build_inductance_matrix_loop(
                 L[i, j] = L[j, i] = 0.0  # screened by the PEC (A2C-1)
                 continue
             m = neumann_mutual(p1_i, p2_i, p1_j, p2_j, touching=touching)
-            m = _touching_wires(m, p1_i, p2_i, wire_radii[i], p1_j, p2_j, wire_radii[j])
+            m = _touching_wires(
+                m,
+                p1_i,
+                p2_i,
+                wire_radii[i],
+                p1_j,
+                p2_j,
+                wire_radii[j],
+                shields=(bool(flags[i]), bool(flags[j])),
+            )
             if mode != "none":
                 p1_j_img = _mirror(p1_j)
                 p2_j_img = _mirror(p2_j)
@@ -1129,7 +1164,14 @@ def _build_inductance_matrix_loop(
                     p1_i, p2_i, p1_j_img, p2_j_img, touching=touching
                 )
                 m_img = _touching_wires(
-                    m_img, p1_i, p2_i, wire_radii[i], p1_j_img, p2_j_img, wire_radii[j]
+                    m_img,
+                    p1_i,
+                    p2_i,
+                    wire_radii[i],
+                    p1_j_img,
+                    p2_j_img,
+                    wire_radii[j],
+                    shields=(bool(flags[i]), bool(flags[j])),
                 )
                 m = m + sign * m_img
             L[i, j] = L[j, i] = m
@@ -1144,6 +1186,7 @@ def _touching_wires(
     p1_b: np.ndarray,
     p2_b: np.ndarray,
     r_b: float,
+    shields: tuple[bool, bool] = (False, False),
 ) -> float:
     """The beside rule (:func:`_beside_mutual`) for the loop oracle.
 
@@ -1157,6 +1200,8 @@ def _touching_wires(
         np.asarray(p1_b, dtype=float),
         np.asarray(p2_b, dtype=float),
         float(r_b),
+        shield_a=shields[0],
+        shield_b=shields[1],
     )
     return m if val is None else val
 
@@ -1444,6 +1489,7 @@ def _beside_plan(
     d_touch: float,
     r_thin: float,
     r_thick: float,
+    inside_rule: bool,
 ) -> tuple[bool, tuple]:
     """Pieces of segment *a* for the one-sided integral of the beside rule.
 
@@ -1453,12 +1499,13 @@ def _beside_plan(
     $d = r_a + r_b$ or $r_\\text{thick} - r_\\text{thin}$. On each piece
     the effective distance is constant in kind: $\\rho$ itself (free), $d$
     (the stretch lies beside *b* closer than touching: wires lying side by
-    side), or $r_\\text{thick}$ (the thinner wire runs inside the thicker
-    one: a core inside a cable shield couples as a filament inside a thin
-    tube). Returns ``(clamped, plan)``: whether a stretch longer than the
-    vertex tolerance is clamped, and the data :func:`_beside_integral`
-    needs. The axis geometry is computed from cross products, which stay
-    accurate for nearly parallel axes (no $1 - \\cos^2$ cancellation).
+    side), or, with ``inside_rule`` (the thicker wire is a cable shield),
+    $r_\\text{thick}$ (the thinner wire runs inside the shield: a core
+    inside a cable shield couples as a filament inside a thin tube).
+    Returns ``(clamped, plan)``: whether a stretch longer than the vertex
+    tolerance is clamped, and the data :func:`_beside_integral` needs. The
+    axis geometry is computed from cross products, which stay accurate for
+    nearly parallel axes (no $1 - \\cos^2$ cancellation).
     """
     ax, ay, az = a2[0] - a1[0], a2[1] - a1[1], a2[2] - a1[2]
     bx, by, bz = b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]
@@ -1513,7 +1560,7 @@ def _beside_plan(
     edges = sorted(marks)
     tol = _TOUCH_TOL_REL * max(la, lb)
     d_clamp = d_touch * (1.0 - _BESIDE_MARGIN)
-    inside_rule = r_thin < r_thick
+    inside_rule = inside_rule and r_thin < r_thick
     pieces: list[tuple[float, float, float]] = []  # (lo, hi, rho_e or nan)
     clamped = False
     for lo, hi in zip(edges[:-1], edges[1:], strict=True):
@@ -1587,6 +1634,9 @@ def _beside_mutual(
     p1_b: np.ndarray,
     p2_b: np.ndarray,
     r_b: float,
+    *,
+    shield_a: bool = False,
+    shield_b: bool = False,
 ) -> float | None:
     """Mutual inductance of two wires lying beside each other, in H.
 
@@ -1602,13 +1652,18 @@ def _beside_mutual(
     Along such a stretch the distance from the other wire's axis is taken
     as the distance of touching wires, $r_a + r_b$, pointwise inside the
     Neumann integral; where the thinner wire runs inside the thicker one
-    ($\\rho + r_\\text{thin} \\le r_\\text{thick}$: a core inside a cable
-    shield) as the thicker wire's radius — a filament inside a thin tube
-    couples to it as at the tube radius (the geometric mean distance of a
-    point inside a circle from the circle). Elsewhere the integrand is the
-    filament one, so the value is continuous in the geometry, and pairs
-    that only meet end to end (chain neighbours, bends of less than 90°)
-    are not affected.
+    ($\\rho + r_\\text{thin} \\le r_\\text{thick}$) and the thicker one is
+    marked as a cable shield (``shield_a`` / ``shield_b``; the solver marks
+    the conductors with ``conductor_type="cable_shield"``, user decision
+    Q32 of 2026.11), as the shield's radius — a core inside a cable shield
+    couples as a filament inside a thin tube, at the tube radius (the
+    geometric mean distance of a point inside a circle from the circle).
+    Two unmarked wires on one axis are two separate conductors and touch
+    (from the 2026.11 development line up to Q32 every thinner wire inside
+    a thicker one was read as a core inside a shield). Elsewhere the
+    integrand is the filament one, so the value is continuous in the
+    geometry, and pairs that only meet end to end (chain neighbours, bends
+    of less than 90°) are not affected.
 
     The one-sided integral over *a* (inner integral over *b* in closed
     form) and the one over *b* differ where the rule acts; their mean is
@@ -1644,8 +1699,11 @@ def _beside_mutual(
     a1, a2 = _canonical_segment(p1_a, p2_a)
     b1, b2 = _canonical_segment(p1_b, p2_b)
     r_thin, r_thick = min(float(r_a), float(r_b)), max(float(r_a), float(r_b))
-    clamped_a, plan_a = _beside_plan(a1, a2, b1, b2, d_touch, r_thin, r_thick)
-    clamped_b, plan_b = _beside_plan(b1, b2, a1, a2, d_touch, r_thin, r_thick)
+    # user decision Q32: the inside reading needs the thicker wire to be a
+    # cable shield (equal radii never count as one inside the other).
+    inside = bool(shield_a) if float(r_a) > float(r_b) else bool(shield_b)
+    clamped_a, plan_a = _beside_plan(a1, a2, b1, b2, d_touch, r_thin, r_thick, inside)
+    clamped_b, plan_b = _beside_plan(b1, b2, a1, a2, d_touch, r_thin, r_thick, inside)
     if not (clamped_a or clamped_b):
         return None
     total = _beside_integral(plan_a) + _beside_integral(plan_b)
@@ -1659,6 +1717,8 @@ def _beside_batch(
     p1_b: np.ndarray,
     p2_b: np.ndarray,
     r_b: np.ndarray,
+    shield_a: bool = False,
+    shield_b: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """:func:`_beside_mutual` of one segment against K partners.
 
@@ -1666,7 +1726,8 @@ def _beside_batch(
     (pre-selected with the clamped two-segment distance,
     :func:`groundfield.conductors.proximity.segment_distance`) are
     evaluated by the scalar rule; returns ``(values, mask)``, ``values[k]``
-    in H where ``mask[k]``.
+    in H where ``mask[k]``. ``shield_a`` and ``shield_b`` (one flag per
+    partner, ``None`` for none) mark cable shields (user decision Q32).
     """
     K = p1_b.shape[0]
     values = np.zeros(K, dtype=float)
@@ -1681,7 +1742,16 @@ def _beside_batch(
     )
     near = dist <= (float(r_a) + r_b) * _BESIDE_PREFILTER + 1e-12
     for k in np.flatnonzero(near):
-        val = _beside_mutual(p1_a, p2_a, r_a, p1_b[k], p2_b[k], float(r_b[k]))
+        val = _beside_mutual(
+            p1_a,
+            p2_a,
+            r_a,
+            p1_b[k],
+            p2_b[k],
+            float(r_b[k]),
+            shield_a=bool(shield_a),
+            shield_b=False if shield_b is None else bool(shield_b[k]),
+        )
         if val is not None:
             values[k] = val
             mask[k] = True
@@ -1715,6 +1785,7 @@ def _inductance_blocks(
     include_internal: np.ndarray,
     touching: str,
     diagonal: bool = True,
+    shields: np.ndarray | None = None,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Direct and image blocks of the partial-inductance matrix.
 
@@ -1736,8 +1807,10 @@ def _inductance_blocks(
     With ``wire_radii``, pairs that lie beside each other closer than the
     sum of their radii (direct or against a mirrored partner) get the
     beside rule (:func:`_beside_mutual`: touching wires, or a wire inside
-    a tube); without radii the filament integral is kept. ``diagonal=False`` leaves the diagonal of the
-    direct block at zero (off-diagonal mutuals only, no radii needed).
+    a cable shield, ``shields``: one flag per segment, ``None`` for none);
+    without radii the filament integral is kept. ``diagonal=False`` leaves
+    the diagonal of the direct block at zero (off-diagonal mutuals only, no
+    radii needed).
     """
     M = p1.shape[0]
     radii = None if wire_radii is None else np.asarray(wire_radii, dtype=float)
@@ -1803,7 +1876,14 @@ def _inductance_blocks(
                 )
             if radii is not None:
                 vals, beside = _beside_batch(
-                    p1[i], p2[i], radii[i], p1[slc], p2[slc], radii[slc]
+                    p1[i],
+                    p2[i],
+                    radii[i],
+                    p1[slc],
+                    p2[slc],
+                    radii[slc],
+                    shield_a=False if shields is None else bool(shields[i]),
+                    shield_b=None if shields is None else shields[slc],
                 )
                 M_pri[beside] = vals[beside]
             L_dir[i, slc] = M_pri
@@ -1834,7 +1914,14 @@ def _inductance_blocks(
                 )
             if radii is not None:
                 vals, beside = _beside_batch(
-                    p1[i], p2[i], radii[i], p1_img[slc], p2_img[slc], radii[slc]
+                    p1[i],
+                    p2[i],
+                    radii[i],
+                    p1_img[slc],
+                    p2_img[slc],
+                    radii[slc],
+                    shield_a=False if shields is None else bool(shields[i]),
+                    shield_b=None if shields is None else shields[slc],
                 )
                 M_img[beside] = vals[beside]
             L_img[i, slc] = M_img
@@ -1850,6 +1937,7 @@ def build_inductance_matrix(
     image: ImageConvention | None = None,
     include_internal: bool | np.ndarray = True,
     touching: TouchingRule = "exact",
+    shields: bool | np.ndarray | None = None,
 ) -> np.ndarray:
     """Assemble the dense partial-inductance matrix over branches.
 
@@ -1868,9 +1956,9 @@ def build_inductance_matrix(
     wire_radii
         Per-branch wire radii in metres, shape ``(M,)``: the thin-wire
         self terms, and the distance of touching wires $r_i + r_j$ (or
-        the thicker radius for a wire inside another) taken where two
-        wires lie beside each other closer than that (module docstring,
-        "Wires lying beside each other").
+        the shield radius for a wire inside a cable shield, see
+        ``shields``) taken where two wires lie beside each other closer
+        than that (module docstring, "Wires lying beside each other").
     use_image
         Legacy switch: ``True`` is ``image="additive"``, ``False`` is
         ``image="none"``. Pass either this or ``image``, not both.
@@ -1892,6 +1980,15 @@ def build_inductance_matrix(
         ``"exact"`` (default): closed forms for pairs that share an end
         point or lie on one axis; ``"quadrature"``: the 16x16 rule of
         0.15.0 (see :func:`neumann_mutual`).
+    shields
+        Segments of cable shields (a bool for all, or an array of shape
+        ``(M,)``; ``None``, the default, for none). A thinner wire on the
+        axis of a shield, inside it, couples to it at the shield radius
+        (a core inside a cable shield; user decision Q32 of 2026.11);
+        two unmarked wires on one axis touch. The self terms do not
+        depend on it: pass ``include_internal=False`` for the shields to
+        drop the internal inductance of a solid wire, as the solver does
+        for ``conductor_type="cable_shield"`` (Q33).
 
     Returns
     -------
@@ -1936,6 +2033,7 @@ def build_inductance_matrix(
         self_from_rows=mode == "none",
         include_internal=internal,
         touching=touching,
+        shields=_shield_array(shields, M),
     )
     if mode == "none":
         return L_dir
@@ -1953,6 +2051,7 @@ def _image_inductance_matrix(
     *,
     touching: TouchingRule = "exact",
     wire_radii: np.ndarray | None = None,
+    shields: bool | np.ndarray | None = None,
 ) -> np.ndarray:
     """Image block $L_\\text{img}$ (mirrored-endpoint image), shape (M, M).
 
@@ -1961,7 +2060,8 @@ def _image_inductance_matrix(
     computed by the same code path, so that an earth-return correction
     can move between conventions exactly (with ``wire_radii``, a mirrored
     partner lying beside a segment closer than touching gets the beside
-    rule, as in :func:`build_inductance_matrix`). Raises for segments
+    rule, as in :func:`build_inductance_matrix`, with the same
+    ``shields``). Raises for segments
     that cross or lie in the soil surface (singular image).
     """
     _check_touching_rule(touching)
@@ -1982,6 +2082,7 @@ def _image_inductance_matrix(
         self_from_rows=False,
         include_internal=np.ones(M, dtype=bool),
         touching=touching,
+        shields=_shield_array(shields, M),
     )
     return L_img
 

@@ -143,8 +143,10 @@ def test_grid_envelope_covers_the_one_metre_offset_curve() -> None:
     )
     _, env = touch_voltage_envelope(res, w, electrode="g1", n_angles=24)
     assert np.abs(env).max() >= 0.99 * brute.max()
-    # ... and an 11.9x under-estimate like v0.15.0 is impossible.
-    assert np.abs(env).max() > 100.0
+    # ... and an 11.9x under-estimate like v0.15.0 is impossible (99.8 V
+    # with one owner per wire line since user decision Q30, 111.4 V with
+    # one owner for the grid before).
+    assert np.abs(env).max() > 95.0
 
 
 @pytest.mark.finding("10.21")
@@ -600,10 +602,12 @@ def test_the_quoted_corner_deviations_are_those_of_the_default_kernel() -> None:
 
     20 m x 20 m grid, 4 x 4 meshes, at 0.5 m, 100 Ohm m, ds = 0.5 m, against
     the per-segment ``mom``: touch with the feet 1 m outside the corner
-    +20.2 %, step from 1 m to 2 m outside -20.8 %, step from the point above
-    the corner 1 m outwards -27.9 % (the text used to quote the point
-    kernel's +19 % / -21 % and the engine page -28 % without saying which
-    step each was; audit round 3, note of nbrefresh).
+    +6.4 %, step from 1 m to 2 m outside -7.6 %, step from the point above
+    the corner 1 m outwards -11.4 % with one owner per wire line (user
+    decision Q30; one owner for the grid gave +20.2 / -20.8 / -27.9 %; the
+    text used to quote the point kernel's +19 % / -21 % and the engine page
+    -28 % without saying which step each was; audit round 3, note of
+    nbrefresh).
     """
     # audit round 3 (coordinator item): numbers of UniformCurrentFieldWarning
     w = _grid_world()

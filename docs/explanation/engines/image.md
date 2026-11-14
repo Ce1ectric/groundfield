@@ -6,9 +6,9 @@
     |---|---|
     | Soil | `HomogeneousSoil`; a `TwoLayerSoil` is forwarded to [`image_2layer`](image_2layer.md) |
     | Green's function | point source plus its air image, closed form |
-    | Current model | one uniform leakage current per unit length per electrode |
+    | Current model | one uniform leakage current per unit length per straight wire of an electrode (a wire line of a grid, an arm of a star, a straight run of a polyline; since 2026.11, user decision Q30) |
     | Kernel | exact line source in Galerkin form (default since 2026.11); midpoint point source with `kernel="point"` |
-    | Unknowns | one current per electrode plus node potentials and branch currents |
+    | Unknowns | one current per straight wire (and soil layer) plus node potentials and branch currents |
     | Status | default engine; `cim` and `image_nlayer` are deprecated names that run it |
 
 `image` is the reference implementation of the classical grounding
@@ -16,7 +16,13 @@ calculation of Sunde, Tagg and Dwight: every electrode carries a uniform
 leakage current, its potential is the average over its surface, and the
 soil is a homogeneous half-space bounded by insulating air. It is exact
 for that model — the remaining error is the model itself, which this page
-quantifies.
+quantifies. Since 2026.11 the uniform current belongs to every straight
+wire of an electrode rather than to the whole electrode (user decisions
+Q30 and Q44): a grid has one current per full wire line, a star one per
+arm, a polyline one per straight run (a building outline one per side);
+the wires of an electrode are ideally bonded, so they share one potential
+and every result is still reported per electrode. Rods, strips and rings
+are one wire.
 
 ## Mathematical and physical context
 
@@ -118,20 +124,25 @@ impedance averages the potential over the electrode, and a wrong current
 distribution changes that average only to second order. A surface
 potential next to a grid corner or the tip of a star arm depends on the
 local current density, which the ansatz gets wrong: a real grid leaks
-more current at its corners and edges than in its interior. Against `mom`
-on the same discretisation (one current per segment, same point kernel)
-the table in the [validation section](#validation) below shows a few per
-cent on impedances but tens of per cent on touch, step and mesh voltages
-near a grid corner or a star tip, with the step voltage
-**under**-estimated — the non-conservative direction for a safety
-assessment. Rings and single rods are exact by symmetry or nearly so.
-In the table the touch voltage has its feet 1 m outside the corner or tip
-and the step starts at the surface point **above** the corner or tip and
-reaches 1 m outwards (grid corner −28 % with either kernel); the warning
-text and `groundfield.postprocess.safety` quote the step from 1 m to 2 m
-outside instead, next to the touch voltage at 1 m: +20 % / −21 % at the
-grid corner with the default line kernel (+19 % / −21 % with the point
-kernel).
+more current at its corners and edges than in its interior, a star more
+at its tips. One current per wire line lets the outer lines of a grid
+carry more than the inner ones (since 2026.11, user decision Q30); along
+each wire, and along each arm of a star, the current is still uniform.
+Against `mom` on the same discretisation (one current per segment, same
+point kernel) the table in the [validation section](#validation) below
+shows about a per cent on grid impedances (the 20 m grid with 4 × 4
+meshes +3.9 % with one current for the whole grid, before Q30) and a few
+per cent on stars, but up to tens of per cent on touch, step and mesh
+voltages next to a star tip and up to about ten per cent next to a grid
+corner, with the step voltage **under**-estimated — the non-conservative
+direction for a safety assessment. Rings and single rods are exact by
+symmetry or nearly so. In the table the touch voltage has its feet 1 m
+outside the corner or tip and the step starts at the surface point
+**above** the corner or tip and reaches 1 m outwards; the warning text and
+`groundfield.postprocess.safety` quote the step from 1 m to 2 m outside
+instead, next to the touch voltage at 1 m: +6 % / −8 % at the grid corner
+with the default line kernel (+5 % / −8 % with the point kernel; one
+current for the whole grid gave +20 % / −21 %).
 
 The safety helpers therefore warn: `touch_voltage`, `step_voltage`,
 `touch_voltage_envelope` and `touch_voltage_at_part` emit
@@ -151,13 +162,13 @@ image family is the right tool.
 | Thin wire | wire radius $a \ll$ segment length; $L \le a$ is rejected, $L < 5a$ is reported by `diagnose()` | `ValueError` |
 | Burial | every segment entirely in the soil; the mirror image must not touch the wire ($2z > a$) | `ValueError` naming the electrode |
 | Shallow segments (point kernel only) | $L \le 4z$ for the point form of the self image | `ShallowSegmentWarning` with the bias in per cent |
-| Field quantities near grids, stars, strip ends, bonded clusters | within 5 m: ansatz error of tens of per cent (validation table) | `UniformCurrentFieldWarning` in the safety helpers |
+| Field quantities near grids, stars, strip ends, bonded clusters | within 5 m: ansatz error up to tens of per cent near star tips, about ten per cent near grid corners (validation table) | `UniformCurrentFieldWarning` in the safety helpers |
 | Size | reaction matrix kept in memory while $8N^2 \le$ 1 GiB ($N \le 11\,585$), block evaluation beyond; the engine's limit `Engine.max_segments` (default `diagnostics.HARD_LIMIT` = 20 000 segments) | `ResourceLimitError` before any allocation |
 
 ## Validation
 
 <!-- generated:begin image -->
-Generated from the benchmark run measured on 2026-11-08 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
+Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
@@ -174,8 +185,8 @@ Near-field quantities against `mom` on the same discretisation (uniform-current 
 | Case | Backend (kernel) | Impedance | Touch voltage, 1 m outside | Step voltage, 1 m | Mesh voltage |
 |---|---|---|---|---|---|
 | grid 20 m × 20 m, 4 × 4 meshes, at 0.5 m; corner | `mom` (reference) | 2.3473 Ω | 0.9377 V/A | 0.3664 V/A | 0.5305 V/A |
-| | `image` (`point`) | +3.3 % | +19 % | −28 % | +19 % |
-| | `image` (`line`) | +3.9 % | +20 % | −28 % | +22 % |
+| | `image` (`point`) | +0.57 % | +5.1 % | −11 % | +6.1 % |
+| | `image` (`line`) | +1.1 % | +6.4 % | −11 % | +8.6 % |
 | star, 4 arms of 10 m, at 0.5 m; arm tip | `mom` (reference) | 5.3784 Ω | 3.4271 V/A | 0.7858 V/A | — |
 | | `image` (`point`) | +3.4 % | +8.8 % | −22 % | — |
 | | `image` (`line`) | +4.3 % | +10 % | −23 % | — |

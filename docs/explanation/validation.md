@@ -4,7 +4,7 @@
 
 !!! info "Generated page"
 
-    Every number on this page comes from one run of the engine benchmark suite, measured on 2026-11-08 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64), and from the bounds in `tests/benchmarks/tolerances.py`. The page is written by `python scripts/generate_validation_page.py`; `tests/test_validation_page.py` checks that it matches the stored measurements and, with `--run-benchmark`, that a fresh run reproduces them.
+    Every number on this page comes from one run of the engine benchmark suite, measured on 2026-11-14 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64), and from the bounds in `tests/benchmarks/tolerances.py`. The page is written by `python scripts/generate_validation_page.py`; `tests/test_validation_page.py` checks that it matches the stored measurements and, with `--run-benchmark`, that a fresh run reproduces them.
 
 Suite result of that run: **69 passed, 7 skipped** (`pytest tests/benchmarks --run-benchmark`; the skipped tests are combinations a benchmark does not apply to).
 
@@ -57,7 +57,7 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 | B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | 1e-7 | 7.3e-9 | 2 | pass |  |
 | B9 Limits of the layered kernels (`equal_rho_integral`) | abs(Z/Z_ref - 1) | 1e-10 | 0 | 2 | pass | image_2layer, mom, mom_sommerfeld, cim, bem |
 | B9 Limits of the layered kernels (`layer_limit_integral`) | abs(Z/Z_ref - 1) | 0.1 % | 5.1e-4 | 2 | pass | physical limit |
-| B11 Grid refinement | abs(Z(ds)/Z(ds/2) - 1) | 0.5 % | 0.43 % | 2 | pass | not monotone |
+| B11 Grid refinement | abs(Z(ds)/Z(ds/2) - 1) | 0.6 % | 0.54 % | 2 | pass | not monotone (point kernel); 0.43 % / 0.39 % with one owner for the grid before user decision Q30 |
 
 ### `mom`
 
@@ -119,7 +119,7 @@ The cross-checks between backends run the image family with `kernel="point"`, th
 
 ## Kernel of the image family
 
-The image family assumes a uniform current per unit length on each electrode. For that model the resistance of a straight wire and of a ring has a closed form, so the error of the **kernel** can be separated from the error of the **ansatz**. Signed deviation from the exact uniform-current resistance (`kernel="line"` is the default since 2026.11, `kernel="point"` reproduces 0.15.0):
+The image family assumes a uniform current per unit length on each straight wire of an electrode (a wire line of a grid, an arm of a star, a straight run of a polyline; user decision Q30 of 2026.11). For that model the resistance of a straight wire and of a ring has a closed form, so the error of the **kernel** can be separated from the error of the **ansatz**. Signed deviation from the exact uniform-current resistance (`kernel="line"` is the default since 2026.11, `kernel="point"` reproduces 0.15.0):
 
 | Case | Exact uniform-current R | Kernel | ds = 2 m | ds = 0.5 m | ds = 0.25 m | ds = 0.125 m |
 |---|---|---|---|---|---|---|
@@ -149,8 +149,8 @@ Impedances average the potential over the electrode, so the uniform-current ansa
 | Case | Backend (kernel) | Impedance | Touch voltage, 1 m outside | Step voltage, 1 m | Mesh voltage |
 |---|---|---|---|---|---|
 | grid 20 m × 20 m, 4 × 4 meshes, at 0.5 m; corner | `mom` (reference) | 2.3473 Ω | 0.9377 V/A | 0.3664 V/A | 0.5305 V/A |
-| | `image` (`point`) | +3.3 % | +19 % | −28 % | +19 % |
-| | `image` (`line`) | +3.9 % | +20 % | −28 % | +22 % |
+| | `image` (`point`) | +0.57 % | +5.1 % | −11 % | +6.1 % |
+| | `image` (`line`) | +1.1 % | +6.4 % | −11 % | +8.6 % |
 | star, 4 arms of 10 m, at 0.5 m; arm tip | `mom` (reference) | 5.3784 Ω | 3.4271 V/A | 0.7858 V/A | — |
 | | `image` (`point`) | +3.4 % | +8.8 % | −22 % | — |
 | | `image` (`line`) | +4.3 % | +10 % | −23 % | — |
@@ -261,8 +261,8 @@ The safety helpers emit `UniformCurrentFieldWarning` when a result of the image 
     | B9 | `layer_limit_fem` | fem h1=4000 | 2.2e-4 | 1 % |
     | B10 | `image` | HomogeneousSoil | 1.4 % | 3 % |
     | B10 | `image` | TwoLayerSoil | 2.8 % | 3 % |
-    | B11 | `image_2layer` | 5->2.5 | 0.43 % | 0.5 % |
-    | B11 | `image_2layer` | 2.5->1.25 | 0.39 % | 0.5 % |
+    | B11 | `image_2layer` | 5->2.5 | 0.54 % | 0.6 % |
+    | B11 | `image_2layer` | 2.5->1.25 | 0.35 % | 0.6 % |
     | B11 | `mom` | 5->2.5 | 0.86 % | 1 % |
     | B11 | `mom` | 2.5->1.25 | 0.14 % | 1 % |
     | B11 | `mom_sommerfeld` | ds=5 | 7.5e-10 | 1e-7 |

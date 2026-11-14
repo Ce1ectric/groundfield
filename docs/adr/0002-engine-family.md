@@ -338,3 +338,58 @@ kernels), `mom_sommerfeld` (point matching, quadrature kernel, any $n$)
 and the experimental `fem`. Independent evidence comes from the
 benchmark references, from `mom_sommerfeld` for the kernel and from
 `mom` for the current model.
+
+## Amendment 2026.11 — one uniform current per straight wire (user decisions Q30 and Q44)
+
+The image family solved one uniform current per electrode (and soil
+layer). A grid put the same current density on its outer and inner wire
+lines, although the current crowds to the outer ones: against one current
+per segment on the same segments (equal to `mom` with the point kernel to
+2e-15) a `GridMeshElectrode` at 0.5 m in 100 Ω·m was +1.6 % (10 m, 2 × 2
+meshes) to +4.9 % (40 m, 8 × 8) high with the default line kernel, in
+5 cm of wet concrete up to +5.8 %, and the surface potential next to a
+corner was off by tens of per cent. The generated mesh foundations were
+one electrode per wire line already (audit A2G-04); a grid built by hand
+was not.
+
+Decision: inside the image family (`image`, `image_2layer` with its
+cross-layer path, `solve_mutual_*`) every **straight wire** of an
+electrode is one uniform-current owner — a full wire line of a grid
+(`GridMeshElectrode`, `MeshElectrode`), an arm of a star, a straight run
+of a polyline (consecutive edges that continue in the same direction are
+one wire, so a building outline has one owner per side and a generated
+mesh wire with a vertex at every crossing stays one owner). Rods, strips
+and rings are one wire; an electrode through a layer interface keeps one
+owner per layer on top (ADR-0007). The owners of an electrode are ideally
+bonded (one potential) and merged before the result: currents,
+potentials, impedances, `cluster_impedance` and the JSON results stay per
+electrode. The geometry records the wire of every segment
+(`WireSegments.wires`); the pipeline splits the owners in one step
+(`split_owners`) and merges them before the result. `mom`,
+`mom_sommerfeld` and `fem` are unchanged.
+
+Consequences (evidence `w1sol/q30_*`; ds = 1 m, line kernel unless
+stated):
+
+- grids −1.2 % (10 m, 2 × 2) … −4.0 % (40 m, 8 × 8) … −5.5 % (100 m,
+  20 × 20) in 100 Ω·m, −1.2 … −2.0 % in 1000 over 100 Ω·m, −1.7 … −4.8 %
+  encased; against one current per segment +0.36 … +0.70 % bare and
+  +0.43 … +0.89 % encased, against `mom` (point kernel) +0.29 … +0.66 %.
+  The 20 m grid with 4 × 4 meshes of the validation page (ds = 0.5 m) is
+  +1.1 % above `mom` with the line kernel (+3.9 % before), its corner touch
+  voltage +6.4 % (+20 %), the step from 1 m to 2 m outside −7.6 % (−21 %);
+- stars do not change on their own (their arms carry equal currents by
+  symmetry): the +1.6 … +12.6 % against one current per segment (3 … 8
+  arms of 10 m) are the crowding along each arm; next to other electrodes
+  the arms share the current unevenly;
+- building outlines −0.31 % at most bare and −0.62 % in 5 cm of wet
+  concrete for a 16 m × 1 m rectangle, −0.004 % at most for the twelve
+  outlines of the tutorial T06 layout alone; the T06 layout with the AP1
+  station −0.03 … −0.40 % in input impedance (one current per segment:
+  +0.14 … +0.51 % → +0.07 … +0.12 % above it). A rectangle given as an
+  outline equals the rectangle given by its size (one owner per side
+  since user decision Q38);
+- a source-free grid, star or polyline floats: its wires exchange
+  equalising currents at one potential, its net current is exactly zero;
+- the solve costs the same: 1440 … 4200 segments of 40 … 100 m grids
+  0.76 … 1.86 s and 235 … 505 MB with either owner model.

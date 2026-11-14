@@ -19,8 +19,9 @@ the ``N × N`` segment reaction matrix ``nG`` times. Here:
    pass 10, 10.59), including the ADR-0012 V2 concrete shell.
 2. The leakage distribution of every excitation is a solve of the same
    augmented nodal system as :meth:`Engine.solve`, with one owner per
-   (electrode, soil layer) for electrodes through the layer interface
-   (10.15).
+   straight wire of an electrode (a wire line of a grid, an arm of a
+   star, an edge of a polyline; user decision Q30) and per soil layer for
+   electrodes through the layer interface (10.15).
 3. The off-diagonal entries are either the reaction of the leakage
    columns (``offdiag="galerkin"``, the default, no further kernel
    evaluation) or the probe-point potentials (``offdiag="probe"``, one
@@ -52,7 +53,7 @@ from groundfield.soil.models import (
     MultiLayerSoil,
     TwoLayerSoil,
 )
-from groundfield.solver._discretize import _LayerOwners
+from groundfield.solver._discretize import _OwnerSplit
 from groundfield.solver._guards import _check_point_interface_diagonal
 from groundfield.solver._kernels import (
     DEFAULT_KERNEL,
@@ -265,7 +266,7 @@ class _MutualProblem:
     line: LineSegments | None
     max_terms: int
     tol: float
-    layer_owners: _LayerOwners
+    owners: _OwnerSplit
 
 
 def _layers_differ(soil: TwoLayerSoil | None) -> bool:
@@ -307,7 +308,8 @@ def _check_backend(world: "World", engine: "Engine", where: str) -> str:
     if resolved.spec.name not in _IMAGE_FAMILY:
         raise registry.BackendCapabilityError(
             f"{where} assembles the multi-port of the image family (uniform "
-            f"current per electrode); backend '{engine.backend}' (running "
+            f"current per straight wire of an electrode); backend "
+            f"'{engine.backend}' (running "
             f"'{resolved.spec.name}') solves a different model. Use an "
             "engine with backend='image' (forwards to image_2layer / "
             "image_nlayer by soil), or solve one world per excitation with "
@@ -372,7 +374,9 @@ def _prepare(
         interfaces = interface_depths(soil_two_layer) or None
     disc = discretise(world, engine, interfaces)
     topo = build_topology(world, disc)
-    layer_owners = _LayerOwners.split(
+    # One owner per straight wire of every electrode (user decision Q30)
+    # and per soil layer for electrodes through the interface (10.15).
+    owners = _OwnerSplit.split(
         disc,
         topo,
         [e.name for e in world.electrodes],
@@ -453,7 +457,7 @@ def _prepare(
         line=line,
         max_terms=int(engine.image_max_terms),
         tol=float(engine.image_series_tol),
-        layer_owners=layer_owners,
+        owners=owners,
     )
 
 
@@ -463,8 +467,9 @@ def _unit_excitations(
     """Owner and segment currents for 1 A into each anchor.
 
     The other clusters float (10.29), as in :meth:`Engine.solve` with one
-    source: zero net current, equalising currents inside bonded groups and
-    between the layer owners of a rod through the interface. The floating
+    source: zero net current, equalising currents inside bonded groups,
+    between the wires of a grid, star or polyline and between the layer
+    owners of a rod through the interface. The floating
     core is factorised once for all anchors
     (:func:`~groundfield.solver._topology._solve_unit_excitations`; audit
     round 2, A2S-03: every excitation rebuilt and refactorised it, so the
@@ -797,15 +802,16 @@ def _cluster_impedance(
     """Cluster impedance of one excitation, reduced like ``FieldResult``.
 
     Mirrors :meth:`FieldResult.cluster_impedance` step by step (10.26):
-    the electrode current is the sum over its owners (one per soil layer
-    for electrodes through an interface, 10.15), the electrode potential
+    the electrode current is the sum over its owners (one per straight
+    wire, Q30, and per soil layer for electrodes through an interface,
+    10.15), the electrode potential
     the length-weighted average over all its segments, the cluster
     potential the electrode-length-weighted average over all members.
 
     Parameters
     ----------
     problem
-        Prepared problem (discretisation and layer owners).
+        Prepared problem (discretisation and owners).
     members
         Sorted member names of the cluster.
     elec_total
@@ -818,7 +824,7 @@ def _cluster_impedance(
     complex
         Cluster impedance in Ω; ``nan`` if the cluster current is zero.
     """
-    owners = problem.layer_owners
+    owners = problem.owners
     lengths = problem.arrays.lengths
     weights: list[float] = []
     potentials: list[complex] = []
