@@ -38,6 +38,7 @@ from groundfield.geometry.primitives import (
     _grid_wires,
     _segment_count,
     _split_interval_at_interfaces,
+    _straight_runs,
     _straight_wire,
 )
 
@@ -122,9 +123,11 @@ _SHELL_DESCRIPTION = (
     "$C = \\rho_c/(2\\pi)\\,\\ln(r_b/r_a)$ in Ω·m (ADR-0012). Every "
     "segment of length $\\Delta s$ adds $C/\\Delta s$ to its reaction-matrix "
     "diagonal, the radial voltage drop through the shell; with the uniform "
-    "current per electrode of the image family this adds exactly "
-    "$C/L$ per ampere to the electrode potential ($L$: total wire length), "
-    "the lumped shell resistance. ``wire_radius`` is the outer shell radius "
+    "current per straight wire of the image family this adds exactly "
+    "$C/L_w$ per ampere of a wire to its potential ($L_w$: wire length), "
+    "the lumped shell resistance of the wire ($C/L$ for the wires of an "
+    "electrode in parallel, $L$: total wire length). ``wire_radius`` is the "
+    "outer shell radius "
     "$r_b$ (the soil sees the shell surface). ``0.0`` (default): no shell. "
     "Honoured by the image family and ``solve_mutual_*``; the other "
     "backends reject a non-zero value."
@@ -753,9 +756,20 @@ class PolylineElectrode(_ElectrodeBase):
         Every edge is discretised exactly like a :class:`StripElectrode`,
         so a closed rectangular polyline reproduces the four perimeter
         wires of the equivalent strip chain. Degenerate edges (zero
-        length) are skipped.
+        length) are skipped. Consecutive edges that continue in the same
+        direction form one straight wire
+        (:attr:`~groundfield.geometry.primitives.WireSegments.wires`): the
+        image family gives every straight wire of the polyline its own
+        uniform current (user decisions Q30 and Q44 of 2026.11), so a
+        building outline has one owner per side and a generated mesh wire,
+        which has a vertex at every crossing, stays one owner.
         """
-        return _edge_wires(self.edges, ds, skip_degenerate=True)
+        return _edge_wires(
+            self.edges,
+            ds,
+            skip_degenerate=True,
+            edge_wires=_straight_runs(self.edges, closed=self.closed),
+        )
 
     def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:
         """The vertex chain, closed if ``closed`` (see base class)."""

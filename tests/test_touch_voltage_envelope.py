@@ -181,30 +181,46 @@ def test_release_note_envelopes_with_the_new_default() -> None:
     100 A, image backend, point kernel as in the notes).
 
     20 m x 20 m grid with 4 x 4 meshes (0.5 m, ds = 1 m): the maximum lies
-    on the offset curve 1 m outside a corner, 111.44 V, with and without
-    the mesh centres (at most 62.97 V), so it does not move. Ring of 10 m
-    radius (0.8 m, ds = 0.5 m): 139.37 V on the offset curve, the new
-    default; the centre, 182.60 V, only with ``interior="meshes"``.
+    on the offset curve 1 m outside a corner, 111.44 V with the one owner
+    of the grid that the notes were measured with, 98.72 V with one owner
+    per wire line (user decision Q30), with and without the mesh centres,
+    so it does not move. Ring of 10 m radius (0.8 m, ds = 0.5 m): 139.37 V
+    on the offset curve, the new default; the centre, 182.60 V, only with
+    ``interior="meshes"``.
     """
     # user decision Q3
+    from groundfield.solver._discretize import _one_owner_per_wire_off
+
     grid = GridMeshElectrode(
         name="g", corner=(0.0, 0.0, 0.5), size=(20.0, 20.0), n_x=4, n_y=4
     )
     ring = gf.RingElectrode(name="r", center=(0.0, 0.0, 0.8), radius=10.0)
     maxima = {}
-    for electrode, ds in ((grid, 1.0), (ring, 0.5)):
+    for electrode, ds, one_owner in (
+        (grid, 1.0, False),
+        (grid, 1.0, True),
+        (ring, 0.5, False),
+    ):
         w = _world(electrode)
         eng = gf.create_engine(
             backend="image", segment_length=ds, frequencies=[50.0], kernel="point"
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            res = eng.solve(w)
+            if one_owner:
+                with _one_owner_per_wire_off():
+                    res = eng.solve(w)
+            else:
+                res = eng.solve(w)
         for mode in (False, "meshes"):
             env = _envelope(res, w, electrode.name, interior=mode)[1]
-            maxima[electrode.name, mode] = float(np.abs(env).max())
-    assert maxima["g", False] == pytest.approx(111.44, abs=0.005)
-    assert maxima["g", "meshes"] == maxima["g", False]
+            maxima[electrode.name, one_owner, mode] = float(np.abs(env).max())
+    # user decision Q30
+    assert maxima["g", False, False] == pytest.approx(98.72, abs=0.005)
+    assert maxima["g", True, False] == pytest.approx(111.44, abs=0.005)
+    for one_owner in (False, True):
+        assert maxima["g", one_owner, "meshes"] == maxima["g", one_owner, False]
+    maxima = {(name, mode): v for (name, _, mode), v in maxima.items() if name == "r"}
     assert maxima["r", False] == pytest.approx(139.37, abs=0.005)
     assert maxima["r", "meshes"] == pytest.approx(182.60, abs=0.005)
 

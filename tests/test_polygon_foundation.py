@@ -10,10 +10,10 @@ rectangle* (OMBR) of a building footprint
 
 Following the real polygon removes both artefacts. The tests below pin
 
-1. the *equivalence* of a rectangular polygon with the historic
-   one-owner ring, a ``GridMeshElectrode`` (no regression on the existing
-   model; the rectangle given by its size is one owner per side since user
-   decision Q38),
+1. the *equivalence* of a rectangular polygon with the rectangle given by
+   its size and with a one-mesh ``GridMeshElectrode``: one owner per side
+   for all three (the rectangle given by its size since user decision Q38,
+   the outline and the grid since the user decisions Q30 and Q44),
 2. the concrete-shell bookkeeping on the polygon perimeter,
 3. the geometric correctness (perimeter, L-shape bias),
 4. the degenerate-edge cleanup, and
@@ -65,15 +65,17 @@ def _z(world, anchor, ds=0.5):
 # ---------------------------------------------------------------------
 
 
-def test_rectangular_polygon_matches_the_one_owner_ring_exactly():
-    """A polygon that *is* the rectangle must reproduce the old ring: one
-    owner, as one ``GridMeshElectrode``. Up to user decision Q38 the
-    generators built the rectangle given by its size that way (this test was
-    ``test_rectangular_polygon_matches_grid_mesh_ring_exactly``); since then
-    it is one strip per side, 6.5e-6 lower for this 10 m x 8 m ring with the
-    point kernel of this test, 6.8e-6 with the default engine (audit D3B-06;
-    evidence d3gen ``q38_polygon_vs_rectangle.out``, f4gen
-    ``d3b06/polygon_vs_rectangle_branch.out``)."""
+# user decisions Q30, Q44
+@pytest.mark.finding("10.22")
+def test_rectangular_polygon_matches_the_rectangle_given_by_its_size():
+    """A polygon that *is* the rectangle reproduces the rectangle given by
+    its size (four strips, one owner per side since user decision Q38) and a
+    one-mesh ``GridMeshElectrode``: the image family gives a polyline one
+    owner per straight side and a grid one per wire line since the user
+    decisions Q30 and Q44 of 2026.11. Up to then the outline and the grid
+    were one owner, 6.5e-6 above the strips with the point kernel of this
+    test, 6.8e-6 with the default engine (audit D3B-06; this test was
+    ``test_rectangular_polygon_matches_the_one_owner_ring_exactly``)."""
     w_rect, a_rect = _foundation_world({"size_xy_m": RECT_SIZE})
     w_poly, a_poly = _foundation_world({"polygon_xy_m": RECT_POLY})
     w_grid = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
@@ -93,8 +95,8 @@ def test_rectangular_polygon_matches_the_one_owner_ring_exactly():
     assert type(w_poly.electrodes[0]).__name__ == "PolylineElectrode"
 
     z_rect, z_poly, z_grid = _z(w_rect, a_rect), _z(w_poly, a_poly), _z(w_grid, "g")
-    assert abs(z_poly - z_grid) <= 1e-12 * abs(z_grid)
-    assert 0.0 < 1.0 - z_rect.real / z_poly.real < 1e-5
+    assert abs(z_poly - z_rect) <= 1e-12 * abs(z_rect)
+    assert abs(z_grid - z_rect) <= 1e-12 * abs(z_rect)
 
 
 def test_polygon_ring_is_one_electrode_no_internal_bonds():

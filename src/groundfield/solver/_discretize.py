@@ -10,7 +10,9 @@ Moved out of :mod:`groundfield.solver.image` (review pass 10, 10.75 /
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -85,6 +87,11 @@ class _Segment:
     # at ``0.0`` for segments that are not part of a concrete-
     # encased foundation electrode.
     concrete_shell_coefficient_ohm_m: float = 0.0
+    # Straight wire of the electrode the segment lies on
+    # (:attr:`~groundfield.geometry.primitives.WireSegments.wires`): a wire
+    # line of a grid, an arm of a star, an edge of a polyline. The image
+    # family gives every wire its own owner (user decision Q30).
+    wire: int = 0
 
 
 # ---------------------------------------------------------------------
@@ -162,6 +169,7 @@ def _discretize_electrode(
     # coefficient that every segment inherits; ``0.0`` leaves the
     # reaction-matrix diagonal untouched.
     shell_coeff = float(getattr(electrode, "concrete_shell_coefficient_ohm_m", 0.0))
+    wires = geo.wire_index
     return [
         _Segment(
             midpoint=geo.midpoints[k],
@@ -170,14 +178,44 @@ def _discretize_electrode(
             wire_radius=wire_radius,
             direction=geo.directions[k],
             concrete_shell_coefficient_ohm_m=shell_coeff,
+            wire=int(wires[k]),
         )
         for k in range(len(geo))
     ]
 
 
 # ---------------------------------------------------------------------
-# One owner per (electrode, soil layer) — review pass 10, 10.15 (F02)
+# Owners of an electrode: one per (straight wire, soil layer) — review
+# pass 10, 10.15 (F02); user decisions Q30 and Q44 of 2026.11
 # ---------------------------------------------------------------------
+
+#: Name prefix of every sub-owner of an electrode (a part in one soil layer
+#: or one straight wire). Reserved like the ``__cond_`` prefix of the
+#: conductor pseudo-nodes (:data:`groundfield.world.RESERVED_NAME_PREFIXES`),
+#: so a sub-owner cannot collide with a user name.
+_SUB_OWNER_PREFIX = "__layer_"
+
+#: Whether the image family gives every straight wire of an electrode its own
+#: owner (user decision Q30). Private: :func:`_one_owner_per_wire_off`
+#: switches it off to rebuild the one-owner grids, stars and polylines of the
+#: releases before 2026.11 for comparisons (tests and evidence only).
+_SPLIT_WIRES = True
+
+
+@contextmanager
+def _one_owner_per_wire_off() -> Iterator[None]:
+    """Solve grids, stars and polylines as one owner, as before Q30.
+
+    A private comparison tool (tests and evidence of the numbers that the
+    user decision Q30 changed); not thread-safe.
+    """
+    global _SPLIT_WIRES
+    previous = _SPLIT_WIRES
+    _SPLIT_WIRES = False
+    try:
+        yield
+    finally:
+        _SPLIT_WIRES = previous
 
 
 def _layer_owner_name(electrode_name: str, layer: int) -> str:
@@ -186,31 +224,58 @@ def _layer_owner_name(electrode_name: str, layer: int) -> str:
     The ``__layer_`` prefix is reserved like the ``__cond_`` prefix of
     the conductor pseudo-nodes, so it cannot collide with a user name.
     """
-    return f"__layer_{electrode_name}__L{layer}"
+    return f"{_SUB_OWNER_PREFIX}{electrode_name}__L{layer}"
+
+
+def _wire_owner_name(electrode_name: str, wire: int, layer: int | None = None) -> str:
+    """Name of the sub-owner of ``electrode_name`` on its straight wire ``wire``.
+
+    Carries the reserved prefix of the electrode parts
+    (:data:`_SUB_OWNER_PREFIX`); ``layer`` is appended for an electrode
+    whose wires reach several soil layers.
+    """
+    suffix = "" if layer is None else f"__L{layer}"
+    return f"{_SUB_OWNER_PREFIX}{electrode_name}__W{wire}{suffix}"
 
 
 @dataclass
-class _LayerOwners:
-    """Owners per (electrode, soil layer) of the electrodes that cross an interface.
+class _OwnerSplit:
+    """Owners per (electrode, straight wire, soil layer) of the image family.
 
-    The image family carries one uniform current density per owner. An
-    electrode that crosses a soil-layer interface (a rod through
-    :math:`h_1`) therefore gets one owner per layer it reaches, all in
-    the electrode's cluster: the current density may then differ above
-    and below the interface, as the physics requires (the leakage
-    density scales roughly with :math:`1/\\rho` of the layer). Up to
-    0.15.0 the whole rod carried one density, which put a 12 m rod
-    through :math:`h_1 = 5` m in 1000/30 Ω·m soil 566 % above the
-    per-segment ``mom`` solution (review pass 10, 10.15 / F02).
+    The image family carries one uniform current density per owner. Two
+    splits make the owners finer than the electrode:
 
-    The electrode keeps its name for the segments of the layer of its
-    first segment; the segments in every other layer form the sub-owner
-    :func:`_layer_owner_name` (a pseudo-owner of the nodal system,
-    attached to the electrode's cluster). After the solve,
-    :meth:`merge` restores one owner per electrode: its current is the
-    sum over its owners, its segment list the original one, so the
+    * **Straight wires** (user decisions Q30 and Q44 of 2026.11). A grid
+      (:class:`~groundfield.geometry.electrodes.GridMeshElectrode`,
+      :class:`~groundfield.geometry.electrodes.MeshElectrode`) gets one
+      owner per full wire line, a star one per arm, a polyline one per
+      straight run (one per side of a building outline; a vertex where
+      the polyline continues straight on, such as the crossings of a
+      generated mesh wire, starts no new owner); rods, strips and rings
+      stay one owner. One density over all wires of a
+      grid or star made it 3.9 % (20 m × 20 m grid, 4 × 4 meshes), 5.3 %
+      (40 m × 40 m, 8 × 8) and 4.3 % (4-arm star) higher than the
+      per-segment ``mom`` solution, because the current crowds to the
+      outer wires and the tips; with one density per wire the current
+      may differ between the wires, as the generated mesh foundations
+      (one electrode per wire line since 2026.11) already did.
+    * **Soil layers** (review pass 10, 10.15 / F02). An electrode that
+      crosses a soil-layer interface (a rod through :math:`h_1`) gets one
+      owner per layer it reaches: the leakage density scales roughly with
+      :math:`1/\\rho` of the layer. Up to 0.15.0 the whole rod carried one
+      density, which put a 12 m rod through :math:`h_1 = 5` m in
+      1000/30 Ω·m soil 566 % above the per-segment ``mom`` solution.
+
+    All owners of an electrode belong to its cluster (ideally bonded: one
+    potential). The electrode keeps its name for the owner of its first
+    segment; every other (wire, layer) group forms a sub-owner
+    (:func:`_wire_owner_name`, :func:`_layer_owner_name`), a pseudo-owner
+    of the nodal system attached to the electrode's cluster. After the
+    solve, :meth:`merge` restores one owner per electrode: its current is
+    the sum over its owners, its segment list the original one, so the
     reported potential is the length-weighted average over the whole
-    electrode (equal to the cluster potential).
+    electrode (equal to the cluster potential). The split is internal:
+    every result is reported per electrode.
 
     Attributes
     ----------
@@ -219,10 +284,18 @@ class _LayerOwners:
         included).
     segments
         Original segment indices per split electrode.
+    n_layers
+        Number of soil layers per electrode split by layer (the
+        ``layer_owners`` metadata of the result).
+    n_wires
+        Number of straight wires per electrode split by wire (the
+        ``wire_owners`` metadata of the result).
     """
 
     sub_owners: dict[str, list[str]]
     segments: dict[str, list[int]]
+    n_layers: dict[str, int] = field(default_factory=dict)
+    n_wires: dict[str, int] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         return bool(self.sub_owners)
@@ -237,17 +310,32 @@ class _LayerOwners:
             return self.segments[electrode_name]
         return owner_segments[electrode_name]
 
-    def merge(self, disc, topo, owner_currents: list[dict[str, complex]]) -> None:
+    def merge(
+        self,
+        disc,
+        topo,
+        owner_currents: list[dict[str, complex]],
+        node_currents: dict[str, complex] | None = None,
+    ) -> None:
         """Restore one owner per electrode after the solve (in place).
 
         Parameters
         ----------
         disc, topo
-            The discretisation and topology passed to :func:`split`.
+            The discretisation and topology passed to :meth:`split`.
         owner_currents
             Owner currents per frequency; the same mapping may appear
             several times (frequency-independent solves) and is merged
             once.
+        node_currents
+            Impressed current per node in A. With it, a source-free
+            cluster without branches that holds a split electrode reports
+            electrode currents that sum to exactly zero (in the member
+            order of :attr:`FieldResult.clusters`), as every other floating
+            cluster does (:func:`~groundfield.solver._topology._zero_net_current`):
+            the sum over the owners of an electrode reorders the
+            additions, so the residue of the solve is moved to the last
+            member again.
         """
         for name, subs in self.sub_owners.items():
             disc.owner_segments[name] = self.segments[name]
@@ -255,6 +343,7 @@ class _LayerOwners:
                 del disc.owner_segments[sub]
                 topo.cluster_id.pop(sub, None)
                 topo.pseudo_owners.remove(sub)
+        floating = self._floating_members(disc, topo, node_currents)
         seen: set[int] = set()
         for currents in owner_currents:
             if id(currents) in seen:
@@ -265,6 +354,32 @@ class _LayerOwners:
                 for sub in subs:
                     total += currents.pop(sub, 0j)
                 currents[name] = total
+            for members in floating:
+                rest = sum(currents.get(m, 0j) for m in members[:-1])
+                currents[members[-1]] = -complex(rest)
+
+    def _floating_members(
+        self, disc, topo, node_currents: dict[str, complex] | None
+    ) -> list[list[str]]:
+        """Sorted members of the source-free clusters without branches
+        that contain a split electrode (see :meth:`merge`)."""
+        if node_currents is None or not self.sub_owners:
+            return []
+        cluster_id = topo.cluster_id
+        driven = {cluster_id[n] for n, ic in node_currents.items() if ic != 0j}
+        linked = {a for a, _b, _R in topo.finite_branches}
+        linked |= {b for _a, b, _R in topo.finite_branches}
+        roots = {cluster_id[name] for name in self.sub_owners}
+        out: list[list[str]] = []
+        for root in sorted(roots - driven - linked):
+            out.append(
+                sorted(
+                    n
+                    for n, idxs in disc.owner_segments.items()
+                    if idxs and cluster_id.get(n) == root
+                )
+            )
+        return out
 
     @classmethod
     def split(
@@ -272,13 +387,16 @@ class _LayerOwners:
         disc,
         topo,
         electrode_names,
-        layer_interfaces,
-    ) -> _LayerOwners:
-        """Give every electrode that crosses an interface one owner per layer.
+        layer_interfaces=None,
+        *,
+        wires: bool | None = None,
+    ) -> _OwnerSplit:
+        """Give every electrode one owner per (straight wire, soil layer).
 
         Modifies ``disc.owner_segments``, ``topo.cluster_id`` and
-        ``topo.pseudo_owners`` in place; electrodes inside one layer are
-        left untouched (bit-identical results).
+        ``topo.pseudo_owners`` in place; electrodes of one wire inside one
+        layer (rods, strips and rings in one layer) are left untouched
+        (bit-identical results).
 
         Parameters
         ----------
@@ -291,44 +409,88 @@ class _LayerOwners:
         electrode_names
             Names of the real electrodes.
         layer_interfaces
-            Interface depths in m; ``None`` or empty does nothing.
+            Interface depths in m at which electrodes get one owner per
+            layer; ``None`` or empty splits by wire only.
+        wires
+            Split by straight wire (user decision Q30); ``None`` (default)
+            takes :data:`_SPLIT_WIRES` (``True``).
 
         Returns
         -------
-        _LayerOwners
+        _OwnerSplit
             The split, for :meth:`merge` after the solve.
+
+        Raises
+        ------
+        ValueError
+            If a sub-owner name is already taken (cannot happen for user
+            names, which may not carry the reserved prefix).
         """
         owners = cls(sub_owners={}, segments={})
-        if not layer_interfaces:
+        if wires is None:
+            wires = _SPLIT_WIRES
+        bounds = None
+        if layer_interfaces:
+            bounds = np.sort(np.asarray(layer_interfaces, dtype=float))
+        if bounds is None and not wires:
             return owners
-        bounds = np.sort(np.asarray(layer_interfaces, dtype=float))
         for name in electrode_names:
             idxs = disc.owner_segments.get(name, [])
             if len(idxs) < 2:
                 continue
-            z = np.array([disc.segments[i].midpoint[2] for i in idxs], dtype=float)
-            # Segments are split at the interfaces, so the midpoint names
-            # the layer of the whole segment (z == h belongs to the layer
-            # below, as in the kernels).
-            layer = np.searchsorted(bounds, z, side="right")
-            if layer.min() == layer.max():
+            n = len(idxs)
+            if wires:
+                wire = [disc.segments[i].wire for i in idxs]
+            else:
+                wire = [0] * n
+            if bounds is not None:
+                z = np.array([disc.segments[i].midpoint[2] for i in idxs], dtype=float)
+                # Segments are split at the interfaces, so the midpoint names
+                # the layer of the whole segment (z == h belongs to the layer
+                # below, as in the kernels).
+                layer = np.searchsorted(bounds, z, side="right").tolist()
+            else:
+                layer = [0] * n
+            keys = list(zip(wire, layer, strict=True))
+            groups = sorted(set(keys))
+            if len(groups) == 1:
                 continue
-            first = int(layer[0])
+            first = keys[0]
             owners.segments[name] = list(idxs)
             disc.owner_segments[name] = [
-                i for i, lv in zip(idxs, layer, strict=True) if lv == first
+                i for i, key in zip(idxs, keys, strict=True) if key == first
             ]
+            several_layers = len(set(layer)) > 1
             subs = []
-            for lv in sorted(set(layer.tolist()) - {first}):
-                sub = _layer_owner_name(name, lv)
+            for key in groups:
+                if key == first:
+                    continue
+                w, lv = key
+                if w == first[0]:
+                    sub = _layer_owner_name(name, lv)
+                else:
+                    sub = _wire_owner_name(name, w, lv if several_layers else None)
+                if sub in disc.owner_segments or sub in topo.cluster_id:
+                    raise ValueError(
+                        f"Internal owner name {sub!r} of electrode {name!r} is "
+                        "already taken."
+                    )
                 disc.owner_segments[sub] = [
-                    i for i, lj in zip(idxs, layer, strict=True) if lj == lv
+                    i for i, kj in zip(idxs, keys, strict=True) if kj == key
                 ]
                 topo.cluster_id[sub] = topo.cluster_id[name]
                 topo.pseudo_owners.append(sub)
                 subs.append(sub)
             owners.sub_owners[name] = subs
+            if several_layers:
+                owners.n_layers[name] = len(set(layer))
+            if len(set(wire)) > 1:
+                owners.n_wires[name] = len(set(wire))
         return owners
+
+
+#: Name of 2026.11 (10.15); the split is by wire and by layer since Q30.
+_LayerOwners = _OwnerSplit
 
 
 # ---------------------------------------------------------------------

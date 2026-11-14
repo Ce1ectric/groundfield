@@ -71,19 +71,22 @@ Validity envelope
 * Frequency: quasi-static envelope :math:`f \\le 1\\,\\mathrm{kHz}`,
   inherited from the underlying Green's function.
 * Current ansatz: the ``image`` family (``image``, ``image_2layer``,
-  ``image_nlayer``, ``cim``) solves **one uniform current per
-  electrode**. Impedances are fine, but near grids, meshes, stars, strip
-  ends and bonded multi-electrode clusters the surface potential is
-  impedance-grade, not field-grade. Measured against the per-segment
-  ``mom`` backend (homogeneous 100 Ω·m, ``segment_length`` 0.5 m) with
-  the default line kernel, touch voltage with the feet 1 m outside the
-  footprint and step voltage from 1 m to 2 m outside it: 20 m × 20 m
-  grid with 4 × 4 meshes at the corner, touch +20 %, step −21 %
-  (non-conservative; the step from the point above the corner 1 m
-  outwards is −28 %); 4-arm star (5 m arms) beyond a tip touch +8 %,
+  ``image_nlayer``, ``cim``) solves **one uniform current per straight
+  wire** of an electrode (a wire line of a grid, an arm of a star, a
+  straight run of a polyline, user decision Q30 of 2026.11; a rod, a
+  strip or a ring is one wire). Impedances are fine, but near grids,
+  meshes, stars, strip ends and bonded multi-electrode clusters the
+  surface potential is impedance-grade, not field-grade. Measured against
+  the per-segment ``mom`` backend (homogeneous 100 Ω·m,
+  ``segment_length`` 0.5 m) with the default line kernel, touch voltage
+  with the feet 1 m outside the footprint and step voltage from 1 m to
+  2 m outside it: 20 m × 20 m grid with 4 × 4 meshes at the corner, touch
+  +6 %, step −8 % (non-conservative; the step from the point above the
+  corner 1 m outwards is −11 %; one current per grid, up to then, gave
+  +20 % / −21 % / −28 %); 4-arm star (5 m arms) beyond a tip touch +8 %,
   step −9 %; 10 m strip beyond its end step −6 %; rings, rods and closed
   rectangular loops within 2 %. The point kernel, which ``mom`` shares,
-  isolates the ansatz: grid +19 % / −21 % (−28 % from above the corner),
+  isolates the ansatz: grid +5 % / −8 % (−11 % from above the corner),
   star +7 % / −10 %, strip −7 %, rings, rods and loops within 1 %. The
   helpers emit
   :class:`UniformCurrentFieldWarning` once per call when a uniform-current
@@ -159,7 +162,8 @@ class UniformCurrentFieldWarning(UserWarning):
     """Field quantity from a uniform-current backend near a crowding geometry.
 
     The ``image`` family assigns one uniform current density to every
-    electrode. Near grids, meshes, stars, strip ends and bonded
+    straight wire of an electrode (user decision Q30 of 2026.11). Near
+    grids, meshes, stars, strip ends and bonded
     multi-electrode clusters the true current crowds to edges, corners and
     tips, so touch and step voltages computed there are impedance-grade
     (review pass 10, 10.22; see the module docstring for measured
@@ -169,14 +173,15 @@ class UniformCurrentFieldWarning(UserWarning):
     """
 
 
-#: Backends that solve one uniform current per electrode.
+#: Backends that solve one uniform current per straight wire of an electrode.
 _UNIFORM_CURRENT_BACKENDS = frozenset({"image", "image_2layer", "image_nlayer", "cim"})
 
 #: Horizontal distance in m from a crowding electrode within which the
 #: safety helpers warn about uniform-current results (10.22). At 5 m from
 #: the footprint the measured touch / step deviations of the uniform
 #: ansatz against ``mom`` are at most 4 % for strips, bonded clusters and
-#: the default house grid, 6.5 % for a 4-arm star and 8 % for a 20 m grid
+#: grids (2.5 % for a 20 m grid with 4 × 4 meshes since user decision Q30,
+#: 8 % with one current per grid before) and 6.5 % for a 4-arm star
 #: (default line kernel; with the point kernel 5 % for the star).
 NEAR_FIELD_DISTANCE_M: float = 5.0
 
@@ -420,9 +425,10 @@ def _uniform_current_caveat(
             f"{caller}: uniform-current backend '{result.backend}' within "
             f"{NEAR_FIELD_DISTANCE_M:g} m of a grid, mesh, star, strip, open "
             "polyline or bonded multi-electrode cluster: the surface potential "
-            "is impedance-grade (20 m grid corner against 'mom': touch 1 m "
-            "outside +20 %, step from 1 m to 2 m outside -21 %, step from the "
-            "point above the corner 1 m outwards -28 %). Use backend='mom' for "
+            "is impedance-grade (against 'mom': 20 m grid corner touch 1 m "
+            "outside +6 %, step from 1 m to 2 m outside -8 %, step from the "
+            "point above the corner 1 m outwards -11 %; 4-arm star beyond a tip "
+            "touch +8 %, step -9 %). Use backend='mom' for "
             "field-grade touch and step voltages.",
             UniformCurrentFieldWarning,
             stacklevel=3,

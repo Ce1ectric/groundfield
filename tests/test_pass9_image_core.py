@@ -132,9 +132,13 @@ def test_two_layer_backend_reports_weighted_potential() -> None:
     of 0.14.1 was a rod split at ``h_1`` (a 4.509 m rod, 0.009 m remainder;
     40.70144871 Ω reported vs 45.68625169 Ω enforced, -10.9 %). Since audit
     round 2 (A2S-07) wires are cut only where the resistivity changes, so a
-    ``K = 0`` soil cuts nothing; the mixed lengths come from an L-shaped
-    polyline with a 0.05 m leg instead (five 0.900 m segments, one 0.050 m
-    segment and the closing edge).
+    ``K = 0`` soil cuts nothing; the mixed lengths come from a polyline with
+    a 0.05 m edge instead (five 0.900 m segments and one 0.050 m segment).
+    Since user decision Q30 the image family gives every straight run of a
+    polyline its own owner, so the 0.05 m edge continues the 4.5 m one in a
+    straight line: one wire, one owner (an L-shaped leg, as up to then, is
+    an owner of its own and the reduction over its uniform segments is
+    trivial).
     """
     rho = 200.0
     soil = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=5.0)
@@ -143,7 +147,8 @@ def test_two_layer_backend_reports_weighted_potential() -> None:
         world,
         "polyline",
         name="p",
-        vertices=[(0.0, 0.0, 0.5), (4.5, 0.0, 0.5), (4.5, 0.05, 0.5)],
+        vertices=[(0.0, 0.0, 0.5), (4.5, 0.0, 0.5), (4.55, 0.0, 0.5)],
+        closed=False,
         wire_radius=0.008,
     )
     gf.create_source(world, attached_to="p", magnitude=1.0)
@@ -164,21 +169,23 @@ def test_two_layer_backend_reports_weighted_potential() -> None:
 
     # The reported impedance is the impedance the solver enforced.
     assert z_reported.real == pytest.approx(z_reference, rel=1e-12)
-    assert z_reported.real == pytest.approx(148.2227484894, rel=1e-8)
-    # ... and not the unweighted mean (137.8034912712 Ω, -7.0 %).
-    assert abs(z_reported.real - 137.8034912712) > 1.0
+    assert z_reported.real == pytest.approx(51.9626906001, rel=1e-8)
+    # ... and not the unweighted mean (48.9335006242 Ω, -5.8 %; evidence
+    # w1sol pass9_straight_run.py).
+    assert abs(z_reported.real - 48.9335006242) > 1.0
 
 
 def test_grounding_impedance_equals_multiport_diagonal() -> None:
     """F10: ``grounding_impedance(e) == Z[i, i]`` to machine precision.
 
     A polyline with legs of 3.0 m and 1.1 m discretised at
-    ``ds = 1.0`` carries segments of three different lengths, so the
-    weighted and unweighted reductions differ (0.14.1: 33.60176075 Ω
-    reported vs. 33.82386779 Ω enforced, -0.66 %). For a single
-    isolated electrode driven with 1 A the input impedance *is* the
-    diagonal of the multi-port matrix, so the two must agree to
-    round-off.
+    ``ds = 1.0`` carries segments of different lengths, so the
+    weighted and unweighted reductions differ (0.14.1, L-shaped and
+    closed: 33.60176075 Ω reported vs. 33.82386779 Ω enforced, -0.66 %).
+    For a single isolated electrode driven with 1 A the input impedance
+    *is* the diagonal of the multi-port matrix, so the two must agree to
+    round-off. The legs run in one straight line, one wire and one owner
+    (user decision Q30 gives every straight run of a polyline its own).
     """
     rho = 150.0
     world = gf.create_world(soil=gf.HomogeneousSoil(resistivity=rho))
@@ -186,7 +193,8 @@ def test_grounding_impedance_equals_multiport_diagonal() -> None:
         world,
         "polyline",
         name="p",
-        vertices=[(0.0, 0.0, 0.7), (3.0, 0.0, 0.7), (3.0, 1.1, 0.7)],
+        vertices=[(0.0, 0.0, 0.7), (3.0, 0.0, 0.7), (4.1, 0.0, 0.7)],
+        closed=False,
         wire_radius=0.006,
     )
     gf.create_source(world, attached_to="p", magnitude=1.0)
