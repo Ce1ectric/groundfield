@@ -283,8 +283,8 @@ shows what agrees with independent references and how well.
   |Z| by at most 0.02 % with an insulated PEN (0 with the default resistive
   one) and by up to −0.30 % with a bare one (default grids of 30 and 150
   houses, 50 Hz and 1 kHz, `carson_series` and `sommerfeld`); a built detour
-  around them adds its own length (insulated Neumann PEN: reactance up to
-  +1.0 %, |Z| up to +0.23 % at 1 kHz). With an isolated PEN the end of a
+  around them adds its own length (insulated Neumann PEN, 30-house grids:
+  reactance up to +1.0 % at 50 Hz and +0.7 % at 1 kHz, |Z| up to +0.23 %). With an isolated PEN the end of a
   drop changes the resistive model only through its length (radial default
   grid with 2 ring houses, 50 Hz: −0.025 %); the joints and the star
   reassignment of user decision Q41 move it by −0.12 … +0.13 % (star 50
@@ -302,8 +302,13 @@ shows what agrees with independent references and how well.
   and the Q38 owner —, radial −10.8 … −1.1 %). Sites without a foundation —
   rods, `RingElectrodeSpec` circles and strips, among them the default
   substations of both generators — keep the connection point of their
-  anchor. `LvNetworkLayout.plot(world=...)` draws the drops as built;
-  without a world it draws the layout's stubs (centroid to tap).
+  anchor. In the layout builder a corner of a cable that lies inside a site
+  foundation (a small cabinet ring on a router corner) stays a node of the
+  cable, and houses may tap it there: in 200 random layouts with a 2 m
+  cabinet ring 82 of 2 540 drops start inside the ring (audit R6A-01; also
+  before user decision Q41). `LvNetworkLayout.plot(world=...)` draws the
+  drops as built; without a world it draws the layout's stubs (centroid to
+  tap).
 - **Measurement leads** of the in-line set-up are laid side by side; their
   mutual inductance depends on the logarithm of that spacing, which is a
   modelling choice, not a measured value.

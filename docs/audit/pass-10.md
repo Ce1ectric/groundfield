@@ -3791,16 +3791,35 @@ gave it a 1 cm drop (R5A-03); radial planning grew faster than the network
 (R5B-01 … R5B-13). In short:
 
 - **Layout:** the taps stay on the layout polyline, clipped at the
-  projection of the site contact onto it; no tap inside a site foundation;
+  projection of the site contact onto it; no tap on the first or last
+  segment inside a site foundation (a cable corner inside one stays a node,
+  audit R6A-01);
   audit R5A's 40 random layouts: drops more than 1 cm longer than the
   closest pair of the built cable 30 → 6 (`e91f3c0`: 7).
 - **Routing:** "along" means both ends of a cable section within one
   minimum section (1 cm) of the drop's line, the guards use the same value;
   a crossing beyond a touching node is the joint; set lookup (radial 8000
-  houses 43.6 → 18.4 s, plans bit-identical). The default grids, audit
+  houses with `max_feeder_length_m=1e5` 43.6 → 18.4 s, plans bit-identical). The default grids, audit
   D3A's set and the 260 random networks of the stress tests are unchanged.
 - **Drops over other foundations:** 0 … 80 % of the drops of the default
   grids run 0.2 m above other houses' side wires; moved 1 m aside they change
   \|Z\| by at most 0.02 % (insulated PEN) and −0.30 % (bare PEN). Routing
   drops around foundations is left to the next release.
 - **Golden:** nothing moves.
+
+## Verification audit R6A of stream `f6gen`
+
+A focused third round on the fixes of stream `f6gen` reproduced them (the
+layout clip of R5A-02 bit for bit against `e91f3c0` in the auditor's five
+cases, the 1 cm rule changing only the 73 near-collinear drops of the
+stress set, the joint search, the bit-identical set lookup, and the
+sensitivity of drops over other foundations: bare PEN −0.30 %, insulated
++0.02 %, two discretisations each). It found that a router corner inside a
+small cabinet ring stays a node that houses tap (R6A-01: 82 of 2 540 drops in
+200 random layouts, also before user decision Q41) — documented as a known
+limitation and scheduled in the roadmap — and five scoping and wording
+points (R6A-02 … R6A-06: an evidence line of the stream's report, the
+`max_feeder_length_m=1e5` of the 8000-house timings, the definition of
+"along" in the 10.38 row, the frequency of the detour reactance, the
+substation drop in tutorial T06), which the release notes, the known
+limitations and the tutorial now state.

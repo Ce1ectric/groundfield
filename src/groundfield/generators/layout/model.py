@@ -839,10 +839,12 @@ class LvNetworkLayout(
         cabinet with a foundation at the foundation's point nearest to the
         cable's next node. Taps lie on the layout polyline, from the
         projection of that point onto it on (the polyline inside the site's
-        foundation is not a cable), so no tap lies inside a site foundation
-        and a rotated, polygon or offset site foundation leaves the taps of
-        the houses on the cable (audits R4A-03, R5A-02); a tap at the
-        projection is the site itself. Sites without a foundation keep the
+        foundation is not a cable), so no tap on the first or last segment
+        lies inside a site foundation and a rotated, polygon or offset site
+        foundation leaves the taps of the houses on the cable (audits
+        R4A-03, R5A-02); a tap at the projection is the site itself; a waypoint (a corner of the cable) inside a site
+        foundation stays a node of the cable, and houses may tap it there
+        (audit R6A-01; a known limitation). Sites without a foundation keep the
         connection point of their anchor.
 
         Parameters
@@ -940,11 +942,13 @@ class LvNetworkLayout(
         where the cable's junctions are; where the cable starts or ends at a
         site with a foundation, its first (last) segment is clipped at the
         projection onto it of the foundation's point nearest to the next
-        (previous) waypoint (:meth:`_built_segments`), so no tap lies inside
-        a site foundation (audit R4A-03) and a rotated, polygon or offset
-        site foundation still lets the houses tap the cable (audit R5A-02);
-        a tap closer than ``min_length`` (m) to the clip point is the site
-        itself.
+        (previous) waypoint (:meth:`_built_segments`), so no tap on that
+        segment lies inside a site foundation (audit R4A-03) and a rotated,
+        polygon or offset site foundation still lets the houses tap the
+        cable (audit R5A-02); a tap closer than ``min_length`` (m) to the
+        clip point is the site itself; a waypoint (a corner of the cable) inside a site
+        foundation stays a node of the cable, and houses may tap it there
+        (audit R6A-01; a known limitation).
         """
         cables = {cable.name: cable for cable in self.pen_cables}
         built = {name: self._built_segments(c, wires) for name, c in cables.items()}

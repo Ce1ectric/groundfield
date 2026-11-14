@@ -154,9 +154,11 @@ in the layout builder:
 - the layout builder keeps its taps on the layout polyline, where the
   cable's junctions are: a cable leaving a site with a foundation starts
   at the foundation's point nearest to its next waypoint, the polyline is
-  clipped at the projection of that point onto it, so no tap lies inside
-  the site foundation, also for a rotated, polygon or offset one, and a
-  tap at the projection is the site (audits R4A-03, R5A-02);
+  clipped at the projection of that point onto it, so no tap on the first
+  or last segment lies inside the site foundation, also for a rotated,
+  polygon or offset one, and a tap at the projection is the site (audits
+  R4A-03, R5A-02); a corner of the cable inside a site foundation stays a
+  node that houses may tap (audit R6A-01);
 - ties go to the lowest wire index, then to the smallest arc position
   along the wire: a cable parallel to the side facing it meets the side
   at the start of the range of equal distance, for a side it passes along

@@ -103,6 +103,12 @@ limits a result, the reference documentation states the limit.
   gets no further rules; a conforming axisymmetric model replaces it in the
   next release (see above, user decision Q37), and a full 3-D volume method
   remains deferred (see below).
+- **Cable corners inside a site foundation.** The layout builder clips a
+  cable's first and last segment at the site's foundation contact, but a
+  router corner inside a small cabinet ring stays a node that houses may
+  tap (82 of 2 540 drops in 200 random layouts, audit R6A-01). The polyline
+  will be clipped where it leaves the foundation, merging such corners into
+  the site.
 - **Service drops around foundations** (question for the author). Drops
   are straight; the contact lies at the corner of the side facing the cable,
   so in the default grids 0 … 80 % of the drops run 0.2 m above the side
