@@ -85,15 +85,48 @@ no effect (drop the argument, see [Deprecations](../deprecations.md)); an
 outline narrower than `MIN_FOUNDATION_SIDE_M` (1 m) is widened to it, with
 a warning, for both `foundation_outline="ombr"` and `"polygon"`.
 
+**Cable cabinets per building group** (user decisions Q22 and Q35). In
+the star topology `TnNetworkGenerator` places one cable cabinet per
+building group, at the far end of the houses it feeds
+(`CabinetConfig.placement=None`, the default): the buildings are ordered
+by their bearing around the substation, counter-clockwise from the widest
+angular gap between two neighbouring bearings, and cut into as many runs
+of consecutive bearings as there are cabinets (`count_per_100_buildings`
+or `fixed_count`), of sizes that differ by at most one
+(`StarCabinetTopology.group_buildings`); the cabinet of a group stands on
+the ray from the substation through the group's centroid,
+`CabinetConfig.end_clearance_m` (1 m) beyond the farthest point of the
+group's buildings along that ray (the vertices of their horizontal
+electrodes), and feeds the group. In the default grid of 30 houses (three
+rows of ten, 25 m × 30 m, the substation in the middle row) the groups
+are the western and the eastern half, with their cabinets at
+(−118.5, 0) m and (118.5, 0) m; each main runs along the middle row,
+whose houses are joined to it, and the 20 houses of the outer rows tap it
+with drops of 25 m (before: both cabinets west of the substation, at
+(−180, 0) m and (−140, 0) m on a strip along the substation row, and 25
+drops of 1 140 m, the 15 eastern ones from the substation, 3.5 … 106.5 m).
+A single group around the substation (one cabinet for a row through it)
+gets its cabinet beyond its farthest house, ties to the first in bearing
+order. A given `CabinetConfig.placement` keeps the former rule — the
+given positions, every building fed by its nearest cabinet (Manhattan
+metric) — and a configuration stored before the decision carries the
+former strip and keeps its cabinets. In `RadialTrunkTopology` a building
+in a substation slot that no trunk crosses taps its feeder's trunk at the
+closest pair, like the buildings of the cabinets, instead of getting its
+own line from the substation (default 30 houses: drops 1 115 → 778 m,
+14 → 4 from the substation, those of the two feeders without a trunk).
+
 In `TnNetworkGenerator` every cable cabinet has its own PEN cable, as
 the topology documents: from the substation (`StarCabinetTopology`), or
 one cable per trunk segment (`RadialTrunkTopology`). A service drop taps
 the cable path that feeds its own building — the cable of its cabinet,
-or the trunk from the substation to its tap source — at the point
-nearest to the building: a leakage-free tap junction
+or the trunk from the substation to its tap source, for a building in a
+substation slot its feeder's whole trunk — at the point nearest to the
+building: a leakage-free tap junction
 `pen_tap_<k>` that splits the cable into sections `<cable>_s<k>`, or the
 substation or cabinet at the end of the cable; a building in a
-substation slot of the radial trunk is connected to the substation. The
+substation slot of a feeder without a trunk is connected to the
+substation. The
 router guarantees that a drop never starts on another building's drop,
 never runs along a cable (the one it taps, a trunk, another cabinet's
 main) farther than one minimum section, and that no cable section is
@@ -109,30 +142,44 @@ foundations, 0.2 m above their wires (PEN at 0.6 m, foundations at
 0.8 m): the contact of a house lies at the corner of the side facing its
 cable (the tie rule below), so a drop to a house behind others of its
 grid column runs above their side wires. In the default grids of 10 to
-200 houses that is 0 … 80 % of the drops (star, 30 mesh houses: 14 of 25
-drops, 150 m in all, up to 40 m over 4 houses; star 150: 70 of 141 drops,
-2 450 m, up to 65 m over 7 houses); drops are not routed around
-foundations. A drop has no inductive coupling to these wires in the
-field model (an electrode carries no current along itself), a bare one
-leaks next to them through the soil; moved 1 m aside as a whole, those
-drops change the input impedance by at most 0.02 % with an insulated PEN
-and by up to −0.30 % with a bare one (default grids of 30 and 150 houses,
-50 Hz and 1 kHz; see the [known limitations](../known-limitations.md)). The layout
+200 houses that is 0 … 100 % of the drops (star, 30 houses: all 20
+drops, each over 5 m above a side wire of the middle-row house it passes
+on its way from the main, 100 m in all; star 50, 150 and 200: none; radial 150: 87 of
+140 drops, 1 805 m, up to 40 m over 4 houses); drops are not routed
+around foundations (user decision Q42). A drop has no inductive coupling
+to these wires in the field model (an electrode carries no current along
+itself), a bare one leaks next to them through the soil; moved 1 m aside
+as a whole, those drops change the input impedance by at most 0.006 % with
+an insulated PEN and by up to −0.40 % with a bare one (default grids of 30
+and 150 houses, 50 Hz and 1 kHz; see the
+[known limitations](../known-limitations.md)). The layout
 builder merges cable nodes closer than the same length.
 
-**Where conductors meet a foundation** (user decision Q41). Every
-conductor the generators route to a foundation ends at the point of that
-foundation nearest to it, for every form (rectangles at any orientation,
-building outlines, a substation's foundation), in `TnNetworkGenerator` and
-in the layout builder:
+**Where conductors meet a site** (user decisions Q41 and Q43). Every
+conductor the generators route to a site with a horizontal earth
+electrode ends at the point of that electrode nearest to it, in
+`TnNetworkGenerator` and in the layout builder: at a foundation of every
+form (rectangles at any orientation, building outlines) since user
+decision Q41, at a circular ring (`RingElectrodeSpec`, e.g. the default
+substation of both generators, a 4 m ring with four rods) and a strip
+since user decision Q43. A site with horizontal electrodes and rods is met
+at the nearest point of the horizontal ones, a site with several of them
+(the `large_industry` ring, mesh and strips) at the nearest point of all;
+rods (vertical) keep their head. A circle is met at its exact nearest
+point (it is searched on an inscribed polygon with a sagitta of at most
+1 mm and refined to the circle). The default mains now leave the
+substation ring at its point nearest to their cabinets — the western ones
+at (−4, 0) m instead of (4, 0) m, through the ring — and drops from the
+substation at the point of the ring nearest to the house.
 
 - a service drop is the shortest connection in plan between its feeding
-  cable and the wires of the building's foundation (their closest pair):
-  the tap on the cable and the end on the foundation, at the PEN depth
-  (layout builder: at the wire's depth), attached to the wire that holds
-  the point (`PlannedBranch.end_contact`, a `PlannedContact`);
-- a cable leaving a substation or cabinet with a foundation starts at the
-  foundation's point nearest to its next node;
+  cable and the horizontal wires of the building (their closest pair):
+  the tap on the cable and the end on the foundation, ring or strip, at
+  the PEN depth (layout builder: at the wire's depth), attached to the
+  wire that holds the point (`PlannedBranch.end_contact`, a
+  `PlannedContact`);
+- a cable leaving a substation or cabinet with horizontal electrodes
+  starts at their point nearest to its next node;
 - a building that a cable crosses is joined to it and fed by it: a cable
   of the building's feeding path that crosses or touches its foundation in
   plan is joined to the wire there, and the building gets no drop; every
@@ -152,30 +199,38 @@ in the layout builder:
   audit R5A-01) starts where it leaves it, at its node at the end of the
   shared stretch (audit R4B-01);
 - the layout builder keeps its taps on the layout polyline, where the
-  cable's junctions are: a cable leaving a site with a foundation starts
-  at the foundation's point nearest to its next waypoint, the polyline is
-  clipped at the projection of that point onto it, so no tap on the first
-  or last segment lies inside the site foundation, also for a rotated,
-  polygon or offset one, and a tap at the projection is the site (audits
-  R4A-03, R5A-02); a corner of the cable inside a site foundation stays a
-  node that houses may tap (audit R6A-01);
+  cable's junctions are, and builds the cable from where its polyline
+  leaves the site's closed electrodes (a rectangle, a building outline, a
+  circle) for the last time, on the last segment that passes inside them,
+  to where it first enters the end site's: the corners in between and the
+  sites are part of the sites (audit R6A-01 — a router corner inside a
+  small cabinet ring was a node that houses tapped, 82 of 2 540 drops in
+  200 random layouts with a 2 m cabinet ring started inside it; also a
+  cable that overshoots its cabinet and turns back into it), and the
+  segment that leaves (enters) a site is clipped at the projection of the
+  site's point nearest to its far waypoint, so no tap and no corner lies
+  inside a site foundation, also for a rotated, polygon or offset one; a
+  tap at the projection, or at the site's waypoint, is the site (audits
+  R4A-03, R5A-02);
 - ties go to the lowest wire index, then to the smallest arc position
   along the wire: a cable parallel to the side facing it meets the side
   at the start of the range of equal distance, for a side it passes along
   its whole length the corner where that wire starts.
 
-Sites without a foundation (rods, rings, strips) keep the connection point
-of their anchor, and so does everything attached by name
+Sites with rods only keep the connection point of their anchor (the head
+of the first rod), and so does everything attached by name
 (`site_anchor_point`, `create_conductor(start=<foundation>)`).
-`site_foundation_wires(site)` returns the wires the rule uses.
-`materialise_plan` rejects a `PlannedContact` that names no foundation
-wire of the branch's site (a direct `materialise_branch` call without
-`foundation_wires` checks only that it names a strip or polyline
-electrode; a `NetworkPlan` rejects another site's electrode when it is
-validated) or lies farther from its wire than one minimum cable section
-(1 cm; a joined cable's point may lie that far off the wire it crosses;
-audit R4A-05). `LvNetworkLayout.plot(world=...)` draws the drops as built
-(tap to foundation contact) instead of the layout's centroid stubs.
+`site_contact_wires(site)` returns the wires the rule uses (named
+`site_foundation_wires` before user decision Q43, foundations only).
+`materialise_plan` rejects a `PlannedContact` that names no horizontal
+wire (foundation, ring, strip) of the branch's site (a direct
+`materialise_branch` call without `foundation_wires` checks only that it
+names a strip, polyline or ring electrode; a `NetworkPlan` rejects another
+site's electrode when it is validated) or lies farther from its wire — from
+the exact circle of a ring — than one minimum cable section (1 cm; a joined
+cable's point may lie that far off the wire it crosses; audit R4A-05).
+`LvNetworkLayout.plot(world=...)` draws the drops as built (tap to
+foundation contact) instead of the layout's centroid stubs.
 
 **Measurement set-up.** A fall-of-potential measurement is a
 two-terminal source between the earthing system and an auxiliary

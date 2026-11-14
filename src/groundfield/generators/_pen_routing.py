@@ -108,16 +108,19 @@ side, so a drop to a house behind others of its grid column runs above
 their side wires, 0.2 m above them in
 :class:`~groundfield.generators.tn_network.TnNetworkGenerator` (PEN at
 0.6 m, foundations at 0.8 m). In the default grids (2 × 2 mesh or 10 m ring
-houses, 25 m × 30 m, 30 to 200 houses) that is 0 … 56 % of the drops (star,
-30 mesh houses: 14 of 25 drops, 150 m in all, up to 40 m over 4 houses;
-star 150: 70 of 141 drops, 2 450 m, up to 65 m over 7 houses; radial 150:
-69 of 140 drops, 1 595 m); drops are not routed around foundations. The
+houses, 25 m × 30 m, 10 to 200 houses, cabinets per building group since
+user decisions Q22 and Q35) that is 0 … 100 % of the drops (star, 30
+houses: all 20 drops, each over 5 m above a side wire of the middle-row
+house it passes on its way from the main, 100 m in all; star 50, 150 and
+200: none; radial 150: 87 of 140 drops, 1 805 m, up to 40 m over 4
+houses); drops are not routed around foundations (user decision Q42). The
 field model has no inductive coupling between a drop and these wires (an
 electrode carries no current along itself); a bare PEN leaks next to them
 through the soil. Moved 1 m aside as a whole, those drops change the input
-impedance by at most 0.02 % with an insulated PEN and by up to −0.30 % with
-a bare one (default grids of 30 and 150 houses, 50 Hz and 1 kHz,
-``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
+impedance by at most 0.006 % with an insulated PEN (nothing in the star
+30-house grid, whose drops are perpendicular to their mains) and by up to
+−0.40 % with a bare one (default grids of 30 and 150 houses, 50 Hz and
+1 kHz, ``carson_series`` and ``sommerfeld``). Overlapping conductors lie in one
 trench; the inductive coupling evaluates them as touching wires (finite
 mutual inductance, passive network).
 

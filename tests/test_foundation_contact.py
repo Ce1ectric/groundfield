@@ -1570,11 +1570,13 @@ def _doc(*parts: str) -> str:
 def test_the_texts_state_the_drops_over_other_foundations_and_the_1_cm_bound() -> None:
     """The texts said a drop may pass over another building's foundation for
     "the house behind a house on the main, 5 m", and "no drop runs along a
-    cable" without its 1 cm bound. In the default grids 0 ... 80 % of the
-    drops run 0.2 m above other houses' side wires (star, 30 mesh houses: 14
-    of 25 drops, 150 m; over_foundations/extent.py of stream f6gen), and a
-    foundation that touches the end node of its cable from beyond is tapped
-    1 cm before the node, its drop sharing that 1 cm with the cable."""
+    cable" without its 1 cm bound. In the default grids 0 ... 100 % of the
+    drops run 0.2 m above other houses' side wires (with the cabinets per
+    building group of user decisions Q22, Q35: star, 30 houses, all 20
+    drops, 5 m each, 100 m; stream w1gen over_foundations/extent.py; 14 of
+    25 drops, 150 m with the former cabinet strip), and a foundation that
+    touches the end node of its cable from beyond is tapped 1 cm before the
+    node, its drop sharing that 1 cm with the cable."""
     from groundfield.generators import _pen_routing
 
     for text in (
@@ -1583,9 +1585,9 @@ def test_the_texts_state_the_drops_over_other_foundations_and_the_1_cm_bound() -
         _doc("docs", "adr", "0009-world-generators.md"),
     ):
         assert "0.2 m above their wires" in text or "0.2 m above them" in text
-        assert "14 of 25" in text
+        assert "all 20 drops" in text and "14 of 25" not in text
         assert "farther than one minimum section" in text
-    assert "0 … 80 %" in _doc("docs", "reference", "api", "generators.md")
+    assert "0 … 100 %" in _doc("docs", "reference", "api", "generators.md")
 
 
 # user decision Q41, audit R5B-13
