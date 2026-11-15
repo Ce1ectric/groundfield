@@ -35,7 +35,9 @@ the soil (depth positive).
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 import numpy as np
@@ -144,11 +146,61 @@ class WireSegments:
 #: whole multiple of ``ds`` only through floating-point noise (an edge of
 #: 3.0000000000000004 m at ds = 1.5 m) gets no extra segment. GEN-1 found 52
 #: instead of 50 segments on footprint polygons (review pass 10, 10.32).
+#: For a length computed from coordinates the tolerance grows with their
+#: round-off (:func:`_segment_count`, ``scale``).
 SEGMENT_COUNT_TOL = 1e-9
 
+#: Origin ``(x0, y0, 0)`` in m of the local frame a solver discretises in
+#: (:mod:`groundfield.solver._frame`), or ``None``: the round-off tolerances
+#: of this module are evaluated with the coordinates of the user's frame,
+#: ``p + origin``, so a world shifted into its local frame is discretised
+#: with the same decisions as the original.
+_FRAME_ORIGIN: ContextVar[np.ndarray | None] = ContextVar(
+    "groundfield_frame_origin", default=None
+)
 
-def _segment_count(length: float, ds: float, minimum: int = 1) -> int:
-    """Segments of a wire: ``max(minimum, ceil(length / ds - SEGMENT_COUNT_TOL))``.
+
+@contextmanager
+def _frame_origin(origin: np.ndarray) -> Iterator[None]:
+    """Evaluate the round-off tolerances as if ``origin`` (m) were added back."""
+    token = _FRAME_ORIGIN.set(np.asarray(origin, dtype=float))
+    try:
+        yield
+    finally:
+        _FRAME_ORIGIN.reset(token)
+
+
+def _coordinate_scale(*points: Sequence[float] | np.ndarray) -> float:
+    """Largest coordinate magnitude in m of ``points`` in the user's frame.
+
+    The magnitude that sets the round-off of the points: ``max |p_i|``, or
+    ``max |p_i + origin|`` while a local frame is active
+    (:data:`_FRAME_ORIGIN`).
+    """
+    origin = _FRAME_ORIGIN.get()
+    if origin is None:
+        return max(float(np.max(np.abs(p))) for p in points)
+    return max(
+        float(np.max(np.abs(np.asarray(p, dtype=float) + origin))) for p in points
+    )
+
+
+def _segment_count(
+    length: float, ds: float, minimum: int = 1, scale: float = 0.0
+) -> int:
+    """Segments of a wire: ``max(minimum, ceil(length / ds - tol))``.
+
+    ``tol`` is :data:`SEGMENT_COUNT_TOL`, or the round-off of a length
+    computed from coordinates of magnitude ``scale`` if that is larger:
+    ``COLLINEAR_ROUNDOFF_ULPS * eps * scale / ds`` (the allowance of the
+    straight-run test, :func:`_continues_straight`). At local coordinates
+    (``scale`` below 70 km per metre of ``ds``) the tolerance is
+    :data:`SEGMENT_COUNT_TOL`; at a UTM easting of 32.6e6 m an edge may
+    exceed a whole number of 0.5 m segments by 0.46 um without getting
+    another one. Up to the calendar release the tolerance was 1e-9 of
+    ``ds`` everywhere, which the round-off of projected coordinates
+    exceeded: a generated 10 m mesh foundation got 508 instead of 440
+    segments at the UTM origin (audit fw1sol).
 
     Parameters
     ----------
@@ -158,8 +210,17 @@ def _segment_count(length: float, ds: float, minimum: int = 1) -> int:
         Target (maximum) segment length in m.
     minimum
         Smallest count (8 for a ring).
+    scale
+        Magnitude in m of the coordinates ``length`` was computed from
+        (:func:`_coordinate_scale`); ``0`` for a length given as a
+        parameter (rod, ring, grid span).
     """
-    return max(minimum, int(np.ceil(length / ds - SEGMENT_COUNT_TOL)))
+    tol = SEGMENT_COUNT_TOL
+    if scale > 0.0:
+        roundoff = COLLINEAR_ROUNDOFF_ULPS * _EPS * scale / ds
+        if roundoff > tol:
+            tol = roundoff
+    return max(minimum, int(np.ceil(length / ds - tol)))
 
 
 def _split_interval_at_interfaces(
@@ -213,6 +274,9 @@ def _straight_wire(
     )
 
 
+#: Machine epsilon of float64.
+_EPS = float(np.finfo(float).eps)
+
 #: Round-off allowance of the straight-run test of :func:`_straight_runs`,
 #: in units of the machine epsilon times the largest coordinate magnitude of
 #: the three vertices (audit W1A-01 of the calendar release). A vertex
@@ -255,7 +319,7 @@ def _continues_straight(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> bool:
         return False
     ac = c - a
     height = float(np.linalg.norm(np.cross(ab, ac))) / float(np.linalg.norm(ac))
-    scale = max(float(np.max(np.abs(p))) for p in (a, b, c))
+    scale = _coordinate_scale(a, b, c)
     tol = COLLINEAR_ROUNDOFF_ULPS * float(np.finfo(float).eps) * scale
     return height <= tol + _COLLINEAR_FLOOR_M
 
@@ -322,7 +386,7 @@ def _edge_wires(
         if skip_degenerate and L <= 1e-12:
             continue
         direction = (p1 - p0) / L
-        n = _segment_count(L, ds)
+        n = _segment_count(L, ds, scale=_coordinate_scale(p0, p1))
         seg_len = L / n
         # Historic per-segment arithmetic: p0 + ((k + 0.5) * seg_len) * dir.
         mids = p0[None, :] + ((np.arange(n) + 0.5) * seg_len)[:, None] * direction

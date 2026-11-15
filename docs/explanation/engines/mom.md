@@ -93,8 +93,15 @@ equal.
 topology, branches; ADR-0014): two-terminal sources (`return_to`),
 voltage sources (one current unknown and one constraint row each),
 junction nodes and inductive conductors behave exactly as with `image`.
-Concrete-shell electrodes are rejected by the registry (only the image
-family consumes the shell coefficient).
+A concrete-encased wire (`concrete_shell_coefficient_ohm_m` $= C$,
+ADR-0012) adds the radial resistance of each segment's shell, $C/\Delta s$,
+to the segment's diagonal entry and the drop $C I_k/\Delta s_k$ to its
+potential, the potential of the metal (since 2026.11; up to then `mom`
+rejected such electrodes). With one owner per segment the image family
+solves the same system: the two agree to $7\cdot10^{-16}$ with shells, in
+homogeneous, two-layer and cross-layer soil, and a ring, whose current
+stays uniform, rises by exactly $C/(2\pi r)$ (to $10^{-14}$; see
+[concrete shells](../concrete-shells.md#in-the-moment-method)).
 
 ## Accuracy of the point-matching scheme
 
@@ -126,7 +133,7 @@ times its depth, because the point self image is then biased high.
 |---|---|---|
 | Soil | one or two distinct layers | `BackendCapabilityError` for three distinct layers (use `mom_sommerfeld`) |
 | Kernel | point | `BackendCapabilityError` for an explicit `kernel="line"` |
-| Concrete shells | not supported | `BackendCapabilityError` |
+| Concrete shells | thin shell per segment, $C/\Delta s$ on the diagonal (ADR-0012) | — |
 | Near-interface horizontal wires | distance to $h_1$, on either side, of at least 0.6 segment lengths (point form of the interface image, see [`image_2layer`](image_2layer.md#electrodes-that-reach-the-interface)) | `PointKernelInterfaceWarning` within 0.6 segment lengths, `BackendCapabilityError` within 0.387 |
 | Rod ends at a layer interface | head and tip more than one wire radius from an interface (the thin wire has no end face: +21 % with the tip at $h_1$) | `InterfaceContactWarning` |
 | Size | dense $N \times N$ matrix and one LU per inductive frequency, $O(N^3)$ | memory and time, see [performance](../performance.md) |

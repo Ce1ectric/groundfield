@@ -70,6 +70,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
+from groundfield.solver import _frame
 from groundfield.solver._discretize import _discretize_electrode, _OwnerSplit
 from groundfield.solver._guards import _check_segment_depths
 from groundfield.solver._inductive import _assemble_inductance_matrix
@@ -1045,7 +1046,36 @@ def solve_image_family(
     FieldResult
         Node potentials and currents per frequency, point sources and
         metadata.
+
+    Notes
+    -----
+    A world with a horizontal coordinate beyond 10 km (projected, UTM
+    coordinates) is solved in its local frame and reported in the user's
+    coordinates (:mod:`groundfield.solver._frame`, since 2026.11).
     """
+    frame = _frame.LocalFrame.of(world)
+    with frame.active():
+        result = _solve_image_family(
+            frame.world,
+            engine,
+            green,
+            stacklevel=stacklevel,
+            owner_interfaces=owner_interfaces,
+        )
+    return frame.to_user(result)
+
+
+def _solve_image_family(
+    world: World,
+    engine: Engine,
+    green: ImageGreen,
+    *,
+    stacklevel: int,
+    owner_interfaces: Sequence[float] | None,
+) -> FieldResult:
+    """Body of :func:`solve_image_family`, in the frame of ``world``."""
+    # One call level below the entry point of the backend.
+    stacklevel += 1
     disc = discretise(world, engine, green.layer_interfaces)
     node_currents = inject(world, where=green.where, stacklevel=stacklevel)
     voltages = impressed_voltages(world)
@@ -1255,10 +1285,12 @@ _warn_ignored_sources = _reject_voltage_sources
 def _reject_concrete_shells(world, backend: str) -> None:
     """Reject worlds carrying concrete-shell corrections (ADR-0012).
 
-    Only the image family consumes the per-segment shell coefficient
-    on the reaction-matrix diagonal. Every other backend would
-    silently solve the bare-metal problem, which the electrode
-    documentation explicitly promises will fail loudly instead.
+    The image family and, since 2026.11, the point-matching family
+    (``mom``, ``mom_sommerfeld``) consume the per-segment shell
+    coefficient on the reaction-matrix diagonal. A backend without it
+    (``fem``) would silently solve the bare-metal problem, which the
+    electrode documentation explicitly promises will fail loudly
+    instead.
 
     Raises
     ------

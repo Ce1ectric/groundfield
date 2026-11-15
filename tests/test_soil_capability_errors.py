@@ -108,15 +108,20 @@ def test_mutual_matrices_raise_the_same_error_for_three_layers() -> None:
 
 
 @pytest.mark.finding("A1-08")
-@pytest.mark.parametrize(
-    "solve",
-    [mom.solve_mom, mom_sommerfeld.solve_mom_sommerfeld],
-    ids=["mom", "mom_sommerfeld"],
-)
-def test_the_concrete_shell_guard_raises_the_same_error(solve) -> None:
+def test_the_concrete_shell_guard_raises_the_same_error() -> None:
+    """The guard of the backends without the shell correction (``fem``).
+
+    ``mom`` and ``mom_sommerfeld`` carried it up to the release scope of
+    2026-11-14; they solve concrete shells since
+    (``tests/test_concrete_shells_mom_family.py``).
+    """
+    from groundfield.solver.fem import solve_fem
+
     world = _world("homogeneous", concrete_shell_coefficient_ohm_m=10.0)
-    with pytest.raises(BackendCapabilityError, match="concrete"):
-        solve(world, _engine())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(BackendCapabilityError, match="concrete"):
+            solve_fem(world, _engine(backend="fem"))
 
 
 @pytest.mark.parametrize(

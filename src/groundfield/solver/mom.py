@@ -20,7 +20,14 @@ Method
    - off-diagonal $Z_{ij}$: potential at the midpoint of segment $i$
      of a unit **point** source at the midpoint of segment $j$;
    - diagonal $Z_{ii}$: analytic potential of the uniformly loaded
-     segment at its own surface (line self-potential), plus images.
+     segment at its own surface (line self-potential), plus images;
+   - concrete-encased wires (``concrete_shell_coefficient_ohm_m``
+     $= C$, ADR-0012) add the radial shell resistance of the segment,
+     $C / \\Delta s_i$, to $Z_{ii}$ and the shell drop
+     $C I_i / \\Delta s_i$ to the segment potential (the potential of
+     the metal); the wire radius of such a wire is the outer radius of
+     the shell. Since 2026.11; the image family carries the same term,
+     and with one owner per segment it solves the same system.
 
    The matrix is assembled directly, entry by entry (review pass 10,
    10.59); up to 0.15.0 it was extracted by applying the kernel to the
@@ -118,7 +125,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
-from groundfield.solver import _pipeline
+from groundfield.solver import _frame, _pipeline
 from groundfield.solver._guards import (
     _check_point_interface_diagonal,
     _check_segment_depths,
@@ -128,14 +135,17 @@ from groundfield.solver._layered import canonical_soil
 from groundfield.solver._pipeline import (
     SegmentArrays,
     Solution,
-    _reject_concrete_shells,
 )
 from groundfield.solver._series import (
     ImageSeries,
     SeriesTruncationWarning,
     _series_tail_bound,
 )
-from groundfield.solver._topology import _voltage_source_entries, _voltage_source_rhs
+from groundfield.solver._topology import (
+    _shell_diagonal,
+    _voltage_source_entries,
+    _voltage_source_rhs,
+)
 from groundfield.solver.image_2layer import _two_layer_self_kernel_factory
 from groundfield.solver.result import FieldResult, PointSource
 from groundfield.utils.logging import get_logger
@@ -826,6 +836,61 @@ class _MomGreen(_PointMatchingGreen):
         }
 
 
+def _with_concrete_shells(
+    Z_soil: np.ndarray,
+    arrays: SegmentArrays,
+    soil_potentials: Callable[[np.ndarray], np.ndarray],
+) -> tuple[np.ndarray, Callable[[np.ndarray], np.ndarray]]:
+    """Add the concrete-shell series term of ADR-0012 per segment.
+
+    A segment of length $\\Delta s_k$ whose wire carries the shell
+    coefficient $C_k$ (Ω·m) drops $C_k I_k / \\Delta s_k$ across its
+    shell when it leaks $I_k$: the radial resistance of a cylindrical
+    shell of $\\Delta s_k$, $\\rho_c \\ln(r_b/r_a) / (2\\pi\\Delta s_k)$
+    (Sunde 1968, §4.4). The shells of different segments do not couple, so
+    the term joins the diagonal only,
+
+    $$
+    Z = K + \\operatorname{diag}(C_k / \\Delta s_k),
+    $$
+
+    with $K$ the soil reaction matrix of the wire of outer radius $r_b$,
+    and the segment potentials (the potential of the metal) become
+    $K I + C_k I_k / \\Delta s_k$. This is the term the image family puts
+    on the diagonal of its segment matrix (``_shell_diagonal``); with one
+    owner per segment the image family solves the same system. Field
+    points see the leakage currents in the soil: the shell is a series
+    element.
+
+    Parameters
+    ----------
+    Z_soil
+        Soil reaction matrix $K$ in Ω, ``N × N``.
+    arrays
+        Segment arrays (lengths in m, ``shell_coefficients`` in Ω·m).
+    soil_potentials
+        ``seg_currents -> K @ seg_currents`` (V) of the Green's function.
+
+    Returns
+    -------
+    Z, potentials
+        The system matrix in Ω and the segment-potential map in V. For a
+        world without shells (every coefficient 0) ``Z_soil`` and
+        ``soil_potentials`` themselves, so such worlds solve bit for bit as
+        before.
+    """
+    shell = _shell_diagonal(arrays.shell_coefficients, arrays.lengths)
+    if shell is None:
+        return Z_soil, soil_potentials
+    Z = Z_soil.copy()
+    Z[np.diag_indices_from(Z)] += shell
+
+    def potentials(seg_currents: np.ndarray) -> np.ndarray:
+        return soil_potentials(seg_currents) + shell * seg_currents
+
+    return Z, potentials
+
+
 def _point_matching_step(
     engine: Engine,
     *,
@@ -1076,7 +1141,29 @@ def solve_point_matching(
     FieldResult
         Node potentials (V) and leakage currents (A) per frequency, the
         segment currents as point sources, and metadata.
+
+    Notes
+    -----
+    A world with a horizontal coordinate beyond 10 km (projected, UTM
+    coordinates) is solved in its local frame and reported in the user's
+    coordinates (:mod:`groundfield.solver._frame`, since 2026.11).
     """
+    frame = _frame.LocalFrame.of(world)
+    with frame.active():
+        result = _solve_point_matching(
+            frame.world, engine, green, stacklevel=stacklevel + 1
+        )
+    return frame.to_user(result)
+
+
+def _solve_point_matching(
+    world: World,
+    engine: Engine,
+    green: _PointMatchingGreen,
+    *,
+    stacklevel: int,
+) -> FieldResult:
+    """Body of :func:`solve_point_matching`, in the frame of ``world``."""
     # Steps 1-4 of the shared pipeline, called through the module so that
     # every extension of a step (two-terminal sources and junction nodes
     # in ``inject`` / ``build_topology``, inductive fixes in
@@ -1092,7 +1179,12 @@ def solve_point_matching(
     _check_segment_depths(disc.segments, where=green.where, stacklevel=stacklevel + 1)
     arrays = SegmentArrays.from_segments(disc.segments)
     kernel = green.prepare(disc.segments, arrays, stacklevel=stacklevel + 1)
-    Z = green.reaction_matrix(kernel, arrays)
+    Z_soil = green.reaction_matrix(kernel, arrays)
+    Z, potentials = _with_concrete_shells(
+        Z_soil,
+        arrays,
+        lambda sc: green.segment_potentials(kernel, Z_soil, arrays, sc),
+    )
     solution, node_potentials = _point_matching_step(
         engine,
         disc=disc,
@@ -1100,7 +1192,7 @@ def solve_point_matching(
         topo=topo,
         branches=branches,
         Z=Z,
-        potentials=lambda sc: green.segment_potentials(kernel, Z, arrays, sc),
+        potentials=potentials,
         voltages=voltages,
     )
     metadata = {
@@ -1148,8 +1240,9 @@ def solve_mom(
     image backend; only the resolution scheme (one current per segment,
     point matching at the segment midpoints, instead of one uniform
     current per straight wire of an electrode) differs. Clusters without a source float
-    (zero net current, 10.29). See the module docstring for the
-    accuracy of the scheme and the shared solve flow.
+    (zero net current, 10.29). Concrete-encased electrodes carry the
+    per-segment shell term of ADR-0012 (since 2026.11). See the module
+    docstring for the accuracy of the scheme and the shared solve flow.
 
     Parameters
     ----------
@@ -1180,8 +1273,7 @@ def solve_mom(
         the soil surface.
     BackendCapabilityError
         For a :class:`MultiLayerSoil` with three or more distinct layers
-        (a :class:`TypeError` before 2026.11), or for electrodes with a
-        concrete-shell coefficient (ADR-0012).
+        (a :class:`TypeError` before 2026.11).
     TypeError
         If ``world.soil`` is no soil model.
     """
@@ -1206,7 +1298,6 @@ def solve_mom(
             f"MultiLayerSoil has {len(soil.layers)}. Use "
             "backend='mom_sommerfeld' for n >= 3 soils."
         )
-    _reject_concrete_shells(world, "mom")
     if two_layer_max_terms is None:
         two_layer_max_terms = engine.image_max_terms
     if two_layer_tol is None:

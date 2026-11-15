@@ -112,11 +112,14 @@ def test_builtin_backends_are_registered_with_their_capabilities() -> None:
         "mom_sommerfeld",
         "fem",
     }
-    # Concrete-shell correction (ADR-0012): the image family only.
+    # Concrete-shell correction (ADR-0012): the image family and, since the
+    # release scope of 2026-11-14, the point-matching family.
     assert {n for n, c in caps.items() if c.concrete_shells} == {
         "image",
         "image_2layer",
         "image_nlayer",
+        "mom",
+        "mom_sommerfeld",
     }
     # fem reduces every conductor to a lumped branch without inductance and
     # skin effect (audit round 2, A2C-4: the skin model is a feature too).
@@ -256,11 +259,16 @@ def test_concrete_shell_capability_error_names_the_image_family() -> None:
         concrete_shell_coefficient_ohm_m=100.0,
     )
     gf.create_source(w, attached_to="f1")
-    with pytest.raises(BackendCapabilityError) as excinfo:
-        gf.Engine(backend="mom", segment_length=SEG).solve(w)
+    # 'mom' solves concrete shells since the release scope of 2026-11-14;
+    # 'fem' is the backend left without the correction.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(BackendCapabilityError) as excinfo:
+            gf.Engine(backend="fem", segment_length=SEG).solve(w)
     msg = str(excinfo.value)
     assert "concrete-shell" in msg
     assert "'image'" in msg
+    assert "'mom'" in msg and "'mom_sommerfeld'" in msg
 
 
 @pytest.mark.finding("10.74")

@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 
 from groundfield.geometry.primitives import (
     WireSegments,
+    _coordinate_scale,
     _edge_wires,
     _grid_wire_polylines,
     _grid_wires,
@@ -129,8 +130,10 @@ _SHELL_DESCRIPTION = (
     "electrode in parallel, $L$: total wire length). ``wire_radius`` is the "
     "outer shell radius "
     "$r_b$ (the soil sees the shell surface). ``0.0`` (default): no shell. "
-    "Honoured by the image family and ``solve_mutual_*``; the other "
-    "backends reject a non-zero value."
+    "Honoured by the image family, ``solve_mutual_*`` and, since 2026.11, "
+    "``mom`` and ``mom_sommerfeld`` (one current per segment: the current "
+    "redistributes, so the shell adds at least ``C/L``); ``fem`` rejects a "
+    "non-zero value."
 )
 
 
@@ -626,10 +629,12 @@ class StripElectrode(_ElectrodeBase):
             for h in layer_interfaces:
                 t_cuts.append((h - p0[2]) / dz * L)
         intervals = _split_interval_at_interfaces(0.0, L, t_cuts)
+        # The length comes from the end points: allow their round-off.
+        scale = _coordinate_scale(p0, p1)
         parts = []
         for t_lo, t_hi in intervals:
             part_len = t_hi - t_lo
-            n = _segment_count(part_len, ds)
+            n = _segment_count(part_len, ds, scale=scale)
             parts.append(_straight_wire(p0, direction, t_lo, part_len / n, n))
         return WireSegments.concatenate(parts)
 

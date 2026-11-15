@@ -1056,6 +1056,12 @@ class FieldResult(BaseModel):
         potentials, profiles, touch / step voltages and VTK exports.
         The error is now raised explicitly so the regime is visible
         rather than silent.
+
+        Point sources at projected (UTM) coordinates, beyond 10 km from
+        the origin, are evaluated in a local frame: points and sources are
+        shifted by the rounded centre of the sources' bounding box (exact
+        for nearby doubles) before the kernel runs (since 2026.11; see
+        *Units and conventions* in the reference).
         """
         if not self.point_sources:
             raise RuntimeError(
@@ -1074,6 +1080,21 @@ class FieldResult(BaseModel):
         # have the stride the BLAS calls of v0.15.0 saw.
         currents = np.ascontiguousarray(all_currents[:, frequency_index])
         line = self._line_sources()
+        # Sources at projected (UTM) coordinates: evaluate in a local frame
+        # of the sources, exactly shifted (2026.11, see solver._frame); a
+        # result within 10 km of the origin is evaluated as before.
+        from groundfield.solver._frame import points_origin
+
+        origin = points_origin(sources)
+        if origin is not None:
+            pts = pts - origin
+            sources = sources - origin
+            if line is not None:
+                from groundfield.solver._line_kernel import LineSegments
+
+                line = LineSegments(
+                    line.mid - origin, line.length, line.tangent, line.radius
+                )
 
         # Dispatch to the kernel that matches the effective number of
         # soil layers: that of the canonical layer stack, the soil the

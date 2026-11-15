@@ -15,8 +15,8 @@ solve function and fills the common metadata of the result.
 |---|---|---|---|---|---|---|---|
 | `image` | homogeneous (forwards two- and multi-layer) | line, point | yes | yes | yes | yes | default |
 | `image_2layer` | two-layer | line, point | yes | yes | yes | yes | |
-| `mom` | homogeneous, two-layer | point | no | yes | yes | yes | |
-| `mom_sommerfeld` | any number of layers | point | no | yes | yes | yes | options: `MomSommerfeldOptions` |
+| `mom` | homogeneous, two-layer | point | yes (since 2026.11) | yes | yes | yes | |
+| `mom_sommerfeld` | any number of layers | point | yes (since 2026.11) | yes | yes | yes | options: `MomSommerfeldOptions` |
 | `fem` | any number of layers | — | no | no | no | no | experimental, options: `FemOptions` |
 | `cim` | → `image` | | | | | | deprecated alias |
 | `bem` | → `mom` | | | | | | deprecated alias |
@@ -39,7 +39,8 @@ assert set(gf.available_backends(include_deprecated=True)) - set(gf.available_ba
 caps = {name: get_backend(name).capabilities for name in gf.available_backends()}
 assert caps["image"].kernels == {"line", "point"} and caps["mom"].kernels == {"point"}
 assert caps["mom_sommerfeld"].soils == {"homogeneous", "two_layer", "multi_layer"}
-assert caps["image"].concrete_shells and not caps["mom"].concrete_shells
+assert caps["image"].concrete_shells and caps["mom"].concrete_shells
+assert caps["mom_sommerfeld"].concrete_shells and not caps["fem"].concrete_shells
 assert not caps["fem"].two_terminal_sources and caps["fem"].conductors == {"lumped"}
 assert all(caps[n].voltage_sources for n in ("image", "image_2layer", "mom", "mom_sommerfeld"))
 assert not caps["fem"].voltage_sources

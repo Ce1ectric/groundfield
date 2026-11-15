@@ -36,6 +36,29 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   `length`.
 - ParaView and other viewers assume $z$ upwards: apply a transform with
   scale $(1, 1, -1)$ to VTK files.
+- **Projected coordinates** (UTM, Gauss–Krüger) may be used as they are.
+  When a horizontal coordinate of a world exceeds 10 km, the solvers
+  (`image`, `image_2layer`, `mom`, `mom_sommerfeld`, `solve_mutual_*`) work
+  in a local frame: the world shifted exactly by the centre of its
+  horizontal bounding box, rounded to whole metres; point sources are
+  reported in the user's coordinates, and `FieldResult.potential`
+  evaluates in a local frame of the sources in the same way (since
+  2026.11). Segment counts and straight runs allow the round-off of the
+  coordinates' own magnitude, 64 $\varepsilon |x|$ (0.46 µm at an easting
+  of 32.6 · 10⁶ m). A world moved from (0, 0) to the UTM origin
+  (32 604 321.123 m, 5 812 345.678 m) then changes its impedance by
+  3 · 10⁻¹¹ with the point kernel (`mom`, `mom_sommerfeld`, `image` with
+  `kernel="point"`), the effect of the rounding of its vertices; up to
+  2026.11 an edge of a whole number of segments got one more there (a
+  generated 10 m mesh foundation 508 instead of 440 segments, +2.6 · 10⁻⁴
+  in `mom`). With the default line kernel the impedance moves by up to
+  2.4 · 10⁻⁷ wherever the world stands (up to 1.2 · 10⁻⁷ already for a shift
+  by (0.1, 0.2) m): the kernel switches from its exact integral to its
+  far form at a midpoint distance of six segment lengths, where pairs six
+  segments apart on a straight wire sit exactly, so round-off decides
+  their form
+  ([known limitations](known-limitations.md#current-ansatz-and-source-kernels)).
+  Worlds within 10 km of the origin are solved exactly as before.
 
 ## Phasors and frequency
 
