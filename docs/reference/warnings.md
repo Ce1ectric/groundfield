@@ -326,8 +326,10 @@ comes from `Engine.solve` (with any backend), not from
 segments of the integral engines; `fem` checks the display segments that
 carry the point sources of its result against `Engine.max_segments` too,
 and limits its mesh by `FemOptions.max_nodes` (axisymmetric, about 4 GB
-per million nodes) and `max_nodes_3d` (3-D, 3.0 … 3.4 GB per million
-nodes), estimated before anything is assembled.
+per million nodes) and `max_nodes_3d` (3-D; the solve adds about 2.9 GB
+per million nodes, 3.0 … 3.1 GB with the process), estimated before
+anything is assembled, and the ports of its 3-D model by `max_ports_3d`
+(100), checked before meshing.
 
 ## Post-processing
 

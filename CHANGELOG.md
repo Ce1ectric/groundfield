@@ -563,7 +563,9 @@ reproduces 0.15.0, it is named.
   frequency, and the coordinate check of decision D5. `FemOptions`:
   `model` (`"auto"`, `"axisymmetric"`, `"3d"`), `refinement`, `extrapolate`,
   `max_nodes`, `source_radius`, `growth`, `concrete_resistivity`,
-  `max_nodes_3d`; metadata `fem_port_resistance`, `fem_ports`,
+  `max_nodes_3d`, `max_ports_3d` (100: more ports are refused before
+  meshing; raise it to solve such a world on purpose, audit W4B-08);
+  metadata `fem_port_resistance`, `fem_ports`,
   `fem_error_estimate`, `fem_mesh`, `fem_model` and more. Against the
   concrete resolved as a volume (Q40) a junction of encased wires acts like a
   few cm of wire, at most about $2\,r_b$, sign not settled (not converged;
@@ -1177,6 +1179,15 @@ reproduces 0.15.0, it is named.
   world size, so a rod 1 µm off a ring's axis went to the 3-D model,
   W4A-08); `metadata["fem_peak_memory_gb"]` of the 3-D model is what the
   solve added (new `fem_process_peak_memory_gb`: the process peak; W4B-09).
+- The `fem` page: the validation rows next to and on an interface and the
+  engine columns re-measured after the wave-3 changes of the image family
+  and the refined ring block (audit W4A-01): `image_2layer` reads a ring
+  1 cm above a 1000 / 30 Ω·m interface +3.46 … +3.57 % above `fem` (the page
+  said +5.2 … +5.4 %), the ring on an interface within 1.2e-5 of the
+  solid-torus boundary elements; boundary elements as a second method for
+  B2, B3 and the bonded ring with a central rod (W4A-11); benchmarks B8 and
+  B10 exclude `fem` for its cost, with the 3-D result measured once
+  (reciprocal to round-off; B10 +0.6 / +0.8 % above `mom`).
 
 ### Deprecated
 

@@ -311,7 +311,8 @@ shows what agrees with independent references and how well.
   4.6 GB). `fem` is a reference for single clusters and small groups, not for
   networks; more than `FemOptions.max_ports_3d` ports (100; every leaking
   piece of a galvanic distributed conductor is one) are refused before
-  meshing (`ResourceLimitError`, audit W4B-08). A horizontal wire within
+  meshing (`ResourceLimitError`, audit W4B-08); raise the option to solve
+  such a world on purpose. A horizontal wire within
   $R/0.8$ of the soil surface or a layer
   interface ($R$ = `source_radius`, 6 cm) gets a smaller disc and a finer
   mesh; a bare one within about 2.8 wire radii is refused
