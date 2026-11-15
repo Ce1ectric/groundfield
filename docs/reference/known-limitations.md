@@ -341,10 +341,23 @@ shows what agrees with independent references and how well.
   stand there farther than `CabinetConfig.max_far_end_gap_m` (20 m) from its houses
   (a group of about 180°, e.g. 10 houses and one small commercial building: 50.4 m)
   stands on the ray through the group's far-end building instead. The threshold is a
-  choice: the groups of the default 50-house grid stand 8.8 … 12.8 m from their houses
-  on the centroid ray (a wide group there, 206 … 341°, still has drops up to 113 m to
-  its outer houses), the wide AP1 groups 23.7 … 50.4 m; 15 / 25 m move one group of the
-  100-house grid more / fewer. A single group around the substation (one cabinet for a
+  step, not a separation of two populations (kept for 2026.11, user decision D7):
+  groups lie on both sides of it — on the centroid ray the groups of the default
+  50-house grid stand 8.8 … 12.8 m from their houses (a wide group there, 206 … 341°,
+  still has drops up to 113 m to its outer houses), those of the 100-house grid
+  10.05 … 23.01 m (15 / 20 / 25 m put four / two / none of its five groups on the
+  far-end ray), and over the 80 AP1 mixes the 118 groups beyond 20 m stand
+  20.21 … 53.56 m from their houses while the largest gap kept is 18.84 m — and the
+  results jump where a group crosses it: with the house columns of the 50-house grid
+  32.0 / 32.2 m apart one cabinet moves 141.8 m, the drops by −19 %, the input
+  resistance at 50 Hz by −0.14 % beyond the smooth trend and, with an inductive PEN,
+  the reactance at 1 kHz by −21.6 / −18.9 % (`carson_series` / `sommerfeld`); the
+  100-house grid across 22.95 m moves two cabinets by 65.6 m (X at 1 kHz +1.5 / −3.1 %),
+  and 80 houses with 5 medium commercial buildings (a group at 20.21 m) move one by
+  31.4 m when the threshold is 20.5 m (X +1.5 / +1.1 %). The plan records per cabinet
+  which rule placed it and its distance on the centroid ray
+  (`PlannedSite.cabinet_rule`, `PlannedSite.centroid_ray_gap_m`), so a study can see
+  where a group crosses. A single group around the substation (one cabinet for a
   row through it) has its cabinet on one side only. A cabinet whose electrodes would
   come closer than `end_clearance_m` to another site raises (3 of 100 random
   200-house layouts 12 m apart); a given `CabinetConfig.placement` avoids it. The

@@ -88,6 +88,12 @@ limits a result, the reference documentation states the limit.
   their only cabinet at one end; the other half is fed from the substation.
 - **A cabinet that cannot keep its clearance** raises; moving it on along the ray past
   the blocking site would always place it (dense random layouts only so far).
+- **A continuous cabinet rule** (user decision D7: not in 2026.11). The 20 m threshold
+  between the centroid ray and the far-end ray is a step: a group that crosses it moves its
+  cabinet by up to the width of the group (141.8 m in the 50-house grid for a 0.2 m change
+  of the house spacing, X at 1 kHz about −20 %). A rule that moves the cabinet continuously
+  with the group's geometry would remove the step; the plan's `cabinet_rule` /
+  `centroid_ray_gap_m` show meanwhile where a study crosses it.
 - **Continuous line-kernel switch.** A deterministic near/far switch (a margin on the
   distance) or a far form exact to round-off would make the line kernel translation
   invariant to round-off. It moves worlds near the origin by up to about 2e-7 (golden

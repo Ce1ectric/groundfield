@@ -118,7 +118,7 @@ reproduces 0.15.0, it is named.
 | 10.46 (Q32) | unmarked conductors of different radii on one axis touch | coax pair 31.97 → 43.47 µH loop | worlds with conductors drawn on one axis without the marker | none |
 | 10.46 (Q33) | shield without internal inductance | −50 nH/m per `cable_shield` conductor; coax 31.97 → 26.97 µH; `buried_lead()` two-pole −2.5 % in X | `cable_shield` conductors with `inductance_model` | none |
 | Q22 / Q35, Q43 (10.38) | cabinets per building group at the far end of their houses, radial substation slots tap the trunk; mains and drops meet rings and strips at their nearest point; layout cables reach a site where the polyline enters it | default grids (10 … 150 houses, 100 Ω·m): resistive PEN at 50 Hz star +0.12 … +0.85 %, radial −0.01 … +0.49 % (Q43 alone −0.05 … −0.13 %); isolated Neumann PEN (n ≤ 50, `carson_series` and `sommerfeld`): 50 Hz \|Z\| −0.03 … +0.97 %, Im −9.9 … +82 %; 1 kHz star Re −6.0 … +5.6 %, Im −9.1 … +70 %, \|Z\| −1.4 … +13.1 %, radial Re −0.5 … +8.3 %, Im −9.6 … +96 %, \|Z\| −1.2 … +15.4 % (default star 30 houses X +64 / +55 %: the houses share their main instead of parallel drops; Q43 alone Im −4 … −11 %); 100 ring houses +0.88 %; T06 layout −0.026 % (100 Ω·m), T07 Z_meas +1.51 %; the AP1-like layout (foundation station) unchanged; golden `gen_tn_default` ≤ 1.4e-2 (cabinet rod current −63 %), `gen_tn_measurement_overhead_leads` ≤ 1.9e-2 | `TnNetworkGenerator` worlds (cabinet positions and feeding with the default `placement=None`; radial substation slots; every default substation ring); layout worlds with ring / strip sites or router corners inside a site; not a given cabinet placement apart from Q43, not foundation stations |
-| W1B-01, W1B-02 (10.38) | cabinet of a wide group (farther than `max_far_end_gap_m` = 20 m from its houses on the centroid ray) on the ray through its far-end building; clearance over every electrode | default star grids of 100 … 200 houses and AP1 mixes with a wide group (100 Ω·m): resistive PEN 50 Hz −0.03 … +0.49 % (star 100 −0.031 %, 150 +0.089 %, 200 +0.072 %, 10 houses + 1 small +0.489 %; image 2 m and 1 m agree to 0.001 %); isolated Neumann PEN of the wide mixes at 1 kHz \|Z\| +0.3 … +1.9 %; 100 ring houses −0.023 %; drops 10 houses + 1 small 527 → 312 m, star 150 2 653 → 2 989 m; the 10 / 30 / 50-house grids, radial networks and golden cases unchanged | `TnNetworkGenerator` star worlds with `placement=None` that have a wide group, or rods at a group's far end; not a given placement |
+| W1B-01, W1B-02 (10.38) | cabinet of a wide group (farther than `max_far_end_gap_m` = 20 m from its houses on the centroid ray) on the ray through its far-end building; clearance over every electrode | default star grids of 100 … 200 houses and AP1 mixes with a wide group (100 Ω·m): resistive PEN 50 Hz −0.03 … +0.49 % (star 100 −0.031 %, 150 +0.089 %, 200 +0.072 %, 10 houses + 1 small +0.489 %; image 2 m and 1 m agree to 0.001 %); isolated Neumann PEN of the wide mixes at 1 kHz \|Z\| +0.3 … +1.9 %; star 100 at 1 kHz X +1.2 / −3.5 %, \|Z\| +2.0 / −1.8 % (`carson_series` / `sommerfeld`; the two models disagree in sign here); 100 ring houses −0.023 %; drops 10 houses + 1 small 527 → 312 m, star 150 2 653 → 2 989 m; the 10 / 30 / 50-house grids, radial networks and golden cases unchanged | `TnNetworkGenerator` star worlds with `placement=None` that have a wide group, or rods at a group's far end; not a given placement |
 | W1B-03, W1B-04 (10.38) | layout cables joined to every substation / cabinet they pass; legs that leave and come back keep their taps | layouts with a cable through a passed cabinet −0.16 … −0.45 % (50 Hz, 1 m / 0.5 m); R6A's families: 32 of 200 cabinet, 10 of 120 random layouts change (drops −7.4 … +2.0 m); T06 and the AP1-like layout unchanged | `LvNetworkLayout` worlds whose cables pass through the closed electrodes of a site other than at their ends |
 | 10.46 (Q32/Q33), audit W1A-02 | pieces of conductors lying beside each other | coax in pieces +0.09 … +9.6 % (back to the lumped value); drops routed back along the PEN main: X(1 kHz) +3.9e-4, Zin 1.3e-5 (golden `cond_drops_along_pen_main_perfect_mirror`) | worlds with a core inside a marked shield, or cables / drops drawn on one axis, with `discretize_segment_length` |
 | 10.22 (Q30), audit W1A-01 | owners at projected coordinates | generated mesh foundations at UTM coordinates +0.09 … +0.64 % (back to the local value) | worlds built at absolute UTM coordinates |
@@ -701,7 +701,7 @@ reproduces 0.15.0, it is named.
   0.2 s before user decision Q41 (0.15.0 had no planning step); 8000 radial
   houses with `max_feeder_length_m=1e5` 18.4 s against 5.9 s. With the
   cabinets per building group (user decisions Q22, Q35; quiet machine)
-  1000 / 8000 star houses take 0.86 / 14.1 s, radial with
+  1000 / 8000 star houses take 0.92 / 14.3 s, radial with
   `max_feeder_length_m=1e5` 0.98 / 17.2 s (the default 500 m: 8 000 radial
   houses 2.6 s). Tests:
   `tests/test_foundation_contact.py`,
@@ -764,13 +764,25 @@ reproduces 0.15.0, it is named.
   `CabinetConfig.end_clearance_m` (new, 1 m, positive) beyond the group's farthest
   earth electrode along it (rods included) plus the plan extent of the cabinet's own
   grounding — unless the cabinet would stand there farther than
-  `CabinetConfig.max_far_end_gap_m` (new, 20 m, positive) from the nearest electrode
+  `CabinetConfig.max_far_end_gap_m` (new, 20 m, positive, larger than
+  `end_clearance_m`) from the nearest electrode
   of its group: a wide group's cabinet stands on the ray through its far-end building
   (the largest projection of its position on the direction of the centroid), 1 m
-  beyond that building (audits W1B-01, W1B-02, W1B-05; on the centroid ray the groups
-  of the default 50-house grid stand 8.8 … 12.8 m from their houses, the wide AP1
-  groups 23.7 … 50.4 m — 10 houses and one small commercial building had their
-  cabinet 50.4 m from the nearest building, drops 527.4 m, now 1.56 m, 311.8 m); a
+  beyond that building (audits W1B-01, W1B-02, W1B-05; 10 houses and one small
+  commercial building had their cabinet 50.4 m from the nearest building, drops
+  527.4 m, now 1.56 m, 311.8 m). The threshold is a step, kept for 2026.11 (user
+  decision D7, audit W1R2-02): groups lie on both sides of it — over the 80 AP1
+  mixes 118 groups stand 20.21 … 53.56 m from their houses on the centroid ray and
+  take the far-end ray, the largest gap kept is 18.84 m — and a group that crosses
+  it moves its cabinet by up to the width of the group (50-house grid with its house
+  columns 32.0 / 32.2 m apart: 141.8 m, X at 1 kHz with an inductive PEN
+  −21.6 / −18.9 %, `carson_series` / `sommerfeld`); the plan records per cabinet
+  which rule placed it and that distance (`PlannedSite.cabinet_rule`,
+  `PlannedSite.centroid_ray_gap_m`), and `end_clearance_m` must be smaller than
+  `max_far_end_gap_m` (audit W1R2-09). Tests:
+  `tests/test_cabinet_groups.py::test_every_cabinet_records_the_rule_that_placed_it_and_its_gap`,
+  `tests/test_cabinet_groups.py::test_the_cabinet_jumps_where_the_recorded_gap_crosses_the_threshold`,
+  `tests/test_cabinet_groups.py::test_an_end_clearance_not_below_the_far_end_gap_is_rejected`. A
   cabinet whose electrodes would come closer than `end_clearance_m` to those of
   another site raises a `ValueError` naming both; the cabinet feeds its group (a building that
   a main crosses stays fed by that main, Q41). Up to then the cabinets stood on a

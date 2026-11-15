@@ -845,6 +845,49 @@ def test_the_cabinet_texts_quote_the_measured_threshold_numbers() -> None:
         assert "18.84 m" in texts[name], name
 
 
+def _doc_text(relpath: str) -> str:
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    return " ".join((root / relpath).read_text(encoding="utf-8").split())
+
+
+# audit W1R2-02, W1R2-04; user decision D7
+def test_the_limitations_state_the_step_at_the_cabinet_threshold() -> None:
+    """A 0.2 m change of the house spacing that moves one group of the
+    50-house grid across max_far_end_gap_m moves its cabinet by 142 m, the
+    drops by -19 % and X(1 kHz) by -21.6 / -18.9 % (carson_series /
+    sommerfeld); the limitations said the threshold separates two
+    populations and did not say that results jump there, and quoted the AP1
+    gaps as 23.7 ... 50.4 m and "15 / 25 m move one group of the 100-house
+    grid" (it is two either way: 4 / 2 / 0 far-end groups)."""
+    kl = _doc_text("docs/reference/known-limitations.md")
+    bullet = kl.split("**Cabinets per building group.**")[1].split("- **")[0]
+    assert "jump" in bullet and "step" in bullet
+    assert "20.21 … 53.56 m" in bullet and "18.84 m" in bullet
+    assert "PlannedSite.cabinet_rule" in bullet
+    assert "move one group of the 100-house grid" not in kl
+    assert "23.7 … 50.4 m" not in kl
+
+
+# audit W1R2-06
+def test_the_pass10_rows_of_q22_and_q35_say_where_they_went() -> None:
+    """Q22 and Q35 were moved into 2026.11.0 (stream w1gen) like Q30 / Q32 /
+    Q33; rows 22 and 35 said "next release", and the last column of all five
+    linked to a roadmap section that no longer lists them."""
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    text = (root / "docs/audit/pass-10.md").read_text(encoding="utf-8")
+    rows = {
+        line.split("|")[1].strip(): line
+        for line in text.splitlines()
+        if line.startswith(("| 22 |", "| 30 |", "| 32 |", "| 33 |", "| 35 |"))
+    }
+    assert sorted(rows) == ["22", "30", "32", "33", "35"]
+    for q in ("22", "35"):
+        assert "next release" not in rows[q].split("|")[3], q
+        assert "2026.11.0" in rows[q].split("|")[3], q
+    for q, row in rows.items():
+        assert "scheduled-for-the-next-release" not in row, q
+
+
 # audit W1B-02; user decisions Q22, Q35
 @pytest.mark.parametrize(
     "kw",
