@@ -411,6 +411,29 @@ def test_the_field_of_a_3d_result_is_evaluated_from_its_point_sources() -> None:
     assert np.all(np.abs(phi[0]) > np.abs(phi[1]))
 
 
+def test_the_leakage_per_display_segment_is_its_integral_not_aliased() -> None:
+    """Every display segment carries the leakage integrated over its own
+    length: uniform around a ring by symmetry. (The nearest segment per
+    axial point aliased the axial cells against the 0.1 m chords: 8.9 %
+    spread around a 1 m ring.)"""
+    # user decision Q37 (part B)
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, 0.5), radius=1.0, wire_radius=0.008
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        eng = gf.create_engine(
+            backend="fem", segment_length=0.1, options={"fem": COARSE}
+        )
+        r = eng.solve(w)
+    i = np.array([ps.current[0].real / ps.length for ps in r.point_sources])
+    total = sum(ps.current[0].real for ps in r.point_sources)
+    assert abs(total - 1.0) < 1e-12
+    assert (i.max() - i.min()) / i.mean() < 5e-3
+
+
 # ---------------------------------------------------------------------
 # Resolved concrete (user decision Q40)
 # ---------------------------------------------------------------------

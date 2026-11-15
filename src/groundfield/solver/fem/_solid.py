@@ -205,21 +205,70 @@ def _prisms(world, engine, model: WireModel, rho_c: float):
     return tuple(prisms), side
 
 
-def _display_assignment(model: WireModel, segs, owner: np.ndarray) -> np.ndarray:
-    """Display segment of every axial point (the nearest of its port)."""
-    out = np.zeros(model.points.shape[0], dtype=int)
+def _display_shares(model: WireModel, segs, owner: np.ndarray):
+    """Share of every axial point's current per display segment.
+
+    Every axial point stands for its stretch of the wire axis (half an axial
+    cell, ``model.intervals``). The stretch is split among the display
+    segments of its port in proportion to its overlap with each, measured
+    along the segment, so a display segment carries the integral of the
+    leakage over its own length. (The nearest segment per point would alias
+    the axial cells against the display segments: ±4 % per segment on a 1 m
+    ring at 0.1 m segments.) Only the segments nearest to the stretch's
+    midpoint take part (a ring's chords, the pieces of a polyline at a
+    corner); a stretch that overlaps none of them goes to the nearest one.
+
+    Returns
+    -------
+    point, segment, share
+        Triplets: the current of axial point ``point`` times ``share`` goes
+        to display segment ``segment``; the shares of a point add up to 1.
+    """
     port = model.port
     mids = np.array([s.midpoint for s in segs], dtype=float)
     dirs = np.array([s.direction for s in segs], dtype=float)
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
     half = 0.5 * np.array([s.length for s in segs], dtype=float)
+    start = np.array([p.start for p in model.pieces])[model.piece]
+    tangent = np.array([p.direction for p in model.pieces])[model.piece]
+    xa = start + model.intervals[:, :1] * tangent
+    xb = start + model.intervals[:, 1:] * tangent
+    xm = 0.5 * (xa + xb)
+    out_p, out_s, out_w = [], [], []
     for k in np.unique(port):
         rows = np.nonzero(owner == k)[0]
         pts = np.nonzero(port == k)[0]
-        rel = model.points[pts][:, None, :] - mids[rows][None, :, :]
-        t = np.clip(np.einsum("ijk,jk->ij", rel, dirs[rows]), -half[rows], half[rows])
-        d = np.linalg.norm(rel - t[:, :, None] * dirs[rows][None, :, :], axis=2)
-        out[pts] = rows[np.argmin(d, axis=1)]
-    return out
+        n_chunks = max(1, (pts.size * rows.size) // 1_000_000 + 1)
+        for chunk in np.array_split(pts, n_chunks):
+            rel = xm[chunk][:, None, :] - mids[rows][None, :, :]
+            t = np.clip(
+                np.einsum("ijk,jk->ij", rel, dirs[rows]), -half[rows], half[rows]
+            )
+            dist = np.linalg.norm(rel - t[:, :, None] * dirs[rows][None, :, :], axis=2)
+            nearest = np.argmin(dist, axis=1)
+            dmin = dist[np.arange(chunk.size), nearest]
+            ta = np.einsum(
+                "ijk,jk->ij", xa[chunk][:, None, :] - mids[rows][None], dirs[rows]
+            )
+            tb = np.einsum(
+                "ijk,jk->ij", xb[chunk][:, None, :] - mids[rows][None], dirs[rows]
+            )
+            lo = np.maximum(np.minimum(ta, tb), -half[rows])
+            hi = np.minimum(np.maximum(ta, tb), half[rows])
+            overlap = np.maximum(hi - lo, 0.0)
+            close = dist <= np.minimum(
+                0.5 * half[rows][None, :], dmin[:, None] + 0.1 * half[rows][None, :]
+            )
+            overlap = np.where(close, overlap, 0.0)
+            total = overlap.sum(axis=1)
+            lone = total <= 0.0
+            overlap[lone, nearest[lone]] = 1.0
+            total[lone] = 1.0
+            i, j = np.nonzero(overlap)
+            out_p.append(chunk[i])
+            out_s.append(rows[j])
+            out_w.append(overlap[i, j] / total[i])
+    return np.concatenate(out_p), np.concatenate(out_s), np.concatenate(out_w)
 
 
 def solid_earth(
@@ -484,9 +533,9 @@ def solid_earth(
     owner = np.concatenate(
         [owner, np.arange(len(world.electrodes), n_ports, dtype=int)]
     )
-    assign = _display_assignment(model, segs, owner)
+    point, segment, share = _display_shares(model, segs, owner)
     leakage = np.zeros((len(segs), n_ports))
-    np.add.at(leakage, assign, solutions[-1].current)
+    np.add.at(leakage, segment, share[:, None] * solutions[-1].current[point])
 
     r_levels = [np.linalg.inv(g) for g in g_levels]
     r_ext = np.linalg.inv(conductance)

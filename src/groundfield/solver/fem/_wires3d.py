@@ -120,6 +120,9 @@ class WireModel:
     points, weights, piece
         Axial quadrature: points in m ``(n, 3)``, weights in m ``(n,)``
         (Gauss, two per axial cell), index of the piece of each point.
+    intervals
+        The stretch of its piece each point stands for (half an axial cell),
+        as distances in m from the piece's start, shape ``(n, 2)``.
     """
 
     names: tuple[str, ...]
@@ -127,6 +130,7 @@ class WireModel:
     points: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
     weights: np.ndarray = field(default_factory=lambda: np.zeros(0))
     piece: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=int))
+    intervals: np.ndarray = field(default_factory=lambda: np.zeros((0, 2)))
 
     @property
     def port(self) -> np.ndarray:
@@ -187,7 +191,7 @@ def world_pieces(world: "World", extra_segments=()) -> WireModel:
 def axial_quadrature(model: WireModel, spacing: float) -> WireModel:
     """Two Gauss points per axial cell of at most ``spacing`` metres."""
     xg, wg = np.polynomial.legendre.leggauss(2)
-    xs, ws, ks = [], [], []
+    xs, ws, ks, iv = [], [], [], []
     for k, p in enumerate(model.pieces):
         length = p.length
         n = max(1, math.ceil(length / spacing - 1e-9))
@@ -195,9 +199,12 @@ def axial_quadrature(model: WireModel, spacing: float) -> WireModel:
         xs.append(p.start[None, :] + s[:, None] * (p.end - p.start)[None, :])
         ws.append(np.tile(0.5 * wg * length / n, n))
         ks.append(np.full(s.size, k, dtype=int))
+        edges = np.arange(2 * n + 1) * (0.5 * length / n)
+        iv.append(np.stack([edges[:-1], edges[1:]], axis=1))
     model.points = np.concatenate(xs)
     model.weights = np.concatenate(ws)
     model.piece = np.concatenate(ks)
+    model.intervals = np.concatenate(iv)
     return model
 
 
