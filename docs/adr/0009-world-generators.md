@@ -375,7 +375,14 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    from its houses (a wide group), on the ray through the group's far-end
    building, 1 m beyond it — and raises when it would come closer than
    `end_clearance_m` to another site (audits W1B-01, W1B-02: the centroid
-   ray of a group of about 180° led 50.4 m past its houses) — instead of
+   ray of a group of about 180° led 50.4 m past its houses; the threshold
+   is a step, kept for 2026.11 by user decision D7 — a group that crosses
+   it moves its cabinet by up to the width of the group, 141.8 m in the
+   50-house grid with its house columns 32.0 / 32.2 m apart, X at 1 kHz
+   −22 / −19 % — and the plan records per cabinet which rule placed it,
+   `PlannedSite.cabinet_rule` and `centroid_ray_gap_m`, audit W1R2-02;
+   `end_clearance_m` must be smaller than `max_far_end_gap_m`, audit
+   W1R2-09) — instead of
    on a fixed strip along the substation row (both cabinets of
    the default 30-house grid stood west of the substation, the eastern
    houses got drops of 3.5 … 106.5 m from it); a given

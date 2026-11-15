@@ -101,19 +101,44 @@ the ray from the substation through the group's centroid,
 `CabinetConfig.end_clearance_m` (1 m, positive) beyond the largest
 projection on that ray of the group's earth electrodes (horizontal wires
 and rods) plus the plan extent of the cabinet's own grounding — when it
-stands there within `CabinetConfig.max_far_end_gap_m` (20 m, positive) of
-the nearest electrode of its group: a cabinet stands next to the houses it
-feeds. A wider group, whose centroid ray leads past its houses, has its
-cabinet on the ray through its far-end building (the largest projection of
-its position on the direction of the centroid, ties to the one nearest to
-that direction), `end_clearance_m` beyond that building's electrodes. The
-cabinet feeds its group (audits W1B-01, W1B-02). On the centroid ray the
-groups of the default 50-house grid stand 8.8 … 12.8 m from their houses
-and keep it; a wide AP1 group stands 23.7 … 50.4 m from them — 10 houses
-and one small commercial building had their cabinet 50.4 m from the
-nearest building (drops 527.4 m), now 1.56 m (311.8 m) on the far-end ray.
-With the far-end ray for every group, six houses of the 50-house grid were
-fed straight from the substation (up to 116.8 m). A cabinet whose
+stands there within `CabinetConfig.max_far_end_gap_m` (20 m, positive,
+larger than `end_clearance_m`) of the nearest electrode of its group: a
+cabinet stands next to the houses it feeds. A wider group, whose centroid
+ray leads past its houses, has its cabinet on the ray through its far-end
+building (the largest projection of its position on the direction of the
+centroid, ties to the one nearest to that direction), `end_clearance_m`
+beyond that building's electrodes. The cabinet feeds its group (audits
+W1B-01, W1B-02). 10 houses and one small commercial building had their
+cabinet 50.4 m from the nearest building on the centroid ray (drops
+527.4 m), now 1.56 m (311.8 m) on the far-end ray; with the far-end ray for
+every group, six houses of the 50-house grid were fed straight from the
+substation (up to 116.8 m). The plan records per cabinet which rule placed
+it, `PlannedSite.cabinet_rule` (`"centroid_ray"` / `"far_end_ray"`), and its
+distance from the group on the centroid ray, `PlannedSite.centroid_ray_gap_m`
+(`None` for every other site and for cabinets of a given placement or of
+the radial topology; materialising ignores both).
+
+The threshold is a step, kept for 2026.11 (user decision D7, audit
+W1R2-02). Groups lie on both sides of it: on the centroid ray the groups of
+the default 50-house grid stand 8.8 … 12.8 m from their houses, those of
+the 100-house grid 10.05 … 23.01 m (its two groups beyond 20 m are on the
+far-end ray; 15 / 25 m put four / none there), and over the 80 AP1 mixes
+the 118 groups beyond it stand 20.21 … 53.56 m from their houses and the
+largest gap kept is 18.84 m (19 mixes have a group between 15 and 25 m).
+A group whose distance crosses the threshold moves its cabinet by up to the
+width of the group, and the results jump:
+
+| layout change (homogeneous 100 Ω·m) | cabinet moves | drops | R at 50 Hz | X at 1 kHz, inductive PEN (`carson_series` / `sommerfeld`) |
+|---|---|---|---|---|
+| 50-house grid, house columns 32.0 → 32.2 m apart (one group 19.99 → 20.22 m) | 141.8 m | 1 788.9 → 1 443.0 m | −0.36 % (−0.14 % beyond the smooth trend) | −21.6 / −18.9 % |
+| 100-house grid, columns across 22.95 m (two groups cross 20 m) | 65.6 m each | +15.8 % | −0.03 % | +1.5 / −3.1 % |
+| 80 houses + 5 medium commercial (AP1), one group at 20.21 m: `max_far_end_gap_m` 20 → 20.5 m | 31.4 m | 1 960.6 → 1 968.2 m | −0.02 % | +1.5 / +1.1 % |
+
+The 100-house row is the difference of straight lines through three
+spacings on each side of the crossing, at the crossing; R at 50 Hz with the
+image backend (2 m and 1 m segments agree), Z at 1 kHz with the isolated
+Neumann PEN in 5 m pieces. A study that varies the layout can read where a
+group crosses from the plan. A cabinet whose
 electrodes would come closer than `end_clearance_m` to those of another
 site — a building of its own or of another group, the substation, another
 cabinet — raises a `ValueError` that names both (3 of 100 random layouts of

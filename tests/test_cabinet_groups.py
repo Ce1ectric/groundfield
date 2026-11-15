@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import math
+import pathlib
 import re
 import warnings
 
@@ -182,7 +183,7 @@ def test_each_cabinet_feeds_its_group_from_the_far_end(n: int) -> None:
     # beyond that building (audit W1B-01; up to then on the ray through the
     # centroid, 1 m beyond the group's farthest foundation vertex).
     expected = _expected_cabinet(plan, world)
-    for cab, (xy, far, _, _) in zip(cabinets, expected, strict=True):
+    for cab, (xy, far, *_) in zip(cabinets, expected, strict=True):
         assert cab.position_xy == pytest.approx(tuple(xy), abs=1e-9), far
     assert crossed <= n // 10
 
@@ -498,7 +499,8 @@ def _expected_cabinet(
     projection of its position on the centroid direction; ties: nearest to
     the ray), ``clearance`` m beyond that building's electrodes (the default
     cabinet rod has no plan extent). Returns (position, the building it
-    stands beyond, group, rule)."""
+    stands beyond, group, rule, the gap in m between the centroid-ray
+    position and the nearest electrode of the group)."""
     buildings = [s for s in plan.sites if s.role == "building"]
     n = len([s for s in plan.sites if s.role == "cabinet"])
     out = []
@@ -511,15 +513,18 @@ def _expected_cabinet(
         u = u / np.hypot(*u)
         reach = max(_reach(world, buildings[i].name, u) for i in group)
         centre = (reach + clearance) * u
-        if min(_point_gap(world, buildings[i].name, centre) for i in group) <= max_gap:
-            out.append((centre, None, group, "centroid"))
+        gap = min(_point_gap(world, buildings[i].name, centre) for i in group)
+        if gap <= max_gap:
+            out.append((centre, None, group, "centroid", gap))
             continue
         proj = pos @ u
         ties = [k for k in range(len(group)) if proj[k] >= proj.max() - 1e-9]
         far = min(ties, key=lambda k: (abs(_cross(u, pos[k])), k))
         v = pos[far] / np.hypot(*pos[far])
         reach = _reach(world, buildings[group[far]].name, v)
-        out.append(((reach + clearance) * v, buildings[group[far]].name, group, "far"))
+        out.append(
+            ((reach + clearance) * v, buildings[group[far]].name, group, "far", gap)
+        )
     return out
 
 
@@ -545,7 +550,7 @@ def test_the_cabinet_of_a_wide_group_stands_next_to_its_far_end_building(
     world = plan.to_world()
     cabinets = [s for s in plan.sites if s.role == "cabinet"]
     buildings = [s for s in plan.sites if s.role == "building"]
-    for cab, (xy, far, group, rule) in zip(
+    for cab, (xy, far, group, rule, _gap) in zip(
         cabinets, _expected_cabinet(plan, world), strict=True
     ):
         assert rule == "far"  # 50.4 m from the houses on the centroid ray
@@ -595,6 +600,249 @@ def test_a_non_positive_or_infinite_far_end_gap_is_rejected(value: float) -> Non
     )
     with pytest.raises(ValueError, match="max_far_end_gap_m.*-2"):
         TnNetworkGenerator(cfg, seed=0).plan()
+
+
+# ---------------------------------------------------------------------
+# The threshold of the cabinet rule (audit W1R2; user decision D7: keep
+# the 20 m threshold for 2026.11, document the step, record the rule)
+# ---------------------------------------------------------------------
+
+_RULE = {"centroid": "centroid_ray", "far": "far_end_ray"}
+
+
+def _spacing(spacing_x_m: float) -> ManhattanGridPlacement:
+    """The default building grid with another column spacing."""
+    return ManhattanGridPlacement(
+        spacing_x_m=spacing_x_m, spacing_y_m=30.0, n_per_row=10
+    )
+
+
+# audit W1R2-02; user decision D7
+@pytest.mark.parametrize(
+    "counts, rules",
+    [
+        ({"residential": 50}, ["centroid_ray"] * 3),
+        ({"residential": 10, "small_industry": 1}, ["far_end_ray"]),
+        (
+            {"residential": 100},
+            ["centroid_ray", "far_end_ray", "centroid_ray", "far_end_ray"]
+            + ["centroid_ray"],
+        ),
+        (
+            {"residential": 80, "medium_industry": 5},
+            ["far_end_ray", "centroid_ray", "far_end_ray", "centroid_ray"]
+            + ["far_end_ray"],
+        ),
+    ],
+    ids=["grid-50", "res10+small1", "grid-100", "res80+medium5"],
+)
+def test_every_cabinet_records_the_rule_that_placed_it_and_its_gap(
+    counts: dict, rules: list
+) -> None:
+    """The plan records per cabinet which rule placed it (``cabinet_rule``:
+    ``"centroid_ray"`` / ``"far_end_ray"``) and the gap between its position
+    on the centroid ray and its group (``centroid_ray_gap_m``, the value
+    compared with ``max_far_end_gap_m``), so a parameter study sees where it
+    crosses the threshold. Both agree with the rule recomputed from the
+    built world (own projections, exact distances to wire pieces and rods).
+    Up to then the plan did not say which rule a cabinet took (80 houses + 5
+    medium commercial: one group 20.21 m from its houses, 0.21 m above the
+    threshold). Every other site records nothing; the plan's JSON round
+    trip keeps both fields, and materialising ignores them."""
+    plan = _plan(building_counts=counts)
+    world = plan.to_world()
+    cabinets = [s for s in plan.sites if s.role == "cabinet"]
+    expected = _expected_cabinet(plan, world)
+    assert [c.cabinet_rule for c in cabinets] == rules
+    assert [_RULE[e[3]] for e in expected] == rules
+    for cab, (*_rest, gap) in zip(cabinets, expected, strict=True):
+        assert cab.centroid_ray_gap_m == pytest.approx(gap, abs=1e-9), cab.name
+    assert all(
+        s.cabinet_rule is None and s.centroid_ray_gap_m is None
+        for s in plan.all_sites
+        if s.role != "cabinet"
+    )
+    again = type(plan).model_validate_json(plan.model_dump_json())
+    assert again == plan
+    bare = plan.model_copy(
+        update={
+            "sites": [
+                s.model_copy(update={"cabinet_rule": None, "centroid_ray_gap_m": None})
+                for s in plan.sites
+            ]
+        }
+    )
+    assert bare.to_world().model_dump_json() == world.model_dump_json()
+
+
+# audit W1R2-02; user decision D7
+def test_cabinets_not_placed_per_building_group_record_no_rule() -> None:
+    """A given placement and the radial topology place their cabinets
+    without the rule; their cabinets record nothing."""
+    for kw in (
+        {"cabinets": CabinetConfig(placement=_FORMER_STRIP)},
+        {"pen_topology": RadialTrunkTopology(), "building_counts": {"residential": 60}},
+    ):
+        cabinets = [s for s in _plan(**kw).sites if s.role == "cabinet"]
+        assert cabinets
+        assert all(
+            c.cabinet_rule is None and c.centroid_ray_gap_m is None for c in cabinets
+        )
+
+
+# audit W1R2-02; user decision D7
+@pytest.mark.parametrize(
+    "kw, message",
+    [
+        (
+            dict(role="building", cabinet_rule="centroid_ray", centroid_ray_gap_m=3.0),
+            r"cabinets only.*'building'",
+        ),
+        (dict(role="cabinet", cabinet_rule="far_end_ray"), "recorded together"),
+        (dict(role="cabinet", centroid_ray_gap_m=3.0), "recorded together"),
+        (
+            dict(role="cabinet", cabinet_rule="centroid_ray", centroid_ray_gap_m=-1.0),
+            r"centroid_ray_gap_m\n.*greater than or equal to 0",
+        ),
+        (
+            dict(
+                role="cabinet",
+                cabinet_rule="centroid_ray",
+                centroid_ray_gap_m=float("nan"),
+            ),
+            r"centroid_ray_gap_m\n.*finite number",
+        ),
+        (
+            dict(role="cabinet", cabinet_rule="nearest", centroid_ray_gap_m=1.0),
+            r"cabinet_rule\n.*'centroid_ray' or 'far_end_ray'",
+        ),
+    ],
+)
+def test_a_planned_site_records_the_cabinet_rule_consistently(
+    kw: dict, message: str
+) -> None:
+    """Only a cabinet records a rule, always with its gap (finite, at
+    least 0); the rule is one of the two names."""
+    from groundfield.generators.plan import PlannedSite
+
+    with pytest.raises(ValueError, match=message):
+        PlannedSite(name="kvs_0", position_xy=(0.0, 0.0), **kw)
+
+
+# audit W1R2-02; user decision D7
+def test_the_cabinet_jumps_where_the_recorded_gap_crosses_the_threshold() -> None:
+    """User decision D7 keeps the 20 m threshold for 2026.11 and documents
+    its step. In the 50-house grid with its house columns 32.0 / 32.2 m apart
+    the southern group's gap on its centroid ray goes 19.99 -> 20.22 m,
+    across ``max_far_end_gap_m``: its cabinet moves from (11.75, -84.99) m on
+    the centroid ray to (151.86, -62.88) m on the ray through its far-end
+    building, 141.8 m, and the drops of the network from 45 / 1 788.9 m to
+    43 / 1 443.0 m (the other two cabinets move by less than 0.9 m). The
+    recorded rule and gap show the step."""
+    before = _plan(building_counts={"residential": 50}, placement=_spacing(32.0))
+    after = _plan(building_counts={"residential": 50}, placement=_spacing(32.2))
+    cab0 = [s for s in before.sites if s.role == "cabinet"]
+    cab1 = [s for s in after.sites if s.role == "cabinet"]
+    assert [c.cabinet_rule for c in cab0] == ["centroid_ray"] * 3
+    assert [c.cabinet_rule for c in cab1] == ["centroid_ray", "far_end_ray"] + [
+        "centroid_ray"
+    ]
+    assert cab0[1].centroid_ray_gap_m == pytest.approx(19.987, abs=5e-4)
+    assert cab1[1].centroid_ray_gap_m == pytest.approx(20.216, abs=5e-4)
+    assert cab0[1].position_xy == pytest.approx((11.751, -84.987), abs=5e-4)
+    assert cab1[1].position_xy == pytest.approx((151.859, -62.882), abs=5e-4)
+    assert math.dist(cab0[1].position_xy, cab1[1].position_xy) == pytest.approx(
+        141.8, abs=0.05
+    )
+    for a, b in ((cab0[0], cab1[0]), (cab0[2], cab1[2])):
+        assert math.dist(a.position_xy, b.position_xy) < 0.9
+    for plan, (n, length) in ((before, (45, 1788.9)), (after, (43, 1443.0))):
+        drops = _drops(plan.to_world())
+        assert len(drops) == n
+        assert sum(math.dist(d.start, d.end) for d in drops) == pytest.approx(
+            length, abs=0.05
+        )
+
+
+# audit W1R2-04; user decision D7
+def test_the_threshold_moves_two_groups_of_the_100_house_grid_either_way() -> None:
+    """15 / 20 / 25 m give 4 / 2 / 0 groups of the default 100-house grid on
+    the far-end ray (the grid is symmetric, its groups come in pairs: gaps
+    10.05, 2 x 16.62 and 2 x 23.01 m); the texts said one group. Counted from
+    the recorded rule and from the rule recomputed from the built world."""
+    counts = []
+    for max_gap in (15.0, 20.0, 25.0):
+        plan = _plan(
+            building_counts={"residential": 100},
+            cabinets=CabinetConfig(max_far_end_gap_m=max_gap),
+        )
+        recorded = sum(s.cabinet_rule == "far_end_ray" for s in plan.sites)
+        rebuilt = _expected_cabinet(plan, plan.to_world(), max_gap=max_gap)
+        assert recorded == sum(e[3] == "far" for e in rebuilt)
+        counts.append(recorded)
+    assert counts == [4, 2, 0]
+
+
+# audit W1R2-09; coordinator's decision on W1R2 (both fields new in 2026.11)
+@pytest.mark.parametrize(
+    "clearance, max_gap", [(20.0, 20.0), (21.0, 20.0), (5.0, 4.0), (1.0, 1.0)]
+)
+def test_an_end_clearance_not_below_the_far_end_gap_is_rejected(
+    clearance: float, max_gap: float
+) -> None:
+    """A cabinet on the centroid ray stands at least ``end_clearance_m`` from
+    its group, so with ``end_clearance_m >= max_far_end_gap_m`` every group
+    took the far-end ray, silently (base: 0 / 1 / 3 / 3 far-end groups of
+    the 50-house grid at 1 / 10 / 19 / 21 m)."""
+    with pytest.raises(ValueError, match=r"end_clearance_m.*max_far_end_gap_m"):
+        CabinetConfig(end_clearance_m=clearance, max_far_end_gap_m=max_gap)
+
+
+# audit W1R2-09; coordinator's decision on W1R2
+def test_a_drawn_end_clearance_not_below_the_far_end_gap_is_rejected() -> None:
+    """Distributions are checked where they are drawn; just below the
+    threshold the network builds."""
+    for cabinets in (
+        CabinetConfig(end_clearance_m=Discrete(values=[25.0])),
+        CabinetConfig(max_far_end_gap_m=Discrete(values=[0.5])),
+        CabinetConfig(
+            end_clearance_m=Discrete(values=[3.0]),
+            max_far_end_gap_m=Discrete(values=[3.0]),
+        ),
+    ):
+        cfg = TnNetworkConfig(cabinets=cabinets)
+        with pytest.raises(ValueError, match=r"end_clearance_m.*max_far_end_gap_m"):
+            TnNetworkGenerator(cfg, seed=0).plan()
+    plan = _plan(
+        building_counts={"residential": 50},
+        cabinets=CabinetConfig(end_clearance_m=Discrete(values=[19.0])),
+    )
+    assert [s.cabinet_rule for s in plan.sites if s.role == "cabinet"] == [
+        "far_end_ray"
+    ] * 3
+
+
+# audit W1R2-04; user decision D7
+def test_the_cabinet_texts_quote_the_measured_threshold_numbers() -> None:
+    """The generator texts said the 20 m default separates the 50-house grid
+    (8.8 ... 12.8 m) from the wide AP1 groups (23.7 ... 50.4 m). Over the 80
+    AP1 mixes the groups beyond 20 m stand 20.21 ... 53.56 m from their
+    houses on the centroid ray and the largest gap kept is 18.84 m: groups
+    lie on both sides of the threshold, where results jump. (The known
+    limitations are the coordinator's; their text test is in the report.)"""
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    files = [
+        *sorted((root / "src" / "groundfield" / "generators").rglob("*.py")),
+        root / "docs" / "reference" / "api" / "generators.md",
+        root / "docs" / "adr" / "0009-world-generators.md",
+    ]
+    texts = {p.name: " ".join(p.read_text(encoding="utf-8").split()) for p in files}
+    for name, text in texts.items():
+        assert "23.7 … 50.4" not in text, name
+        assert not re.search(r"separates the (wide )?groups", text), name
+    for name in ("tn_network.py", "generators.md"):
+        assert "20.21 … 53.56 m" in texts[name], name
+        assert "18.84 m" in texts[name], name
 
 
 # audit W1B-02; user decisions Q22, Q35
