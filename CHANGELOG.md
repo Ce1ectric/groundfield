@@ -112,7 +112,7 @@ reproduces 0.15.0, it is named.
 | 10.12–10.14, 10.39, 10.28 (user decision Q20) | encased mesh foundations: every wire, cross-braces included, carries r_b and the shell coefficient C (in 0.15.0 every wire had r_b, but `"lumped"` put C on no wire and kept the shell in a registry that only the TN service drops read, `"distributed"` put C on the perimeter only) | default house mesh (10 m, 2 × 2, 0.8 m, r_a = 5 mm, t = 5 cm) in 100 Ω·m at ρ_c = 50 / 100 / 150 / 1000 / 5000 Ω·m, default engine of each version: +7.0 / +15 / +23 / +157 / +782 % against 0.15.0 `"lumped"`, +2.2 / +4.2 / +6.6 / +68 / +399 % against `"distributed"` (point kernel on both: +6.2 … +781 % and +1.5 … +398 %); in 30 over 100 Ω·m (h₁ = 5 m) up to +1701 % and +1045 %; four such houses on the default TN network (100 Ω·m): −3.8 / −5.2 / −6.5 / −14 / −11 % (`"lumped"`, whose shell sat on the service drop) and −0.3 / +1.0 / +2.5 / +35 / +121 % (`"distributed"`), of which −1.7 % without any shell (10.38, 10.28); the rule for the braces alone, against the 0.15.0 `"distributed"` model (braces with r_b, no C): +5.9 / +66 / +393 % at 150 / 1000 / 5000 Ω·m (against the bare braces of the development line, never released: +1.5 / +47 / +307 %) (golden: none) | generated mesh foundations with `concrete_rho_ohm_m` set; not worlds without a shell, not ring and building-outline foundations (AP1: see the 10.12–10.14 row) |
 | 10.39 (user decision Q38) | an axis-aligned rectangular foundation without cross-braces (`style="ring"`, or `"mesh"` with `n_x = n_y = 1`) with the default `concrete_model` is one current owner per side instead of one grid mesh, connected at the corner of its −y side instead of its centre (the generators' conductors at its nearest point since user decision Q41) | input impedance of a foundation on its own never higher, unchanged for a square; largest decreases over the AP1 soils (5 mm wire at 0.8 m, short side ≥ 1 m, aspect ratio ≤ 4 / ≤ 50): −0.32 / −0.91 % bare or with the default 5 cm shell (80 m × 20 m with 5 cm of 30 Ω·m concrete / 150 m × 7.75 m bare, both in 30 over 200 Ω·m), −0.69 / −1.53 % in up to 0.2 m of wet concrete (4 m × 1 m / 16 m × 1 m in 0.2 m of 30 Ω·m concrete over 1000 / 30 Ω·m), −0.09 / −0.33 % bare in homogeneous soil; AP1 station −0.0009 … −0.0026 %; TN networks with 1 / 2 / 5 / 30 / 100 ring-foundation houses +0.023 / +0.007 / +0.024 / −0.038 / −0.039 % (with Q41 +0.012 / −0.005 / +0.012 / −0.044 / −0.044 %); touch-voltage envelope of 20 m × 5 m and 40 m × 10 m rings −0.4 … −4.3 % (the centre +0.5 … +6.9 %); `fem` see the 10.49 row (golden `mutual_foundations_lumped_concrete`: Z_G 5.2e-4, R 1.6 %, now equal to the `distributed` case) | generated `style="ring"` foundations and meshes with `n_x = n_y = 1` at multiples of 90° with the default value, OMBR foundations of axis-aligned footprints with these specs (not the layout builder's default braced mesh), the AP1 station; not building outlines (the AP1 houses), braced meshes or rectangles at other angles |
 | 10.38 (user decision Q41) | conductors the generators route to a foundation end at its nearest point (closest pair of cable and foundation for service drops; the foundation's point nearest to the next node for cables leaving a site); a building that a cable of its feeding path crosses (radial: any trunk; star: the main that crosses it, whose cabinet then feeds it) is joined to it without a drop; no drop runs along a cable farther than 1 cm (one minimum section; "along" as defined in the known limitations) | seed 1, 100 Ω·m, default grid; default resistive PEN at 50 Hz: star −0.005 … −0.12 % (10 / 30 / 50 / 100 / 150 / 200 mesh houses −0.008 / −0.006 / −0.117 / −0.006 / −0.055 / −0.005 %, 1 … 200 ring houses −0.005 … −0.012 %), radial −0.03 … +0.13 %; Neumann PEN at 1 kHz (`carson_series` and `sommerfeld`, the default; isolated and galvanic): star Re −0.43 … +1.6 %, Im −3.1 … +16.3 %, \|Z\| −0.71 … +3.3 % (the 10-house network, 5 of its 10 houses on the main: X +14.2 % `carson_series`, +16.3 % `sommerfeld`, bare PEN at 50 Hz +2.0 %; without it Im −3.1 … +3.5 %), radial Re −0.47 … +8.4 %, Im −8.6 … +37.7 %, \|Z\| −0.67 … +9.0 % (default 30 houses, isolated, `sommerfeld`: Im +10.4 %); against drops to the centre as in 0.15.0, Im at 1 kHz: 12 m × 8 m ring houses (audit D3A) +5.7 … +14.0 %, default 10 m ring houses star +1.2 … +2.1 % (the 30-house network; the networks of 1 … 5 houses have no drop, all on the main: +0.6 … +10.4 % from the joint and the Q38 owner), radial −10.8 … −1.1 %; a layout of building outlines with an AP1-like station −0.026 … −0.147 % at 50 Hz, drops 215.9 → 140.6 m; golden `gen_tn_default` ≤ 2.9e-4, `gen_layout_builder` ≤ 1.1e-3, `gen_tn_measurement_overhead_leads` ≤ 1.6e-4 (the probe reading 4.3e-3) | `TnNetworkGenerator` and layout-builder worlds with foundations; not sites without a foundation, not worlds built by hand (the AP1 catalogue attaches its drops by name and does not change) (default-grid values measured before user decisions Q22, Q35 and Q43, see the next rows) |
-| fw1sol open point (projected coordinates) | worlds with a horizontal coordinate beyond 10 km are solved in an exactly shifted local frame; segment and piece counts allow the round-off of the coordinates' magnitude | point kernel, `mom`, `mom_sommerfeld`: up to 2.8e-4 (Z), 4.5e-4 (touch voltage) → 3e-11; line kernel up to 1.5e-6 → 3.4e-11 with the continuous switch of wave 3 (user decision D2); distributed conductors whose length is a whole number of pieces up to round-off get no extra piece at any position (a 60 m / 10 m counterpoise near the origin in a quarter of all directions 7 → 6 pieces: Z −0.30 % `image`, −2.54 % `mom`; audit W2B-03) | worlds at projected (UTM) coordinates (AP2 worlds in UTM); distributed conductors near the origin whose length is a multiple of `discretize_segment_length`; not the AP1 catalogue, no golden case |
+| fw1sol open point (projected coordinates) | worlds with a horizontal coordinate beyond 10 km are solved in an exactly shifted local frame; segment and piece counts allow the round-off of the coordinates' magnitude | point kernel, `mom`, `mom_sommerfeld`: up to 2.8e-4 (Z), 4.5e-4 (touch voltage) → 3e-11; line kernel up to 1.5e-6 → ≤ 5e-11 with the continuous switch of wave 3 (user decision D2); distributed conductors whose length is a whole number of pieces up to round-off get no extra piece at any position (a 60 m / 10 m counterpoise near the origin in a quarter of all directions 7 → 6 pieces: Z −0.30 % `image`, −2.54 % `mom`; audit W2B-03) | worlds at projected (UTM) coordinates (AP2 worlds in UTM); distributed conductors near the origin whose length is a multiple of `discretize_segment_length`; not the AP1 catalogue, no golden case |
 | 10.22 (Q30) | grids built by hand: one owner per wire line | −1.2 % (10 m 2 × 2) … −4.0 % (40 m 8 × 8) … −5.5 % (100 m 20 × 20) in 100 Ω·m, −1.2 … −2.0 % in 1000/100/5, −1.7 … −4.8 % in 5 cm of wet concrete; against one current per segment +1.6 … +4.9 % → +0.36 … +0.70 %; 20 m grid corner: touch +20 % → +6.4 %, step −21 % → −7.6 % (from above the corner −28 % → −11 %), mesh voltage +22 % → +8.6 % (against `mom`); touch-voltage envelope of the 10.21 note 111.44 → 98.72 V; the references example 2.39 → 2.31 Ω | `GridMeshElectrode` / `MeshElectrode` worlds (not generated foundations) | `img2_grid_upper_resistive`, `cim_grid_unequal_segments` |
 | 10.22 (Q30, Q44) | polylines one owner per straight run, stars per arm | rectangle outlines −0.000 … −0.31 % bare, −0.62 % in wet concrete (16 m × 1 m), L-shape −0.13 / −0.19 %; T06 outlines alone ≤ −0.004 %; T06 layout with the AP1 station −0.03 … −0.40 % (one current per segment: +0.14 … +0.51 % → +0.07 … +0.12 % above it); stars alone 0, in a cluster member currents up to 3.4 % | building outlines (the AP1 houses), hand-built polylines, stars next to other electrodes | `img_mixed_cluster_hom`, `line_img_mixed_cluster_hom` |
 | 10.46 (Q32) | unmarked conductors of different radii on one axis touch | coax pair 31.97 → 43.47 µH loop | worlds with conductors drawn on one axis without the marker | none |
@@ -124,7 +124,8 @@ reproduces 0.15.0, it is named.
 | 10.22 (Q30), audit W1A-01 | owners at projected coordinates | generated mesh foundations at UTM coordinates +0.09 … +0.64 % (back to the local value) | worlds built at absolute UTM coordinates |
 | 10.46 (Q32/Q33), audits W1R2-01, W1R3-01, W1R3-02 | pieces of conductors lying beside each other that are not parallel | tilted coax in pieces +0.004 … +8.0 % (back to the lumped value); a core crossing the shield's axis −8.6e-5 … −3.0e-5 → lumped; shield pieces of mixed length up to +1.6e-3; wires leaving a junction in fine pieces +0.098 / +0.75 % at 3° in 0.1 / 0.02 m pieces (W1R2-01, measured in W1R3-05), +0.15 % at 8.2° and +0.11 % at 10° in 0.02 m pieces (W1R3-02); drops routed back along a split main +6.8e-5 … +1.65e-3 (W1R2-01, W1R3-05); overhead measurement leads: probe junction potential 6.5e-5 … 1.1e-4, U_HS ≤ 1.05e-6 | worlds with a core drawn off its shield's axis, touching cables / leads drawn at an angle, or wires leaving one junction at an angle, with `discretize_segment_length` (the generator's overhead leads); generated networks otherwise bit-identical |
 | 10.22 (Q30), audit W1R2-05 | straight runs at projected coordinates | arc-like polylines at UTM coordinates with vertices less than 0.46 µm off their neighbours' chord (audit W1R3-04), e.g. a 2° arc electrode +1.27 % → +5.5e-4 against the local origin | worlds at absolute UTM coordinates |
-| D2, W2B-01/-02, 10.28 (wave 3, stream `w3xl`) | line kernel: blended near/far switch, far form with the radius term, far images with the quadrupole term, cross-layer correction in line form | homogeneous: ≤ 7.8e-7 (golden), the 12 m strip of W2B 1e-7 … 1e-6; two layers: house grids 3e-6 … 1.8e-4, wires near the interface up to 4e-4, surface potentials near the interface up to 0.9 %; cross-layer: rods ≤ 4e-4, the AP1 station −4e-5 (40 %); golden `line_*`, `defaults_rod_hom`, `defaults_mixed_cluster_inductive`, `defaults_two_layer_ring_auto` up to 6.0e-4 | every line-kernel result (the default of the image family); not `kernel="point"`, not the `mom` family |
+| D2, W2B-01/-02, 10.28 (wave 3, stream `w3xl`) | line kernel: blended near/far switch, far form with the radius term, far images with the quadrupole term, cross-layer correction in line form | homogeneous: ≤ 7.8e-7 (golden), the 12 m strip of W2B 1e-7 … 1e-6; two layers: house grids 3e-6 … 1.8e-4, wires near the interface up to 6.2e-4 (audit W3A-04), surface potentials near the interface up to 0.9 %; cross-layer: rods ≤ 4e-4, the AP1 station −4e-5 (40 %); golden `line_*`, `defaults_rod_hom`, `defaults_mixed_cluster_inductive`, `defaults_two_layer_ring_auto` up to 6.0e-4 | every line-kernel result (the default of the image family); not `kernel="point"`, not the `mom` family |
+| W3A-02 (wave 3, stream `fw3xl`) | image pairs at the transverse distance, no radius term on far images, symmetric image corrections | rings and wires within 1 cm … 0.5 m of an interface up to −1.6 % (the ring 1 cm above 1000/30); 0.4 … 0.7 m above −1.2e-6 … −4.7e-6; ≥ 1 m above < 2e-7; homogeneous soil and `kernel="point"` unchanged; golden `line_img2_ring_rods_within_layer` 3.2e-7, `defaults_two_layer_ring_auto` 9.4e-8, `line_mutual_two_layer` 1.7e-8, `line_img2_rod_crosslayer` 1.0e-8 | line-kernel results in two-layer soil (the default) |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
@@ -471,7 +472,7 @@ reproduces 0.15.0, it is named.
   images, the images of the cross-layer correction and field points
   (`SWITCH_FACTOR` in `groundfield.solver._line_kernel`). Results no longer
   depend on where a world stands beyond round-off: 1e-13 over local shifts,
-  the point kernel's 3e-11 at UTM coordinates
+  ≤ 5e-11 at UTM coordinates, as the point kernel (audit W3A-04)
   (`tests/test_line_kernel_switch.py`).
 - Far Tagg/Sunde images carry the quadrupole term of the segment average,
   and the far form of segment pairs the radius term of the reduced kernel;
@@ -510,6 +511,20 @@ reproduces 0.15.0, it is named.
 - `PlannedBranch.axis_offset_m`: horizontal offset of a branch from the line
   between its end points; the TN generator lays service drops in a row with
   it (user decision D9). Plans without it keep their geometry.
+
+- `Engine.image_far_field` (`"quadrupole"`, the default, or `"point"`): the
+  form of the far images of the line kernel in two-layer soil (the author's
+  decision of 2026-11-15). `"point"` keeps the Tagg/Sunde images and the
+  images of the cross-layer correction beyond the near-pair reach as point
+  sources, as before wave 3 (on the cross-layer path the line form then covers
+  the interface image only); the continuous switch and the transverse
+  distance of near image pairs stay. Networks move by 2e-5 … 1.8e-4 against
+  the default, a wire near the interface by 4e-4, surface potentials by up to
+  0.8 %; a 40-house network in 1000/30 Ω·m with h₁ = 1.5 m solves in 0.46 of
+  the default's time (0.84 of the solve before wave 3). Recorded in
+  `metadata["series"]["far_field"]` and used by `FieldResult.potential` and
+  `solve_mutual_*`; `create_engine(image_far_field=...)`. Test:
+  `tests/test_image_far_field_option.py`.
 
 ### Changed
 
@@ -1013,16 +1028,22 @@ reproduces 0.15.0, it is named.
 - The cross-layer path of `image_2layer` needs the memory of the series
   path: large depth groups are evaluated in row chunks (bit-identical), and
   beyond `MATRIX_BUDGET_BYTES` the path works in row blocks (10.56): 278 →
-  137 MiB at the AP1 station with 40 % penetration.
+  137 MiB at the AP1 station with 40 % penetration with numba (without numba
+  224 → 140 MiB after audit W3A-05).
 - The spectral amplitudes of `groundfield.coupling.layered_green` are
   eliminated in closed form, vectorised over the quadrature nodes, instead
   of one LAPACK solve per node: the cross-layer path with the point kernel
   is 1.6 … 2.0 times faster at the AP1 station; results move by round-off.
-- Cost of the line kernel: +18 … +27 % in homogeneous soil (the band of the
-  switch), +59 … +70 % in two-layer soil (far images) for 16 house grids;
-  the cross-layer AP1 station 1.4 … 1.9 times faster at 5 … 20 %
-  penetration, 1.3 times slower at 40 % (2.7 times without numba); 16 house
-  grids wholly below a 0.5 m top layer 3.3 times slower (5.3 without numba).
+- Cost of the line kernel (audit W3A-01): a solve of 16 house grids takes 3.8
+  times the point kernel in homogeneous soil and 1.6 times in two-layer soil
+  (h₁ = 5 m) with numba, 5.8 and 1.4 times without; the far-image terms are
+  evaluated per pair class and on the upper half of the symmetric matrix.
+  Against the solve before wave 3: the TN 40-house network in 1000/30 Ω·m,
+  h₁ = 1.5 m, 1.84 times with numba, 3.63 times without (4.2 and 9.7 times
+  before the audit fix); 16 house grids with eight 9.4 m pieces 1.5 times
+  (2.8); the AP1 station at 40 % 1.0 times (1.4); thin top layers (h₁ 0.1 …
+  0.2 m) 3.6 … 4.5 times (7 … 8.7). With `image_far_field="point"` 0.8 … 1.3
+  times.
 - `sommerfeld`: the self term of every segment is the exact one-dimensional
   reduction of its double integral, and close pairs get a graded rule along
   their line of closest approach (user decision Q34): the self correction is
@@ -1562,7 +1583,7 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
     `mom` / `image(kernel="point")` moved by 2.6e-4 / 2.8e-4.
   - Now: 3e-12. A world beyond 10 km is solved in an exactly shifted local frame and
     reported in user coordinates; `FieldResult.potential` likewise.
-  - Line kernel: 1.5e-6 → 3.4e-11 with the continuous switch of wave 3 (user
+  - Line kernel: 1.5e-6 → ≤ 5e-11 with the continuous switch of wave 3 (user
     decision D2; before it, within its own spread, audit W2B-01).
   - Electrode worlds within 10 km unchanged (distributed conductors: the next entry).
   - Test: `tests/test_projected_coordinates.py`.
@@ -1584,7 +1605,8 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - A straight wire in two-layer soil deviated from its uniform-current
   resistance by up to +5.1e-4, not monotonically in the segment length, and
   the surface potential above a wire in a thin top layer by up to 0.94 %
-  (the far images were point sources; 10.28); now 7.7e-7 and 8e-6. Tests:
+  (the far images were point sources; 10.28); now within 3.6e-6 for 0.125 …
+  2 m, not monotonically (audit W3A-03), and 8e-6. Tests:
   `tests/test_two_layer_far_images.py::test_a_straight_strip_in_two_layer_soil_is_exact_at_any_segment_length`,
   `tests/test_two_layer_far_images.py::test_the_surface_potential_above_a_strip_matches_the_image_sum`.
 - A rod through the layer interface changed by 1.3e-4 … 2.4e-4 between
@@ -1620,6 +1642,27 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `ZeroDivisionError`) with `ValueError`, and stays finite down to the
   smallest normal frequency (the homogeneous depth overflowed below about
   1e-303 Hz) (audit W3B-11). Test: `tests/test_penetration_depth.py`.
+
+- Image pairs of the line kernel used the reduced kernel of direct pairs,
+  which leaves out a²/(2d²) of an image d away (audit W3A-02; found by stream
+  w4axi): a ring 1 cm above a 1000/30 Ω·m interface read +1.60 % against its
+  exact thin ring. Images act at the transverse distance max(ρ⊥, a);
+  collinear images and images within one wire radius of their segment keep
+  the reduced kernel; the far form of images has no radius term, and the
+  image corrections are symmetric. The ring −0.004 %, a strip 0.1 m above the
+  interface −3.8e-6 instead of +6.8e-5, the rod through the interface within
+  1.4e-6 of its exact value. Tests: `tests/test_line_kernel_image_pairs.py`.
+- The image work of the line kernel followed the longest segment of the world
+  (audit W3A-01): eight 9.4 m pieces among 1920 segments multiplied it by
+  5.6; it now follows the pair (bit-identical). Test:
+  `tests/test_two_layer_far_images.py::test_w3a_01_a_few_long_pieces_do_not_multiply_the_image_work`.
+- Without numba the far-image term held twice the memory (161 instead of
+  80 MiB; audit W3A-05). Test:
+  `tests/test_cross_layer_memory.py::test_w3a_05_the_line_kernel_without_numba_keeps_the_memory_of_the_path`.
+- The near-interface "finer segment_length" warning fired for the line
+  kernel, which integrates the near image (audit W3A-06); it fires for
+  `kernel="point"` only. Test:
+  `tests/test_audit_layer2.py::test_w3a_06_no_near_interface_discretisation_warning_for_the_line_kernel`.
 
 ### Corrections to the 0.15.0 release notes
 

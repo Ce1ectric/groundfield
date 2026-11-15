@@ -95,6 +95,19 @@ limits a result, the reference documentation states the limit.
   spacing parameter of the generator would cover wider trenches (5 cm moves
   the 5-house radial network's X at 1 kHz by −12.5 / −14.6 %,
   `carson_series` / `sommerfeld`).
+- **Galerkin near image pairs of long pieces.** A long piece below a thin top
+  layer is within 7.5 segment lengths of the image of every short segment
+  (1.15 M pairs, 5 times the solve before wave 3); integrating them with the
+  shorter segment as observer and mirroring the result (the corrections are
+  symmetric) would remove it.
+- **Far term per image family** (audit W3A-01, proposal 2). Thin top layers
+  and high contrasts put hundreds of images within reach (3.6 … 4.5 times the
+  solve before wave 3 with the default far-image form).
+- **The soil-surface image at the transverse distance.** Image pairs use the
+  transverse distance since audit W3A-02; the soil-surface image keeps the
+  reduced kernel so that homogeneous worlds stay as they are in 2026.11
+  (applied to it, homogeneous house grids would move by +3.9e-7 at 0.8 m,
+  +8.8e-7 at 0.5 m and +1.7e-5 at 0.1 m).
 
 ## Status of the roadmap items carried in the changelog
 
