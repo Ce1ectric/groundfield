@@ -1453,19 +1453,24 @@ class SparseCorrection:
         the partner image), but the Galerkin integral of a skew image pair
         with the transverse distance (:func:`galerkin_pairs`) is evaluated
         from the observing segment and differs between the two orders by
-        ``O(a²/ρ²)`` near the wire: up to 2.3e-8 of the largest entry of a
-        rod and a ring through the interface (audit W3A-02). Each entry is
-        replaced by the mean of the two orders (both are in the set, the
-        near-pair criterion is symmetric); parallel and collinear pairs are
-        symmetric already.
+        ``O(a²/ρ²)`` near the wire: up to 5e-9 of the largest entry of a rod
+        through the interface and a ring (audit W3A-02). The entries of one
+        ``(i, j)`` (one per image) are summed first, then each sum is replaced
+        by the mean of its two orders (both are in the set, the near-pair
+        criterion is symmetric; an entry without its partner keeps half its
+        value). The result has one entry per pair, sorted by row and column.
         """
-        half = 0.5 * self.values
-        return SparseCorrection.concatenate(
-            [
-                SparseCorrection(self.rows, self.cols, half),
-                SparseCorrection(self.cols, self.rows, half),
-            ]
-        )
+        if not self.rows.size:
+            return self
+        n = int(max(self.rows.max(), self.cols.max())) + 1
+        keys, inverse = np.unique(self.rows * n + self.cols, return_inverse=True)
+        sums = np.bincount(inverse, weights=self.values, minlength=keys.size)
+        del inverse
+        rows, cols = keys // n, keys % n
+        pos = np.searchsorted(keys, cols * n + rows)
+        pos = np.minimum(pos, keys.size - 1)
+        partner = np.where(keys[pos] == cols * n + rows, sums[pos], 0.0)
+        return SparseCorrection(rows, cols, 0.5 * (sums + partner))
 
     def add_to_rows(self, block: np.ndarray, i0: int, scale: float = 1.0) -> None:
         """Add the corrections of rows ``i0 … i0 + len(block)`` to ``block``."""
