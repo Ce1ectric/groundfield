@@ -1,283 +1,239 @@
-# `fem` — equivalent hemisphere by finite elements (experimental)
+# `fem` — conforming axisymmetric finite elements (experimental)
 
 !!! abstract "At a glance"
 
     | | |
     |---|---|
-    | Soil | any number of layers |
-    | Model | the volume PDE of one **equivalent hemisphere** per cluster, axisymmetric |
-    | Discretisation | linear triangles on a spherical-shell mesh that conforms to the hemisphere; layer interfaces cut into the mesh |
-    | Far field | exact monopole Dirichlet-to-Neumann (Robin) condition on the truncation sphere |
-    | Options | `FemOptions`: `n_radial`, `n_axial`, `r_far_factor`, `far_field` |
-    | Status | **experimental** (`ExperimentalBackendWarning` once per process); valid for one compact electrode inside one layer |
+    | Soil | any number of horizontal layers |
+    | Electrodes | rods on one vertical axis and horizontal rings centred on it, bare or encased (ADR-0012); every other world is refused |
+    | Model | the electrodes as they are: solid cylinders with flat end faces, solid tori, perfect conductors, each one port |
+    | Discretisation | linear triangles on a graded tensor mesh in $(s, z)$ conforming to every electrode surface and layer interface; O-grid around the ring wire |
+    | Far field | exact monopole Dirichlet-to-Neumann (Robin) condition on a box 1000 electrode lengths away |
+    | Accuracy | port resistance within about 1e-4 of independent references (Richardson extrapolation of two nested levels, error estimate reported) |
+    | Network | the shared pipeline: conductors, junctions, `return_to`, voltage sources, inductive branches |
+    | Options | `FemOptions`: `refinement`, `extrapolate`, `r_far_factor`, `far_field`, `max_nodes` |
+    | Status | **experimental** (`ExperimentalBackendWarning` once per process), a reference backend |
 
-`fem` solves the volume form of the current-flow problem instead of an
-integral equation. It does not mesh the electrodes: every cluster is
-replaced by a hemisphere with the same resistance in homogeneous soil, and
-that hemisphere is solved in the layered soil. In homogeneous soil the
-result is therefore Dwight's closed form by construction, and in layered
-soil it describes a different geometry from the one in the world. It is
-kept as a fast plausibility check for a single compact electrode inside
-one layer, not as a cross-check of the integral engines (finding 10.23).
+`fem` solves the volume form of the current-flow problem: it meshes the
+soil around the electrodes and finds the field of the solid conductors.
+Since 2026.11 (user decision Q37) it models a rod, a ring and a ring with a
+central rod — any set of rods on one vertical axis and rings around it — as
+they are, in any horizontally layered soil, and it shares nothing with the
+integral engines but the network solve. That makes it the independent
+reference for the image family, `mom` and `mom_sommerfeld` where they make
+their approximations: the uniform current of the image family, the point
+kernel of `mom`, the thin wire of both next to an interface. Up to 2026.11
+`fem` reduced every cluster to an equivalent hemisphere; that reduction
+and its rules are gone ([ADR-0016](../../adr/0016-conforming-fem.md)).
 
 ## Mathematical and physical context
 
-The stationary current field obeys the volume equation
+The stationary current field obeys
 
 $$
 -\nabla\cdot\bigl(\sigma(z)\,\nabla\varphi\bigr) = 0
 \quad\text{in the soil},\qquad
-\frac{\partial\varphi}{\partial z}\Big|_{z=0} = 0,
+\frac{\partial\varphi}{\partial z}\Big|_{z=0} = 0,\qquad
+\varphi \to 0 \text{ far away},
 $$
 
-with $\sigma = 1/\rho$ piecewise constant in depth and the electrode a
-surface of prescribed potential. For a body of revolution about a vertical
-axis the problem reduces to the meridian half-plane $(s, z)$,
+with $\sigma = 1/\rho$ piecewise constant in depth. For a body of
+revolution about a vertical axis the problem reduces to the meridian
+half-plane $(s, z)$, $s$ the distance from the axis,
 
 $$
 -\frac{1}{s}\frac{\partial}{\partial s}\Bigl(s\,\sigma\,\frac{\partial\varphi}{\partial s}\Bigr)
--\frac{\partial}{\partial z}\Bigl(\sigma\,\frac{\partial\varphi}{\partial z}\Bigr) = 0 ,
+-\frac{\partial}{\partial z}\Bigl(\sigma\,\frac{\partial\varphi}{\partial z}\Bigr) = 0 .
 $$
 
-and the resistance follows from the energy: with $\varphi = 1$ V on the
-electrode, the conductance is $G = 1/R = \int \sigma|\nabla\varphi|^2\,\mathrm dV$
-(Dirichlet principle).
+Every electrode is a perfect conductor at its own potential $U_k$ — a
+*port*. A rod is the solid cylinder of its `wire_radius` with flat end
+faces, a ring the solid torus of its `wire_radius`; the current density
+along and around them follows from the field (more at the rod ends, more on
+the side of a ring that faces a conductive layer). The **port conductance
+matrix** $G$, $\mathbf I = G\,\mathbf U$, is the earth part of the solve:
+symmetric, positive definite, and by the minimum-energy principle the
+discrete $G$ of one mesh is larger than the exact one (the resistance
+converges from below).
 
-### The equivalent hemisphere
-
-An electrode of a cluster is replaced by the hemisphere of radius
-$a_\text{eq}$ whose resistance in homogeneous soil of the top-layer
-resistivity equals the electrode's closed-form resistance,
-$\rho_1/(2\pi a_\text{eq}) = R_\text{Dwight}$ (Dwight 1936; Sverak's
-formula for grids). The radii of the electrodes of one cluster are summed,
-which puts them in parallel without their mutual resistance. The
-reduction is exact in what it promises — the Dwight value in homogeneous
-soil — and wrong wherever the geometry matters: a hemisphere reaches the
-depth $a_\text{eq}$, not the depth of the electrode, so it feeds a
-different layer than a rod or a ring does.
+An **encased electrode** (`concrete_shell_coefficient_ohm_m` $= C$,
+[concrete shells](../concrete-shells.md)) keeps its metal at $U_k$ and
+leaks through its shell surface $r_b$ = `wire_radius`: every metre adds the
+radial resistance $C$, applied locally as the surface conductance
+$1/(2\pi r_b C)$ between the metal and the soil at each point of the
+surface. That is Sunde's cylindrical shell, exact for a shell thin against
+the scale on which the leakage current varies; the current may
+redistribute, so the shell adds at least $C/L$ (for a ring $C/(2\pi r)$),
+as in `mom`.
 
 ## Discretisation
 
-The mesh is built in spherical-shell coordinates around the electrode,
-$s = r\sin\vartheta$, $z = r\cos\vartheta$, $r \in [a_\text{eq}, r_\text{far}]$,
-with a geometric ladder in $r$ and a uniform one in $\vartheta$. The
-electrode surface $r = a_\text{eq}$ is an exact mesh line (no staircase),
-the soil surface $\vartheta = \pi/2$ carries the natural Neumann
-condition, and element shapes are scale-invariant. Linear elements on
-straight-sided triangles with the centroid radius integrate the
-axisymmetric weak form exactly. Elements crossed by a layer interface are
-cut along it, so each element has one conductivity.
+- **Graded tensor mesh.** Vertical lines $s = s_i$ and horizontal lines
+  $z = z_j$ through every feature — the rod surfaces and end faces, the
+  layer interfaces, the soil surface, the axis and the truncation box —
+  graded away from each feature, $h(x) = \min_f (h_f + 0.2\,|x - x_f|)$.
+  The cells inside a rod are removed, so the rod is a rectangle of mesh
+  lines. The edges of its end faces are re-entrant corners of the
+  conductor; with a spacing of $0.002\,a$ there the convergence stays of
+  second order, also for a rod tip on an interface. Each cell is split into
+  two linear triangles; the weight $2\pi s$ is integrated exactly.
+- **O-grid for the ring wire.** A square block of up to three wire radii
+  around the wire's cross section is filled by an O-grid that conforms to
+  the tensor lines on its boundary and is inscribed in the wire's circle
+  (32 chords at level 0). The block keeps clear of the soil surface, the
+  axis, the other electrodes and of every interface more than $1.05\,a$
+  from the wire axis; a nearer interface — a ring on it or within its
+  radius — is cut into the block's elements, so every element lies in one
+  layer.
+- **Truncation.** A box at `r_far_factor` = 1000 characteristic lengths
+  (the electrodes' depth and radius, or the depth of the deepest interface
+  times the layer contrast $\max\rho/\min\rho$ if larger, since a
+  resistive bottom keeps the current in the layers above it over that
+  distance) with the Robin condition
+  $\partial_n\varphi = -(\mathbf n\cdot\mathbf r/r^2)\,\varphi$, the exact
+  Dirichlet-to-Neumann map of the monopole far field on any boundary; the
+  graded mesh reaches it with a few dozen extra lines.
+- **Ports.** The surface nodes of a bare electrode are one unknown; $G$ is
+  the Schur complement of the stiffness matrix onto the ports, one sparse
+  LU factorisation for all of them.
+- **Refinement and extrapolation.** Level $\ell$ bisects every interval of
+  the level-0 lines $\ell$ times (and doubles the O-grid), so the tensor
+  part of the spaces is nested and the resistance of one level rises
+  monotonically to the limit. By default `fem` solves levels 0 and 1 and
+  extrapolates $G$ with the observed second order (Richardson,
+  $G = G_1 + (G_1 - G_0)/3$); `metadata["fem_error_estimate"]` is the
+  largest relative difference of a port's resistance between the
+  extrapolated and the finer level — a bound of the finer level's error,
+  and some ten to a hundred times the error of the extrapolated value.
+  `FemOptions(refinement=k)` starts at level $k$; `extrapolate=False`
+  solves one level (a lower bound of the resistance).
 
-Refining $(n_\text{radial}, n_\text{axial})$ by $n \mapsto 2n-1$ produces
-nested spaces; by the minimum-energy principle the discrete conductance
-can only decrease, so $R_h$ **increases monotonically towards the exact
-value from below** (benchmark B1 reports the observed order). The domain
-is truncated at $r_\text{far} = $ `r_far_factor` $\cdot\,(a_\text{eq} + \sum h_i)$
-with the Robin condition $\partial\varphi/\partial r = -\varphi/r_\text{far}$,
-the exact Dirichlet-to-Neumann map of the monopole far field; it removes
-the $O(a_\text{eq}/r_\text{far})$ error of a grounded truncation sphere.
-Since 2026.11 the number of radial lines grows with
-$\ln(r_\text{far}/a_\text{eq})$ when a deep layer stack stretches the
-domain, so the near-field resolution no longer degrades with $h_1$
-(finding 10.49).
+Convergence (one level without extrapolation; deviation from the
+independent reference; time on an M1 Pro core with other jobs running):
+
+| World | level 0 | level 1 | level 2 | level 3 | observed order | default (0/1 extrapolated) |
+|---|---|---|---|---|---|---|
+| ring $r$ = 2 m at 0.8 m, $a$ = 8 mm, 100 Ω·m (closed form) | −0.63 % | −0.16 % | −0.043 % | −0.013 % | 1.97 / 2.00 | −5.7e-5 |
+| rod 0.5 … 3.5 m, $a$ = 8 mm, 100 Ω·m (solid-rod FV) | −0.42 % | −0.11 % | −0.027 % | −0.0069 % | 1.98 / 1.99 | −1.4e-5 |
+| the rod through $h_1$ = 2 m, 30 / 1000 Ω·m (FV) | −0.40 % | −0.10 % | −0.025 % | −0.0061 % | 1.98 / 1.99 | −1.0e-5 |
+| rod 0.5 … 5 m with its tip on $h_1$, 1000 / 30 Ω·m (FV) | −0.43 % | −0.11 % | −0.029 % | −0.0075 % | 1.96 / 1.95 | −4.1e-5 |
+| ring ($a$ = 5 mm) on $h_1$ = 2 m, 30 / 1000 Ω·m (Hankel ring) | −0.51 % | −0.13 % | −0.026 % | −0.0014 % | 1.97 / 2.00 | +4.7e-5 |
+| the ring 1 cm above $h_1$, 1000 / 30 Ω·m (Hankel ring + proximity) | −0.69 % | −0.18 % | −0.049 % | −0.015 % | 1.98 / 1.96 | −7.0e-5 |
+| ring in three layers 100 / 1000 / 30 Ω·m (Hankel ring) | −0.48 % | −0.12 % | −0.034 % | −0.011 % | 1.97 / 2.00 | −5.2e-5 |
+
+Mesh size and cost: a ring has 7 341 / 28 934 nodes at levels 0 / 1, a
+3 m rod 18 868 / 74 871, a ring with a central rod in two layers 56 079 /
+223 112; the default solve takes 0.20 s, 0.58 s and 2.0 s (best of three),
+`refinement=1` 12 s for the last, level 3 of a rod through an interface
+2.4 million nodes and 36 s. The error estimate of the finer level
+($1.0 \ldots 1.7 \cdot 10^{-3}$ in these cases) matches its actual error
+within 5 %. The truncation is converged: the box at 30, 100, 300 … 10 000
+characteristic lengths moves a rod over 30 / 10 000 Ω·m by at most 4e-5
+(5e-6 from 100 on), a grounded box at the default size by 7e-5.
+
+## Network, sources and results
+
+The soil model hands an `EarthPorts` record (port conductance matrix,
+display segments with their leakage per port volt) to the network solve of
+the integral backends ([ADR-0014](../../adr/0014-backend-registry-and-pipeline.md)),
+with $Z = G^{-1}$ as the multi-port matrix. Lumped and isolated distributed
+conductors, inductive branches with their earth-return models
+(`earth_inductive_model`), the skin effect, junctions, `return_to` and
+voltage sources with their internal impedance are honoured exactly as
+there, at every frequency of the engine; the soil part is quasi-static and
+the same at every frequency. Floating electrodes take their transfer
+potential. The result reports every electrode's potential and current, the
+port resistance matrix (`metadata["fem_port_resistance"]`, ports in world
+order `metadata["fem_ports"]`, and per level), the mesh size and time per
+level (`fem_mesh`) and the box size (`fem_r_far`). Its point sources are
+the display segments of the engine's `segment_length` (rods cut at the
+interfaces) with the model's leakage distribution, so
+`FieldResult.potential`, the touch-voltage helpers and the exports work as
+for the other backends (homogeneous and two-layer soil); the field of
+those point sources is the exact field of the model's leakage, and the
+nodal field of the mesh converges to it (at most 0.96 %, 0.21 %, 0.062 %
+at levels 0, 1, 2 along the surface 1 … 100 m from a 3 m rod). Next to a
+rod the equipotential current distribution differs from the uniform one of
+the image family: the surface potential 1 … 3 m from the rod lies
+0.08 … 0.36 % below that of `image`, the touch voltage at 1 m (per ampere)
+1.4 % below. The solve runs the
+coordinate check of user decision D5 (`MixedCoordinatesWarning`) and
+solves projected coordinates in a local frame.
 
 ## Guards
 
-The registry marks `fem` experimental; the reduction itself is guarded
-(findings 10.23, the audit rounds of the release and the D2 audit). All
-layer rules ask which layers the electrodes touch with one predicate, the
-contact of the thin-wire model the integral engines solve: a horizontal
-wire touches the layers that hold its axis (a wire lying on an interface
-touches both, to round-off), a rod the layers its axis passes through —
-an end lying on an interface does not count, the thin-wire model has no
-end face (audit D2A-01, D2A-02). Only the first error below also counts
-a wire within its radius of a layer as touching it, the one rule that
-this makes stricter; counting it in the other two had turned errors
-into warnings where `fem` is far too low (a ring 3 mm above a more
-conductive layer: −56 %; audit R2A-02).
-
+- **Error** (`BackendCapabilityError`, naming the backends whose own checks
+  accept the world): an electrode other than a rod or a ring; a rod or a
+  ring off the common axis (to 1e-9 of the world's size); a galvanic
+  distributed conductor (it leaks along its route); rods that touch or
+  overlap on the axis, a ring that touches a rod or another ring, a ring
+  wire that reaches within 5 % of its radius to the soil surface (the
+  solid torus must fit; the thin-wire engines accept a wire down to
+  $2z > a$). A full 3-D model is planned (user decision Q37).
 - **Error** (`ValueError`, before anything else): an electrode, driven or
-  passive, lies at or above the soil surface, in the surface plane
-  ($2z \le a$) or reaches above it — what every other backend refuses as
-  well (audit D2A-06) — and so does a galvanic distributed conductor
-  whose leakage segments do (audit R2A-07; `fem` itself treats every
-  conductor as a lumped branch). A rod with its head at $z = 0$ is the
-  ordinary driven rod and stays valid; an isolated conductor may run in
-  the air.
-- **Error** (`BackendCapabilityError`, in the capability check of
-  `Engine.solve` and in a direct `solve_fem` call): a `VoltageSource`. The
-  registry capability `voltage_sources` is false for `fem`; the integral
-  engines solve the world (up to 0.15.0 `fem` dropped the source with a
-  warning and solved to zero potentials).
-- **Error** (`BackendCapabilityError`, before meshing): an electrode
-  touches a layer that its hemisphere does not reach — a rod through the
-  top layer, a wire on (or within its radius above) an interface below
-  the hemisphere. The hemisphere would inject the current into the wrong
-  layer; a 3 m rod through $h_1 = 2$ m was +1092 % off in v0.15.0,
-  silently (benchmark B7 records the exclusion), and a 2 m ring on
-  $h_1 = 2$ m ($a_\text{eq} = 1.3$ m) is +1008 % (1000/30 Ω·m) and −18 %
-  (30/1000 Ω·m) against `image_2layer`, silent up to the D2 audit.
-- **Error** (`BackendCapabilityError`): every electrode of a driven
-  cluster lies below an interface at a depth between $a_\text{eq}/2$ and
-  $a_\text{eq}$, so more than half of the hemisphere sits in a layer the
-  electrodes do not touch (a 3 m rod below $h_1 = 0.4$ m in
-  1000 / 30 Ω·m read 31.1 Ω against 10.5 Ω from `mom`, +197 %; second
-  adversarial audit, A2E-2; a 2 m ring 1 … 7 mm below $h_1 = 0.8$ m:
-  −5 … −84 % in 30/1000 and 30/10000 Ω·m, +11 … +19 % in 1000/30 and
-  10000/30 Ω·m).
-- **Error** (`BackendCapabilityError`, user decision Q23 of 2026.11): a
-  layer that no electrode of the cluster touches and that conducts better
-  than every layer the electrodes touch, with its top above
-  $\max(a_\text{eq}, r_\text{ext})$ — the hemisphere radius or the
-  electrodes' horizontal half-extent (ring radius, half the strip length,
-  half the grid diagonal); below the hemisphere only when every layer
-  between the electrodes and it conducts better than theirs as well (a
-  more resistive layer in between shields both, see the warning below;
-  audit R2A-09). The hemisphere injects the current straight
-  into a layer it spans and reaches one below it much less than the
-  electrodes do: `fem` misplaces the current, mostly far too low, i.e. not
-  conservative. The
-  rule is structural, independent of the size of the contrast, and works
-  on the canonical layer stack (equal resistivities are no interface).
-  The fem error is continuous across $h_1 = a_\text{eq}$ (−67.9 % on both
-  sides for a 10 m ring over 1000/30 Ω·m), so the rule covers the
-  half-extent as well since the D2 audit (D2A-03; a coordinator decision
-  flagged for the author's review). The message names the cluster, the
-  layer (depth range and $\rho$), the electrodes' $\rho$,
-  $a_\text{eq}$, the measured error and the backends whose own checks
-  accept the world. Measured against `image_2layer` and `mom`:
-
-    | World (two layers) | `fem` against `image_2layer` / `mom` |
-    |---|---|
-    | 3 m rod at 0.5 m below a more conductive top layer, $h_1 = 0.05 \ldots 0.49\,a_\text{eq}$ (22 … 217 mm), or with its head on $h_1$ | 100/1000 Ω·m: −12 … −58 %; 30/1000: −35 … −80 %; 30/10000: −80 … −97 % |
-    | 10 m strip at 0.8 m below such a top layer, $h_1 = 0.22$ and $0.50$ m | 100/1000: −32 … −47 %; 30/1000: −58 … −71 %; 30/10000: −91 … −95 % |
-    | ring $r = 10$ m at 0.8 m above a more conductive layer at $h_1 = 2$ m | 1000/300 and 100/30: −45 %; 1000/30: −92 % |
-    | ring $r = 10$ m at 0.8 m above a more conductive layer at $h_1 = a_\text{eq} \ldots 10$ m (below the hemisphere, within the radius) | 1000/30: −68 … −7 %; 3000/30 and 1000/10: −78 … −8 %; 100/30 and 1000/300: −28 … −4 % |
-    | 10 m strip at 0.8 m above a more conductive layer at $h_1 = 1.2 \ldots 5$ m | 1000/30 and 3000/30: −45 … +1 % |
-    | 20 m grid at 0.5 m above 1000/30 Ω·m at $h_1 = a_\text{eq} \ldots 14$ m | −60 … +13 % (its formula reads +12 % high in homogeneous soil) |
-    | near-equal layers (100/120 and 120/100 Ω·m), rods, strips and rings | −7 … +5 % (raises as well: the rule is structural) |
-    | ring $r = 5$ / 10 m within its wire radius (1 µm … 7 mm) below a more conductive top layer, $h_1 = 0.5$ / 0.8 m (`mom` refuses these; second reference an independent ring series) | 30/1000 and 100/1000 Ω·m: −6 … +30 %; 30/10000: −59 … +7 %; 100/120: +2 … +3 % |
-    | ring $r = 5$ / 2 m within its wire radius (1 µm … 7 mm) above a more conductive lower layer, $h_1 = 0.5$ / 0.8 m (likewise) | 1000/30, 3000/30, 10000/30 Ω·m: −96 … +11 %; 120/100: −3 … +1 % |
-
-  The rule stops at the half-extent: just beyond it fem is silent at
-  −10.3 … −0.3 % (rings $r$ = 2, 5, 10 m over 1000/30, 3000/30, 1000/10,
-  100/30, 1000/300 and 120/100 Ω·m), −1.4 … −0.3 % (10 m strip) and
-  +9.9 % (20 m grid) against `image_2layer` (−8.8 … +0.8 %, +0.5 … +1.5 %
-  and +12.7 % against `mom`; audit R2A-05), and the deviation fades
-  further down (−1.3 % for the 10 m ring over $h_1$ = 20 m in 1000/30 Ω·m).
-- **Error** (`BackendCapabilityError`): the closed form of the
-  hemisphere is used outside its range (audit D2A, O-1). Dwight's strip
-  formula is the series of the wire and its image in $s/l$ ($s = 2t$
-  the image distance, $l$ the length) and converges only for a burial
-  depth $t < l/2$; his ring formula needs $s \ll D$ and stays within
-  −0.8 … +1.2 % of the exact thin ring down to $t = D$ (it crosses zero
-  near $0.85\,D$, −3.6 … −7.1 % at $2D$). A driven strip deeper than half
-  its length and a driven ring deeper than its diameter raise (a 1.88 m
-  strip at 5 m and 9.8 m read +369 % and +6120 % in homogeneous soil,
-  silently; the ring limit sat at the radius, where the formula's error
-  peaks, up to audit R2A-06). Every driven `MeshElectrode` raises: its formula, one
-  strip along the diagonal, misses the wires of the mesh (+118 … +217 %
-  against `image` and `mom` at 0.8 m, up to +262 % at 10 m); a
-  `GridMeshElectrode` of the same wires is reduced with Sverak's formula
-  (−1 … +22 % at 0.8 m).
-- **Error** (`BackendCapabilityError`): a driven cluster contains a star
-  or polyline electrode, which has no closed-form hemisphere radius. The
-  generators build mesh foundations of polyline wires, so generated
-  networks cannot be solved with `fem`.
-- **Generated rectangles without cross-braces** (user decision Q38 of
-  2026.11): `FoundationElectrodeSpec(style="ring")`, or `"mesh"` with
-  `n_x = n_y = 1`, is four bonded strips at every orientation; up to the
-  decision an axis-aligned one reached `fem` as one `GridMeshElectrode`
-  (Sverak's formula). As a cluster of four strips the hemisphere radii are
-  summed (`FemReductionWarning`), and the numbers move: a 10 m × 10 m and a
-  20 m × 5 m ring at 0.8 m in 100 Ω·m read −32 % against the image family
-  instead of +21 / +30 %, over the two-layer soils that `fem` accepts in
-  both forms −9 … −40 % instead of +17 … +28 %, and the AP1 station
-  (4 m × 4 m ring with three bonded rods) −35 … −71 % over the 39 AP1
-  soils instead of −22 … −42 %. A rectangle with a side shorter than twice
-  its depth is refused (a strip deeper than half its length, see above; a
-  20 m × 1 m ring at 0.8 m read +73 % as one grid). The layer rule of user
-  decision Q23 takes the horizontal half-extent per electrode, half a side
-  for a strip instead of half the diagonal of the grid, so it reaches less
-  far: a 10 m × 10 m ring over 1 000 / 100 Ω·m at 5 m and over
-  1 000 / 30 Ω·m at 6 m and a 20 m × 5 m ring over 300 / 30 Ω·m at 10 m,
-  which the grid form refused, are solved with the warning at −58 / −54 /
-  −42 %. Rotated rectangles behaved so before; the reduction gets no new
-  rule (user decision Q37: a conforming model replaces it in the next
-  release).
-- The backends an error message names pass their own checks for the
-  world — the capability check, the cross-layer limit of `mom_sommerfeld`
-  (decided from the geometry), the resource limit, the burial depth of
-  every segment and the point form at the interface. A backend that a
-  setting of the engine would let solve the world is named with that
-  setting: a larger `Engine.max_segments`, or a `segment_length` below the
-  length its point-form guard names (checked by running its checks again
-  at that length); a backend that refuses the world itself is named with
-  its own reason, and if none is left, the message says that no backend
-  solves the world yet. Every `fem` error takes its remedy from these
-  checks, the one for star and polyline electrodes included (audit
-  D2A-06, R2A-03, R2A-04).
-- **Warning** (`FemReductionWarning`, once per solve, naming every reason
-  and the cluster members): a cluster with several electrodes (radii
-  summed; −35 % for a ring with three rods in homogeneous soil, −55 … −75 %
-  for two bonded rods of which one reaches into a conductive top layer);
-  several clusters (each solved alone, transfer impedances 0, passive
-  clusters at 0 V); a layer interface above the deeper of the electrode
-  and the hemisphere that the errors above do not cover: the spanned
-  layer conducts no better than the electrodes' layer (−3 … +48 %
-  measured, +23 % for a 10 m ring over a more resistive layer at 2 m), an
-  electrode touches the conductive layer only partly (a rod reaching
-  1 µm … 8 cm into a conductive top layer of $0.2\,a_\text{eq}$:
-  −44 … −78 %; a ring lying exactly on the interface, which touches both
-  layers: −21 … +30 % against `image_2layer` and a ring series);
-  an interface below the electrode and the hemisphere but within the
-  horizontal half-extent of the electrode over a layer that conducts no
-  better (+9 % for a 10 m ring over 30/1000 Ω·m at 5 m; −17 … +16 % over
-  30/1000, 100/1000 and 30/10000 Ω·m; the references sum the image series
-  of 30/10000 Ω·m to convergence, audit R2A-08), or over a more conductive layer
-  behind such a layer (a 10 m ring at 0.8 m over 100/1000/30 and
-  100/300/30 Ω·m: +16 … +46 % against `mom_sommerfeld` and a
-  Hankel-integral ring; −10 … −9 % behind a near-equal or 1 m thin
-  resistive layer; audit R2A-09). Escalate with
-  `warnings.simplefilter("error", FemReductionWarning)` when `fem` serves
-  as a check.
-- Concrete shells are rejected; distributed and inductive conductors are
-  solved as lumped branches, and `resistance_model="skin"` is ignored, each
-  with a `BackendCapabilityWarning`.
-- **Not covered** (silent): an interface just below a horizontal electrode
-  that is buried about as deep as its half-extent or deeper, with the
-  interface deeper than both the hemisphere radius and the half-extent — a
-  2 m ring at 1.9 m over $h_1 = 2$ m in 1000/30 Ω·m reads +34 %, at
-  1.993 m +250 %. Since rings are solved down to their diameter (audit
-  R2A-06) the class covers deeper rings as well: a ring $r$ = 2 or 5 m at
-  $t = r \ldots D$ reads +191 … +308 % 1 cm above a more conductive layer
-  (1000/30 Ω·m), +38 … +90 % 10 cm above it, and −27 … −14 % / −21 … −9 %
-  above a more resistive one (30/1000 Ω·m), against `image_2layer` and a
-  ring series. Rods are hardly affected (+5.7 % with the interface 1 mm
-  below the tip).
-- The size notice of `Engine.solve` ("solve time may run from seconds to
-  minutes") and its resource limit count the segments of the integral
-  engines, which `fem` does not use: its problem is the mesh of each
-  driven cluster (2 400 nodes at the default resolution in homogeneous
-  soil and up to 2 531 with a layer stack of at most 1 m; the radial lines
-  grow with the depth of the stack, to 3 120 … 3 564 nodes at 10 m,
-  3 670 … 4 134 at 30 m and 5 678 … 6 174 at 1 km for rods, rings, strips
-  and a grid; independent of `segment_length`), and `fem` does not
-  refuse a world above `Engine.max_segments`.
+  passive, at or above the soil surface, in the surface plane
+  ($2z \le a$) or reaching above it, and a galvanic distributed conductor
+  out of the soil — what every backend refuses (audit D2A-06, R2A-07). A
+  rod with its head at $z = 0$ is the ordinary driven rod.
+- **Error** (`ResourceLimitError`): the node count of the finer mesh,
+  predicted from its lines before anything is assembled, above
+  `FemOptions.max_nodes` (4 000 000; level 3 of a rod has about 2.4
+  million). `Engine.max_segments` does not limit `fem`; its display
+  segments pass the segment budget of every backend.
+- The remedy of every refusal comes from the other backends' own checks:
+  a backend that a setting of the engine would let solve the world is
+  named with that setting (a larger `Engine.max_segments`, a finer
+  `segment_length`), and if none is left the message says that no backend
+  solves the world yet (audit D2A-06, R2A-03, R2A-04).
 
 ## Validity range
 
 | Condition | Limit | Behaviour outside |
 |---|---|---|
-| Electrodes | one compact rod, ring, strip or grid per cluster, inside one layer, with the hemisphere inside that layer | error (wrong layer, or a more conductive layer within the hemisphere or the half-extent that no electrode touches) or `FemReductionWarning` (see above) |
-| Burial depth | strip: at most half its length; ring: at most its diameter (Dwight's ring formula within −0.8 … +1.2 % there; audit R2A-06); grid and rod: no limit, both read high but bounded in depth (Sverak's grid formula: +51 … +67 % for a 1 m grid, +29 … +52 % for 2 m, +14 … +39 % for 4 m, +10 … +26 % for 10 m, +6.5 … +17 % for 20 m, 0.25 … 20 m deep; Dwight's rod ignores the head depth: +0.8 … +15 % for 1 … 20 m rods with the head 0.5 … 10 m deep; audit R2A-05) | error (the closed form diverges: up to +474 % for strips, −33 % for rings at ten diameters) |
-| Kinds | rod, ring, strip, grid (`GridMeshElectrode`) | error for a driven `MeshElectrode`, star or polyline |
-| Clusters | one driven cluster | `FemReductionWarning`: no coupling between clusters |
-| Conductors | lumped | distributed and inductive conductors solved as lumped, `BackendCapabilityWarning` |
-| Accuracy | discretisation error of the hemisphere itself: B1 below; the reduction is the Dwight formula | — |
-| Frequency | quasi-static, frequency independent | — |
+| Electrodes | rods on one vertical axis, horizontal rings centred on it (any number, not touching) | `BackendCapabilityError` |
+| Ring wire | its top deeper than 5 % of the wire radius | `BackendCapabilityError` (thin-wire engines solve it) |
+| Soil | any number of horizontal layers, any contrast | — |
+| Concrete shells | per-length coefficient on rods and rings | — |
+| Conductors | lumped, inductive, skin effect, isolated distributed chains | galvanic distributed: `BackendCapabilityError` |
+| Accuracy | port resistance about 1e-4 at the default (see the tables) | raise `FemOptions.refinement` |
+| Mesh size | `FemOptions.max_nodes` | `ResourceLimitError` |
+| Frequency | quasi-static soil; conductor branches per frequency | — |
 
 ## Validation
+
+Every number is checked against a second method that shares no code with
+`fem` (references in `tests/benchmarks/references.py`, tests in
+`tests/test_fem.py`): Weber's disc, the thin ring in closed form, a
+Hankel-transform thin ring for any number of layers, the exact 2-D
+proximity correction of a wire next to an interface, and a finite-volume
+model of the solid rod (cell-centred, its own grid, adapted from audit
+A3). The integral engines follow within their documented biases: the
+uniform current of the image family lies about 1 % above a rod's
+equipotential solution, the point kernel of `mom` 0.2 … 2 % below.
+
+| World | `fem` | second method: fem / reference − 1 | integral engines: engine / fem − 1 |
+|---|---|---|---|
+| Weber's disc $b$ = 1 m, 100 Ω·m | 24.9923 Ω | $\rho/(4b)$ = 25 Ω: −3.1e-4 | — |
+| rod 0 … 3 m, $a$ = 8 mm, 100 Ω·m (B2) | 33.1933 Ω | thin-wire Galerkin limit 33.1957 Ω: −7.3e-5 | `image` (line) +0.93 %, `mom` (0.25 m) −1.1 % |
+| rod 0.5 … 3.5 m / 0.5 … 5 m | 31.7170 / 22.7906 Ω | solid-rod FV: −1.4e-5 / −1.4e-5 | `image` +1.1 / +0.91 %, `mom` −0.59 / −0.91 % |
+| rings $r$ = 2, 5, 10 m (B3) | 12.4809 … 3.4417 Ω | closed form: −2.7e-5 … −5.7e-5 | `image` +3.0e-5 … +5.0e-5, `mom` −0.85 … −1.2 % |
+| ring with a central rod, bonded, 100 Ω·m | 11.5338 Ω | — (port matrix symmetric) | `image` +0.41 %, `mom` −0.87 % |
+| rings in two layers (8 soils, 30 / 10 000 … 10 000 / 30 Ω·m) | | Hankel ring: −2.6e-5 … −7.3e-5 | `image_2layer` +3.0e-5 … +5.9e-5 (+3.4e-4 for 10 000 / 30, −1.0 % for 30 / 10 000 Ω·m, whose series it truncates), `mom` −0.43 … −1.8 % |
+| rings in three layers (5 stacks, also below $h_1$) | | Hankel ring: −3.4e-5 … −9.1e-5 | `mom_sommerfeld` −0.45 … −2.1 % (top layer only) |
+| rods in two layers (6 cases, through and within a layer) | | solid-rod FV: −1.4e-5 … +2.0e-4 | `image_2layer` +0.07 … +1.4 %, `mom` −1.2 … +0.5 % |
+| ring 1 cm above an interface, $r$ = 2 / 5 m at $t = r \ldots D$ (12 cases) | | Hankel ring + 2-D proximity: −1.3e-5 … −7.0e-5 | `image_2layer` +5.2 … +5.4 % (1000 / 30 Ω·m), +0.07 … +0.10 % (30 / 1000) |
+| the same rings 10 cm above the interface (12 cases) | | −1.9e-5 … −6.3e-5 | `image_2layer` −0.004 … +0.07 % |
+| 3 m rod with its head 1 mm below … 8 cm into a 30 Ω·m top layer (14 cases) | | solid-rod FV: within ±1.3e-4 | `image_2layer` jumps by a factor 3.8 when its first segment enters the layer (30 / 10 000 Ω·m) |
+| ring exactly on an interface (4 soils) | | Hankel ring: −1.1e-4 … +4.7e-5 | `image_2layer` jumps by 0.03 … 0.38 % between the two sides |
+| rod tip 16 mm above … 16 mm below an interface (1000 / 30 Ω·m) | | solid-rod FV: −4.1e-5 … +1.3e-5 | thin wire (`image_2layer`) +22 % with the tip on the interface, +7.2 % 1 mm above, −4.4 % 1 mm below |
+| encased ring $r$ = 2 m at 0.5 / 0.8 / 3 m ($r_b$ = 55 mm, $C$ = 38.16 Ω·m) | rise 1.0057 / 1.0040 / 1.0021 $C/(2\pi r)$ | the bound $\ge C/(2\pi r)$ | the image family adds exactly $C/(2\pi r)$ |
+| encased 3 m rod, head at 0 / 0.5 m | rise 1.0086 / 1.0005 $C/L$ | Sunde's decomposition with Dwight's rod (uniform current): −0.96 % / −5.2 % | `image` +1.1 / +1.6 %, `mom` −0.84 / −0.21 % |
+
+(Evidence of stream w4axi, `e01`–`e04`.)
+
+The generated table below compares `fem` with the benchmark references of
+the suite; in B6 and B7 the reference is `mom` on the same segments, so
+the deviation is the deficit of `mom`'s point kernel.
 
 <!-- generated:begin fem -->
 Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11.0 (Python 3.12.3, NumPy 2.5.4, SciPy 1.18.1, numba installed: yes; Linux x86_64); bounds from `tests/benchmarks/tolerances.py`. Details and all cases: [Validation and benchmarks](../validation.md).
@@ -297,20 +253,24 @@ Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11
 
 ## Literature
 
-- Dwight, H. B. (1936). Calculation of resistances to ground. *Electrical
-  Engineering* 55(12), 1319–1328.
 - Sunde, E. D. (1968). *Earth Conduction Effects in Transmission Systems*.
-  Dover, New York, ch. 2 (equivalent hemisphere).
-- Güemes, J. A., & Hernando, F. E. (2004). Method for calculating the
-  ground resistance of grounding grids using FEM. *IEEE Transactions on
-  Power Delivery* 19(2).
+  Dover, New York, ch. 2 and §4.4 (concrete shell).
+- Weber, H. (1873). Ueber die Besselschen Functionen und ihre Anwendung
+  auf die Theorie der elektrischen Ströme. *J. reine angew. Math.* 75
+  (the disc electrode, $R = \rho/(4b)$).
 - Givoli, D. (1992). *Numerical Methods for Problems in Infinite Domains*.
   Elsevier (Dirichlet-to-Neumann truncation; the monopole map is its
   lowest mode).
 - Strang, G., & Fix, G. (2008). *An Analysis of the Finite Element
   Method*, 2nd ed. Wellesley-Cambridge Press (minimum-energy principle and
   one-sided convergence).
+- Richardson, L. F. (1911). The approximate arithmetical solution by finite
+  differences of physical problems. *Phil. Trans. R. Soc. A* 210.
+- Smythe, W. R. (1968). *Static and Dynamic Electricity*, 3rd ed.
+  McGraw-Hill (images in a plane interface and in a circular cylinder).
 
-Architecture decision: [ADR-0002](../../adr/0002-engine-family.md) and its
-amendments. API: `groundfield.solver.fem.solve_fem`,
-`equivalent_hemisphere_radius`, `FemReductionWarning`.
+Architecture decision: [ADR-0016](../../adr/0016-conforming-fem.md) (the
+conforming model; [ADR-0002](../../adr/0002-engine-family.md) for the engine
+family). API: `groundfield.solver.fem.solve_fem`; `FemOptions`;
+`equivalent_hemisphere_radius` (deprecated) and `FemReductionWarning`
+(never emitted) are kept for compatibility.

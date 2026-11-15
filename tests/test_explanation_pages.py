@@ -130,10 +130,14 @@ def test_mom_is_described_as_point_matching_not_galerkin() -> None:
 
 
 @pytest.mark.finding("10.83", "10.23")
-def test_fem_is_experimental_and_not_a_cross_check() -> None:
-    text = _engine("fem")
+def test_fem_is_experimental_and_an_independent_reference() -> None:
+    """Up to 2026.11 the page said "not as a cross-check" (the equivalent
+    hemisphere, 10.23); the conforming model is the independent reference
+    (user decision Q37) and the page says what it refuses."""
+    text = " ".join(_engine("fem").split())
     assert "experimental" in text.lower()
-    assert "not as a cross-check" in text
+    assert "independent reference" in text
+    assert "every other world is refused" in text
     assert "≤ 10 %" not in text and "<= 10 %" not in text
 
 
