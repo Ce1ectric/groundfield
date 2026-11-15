@@ -199,8 +199,10 @@ sections; it matters for harmonics up to 1 kHz.
   core couples to the shield as a filament inside a tube, at the shield
   radius, and the shield carries no internal inductance of a solid wire
   (user decisions Q32 and Q33; a 100 m coax with 5 mm core and 15 mm
-  shield: loop inductance 26.97 µH). Without the marker two conductors
-  on one axis are two separate cables touching each other.
+  shield: loop inductance 26.97 µH, whatever the sub-pieces
+  `discretize_segment_length` cuts the two conductors into). Without the
+  marker two conductors on one axis are two separate cables touching each
+  other.
 - The leads of a measurement (tutorial
   [T07](../tutorials/T07_fall_of_potential_measurement.ipynb)) couple
   like cables; lay the probe lead at an angle to the feed lead.

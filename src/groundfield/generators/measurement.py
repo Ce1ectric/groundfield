@@ -353,7 +353,11 @@ class MeasurementLeadConfig(GeneratorConfig):
         description=(
             "Conductor type for the engine. 'bare_copper' for an "
             "overhead measurement lead, 'cable_shield' or 'pen' for "
-            "a buried cable that doubles as a measurement lead."
+            "a buried cable that doubles as a measurement lead. "
+            "'cable_shield' makes the lead a thin-walled tube: no internal "
+            "inductance of a solid wire (50 nH/m less) and a thinner "
+            "conductor on its axis is read as its core (user decisions "
+            "Q32, Q33)."
         ),
     )
     coupling_to_soil: str = Field(
@@ -435,6 +439,33 @@ def buried_lead(
 
     Default depth 0.6 m (typical NS cable trench). Insulated cable
     (no soil leakage along the lead), Neumann inductance enabled.
+
+    The lead is built as a cable shield (``conductor_type="cable_shield"``,
+    user decisions Q32 and Q33 of 2026.11): a thin-walled tube, so its self
+    inductance carries no internal inductance of a solid wire,
+    μ₀/(8π) = 50 nH/m less than the same lead as a solid
+    wire (a 150 m lead: 7.5 µH, 2.4 mΩ of reactance at 50 Hz), and a
+    thinner conductor drawn on its axis is read as its core, coupled at the
+    lead radius (a filament inside a tube). Its skin effect is not modelled
+    (``resistance_model="skin"`` is rejected for a shield). For a lead that
+    is a solid wire, build a :class:`MeasurementLeadConfig` with
+    ``conductor_type="bare_copper"``.
+
+    Parameters
+    ----------
+    depth_m
+        Depth of the lead axis in m (positive into the soil).
+    wire_radius_m
+        Radius of the lead in m.
+    inductance_model
+        ``"neumann"`` (default) or ``None`` for a resistive lead.
+    segment_length_m
+        Sub-piece length in m; ``None`` keeps the lead lumped.
+
+    Returns
+    -------
+    MeasurementLeadConfig
+        The lead configuration.
     """
     return MeasurementLeadConfig(
         depth_m=depth_m,

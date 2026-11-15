@@ -15,7 +15,6 @@ import time
 import tracemalloc
 import warnings
 
-import numpy as np
 import pytest
 
 import groundfield as gf
@@ -364,6 +363,74 @@ def test_nodal_unknowns_are_the_size_of_the_solved_system(
         warnings.simplefilter("ignore")
         w.solve(engine)
     assert expected_segments(w, engine)["nodal_unknowns"] == expected == sizes[0]
+
+
+@pytest.mark.finding("10.06", "10.22")
+@pytest.mark.parametrize("soil", ["homogeneous", "two_layer"])
+def test_nodal_unknowns_count_one_owner_per_straight_wire(
+    monkeypatch: pytest.MonkeyPatch, soil: str
+) -> None:
+    """Grids, stars and polylines are one owner per straight wire in the
+    image family (user decisions Q30, Q44); the prediction counts them, so
+    it equals the size of the solved system (audit W1A-06: a 100 m 20 x 20
+    grid with 50 L-shaped outlines read 102 instead of 393)."""
+    from groundfield.solver import _topology
+
+    sizes: list[int] = []
+    original = _topology._augmented_matrix
+
+    def recording(Z, system, cluster_id):  # noqa: ANN001, ANN202
+        A = original(Z, system, cluster_id)
+        sizes.append(A.shape[0])
+        return A
+
+    monkeypatch.setattr(_topology, "_augmented_matrix", recording)
+    w = gf.create_world(
+        soil=gf.HomogeneousSoil(rho=100.0)
+        if soil == "homogeneous"
+        else gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=3.0)
+    )
+    gf.create_electrode(
+        w, "grid_mesh", name="g", corner=(0, 0, 0.5), size=(20.0, 20.0), n_x=4, n_y=3
+    )
+    gf.create_electrode(
+        w, "mesh", name="m", corner=(30, 0, 0.5), size=(6.0, 4.0), spacing=2.0
+    )
+    gf.create_electrode(
+        w, "star", name="st", center=(50, 0, 0.6), n_arms=5, arm_length=3
+    )
+    for k in range(3):
+        x = 60.0 + 15.0 * k
+        gf.create_electrode(
+            w,
+            "polyline",
+            name=f"h{k}",
+            closed=True,
+            vertices=[
+                (x, 0, 0.8),
+                (x + 6, 0, 0.8),
+                (x + 12, 0, 0.8),
+                (x + 12, 5, 0.8),
+                (x + 5, 5, 0.8),
+                (x + 5, 9, 0.8),
+                (x, 9, 0.8),
+            ],
+        )
+    gf.create_electrode(w, "rod", name="r", position=(-5, 0, 0.5), length=6.0)
+    # driven rod: every other electrode floats with several owners (a lone
+    # passive electrode of one owner is left out of the solve, which is
+    # why the count is an upper bound)
+    gf.create_source(w, attached_to="r", magnitude=1.0)
+    engine = _engine(1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        w.solve(engine)
+    interfaces = None if soil == "homogeneous" else [3.0]
+    assert diagnostics._nodal_unknowns(w, interfaces) == sizes[0]
+    # grid 5 + 4 lines, mesh 3 + 4, star 5 arms, outlines 6 sides each, rod 1
+    # (2 in two layers), plus one node per electrode
+    owners = 9 + 7 + 5 + 3 * 6 + (1 if soil == "homogeneous" else 2)
+    assert sizes[0] == owners + 7
 
 
 @pytest.mark.finding("10.06")

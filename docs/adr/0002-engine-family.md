@@ -358,7 +358,10 @@ electrode is one uniform-current owner — a full wire line of a grid
 (`GridMeshElectrode`, `MeshElectrode`), an arm of a star, a straight run
 of a polyline (consecutive edges that continue in the same direction are
 one wire, so a building outline has one owner per side and a generated
-mesh wire with a vertex at every crossing stays one owner). Rods, strips
+mesh wire with a vertex at every crossing stays one owner; a vertex
+continues the wire when it lies on the chord of its neighbours up to 64
+units of round-off of the coordinates, so the rule is the same at local
+and at projected UTM coordinates, audit W1A-01). Rods, strips
 and rings are one wire; an electrode through a layer interface keeps one
 owner per layer on top (ADR-0007). The owners of an electrode are ideally
 bonded (one potential) and merged before the result: currents,

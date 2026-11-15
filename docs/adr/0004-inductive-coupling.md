@@ -364,13 +364,49 @@ the following decisions refine it.
     inductive part; the solid-round skin model (`resistance_model="skin"`)
     is rejected for a shield. A 100 m coaxial pair (core 5 mm, shield
     15 mm, 0.7 m deep) reads a loop inductance of 26.966 µH in a solve
-    (lumped, every earth-return model; 26.912 µH with 10 m sub-pieces)
-    against the analytic 26.972 µH of the infinitely long coax, instead of
-    31.966 µH with the internal inductance of a solid shield; unmarked,
-    the two cables read 43.471 µH, the 43.48 µH of two touching solid
-    wires. A shield without a core loses $\mu_0\ell/(8\pi)$ = 50 nH/m
+    (`perfect_mirror` and `sommerfeld`; 26.970 µH with `carson_series`),
+    whatever the sub-pieces of the two conductors (item 12), against the
+    analytic 26.972 µH of the infinitely long coax, instead of 31.966 µH
+    with the internal inductance of a solid shield; unmarked, the two
+    cables read 43.472 µH (43.476 µH with `carson_series`), the 43.48 µH
+    of two touching solid wires. A shield without a core loses $\mu_0\ell/(8\pi)$ = 50 nH/m
     of self inductance against the same conductor without the tag
     (`buried_lead()` of the measurement generator builds its lead as a
     shield: the two-pole reading of a three-house network with buried feed
     and probe leads −2.5 % in reactance at 50 Hz and 1 kHz, the
     three-pole reading unchanged to 1e-6).
+12. **Pieces of conductors lying beside each other (wave-1 audit of the
+    calendar release, W1A-02).** Item 9 decides per *segment* whether a
+    point lies beside the partner, so a pair of sub-pieces of two
+    conductors on one axis that do not overlap coupled as two filaments on
+    the axis (distance 0) while the overlapping pairs coupled at the shield
+    radius or at $r_1 + r_2$: the pieces did not add up to the lumped pair.
+    The 100 m coax read 26.912 / 26.852 / 26.374 / 24.608 µH in 10 / 5 /
+    1 / 0.25 m pieces (−0.2 … −8.7 %; every joint of the pieces cost
+    about 6 nH), the unmarked pair 43.400 … 40.343 µH, the drops routed
+    back along the PEN main of a golden case 3.9e-4 low in reactance at
+    1 kHz. Two rules now act on parallel pairs closer than touching. A
+    thinner wire inside a cable shield ($\delta + r_\text{thin} \le r_s$,
+    $\delta$ the lateral distance of the axes) couples at the shield
+    radius at every axial offset — overlapping, end to end and apart —
+    which is exact for a filament on the axis of a thin tube (every point
+    of the tube is $\sqrt{x^2 + r_s^2}$ away), so a shield made of several
+    conductors, or a core and shield in sections, add up too. For two
+    other conductors lying beside each other (the rule of item 9 acts on a
+    parallel pair of their pieces), a point lies beside the partner when
+    its foot falls inside the partner's whole *conductor*, not only inside
+    the partner segment; the stretches have Grover's parallel-filament
+    closed form. The solver passes one label per conductor
+    (`build_inductance_matrix(..., conductors=...)`; without labels every
+    segment counts as a conductor of its own, the rule of item 9 in closed
+    form). The pieces now add up to the lumped loop to 3e-12 (coax, marked
+    and unmarked, 0.25 … 20 m pieces, all three earth-return models) and
+    the drops along the main to 3e-15; the value stays continuous in the
+    geometry, the same for every order and direction of the segments, and
+    pieces of one conductor or conductors that only meet end to end on one
+    axis (a main split at its taps) keep the filament integral (every
+    other golden case bit-identical). The assembly of a 1 km coax in 2 m
+    pieces takes 6.4 s instead of 5.8 s. Remaining: two unmarked cables in
+    sections on one axis (a section of one beside a section of the other
+    that it does not overlap) couple as filaments on the axis between the
+    sections that do not overlap.

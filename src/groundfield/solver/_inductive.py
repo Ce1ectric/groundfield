@@ -583,11 +583,24 @@ def _assemble_inductance_matrix(
         extra = {}
         if shields.any():
             extra = {"shields": shields, "include_internal": ~shields}
+        # audit W1A-02: the pieces of two conductors lying beside each other
+        # along one axis (a core inside a shield, two cables drawn on one
+        # axis) couple at the on-axis distance, so they add up to the lumped
+        # pair; a branch of unknown conductor counts as a conductor of its own.
+        label_of: dict[object, int] = {}
+        labels = [
+            label_of.setdefault(
+                name if (name := getattr(b, "conductor", None)) is not None else k,
+                len(label_of),
+            )
+            for k, b in records
+        ]
         L_sub = build_inductance_matrix(
             seg_endpoints,
             radii,
             image=IMAGE_OF_EARTH_MODEL[earth_model],
             touching=SOLVER_TOUCHING,
+            conductors=np.array(labels, dtype=int),
             **extra,
         )
         L_full[np.ix_(idx, idx)] = L_sub
@@ -738,7 +751,19 @@ def branch_records(
         If an inductive or skin-effect conductor cannot be matched to the
         branches the topology built for it (its inductance or skin effect
         would otherwise be lost without a trace).
+
+    Raises
+    ------
+    ValueError
+        For a cable shield with ``resistance_model="skin"``, which the
+        validator of :class:`~groundfield.conductors.Conductor` rejects but
+        ``model_copy(update=...)`` lets through (user decision Q33, audit
+        W1A-05).
     """
+    for c in conductors:
+        check = getattr(c, "_check_shield_resistance_model", None)
+        if check is not None:
+            check()
     lumped_conductors = _lumped_branch_conductors(
         conductors, cluster_id, finite_branches[:n_lumped_branches]
     )

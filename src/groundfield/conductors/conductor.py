@@ -350,16 +350,30 @@ class Conductor(BaseModel):
                     "combined with lumped_series_resistance_ohm (a lumped "
                     "override has no conductor geometry)."
                 )
-            if self.conductor_type == "cable_shield":
-                # user decision Q33: a shield is a thin-walled tube, which the
-                # solid-round Bessel solution does not describe.
-                raise ValueError(
-                    f"Conductor {self.name!r}: resistance_model='skin' models "
-                    "a solid round conductor; a 'cable_shield' is a thin-walled "
-                    "tube without the internal inductance of a solid wire, whose "
-                    "skin effect is not modelled. Use resistance_model='dc'."
-                )
+            self._check_shield_resistance_model()
         return self
+
+    def _check_shield_resistance_model(self) -> None:
+        """Reject the solid-round skin model on a cable shield.
+
+        User decision Q33: a shield is a thin-walled tube, which the
+        solid-round Bessel solution does not describe. Called by the
+        validator and, because ``model_copy(update=...)`` skips it, again
+        by the solver for every conductor (audit W1A-05).
+
+        Raises
+        ------
+        ValueError
+            For ``conductor_type="cable_shield"`` with
+            ``resistance_model="skin"``.
+        """
+        if self.conductor_type == "cable_shield" and self.resistance_model == "skin":
+            raise ValueError(
+                f"Conductor {self.name!r}: resistance_model='skin' models "
+                "a solid round conductor; a 'cable_shield' is a thin-walled "
+                "tube without the internal inductance of a solid wire, whose "
+                "skin effect is not modelled. Use resistance_model='dc'."
+            )
 
     @property
     def is_shield(self) -> bool:

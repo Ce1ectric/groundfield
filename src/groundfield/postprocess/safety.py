@@ -534,9 +534,11 @@ def touch_voltage(
     Notes
     -----
     Up to v0.15.0 the metre was measured from the connection point, so
-    for a 20 m × 20 m grid the feet stood above the grid and the helper
-    reported 9.92 V where 1 m outside the edge has 69.6 V (100 A,
-    100 Ω·m; F13 / 10.21).
+    for a 20 m × 20 m grid (4 × 4 meshes, 100 A, 100 Ω·m) the feet stood
+    above the grid and the helper reported 9.92 V where 1 m outside the
+    edge has 61.3 V (default line kernel; 60.0 V with the point kernel,
+    61.6 V per segment with ``mom``; 69.6 V with one current over the
+    whole grid, before user decision Q30; F13 / 10.21).
     """
     _check_distance(distance)
     _check_anchor(anchor)

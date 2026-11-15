@@ -1,0 +1,36 @@
+# Stream fw1sol (fixes of the wave-1 audit W1A of the 2026.11 integration).
+# See ../README.md for the format. Every bound was measured with
+# GF_GOLDEN_STRICT=1 against the snapshot of the stream's base
+# (release/calver 6f63deb) and checked against the committed baseline
+# (v0.15.0) with every declaration (evidence:
+# /home/claude/deliver/evidence/fw1sol/golden_*.txt).
+#
+# W1A-01 (straight runs scaled to the coordinate magnitude) moves no stored
+# case: every case is at local coordinates, where the old and the new rule
+# classify all polylines alike.
+#
+# W1A-02: the pieces of two conductors lying beside each other along one
+# axis couple at the on-axis distance (the beside rule against the
+# partner's whole conductor; a thinner wire inside a cable shield at the
+# shield radius at every axial offset), so they add up to the lumped pair.
+# One stored case has such conductors: service drops routed back along the
+# PEN main on its axis (touching wires, 10 m pieces). Its reactance at 1 kHz
+# was 3.9e-4 below the lumped value; it now equals it (to 1e-15), which
+# moves the input impedance by 1.3e-5 (resistive part dominant) and the
+# currents by up to 1.4e-5. Every other case is bit-identical with the base.
+
+[[change]]
+cases = ["cond_drops_along_pen_main_perfect_mirror"]
+quantities = ["Zin", "phi/*", "I/*"]
+findings = ["10.46"]
+reason = "audit W1A-02: the pieces of the drops and the PEN main on one axis couple at the touching distance also where they do not overlap; the pieces add up to the lumped conductors."
+min_rel_change = 1e-6
+max_rel_change = 3e-5
+
+[[change]]
+cases = ["cond_drops_along_pen_main_perfect_mirror"]
+quantities = ["Zc/*"]
+findings = ["10.46"]
+reason = "audit W1A-02: as above; the cluster impedance of the substation moves by the redistribution of the currents."
+min_rel_change = 1e-7
+max_rel_change = 1e-6

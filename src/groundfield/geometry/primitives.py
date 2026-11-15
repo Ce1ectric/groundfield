@@ -213,12 +213,51 @@ def _straight_wire(
     )
 
 
-#: Largest sine of the angle between two consecutive polyline edges that
-#: still continue one straight wire (user decision Q30): exact collinearity
-#: up to the round-off of rotated coordinates, so a generated mesh wire with
-#: a vertex at every crossing stays one wire, while any visible bend of a
-#: building outline starts a new one.
-COLLINEAR_SIN_TOL = 1e-9
+#: Round-off allowance of the straight-run test of :func:`_straight_runs`,
+#: in units of the machine epsilon times the largest coordinate magnitude of
+#: the three vertices (audit W1A-01 of the calendar release). A vertex
+#: continues a straight wire when its perpendicular distance from the chord
+#: of its neighbours is at most ``COLLINEAR_ROUNDOFF_ULPS * eps * max|x| +
+#: 1e-12`` m: 2.4e-12 m at local coordinates of 100 m, 0.46 um at a projected
+#: (UTM) easting of 32.6e6 m. Generated mesh wires, which have a vertex at
+#: every crossing, stay one wire wherever they stand (their crossing vertices
+#: are off the chord by round-off, at most 1.9e-9 m at the UTM easting, 1/250
+#: of the tolerance), while
+#: any visible bend of a building outline starts a new one (user decision
+#: Q30). Up to the audit the test was an absolute sine of 1e-9 between the
+#: edge directions, which the round-off at UTM coordinates exceeded.
+COLLINEAR_ROUNDOFF_ULPS = 64.0
+
+#: Floor of the straight-run tolerance in m (coordinates near the origin).
+_COLLINEAR_FLOOR_M = 1e-12
+
+
+def _continues_straight(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> bool:
+    """Whether the edge ``b -> c`` continues the edge ``a -> b`` straight on.
+
+    The middle vertex ``b`` must lie on the chord ``a -> c`` up to the
+    round-off of the coordinates (:data:`COLLINEAR_ROUNDOFF_ULPS`), and the
+    two edges must point the same way (a vertex where the wire turns back
+    starts a new wire).
+
+    Parameters
+    ----------
+    a, b, c
+        Consecutive vertices in m, shape ``(3,)``.
+
+    Returns
+    -------
+    bool
+        ``True`` for a straight continuation.
+    """
+    ab = b - a
+    if float(np.dot(ab, c - b)) <= 0.0:
+        return False
+    ac = c - a
+    height = float(np.linalg.norm(np.cross(ab, ac))) / float(np.linalg.norm(ac))
+    scale = max(float(np.max(np.abs(p))) for p in (a, b, c))
+    tol = COLLINEAR_ROUNDOFF_ULPS * float(np.finfo(float).eps) * scale
+    return height <= tol + _COLLINEAR_FLOOR_M
 
 
 def _straight_runs(
@@ -226,11 +265,11 @@ def _straight_runs(
 ) -> list[int]:
     """Wire index of every edge of a polyline: one per straight run.
 
-    Consecutive edges that continue in the same direction (the sine of the
-    angle between them at most :data:`COLLINEAR_SIN_TOL`) belong to one
-    straight wire; a closed polyline also joins its last edge to its first.
-    The wires are numbered in the order of their first edge, so the first
-    edge is on wire 0.
+    Consecutive edges that continue in the same direction (their common
+    vertex on the chord of the two outer ones up to round-off,
+    :func:`_continues_straight`) belong to one straight wire; a closed
+    polyline also joins its last edge to its first. The wires are numbered
+    in the order of their first edge, so the first edge is on wire 0.
 
     Parameters
     ----------
@@ -244,22 +283,18 @@ def _straight_runs(
     list[int]
         Wire index per edge.
     """
-    units = []
-    for start, end in edges:
-        d = np.asarray(end, dtype=float) - np.asarray(start, dtype=float)
-        n = float(np.linalg.norm(d))
-        units.append(d / n if n > 0.0 else d)
+    pts = [
+        (np.asarray(start, dtype=float), np.asarray(end, dtype=float))
+        for start, end in edges
+    ]
 
-    def continues(a: np.ndarray, b: np.ndarray) -> bool:
-        return (
-            float(np.dot(a, b)) > 0.0
-            and float(np.linalg.norm(np.cross(a, b))) <= COLLINEAR_SIN_TOL
-        )
+    def continues(prev: tuple, nxt: tuple) -> bool:
+        return _continues_straight(prev[0], nxt[0], nxt[1])
 
-    wire = [0] * len(units)
-    for k in range(1, len(units)):
-        wire[k] = wire[k - 1] if continues(units[k - 1], units[k]) else wire[k - 1] + 1
-    if closed and len(units) > 2 and wire[-1] != 0 and continues(units[-1], units[0]):
+    wire = [0] * len(pts)
+    for k in range(1, len(pts)):
+        wire[k] = wire[k - 1] if continues(pts[k - 1], pts[k]) else wire[k - 1] + 1
+    if closed and len(pts) > 2 and wire[-1] != 0 and continues(pts[-1], pts[0]):
         last = wire[-1]
         wire = [0 if w == last else w for w in wire]
     return wire

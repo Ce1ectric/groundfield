@@ -77,7 +77,14 @@ the radius of the thicker wire where the thinner one runs inside it and
 the thicker one is marked as a cable shield (``shields=``; a core inside
 a cable shield couples as a filament inside a thin tube). The marker is
 explicit since the user decision Q32 of 2026.11: two unmarked wires on
-one axis are separate conductors that touch. The filament integral diverges for coincident axes (two coincident 50 m
+one axis are separate conductors that touch. For parallel wires the rule
+refers to whole conductors (``conductors=``, one label per conductor, as
+the solver passes them; audit W1A-02 of the calendar release): a thinner
+wire inside a cable shield couples at the shield radius at every axial
+offset (exact for a filament on the axis of a thin tube), and a point lies
+beside another conductor when its foot falls inside that conductor, so
+the sub-pieces of two conductors lying beside each other add up to the
+lumped pair (a 100 m coax in 1 m pieces read 2.2 % low before). The filament integral diverges for coincident axes (two coincident 50 m
 leads read +587j Ω at 50 Hz) and exceeds the self inductance once the
 wires are closer than about their radius (an indefinite matrix, a TN
 network with drops along its PEN main had a negative input reactance).
@@ -1088,6 +1095,7 @@ def _build_inductance_matrix_loop(
     include_internal: bool | np.ndarray = True,
     touching: TouchingRule = "exact",
     shields: bool | np.ndarray | None = None,
+    conductors: np.ndarray | None = None,
 ) -> np.ndarray:
     """Reference (loop-based) implementation of :func:`build_inductance_matrix`.
 
@@ -1104,7 +1112,10 @@ def _build_inductance_matrix_loop(
     internal = _include_internal_array(include_internal, M)
     shield = _shield_array(shields, M)
     flags = np.zeros(M, dtype=bool) if shield is None else shield
+    labels = _conductor_labels(conductors, M)
     L = np.zeros((M, M), dtype=float)
+    L_dir = np.zeros((M, M), dtype=float)
+    hits: list[tuple[int, int]] = []
     sign = -1.0 if mode == "antiparallel" else 1.0
     opposite = _opposite_sides(
         np.asarray(seg_endpoints[:, 0, :], dtype=float),
@@ -1147,16 +1158,20 @@ def _build_inductance_matrix_loop(
                 L[i, j] = L[j, i] = 0.0  # screened by the PEC (A2C-1)
                 continue
             m = neumann_mutual(p1_i, p2_i, p1_j, p2_j, touching=touching)
-            m = _touching_wires(
-                m,
-                p1_i,
-                p2_i,
-                wire_radii[i],
-                p1_j,
-                p2_j,
-                wire_radii[j],
-                shields=(bool(flags[i]), bool(flags[j])),
+            beside = _beside_mutual(
+                np.asarray(p1_i, dtype=float),
+                np.asarray(p2_i, dtype=float),
+                float(wire_radii[i]),
+                np.asarray(p1_j, dtype=float),
+                np.asarray(p2_j, dtype=float),
+                float(wire_radii[j]),
+                shield_a=bool(flags[i]),
+                shield_b=bool(flags[j]),
             )
+            if beside is not None:
+                m = beside
+                hits.append((i, j))
+            L_dir[i, j] = L_dir[j, i] = m
             if mode != "none":
                 p1_j_img = _mirror(p1_j)
                 p2_j_img = _mirror(p2_j)
@@ -1173,8 +1188,15 @@ def _build_inductance_matrix_loop(
                     wire_radii[j],
                     shields=(bool(flags[i]), bool(flags[j])),
                 )
-                m = m + sign * m_img
-            L[i, j] = L[j, i] = m
+                L[i, j] = L[j, i] = sign * m_img
+    # conductors lying beside each other along one axis (audit W1A-02)
+    p1_all = np.asarray(seg_endpoints[:, 0, :], dtype=float)
+    p2_all = np.asarray(seg_endpoints[:, 1, :], dtype=float)
+    _apply_bundles(
+        L_dir, p1_all, p2_all, np.asarray(wire_radii, dtype=float), shield, labels, hits
+    )
+    off = ~np.eye(M, dtype=bool)
+    L[off] = L_dir[off] if mode == "none" else L_dir[off] + L[off]
     return L
 
 
@@ -1758,6 +1780,366 @@ def _beside_batch(
     return values, mask
 
 
+# ---------------------------------------------------------------------
+# Conductors lying beside each other along one axis (audit W1A-02)
+# ---------------------------------------------------------------------
+
+
+def _lexicographic_ends(
+    p1: np.ndarray, p2: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """End points of K segments in lexicographic order, shapes ``(K, 3)``."""
+    swap = (p1[:, 0] > p2[:, 0]) | (
+        (p1[:, 0] == p2[:, 0])
+        & ((p1[:, 1] > p2[:, 1]) | ((p1[:, 1] == p2[:, 1]) & (p1[:, 2] > p2[:, 2])))
+    )
+    lo = np.where(swap[:, None], p2, p1)
+    hi = np.where(swap[:, None], p1, p2)
+    return lo, hi
+
+
+def _distance_to_line(q: np.ndarray, p: np.ndarray, u: np.ndarray) -> np.ndarray:
+    """Distance in m of the points ``q`` from the lines ``p + t u``, (K,)."""
+    w = q - p
+    r = w - _row_dots(w, u)[:, None] * u
+    return np.sqrt(_row_dots(r, r))
+
+
+def _x_log_abs_x(x: np.ndarray) -> np.ndarray:
+    """$|x| \\ln|x|$ with the value 0 at 0 (the on-axis limit of $G_d$)."""
+    ax = np.abs(x)
+    out = np.zeros_like(ax)
+    pos = ax > 0.0
+    out[pos] = ax[pos] * np.log(ax[pos])
+    return out
+
+
+def _stretch_integral(
+    s1: np.ndarray,
+    s2: np.ndarray,
+    beta_lo: np.ndarray,
+    beta_hi: np.ndarray,
+    d: np.ndarray,
+    on_axis: np.ndarray,
+) -> np.ndarray:
+    r"""$\int_{s_1}^{s_2}\!\int_{\beta_\text{lo}}^{\beta_\text{hi}}
+    dt\,ds/\sqrt{(t - s)^2 + d^2}$ for parallel filaments, in m.
+
+    $= G(\beta_\text{hi} - s_1) - G(\beta_\text{hi} - s_2)
+    - G(\beta_\text{lo} - s_1) + G(\beta_\text{lo} - s_2)$ with
+    $G(x) = x \operatorname{asinh}(x/d) - \sqrt{x^2 + d^2}$; for filaments on
+    one axis (``on_axis``, $d = 0$, the stretch outside the partner) its limit
+    $G(x) = |x| \ln|x|$. Zero for an empty stretch ($s_2 \le s_1$).
+    """
+    d_safe = np.where(on_axis, 1.0, d)
+
+    def G(x: np.ndarray) -> np.ndarray:
+        off = x * np.arcsinh(x / d_safe) - np.hypot(x, d_safe)
+        return np.where(on_axis, _x_log_abs_x(x), off)
+
+    J = (G(beta_hi - s1) - G(beta_hi - s2)) - (G(beta_lo - s1) - G(beta_lo - s2))
+    return np.where(s2 > s1, J, 0.0)
+
+
+def _one_sided_beside(
+    a1: np.ndarray,
+    a2: np.ndarray,
+    b1: np.ndarray,
+    b2: np.ndarray,
+    e1: np.ndarray,
+    e2: np.ndarray,
+    d_e: np.ndarray,
+    delta: np.ndarray,
+    on_axis: np.ndarray,
+    unbounded: np.ndarray,
+) -> np.ndarray:
+    """One-sided integral of the beside rule over *a* for parallel pairs, in m.
+
+    The inner integral over *b* is taken at the effective distance ``d_e``
+    on the stretch of *a* beside the partner's conductor (end points
+    ``e1``, ``e2`` on *b*'s axis; the whole of *a* where ``unbounded``), at
+    the lateral distance ``delta`` elsewhere. All points and the results
+    have K rows.
+    """
+    la = np.sqrt(_row_dots(a2 - a1, a2 - a1))
+    u = (a2 - a1) / la[:, None]
+    pb1 = _row_dots(b1 - a1, u)
+    pb2 = _row_dots(b2 - a1, u)
+    lo, hi = np.minimum(pb1, pb2), np.maximum(pb1, pb2)
+    pe1 = _row_dots(e1 - a1, u)
+    pe2 = _row_dots(e2 - a1, u)
+    e_lo, e_hi = np.minimum(pe1, pe2), np.maximum(pe1, pe2)
+    zero = np.zeros_like(la)
+    e_lo = np.where(unbounded, zero, e_lo)
+    e_hi = np.where(unbounded, la, e_hi)
+    in_lo = np.maximum(zero, e_lo)
+    in_hi = np.minimum(la, e_hi)
+    no = np.zeros_like(on_axis)
+    inside = _stretch_integral(in_lo, in_hi, lo, hi, d_e, no)
+    before = _stretch_integral(zero, np.minimum(la, e_lo), lo, hi, delta, on_axis)
+    after = _stretch_integral(np.maximum(zero, e_hi), la, lo, hi, delta, on_axis)
+    return inside + (before + after)
+
+
+def _bundle_mutual_batch(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    r_a: np.ndarray,
+    shield_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    r_b: np.ndarray,
+    shield_b: np.ndarray,
+    ext_a: tuple[np.ndarray, np.ndarray] | None = None,
+    ext_b: tuple[np.ndarray, np.ndarray] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    r"""The beside rule for K pairs of parallel wires, in closed form (H).
+
+    For two parallel segments whose axes are $\delta$ apart, below the
+    touching distance $r_a + r_b$, the beside rule (:func:`_beside_mutual`)
+    takes the inner integral over one segment at the effective distance $d$
+    (the shield radius for a thinner wire inside a cable shield, else
+    $r_a + r_b$; :func:`_beside_plan`) for the points of the other segment
+    that lie beside it, and at $\delta$ elsewhere; the mutual is
+    $\mu_0/(4\pi)\,\operatorname{sign}(\hat u_a\cdot\hat u_b)$ times the mean
+    of the two one-sided integrals. For parallel filaments each stretch has
+    the closed form of :func:`_stretch_integral` (Grover's parallel filaments
+    with an axial offset).
+
+    ``ext_a`` and ``ext_b`` are the end points of the conductors the two
+    segments belong to (on their axes; default: the segments themselves). A
+    point lies beside the *conductor* of the partner when its foot falls
+    inside that conductor (audit W1A-02): the pieces of two conductors lying
+    beside each other along one axis — a core inside a cable shield, two
+    cables drawn on one axis — then couple at $d$ on the whole stretch they
+    share, also between pieces that do not overlap, and the pieces add up
+    to the lumped pair (with the segment's own extent, a 100 m coax in 1 m
+    pieces read 2.2 % low). A thinner wire inside a cable shield
+    ($\delta + r_\text{thin} \le r_s$, the *inside* reading) couples at
+    the shield radius at every axial offset, wherever the two conductors
+    end: for a filament on the axis of a thin tube this is exact, every
+    point of the tube is $\sqrt{x^2 + r_s^2}$ away. The value is continuous
+    in the axial geometry (the stretch beside the partner grows from zero)
+    and the same, bit for bit, for either order of the two segments and
+    either direction of each (up to the orientation sign).
+
+    Returns
+    -------
+    values, valid, inside : np.ndarray
+        ``values[k]`` in H where ``valid[k]`` (parallel within the coaxial
+        tolerance and closer than touching), undefined otherwise;
+        ``inside[k]`` marks the inside reading.
+    """
+    da = p2_a - p1_a
+    db = p2_b - p1_b
+    la = np.sqrt(_row_dots(da, da))
+    lb = np.sqrt(_row_dots(db, db))
+    dot = _row_dots(da / la[:, None], db / lb[:, None])
+    parallel = np.abs(np.abs(dot) - 1.0) <= 1e-9
+    a1, a2 = _lexicographic_ends(p1_a, p2_a)
+    b1, b2 = _lexicographic_ends(p1_b, p2_b)
+    ea1, ea2 = (a1, a2) if ext_a is None else _lexicographic_ends(*ext_a)
+    eb1, eb2 = (b1, b2) if ext_b is None else _lexicographic_ends(*ext_b)
+    ua = (a2 - a1) / la[:, None]
+    ub = (b2 - b1) / lb[:, None]
+    # lateral distance: the four point-line distances, summed order-free
+    delta = 0.25 * (
+        (_distance_to_line(b1, a1, ua) + _distance_to_line(b2, a1, ua))
+        + (_distance_to_line(a1, b1, ub) + _distance_to_line(a2, b1, ub))
+    )
+    r_a = np.asarray(r_a, dtype=float)
+    r_b = np.asarray(r_b, dtype=float)
+    d_touch = r_a + r_b
+    valid = parallel & (delta < d_touch * (1.0 - _BESIDE_MARGIN))
+    r_thin = np.minimum(r_a, r_b)
+    r_thick = np.maximum(r_a, r_b)
+    thick_is_shield = np.where(r_a > r_b, shield_a, shield_b)
+    inside = thick_is_shield & (r_thin < r_thick) & (delta + r_thin <= r_thick)
+    d_e = np.where(inside, r_thick, d_touch)
+    on_axis = delta <= _TOUCH_TOL_REL * np.maximum(la, lb)
+    i_ab = _one_sided_beside(a1, a2, b1, b2, eb1, eb2, d_e, delta, on_axis, inside)
+    i_ba = _one_sided_beside(b1, b2, a1, a2, ea1, ea2, d_e, delta, on_axis, inside)
+    sign = np.where(dot > 0.0, 1.0, -1.0)
+    values = (MU_0 / (4.0 * math.pi)) * sign * (0.5 * (i_ab + i_ba))
+    return values, valid & parallel, valid & inside
+
+
+def _conductor_labels(conductors, M: int) -> np.ndarray:
+    """Integer conductor label per segment (``None``: one per segment)."""
+    if conductors is None:
+        return np.arange(M)
+    arr = np.asarray(conductors)
+    if arr.shape != (M,):
+        raise ValueError(f"conductors must have shape ({M},), got {arr.shape}")
+    _, labels = np.unique(arr, return_inverse=True)
+    return labels.reshape(M)
+
+
+def _conductor_extents(
+    p1: np.ndarray, p2: np.ndarray, members: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """End points of the conductor made of the segments ``members``.
+
+    The segments of one conductor label that lie on one straight line form
+    one straight conductor: its extreme end points along that line, for
+    every member. Otherwise every member keeps its own end points.
+    """
+    q1, q2 = p1[members], p2[members]
+    if members.size == 1:
+        return q1, q2
+    o = q1[0]
+    u = (q2[0] - o) / float(np.linalg.norm(q2[0] - o))
+    ends = np.concatenate([q1, q2])
+    t = (ends - o) @ u
+    perp = ends - o - t[:, None] * u
+    span = float(t.max() - t.min())
+    if float(np.sqrt((perp * perp).sum(axis=1)).max()) > _TOUCH_TOL_REL * span:
+        return q1, q2
+    e1 = np.broadcast_to(ends[int(np.argmin(t))], q1.shape)
+    e2 = np.broadcast_to(ends[int(np.argmax(t))], q1.shape)
+    return e1, e2
+
+
+def _apply_bundles(
+    L_dir: np.ndarray,
+    p1: np.ndarray,
+    p2: np.ndarray,
+    radii: np.ndarray,
+    shields: np.ndarray | None,
+    labels: np.ndarray,
+    hits: list[tuple[int, int]],
+) -> None:
+    """Couple the pieces of conductors lying beside each other (in place).
+
+    ``hits`` are the pairs on which the beside rule acted. Two conductors
+    (``labels``) with a pair of pieces that is parallel and closer than
+    touching along a stretch — a core inside a cable shield, two cables
+    drawn on one axis — lie beside each other: every parallel pair of their
+    pieces closer than touching gets the beside rule against the partner's
+    whole conductor, in closed form (:func:`_bundle_mutual_batch`), so the
+    pieces add up to the lumped pair (audit W1A-02). Pieces of one
+    conductor, and conductors that only meet end to end (a main split at
+    its taps), keep their values. A thinner wire parallel inside a cable
+    shield (``shields``) couples at the shield radius at every axial offset
+    (:func:`_apply_inside_shields`), so a shield made of several
+    conductors, or a core and shield in sections, add up as well. Writes
+    the direct block ``L_dir`` symmetrically; does nothing without hits and
+    shields.
+    """
+    flags = np.zeros(len(radii), dtype=bool) if shields is None else shields
+    if hits:
+        _apply_touching_bundles(L_dir, p1, p2, radii, flags, labels, hits)
+    if flags.any():
+        _apply_inside_shields(L_dir, p1, p2, radii, flags)
+
+
+def _apply_inside_shields(
+    L_dir: np.ndarray,
+    p1: np.ndarray,
+    p2: np.ndarray,
+    radii: np.ndarray,
+    flags: np.ndarray,
+) -> None:
+    """Every thinner wire parallel inside a cable shield couples at its radius.
+
+    The inside reading of :func:`_bundle_mutual_batch` for every pair of a
+    shield segment and a thinner parallel segment inside it, at every axial
+    offset (overlapping, end to end, apart; user decision Q32, audit
+    W1A-02). Without shields nothing changes.
+    """
+    da = p2 - p1
+    la = np.sqrt(_row_dots(da, da))
+    u = da / la[:, None]
+    for i in np.flatnonzero(flags):
+        dots = _row_dots(u, u[i])
+        lateral = np.maximum(
+            _distance_to_line(
+                p1, np.broadcast_to(p1[i], p1.shape), np.broadcast_to(u[i], u.shape)
+            ),
+            _distance_to_line(
+                p2, np.broadcast_to(p1[i], p1.shape), np.broadcast_to(u[i], u.shape)
+            ),
+        )
+        cand = np.flatnonzero(
+            (radii < radii[i])
+            & (np.abs(np.abs(dots) - 1.0) <= 1e-6)
+            & (lateral <= radii[i] * (1.0 + 1e-6))
+        )
+        if cand.size == 0:
+            continue
+        K = cand.size
+        values, _, inside = _bundle_mutual_batch(
+            np.broadcast_to(p1[i], (K, 3)),
+            np.broadcast_to(p2[i], (K, 3)),
+            np.full(K, radii[i]),
+            np.ones(K, dtype=bool),
+            p1[cand],
+            p2[cand],
+            radii[cand],
+            flags[cand],
+        )
+        L_dir[i, cand[inside]] = values[inside]
+        L_dir[cand[inside], i] = values[inside]
+
+
+def _apply_touching_bundles(
+    L_dir: np.ndarray,
+    p1: np.ndarray,
+    p2: np.ndarray,
+    radii: np.ndarray,
+    flags: np.ndarray,
+    labels: np.ndarray,
+    hits: list[tuple[int, int]],
+) -> None:
+    """The beside rule against the partner's conductor for bundled pairs.
+
+    See :func:`_apply_bundles`; the inside reading is applied afterwards
+    by :func:`_apply_inside_shields`.
+    """
+    I = np.array([i for i, _ in hits])
+    J = np.array([j for _, j in hits])
+    keep = labels[I] != labels[J]
+    I, J = I[keep], J[keep]
+    if I.size == 0:
+        return
+    _, close, inside = _bundle_mutual_batch(
+        p1[I], p2[I], radii[I], flags[I], p1[J], p2[J], radii[J], flags[J]
+    )
+    close &= ~inside  # the inside reading is applied by _apply_inside_shields
+    bundles = sorted(
+        {
+            (min(a, b), max(a, b))
+            for a, b in zip(
+                labels[I[close]].tolist(), labels[J[close]].tolist(), strict=True
+            )
+        }
+    )
+    extents: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    for c in sorted({c for pair in bundles for c in pair}):
+        members = np.flatnonzero(labels == c)
+        extents[c] = (members, *_conductor_extents(p1, p2, members))
+    for ca, cb in bundles:
+        ia, ea1, ea2 = extents[ca]
+        ib, eb1, eb2 = extents[cb]
+        II = np.repeat(ia, ib.size)
+        JJ = np.tile(ib, ia.size)
+        values, valid, inside = _bundle_mutual_batch(
+            p1[II],
+            p2[II],
+            radii[II],
+            flags[II],
+            p1[JJ],
+            p2[JJ],
+            radii[JJ],
+            flags[JJ],
+            ext_a=(np.repeat(ea1, ib.size, axis=0), np.repeat(ea2, ib.size, axis=0)),
+            ext_b=(np.tile(eb1, (ia.size, 1)), np.tile(eb2, (ia.size, 1))),
+        )
+        valid &= ~inside
+        L_dir[II[valid], JJ[valid]] = values[valid]
+        L_dir[JJ[valid], II[valid]] = values[valid]
+
+
 def _overhead(p1: np.ndarray, p2: np.ndarray) -> np.ndarray:
     """Side of the soil surface of every segment: ``True`` above it.
 
@@ -1786,6 +2168,7 @@ def _inductance_blocks(
     touching: str,
     diagonal: bool = True,
     shields: np.ndarray | None = None,
+    beside_hits: list[tuple[int, int]] | None = None,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Direct and image blocks of the partial-inductance matrix.
 
@@ -1810,7 +2193,9 @@ def _inductance_blocks(
     a cable shield, ``shields``: one flag per segment, ``None`` for none);
     without radii the filament integral is kept. ``diagonal=False`` leaves
     the diagonal of the direct block at zero (off-diagonal mutuals only, no
-    radii needed).
+    radii needed). ``beside_hits``, if given, collects the pairs
+    ``(i, j)``, ``i < j``, of the direct block on which the beside rule
+    acted (for :func:`_apply_bundles`).
     """
     M = p1.shape[0]
     radii = None if wire_radii is None else np.asarray(wire_radii, dtype=float)
@@ -1886,6 +2271,8 @@ def _inductance_blocks(
                     shield_b=None if shields is None else shields[slc],
                 )
                 M_pri[beside] = vals[beside]
+                if beside_hits is not None:
+                    beside_hits += [(i, i + 1 + int(k)) for k in np.flatnonzero(beside)]
             L_dir[i, slc] = M_pri
             L_dir[slc, i] = M_pri
         if want_image:
@@ -1938,6 +2325,7 @@ def build_inductance_matrix(
     include_internal: bool | np.ndarray = True,
     touching: TouchingRule = "exact",
     shields: bool | np.ndarray | None = None,
+    conductors: np.ndarray | None = None,
 ) -> np.ndarray:
     """Assemble the dense partial-inductance matrix over branches.
 
@@ -1982,13 +2370,27 @@ def build_inductance_matrix(
         0.15.0 (see :func:`neumann_mutual`).
     shields
         Segments of cable shields (a bool for all, or an array of shape
-        ``(M,)``; ``None``, the default, for none). A thinner wire on the
-        axis of a shield, inside it, couples to it at the shield radius
-        (a core inside a cable shield; user decision Q32 of 2026.11);
-        two unmarked wires on one axis touch. The self terms do not
-        depend on it: pass ``include_internal=False`` for the shields to
-        drop the internal inductance of a solid wire, as the solver does
-        for ``conductor_type="cable_shield"`` (Q33).
+        ``(M,)``; ``None``, the default, for none). A thinner wire
+        parallel inside a shield ($\\delta + r_\\text{thin} \\le r_s$)
+        couples to it at the shield radius, at every axial offset (a core
+        inside a cable shield; user decision Q32 of 2026.11); two unmarked
+        wires on one axis touch. **The self terms do not depend on it**:
+        pass ``include_internal=~shields`` to drop the internal inductance
+        of a solid wire from the shields, as the solver does for
+        ``conductor_type="cable_shield"`` (Q33). Without it a shield keeps
+        $\\mu_0\\ell/(8\\pi)$ = 50 nH/m: the 100 m coax with 5 mm core and
+        15 mm shield reads 31.97 µH instead of 26.97 µH.
+    conductors
+        Conductor label of every segment, shape ``(M,)`` (any values that
+        can be compared for equality, e.g. conductor names; ``None``, the
+        default: every segment is a conductor of its own). For two
+        conductors lying beside each other along one axis (a parallel pair
+        of their segments closer than touching), a point lies beside the
+        partner when its foot falls inside the partner's whole conductor —
+        the straight run of its segments with that label — so the
+        sub-pieces of the two conductors add up to the lumped pair (audit
+        W1A-02 of the calendar release). Pieces of one conductor and
+        conductors that only meet end to end keep the filament integral.
 
     Returns
     -------
@@ -2024,6 +2426,9 @@ def build_inductance_matrix(
     internal = _include_internal_array(include_internal, M)
     if mode != "none":
         _check_image_geometry(p1, p2, radii, where="build_inductance_matrix")
+    shield = _shield_array(shields, M)
+    labels = _conductor_labels(conductors, M)
+    hits: list[tuple[int, int]] = []
     L_dir, L_img = _inductance_blocks(
         p1,
         p2,
@@ -2033,8 +2438,10 @@ def build_inductance_matrix(
         self_from_rows=mode == "none",
         include_internal=internal,
         touching=touching,
-        shields=_shield_array(shields, M),
+        shields=shield,
+        beside_hits=hits,
     )
+    _apply_bundles(L_dir, p1, p2, radii, shield, labels, hits)
     if mode == "none":
         return L_dir
     if mode == "additive":

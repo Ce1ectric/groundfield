@@ -547,18 +547,47 @@ def _conductor_unknowns(c) -> int:
     return 2 * n - 1
 
 
+def _straight_wire_count(electrode) -> int:
+    """Straight wires of an electrode: its uniform-current owners per layer.
+
+    The image family gives every straight wire its own owner (user
+    decisions Q30 and Q44 of 2026.11): a full wire line of a grid, an arm
+    of a star, a straight run of a polyline; rods, strips and rings are one
+    wire. Counted from the geometry, without discretising.
+    """
+    kind = getattr(electrode, "kind", None)
+    if kind == "grid_mesh":
+        return int(electrode.n_x + 1 + electrode.n_y + 1)
+    if kind == "mesh":
+        return int(sum(electrode._wire_counts()))
+    if kind == "star":
+        return int(electrode.n_arms)
+    if kind == "polyline":
+        from groundfield.geometry.primitives import _straight_runs
+
+        return 1 + max(_straight_runs(electrode.edges, closed=electrode.closed))
+    return 1
+
+
 def _nodal_unknowns(world: "World", layer_interfaces=None) -> int:
     """Size of the dense augmented nodal system of the solver (upper bound).
 
     The image and ``mom`` families solve one dense system with one unknown
-    per current owner (an electrode, its part in every further soil
-    layer, every leaking conductor sub-piece), per node (one per
-    electrode cluster, junction and interior conductor node) and per
-    branch (lumped conductors and every chain sub-piece). Its matrix has
-    $n^2$ entries and is allocated whole, so a long conductor chain of
-    fine sub-pieces dominates the memory long before the leakage
-    segments do (audit round 2, A2S-02: a 100 m PEN in 2000 isolated
-    pieces, 12 segments and about 4000 unknowns, took 407 MiB).
+    per current owner (a straight wire of an electrode — a wire line of a
+    grid, an arm of a star, a straight run of a polyline, user decisions
+    Q30 and Q44 —, its part in every further soil layer, every leaking
+    conductor sub-piece), per node (one per electrode cluster, junction and
+    interior conductor node) and per branch (lumped conductors and every
+    chain sub-piece). Its matrix has $n^2$ entries and is allocated whole,
+    so a long conductor chain of fine sub-pieces dominates the memory long
+    before the leakage segments do (audit round 2, A2S-02: a 100 m PEN in
+    2000 isolated pieces, 12 segments and about 4000 unknowns, took
+    407 MiB). The count is exact for unbonded electrodes that carry
+    current; bonded electrodes share one node, and a source-free electrode
+    of one owner that is a cluster of its own is left out of the solve
+    (up to audit W1A-06 an electrode counted as one owner: a 100 m
+    20 x 20 grid with 50 L-shaped building outlines read 102 unknowns
+    instead of 393).
 
     Parameters
     ----------
@@ -571,16 +600,18 @@ def _nodal_unknowns(world: "World", layer_interfaces=None) -> int:
     Returns
     -------
     int
-        Owners plus nodes plus branches; an electrode counts as one
-        owner and one node (every electrode its own cluster).
+        Owners plus nodes plus branches; an electrode counts as one owner
+        per straight wire and soil layer and one node (every electrode its
+        own cluster).
     """
     interfaces = tuple(layer_interfaces or ())
     n = len(world.junctions)
     for e in world.electrodes:
-        n += 2
+        crossings = 0
         if interfaces:
             lower, upper = e.bounds()
-            n += sum(1 for h in interfaces if lower[2] < h < upper[2])
+            crossings = sum(1 for h in interfaces if lower[2] < h < upper[2])
+        n += 1 + _straight_wire_count(e) * (1 + crossings)
     n += sum(_conductor_unknowns(c) for c in world.conductors)
     return n
 

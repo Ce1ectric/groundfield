@@ -93,6 +93,7 @@ def _build_distributed_topology(
                     wire_radius=db.wire_radius,
                     inductive=db.inductive,
                     shield=db.shield,
+                    conductor=db.conductor,
                 )
             )
             if db.node_a not in cluster_id:

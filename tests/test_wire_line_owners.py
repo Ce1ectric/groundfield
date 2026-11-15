@@ -487,3 +487,89 @@ def test_grid_against_per_segment_mom(kernel: str, base: float, bound: float) ->
     z_img = _z(_solve(world, _engine(kernel=kernel, ds=0.5))).real
     dev = z_img / z_mom - 1.0
     assert 0.0 < dev < bound < base
+
+
+# ---------------------------------------------------------------------
+# Straight runs at projected coordinates (audit W1A-01)
+# ---------------------------------------------------------------------
+
+#: A projected (UTM-size) origin with the zone prefix in the easting.
+UTM = (32_604_321.123, 5_812_345.678)
+
+
+# audit W1A-01, user decision Q30
+@pytest.mark.parametrize(
+    "angle, n, ds",
+    [(33.0, 4, 0.5), (33.0, 10, 0.5), (89.999999, 10, 0.5), (33.0, 20, 0.25)],
+)
+def test_generated_mesh_foundation_at_utm_coordinates(angle, n: int, ds: float) -> None:
+    """A rotated generated mesh foundation is one owner per wire line
+    wherever it stands: at projected coordinates the round-off of its
+    crossing vertices (sines up to 7e-9 between consecutive edges) is no
+    bend. The snapshot 6f63deb split a 10 m 10 x 10 mesh at 33 deg into 142
+    extra owners and read Z 0.55 % low (0.64 % for 20 x 20)."""
+    from groundfield.generators import FoundationElectrodeSpec, GroundingSystemSpec
+
+    spec = FoundationElectrodeSpec(
+        style="mesh",
+        size_m=10.0,
+        depth_m=0.8,
+        wire_radius_m=0.005,
+        orientation_deg=angle,
+        n_x=n,
+        n_y=n,
+    )
+    zs, owners = [], []
+    for origin in ((0.0, 0.0), UTM):
+        world = gf.World(soil=gf.HomogeneousSoil(rho=RHO))
+        anchor = GroundingSystemSpec(electrodes=[spec]).build_at(
+            world, origin, "h", np.random.default_rng(0)
+        )
+        gf.create_source(world, attached_to=anchor, magnitude=1.0)
+        res = _solve(world, _engine(ds=ds))
+        owners.append(res.metadata.get("wire_owners"))
+        zs.append(complex(res.cluster_impedance(anchor)[0]))
+    assert owners == [None, None]
+    assert zs[1] == pytest.approx(zs[0], rel=1e-6)
+
+
+# audit W1A-01, user decision Q30
+@pytest.mark.parametrize("origin", [(0.0, 0.0), (604_321.123, 5_812_345.678), UTM])
+def test_straight_run_tolerance_follows_the_coordinate_magnitude(origin) -> None:
+    """Collinear vertices stay one wire at every origin; a vertex 2 um off
+    the chord of its neighbours (local coordinates: 1 nm) starts a new one.
+    The tolerance is the perpendicular height of a vertex over the chord of
+    its neighbours, scaled to the coordinate magnitude (64 units of
+    round-off: 0.46 um at the UTM origin, 2.4e-12 m at the local one)."""
+    from groundfield.geometry.primitives import _straight_runs
+
+    x0, y0 = origin
+    theta = math.radians(33.0)
+    u = np.array([math.cos(theta), math.sin(theta), 0.0])
+    v = np.array([-math.sin(theta), math.cos(theta), 0.0])
+    o = np.array([x0, y0, 0.8])
+    straight = [tuple(o + t * u) for t in (0.0, 0.5, 1.0, 1.5, 7.0)]
+    edges = list(zip(straight[:-1], straight[1:], strict=True))
+    assert _straight_runs(edges, closed=False) == [0, 0, 0, 0]
+    height = 2e-6 if max(abs(x0), abs(y0)) > 1e3 else 1e-9
+    a, b, c = o, o + 1.0 * u, o + 2.0 * u + 2.0 * height * v
+    assert _straight_runs([(a, b), (b, c)], closed=False) == [0, 1]
+    # a vertex where the wire turns back is never a straight continuation
+    back = [tuple(o), tuple(o + 2.0 * u), tuple(o + 1.0 * u)]
+    edges = list(zip(back[:-1], back[1:], strict=True))
+    assert _straight_runs(edges, closed=False) == [0, 1]
+
+
+# audit W1A-07, user decision Q30
+def test_a_lone_floating_grid_reports_a_plain_zero_current() -> None:
+    """A source-free grid that is a cluster of its own floats with exactly
+    zero net current, reported as +0 (the snapshot 6f63deb gave -0-0j, the
+    negated empty sum of the other cluster members)."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=RHO))
+    gf.create_electrode(world, "grid_mesh", name="g", **GRID)
+    gf.create_electrode(world, "rod", name="r", position=(25.0, 10.0, 0.5), length=3.0)
+    gf.create_source(world, attached_to="r", magnitude=1.0)
+    current = complex(_solve(world).electrode_currents["g"][0])
+    assert current == 0j
+    assert math.copysign(1.0, current.real) == 1.0
+    assert math.copysign(1.0, current.imag) == 1.0
