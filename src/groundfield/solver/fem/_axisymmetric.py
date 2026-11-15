@@ -325,8 +325,17 @@ def _hat_fractions(z_nodes: np.ndarray, bounds: np.ndarray) -> np.ndarray:
 
 
 def _display_segments(world: "World", engine: "Engine", interfaces: list[float]):
-    """Leakage segments of every electrode as the integral backends cut them."""
+    """Leakage segments of every electrode as the integral backends cut them.
+
+    They carry the point sources of the result. Their count is checked
+    against the engine's resource limit first, like the segments of every
+    backend (:func:`groundfield.diagnostics.check_segment_budget`), so a unit
+    error of ``segment_length`` fails before anything is allocated.
+    """
+    from groundfield.diagnostics import check_segment_budget
     from groundfield.solver._discretize import _discretize_electrode
+
+    check_segment_budget(world, engine, interfaces or None)
 
     segs, owner = [], []
     for k, e in enumerate(world.electrodes):
@@ -459,6 +468,7 @@ def axisymmetric_earth(
         )
         shells.append(1.0 / (2.0 * math.pi * radius * e.shell) if e.shell > 0 else 0.0)
 
+    segs, owner = _display_segments(world, engine, depths)
     levels = [refinement, refinement + 1] if extrapolate else [refinement]
     lines = [
         mesh_lines(rod_geo, ring_geo, inside, r_far, params, level) for level in levels
@@ -489,7 +499,6 @@ def axisymmetric_earth(
         conductance = g_fine
     conductance = 0.5 * (conductance + conductance.T)
 
-    segs, owner = _display_segments(world, engine, depths)
     leakage = _leakage_matrix(
         world, electrodes, port_of_mesh, meshes[-1], solutions[-1], segs, owner
     )

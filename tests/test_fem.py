@@ -775,6 +775,18 @@ def test_an_electrode_out_of_the_soil_is_refused_like_every_backend(
     assert not isinstance(info.value, gf.BackendCapabilityError)
 
 
+def test_the_point_sources_count_against_the_engines_resource_limit() -> None:
+    """A unit error of segment_length fails before anything is allocated,
+    as in every backend (the mesh has its own limit, max_nodes)."""
+    # user decision Q37 (10.06)
+    from groundfield.diagnostics import ResourceLimitError
+
+    with pytest.raises(ResourceLimitError):
+        _engine(segment_length=1e-4).solve(_ring_world(H100, r0=100.0))
+    with pytest.raises(ResourceLimitError):
+        _engine(max_segments=5).solve(_rod_world(H100))
+
+
 def test_a_world_without_a_source_is_refused_like_every_backend() -> None:
     # audit round 2, A2S-05
     w = gf.create_world(soil=H100)

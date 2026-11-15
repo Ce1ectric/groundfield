@@ -178,8 +178,9 @@ solves projected coordinates in a local frame.
 - **Error** (`ResourceLimitError`): the node count of the finer mesh,
   predicted from its lines before anything is assembled, above
   `FemOptions.max_nodes` (4 000 000; level 3 of a rod has about 2.4
-  million). `Engine.max_segments` does not limit `fem`; its display
-  segments pass the segment budget of every backend.
+  million). The display segments of the point sources count against
+  `Engine.max_segments` like the segments of every backend (a unit error
+  of `segment_length` fails before anything is allocated).
 - The remedy of every refusal comes from the other backends' own checks:
   a backend that a setting of the engine would let solve the world is
   named with that setting (a larger `Engine.max_segments`, a finer
