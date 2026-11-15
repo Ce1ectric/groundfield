@@ -70,6 +70,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
+from groundfield.solver import _frame
 from groundfield.solver._discretize import _discretize_electrode, _OwnerSplit
 from groundfield.solver._guards import _check_segment_depths
 from groundfield.solver._inductive import _assemble_inductance_matrix
@@ -1045,7 +1046,36 @@ def solve_image_family(
     FieldResult
         Node potentials and currents per frequency, point sources and
         metadata.
+
+    Notes
+    -----
+    A world with a horizontal coordinate beyond 10 km (projected, UTM
+    coordinates) is solved in its local frame and reported in the user's
+    coordinates (:mod:`groundfield.solver._frame`, since 2026.11).
     """
+    frame = _frame.LocalFrame.of(world)
+    with frame.active():
+        result = _solve_image_family(
+            frame.world,
+            engine,
+            green,
+            stacklevel=stacklevel,
+            owner_interfaces=owner_interfaces,
+        )
+    return frame.to_user(result)
+
+
+def _solve_image_family(
+    world: World,
+    engine: Engine,
+    green: ImageGreen,
+    *,
+    stacklevel: int,
+    owner_interfaces: Sequence[float] | None,
+) -> FieldResult:
+    """Body of :func:`solve_image_family`, in the frame of ``world``."""
+    # One call level below the entry point of the backend.
+    stacklevel += 1
     disc = discretise(world, engine, green.layer_interfaces)
     node_currents = inject(world, where=green.where, stacklevel=stacklevel)
     voltages = impressed_voltages(world)

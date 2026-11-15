@@ -64,6 +64,7 @@ from groundfield.solver._kernels import (
 )
 from groundfield.solver._layered import interface_depths
 from groundfield.solver._line_kernel import LineSegments
+from groundfield.solver._frame import LocalFrame
 from groundfield.solver._pipeline import (
     BranchModel,
     Discretisation,
@@ -267,6 +268,9 @@ class _MutualProblem:
     max_terms: int
     tol: float
     owners: _OwnerSplit
+    #: Local frame of the call (projected coordinates, since 2026.11): the
+    #: discretisation lives in it, field and probe points are moved into it.
+    frame: LocalFrame
 
 
 def _layers_differ(soil: TwoLayerSoil | None) -> bool:
@@ -335,9 +339,13 @@ def _prepare(
 
     Steps 1, 3 and 4 of the image-family pipeline, then the soil
     dispatch of ``Engine.solve`` (``image`` → ``image_2layer`` for a
-    two-layer soil) and the full segment reaction matrix in Ω.
+    two-layer soil) and the full segment reaction matrix in Ω. A world
+    with a horizontal coordinate beyond 10 km is discretised in its local
+    frame (:mod:`groundfield.solver._frame`, since 2026.11).
     """
     kernel_name = _check_backend(world, engine, where)
+    frame = LocalFrame.of(world)
+    world = frame.world
     soil = world.soil
     # Soil dispatch of ``Engine.solve`` (image -> image_2layer /
     # image_nlayer): a layer stack is solved through its canonical form,
@@ -372,8 +380,9 @@ def _prepare(
     interfaces = None
     if soil_two_layer is not None:
         interfaces = interface_depths(soil_two_layer) or None
-    disc = discretise(world, engine, interfaces)
-    topo = build_topology(world, disc)
+    with frame.active():
+        disc = discretise(world, engine, interfaces)
+        topo = build_topology(world, disc)
     # One owner per straight wire of every electrode (user decision Q30)
     # and per soil layer for electrodes through the interface (10.15).
     owners = _OwnerSplit.split(
@@ -458,6 +467,7 @@ def _prepare(
         max_terms=int(engine.image_max_terms),
         tol=float(engine.image_series_tol),
         owners=owners,
+        frame=frame,
     )
 
 
@@ -531,6 +541,7 @@ def _field_of_columns(
     (review pass 10, 10.25: they were 100 / 1e-6 whatever the engine said).
     """
     seg_points = problem.arrays.points
+    field_points = problem.frame.local_points(field_points)
     if problem.soil_two_layer is not None:
         return _probe_potential_two_layer(
             field_points,

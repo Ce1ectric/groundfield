@@ -558,9 +558,21 @@ class Conductor(BaseModel):
         Returns ``1`` for a lumped conductor. Otherwise
         $n = \\lceil L / \\Delta s \\rceil$ with $L$ the
         Euclidean length and $\\Delta s =
-        $ :attr:`discretize_segment_length`.
+        $ :attr:`discretize_segment_length`, with the round-off allowance
+        of the electrode wires
+        (:func:`~groundfield.geometry.primitives._segment_count`): a
+        conductor that exceeds a whole number of pieces only through the
+        round-off of its end points gets no extra piece. Up to the
+        calendar release the count had no allowance, so a 60 m
+        counterpoise in 10 m pieces got 7 instead of 6 at projected (UTM)
+        coordinates, where its computed length is 60.0000000012 m.
         """
         if self.discretize_segment_length is None:
             return 1
-        n = int(math.ceil(self.length / self.discretize_segment_length))
-        return max(1, n)
+        from groundfield.geometry.primitives import _coordinate_scale, _segment_count
+
+        return _segment_count(
+            self.length,
+            self.discretize_segment_length,
+            scale=_coordinate_scale(self.start, self.end),
+        )

@@ -125,7 +125,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
-from groundfield.solver import _pipeline
+from groundfield.solver import _frame, _pipeline
 from groundfield.solver._guards import (
     _check_point_interface_diagonal,
     _check_segment_depths,
@@ -1141,7 +1141,29 @@ def solve_point_matching(
     FieldResult
         Node potentials (V) and leakage currents (A) per frequency, the
         segment currents as point sources, and metadata.
+
+    Notes
+    -----
+    A world with a horizontal coordinate beyond 10 km (projected, UTM
+    coordinates) is solved in its local frame and reported in the user's
+    coordinates (:mod:`groundfield.solver._frame`, since 2026.11).
     """
+    frame = _frame.LocalFrame.of(world)
+    with frame.active():
+        result = _solve_point_matching(
+            frame.world, engine, green, stacklevel=stacklevel + 1
+        )
+    return frame.to_user(result)
+
+
+def _solve_point_matching(
+    world: World,
+    engine: Engine,
+    green: _PointMatchingGreen,
+    *,
+    stacklevel: int,
+) -> FieldResult:
+    """Body of :func:`solve_point_matching`, in the frame of ``world``."""
     # Steps 1-4 of the shared pipeline, called through the module so that
     # every extension of a step (two-terminal sources and junction nodes
     # in ``inject`` / ``build_topology``, inductive fixes in

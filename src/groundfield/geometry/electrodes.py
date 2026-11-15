@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 
 from groundfield.geometry.primitives import (
     WireSegments,
+    _coordinate_scale,
     _edge_wires,
     _grid_wire_polylines,
     _grid_wires,
@@ -628,10 +629,12 @@ class StripElectrode(_ElectrodeBase):
             for h in layer_interfaces:
                 t_cuts.append((h - p0[2]) / dz * L)
         intervals = _split_interval_at_interfaces(0.0, L, t_cuts)
+        # The length comes from the end points: allow their round-off.
+        scale = _coordinate_scale(p0, p1)
         parts = []
         for t_lo, t_hi in intervals:
             part_len = t_hi - t_lo
-            n = _segment_count(part_len, ds)
+            n = _segment_count(part_len, ds, scale=scale)
             parts.append(_straight_wire(p0, direction, t_lo, part_len / n, n))
         return WireSegments.concatenate(parts)
 
