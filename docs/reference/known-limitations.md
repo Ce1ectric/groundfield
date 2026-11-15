@@ -50,7 +50,11 @@ shows what agrees with independent references and how well.
   0.46 µm at a UTM easting: an arc whose vertices lie closer than that to the
   chord of their neighbours (R = 50 m in 6 mm edges) gets one owner per two
   edges instead of one per edge (+5.5e-4 in Z against the same arc at local
-  coordinates).
+  coordinates). The runs are grown greedily from the first vertex, so where
+  vertices lie within that allowance off the chord the partition depends on the
+  vertex order: the same arc given in reverse order has as many wires, in another
+  partition, and its impedance differs by 2.4e-8 (closed) / 4.9e-8 (open) (audit
+  W1R3-06; at local coordinates 4e-15).
 
 ## Current ansatz and source kernels
 
@@ -258,14 +262,16 @@ shows what agrees with independent references and how well.
   other conductors drawn on one axis are separate cables touching each
   other; their sub-pieces add up to the lumped pair. Two unmarked cables in
   *sections* couple as filaments on the axis between sections that do not
-  overlap, and a core tilted against the shield axis is read the same way
-  while the lateral distance changes by at most the touching distance
-  $r_c + r_s$ along a piece (and $|\cos\varphi| \ge 0.99$); beyond, the rule
-  acts per segment and the pieces are about 1e-6 off the lumped pair (the
-  touching stretch is then about one piece long). Under `carson_series` the
-  Carson correction of a tilted pair is tiled at the mid-point distance of
-  each pair, so one lumped pair and its pieces differ (1.3e-4 of the loop at
-  1e-3 rad). The skin effect of a shield (a tube) is
+  overlap, and a core tilted against the shield axis, or crossing it, is read
+  the same way at any angle and in pieces of any length (they add up to the
+  lumped pair within 3e-12; audits W1R2-01, W1R3-01). Under `carson_series`
+  the Carson correction of a tilted pair is tiled at the mid-point distance
+  of each pair, so a lumped pair and its pieces differ, and the difference
+  grows quickly with the tilt: 1.3e-4 of the loop at 1e-3 rad (core leaving
+  the axis at the shield's start), for a core crossing the axis 4.2e-4 /
+  1.4e-3 of X at 2e-3 / 4e-3 rad in 10 / 5 m pieces and 1.9e-2 / 5.2e-2 at
+  2e-2 / 4e-2 rad (audit W1R3-07); `perfect_mirror` and `sommerfeld` have
+  no such tiling. The skin effect of a shield (a tube) is
   not modelled (`resistance_model="skin"` raises for a shield); a three-core
   cable in one shield is three cores at the shield radius each.
 ## Post-processing and export

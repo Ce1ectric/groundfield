@@ -865,3 +865,16 @@ def test_polyline_segments_compute_the_straight_runs_once(monkeypatch) -> None:
     with _frame_origin(np.array([UTM[0], UTM[1], 0.0])):
         assert z.segments(0.5).n_wires == 1
     assert z.segments(0.5).n_wires == 20
+
+
+# audit W1R3-04
+def test_the_numbers_row_of_the_chord_rule_names_vertices_below_the_tolerance() -> None:
+    """The rule of W1R2-05 changes polylines whose vertices lie *closer* than
+    0.46 um to the chord of their neighbours (the per-vertex test merged
+    them); the row said "more than 0.46 um", the polylines split already."""
+    import pathlib
+
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    text = " ".join((root / "CHANGELOG.md").read_text(encoding="utf-8").split())
+    assert "vertices more than 0.46 µm off their neighbours' chord" not in text
+    assert "vertices less than 0.46 µm off their neighbours' chord" in text

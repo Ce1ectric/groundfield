@@ -1085,3 +1085,22 @@ def test_world_check_rejects_a_copied_skin_shield(backend: str) -> None:
         w.check()
     with pytest.raises(ValueError, match="thin-walled"):
         gf.create_engine(backend=backend, frequencies=[50.0]).solve(w)
+
+
+# audit W1R3-01
+def test_the_texts_do_not_state_an_error_of_1e_6_beyond_the_tilted_gate() -> None:
+    """Beyond l sin(phi) = r_a + r_b the per-segment drift reached -8.6e-5 of
+    the loop (core crossing the shield axis, 10 m pieces) and -1.5e-3 at the
+    8.1 deg cap; the texts said about 1e-6. Since the rule has neither gate
+    nor cap, no text may state that error."""
+    import pathlib
+
+    root = pathlib.Path(gf.__file__).resolve().parents[2]
+    for path, phrase in (
+        ("docs/reference/known-limitations.md", "about 1e-6 off the lumped pair"),
+        ("docs/explanation/earth-return.md", "(1e-6 off the lumped pair)"),
+        ("src/groundfield/coupling/inductance.py", "with an error of about 1e-6"),
+        ("CHANGELOG.md", "slightly tilted against the shield (within 6.4e-12 up to"),
+    ):
+        text = " ".join((root / path).read_text(encoding="utf-8").split())
+        assert phrase not in text, path
