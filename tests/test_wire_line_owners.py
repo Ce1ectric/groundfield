@@ -558,3 +558,18 @@ def test_straight_run_tolerance_follows_the_coordinate_magnitude(origin) -> None
     back = [tuple(o), tuple(o + 2.0 * u), tuple(o + 1.0 * u)]
     edges = list(zip(back[:-1], back[1:], strict=True))
     assert _straight_runs(edges, closed=False) == [0, 1]
+
+
+# audit W1A-07, user decision Q30
+def test_a_lone_floating_grid_reports_a_plain_zero_current() -> None:
+    """A source-free grid that is a cluster of its own floats with exactly
+    zero net current, reported as +0 (the snapshot 6f63deb gave -0-0j, the
+    negated empty sum of the other cluster members)."""
+    world = gf.create_world(soil=gf.HomogeneousSoil(rho=RHO))
+    gf.create_electrode(world, "grid_mesh", name="g", **GRID)
+    gf.create_electrode(world, "rod", name="r", position=(25.0, 10.0, 0.5), length=3.0)
+    gf.create_source(world, attached_to="r", magnitude=1.0)
+    current = complex(_solve(world).electrode_currents["g"][0])
+    assert current == 0j
+    assert math.copysign(1.0, current.real) == 1.0
+    assert math.copysign(1.0, current.imag) == 1.0

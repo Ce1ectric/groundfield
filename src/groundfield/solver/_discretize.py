@@ -355,6 +355,11 @@ class _OwnerSplit:
                     total += currents.pop(sub, 0j)
                 currents[name] = total
             for members in floating:
+                if len(members) == 1:
+                    # a cluster of its own: exactly zero (not the -0 of the
+                    # negated empty sum; audit W1A-07)
+                    currents[members[0]] = 0j
+                    continue
                 rest = sum(currents.get(m, 0j) for m in members[:-1])
                 currents[members[-1]] = -complex(rest)
 
