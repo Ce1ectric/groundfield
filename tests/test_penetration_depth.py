@@ -181,3 +181,95 @@ def test_self_impedance_of_a_wire_matches_carson() -> None:
     z_carson = 1j * om * MU0 / (2.0 * math.pi) * math.log(2.0 * h / r)
     z_carson += carson_mutual_correction(om, h, h, 0.0, 0.01)
     assert z_cd == pytest.approx(z_carson, rel=0.02)
+
+
+# audit W3B-11
+@pytest.mark.parametrize(
+    "bad",
+    [
+        True,
+        False,
+        "50",
+        ["50"],
+        [True, 50.0],
+        np.array([True]),
+        50.0 + 0j,
+        [1.0 + 1e-3j],
+    ],
+    ids=[
+        "True",
+        "False",
+        "str",
+        "str_list",
+        "bool_in_list",
+        "bool_array",
+        "complex",
+        "complex_list",
+    ],
+)
+def test_w3b_11_frequencies_are_real_numbers_not_bool_or_str(bad) -> None:
+    """Base 098bbbc: ``"50"`` and ``True`` were accepted as frequencies (50 Hz
+    and 1 Hz). Frequencies are finite, positive real numbers."""
+    with pytest.raises(ValueError, match="real numbers"):
+        gf.penetration_depth(gf.HomogeneousSoil(rho=100.0), bad)
+
+
+# audit W3B-11
+@pytest.mark.parametrize("bad", [1e-320, 5e-324, [50.0, 1e-310]])
+def test_w3b_11_a_subnormal_frequency_is_refused(bad) -> None:
+    """Base 098bbbc: f = 1e-320 raised ZeroDivisionError. A frequency below
+    numpy.finfo(float).tiny is refused with ValueError."""
+    for soil in (
+        gf.HomogeneousSoil(rho=100.0),
+        gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0),
+    ):
+        with pytest.raises(ValueError, match="tiny"):
+            gf.penetration_depth(soil, bad)
+
+
+# audit W3B-11 (own attack): the smallest normal frequencies give a finite depth
+@pytest.mark.parametrize("f", [float(np.finfo(float).tiny), 1e-305, 1e-300])
+def test_w3b_11_the_smallest_normal_frequency_gives_a_finite_depth(f) -> None:
+    """Base 098bbbc: the homogeneous depth sqrt(rho / (j w mu0)) overflowed to
+    inf below about 1e-303 Hz; it is 1 / gamma now, as for the bottom layer of
+    a stack."""
+    for soil in (
+        gf.HomogeneousSoil(rho=100.0),
+        gf.HomogeneousSoil(rho=1e6),
+        gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0),
+    ):
+        pd = gf.penetration_depth(soil, f)
+        assert np.all(np.isfinite(pd.depth)) and np.all(np.isfinite(pd.resistivity))
+    pd = gf.penetration_depth(gf.HomogeneousSoil(rho=100.0), f)
+    assert pd.resistivity[0] == 100.0
+    expected = 1.0 / np.sqrt(2j * math.pi * f * MU0 / 100.0) if f > 1e-302 else None
+    if expected is not None:
+        assert pd.depth[0] == pytest.approx(expected, rel=1e-12)
+
+
+# audit W3B-11
+def test_w3b_11_penetration_depth_compares_by_value_and_hashes() -> None:
+    """Base 098bbbc: ``==`` of two results raised ValueError (the truth value
+    of an array) and ``hash`` raised TypeError. A result is a value: equal
+    soils and frequencies give equal results with equal hashes, and its
+    arrays are read-only copies, so the hash cannot change."""
+    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0)
+    a = gf.penetration_depth(soil, [50.0, 1000.0])
+    b = gf.penetration_depth(soil, np.array([50.0, 1000.0]))
+    c = gf.penetration_depth(soil, [50.0])
+    assert a == b and hash(a) == hash(b)
+    assert a != c and a != gf.penetration_depth(
+        gf.HomogeneousSoil(rho=30.0), [50.0, 1000.0]
+    )
+    assert (a == "x") is False
+    assert len({a, b, c}) == 2
+    f = np.array([50.0])
+    d = gf.PenetrationDepth(
+        frequencies=f, depth=c.depth.copy(), resistivity=c.resistivity.copy()
+    )
+    f[0] = 60.0  # the result keeps its own copy
+    assert d == c and hash(d) == hash(c)
+    for arr in (d.frequencies, d.depth, d.resistivity):
+        assert not arr.flags.writeable
+    with pytest.raises(ValueError, match="shape"):
+        gf.PenetrationDepth(frequencies=[50.0, 60.0], depth=[1.0], resistivity=[1.0])

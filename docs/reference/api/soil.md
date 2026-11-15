@@ -281,8 +281,11 @@ assert z.shape == (2,)
 
 **Accuracy** (stream w3perf; two methods: the exact layered earth-return
 integral `coupling.sommerfeld_inductance.per_metre_mutual_impedance`, any
-number of layers, within 4.9e-8 of Carson and of the two-layer Pollaczek
-integral, against the formula with the equivalent depth). Over the 39
+number of layers, against the formula with the equivalent depth; the
+integral is within 6e-8 of the earth-return correction of an independent
+reference integral up to 300 m and 7e-7 at 1 km for buried pairs, 4e-8
+overhead, audit W3B-08, and agrees with Carson and the two-layer Pollaczek
+integral). Over the 39
 soils of the AP1 grid ($\rho_1$ = 30 … 1000, $\rho_2$ = 30 … 200 Ω·m,
 $h_1$ = 5 / 10 / 30 m), 50 Hz … 1 kHz and separations of 0.1 … 1000 m, the
 earth-return correction (Carson's quantity, relative to the perfectly
@@ -300,8 +303,19 @@ beyond (the worst soil at 1 kHz: 15 % at 1 km, 0.05 % at 10 km) and slowly
 towards low frequency (12.7 % at 1 kHz, 1.4 % at 0.1 Hz for 100 m). The
 equivalence of the soils alone — the exact homogeneous integral at the
 complex $\rho_\text{eq}$ against the layered one — is within a median of
-0.4 % (at most 26 % / 29 %). `penetration_depth` is a modelling aid for
-line-impedance formulas; the solver's earth-return models do not use it.
+0.4 % (at most 26 % / 29 %). **Beyond two layers** the error is larger
+(audit W3B-08; both references agree to 3e-5 %): in 300 / 50 / 2000 Ω·m
+($h$ = 2 / 20 m) at 1 kHz 8.1 / 8.4 / 14 / 44 % overhead and 5.1 / 7.8 / 16 /
+46 % buried at 0.1 / 10 / 100 / 1000 m, in 50 / 500 / 20 / 1000 Ω·m ($h$ =
+2 / 3 / 50 m) 7.2 / 7.6 / 20 / 54 % and 3.9 / 7.0 / 28 / 77 %, at 50 Hz up
+to 9 % and 37 %. `penetration_depth` is a modelling aid for line-impedance
+formulas; the solver's earth-return models do not use it.
+
+Frequencies are finite, positive real numbers of at least
+`numpy.finfo(float).tiny`: `bool`, `str` and complex values and subnormal
+numbers raise `ValueError` (audit W3B-11). A `PenetrationDepth` is a value:
+its arrays are read-only copies, two results with equal arrays compare
+equal and have equal hashes.
 
 ## API reference
 

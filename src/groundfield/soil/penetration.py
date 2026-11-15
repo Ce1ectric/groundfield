@@ -90,6 +90,7 @@ from __future__ import annotations
 
 import cmath
 import math
+import numbers
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -106,9 +107,14 @@ _CALLER = "penetration_depth"
 MU_0 = 4.0e-7 * math.pi
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class PenetrationDepth:
     """Complex penetration depth of a soil, per frequency.
+
+    A value: the three arrays are read-only copies of the given ones, two
+    results compare equal when their arrays are equal (``==``), and a result
+    is hashable (by its frequencies, so equal results have equal hashes), so
+    it can key a dictionary or join a set (audit W3B-11).
 
     Attributes
     ----------
@@ -123,11 +129,44 @@ class PenetrationDepth:
         p^2$ in Ω·m, shape ``(n_f,)``, complex: real and equal to $\\rho$ for
         homogeneous soil; its modulus is the magnetotelluric apparent
         resistivity of a layered soil.
+
+    Raises
+    ------
+    ValueError
+        If the three arrays are not one-dimensional of one length.
     """
 
     frequencies: np.ndarray
     depth: np.ndarray
     resistivity: np.ndarray
+
+    def __post_init__(self) -> None:
+        arrays = {
+            "frequencies": np.array(self.frequencies, dtype=float),
+            "depth": np.array(self.depth, dtype=complex),
+            "resistivity": np.array(self.resistivity, dtype=complex),
+        }
+        shapes = {value.shape for value in arrays.values()}
+        if len(shapes) != 1 or len(next(iter(shapes))) != 1:
+            raise ValueError(
+                "PenetrationDepth: frequencies, depth and resistivity must be "
+                "one-dimensional arrays of one length (one entry per frequency), "
+                f"got the shapes {[value.shape for value in arrays.values()]}."
+            )
+        for name, value in arrays.items():
+            value.setflags(write=False)
+            object.__setattr__(self, name, value)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PenetrationDepth):
+            return NotImplemented
+        return all(
+            np.array_equal(getattr(self, name), getattr(other, name))
+            for name in ("frequencies", "depth", "resistivity")
+        )
+
+    def __hash__(self) -> int:
+        return hash(self.frequencies.tobytes())
 
     def mutual_impedance(self, z_i: float, z_j: float, distance: float) -> np.ndarray:
         """Per-metre impedance of the complex-depth formula, every frequency.
@@ -178,15 +217,44 @@ class PenetrationDepth:
         return 1j * omega * MU_0 / (2.0 * math.pi) * np.log(image / direct)
 
 
+_TINY = float(np.finfo(float).tiny)
+_SQRT_J = cmath.sqrt(1j)
+
+
 def _frequencies(frequencies: object) -> np.ndarray:
+    """Frequencies in Hz as a 1-D float array; finite, positive, real.
+
+    ``bool`` and ``str`` are refused, not converted (audit W3B-11: ``"50"``
+    and ``True`` were read as 50 Hz and 1 Hz), and so is a subnormal value,
+    below ``numpy.finfo(float).tiny`` (``f = 1e-320`` raised
+    :class:`ZeroDivisionError`).
+    """
     try:
-        f = np.atleast_1d(np.asarray(frequencies, dtype=float))
+        values = np.asarray(frequencies, dtype=object)
+        items = values.ravel().tolist()
     except (TypeError, ValueError):
-        f = np.array([math.nan])
+        items = [None]
+    if not all(
+        isinstance(v, numbers.Real) and not isinstance(v, (bool, np.bool_))
+        for v in items
+    ):
+        raise ValueError(
+            f"{_CALLER}: frequencies must be finite, positive real numbers "
+            f"(Hz), not bool, str or complex, got {frequencies!r}."
+        )
+    f = np.atleast_1d(np.array([float(v) for v in items], dtype=float))
+    if values.ndim > 1:
+        f = f.reshape(values.shape)
     if f.ndim != 1 or f.size == 0 or not np.all(np.isfinite(f)) or np.any(f <= 0.0):
         raise ValueError(
             f"{_CALLER}: frequencies must be finite and positive (Hz), got "
             f"{frequencies!r}. At f = 0 the penetration depth is infinite."
+        )
+    if np.any(f < _TINY):
+        raise ValueError(
+            f"{_CALLER}: frequencies must be positive normal numbers, at least "
+            f"numpy.finfo(float).tiny = {_TINY:.3g} Hz; got {frequencies!r}, "
+            "which holds a subnormal value."
         )
     return f
 
@@ -210,7 +278,8 @@ def penetration_depth(
         The soil (reduced to its canonical stack: adjacent layers of equal
         resistivity merged, as in every layered backend).
     frequencies : float or array_like
-        Frequencies in Hz, finite and positive.
+        Frequencies in Hz: finite, positive real numbers, at least
+        ``numpy.finfo(float).tiny`` (not ``bool``, ``str`` or complex).
 
     Returns
     -------
@@ -225,7 +294,9 @@ def penetration_depth(
     TypeError
         If ``soil`` is not a soil model.
     ValueError
-        If a frequency is not finite and positive.
+        If a frequency is not a finite, positive real number (``bool``,
+        ``str`` and complex values are refused, not converted) or is
+        subnormal (below ``numpy.finfo(float).tiny``).
 
     Notes
     -----
@@ -259,20 +330,21 @@ def penetration_depth(
     depth = np.empty(f.size, dtype=complex)
     resistivity = np.empty(f.size, dtype=complex)
     for k, freq in enumerate(f.tolist()):
-        jwm = 1j * 2.0 * math.pi * freq * MU_0
+        # sqrt(j w mu0) and gamma_k = sqrt(j w mu0 / rho_k) as products of
+        # square roots: j w mu0 itself is subnormal near the smallest normal
+        # frequency, and sqrt(rho / (j w mu0)) overflowed to inf below about
+        # 1e-303 Hz (audit W3B-11, own attack)
+        root = _SQRT_J * math.sqrt(2.0 * math.pi * freq) * math.sqrt(MU_0)
+        gammas = [root / math.sqrt(rho) for rho in rhos]
+        p = 1.0 / gammas[-1]
         if len(rhos) == 1:
-            depth[k] = cmath.sqrt(rhos[0] / jwm)
+            depth[k] = p
             resistivity[k] = rhos[0]
             continue
-        gammas = [cmath.sqrt(jwm / rho) for rho in rhos]
-        p = 1.0 / gammas[-1]
         for g, h in zip(reversed(gammas[:-1]), reversed(thicknesses), strict=True):
             e = cmath.exp(-2.0 * g * h)
             t = (1.0 - e) / (1.0 + e)  # tanh(g h), stable for Re(g h) > 0
             p = (p + t / g) / (1.0 + g * p * t)
         depth[k] = p
-        resistivity[k] = jwm * p * p
-    depth.setflags(write=False)
-    resistivity.setflags(write=False)
-    f.setflags(write=False)
+        resistivity[k] = (root * p) ** 2
     return PenetrationDepth(frequencies=f, depth=depth, resistivity=resistivity)
