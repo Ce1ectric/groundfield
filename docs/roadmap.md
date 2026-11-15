@@ -88,6 +88,10 @@ limits a result, the reference documentation states the limit.
   their only cabinet at one end; the other half is fed from the substation.
 - **A cabinet that cannot keep its clearance** raises; moving it on along the ray past
   the blocking site would always place it (dense random layouts only so far).
+- **Continuous line-kernel switch.** A deterministic near/far switch (a margin on the
+  distance) or a far form exact to round-off would make the line kernel translation
+  invariant to round-off. It moves worlds near the origin by up to about 2e-7 (golden
+  strict), so it is a decision.
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the
@@ -95,9 +99,6 @@ limits a result, the reference documentation states the limit.
   ([known limitations](reference/known-limitations.md#backends)). The
   effect is local; it will be quantified once a 3-D volume reference is
   available (user decision Q40).
-- **Concrete shells in the `mom` family.** `mom` and `mom_sommerfeld` reject
-  electrodes with a concrete shell; the shell is modelled by the image family
-  and `solve_mutual_*` (10.12–10.14).
 - **Overlapping inductive conductors in `diagnose()`.** Conductors that lie
   side by side or overlap (two cables in one trench, a service drop along its
   PEN main) are evaluated as touching wires since 2026.11; `diagnose()` reports

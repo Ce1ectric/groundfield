@@ -31,6 +31,10 @@ shows what agrees with independent references and how well.
 - **Not computed:** the inductive reduction factor of cable screens and
   earth wires; mutual impedances (`BranchType`) for groundinsight — one
   `BusType` describes one terminal.
+- **Projected coordinates** are solved in an exactly shifted local frame beyond 10 km
+  from the origin. A world that mixes projected and local coordinates (electrodes at UTM
+  coordinates and a node near (0, 0)) gains nothing from the frame, as its bounding box
+  spans the whole range.
 
 ## Current ansatz and source kernels
 
@@ -41,11 +45,13 @@ shows what agrees with independent references and how well.
   rods, strips and rings are one wire. Impedances of rods and rings are
   within about 1 % of the per-segment `mom` solution, grids +0.36 … +0.70 %
   above one current per segment with the default line kernel (10 m 2 × 2 …
-  40 m 8 × 8; +0.43 … +0.89 % in 5 cm of wet concrete; +0.29 … +0.66 %
-  against `mom` with the point kernel), stars a few per cent above it,
+  40 m 8 × 8; +0.43 … +0.89 % in 5 cm of wet concrete; against `mom` with
+  the point kernel +0.29 … +0.66 %, +0.35 … +0.69 % in the same concrete),
+  stars a few per cent above it,
   growing with the number of arms (+1.8 % for 3, +3.5 % for 4, +10.5 % for
   8 arms of 10 m in 100 Ω·m; up to +12.6 % in 1000 over 100 Ω·m and
-  +19.7 % in wet concrete): the current crowds to the tips, which one
+  +19.7 % in wet concrete; against `mom`, point kernel, +1.4 … +11.8 % bare,
+  up to +18.8 % encased): the current crowds to the tips, which one
   current per arm cannot represent. Rectangles without cross-braces,
   given by their size or as an outline (one owner per side), with a short
   side of at least 1 m, an aspect ratio up to 50 and sides up to 150 m are
@@ -90,6 +96,14 @@ shows what agrees with independent references and how well.
   point kernel for 16 house grids ($N$ = 1920 segments) with numba
   installed, 5.7 times without (`Engine.kernel`); the extra work grows
   like $N^2$.
+- **Line-kernel switch at six segment lengths.** The line kernel integrates segment
+  pairs closer than six segment lengths exactly and farther ones in its far form; on a
+  straight wire of equal segments the pairs six segments apart sit exactly on that
+  boundary, so round-off decides their form wherever the world stands. Results of the
+  same world at different positions (shifted by 0.1 m … 8.8 km, or to UTM coordinates)
+  therefore spread by up to 2.4e-7 in the impedance, 4.7e-7 in the mutual matrix and
+  1.7e-6 in step voltages. The point kernel (`kernel="point"`, `mom`,
+  `mom_sommerfeld`) is invariant to 1e-14 at local offsets and 3e-11 at UTM coordinates.
 
 ## Soil layers
 
@@ -181,14 +195,13 @@ shows what agrees with independent references and how well.
   release replaces it by a conforming axisymmetric model
   ([roadmap](../roadmap.md#scheduled-for-the-next-release), user decision
   Q37).
-- **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are
-  represented by the image family and `solve_mutual_*` only. Each wire
-  carries its own radial shell; where wires meet — the corners of a ring,
-  the crossings and T-joints of a mesh foundation, whose braces are encased
-  since 2026.11 — the shells overlap within about $r_b$ of the junction
-  and each wire counts the shared concrete as its own (a local effect, not
-  quantified separately; it will be quantified once a 3-D volume reference
-  is available, user decision Q40).
+- **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are represented by the image
+  family, `solve_mutual_*`, `mom` and `mom_sommerfeld` (`fem` rejects them). Each wire
+  carries its own radial shell; where wires meet — the corners of a ring, the crossings
+  and T-joints of a mesh foundation, whose braces are encased since 2026.11 — the
+  shells overlap within about $r_b$ of the junction and each wire counts the shared
+  concrete as its own (a local effect, not quantified separately; it will be quantified
+  once a 3-D volume reference is available, user decision Q40).
 - **Aliases.** `cim`, `bem` and `image_nlayer` run `image` and `mom`;
   comparing them with their targets adds no independent information.
 
