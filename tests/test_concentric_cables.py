@@ -521,3 +521,241 @@ def test_the_shield_marker_alone_keeps_the_internal_inductance() -> None:
     )
     doc = " ".join(build_inductance_matrix.__doc__.split())
     assert "include_internal=~shields" in doc and "31.97" in doc
+
+
+# ---------------------------------------------------------------------
+# Nearly parallel pieces of conductors on one axis (audit W1R2-01)
+# ---------------------------------------------------------------------
+
+
+def _tilted_pieces(n: int, tilt: float) -> np.ndarray:
+    """A 100 m wire from the origin with its far end ``tilt * 100 m`` off
+    the x axis, in ``n`` equal pieces."""
+    ts = np.linspace(0.0, 1.0, n + 1)
+    end = np.array([LENGTH, LENGTH * tilt, DEPTH])
+    start = np.array([0.0, 0.0, DEPTH])
+    pts = start[None, :] + ts[:, None] * (end - start)[None, :]
+    return np.stack([pts[:-1], pts[1:]], axis=1)
+
+
+def _tilted_loop(
+    n: int,
+    tilt: float,
+    marked: bool,
+    image: str = "none",
+    labels: bool = True,
+) -> float:
+    """Loop inductance (core out, shield back) of the coax with the core
+    tilted against the shield axis, both in ``n`` pieces."""
+    seg = np.concatenate([_tilted_pieces(n, tilt), _axis_pieces(n)])
+    radii = np.array([R_CORE] * n + [R_SHIELD] * n)
+    shields = np.array([False] * n + [marked] * n)
+    kw: dict = dict(image=image, shields=shields, include_internal=~shields)
+    if labels:
+        kw["conductors"] = np.array([0] * n + [1] * n)
+    L = build_inductance_matrix(seg, radii, **kw)
+    s = np.array([1.0] * n + [-1.0] * n)
+    return float(s @ L @ s)
+
+
+# audit W1R2-01
+@pytest.mark.parametrize("marked", [True, False], ids=["marked", "unmarked"])
+@pytest.mark.parametrize("tilt", [4.5e-5, 1e-4, 3e-4, 1e-3])
+def test_a_slightly_tilted_core_adds_up_in_pieces(tilt: float, marked: bool) -> None:
+    """A core whose far end is 4.5 / 10 / 30 / 100 mm off the axis of the
+    100 m shield (the core leaves the shield's tube beyond 1e-4 rad) reads
+    the lumped loop in 10 / 5 / 1 / 0.25 m pieces. Base ecff7b6: only
+    pairs parallel within 4.47e-5 rad took the rule against the partner's
+    conductor, so the marked coax read -0.17 / -0.36 / -1.86 / -7.42 % at
+    4.5e-5 rad (-0.13 ... -5.8 % at 1e-4, -0.004 ... -0.33 % at 1e-3).
+    Measured now: within 6e-12."""
+    lumped = _tilted_loop(1, tilt, marked)
+    for n in (10, 20, 100, 400):
+        assert _tilted_loop(n, tilt, marked) == pytest.approx(lumped, rel=1e-9)
+
+
+# audit W1R2-01
+def test_the_coax_loop_is_continuous_at_the_parallel_tolerance() -> None:
+    """4.4e-5 and 4.5e-5 rad of tilt differ by nothing physical (the lumped
+    loop by 3.6e-10); in 0.25 m pieces the base read 26.966 against
+    24.966 uH (a 7.4 % step at the closed form's tolerance of 4.47e-5)."""
+    a, b = _tilted_loop(400, 4.4e-5, True), _tilted_loop(400, 4.5e-5, True)
+    assert abs(b / a - 1.0) < 1e-8
+
+
+# audit W1R2-01
+@pytest.mark.parametrize("image", ["additive", "antiparallel"])
+def test_tilted_pieces_add_up_with_every_image(image: str) -> None:
+    lumped = _tilted_loop(1, 3e-4, True, image)
+    assert _tilted_loop(40, 3e-4, True, image) == pytest.approx(lumped, rel=1e-9)
+
+
+def _tilted_loop_world(tilt: float, ds: float | None) -> gf.World:
+    """The loop world of :func:`_loop_world` with the core's far end
+    ``tilt * 100 m`` off the axis, bonded to the shield by an ideal link."""
+    w = _loop_world("cable_shield", ds)
+    end = (LENGTH, LENGTH * tilt, DEPTH)
+    core = next(c for c in w.conductors if c.name == "core")
+    w.conductors.remove(core)
+    gf.create_junction(w, name="Bc", position=end)
+    w.add_conductor(core.model_copy(update={"end": end, "end_electrode": "Bc"}))
+    w.add_conductor(
+        Conductor(
+            name="bond",
+            start=(LENGTH, 0.0, DEPTH),
+            end=end,
+            start_electrode="B",
+            end_electrode="Bc",
+        )
+    )
+    return w
+
+
+# audit W1R2-01 (method 2: the solver)
+@pytest.mark.parametrize("model", ["perfect_mirror", "carson_series", "sommerfeld"])
+def test_a_tilted_core_adds_up_in_the_solver(model: str) -> None:
+    """The core tilted by 1e-4 rad (inside the shield over its length): the
+    solved loop in 5 m and 1 m pieces equals the lumped one under every
+    earth model (base ecff7b6: -0.29 / -1.47 %; now within 8e-12)."""
+    lumped = _loop_inductance(_tilted_loop_world(1e-4, None), model)
+    for ds in (5.0, 1.0):
+        loop = _loop_inductance(_tilted_loop_world(1e-4, ds), model)
+        assert loop == pytest.approx(lumped, rel=1e-9)
+    assert lumped == pytest.approx(COAX, rel=3e-4)
+
+
+# audit W1R2-01: where the rule stops
+def test_the_tilted_rule_stops_where_a_piece_leaves_the_touching_distance() -> None:
+    """The rule holds while the lateral distance changes by at most the
+    touching distance along the longer piece, l sin(phi) <= r_a + r_b
+    (and |cos phi| >= 0.99). Beyond it the per-piece rule is back, with
+    the small error of a touching stretch about one piece long: measured
+    -1.5e-7 (10 m pieces at 2.01e-3 rad), -6.6e-7 (1 m at 2.01e-2), -1.4e-6
+    (0.25 m at 8.01e-2); just inside the gate within 2e-12."""
+    from groundfield.coupling.inductance import _TILT_FRACTION, _tilted_gate
+
+    assert _TILT_FRACTION == 1.0
+    for n, inside, outside in ((10, 1.99e-3, 2.01e-3), (100, 1.99e-2, 2.01e-2)):
+        lumped_in = _tilted_loop(1, inside, True)
+        lumped_out = _tilted_loop(1, outside, True)
+        assert _tilted_loop(n, inside, True) == pytest.approx(lumped_in, rel=1e-9)
+        assert abs(_tilted_loop(n, outside, True) / lumped_out - 1.0) < 3e-6
+    one = _tilted_pieces(10, 1.99e-3)
+    two = _tilted_pieces(10, 2.01e-3)
+    axis = _axis_pieces(10)
+    d = np.full(10, R_CORE + R_SHIELD)
+    assert _tilted_gate(one[:, 0], one[:, 1], axis[:, 0], axis[:, 1], d).all()
+    assert not _tilted_gate(two[:, 0], two[:, 1], axis[:, 0], axis[:, 1], d).any()
+
+
+# audit W1R2-01
+def test_the_tilted_rule_is_free_of_order_and_direction() -> None:
+    """Permuting and reversing the pieces of a tilted core and shield (the
+    core leaves the shield's tube, so all three stretch kinds occur)
+    permutes the cross block (up to the orientation sign): bit for bit
+    where the rule integrates both sides, to a few units in the last place
+    where one side is entirely free and takes the filament value of the
+    matrix, whose quadrature bits depend on which segment is the row
+    (4e-16 here; base ecff7b6, where that pair kept the filament: 1.2e-15).
+    A guard; the loop oracle agrees with the vectorised assembly to
+    round-off."""
+    seg = np.concatenate([_tilted_pieces(4, 3e-4), _axis_pieces(3, 10.0, 90.0)])
+    radii = np.array([R_CORE] * 4 + [R_SHIELD] * 3)
+    shields = np.array([False] * 4 + [True] * 3)
+    labels = np.array([0] * 4 + [1] * 3)
+    kw = dict(image="none", shields=shields, include_internal=~shields)
+    L = build_inductance_matrix(seg, radii, conductors=labels, **kw)
+    oracle = _build_inductance_matrix_loop(seg, radii, conductors=labels, **kw)
+    np.testing.assert_allclose(L, oracle, rtol=1e-15, atol=0)
+    perm = np.array([5, 2, 0, 6, 3, 1, 4])
+    flip = np.array([1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0])
+    seg_p = seg[perm].copy()
+    seg_p[flip < 0] = seg_p[flip < 0][:, ::-1, :]
+    L_p = build_inductance_matrix(
+        seg_p,
+        radii[perm],
+        conductors=labels[perm],
+        image="none",
+        shields=shields[perm],
+        include_internal=~shields[perm],
+    )
+    expected = L[np.ix_(perm, perm)] * np.outer(flip, flip)
+    cross = labels[perm][:, None] != labels[perm][None, :]
+    np.testing.assert_allclose(L_p[cross], expected[cross], rtol=4e-15, atol=0)
+
+
+# audit W1R2-01: what else moves (generated measurement leads)
+def test_overhead_measurement_leads_add_up_in_pieces() -> None:
+    """The generator draws the overhead probe lead from 10 mm beside the
+    feed lead's start to a point on its axis (2e-4 rad, touching all
+    along); their mutual in the generator's 5 m pieces (and in 1 m pieces)
+    equals the lumped one. Base ecff7b6: +1.0e-4 (5 m), +5.4e-4 (1 m)."""
+
+    def mutual(ds: float | None) -> float:
+        n_f, n_p = (1, 1) if ds is None else (int(150 / ds), int(50 / ds))
+        feed = np.array([[0.0, 0.0, -0.1], [150.0, 0.0, -0.1]])
+        probe = np.array([[0.0, 0.01, -0.1], [50.0, 0.0, -0.1]])
+
+        def cut(p: np.ndarray, n: int) -> np.ndarray:
+            ts = np.linspace(0.0, 1.0, n + 1)
+            pts = p[0][None, :] + ts[:, None] * (p[1] - p[0])[None, :]
+            return np.stack([pts[:-1], pts[1:]], axis=1)
+
+        seg = np.concatenate([cut(feed, n_f), cut(probe, n_p)])
+        L = build_inductance_matrix(
+            seg,
+            np.full(n_f + n_p, 0.005),
+            image="additive",
+            conductors=np.array([0] * n_f + [1] * n_p),
+        )
+        return float(L[:n_f, n_f:].sum())
+
+    lumped = mutual(None)
+    for ds in (5.0, 1.0):
+        assert mutual(ds) == pytest.approx(lumped, rel=1e-12)
+
+
+# ---------------------------------------------------------------------
+# Memory of the bundle rule (audit W1R2-03)
+# ---------------------------------------------------------------------
+
+
+# audit W1R2-03
+def test_the_bundle_rule_memory_grows_with_the_matrix_not_with_its_square() -> None:
+    """Two touching unmarked conductors of 600 m in 1 m pieces: the base's
+    all-pairs closed form peaked at 292 MiB (an 11 MiB matrix; 30 MiB
+    before the rule, 1 km: ~0.9 GB); evaluated in chunks it is 30 MiB."""
+    import tracemalloc
+
+    n = 600
+    one = _axis_pieces(n, 0.0, float(n))
+    seg = np.concatenate([one, one])
+    tracemalloc.start()
+    try:
+        build_inductance_matrix(
+            seg,
+            np.full(2 * n, 0.005),
+            image="none",
+            conductors=np.array([0] * n + [1] * n),
+        )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 4 * (2 * n) ** 2 * 8
+
+
+# audit W1R2-03
+def test_the_bundle_chunks_change_no_bit(monkeypatch) -> None:
+    """The chunked evaluation is element-wise: any chunk size gives the
+    same matrix bit for bit (parallel bundles and the tilted rule)."""
+    import groundfield.coupling.inductance as ind
+
+    n = 37
+    seg = np.concatenate([_axis_pieces(n), _axis_pieces(n), _tilted_pieces(n, 3e-4)])
+    radii = np.array([0.005] * n + [0.006] * n + [R_CORE] * n)
+    labels = np.array([0] * n + [1] * n + [2] * n)
+    ref = build_inductance_matrix(seg, radii, image="none", conductors=labels)
+    for chunk in (1, 7, 10**9):
+        monkeypatch.setattr(ind, "_BUNDLE_CHUNK", chunk)
+        got = build_inductance_matrix(seg, radii, image="none", conductors=labels)
+        assert np.array_equal(got, ref)

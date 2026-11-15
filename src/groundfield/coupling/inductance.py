@@ -84,7 +84,14 @@ wire inside a cable shield couples at the shield radius at every axial
 offset (exact for a filament on the axis of a thin tube), and a point lies
 beside another conductor when its foot falls inside that conductor, so
 the sub-pieces of two conductors lying beside each other add up to the
-lumped pair (a 100 m coax in 1 m pieces read 2.2 % low before). The filament integral diverges for coincident axes (two coincident 50 m
+lumped pair (a 100 m coax in 1 m pieces read 2.2 % low before). Nearly
+parallel pieces — tilted against each other by more than the closed
+form's tolerance of about 4.5e-5 rad, but so little that their lateral
+distance changes by at most the touching distance along the longer piece
+— get the same two readings with the stretches inside, beside and away
+from the partner found exactly (audit W1R2-01; a core tilted by 4.5e-5
+rad read 7.4 % low in 0.25 m pieces, with a step at the tolerance).
+The filament integral diverges for coincident axes (two coincident 50 m
 leads read +587j Ω at 50 Hz) and exceeds the self inductance once the
 wires are closer than about their radius (an indefinite matrix, a TN
 network with drops along its PEN main had a negative input reactance).
@@ -1503,6 +1510,22 @@ def _canonical_segment(p1: np.ndarray, p2: np.ndarray) -> tuple[_Point, _Point]:
     return (a, b) if a <= b else (b, a)
 
 
+def _axial_span(
+    b1: _Point, b2: _Point, ext: tuple[np.ndarray, np.ndarray]
+) -> tuple[float, float]:
+    """Interval on the axis of segment ``b1 -> b2`` (from ``b1``, in m)
+    between the feet of the two conductor end points ``ext``."""
+    lb = math.hypot(b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2])
+    ub = ((b2[0] - b1[0]) / lb, (b2[1] - b1[1]) / lb, (b2[2] - b1[2]) / lb)
+    t = [
+        (float(e[0]) - b1[0]) * ub[0]
+        + (float(e[1]) - b1[1]) * ub[1]
+        + (float(e[2]) - b1[2]) * ub[2]
+        for e in ext
+    ]
+    return min(t), max(t)
+
+
 def _beside_plan(
     a1: _Point,
     a2: _Point,
@@ -1512,6 +1535,7 @@ def _beside_plan(
     r_thin: float,
     r_thick: float,
     inside_rule: bool,
+    extent: tuple[float, float] | None = None,
 ) -> tuple[bool, tuple]:
     """Pieces of segment *a* for the one-sided integral of the beside rule.
 
@@ -1528,6 +1552,14 @@ def _beside_plan(
     tolerance is clamped, and the data :func:`_beside_integral` needs. The
     axis geometry is computed from cross products, which stay accurate for
     nearly parallel axes (no $1 - \\cos^2$ cancellation).
+
+    ``extent`` (the bundle rule of nearly parallel conductors, audit W1R2-01
+    of the calendar release): the interval $[t_\\text{lo}, t_\\text{hi}]$ on
+    *b*'s axis (measured from ``b1``) that the conductor of *b* occupies. A
+    point then lies beside *b* when its foot falls inside that interval, and
+    the inside reading holds at every axial offset, as for parallel pieces
+    (:func:`_bundle_mutual_batch`); the inner integral stays over *b*. With
+    ``None`` (the default) the arithmetic is the one of the pointwise rule.
     """
     ax, ay, az = a2[0] - a1[0], a2[1] - a1[1], a2[2] - a1[2]
     bx, by, bz = b2[0] - b1[0], b2[1] - b1[1], b2[2] - b1[2]
@@ -1549,7 +1581,7 @@ def _beside_plan(
 
     marks = {0.0, la}
     if dot != 0.0:
-        for target in (0.0, lb):
+        for target in (0.0, lb) if extent is None else (0.0, lb, *extent):
             x = (target - c0) / dot
             if 0.0 < x < la:
                 marks.add(x)
@@ -1591,7 +1623,17 @@ def _beside_plan(
         mid = 0.5 * (lo + hi)
         t0 = c0 + mid * dot
         rho_e = math.nan
-        if 0.0 <= t0 <= lb:
+        if extent is not None:
+            # bundle rule: beside the partner's conductor, inside at every
+            # axial offset (audit W1R2-01)
+            rho = rho_at(mid)
+            if inside_rule and rho + r_thin <= r_thick:
+                rho_e = r_thick
+            elif extent[0] <= t0 <= extent[1] and rho < d_clamp:
+                rho_e = d_touch
+            if not math.isnan(rho_e):
+                clamped = clamped or hi - lo > tol
+        elif 0.0 <= t0 <= lb:
             rho = rho_at(mid)
             if rho < d_clamp:
                 inside = inside_rule and rho + r_thin <= r_thick
@@ -1659,6 +1701,8 @@ def _beside_mutual(
     *,
     shield_a: bool = False,
     shield_b: bool = False,
+    ext_a: tuple[np.ndarray, np.ndarray] | None = None,
+    ext_b: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> float | None:
     """Mutual inductance of two wires lying beside each other, in H.
 
@@ -1695,6 +1739,13 @@ def _beside_mutual(
     ``None`` when the rule does not act (no stretch beside the partner
     closer than touching), so that the caller keeps its closed form or
     quadrature value.
+
+    ``ext_a`` and ``ext_b`` (both or neither) are the end points of the
+    straight conductors the two segments belong to: the bundle rule of
+    nearly parallel conductors (:func:`_apply_tilted_bundles`, audit W1R2-01),
+    in which a point lies beside the partner's whole conductor and a wire
+    inside a cable shield couples at the shield radius at every axial
+    offset, as for parallel pieces.
     """
     d_touch = float(r_a) + float(r_b)
     if not d_touch > 0.0:
@@ -1724,8 +1775,16 @@ def _beside_mutual(
     # user decision Q32: the inside reading needs the thicker wire to be a
     # cable shield (equal radii never count as one inside the other).
     inside = bool(shield_a) if float(r_a) > float(r_b) else bool(shield_b)
-    clamped_a, plan_a = _beside_plan(a1, a2, b1, b2, d_touch, r_thin, r_thick, inside)
-    clamped_b, plan_b = _beside_plan(b1, b2, a1, a2, d_touch, r_thin, r_thick, inside)
+    span_b = span_a = None
+    if ext_a is not None and ext_b is not None:
+        span_b = _axial_span(b1, b2, ext_b)
+        span_a = _axial_span(a1, a2, ext_a)
+    clamped_a, plan_a = _beside_plan(
+        a1, a2, b1, b2, d_touch, r_thin, r_thick, inside, span_b
+    )
+    clamped_b, plan_b = _beside_plan(
+        b1, b2, a1, a2, d_touch, r_thin, r_thick, inside, span_a
+    )
     if not (clamped_a or clamped_b):
         return None
     total = _beside_integral(plan_a) + _beside_integral(plan_b)
@@ -2022,15 +2081,21 @@ def _apply_bundles(
     its taps), keep their values. A thinner wire parallel inside a cable
     shield (``shields``) couples at the shield radius at every axial offset
     (:func:`_apply_inside_shields`), so a shield made of several
-    conductors, or a core and shield in sections, add up as well. Writes
-    the direct block ``L_dir`` symmetrically; does nothing without hits and
-    shields.
+    conductors, or a core and shield in sections, add up as well. Pieces
+    that are nearly parallel — tilted against each other by more than the
+    closed form's tolerance, but so little that their lateral distance
+    changes by less than the touching distance along the longer piece —
+    get the same two readings, with the exact pointwise classification
+    (:func:`_apply_tilted_bundles`, audit W1R2-01). Writes the direct block
+    ``L_dir`` symmetrically; does nothing without hits and shields.
     """
     flags = np.zeros(len(radii), dtype=bool) if shields is None else shields
     if hits:
         _apply_touching_bundles(L_dir, p1, p2, radii, flags, labels, hits)
     if flags.any():
         _apply_inside_shields(L_dir, p1, p2, radii, flags)
+    if hits or flags.any():
+        _apply_tilted_bundles(L_dir, p1, p2, radii, flags, labels, hits)
 
 
 def _apply_inside_shields(
@@ -2121,23 +2186,470 @@ def _apply_touching_bundles(
     for ca, cb in bundles:
         ia, ea1, ea2 = extents[ca]
         ib, eb1, eb2 = extents[cb]
-        II = np.repeat(ia, ib.size)
-        JJ = np.tile(ib, ia.size)
-        values, valid, inside = _bundle_mutual_batch(
-            p1[II],
-            p2[II],
-            radii[II],
-            flags[II],
-            p1[JJ],
-            p2[JJ],
-            radii[JJ],
-            flags[JJ],
-            ext_a=(np.repeat(ea1, ib.size, axis=0), np.repeat(ea2, ib.size, axis=0)),
-            ext_b=(np.tile(eb1, (ia.size, 1)), np.tile(eb2, (ia.size, 1))),
+        # rows of the first conductor in chunks: the temporaries of the
+        # closed form stay bounded (audit W1R2-03; element-wise, so the
+        # values are the same bit for bit as for all pairs at once)
+        rows = max(1, _BUNDLE_CHUNK // ib.size)
+        for start in range(0, ia.size, rows):
+            sl = slice(start, start + rows)
+            na = ia[sl].size
+            II = np.repeat(ia[sl], ib.size)
+            JJ = np.tile(ib, na)
+            values, valid, inside = _bundle_mutual_batch(
+                p1[II],
+                p2[II],
+                radii[II],
+                flags[II],
+                p1[JJ],
+                p2[JJ],
+                radii[JJ],
+                flags[JJ],
+                ext_a=(
+                    np.repeat(ea1[sl], ib.size, axis=0),
+                    np.repeat(ea2[sl], ib.size, axis=0),
+                ),
+                ext_b=(np.tile(eb1, (na, 1)), np.tile(eb2, (na, 1))),
+            )
+            valid &= ~inside
+            L_dir[II[valid], JJ[valid]] = values[valid]
+            L_dir[JJ[valid], II[valid]] = values[valid]
+
+
+# ---------------------------------------------------------------------
+# Nearly parallel conductors lying beside each other (audit W1R2-01)
+# ---------------------------------------------------------------------
+
+#: Two pieces of different conductors that are tilted against each other
+#: by more than the parallel tolerance of :func:`_bundle_mutual_batch`
+#: ($|\cos\varphi| < 1 - 10^{-9}$, about 4.5e-5 rad) are *nearly parallel*
+#: while their lateral distance changes by at most this fraction of the
+#: touching distance $r_a + r_b$ along the longer piece,
+#: $\max(\ell_a, \ell_b)\sin\varphi \le f\,(r_a + r_b)$, and
+#: $|\cos\varphi| \ge$ :data:`_PARALLEL_COS_MIN`. Such pieces get the bundle
+#: rule with the exact pointwise classification (:func:`_apply_tilted_bundles`).
+_TILT_FRACTION = 1.0
+
+#: Pairs of pieces evaluated at once by the bundle rules: the temporaries
+#: stay a few MiB whatever the length of the conductors (audit W1R2-03; the
+#: 600 m pair of 1 m pieces peaked at 292 MiB with all pairs at once).
+_BUNDLE_CHUNK = 4096
+
+
+def _tilted_gate(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    d_touch: np.ndarray,
+) -> np.ndarray:
+    """Mask of the nearly parallel pairs among K pairs of segments.
+
+    Not parallel within the tolerance of the closed form
+    (:func:`_bundle_mutual_batch`), $|\\cos\\varphi| \\ge$
+    :data:`_PARALLEL_COS_MIN`, and the lateral distance changes by at most
+    :data:`_TILT_FRACTION` times ``d_touch`` along the longer segment.
+    """
+    da = p2_a - p1_a
+    db = p2_b - p1_b
+    la = np.sqrt(_row_dots(da, da))
+    lb = np.sqrt(_row_dots(db, db))
+    ua = da / la[:, None]
+    ub = db / lb[:, None]
+    dot = _row_dots(ua, ub)
+    n = np.cross(ua, ub)
+    sin = np.sqrt(_row_dots(n, n))
+    return (
+        (np.abs(np.abs(dot) - 1.0) > 1e-9)
+        & (np.abs(dot) >= _PARALLEL_COS_MIN)
+        & (np.maximum(la, lb) * sin <= _TILT_FRACTION * d_touch)
+    )
+
+
+def _tilted_one_sided(
+    a1: np.ndarray,
+    a2: np.ndarray,
+    b1: np.ndarray,
+    b2: np.ndarray,
+    e1: np.ndarray,
+    e2: np.ndarray,
+    r_thin: np.ndarray,
+    r_thick: np.ndarray,
+    d_touch: np.ndarray,
+    inside_ok: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    r"""One-sided integral of the bundle rule over *a*, K nearly parallel pairs.
+
+    *a* is split where the foot of its points on *b*'s axis passes an end
+    of the partner's conductor (``e1``, ``e2``) and where the distance
+    $\rho(s)$ from that axis crosses $r_a + r_b$ or $r_\text{thick} -
+    r_\text{thin}$ (exactly, from the closest approach of the two lines,
+    as :func:`_beside_plan`). A stretch is *inside* (``inside_ok`` and
+    $\rho + r_\text{thin} \le r_\text{thick}$, at every axial offset),
+    *beside* (the foot inside the partner's conductor and $\rho < r_a +
+    r_b$) or free. On the inside and beside stretches the effective distance
+    $\rho_e$ is constant, and with $u = t_0(s)$ (the foot on *b*'s axis,
+    $du = \cos\varphi\,ds$) the integral is exact in closed form:
+    $\int_{s_1}^{s_2} [\operatorname{asinh}((\ell_b - t_0)/\rho_e) +
+    \operatorname{asinh}(t_0/\rho_e)]\,ds = J(u_1, u_2; 0, \ell_b; \rho_e)
+    /\cos\varphi$ (:func:`_stretch_integral`). *b* must point along *a*
+    ($\hat u_a \cdot \hat u_b > 0$).
+
+    Returns
+    -------
+    J, clamped, free : np.ndarray
+        ``J`` in m: the integral over the inside and beside stretches (and
+        over free stretches shorter than the vertex tolerance, at their
+        own distance); ``clamped``: a stretch longer than the tolerance is
+        inside or beside; ``free``: a free stretch longer than the
+        tolerance exists (its integral is not in ``J``).
+    """
+    da = a2 - a1
+    la = np.sqrt(_row_dots(da, da))
+    ua = da / la[:, None]
+    db = b2 - b1
+    lb = np.sqrt(_row_dots(db, db))
+    ub = db / lb[:, None]
+    dot = _row_dots(ua, ub)
+    w = a1 - b1
+    c0 = _row_dots(w, ub)  # foot t0(s) = c0 + s dot
+    n = np.cross(ua, ub)
+    sin2 = _row_dots(n, n)
+    # closest approach of the axes and their distance (as _beside_plan)
+    s_star = _row_dots(np.cross(-w, ub), n) / sin2
+    delta = np.abs(_row_dots(w, n)) / np.sqrt(sin2)
+    te1 = _row_dots(e1 - b1, ub)
+    te2 = _row_dots(e2 - b1, ub)
+    t_lo = np.minimum(te1, te2)
+    t_hi = np.maximum(te1, te2)
+    marks = [np.zeros_like(la), la, (t_lo - c0) / dot, (t_hi - c0) / dot]
+    for d in (d_touch, r_thick - r_thin):
+        crosses = d > delta
+        half = np.sqrt(np.where(crosses, (d - delta) * (d + delta), 0.0) / sin2)
+        marks += [
+            np.where(crosses, s_star - half, 0.0),
+            np.where(crosses, s_star + half, 0.0),
+        ]
+    edges = np.sort(np.clip(np.stack(marks, axis=1), 0.0, la[:, None]), axis=1)
+    lo, hi = edges[:, :-1], edges[:, 1:]
+    mid = 0.5 * (lo + hi)
+    t_mid = c0[:, None] + mid * dot[:, None]
+    v = (
+        w[:, None, :]
+        + mid[:, :, None] * ua[:, None, :]
+        - t_mid[:, :, None] * ub[:, None, :]
+    )
+    rho = np.sqrt(np.einsum("kpi,kpi->kp", v, v))
+    inside = inside_ok[:, None] & (rho + r_thin[:, None] <= r_thick[:, None])
+    beside = (
+        (t_lo[:, None] <= t_mid)
+        & (t_mid <= t_hi[:, None])
+        & (rho < (d_touch * (1.0 - _BESIDE_MARGIN))[:, None])
+    )
+    clamped = inside | beside
+    longest = np.maximum(la, lb)[:, None]
+    long_enough = (hi - lo) > _TOUCH_TOL_REL * longest
+    rho_e = np.where(
+        inside,
+        r_thick[:, None],
+        np.where(clamped, d_touch[:, None], np.maximum(rho, 1e-30 * longest)),
+    )
+    free = ~clamped & long_enough
+    J = _stretch_integral(
+        c0[:, None] + lo * dot[:, None],
+        c0[:, None] + hi * dot[:, None],
+        0.0,
+        lb[:, None],
+        rho_e,
+        np.zeros(rho_e.shape, dtype=bool),
+    )
+    J = np.where(free, 0.0, J).sum(axis=1) / dot
+    return J, (clamped & long_enough).any(axis=1), free.any(axis=1)
+
+
+def _tilted_bundle_batch(
+    p1_a: np.ndarray,
+    p2_a: np.ndarray,
+    r_a: np.ndarray,
+    shield_a: np.ndarray,
+    p1_b: np.ndarray,
+    p2_b: np.ndarray,
+    r_b: np.ndarray,
+    shield_b: np.ndarray,
+    ext_a: tuple[np.ndarray, np.ndarray],
+    ext_b: tuple[np.ndarray, np.ndarray],
+    m_fil: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    r"""The bundle rule for K nearly parallel pairs of pieces, in H.
+
+    The mutual is $\mu_0/(4\pi)\cos\varphi$ times the mean of the two
+    one-sided integrals of the pointwise rule against the partner's whole
+    conductor (``ext_a`` / ``ext_b``: the end points of the conductors).
+    A side whose stretches are all inside or beside the partner is
+    integrated in closed form (:func:`_tilted_one_sided`); a side that
+    is entirely free takes the filament value, $J = m_\text{fil} /
+    (\mu_0/(4\pi)\cos\varphi)$ with ``m_fil`` the filament mutual of the
+    pair (the matrix entry before the rule). A side with both kinds of
+    stretch is marked ``exact``: the caller evaluates such pairs with
+    :func:`_beside_mutual` and the conductor extents. The value is the same,
+    bit for bit, for either order of the two pieces and either direction of
+    each (up to the orientation sign).
+
+    Returns
+    -------
+    values, valid, exact : np.ndarray
+        ``values[k]`` in H where ``valid[k]`` (a stretch of either side is
+        inside or beside) and not ``exact[k]``.
+    """
+    da = p2_a - p1_a
+    db = p2_b - p1_b
+    la = np.sqrt(_row_dots(da, da))
+    lb = np.sqrt(_row_dots(db, db))
+    dot = _row_dots(da / la[:, None], db / lb[:, None])
+    a1, a2 = _lexicographic_ends(p1_a, p2_a)
+    b1, b2 = _lexicographic_ends(p1_b, p2_b)
+    flip = (_row_dots(a2 - a1, b2 - b1) < 0.0)[:, None]
+    r_a = np.asarray(r_a, dtype=float)
+    r_b = np.asarray(r_b, dtype=float)
+    d_touch = r_a + r_b
+    r_thin = np.minimum(r_a, r_b)
+    r_thick = np.maximum(r_a, r_b)
+    inside_ok = np.where(r_a > r_b, shield_a, shield_b) & (r_thin < r_thick)
+    j_a, cl_a, fr_a = _tilted_one_sided(
+        a1,
+        a2,
+        np.where(flip, b2, b1),
+        np.where(flip, b1, b2),
+        ext_b[0],
+        ext_b[1],
+        r_thin,
+        r_thick,
+        d_touch,
+        inside_ok,
+    )
+    j_b, cl_b, fr_b = _tilted_one_sided(
+        b1,
+        b2,
+        np.where(flip, a2, a1),
+        np.where(flip, a1, a2),
+        ext_a[0],
+        ext_a[1],
+        r_thin,
+        r_thick,
+        d_touch,
+        inside_ok,
+    )
+    k = (MU_0 / (4.0 * math.pi)) * dot
+    filament = m_fil / k
+    j_a = np.where(cl_a, j_a, filament)
+    j_b = np.where(cl_b, j_b, filament)
+    valid = cl_a | cl_b
+    exact = valid & ((cl_a & fr_a) | (cl_b & fr_b))
+    return k * (0.5 * (j_a + j_b)), valid, exact
+
+
+def _tilted_pairs(
+    L_dir: np.ndarray,
+    p1: np.ndarray,
+    p2: np.ndarray,
+    radii: np.ndarray,
+    flags: np.ndarray,
+    II: np.ndarray,
+    JJ: np.ndarray,
+    ext_a: tuple[np.ndarray, np.ndarray],
+    ext_b: tuple[np.ndarray, np.ndarray],
+    hit_keys: np.ndarray,
+) -> None:
+    """Evaluate and write the bundle rule for the nearly parallel pairs
+    ``(II[k], JJ[k])`` (one chunk; see :func:`_apply_tilted_bundles`)."""
+    M = len(radii)
+    sel = np.flatnonzero(
+        _tilted_gate(p1[II], p2[II], p1[JJ], p2[JJ], radii[II] + radii[JJ])
+    )
+    if sel.size == 0:
+        return
+    II, JJ = II[sel], JJ[sel]
+    ea = (ext_a[0][sel], ext_a[1][sel])
+    eb = (ext_b[0][sel], ext_b[1][sel])
+    values, valid, exact = _tilted_bundle_batch(
+        p1[II],
+        p2[II],
+        radii[II],
+        flags[II],
+        p1[JJ],
+        p2[JJ],
+        radii[JJ],
+        flags[JJ],
+        ea,
+        eb,
+        L_dir[II, JJ],
+    )
+    # pairs on which the pointwise rule acted hold its value, not the
+    # filament: they, and sides with free and clamped stretches, are
+    # integrated by the pointwise rule against the conductors
+    keys = np.minimum(II, JJ) * M + np.maximum(II, JJ)
+    exact |= np.isin(keys, hit_keys)
+    for k in np.flatnonzero(exact):
+        i, j = int(II[k]), int(JJ[k])
+        val = _beside_mutual(
+            p1[i],
+            p2[i],
+            float(radii[i]),
+            p1[j],
+            p2[j],
+            float(radii[j]),
+            shield_a=bool(flags[i]),
+            shield_b=bool(flags[j]),
+            ext_a=(ea[0][k], ea[1][k]),
+            ext_b=(eb[0][k], eb[1][k]),
         )
-        valid &= ~inside
-        L_dir[II[valid], JJ[valid]] = values[valid]
-        L_dir[JJ[valid], II[valid]] = values[valid]
+        valid[k] = val is not None
+        if val is not None:
+            values[k] = val
+    L_dir[II[valid], JJ[valid]] = values[valid]
+    L_dir[JJ[valid], II[valid]] = values[valid]
+
+
+def _all_conductor_extents(
+    p1: np.ndarray, p2: np.ndarray, labels: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """End points of the conductor of every segment, shapes ``(M, 3)``.
+
+    :func:`_conductor_extents` for every label (a segment of a conductor
+    that is not straight keeps its own end points).
+    """
+    e1 = p1.copy()
+    e2 = p2.copy()
+    order = np.argsort(labels, kind="stable")
+    for members in np.split(order, np.flatnonzero(np.diff(labels[order])) + 1):
+        if members.size > 1:
+            q1, q2 = _conductor_extents(p1, p2, members)
+            e1[members] = q1
+            e2[members] = q2
+    return e1, e2
+
+
+def _segment_line_distance(
+    q1: np.ndarray, q2: np.ndarray, p: np.ndarray, u: np.ndarray
+) -> np.ndarray:
+    """Smallest distance in m of the segments ``q1 -> q2`` (K, 3) from the
+    line through ``p`` along the unit vector ``u`` (3,)."""
+    r1 = q1 - p
+    r1 = r1 - (r1 @ u)[:, None] * u
+    r2 = q2 - p
+    r2 = r2 - (r2 @ u)[:, None] * u
+    dr = r2 - r1
+    den = _row_dots(dr, dr)
+    t = np.clip(
+        np.where(den > 0.0, -_row_dots(r1, dr) / np.where(den > 0.0, den, 1.0), 0.0),
+        0.0,
+        1.0,
+    )
+    r = r1 + t[:, None] * dr
+    return np.sqrt(_row_dots(r, r))
+
+
+def _apply_tilted_bundles(
+    L_dir: np.ndarray,
+    p1: np.ndarray,
+    p2: np.ndarray,
+    radii: np.ndarray,
+    flags: np.ndarray,
+    labels: np.ndarray,
+    hits: list[tuple[int, int]],
+) -> None:
+    """The bundle rule for nearly parallel conductors (audit W1R2-01).
+
+    The parallel closed form (:func:`_bundle_mutual_batch`) needs the
+    pieces parallel within $|\\cos\\varphi| \\ge 1 - 10^{-9}$ (4.5e-5 rad);
+    a core tilted by more against its shield kept the per-piece rule, and
+    the 100 m coax in 0.25 m pieces read 7.4 % low at 4.5e-5 rad, with a
+    step at the tolerance. Here every nearly parallel pair
+    (:func:`_tilted_gate`) of pieces of two conductors lying beside each
+    other gets the two readings against the partner's whole conductor:
+    the inside reading at every axial offset, the beside reading where the
+    foot falls inside the partner's conductor. The conductors are those of
+    a pair of the pointwise rule (``hits``, other labels, nearly parallel;
+    every pair of their pieces is evaluated) and, as for parallel pieces
+    without labels, a cable shield with every thinner nearly parallel wire
+    that comes inside its tube (the inside reading needs no conductor
+    identity). The classification is exact (:func:`_tilted_one_sided`), so
+    the pieces add up to the lumped pair whatever the tilt within the gate.
+    Pieces of one conductor are not touched.
+    """
+    M = len(radii)
+    I = np.array([i for i, _ in hits], dtype=int)
+    J = np.array([j for _, j in hits], dtype=int)
+    bundles: list[tuple[int, int]] = []
+    if I.size:
+        keep = (labels[I] != labels[J]) & _tilted_gate(
+            p1[I], p2[I], p1[J], p2[J], radii[I] + radii[J]
+        )
+        bundles = sorted(
+            {
+                (min(a, b), max(a, b))
+                for a, b in zip(
+                    labels[I[keep]].tolist(), labels[J[keep]].tolist(), strict=True
+                )
+            }
+        )
+    if not bundles and not flags.any():
+        return
+    hit_keys = np.unique(I * M + J)
+    e1, e2 = _all_conductor_extents(p1, p2, labels)
+    members = {
+        c: np.flatnonzero(labels == c) for c in sorted({c for b in bundles for c in b})
+    }
+    for ca, cb in bundles:
+        ia, ib = members[ca], members[cb]
+        rows = max(1, _BUNDLE_CHUNK // ib.size)
+        for start in range(0, ia.size, rows):
+            II = np.repeat(ia[start : start + rows], ib.size)
+            JJ = np.tile(ib, II.size // ib.size)
+            _tilted_pairs(
+                L_dir,
+                p1,
+                p2,
+                radii,
+                flags,
+                II,
+                JJ,
+                (e1[II], e2[II]),
+                (e1[JJ], e2[JJ]),
+                hit_keys,
+            )
+    if not flags.any():
+        return
+    # the inside reading of a cable shield needs no conductor identity:
+    # every thinner nearly parallel wire that comes inside the tube
+    n_labels = int(labels.max()) + 1
+    bundle_keys = np.array([a * n_labels + b for a, b in bundles], dtype=int)
+    da = p2 - p1
+    u = da / np.sqrt(_row_dots(da, da))[:, None]
+    for i in np.flatnonzero(flags):
+        near = _segment_line_distance(p1, p2, p1[i], u[i])
+        cand = np.flatnonzero(
+            (radii < radii[i]) & (labels != labels[i]) & (near + radii <= radii[i])
+        )
+        if cand.size == 0:
+            continue
+        lo = np.minimum(labels[cand], labels[i])
+        hi = np.maximum(labels[cand], labels[i])
+        cand = cand[~np.isin(lo * n_labels + hi, bundle_keys)]
+        if cand.size == 0:
+            continue
+        II = np.full(cand.size, i)
+        _tilted_pairs(
+            L_dir,
+            p1,
+            p2,
+            radii,
+            flags,
+            II,
+            cand,
+            (e1[II], e2[II]),
+            (e1[cand], e2[cand]),
+            hit_keys,
+        )
 
 
 def _overhead(p1: np.ndarray, p2: np.ndarray) -> np.ndarray:
@@ -2384,13 +2896,21 @@ def build_inductance_matrix(
         Conductor label of every segment, shape ``(M,)`` (any values that
         can be compared for equality, e.g. conductor names; ``None``, the
         default: every segment is a conductor of its own). For two
-        conductors lying beside each other along one axis (a parallel pair
-        of their segments closer than touching), a point lies beside the
-        partner when its foot falls inside the partner's whole conductor —
-        the straight run of its segments with that label — so the
-        sub-pieces of the two conductors add up to the lumped pair (audit
-        W1A-02 of the calendar release). Pieces of one conductor and
-        conductors that only meet end to end keep the filament integral.
+        conductors lying beside each other along one axis (a parallel or
+        nearly parallel pair of their segments closer than touching), a
+        point lies beside the partner when its foot falls inside the
+        partner's whole conductor — the straight run of its segments with
+        that label — so the sub-pieces of the two conductors add up to the
+        lumped pair (audit W1A-02 of the calendar release). Nearly parallel
+        means tilted so little that the lateral distance changes by at most
+        the touching distance $r_i + r_j$ along the longer segment, with
+        $|\\cos\\varphi| \\ge 0.99$ (audit W1R2-01; the stretches inside,
+        beside and away from the partner are then found exactly, so a
+        slightly tilted core adds up as well; beyond that the rule of the
+        single segments acts, with an error of about 1e-6 because the
+        touching stretch is then about one segment long). Pieces of one
+        conductor and conductors that only meet end to end keep the
+        filament integral.
 
     Returns
     -------

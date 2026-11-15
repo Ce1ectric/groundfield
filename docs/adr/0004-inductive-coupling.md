@@ -410,3 +410,50 @@ the following decisions refine it.
     sections on one axis (a section of one beside a section of the other
     that it does not overlap) couple as filaments on the axis between the
     sections that do not overlap.
+13. **Nearly parallel pieces (second wave-1 audit of the calendar
+    release, W1R2-01, W1R2-03).** The closed form of item 12 needs the
+    pieces parallel within $|\cos\varphi| \ge 1 - 10^{-9}$, about
+    4.5e-5 rad. A core tilted by more against its shield kept the rule of
+    item 9 per segment, so the drift of item 12 came back in full, with a
+    step at the tolerance: the 100 m coax read 26.966 µH in 0.25 m pieces
+    at 4.4e-5 rad and 24.966 µH at 4.5e-5 rad (−7.4 %; −0.17 / −0.36 /
+    −1.86 % in 10 / 5 / 1 m pieces). Pieces of two conductors that are
+    *nearly parallel* — the lateral distance changes by at most the
+    touching distance $r_1 + r_2$ along the longer piece, and
+    $|\cos\varphi| \ge 0.99$ — now get the two readings of item 12 against
+    the partner's whole conductor with the stretches found exactly: each
+    piece is split where the foot of its points passes an end of the
+    partner's conductor and where the distance $\rho(s)$ from the partner's
+    axis crosses $r_1 + r_2$ or $r_\text{thick} - r_\text{thin}$ (from
+    the closest approach of the two lines). On the stretches inside the
+    shield and beside the partner the effective distance is constant and
+    the integral has a closed form in the foot coordinate
+    ($du = \cos\varphi\,ds$); a side that is entirely free takes the
+    filament value of the pair, and a side with free and clamped stretches
+    (a piece where the core leaves the touching distance, or passes an end
+    of the partner) is integrated by the quadrature of item 9 with the
+    conductor extents. The pieces add up to the lumped pair within
+    6e-12 for tilts 0 … 1e-3 rad in 10 / 5 / 1 / 0.25 m pieces, marked and
+    unmarked, in the matrix and in the solver (`perfect_mirror` and
+    `sommerfeld` within 3.2e-11; under `carson_series` the Carson
+    correction of one lumped pair, tiled at its mid-point distance, differs
+    from the pieces by 1.7e-5 at 3e-4 rad and 1.3e-4 at 1e-3 rad,
+    independent of the piece length — the correction's own tiling, not the
+    rule). The literal proposal, the closed form at the mean lateral
+    distance of each pair, missed by up to 1.35 % at 1.5e-4 … 7e-4 rad,
+    where the core leaves the shield's tube inside a piece. Beyond the
+    gate the rule of item 9 acts per segment; the touching stretch is then
+    about one piece long and the pieces differ from the lumped pair by
+    1.5e-7 (10 m pieces, 2.01e-3 rad), 6.6e-7 (1 m, 2.01e-2 rad) and
+    1.4e-6 (0.25 m, 8.01e-2 rad). The generator's overhead measurement
+    leads are such a pair (the probe lead starts 10 mm beside the feed
+    lead and ends on its axis, 2e-4 rad): their mutual in the default 5 m
+    pieces was +1.0e-4 off the lumped one (1 m pieces +5.4e-4), now
+    4e-16; the probe junction potential moves by 6.5e-5 … 1.1e-4, the
+    feed potentials and every electrode result not at all. Without labels
+    (`conductors=None`) unmarked touching pieces stay per segment, while
+    the inside reading of a marked shield needs no labels, also tilted.
+    The pairs of two bundled conductors are evaluated in chunks of 4096
+    (W1R2-03; element-wise, so bit-identical): a 600 m pair in 1 m pieces
+    peaked at 292 MiB with all pairs at once, now 30 MiB, the level
+    before item 12.
