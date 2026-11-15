@@ -94,7 +94,10 @@ without it are ignored with a `ProbePointsIgnoredWarning`.
 
 `FieldResult.potential(points, frequency_index=0)` evaluates the
 potential in V at arbitrary points of shape `(M, 3)` (homogeneous and
-two-layer soil), `to_dataframe()` returns the per-electrode table, and `metadata["provenance"]` records the package
+two-layer soil), `to_dataframe()` returns the per-electrode table,
+`to_dataframe("sources")` the per-source table (impressed or solved
+current, the voltage and internal impedance of a voltage source, the
+input impedance), and `metadata["provenance"]` records the package
 and library versions, the engine configuration, a fingerprint of the
 world and the solve time stamp. Results are saved and loaded with
 [`save_result` / `load_result`](results-io.md).

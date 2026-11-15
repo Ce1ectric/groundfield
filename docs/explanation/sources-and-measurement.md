@@ -44,22 +44,33 @@ Sources are validated before any work is done (`World.check`, called by
 every solve): unknown node names raise with a did-you-mean suggestion,
 magnitudes must be finite, a current source must not be 0 A, a source whose
 two terminals end in one cluster (a short circuit) raises, and so do voltage
-sources that form a loop (finding 10.66).
+sources without internal resistance that form a loop (finding 10.66; the
+message names the sources of the loop).
 
 ## Voltage sources
 
-A `VoltageSource` holds `attached_to` at the voltage $U$ above `return_to`
-(or above remote earth) — an instrument that drives a test voltage, the
-feeding voltage of a fault loop. Its current is solved for and reported
-like the impressed current of a current source
-(`result.sources[k].current`, `input_impedance()` $= U/I$). The answer is
-the 1 A current-source solve scaled by $U/Z_\text{in}$; a voltage source
-saves that step and keeps several voltage-driven terminals in one solve,
-where scaling would need the transfer matrix of all of them. A voltage
-behind an internal impedance is a junction at the terminal, a finite
-conductor to the electrode and the source at the junction. Up to 0.15.0
-voltage sources were dropped with a warning (finding 10.51); they are
-solved since 2026.11 ([sources](../reference/api/sources.md)).
+A `VoltageSource` drives `attached_to` against `return_to` (or against
+remote earth) with the voltage $U$ behind an internal impedance
+$Z_q = R + j\omega L$ (`internal_resistance_ohm`, `internal_inductance_h`;
+0 by default, the ideal source) — an instrument that drives a test
+voltage, the source voltage of a fault loop behind the impedance of the
+feeding transformer and line. The terminals then sit at
+$\varphi_a - \varphi_r = U - Z_q I$. The current is solved for and
+reported like the impressed current of a current source
+(`result.sources[k].current`); `input_impedance()` $= U/I - Z_q$ is the
+impedance the source sees, without its own $Z_q$. For one source the
+answer is the 1 A current-source solve scaled by
+$I = U/(Z_q + Z_\text{in})$ — the fault current $I_F = U_q/(Z_q + R_F + T)$
+of a fault study, with $T$ the input impedance of the network — and a
+voltage source saves that step; with several voltage-driven terminals in
+one solve the scaling would need the transfer matrix of all of them, and
+the result is their superposition (the input impedance of each is then an
+apparent one). Before 2026.11 a series resistance was a junction at the
+terminal, a lumped conductor to the electrode and the ideal source at the
+junction; that pattern and `internal_resistance_ohm` give the same
+solution to round-off. Up to 0.15.0 voltage sources were dropped with a
+warning (finding 10.51); they are solved since 2026.11
+([sources](../reference/api/sources.md)).
 
 ## Junctions
 
@@ -145,8 +156,10 @@ and the feed lead — not the reading; `measured_impedance` is the reading.
 
 ## Validity
 
-- The source model is ideal: an impressed current or an impressed voltage,
-  no internal impedance (model one with a junction and a finite conductor).
+- The source model is an impressed current (ideal) or an impressed voltage
+  behind a lumped internal impedance $R + j\omega L$ (no frequency
+  dependence of $R$ and $L$ themselves; a source with a frequency-dependent
+  impedance needs one solve per frequency with its values).
 - Two-terminal sources, junctions and voltage sources are supported by the
   image family and the `mom` family (registry capabilities
   `two_terminal_sources`, `junctions`, `voltage_sources`); `fem` ignores

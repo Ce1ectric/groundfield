@@ -165,3 +165,44 @@ two-terminal source equals $U/(Z_{11}+Z_{22}-Z_{12}-Z_{21})$ of
 `solve_mutual_matrix`, three voltage sources the hand-inverted transfer
 matrix of three 1 A solves, a rod Dwight's formula (−0.012 %) and its far
 field the hemispherical $\rho I/(2\pi r)$.
+
+## Amendment 2026.11 — internal impedance of a voltage source (user decision D1)
+
+Decision of 2026-11-15: a `VoltageSource` carries an internal series
+impedance $Z_q(f) = R + j\omega L$ as two fields,
+`internal_resistance_ohm` and `internal_inductance_h` (both ≥ 0, default 0:
+the ideal source, which assembles the matrix of the first amendment entry
+for entry). $Z_q$ is the one diagonal entry of the source's constraint row,
+$\varphi_a - \varphi_r + Z_q I_v = U$, with $I_v$ flowing from the source
+into `attached_to` (the terminal voltage is $U - Z_q I_v$). The pipeline
+evaluates it per angular frequency (`ImpressedVoltage.terminals(cluster_id,
+omega)`); `_voltage_source_entries` writes $\operatorname{Re} Z_q$ into the
+real matrix and `_source_reactance_entries` adds $j\operatorname{Im} Z_q$
+to its complex copy. A real (galvanic) system with a non-zero $\omega L$
+therefore **takes the complex path** — one complex factorisation per
+frequency instead of one real factorisation with two right-hand sides for
+all frequencies — rather than being refused: the cost is one solve per
+frequency of a system whose size does not change, and the complex path is
+the one every inductive world already takes. The same two helpers serve
+the image family (including the cross-layer path) and the point-matching
+family, so `image`, `image_2layer`, `mom` and `mom_sommerfeld` honour $Z_q$
+with conductors, inductive coupling and frequency sweeps; `fem` keeps
+refusing voltage sources.
+
+`input_impedance()` of a voltage source is the impedance the source sees,
+$U/I - Z_q$, without its own $Z_q$; `SourceRecord` carries $R$ and $L$ so a
+result read back from a file computes it alone (records written before
+have 0 / 0). `World.check` treats a source with $R > 0$ as no edge of the
+loop check — two such sources in parallel, or a ring with one of them, are
+solvable — while an inductance alone keeps the source an edge, because
+$Z_q$ vanishes at $f = 0$ and `World.check` does not know the engine's
+frequencies. A source short-circuited by an ideal bond stays rejected also
+with $Z_q$ (its current would circulate through the bond, none through the
+soil). Validation (`tests/test_voltage_source_impedance.py`): the solve
+equals the junction + `lumped_series_resistance_ohm` pattern for a
+resistance, and the 1 A current-source solve with $I = U/(Z_q + Z_\text{in})$
+at 0, 50 and 1000 Hz in every backend, with inductive conductors (three
+earth models) and on the cross-layer path; several sources satisfy
+$(Z_T + \operatorname{diag} Z_q)\,\mathbf I = \mathbf U$ with the
+transfer matrix of 1 A solves, a two-terminal source
+$U/(Z_q + Z_{11}+Z_{22}-Z_{12}-Z_{21})$ of `solve_mutual_matrix`.

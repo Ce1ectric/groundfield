@@ -17,7 +17,8 @@ frequency, real and imaginary part separately:
 
 - the cluster impedance of every cluster (Ω),
 - the input impedance of every current or voltage source (Ω; a voltage
-  source since 2026.11),
+  source since 2026.11, the impedance seen by the source without its
+  internal impedance),
 - optionally the potential at `sample_points` (V).
 
 Each (quantity, frequency, part) is one `ComparisonRow` with the
