@@ -68,7 +68,10 @@ limits a result, the reference documentation states the limit.
   layer is within 7.5 segment lengths of the image of every short segment
   (1.15 M pairs, 5 times the solve before wave 3); integrating them with the
   shorter segment as observer and mirroring the result (the corrections are
-  symmetric) would remove it.
+  symmetric) would remove it. Since audit W3R2A-01 the point form keeps them
+  too: 16 house grids with eight 9.4 m pieces below a 0.5 m top layer solve
+  in 1.44 s instead of 0.39 s with `image_far_field="point"`, 4.5 times the
+  solve before wave 3.
 - **Far term per image family** (audit W3A-01, proposal 2). Thin top layers
   and high contrasts put hundreds of images within reach (3.6 … 4.5 times the
   solve before wave 3 with the default far-image form).
@@ -87,6 +90,13 @@ limits a result, the reference documentation states the limit.
   jitter of 1e-7 … 1e-6 m flips (the 10-house star: −0.24 % and −11.8 % X at
   1 kHz); making them robust, or documenting the realisations as discrete,
   would serve Monte Carlo studies.
+- **The point form at the interface.** A wire on the interface differs by
+  up to 3e-4 between the series and the cross-layer path with
+  `image_far_field="point"`, because the far terms are split differently
+  (the default: 1.3e-6); a consistent split was not attempted.
+- **Reciprocity of cross-layer worlds.** `solve_mutual_matrix(symmetrize=False)`
+  shows an asymmetry of 2.3e-8 on a cross-layer world (a strip below h₁, a
+  rod through it, a grid above), in both far-image forms.
 
 ## Status of the roadmap items carried in the changelog
 

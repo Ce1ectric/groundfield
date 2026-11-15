@@ -115,33 +115,59 @@ shows what agrees with independent references and how well.
   `BackendCapabilityError` (a ring 1 µm above the interface read −1931 Ω
   instead of 4.18 Ω before). Use the line kernel or shorter segments.
 - **Line kernel in two-layer soil.** Image pairs take the image's potential
-  at the transverse distance of the wire from the image's axis (its average
-  over the wire's circumference; audit W3A-02): a ring 1 cm above a 1000 /
-  30 Ω·m interface is within 0.004 % of its exact thin ring, a straight 10 m
-  strip in 1000 / 50 Ω·m with $h_1$ = 1 m within 3.6e-6 of its
-  uniform-current resistance for segment lengths of 0.125 … 2 m (not
-  monotonically), a rod through the interface within 1.4e-6 of its exact
-  two-owner value. The soil-surface image keeps the reduced kernel of direct
-  pairs (a house grid at 0.8 m 4e-7 lower than with the transverse distance,
-  at 0.1 m 1.7e-5). Far images carry the quadrupole term up to a vertical
-  distance of 120 segment lengths (tapered from 60) and where it exceeds
-  1e-9 of a unit point term; with `Engine.image_far_field = "point"` they stay
-  point sources. The field of sources in the lower layer
-  (`FieldResult.potential`, `solve_mutual_field`) is evaluated in point form
-  by the spectral kernel. With an electrode through the interface, a galvanic
-  distributed conductor needs sub-pieces of the order of $h_1$ (changelog
-  2026.11.0, 10.24).
+  at the transverse distance of the wire from the image's axis (audit
+  W3A-02). That is its average over the wire's circumference for a long
+  wire; the ends of a finite one add a remainder of order a²/(d·ℓ) (audit
+  W3R2A-05): a 2 m strip 5 mm above a 1000 / 30 Ω·m interface reads
+  +3.0e-4 against the circumference average, a 10 m strip +5.5e-5; rings
+  have no ends.
+
+  A ring 1 cm above a 1000 / 30 Ω·m interface is within 0.004 % of its
+  exact thin ring. A straight 10 m strip in 1000 / 50 Ω·m with $h_1$ = 1 m
+  is within 3.6e-6 of its uniform-current resistance for segment lengths of
+  0.125 … 2 m, not monotonically. A rod through the interface is within
+  1.4e-6 of its exact two-owner value.
+
+  Direct pairs of different wires and the soil-surface image keep the
+  reduced kernel of the direct term (audit W3R2A-06). Two strips 1 cm above
+  a 1000 / 30 Ω·m interface, 5 cm apart, read −3.5e-4 against their mutual
+  resistance with the circumference average of the direct term too. A house
+  grid at 0.8 m is 4e-7 lower than with the transverse distance on the
+  surface image, at 0.1 m 1.7e-5.
+
+  Far images carry the quadrupole term up to a vertical distance of 120
+  segment lengths (tapered from 60) and where it exceeds 1e-9 of a unit
+  point term. With `Engine.image_far_field = "point"` they stay point
+  sources and their near pairs stay Galerkin integrals. In that form a wire
+  on the interface is up to 3.0e-4 apart between the series and the
+  cross-layer path (the default: 1.3e-6), and a rod through the interface
+  depends on the segment length by up to 6e-5 (ds 1 … 0.25 m; the default
+  4e-7).
+
+  The field of sources in the lower layer (`FieldResult.potential`,
+  `solve_mutual_field`) is evaluated in point form by the spectral kernel.
+  With an electrode through the interface, a galvanic distributed
+  conductor needs sub-pieces of the order of $h_1$ (changelog 2026.11.0,
+  10.24).
 - **Wires within one radius of the layer interface.** A wire at least one
-  wire radius from the interface is integrated exactly (a ring 5 mm above a
-  1000 / 30 Ω·m interface within 4.1e-5 of its exact thin ring, two
-  references). Closer, its surface crosses the interface and the thin-wire
-  model does not apply: at half a radius the two references (image sum,
-  Hankel transform) differ by 8 % and the line kernel lies 2 … 11 % below
-  them (+65 % before audit W3A-02). Within a fraction of a radius the image
-  takes the reduced kernel of the direct pair, so a wire on the interface is
-  the same on both sides (4.1806 Ω for a 3 m ring at $h_1$ = 5 m). No warning
-  is given; `kernel="point"` keeps its warning for wires within two segment
-  lengths of the interface.
+  wire radius from the interface is integrated exactly: a ring 5 mm above a
+  1000 / 30 Ω·m interface is within 4.1e-5 of its exact thin ring (two
+  references).
+
+  Closer, its surface crosses the interface and the thin-wire model does
+  not apply. At half a radius the two references (image sum, Hankel
+  transform) differ by 8 %, and the line kernel lies 2 … 11 % below them
+  (+65 % before audit W3A-02).
+
+  Within a/20 of the interface the image blends into the reduced kernel of
+  the direct pair, so a wire on the interface is the same on both sides
+  (4.1806 Ω for a 3 m ring at $h_1$ = 5 m). Through ±a the impedance moves
+  with wiggles of at most 0.17 % against its direction (strips and rings in
+  1000 / 30 and 30 / 1000 Ω·m; up to 24 % with the blend over one radius
+  before audit W3R2A-03).
+
+  No warning is given; `kernel="point"` keeps its warning for wires within
+  two segment lengths of the interface.
 - **Cost of the line kernel.** For 16 house grids ($N$ = 1920) 3.8 times the
   solve time of the point kernel in homogeneous soil and 1.6 times in
   two-layer soil ($h_1$ = 5 m) with numba, 5.8 and 1.4 times without
@@ -150,8 +176,12 @@ shows what agrees with independent references and how well.
   30 Ω·m with $h_1$ = 1.5 m takes 1.8 times the solve before wave 3 (3.6
   times without numba), 16 house grids below a 0.1 m top layer 4 times, and
   with eight 9.4 m pieces below a 0.5 m top layer 5 times (their near image
-  pairs are Galerkin integrals). `Engine.image_far_field = "point"`: 0.8 …
-  1.3 times.
+  pairs are Galerkin integrals). `Engine.image_far_field = "point"`: 1.1 …
+  1.3 times within the upper layer; on the cross-layer path its near image
+  pairs stay Galerkin integrals (audit W3R2A-01): 0.7 … 0.9 times at the AP1
+  station and the 40-house network, 1.5 … 2.4 times below thin top layers,
+  4.3 … 4.5 times with long pieces there — 0.49 … 0.94 of the default's
+  time.
 - **Line-kernel switch.** Pairs closer than six segment lengths are
   integrated exactly, pairs beyond 7.5 use the far form, and between the two
   the values are blended (user decision D2). Results of the same world at

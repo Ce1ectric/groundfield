@@ -126,6 +126,7 @@ reproduces 0.15.0, it is named.
 | 10.22 (Q30), audit W1R2-05 | straight runs at projected coordinates | arc-like polylines at UTM coordinates with vertices less than 0.46 µm off their neighbours' chord (audit W1R3-04), e.g. a 2° arc electrode +1.27 % → +5.5e-4 against the local origin | worlds at absolute UTM coordinates |
 | D2, W2B-01/-02, 10.28 (wave 3, stream `w3xl`) | line kernel: blended near/far switch, far form with the radius term, far images with the quadrupole term, cross-layer correction in line form | homogeneous: ≤ 7.8e-7 (golden), the 12 m strip of W2B 1e-7 … 1e-6; two layers: house grids 3e-6 … 1.8e-4, wires near the interface up to 6.2e-4 (audit W3A-04), surface potentials near the interface up to 0.9 %; cross-layer: rods ≤ 4e-4, the AP1 station −4e-5 (40 %); golden `line_*`, `defaults_rod_hom`, `defaults_mixed_cluster_inductive`, `defaults_two_layer_ring_auto` up to 6.0e-4 | every line-kernel result (the default of the image family); not `kernel="point"`, not the `mom` family |
 | W3A-02 (wave 3, stream `fw3xl`) | image pairs at the transverse distance, no radius term on far images, symmetric image corrections | rings and wires within 1 cm … 0.5 m of an interface up to −1.6 % (the ring 1 cm above 1000/30); 0.4 … 0.7 m above −1.2e-6 … −4.7e-6; ≥ 1 m above < 2e-7; homogeneous soil and `kernel="point"` unchanged; golden `line_img2_ring_rods_within_layer` 3.2e-7, `defaults_two_layer_ring_auto` 9.4e-8, `line_mutual_two_layer` 1.7e-8, `line_img2_rod_crosslayer` 1.0e-8 | line-kernel results in two-layer soil (the default) |
+| W3R2A-01, W3R2A-03 (wave 3, stream `fw3r2a`) | `image_far_field="point"` on the cross-layer path keeps the near pairs of every image; the image blend near the interface over a/10 | point form, long segments below the interface: the 75 m strip −58 % → −3e-7 against its exact value (37.5 m pieces), −1.0e-3 → −1.3e-6 (2.5 m); networks with long pieces −1.1 %; TN40 1000/30 (transformer rods below h₁) +2.3e-4; wires 0 < g < a/2 from the interface up to −18 % (the ring 1.75 mm above 1000/30, 7.319 → 5.985 Ω); the default form beyond a/2 and the series path unchanged | point-form results with a wire at or below h₁; line-kernel results with a wire within half a radius of the interface |
 | Q37, Q40 (wave 4, streams `w4axi`, `w4fem3d`) | `fem` conforming (axisymmetric and 3-D) instead of the equivalent hemisphere | every `fem` result: the stored 3 m rods −4.65 % / −4.57 %, the B2 rod / B3 ring −0.70 % / −0.35 %, a ring with a bonded central rod +20 %, a ring 1 cm above a conductive layer −67 %, a rod 2 cm into a conductive top layer +164 %; worlds refused before (strips, grids, meshes, the AP1 station, several clusters, galvanic conductors) are solved; golden `fem_rod_hom`, `fem_rod_two_layer_deep` | anyone using `fem` as a check |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
@@ -462,8 +463,9 @@ reproduces 0.15.0, it is named.
   shell resistance `C/Δs` to the diagonal of the point-matching system, and the shell drop
   to its potential. With one owner per segment the image family solves the same system
   (agreement 7e-16); a ring rises by exactly `C/(2πr)` in one, two and three layers (1e-14).
-  Up to 2026.11 both raised `BackendCapabilityError`; `fem` is the only backend that still
-  does. `mom` is thereby the per-segment reference for encased foundations: against it the
+  Up to 2026.11 both raised `BackendCapabilityError`; since wave 4 `fem` solves shells as
+  well (its axisymmetric model as a surface conductance, its 3-D model as a radial
+  resistance per length). `mom` is thereby the per-segment reference for encased foundations: against it the
   image family's point kernel lies +0.35 … +0.69 % high for grids in 5 cm of wet concrete
   and up to +18.8 % for stars. Test: `tests/test_concrete_shells_mom_family.py`.
 
@@ -517,16 +519,20 @@ reproduces 0.15.0, it is named.
   form of the far images of the line kernel in two-layer soil (the author's
   decision of 2026-11-15). `"point"` keeps the Tagg/Sunde images and the
   images of the cross-layer correction beyond the near-pair reach as point
-  sources, as before wave 3 (on the cross-layer path the line form then covers
-  the interface image only); the continuous switch and the transverse
-  distance of near image pairs stay. Networks move by 2e-5 … 1.8e-4 against
-  the default, a wire near the interface by 4e-4, surface potentials by up to
-  0.8 %; a 40-house network in 1000/30 Ω·m with h₁ = 1.5 m solves in 0.46 of
-  the default's time (0.84 of the solve before wave 3). Recorded in
+  sources and leaves out their dense far-field term; the near image pairs
+  (within 7.5 segment lengths, a segment's own images included) stay
+  Galerkin integrals on both paths, and so do the continuous switch and the
+  transverse distance of near image pairs — it is therefore not the result
+  before wave 3 (within the upper layer up to 2.3e-4 from it). Networks move
+  by 3e-6 … 4.3e-4 against the default (16 house grids 0.4 m above a
+  1000/10 Ω·m interface), a wire near the interface by 4e-4, surface
+  potentials by up to 0.8 %; a 40-house network in 1000/30 Ω·m with
+  h₁ = 1.5 m, whose transformer rods reach below h₁, solves in 0.49 of the
+  default's time (0.91 of the solve before wave 3). Any other value raises
+  `ValueError`, also in `solve_image_2layer(far_field=...)`. Recorded in
   `metadata["series"]["far_field"]` and used by `FieldResult.potential` and
   `solve_mutual_*`; `create_engine(image_far_field=...)`. Test:
   `tests/test_image_far_field_option.py`.
-
 - ⚠ **`fem` is a conforming finite-element model (user decisions Q37, Q40;
   ADR-0016).** The equivalent-hemisphere reduction is gone. *Axisymmetric
   model* (no new dependency): rods on one vertical axis and horizontal rings
@@ -1046,9 +1052,8 @@ reproduces 0.15.0, it is named.
   or voltage); a voltage source of 0 V is accepted; voltage sources that
   close a loop through ideal bonds or remote earth, and a voltage source
   short-circuited by an ideal bond, raise `ValueError` naming the sources.
-  `fem` rejects voltage sources with `BackendCapabilityError` (Engine.solve
-  and a direct `solve_fem` call; up to 0.15.0 it dropped them with a
-  warning). `diagnose()` / `expected_segments` count one nodal unknown per
+  `fem` solves them through the shared network since wave 4 (up to 0.15.0
+  it dropped them with a warning). `diagnose()` / `expected_segments` count one nodal unknown per
   voltage source. A voltage source with `internal_resistance_ohm > 0` opens a
   loop of voltage sources (an inductance alone does not: it vanishes at
   $f = 0$); negative or non-finite internal impedances raise, also after
@@ -1064,8 +1069,8 @@ reproduces 0.15.0, it is named.
   voltage sources too (W2A-02).
 - `FieldResult.input_impedance()` without `source` picks the only current
   or voltage source.
-- Registry: `mom` / `mom_sommerfeld` declare `concrete_shells`; a shell world on `fem`
-  names `image`, `mom`, `mom_sommerfeld` as capable backends.
+- Registry: `mom`, `mom_sommerfeld` and, since wave 4, `fem` declare `concrete_shells`
+  and `voltage_sources`.
 
 - The cross-layer path of `image_2layer` needs the memory of the series
   path: large depth groups are evaluated in row chunks (bit-identical), and
@@ -1084,8 +1089,12 @@ reproduces 0.15.0, it is named.
   h₁ = 1.5 m, 1.84 times with numba, 3.63 times without (4.2 and 9.7 times
   before the audit fix); 16 house grids with eight 9.4 m pieces 1.5 times
   (2.8); the AP1 station at 40 % 1.0 times (1.4); thin top layers (h₁ 0.1 …
-  0.2 m) 3.6 … 4.5 times (7 … 8.7). With `image_far_field="point"` 0.8 … 1.3
-  times.
+  0.2 m) 3.6 … 4.5 times (7 … 8.7). With `image_far_field="point"` 1.1 … 1.3
+  times within the upper layer; on the cross-layer path the point form keeps
+  the Galerkin near image pairs (audit W3R2A-01) and takes 0.49 … 0.94 of the
+  default's time — 0.74 at the AP1 station, 0.91 on the 40-house network,
+  1.5 … 2.4 times the solve before wave 3 below thin top layers, 4.3 … 4.5
+  with long pieces there.
 - `sommerfeld`: the self term of every segment is the exact one-dimensional
   reduction of its double integral, and close pairs get a graded rule along
   their line of closest approach (user decision Q34): the self correction is
@@ -1728,7 +1737,9 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   1.4e-6 of its exact value. Tests: `tests/test_line_kernel_image_pairs.py`.
 - The image work of the line kernel followed the longest segment of the world
   (audit W3A-01): eight 9.4 m pieces among 1920 segments multiplied it by
-  5.6; it now follows the pair (bit-identical). Test:
+  5.6; it now follows the pair (Z bit-identical, except 5.4e-14 on a
+  cross-layer world with long pieces — the diagonal rule; matrix entries change
+  by round-off, ≤ 6.7e-15; audit W3R2A-07). Test:
   `tests/test_two_layer_far_images.py::test_w3a_01_a_few_long_pieces_do_not_multiply_the_image_work`.
 - Without numba the far-image term held twice the memory (161 instead of
   80 MiB; audit W3A-05). Test:
@@ -1768,6 +1779,31 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   given description only exact preset lines are removed or replaced (every
   line that started with the marker was dropped and CRLF became LF; audit
   W3R2B-06). Test: `tests/test_bustype_rho_preset.py`.
+
+- The point form on the cross-layer path (`image_far_field="point"`) kept the
+  line form of the interface image only: the own surface and transmitted
+  images of a segment below the interface were point sources, so a 75 m
+  strip below a 0.5 m top layer read −1.0e-3 at 2.5 m segments and −58 % at
+  37.5 m, and 16 house grids with a 75 m conductor in two pieces +1.1 %
+  against the default (audit W3R2A-01). Every image of the layered
+  correction keeps its near pairs, and a segment's own images follow the
+  switch of every pair, as on the series path: the strip within 1.1e-5 at
+  every segment length (500/100 and 1000/30 Ω·m), the network within 4e-6 of
+  the default. Tests:
+  `tests/test_image_far_field_option.py::test_w3r2a_01_the_point_form_keeps_long_segments_below_the_interface`,
+  `tests/test_image_far_field_option.py::test_w3r2a_01_a_network_with_long_pieces_below_the_interface`.
+- `solve_image_2layer(far_field=...)` and the kernels of the image family
+  accepted any string; every value other than `"quadrupole"` ran the point
+  form and was recorded as given, while `FieldResult.potential` evaluated
+  the quadrupole form (audit W3R2A-02). They raise `ValueError`. Test:
+  `tests/test_image_far_field_option.py`.
+- Within one wire radius of the layer interface the impedance was not
+  monotone in the distance: the blend of an image into the reduced kernel of
+  the direct pair over one radius peaked at a/√2 (a ring 1.75 mm above a
+  1000/30 Ω·m interface +22 %, a strip +24 %; audit W3R2A-03). The blend runs
+  over a tenth of the radius: wiggles of at most 0.17 % through ±a for
+  strips and rings in 1000/30 and 30/1000 Ω·m. Test:
+  `tests/test_line_kernel_image_pairs.py`.
 
 ### Corrections to the 0.15.0 release notes
 
