@@ -2,7 +2,7 @@
 
 Each test names the finding it guards (``W2R2-NN`` of the audit report) and
 fails on the base ``34ad269`` for the reason given in its docstring; the
-tests of W2R2-01, -04 and -05 start from the auditor's proposals.
+tests of W2R2-01, -02, -04 and -05 start from the auditor's proposals.
 
 * W2R2-01 — worlds and results pickled before user decision D1 (by
   ``8c83d7c``) load as ideal sources: ``VoltageSource`` and ``SourceRecord``
@@ -12,6 +12,10 @@ tests of W2R2-01, -04 and -05 start from the auditor's proposals.
   evidence) and holds two worlds with voltage sources, their results at 0
   and 50 Hz, the JSON of each world and the input impedances ``8c83d7c``
   computed.
+* W2R2-02 — a galvanic ``mom`` / ``mom_sommerfeld`` world whose voltage
+  source has an inductance factorises its segment system once for all
+  frequencies (Schur complement on the source rows) instead of once per
+  frequency.
 * W2R2-04 — the short-circuit message of a source behind $Z_q$.
 * W2R2-05 — ``measured_impedance`` and the layout reading prefer the single
   current source of a result, else its single voltage source.
@@ -27,6 +31,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pytest
 from pydantic import ValidationError
 
@@ -40,6 +45,7 @@ from groundfield.sources import VoltageSource
 pytestmark = pytest.mark.finding("10.51")
 
 HOM = gf.HomogeneousSoil(rho=100.0)
+TWO = gf.TwoLayerSoil(rho_1=300.0, rho_2=50.0, h_1=2.0)
 FIXTURE = Path(__file__).parent / "data" / "pre_d1_voltage_source_pickles.pkl"
 D1_FIELDS = ("internal_resistance_ohm", "internal_inductance_h")
 #: Round-off bound of the comparisons between two exact solution methods
@@ -195,6 +201,237 @@ def test_w2r2_01_results_pickled_by_8c83d7c_read_back(pre_d1, name):
     # The result pickles again and reads the same.
     again = pickle.loads(pickle.dumps(res))
     assert again.sources == res.sources
+
+
+# W2R2-02 ----------------------------------------------------------------
+
+
+def _counting_solves(monkeypatch, min_rows: int = 20) -> list[int]:
+    """Record the row count of every ``numpy.linalg.solve`` on a large system."""
+    import groundfield.solver.mom as mom
+
+    calls: list[int] = []
+    real_solve = np.linalg.solve
+
+    def counting_solve(a, b):
+        if np.ndim(a) == 2 and a.shape[0] > min_rows:
+            calls.append(a.shape[0])
+        return real_solve(a, b)
+
+    monkeypatch.setattr(mom.np.linalg, "solve", counting_solve)
+    return calls
+
+
+def _grid_world(soil=HOM, **source) -> gf.World:
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w,
+        "grid_mesh",
+        name="grid",
+        corner=(0.0, 0.0, 0.5),
+        size=(10.0, 10.0),
+        n_x=2,
+        n_y=2,
+    )
+    gf.create_source(w, attached_to="grid", kind="voltage", magnitude=230.0, **source)
+    return w
+
+
+# audit W2R2-02
+@pytest.mark.parametrize("backend", ["mom", "mom_sommerfeld"])
+def test_w2r2_02_a_galvanic_mom_world_with_a_source_inductance_factorises_once(
+    monkeypatch, backend
+):
+    """W2R2-02: the segment system of mom is factorised once per frequency.
+
+    A galvanic world (no inductive conductor) whose voltage source has an
+    internal inductance takes the complex path at every frequency: on
+    34ad269 ``numpy.linalg.solve`` runs once per frequency on the full
+    segment-level matrix (20 frequencies, 1488 segments: 1.53 s against
+    0.054 s for the R-only source, x28; evidence ``w2r2_02_cost_base.out``).
+    Since the fix: one real factorisation with V + 2 right-hand sides and a
+    V x V system per frequency.
+    """
+    calls = _counting_solves(monkeypatch)
+    w = _grid_world(internal_resistance_ohm=1.0, internal_inductance_h=1e-3)
+    freqs = [10.0, 50.0, 150.0, 250.0, 1000.0]
+    _solve(w, backend=backend, frequencies=freqs)
+    assert len(calls) == 1, f"{len(calls)} factorisations of the {calls[0]}-row system"
+
+
+# audit W2R2-02
+@pytest.mark.parametrize("backend", ["mom", "mom_sommerfeld"])
+@pytest.mark.parametrize("soil", [HOM, TWO], ids=["hom", "two_layer"])
+def test_w2r2_02_the_one_factorisation_equals_the_unit_current_solve(backend, soil):
+    """I = U / (Z_q + Z_in) and every potential the 1 A solve times I."""
+    freqs = [0.0, 10.0, 50.0, 1000.0]
+    res_v = _solve(
+        _grid_world(
+            soil, name="v", internal_resistance_ohm=1.0, internal_inductance_h=1e-3
+        ),
+        backend=backend,
+        frequencies=freqs,
+    )
+    w_i = _grid_world(soil)
+    w_i.sources = []
+    gf.create_source(w_i, attached_to="grid", magnitude=1.0, name="i")
+    res_i = _solve(w_i, backend=backend, frequencies=freqs)
+    rec = _record(res_v, "v")
+    z_in = res_i.input_impedance("i")
+    for k, f in enumerate(freqs):
+        z_q = complex(1.0, 2.0 * math.pi * f * 1e-3)
+        i_v = rec.voltage[k] / (z_q + z_in[k])
+        assert _close(rec.current[k], i_v), (f, rec.current[k], i_v)
+        assert _close(res_v.input_impedance("v")[k], z_in[k]), f
+        for e, values in res_i.electrode_potentials.items():
+            assert _close(res_v.electrode_potentials[e][k], i_v * values[k]), (f, e)
+        got = np.array([p.current[k] for p in res_v.point_sources])
+        ref = np.array([p.current[k] for p in res_i.point_sources])
+        assert np.abs(got - i_v * ref).max() <= RTOL * abs(i_v) * np.abs(ref).max()
+
+
+def _network() -> gf.World:
+    """Two reactive and one resistive voltage source, a current source, a
+    finite conductor and a floating rod."""
+    w = gf.create_world(soil=HOM)
+    for name, x, y, length in (
+        ("g1", 0.0, 0.0, 3.0),
+        ("g2", 8.0, 0.0, 3.0),
+        ("g3", 0.0, 9.0, 2.0),
+        ("g4", 15.0, 5.0, 2.0),
+        ("g5", -6.0, -4.0, 2.0),
+    ):
+        gf.create_electrode(w, "rod", name=name, position=(x, y, 0.0), length=length)
+    gf.create_conductor(
+        w,
+        name="c1",
+        start="g3",
+        end="g4",
+        conductor_type="generic",
+        cross_section=16e-6,
+    )
+    gf.create_source(
+        w,
+        attached_to="g1",
+        kind="voltage",
+        magnitude=100.0,
+        phase_deg=30.0,
+        name="v1",
+        internal_inductance_h=2e-3,
+    )
+    gf.create_source(
+        w,
+        attached_to="g2",
+        return_to="g3",
+        kind="voltage",
+        magnitude=50.0,
+        name="v2",
+        internal_resistance_ohm=3.0,
+        internal_inductance_h=5e-4,
+    )
+    gf.create_source(
+        w,
+        attached_to="g4",
+        kind="voltage",
+        magnitude=20.0,
+        name="v3",
+        internal_resistance_ohm=4.0,
+    )
+    gf.create_source(w, attached_to="g2", magnitude=2.0, phase_deg=-10.0, name="i1")
+    return w
+
+
+# audit W2R2-02
+def test_w2r2_02_several_sources_against_the_transfer_impedance_matrix():
+    """(Z_T + diag Z_q) I = U - Z_T,i I_i with Z_T from 1 A solves (mom)."""
+    freqs = [0.0, 50.0, 1000.0]
+    world = _network()
+    res = _solve(world, backend="mom", frequencies=freqs)
+    names = ["v1", "v2", "v3"]
+    by_name = {s.name: s for s in world.sources}
+    unit = {}
+    for s in world.sources:
+        w = _network()
+        w.sources = [
+            gf.CurrentSource(
+                name=s.name,
+                attached_to=s.attached_to,
+                return_to=s.return_to,
+                magnitude=1.0,
+            )
+        ]
+        unit[s.name] = _solve(w, backend="mom", frequencies=freqs)
+
+    def terminal_voltage(r: gf.FieldResult, s, k: int) -> complex:
+        # Every terminal is a rod of its own cluster (c1 is a finite conductor).
+        phi = r.electrode_potentials
+        return phi[s.attached_to][k] - (
+            0j if s.return_to is None else phi[s.return_to][k]
+        )
+
+    i_src = 2.0 * np.exp(-1j * math.radians(10.0))
+    for k, f in enumerate(freqs):
+        z_t = np.array(
+            [[terminal_voltage(unit[m], by_name[n], k) for m in names] for n in names]
+        )
+        z_ti = np.array([terminal_voltage(unit["i1"], by_name[n], k) for n in names])
+        z_q = np.diag([by_name[n].internal_impedance(f) for n in names])
+        u = np.array([_record(res, n).voltage[k] for n in names])
+        expected = np.linalg.solve(z_t + z_q, u - z_ti * i_src)
+        got = np.array([_record(res, n).current[k] for n in names])
+        assert np.allclose(got, expected, rtol=RTOL, atol=0), (f, got, expected)
+        for e in world.electrodes:
+            phi = (
+                sum(
+                    unit[n].electrode_potentials[e.name][k] * got[j]
+                    for j, n in enumerate(names)
+                )
+                + unit["i1"].electrode_potentials[e.name][k] * i_src
+            )
+            assert _close(res.electrode_potentials[e.name][k], phi), (f, e.name)
+
+
+# audit W2R2-02
+def test_w2r2_02_the_frequencies_are_solved_independently():
+    """Every frequency f > 0 of a sweep equals its single-frequency solve, bit
+    for bit, in any order. f = 0 inside a sweep equals the R-only source to
+    round-off; a solve at f = 0 alone is the R-only solve, bit for bit."""
+    world = _network()
+    freqs = [1000.0, 0.0, 50.0]
+    res = _solve(world, backend="mom", frequencies=freqs)
+    for k, f in enumerate(freqs):
+        if f == 0.0:
+            continue
+        single = _solve(world, backend="mom", frequencies=[f])
+        for n in ("v1", "v2", "v3"):
+            assert _record(res, n).current[k] == _record(single, n).current[0]
+        assert res.electrode_potentials["g5"][k] == single.electrode_potentials["g5"][0]
+    r_only = _network()
+    for s in r_only.sources:
+        if s.kind == "voltage":
+            s.internal_inductance_h = 0.0
+    dc = _solve(r_only, backend="mom", frequencies=[0.0])
+    for n in ("v1", "v2", "v3"):
+        assert _close(_record(res, n).current[1], _record(dc, n).current[0], 1e-14)
+    for e, values in dc.electrode_potentials.items():
+        assert _close(res.electrode_potentials[e][1], values[0], 1e-14), e
+    only_dc = _solve(world, backend="mom", frequencies=[0.0])
+    for n in ("v1", "v2", "v3"):
+        assert _record(only_dc, n).current == _record(dc, n).current
+    assert only_dc.electrode_potentials == dc.electrode_potentials
+
+
+# audit W2R2-02
+def test_w2r2_02_ideal_and_resistive_sources_keep_their_path(monkeypatch):
+    """No reactive source: one solve for all frequencies, as before."""
+    calls = _counting_solves(monkeypatch)
+    _solve(_grid_world(), backend="mom", frequencies=[10.0, 50.0, 1000.0])
+    _solve(
+        _grid_world(internal_resistance_ohm=2.0),
+        backend="mom",
+        frequencies=[10.0, 50.0, 1000.0],
+    )
+    assert len(calls) == 2
 
 
 # W2R2-04 ----------------------------------------------------------------
