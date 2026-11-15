@@ -1145,6 +1145,7 @@ def _register_builtins() -> None:
         "groundfield.solver.mom:solve_mom",
         capabilities=BackendCapabilities(
             soils={"homogeneous", "two_layer"},
+            concrete_shells=True,
             two_terminal_sources=True,
             junctions=True,
             voltage_sources=True,
@@ -1156,6 +1157,7 @@ def _register_builtins() -> None:
         "groundfield.solver.mom_sommerfeld:solve_mom_sommerfeld",
         capabilities=BackendCapabilities(
             soils={"homogeneous", "two_layer", "multi_layer"},
+            concrete_shells=True,
             two_terminal_sources=True,
             junctions=True,
             voltage_sources=True,

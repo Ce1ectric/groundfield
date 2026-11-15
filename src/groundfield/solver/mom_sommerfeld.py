@@ -84,8 +84,9 @@ with **no** Python-level warning.
 
 The MoM resolution itself (point matching at the segment midpoints
 with a point-source near field, one constraint per node, source-free
-clusters floating) is that of :mod:`groundfield.solver.mom`; only the
-off-diagonal kernel evaluation differs. Its accuracy limits (about 1 %
+clusters floating, the per-segment concrete-shell term of ADR-0012 on
+the diagonal since 2026.11) is that of :mod:`groundfield.solver.mom`;
+only the off-diagonal kernel evaluation differs. Its accuracy limits (about 1 %
 to 2 % below the exact thin-wire solution, drifting under refinement)
 are those documented there.
 
@@ -163,7 +164,6 @@ from groundfield.solver._layered import (
     canonical_soil,
     reflection_gamma,
 )
-from groundfield.solver._pipeline import _reject_concrete_shells
 from groundfield.solver._series import (
     ImageSeries,
     SeriesTruncationWarning,
@@ -1761,7 +1761,6 @@ def solve_mom_sommerfeld(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
-    _reject_concrete_shells(world, "mom_sommerfeld")
     green = _SommerfeldGreen(
         world.soil,
         lambda_max_factor=lambda_max_factor,

@@ -1255,10 +1255,12 @@ _warn_ignored_sources = _reject_voltage_sources
 def _reject_concrete_shells(world, backend: str) -> None:
     """Reject worlds carrying concrete-shell corrections (ADR-0012).
 
-    Only the image family consumes the per-segment shell coefficient
-    on the reaction-matrix diagonal. Every other backend would
-    silently solve the bare-metal problem, which the electrode
-    documentation explicitly promises will fail loudly instead.
+    The image family and, since 2026.11, the point-matching family
+    (``mom``, ``mom_sommerfeld``) consume the per-segment shell
+    coefficient on the reaction-matrix diagonal. A backend without it
+    (``fem``) would silently solve the bare-metal problem, which the
+    electrode documentation explicitly promises will fail loudly
+    instead.
 
     Raises
     ------
