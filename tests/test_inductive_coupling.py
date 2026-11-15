@@ -359,18 +359,14 @@ def test_inductive_cross_engine_50hz(backend: str) -> None:
     assert rel < 0.05, f"{backend}: I_ref={I_ref}, I={I}, rel={rel:.3f}"
 
 
-def test_fem_warns_on_inductance_model() -> None:
-    """FEM backend logs a warning when ``inductance_model`` is set
-    and falls back to the resistive solution."""
+def test_fem_refuses_a_galvanic_distributed_conductor() -> None:
+    """Up to 2026.11 fem solved such a conductor as a lumped resistive
+    branch; its conforming model refuses the leakage along the route,
+    which is not axisymmetric (user decision Q37), and honours inductance
+    models on the other conductors (``tests/test_fem.py``)."""
+    from groundfield.solver.registry import BackendCapabilityError
 
     w, _ = _galvanic_world(n_seg=4, inductance_model="neumann")
-    eng = gf.create_engine(
-        backend="fem",
-        segment_length=SEG,
-        frequencies=[50.0],
-    )
-    # Use caplog if available; otherwise just check the result exists
-    res = eng.solve(w)
-    # FEM still returns something sensible (DC solution)
-    I1 = res.electrode_currents["g1"][0]
-    assert abs(I1.real) > 0.0
+    eng = gf.create_engine(backend="fem", segment_length=SEG, frequencies=[50.0])
+    with pytest.raises(BackendCapabilityError, match="coupling_to_soil='galvanic'"):
+        eng.solve(w)

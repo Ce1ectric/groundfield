@@ -105,7 +105,9 @@ def test_boundary_conditions_are_inert_in_every_backend(soil, backend) -> None:
     def solve(boundary: gf.BoundaryConditions) -> np.ndarray:
         world = gf.create_world(soil=soil, boundary=boundary)
         gf.create_electrode(world, "rod", name="g1", position=(0, 0, 0.5), length=2.0)
-        gf.create_electrode(world, "ring", name="g2", center=(6, 0, 0.6), radius=1.0)
+        # The ring around the rod's axis, so that fem (axisymmetric since
+        # user decision Q37) solves the same world as every other backend.
+        gf.create_electrode(world, "ring", name="g2", center=(0, 0, 0.6), radius=1.0)
         gf.create_source(world, attached_to="g1", magnitude=1.0)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

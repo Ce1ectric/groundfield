@@ -234,7 +234,9 @@ def test_branch_decouples_for_large_R() -> None:
 # ---------------------------------------------------------------------
 
 
-HOMOGENEOUS_BACKENDS = ["image", "mom", "cim", "bem", "fem"]
+# fem solves coaxial worlds only since its conforming model (user decision
+# Q37); its finite branches are tested in tests/test_fem.py.
+HOMOGENEOUS_BACKENDS = ["image", "mom", "cim", "bem"]
 
 
 @pytest.mark.parametrize("backend", HOMOGENEOUS_BACKENDS)
@@ -251,9 +253,7 @@ def test_finite_branch_cross_engine_homogeneous(backend: str) -> None:
     I2_ref = res_ref.electrode_currents["g2"][0].real
     I1 = res.electrode_currents["g1"][0].real
     I2 = res.electrode_currents["g2"][0].real
-    # FEM uses an equivalent-hemisphere reduction → a slightly larger
-    # tolerance is appropriate for the cross-check.
-    tol = 0.07 if backend == "fem" else 0.03
+    tol = 0.03
     assert abs(I1 - I1_ref) / abs(I1_ref) < tol, (
         f"{backend}: I1={I1:.4f} vs image {I1_ref:.4f}"
     )
@@ -265,7 +265,7 @@ def test_finite_branch_cross_engine_homogeneous(backend: str) -> None:
 
 
 # Layered-soil engines need a TwoLayerSoil world.
-LAYERED_BACKENDS = ["image_2layer", "mom", "cim", "bem", "mom_sommerfeld", "fem"]
+LAYERED_BACKENDS = ["image_2layer", "mom", "cim", "bem", "mom_sommerfeld"]
 
 
 @pytest.mark.parametrize("backend", LAYERED_BACKENDS)
@@ -281,7 +281,7 @@ def test_finite_branch_cross_engine_two_layer(backend: str) -> None:
     I2_ref = res_ref.electrode_currents["g2"][0].real
     I1 = res.electrode_currents["g1"][0].real
     I2 = res.electrode_currents["g2"][0].real
-    tol = 0.10 if backend == "fem" else 0.04
+    tol = 0.04
     assert abs(I1 - I1_ref) / abs(I1_ref) < tol, (
         f"{backend}: I1={I1:.4f} vs image_2layer {I1_ref:.4f}"
     )

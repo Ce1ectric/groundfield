@@ -279,15 +279,30 @@ def _shelled_world():
 
 # 'cim' runs the image auto-dispatch since review pass 10 (10.76) and
 # therefore applies the correction; 'mom' and the deprecated 'bem' (which
-# runs 'mom') apply it since the release scope of 2026-11-14. 'fem' is the
-# backend left without it.
-@pytest.mark.parametrize("backend", ["fem"])
-def test_concrete_shell_rejected_by_non_image_backends(backend: str) -> None:
-    eng = gf.create_engine(backend=backend, segment_length=0.5)
+# runs 'mom') apply it since the release scope of 2026-11-14, and 'fem'
+# resolves the shell since its conforming model (user decision Q37): no
+# built-in backend rejects it any more.
+def test_concrete_shell_is_honoured_by_fem() -> None:
+    def ring(shell: float):
+        w = gf.create_world(soil=SOIL)
+        gf.create_electrode(
+            w,
+            "ring",
+            name="g1",
+            center=(0.0, 0.0, 0.7),
+            radius=2.0,
+            wire_radius=0.055,
+            concrete_shell_coefficient_ohm_m=shell,
+        )
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        return w
+
+    eng = gf.create_engine(backend="fem", segment_length=0.5)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(NotImplementedError, match="concrete-shell"):
-            eng.solve(_shelled_world())
+        bare = eng.solve(ring(0.0)).cluster_impedance("g1")[0].real
+        encased = eng.solve(ring(100.0)).cluster_impedance("g1")[0].real
+    assert encased - bare >= 100.0 / (2 * np.pi * 2.0)
 
 
 def test_concrete_shell_still_works_on_image() -> None:

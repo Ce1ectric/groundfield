@@ -61,11 +61,12 @@ def test_fem_knobs_are_reachable_through_engine_options() -> None:
     engine = gf.Engine(
         backend="fem",
         segment_length=SEG,
-        options={"fem": {"n_radial": 31, "n_axial": 21}},
+        options={"fem": {"refinement": 1, "extrapolate": False}},
     )
     res = _solve(engine)
-    assert res.metadata["n_radial"] == 31
-    assert res.metadata["n_axial"] == 21
+    assert res.metadata["fem_refinement"] == 1
+    assert res.metadata["fem_extrapolated"] is False
+    assert [m["level"] for m in res.metadata["fem_mesh"]] == [1]
 
 
 @pytest.mark.finding("10.74")
@@ -81,7 +82,7 @@ def test_fem_far_field_option_reaches_the_solver() -> None:
     assert dirichlet.metadata["far_field"] == "dirichlet"
     z_r = robin.cluster_impedance("g1")[0].real
     z_d = dirichlet.cluster_impedance("g1")[0].real
-    # A grounded truncation sphere biases the resistance low.
+    # A grounded truncation box biases the resistance low.
     assert z_d < z_r
 
 
@@ -143,7 +144,7 @@ def test_options_for_another_backend_warn() -> None:
     from groundfield.solver.registry import BackendOptionsWarning
 
     with pytest.warns(BackendOptionsWarning, match="'fem'.*'image'"):
-        gf.Engine(backend="image", options={"fem": {"n_radial": 30}})
+        gf.Engine(backend="image", options={"fem": {"refinement": 1}})
     with pytest.warns(BackendOptionsWarning, match="mom_sommerfeld"):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -153,14 +154,14 @@ def test_options_for_another_backend_warn() -> None:
 def test_options_for_the_selected_backend_are_silent() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        gf.Engine(backend="fem", options={"fem": {"n_radial": 30}})
+        gf.Engine(backend="fem", options={"fem": {"refinement": 1}})
         gf.Engine(backend="mom_sommerfeld", options={"mom_sommerfeld": {}})
 
 
 @pytest.mark.finding("10.74")
 def test_misspelled_option_is_rejected_with_a_suggestion() -> None:
-    with pytest.raises(pydantic.ValidationError, match="n_radial"):
-        gf.Engine(backend="fem", options={"fem": {"n_radail": 30}})
+    with pytest.raises(pydantic.ValidationError, match="did you mean 'refinement'"):
+        gf.Engine(backend="fem", options={"fem": {"refinment": 1}})
     with pytest.raises(pydantic.ValidationError, match="Did you mean 'fem'"):
         gf.Engine(backend="fem", options={"fme": {}})
 
@@ -173,7 +174,7 @@ def test_series_controls_are_common_fields_not_backend_options() -> None:
 
 def test_invalid_option_values_are_rejected() -> None:
     for options in (
-        {"fem": {"n_radial": 0}},
+        {"fem": {"refinement": -1}},
         {"fem": {"far_field": "sommerfeld"}},
         {"mom_sommerfeld": {"epsrel": 0.0}},
     ):
@@ -185,10 +186,10 @@ def test_engine_json_round_trip_keeps_typed_options() -> None:
     from groundfield.solver.registry import FemOptions
 
     engine = gf.Engine(
-        backend="fem", options={"fem": {"n_radial": 30, "far_field": "dirichlet"}}
+        backend="fem", options={"fem": {"refinement": 1, "far_field": "dirichlet"}}
     )
     payload = json.loads(engine.model_dump_json())
-    assert payload["options"]["fem"]["n_radial"] == 30
+    assert payload["options"]["fem"]["refinement"] == 1
     back = gf.Engine.model_validate_json(engine.model_dump_json())
     assert back == engine
     assert isinstance(back.options["fem"], FemOptions)
@@ -275,4 +276,4 @@ def test_backend_options_accessor_returns_defaults() -> None:
     assert engine.backend_options() == FemOptions()
     assert engine.backend_options("mom_sommerfeld") == MomSommerfeldOptions()
     assert gf.Engine(backend="image").backend_options() is None
-    assert np.isclose(FemOptions().r_far_factor, 30.0)
+    assert np.isclose(FemOptions().r_far_factor, 1000.0)

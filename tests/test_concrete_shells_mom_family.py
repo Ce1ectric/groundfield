@@ -308,10 +308,23 @@ def test_zero_coefficient_is_bit_identical(backend) -> None:
     ]
 
 
-def test_fem_still_rejects_shells() -> None:
-    from groundfield.solver.registry import BackendCapabilityError
-
+def test_fem_solves_shells_as_well() -> None:
+    """fem resolves the shell since its conforming model (user decision
+    Q37): the encased rod rises by at least C/L over the bare one of the
+    same outer radius (the shell evens out the current) and lies 0.6 %
+    below mom and 1.6 % below the uniform current of the image family (the
+    thin-wire models of a 55 mm wire, L/r_b = 55)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(BackendCapabilityError, match="concrete-shell"):
-            gf.create_engine(backend="fem").solve(_world("rod", _C, _HOM))
+        fem = gf.create_engine(backend="fem").solve(_world("rod", _C, _HOM))
+        bare = gf.create_engine(backend="fem").solve(
+            _world("rod", 0.0, _HOM, wire_radius=_RB)
+        )
+        mom = gf.create_engine(backend="mom").solve(_world("rod", _C, _HOM))
+        img = gf.create_engine(backend="image").solve(_world("rod", _C, _HOM))
+    z = fem.cluster_impedance("e")[0].real
+    assert 0.0 < 1.0 - z / mom.cluster_impedance("e")[0].real < 0.01
+    assert 0.0 < 1.0 - z / img.cluster_impedance("e")[0].real < 0.02
+    length = _world("rod", _C, _HOM).electrodes[0].total_length()
+    rise = (z - bare.cluster_impedance("e")[0].real) / (_C / length)
+    assert 1.0 < rise < 1.05, rise

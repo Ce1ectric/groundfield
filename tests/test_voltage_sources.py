@@ -626,23 +626,27 @@ def test_non_finite_voltage_is_rejected() -> None:
         src.magnitude = float("nan")
 
 
-def test_fem_rejects_voltage_sources_naming_the_capable_backends() -> None:
-    from groundfield.solver import BackendCapabilityError
+def test_fem_solves_voltage_sources() -> None:
+    """Since its conforming model fem runs the network of the shared
+    pipeline (user decision Q37; it refused them up to then): a voltage
+    source equals the scaled current-source solve."""
     from groundfield.solver.fem import solve_fem
 
     w = _rod_world()
     _voltage(w, "g1", name="v1")
-    with pytest.raises(BackendCapabilityError, match=r"(?s)voltage source.*'image'"):
-        _solve(w, backend="fem")
-    with pytest.raises(BackendCapabilityError, match="voltage source"):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            solve_fem(w, _engine(backend="fem"))
+    res = _solve(w, backend="fem")
+    ref = _rod_world()
+    gf.create_source(ref, attached_to="g1", magnitude=1.0)
+    z = _solve(ref, backend="fem").input_impedance()[0]
+    assert abs(res.sources[0].current[0] / (U_PHASOR / z) - 1.0) < RTOL
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        direct = solve_fem(w, _engine(backend="fem"))
+    assert direct.sources[0].current == res.sources[0].current
 
 
 def test_capabilities_declare_voltage_sources() -> None:
     from groundfield.solver import get_backend
 
-    for name in ("image", "image_2layer", "mom", "mom_sommerfeld"):
+    for name in ("image", "image_2layer", "mom", "mom_sommerfeld", "fem"):
         assert get_backend(name).capabilities.voltage_sources, name
-    assert not get_backend("fem").capabilities.voltage_sources

@@ -284,15 +284,15 @@ Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11
 
 | Benchmark | Measure | Bound | Worst measured | Cases | Status | Note |
 |---|---|---|---|---|---|---|
-| B1 Hemisphere | abs(Z/Z_ref - 1) | 0.5 % | 0.16 % | 1 | pass | observed order of convergence 1.99; discretisation of the conforming shell mesh alone |
-| B2 Rod, homogeneous soil | abs(Z/Z_ref - 1) | 1 % | 0.70 % | 3 | pass | equals Dwight's rod formula |
-| B3 Ring, homogeneous soil | abs(Z/Z_ref - 1) | 1 % | 0.34 % | 3 | pass | equals Dwight's ring formula |
-| B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 5 % | 4.3 % | 10 | pass | experimental; equivalent hemisphere in layered soil (10.23) |
-| B7 Rod through the layer interface | abs(Z/Z_ref - 1) | excluded | — | — | excluded | raises BackendCapabilityError (v0.15.0: +1092 %, silent); excluded: the rod reaches a layer its equivalent hemisphere does not (10.23) |
-| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | Z_AB = Z_BA = 0; excluded: clusters solved without coupling (10.23) |
-| B9 Limits of the layered kernels (`equal_rho_fem`) | abs(Z/Z_ref - 1) | 0.1 % | 2.0e-4 | 3 | pass | declared stack; <= 1e-5 for interfaces below the hemisphere (10.49) |
-| B9 Limits of the layered kernels (`layer_limit_fem`) | abs(Z/Z_ref - 1) | 1 % | 0.20 % | 2 | pass | experimental; h₁ = 4 mm emits FemReductionWarning (structural interface rule, audit F01) |
-| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | -35 % / -45 %; excluded: radii summed (10.23) |
+| B1 Surface disc | abs(Z/Z_ref - 1) | 5e-4 | 3.1e-4 | 1 | pass | observed order of convergence 1.87; discretisation of the conforming tensor mesh alone (user decision Q37; up to 2026.11 the hemisphere of the equivalent-hemisphere mesh) |
+| B2 Rod, homogeneous soil | abs(Z/Z_ref - 1) | 0.1 % | 7.3e-5 | 3 | pass | solid rod with flat ends (user decision Q37); the thin-wire limit itself is uncertain at a few 1e-4 (33.185 Ω at 384 segments) |
+| B3 Ring, homogeneous soil | abs(Z/Z_ref - 1) | 5e-4 | 5.7e-5 | 3 | pass | solid torus (user decision Q37) |
+| B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 3 % | 1.3 % | 10 | pass | conforming model (user decision Q37): the deficit of mom's point kernel (10.28) |
+| B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 3 % | 1.1 % | 2 | pass | conforming model (user decision Q37; up to 2026.11 it raised, v0.15.0: +1092 %, silent): the deficit of mom's point kernel |
+| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | refused; excluded: rod and ring on different axes, which the axisymmetric model refuses (user decision Q37); the port matrix of coaxial electrodes is symmetric to round-off |
+| B9 Limits of the layered kernels (`equal_rho_fem`) | abs(Z/Z_ref - 1) | 1e-12 | 0 | 3 | pass | the conforming model meshes the canonical stack (user decision Q37) |
+| B9 Limits of the layered kernels (`layer_limit_fem`) | abs(Z/Z_ref - 1) | 0.1 % | 5.0e-4 | 2 | pass | physical limit (user decision Q37) |
+| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | refused; excluded: rods off the ring's axis, which the axisymmetric model refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed) |
 <!-- generated:end fem -->
 
 ## Literature

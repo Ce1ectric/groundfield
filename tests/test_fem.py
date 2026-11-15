@@ -1,2114 +1,908 @@
-"""Tests for the experimental FEM (axisymmetric volume PDE) backend.
+"""Tests of the conforming axisymmetric ``fem`` backend (user decision Q37).
 
-The FEM backend reduces every cluster to its equivalent hemisphere
-and solves the volume PDE in (s, z) coordinates. The reduction is
-exact for hemispheres and, by construction, reproduces the Dwight
-resistance of a single electrode in homogeneous soil; for clusters,
-several clusters and electrodes reaching across a layer interface it is
-not a valid cross-check and warns (10.23). ``test_fem_*`` accordingly
-checks an enveloped agreement with the closed-form references rather
-than bit-exact identity.
+Since 2026.11 ``fem`` solves rods on one vertical axis and horizontal rings
+centred on it as they are (solid cylinder with flat end faces, solid torus,
+concrete shells), in any horizontally layered soil, and refuses every
+other world. The equivalent-hemisphere reduction and its rules are gone
+(they were tested here up to 2026.11; review pass 10, 10.23, user decision
+Q23, audits D2A and R2A).
+
+Every number is checked against a second method that shares no code with
+``fem``: the exact disc (Weber), the thin-wire ring in closed form, a
+Hankel-transform thin ring for any number of layers, the exact 2-D
+proximity correction of a wire next to an interface, an independent
+finite-volume model of the solid rod (``tests/benchmarks/references.py``)
+and the integral engines (``image``, ``image_2layer``, ``mom``,
+``mom_sommerfeld``) within their documented biases. The tolerances stay
+well above 1e-5, the size by which wave 3 may move the image family.
 """
 
 from __future__ import annotations
 
 import math
 import re
+import warnings
 
+import numpy as np
 import pytest
 
 import groundfield as gf
-from groundfield.references import dwight1936 as dw
+from groundfield.geometry.electrodes import concrete_shell_coefficient
+from tests.benchmarks import references as ref
 
-SEG = 0.05
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::groundfield.ExperimentalBackendWarning"
+)
+
+SEG = 0.25
 
 
-def _world_rod(soil) -> gf.World:
+def _engine(**kw) -> gf.Engine:
+    kw.setdefault("segment_length", SEG)
+    return gf.create_engine(backend="fem", **kw)
+
+
+def _rod_world(soil, *, top=0.0, length=3.0, radius=0.008, shell=0.0, name="g1"):
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    return w
-
-
-def test_fem_rod_matches_dwight() -> None:
-    """FEM on a single rod matches Dwight within 10 % (equivalent-hemisphere)."""
-    soil = gf.HomogeneousSoil(resistivity=100.0)
-    eng = gf.create_engine(backend="fem", segment_length=SEG)
-    Z = eng.solve(_world_rod(soil)).cluster_impedance("g1")[0].real
-    R_dw = dw.rod(rho=100.0, length=1.5, radius=0.005)
-    assert abs(Z - R_dw) / R_dw < 0.10, (
-        f"FEM={Z:.3f} vs Dwight={R_dw:.3f}, Δ={abs(Z - R_dw) / R_dw * 100:.2f}%"
+    gf.create_electrode(
+        w,
+        "rod",
+        name=name,
+        position=(0, 0, top),
+        length=length,
+        wire_radius=radius,
+        concrete_shell_coefficient_ohm_m=shell,
     )
-
-
-def test_fem_two_layer_K_zero_collapses() -> None:
-    """For ρ₁ = ρ₂ the FEM result must equal the homogeneous one.
-
-    The FEM mesh follows the soil description (the layer interface is
-    cut into the elements), so a 2-layer stack with equal
-    resistivities still carries the interface as a mesh feature even
-    though the physics is identical to a homogeneous half-space. Since
-    0.15.0 the mesh is graded relative to the equivalent hemisphere
-    instead of the domain height, so that feature costs only the
-    logarithmic resolution loss of the larger truncation radius:
-    measured 0.06 % at ``h_1 = 2 m`` (19.5 % before). The full sweep
-    over ``h_1`` lives in ``tests/test_pass9_fem.py``.
-    """
-    rho = 100.0
-    eng = gf.create_engine(backend="fem", segment_length=SEG)
-    soil_h = gf.HomogeneousSoil(resistivity=rho)
-    soil_2 = gf.TwoLayerSoil(rho_1=rho, rho_2=rho, h_1=2.0)
-    Z_h = eng.solve(_world_rod(soil_h)).cluster_impedance("g1")[0].real
-    Z_2 = eng.solve(_world_rod(soil_2)).cluster_impedance("g1")[0].real
-    assert abs(Z_2 - Z_h) / Z_h < 0.01
-
-
-def test_fem_two_layer_low_rho_below_lowers_R() -> None:
-    """A more conductive lower layer must lower R; a more resistive one raises it.
-
-    The FEM backend uses an equivalent-hemisphere reduction; the layer
-    contrast is only visible in the result when the equivalent
-    hemisphere actually crosses the layer boundary. We pick a thin
-    upper layer (``h_1 = 0.3 m``) so that the layer effect dominates.
-    """
-    eng = gf.create_engine(backend="fem", segment_length=SEG)
-    soil_low = gf.TwoLayerSoil(rho_1=100.0, rho_2=10.0, h_1=0.1)
-    soil_high = gf.TwoLayerSoil(rho_1=100.0, rho_2=1000.0, h_1=0.1)
-    soil_h = gf.HomogeneousSoil(resistivity=100.0)
-    Z_low = eng.solve(_world_rod(soil_low)).cluster_impedance("g1")[0].real
-    Z_high = eng.solve(_world_rod(soil_high)).cluster_impedance("g1")[0].real
-    Z_h = eng.solve(_world_rod(soil_h)).cluster_impedance("g1")[0].real
-    assert Z_low < Z_h < Z_high, (Z_low, Z_h, Z_high)
-
-
-def test_fem_metadata_exposes_a_eq() -> None:
-    """The FEM result reports the equivalent-hemisphere radius per cluster."""
-    soil = gf.HomogeneousSoil(resistivity=100.0)
-    eng = gf.create_engine(backend="fem", segment_length=SEG)
-    res = eng.solve(_world_rod(soil))
-    assert res.backend == "fem"
-    assert "equivalent_hemisphere_radius" in res.metadata
-    a_map = res.metadata["equivalent_hemisphere_radius"]
-    assert len(a_map) == 1
-    a_eq = next(iter(a_map.values()))
-    assert 0.05 < a_eq < 1.5  # plausible for a 1.5 m rod
-
-
-def test_fem_two_rod_cluster() -> None:
-    """Two parallel rods connected by a conductor must give a lower R
-    than either single rod alone (parallel-electrode rule)."""
-    soil = gf.HomogeneousSoil(resistivity=100.0)
-
-    def _solve(world, eng_be):
-        eng = gf.create_engine(backend=eng_be, segment_length=SEG)
-        return eng.solve(world).cluster_impedance("g1")[0].real
-
-    w_single = gf.create_world(soil=soil)
-    gf.create_electrode(w_single, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
-    gf.create_source(w_single, attached_to="g1", magnitude=1.0)
-
-    w_pair = gf.create_world(soil=soil)
-    gf.create_electrode(w_pair, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
-    gf.create_electrode(w_pair, "rod", name="g2", position=(8, 0, 0.0), length=1.5)
-    gf.create_conductor(w_pair, name="bond", start="g1", end="g2")
-    gf.create_source(w_pair, attached_to="g1", magnitude=1.0)
-
-    Z_single = _solve(w_single, "fem")
-    # Two electrodes in one cluster: the reduction sums the hemisphere
-    # radii and says so (10.23).
-    with pytest.warns(UserWarning, match="sum of their radii"):
-        Z_pair = _solve(w_pair, "fem")
-    assert Z_pair < Z_single, (Z_pair, Z_single)
-    # Two equal hemispheres in parallel: R_pair ≈ R_single / 2.
-    # The FEM equivalent-hemisphere reduction places the doubled
-    # hemisphere at the cluster centroid; mesh truncation and the
-    # geometric reduction together leave a ~20 % envelope around the
-    # ideal parallel-hemisphere value.
-    assert Z_pair == pytest.approx(Z_single / 2.0, rel=0.25)
-
-
-# ---------------------------------------------------------------------
-# 10.23 — the equivalent-hemisphere reduction says when it is not a
-# valid cross-check; the backend is experimental
-# ---------------------------------------------------------------------
-
-
-def _fem_warnings(world) -> tuple[gf.FieldResult, list[str]]:
-    """Solve with fem; return the result and the reduction warnings."""
-    import warnings
-
-    with warnings.catch_warnings(record=True) as rec:
-        warnings.simplefilter("always")
-        res = gf.create_engine(backend="fem", segment_length=0.5).solve(world)
-    texts = [
-        str(w.message) for w in rec if w.category.__name__ == "FemReductionWarning"
-    ]
-    return res, texts
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("soil", "builder", "needle"),
-    [
-        # ring r = 10 m at 0.8 m over h_1 = 2 m: a_eq = 4.6 m reaches the
-        # bottom layer the ring never touches. Over a more resistive layer
-        # (30/1000 Ohm m) fem reads +22.7 % against image_2layer and warns;
-        # over a more conductive one (1000/30, -92 %) it raises since user
-        # decision Q23, see test_fem_rejects_a_more_conductive_layer_*. The
-        # opposite case (rod 0-3 m through h_1 = 2 m, +1092 %) raises since
-        # the eng2 stream, see test_fem_rejects_an_electrode_below_its_hemisphere.
-        (
-            gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=2.0),
-            lambda w: gf.create_electrode(
-                w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0
-            ),
-            "interface",
-        ),
-    ],
-)
-def test_fem_warns_when_electrode_and_hemisphere_straddle_an_interface(
-    soil, builder, needle
-) -> None:
-    w = gf.create_world(soil=soil)
-    builder(w)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    _, texts = _fem_warnings(w)
-    assert texts, "no FemReductionWarning"
-    assert needle in texts[0]
-    assert "h = 2" in texts[0]
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("rho_1", "rho_2", "h_1", "top", "length"),
-    [
-        # rod through h_1 (+1092 % vs mom with 1000/30)
-        (1000.0, 30.0, 2.0, 0.0, 3.0),
-        # rod through h_1 over a resistive layer (-23 % vs mom)
-        (100.0, 1000.0, 2.0, 0.0, 3.0),
-        # rod entirely below h_1 (+3138 % vs mom)
-        (1000.0, 30.0, 2.0, 3.0, 2.0),
-    ],
-)
-def test_fem_rejects_an_electrode_below_its_hemisphere(
-    rho_1, rho_2, h_1, top, length
-) -> None:
-    """The reduction cannot reach a layer below its hemisphere: raise.
-
-    The equivalent hemisphere injects from the surface down to ``a_eq``
-    (0.44 m for a 3 m rod); an electrode that reaches below an interface
-    above ``a_eq`` injects into a layer the hemisphere never touches.
-    v0.15.0 returned 306.4 Ω (mom: 25.69 Ω) silently, the eng1 stream
-    warned; the user decision of 10.23 makes it an error.
-    """
-    from groundfield.solver.registry import BackendCapabilityError
-
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, top), length=length)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    eng = gf.create_engine(backend="fem", segment_length=0.5)
-    with pytest.raises(BackendCapabilityError, match="'g1'.*h = 2.*'mom'"):
-        eng.solve(w)
-    with pytest.raises(ValueError, match="hemisphere"):  # also on a direct call
-        from groundfield.solver.fem import solve_fem
-
-        solve_fem(w, eng)
-
-
-def _a_eq_of_rod(top: float = 0.5, length: float = 3.0) -> float:
-    from groundfield.solver.fem import equivalent_hemisphere_radius
-
-    rod = gf.RodElectrode(name="g1", position=(0.0, 0.0, top), length=length)
-    return equivalent_hemisphere_radius(rod, 100.0)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("rho_1", "rho_2", "fraction"),
-    [
-        (1000.0, 30.0, None),  # the auditors' case: h_1 = 0.4 m (+197 % vs mom)
-        (1000.0, 30.0, 0.55),  # +51 % vs image_2layer
-        (1000.0, 30.0, 1.0),  # h_1 = a_eq: joins the through case
-        (30.0, 1000.0, 0.8),  # -85 %
-    ],
-)
-def test_fem_rejects_a_rod_below_a_top_layer_holding_most_of_its_hemisphere(
-    rho_1, rho_2, fraction
-) -> None:
-    """A rod wholly below an interface between a_eq/2 and a_eq: raise.
-
-    The guard of 10.23 compared the interface with the hemisphere radius
-    only: a 3 m rod 0.5-3.5 m below h_1 = 0.4 m < a_eq warned and returned
-    31.1 Ohm (mom: 10.5 Ohm, +197 %).
-    """
-    # audit A2E-2
-    from groundfield.solver.registry import BackendCapabilityError
-
-    h_1 = 0.4 if fraction is None else fraction * _a_eq_of_rod()
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=3.0)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    eng = gf.create_engine(backend="fem", segment_length=0.5)
-    with pytest.raises(BackendCapabilityError, match="'g1'.*of its equivalent"):
-        eng.solve(w)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize("fraction", [0.2, 0.45])
-def test_fem_only_warns_below_a_thin_top_layer(fraction: float) -> None:
-    """h_1 <= a_eq/2: the hemisphere lies mostly in the rod's layer (+16 %, +38 %)."""
-    # audit A2E-2
-    h_1 = fraction * _a_eq_of_rod()
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=h_1))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=3.0)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    res, texts = _fem_warnings(w)
-    assert texts and "lies above the electrode's lowest point" in texts[0]
-    assert math.isfinite(res.electrode_potentials["g1"][0].real)
-
-
-@pytest.mark.finding("10.23")
-def test_fem_guard_applies_to_a_bonded_cluster_wholly_below_the_interface() -> None:
-    """Two bonded rods (radii summed): wholly below raises, one above warns."""
-    # audit A2E-2
-    from groundfield.solver.registry import BackendCapabilityError
-
-    a_sum = 2.0 * _a_eq_of_rod()
-
-    def world(top_b: float) -> gf.World:
-        w = gf.create_world(
-            soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.7 * a_sum)
-        )
-        gf.create_electrode(
-            w, "rod", name="g1", position=(0, 0, 0.7 * a_sum + 0.1), length=3.0
-        )
-        gf.create_electrode(w, "rod", name="g2", position=(3, 0, top_b), length=3.0)
-        gf.create_conductor(w, start="g1", end="g2", name="bond")
-        gf.create_source(w, attached_to="g1", magnitude=1.0)
-        return w
-
-    eng = gf.create_engine(backend="fem", segment_length=0.5)
-    with pytest.raises(BackendCapabilityError, match="every electrode of the cluster"):
-        eng.solve(world(0.7 * a_sum + 0.1))
-    _, texts = _fem_warnings(world(0.2))  # g2 starts in the top layer
-    assert texts
-
-
-@pytest.mark.finding("10.23", "F01")
-@pytest.mark.parametrize(
-    "electrode",
-    [
-        # resistive top 1000/30 Ohm m: fem +22.0 % against image_2layer
-        dict(kind="strip", start=(0.0, 0.0, 0.8), end=(10.0, 0.0, 0.8)),
-        # resistive top 1000/30 Ohm m: fem +3.1 % against image_2layer
-        dict(kind="ring", center=(0.0, 0.0, 0.8), radius=5.0),
-    ],
-)
-def test_fem_warns_when_the_electrode_lies_below_a_thin_top_layer(electrode) -> None:
-    """Audit round 1, F01: the hemisphere spans the soil from the surface.
-
-    Strip and ring lie at 0.8 m, entirely below a 0.5 m top layer; their
-    hemispheres (a_eq ≈ 1 … 2 m) cross the interface as well, so neither
-    the raise (electrode below a hemisphere that ends above the interface)
-    nor the old warning (interface between the electrode and a_eq) applied,
-    and fem was off without a word. The guard covers every interface above
-    the deeper of the electrode's lowest point and ``a_eq``. Under a more
-    resistive top layer (1000/30 Ω·m) the result keeps the warning; under
-    the audit's more conductive one (30/1000 Ω·m: −70 % and −47 % against
-    ``mom``) it raises since user decision Q23
-    (:func:`test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans`).
-    """
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.5))
-    params = dict(electrode)
-    gf.create_electrode(w, params.pop("kind"), name="g1", **params)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    res, texts = _fem_warnings(w)
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
-    assert texts, "no FemReductionWarning"
-    assert "interface" in texts[0] and "h = 0.5" in texts[0], texts[0]
-
-
-# ---------------------------------------------------------------------
-# User decision Q23 — a more conductive layer that the hemisphere spans and
-# no electrode of the cluster touches is an error
-# ---------------------------------------------------------------------
-
-
-def _rod_world(soil, top: float = 0.5, length: float = 3.0) -> gf.World:
-    w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, top), length=length)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    gf.create_source(w, attached_to=name, magnitude=1.0)
     return w
 
 
-def _electrode_world(soil, kind: str, **params) -> gf.World:
+def _ring_world(soil, *, r0=2.0, depth=0.8, radius=0.008, shell=0.0, name="g1"):
     w = gf.create_world(soil=soil)
-    gf.create_electrode(w, kind, name="g1", **params)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    gf.create_electrode(
+        w,
+        "ring",
+        name=name,
+        center=(0, 0, depth),
+        radius=r0,
+        wire_radius=radius,
+        concrete_shell_coefficient_ohm_m=shell,
+    )
+    gf.create_source(w, attached_to=name, magnitude=1.0)
     return w
 
 
-def _three_layers(rhos, thicknesses) -> gf.MultiLayerSoil:
+def _z(world, backend="fem", name="g1", **kw) -> float:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if backend == "fem":
+            eng = _engine(**kw)
+        else:
+            kw.setdefault("segment_length", 0.05)
+            eng = gf.create_engine(backend=backend, **kw)
+        return eng.solve(world).cluster_impedance(name)[0].real
+
+
+def _two(r1, r2, h1):
+    return gf.TwoLayerSoil(rho_1=r1, rho_2=r2, h_1=h1)
+
+
+def _three(rhos, thicknesses):
     return gf.MultiLayerSoil(
         layers=[
-            gf.SoilLayer(rho=rho, thickness=h)
-            for rho, h in zip(rhos, [*thicknesses, None], strict=True)
+            gf.SoilLayer(resistivity=rhos[0], thickness=thicknesses[0]),
+            gf.SoilLayer(resistivity=rhos[1], thickness=thicknesses[1]),
+            gf.SoilLayer(resistivity=rhos[2]),
         ]
     )
 
 
-_A_ROD = 0.44231  # equivalent-hemisphere radius of a 3 m rod, r = 5 mm (m)
-_A_RING10 = 4.622583619251554  # a_eq of a ring r = 10 m at 0.8 m, r = 5 mm (m)
-
-_STRIP = dict(start=(0.0, 0.0, 0.8), end=(10.0, 0.0, 0.8))
+H100 = gf.HomogeneousSoil(resistivity=100.0)
 
 
-@pytest.mark.finding("10.23")
+# ---------------------------------------------------------------------
+# Mesh
+# ---------------------------------------------------------------------
+
+
+def test_graded_lines_hit_every_feature_and_grow_at_most_geometrically() -> None:
+    # user decision Q37
+    from groundfield.solver.fem._mesh import bisect, graded_lines
+
+    feats = [(0.0, math.inf), (0.008, 1.6e-5), (3.0, 1.6e-5), (3000.0, math.inf)]
+    lines = graded_lines(feats, 0.2)
+    for x, _ in feats:
+        assert x in lines
+    steps = np.diff(lines)
+    assert (steps > 0).all()
+    assert steps.min() <= 1.6e-5 * 1.1  # the integer interval counts
+    # the spacing grows by at most the ratio 1 + g between neighbours (to
+    # the rounding of the integer interval counts)
+    assert (steps[1:] / steps[:-1]).max() < 1.25
+    assert (steps[:-1] / steps[1:]).max() < 1.25
+    fine = bisect(lines, 2)
+    assert np.isin(lines, fine).all() and fine.size == 4 * lines.size - 3
+
+
+def _mesh(rods, rings, interfaces, level=0):
+    from groundfield.solver.fem._mesh import MeshParameters, build_mesh
+
+    return build_mesh(rods, rings, interfaces, 3000.0, MeshParameters(), level)
+
+
+def test_the_rod_is_a_closed_conforming_rectangle() -> None:
+    # user decision Q37
+    from groundfield.solver.fem._mesh import RodGeometry
+
+    mesh = _mesh([RodGeometry(0.008, 0.5, 3.5)], [], [2.0])
+    nodes = mesh.nodes[mesh.port == 0]
+    on_face = np.isclose(nodes[:, 0], 0.008) | np.isin(nodes[:, 1], [0.5, 3.5])
+    assert on_face.all()
+    assert np.isclose(nodes[:, 1], 2.0).any()  # the interface meets the rod
+    edges = mesh.port_edges[0]
+    # every surface node of the rod has two surface edges, except the two
+    # on the axis (the polyline runs from axis to axis)
+    count = np.bincount(edges.ravel(), minlength=mesh.nodes.shape[0])[mesh.port == 0]
+    on_axis = nodes[:, 0] == 0.0
+    assert (count[~on_axis] == 2).all() and (count[on_axis] == 1).all()
+    # no triangle inside the rod
+    centroid = mesh.nodes[mesh.triangles].mean(axis=1)
+    inside = (centroid[:, 0] < 0.008) & (centroid[:, 1] > 0.5) & (centroid[:, 1] < 3.5)
+    assert not inside.any()
+
+
+@pytest.mark.parametrize("h", [2.0, 2.003, 2.01, 1.9999, 2.0 + 1e-6])
+def test_the_ring_wire_is_an_inscribed_circle_and_interfaces_are_mesh_lines(h) -> None:
+    """The wire's cross section is a closed polygon inscribed in its circle;
+    an interface through the wire's mesh block is cut into its elements."""
+    # user decision Q37
+    from groundfield.solver.fem._mesh import RingGeometry
+
+    ring = RingGeometry(2.0, 2.0, 0.005, 0.015 if abs(h - 2.0) < 0.00525 else 0.0075)
+    mesh = _mesh([], [ring], [h])
+    nodes = mesh.nodes[mesh.port == 0]
+    dist = np.hypot(nodes[:, 0] - 2.0, nodes[:, 1] - 2.0)
+    assert dist.max() <= 0.005 * (1 + 1e-12)
+    assert dist.min() > 0.005 * math.cos(math.pi / 16)  # chords of 32 at least
+    count = np.bincount(mesh.port_edges[0].ravel(), minlength=mesh.nodes.shape[0])
+    assert (count[mesh.port == 0] == 2).all()  # closed
+    # every triangle lies in one layer: none has vertices on both sides
+    dz = mesh.nodes[mesh.triangles, 1] - h
+    assert not ((dz > 0).any(axis=1) & (dz < 0).any(axis=1)).any()
+    assert (mesh.layer == (mesh.nodes[mesh.triangles, 1].mean(axis=1) > h)).all()
+
+
+# ---------------------------------------------------------------------
+# Exact solution of the kernel
+# ---------------------------------------------------------------------
+
+
+def test_a_disc_on_the_surface_reproduces_webers_resistance() -> None:
+    """A coin of radius 1 m and thickness 10 um: rho / (4 b) (Weber)."""
+    # user decision Q37
+    from groundfield.solver.fem._assembly import solve_ports
+    from groundfield.solver.fem._mesh import RodGeometry
+
+    r = []
+    for level in (1, 2):
+        mesh = _mesh([RodGeometry(1.0, 0.0, 1e-5)], [], [], level)
+        r.append(1.0 / solve_ports(mesh, np.array([100.0]), [0.0]).conductance[0, 0])
+    extrapolated = r[1] + (r[1] - r[0]) / 3.0
+    assert r[0] < r[1] < 25.0  # monotone from below
+    assert abs(extrapolated / 25.0 - 1.0) < 2e-4, extrapolated
+
+
+# ---------------------------------------------------------------------
+# Homogeneous soil
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_a_rod_matches_the_solid_rod_finite_volume_model() -> None:
+    """3 m rod (a = 8 mm), head 0.5 m deep, 100 Ohm m; FV extrapolated."""
+    # user decision Q37
+    fv = [
+        ref.solid_rod_finite_volume(
+            100.0, 100.0, 1e9, 0.5, 3.5, 0.008, h_min=h, growth=g
+        )
+        for h, g in ((1e-4, 1.07), (5e-5, 1.05))
+    ]
+    limit = 2.0 * fv[1] - fv[0]  # first order
+    z = _z(_rod_world(H100, top=0.5))
+    assert abs(z / limit - 1.0) < 1e-4, (z, fv)
+
+
+def test_a_rod_lies_below_the_uniform_current_value_and_above_point_matching() -> None:
+    """Equipotential solid rod: below the uniform current of the line kernel
+    (an upper bound), above mom's point kernel (biased low, 10.28)."""
+    # user decision Q37
+    w = _rod_world(H100, top=0.5)
+    z = _z(w)
+    image = _z(w, "image", segment_length=0.1)
+    mom = _z(w, "mom", segment_length=0.25)
+    assert mom < z < image
+    assert 0.005 < image / z - 1.0 < 0.015  # +1.0 %
+    dwight = 100.0 / (2 * math.pi * 3.0) * (math.log(4 * 3.0 / 0.008) - 1.0)
+    assert dwight > z  # Dwight ignores the depth of the head
+
+
+@pytest.mark.parametrize(("r0", "depth", "a"), [(2.0, 0.8, 0.008), (5.0, 0.5, 0.005)])
+def test_a_ring_matches_the_thin_ring_and_image(r0, depth, a) -> None:
+    # user decision Q37
+    w = _ring_world(H100, r0=r0, depth=depth, radius=a)
+    z = _z(w)
+    closed = ref.ring_thin_wire_resistance(100.0, r0, a, depth)
+    assert abs(z / closed - 1.0) < 2e-4, (z, closed)
+    assert abs(z / _z(w, "image", segment_length=0.05) - 1.0) < 3e-4
+
+
+def test_unextrapolated_levels_converge_monotonically_at_second_order() -> None:
+    # user decision Q37
+    from groundfield.solver.fem._axisymmetric import axisymmetric_earth
+
+    w = _ring_world(H100)
+    eng = _engine()
+    r = [
+        1.0
+        / axisymmetric_earth(w, eng, refinement=k, extrapolate=False).conductance[0, 0]
+        for k in range(3)
+    ]
+    assert r[0] < r[1] < r[2]
+    assert 3.5 < (r[1] - r[0]) / (r[2] - r[1]) < 4.6
+
+
+def test_the_error_estimate_bounds_the_error_of_the_finer_level() -> None:
+    # user decision Q37
+    w = _ring_world(H100)
+    res = _engine().solve(w)
+    closed = ref.ring_thin_wire_resistance(100.0, 2.0, 0.008, 0.8)
+    fine = res.metadata["fem_port_resistance_levels"][-1][0][0]
+    est = res.metadata["fem_error_estimate"]
+    assert abs(fine / closed - 1.0) <= 1.5 * est
+    assert abs(res.cluster_impedance("g1")[0].real / closed - 1.0) < est / 5
+
+
+def test_equal_layers_solve_like_homogeneous_soil() -> None:
+    """The canonical layer stack: 100 over 100 Ohm m is homogeneous soil."""
+    # user decision Q37 (10.48)
+    z_h = _z(_rod_world(H100, top=0.5))
+    z_2 = _z(_rod_world(_two(100.0, 100.0, 2.0), top=0.5))
+    assert z_2 == z_h
+
+
+def test_the_truncation_does_not_move_the_result() -> None:
+    # user decision Q37
+    w = _rod_world(_two(30.0, 1000.0, 2.0), top=0.5)
+    z = [_z(w, options={"fem": {"r_far_factor": f}}) for f in (200.0, 1000.0, 5000.0)]
+    assert abs(z[0] / z[2] - 1.0) < 1e-4 and abs(z[1] / z[2] - 1.0) < 2e-5
+    grounded = _z(w, options={"fem": {"far_field": "dirichlet", "r_far_factor": 10.0}})
+    assert grounded < z[1]
+
+
+# ---------------------------------------------------------------------
+# Layered soil
+# ---------------------------------------------------------------------
+
+
 @pytest.mark.parametrize(
-    ("world", "layer", "remedy"),
+    ("rhos", "h1", "depth"),
     [
-        # rod 0.5-3.5 m under a conductive top layer h_1 = 0.2 a_eq: the base
-        # warned and returned -38.2 % / -37.2 % (image_2layer / mom)
-        pytest.param(
-            lambda: _rod_world(gf.TwoLayerSoil(rho_1=100, rho_2=1000, h_1=0.0885)),
-            "0 ... 0.0885 m (rho = 100 Ohm m)",
-            "'image_2layer'",
-            id="rod-100/1000-thin-top",
-        ),
-        # a 22 mm top layer is enough: -80.6 % / -80.3 % on the base
-        pytest.param(
-            lambda: _rod_world(gf.TwoLayerSoil(rho_1=30, rho_2=10000, h_1=0.0221)),
-            "0 ... 0.0221 m (rho = 30 Ohm m)",
-            "'image_2layer'",
-            id="rod-30/10000-22mm-top",
-        ),
-        # audit F01 strip at 0.8 m under h_1 = 0.5 m: -70.9 % / -70.3 %
-        pytest.param(
-            lambda: _electrode_world(
-                gf.TwoLayerSoil(rho_1=30, rho_2=1000, h_1=0.5), "strip", **_STRIP
-            ),
-            "0 ... 0.5 m (rho = 30 Ohm m)",
-            "'image_2layer'",
-            id="strip-30/1000-F01",
-        ),
-        # audit F01 ring r = 5 m at 0.8 m under h_1 = 0.5 m: -48.1 % / -47.2 %
-        pytest.param(
-            lambda: _electrode_world(
-                gf.TwoLayerSoil(rho_1=30, rho_2=1000, h_1=0.5),
-                "ring",
-                center=(0, 0, 0.8),
-                radius=5.0,
-            ),
-            "0 ... 0.5 m (rho = 30 Ohm m)",
-            "'image_2layer'",
-            id="ring5-30/1000-F01",
-        ),
-        # ring r = 10 m at 0.8 m above a conductive lower layer at 2 m
-        # (a_eq = 4.62 m): -92.1 % / -92.0 % on the base
-        pytest.param(
-            lambda: _electrode_world(
-                gf.TwoLayerSoil(rho_1=1000, rho_2=30, h_1=2.0),
-                "ring",
-                center=(0, 0, 0.8),
-                radius=10.0,
-            ),
-            "below 2 m (rho = 30 Ohm m)",
-            "'image_2layer'",
-            id="ring10-above-1000/30",
-        ),
-        # structural: a near-equal contrast raises too (-2.5 % / -1.4 %)
-        pytest.param(
-            lambda: _electrode_world(
-                gf.TwoLayerSoil(rho_1=120, rho_2=100, h_1=1.0),
-                "ring",
-                center=(0, 0, 0.8),
-                radius=2.0,
-            ),
-            "below 1 m (rho = 100 Ohm m)",
-            "'image_2layer'",
-            id="ring2-above-120/100",
-        ),
-        # three layers, ring in the top layer: the middle layer is spanned
-        # (a_eq = 4.62 m > 2 m); mom_sommerfeld solves the world
-        pytest.param(
-            lambda: _electrode_world(
-                _three_layers((1000, 30, 1000), (2.0, 3.0)),
-                "ring",
-                center=(0, 0, 0.8),
-                radius=10.0,
-            ),
-            "2 ... 5 m (rho = 30 Ohm m)",
-            "'mom_sommerfeld'",
-            id="ring10-three-layers",
-        ),
-        # three layers, rod in the second layer: no backend solves it yet
-        pytest.param(
-            lambda: _rod_world(_three_layers((30, 1000, 100), (0.1, 5.0))),
-            "0 ... 0.1 m (rho = 30 Ohm m)",
-            "No backend solves",
-            id="rod-three-layers-second-layer",
-        ),
+        ((1000.0, 30.0), 2.0, 0.8),
+        ((30.0, 1000.0), 2.0, 0.8),
+        ((100.0, 400.0), 0.5, 2.0),
     ],
 )
-def test_fem_rejects_a_more_conductive_layer_its_hemisphere_spans(
-    world, layer, remedy
+def test_rings_in_two_layer_soil_match_the_hankel_ring_and_image_2layer(
+    rhos, h1, depth
 ) -> None:
-    """The hemisphere feeds a better-conducting layer the electrodes never touch.
-
-    ``fem`` replaces the cluster by a hemisphere from the surface down to
-    ``a_eq``. Where that hemisphere spans a layer that no electrode of the
-    cluster touches and that conducts better than every layer they touch,
-    the reduction injects the current there and reads far too low
-    (non-conservative). Up to bbaea9f this was a ``FemReductionWarning``
-    (never silent: every such world warned, audit D2A-05); the user decided
-    on an error, independent of the contrast.
-    """
-    # user decision Q23
-    from groundfield.solver.fem import solve_fem
-    from groundfield.solver.registry import BackendCapabilityError
-
-    eng = gf.create_engine(backend="fem", segment_length=0.5)
-    with pytest.raises(BackendCapabilityError) as info:
-        eng.solve(world())
-    text = str(info.value)
-    assert "cluster {'g1'}" in text, text
-    assert f"spans the layer {layer}" in text, text
-    assert "a_eq = " in text and "none of its electrodes touches" in text, text
-    assert "against 'image_2layer' and 'mom'" in text, text  # measured range
-    assert remedy in text, text
-    with pytest.raises(ValueError, match="none of its electrodes touches"):
-        solve_fem(world(), eng)  # the direct call raises the same
+    # user decision Q37
+    w = _ring_world(_two(*rhos, h1), depth=depth)
+    z = _z(w)
+    hankel = ref.ring_layered_hankel(rhos, [h1], 2.0, depth, 0.008)
+    assert abs(z / hankel - 1.0) < 2e-4, (z, hankel)
+    assert abs(z / _z(w, "image_2layer", segment_length=0.05) - 1.0) < 3e-4
 
 
-@pytest.mark.finding("10.23")
-def test_fem_q23_message_names_the_electrodes_resistivity() -> None:
-    """Cluster, layer, the electrodes' resistivity and a_eq are in the text."""
-    # user decision Q23
-    w = _rod_world(gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.2 * _A_ROD))
-    eng = gf.create_engine(backend="fem", segment_length=0.5)
-    with pytest.raises(gf.BackendCapabilityError) as info:
-        eng.solve(w)
-    text = str(info.value)
-    assert "rho = 30 Ohm m" in text and "they touch (rho = 1000 Ohm m)" in text
-    assert "a_eq = 0.442 m" in text
-    assert "-97 %" in text  # the measured error range reaches -97 %
+@pytest.mark.parametrize(
+    ("rhos", "thicknesses", "depth"),
+    [
+        ((100.0, 1000.0, 30.0), (1.5, 3.0), 0.8),
+        ((1000.0, 30.0, 300.0), (1.0, 2.0), 0.5),
+        ((100.0, 1000.0, 30.0), (1.5, 3.0), 2.5),  # in the middle layer
+    ],
+)
+def test_rings_in_three_layer_soil_match_the_hankel_ring(
+    rhos, thicknesses, depth
+) -> None:
+    # user decision Q37
+    w = _ring_world(_three(rhos, thicknesses), depth=depth)
+    z = _z(w)
+    hankel = ref.ring_layered_hankel(rhos, thicknesses, 2.0, depth, 0.008)
+    assert abs(z / hankel - 1.0) < 2e-4, (z, hankel)
+    if depth < thicknesses[0]:  # mom_sommerfeld: top layer, point kernel low
+        msf = _z(w, "mom_sommerfeld", segment_length=0.25)
+        assert 0.0 < z / msf - 1.0 < 0.03
 
 
-def _ring10_with_bare_conductor(soil, z_conductor: float) -> gf.World:
-    """Ring r = 10 m at 0.8 m bonded to a rod by a bare galvanic conductor."""
-    from groundfield.conductors import Conductor
-
-    w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
-    gf.create_electrode(w, "rod", name="g2", position=(60, 0, 0.5), length=1.0)
-    w.add_conductor(
-        Conductor(
-            name="bare",
-            start=(10, 0, z_conductor),
-            end=(60, 0, z_conductor),
-            start_electrode="g1",
-            end_electrode="g2",
-            cross_section=50e-6,
-            discretize_segment_length=5.0,
-            coupling_to_soil="galvanic",
-        )
+@pytest.mark.slow
+@pytest.mark.parametrize("rhos", [(1000.0, 30.0), (30.0, 1000.0)])
+def test_a_rod_through_the_interface_matches_the_solid_rod_finite_volume_model(
+    rhos,
+) -> None:
+    # user decision Q37
+    fv = [
+        ref.solid_rod_finite_volume(*rhos, 2.0, 0.5, 3.5, 0.008, h_min=h, growth=g)
+        for h, g in ((1e-4, 1.07), (5e-5, 1.05))
+    ]
+    limit = 2.0 * fv[1] - fv[0]
+    w = _rod_world(_two(*rhos, 2.0), top=0.5)
+    z = _z(w)
+    assert abs(z / limit - 1.0) < 2e-4, (z, fv)
+    # the integral engines: one uniform current per layer above, mom below
+    assert (
+        _z(w, "mom", segment_length=0.25)
+        < z
+        < _z(w, "image_2layer", segment_length=0.1)
     )
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
+
+
+# ---------------------------------------------------------------------
+# The limit cases of the equivalent-hemisphere reduction (Q37)
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("rhos", "r0", "depth"),
+    [
+        ((1000.0, 30.0), 2.0, 2.0),
+        ((30.0, 1000.0), 2.0, 2.0),
+        ((1000.0, 30.0), 5.0, 10.0),
+    ],
+)
+def test_a_deep_ring_1_cm_above_an_interface(rhos, r0, depth) -> None:
+    """Up to 2026.11: +191 ... +308 % (1000/30) and -27 ... -14 % (30/1000)
+    against image_2layer, without a message. Reference: the Hankel thin
+    ring plus the exact 2-D proximity correction of the wire, which the
+    thin-wire engines lack (-5 % for 1000/30 at two wire radii)."""
+    # user decision Q37
+    h1 = depth + 0.01
+    w = _ring_world(_two(*rhos, h1), r0=r0, depth=depth, radius=0.005)
+    z = _z(w)
+    k = (rhos[1] - rhos[0]) / (rhos[1] + rhos[0])
+    reference = ref.ring_layered_hankel(rhos, [h1], r0, depth, 0.005)
+    reference += ref.wire_proximity_correction(rhos[0], r0, 0.005, 0.01, k)
+    assert abs(z / reference - 1.0) < 2e-4, (z, reference)
+
+
+@pytest.mark.parametrize("rhos", [(1000.0, 30.0), (30.0, 1000.0)])
+def test_a_ring_exactly_on_the_interface_matches_the_hankel_ring(rhos) -> None:
+    """Up to 2026.11: -21 ... +30 % with a warning. image_2layer jumps by
+    0.2 % between the two sides of the interface; fem and the Hankel ring
+    are continuous."""
+    # user decision Q37
+    depths = (2.0 - 1e-6, 2.0, 2.0 + 1e-6)
+    z = [_z(_ring_world(_two(*rhos, 2.0), depth=d, radius=0.005)) for d in depths]
+    hankel = ref.ring_layered_hankel(rhos, [2.0], 2.0, 2.0, 0.005)
+    assert abs(z[1] / hankel - 1.0) < 2e-4, (z, hankel)
+    assert max(z) / min(z) - 1.0 < 1e-4
+
+
+@pytest.mark.parametrize("rho_2", [1000.0, 10000.0])
+def test_a_rod_reaching_into_a_conductive_top_layer_falls_continuously(rho_2) -> None:
+    """3 m rod, top layer 30 Ohm m of h_1 = 0.0885 m (audit D2A-01). Up to
+    2026.11: -44 ... -78 % with a warning or an error; the thin wire of the
+    integral engines jumps (image_2layer: 2981 / 632 Ohm with the head 1 um
+    below / 2 cm into the top layer in 30/10000 Ohm m). The solid rod's head
+    face touches the top layer: the resistance falls monotonically as the
+    head nears and enters it, and steeply only through the slab of the
+    bottom layer left above the face (rho_2 delta / (pi a^2): 50 Ohm for
+    1 um of 10000 Ohm m)."""
+    # user decision Q37
+    h1 = 0.0885
+    soil = _two(30.0, rho_2, h1)
+    reach = [-1e-3, -1e-6, 0.0, 1e-6, 1e-3, 0.02, 0.08]  # head above h_1 by
+    z = [_z(_rod_world(soil, top=h1 - d, length=3.0)) for d in reach]
+    assert all(a > b for a, b in zip(z[:-1], z[1:], strict=True)), z
+    slab = rho_2 * 1e-6 / (math.pi * 0.008**2)
+    assert z[1] - z[2] < slab  # the 1 um slab, in series with the face
+    assert z[2] / z[3] - 1.0 < 2e-4  # 1 um of lateral surface: nothing
+    # 8 cm in: thin wire and solid rod are close again (a few per cent)
+    image = _z(_rod_world(soil, top=h1 - 0.08), "image_2layer", segment_length=0.1)
+    assert abs(z[-1] / image - 1.0) < 0.03
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("p", [0.0, 0.016])
+def test_a_rod_tip_on_or_in_a_conductive_layer_matches_the_finite_volume_model(
+    p,
+) -> None:
+    """Rod 0.5 ... 5 m, 1000 over 30 Ohm m, the tip on h_1 or 16 mm below it
+    (the case of the known limitation on rod ends at an interface)."""
+    # user decision Q37
+    h1 = 5.0 - p
+    fv = [
+        ref.solid_rod_finite_volume(
+            1000.0, 30.0, h1, 0.5, 5.0, 0.008, h_min=h, growth=g
+        )
+        for h, g in ((1e-4, 1.07), (5e-5, 1.05))
+    ]
+    limit = 2.0 * fv[1] - fv[0]
+    z = _z(_rod_world(_two(1000.0, 30.0, h1), top=0.5, length=4.5))
+    assert abs(z / limit - 1.0) < 5e-4, (z, fv)
+
+
+# ---------------------------------------------------------------------
+# Concrete shells (ADR-0012)
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("depth", [0.8, 3.0])
+def test_an_encased_ring_adds_at_least_its_shell_resistance(depth) -> None:
+    """R(C) >= R(0) + C / (2 pi r): the shell evens out the current around
+    the wire's cross section; the excess fades with depth."""
+    # user decision Q37
+    c = concrete_shell_coefficient(100.0, 0.005, 0.05)
+    bare = _z(_ring_world(H100, depth=depth, radius=0.055))
+    encased = _z(_ring_world(H100, depth=depth, radius=0.055, shell=c))
+    excess = (encased - bare) / (c / (2 * math.pi * 2.0)) - 1.0
+    assert 0.0 < excess < (0.006 if depth < 1 else 0.003), excess
+
+
+def test_an_encased_rod_follows_sundes_decomposition() -> None:
+    """3 m rod from the surface, 5 cm of 100 Ohm m concrete (r_b = 55 mm):
+    the shell adds about C / L, a little more (the current evens out)."""
+    # user decision Q37
+    c = concrete_shell_coefficient(100.0, 0.005, 0.05)
+    bare = _z(_rod_world(H100, radius=0.055))
+    encased = _z(_rod_world(H100, radius=0.055, shell=c))
+    assert 1.0 < (encased - bare) / (c / 3.0) < 1.03
+    sunde = c / 3.0 + 100.0 / (2 * math.pi * 3.0) * (math.log(4 * 3.0 / 0.055) - 1.0)
+    assert 0.0 < sunde / encased - 1.0 < 0.02  # uniform current: an upper bound
+
+
+# ---------------------------------------------------------------------
+# Network on the shared pipeline
+# ---------------------------------------------------------------------
+
+
+def _ring_and_rod(soil, *, bonded: bool, source: dict | None = None):
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(w, "ring", name="ring", center=(0, 0, 0.8), radius=2.0)
+    gf.create_electrode(w, "rod", name="rod", position=(0, 0, 0.5), length=3.0)
+    if bonded:
+        gf.create_conductor(w, start="ring", end="rod")
+    gf.create_source(w, **(source or {"attached_to": "ring", "magnitude": 1.0}))
     return w
 
 
-def _fem_message(world, segment_length: float = 0.5) -> str:
-    import warnings
+def test_a_bonded_ring_and_rod_is_the_parallel_of_the_port_matrix() -> None:
+    # user decision Q37
+    res = _engine().solve(_ring_and_rod(_two(100.0, 400.0, 2.0), bonded=True))
+    r = np.array(res.metadata["fem_port_resistance"])
+    assert res.metadata["fem_ports"] == ["ring", "rod"]
+    assert np.allclose(r, r.T, rtol=1e-12)
+    z = res.cluster_impedance("ring")[0].real
+    assert math.isclose(z, 1.0 / np.linalg.inv(r).sum(), rel_tol=1e-10)
+    total = sum(res.electrode_currents[n][0].real for n in ("ring", "rod"))
+    assert math.isclose(total, 1.0, rel_tol=1e-12)
 
+
+def test_a_two_terminal_source_measures_the_loop_through_the_soil() -> None:
+    # user decision Q37
+    src = {"attached_to": "ring", "return_to": "rod", "magnitude": 1.0}
+    res = _engine().solve(
+        _ring_and_rod(_two(100.0, 400.0, 2.0), bonded=False, source=src)
+    )
+    r = np.array(res.metadata["fem_port_resistance"])
+    expected = r[0, 0] + r[1, 1] - 2 * r[0, 1]
+    assert math.isclose(res.input_impedance()[0].real, expected, rel_tol=1e-10)
+    assert math.isclose(res.electrode_currents["rod"][0].real, -1.0, rel_tol=1e-12)
+
+
+def test_a_floating_electrode_takes_the_transfer_potential() -> None:
+    # user decision Q37
+    res = _engine().solve(_ring_and_rod(H100, bonded=False))
+    r = np.array(res.metadata["fem_port_resistance"])
+    assert res.electrode_currents["rod"][0] == 0j
+    assert math.isclose(res.electrode_potentials["rod"][0].real, r[1, 0], rel_tol=1e-10)
+    assert math.isclose(
+        res.electrode_potentials["ring"][0].real, r[0, 0], rel_tol=1e-10
+    )
+
+
+def test_voltage_sources_junctions_and_inductive_branches_solve_per_frequency() -> None:
+    """A voltage source at a junction feeds a ring and a rod through 16 mm2
+    leads, one inductive: fem and image_2layer share the network solve, so
+    they differ by the earth model only (a few per mille)."""
+
+    # user decision Q37 (open point 3 of w2src: fem solves voltage sources)
+    def world():
+        w = gf.create_world(soil=_two(100.0, 400.0, 2.0))
+        gf.create_electrode(w, "ring", name="ring", center=(0, 0, 0.8), radius=2.0)
+        gf.create_electrode(w, "rod", name="rod", position=(0, 0, 0.5), length=3.0)
+        gf.create_junction(w, name="J", position=(0, 0, -0.5))
+        gf.create_conductor(w, start="ring", end="J", cross_section=16e-6)
+        gf.create_conductor(
+            w, start="rod", end="J", cross_section=16e-6, inductance_model="neumann"
+        )
+        gf.create_source(
+            w,
+            kind="voltage",
+            attached_to="J",
+            magnitude=230.0,
+            internal_resistance_ohm=1.0,
+        )
+        return w
+
+    freqs = [0.0, 50.0, 1000.0]
+    res = _engine(frequencies=freqs).solve(world())
+    other = gf.create_engine(
+        backend="image_2layer", segment_length=0.05, frequencies=freqs
+    ).solve(world())
+    for k in range(3):
+        i_fem = res.sources[0].current[k]
+        i_img = other.sources[0].current[k]
+        assert abs(i_fem / i_img - 1.0) < 5e-3
+        assert abs(res.metadata["junction_potentials"]["J"][k] - (230 - i_fem)) < 1e-9
+    assert res.sources[0].current[2] != res.sources[0].current[0]  # inductive
+
+
+def test_an_isolated_distributed_conductor_is_a_chain_of_branches() -> None:
+    # user decision Q37
+    def world(distributed):
+        w = _ring_and_rod(H100, bonded=False)
+        gf.create_conductor(
+            w,
+            start="ring",
+            end="rod",
+            cross_section=1e-6,
+            discretize_segment_length=0.5 if distributed else None,
+        )
+        return w
+
+    lumped = _engine().solve(world(False)).cluster_impedance("ring")[0]
+    chain = _engine().solve(world(True)).cluster_impedance("ring")[0]
+    assert abs(chain / lumped - 1.0) < 1e-9
+
+
+# ---------------------------------------------------------------------
+# Field
+# ---------------------------------------------------------------------
+
+
+def test_point_sources_carry_the_model_current_of_every_electrode() -> None:
+    # user decision Q37
+    src = {"attached_to": "ring", "return_to": "rod", "magnitude": 2.0}
+    res = _engine().solve(_ring_and_rod(H100, bonded=False, source=src))
+    for name in ("ring", "rod"):
+        total = sum(p.current[0] for p in res.point_sources if p.electrode_name == name)
+        assert abs(total - res.electrode_currents[name][0]) < 1e-12
+    rod = sorted(
+        (p for p in res.point_sources if p.electrode_name == "rod"),
+        key=lambda p: p.position[2],
+    )
+    density = [abs(p.current[0]) / p.length for p in rod]
+    assert density[-1] > density[len(density) // 2]  # more at the tip
+
+
+def test_the_finite_element_field_converges_to_the_point_source_field() -> None:
+    """Two methods for the field: the FE nodal solution and the point
+    sources of the result (the model's leakage with the soil's Green's
+    function). The FE field converges to it, by about four per level; the
+    point sources carry no far-field discretisation error."""
+    # user decision Q37
+    from groundfield.solver.fem._assembly import solve_ports
+    from groundfield.solver.fem._mesh import MeshParameters, RodGeometry, build_mesh
+
+    w = _rod_world(H100, top=0.5)
+    res = _engine().solve(w)
+    errors = []
+    for level in (0, 1):
+        mesh = build_mesh(
+            [RodGeometry(0.008, 0.5, 3.5)],
+            [],
+            [],
+            res.metadata["fem_r_far"],
+            MeshParameters(),
+            level,
+        )
+        sol = solve_ports(mesh, np.array([100.0]), [0.0])
+        if level == 0:
+            surface = (mesh.nodes[:, 1] == 0.0) & (mesh.nodes[:, 0] > 1.0)
+            s = mesh.nodes[surface & (mesh.nodes[:, 0] < 100.0), 0]
+        index = {
+            float(x): k
+            for k, x in enumerate(mesh.nodes[:, 0])
+            if mesh.nodes[k, 1] == 0.0
+        }
+        rows = [index[float(x)] for x in s]
+        phi_fe = sol.potentials[rows, 0] / sol.conductance[0, 0]  # per ampere
+        pts = np.column_stack([s, np.zeros_like(s), np.zeros_like(s)])
+        errors.append(np.max(np.abs(phi_fe / res.potential(pts).real - 1.0)))
+    assert errors[1] < 5e-3 and errors[1] < errors[0] / 3.0, errors
+
+
+# ---------------------------------------------------------------------
+# Refusals and guards
+# ---------------------------------------------------------------------
+
+
+def _fem_error(world, **kw) -> str:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with pytest.raises(gf.BackendCapabilityError) as info:
-            gf.create_engine(backend="fem", segment_length=segment_length).solve(world)
+            _engine(**kw).solve(world)
     return str(info.value)
 
 
-def _solves(backend: str, world, segment_length: float = 0.5) -> bool:
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = gf.create_engine(backend=backend, segment_length=segment_length).solve(
-            world
-        )
-    return math.isfinite(res.cluster_impedance("g1")[0].real)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("world", "named", "refusing"),
-    [
-        # every segment 5 cm above h_1: mom's point form refuses 0.5 m
-        # segments (closer than 0.387 segment lengths), the line kernel of
-        # image_2layer does not; a finer segment_length lifts it (audit
-        # R2A-04), so mom is named with that remedy
-        pytest.param(
-            lambda: _electrode_world(
-                gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.85),
-                "ring",
-                center=(0, 0, 0.8),
-                radius=10.0,
-            ),
-            ("image_2layer", "mom"),
-            (),
-            id="two-layers-mom-needs-finer-segments",
-        ),
-        # a bare conductor below h_1 = 2 m in three layers: mom_sommerfeld
-        # refuses the cross-layer geometry (audit D2A-06)
-        pytest.param(
-            lambda: _ring10_with_bare_conductor(
-                _three_layers((1000.0, 30.0, 1000.0), (2.0, 3.0)), 2.5
-            ),
-            (),
-            ("mom_sommerfeld",),
-            id="three-layers-bare-conductor-below-h1",
-        ),
-        # (a bare conductor in the air, which every backend refuses, is
-        # refused by fem itself before any rule since audit R2A-07, see
-        # test_fem_refuses_a_galvanic_conductor_out_of_the_soil)
-        # the plain case: both are named, both solve
-        pytest.param(
-            lambda: _electrode_world(
-                gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0),
-                "ring",
-                center=(0, 0, 0.8),
-                radius=10.0,
-            ),
-            ("mom", "image_2layer"),
-            (),
-            id="two-layers-both-solve",
-        ),
-    ],
-)
-def test_fem_names_only_a_backend_that_solves_the_world(world, named, refusing) -> None:
-    """The remedy of the error message passes the named backend's own checks.
-
-    The message named ``'mom'`` / ``'image_2layer'`` (two layers) or
-    ``'mom_sommerfeld'`` (three or more, when the electrodes lie in the top
-    layer) by a rule of thumb; those backends refused some of these worlds
-    — a bare conductor below h_1 in three layers, segments near the
-    interface (point form), a conductor in the air (audit D2A-06). The
-    message now names a backend only if its capability and geometry checks
-    accept the world, and says that no backend solves it otherwise.
-    """
-    # audit D2A-06
-    text = _fem_message(world())
-    remedy = text[max(text.rfind("Use backend="), text.rfind("No backend solves")) :]
-    for backend in named:
-        assert f"'{backend}'" in remedy, remedy
-        finer = re.search(
-            rf"'{backend}' refuses this world at segment_length = "
-            r"[0-9.]+ m \(.*\) but accepts it below ([0-9.]+) m",
-            remedy,
-        )
-        ds = 0.99 * float(finer.group(1)) if finer else 0.5  # audit R2A-04
-        assert _solves(backend, world(), segment_length=ds)
-    for backend in refusing:
-        assert f"backend='{backend}'" not in remedy, remedy
-        assert f"'{backend}'" in remedy and "this world: " in remedy, remedy
-    if not named:
-        assert "No backend solves this world yet" in remedy, remedy
-
-
-@pytest.mark.finding("10.23")
-def test_fem_remedy_is_not_refused_by_the_engines_resource_limit() -> None:
-    """The resource limit is a setting of the engine, not of the world.
-
-    A fem engine with ``max_segments=50`` makes the dry check of 'mom' and
-    'image_2layer' stop at their resource limit; the message must still
-    name them (with the limit as a remedy), not claim that no backend
-    solves the world.
-    """
-    # audit D2A-06
-    w = _electrode_world(
-        gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0),
-        "ring",
-        center=(0, 0, 0.8),
-        radius=10.0,
-    )
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with pytest.raises(gf.BackendCapabilityError) as info:
-            gf.Engine(backend="fem", segment_length=0.5, max_segments=50).solve(w)
-    text = str(info.value)
-    assert "No backend solves" not in text, text
-    assert "Use backend='mom' (one current per segment) or 'image_2layer'" in text, text
-    assert "Engine.max_segments" in text, text
-
-
-# ---------------------------------------------------------------------
-# Audit R2A-03, R2A-04: every remedy text comes from the backends' own
-# checks; a refusal that a setting lifts names the backend with it
-# ---------------------------------------------------------------------
-
-
-def _polyline_world(soil) -> gf.World:
-    return _electrode_world(
-        soil, "polyline", vertices=[(0, 0, 0.8), (10, 0, 0.8), (10, 10, 0.8)]
-    )
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("soil", "named"),
-    [
-        # three layers, the polyline in the top layer: mom_sommerfeld solves
-        # it (6.1644 Ohm); 4fc8153 named 'image' and 'mom', which refuse
-        # three-layer soil
-        pytest.param(
-            _three_layers((100.0, 30.0, 300.0), (2.0, 3.0)),
-            "mom_sommerfeld",
-            id="three-layers-top-layer",
-        ),
-        # the polyline below h_1 = 0.5 m: no backend solves it yet
-        pytest.param(
-            _three_layers((100.0, 30.0, 300.0), (0.5, 3.0)), None, id="below-h1"
-        ),
-        # homogeneous: the old text, unchanged
-        pytest.param(gf.HomogeneousSoil(rho=100.0), "image", id="homogeneous"),
-    ],
-)
-def test_fem_polyline_message_names_only_backends_that_solve_the_world(
-    soil, named
-) -> None:
-    """The irreducible-electrode error had a fixed remedy (audit R2A-03).
-
-    "Use backend='image' or 'mom'" was false for every world that those two
-    refuse — 87 of 165 random worlds that got this message. The remedy now
-    comes from the backends' own checks like every other fem error.
-    """
-    # audit R2A-03
-    text = _fem_message(_polyline_world(soil))
-    assert "no closed form for PolylineElectrode" in text, text
-    if named is None:
-        assert "No backend solves this world yet" in text, text
-        assert "'image'" not in text, text
-    else:
-        assert f"Use backend='{named}'" in text, text
-        assert _solves(named, _polyline_world(soil))
-    if not isinstance(soil, gf.HomogeneousSoil):
-        assert "Use backend='image' or 'mom'" not in text, text
-
-
-@pytest.mark.finding("10.23")
-def test_fem_no_backend_claim_does_not_depend_on_the_segment_length() -> None:
-    """Three layers, ring r = 10 m at 0.8 m over h_1 = 1 m (Q23), ds = 2 m.
-
-    The point form of mom_sommerfeld refuses 2 m segments 0.2 m above h_1,
-    and 4fc8153 said "No backend solves this world yet"; with a finer
-    segment_length it solves the world (15.0457 Ohm at 0.5 m). A refusal
-    that a setting lifts names the backend with that setting (audit R2A-04).
-    """
-    # audit R2A-04
-    w = _electrode_world(
-        _three_layers((1000.0, 30.0, 1000.0), (1.0, 3.0)),
-        "ring",
-        center=(0, 0, 0.8),
-        radius=10.0,
-    )
-    text = _fem_message(w, segment_length=2.0)
-    assert "No backend solves this world yet" not in text, text
-    assert "Use backend='mom_sommerfeld'" in text, text
-    assert "but accepts it below 0.333 m" in text, text
-    assert _solves("mom_sommerfeld", w, segment_length=0.33)
-
-
-@pytest.mark.finding("10.23")
-def test_fem_resource_limit_does_not_assert_the_geometry() -> None:
-    """Rod through h_1 in three layers, ``max_segments = 3``.
-
-    The dry check stopped at the resource limit before the cross-layer
-    check of mom_sommerfeld, and 4fc8153 said "Use backend='mom_sommerfeld',
-    which solves three or more layers when every segment lies in the top
-    layer, as here" — mom_sommerfeld refuses the rod at any limit. The
-    cross-layer check now runs on the geometry first (audit R2A-04).
-    """
-    # audit R2A-04
-    import warnings
-
-    w = _rod_world(_three_layers((1000.0, 30.0, 1000.0), (2.0, 3.0)), top=0.0)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with pytest.raises(gf.BackendCapabilityError) as info:
-            gf.Engine(backend="fem", segment_length=0.5, max_segments=3).solve(w)
-    text = str(info.value)
-    assert "as here" not in text, text
-    assert "No backend solves this world yet" in text, text
-    assert "'mom_sommerfeld' refuses this world: electrode 'g1' reaches z = 3 m" in text
-
-
-@pytest.mark.finding("10.23")
-def test_fem_remedy_passes_the_guards_own_reason() -> None:
-    """A rod through h_1 bonded to a ring 0.1 m deep (two layers, ds = 0.5 m).
-
-    The point form of mom refuses because its 3-point rule reaches above the
-    soil surface, not because of the interface; 4fc8153 quoted a fixed text
-    about the interface. The guard's own reason is passed through, and a
-    finer segment_length lifts the refusal (audit R2A-04).
-    """
-    # audit R2A-04
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-    gf.create_electrode(w, "ring", name="r", center=(3, 0, 0.1), radius=1.0)
-    gf.create_conductor(w, start="g1", end="r", name="bond")
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    text = _fem_message(w)
-    assert "reach above the soil surface" in text, text
-    assert "closer than 0.387 segment lengths to the interface" not in text, text
-    assert "'mom' refuses this world at segment_length = 0.5 m" in text, text
-    assert "but accepts it below 0.258 m" in text, text
-    assert _solves("mom", w, segment_length=0.25)
-
-
-@pytest.mark.finding("10.23")
-def test_fem_q23_uses_the_canonical_layer_stack() -> None:
-    """Equal resistivities are no interface: the merged top layer is named."""
-    # user decision Q23
-    soil = _three_layers((30.0, 30.0, 1000.0), (0.05, 0.05))
-    with pytest.raises(gf.BackendCapabilityError, match=r"0 \.\.\. 0\.1 m \(rho = 30"):
-        gf.create_engine(backend="fem", segment_length=0.5).solve(_rod_world(soil))
-
-
-@pytest.mark.finding("10.23")
-def test_fem_an_electrode_on_the_interface_touches_both_layers() -> None:
-    """A ring lying exactly on h_1 touches the conductive layer: no error.
-
-    Ring r = 5 m (a_eq = 2.57 m) under a 30/1000 Ω·m top layer of 0.5 m:
-    at z = 0.5 m it lies on the interface and touches both layers (the
-    reduction then only warns, +23.4 % against image_2layer); 7 mm deeper
-    it touches the lower layer alone and the spanned top layer, more
-    conductive, raises. So does the ring within its wire radius below the
-    interface since audit R2A-02, see
-    :func:`test_fem_a_wire_within_its_radius_below_a_conductive_layer_raises`.
-    """
-    # user decision Q23
-    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
-    on = _electrode_world(soil, "ring", center=(0, 0, 0.5), radius=5.0)
-    res, texts = _fem_warnings(on)
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
-    assert texts and "interface" in texts[0]
-    below = _electrode_world(soil, "ring", center=(0, 0, 0.5 + 7e-3), radius=5.0)
-    with pytest.raises(gf.BackendCapabilityError, match="none of its electrodes"):
-        gf.create_engine(backend="fem", segment_length=0.5).solve(below)
-
-
-# ---------------------------------------------------------------------
-# One contact predicate for the layer rules (audit D2A-01, D2A-02): a
-# horizontal wire touches every layer within its wire radius of its axis, a
-# rod the layers its axis passes through (an end on an interface does not
-# count: the thin-wire model has no end face)
-# ---------------------------------------------------------------------
-
-
-def _fem_verdict(world) -> str:
-    """'raise' (a layer rule of the reduction), 'warn' or 'silent'."""
-    try:
-        _, texts = _fem_warnings(world)
-    except gf.BackendCapabilityError:
-        return "raise"
-    return "warn" if texts else "silent"
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize("rho_2", [10000.0, 1000.0])
-@pytest.mark.parametrize("gap", [0.0, 1e-3, 3e-3])
-def test_fem_a_rod_head_on_the_interface_does_not_touch_the_layer_above(
-    rho_2, gap
-) -> None:
-    """A rod whose head lies on h_1 (or within a radius below it) is below it.
-
-    The thin-wire model has no end face, so the integral engines give a rod
-    whose head sits exactly on the interface no contact with the layer
-    above. ``fem`` counted the closed interval and only warned for the head
-    on h_1 under a conductive 30/10000 (30/1000) top layer of 0.2 a_eq,
-    where it reads -92.9 % (-64.7 %) against image_2layer and -92.7 %
-    (-63.9 %) against mom, the value the rod 1 um deeper raised for
-    (audit D2A-01).
-    """
-    # audit D2A-01
-    h_1 = 0.2 * _A_ROD
-    w = _rod_world(gf.TwoLayerSoil(rho_1=30.0, rho_2=rho_2, h_1=h_1), top=h_1 + gap)
-    with pytest.raises(gf.BackendCapabilityError, match="none of its electrodes"):
-        gf.create_engine(backend="fem", segment_length=0.5).solve(w)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize("reach", [1e-6, 0.02, 0.08])
-def test_fem_a_rod_reaching_into_the_conductive_top_layer_keeps_the_warning(
-    reach,
-) -> None:
-    """Both sides: a head that reaches into the layer touches it.
-
-    Then the cluster touches the conductive layer and Q23 does not apply;
-    fem is still -77 % / -67 % / -53 % (1 um / 2 cm / 8 cm into a 30/10000
-    top layer of 0.2 a_eq) against image_2layer and mom, a warning: a
-    share-based contact rule is the author's decision (audit D2A-01).
-    """
-    # audit D2A-01
-    h_1 = 0.2 * _A_ROD
-    w = _rod_world(gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=h_1), top=h_1 - reach)
-    assert _fem_verdict(w) == "warn"
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize("gap", [1e-6, 3e-3, 5e-3, 7e-3])
-def test_fem_a_wire_within_its_radius_below_a_conductive_layer_raises(gap) -> None:
-    """A ring (wire radius 5 mm) whose axis lies within one radius below h_1.
-
-    The Q23 rule asks for the axis (audit R2A-02): the ring touches the
-    1000 Ohm m layer only, and the spanned 30 Ohm m top layer conducts
-    better, so it raises. fem is +23.4 % / +9.3 % / +0.1 % / -6.2 % against
-    image_2layer and the reduced-kernel ring series there; the message says
-    that fem misplaces the current and quotes the measured range with its
-    positive end instead of "reads too low". Audit D2A-02 had counted the
-    band as contact and made the first three a warning, which also turned
-    errors of -30 ... -89 % into warnings
-    (:func:`test_fem_partial_contact_with_a_more_conductive_layer_raises`).
-    """
-    # audit R2A-02
-    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
-    text = _fem_message(
-        _electrode_world(soil, "ring", center=(0, 0, 0.5 + gap), radius=5.0)
-    )
-    assert "none of its electrodes touches" in text, text
-    assert "reads too low" not in text and "misplaces the current" in text, text
-    assert "+30 %" in text, text  # the measured range ends above +23.4 %
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("soil", "radius", "z"),
-    [
-        # ring 3 mm / 5 mm above a conductive lower layer that the hemisphere
-        # spans: -55.6 % / -85.4 % against image_2layer (Q23)
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=0.5),
-            5.0,
-            0.497,
-            id="1000/30-3mm-above",
-        ),
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=0.5),
-            5.0,
-            0.495,
-            id="3000/30-5mm-above",
-        ),
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=10000.0, rho_2=30.0, h_1=0.8),
-            2.0,
-            0.797,
-            id="10000/30-3mm-above",
-        ),
-        # ring 5 mm below a conductive top layer in the A2E-2 band
-        # (h_1 = 0.66 a_eq): -79.4 % against image_2layer (A2E-2)
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=0.8),
-            2.0,
-            0.805,
-            id="30/10000-5mm-below",
-        ),
-    ],
-)
-def test_fem_partial_contact_with_a_more_conductive_layer_raises(
-    soil, radius, z
-) -> None:
-    """A wire within its radius of a more conductive layer it does not reach.
-
-    Audit D2A-02 let a horizontal wire touch every layer within its wire
-    radius of its axis, for every rule. That lifted the Q23 and A2E-2
-    errors where fem is far too low (-30 ... -89 % against image_2layer and
-    a radius-regularised ring series, all raised on 563ead7); 4fc8153 only
-    warned. The band now serves the 10.23 rule only, which it makes
-    stricter (audit R2A-02).
-    """
-    # audit R2A-02
-    assert _fem_verdict(
-        _electrode_world(soil, "ring", center=(0, 0, z), radius=radius)
-    ) == ("raise")
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(("rho_1", "rho_2"), [(30.0, 1000.0), (1000.0, 30.0)])
-def test_fem_a_wire_on_the_interface_is_not_below_it(rho_1, rho_2) -> None:
-    """The A2E-2 rule: a ring lying on h_1 is not "below" the interface.
-
-    Ring r = 2 m on h_1 = 0.8 m (a_eq = 1.21 m, so h_1 is in the A2E-2 band
-    a_eq/2 < h <= a_eq): it touches both layers, but the rule treated it as
-    lying below h_1 and raised "in a layer the electrodes do not touch";
-    fem is -0.6 % / +10.2 % against image_2layer and the ring series there
-    (audit D2A-02). 7 mm below h_1 it lies below the interface and raises.
-    """
-    # audit D2A-02
-    soil = gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=0.8)
-    on = _electrode_world(soil, "ring", center=(0, 0, 0.8), radius=2.0)
-    res, texts = _fem_warnings(on)
-    assert math.isfinite(res.cluster_impedance("g1")[0].real) and texts
-    below = _electrode_world(soil, "ring", center=(0, 0, 0.807), radius=2.0)
-    with pytest.raises(gf.BackendCapabilityError, match="of its equivalent hemisphere"):
-        gf.create_engine(backend="fem", segment_length=0.5).solve(below)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("soil", "kind", "params", "depths"),
-    [
-        # the second interface is 0.1 + 0.2 = 0.30000000000000004 m
-        pytest.param(
-            _three_layers((300.0, 1000.0, 30.0), (0.1, 0.2)),
-            "ring",
-            dict(radius=5.0),
-            (0.3, 0.1 + 0.2),
-            id="ring",
-        ),
-        # canonical top layer 0.05 + 0.03 m (30 and 30 Ohm m merge)
-        pytest.param(
-            _three_layers((30.0, 30.0, 1000.0), (0.05, 0.03)),
-            "rod",
-            dict(length=3.0),
-            (0.08, 0.05 + 0.03),
-            id="rod-head",
-        ),
-    ],
-)
-def test_fem_contact_does_not_depend_on_float_sums(soil, kind, params, depths) -> None:
-    """An electrode written at 0.3 and one at 0.1 + 0.2 get the same verdict."""
-    # audit D2A-02
-
-    def verdict(z: float) -> str:
-        key = "center" if kind == "ring" else "position"
-        return _fem_verdict(_electrode_world(soil, kind, **{key: (0, 0, z)}, **params))
-
-    assert verdict(depths[0]) == verdict(depths[1])
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(("rho_1", "rho_2"), [(1000.0, 30.0), (30.0, 1000.0)])
-@pytest.mark.parametrize("gap", [0.0, 3e-3])
-def test_fem_a_wire_touching_a_layer_below_its_hemisphere_raises(
-    rho_1, rho_2, gap
-) -> None:
-    """The 10.23 rule with the same predicate: a wire on (or within one radius
-    above) an interface below a_eq touches the layer its hemisphere does not
-    reach.
-
-    Ring r = 2 m at 2 m - gap over h_1 = 2 m (a_eq = 1.3 m): +1008 % / +487 %
-    (1000/30) and -18 % / -17 % (30/1000) against image_2layer and the ring
-    series, silent or only a warning on 563ead7 (the axis lies above the
-    interface).
-    """
-    # audit D2A-02
-    w = _electrode_world(
-        gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=2.0),
-        "ring",
-        center=(0, 0, 2.0 - gap),
-        radius=2.0,
-    )
-    with pytest.raises(gf.BackendCapabilityError, match="hemisphere of its cluster"):
-        gf.create_engine(backend="fem", segment_length=0.5).solve(w)
-
-
-# ---------------------------------------------------------------------
-# Audit R2A-01: round-off in the end depths of a strip. StripElectrode
-# accepts end depths that differ by up to 1e-9 m as horizontal; only a
-# rod is non-horizontal, every other electrode has one depth.
-# ---------------------------------------------------------------------
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("start_z", "end_z"),
-    [
-        pytest.param(0.1 + 0.2, 0.3, id="float-sum"),
-        pytest.param(0.3, 0.3 + 1e-10, id="1e-10-at-the-end"),
-        pytest.param(0.3 + 1e-10, 0.3, id="1e-10-at-the-start"),
-    ],
-)
-def test_fem_round_off_in_a_strip_does_not_change_the_verdict(start_z, end_z) -> None:
-    """A strip lying in the interface h_1 = 0.3 m warns like the exact one.
-
-    fem took a strip whose end depths differ by round-off for a rod, so the
-    rod's contact rule (the open interval between its ends) applied: the
-    ends 0.1 + 0.2 / 0.3 touched no layer and raised a bare ``ValueError:
-    min() iterable argument is empty``, the ends 0.3 / 0.3 + 1e-10 raised a
-    Q23 error saying that the strip touches neither layer, while the exact
-    strip warns (audit R2A-01; 563ead7 warned for all of them).
-    """
-    # audit R2A-01
-    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.3)
-    exact = _electrode_world(soil, "strip", start=(0, 0, 0.3), end=(10, 0, 0.3))
-    noisy = _electrode_world(soil, "strip", start=(0, 0, start_z), end=(10, 0, end_z))
-    assert _fem_verdict(exact) == "warn"
-    assert _fem_verdict(noisy) == _fem_verdict(exact)
-
-
-@pytest.mark.finding("10.23")
-def test_fem_round_off_in_a_strip_below_the_interface_does_not_change_the_verdict() -> (
-    None
-):
-    """A strip 3 mm below h_1 = 0.5 m with 1e-10 m of round-off in one end.
-
-    4fc8153 warned for the exact strip (the wire-radius band) and raised
-    Q23 for the noisy one (taken for a rod, audit R2A-01).
-    """
-    # audit R2A-01
-    soil = gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=0.5)
-    exact = _electrode_world(soil, "strip", start=(0, 0, 0.503), end=(10, 0, 0.503))
-    noisy = _electrode_world(
-        soil, "strip", start=(0, 0, 0.503), end=(10, 0, 0.503 + 1e-10)
-    )
-    assert _fem_verdict(noisy) == _fem_verdict(exact)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("start_z", "end_z", "needle"),
-    [
-        # 4fc8153 solved it (24.6326 Ohm); image and mom refuse it
-        pytest.param(1e-3, 1e-3 + 1e-10, "soil-surface plane", id="surface-plane"),
-        pytest.param(0.0, 1e-10, "at or above the soil surface", id="at-z=0"),
-        # 4fc8153: ValueError: min() iterable argument is empty
-        pytest.param(-1e-10, 0.0, "at or above the soil surface", id="above-z=0"),
-    ],
-)
-def test_fem_round_off_does_not_bypass_the_out_of_soil_refusal(
-    start_z, end_z, needle
-) -> None:
-    """fem refuses a strip in or above the surface plane like image and mom."""
-    # audit R2A-01
-    import warnings
-
-    w = _electrode_world(
-        gf.HomogeneousSoil(rho=100.0),
-        "strip",
-        start=(0, 0, start_z),
-        end=(10, 0, end_z),
-    )
-    for backend in ("image", "mom"):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            with pytest.raises(ValueError, match="soil.surface"):
-                gf.create_engine(backend=backend, segment_length=0.5).solve(w)
-    with pytest.raises(ValueError, match=needle) as info:
-        _fem_warnings(w)
-    assert not isinstance(info.value, gf.BackendCapabilityError), info.value
-
-
-def _documented(pattern: str) -> list[str]:
-    """Where the fem docs (engine page, FemReductionWarning) miss ``pattern``."""
-    import re
-    from pathlib import Path
-
-    from groundfield.solver.fem import FemReductionWarning
-
-    page = Path(__file__).resolve().parents[1] / "docs/explanation/engines/fem.md"
-    texts = {
-        "fem.md": page.read_text(encoding="utf-8"),
-        "FemReductionWarning": FemReductionWarning.__doc__,
-    }
-    return [k for k, t in texts.items() if not re.search(pattern, " ".join(t.split()))]
-
-
-def _z_ref(backend: str, world, segment_length: float = 0.25) -> float:
-    """A reference value; the two-layer image series summed to convergence.
-
-    The default ``image_max_terms`` = 300 truncates the series of 30/10000
-    Ohm m (K = 0.994): -1.0 % instead of -2.4 % for a ring over it (audit
-    R2A-08). 30 000 terms leave K**30000 < 1e-78.
-    """
-    import warnings
-
-    kw = {"image_max_terms": 30000} if backend in ("image_2layer", "mom") else {}
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = gf.create_engine(
-            backend=backend, segment_length=segment_length, **kw
-        ).solve(world)
-    return res.cluster_impedance("g1")[0].real
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("soil", "kind", "params"),
-    [
-        # ring r = 10 m over 30/10000 at 2 m: -2.4 % / -2.3 % with the
-        # image series summed to convergence (-1.0 % / -0.9 % at 300 terms)
-        (
-            gf.TwoLayerSoil(rho_1=30.0, rho_2=10000.0, h_1=2.0),
-            "ring",
-            dict(center=(0, 0, 0.8), radius=10.0),
-        ),
-        # 3 m rod under 10000/30 at 0.49 a_eq: +44.7 % / +46.9 % (+47.6 % at
-        # half the segment length)
-        (
-            gf.TwoLayerSoil(rho_1=10000.0, rho_2=30.0, h_1=0.49 * _A_ROD),
-            "rod",
-            dict(position=(0, 0, 0.5), length=3.0),
-        ),
-    ],
-)
-def test_fem_documented_range_of_the_resistive_warning_holds(
-    soil, kind, params
-) -> None:
-    """A more resistive spanned layer warns at -3 ... +48 %, as documented.
-
-    The docs quoted +3 ... +45 %; the extremes measured by the audit are
-    -1.0 % (ring over 30/10000) and +47.6 % (rod under 10000/30, mom at half
-    the segment length) (audit D2A-04) -- the -1.0 % against references
-    whose image series of 30/10000 Ohm m stopped at 300 terms; converged,
-    -2.4 % (audit R2A-08).
-    """
-    # audit D2A-04, audit R2A-08
-    w = _electrode_world(soil, kind, **params)
-    res, texts = _fem_warnings(w)
-    assert texts, "no FemReductionWarning"
-    fem = res.cluster_impedance("g1")[0].real
-    for backend in ("image_2layer", "mom"):
-        err = 100.0 * (fem / _z_ref(backend, w) - 1.0)
-        assert -3.0 <= err <= 48.0, f"{backend}: {err:+.1f} %"
-    assert _documented(r"−3 (% )?… \+48 %") == []
-
-
-@pytest.mark.finding("10.23", "F01")
-@pytest.mark.parametrize(
-    ("rho_1", "rho_2", "h_1"),
-    [
-        (30.0, 10000.0, 9.99),  # -16.2 % / -16.0 % (converged; -15.5 % at 300 terms)
-        (100.0, 1000.0, _A_RING10 * (1 + 1e-9)),  # +15.2 % / +15.6 %
-    ],
-)
-def test_fem_documented_range_of_the_wide_warning_holds(rho_1, rho_2, h_1) -> None:
-    """The warning that remains within the half-extent: -17 ... +16 %.
-
-    Since the conductive "wide" worlds raise (D2A-03), the warning covers
-    layers that conduct no better than the electrodes'. The docs quoted
-    -11 ... -47 % for the conductive ones and +9 % for one resistive case;
-    ring r = 10 m at 0.8 m over 30/10000 and 100/1000 Ohm m reads
-    -16.2 % ... +15.6 % against image_2layer and mom with the image series
-    summed to convergence (-15.5 % at 300 terms; audit D2A-03, R2A-08).
-    """
-    # audit D2A-03, audit R2A-08
-    w = _electrode_world(
-        gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1),
-        "ring",
-        center=(0, 0, 0.8),
-        radius=10.0,
-    )
-    res, texts = _fem_warnings(w)
-    assert texts and "half-extent" in texts[0], texts
-    fem = res.cluster_impedance("g1")[0].real
-    for backend in ("image_2layer", "mom"):
-        err = 100.0 * (fem / _z_ref(backend, w) - 1.0)
-        assert -17.0 <= err <= 16.0, f"{backend}: {err:+.1f} %"
-    assert _documented(r"−17 (% )?… \+16 %") == []
-
-
-def _formula_documented(pattern: str) -> list[str]:
-    """Where the closed-form ranges (fem page, the reduction) miss ``pattern``."""
-    from pathlib import Path
-
-    from groundfield.solver.fem import equivalent_hemisphere_radius
-
-    page = Path(__file__).resolve().parents[1] / "docs/explanation/engines/fem.md"
-    texts = {
-        "fem.md": page.read_text(encoding="utf-8"),
-        "equivalent_hemisphere_radius": equivalent_hemisphere_radius.__doc__,
-    }
-    return [k for k, t in texts.items() if not re.search(pattern, " ".join(t.split()))]
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("kind", "params", "lo", "hi", "pattern"),
-    [
-        # Sverak's grid formula by grid size: a 4 m single-mesh grid (the AP1
-        # station ring size) reads +31.9 % / +33.2 %, a 1 m grid +54.3 % /
-        # +56.1 % against image / mom; the docs said +6 ... +21 % (10 m and
-        # 20 m grids only)
-        pytest.param(
-            "grid_mesh",
-            dict(corner=(0, 0, 0.8), size=(4, 4), n_x=1, n_y=1),
-            14.0,
-            39.5,
-            r"\+14 (% )?… \+39 % for 4 m",
-            id="grid-4m",
-        ),
-        pytest.param(
-            "grid_mesh",
-            dict(corner=(0, 0, 0.5), size=(1, 1), n_x=1, n_y=1),
-            51.0,
-            67.0,
-            r"\+51 (% )?… \+67 % for a 1 m grid",
-            id="grid-1m",
-        ),
-        # the rod formula by rod length: a 1 m rod 10 m deep +12.9 % / +15.4 %
-        pytest.param(
-            "rod",
-            dict(position=(0, 0, 10.0), length=1.0),
-            0.8,
-            15.5,
-            r"\+0\.8 (% )?… \+15 % for 1 … 20 m rods",
-            id="rod-1m-at-10m",
-        ),
-    ],
-)
-def test_fem_documented_range_of_the_closed_forms_holds(
-    kind, params, lo, hi, pattern
-) -> None:
-    """The documented error of Sverak's and Dwight's formulas follows the
-    measurements over the stated scope (audit R2A-05)."""
-    # audit R2A-05
-    w = _electrode_world(gf.HomogeneousSoil(rho=100.0), kind, **params)
-    res, _ = _fem_warnings(w)
-    fem = res.cluster_impedance("g1")[0].real
-    ds = 0.125 if kind == "grid_mesh" else 1.0 / 12.0
-    for backend in ("image", "mom"):
-        err = 100.0 * (fem / _z_ref(backend, w, segment_length=ds) - 1.0)
-        assert lo <= err <= hi, f"{backend}: {err:+.1f} %"
-    assert _formula_documented(pattern) == []
-
-
-@pytest.mark.finding("10.23")
-def test_fem_documented_range_of_the_mesh_formula_holds() -> None:
-    """MeshElectrode formula: +118 ... +193 % was the range at 0.8 m against
-    image; deeper and against mom it reaches +262 % (20 m mesh, 1 m spacing,
-    10 m deep; audit R2A-05). A driven mesh is refused, so the formula is
-    taken directly."""
-    # audit R2A-05
-    from groundfield.solver.fem import equivalent_hemisphere_radius
-
-    w = _electrode_world(
-        gf.HomogeneousSoil(rho=100.0),
-        "mesh",
-        corner=(0, 0, 10.0),
-        size=(20, 20),
-        spacing=1.0,
-    )
-    formula = 100.0 / (
-        2.0 * math.pi * equivalent_hemisphere_radius(w.get_electrode("g1"), 100.0)
-    )
-    for backend in ("image", "mom"):
-        err = 100.0 * (formula / _z_ref(backend, w, segment_length=0.5) - 1.0)
-        assert 118.0 <= err <= 263.0, f"{backend}: {err:+.1f} %"
-    assert (
-        _formula_documented(r"\+118 (% )?… \+217 %.{0,40}0\.8 m, up to \+262 % at 10 m")
-        == []
-    )
-
-
-@pytest.mark.finding("10.23", "F01")
-def test_fem_documented_value_where_q23_stops_holds() -> None:
-    """Ring r = 2 m at 0.8 m over 3000/30 Ohm m at h_1 = r (1 + 1e-9), just
-    beyond the half-extent: fem is silent at -10.3 % against image_2layer
-    (-8.8 % mom, -10.4 % a ring series); the docs said -9.8 % (audit R2A-05)."""
-    # audit R2A-05
-    w = _electrode_world(
-        gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=2.0 * (1 + 1e-9)),
-        "ring",
-        center=(0, 0, 0.8),
-        radius=2.0,
-    )
-    res, texts = _fem_warnings(w)
-    assert texts == []
-    fem = res.cluster_impedance("g1")[0].real
-    err = 100.0 * (fem / _z_ref("image_2layer", w) - 1.0)
-    assert -10.5 <= err <= -10.0, f"{err:+.2f} %"
-    assert _documented(r"−10\.3 … −0\.3 % \(rings") == ["FemReductionWarning"]
-
-
-@pytest.mark.finding("10.49")
-def test_fem_documented_mesh_size_holds() -> None:
-    """fem's own problem size: 2 400 nodes in homogeneous soil, 4 124 for a
-    3 m rod under a 30 m top layer; the docs said "about 2 400 ..., 3 700
-    with a 30 m top layer" (audit R2A-05)."""
-    # audit R2A-05
-    import warnings
-
-    def nodes(soil) -> int:
-        w = _rod_world(soil)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            res = gf.create_engine(backend="fem", segment_length=0.5).solve(w)
-        return res.metadata["fem_mesh"]["g1"]["n_nodes"]
-
-    assert nodes(gf.HomogeneousSoil(rho=100.0)) == 2400
-    assert 3670 <= nodes(gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=30.0)) <= 4134
-    page = (
-        __import__("pathlib").Path(__file__).resolve().parents[1]
-        / "docs/explanation/engines/fem.md"
-    ).read_text(encoding="utf-8")
-    assert "3 670 … 4 134 at 30 m" in " ".join(page.split())
-
-
-@pytest.mark.finding("10.23")
-def test_fem_q23_counts_every_electrode_of_a_bonded_cluster() -> None:
-    """Two bonded rods: both below the conductive top layer raise; one in it warns."""
-    # user decision Q23
-    h_1 = 0.4 * 2.0 * _A_ROD  # below a_sum/2: the A2E-2 rule does not apply
-
-    def world(top_b: float) -> gf.World:
-        w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=h_1))
-        gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=3.0)
-        gf.create_electrode(w, "rod", name="g2", position=(3, 0, top_b), length=3.0)
-        gf.create_conductor(w, start="g1", end="g2", name="bond")
-        gf.create_source(w, attached_to="g1", magnitude=1.0)
-        return w
-
-    eng = gf.create_engine(backend="fem", segment_length=0.5)
-    with pytest.raises(gf.BackendCapabilityError, match=r"cluster \{'g1', 'g2'\}"):
-        eng.solve(world(0.5))
-    res, texts = _fem_warnings(world(0.1))  # g2 starts in the top layer
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
-    assert texts and "sum of their radii" in texts[0]
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("rho_1", "rho_2", "h_1", "kind", "params"),
-    [
-        # more resistive top layer over the rod: +15.5 % (image_2layer)
-        (1000.0, 30.0, 0.2 * _A_ROD, "rod", dict(position=(0, 0, 0.5), length=3.0)),
-        # more resistive lower layer under the ring: +22.7 %
-        (30.0, 1000.0, 2.0, "ring", dict(center=(0, 0, 0.8), radius=10.0)),
-        # the rod passes through the conductive layer itself: +19.2 %
-        (100.0, 10.0, 0.1, "rod", dict(position=(0, 0, 0.0), length=1.5)),
-    ],
-)
-def test_fem_q23_keeps_the_warning_where_the_layer_is_not_more_conductive(
-    rho_1, rho_2, h_1, kind, params
-) -> None:
-    """Both sides of the rule: these spanned layers are not a Q23 error."""
-    # user decision Q23
-    w = _electrode_world(
-        gf.TwoLayerSoil(rho_1=rho_1, rho_2=rho_2, h_1=h_1), kind, **params
-    )
-    res, texts = _fem_warnings(w)
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
-    assert texts, "no FemReductionWarning"
-
-
-@pytest.mark.finding("10.23", "F01")
-@pytest.mark.parametrize(
-    ("soil", "kind", "params", "layer"),
-    [
-        # ring r = 10 m at 0.8 m (a_eq = 4.62 m, half-extent 10 m) over a more
-        # conductive layer below its hemisphere: -67.9 % at h_1 = a_eq (1 +
-        # 1e-9), the value the world at a_eq (1 - 1e-9) raised for (D2A-03),
-        # -46.9 % at 5 m, -11.0 % at 9 m (image_2layer; mom within 1 point)
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=_A_RING10 * (1 + 1e-9)),
-            "ring",
-            dict(center=(0, 0, 0.8), radius=10.0),
-            "below 4.62 m (rho = 30 Ohm m)",
-            id="ring10-1000/30-just-below-a_eq",
-        ),
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=_A_RING10 * (1 + 1e-9)),
-            "ring",
-            dict(center=(0, 0, 0.8), radius=10.0),
-            "below 4.62 m (rho = 30 Ohm m)",
-            id="ring10-3000/30-just-below-a_eq",
-        ),
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0),
-            "ring",
-            dict(center=(0, 0, 0.8), radius=10.0),
-            "below 5 m (rho = 30 Ohm m)",
-            id="ring10-1000/30-5m",
-        ),
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=9.0),
-            "ring",
-            dict(center=(0, 0, 0.8), radius=10.0),
-            "below 9 m (rho = 30 Ohm m)",
-            id="ring10-1000/30-9m",
-        ),
-        # 10 m strip at 0.8 m (half-extent 5 m) over 3000/30 at 3 m
-        pytest.param(
-            gf.TwoLayerSoil(rho_1=3000.0, rho_2=30.0, h_1=3.0),
-            "strip",
-            dict(start=(0, 0, 0.8), end=(10, 0, 0.8)),
-            "below 3 m (rho = 30 Ohm m)",
-            id="strip10-3000/30-3m",
-        ),
-        # three layers: the conductive middle layer lies within the extent
-        pytest.param(
-            _three_layers((1000.0, 30.0, 1000.0), (6.0, 2.0)),
-            "ring",
-            dict(center=(0, 0, 0.8), radius=10.0),
-            "6 ... 8 m (rho = 30 Ohm m)",
-            id="ring10-three-layers",
-        ),
-    ],
-)
-def test_fem_rejects_a_more_conductive_layer_within_the_electrode_extent(
-    soil, kind, params, layer
-) -> None:
-    """Q23 extends to the domain of the "wide" rule (D2A-03).
-
-    A layer below the electrode and its hemisphere but within the
-    electrode's horizontal half-extent is reached by the electrode's
-    current and much less by the compact hemisphere. Over a more
-    conductive layer fem then reads too low, continuously with the Q23
-    worlds above a_eq (only a warning up to 563ead7; the eng2 evidence e07
-    pinned fem 11.79 Ohm against mom 21.89 Ohm for the ring over h_1 = 5 m).
-    Coordinator decision, flagged for the author's review: such a layer
-    raises like one the hemisphere spans.
-    """
-    # audit D2A-03
-    with pytest.raises(gf.BackendCapabilityError) as info:
-        gf.create_engine(backend="fem", segment_length=0.5).solve(
-            _electrode_world(soil, kind, **params)
-        )
-    text = str(info.value)
-    assert "none of its electrodes touches" in text, text
-    assert f"the layer {layer}" in text and "half-extent" in text, text
-
-
-@pytest.mark.finding("10.23", "F01")
-@pytest.mark.parametrize(
-    ("rhos", "thicknesses"),
-    [
-        # fem +40.0 % / +46.4 % / +23.7 % / +23.6 % against mom_sommerfeld
-        # (+39.2 / +45.8 / +22.7 / +22.6 % against a Hankel-integral ring):
-        # the 1000 or 300 Ohm m layer that the hemisphere spans shields both
-        pytest.param((100.0, 1000.0, 30.0), (2.0, 4.0), id="100/1000/30-2-4"),
-        pytest.param((100.0, 1000.0, 30.0), (1.0, 6.0), id="100/1000/30-1-6"),
-        pytest.param((100.0, 300.0, 30.0), (2.0, 5.0), id="100/300/30-2-5"),
-        pytest.param((100.0, 1000.0, 30.0), (4.0, 2.0), id="100/1000/30-4-2"),
-        # the resistive layer lies below the hemisphere as well: +17.1 % (+16.2 %)
-        pytest.param((100.0, 1000.0, 30.0), (5.0, 2.0), id="100/1000/30-5-2"),
-    ],
-)
-def test_fem_a_resistive_layer_in_between_keeps_the_warning(rhos, thicknesses) -> None:
-    """Ring r = 10 m at 0.8 m: a 30 Ohm m layer within the half-extent behind
-    a more resistive layer.
-
-    Q23 within the half-extent (audit D2A-03) counted the conductive layer
-    whatever lay between it and the electrodes, and raised "fem reads too
-    low" where fem reads high (563ead7 warned). A layer below the
-    hemisphere now counts only if every layer between the electrodes and it
-    conducts better than the electrodes' layers (audit R2A-09).
-    """
-    # audit R2A-09
-    w = _electrode_world(
-        _three_layers(rhos, thicknesses), "ring", center=(0, 0, 0.8), radius=10.0
-    )
-    assert _fem_verdict(w) == "warn"
-
-
-@pytest.mark.finding("10.23", "F01")
-@pytest.mark.parametrize(
-    ("rhos", "thicknesses", "layers"),
-    [
-        # both conductive layers lie directly below the ring's layer: -26.5 %
-        pytest.param(
-            (1000.0, 100.0, 30.0),
-            (6.0, 2.0),
-            ("6 ... 8 m (rho = 100 Ohm m)", "below 8 m (rho = 30 Ohm m)"),
-            id="1000/100/30",
-        ),
-        # the conductive layer, then a resistive one: -32.7 %
-        pytest.param(
-            (1000.0, 30.0, 3000.0),
-            (5.0, 2.0),
-            ("5 ... 7 m (rho = 30 Ohm m)",),
-            id="1000/30/3000",
-        ),
-    ],
-)
-def test_fem_q23_counts_conductive_layers_directly_below(
-    rhos, thicknesses, layers
-) -> None:
-    """Both sides of the R2A-09 rule: a layer reached through more conductive
-    layers only still raises (fem -26.5 % / -32.7 % against mom_sommerfeld)."""
-    # audit R2A-09
-    text = _fem_message(
-        _electrode_world(
-            _three_layers(rhos, thicknesses), "ring", center=(0, 0, 0.8), radius=10.0
-        )
-    )
-    for layer in layers:
-        assert layer in text, text
-
-
-@pytest.mark.finding("10.23", "F01")
-@pytest.mark.parametrize(
-    ("kind", "params", "r_ext"),
-    [
-        ("ring", dict(center=(0, 0, 0.8), radius=10.0), 10.0),
-        ("strip", dict(start=(0, 0, 0.8), end=(10, 0, 0.8)), 5.0),
-    ],
-)
-def test_fem_q23_stops_at_the_horizontal_half_extent(kind, params, r_ext) -> None:
-    """Both sides of the new boundary: a layer top at the half-extent.
-
-    Just above the half-extent the conductive layer raises; just below it
-    neither rule applies and fem is silent (ring r = 10 m over 1000/30 Ohm m
-    at h_1 = 10 m: -7.9 %; 20 m: -0.3 %).
-    """
-
-    # audit D2A-03
-    def world(h_1: float) -> gf.World:
-        soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=h_1)
-        return _electrode_world(soil, kind, **params)
-
-    assert _fem_verdict(world(r_ext * (1 - 1e-9))) == "raise"
-    assert _fem_verdict(world(r_ext * (1 + 1e-9))) == "silent"
-
-
-@pytest.mark.finding("10.23", "F01")
-def test_fem_warns_when_a_more_resistive_layer_lies_within_the_electrode_extent() -> (
-    None
-):
-    """Ring r = 10 m at 0.8 m over a more resistive layer at h_1 = 5 m.
-
-    The "wide" rule keeps its warning where the layer conducts no better
-    than the electrodes' layer: fem +9.2 % against image_2layer (30/1000
-    Ohm m), 3.6154 Ohm, unchanged.
-    """
-    w = _electrode_world(
-        gf.TwoLayerSoil(rho_1=30.0, rho_2=1000.0, h_1=5.0),
-        "ring",
-        center=(0, 0, 0.8),
-        radius=10.0,
-    )
-    res, texts = _fem_warnings(w)
-    assert texts, "no FemReductionWarning"
-    assert "h = 5 m" in texts[0] and "half-extent" in texts[0], texts[0]
-    assert res.cluster_impedance("g1")[0].real == pytest.approx(3.6154, abs=1e-4)
-
-
-def test_fem_is_silent_for_an_interface_below_the_electrode_extent() -> None:
-    """Guard: the same ring over h_1 = 20 m agrees with mom to −0.3 %."""
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=20.0))
-    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=10.0)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    _, texts = _fem_warnings(w)
-    assert texts == []
-
-
-def test_fem_accepts_a_hemisphere_that_reaches_the_electrode_layer() -> None:
-    """Guard: a vanishing top layer is no reason to raise (B9 limit, 2e-3).
-
-    A ring at 0.8 m under a 4 mm top layer lies in layer 2, but its
-    hemisphere (a_eq = 1.2 m) reaches layer 2 as well; the result tends
-    to the homogeneous value of the lower layer. Since audit round 1
-    (F01) every interface above the electrode or its hemisphere is
-    reported, so this limit case warns although it is accurate — the
-    guard is structural, not a measure of the error.
-    """
-    soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=4e-3)
-    w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.8), radius=2.0)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    res, texts = _fem_warnings(w)
-    assert len(texts) == 1 and "h = 0.004" in texts[0], texts
-    w_hom = gf.create_world(soil=gf.HomogeneousSoil(rho=30.0))
-    gf.create_electrode(w_hom, "ring", name="g1", center=(0, 0, 0.8), radius=2.0)
-    gf.create_source(w_hom, attached_to="g1", magnitude=1.0)
-    ref, _ = _fem_warnings(w_hom)
-    z, z_ref = res.cluster_impedance("g1")[0].real, ref.cluster_impedance("g1")[0].real
-    assert abs(z / z_ref - 1.0) < 1e-2
-
-
-def test_fem_does_not_reject_an_equal_resistivity_interface() -> None:
-    """Guard: a declared interface between equal resistivities is none (10.48)."""
-    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=2.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    _, texts = _fem_warnings(w)
-    assert texts == []
-
-
-@pytest.mark.finding("10.23")
-def test_fem_warns_for_a_multi_electrode_cluster() -> None:
-    """Ring + three rods: radii summed, mutual resistance neglected
-    (-35 % against mom in homogeneous soil)."""
-    import numpy as np
-
-    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(w, "ring", name="g1", center=(0, 0, 0.5), radius=2.0)
-    for k, ang in enumerate((0.0, 2.1, 4.2)):
-        gf.create_electrode(
-            w,
-            "rod",
-            name=f"r{k}",
-            position=(2 * np.cos(ang), 2 * np.sin(ang), 0.5),
-            length=4.0,
-        )
-        gf.create_conductor(w, start="g1", end=f"r{k}")
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    _, texts = _fem_warnings(w)
-    assert texts and "4 electrodes" in texts[0]
-
-
-@pytest.mark.finding("10.23")
-def test_fem_warns_when_clusters_are_solved_without_coupling() -> None:
-    """A second (passive) cluster reports 0 V and 0 transfer impedance."""
-    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-    gf.create_electrode(w, "ring", name="p", center=(4.0, 0, 0.8), radius=1.5)
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    res, texts = _fem_warnings(w)
-    assert res.electrode_potentials["p"][0] == 0j
-    assert texts and "2 clusters" in texts[0]
-
-
-@pytest.mark.finding("10.23")
-def test_fem_rejects_a_driven_polyline_with_a_capability_error() -> None:
-    """A driven electrode without a hemisphere formula is a capability limit.
-
-    The generators build mesh foundations of polyline wires (audit round 2,
-    A2G-04); fem raised a bare ``TypeError`` from inside the reduction for
-    every generated network. It now raises ``BackendCapabilityError`` before
-    meshing, naming the electrode, while a passive polyline still solves.
-    """
-    import warnings
-
-    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
-    gf.create_electrode(
-        w, "polyline", name="wire", vertices=[(0, 0, 0.7), (5, 0, 0.7), (5, 5, 0.7)]
-    )
-    gf.create_source(w, attached_to="wire", magnitude=1.0)
-    eng = gf.create_engine(backend="fem", frequencies=[50.0])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with pytest.raises(gf.BackendCapabilityError, match="'wire'"):
-            w.solve(eng)
-
-    passive = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
-    gf.create_electrode(passive, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-    gf.create_electrode(
-        passive, "polyline", name="wire", vertices=[(20, 0, 0.7), (25, 0, 0.7)]
-    )
-    gf.create_source(passive, attached_to="g1", magnitude=1.0)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = passive.solve(eng)
-    assert res.electrode_potentials["wire"][0] == 0j
-
-
-_SURFACE_CASES = [
-    # (soil, kind, params, needle of the fem message, passive)
-    pytest.param(
-        gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=2.0),
-        "ring",
-        dict(center=(0, 0, -0.5), radius=10.0),
-        "at or above the soil surface",
-        False,
-        id="ring-in-the-air-two-layers",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "ring",
-        dict(center=(0, 0, 0.0), radius=10.0),
-        "at or above the soil surface",
-        False,
-        id="ring-at-z=0",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "strip",
-        dict(start=(0, 0, 0.0), end=(10, 0, 0.0)),
-        "at or above the soil surface",
-        False,
-        id="strip-at-z=0",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "grid_mesh",
-        dict(corner=(0, 0, 0.0), size=(10, 10), n_x=2, n_y=2),
-        "at or above the soil surface",
-        False,
-        id="grid-at-z=0",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "mesh",
-        dict(corner=(0, 0, -0.7), size=(10, 10)),
-        "at or above the soil surface",
-        False,
-        id="mesh-in-the-air",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "rod",
-        dict(position=(0, 0, -0.5), length=1.2),
-        "reaches above the soil surface",
-        False,
-        id="rod-head-in-the-air",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "ring",
-        dict(center=(0, 0, 0.0025), radius=10.0),
-        "soil-surface plane",
-        False,
-        id="ring-in-the-surface-plane",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "ring",
-        dict(center=(0, 0, -0.5), radius=2.0),
-        "at or above the soil surface",
-        True,
-        id="passive-ring-in-the-air",
-    ),
-    pytest.param(
-        gf.HomogeneousSoil(rho=100.0),
-        "polyline",
-        dict(vertices=[(0, 5, 0.0), (5, 5, 0.0)]),
-        "at or above the soil surface",
-        True,
-        id="passive-polyline-at-z=0",
-    ),
-]
-
-
-def _surface_world(soil, kind: str, params: dict, passive: bool) -> gf.World:
-    w = gf.create_world(soil=soil)
-    gf.create_electrode(w, kind, name="g1", **params)
-    if passive:  # the probed electrode is passive, a rod is driven
-        gf.create_electrode(w, "rod", name="d", position=(30, 0, 0.5), length=3.0)
-    gf.create_source(w, attached_to="d" if passive else "g1", magnitude=1.0)
-    return w
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("soil", "kind", "params", "needle", "passive"), _SURFACE_CASES
-)
-def test_fem_rejects_an_electrode_above_the_surface_like_every_backend(
-    soil, kind, params, needle, passive
-) -> None:
-    """An electrode at or above the soil surface is refused by every backend.
-
-    The integral backends refuse a segment whose mid-point lies at or above
-    the surface, in the surface plane (``2 z <= wire_radius``) or with a
-    part in the air (:func:`groundfield.solver._guards._check_segment_depths`).
-    ``fem`` solved such worlds — a ring 0.5 m in the air read like a ring
-    1 mm deep, since the hemisphere formulas clamp the depth at 1 mm — and
-    a Q23 message named ``'mom'`` / ``'image_2layer'`` for a world both
-    refuse (audit D2A-06). It now refuses them as well, before anything
-    else, with a plain ``ValueError`` like the others.
-    """
-    # audit D2A-06
-    import warnings
-
-    other = "image" if isinstance(soil, gf.HomogeneousSoil) else "image_2layer"
-    for backend in (other, "mom"):  # the rule fem matches
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            with pytest.raises(ValueError, match="soil.surface"):
-                gf.create_engine(backend=backend, segment_length=0.5).solve(
-                    _surface_world(soil, kind, params, passive)
-                )
-    world = _surface_world(soil, kind, params, passive)
-    with pytest.raises(ValueError, match=needle) as info:
-        _fem_warnings(world)
-    assert not isinstance(info.value, gf.BackendCapabilityError), info.value
-    assert "'g1'" in str(info.value)
-
-
-def _rods_with_a_conductor(z_c: float, coupling: str, z_end: float | None = None):
-    """Two 3 m rods 50 m apart bonded by a distributed 50 mm2 conductor."""
-    from groundfield.conductors import Conductor
-
-    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-    gf.create_electrode(w, "rod", name="g2", position=(50, 0, 0.0), length=3.0)
-    w.add_conductor(
-        Conductor(
-            name="bare",
-            start=(0, 0, z_c),
-            end=(50, 0, z_c if z_end is None else z_end),
-            start_electrode="g1",
-            end_electrode="g2",
-            cross_section=50e-6,
-            discretize_segment_length=5.0,
-            coupling_to_soil=coupling,
-        )
-    )
-    gf.create_source(w, attached_to="g1", magnitude=1.0)
-    return w
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("z_c", "z_end", "needle"),
-    [
-        pytest.param(-0.5, None, "at or above the soil surface", id="in-the-air"),
-        pytest.param(0.0, None, "at or above the soil surface", id="at-z=0"),
-        pytest.param(0.002, None, "soil-surface plane", id="surface-plane"),
-        # sloped from 0.4 m above the surface to 0.5 m deep
-        pytest.param(-0.4, 0.5, "soil surface", id="sloped-into-the-air"),
-    ],
-)
-def test_fem_refuses_a_galvanic_conductor_out_of_the_soil(z_c, z_end, needle) -> None:
-    """image and mom refuse a leaking conductor at or above the surface or in
-    its plane; 4fc8153's fem solved the world (35.9147 Ohm), since its
-    out-of-soil refusal looked at the electrodes only (audit R2A-07)."""
-    # audit R2A-07
-    import warnings
-
-    for backend in ("image", "mom"):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            with pytest.raises(ValueError, match="soil.surface"):
-                gf.create_engine(backend=backend, segment_length=0.5).solve(
-                    _rods_with_a_conductor(z_c, "galvanic", z_end)
-                )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with pytest.raises(ValueError, match=needle) as info:
-            gf.create_engine(backend="fem", segment_length=0.5).solve(
-                _rods_with_a_conductor(z_c, "galvanic", z_end)
-            )
-    assert "conductor 'bare'" in str(info.value), info.value
-    assert not isinstance(info.value, gf.BackendCapabilityError), info.value
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("z_c", "coupling"),
-    [(-0.5, "isolated"), (0.0, "isolated"), (0.5, "galvanic")],
-)
-def test_fem_keeps_conductors_that_every_backend_accepts(z_c, coupling) -> None:
-    """Guard: an isolated conductor in the air and a buried bare one solve."""
-    # audit R2A-07
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = gf.create_engine(backend="fem", segment_length=0.5).solve(
-            _rods_with_a_conductor(z_c, coupling)
-        )
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
-
-
-@pytest.mark.finding("10.23")
 @pytest.mark.parametrize(
     ("kind", "params"),
     [
-        ("rod", dict(position=(0, 0, 0.0), length=3.0)),  # the driven rod
-        ("rod", dict(position=(0, 0, -1e-10), length=3.0)),  # round-off
-        ("ring", dict(center=(0, 0, 0.003), radius=10.0)),  # 2 z > a
+        ("strip", dict(start=(0, 0, 0.8), end=(10, 0, 0.8))),
+        ("grid_mesh", dict(corner=(0, 0, 0.5), size=(10, 10), n_x=2, n_y=2)),
+        ("mesh", dict(corner=(0, 0, 0.5), size=(10, 10))),
+        ("polyline", dict(vertices=[(0, 0, 0.8), (10, 0, 0.8), (10, 10, 0.8)])),
+        ("star", dict(center=(0, 0, 0.8), n_arms=3, arm_length=5.0)),
     ],
 )
-def test_fem_keeps_electrodes_that_start_at_the_surface(kind, params) -> None:
-    """Guard: a rod with its head at z = 0 is the ordinary driven rod."""
-    # audit D2A-06
-    res, _ = _fem_warnings(
-        _surface_world(gf.HomogeneousSoil(rho=100.0), kind, params, False)
+def test_electrodes_that_are_not_axisymmetric_are_refused(kind, params) -> None:
+    # user decision Q37
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, kind, name="g1", **params)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    text = _fem_error(w)
+    assert "not axisymmetric" in text and "'g1'" in text, text
+    assert "Use backend='image' or 'mom'" in text, text
+
+
+def test_electrodes_off_the_common_axis_are_refused() -> None:
+    # user decision Q37
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0), length=3.0)
+    gf.create_electrode(w, "rod", name="b", position=(20, 0, 0), length=3.0)
+    gf.create_conductor(w, start="a", end="b")
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    text = _fem_error(w)
+    assert "off the axis" in text and "'b'" in text, text
+
+
+@pytest.mark.parametrize(
+    ("build", "needle"),
+    [
+        (
+            lambda w: (
+                gf.create_electrode(
+                    w, "rod", name="g1", position=(0, 0, 0), length=3.0
+                ),
+                gf.create_electrode(
+                    w, "rod", name="g2", position=(0, 0, 3.0), length=1.0
+                ),
+            ),
+            "touch or",
+        ),
+        (
+            lambda w: (
+                gf.create_electrode(
+                    w, "rod", name="g1", position=(0, 0, 0), length=3.0
+                ),
+                gf.create_electrode(
+                    w, "ring", name="g2", center=(0, 0, 1.0), radius=0.0101
+                ),
+            ),
+            "touches or nearly",
+        ),
+        (
+            lambda w: (
+                gf.create_electrode(
+                    w, "ring", name="g1", center=(0, 0, 0.8), radius=2.0
+                ),
+                gf.create_electrode(
+                    w, "ring", name="g2", center=(0, 0, 0.81), radius=2.0
+                ),
+            ),
+            "touch or nearly",
+        ),
+        (
+            lambda w: gf.create_electrode(
+                w, "ring", name="g1", center=(0, 0, 0.004), radius=2.0
+            ),
+            "solid torus",
+        ),
+    ],
+)
+def test_touching_electrodes_and_a_wire_through_the_surface_are_refused(
+    build, needle
+) -> None:
+    # user decision Q37
+    w = gf.create_world(soil=H100)
+    build(w)
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    assert needle in _fem_error(w)
+
+
+def test_a_galvanic_distributed_conductor_is_refused() -> None:
+    # user decision Q37
+    w = _ring_and_rod(H100, bonded=False)
+    gf.create_conductor(
+        w,
+        start="ring",
+        end="rod",
+        cross_section=50e-6,
+        discretize_segment_length=0.5,
+        coupling_to_soil="galvanic",
     )
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
+    assert "coupling_to_soil='galvanic'" in _fem_error(w)
 
 
-# ---------------------------------------------------------------------
-# The closed forms of the equivalent hemisphere outside their range
-# (audit D2A, O-1): a burial depth beyond the electrode's half-extent,
-# and the MeshElectrode formula
-# ---------------------------------------------------------------------
+def test_the_mesh_size_is_limited_before_anything_is_assembled() -> None:
+    # user decision Q37
+    from groundfield.diagnostics import ResourceLimitError
+
+    with pytest.raises(ResourceLimitError, match="max_nodes"):
+        _engine(options={"fem": {"max_nodes": 1000}}).solve(_ring_world(H100))
 
 
-@pytest.mark.finding("10.23")
 @pytest.mark.parametrize(
     ("kind", "params", "needle"),
     [
-        # 1.88 m strip at 5 m / 9.8 m: fem +369 % / +6120 % against image,
-        # silently (audit O-1); Dwight's wire series diverges beyond z = l/2
-        ("strip", dict(start=(0, 0, 5.0), end=(1.88, 0, 5.0)), "half its length"),
-        ("strip", dict(start=(0, 0, 9.8), end=(1.88, 0, 9.8)), "half its length"),
-        # 10 m strip just below z = l/2 = 5 m (+0.1 % ... +3 % up to z = l)
-        ("strip", dict(start=(0, 0, 5.01), end=(10, 0, 5.01)), "half its length"),
-        # rings deeper than their diameter: -5.7 % (r = 0.5 m at 2 m) and
-        # -4.7 % (r = 2 m at 8 m) against image, ever lower with depth;
-        # just beyond the diameter -0.9 % (audit R2A-06)
-        ("ring", dict(center=(0, 0, 2.0), radius=0.5), "its diameter"),
-        ("ring", dict(center=(0, 0, 8.0), radius=2.0), "its diameter"),
-        ("ring", dict(center=(0, 0, 1.01), radius=0.5), "its diameter"),
+        (
+            "ring",
+            dict(center=(0, 0, -0.5), radius=10.0),
+            "at or above the soil surface",
+        ),
+        (
+            "rod",
+            dict(position=(0, 0, -0.5), length=1.2),
+            "reaches above the soil surface",
+        ),
+        ("ring", dict(center=(0, 0, 0.0025), radius=10.0), "soil-surface plane"),
+        (
+            "strip",
+            dict(start=(0, 0, 0.0), end=(10, 0, 0.0)),
+            "at or above the soil surface",
+        ),
     ],
 )
-def test_fem_rejects_an_electrode_deeper_than_its_formula_reaches(
+def test_an_electrode_out_of_the_soil_is_refused_like_every_backend(
     kind, params, needle
 ) -> None:
-    """The hemisphere formulas assume a burial depth small against the electrode.
-
-    Dwight's wire formula is the series of the wire and its image in
-    s/l (s = 2 z the image distance, l the length) and converges for
-    s < l only; his ring formula assumes s << D. ``fem`` used them at any
-    depth and read +369 % / +6120 % for a 1.88 m strip at 5 m / 9.8 m in
-    homogeneous soil, silently (audit D2A, O-1). It now raises when the
-    burial depth exceeds half the strip length or the ring diameter (audit
-    R2A-06) and names the backends that solve the world.
-    """
-    # audit D2A O-1
-    w = _electrode_world(gf.HomogeneousSoil(rho=10.0), kind, **params)
-    with pytest.raises(gf.BackendCapabilityError, match=needle) as info:
-        gf.create_engine(backend="fem", segment_length=0.25).solve(w)
-    text = str(info.value)
-    assert "'g1'" in text and "Use backend='image' or 'mom'" in text, text
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("kind", "params"),
-    [
-        ("strip", dict(start=(0, 0, 0.8), end=(1.88, 0, 0.8))),  # -0.2 %
-        ("strip", dict(start=(0, 0, 5.0), end=(10, 0, 5.0))),  # z = l/2: -0.1 %
-        ("ring", dict(center=(0, 0, 2.0), radius=2.0)),  # z = r: +0.7 %
-        ("ring", dict(center=(0, 0, 4.0), radius=2.0)),  # z = D: -0.7 %
-        ("ring", dict(center=(0, 0, 0.8), radius=2.0)),  # benchmark B3
-        # Sverak's grid formula stays bounded with depth: +11.2 % at 20 m
-        ("grid_mesh", dict(corner=(0, 0, 20.0), size=(20, 20), n_x=4, n_y=4)),
-    ],
-)
-def test_fem_keeps_electrodes_within_their_formula(kind, params) -> None:
-    """Guard: within the range the result is unchanged (no error)."""
-    # audit D2A O-1
-    res, _ = _fem_warnings(
-        _electrode_world(gf.HomogeneousSoil(rho=10.0), kind, **params)
-    )
-    assert math.isfinite(res.cluster_impedance("g1")[0].real)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    ("radius", "depth"),
-    [
-        pytest.param(0.5, 0.8, id="r=0.5-at-0.8"),  # -0.05 % against image
-        pytest.param(0.5, 1.0, id="r=0.5-at-D"),  # -0.9 %
-        pytest.param(2.0, 3.0, id="r=2-at-1.5r"),  # +0.2 %
-    ],
-)
-def test_fem_solves_a_ring_down_to_its_diameter(radius, depth) -> None:
-    """Dwight's ring formula holds to about +-1 % down to t = D (audit R2A-06).
-
-    The limit at the radius sat where the formula's error peaks: a ring at
-    t = r was accepted at +0.7 ... +1.0 %, one at 1.5 r ... 2 r refused at
-    +0.2 ... -0.9 %. The formula against the exact thin ring stays within
-    -0.73 ... +1.05 % for t <= D (ring diameter over wire diameter >= 50).
-    """
-    # audit R2A-06
-    w = _electrode_world(
-        gf.HomogeneousSoil(rho=100.0), "ring", center=(0, 0, depth), radius=radius
-    )
-    res, _ = _fem_warnings(w)
-    fem = res.cluster_impedance("g1")[0].real
-    import warnings
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        ref = (
-            gf.create_engine(backend="image", segment_length=2 * math.pi * radius / 400)
-            .solve(w)
-            .cluster_impedance("g1")[0]
-            .real
-        )
-    assert abs(fem / ref - 1.0) < 0.01, f"{100 * (fem / ref - 1):+.2f} %"
-
-
-@pytest.mark.finding("10.23")
-def test_fem_rejects_a_driven_mesh_electrode() -> None:
-    """MeshElectrode's formula, one strip along the diagonal, misses its wires.
-
-    +118 % ... +193 % against image for 10 m and 20 m meshes at 0.8 m
-    (spacing = size ... 1 m), at every depth (audit D2A, O-1); the
-    GridMeshElectrode of the same wires reads -1.4 ... +21 % (Sverak). A
-    driven mesh raises, a passive one is not reduced and still solves.
-    """
-    # audit D2A O-1
-    import warnings
-
-    w = _electrode_world(
-        gf.HomogeneousSoil(rho=100.0), "mesh", corner=(0, 0, 0.8), size=(10, 10)
-    )
-    with pytest.raises(gf.BackendCapabilityError, match="GridMeshElectrode") as info:
-        gf.create_engine(backend="fem", segment_length=0.5).solve(w)
-    assert "'g1'" in str(info.value) and "'image'" in str(info.value)
-    passive = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
-    gf.create_electrode(passive, "rod", name="g1", position=(0, 0, 0), length=3.0)
-    gf.create_electrode(passive, "mesh", name="m", corner=(20, 0, 0.8), size=(10, 10))
-    gf.create_source(passive, attached_to="g1", magnitude=1.0)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = gf.create_engine(backend="fem", segment_length=0.5).solve(passive)
-    assert res.electrode_potentials["m"][0] == 0j
-
-
-@pytest.mark.finding("10.66")
-def test_fem_rejects_a_world_without_a_source_like_every_backend() -> None:
-    """fem alone solved a source-free world to zeros through Engine.solve.
-
-    Every other backend raised (10.66); since audit round 2 (A2S-05) fem
-    raises the same error, and nothing has to be said about clusters.
-    """
-    # audit A2S-05
-    w = gf.create_world(soil=gf.HomogeneousSoil(resistivity=100.0))
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=3.0)
-    gf.create_electrode(w, "ring", name="p", center=(4.0, 0, 0.8), radius=1.5)
-    with pytest.raises(ValueError, match="no current source"):
-        _fem_warnings(w)
-
-
-@pytest.mark.finding("10.23")
-@pytest.mark.parametrize(
-    "soil",
-    [
-        gf.HomogeneousSoil(resistivity=100.0),
-        gf.TwoLayerSoil(rho_1=100.0, rho_2=400.0, h_1=5.0),
-    ],
-)
-def test_fem_is_silent_for_one_compact_electrode_inside_one_layer(soil) -> None:
-    w = gf.create_world(soil=soil)
-    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.5), length=1.5)
+    # audit D2A-06
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, kind, name="g1", **params)
     gf.create_source(w, attached_to="g1", magnitude=1.0)
-    _, texts = _fem_warnings(w)
-    assert texts == []
+    with pytest.raises(ValueError, match=needle) as info:
+        _engine().solve(w)
+    assert not isinstance(info.value, gf.BackendCapabilityError)
 
 
-@pytest.mark.finding("10.23")
+def test_a_world_without_a_source_is_refused_like_every_backend() -> None:
+    # audit round 2, A2S-05
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0), length=3.0)
+    with pytest.raises(ValueError, match="source"):
+        _engine().solve(w)
+
+
+@pytest.mark.parametrize(
+    ("soil", "named"),
+    [
+        (_three((100.0, 30.0, 300.0), (2.0, 3.0)), "mom_sommerfeld"),
+        (_three((100.0, 30.0, 300.0), (0.5, 3.0)), None),
+        (gf.HomogeneousSoil(rho=100.0), "image"),
+    ],
+)
+def test_the_remedy_names_only_backends_that_solve_the_world(soil, named) -> None:
+    """The remedy comes from the backends' own checks (audit R2A-03)."""
+    # audit R2A-03
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w, "polyline", name="g1", vertices=[(0, 0, 0.8), (10, 0, 0.8), (10, 10, 0.8)]
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    text = _fem_error(w)
+    if named is None:
+        assert "No backend solves this world yet" in text, text
+    else:
+        assert f"Use backend='{named}'" in text, text
+
+
+def test_the_remedy_names_a_finer_segment_length_where_it_lifts_a_refusal() -> None:
+    """A strip 5 cm above h_1: mom's point form refuses 0.5 m segments
+    (audit R2A-04)."""
+    # audit R2A-04
+    w = gf.create_world(soil=_two(1000.0, 30.0, 0.85))
+    gf.create_electrode(w, "strip", name="g1", start=(0, 0, 0.8), end=(10, 0, 0.8))
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    text = _fem_error(w, segment_length=0.5)
+    found = re.search(
+        r"'mom' refuses this world at segment_length = 0.5 m .* below ([0-9.]+) m", text
+    )
+    assert found, text
+    assert "image_2layer" in text
+
+
 def test_fem_is_marked_experimental() -> None:
-    import groundfield.solver.fem as fem_mod
+    # 10.23
+    from groundfield.solver.registry import get_backend
 
-    assert "experimental" in fem_mod.__doc__.splitlines()[0].lower()
-    assert "experimental" in fem_mod.solve_fem.__doc__.strip().splitlines()[0].lower()
-    # Claims that the reduction is not entitled to (review pass 10, R2-01).
-    assert "forms the third independent cross-check" not in fem_mod.solve_fem.__doc__
-    assert "the approximation is appropriate" not in fem_mod.__doc__
+    assert get_backend("fem").experimental
 
 
-# ---------------------------------------------------------------------
-# 10.49 — the truncation sphere does not cost near-electrode resolution
-# ---------------------------------------------------------------------
+def test_the_mesh_arguments_of_0150_warn_and_have_no_effect() -> None:
+    # user decision Q37
+    from groundfield.solver.fem import solve_fem
+
+    w = _ring_world(H100)
+    base = solve_fem(w, _engine()).cluster_impedance("g1")[0]
+    with pytest.warns(DeprecationWarning, match="n_radial=..., n_axial="):
+        old = solve_fem(w, _engine(), n_radial=60, n_axial=40)
+    assert old.cluster_impedance("g1")[0] == base
 
 
-@pytest.mark.finding("10.49")
-@pytest.mark.parametrize("h_1", [10.0, 100.0, 1000.0, 10000.0])
-def test_fem_deep_interface_does_not_degrade_the_resolution(h_1: float) -> None:
-    """``TwoLayerSoil(rho, rho, h_1)`` is homogeneous for every h_1.
+def test_the_names_of_the_reduction_stay_importable() -> None:
+    # user decision Q37
+    from groundfield.solver.fem import FemReductionWarning, equivalent_hemisphere_radius
 
-    The truncation sphere grows with the declared thickness,
-    ``r_far = 30 (a_eq + h_1)``; at a fixed radial node count v0.15.0
-    lost near-electrode resolution logarithmically: -0.25 % / -0.60 % /
-    -1.06 % / -1.62 % at h_1 = 10 m / 100 m / 1 km / 10 km (R2-15).
-    """
-    eng = gf.create_engine(backend="fem", segment_length=SEG)
+    assert issubclass(FemReductionWarning, UserWarning)
+    assert gf.FemReductionWarning is FemReductionWarning
+    rod = gf.RodElectrode(name="r", position=(0, 0, 0), length=3.0)
+    with pytest.warns(DeprecationWarning, match="equivalent_hemisphere_radius"):
+        a = equivalent_hemisphere_radius(rod, 100.0)
+    assert math.isclose(a, 0.4423, rel_tol=1e-3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FemReductionWarning)
+        _engine().solve(_ring_and_rod(H100, bonded=True))  # never emitted
 
-    def world(soil):
-        w = gf.create_world(soil=soil)
-        gf.create_electrode(w, "rod", name="g1", position=(0, 0, 0.0), length=1.5)
-        gf.create_source(w, attached_to="g1", magnitude=1.0)
-        return w
 
-    r_hom = eng.solve(world(gf.HomogeneousSoil(resistivity=100.0)))
-    r_lay = eng.solve(world(gf.TwoLayerSoil(rho_1=100.0, rho_2=100.0, h_1=h_1)))
-    z_hom = r_hom.cluster_impedance("g1")[0].real
-    z_lay = r_lay.cluster_impedance("g1")[0].real
-    assert abs(z_lay / z_hom - 1.0) < 2e-3, (h_1, z_lay, z_hom)
+def test_fem_options_are_validated() -> None:
+    # user decision Q37
+    with pytest.raises(ValueError, match="n_radial"):
+        gf.Engine(backend="fem", options={"fem": {"n_radial": 60}})
+    with pytest.raises(ValueError):
+        gf.Engine(backend="fem", options={"fem": {"refinement": -1}})
+    eng = gf.Engine(
+        backend="fem", options={"fem": {"refinement": 1, "extrapolate": False}}
+    )
+    assert eng.backend_options().refinement == 1
+
+
+def test_mixed_coordinates_warn_at_the_solve() -> None:
+    """User decision D5: fem runs the coordinate check like every backend."""
+    # user decision D5
+    from groundfield.diagnostics import MixedCoordinatesWarning
+
+    w = _ring_world(H100)
+    w.electrodes[0] = w.electrodes[0].model_copy(
+        update={"center": (500000.0, 5800000.0, 0.8)}
+    )
+    gf.create_junction(w, name="J", position=(0.0, 0.0, -0.5))
+    gf.create_conductor(w, start="g1", end="J")
+    with pytest.warns(MixedCoordinatesWarning):
+        _engine().solve(w)
+
+
+def test_projected_coordinates_solve_like_local_ones() -> None:
+    # 2026.11 local frame
+    local = _z(_ring_world(H100))
+    w = _ring_world(H100)
+    w.electrodes[0] = w.electrodes[0].model_copy(
+        update={"center": (32604321.0, 5812345.0, 0.8)}
+    )
+    res = _engine().solve(w)
+    assert abs(res.cluster_impedance("g1")[0].real / local - 1.0) < 1e-12
+    assert res.point_sources[0].position[0] > 3.26e7
+
+
+def test_the_result_survives_a_json_round_trip_and_reports_its_mesh() -> None:
+    # user decision Q37
+    res = _engine(frequencies=[0.0, 50.0]).solve(_ring_and_rod(H100, bonded=True))
+    back = gf.FieldResult.model_validate_json(res.model_dump_json())
+    assert back.cluster_impedance("ring") == res.cluster_impedance("ring")
+    md = back.metadata
+    assert md["fem_model"] == "axisymmetric" and md["fem_extrapolated"] is True
+    assert (
+        len(md["fem_mesh"]) == 2
+        and md["fem_mesh"][1]["n_nodes"] > md["fem_mesh"][0]["n_nodes"]
+    )
+    assert md["kernel"] == "line" and md["n_segments"] == len(res.point_sources)
+    assert res.cluster_impedance("ring")[0] == res.cluster_impedance("ring")[1]

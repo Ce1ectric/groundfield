@@ -5,13 +5,14 @@ Adds the four new engines (``image_nlayer``, ``cim``, ``mom_sommerfeld``,
 guiding principle:
 
 - **Simple configurations**: every engine on the list must produce
-  the same answer within a 5 % envelope (10 % for ``fem``, which uses
-  the equivalent-hemisphere reduction).
+  the same answer within a 5 % envelope (``fem`` takes part where the
+  world is axisymmetric, rods on one axis and rings around it, since its
+  conforming model of user decision Q37; it refuses strips, grids and
+  rods side by side).
 - **Layer variations**: as the layer contrast grows, the closed-form
-  engines (``image_2layer``, ``image_nlayer``, ``cim``, ``bem``) and
-  the integral reference (``mom_sommerfeld``) must track each other
-  within 5 %; the volume engine (``fem``) follows the trend with the
-  expected reduction-induced bias.
+  engines (``image_2layer``, ``image_nlayer``, ``cim``, ``bem``), the
+  integral reference (``mom_sommerfeld``) and the volume engine
+  (``fem``) must track each other within 5 %.
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ def _world_two_rods(soil) -> gf.World:
         ("mom", 0.05),
         ("mom_sommerfeld", 0.05),
         ("bem", 0.05),
-        ("fem", 0.10),
+        ("fem", 0.05),
     ],
 )
 def test_homogeneous_single_rod_all_engines(backend: str, tol: float) -> None:
@@ -134,7 +135,7 @@ def test_two_layer_engines_agree(backend: str, tol: float, rho_2: float) -> None
 
 @pytest.mark.parametrize(
     "backend",
-    ["image", "image_nlayer", "cim", "mom", "bem", "fem"],
+    ["image", "image_nlayer", "cim", "mom", "bem"],  # rods side by side: not fem
 )
 def test_two_interconnected_rods_homogeneous_lower_R(backend: str) -> None:
     """Two bonded rods in homogeneous soil have a lower cluster resistance
@@ -271,7 +272,6 @@ def _world_grid_mesh(soil) -> gf.World:
         ("cim", 0.05),
         ("mom", 0.05),
         ("bem", 0.05),
-        ("fem", 0.20),  # equivalent-hemisphere bias is larger for strips
     ],
 )
 def test_homogeneous_strip_all_engines(backend: str, tol: float) -> None:
@@ -307,12 +307,6 @@ def test_homogeneous_strip_all_engines(backend: str, tol: float) -> None:
         ("cim", 0.05),
         ("mom", 0.05),
         ("bem", 0.05),
-        # FEM uses the Schwarz / Sverak / IEEE Std 80 reduction for
-        # rectangular grids. Sverak itself is a documented ~10–15 %
-        # engineering approximation, and the equivalent-hemisphere
-        # mapping adds further bias against the integral solvers, so
-        # 30 % is the realistic envelope for this cross-check role.
-        ("fem", 0.30),
     ],
 )
 def test_homogeneous_grid_mesh_all_engines(backend: str, tol: float) -> None:

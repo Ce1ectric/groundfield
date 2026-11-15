@@ -20,15 +20,15 @@
   {
    "benchmark": "B1",
    "backend": "fem",
-   "case": "60x40",
-   "value": 0.0015731495473542134,
-   "bound": 0.005
+   "case": "levels 0/1",
+   "value": 0.0003071695499282656,
+   "bound": 0.0005
   },
   {
    "benchmark": "B1",
    "backend": "fem",
    "case": "observed order",
-   "value": 1.993077514068714,
+   "value": 1.8684065103923548,
    "bound": null
   },
   {
@@ -77,22 +77,22 @@
    "benchmark": "B2",
    "backend": "fem",
    "case": "ds=0.5",
-   "value": 0.006986924525030025,
-   "bound": 0.01
+   "value": 7.278394863530213e-05,
+   "bound": 0.001
   },
   {
    "benchmark": "B2",
    "backend": "fem",
    "case": "ds=0.25",
-   "value": 0.006986924525030025,
-   "bound": 0.01
+   "value": 7.278394863530213e-05,
+   "bound": 0.001
   },
   {
    "benchmark": "B2",
    "backend": "fem",
    "case": "ds=0.125",
-   "value": 0.006986924525030025,
-   "bound": 0.01
+   "value": 7.278394863530213e-05,
+   "bound": 0.001
   },
   {
    "benchmark": "B3",
@@ -140,22 +140,22 @@
    "benchmark": "B3",
    "backend": "fem",
    "case": "ds=0.5",
-   "value": 0.003419448718308349,
-   "bound": 0.01
+   "value": 5.692098956600056e-05,
+   "bound": 0.0005
   },
   {
    "benchmark": "B3",
    "backend": "fem",
    "case": "ds=0.25",
-   "value": 0.003419448718308349,
-   "bound": 0.01
+   "value": 5.692098956600056e-05,
+   "bound": 0.0005
   },
   {
    "benchmark": "B3",
    "backend": "fem",
    "case": "ds=0.125",
-   "value": 0.003419448718308349,
-   "bound": 0.01
+   "value": 5.6920989565889535e-05,
+   "bound": 0.0005
   },
   {
    "benchmark": "B4",
@@ -194,13 +194,6 @@
   },
   {
    "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 1000/30/h=5",
-   "value": 0.010942910076310541,
-   "bound": 0.05
-  },
-  {
-   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "rod 1000/30/h=5",
    "value": 0.0037395332994980546,
@@ -212,13 +205,6 @@
    "case": "rod 1000/30/h=5",
    "value": 4.54036808150704e-12,
    "bound": 1e-07
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 1000/30/h=5",
-   "value": 0.014875047974715727,
-   "bound": 0.05
   },
   {
    "benchmark": "B6",
@@ -236,13 +222,6 @@
   },
   {
    "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 1000/30/h=10",
-   "value": 0.015142341439571938,
-   "bound": 0.05
-  },
-  {
-   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "rod 1000/30/h=10",
    "value": 0.003636495094801573,
@@ -254,13 +233,6 @@
    "case": "rod 1000/30/h=10",
    "value": 2.2302160118670145e-12,
    "bound": 1e-07
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 1000/30/h=10",
-   "value": 0.013966480304696383,
-   "bound": 0.05
   },
   {
    "benchmark": "B6",
@@ -278,13 +250,6 @@
   },
   {
    "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 1000/30/h=30",
-   "value": 0.01498140445036844,
-   "bound": 0.05
-  },
-  {
-   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "rod 1000/30/h=30",
    "value": 0.0035909302937060517,
@@ -296,13 +261,6 @@
    "case": "rod 1000/30/h=30",
    "value": 7.354117315117037e-13,
    "bound": 1e-07
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 1000/30/h=30",
-   "value": 0.01372234616614576,
-   "bound": 0.05
   },
   {
    "benchmark": "B6",
@@ -320,13 +278,6 @@
   },
   {
    "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 30/200/h=5",
-   "value": 0.012858602875667646,
-   "bound": 0.05
-  },
-  {
-   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "rod 30/200/h=5",
    "value": 0.003306228108331366,
@@ -341,13 +292,6 @@
   },
   {
    "benchmark": "B6",
-   "backend": "fem",
-   "case": "rod 30/200/h=5",
-   "value": 0.011353789501118872,
-   "bound": 0.05
-  },
-  {
-   "benchmark": "B6",
    "backend": "image_2layer",
    "case": "ring 100/400/h=2",
    "value": 4.440892098500626e-16,
@@ -359,13 +303,6 @@
    "case": "ring 100/400/h=2",
    "value": 1.2110280334098888e-08,
    "bound": 1e-07
-  },
-  {
-   "benchmark": "B6",
-   "backend": "fem",
-   "case": "ring 100/400/h=2",
-   "value": 0.04344920745279435,
-   "bound": 0.05
   },
   {
    "benchmark": "B6",
@@ -384,9 +321,72 @@
   {
    "benchmark": "B6",
    "backend": "fem",
+   "case": "ring 1000/30/h=5",
+   "value": 0.013446883615958916,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 1000/30/h=5",
+   "value": 0.006298514322230275,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 1000/30/h=10",
+   "value": 0.012319340986509664,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 1000/30/h=10",
+   "value": 0.006212068115398539,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 1000/30/h=30",
+   "value": 0.011636738596388918,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 1000/30/h=30",
+   "value": 0.006144938565845415,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 30/200/h=5",
+   "value": 0.008537718789163762,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "rod 30/200/h=5",
+   "value": 0.005745719618394318,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
+   "case": "ring 100/400/h=2",
+   "value": 0.007490807691947987,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B6",
+   "backend": "fem",
    "case": "rod 100/400/h=2",
-   "value": 0.0020321739002546746,
-   "bound": 0.05
+   "value": 0.005929084789200845,
+   "bound": 0.03
   },
   {
    "benchmark": "B7",
@@ -415,6 +415,20 @@
    "case": "100/1000",
    "value": 0.0002157081586351417,
    "bound": 0.02
+  },
+  {
+   "benchmark": "B7",
+   "backend": "fem",
+   "case": "1000/30",
+   "value": 0.0034963885059030586,
+   "bound": 0.03
+  },
+  {
+   "benchmark": "B7",
+   "backend": "fem",
+   "case": "100/1000",
+   "value": 0.011221075291358407,
+   "bound": 0.03
   },
   {
    "benchmark": "B8",
@@ -593,27 +607,6 @@
   },
   {
    "benchmark": "B9",
-   "backend": "equal_rho_fem",
-   "case": "fem TwoLayer(100,100,h=0.5)",
-   "value": 0.00020275725368534836,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "equal_rho_fem",
-   "case": "fem TwoLayer(100,100,h=30)",
-   "value": 1.2844481795948326e-06,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "equal_rho_fem",
-   "case": "fem MultiLayer([100]*3)",
-   "value": 1.7017680817188463e-05,
-   "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
    "backend": "layer_limit_integral",
    "case": "image_2layer h1=0.004",
    "value": 0.0005051156607269736,
@@ -632,13 +625,6 @@
    "case": "mom_sommerfeld h1=0.004",
    "value": 0.0005051155941384611,
    "bound": 0.001
-  },
-  {
-   "benchmark": "B9",
-   "backend": "layer_limit_fem",
-   "case": "fem h1=0.004",
-   "value": 0.002045969837698669,
-   "bound": 0.01
   },
   {
    "benchmark": "B9",
@@ -663,10 +649,38 @@
   },
   {
    "benchmark": "B9",
+   "backend": "equal_rho_fem",
+   "case": "fem TwoLayer(100,100,h=0.5)",
+   "value": 0.0,
+   "bound": 1e-12
+  },
+  {
+   "benchmark": "B9",
+   "backend": "equal_rho_fem",
+   "case": "fem TwoLayer(100,100,h=30)",
+   "value": 0.0,
+   "bound": 1e-12
+  },
+  {
+   "benchmark": "B9",
+   "backend": "equal_rho_fem",
+   "case": "fem MultiLayer([100]*3)",
+   "value": 0.0,
+   "bound": 1e-12
+  },
+  {
+   "benchmark": "B9",
+   "backend": "layer_limit_fem",
+   "case": "fem h1=0.004",
+   "value": 0.000495948328866902,
+   "bound": 0.001
+  },
+  {
+   "benchmark": "B9",
    "backend": "layer_limit_fem",
    "case": "fem h1=4000",
-   "value": 0.00022473632039432534,
-   "bound": 0.01
+   "value": 0.00020167222420441888,
+   "bound": 0.001
   },
   {
    "benchmark": "B10",
