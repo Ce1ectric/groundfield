@@ -26,11 +26,16 @@ def _text(relpath: str) -> str:
 def test_the_limitations_state_the_carson_series_error_of_networks_at_both_frequencies() -> (
     None
 ):
-    """carson_series reads X 21 ... 44 % high at 50 Hz on generated networks
-    (the 10-house radial +41 %); the limitations gave 9 ... 15 % at 1 kHz only."""
+    """carson_series reads X 21 ... 50 % high at 50 Hz on generated networks
+    (the 10-house radial +41 %, the 80-house radial +50 %; audits W3B-02,
+    W3R2B-03); the limitations gave 9 ... 15 % at 1 kHz only, then 21 ... 44 %."""
     kl = _text("docs/reference/known-limitations.md")
     assert "X 9 … 15 %" not in kl
-    assert "X 4 … 21 % and R 2 … 11 % high at 1 kHz and X 21 … 44 % high at 50 Hz" in kl
+    assert "X 21 … 44 %" not in kl
+    assert (
+        "X 4 … 21 % and R up to 11 % high at 1 kHz and X 21 … 50 % and R up to 0.9 % high at 50 Hz"
+        in kl
+    )
 
 
 # audit W3B-09

@@ -294,5 +294,8 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    read back from the database could not be checked); groundinsight's
    `BusType` and its database keep the description (`bus_types.description`
    of groundinsight 0.3.0), and `bustype_rho_preset` reads the line back
-   (database round trip tested). A blank preset is refused on load.
+   (database round trip tested). On load
+   the preset must be a name of `EFFECTIVE_RESISTIVITY_PRESETS` or null
+   (audit W3R2B-06), and only the exact preset line is removed or replaced
+   in a description.
 

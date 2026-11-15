@@ -64,7 +64,11 @@ has no metadata; with a preset its description ends with the line
 is replaced), which the groundinsight database keeps, and
 `gf.bustype_rho_preset(bus_type)` reads it back, also from a `BusType`
 loaded with `gi.load_bustypes_from_db()` (audit W3B-06; `None` without a
-preset line). A blank `metadata["rho_preset"]` is refused on load. Describe
+preset line). On load `metadata["rho_preset"]` must be a
+preset name or null, as the exporters write it (padding, line breaks and
+unknown names are refused); only the exact line `groundfield rho_preset:
+<name>` of a description is the record, the other lines stay as given
+(audit W3R2B-06). Describe
 the layers, and explicit weights $w_0$, $\beta$, in `soil_summary`.
 
 Before a `BusType` is written, the exported formula (with its rounded

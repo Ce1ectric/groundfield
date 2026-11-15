@@ -130,8 +130,8 @@ reproduces 0.15.0, it is named.
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
-| audit W3B-01 (stream `fw3perf`) | `sommerfeld` λ grid with 256 log nodes | self terms of 1 m … 0.01 δ segments 1e-5 … 7.5e-5, close pairs of 1 m up to 3e-4; solved impedances ≤ 9e-9 (a 200 m PEN in 1 m pieces), 2e-9 … 4e-9 (40-house star); golden `cond_galvanic_neumann_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_lumped_long_pen_sommerfeld`, `cond_overhead_lead_over_pen_carson_series`, `defaults_mixed_cluster_inductive` 4.8e-18 … 2.2e-11 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
-| D9 (stream `fw3perf`) | service drops of one tap and direction in a row at the touching distance | inductive PEN, X at 1 kHz: radial 5 −2.33 / −2.70 % (`carson_series` / `sommerfeld`), radial 10 −2.31 / −2.82 %, star 10 −1.06 / −1.27 %, radial 80 / 200 ≤ 5e-4, radial 30 ≤ 1.1e-6; bare PEN \|dZ\| up to 8e-3; star 5 / 30 / 80 / 200 unchanged; no golden case | generated TN networks (star and radial) with drops of one tap and direction |
+| audit W3B-01 (stream `fw3perf`) | `sommerfeld` λ grid with 256 log nodes | self terms of 1 m … 0.01 δ segments 1e-5 … 3e-4 (6e-4 in 10 over 10 000 Ω·m), close pairs of 1 m up to 3e-4; solved impedances ≤ 9e-9 (a 200 m PEN in 1 m pieces), 2e-9 … 4e-9 (40-house star); golden `cond_galvanic_neumann_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_lumped_long_pen_sommerfeld`, `cond_overhead_lead_over_pen_carson_series`, `defaults_mixed_cluster_inductive` 4.8e-18 … 2.2e-11 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
+| D9 (stream `fw3perf`) | service drops of one tap and direction in a row at the touching distance | inductive PEN, X at 1 kHz: radial 5 −2.33 / −2.70 % (`carson_series` / `sommerfeld`), radial 10 −2.31 / −2.82 %, star 10 −1.06 / −1.27 %, radial 80 / 200 ≤ 5e-4, radial 30 ≤ 1.1e-6; bare PEN \|dZ\| up to 8e-3; star 5 / 30 / 80 / 200 unchanged, stars of 40 … 180 houses with rows (the 60-house star X −1.0e-3 / −6.1e-4 at 50 Hz / 1 kHz, `carson_series`); the same moves under placement jitter since audit W3R2B-01; no golden case | generated TN networks (star and radial) with drops of one tap and direction |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -562,6 +562,11 @@ reproduces 0.15.0, it is named.
   a T-joint within ±5 cm); the generators' house mesh changes by less than
   0.6 %, so no correction rule is applied. Tests: `tests/test_fem.py`,
   `tests/test_fem_3d.py`.
+
+- `PlannedBranch.axis_offset_normal_xy`: the unit plan vector along which
+  `axis_offset_m` moves a branch; the TN generator records the common normal
+  of a row of drops that are not exactly parallel (placement jitter; audit
+  W3R2B-01). Plans without it keep their geometry.
 
 ### Changed
 
@@ -1084,7 +1089,8 @@ reproduces 0.15.0, it is named.
 - `sommerfeld`: the self term of every segment is the exact one-dimensional
   reduction of its double integral, and close pairs get a graded rule along
   their line of closest approach (user decision Q34): the self correction is
-  within 1.1e-9 of a refined rule from 1 m and 0.01 skin depths to 3 km at
+  within 1.1e-9 of a refined rule (for the soils tested; up to 3.4e-9 in
+  high-contrast soils, audit W3R2B-08) from 1 m and 0.01 skin depths to 3 km at
   50 Hz and 1 kHz without a step (with the λ grid of audit W3B-01; it was
   4.8e-4 off at a quarter skin depth, with a step of 3.5e-4 where the
   composite rule took over); close pairs within about 4e-8 (wires 1 mm apart
@@ -1111,7 +1117,24 @@ reproduces 0.15.0, it is named.
   sorted by length and centred on their former axis, so that only neighbours
   touch (user decision D9 of 2026-11-15). Before, they lay on one axis and
   the inductance matrix read every pair as touching; `diagnose()` reported
-  them as overlaps (5-house radial network: 10 pairs, 200 houses: 247).
+  them as overlaps (5-house radial network: 10 pairs, 200 houses: 247). The
+  drops of one node form a row when their start points lie within the
+  touching distance d_t of each other and the shorter drop's end lies within
+  d_t of the longer drop's line; drops that are not exactly parallel
+  (placement jitter) lie along one common normal, each at least d_t from the
+  others, and a drop that would overlap a drop of a row joins it, also a drop
+  of a tap 1 … 4 cm away on the same trunk (from 2 cm of jitter; audit
+  W3R2B-01). A drop of a row starts up to (n − 1)/2 touching distances off
+  its tap (2 cm in a row of five). No generated network reports an overlap
+  with `jitter_m` 0 … 0.1 m (star and radial, 5 … 200 houses).
+- `TnNetworkGenerator.build()` right after `plan()` on the same generator
+  (no `rng=`, nothing drawn from `generator.rng` since, the same
+  configuration) gives the world of that plan; before, it drew a second
+  realisation, another world with placement jitter. Successive calls still
+  draw successive realisations (audit W3R2B).
+- `bustype_rho_preset` returns `None` when the last line of the description
+  is not exactly `groundfield rho_preset: <known preset>` (before, a blank
+  name raised `ValueError`; audit W3R2B-06).
 - `PenetrationDepth` compares by value and is hashable; its arrays are
   read-only copies (audit W3B-11).
 
@@ -1670,7 +1693,8 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 
 - `sommerfeld`: the logarithmic region of the λ grid has 256 nodes instead
   of 64 (audit W3B-01). Short segments missed the skin-scale part of S(ρ): a
-  1 m self correction was 7.5e-5 off (1e-5 … 7.4e-5 at 0.01 skin depths,
+  1 m self correction was up to 3.0e-4 off (6.4e-4 in 10 over 10 000 Ω·m,
+  7.5e-5 in 100 Ω·m; 1e-5 … 7.4e-5 at 0.01 skin depths; audit W3R2B-04;
   close pairs of 1 m up to 3e-4) against the stated 1.1e-9; now the self
   term is within 1.1e-9 of a refined rule and of an independent reference
   from 1 m and 0.01 skin depths to 3 km, close pairs within about 4e-8
@@ -1721,6 +1745,29 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   (radii summed, −35 %) and several clusters (no coupling) are solved within
   1e-4 (axisymmetric) or 2e-3 (3-D) of independent references (user decision
   Q37). Tests: `tests/test_fem.py`, `tests/test_fem_3d.py`.
+
+- The D9 rows held only to 1e-11 m: any placement jitter put the drops back
+  on one axis (the 10-house radial network reported 19 overlaps at 1 nm and
+  its reactance at 1 kHz jumped by +2.4 % / +2.9 %, `carson_series` /
+  `sommerfeld`; now −8.5e-10 / −1.1e-9; audit W3R2B-01). Test:
+  `tests/test_service_drop_rows.py`.
+- `diagnose()` overlap check and `find_close_wires`: the tolerance at the
+  touching distance is the larger of 1e-9 of it and 16 units in the last
+  place of the largest coordinate of the pair. Rows translated to UTM
+  coordinates (5e5, 5.8e6) gave 4 / 10 / 98 false overlaps for the radial
+  networks of 5 / 80 / 200 houses; local worlds keep their findings bit for
+  bit (audit W3R2B-02). Tests: `tests/test_diagnostics_overlap.py`,
+  `tests/test_conductor_proximity.py`.
+- A `PenetrationDepth` built directly is validated (finite, positive
+  frequencies, no NaN depth or resistivity) and its hash agrees with `==`
+  (f = +0.0 and −0.0 compared equal but hashed differently; audit W3R2B-05).
+  Test: `tests/test_penetration_depth.py`.
+- BusType documents: `metadata["rho_preset"]` must be a known preset name or
+  null, as the exporters write it ("station\nfoo" lost the preset on the live
+  BusType, " station " read back as "station", unknown names loaded); of a
+  given description only exact preset lines are removed or replaced (every
+  line that started with the marker was dropped and CRLF became LF; audit
+  W3R2B-06). Test: `tests/test_bustype_rho_preset.py`.
 
 ### Corrections to the 0.15.0 release notes
 

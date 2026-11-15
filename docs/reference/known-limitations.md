@@ -206,7 +206,9 @@ shows what agrees with independent references and how well.
   the JSON document in `metadata["rho_preset"]`, the live
   `groundinsight.BusType` and the groundinsight database in the last line of
   the description, `groundfield rho_preset: <name>` (`bustype_rho_preset`
-  reads it back; audit W3B-06); `evaluate_spec` and `bustype_from_spec` warn
+  reads it back; audit W3B-06; a document's `metadata["rho_preset"]` must be
+  a preset name or null, as the exporters write it, and only the exact line
+  is the record, audit W3R2B-06); `evaluate_spec` and `bustype_from_spec` warn
   when the bus uses another one, nothing checks `rho_at_fit` against it, and
   a document without a recorded preset is not checked; check `max_relative` of a fit over
   $\rho_\text{eff}$ (see [Soil](api/soil.md#effective-resistivity)).
@@ -292,9 +294,15 @@ shows what agrees with independent references and how well.
   50 Hz / 1 kHz), and such a solve warns. Use the default `sommerfeld` for
   numbers. `carson_series` overstates the earth return of LV networks of
   short service drops (shorter than the skin depth): the generated star,
-  radial and grid networks of 5 … 100 houses read X 4 … 21 % and R 2 … 11 %
-  high at 1 kHz and X 21 … 44 % high at 50 Hz against `sommerfeld` (at 50 Hz
-  no closer than `perfect_mirror`; audit W3B-02), an error that changes with
+  radial and grid networks of 5 … 100 houses read X 4 … 21 % and R up to
+  11 % high at 1 kHz and X 21 … 50 % and R up to 0.9 % high at 50 Hz against
+  `sommerfeld` (the 80-house radial network +50 % at 50 Hz; the default
+  `sommerfeld` agrees with a refined discretisation to 1e-3 for the 5-house
+  radial network and 4e-5 for the 80- and 100-house ones). At 50 Hz it is no
+  closer than `perfect_mirror` for the 10-house radial network, the 30-house
+  star and the 80- and 100-house radial networks, but closer for the 5-house
+  radial network (+31 % against +45 %; audits W3B-02, W3R2B-03). The error
+  changes with
   the geometry, so a geometry change can move the two models in opposite
   directions (the 100-house star across the cabinet fix: +1.2 % against
   −3.5 %). Use `sommerfeld` for networks. Under `carson_series` the stretch
@@ -305,8 +313,10 @@ shows what agrees with independent references and how well.
 - **Sommerfeld segment rules.** Under `sommerfeld` the self term of every
   segment is integrated exactly in one dimension and close pairs along their
   line of closest approach (user decision Q34): within 1.1e-9 of a refined
-  rule from 1 m and 0.01 skin depths to 3 km (and of an independent
-  reference, audit W3B-01), close pairs within about 4e-8 (3.5e-8 for 1 m
+  rule from 1 m and 0.01 skin depths to 3 km for the soils tested (100,
+  1000, 30 over 1000 and 300/50/2000 Ω·m; up to 3.4e-9 in high-contrast
+  soils: 10 over 10 000 Ω·m, 1.8e-9 under a 0.3 m top layer; independent
+  references, audits W3B-01, W3R2B-08), close pairs within about 4e-8 (3.5e-8 for 1 m
   wires 1 mm apart in 30 over 1000 Ω·m at 1 kHz), continuous in the length.
   Pairs of
   long segments that are not close keep a composite 16×16 rule (pieces of a
@@ -479,10 +489,23 @@ shows what agrees with independent references and how well.
   direction lie side by side at the touching distance (user decision D9), as
   cables in one trench; a wider spacing is not modelled (5 cm apart the
   5-house radial network's X at 1 kHz is 12.5 / 14.6 % lower,
-  `carson_series` / `sommerfeld`). No generated network reports an overlap
-  in `diagnose()`; with a bare PEN `diagnose()` reports the drops of a row as
-  close wires (`proximity`, information with the default line kernel;
-  audit W3B-05).
+  `carson_series` / `sommerfeld`). Drops that are not exactly parallel
+  (placement jitter) lie along one common normal, and a drop that would come
+  closer than touching to a drop of a row joins it, also a drop of a tap
+  1 … 4 cm away on the same trunk. No generated network reports an overlap
+  in `diagnose()`, also with `jitter_m` 0 … 0.1 m (audit W3R2B-01). A drop of
+  a row starts up to (n − 1)/2 touching distances off its tap (2 cm in a row
+  of five). With a bare PEN, `diagnose()` without an engine warns about those
+  starts as "interpenetrating" against the substation ring (the 10-house
+  radial network: 9 pairs at 0.5 … 5.0 mm) and about the row neighbours as
+  "close"; with the default line kernel all of these are information (audit
+  W3R2B-07).
+- **Ties of the star topology under placement jitter.** Two ties of the
+  10-house star move its reactance by steps: from about 1e-7 m of jitter the
+  cabinet main joins `residential_4` at another foundation wire (−0.24 % at
+  1 kHz), and from 1e-6 m it runs to the other side (−x → +x, −11.8 %
+  `carson_series`, −12.1 % `sommerfeld`). A Monte Carlo study over the
+  jitter sees these steps.
 
 ## Diagnostics and problem size
 

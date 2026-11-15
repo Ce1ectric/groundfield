@@ -82,6 +82,11 @@ limits a result, the reference documentation states the limit.
   third level with the observed order of convergence (instead of the assumed
   second order) would tighten its 2e-3, and per-feature grading or a
   matrix-free multigrid would reach foundations and groups at the defaults.
+- **Ties of the star topology under placement jitter.** The cabinet
+  placement and the contact rule of the star topology have ties that a
+  jitter of 1e-7 … 1e-6 m flips (the 10-house star: −0.24 % and −11.8 % X at
+  1 kHz); making them robust, or documenting the realisations as discrete,
+  would serve Monte Carlo studies.
 
 ## Status of the roadmap items carried in the changelog
 
