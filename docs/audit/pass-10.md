@@ -3455,7 +3455,7 @@ each was done.
 
 | Q | Question | Decision | Where |
 |---|---|---|---|
-| 37 | Stop adding rules to the equivalent-hemisphere reduction of `fem`, in which every audit round found new limit cases (an interface 1 cm below a deep ring +191 … +308 % without a message; a rod reaching 1 µm … 8 cm into a more conductive top layer −44 … −78 %, warning only)? | yes; no further rules, replaced by a conforming axisymmetric model (rod on the axis, ring, ring with central rod; other electrodes refused until a full 3-D method exists); planned for a later release on 2026-11-08, moved into 2026.11.0 with the full 3-D model by the user decision of 2026-11-14 | implemented in 2026.11 (streams w4axi, w4fem3d; fixes of audits W4A / W4B in fw4axi, fw4fem3d): conforming axisymmetric model of rods on one axis and rings around it (about 1e-4; rings next to a conductive layer 3.3e-4 since W4A-01), and a three-dimensional conforming model for every other world — strips, grids, meshes, several clusters, galvanic distributed conductors — within 2e-3 of the axisymmetric model away from interfaces and other wires (W4B-01/-02) and between `image_2layer` and `mom` at the AP1 station; the equivalent-hemisphere reduction is gone ([changelog](../changelog.md)) |
+| 37 | Stop adding rules to the equivalent-hemisphere reduction of `fem`, in which every audit round found new limit cases (an interface 1 cm below a deep ring +191 … +308 % without a message; a rod reaching 1 µm … 8 cm into a more conductive top layer −44 … −78 %, warning only)? | yes; no further rules, replaced by a conforming axisymmetric model (rod on the axis, ring, ring with central rod; other electrodes refused until a full 3-D method exists); planned for a later release on 2026-11-08, moved into 2026.11.0 with the full 3-D model by the user decision of 2026-11-14 | implemented in 2026.11 (streams w4axi, w4fem3d; fixes of audits W4A / W4B in fw4axi, fw4fem3d): conforming axisymmetric model of rods on one axis and rings around it (about 1e-4; rings next to a conductive layer 3.3e-4 since W4A-01), and a three-dimensional conforming model for every other world — strips, grids, meshes, several clusters, galvanic distributed conductors — within 2e-3 of the axisymmetric model away from interfaces and other wires (W4B-01/-02) and between `image_2layer` and `mom` at the AP1 station; the 3-D port limit is the option `FemOptions.max_ports_3d` (stream fw4int); the equivalent-hemisphere reduction is gone ([changelog](../changelog.md)) |
 | 38 | Which owner model stays when `concrete_model` is removed: one current per rectangle without cross-braces (up to 2.2 % above the reference with one current per segment) or one per side (up to 0.9 %; short side at least 1 m)? | one per side, already in 2026.11.0: `concrete_model` has no effect | stream `d3gen` |
 | 39 | Record the effective-resistivity preset in the BusType document (for example `metadata["rho_preset"]`), so that a bus paired with the wrong preset is detectable? | yes, in a later release (2026-11-08); moved into 2026.11.0 by the user decision of 2026-11-14 | done in 2026.11.0 (streams `w3perf`, `fw3perf`, `fw3r2b`): `rho_preset` of the exporters, `metadata["rho_preset"]`, `BusTypeSpec.rho_preset`, the last line of the description of the live BusType and of its database entry (`bustype_rho_preset`; audit W3B-06), `RhoPresetMismatchWarning` from `evaluate_spec` / `bustype_from_spec`; a document holds a known preset name or null, and only an exact preset line of a description is replaced (audit W3R2B-06); older documents load with `None` ([changelog](../changelog.md)) |
 | 40 | Quantify the overlap of the concrete shells at the corners and crossings of encased foundations? | only once a 3-D volume reference is available | quantified in 2026.11 (stream w4fem3d, audit W4B-05) against the concrete resolved as a volume in the 3-D `fem` model: a junction acts like a few cm of wire, at most about 2 r_b, sign not settled (not converged); the generators' house mesh changes by about 1 % or less (0.35 … 0.85 % re-measured after W4B-01); no correction rule ([concrete shells](../explanation/concrete-shells.md#overlapping-shells-at-junctions)) |
@@ -4751,7 +4751,8 @@ and two nested levels extrapolated. It needs the optional extra `fem3d`
 naming it otherwise. In short:
 
 - **Against part A:** within 2.0e-3 for rods and rings in one to three
-  layers, inside its own error estimate.
+  layers, inside its own error estimate (away from interfaces and other
+  wires since audits W4B-01, W4B-02, see below).
 - **The AP1 station** in the corner soils of the AP1 grid lies between the
   thin-wire engines: `image_2layer` +0.7 … +3.0 % above it, `mom` −0.4 …
   −0.9 % below; 1.5 … 3 minutes and 3.6 … 4.4 GB per solve.
@@ -4762,7 +4763,8 @@ naming it otherwise. In short:
   encased wires acts like at most about one shell radius of wire (a corner
   −1.5 cm, a crossing −3 … −6 cm, a T-joint within ±5 cm; 5 mm bar, 5 cm
   cover, ρ_c 1 000 / 5 000 Ω·m); the generators' house mesh changes by less
-  than 0.6 %, so no correction rule is applied.
+  than 0.6 %, so no correction rule is applied (audit W4B-05 found these
+  numbers not converged, see below).
 - **Golden:** nothing moves (every golden `fem` case is axisymmetric and
   stays on part A bit for bit); the 3-D model has no golden case.
 
@@ -4811,10 +4813,121 @@ two declared `fem` cases. Taken up by the wave-4 fixes below.
 
 ### Audit W4B: the three-dimensional model
 
-Findings of audit W4B on the three-dimensional model of stream `w4fem3d`;
-filled in at the release.
+The second wave-4 audit checked part B, decision Q40 and the extra `fem3d`
+(snapshot `4e37760`) against the axisymmetric model, the exact thin rings
+and closed forms of the smoothed line source. Findings:
 
-### Fixes of wave 4
+- W4B-01 (medium): the radius correction added terms for the surface image
+  and for every wire within 20 R, where the mesh already gives the exact
+  field: shallow wires up to +1.9e-3 high, two wires 10 cm apart +4.6e-3,
+  above the error estimate.
+- W4B-02 (medium): neither "within 2e-3 of the axisymmetric model" nor "the
+  estimate bounds the error" held for every world the guards accept: a ring
+  1.5 cm above a 1000 / 30 Ω·m interface read +9.1e-3 against an estimate of
+  5.4e-3, its two levels on either side of the reference.
+- W4B-03 (low–medium): at a layer contrast of 1000 the conjugate gradients
+  did not converge in 3000 iterations and ended after about a minute in a
+  bare `RuntimeError`; the pages said "any contrast".
+- W4B-04, W4B-05 (low–medium): the square concrete prism keeps the shell's
+  outer conformal radius, but its inner one is 0.914 r_b, so its concrete
+  leaks 3.9 % per metre more than the shell, which the texts blamed on the
+  discretisation; the Q40 junction numbers were not converged (one face
+  refinement moved the corner by −4.9 / −7.1 cm), although "no correction
+  rule" stays justified.
+- W4B-06, W4B-07 (low–medium): the face key of the immersed elements
+  aliased above 2²¹ nodes (the default limit of 2 million lies 4.6 % below)
+  and coupled unrelated elements; results depended on numpy's global random
+  state (1e-12 … 1.9e-6 apart), and every solve advanced the user's stream.
+- W4B-08, W4B-09, W4B-10 (low): `Engine.max_segments` was checked only after
+  both levels were solved, and the number of ports had no limit;
+  `fem_peak_memory_gb` reported the peak of the whole process; about 30
+  stale texts.
 
-The fixes of audits W4A and W4B and the second audit round of wave 4;
-filled in at the release.
+Confirmed: no stored golden number changes (563 of 563 quantities against
+the merge parent); the AP1 station, the brace effect (+49.09 / +317.99 %)
+and the Q40 numbers reproduce to the last digit; the light import, the
+message without the extra, the lock file, the licences and the `ci:` commit
+are correct; keeping `fem` experimental is justified. Taken up by the
+wave-4 fixes below.
+
+### Streams `fw4axi` and `fw4fem3d`: fixes of audits W4A and W4B
+
+- **`fw4axi`, a ring next to a more conductive layer (W4A-01):** a ring
+  wire within 1.05 radii of an interface gets 64 instead of 8 tensor
+  intervals per side of its mesh block. The auditor's 14 cases are within
+  3.3e-4 of the boundary elements (were 6.0e-3), and the error estimate
+  (7.5e-4 … 1.9e-3) is at least the error in each of them (was below it in
+  7); such a ring takes about four times the nodes (0.37 → 2.3 … 2.7 s).
+- **`fw4axi` (W4A-02, -03, -05, -08, -10):** a single level reports an error
+  estimate of NaN; `auto` solves a ring without room for its mesh block with
+  the 3-D model, and `model="axisymmetric"` refuses it with a remedy; the
+  common axis has a tolerance of 1e-3 of the smallest wire radius or gap
+  (the axisymmetric reading then errs by less than 1e-6), so a rod 1 µm off
+  a ring's axis stays axisymmetric; `FemOptions.max_nodes` defaults to 2
+  million (about 4 GB per million nodes, re-measured 3.92 … 4.21), and the
+  node prediction errs high (+0.67 … +10.8 %).
+- **`fw4axi`, the thin wire next to a contrasting interface (W4A-07,
+  W4B-02):** `InterfaceContactWarning` and the `diagnose()` category
+  `interface_contact` for horizontal wires within the reach where the thin
+  wire deviates from the solid wire by more than about 1 %, measured against
+  the axisymmetric torus and the Hankel thin ring with an exact 2-D
+  proximity correction at contrasts 1.5 … 1000 in both directions: 1.0 /
+  1.5 / 2.9 / 3.5 / 3.8 / 3.9 wire radii over a layer 2 / 3 / 10 / 33 / 100
+  / 1000 times more conductive, 1.0 … 1.25 radii over a more resistive one,
+  nothing below a contrast of 2. Emitted by the image family, `mom`,
+  `mom_sommerfeld`, `solve_mutual_*` and the 3-D `fem`; no generated
+  network, no world of the AP1 soils and no golden case is reported.
+- **`fw4axi`, texts (W4A-04, -09, W4B-10):** tutorial T09 describes both
+  models; the stale texts of the auditors' lists in the reference pages,
+  the docstrings and ADR-0002.
+- **`fw4fem3d`, the radius correction (W4B-01):** it counts the observer's
+  own wire whole and, of every other wire and surface image, only the part
+  within 1.5 R (a clip at 2 R would still keep 2 % of the self term at
+  1.5 R). A ring r = 1 m at 0.06 … 0.8 m depth lies −1.62e-3 … −1.83e-3
+  from the axisymmetric model (spread 2.1e-4, was 2.1e-3); two coaxial
+  rings 10 cm apart −1.19e-3 / −1.48e-3, inside the estimate of 3.87e-3
+  (were +4.60e-3 / +3.67e-3); the AP1 station moves by about −1e-4, the
+  brace effect to +49.14 / +318.23 %.
+- **`fw4fem3d`, the accuracy texts (W4B-02):** "within 2e-3 of the
+  axisymmetric model" holds away from interfaces and other wires; the error
+  estimate bounds the error while the ratio of the level errors is at least
+  2.5 (2.1 … 2.7 times the error for rings), and not for resolved concrete.
+  The ring 1.5 cm above a 1000 / 30 Ω·m interface still reads +9.2e-3
+  against 5.4e-3: the thin-wire error, which the new warning reports.
+- **`fw4fem3d` (W4B-03 … -09):** a conjugate-gradient solve that does not
+  converge (contrast above the tested 300) raises `BackendCapabilityError`
+  naming the contrast, the axisymmetric model and the integral engines (the
+  auditor's preconditioner gave no gain); the texts say that the square
+  prism's concrete is 3.8 % less resistive (inner conformal radius
+  0.914 r_b, two methods) and mark the junction numbers not converged — a
+  few cm of wire per junction, at most about 2 r_b, sign not settled, the
+  house mesh 0.35 … 0.85 % re-measured; faces are paired with `np.lexsort`;
+  numpy's global random state is saved, seeded and restored around the
+  multigrid set-up (results bit-identical whatever the user's seed, the
+  user's stream unchanged); `Engine.max_segments` and the number of ports
+  (100; about 0.95 s per port and level) are checked before meshing;
+  `fem_peak_memory_gb` is what the solve added (about 2.9 GB per million
+  nodes of the finer level), `fem_process_peak_memory_gb` the process peak.
+- **Golden:** 563 of 563 quantities identical in both streams.
+
+### Stream `fw4int`: the loose ends of the wave-4 fixes
+
+- The texts of `fw4axi` on the `fem` page and in ADR-0016, fitted to those
+  of `fw4fem3d`; the validation rows next to and on an interface
+  re-measured: `image_2layer` reads a ring 1 cm above a 1000 / 30 Ω·m
+  interface +3.46 … +3.57 % above `fem` (the page said +5.2 … +5.4 %, from
+  before wave 3), the ring on an interface within 1.2e-5 of the solid-torus
+  boundary elements.
+- `FemOptions.max_ports_3d` (default 100): the port limit of the 3-D model
+  is an option, and its refusal names it.
+- Benchmarks B8 and B10 exclude `fem` for its cost; measured once with the
+  3-D model, both are reciprocal to round-off, B10 +0.6 / +0.8 % above
+  `mom`. The transfer impedance of B8 lies 0.40 … 0.96 % below `mom`, more
+  than the error estimate; handed to the second audit round.
+- A test that the 3-D model warns once for a wire next to a contrasting
+  interface; the call was already in place.
+- **Golden:** 563 of 563 quantities identical.
+
+### Audits W4R2A and W4R2B: round 2 on the wave-4 fixes
+
+Filled in at the release.
