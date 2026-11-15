@@ -14,8 +14,8 @@ gf.create_conductor(world, name="pen", start="substation", end="house", cross_se
 gf.create_source(world, attached_to="substation", magnitude=1.0)
 
 result = world.solve(gf.create_engine(frequencies=[50.0]))
-print(result.input_impedance()[0])                # (11.2699+0j) Ω
-print(result.cluster_impedance("substation")[0])  # (14.1046+0j) Ω
+print(result.input_impedance()[0])                # (11.2695+0j) Ω
+print(result.cluster_impedance("substation")[0])  # (14.1034+0j) Ω
 ```
 
 Line by line:
@@ -91,7 +91,7 @@ report = gf.compare_engines(
 print(report.summary())     # largest deviation 1.1 % (house cluster): consistent
 
 fine = world.solve(gf.create_engine(segment_length=0.25))
-print(fine.input_impedance()[0])   # (11.2759+0j) Ω, +0.05 % at half the segment length
+print(fine.input_impedance()[0])   # (11.2758+0j) Ω, +0.06 % at half the segment length
 ```
 
 The two methods differ in the current ansatz and the kernel: `mom`
@@ -107,11 +107,11 @@ low, see [source kernels](../explanation/kernels.md)).
     these assertions keep the numbers quoted above in step with the code.
 
     ```python
-    assert abs(Z_in - 11.2699) < 5e-4 and abs(Z_substation - 14.1046) < 5e-4
+    assert abs(Z_in - 11.2695) < 5e-4 and abs(Z_substation - 14.1034) < 5e-4
     assert abs(share.real - 0.799) < 1e-3
     assert abs(1 / (1 / Z_substation + 1 / Z_house) - Z_in) < 1e-3
     assert report.is_consistent and max(report.deviations.values()) < 0.012
-    assert abs(fine.input_impedance()[0] - 11.2759) < 5e-4
+    assert abs(fine.input_impedance()[0] - 11.2758) < 5e-4
     ```
 
 ## Where next

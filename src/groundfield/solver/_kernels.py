@@ -42,11 +42,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from groundfield.solver._guards import _MIN_DISTANCE, _require_image_separation
+from groundfield.solver import _line_kernel
 from groundfield.solver._line_kernel import (
     LineSegments,
     SparseCorrection,
     field_corrections,
+    far_images,
     field_quadrupole_rows,
+    image_quadrupole_rows,
     point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
@@ -484,6 +487,15 @@ def _self_corrected_kernel(
 # ---------------------------------------------------------------------
 
 
+def _series_images(series: ImageSeries) -> list[tuple[float, float, float]]:
+    """``(weight, offset, sign)`` of every image ``n >= 1``, canonical order."""
+    return [
+        (term.weight, term.offset, term.sign)
+        for quad in series.iter_layer_terms()
+        for term in quad
+    ]
+
+
 def _image_depths(
     series: ImageSeries, z_src: np.ndarray
 ) -> list[tuple[float, np.ndarray]]:
@@ -640,25 +652,53 @@ class TwoLayerSeriesKernel:
         self._S: np.ndarray | None = None
         self._S_points: np.ndarray | None = None
         self._series_corrections: SparseCorrection | None = None
+        self._far: list[tuple[float, float, float]] | None = None
+
+    def _images(self) -> list[tuple[float, float, float]]:
+        """``(weight, offset, sign)`` of every image ``n >= 1``, canonical order."""
+        return _series_images(self.series)
 
     def _line_series(self) -> SparseCorrection:
-        """Exact-minus-point corrections of near series images (line kernel)."""
+        """Exact-minus-far-form corrections of near series images (line kernel)."""
         if self._series_corrections is None:
-            images = [
-                (term.weight, term.offset, term.sign)
-                for quad in self.series.iter_layer_terms()
-                for term in quad
-            ]
             self._series_corrections = series_corrections(
-                self.line, images, _MIN_DISTANCE
+                self.line, self._images(), _MIN_DISTANCE
             )
         return self._series_corrections
 
+    def _apply_line(self, rows: np.ndarray, i0: int) -> None:
+        """Point-image rows ``i0 …`` to line-kernel rows, in place.
+
+        The far images get the quadrupole term of the segment average
+        (:func:`~groundfield.solver._line_kernel.image_quadrupole_rows`, wave 3
+        of the 2026.11 work, 10.28), the near ones the sparse corrections.
+        """
+        line = self.line
+        if _line_kernel.FAR_IMAGE_QUADRUPOLE:
+            sl = slice(i0, i0 + rows.shape[0])
+            rows += image_quadrupole_rows(
+                line.mid[sl],
+                line.tangent[sl],
+                line.length[sl],
+                line,
+                self._far_images(),
+                obs_radius=line.radius[sl],
+            )
+        self._line_series().add_to_rows(rows, i0)
+
+    def _far_images(self) -> list[tuple[float, float, float]]:
+        """Images with their quadrupole weights (built once)."""
+        if self._far is None:
+            self._far = far_images(self.line.mid[:, 2], self.line, self._images())
+        return self._far
+
     def _series(self, seg_points: np.ndarray) -> np.ndarray:
-        """``S`` (point images plus the near-image corrections of the line kernel)."""
+        """``S`` (point images plus the line-kernel terms of the images)."""
         S = _series_matrix(seg_points, self.series)
         if self.line is not None:
-            self._line_series().add_to_rows(S, 0)
+            rows = _block_rows(S.shape[0])
+            for i0 in range(0, S.shape[0], rows):
+                self._apply_line(S[i0 : i0 + rows], i0)
         return S
 
     @property
@@ -746,7 +786,7 @@ class TwoLayerSeriesKernel:
                 use_numba=use_numba,
             )
             if self.line is not None:
-                self._line_series().add_to_rows(b, i0)
+                self._apply_line(b, i0)
             out[i0:i1] = b @ cur
         return out
 
@@ -926,11 +966,7 @@ def _series_field(
         for out, phi in zip(outs, phis, strict=True):
             out[sl] = phi
     if line is not None:
-        images = [
-            (term.weight, term.offset, term.sign)
-            for quad in series.iter_layer_terms()
-            for term in quad
-        ]
+        images = _series_images(series)
         for out, corr in zip(
             outs,
             _line_field_correction(points, line, real_parts, min_distance, images),
@@ -958,8 +994,15 @@ def _line_field_correction(
 
     m, n = points.shape[0], line.mid.shape[0]
     outs = [np.zeros((m,) + c.shape[1:]) for c in real_parts]
+    far = []
+    if images and _line_kernel.FAR_IMAGE_QUADRUPOLE:
+        far = far_images(points[:, 2], line, images)
     for sl in _field_row_blocks(m, n, force_blocks=True):
         Q = field_quadrupole_rows(points[sl], line)
+        if far:
+            # Far Tagg/Sunde images with the quadrupole term (wave 3, 10.28).
+            pts = points[sl]
+            Q += image_quadrupole_rows(pts, None, np.zeros(pts.shape[0]), line, far)
         for out, c in zip(outs, real_parts, strict=True):
             out[sl] += Q @ c
         # Sparse near corrections block by block as well (audit round 1,

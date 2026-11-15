@@ -88,8 +88,10 @@ from groundfield.solver._line_kernel import (
     LineSegments,
     SparseCorrection,
     _point_values,
+    far_images,
     galerkin_pairs,
-    near_pairs,
+    image_quadrupole_rows,
+    image_taper,
     point_self_term,
     reaction_corrections,
     reaction_quadrupole_rows,
@@ -434,6 +436,12 @@ class _CrossLayerParts:
         self._diagonal: np.ndarray | None = None
         self._sparse: SparseCorrection | None = None
         self._plans: dict = {}
+        # Line form of the layered correction (wave 3 of the 2026.11 work,
+        # 10.28, ADR-0007): its image families, dense far terms and sparse
+        # near terms.
+        self.families = (
+            _LayeredImageFamilies(line, self.lower, soil) if line is not None else None
+        )
 
     # ------------------------------------------------------------------
     # Shared pieces
@@ -473,20 +481,24 @@ class _CrossLayerParts:
                 self.lower,
                 self.soil,
                 self.line,
+                families=self.families,
             )
         return self._diagonal
 
     def sparse(self) -> SparseCorrection:
-        """Off-diagonal line-kernel corrections of ``ΔZ`` (built once)."""
+        """Off-diagonal near-pair corrections of ``ΔZ`` (line kernel, built once)."""
         if self._sparse is None:
-            if self.line is None:
+            if self.families is None:
                 empty = np.zeros(0, dtype=int)
                 self._sparse = SparseCorrection(empty, empty, np.zeros(0))
             else:
-                self._sparse = _interface_image_corrections(
-                    self.line, self.lower, self.soil
-                )
+                self._sparse = self.families.sparse()
         return self._sparse
+
+    def add_far_rows(self, block: np.ndarray, i0: int) -> None:
+        """Add the far-field terms of the layered images to rows ``i0 …``."""
+        if self.families is not None:
+            block += self.families.rows(i0, i0 + block.shape[0])
 
     # ------------------------------------------------------------------
     # Materialised mode
@@ -506,8 +518,13 @@ class _CrossLayerParts:
         _fill_layered_correction(
             delta_Z, self.seg_points, self.rho_per_segment, self.soil
         )
-        # Exact line sources (10.28): the near-singular interface image of
-        # the layered correction as a Galerkin integral.
+        # Exact line sources (10.28): the layered correction in line form —
+        # the far-field terms of its images over all pairs and the Galerkin
+        # integrals of the near image pairs.
+        if self.families is not None:
+            rows = _block_rows(n)
+            for i0 in range(0, n, rows):
+                self.add_far_rows(delta_Z[i0 : i0 + rows], i0)
         self.sparse().add_to_rows(delta_Z, 0)
         diag = np.arange(n)
         delta_Z[diag, diag] = self.diagonal()
@@ -562,6 +579,7 @@ class _CrossLayerParts:
                 out[np.ix_(sub - i0, cols)] = plan(s.ravel()).reshape(s.shape) / (
                     2.0 * np.pi
                 )
+        self.add_far_rows(out, i0)
         self.sparse().add_to_rows(out, i0)
         idx = np.arange(i0, i1)
         out[idx - i0, idx] = self.diagonal()[i0:i1]
@@ -700,59 +718,183 @@ def _layered_green_kernel(
     return phi_hom_matrix @ currents + delta_Z @ currents
 
 
-def _interface_image_corrections(
-    line: LineSegments, lower: np.ndarray, soil: TwoLayerSoil
-) -> SparseCorrection:
-    r"""Line-exact interface image of the layered correction (off-diagonal).
+class _LayeredImageFamilies:
+    r"""The layered correction ``ΔZ`` of the cross-layer path as image families.
 
-    For two points in the same layer the layered correction
-    :math:`\Delta G` contains the image of the source mirrored in the
-    interface, :math:`c_j / (4\pi R')` with :math:`c_j = \rho_1 K`
-    (source in layer 1) or :math:`-\rho_2 K` (layer 2),
-    :math:`K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)`, whose distance
-    :math:`R'` vanishes as both points approach the interface. Near the
-    interface its point form misses the segment average by far more than
-    the rest of :math:`\Delta G`; here it is replaced by the Galerkin
-    integral of the segment and the mirrored source segment for every
-    pair nearer than :data:`~groundfield.solver._line_kernel.NEAR_FACTOR`
-    segment lengths.
+    In two-layer soil the Green's function of every layer combination is an
+    exact superposition of images (Sunde; the generations of
+    :func:`groundfield.coupling.layered_green._image_generation`), so the
+    layered correction relative to the baseline of the source layer is, with
+    :math:`K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)`,
+    :math:`c = 2\rho_1\rho_2/(\rho_1 + \rho_2)` and :math:`q = 2h_1`,
 
-    The image term keeps the reaction matrix symmetric: the integral of
-    segment :math:`i` against the image of :math:`j` equals that of
-    :math:`j` against the image of :math:`i`.
+    * observer and source in layer 1: :math:`\rho_1 K^m` at the four
+      Tagg/Sunde images :math:`z_s \pm mq`, :math:`\pm mq - z_s` (``m >= 1``);
+    * both in layer 2: :math:`-\rho_2 K` at the interface image
+      :math:`q - z_s`, :math:`-\rho_2 K^2` at the surface image
+      :math:`-z_s` and :math:`\rho_2 (1 - K^2) K^m` at :math:`-z_s - mq`;
+    * in different layers: :math:`c\,K^m` at :math:`z_s + mq` (source in
+      layer 2) or :math:`z_s - mq` (source in layer 1) and at
+      :math:`-z_s - mq` (``m >= 1``; the ``m = 0`` pair is the transmitted
+      resistivity of ``Φ_hom``).
 
-    Parameters
-    ----------
-    line
-        Segment geometry.
-    lower
-        Whether each segment lies in the lower layer.
-    soil
-        The two-layer soil.
+    The spectral quadrature evaluates ``ΔZ`` between segment midpoints. This
+    object adds, per image, ``coefficient · (line − point)/(4π)``: the
+    far-field term of :func:`~groundfield.solver._line_kernel.image_quadrupole_rows`
+    over all pairs (images beyond
+    :data:`~groundfield.solver._line_kernel.IMAGE_QUADRUPOLE_REACH` segment
+    lengths tapered off) and, for the pairs within
+    :data:`~groundfield.solver._line_kernel.SWITCH_FACTOR` segment lengths,
+    the blended Galerkin integral minus the far form — the treatment of the
+    Tagg/Sunde images of the within-layer path (wave 3 of the 2026.11 work,
+    10.28; before, only the interface image of near pairs in the same layer
+    was a Galerkin integral and everything else stayed in point form). The
+    diagonal (a segment and its own images) is the tapered Galerkin integral
+    at every distance.
 
-    Returns
-    -------
-    SparseCorrection
-        ``c_j (exact − point)`` in Ω for the near off-diagonal pairs.
+    The families are grouped by image geometry ``(offset, sign)``; each group
+    carries one 2 × 2 table of coefficients indexed by the layers of observer
+    and source.
     """
-    coeff = _interface_image_coefficients(lower, soil)
-    image = line.image(2.0 * soil.h_1, -1.0)
-    i, j = near_pairs(line.mid, line.length, image.mid, image.length)
-    keep = (lower[i] == lower[j]) & (i != j)
-    i, j = i[keep], j[keep]
-    if not i.size:
-        empty = np.zeros(0, dtype=int)
-        return SparseCorrection(empty, empty, np.zeros(0))
-    exact = galerkin_pairs(line, i, image, j)
-    point = _point_values(line.mid, image.mid, i, j, _MIN_DISTANCE)
-    return SparseCorrection(i, j, coeff[j] * (exact - point))
 
+    def __init__(self, line: LineSegments, lower: np.ndarray, soil: TwoLayerSoil):
+        from groundfield.solver._line_kernel import IMAGE_QUADRUPOLE_REACH
 
-def _interface_image_coefficients(lower: np.ndarray, soil: TwoLayerSoil) -> np.ndarray:
-    """Coefficient ``c_j / (4π)`` of the interface image per source segment, in Ω·m."""
-    rho_1, rho_2 = soil.rho_1, soil.rho_2
-    K = (rho_2 - rho_1) / (rho_2 + rho_1)
-    return np.where(lower, -rho_2 * K, rho_1 * K) / (4.0 * np.pi)
+        self.line = line
+        self.layer = lower.astype(np.intp)
+        rho_1, rho_2, h_1 = soil.rho_1, soil.rho_2, soil.h_1
+        K = (rho_2 - rho_1) / (rho_2 + rho_1)
+        c = 2.0 * rho_1 * rho_2 / (rho_1 + rho_2)
+        q = 2.0 * h_1
+        has = (bool((~lower).any()), bool(lower.any()))
+        # Images up to the depth where their quadrupole term is tapered off
+        # (and their weight above the floor of the spectral module).
+        reach = IMAGE_QUADRUPOLE_REACH[1] * float(line.length.max())
+        z_max = float(line.mid[:, 2].max())
+        m_max = int(np.ceil((reach + 2.0 * z_max) / q)) + 1
+        weights = []
+        for m in range(1, m_max + 1):
+            if abs(K) ** m < 1e-17:
+                break
+            weights.append((m, K**m))
+
+        def table(uu, ul, lu, ll):
+            # [observer layer][source layer]; layer 0 = upper, 1 = lower.
+            tab = np.array([[uu, ul], [lu, ll]], dtype=float) / (4.0 * np.pi)
+            tab[0, :] *= has[0]
+            tab[1, :] *= has[1]
+            tab[:, 0] *= has[0]
+            tab[:, 1] *= has[1]
+            return tab
+
+        groups = [
+            ([(w, m * q, 1.0) for m, w in weights], table(rho_1, c, 0.0, 0.0)),
+            ([(w, -m * q, 1.0) for m, w in weights], table(rho_1, 0.0, c, 0.0)),
+            (
+                [(w, -m * q, -1.0) for m, w in weights],
+                table(rho_1, c, c, rho_2 * (1.0 - K * K)),
+            ),
+            ([(w, m * q, -1.0) for m, w in weights], table(rho_1, 0.0, 0.0, 0.0)),
+            ([(1.0, q, -1.0)], table(0.0, 0.0, 0.0, -rho_2 * K)),
+            ([(1.0, 0.0, -1.0)], table(0.0, 0.0, 0.0, -rho_2 * K * K)),
+        ]
+        self.groups = [(images, tab) for images, tab in groups if images and tab.any()]
+        z = line.mid[:, 2]
+        self.far = [far_images(z, line, images) for images, _ in self.groups]
+
+    def rows(self, i0: int, i1: int) -> np.ndarray:
+        """Far-field terms of rows ``i0:i1`` in Ω, shape ``(i1 - i0, N)``."""
+        from groundfield.solver import _line_kernel
+
+        line = self.line
+        out = np.zeros((i1 - i0, line.mid.shape[0]))
+        if not _line_kernel.FAR_IMAGE_QUADRUPOLE:
+            return out
+        sl = slice(i0, i1)
+        lay = self.layer
+        for (_, tab), far in zip(self.groups, self.far, strict=True):
+            if not far:
+                continue
+            Q = image_quadrupole_rows(
+                line.mid[sl],
+                line.tangent[sl],
+                line.length[sl],
+                line,
+                far,
+                obs_radius=line.radius[sl],
+            )
+            out += tab[lay[sl][:, None], lay[None, :]] * Q
+        return out
+
+    def sparse(self) -> SparseCorrection:
+        """Blended Galerkin corrections of the near off-diagonal image pairs, in Ω."""
+        from groundfield.solver import _line_kernel
+        from groundfield.solver._line_kernel import (
+            SWITCH_FACTOR,
+            _corrections,
+            _depth_gap,
+            switch_pairs,
+        )
+
+        line = self.line
+        z = line.mid[:, 2]
+        z_lo, z_hi = float(z.min()), float(z.max())
+        reach = SWITCH_FACTOR * float(line.length.max())
+        lay = self.layer
+        parts = []
+        for images, tab in self.groups:
+            for weight, offset, sign in images:
+                band = sorted((offset + sign * z_lo, offset + sign * z_hi))
+                if _depth_gap(z, band[0], band[1]) >= reach:
+                    continue
+                img = line.image(offset, sign)
+                i, j, w, far = switch_pairs(line.mid, line.length, img.mid, img.length)
+                coef = tab[lay[i], lay[j]]
+                keep = (i != j) & (coef != 0.0)
+                if not keep.any():
+                    continue
+                i, j, w, far, coef = i[keep], j[keep], w[keep], far[keep], coef[keep]
+                point = _point_values(line.mid, img.mid, i, j, _MIN_DISTANCE)
+                values = _corrections(
+                    line,
+                    line.mid,
+                    line.length,
+                    img,
+                    i,
+                    j,
+                    w,
+                    far,
+                    point,
+                    _MIN_DISTANCE,
+                    with_quadrupole=_line_kernel.FAR_IMAGE_QUADRUPOLE,
+                )
+                parts.append(SparseCorrection(i, j, (weight * coef) * values))
+        return SparseCorrection.concatenate(parts)
+
+    def diagonal(self) -> np.ndarray:
+        """Line-minus-point value of every segment against its own images, in Ω.
+
+        Per image the Galerkin integral minus the point value at ``s = a``
+        (``1/sqrt(a² + d²)``, the form of the spectral diagonal), tapered
+        like the far-field term (:func:`~groundfield.solver._line_kernel.image_taper`
+        of the distance of the segment to its image). The diagonal of ``ΔZ`` is assigned after
+        the far-field rows (:meth:`rows`) are added, so it carries none of
+        them.
+        """
+        line = self.line
+        n = line.mid.shape[0]
+        idx = np.arange(n)
+        a = line.radius
+        out = np.zeros(n)
+        for (_, tab), far in zip(self.groups, self.far, strict=True):
+            coef_diag = tab[self.layer, self.layer]
+            for weight, offset, sign in far:
+                img = line.image(offset, sign)
+                exact = galerkin_pairs(line, idx, img, idx)
+                dz = line.mid[:, 2] - img.mid[:, 2]
+                value = exact - 1.0 / np.sqrt(a * a + dz * dz)
+                out += (weight * coef_diag) * (image_taper(dz, line.length) * value)
+        return out
 
 
 def _layered_diagonal(
@@ -763,6 +905,8 @@ def _layered_diagonal(
     lower: np.ndarray,
     soil: TwoLayerSoil,
     line: LineSegments | None,
+    *,
+    families: _LayeredImageFamilies | None = None,
 ) -> np.ndarray:
     """Diagonal of the layered correction ``ΔZ`` in Ω.
 
@@ -783,13 +927,10 @@ def _layered_diagonal(
     n = seg_points.shape[0]
     out = np.empty(n)
     if line is not None:
-        coeff = _interface_image_coefficients(lower, soil)
-        image = line.image(2.0 * h_1, -1.0)
-        diag = np.arange(n)
-        self_image = galerkin_pairs(line, diag, image, diag)
+        if families is None:
+            families = _LayeredImageFamilies(line, lower, soil)
+        images = families.diagonal()
         a = line.radius
-        d = 2.0 * np.abs(h_1 - line.mid[:, 2])
-        point_image = 1.0 / np.sqrt(a * a + d * d)
         cache: dict = {}
         for k in range(n):
             key = (
@@ -814,7 +955,7 @@ def _layered_diagonal(
                     rho_baseline=float(rho_per_segment[k]),
                     min_distance=float(a[k]),
                 ) / (2.0 * np.pi)
-            out[k] = cache[key] + coeff[k] * (self_image[k] - point_image[k])
+            out[k] = cache[key] + images[k]
         return out
 
     gl3_nodes, gl3_weights = np.polynomial.legendre.leggauss(3)
@@ -856,7 +997,7 @@ def _layered_diagonal(
 
 
 class _PhiHomRows:
-    """Rows of the reaction matrix for homog-with-per-source-rho soil.
+    r"""Rows of the reaction matrix for homog-with-per-source-rho soil.
 
     ``M[i, j]`` is the potential at segment midpoint *i* due to a
     uniform-line-current ``I_j`` distributed along segment *j*, computed in a

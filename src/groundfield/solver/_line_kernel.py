@@ -64,12 +64,54 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 
-__all__ = ["NEAR_FACTOR", "SELF_TERM_CROSSOVER", "LineSegments"]
+__all__ = [
+    "FAR_IMAGE_QUADRUPOLE",
+    "IMAGE_QUADRUPOLE_REACH",
+    "NEAR_FACTOR",
+    "SELF_TERM_CROSSOVER",
+    "SWITCH_FACTOR",
+    "LineSegments",
+]
 
 #: Pairs closer than ``NEAR_FACTOR · max(L_i, L_j)`` (midpoint distance)
 #: are integrated exactly; farther pairs use the quadrupole-corrected
-#: point form.
+#: point form, blended with the exact value up to :data:`SWITCH_FACTOR`.
 NEAR_FACTOR: float = 6.0
+
+#: Pairs farther than ``SWITCH_FACTOR · max(L_i, L_j)`` use the far form
+#: alone. Between :data:`NEAR_FACTOR` and ``SWITCH_FACTOR`` segment lengths
+#: the value is ``w · exact + (1 − w) · far`` with a weight ``w`` that falls
+#: smoothly (C¹) from 1 to 0 in the squared distance (user decision D2 of
+#: 2026-11-15, audit W2B-01/-02). Before, the form switched at six segment
+#: lengths in one step; the pairs six segments apart on a straight wire and
+#: every segment's own Tagg/Sunde image at a distance of six segment lengths
+#: sat exactly on it, so the round-off of the coordinates decided their form
+#: and results of the same world at different positions spread by up to
+#: 4.4e-7 (direct pairs) and 2.6e-5 (images) in the impedance.
+SWITCH_FACTOR: float = 7.5
+
+#: Far Tagg/Sunde images (``n >= 1``) and far images of the cross-layer
+#: correction carry the quadrupole term of the segment average like direct
+#: pairs (wave 3 of the 2026.11 work, 10.28). ``False`` restores the point
+#: form of far images (for comparisons only).
+FAR_IMAGE_QUADRUPOLE: bool = True
+
+#: ``(SWITCH_FACTOR / NEAR_FACTOR)²``: end of the blend in ``r² / lim²``.
+_SWITCH_U: float = (SWITCH_FACTOR / NEAR_FACTOR) ** 2
+
+#: Vertical distances between an observer and an image, in units of the
+#: longer segment of the pair, over which the quadrupole term of far images
+#: is tapered off (full below the first, none beyond the second, a C¹ blend
+#: between; a property of the pair alone). The term is below ``1/(8 G²)`` of
+#: the image's point value at ``G`` segment lengths — 3.5e-5 at 60, the level
+#: of the quadrupole remainder at the switch (2e-5) — while every image costs
+#: the same: the series of 1000 over 30 Ohm m keeps 277 images per sign
+#: pair, of which those within 120 segment lengths of 0.5 m at h_1 = 1.5 m
+#: are 20, and images farther from every observer are skipped. Measured on 16
+#: house grids: the impedance moves by at most 1e-6 against the quadrupole
+#: on every image, the solve takes 1.2 instead of 3.9 times the time without
+#: it (``item1_gain.py`` of stream w3xl).
+IMAGE_QUADRUPOLE_REACH: tuple[float, float] = (60.0, 120.0)
 
 #: Tolerance of ``|t_i · t_j|`` for the closed-form parallel integral.
 _PARALLEL_TOL = 1e-10
@@ -432,6 +474,10 @@ def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
     return total / Li
 
 
+#: Pairs per call of the quadrature in :func:`galerkin_pairs`.
+_GALERKIN_CHUNK: int = 1 << 14
+
+
 def galerkin_pairs(
     obs: LineSegments, i: np.ndarray, src: LineSegments, j: np.ndarray
 ) -> np.ndarray:
@@ -449,7 +495,22 @@ def galerkin_pairs(
     numpy.ndarray
         ``(1/(L_i L_j)) ∬ dl dl' / sqrt(|x - y|² + a²)`` per pair, with
         ``a² = (a_i² + a_j²)/2``.
+
+    Notes
+    -----
+    Pairs are evaluated in chunks of :data:`_GALERKIN_CHUNK`, so that the
+    quadrature temporaries (up to 112 nodes × 3 coordinates per skew pair)
+    stay bounded however many near pairs a world has.
     """
+    if i.shape[0] > _GALERKIN_CHUNK:
+        return np.concatenate(
+            [
+                galerkin_pairs(
+                    obs, i[k : k + _GALERKIN_CHUNK], src, j[k : k + _GALERKIN_CHUNK]
+                )
+                for k in range(0, i.shape[0], _GALERKIN_CHUNK)
+            ]
+        )
     Ai, ti, Li = obs.start[i], obs.tangent[i], obs.length[i]
     Aj, tj, Lj = src.start[j], src.tangent[j], src.length[j]
     a2 = 0.5 * (obs.radius[i] ** 2 + src.radius[j] ** 2)
@@ -552,13 +613,32 @@ def quadrupole_block(
     obs_len: np.ndarray,
     src: LineSegments,
     factor: float = NEAR_FACTOR,
+    obs_radius: np.ndarray | None = None,
 ) -> np.ndarray:
     """Leading correction of the segment average to the point kernel.
 
-    ``[L_i²(3c_i² - 1) + L_j²(3c_j² - 1)] / (24 R³)`` for every pair with
-    ``R >= factor · max(L_i, L_j)``, zero for nearer pairs (they are
-    integrated exactly). For field points pass ``obs_t=None`` and zero
-    lengths.
+    ``[L_i²(3c_i² - 1) + L_j²(3c_j² - 1) - 12 a²] / (24 R³)`` for every pair
+    with ``R >= factor · max(L_i, L_j)``, zero for nearer pairs (they are
+    integrated exactly). ``a² = (a_i² + a_j²)/2`` is the radius of the
+    reduced kernel ``1/sqrt(r² + a²)`` of the exact pairs, whose expansion
+    the term completes (``1/sqrt(R² + a²) = 1/R - a²/(2R³) + …``; wave 3 of
+    the 2026.11 work: the far form used ``1/R``, ``a²/(2R²)`` = 1.4e-6 off at
+    six segment lengths of 0.5 m). For field points pass ``obs_t=None`` and
+    zero lengths: their far form keeps the plain point value (the 1 mm of
+    their exact line potential only regularises points on the axis).
+
+    Parameters
+    ----------
+    obs_mid, obs_t, obs_len
+        Observer midpoints (m), unit tangents (``None`` for field points)
+        and lengths (m).
+    src
+        Source segments.
+    factor
+        Near-pair factor.
+    obs_radius
+        Wire radii of the observing segments in m (with ``obs_t``); ``None``
+        omits the radius term.
 
     Returns
     -------
@@ -578,8 +658,297 @@ def quadrupole_block(
         if obs_t is not None:
             ui = dx * obs_t[:, 0:1] + dy * obs_t[:, 1:2] + dz * obs_t[:, 2:3]
             q += (obs_len[:, None] ** 2) * (3.0 * ui * ui / r2 - 1.0)
+            if obs_radius is not None:
+                q -= 12.0 * (0.5 * np.add.outer(obs_radius**2, src.radius**2))
         q /= 24.0 * r2 * np.sqrt(r2)
     return np.where(far, q, 0.0)
+
+
+# ---------------------------------------------------------------------
+# Continuous near/far switch (user decision D2)
+# ---------------------------------------------------------------------
+
+
+def _switch(r2: np.ndarray, lim: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Weights of the blended switch for pairs with ``r² < (SWITCH · L)²``.
+
+    ``far`` is ``r² >= lim²`` with ``lim = NEAR_FACTOR · max(L_i, L_j)`` —
+    the comparison of :func:`quadrupole_block`, on the same numbers, so a
+    pair is ``far`` exactly where the dense far form was added. ``w`` is the
+    weight of the exact value: 1 for near pairs, then
+    ``1 − t²(3 − 2t)`` with ``t = (r²/lim² − 1)/(SWITCH²/NEAR² − 1)``,
+    which reaches 0 with zero slope at ``SWITCH_FACTOR`` segment lengths.
+    """
+    lim2 = lim * lim
+    far = r2 >= lim2
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = (r2 / lim2 - 1.0) / (_SWITCH_U - 1.0)
+    t = np.clip(t, 0.0, 1.0)
+    w = 1.0 - t * t * (3.0 - 2.0 * t)
+    return np.where(far, w, 1.0), far
+
+
+def switch_pairs(
+    obs_mid: np.ndarray,
+    obs_len: np.ndarray,
+    src_mid: np.ndarray,
+    src_len: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Pairs that need the exact value, with their blending weights.
+
+    Every pair with ``|P_i − Q_j| < SWITCH_FACTOR · max(L_i, L_j)``.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, ...]
+        Observer indices, source indices, the weight ``w`` of the exact
+        value and ``far`` (the dense far form of :func:`quadrupole_block` /
+        :func:`image_quadrupole_rows` is added for the pair).
+    """
+    i, j = near_pairs(obs_mid, obs_len, src_mid, src_len, factor=SWITCH_FACTOR)
+    d = obs_mid[i] - src_mid[j]
+    r2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
+    w, far = _switch(r2, NEAR_FACTOR * np.maximum(obs_len[i], src_len[j]))
+    return i, j, w, far
+
+
+def pair_quadrupole(
+    obs_mid: np.ndarray,
+    obs_t: np.ndarray | None,
+    obs_len: np.ndarray,
+    src: LineSegments,
+    i: np.ndarray,
+    j: np.ndarray,
+    obs_radius: np.ndarray | None = None,
+) -> np.ndarray:
+    """The far-field term of :func:`quadrupole_block` for index pairs, in 1/m.
+
+    Without the near/far mask (callers pass far pairs only). ``obs_t=None``
+    and zero lengths for field points.
+    """
+    d = obs_mid[i] - src.mid[j]
+    r2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
+    tj = src.tangent[j]
+    uj = d[:, 0] * tj[:, 0] + d[:, 1] * tj[:, 1] + d[:, 2] * tj[:, 2]
+    q = (src.length[j] ** 2) * (3.0 * uj * uj / r2 - 1.0)
+    if obs_t is not None:
+        ti = obs_t[i]
+        ui = d[:, 0] * ti[:, 0] + d[:, 1] * ti[:, 1] + d[:, 2] * ti[:, 2]
+        q += (obs_len[i] ** 2) * (3.0 * ui * ui / r2 - 1.0)
+        if obs_radius is not None:
+            q -= 12.0 * (0.5 * (obs_radius[i] ** 2 + src.radius[j] ** 2))
+    q /= 24.0 * r2 * np.sqrt(r2)
+    return q
+
+
+def _blended(
+    exact: np.ndarray,
+    point: np.ndarray,
+    w: np.ndarray,
+    far: np.ndarray,
+    q: np.ndarray | None,
+) -> np.ndarray:
+    """Sparse correction to the dense ``point (+ q · far)`` of each pair.
+
+    Near pairs: ``exact − point`` (as before the blend, bit for bit). Pairs
+    in the band: ``w · (exact − point − q)``, so that the total is
+    ``w · exact + (1 − w) · (point + q)``; ``q = None`` where the dense far
+    form is the point form.
+    """
+    out = exact - point
+    if np.any(far):
+        rest = out[far] if q is None else out[far] - q[far]
+        out[far] = w[far] * rest
+    return out
+
+
+def _corrections(
+    obs: LineSegments | None,
+    obs_mid: np.ndarray,
+    obs_len: np.ndarray,
+    src: LineSegments,
+    i: np.ndarray,
+    j: np.ndarray,
+    w: np.ndarray,
+    far: np.ndarray,
+    point: np.ndarray,
+    min_distance: float,
+    *,
+    with_quadrupole: bool,
+) -> np.ndarray:
+    """Blended exact-minus-point values of segment or field-point pairs.
+
+    ``obs`` are the observing segments (Galerkin integrals), or ``None`` for
+    field points (exact line potential regularised with ``min_distance``).
+    """
+    if obs is not None:
+        exact = galerkin_pairs(obs, i, src, j)
+    else:
+        exact = line_potential_pairs(
+            obs_mid[i],
+            src.start[j],
+            src.tangent[j],
+            src.length[j],
+            np.full(i.size, min_distance * min_distance),
+        )
+    q = None
+    if with_quadrupole and np.any(far):
+        q = np.zeros(i.size)
+        q[far] = pair_quadrupole(
+            obs_mid,
+            None if obs is None else obs.tangent,
+            obs_len,
+            src,
+            i[far],
+            j[far],
+            obs_radius=None if obs is None else obs.radius,
+        )
+    return _blended(exact, point, w, far, q)
+
+
+def far_images(
+    z_obs: np.ndarray, segs: LineSegments, images: list[tuple[float, float, float]]
+) -> list[tuple[float, float, float]]:
+    """The images that carry the far-field quadrupole term for some pair.
+
+    An image whose depth band lies farther than the second value of
+    :data:`IMAGE_QUADRUPOLE_REACH` longest segment lengths from every
+    observer (depths ``z_obs``) is left out: its taper is zero for every
+    pair, so leaving it out changes no number and saves its cost.
+    """
+    if not images or not z_obs.size or not segs.mid.shape[0]:
+        return []
+    z = segs.mid[:, 2]
+    z_lo, z_hi = float(z.min()), float(z.max())
+    reach = IMAGE_QUADRUPOLE_REACH[1] * float(segs.length.max())
+    out = []
+    for weight, offset, sign in images:
+        band = sorted((offset + sign * z_lo, offset + sign * z_hi))
+        if _depth_gap(z_obs, band[0], band[1]) < reach:
+            out.append((weight, offset, sign))
+    return out
+
+
+def image_taper(dz: np.ndarray, length: np.ndarray) -> np.ndarray:
+    """Taper of the far-image quadrupole term of pairs (:data:`IMAGE_QUADRUPOLE_REACH`).
+
+    ``dz`` is the vertical distance of observer and image in m, ``length``
+    the longer segment of the pair in m.
+    """
+    lo, hi = IMAGE_QUADRUPOLE_REACH
+    t = np.clip((np.abs(dz) * (1.0 / length) - lo) * (1.0 / (hi - lo)), 0.0, 1.0)
+    return 1.0 - t * t * (3.0 - 2.0 * t)
+
+
+def image_quadrupole_rows(
+    obs_mid: np.ndarray,
+    obs_t: np.ndarray | None,
+    obs_len: np.ndarray,
+    segs: LineSegments,
+    images: list[tuple[float, float, float]],
+    obs_radius: np.ndarray | None = None,
+) -> np.ndarray:
+    """Dense far-field term of far images, ``Σ_k w_k · τ_k · Q_k``, in 1/m.
+
+    ``Q_k`` is the far-field term of :func:`quadrupole_block` of the
+    observers against the image ``(offset_k, sign_k)`` of the segments
+    (:meth:`LineSegments.image`), nonzero where
+    ``r² >= (NEAR_FACTOR · max(L_i, L_j))²``; ``w_k`` the image weight and
+    ``τ_k`` the taper :func:`image_taper` of the pair. Item 1 of wave 3
+    (10.28): up to it the Tagg/Sunde images were point sources beyond six
+    segment lengths. With numba (extra ``fast``) and enough work the
+    compiled kernel runs; both paths give bit-identical blocks.
+
+    Parameters
+    ----------
+    obs_mid, obs_t, obs_len
+        Observer midpoints (m), unit tangents (``None`` for field points)
+        and lengths (m; zeros for field points).
+    segs
+        The source segments.
+    images
+        ``(weight, offset, sign)`` of every image.
+    obs_radius
+        Wire radii of the observing segments in m (the radius term of
+        :func:`quadrupole_block`); ``None`` for field points.
+
+    Returns
+    -------
+    numpy.ndarray
+        Shape ``(len(obs_mid), len(segs.mid))``.
+    """
+    n_obs, n_src = obs_mid.shape[0], segs.mid.shape[0]
+    out = np.zeros((n_obs, n_src))
+    if not images or not n_obs or not n_src:
+        return out
+    kernel = None
+    if n_obs * n_src * len(images) >= LINE_NUMBA_MIN_PAIRS:
+        kernel = _numba_image_quadrupole_rows()
+    has_t = obs_t is not None
+    with_radius = has_t and obs_radius is not None
+    t = obs_t if has_t else np.zeros_like(obs_mid)
+    ro = obs_radius if with_radius else np.zeros(n_obs)
+    lo, hi = IMAGE_QUADRUPOLE_REACH
+    if kernel is not None:
+        c = np.ascontiguousarray
+        weights = np.array([wk for wk, _, _ in images], dtype=float)
+        z_img = c(np.array([off + sgn * segs.mid[:, 2] for _, off, sgn in images]))
+        tz_img = c(np.array([sgn * segs.tangent[:, 2] for _, _, sgn in images]))
+        kernel(
+            c(obs_mid[:, 0]), c(obs_mid[:, 1]), c(obs_mid[:, 2]),
+            c(t[:, 0]), c(t[:, 1]), c(t[:, 2]), c(obs_len, dtype=float), has_t,
+            c(ro, dtype=float), with_radius,
+            c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.tangent[:, 0]),
+            c(segs.tangent[:, 1]), c(segs.length, dtype=float), c(segs.radius, dtype=float),
+            z_img, tz_img, weights, float(NEAR_FACTOR), float(lo), float(hi), out,
+        )  # fmt: skip
+        return out
+    # numpy: the operations of the compiled kernel, block by block.
+    dx = np.subtract.outer(obs_mid[:, 0], segs.mid[:, 0])
+    dy = np.subtract.outer(obs_mid[:, 1], segs.mid[:, 1])
+    dxy2 = dx * dx + dy * dy
+    hx = dx * segs.tangent[None, :, 0] + dy * segs.tangent[None, :, 1]
+    gx = dx * t[:, 0:1] + dy * t[:, 1:2]
+    ls2 = (segs.length * segs.length)[None, :]
+    lo2 = (obs_len * obs_len)[:, None]
+    a2t = 12.0 * (0.5 * np.add.outer(ro * ro, segs.radius * segs.radius))
+    lmax = np.maximum.outer(obs_len, segs.length)
+    lim = NEAR_FACTOR * lmax
+    lim2 = lim * lim
+    inv_l = 1.0 / lmax
+    inv_span = 1.0 / (hi - lo)
+    zo = obs_mid[:, 2:3]
+    tzo = t[:, 2:3]
+    for weight, offset, sign in images:
+        dz = zo - (offset + sign * segs.mid[:, 2])[None, :]
+        r2 = dxy2 + dz * dz
+        rq = np.maximum(r2, 1e-100)
+        u = hx + dz * (sign * segs.tangent[:, 2])[None, :]
+        q = ls2 * (3.0 * u * u / rq - 1.0)
+        if has_t:
+            v = gx + dz * tzo
+            q += lo2 * (3.0 * v * v / rq - 1.0)
+            if with_radius:
+                q -= a2t
+        q /= 24.0 * rq * np.sqrt(rq)
+        x = np.abs(dz) * inv_l
+        s = np.minimum(np.maximum((x - lo) * inv_span, 0.0), 1.0)
+        tau = 1.0 - s * s * (3.0 - 2.0 * s)
+        out += np.where(r2 >= lim2, weight * (q * tau), 0.0)
+    return out
+
+
+def _numba_image_quadrupole_rows():
+    """The compiled image kernel, or ``None`` (numba missing or switched off)."""
+    from groundfield.solver import _kernels
+
+    if not _kernels.USE_NUMBA:
+        return None
+    try:
+        from groundfield.solver._line_numba import image_quadrupole_rows
+    except ImportError:  # numba is an optional extra
+        return None
+    return image_quadrupole_rows
 
 
 # ---------------------------------------------------------------------
@@ -627,8 +996,9 @@ def reaction_corrections(segs: LineSegments, min_distance: float) -> SparseCorre
 
     Covers the self terms (Galerkin self term instead of
     ``2 ln(L/a)/L``) and every direct or surface-image pair nearer than
-    :data:`NEAR_FACTOR` segment lengths (Galerkin integral instead of
-    ``1/r``; for the self image ``1/(2z)``).
+    :data:`SWITCH_FACTOR` segment lengths: the Galerkin integral instead of
+    ``1/r`` (for the self image ``1/(2z)``) below :data:`NEAR_FACTOR`, the
+    blend towards the far form of :func:`reaction_quadrupole_rows` beyond.
     """
     n = segs.length.shape[0]
     parts = []
@@ -641,24 +1011,27 @@ def reaction_corrections(segs: LineSegments, min_distance: float) -> SparseCorre
             - point_self_term(segs.length, segs.radius),
         )
     )
-    i, j = near_pairs(segs.mid, segs.length, segs.mid, segs.length)
+    i, j, w, far = switch_pairs(segs.mid, segs.length, segs.mid, segs.length)
     off = i != j
-    i, j = i[off], j[off]
+    i, j, w, far = i[off], j[off], w[off], far[off]
     if i.size:
-        exact = galerkin_pairs(segs, i, segs, j)
-        parts.append(
-            SparseCorrection(
-                i, j, exact - _point_values(segs.mid, segs.mid, i, j, min_distance)
-            )
-        )
+        point = _point_values(segs.mid, segs.mid, i, j, min_distance)
+        values = _corrections(
+            segs, segs.mid, segs.length, segs, i, j, w, far, point, min_distance,
+            with_quadrupole=True,
+        )  # fmt: skip
+        parts.append(SparseCorrection(i, j, values))
     img = segs.image()
-    i, j = near_pairs(segs.mid, segs.length, img.mid, img.length)
+    i, j, w, far = switch_pairs(segs.mid, segs.length, img.mid, img.length)
     if i.size:
-        exact = galerkin_pairs(segs, i, img, j)
         point = _point_values(segs.mid, img.mid, i, j, min_distance)
         self_image = i == j
         point[self_image] = 1.0 / (2.0 * np.abs(segs.mid[i[self_image], 2]))
-        parts.append(SparseCorrection(i, j, exact - point))
+        values = _corrections(
+            segs, segs.mid, segs.length, img, i, j, w, far, point, min_distance,
+            with_quadrupole=True,
+        )  # fmt: skip
+        parts.append(SparseCorrection(i, j, values))
     return SparseCorrection.concatenate(parts)
 
 
@@ -687,25 +1060,31 @@ def _quadrupole_with_image(
     obs_t: np.ndarray | None,
     obs_len: np.ndarray,
     segs: LineSegments,
+    obs_radius: np.ndarray | None = None,
 ) -> np.ndarray:
     """``quadrupole_block`` of the segments plus that of their surface images."""
     img = segs.image()
+    with_radius = obs_t is not None and obs_radius is not None
     kernel = None
     if obs_mid.shape[0] * segs.mid.shape[0] >= LINE_NUMBA_MIN_PAIRS:
         kernel = _numba_quadrupole_rows()
     if kernel is None:
-        return quadrupole_block(obs_mid, obs_t, obs_len, segs) + quadrupole_block(
-            obs_mid, obs_t, obs_len, img
-        )
+        ro = obs_radius if with_radius else None
+        return quadrupole_block(
+            obs_mid, obs_t, obs_len, segs, obs_radius=ro
+        ) + quadrupole_block(obs_mid, obs_t, obs_len, img, obs_radius=ro)
     out = np.empty((obs_mid.shape[0], segs.mid.shape[0]))
     t = obs_t if obs_t is not None else np.zeros_like(obs_mid)
+    ro = obs_radius if with_radius else np.zeros(obs_mid.shape[0])
     c = np.ascontiguousarray
     kernel(
         c(obs_mid[:, 0]), c(obs_mid[:, 1]), c(obs_mid[:, 2]),
         c(t[:, 0]), c(t[:, 1]), c(t[:, 2]), c(obs_len, dtype=float), obs_t is not None,
+        c(ro, dtype=float), with_radius,
         c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.mid[:, 2]), c(img.mid[:, 2]),
         c(segs.tangent[:, 0]), c(segs.tangent[:, 1]), c(segs.tangent[:, 2]),
-        c(img.tangent[:, 2]), c(segs.length, dtype=float), float(NEAR_FACTOR), out,
+        c(img.tangent[:, 2]), c(segs.length, dtype=float), c(segs.radius, dtype=float),
+        float(NEAR_FACTOR), out,
     )  # fmt: skip
     return out
 
@@ -713,7 +1092,9 @@ def _quadrupole_with_image(
 def reaction_quadrupole_rows(segs: LineSegments, i0: int, i1: int) -> np.ndarray:
     """Dense far-field correction of rows ``i0:i1`` (direct + surface image)."""
     sl = slice(i0, i1)
-    return _quadrupole_with_image(segs.mid[sl], segs.tangent[sl], segs.length[sl], segs)
+    return _quadrupole_with_image(
+        segs.mid[sl], segs.tangent[sl], segs.length[sl], segs, segs.radius[sl]
+    )
 
 
 def _depth_gap(z_obs: np.ndarray, z_img_lo: float, z_img_hi: float) -> float:
@@ -725,7 +1106,7 @@ def _depth_gap(z_obs: np.ndarray, z_img_lo: float, z_img_hi: float) -> float:
 def series_corrections(
     segs: LineSegments, images: list[tuple[float, float, float]], min_distance: float
 ) -> SparseCorrection:
-    """Exact minus point value of near Tagg/Sunde image pairs.
+    """Exact minus far-form value of near Tagg/Sunde image pairs.
 
     Parameters
     ----------
@@ -739,23 +1120,30 @@ def series_corrections(
     Returns
     -------
     SparseCorrection
-        Weighted corrections ``K^n (exact − 1/r)`` of the image pairs
-        nearer than :data:`NEAR_FACTOR` segment lengths; usually empty
-        (images are at least ``2(h_1 - z)`` away).
+        Weighted corrections of the image pairs nearer than
+        :data:`SWITCH_FACTOR` segment lengths: ``K^n (exact − 1/r)`` below
+        :data:`NEAR_FACTOR`, the blend towards the far form (point plus
+        :func:`image_quadrupole_rows`) beyond; usually few (images are at
+        least ``2(h_1 - z)`` away). An image whose depth band is at least
+        :data:`SWITCH_FACTOR` longest segment lengths from every observer is
+        skipped: no pair of it can be nearer, and the blend is zero there.
     """
     z = segs.mid[:, 2]
-    reach = NEAR_FACTOR * float(segs.length.max())
+    reach = SWITCH_FACTOR * float(segs.length.max())
     parts = []
     for weight, offset, sign in images:
         band = sorted((offset + sign * float(z.min()), offset + sign * float(z.max())))
         if _depth_gap(z, band[0], band[1]) >= reach:
             continue
         img = segs.image(offset, sign)
-        i, j = near_pairs(segs.mid, segs.length, img.mid, img.length)
+        i, j, w, far = switch_pairs(segs.mid, segs.length, img.mid, img.length)
         if i.size:
-            exact = galerkin_pairs(segs, i, img, j)
             point = _point_values(segs.mid, img.mid, i, j, min_distance)
-            parts.append(SparseCorrection(i, j, weight * (exact - point)))
+            values = _corrections(
+                segs, segs.mid, segs.length, img, i, j, w, far, point, min_distance,
+                with_quadrupole=FAR_IMAGE_QUADRUPOLE,
+            )  # fmt: skip
+            parts.append(SparseCorrection(i, j, weight * values))
     return SparseCorrection.concatenate(parts)
 
 
@@ -764,27 +1152,22 @@ def field_corrections(
 ) -> SparseCorrection:
     """Exact line potential minus point value at near field points.
 
-    Direct and surface-image sources; the line potential is regularised
-    with ``min_distance`` (the point kernel's clamp).
+    Direct and surface-image sources nearer than :data:`SWITCH_FACTOR`
+    segment lengths, blended towards the far form beyond
+    :data:`NEAR_FACTOR`; the line potential is regularised with
+    ``min_distance`` (the point kernel's clamp).
     """
     zero = np.zeros(points.shape[0])
     parts = []
-    a2 = min_distance * min_distance
     for src in (segs, segs.image()):
-        i, j = near_pairs(points, zero, src.mid, src.length)
+        i, j, w, far = switch_pairs(points, zero, src.mid, src.length)
         if i.size:
-            exact = line_potential_pairs(
-                points[i],
-                src.start[j],
-                src.tangent[j],
-                src.length[j],
-                np.full(i.size, a2),
-            )
-            parts.append(
-                SparseCorrection(
-                    i, j, exact - _point_values(points, src.mid, i, j, min_distance)
-                )
-            )
+            point = _point_values(points, src.mid, i, j, min_distance)
+            values = _corrections(
+                None, points, zero, src, i, j, w, far, point, min_distance,
+                with_quadrupole=True,
+            )  # fmt: skip
+            parts.append(SparseCorrection(i, j, values))
     return SparseCorrection.concatenate(parts)
 
 
@@ -799,27 +1182,23 @@ def series_field_corrections(
     images: list[tuple[float, float, float]],
     min_distance: float,
 ) -> SparseCorrection:
-    """Weighted exact-minus-point corrections of near series images at field points."""
+    """Weighted exact-minus-far-form corrections of near series images at field points."""
     zero = np.zeros(points.shape[0])
-    a2 = min_distance * min_distance
     z_pts = points[:, 2]
     z = segs.mid[:, 2]
-    reach = NEAR_FACTOR * float(segs.length.max())
+    reach = SWITCH_FACTOR * float(segs.length.max())
     parts = []
     for weight, offset, sign in images:
         band = sorted((offset + sign * float(z.min()), offset + sign * float(z.max())))
         if _depth_gap(z_pts, band[0], band[1]) >= reach:
             continue
         img = segs.image(offset, sign)
-        i, j = near_pairs(points, zero, img.mid, img.length)
+        i, j, w, far = switch_pairs(points, zero, img.mid, img.length)
         if i.size:
-            exact = line_potential_pairs(
-                points[i],
-                img.start[j],
-                img.tangent[j],
-                img.length[j],
-                np.full(i.size, a2),
-            )
             point = _point_values(points, img.mid, i, j, min_distance)
-            parts.append(SparseCorrection(i, j, weight * (exact - point)))
+            values = _corrections(
+                None, points, zero, img, i, j, w, far, point, min_distance,
+                with_quadrupole=FAR_IMAGE_QUADRUPOLE,
+            )  # fmt: skip
+            parts.append(SparseCorrection(i, j, weight * values))
     return SparseCorrection.concatenate(parts)
