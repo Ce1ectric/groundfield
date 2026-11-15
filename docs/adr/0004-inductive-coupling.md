@@ -420,7 +420,8 @@ the following decisions refine it.
     −1.86 % in 10 / 5 / 1 m pieces). Pieces of two conductors that are
     *nearly parallel* — the lateral distance changes by at most the
     touching distance $r_1 + r_2$ along the longer piece, and
-    $|\cos\varphi| \ge 0.99$ — now get the two readings of item 12 against
+    $|\cos\varphi| \ge 0.99$; both bounds were dropped by item 14 — now
+    get the two readings of item 12 against
     the partner's whole conductor with the stretches found exactly: each
     piece is split where the foot of its points passes an end of the
     partner's conductor and where the distance $\rho(s)$ from the partner's
@@ -444,10 +445,12 @@ the following decisions refine it.
     rule). The literal proposal, the closed form at the mean lateral
     distance of each pair, missed by up to 1.35 % at 1.5e-4 … 7e-4 rad,
     where the core leaves the shield's tube inside a piece. Beyond the
-    gate the rule of item 9 acts per segment; the touching stretch is then
-    about one piece long and the pieces differ from the lumped pair by
-    1.5e-7 (10 m pieces, 2.01e-3 rad), 6.6e-7 (1 m, 2.01e-2 rad) and
-    1.4e-6 (0.25 m, 8.01e-2 rad). The generator's overhead measurement
+    gate the rule of item 9 acted per segment. Where the core leaves the
+    axis at the shield's start the touching stretch is then about one
+    piece long, and the pieces differed from the lumped pair by 1.5e-7
+    (10 m pieces, 2.01e-3 rad), 6.6e-7 (1 m, 2.01e-2 rad) and 1.4e-6
+    (0.25 m, 8.01e-2 rad); in general the error was not small (item 14).
+    The generator's overhead measurement
     leads are such a pair (the probe lead starts 10 mm beside the feed
     lead and ends on its axis, 2e-4 rad): their mutual in the default 5 m
     pieces was +1.0e-4 off the lumped one (1 m pieces +5.4e-4), now
@@ -459,3 +462,40 @@ the following decisions refine it.
     (W1R2-03; element-wise, so bit-identical): a 600 m pair in 1 m pieces
     peaked at 292 MiB with all pairs at once, now 30 MiB, the level
     before item 12.
+14. **No length gate and no angular cap (third wave-1 audit of the
+    calendar release, W1R3-01, W1R3-02).** The two bounds of item 13 mixed
+    two readings within one pair of conductors, and between a lumped pair
+    and its pieces. Where the core crosses the shield axis at mid-length
+    the touching stretch is two pieces long: just beyond the length gate
+    the loop in 10 / 5 / 1 / 0.25 m pieces read −8.6e-5 / −6.4e-5 /
+    −4.0e-5 / −3.0e-5 off the lumped pair (solver: X −7.6e-5 / −5.6e-5 in
+    10 / 5 m pieces under `perfect_mirror` and `sommerfeld`, homogeneous,
+    two- and three-layer soil). Long pieces at small tilts read −1.7e-4
+    (2 × 50 m, 5e-4 rad), shield pieces of 15 / 1 m at 2e-3 rad −1.6e-3,
+    and a core running 5 m beyond its shield +2.9e-5, its lumped mutual
+    4.4e-6 off the independent quadrature (the lumped loop stepped by
+    −3.3e-5 at the gate). At the cap, two 2 m wires leaving one junction
+    in 0.02 m pieces read 0 at 8.0° and −1.55e-3 at 8.2°. Decision of the
+    coordinator: the rule acts on every pair of pieces of two conductors
+    with a hit of the pointwise rule that is neither parallel within the
+    closed form's tolerance nor orthogonal, at any angle and for pieces
+    of any length; the classification of item 13 is exact at any angle.
+    Every case above now adds up to the lumped pair within 2.2e-12, every
+    lumped mutual equals the independent quadrature within 4.4e-16, the
+    loop is smooth in the tilt (no step at the old gate, none at 8.1°;
+    wires leaving a junction add up at 1° … 90° in 0.1 / 0.05 / 0.02 m
+    pieces), and the matrices stay symmetric and positive definite. In the
+    solver the pieces equal the lumped pair within 1.1e-15 under
+    `perfect_mirror`; under `sommerfeld` within 1.6e-8 at 1 kHz (3.2e-7
+    at 10 × the old gate in 5 m pieces), the correction's own piece
+    dependence, the same inside the old gate; under `carson_series` the
+    correction of a tilted pair is tiled at the mid-point distance of each
+    pair and the pieces differ from the lumped pair by 4.2e-4 (10 m pieces,
+    2e-3 rad), 1.4e-3 (5 m, 4e-3 rad), 1.9e-2 (10 m, 2e-2 rad) — the
+    tiling, not this rule. Only pairs with a piece that comes within the
+    touching distance of the other's axis are classified (the others keep
+    the filament value either way; bit-identical): a 600 m coax crossing
+    at 0.05 / 0.3 rad in 1 m pieces assembles in 3.95 / 3.82 s against
+    3.73 / 3.66 s on the snapshot, where the gates skipped these pairs.
+    Generated networks are bit-identical, with and without an inductive
+    PEN.

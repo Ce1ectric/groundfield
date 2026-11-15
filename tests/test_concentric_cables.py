@@ -624,28 +624,32 @@ def test_a_tilted_core_adds_up_in_the_solver(model: str) -> None:
     assert lumped == pytest.approx(COAX, rel=3e-4)
 
 
-# audit W1R2-01: where the rule stops
-def test_the_tilted_rule_stops_where_a_piece_leaves_the_touching_distance() -> None:
-    """The rule holds while the lateral distance changes by at most the
-    touching distance along the longer piece, l sin(phi) <= r_a + r_b
-    (and |cos phi| >= 0.99). Beyond it the per-piece rule is back, with
-    the small error of a touching stretch about one piece long: measured
-    -1.5e-7 (10 m pieces at 2.01e-3 rad), -6.6e-7 (1 m at 2.01e-2), -1.4e-6
-    (0.25 m at 8.01e-2); just inside the gate within 2e-12."""
-    from groundfield.coupling.inductance import _TILT_FRACTION, _tilted_gate
+# audit W1R3-01 (rewritten: it pinned the length gate of W1R2-01)
+def test_the_tilted_rule_has_no_step_at_the_old_length_gate() -> None:
+    """Up to audit W1R3-01 the rule acted only while the lateral distance
+    changed by at most the touching distance along the longer piece,
+    l sin(phi) <= r_a + r_b; beyond, the rule of the single segments acted
+    (-1.5e-7 in 10 m pieces at 2.01e-3 rad, -6.6e-7 in 1 m at 2.01e-2,
+    -1.4e-6 in 0.25 m at 8.01e-2 on 34ad269, with the core leaving the axis
+    at the shield's start). The gate is gone: on both sides of where it was
+    the pieces add up to the lumped pair, and every non-parallel pair of
+    pieces is nearly parallel for the rule."""
+    from groundfield.coupling.inductance import _tilted_gate
 
-    assert _TILT_FRACTION == 1.0
-    for n, inside, outside in ((10, 1.99e-3, 2.01e-3), (100, 1.99e-2, 2.01e-2)):
-        lumped_in = _tilted_loop(1, inside, True)
-        lumped_out = _tilted_loop(1, outside, True)
-        assert _tilted_loop(n, inside, True) == pytest.approx(lumped_in, rel=1e-9)
-        assert abs(_tilted_loop(n, outside, True) / lumped_out - 1.0) < 3e-6
+    for n, inside, outside in (
+        (10, 1.99e-3, 2.01e-3),
+        (100, 1.99e-2, 2.01e-2),
+        (400, 7.99e-2, 8.01e-2),
+    ):
+        for tilt in (inside, outside):
+            lumped = _tilted_loop(1, tilt, True)
+            assert _tilted_loop(n, tilt, True) == pytest.approx(lumped, rel=1e-10)
     one = _tilted_pieces(10, 1.99e-3)
     two = _tilted_pieces(10, 2.01e-3)
     axis = _axis_pieces(10)
-    d = np.full(10, R_CORE + R_SHIELD)
-    assert _tilted_gate(one[:, 0], one[:, 1], axis[:, 0], axis[:, 1], d).all()
-    assert not _tilted_gate(two[:, 0], two[:, 1], axis[:, 0], axis[:, 1], d).any()
+    assert _tilted_gate(one[:, 0], one[:, 1], axis[:, 0], axis[:, 1]).all()
+    assert _tilted_gate(two[:, 0], two[:, 1], axis[:, 0], axis[:, 1]).all()
+    assert not _tilted_gate(axis[:, 0], axis[:, 1], axis[:, 0], axis[:, 1]).any()
 
 
 # audit W1R2-01
@@ -713,6 +717,278 @@ def test_overhead_measurement_leads_add_up_in_pieces() -> None:
     lumped = mutual(None)
     for ds in (5.0, 1.0):
         assert mutual(ds) == pytest.approx(lumped, rel=1e-12)
+
+
+# ---------------------------------------------------------------------
+# No length gate and no angular cap on the tilted rule (audit W1R3)
+# ---------------------------------------------------------------------
+
+
+def _cut(p0, p1, pieces) -> np.ndarray:
+    """A straight wire ``p0 -> p1`` in ``pieces`` equal pieces, or in pieces
+    of the given lengths (a list, scaled to the wire)."""
+    p0, p1 = np.asarray(p0, dtype=float), np.asarray(p1, dtype=float)
+    if isinstance(pieces, list):
+        c = np.concatenate([[0.0], np.cumsum(pieces)])
+        ts = c / c[-1]
+    else:
+        ts = np.linspace(0.0, 1.0, pieces + 1)
+    pts = p0[None, :] + ts[:, None] * (p1 - p0)[None, :]
+    return np.stack([pts[:-1], pts[1:]], axis=1)
+
+
+def _pair_matrix(a, b, pieces_a, pieces_b, radii, marked, image="none"):
+    """Matrix of two conductors ``a`` and ``b`` (end-point pairs) in pieces,
+    one label per conductor; ``b`` is the shield when ``marked``. Returns
+    the matrix and the loop signs (a out, b back)."""
+    sa, sb = _cut(*a, pieces_a), _cut(*b, pieces_b)
+    seg = np.concatenate([sa, sb])
+    r = np.array([radii[0]] * len(sa) + [radii[1]] * len(sb))
+    sh = np.array([False] * len(sa) + [marked] * len(sb))
+    kw: dict = dict(image=image, conductors=np.array([0] * len(sa) + [1] * len(sb)))
+    if marked:
+        kw.update(shields=sh, include_internal=~sh)
+    L = build_inductance_matrix(seg, r, **kw)
+    return L, np.array([1.0] * len(sa) + [-1.0] * len(sb))
+
+
+def _pair_loop(a, b, pieces_a, pieces_b, radii=(R_CORE, R_SHIELD), marked=True):
+    """Loop inductance in H of :func:`_pair_matrix`."""
+    L, s = _pair_matrix(a, b, pieces_a, pieces_b, radii, marked)
+    return float(s @ L @ s)
+
+
+SHIELD_AXIS = ((0.0, 0.0, DEPTH), (LENGTH, 0.0, DEPTH))
+#: l sin(phi) of the length gate removed by audit W1R3-01
+OLD_GATE = R_CORE + R_SHIELD
+
+
+def _crossing_core(tilt: float) -> tuple:
+    """A core crossing the shield axis at mid-length, on a piece boundary."""
+    return ((0.0, -0.5 * LENGTH * tilt, DEPTH), (LENGTH, 0.5 * LENGTH * tilt, DEPTH))
+
+
+# audit W1R3-01, W1R3-02
+@pytest.mark.parametrize("factor", [1.01, 10.0])
+@pytest.mark.parametrize("piece", [10.0, 5.0, 1.0, 0.25])
+def test_a_core_crossing_the_shield_axis_adds_up_beyond_the_old_length_gate(
+    piece: float, factor: float
+) -> None:
+    """The core crosses the shield axis at mid-length, so it touches the
+    shield along a stretch two pieces long. Beyond the old gate
+    (l sin(phi) > r_c + r_s) the rule of the single segments acted: on
+    34ad269 the loop in 10 / 5 / 1 / 0.25 m pieces read -8.6e-5 / -6.4e-5 /
+    -4.0e-5 / -3.0e-5 off the lumped pair just beyond the gate, -3.8e-5 at
+    10 x the gate in 10 m pieces (1 and 0.25 m pieces at 10 x the gate are
+    tilted by more than the old 8.1 deg cap of W1R3-02). Measured now:
+    within 1e-13."""
+    n = int(round(LENGTH / piece))
+    tilt = math.tan(math.asin(factor * OLD_GATE / piece))
+    lumped = _pair_loop(_crossing_core(tilt), SHIELD_AXIS, 1, 1)
+    pieces = _pair_loop(_crossing_core(tilt), SHIELD_AXIS, n, n)
+    assert pieces == pytest.approx(lumped, rel=1e-10)
+
+
+# audit W1R3-01
+@pytest.mark.parametrize("tilt, n", [(5e-4, 2), (1e-3, 4), (1e-3, 5)])
+def test_long_pieces_at_small_tilts_add_up(tilt: float, n: int) -> None:
+    """2 x 50 m at 5e-4 rad, 4 x 25 m and 5 x 20 m at 1e-3 rad: every pair
+    of pieces was beyond the old gate (34ad269: -1.7e-4 / -1.2e-4 /
+    -9.2e-5 off the lumped pair)."""
+    lumped = _pair_loop(_crossing_core(tilt), SHIELD_AXIS, 1, 1)
+    assert _pair_loop(_crossing_core(tilt), SHIELD_AXIS, n, n) == pytest.approx(
+        lumped, rel=1e-10
+    )
+
+
+# audit W1R3-01
+@pytest.mark.parametrize("pieces", [(7, 13), (10, 10), (100, 100)])
+def test_two_thin_unmarked_wires_crossing_at_a_small_angle_add_up(pieces) -> None:
+    """Two unmarked wires (5 and 8 mm) crossing at mid-length at 1e-3 rad
+    (34ad269: -1.0e-4 off the lumped pair in 7 x 13 pieces)."""
+    a = ((0.0, -0.05, DEPTH), (LENGTH, 0.05, DEPTH))
+    radii = (0.005, 0.008)
+    lumped = _pair_loop(a, SHIELD_AXIS, 1, 1, radii, marked=False)
+    assert _pair_loop(a, SHIELD_AXIS, *pieces, radii, marked=False) == pytest.approx(
+        lumped, rel=1e-10
+    )
+
+
+# audit W1R3-01
+@pytest.mark.parametrize(
+    "tilt, core, shield",
+    [
+        (5e-3, 100, [10.0, 1.0] * 9 + [2.0]),
+        (5e-3, 400, [10.0, 1.0] * 9 + [2.0]),
+        (2e-3, 400, [15.0, 1.0] * 6 + [4.0]),
+    ],
+)
+def test_shield_pieces_of_mixed_length_add_up_for_a_tilted_core(
+    tilt: float, core: int, shield: list
+) -> None:
+    """Shield pieces of 10 m and 1 m: at 5e-3 rad the 1 m pairs passed the
+    old gate and the 10 m pairs did not, so one conductor pair mixed both
+    rules (34ad269: -1.2e-4 with the core in 1 m pieces, -4.5e-4 in 0.25 m
+    pieces; 15 / 1 m at 2e-3 rad: -1.6e-3)."""
+    lumped = _pair_loop(_crossing_core(tilt), SHIELD_AXIS, 1, 1)
+    assert _pair_loop(_crossing_core(tilt), SHIELD_AXIS, core, shield) == pytest.approx(
+        lumped, rel=1e-10
+    )
+
+
+# audit W1R3-01
+def test_a_core_running_beyond_its_shield_adds_up_when_the_lumped_pair_is_tilted() -> (
+    None
+):
+    """A core 5 m longer than the shield at the end where it lies on the
+    axis, at 3e-4 rad: the lumped pair (110 m x 3e-4 > r_c + r_s) took the
+    rule of single segments (the inside reading only where the foot falls
+    inside the shield), its pieces the bundle rule (inside at every axial
+    offset). 34ad269: the pieces read +2.9e-5 off the lumped pair, and the
+    lumped loop stepped by -3.3e-5 at the old gate (its slope is 1.4e-7 per
+    1e-6 of the tilt there)."""
+    t = 3e-4
+    core = ((-5.0, -5.0 * t, DEPTH), (105.0, 105.0 * t, DEPTH))
+    lumped = _pair_loop(core, SHIELD_AXIS, 1, 1)
+    for pieces in ((11, 10), (110, 100)):
+        assert _pair_loop(core, SHIELD_AXIS, *pieces) == pytest.approx(
+            lumped, rel=1e-10
+        )
+    # the lumped loop is smooth across the old gate (110 m x t = r_c + r_s):
+    # equal steps of the tilt change it by equal amounts
+    edge = OLD_GATE / 110.0
+
+    def lumped_at(tilt: float) -> float:
+        c = ((-5.0, -5.0 * tilt, DEPTH), (105.0, 105.0 * tilt, DEPTH))
+        return _pair_loop(c, SHIELD_AXIS, 1, 1)
+
+    diffs = np.diff([lumped_at(edge * (1.0 + 1e-6 * k)) for k in range(-3, 4)])
+    assert diffs.min() > 0.0
+    assert diffs.max() / diffs.min() < 1.001
+
+
+# audit W1R3-01
+def test_the_crossing_core_loop_is_continuous_in_the_tilt() -> None:
+    """10 m pieces, tilts across the old gate (2e-3 rad) and on to 2e-2:
+    the pieces equal the lumped pair at every tilt, so the curve has no
+    step (34ad269: 0 inside, -8.6e-5 just beyond)."""
+    for tilt in np.geomspace(1e-5, 2e-2, 25).tolist() + [1.999e-3, 2.001e-3]:
+        lumped = _pair_loop(_crossing_core(tilt), SHIELD_AXIS, 1, 1)
+        pieces = _pair_loop(_crossing_core(tilt), SHIELD_AXIS, 10, 10)
+        assert pieces == pytest.approx(lumped, rel=1e-10), tilt
+
+
+# audit W1R3-01 (method 2: the solver)
+@pytest.mark.parametrize("model", ["perfect_mirror", "sommerfeld"])
+@pytest.mark.parametrize("piece", [10.0, 5.0])
+def test_a_crossing_core_adds_up_in_the_solver(model: str, piece: float) -> None:
+    """The crossing core just beyond the old gate, bonded to the shield at
+    the far end: the solved loop in pieces equals the lumped one (34ad269:
+    X -7.6e-5 in 10 m and -5.6e-5 in 5 m pieces, at 50 Hz and 1 kHz; now
+    1e-15 under perfect_mirror; under sommerfeld the earth correction of
+    the pieces differs from the lumped one by about 1e-9, as inside the
+    old gate)."""
+    tilt = math.tan(math.asin(1.01 * OLD_GATE / piece))
+    lumped = _loop_inductance(_crossing_loop_world(tilt, None), model)
+    loop = _loop_inductance(_crossing_loop_world(tilt, piece), model)
+    assert loop == pytest.approx(
+        lumped, rel=1e-12 if model == "perfect_mirror" else 1e-8
+    )
+
+
+def _crossing_loop_world(tilt: float, ds: float | None) -> gf.World:
+    """The loop world of :func:`_loop_world` with the core crossing the
+    shield axis at mid-length, bonded to the shield's far end."""
+    w = _loop_world("cable_shield", ds)
+    start, end = _crossing_core(tilt)
+    core = next(c for c in w.conductors if c.name == "core")
+    w.conductors.remove(core)
+    gf.create_junction(w, name="Ac", position=start)
+    gf.create_junction(w, name="Bc", position=end)
+    w.add_conductor(
+        core.model_copy(
+            update={
+                "start": start,
+                "end": end,
+                "start_electrode": "Ac",
+                "end_electrode": "Bc",
+            }
+        )
+    )
+    for name, a, b, p, q in (
+        ("feed", "A", "Ac", (0.0, 0.0, DEPTH), start),
+        ("bond", "B", "Bc", (LENGTH, 0.0, DEPTH), end),
+    ):
+        w.add_conductor(
+            Conductor(name=name, start=p, end=q, start_electrode=a, end_electrode=b)
+        )
+    return w
+
+
+def _junction_loop(deg: float, n: int) -> tuple[float, float, np.ndarray]:
+    """Two 2 m wires (5 mm) leaving one point at ``deg``, in ``n`` pieces
+    each: loop in pieces, lumped loop, and the matrix of the pieces."""
+    a = math.radians(deg)
+    w1 = ((0.0, 0.0, DEPTH), (2.0, 0.0, DEPTH))
+    w2 = ((0.0, 0.0, DEPTH), (2.0 * math.cos(a), 2.0 * math.sin(a), DEPTH))
+    radii = (0.005, 0.005)
+    L, s = _pair_matrix(w1, w2, n, n, radii, marked=False)
+    return float(s @ L @ s), _pair_loop(w1, w2, 1, 1, radii, marked=False), L
+
+
+# audit W1R3-02
+@pytest.mark.parametrize("piece", [0.1, 0.05, 0.02])
+def test_two_wires_leaving_a_junction_add_up_at_every_angle(piece: float) -> None:
+    """Two 2 m wires leaving one point at 1 ... 90 deg in pieces: the bundle
+    rule acts at every angle, so the pieces add up to the lumped pair and
+    the curve has no step at the old cap |cos phi| = 0.99 (8.1 deg). On
+    34ad269, in 0.02 m pieces: 0 at 8.0 deg, -1.55e-3 at 8.2 deg (a step of
+    1.5e-3; -0.75 % at 3 deg on ecff7b6). The matrix stays symmetric and
+    positive definite."""
+    n = int(round(2.0 / piece))
+    for deg in (1.0, 3.0, 8.0, 8.1, 8.2, 10.0, 20.0, 45.0, 60.0, 89.0, 90.0):
+        pieces, lumped, L = _junction_loop(deg, n)
+        assert pieces == pytest.approx(lumped, rel=1e-10), deg
+        assert np.array_equal(L, L.T)
+        assert np.linalg.eigvalsh(L).min() > 0.0
+
+
+# audit W1R3-02 (guard: generated networks stay bit-identical)
+def test_a_junction_at_right_angles_up_to_round_off_keeps_its_values(
+    monkeypatch,
+) -> None:
+    """A drop leaving its main at 90 deg drawn in rotated coordinates has
+    |cos phi| of a few 1e-16, so the pointwise rule acts at the junction;
+    the rule of tilted conductors treats pairs within 1e-9 of orthogonal as
+    orthogonal and leaves the matrix bit-identical (without that, generated
+    80-house networks with an inductive PEN moved by 1.2e-15 through 1086
+    entries changed by at most 3.3e-23 H)."""
+    import groundfield.coupling.inductance as ind
+
+    th = math.radians(33.0)
+    u = np.array([math.cos(th), math.sin(th), 0.0])
+    v = np.array([-math.sin(th), math.cos(th), 0.0])
+    o = np.array([10.0, 20.0, DEPTH])
+    main = _cut(o - 5.0 * u, o + 5.0 * u, 10)
+    drop = _cut(o, o + 3.0 * v, 6)
+    seg = np.concatenate([main, drop])
+    radii = np.full(len(seg), 0.005)
+    labels = np.array([0] * 5 + [1] * 5 + [2] * 6)
+    dots = np.abs(np.einsum("ij,j->i", drop[:, 1] - drop[:, 0], u) / 0.5)
+    assert 0.0 < dots.max() < 1e-9  # round-off, not zero
+    L = build_inductance_matrix(seg, radii, image="additive", conductors=labels)
+    monkeypatch.setattr(ind, "_apply_tilted_bundles", lambda *args: None)
+    off = build_inductance_matrix(seg, radii, image="additive", conductors=labels)
+    assert np.array_equal(L, off)
+
+
+# audit W1R3-02 (the auditor's test)
+def test_two_wires_leaving_a_junction_have_no_step_at_the_parallel_cap() -> None:
+    rel = [
+        _junction_loop(deg, 100)[0] / _junction_loop(deg, 1)[1] - 1.0
+        for deg in (8.0, 8.2)
+    ]
+    assert abs(rel[0] - rel[1]) < 1e-10
 
 
 # ---------------------------------------------------------------------
