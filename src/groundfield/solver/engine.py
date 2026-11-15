@@ -435,6 +435,37 @@ class Engine(BaseModel):
         :meth:`FieldResult.potential` uses for the post-solve field
         evaluation. Defaults: :data:`DEFAULT_IMAGE_MAX_TERMS` (300) and
         :data:`DEFAULT_IMAGE_SERIES_TOL` (1e-6).
+    image_far_field
+        Form of the far images of the line kernel in two-layer soil — the
+        Tagg/Sunde images (``n >= 1``) and the images of the cross-layer
+        correction beyond the near-pair reach (the author's decision of
+        2026-11-15):
+
+        - ``"quadrupole"`` (default) — the far form of direct pairs: the
+          point value plus the quadrupole term of the segment average,
+          tapered off between 60 and 120 segment lengths of vertical
+          distance (wave 3 of the 2026.11 work, finding 10.28).
+        - ``"point"`` — point sources, as before wave 3; on the cross-layer
+          path the line form of the layered correction for the interface
+          image of pairs in one layer only. The continuous switch (user
+          decision D2) and the transverse distance of near image pairs
+          stay.
+
+        Against the default, ``"point"`` moves networks by 2e-5 … 1.8e-4
+        (16 house grids in 1000 / 30 Ω·m with :math:`h_1` = 1.5 m:
+        1.8e-4), a straight wire 0.5 m above the interface by 4e-4 and the
+        surface potential above it by up to 0.8 %; it takes 0.46 of the
+        default's time on that 40-house network with numba (1.9 against
+        4.2 s; 0.24 without numba) and 1.1 … 1.3 times the time before wave
+        3 on house grids (performance page). No
+        effect with ``kernel="point"``, in homogeneous soil or on backends
+        without the line kernel. Read by the image family and
+        ``solve_mutual_*``, recorded in ``FieldResult.metadata["series"]``
+        (``"far_field"``) and used by :meth:`FieldResult.potential`; kept by
+        JSON round trips, :meth:`with_frequencies`, :meth:`model_copy` and
+        the provenance block. The name follows ``image_max_terms`` /
+        ``image_series_tol``, the other controls of how the image series is
+        evaluated.
     options
         Backend-specific settings, keyed by backend name and validated
         against the backend's options model:
@@ -498,17 +529,26 @@ class Engine(BaseModel):
           (Galerkin form of the exact line-source potential, see
           :mod:`groundfield.solver._line_kernel`). In homogeneous soil it
           is exact for straight wires at any segment length. In two-layer
-          soil the Tagg/Sunde images farther than six segment lengths and
-          the smooth part of the cross-layer correction stay in point
-          form: a straight 10 m strip deviates by up to 0.05 % from its
-          exact uniform-current resistance for ds = 0.125–2 m, not
-          monotonically in ds (point kernel: up to 22 %), and the
-          resistance of a rod through the layer interface changes by less
-          than 0.01 % per halving of ds. Cost: a solve of 16 house grids
-          (N = 1920 segments, homogeneous soil) takes 2.7 times as long
-          as with ``"point"`` when numba is installed (it is used
-          automatically) and 5.7 times without it; the extra time grows
-          with :math:`N^2`.
+          soil the Tagg/Sunde images and the images of the cross-layer
+          correction get the same treatment: near image pairs exact (with
+          the transverse distance of the wire from the image, audit
+          W3A-02), blended into the far form between six and 7.5 segment
+          lengths, far images with the quadrupole term
+          (:attr:`image_far_field`). A straight 10 m strip is within 3.6e-6
+          of its uniform-current resistance for ds = 0.125–2 m, not
+          monotonically (point kernel: up to 22 %), a ring 1 cm above a
+          1000 / 30 Ω·m interface within 0.004 % of its exact thin-ring
+          value, and a rod through the layer interface within 1.4e-6 of
+          its exact two-owner value. Cost: a solve of 16 house grids
+          (N = 1920 segments) takes 3.8 times as long as with ``"point"``
+          in homogeneous soil and 1.6 times in two-layer soil
+          (:math:`h_1` = 5 m) when numba is installed (it is used
+          automatically), 5.8 and 1.4 times without it; the extra time
+          grows with :math:`N^2`. The far images of a high contrast cost
+          more: a 40-house network in 1000 / 30 Ω·m with :math:`h_1` =
+          1.5 m takes 1.8 times the solve before wave 3 of the 2026.11
+          work with numba, 3.6 times without (``image_far_field="point"``:
+          0.8 times).
         - ``"point"`` — each segment's current sits at its midpoint;
           reproduces the results of releases up to 0.15.0. Its row sums
           carry an error of about :math:`-0.23/L`, so the grounding
@@ -531,9 +571,9 @@ class Engine(BaseModel):
 
     Examples
     --------
-    >>> eng = Engine(backend="fem", options={"fem": {"n_radial": 120}})
-    >>> eng.backend_options().n_radial
-    120
+    >>> eng = Engine(backend="mom_sommerfeld", options={"mom_sommerfeld": {"epsabs": 1e-8}})
+    >>> eng.backend_options().epsabs
+    1e-08
     """
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)

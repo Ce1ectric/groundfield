@@ -364,3 +364,25 @@ the roadmap row *Vectorise the ADR-0007 cross-layer Sommerfeld path*.
    least as accurate as LAPACK against a 50-digit reference). With the line
    kernel the far terms of point 1 cost about as much again at 40 %
    (performance page).
+
+## Amendment 2026.11 (wave 3, audit W3A) — image pairs, cost, the point form
+
+Audit W3A and the author's decision of 2026-11-15 (stream fw3xl; ADR-0015,
+amendment W3A).
+
+1. The images of the layered correction take the transverse distance of the
+   wire from the image (ADR-0015); a ring 1 cm above a 1000 / 30 Ω·m
+   interface is within 0.004 % of its exact thin ring (+1.60 % before), the
+   rod through the interface within 1.4e-6 of the auditor's exact two-owner
+   value, and the two paths agree to 1.8e-7 where both apply.
+2. A segment's own image on the diagonal follows the rule of every pair:
+   only where the segment reaches the image (before, a short segment took
+   every far image of the world's longest segment); the far terms are
+   evaluated on the upper half of the symmetric correction.
+   The AP1 station at 40 % penetration solves in 1.35 s again (1.86 s at
+   wave 3, 1.34 s before it; 2.35 s without numba), 16 house grids below
+   $h_1$ = 0.5 m in 0.54 s (0.91 s, 0.29 s), with `image_far_field="point"`
+   in 0.93 and 0.32 s (performance page).
+3. With `Engine.image_far_field = "point"` the layered correction is in
+   line form for the interface image of pairs in one layer only — near pairs
+   blended, the diagonal at every distance — as before wave 3.

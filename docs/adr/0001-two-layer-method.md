@@ -311,6 +311,16 @@ Open: full Sommerfeld-quadrature variant of engine B — see action
 item 2 (current `mom` backend covers the resolution-scheme
 cross-check; the Green's-function cross-check is deferred).
 
+## Amendment 2026.11 (wave 3) — the image series with the line kernel
+
+With the default line kernel (ADR-0015) the images of the series are line
+sources: near image pairs Galerkin integrals at the transverse distance of
+the wire from the image, far images with the quadrupole term of the segment
+average (`Engine.image_far_field = "quadrupole"`, the default) or point
+sources (`"point"`, as before wave 3; the author's decision of
+2026-11-15). The series itself (terms, truncation, `image_max_terms` /
+`image_series_tol`) is unchanged; see ADR-0015 (amendments wave 3 and W3A).
+
 ## References
 
 - Dwight, H. B. (1936). *Calculation of Resistances to Ground*. AIEE

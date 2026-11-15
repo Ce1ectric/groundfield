@@ -129,13 +129,28 @@ reduced kernel). The outer average is computed as follows:
   blended, far form with the quadrupole term (since wave 3 of the 2026.11
   work; they were point sources beyond six segment lengths, which left a
   straight strip in two-layer soil up to 5e-4 off and the potential above
-  it up to 1 % off). The quadrupole term of an image is tapered off
-  between 60 and 120 segment lengths of vertical distance between
-  observer and image (`IMAGE_QUADRUPOLE_REACH`; beyond, it is below
+  it up to 1 % off). Two things differ from direct pairs. An image line
+  that passes the wire at a transverse distance $\rho_\perp$ acts with its
+  potential averaged over the wire's circumference, which is its value on
+  the axis for $\rho_\perp \ge a$ (the two-dimensional mean-value property:
+  the average of $\ln\lvert x - y\rvert$ over a circle of radius $a$ is
+  $\ln\max(\rho, a)$); the exact integral of an image pair therefore uses
+  $\max(\rho_\perp, a)$ in place of $\sqrt{\rho_\perp^2 + a^2}$, which keeps
+  the reduced kernel for a collinear image ($\rho_\perp = 0$, a rod against
+  its own image), and the far form of images has no radius term (audit
+  W3A-02; the reduced kernel left out $a^2/(2d^2)$ of an image $d$ away, so
+  a ring 1 cm above a 1000 / 30 Ω·m interface read +1.60 % against its
+  exact thin ring; now −0.004 %). And the quadrupole term of an image is
+  tapered off between 60 and 120 segment lengths of vertical distance
+  between observer and image (`IMAGE_QUADRUPOLE_REACH`; beyond, it is below
   $1/(8\cdot 60^2)$ of the image's point value, the level of the far form's
-  remainder at the switch), and images beyond every observer are skipped:
-  the image series of a high contrast has hundreds of images, of which few
-  are close. On the cross-layer path of
+  remainder at the switch): the image series of a high contrast has hundreds
+  of images, of which few are close. An image is evaluated only on the
+  pairs whose longer segment reaches it (a few long pieces among short
+  segments no longer extend the reach of every pair, audit W3A-01), and in
+  the reaction matrix, which is symmetric, on its upper half.
+  `Engine.image_far_field = "point"` keeps far images as point sources
+  (see [Cost](#cost)). On the cross-layer path of
   [`image_2layer`](engines/image_2layer.md#electrodes-that-reach-the-interface)
   the layered correction is the exact image expansion of the two-layer
   Green's function (Sunde) in every layer combination, and its images get
@@ -144,12 +159,15 @@ reduced kernel). The outer average is computed as follows:
   $2\rho_1\rho_2/(\rho_1+\rho_2)$, which keeps the matrix reciprocal.
 
 For a straight wire the line kernel is exact at any segment length, in
-homogeneous and in two-layer soil (the remaining few $10^{-7}$ are the
-$(L/R)^4$ remainder of the far form; a 10 m strip in 1000 / 50 Ω·m with
-$h_1$ = 1 m is within 7.7e-7 of its closed-form uniform-current resistance
-from 2 m to 0.125 m segments, monotonically, and a rod through the layer
-interface changes by less than 1e-6 over the same range); a ring converges
-monotonically because its chords approximate the circle. What remains
+homogeneous and in two-layer soil, up to the $(L/R)^4$ remainder of the
+far form and the reduced kernel the soil-surface image keeps: a 10 m strip
+in 1000 / 50 Ω·m with $h_1$ = 1 m is within 3.6e-6 of its closed-form
+uniform-current resistance (images axis to axis) for segment lengths of
+0.125 … 2 m, not monotonically (the same strip in homogeneous soil:
+within 2.1e-6), and a rod through the layer interface is within 1.4e-6 of
+its exact two-owner value at every segment length (audit W3A, 4 soils, 3
+rods); a ring converges like the square of the segment length because its
+chords approximate the circle. What remains
 against the true thin-wire solution is the uniform-current ansatz itself:
 for the 3 m rod of benchmark B2 the line kernel sits about +0.9 % above
 the thin-wire value at every segment length (generated numbers on the
@@ -179,17 +197,25 @@ finding 10.33).
 ### Cost
 
 The near pairs and the quadrupole far field over all $N^2$ pairs make the
-line kernel more expensive than the point kernel. As documented with
-`Engine.kernel`, a solve of 16 house grids ($N$ = 1920 segments,
-homogeneous soil) took 2.7 times as long with numba installed (it is used
-automatically, extra `fast`) and 5.7 times without; the extra time grows
-with $N^2$. The blended switch adds the integrals of the pairs between six
-and 7.5 segment lengths (+18 … +27 % on those 16 house grids), and in
-two-layer soil every image within reach carries the far-field term (16 house
-grids at $h_1$ = 5 m: 1.6 times the solve without it, which is 0.9 times the
-assembly of the point series). The [performance page](performance.md) puts
-this into the context of a whole study. `kernel="point"` remains available
-and reproduces the numbers of 0.15.0.
+line kernel more expensive than the point kernel. A solve of 16 house grids
+($N$ = 1920 segments) takes 3.8 times as long as with the point kernel in
+homogeneous soil and 1.6 times in two-layer soil ($h_1$ = 5 m) with numba
+installed (it is used automatically, extra `fast`), 5.8 and 1.4 times
+without; the extra time grows with $N^2$. The blended switch adds the
+integrals of the pairs between six and 7.5 segment lengths, and in
+two-layer soil every image within reach carries the far-field term. That
+term is evaluated only on the pairs whose longer segment reaches the image
+and, in the reaction matrix, on its upper half, with one division per
+evaluation (audit W3A-01: before, a few long pieces among short segments
+multiplied the work by 5.6, and a high contrast made a 40-house network in
+1000 / 30 Ω·m with $h_1$ = 1.5 m, 82 images within reach, 4.2 times the
+solve before wave 3 with numba and 9.7 times without). That network now
+takes 1.8 times the solve before wave 3 with numba and 3.6 times without.
+`Engine.image_far_field = "point"` keeps far images as point sources: 0.84
+times the solve before wave 3 on that network (0.46 times the default),
+1.1 … 1.3 times on house grids. The [performance page](performance.md)
+has the table. `kernel="point"` remains available and reproduces the
+numbers of 0.15.0.
 
 ## Where each kernel is used
 

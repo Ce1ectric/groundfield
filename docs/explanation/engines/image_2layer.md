@@ -74,14 +74,34 @@ lengths, blended into the far form up to 7.5, and beyond the point form
 with the quadrupole term of the segment average — tapered off between 60
 and 120 segment lengths of vertical distance, where it falls below the
 remainder of the far form (since wave 3 of the 2026.11 work; before, far
-images were point sources). A straight strip then reproduces its exact
-uniform-current resistance at any segment length: a 10 m strip at 0.5 m in
-1000 / 50 Ω·m with $h_1$ = 1 m within 7.7e-7 from 2 m to 0.125 m segments,
-monotonically (before up to +5.1e-4, not monotone), and the surface
-potential above it within 8e-6 of the closed-form image sum (before up to
-0.94 %: the alternating series of a more conductive lower layer amplifies
-the error of its far images). The point kernel sits about 1–2 % low, like
-in homogeneous soil.
+images were point sources, which `Engine.image_far_field = "point"` keeps,
+see below). The exact integral of an image pair takes the image's
+potential at the transverse distance $\max(\rho_\perp, a)$ of the wire from
+the image's axis, its average over the wire's circumference (audit
+W3A-02; the reduced kernel of direct pairs left out $a^2/(2d^2)$ of an image
+$d$ away). A straight strip then reproduces its uniform-current resistance
+at any segment length: a 10 m strip at 0.5 m in 1000 / 50 Ω·m with
+$h_1$ = 1 m within 3.6e-6 from 2 m to 0.125 m segments, not monotonically
+(before wave 3 up to +5.1e-4; about 2e-6 of the rest is the reduced kernel
+the soil-surface image keeps); 0.1 m above $h_1$ within 3.8e-6 (+6.8e-5
+with the reduced kernel on the images); a ring 1 cm above a 1000 / 30 Ω·m
+interface within 0.004 % of its exact thin ring (+1.60 %); the surface
+potential above the strip within 8e-6 of the closed-form image sum (before
+up to 0.94 %: the alternating series of a more conductive lower layer
+amplifies the error of its far images). The point kernel sits about 1–2 %
+low, like in homogeneous soil.
+
+### Far images in point form
+
+`Engine(image_far_field="point")` (the author's decision of 2026-11-15)
+evaluates the far images as point sources, as before wave 3, and on the
+cross-layer path the line form of the layered correction for the interface
+image of pairs in one layer only; the continuous switch and the transverse
+distance of near image pairs stay. It saves the far-image work (cost on
+the [kernels page](../kernels.md#cost)) and moves networks by 2e-5 … 1.8e-4
+against the default, single wires near the interface by up to 4e-4 and the
+surface potential above them by up to 0.8 %. `metadata["series"]` records
+the form, and the post-solve field evaluation and `solve_mutual_*` use it.
 
 ## Electrodes that reach the interface
 
@@ -102,12 +122,13 @@ quadrupole term over all pairs, the Galerkin integral for pairs within
 six segment lengths blended up to 7.5, the Galerkin self images on the
 diagonal — on top of the spectral values between midpoints (since wave 3
 of the 2026.11 work; before, only the interface image of near pairs in one
-layer was a Galerkin integral). A rod through the interface then no longer
-depends on the segment length (6 m from 0.6 m through $h_1$ = 5 m in
-500 / 100, 1000 / 30 and 30 / 1000 Ω·m: within 9e-7 from 2 m to 0.125 m
-segments, before 1.3e-4 … 2.4e-4), and for wires in the upper layer, where
-both paths apply, the cross-layer path reproduces the series to 1.7e-7
-(before up to 6.2e-4).
+layer was a Galerkin integral, which `image_far_field="point"` keeps). A
+rod through the interface then no longer depends on the segment length
+(6 m from 0.6 m through $h_1$ = 5 m in 500 / 100, 1000 / 30 and
+30 / 1000 Ω·m: within 6.7e-7 from 2 m to 0.125 m segments, before
+1.3e-4 … 2.4e-4; within 1.4e-6 of the exact two-owner value), and for
+wires in the upper layer, where both paths apply, the cross-layer path
+reproduces the series to 1.8e-7 (before up to 6.2e-4).
 
 Its cost: one spectral evaluation per pair of segment depths. Large depth
 groups (all house grids at one depth, for example) are planned once and

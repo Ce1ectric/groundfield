@@ -145,6 +145,56 @@ User decision D2 of 2026-11-15, audits W2B-01/-02, finding 10.28.
 4. **The cross-layer path** (ADR-0007) treats the images of its layered
    correction alike (ADR-0007, amendment wave 3).
 
+## Amendment 2026.11 (wave 3, audit W3A) — image pairs, the cost of the far images, a point-form option
+
+The author's decision of 2026-11-15 and audit W3A (stream fw3xl).
+
+1. **Image pairs.** Decision 2 applied the reduced kernel to every pair,
+   images included, and point 2 of the wave-3 amendment gave the far form
+   of images the radius term. An image line that passes a wire at a
+   transverse distance $\rho_\perp \ge a$ acts with its axis value (the
+   average of $\ln\lvert x - y\rvert$ over a circle of radius $a$ is
+   $\ln\max(\rho, a)$), so the reduced kernel left out $a^2/(2d^2)$ of an
+   image $d$ away: a ring 1 cm above a 1000 / 30 Ω·m interface read
+   +1.60 % against its exact thin ring (audit W3A-02, finding of w4axi).
+   The line potential of an image at a point of the observer now uses
+   $\max(\rho_\perp, a)$, which is the reduced kernel for a collinear image
+   (a rod against its own image, where it is exact); an image within one
+   wire radius of its own segment blends into the reduced kernel of the
+   direct pair it nearly coincides with, so that a wire on the interface is
+   the same on both sides; the far form of images has no radius term; the
+   image corrections are symmetrised (the pointwise rule differs between the
+   two orders of a skew pair). The ring is within 0.004 % now, a rod through
+   the interface within 1.4e-6 of its exact two-owner value. The soil-surface
+   image keeps the reduced kernel (homogeneous results unchanged; with the
+   transverse distance a house grid at 0.8 m would move by 4e-7, at 0.1 m by
+   1.7e-5 — an open decision).
+2. **Cost of the far images.** Every image the longest segment of the world
+   reached was evaluated on every pair (audit W3A-01: eight 9.4 m pieces
+   among 1920 segments multiplied the far-image work by 5.6), and the image
+   density of a high contrast made a 40-house network in 1000 / 30 Ω·m with
+   $h_1$ = 1.5 m (82 images within the taper) 4.4 times the solve of the
+   base. An image is now evaluated on the pairs whose longer segment reaches
+   it (bit-identical), the far-image part of the reaction matrix on its upper
+   half (it is symmetric), with one division per evaluation and the taper and
+   tolerance tests left out where they hold for a whole block (round-off).
+   That network takes 1.8 times the solve before wave 3 with numba (3.6
+   times without; 4.2 and 9.7 before the audit), 16 house grids with eight
+   long pieces 1.5 times (2.8 before; performance page). Rejected:
+   tabulating the far term per image family in the horizontal distance
+   (an interpolation error instead of round-off) and multi-threading
+   (the base is single-threaded, parameter sweeps run processes in parallel).
+3. **Option.** `Engine.image_far_field = "point"` keeps the far images in
+   point form, as before wave 3 (on the cross-layer path the line form of the
+   interface image only); the continuous switch and the transverse distance
+   stay. The quadrupole form stays the default. The point form moves
+   networks by 2e-5 … 1.8e-4, a straight wire near the interface by 4e-4
+   and the surface potential above it by up to 0.8 %, and takes 0.46 of the
+   default's time on the 40-house network (0.84 times the solve before wave
+   3). A common `Engine` field next to `image_max_terms` / `image_series_tol`
+   rather than a backend option, because `solve_mutual_*` and
+   `FieldResult.potential` read it too.
+
 ## References
 
 - Review pass 10 (2026-11-07), findings 10.28 and 10.33, decision
