@@ -23,9 +23,11 @@ shows what agrees with independent references and how well.
   dependence of $\rho$; soil and metal are non-magnetic.
 - **No capacitive coupling** between conductors (negligible below
   1 kHz for buried conductors).
-- **No impressed voltage sources.** A `VoltageSource` raises
-  `NotImplementedError`; solve with a current source and scale, the
-  problem is linear.
+- **Ideal voltage sources.** A `VoltageSource` has no internal impedance;
+  model one as a junction at the terminal and a finite conductor to the
+  electrode. Voltage sources that form a loop (through ideal bonds or remote
+  earth) are rejected; `fem` does not solve voltage sources
+  (`BackendCapabilityError`).
 - **Not computed:** the inductive reduction factor of cable screens and
   earth wires; mutual impedances (`BranchType`) for groundinsight — one
   `BusType` describes one terminal.

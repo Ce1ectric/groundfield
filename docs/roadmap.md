@@ -65,9 +65,6 @@ limits a result, the reference documentation states the limit.
   kernel, the layered correction stays in point form (10.28).
 - **Compiled Carson integrals.** A `LowLevelCallable` for Carson's P and Q was
   not built; memoisation gives the bulk of the gain bit-identically (10.63).
-- **Voltage sources.** Solving a world with a `VoltageSource` raises
-  `NotImplementedError`; drive the world with a 1 A current source and scale by
-  U / Z_in (10.51).
 - **`fem` beyond the equivalent hemisphere.** `fem` is experimental: it reduces
   every cluster to an equivalent hemisphere, lumps distributed and inductive
   conductors, returns the current of a two-terminal source through remote

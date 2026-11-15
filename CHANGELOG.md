@@ -385,6 +385,25 @@ reproduces 0.15.0, it is named.
   every segment); `geometry.primitives.COLLINEAR_ROUNDOFF_ULPS`; `build_inductance_matrix(conductors=...)`.
 - `Conductor.is_shield`; `build_inductance_matrix(shields=...)`.
 - `FieldResult.metadata["wire_owners"]`.
+- **Impressed voltage sources (10.51).** A `VoltageSource` holds
+  `attached_to` at $U$ above `return_to` (or remote earth) and is solved by
+  every backend on the shared pipeline — `image`, `image_2layer` (also for
+  electrodes through the layer interface), `mom`, `mom_sommerfeld` — with
+  conductors, inductive coupling and several frequencies: one current
+  unknown and one constraint row per source in the nodal system (modified
+  nodal analysis). Several voltage and current sources superpose; 0 V is an
+  ideal short. The result reports the solved current in
+  `SourceRecord.current` (new field `SourceRecord.voltage`, new column
+  `voltage_v` of `to_dataframe("sources")`), `input_impedance()` is $U/I$,
+  and `sweep`, the rho-f helpers, `split_factor` and
+  `touch_voltage_spectrum` accept the source. New registry capability
+  `BackendCapabilities.voltage_sources`. Validated against the 1 A
+  current-source solve scaled by $U/Z_\text{in}$ in every backend, two- and
+  three-layer soil, the cross-layer path and inductive conductors at
+  0 / 50 / 1000 Hz (at most 1.4e-15 relative), against
+  `solve_mutual_matrix` for a two-terminal source, the hand-inverted
+  transfer matrix for three sources, Dwight's rod (−0.012 %) and the
+  hemispherical far field. Tests: `tests/test_voltage_sources.py`.
 
 ### Changed
 
@@ -848,6 +867,16 @@ reproduces 0.15.0, it is named.
   `concepts.md` → `explanation/concepts.md`, `performance.md` →
   `explanation/performance.md`, `installation.md` and `quickstart.md` →
   `getting-started/`.
+- `World.check`: a world needs one source of non-zero magnitude (current
+  or voltage); a voltage source of 0 V is accepted; voltage sources that
+  close a loop through ideal bonds or remote earth, and a voltage source
+  short-circuited by an ideal bond, raise `ValueError` naming the sources.
+  `fem` rejects voltage sources with `BackendCapabilityError` (Engine.solve
+  and a direct `solve_fem` call; up to 0.15.0 it dropped them with a
+  warning). `diagnose()` / `expected_segments` count one nodal unknown per
+  voltage source.
+- `FieldResult.input_impedance()` without `source` picks the only current
+  or voltage source.
 
 ### Deprecated
 
@@ -914,9 +943,10 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   source on a conductor, a source returning to its own node, no current
   source, magnitude 0 and dangling conductor ends raise with the closest
   names. Tests: `tests/test_source_validation.py`.
-- **`VoltageSource` solved to zero (10.51)** and now raises
-  `NotImplementedError` naming the alternative. Test:
-  `tests/test_source_validation.py::test_voltage_source_raises_not_implemented_naming_the_alternative`.
+- **`VoltageSource` solved to zero (10.51):** up to 0.15.0 every backend
+  dropped it with a warning and the world solved to zero potentials; it is
+  solved now (see *Added*). Test:
+  `tests/test_source_validation.py::test_voltage_source_solves_and_fixes_the_feeding_potential`.
 - **`HARD_LIMIT` only warned (10.06):** worlds beyond the segment limit, or
   whose dense nodal system with every conductor sub-piece exceeds it (audit
   A2S-02: a 100 m PEN in 2000 pieces was predicted at 12 segments), raise
