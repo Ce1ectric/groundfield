@@ -551,3 +551,63 @@ def test_a_3d_result_survives_a_json_round_trip_and_reports_its_mesh() -> None:
     )
     back = FieldResult.model_validate_json(r.model_dump_json())
     assert back.cluster_impedance("g1")[0] == r.cluster_impedance("g1")[0]
+
+
+# ---------------------------------------------------------------------
+# Attack: frames, truncation variants, thin layers
+# ---------------------------------------------------------------------
+
+
+def test_projected_coordinates_solve_like_local_ones() -> None:
+    # user decision D5, user decision Q37 (part B)
+    def strip(x0, y0):
+        w = gf.create_world(soil=H100)
+        gf.create_electrode(
+            w, "strip", name="g1", start=(x0, y0, 0.8), end=(x0 + 6, y0, 0.8)
+        )
+        gf.create_source(w, attached_to="g1", magnitude=1.0)
+        return w
+
+    local = _z(strip(0.0, 0.0))
+    utm = _z(strip(32_604_321.0, 5_812_345.0))
+    assert abs(utm / local - 1.0) < 1e-9
+
+
+def test_the_unextrapolated_level_lies_below_and_a_grounded_box_lower_still() -> None:
+    """The finer level alone is a lower bound of the extrapolated value
+    (the conductance falls under refinement); grounding the box biases the
+    resistance low by about rho_n / (2 pi R_box)."""
+    # user decision Q37 (part B)
+    w = _strip_world()
+    z_ext = _z(w)
+    z_one = _z(w, extrapolate=False)
+    z_dir = _z(w, far_field="dirichlet")
+    assert z_one < z_ext
+    assert z_dir < z_ext
+    r_far = _solve(w).metadata["fem_r_far"]
+    assert abs((z_ext - z_dir) - 100.0 / (2.0 * math.pi * r_far)) < 0.2 * 100.0 / (
+        2.0 * math.pi * r_far
+    )
+
+
+def test_a_rod_through_a_thin_middle_layer() -> None:
+    """Three layers with a 0.3 m middle layer that the rod crosses: elements
+    cut by both interfaces far away take the laminate; the result moves
+    continuously from the two-layer limits (middle layer as the top or the
+    bottom resistivity)."""
+
+    # user decision Q37 (part B)
+    def rod(rhos):
+        soil = gf.MultiLayerSoil(
+            layers=[
+                gf.SoilLayer(resistivity=rhos[0], thickness=1.0),
+                gf.SoilLayer(resistivity=rhos[1], thickness=0.3),
+                gf.SoilLayer(resistivity=rhos[2]),
+            ]
+        )
+        return _rod(soil)
+
+    z_mid = _z(rod((100.0, 300.0, 1000.0)))
+    z_low = _z(rod((100.0, 100.0, 1000.0)))
+    z_high = _z(rod((100.0, 1000.0, 1000.0)))
+    assert z_low < z_mid < z_high
