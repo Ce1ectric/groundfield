@@ -515,9 +515,11 @@ def _warn_manual_counter_sources(world: World) -> None:
     """
     from groundfield.solver.registry import warn_external
 
-    two_terminal = [s for s in world.sources if s.return_to is not None]
+    # Current sources only: a voltage source is no counter-source (2026.11).
+    current = [s for s in world.sources if s.kind == "current"]
+    two_terminal = [s for s in current if s.return_to is not None]
     for src in two_terminal:
-        for other in world.sources:
+        for other in current:
             if other is src or other.return_to is not None:
                 continue
             if other.attached_to != src.return_to:

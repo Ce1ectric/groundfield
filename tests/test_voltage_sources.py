@@ -408,6 +408,18 @@ def test_several_voltage_sources_against_the_transfer_impedance_matrix() -> None
         assert abs(res.electrode_currents[node][0] - ik) <= 1e-10 * abs(ik) + 1e-14
 
 
+def test_voltage_source_is_no_manual_counter_source() -> None:
+    """The 0.15.0 counter-source warning looks at current sources only."""
+    w = _two_rods()
+    gf.create_source(w, attached_to="g1", return_to="g2", name="i1", magnitude=5.0)
+    _voltage(w, "g2", -5.0, name="v2")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        warnings.simplefilter("ignore", DeprecationWarning)
+        res = w.solve(_engine())
+    assert _close(res.electrode_potentials["g2"][0], -5.0, 1e-10)
+
+
 def test_zero_volt_source_is_an_ideal_short_to_remote_earth() -> None:
     """0 V at g2 with a current source at g1: g2 is held at remote earth."""
     w = _two_rods(d=8.0)
@@ -495,6 +507,31 @@ def test_json_round_trip_of_world_and_result() -> None:
     assert back.input_impedance("v1") == res.input_impedance("v1")
     payload = json.loads(res.model_dump_json())
     assert payload["sources"][0]["kind"] == "voltage"
+
+
+def test_result_file_round_trip(tmp_path) -> None:
+    w = _two_rods()
+    _voltage(w, "g1", name="v1")
+    res = _solve(w, frequencies=[50.0, 1000.0])
+    path = tmp_path / "result.json"
+    gf.save_result(res, path)
+    back = gf.load_result(path)
+    assert back.sources == res.sources
+    assert back.input_impedance() == res.input_impedance()
+
+
+def test_voltage_record_without_a_solved_current_raises() -> None:
+    from groundfield.solver.result import SourceRecord
+
+    res = gf.FieldResult(
+        backend="custom",
+        frequencies=[50.0],
+        sources=[
+            SourceRecord(name="v", kind="voltage", attached_to="g1", voltage=[1.0])
+        ],
+    )
+    with pytest.raises(ValueError, match="no solved source current"):
+        res.input_impedance()
 
 
 def test_diagnose_counts_one_unknown_per_voltage_source() -> None:
