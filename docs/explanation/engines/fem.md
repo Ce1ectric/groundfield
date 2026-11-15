@@ -313,17 +313,22 @@ Generated from the benchmark run measured on 2026-11-14 with groundfield 2026.11
 | B3 Ring, homogeneous soil | abs(Z/Z_ref - 1) | 5e-4 | 5.7e-5 | 3 | pass | solid torus (user decision Q37) |
 | B6 Top-layer electrodes, two-layer soil | abs(Z/Z_ref - 1) | 3 % | 1.3 % | 10 | pass | conforming model (user decision Q37): the deficit of mom's point kernel (10.28) |
 | B7 Rod through the layer interface | abs(Z/Z_ref - 1) | 3 % | 1.1 % | 2 | pass | conforming model (user decision Q37; up to 2026.11 it raised, v0.15.0: +1092 %, silent): the deficit of mom's point kernel |
-| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | refused; excluded: rod and ring on different axes, which the axisymmetric model refuses (user decision Q37); the port matrix of coaxial electrodes is symmetric to round-off |
+| B8 Two-port reciprocity | abs(Z_AB/Z_BA - 1) | excluded | — | — | excluded | 3-D model, run once outside the suite (stream fw4int): 0 in all three soils, its port matrix symmetric to 2.2e-16; Z_BA 0.67 / 0.96 % below the floating-port mom (h₁ = 5 / 2 m); excluded from the benchmark run for its cost: rod and ring on different axes are not axisymmetric, so fem solves them with its 3-D model (the fem3d extra; user decision Q37), 0.5 … 1.2 minutes and up to 2 GB per solve, two solves per soil |
 | B9 Limits of the layered kernels (`equal_rho_fem`) | abs(Z/Z_ref - 1) | 1e-12 | 0 | 3 | pass | the conforming model meshes the canonical stack (user decision Q37) |
 | B9 Limits of the layered kernels (`layer_limit_fem`) | abs(Z/Z_ref - 1) | 0.1 % | 5.0e-4 | 2 | pass | physical limit (user decision Q37) |
-| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | refused; excluded: rods off the ring's axis, which the axisymmetric model refuses (user decision Q37; up to 2026.11 -35 % / -45 %, radii summed) |
+| B10 Ring with three bonded rods | abs(Z/Z_ref - 1) | excluded | — | — | excluded | 3-D model, run once outside the suite (stream fw4int): +0.62 % / +0.84 % against mom (error estimate 3.9e-3 / 4.3e-3; image / image_2layer +0.81 / +1.97 % above fem); excluded from the benchmark run for its cost: rods off the ring's axis are not axisymmetric, so fem solves the world with its 3-D model (the fem3d extra; user decision Q37), 2 … 3.5 minutes and up to 3.8 GB per soil (up to 2026.11 -35 % / -45 %, radii summed) |
 <!-- generated:end fem -->
 
-B8 and B10 exclude `fem` because the generated rows were measured when only
-the axisymmetric model existed, which refuses rods and rings off one axis.
-The 3-D model solves both (B8: the port matrix of two clusters is symmetric
-to $1.1\cdot10^{-16}$; B10 is the shape of the AP1 station below); the rows
-are re-measured with the validation page at the release.
+B8 and B10 exclude `fem` from the benchmark run for its cost: neither world
+is axisymmetric, so `fem` solves it with its 3-D model, 0.5 … 3.5 minutes
+and 2 … 4 GB per solve. Run once outside the suite (evidence `e01` of
+stream fw4int): in B8 the transfer impedances agree to round-off
+($Z_{AB} = Z_{BA}$ in all three soils, the port matrix symmetric to
+$2.2\cdot10^{-16}$) and $Z_{BA}$ lies 0.67 / 0.96 % below the floating-port
+`mom` reference ($h_1$ = 5 / 2 m); in B10 (the shape of the AP1 station
+below) `fem` lies +0.62 / +0.84 % above `mom` on the same segments, within
+the pattern of the station, `image` / `image_2layer` +0.81 / +1.97 % above
+`fem`.
 
 ## The three-dimensional model
 

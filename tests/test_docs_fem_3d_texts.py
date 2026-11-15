@@ -78,7 +78,9 @@ def test_w4b_10_no_stale_texts_of_the_3d_model() -> None:
     assert "R_\\\\eta/2" not in mesh
     assert "0.086" not in wires and "0.084" in wires
     assert "Every other world is refused with" not in adr
-    # B8 / B10 of the generated table: the stale exclusion is explained
-    assert "re-measured with the validation page at the release" in page
+    # B8 / B10 of the generated table: fem is excluded for its cost, not
+    # refused (stream fw4int; the 3-D model solves both worlds)
+    assert "exclude `fem` from the benchmark run for its cost" in page
+    assert "which the axisymmetric model refuses" not in page
     # the 'raise refinement' remedy holds for the axisymmetric model only
     assert "multiplies its nodes by eight" in page
