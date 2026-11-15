@@ -8,7 +8,12 @@ kernels from geometries they cannot represent:
 * :func:`_require_image_separation` — leakage segments at or above the
   soil surface, or so shallow that the mirror image touches the wire;
 * :func:`_check_segment_depths` — the same checks on the full segment
-  extent plus the :class:`ShallowSegmentWarning` advisory.
+  extent plus the :class:`ShallowSegmentWarning` advisory;
+* :func:`_warn_rod_ends_near_interfaces` and
+  :func:`_warn_wires_near_interfaces` — :class:`InterfaceContactWarning`
+  where the thin-wire model deviates from the solid wire next to a layer
+  interface (rod ends, audit A3S-05; horizontal wires, audits W4A-07 and
+  W4B-02).
 
 Moved out of :mod:`groundfield.solver.image` (review pass 10, 10.75 /
 10.79); every name stays importable from there.
@@ -824,24 +829,58 @@ def _check_point_interface_diagonal(
 
 
 class InterfaceContactWarning(UserWarning):
-    """A rod head or tip lies within one wire radius of a layer interface.
+    """A wire lies too close to a layer interface for the thin-wire model.
 
-    The thin-wire model carries the current on the wire axis and has no
-    end face. A rod that ends exactly at the interface :math:`h_1` is
-    therefore a wire entirely on one side of it, and a rod that reaches
-    past the interface by a few micrometres touches the other layer only
-    through a part much shorter than its radius. The solid rod with a flat
-    end face is continuous in between: its end face carries the contact.
-    Against an axisymmetric finite-volume model of the solid rod (4.5 m,
-    :math:`a` = 8 mm, 1000/30 Ω·m, audit A3S-05) the thin wire reads
-    +21 % with its tip at the interface, +7 % 1 mm above it and −4.6 %
-    1 mm below it; beyond two radii it is within a few per cent, like
-    anywhere else (+0.9 % in homogeneous soil). Every segment backend
-    shares this limit; it concerns the end of a rod only (a horizontal
-    wire at the interface is continuous across it).
+    The thin-wire model carries the current on the wire axis. Two limits
+    follow next to a layer interface:
 
-    Remedy: keep rod ends a few wire radii from an interface, or bracket
-    the result by moving the end by :math:`\\pm 2a`.
+    **Rod ends** (audit A3S-05). A rod head or tip within one wire radius of
+    an interface: the thin wire has no end face, so a rod that ends exactly
+    at the interface :math:`h_1` is a wire entirely on one side of it, and
+    a rod that reaches past the interface by a few micrometres touches the
+    other layer only through a part much shorter than its radius. The solid
+    rod with a flat end face is continuous in between: its end face carries
+    the contact. Against an axisymmetric finite-volume model of the solid
+    rod (4.5 m, :math:`a` = 8 mm, 1000/30 Ω·m) the thin wire reads +21 %
+    with its tip at the interface, +7 % 1 mm above it and −4.6 % 1 mm
+    below it; beyond two radii it is within a few per cent, like anywhere
+    else (+0.9 % in homogeneous soil). An end that meets the end of another
+    rod has no free end face and is not reported.
+
+    **Horizontal wires** (audits W4A-07, W4B-02). A horizontal wire (every
+    electrode but a rod, and the leaking pieces of a galvanic distributed
+    conductor) whose axis lies within the reach :func:`wire_contact_reach`
+    of an interface: next to a more conductive layer the current crowds to
+    the wire's near side, which a current on the axis cannot follow. Against
+    the solid torus (the axisymmetric ``fem``, confirmed by a Hankel thin
+    ring plus the exact 2-D proximity correction to 5.2e-4, to 2e-4 from two
+    radii on) a ring (a = 5 mm)
+    over a layer 33 times more conductive reads +0.59 % at 4 radii, +1.2 %
+    at 3, +3.6 % at 2, +8.6 % at 1.5 and +32 % at 1.1 radii, and +89 % when
+    the interface cuts the wire 0.99 radii below its axis; over a more
+    resistive layer at most +1.4 % (at 1.01 radii). The reach is the
+    distance at which the thin wire is 1 % off in four geometries (rings
+    of 1, 2 and 5 m at 0.8 and 2 m, a = 5 and 55 mm, interface below and
+    above), rounded up to 0.1 a:
+
+    ================  =====  =====  =====  =====  =====  ======
+    contrast          2      3      10     33     100    1000
+    more conductive   1.0 a  1.5 a  2.9 a  3.5 a  3.8 a  3.9 a
+    more resistive    1.0 a  1.0 a  1.0 a  1.2 a  1.25 a 1.25 a
+    ================  =====  =====  =====  =====  =====  ======
+
+    (1.0 a: only a wire that the interface cuts; below a contrast of 2 no
+    wire is reported: at 1.5 the thin wire is within 0.75 % everywhere, cut
+    or not.) The image family, ``mom``, ``mom_sommerfeld`` and the
+    three-dimensional ``fem`` share this limit (the 3-D model's smoothed
+    line source lies between the thin wire and the solid torus); the
+    axisymmetric ``fem`` resolves the wire and does not warn.
+
+    Remedy: keep rod ends and horizontal wires a few wire radii from a
+    contrasting interface; bracket a rod end by moving it by
+    :math:`\\pm 2a`; check a ring with ``fem``'s axisymmetric model
+    (``FemOptions.model="axisymmetric"``), which solves the wire as the
+    solid torus it is.
     """
 
 
@@ -921,5 +960,192 @@ def _warn_rod_ends_near_interfaces(
         "1000/30 Ohm m): +21 % with the tip at the interface, +7 % 1 mm above "
         "it, -4.6 % 1 mm below it. Keep rod ends a few wire radii from an "
         "interface, or bracket the result by moving the end by +-2a.",
+        InterfaceContactWarning,
+    )
+
+
+# ---------------------------------------------------------------------
+# Horizontal wires next to a contrasting interface (audits W4A-07, W4B-02)
+# ---------------------------------------------------------------------
+
+#: Reach of an interface over a more conductive layer, in wire radii of the
+#: horizontal wire's axis: ``(contrast, reach)`` nodes (see
+#: :class:`InterfaceContactWarning` and :func:`wire_contact_reach`).
+WIRE_CONTACT_REACH_CONDUCTIVE: tuple[tuple[float, float], ...] = (
+    (2.0, 1.0),
+    (3.0, 1.5),
+    (10.0, 2.9),
+    (33.0, 3.5),
+    (100.0, 3.8),
+    (1000.0, 3.9),
+)
+
+#: Reach of an interface over a more resistive layer, in wire radii.
+WIRE_CONTACT_REACH_RESISTIVE: tuple[tuple[float, float], ...] = (
+    (2.0, 1.0),
+    (10.0, 1.0),
+    (33.0, 1.2),
+    (100.0, 1.25),
+)
+
+#: Below this contrast of the two resistivities no horizontal wire is
+#: reported (the thin wire stays within 0.75 % of the solid one at 1.5).
+WIRE_CONTACT_MIN_CONTRAST = 2.0
+
+
+def wire_contact_reach(rho_wire: float, rho_other: float) -> float:
+    """Reach of an interface for a horizontal wire, in wire radii.
+
+    Within this distance of the interface (wire axis to interface plane)
+    the thin-wire model of a horizontal wire deviates from the solid wire
+    by more than about 1 % (:class:`InterfaceContactWarning`).
+
+    Parameters
+    ----------
+    rho_wire
+        Resistivity in Ω·m of the layer that holds the wire axis.
+    rho_other
+        Resistivity in Ω·m of the layer beyond the interface.
+
+    Returns
+    -------
+    float
+        The reach in wire radii, linear in ``log10`` of the contrast
+        between the nodes of :data:`WIRE_CONTACT_REACH_CONDUCTIVE`
+        (``rho_other < rho_wire``) or :data:`WIRE_CONTACT_REACH_RESISTIVE`
+        and held beyond the last node; ``0.0`` below the contrast
+        :data:`WIRE_CONTACT_MIN_CONTRAST`.
+    """
+    lo, hi = sorted((float(rho_wire), float(rho_other)))
+    contrast = hi / lo
+    if not contrast >= WIRE_CONTACT_MIN_CONTRAST:
+        return 0.0
+    table = (
+        WIRE_CONTACT_REACH_CONDUCTIVE
+        if rho_other < rho_wire
+        else WIRE_CONTACT_REACH_RESISTIVE
+    )
+    x = [math.log10(k) for k, _ in table]
+    y = [r for _, r in table]
+    return float(np.interp(math.log10(contrast), x, y))
+
+
+def _wires_near_interfaces(
+    world: "object",
+) -> list[tuple[str, str, float, float, float, float, float, float]]:
+    """Horizontal wires within the reach of a contrasting interface.
+
+    Parameters
+    ----------
+    world
+        The world; its soil gives the interfaces and resistivities.
+
+    Returns
+    -------
+    list of tuple
+        ``(name, kind, z, h, wire_radius, rho_wire, rho_other, reach)`` per
+        electrode or galvanic distributed conductor and interface:
+        ``kind`` is ``"electrode"`` or ``"conductor"``, ``z`` the depth in m
+        of the wire part nearest to the interface ``h`` (m),
+        ``wire_radius`` in m, the resistivities in Ω·m and ``reach`` in wire
+        radii (:func:`wire_contact_reach`). Rods are not horizontal wires
+        (their ends have their own rule, :func:`_rod_ends_near_interfaces`).
+    """
+    from groundfield.geometry.electrodes import RodElectrode
+    from groundfield.solver._layered import as_layer_stack
+
+    soil = getattr(world, "soil", None)
+    if soil is None:
+        return []
+    stack = as_layer_stack(soil)
+    if stack.n_layers < 2:
+        return []
+    rhos = [float(r) for r in stack.rhos]
+    depths = [float(d) for d in np.cumsum(stack.h)]
+
+    parts: list[tuple[str, str, float, float, float]] = []
+    for e in world.electrodes:
+        if isinstance(e, RodElectrode):
+            continue
+        lo, hi = e.bounds()
+        parts.append(
+            (e.name, "electrode", float(lo[2]), float(hi[2]), float(e.wire_radius))
+        )
+    for c in world.conductors:
+        if not (
+            getattr(c, "is_distributed", False)
+            and getattr(c, "coupling_to_soil", "isolated") == "galvanic"
+        ):
+            continue
+        from groundfield.solver._discretize import _discretize_conductor
+
+        segments, _ = _discretize_conductor(c)
+        for seg in segments:
+            dz = 0.0 if seg.direction is None else abs(float(seg.direction[2]))
+            if dz > 0.1:  # not horizontal
+                continue
+            z_mid = float(seg.midpoint[2])
+            half = 0.5 * float(seg.length) * dz
+            parts.append(
+                (
+                    c.name,
+                    "conductor",
+                    z_mid - half,
+                    z_mid + half,
+                    float(seg.wire_radius),
+                )
+            )
+
+    out = []
+    seen: set[tuple[str, int]] = set()
+    for name, kind, z_lo, z_hi, a in parts:
+        for j, h in enumerate(depths):
+            if (name, j) in seen:
+                continue
+            if z_lo <= h <= z_hi:
+                z, distance = h, 0.0
+            else:
+                z = z_lo if abs(z_lo - h) <= abs(z_hi - h) else z_hi
+                distance = abs(z - h)
+            rho_wire, rho_other = (
+                (rhos[j], rhos[j + 1]) if z < h else (rhos[j + 1], rhos[j])
+            )
+            if distance == 0.0:  # on the interface: the larger contrast reach
+                rho_wire, rho_other = (
+                    max(rhos[j], rhos[j + 1]),
+                    min(rhos[j], rhos[j + 1]),
+                )
+            reach = wire_contact_reach(rho_wire, rho_other)
+            if reach > 0.0 and distance < reach * a:
+                seen.add((name, j))
+                out.append((name, kind, z, h, a, rho_wire, rho_other, reach))
+    return out
+
+
+def _warn_wires_near_interfaces(world: "object") -> None:
+    """Emit :class:`InterfaceContactWarning` for horizontal wires (W4A-07)."""
+    hits = _wires_near_interfaces(world)
+    if not hits:
+        return
+    from groundfield.solver.registry import warn_external
+
+    name, kind, z, h, a, rho_wire, rho_other, reach = hits[0]
+    n = len({(hit[1], hit[0]) for hit in hits})  # a wire near two interfaces once
+    contrast = max(rho_wire, rho_other) / min(rho_wire, rho_other)
+    side = "conductive" if rho_other < rho_wire else "resistive"
+    warn_external(
+        f"{n} horizontal wire{'s' if n != 1 else ''} lie{'' if n != 1 else 's'} "
+        "within reach of a contrasting layer interface, where the thin-wire "
+        f"model deviates from the solid wire by more than about 1 % (e.g. {kind} "
+        f"'{name}' at z = {z:.6g} m, interface at {h:.6g} m: "
+        f"{abs(z - h) / a:.3g} wire radii from it, the layer beyond "
+        f"{contrast:.3g} times more {side}; reach {reach:.3g} radii). The thin "
+        "wire carries its current on its axis; next to a more conductive layer "
+        "the current crowds to the wire's near side: against the solid wire a "
+        "ring reads +3.6 % at 2 radii, +8.6 % at 1.5 and +32 % at 1.1 radii "
+        "above a 33 times more conductive layer, +89 % when the interface cuts "
+        "the wire. Keep horizontal wires a few radii from a contrasting "
+        "interface, or check a ring with fem's axisymmetric model "
+        "(FemOptions.model='axisymmetric'), which solves the solid torus.",
         InterfaceContactWarning,
     )

@@ -14,9 +14,19 @@ Every electrode is one port. The mesh (:mod:`groundfield.solver.fem._mesh`)
 is solved at the refinement levels ``refinement`` and ``refinement + 1``;
 with ``extrapolate`` the port conductance matrix is extrapolated to zero
 mesh size with the observed second order (Richardson,
-$G = G_{\\ell+1} + (G_{\\ell+1} - G_\\ell)/3$), and the difference between
-the extrapolated and the finer matrix is reported as the error estimate of
-the finer level (``metadata["fem_error_estimate"]``).
+$G = G_{\\ell+1} + (G_{\\ell+1} - G_\\ell)/3$), and the largest relative
+difference of a port resistance between the extrapolated and the finer
+matrix is reported as the error estimate (``metadata["fem_error_estimate"]``;
+``NaN`` for a single level, audit W4A-02). It bounds the error of the
+extrapolated value while the error of the finer level is at most 1/2.5 of
+that of the coarser (observed: 1/3.9 away from interfaces); against the
+finer level itself it is 0.88 ... 0.99 of its error in 36 cases of audit
+W4A, 0.80 ... 1.0 next to an interface cut into a ring's block.
+
+The classification (:func:`classify`) is cheap and raises
+:class:`NotAxisymmetric` without the remedy text, so ``model="auto"`` falls
+back to the three-dimensional model at no cost; it includes the check that
+every ring has room for its mesh block (audit W4A-03).
 """
 
 from __future__ import annotations
@@ -46,9 +56,23 @@ if TYPE_CHECKING:  # pragma: no cover
 
 __all__: list[str] = []
 
-#: Relative tolerance of the common axis (horizontal positions of the rods
-#: and ring centres), in units of the larger of 1 m and the world's size.
-AXIS_TOL = 1e-9
+#: Tolerance of the common axis (horizontal offset of a rod or a ring centre
+#: from the axis of the first electrode), relative to the smallest length the
+#: offset acts on: the smallest wire radius and the smallest surface gap
+#: between two electrodes (audit W4A-08). The resistance matrix is even in the
+#: offset (the world offset by -delta is the mirror image of the one offset by
+#: +delta), so the axisymmetric reading of an offset world is off by
+#: kappa (delta / L)^2: below 1e-6 at delta <= 1e-3 L for kappa <= 1. Measured
+#: with ``image`` and ``mom`` on identical discretisations (a ring around a
+#: rod, two rods 0.1 m apart on one axis, two rings 34 mm apart): kappa <= 6e-4
+#: for L the wire radius, <= 1.1e-2 for L the gap. Up to audit W4A-08 the
+#: tolerance was 1e-9 of the world's size (3 nm for a 3 m rod), and a rod
+#: 1 um off a ring's axis went to the 3-D model (40.7 s, 2.35 GB).
+AXIS_TOL = 1e-3
+
+#: Floor of the axis tolerance relative to the larger of 1 m and the world's
+#: size: the round-off of the coordinates.
+_AXIS_ROUND_OFF = 1e-12
 
 #: A ring wire may come no closer than this fraction of its radius to the
 #: soil surface, the axis or another electrode (the solid torus must fit).
@@ -57,6 +81,16 @@ _CLEARANCE = 0.05
 #: An interface farther than ``1 + _CLEARANCE`` wire radii from a ring's
 #: axis is kept outside its O-grid block; a nearer one is cut into it.
 _SHARE = 0.45
+
+
+class NotAxisymmetric(Exception):
+    """Why the axisymmetric model does not take a world (internal).
+
+    :func:`classify` raises it without building the remedy text, so the
+    dispatch of ``model="auto"`` stays cheap; :func:`coaxial_electrodes`
+    turns it into the user-facing
+    :class:`~groundfield.solver.registry.BackendCapabilityError`.
+    """
 
 
 class CoaxialElectrode(NamedTuple):
@@ -80,10 +114,35 @@ def _refuse(world: "World", engine: "Engine", why: str) -> None:
     )
 
 
+_THREE_D = (
+    "The three-dimensional model solves it (FemOptions.model='auto', the "
+    "default, or '3d'; the fem3d extra)."
+)
+
+
 def coaxial_electrodes(
     world: "World", engine: "Engine"
 ) -> tuple[tuple[float, float], list[CoaxialElectrode]]:
     """The electrodes of an axisymmetric world, or a refusal.
+
+    :func:`classify` with the refusal turned into a
+    :class:`~groundfield.solver.registry.BackendCapabilityError` that names
+    the backends that solve the world.
+
+    Raises
+    ------
+    BackendCapabilityError
+        For every reason of :class:`NotAxisymmetric`.
+    """
+    try:
+        return classify(world)
+    except NotAxisymmetric as exc:
+        _refuse(world, engine, str(exc))
+        raise  # pragma: no cover - _refuse raises
+
+
+def classify(world: "World") -> tuple[tuple[float, float], list[CoaxialElectrode]]:
+    """The electrodes of an axisymmetric world.
 
     Returns
     -------
@@ -96,10 +155,13 @@ def coaxial_electrodes(
 
     Raises
     ------
-    BackendCapabilityError
+    NotAxisymmetric
         For an electrode that is neither a rod nor a ring, a rod or ring
-        off the common axis, touching or overlapping electrodes and a ring
-        wire that reaches within 5 % of its radius to the soil surface.
+        off the common axis (by more than :data:`AXIS_TOL` of the smallest
+        wire radius or surface gap), touching or overlapping electrodes, a
+        ring wire that reaches within 5 % of its radius to the soil
+        surface, and a ring without room for its mesh block (within about a
+        wire radius, diagonally, of a rod's end edge; audit W4A-03).
     """
     kinds = sorted(
         {
@@ -116,38 +178,12 @@ def coaxial_electrodes(
         ]
         shown = ", ".join(repr(n) for n in names[:5])
         more = f" and {len(names) - 5} more" if len(names) > 5 else ""
-        _refuse(
-            world,
-            engine,
+        raise NotAxisymmetric(
             "its axisymmetric model represents rods on one vertical axis and "
             "horizontal rings centred on that axis, and electrode(s) "
             f"{shown}{more} ({', '.join(kinds)}) are not axisymmetric. The "
             "three-dimensional model solves them (FemOptions.model='auto', the "
-            "default, or '3d'; the fem3d extra).",
-        )
-    points = []
-    for e in world.electrodes:
-        p = e.position if isinstance(e, RodElectrode) else e.center
-        points.append((float(p[0]), float(p[1])))
-    xy = np.array(points)
-    x0, y0 = float(xy[0, 0]), float(xy[0, 1])
-    scale = max(1.0, float(np.max(np.abs(xy))))
-    for e in world.electrodes:
-        extent = e.length if isinstance(e, RodElectrode) else e.radius
-        scale = max(scale, float(extent))
-    off = np.hypot(xy[:, 0] - x0, xy[:, 1] - y0) > AXIS_TOL * scale
-    if off.any():
-        k = int(np.argmax(off))
-        e = world.electrodes[k]
-        what = "rod head" if isinstance(e, RodElectrode) else "ring centre"
-        _refuse(
-            world,
-            engine,
-            "its axisymmetric model needs every rod on one vertical axis and "
-            f"every ring centred on it, and the {what} of electrode '{e.name}' "
-            f"lies at (x, y) = ({xy[k, 0]:.6g}, {xy[k, 1]:.6g}) m, "
-            f"{float(np.hypot(xy[k, 0] - x0, xy[k, 1] - y0)):.3g} m off the axis "
-            f"of '{world.electrodes[0].name}' at ({x0:.6g}, {y0:.6g}) m.",
+            "default, or '3d'; the fem3d extra)."
         )
     out: list[CoaxialElectrode] = []
     for k, e in enumerate(world.electrodes):
@@ -167,7 +203,34 @@ def coaxial_electrodes(
                 half_width=0.0,
             )
         out.append(CoaxialElectrode(k, e.name, geo, shell))
-    _check_overlaps(world, engine, out)
+    points = []
+    for e in world.electrodes:
+        p = e.position if isinstance(e, RodElectrode) else e.center
+        points.append((float(p[0]), float(p[1])))
+    xy = np.array(points)
+    x0, y0 = float(xy[0, 0]), float(xy[0, 1])
+    scale = max(1.0, float(np.max(np.abs(xy))))
+    for e in world.electrodes:
+        extent = e.length if isinstance(e, RodElectrode) else e.radius
+        scale = max(scale, float(extent))
+    tol = max(AXIS_TOL * _offset_scale(out), _AXIS_ROUND_OFF * scale)
+    offset = np.hypot(xy[:, 0] - x0, xy[:, 1] - y0)
+    off = offset > tol
+    if off.any():
+        k = int(np.argmax(off))
+        e = world.electrodes[k]
+        what = "rod head" if isinstance(e, RodElectrode) else "ring centre"
+        raise NotAxisymmetric(
+            "its axisymmetric model needs every rod on one vertical axis and "
+            f"every ring centred on it, and the {what} of electrode '{e.name}' "
+            f"lies at (x, y) = ({xy[k, 0]:.6g}, {xy[k, 1]:.6g}) m, "
+            f"{float(offset[k]):.3g} m off the axis of "
+            f"'{world.electrodes[0].name}' at ({x0:.6g}, {y0:.6g}) m (tolerance "
+            f"{tol:.3g} m). " + _THREE_D
+        )
+    _check_overlaps(out)
+    stack = as_layer_stack(world.soil)
+    block_half_widths(out, [float(d) for d in np.cumsum(stack.h)], MeshParameters())
     return (x0, y0), out
 
 
@@ -180,55 +243,70 @@ def _rect_gap(
     return math.hypot(ds, dz), max(ds, dz)
 
 
-def _check_overlaps(
-    world: "World", engine: "Engine", electrodes: list[CoaxialElectrode]
-) -> None:
+def _offset_scale(electrodes: list[CoaxialElectrode]) -> float:
+    """Smallest wire radius and positive surface gap in m (the axis tolerance).
+
+    The gaps are those of the meridian plane: between rods on the axis
+    (head of the lower minus tip of the upper), between a ring wire and a
+    rod, and between two ring wires.
+    """
+    rods = [e.geometry for e in electrodes if isinstance(e.geometry, RodGeometry)]
+    rings = [e.geometry for e in electrodes if isinstance(e.geometry, RingGeometry)]
+    lengths = [r.radius for r in rods] + [g.wire_radius for g in rings]
+    by_top = sorted(rods, key=lambda r: r.z_top)
+    gaps = [
+        lo.z_top - up.z_bottom for up, lo in zip(by_top[:-1], by_top[1:], strict=True)
+    ]
+    for g in rings:
+        for r in rods:
+            euclid, _ = _rect_gap(g.radius, g.depth, r.radius, r.z_top, r.z_bottom)
+            gaps.append(euclid - g.wire_radius)
+    for i, g1 in enumerate(rings):
+        for g2 in rings[i + 1 :]:
+            centres = math.hypot(g1.radius - g2.radius, g1.depth - g2.depth)
+            gaps.append(centres - g1.wire_radius - g2.wire_radius)
+    return min(lengths + [d for d in gaps if d > 0.0])
+
+
+def _check_overlaps(electrodes: list[CoaxialElectrode]) -> None:
     rods = [e for e in electrodes if isinstance(e.geometry, RodGeometry)]
     rings = [e for e in electrodes if isinstance(e.geometry, RingGeometry)]
     by_top = sorted(rods, key=lambda e: e.geometry.z_top)
     for upper, lower in zip(by_top[:-1], by_top[1:], strict=True):
         if lower.geometry.z_top <= upper.geometry.z_bottom:
-            _refuse(
-                world,
-                engine,
+            raise NotAxisymmetric(
                 f"rods '{upper.name}' and '{lower.name}' on the same axis touch or "
                 f"overlap (z = {upper.geometry.z_top:.4g} ... "
                 f"{upper.geometry.z_bottom:.4g} m and {lower.geometry.z_top:.4g} ... "
-                f"{lower.geometry.z_bottom:.4g} m); bond them or move one.",
+                f"{lower.geometry.z_bottom:.4g} m); bond them or move one."
             )
     for ring in rings:
         g = ring.geometry
         a = g.wire_radius
         if g.depth - a <= _CLEARANCE * a:
-            _refuse(
-                world,
-                engine,
+            raise NotAxisymmetric(
                 f"the wire of ring '{ring.name}' (radius {a:.4g} m at z = "
                 f"{g.depth:.4g} m) reaches within {_CLEARANCE:.0%} of its radius "
                 "to the soil surface or above it; fem models the wire as the "
-                "solid torus it is. Bury it deeper.",
+                "solid torus it is. Bury it deeper."
             )
         for rod in rods:
             r = rod.geometry
             euclid, _ = _rect_gap(g.radius, g.depth, r.radius, r.z_top, r.z_bottom)
             if euclid <= (1.0 + _CLEARANCE) * a:
-                _refuse(
-                    world,
-                    engine,
+                raise NotAxisymmetric(
                     f"ring '{ring.name}' touches or nearly touches rod '{rod.name}' "
                     f"(wire surface {euclid - a:.3g} m from the rod); fem models "
-                    "both as the solid bodies they are.",
+                    "both as the solid bodies they are."
                 )
     for i, first in enumerate(rings):
         for second in rings[i + 1 :]:
             g1, g2 = first.geometry, second.geometry
             gap = math.hypot(g1.radius - g2.radius, g1.depth - g2.depth)
             if gap <= (1.0 + _CLEARANCE) * (g1.wire_radius + g2.wire_radius):
-                _refuse(
-                    world,
-                    engine,
+                raise NotAxisymmetric(
                     f"rings '{first.name}' and '{second.name}' touch or nearly "
-                    "touch; bond them or move one.",
+                    "touch; bond them or move one."
                 )
 
 
@@ -243,17 +321,20 @@ def block_half_widths(
     ``params.box_half_width`` wire radii, and stays clear of the soil
     surface, the axis, the rods, the other rings' blocks and every
     interface farther than $1.05\\,a$ from the wire axis (it takes at most
-    45 % of each gap beyond the wire); a nearer interface is cut into it.
+    45 % of each gap beyond the wire); a nearer interface is cut into it,
+    and the ring is marked ``near_interface`` (its block's lines along $s$
+    are refined, audit W4A-01).
 
     Raises
     ------
-    ValueError
+    NotAxisymmetric
         If a block cannot contain its wire (a ring within a wire radius,
-        diagonally, of a rod's end edge).
+        diagonally, of a rod's end edge, audit W4A-03); :func:`classify`
+        runs this check, so the dispatch takes the 3-D model instead.
     """
     rods = [e.geometry for e in electrodes if isinstance(e.geometry, RodGeometry)]
     rings = [e for e in electrodes if isinstance(e.geometry, RingGeometry)]
-    limit: dict[int, float] = {}
+    limit: dict[int, tuple[float, bool]] = {}
     for ring in rings:
         g = ring.geometry
         a = g.wire_radius
@@ -262,10 +343,13 @@ def block_half_widths(
         for r in rods:
             _, cheb = _rect_gap(g.radius, g.depth, r.radius, r.z_top, r.z_bottom)
             c = min(c, a + _SHARE * (cheb - a))
+        near = False
         for h in interfaces:
             d = abs(g.depth - h)
             if d > (1.0 + _CLEARANCE) * a:
                 c = min(c, a + _SHARE * (d - a))
+            else:
+                near = True
         for other in rings:
             if other is ring:
                 continue
@@ -273,21 +357,26 @@ def block_half_widths(
             cheb = max(abs(g.radius - o.radius), abs(g.depth - o.depth))
             c = min(c, a + _SHARE * (cheb - a - o.wire_radius))
         if not c > a:
-            raise ValueError(
-                f"fem: no room for the mesh block around ring '{ring.name}' "
-                f"(half-width {c:.3g} m <= wire radius {a:.3g} m)."
+            raise NotAxisymmetric(
+                f"there is no room for the mesh block around the wire of ring "
+                f"'{ring.name}' (half-width {c:.3g} m <= wire radius {a:.3g} m): "
+                "the wire lies within about its radius, diagonally, of a rod's "
+                "end edge, another ring or the soil surface, where the "
+                "axisymmetric mesh cannot resolve the gap. " + _THREE_D
             )
-        limit[ring.index] = c
+        limit[ring.index] = (c, near)
     out = []
     for e in electrodes:
         if e.index in limit:
             g = e.geometry
+            c, near = limit[e.index]
             e = e._replace(
                 geometry=RingGeometry(
                     radius=g.radius,
                     depth=g.depth,
                     wire_radius=g.wire_radius,
-                    half_width=limit[e.index],
+                    half_width=c,
+                    near_interface=near,
                 )
             )
         out.append(e)
@@ -399,7 +488,7 @@ def axisymmetric_earth(
     extrapolate: bool = True,
     r_far_factor: float = 1000.0,
     far_field: str = "robin",
-    max_nodes: int = 4_000_000,
+    max_nodes: int = 2_000_000,
     params: MeshParameters | None = None,
 ) -> EarthPorts:
     """Port model of an axisymmetric world (see the module docstring).
@@ -414,7 +503,8 @@ def axisymmetric_earth(
         lines).
     extrapolate
         Solve also at ``refinement + 1`` and extrapolate the port
-        conductance matrix (Richardson, second order).
+        conductance matrix (Richardson, second order). ``False``: the level
+        ``refinement`` alone, with ``fem_error_estimate`` = ``NaN``.
     r_far_factor
         Size of the truncation box as a multiple of the characteristic
         length $L$: the largest of the electrodes' depth and radius and the
@@ -424,7 +514,9 @@ def axisymmetric_earth(
     far_field
         ``"robin"`` or ``"dirichlet"`` (:func:`~._assembly.solve_ports`).
     max_nodes
-        Resource limit: the predicted node count of the finer mesh.
+        Resource limit: the predicted node count of the finer mesh
+        (:func:`~._mesh.predicted_nodes`, an estimate that errs high). The
+        solve needs about 4 GB per million nodes of the finer mesh.
 
     Raises
     ------
@@ -440,7 +532,10 @@ def axisymmetric_earth(
     stack = as_layer_stack(world.soil)
     depths = [float(d) for d in np.cumsum(stack.h)]
     rhos = np.asarray(stack.rhos, dtype=float)
-    electrodes = block_half_widths(electrodes, depths, params)
+    try:
+        electrodes = block_half_widths(electrodes, depths, params)
+    except NotAxisymmetric as exc:  # only with a coarser params.box_half_width
+        _refuse(world, engine, str(exc))
 
     extent = 1.0
     for e in electrodes:
@@ -474,7 +569,7 @@ def axisymmetric_earth(
     lines = [
         mesh_lines(rod_geo, ring_geo, inside, r_far, params, level) for level in levels
     ]
-    predicted = predicted_nodes(*lines[-1], ring_geo, levels[-1])
+    predicted = predicted_nodes(*lines[-1], ring_geo, levels[-1], inside)
     if predicted > max_nodes:
         raise ResourceLimitError(
             f"Backend 'fem': the mesh at refinement level {levels[-1]} would have "
@@ -506,7 +601,10 @@ def axisymmetric_earth(
     r_levels = [np.linalg.inv(g) for g in g_levels]
     r_ext = np.linalg.inv(conductance)
     diag = np.abs(np.diag(r_ext))
-    estimate = float(np.max(np.abs(np.diag(r_ext) - np.diag(r_levels[-1])) / diag))
+    if extrapolate:
+        estimate = float(np.max(np.abs(np.diag(r_ext) - np.diag(r_levels[-1])) / diag))
+    else:  # one level has no estimate (audit W4A-02: it read 0.0)
+        estimate = math.nan
     metadata = {
         "fem_model": "axisymmetric",
         "fem_ports": [world.electrodes[k].name for k in range(len(electrodes))],

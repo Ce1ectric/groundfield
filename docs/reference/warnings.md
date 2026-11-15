@@ -34,7 +34,8 @@ the built-in exceptions with a fixed meaning.
 `NotImplementedError`. **Raised** by `Engine.solve` before any
 numerics when the backend cannot represent the world: an unsupported
 number of soil layers, electrodes with a concrete-shell coefficient,
-junctions, voltage sources (`fem`), an explicitly requested kernel the
+junctions, a world outside the axisymmetric model of `fem` with
+`FemOptions.model="axisymmetric"`, an explicitly requested kernel the
 backend does not implement, or a horizontal wire so close to the layer interface, on
 either side of it, that the point form cannot evaluate it (see
 `PointKernelInterfaceWarning`). The message names the backends that can. **Remedy:** choose
@@ -44,11 +45,12 @@ distinct layers need `mom_sommerfeld`.
 ### `BackendCapabilityWarning`
 
 `groundfield.solver.BackendCapabilityWarning`. **Emitted** when the
-backend solves the world with a documented simplification: `fem` treats
-distributed and inductive conductors as lumped resistive branches, and
-a backend without two-terminal sources returns the current of a source
-with `return_to` through remote earth. **Remedy:** use an image or MoM
-backend when the conductor network or the return terminal matters.
+backend solves the world with a documented simplification: a backend
+without two-terminal sources returns the current of a source with
+`return_to` through remote earth (no built-in backend since 2026.11; up
+to then `fem` also treated distributed and inductive conductors as lumped
+resistive branches). **Remedy:** use an image or MoM backend when the
+conductor network or the return terminal matters.
 
 ### `ExperimentalBackendWarning`
 
@@ -115,21 +117,56 @@ segments shorter than the distance of the wire to the interface.
 ### `InterfaceContactWarning`
 
 `groundfield.solver.InterfaceContactWarning`. **Emitted** by every
-segment backend and `solve_mutual_*` when a rod head or tip lies within
-one wire radius of a layer interface. The thin-wire model has no end
-face: a rod that ends exactly at the interface is a wire entirely on one
-side of it, and one that reaches past it by a fraction of its radius
-touches the other layer through a short part only, while the solid rod
-with a flat end is continuous in between. Against an axisymmetric model
-of the solid rod (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads
-+21 % with its tip at the interface, +7 % 1 mm above it, −4.6 % 1 mm
-below it, and within a few per cent beyond two radii, as anywhere else.
-`diagnose()` reports the same ends under `interface_contact`. An end
-that meets the end of another rod — a rod split at the interface into two
-pieces, the usual way to give each layer its own piece — has no free end
-face and is not reported.
-**Remedy:** keep rod ends a few wire radii from an interface, or bracket
-the result by moving the end by ±2 wire radii.
+segment backend (the image family, `mom`, `mom_sommerfeld`), by
+`solve_mutual_*` and by the three-dimensional `fem` where the thin-wire
+model, which carries the current on the wire axis, deviates from the
+solid wire next to a layer interface:
+
+- **Rod ends.** A rod head or tip within one wire radius of a layer
+  interface. The thin-wire model has no end face: a rod that ends exactly
+  at the interface is a wire entirely on one side of it, and one that
+  reaches past it by a fraction of its radius touches the other layer
+  through a short part only, while the solid rod with a flat end is
+  continuous in between. Against an axisymmetric model of the solid rod
+  (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads +21 % with its tip
+  at the interface, +7 % 1 mm above it, −4.6 % 1 mm below it, and within
+  a few per cent beyond two radii, as anywhere else. An end that meets the
+  end of another rod — a rod split at the interface into two pieces, the
+  usual way to give each layer its own piece — has no free end face and is
+  not reported.
+- **Horizontal wires** (since 2026.11, audits W4A-07 and W4B-02). Every
+  electrode but a rod, and the leaking pieces of a galvanic distributed
+  conductor, whose axis lies within the reach of a contrasting interface.
+  Next to a more conductive layer the current crowds to the wire's near
+  side, which a current on the axis cannot follow. Against the solid torus
+  (the axisymmetric `fem`; a Hankel thin ring plus the exact 2-D
+  proximity correction agrees to 5e-4) a ring of $a$ = 5 mm over a layer
+  33 times more conductive reads +0.59 % at 4 radii, +1.2 % at 3, +3.6 % at
+  2, +8.6 % at 1.5 and +32 % at 1.1 radii, and +89 % when the interface
+  cuts the wire; over a more resistive layer at most +1.4 %. The reach is
+  the distance of the wire axis from the interface at which the thin wire
+  is 1 % off, the largest of four geometries (rings of 1, 2 and 5 m at
+  0.8 and 2 m depth, $a$ = 5 and 55 mm, the interface below and above),
+  rounded up to 0.1 $a$:
+
+  | contrast of the layers | 2 | 3 | 10 | 33 | 100 | 1000 |
+  |---|---|---|---|---|---|---|
+  | more conductive beyond | 1.0 $a$ | 1.5 $a$ | 2.9 $a$ | 3.5 $a$ | 3.8 $a$ | 3.9 $a$ |
+  | more resistive beyond | 1.0 $a$ | 1.0 $a$ | 1.0 $a$ | 1.2 $a$ | 1.25 $a$ | 1.25 $a$ |
+
+  (log-linear in between, held beyond 1000; 1.0 $a$: only a wire that the
+  interface cuts; below a contrast of 2 the thin wire stays within 0.75 %
+  of the solid one and nothing is reported). The three-dimensional `fem`
+  shares the limit (its smoothed line source lies between the thin wire
+  and the torus); the axisymmetric `fem` solves the wire as the solid torus
+  and does not warn. No generated network and no world of the AP1 soils
+  ($h_1$ = 5 or 30 m) comes within reach.
+
+`diagnose()` reports both under `interface_contact`.
+**Remedy:** keep rod ends and horizontal wires a few wire radii from a
+contrasting interface; bracket a rod end by moving it by ±2 wire radii;
+check a ring with `fem`'s axisymmetric model
+(`FemOptions.model="axisymmetric"`).
 
 ### `SeriesTruncationWarning`
 
@@ -154,8 +191,11 @@ soil use `image_2layer`.
 
 ### `FemReductionWarning`
 
-`gf.FemReductionWarning`. **Emitted** once per `fem` solve, listing the
-reasons, when its equivalent-hemisphere reduction does not represent the
+`gf.FemReductionWarning`. **Never emitted since 2026.11**: `fem` solves a
+conforming finite-element model (user decision Q37) instead of the
+equivalent-hemisphere reduction, and the class is kept importable for
+filters of older code. Up to 2026.11 it was emitted once per `fem` solve,
+listing the reasons, when the reduction did not represent the
 world: several electrodes in a cluster (mutual resistance neglected;
 −35 % for a ring with three rods, −55 … −75 % for two bonded rods of
 which one reaches into a conductive top layer), several clusters (no
@@ -175,8 +215,8 @@ D2A-03: `fem` misplaces the current, mostly far too low), as are
 electrodes touching a layer the hemisphere does not reach, a strip deeper
 than half its length, a ring deeper than its diameter and a driven
 `MeshElectrode` (the closed forms outside their range). See the [fem engine page](../explanation/engines/fem.md#guards)
-for the measured numbers. **Remedy:** use an integral-equation backend
-for such worlds; `fem` is experimental.
+for the conforming model and its guards. **Remedy:** none needed; remove
+filters for this category when convenient.
 
 ### `ComplexImageFitWarning`
 
@@ -262,8 +302,8 @@ long, $Z_{in}$ = 7494 + j25 396 Ω instead of 5.39 + j0.19 Ω at 50 Hz with
 finish. `diagnose()` reports the same world under `coordinates` (a
 warning), and a world wider than 100 km that does not mix as
 information. A world wholly in projected or wholly in local coordinates
-never warns. `fem` does not run this check at the solve (`diagnose()`
-does). **Remedy:** give every point in one coordinate system; to stop
+never warns. `fem` runs the same check at the solve (since 2026.11, user
+decision D5). **Remedy:** give every point in one coordinate system; to stop
 such a solve at once, `warnings.simplefilter("error",
 MixedCoordinatesWarning)`.
 
@@ -283,8 +323,11 @@ limit, a world at or above the engine's notice size
 `UserWarning` `"budget: ..."` that the solve may take minutes; the notice
 comes from `Engine.solve` (with any backend), not from
 `solve_mutual_matrix` / `solve_mutual_field`. Both sizes count the
-segments of the integral engines: `fem` neither uses them nor refuses a
-world above the limit (its problem is the mesh of each driven cluster).
+segments of the integral engines; `fem` checks the display segments that
+carry the point sources of its result against `Engine.max_segments` too,
+and limits its mesh by `FemOptions.max_nodes` (axisymmetric, about 4 GB
+per million nodes) and `max_nodes_3d` (3-D, 3.0 … 3.4 GB per million
+nodes), estimated before anything is assembled.
 
 ## Post-processing
 
@@ -388,6 +431,6 @@ from a cached / stored answer.
 | `KeyError` | an electrode, junction, conductor or source name is unknown (the message suggests the closest names) |
 | `ValueError` | an invalid value: non-finite or non-positive physical input, a current source of 0 A, a short-circuited two-terminal source, a loop of voltage sources, a junction without soil contact, an empty world |
 | `TypeError` | an unknown keyword of a factory, or a soil that is not a soil model |
-| `NotImplementedError` | `FieldResult.potential` for three or more soil layers (`BackendCapabilityError`, a subclass, for a world a backend cannot represent, such as a `VoltageSource` on `fem`) |
+| `NotImplementedError` | `FieldResult.potential` for three or more soil layers (`BackendCapabilityError`, a subclass, for a world a backend cannot represent, such as a strip with `FemOptions.model="axisymmetric"`) |
 | `ImportError` | a function of `groundfield.geo` without the `geo` extra, or `to_bustype` without `groundinsight` (the message gives the install command) |
 | `pydantic.ValidationError` | a model field fails validation (subclass of `ValueError`) |

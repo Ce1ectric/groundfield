@@ -1,7 +1,7 @@
 """Static typing of the documented public calls (audit A1-06, A1-09).
 
 The docstrings and the changelog show calls such as
-``Engine(backend="fem", options={"fem": {"n_radial": 120}})`` and
+``Engine(backend="fem", options={"fem": {"refinement": 1}})`` and
 ``BackendCapabilities(soils={"homogeneous"})``. On the 2026.11 base both
 were type errors for mypy and Pyright / Pylance (VS Code), because the
 fields were annotated with the stored types (``dict[str, BackendOptions]``,
@@ -44,8 +44,8 @@ USER_CODE = """\
 import groundfield as gf
 from groundfield.solver.registry import BackendCapabilities
 
-engine = gf.Engine(backend="fem", options={"fem": {"n_radial": 120}})
-options = {"fem": {"n_radial": 120}}
+engine = gf.Engine(backend="fem", options={"fem": {"refinement": 1}})
+options = {"fem": {"refinement": 1}}
 engine_from_variable = gf.Engine(backend="fem", options=options)
 caps = BackendCapabilities(soils={"homogeneous"}, conductors={"lumped"}, kernels=set())
 tabulated = gf.create_engine(sommerfeld_assembly="tabulated")

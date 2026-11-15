@@ -402,13 +402,18 @@ def discretise(
     InterfaceContactWarning
         If a rod head or tip lies within one wire radius of one of the
         ``layer_interfaces`` (a limit of the thin-wire model, audit
-        A3S-05).
+        A3S-05), or a horizontal wire within the reach of a contrasting
+        interface of the soil (audits W4A-07, W4B-02).
     """
     from groundfield.diagnostics import check_segment_budget
-    from groundfield.solver._guards import _warn_rod_ends_near_interfaces
+    from groundfield.solver._guards import (
+        _warn_rod_ends_near_interfaces,
+        _warn_wires_near_interfaces,
+    )
 
     check_segment_budget(world, engine, layer_interfaces)
     _warn_rod_ends_near_interfaces(world.electrodes, layer_interfaces)
+    _warn_wires_near_interfaces(world)
     ds = engine.segment_length
     segments: list[_Segment] = []
     owner_segments: dict[str, list[int]] = {}
@@ -1316,7 +1321,9 @@ def _warn_ignored_sources(world, backend: str, *, stacklevel: int = 3) -> None:
 
     Up to 0.15.0 it warned and dropped the voltage sources (hence
     ``stacklevel``, accepted and ignored since; audit W2A-03); kept with
-    the old signature for ``fem`` and the re-export of ``solver.image``.
+    the old signature for the re-export of ``solver.image`` (``fem`` used
+    it up to its conforming model of 2026.11, which solves voltage
+    sources).
     It returns ``None`` for a world of current sources and raises
     :class:`~groundfield.solver.registry.BackendCapabilityError` for a
     world with voltage sources.
@@ -1330,10 +1337,12 @@ def _reject_concrete_shells(world, backend: str) -> None:
 
     The image family and, since 2026.11, the point-matching family
     (``mom``, ``mom_sommerfeld``) consume the per-segment shell
-    coefficient on the reaction-matrix diagonal. A backend without it
-    (``fem``) would silently solve the bare-metal problem, which the
-    electrode documentation explicitly promises will fail loudly
-    instead. The message names the backends of the registry that solve
+    coefficient on the reaction-matrix diagonal, and ``fem`` applies it
+    on the electrode surface (or resolves the concrete, user decision
+    Q40). A backend without it would silently solve the bare-metal
+    problem, which the electrode documentation explicitly promises will
+    fail loudly instead; no built-in backend calls this since 2026.11 (it
+    stays for the re-export of ``solver.image``). The message names the backends of the registry that solve
     the world (audit W2A-09; up to then it named ``image`` /
     ``image_2layer`` only).
 

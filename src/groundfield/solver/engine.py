@@ -28,9 +28,10 @@ matching (collocation) with the closed-form kernels above;
 quadrature of the layered Green's function and is the only integral
 backend for $n \\ge 3$ layers. ``bem`` is a deprecated name of ``mom``.
 
-*Volume PDE.* ``fem`` (experimental) is the axisymmetric finite-element
-solver with the equivalent-hemisphere reduction described in
-:mod:`groundfield.solver.fem`.
+*Volume PDE.* ``fem`` (experimental) solves the field in the soil by
+conforming finite elements: an axisymmetric model for rods on one axis and
+rings around it, a three-dimensional one for every other world (the
+optional ``fem3d`` extra), described in :mod:`groundfield.solver.fem`.
 
 Notes
 -----
@@ -102,14 +103,16 @@ __all__ = [
 #:     Registered backend that ran, after alias resolution and the
 #:     auto-forwarding by soil model.
 #: ``kernel``
-#:     Source kernel used (``"point"`` / ``"line"``); ``None`` for
-#:     backends without a source kernel (``fem``).
+#:     Source kernel used (``"point"`` / ``"line"``); ``fem`` reports the
+#:     kernel of the point sources of its result (the engine's, default
+#:     ``"line"``), which the field evaluation uses.
 #: ``groundfield_version``
 #:     Version of the package that solved.
 #: ``frequencies``
 #:     Frequencies in Hz, in solve order.
 #: ``n_segments``
-#:     Number of current-carrying source segments (``0`` for ``fem``).
+#:     Number of current-carrying source segments (for ``fem`` the display
+#:     segments that carry the point sources of its result).
 #: ``soil_kind``
 #:     ``kind`` of the soil model (``"homogeneous"``, ``"two_layer"``,
 #:     ``"multi_layer"``).
@@ -124,7 +127,8 @@ __all__ = [
 #:     Problem-size limit the solve was checked against
 #:     (:attr:`Engine.max_segments`, or
 #:     :data:`groundfield.diagnostics.HARD_LIMIT` when the engine leaves
-#:     it at ``None``); ``fem`` has no segments and is not limited by it.
+#:     it at ``None``); ``fem`` checks its display segments against it
+#:     and limits its mesh by ``FemOptions.max_nodes`` / ``max_nodes_3d``.
 #: ``provenance``
 #:     Versions, platform, engine configuration, world fingerprint and
 #:     UTC timestamp (see :func:`groundfield.solver.result.solve_provenance`).
@@ -352,8 +356,9 @@ class Engine(BaseModel):
         (3.0 GiB at 20 000), the nodal system of $n$ unknowns $16n^2$
         bytes; :func:`~groundfield.diagnostics.expected_segments` predicts
         both. The limit is recorded in ``FieldResult.metadata
-        ["max_segments"]``; ``fem`` meshes a volume and is not limited by
-        it.
+        ["max_segments"]``; ``fem`` checks the display segments of its
+        result against it and limits its volume mesh by
+        ``FemOptions.max_nodes`` / ``max_nodes_3d``.
     warn_segments
         Size of the soft notice of this engine, counted like
         ``max_segments``: at or above it every solve emits a

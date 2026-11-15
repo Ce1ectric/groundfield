@@ -7,6 +7,15 @@
 | **Deciders** | Project maintainers |
 | **Scope** | `groundfield` |
 
+!!! note "`fem` since 2026.11"
+
+    The `fem` parts of this ADR describe the equivalent-hemisphere
+    reduction that `fem` used up to 2026.11. It was replaced by a
+    conforming finite-element model (user decision Q37): axisymmetric for
+    rods on one axis and rings around it, three-dimensional for every
+    other world. [ADR-0016](0016-conforming-fem.md) records that decision;
+    the text below is kept as the historical record.
+
 ## Context
 
 ADR-0001 settled the methodology for the **2-layer** case: closed-form

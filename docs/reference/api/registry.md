@@ -17,7 +17,7 @@ solve function and fills the common metadata of the result.
 | `image_2layer` | two-layer | line, point | yes | yes | yes | yes | |
 | `mom` | homogeneous, two-layer | point | yes (since 2026.11) | yes | yes | yes | |
 | `mom_sommerfeld` | any number of layers | point | yes (since 2026.11) | yes | yes | yes | options: `MomSommerfeldOptions` |
-| `fem` | any number of layers | — | yes (since 2026.11) | yes (since 2026.11) | yes (since 2026.11) | yes (since 2026.11) | experimental, axisymmetric worlds only, options: `FemOptions` |
+| `fem` | any number of layers | — | yes (since 2026.11) | yes (since 2026.11) | yes (since 2026.11) | yes (since 2026.11) | experimental; axisymmetric model for coaxial rods and rings, 3-D model otherwise (`fem3d` extra); options: `FemOptions` |
 | `cim` | → `image` | | | | | | deprecated alias |
 | `bem` | → `mom` | | | | | | deprecated alias |
 | `image_nlayer` | homogeneous, two-layer | line, point | yes | yes | yes | yes | deprecated name of the `image` dispatch |
@@ -25,10 +25,11 @@ solve function and fills the common metadata of the result.
 Every built-in backend honours every conductor model (lumped,
 distributed, inductive, skin effect). Since its conforming model of
 2026.11 (user decision Q37) `fem` runs the network of the shared pipeline
-like the integral backends; it refuses worlds that are not axisymmetric
-(rods on one vertical axis, horizontal rings centred on it) and galvanic
-distributed conductors, whose leakage runs along their route. Up to then
-it solved distributed and inductive conductors as lumped resistive
+like the integral backends: its axisymmetric model solves rods on one
+vertical axis and horizontal rings centred on it, its three-dimensional
+model (the optional `fem3d` extra) every other world, galvanic
+distributed conductors included (`FemOptions.model`). Up to then it
+solved distributed and inductive conductors as lumped resistive
 branches and rejected shells, junctions, two-terminal and voltage
 sources. The table is checked against the registry:
 

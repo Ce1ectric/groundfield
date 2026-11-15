@@ -92,8 +92,10 @@ above this size every :meth:`Engine.solve
 may take from seconds to minutes on a laptop, and :func:`diagnose` reports
 it as an *info* finding; ``solve_mutual_matrix`` and ``solve_mutual_field``
 check the hard limit but emit no notice. For ``fem`` the segment count is
-not its problem size (the mesh of each driven cluster is), and ``fem`` does
-not refuse a world above the limit either. The two sizes are not checked
+not its problem size (its volume mesh is, limited by ``FemOptions.max_nodes``
+and ``max_nodes_3d``); it counts the display segments that carry the point
+sources of its result, which ``fem`` checks against the limit too. The two
+sizes are not checked
 against each other: a notice above the engine's hard limit never appears,
 because such a world is refused first.
 :func:`check_segment_resolution` and :func:`diagnose` (``report.context
@@ -350,13 +352,17 @@ _CAUSES: dict[str, tuple[str, tuple[str, str], str, str]] = {
     ),
     "interface_contact": (
         "interface contact",
-        ("rod end lies", "rod ends lie"),
-        "within one wire radius of a layer interface",
-        "the thin-wire model has no end face, so the contact with the layer "
-        "beyond is all or nothing there (a solid 4.5 m rod, a = 8 mm, in "
-        "1000/30 Ohm m: +21 % with the tip at the interface, -4.6 % 1 mm past "
-        "it, audit A3S-05); keep rod ends a few wire radii from an interface "
-        "or bracket the result by moving the end by +-2a",
+        ("rod end or wire lies", "rod ends or wires lie"),
+        "too close to a layer interface for the thin-wire model",
+        "a rod end within one wire radius has no end face, so the contact with "
+        "the layer beyond is all or nothing there (a solid 4.5 m rod, a = 8 mm, "
+        "in 1000/30 Ohm m: +21 % with the tip at the interface, -4.6 % 1 mm "
+        "past it, audit A3S-05); next to a more conductive layer the current "
+        "of a horizontal wire crowds to its near side (a ring over a layer 33 "
+        "times more conductive: +3.6 % at 2 wire radii, +8.6 % at 1.5, audit "
+        "W4A-07); keep rod ends and wires a few wire radii from a contrasting "
+        "interface, bracket a rod end by moving it by +-2a, or check a ring "
+        "with fem's axisymmetric model",
     ),
 }
 
@@ -808,10 +814,10 @@ def expected_segments(
     $\\lceil L_\\text{total}/ds \\rceil$ already exceeds the engine's
     limit (``Engine.max_segments``, default :data:`HARD_LIMIT`) is
     counted by that bound instead, so that a unit error does not
-    allocate a huge discretisation just to count it. The FEM backend
-    (:mod:`groundfield.solver.fem`) uses an axisymmetric volume mesh that
-    is unrelated to ``segment_length``; for FEM this prediction is not
-    informative.
+    allocate a huge discretisation just to count it. The ``fem`` backend
+    (:mod:`groundfield.solver.fem`) solves a volume mesh that is unrelated
+    to ``segment_length`` (``FemOptions.max_nodes``, ``max_nodes_3d``); for
+    it the prediction counts only the display segments of its result.
 
     Parameters
     ----------
@@ -1403,13 +1409,23 @@ def _overlap_findings(world: "World") -> list[Diagnostic]:
 
 
 def _interface_contact_findings(world: "World") -> list[Diagnostic]:
-    """Rod heads and tips within one wire radius of a layer interface (A3S-05)."""
-    from groundfield.solver._guards import _rod_ends_near_interfaces
+    """Thin-wire limits next to a layer interface.
+
+    Rod heads and tips within one wire radius of an interface (audit
+    A3S-05; ``data["end"]`` is ``"head"`` or ``"tip"``) and horizontal
+    wires within the reach of a contrasting interface (audits W4A-07,
+    W4B-02; ``data["end"]`` is ``None``, ``data["reach_radii"]`` the reach of
+    :func:`groundfield.solver._guards.wire_contact_reach`).
+    """
+    from groundfield.solver._guards import (
+        _rod_ends_near_interfaces,
+        _wires_near_interfaces,
+    )
 
     if world.soil is None:
         return []
     hits = _rod_ends_near_interfaces(world.electrodes, _layer_interfaces(world.soil))
-    return [
+    out = [
         Diagnostic(
             "interface_contact",
             "warning",
@@ -1426,6 +1442,34 @@ def _interface_contact_findings(world: "World") -> list[Diagnostic]:
         )
         for name, which, z_end, h, a in hits
     ]
+    for name, kind, z, h, a, rho_wire, rho_other, reach in _wires_near_interfaces(
+        world
+    ):
+        side = "conductive" if rho_other < rho_wire else "resistive"
+        contrast = max(rho_wire, rho_other) / min(rho_wire, rho_other)
+        out.append(
+            Diagnostic(
+                "interface_contact",
+                "warning",
+                (name,),
+                f"{kind} '{name}' at z = {z:.6g} m, interface at {h:.6g} m "
+                f"({abs(z - h) / a:.3g} wire radii, reach {reach:.3g}; the layer "
+                f"beyond {contrast:.3g} times more {side})",
+                {
+                    "end": None,
+                    "kind": kind,
+                    "z_m": z,
+                    "interface_m": h,
+                    "offset_m": z - h,
+                    "wire_radius_m": a,
+                    "distance_radii": abs(z - h) / a,
+                    "reach_radii": reach,
+                    "rho_wire_ohm_m": rho_wire,
+                    "rho_other_ohm_m": rho_other,
+                },
+            )
+        )
+    return out
 
 
 def _inert_findings(world: "World") -> list[Diagnostic]:
@@ -1620,7 +1664,12 @@ def diagnose(
     ``interface_contact``
         A rod head or tip within one wire radius of a physical layer
         interface, where the thin-wire model (no end face) deviates from
-        the solid rod by up to +21 % (audit A3S-05); the solve warns with
+        the solid rod by up to +21 % (audit A3S-05), and a horizontal wire
+        (every electrode but a rod, the leaking pieces of a galvanic
+        distributed conductor) within the reach of a contrasting interface,
+        where the thin wire deviates from the solid wire by more than about
+        1 % (3.5 wire radii over a layer 33 times more conductive; audits
+        W4A-07, W4B-02); the segment backends and the 3-D ``fem`` warn with
         :class:`~groundfield.solver.InterfaceContactWarning` too.
     ``inert``
         Settings the solve ignores: conductors not attached at both ends,

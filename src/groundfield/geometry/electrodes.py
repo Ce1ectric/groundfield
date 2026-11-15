@@ -134,8 +134,10 @@ _SHELL_DESCRIPTION = (
     "$r_b$ (the soil sees the shell surface). ``0.0`` (default): no shell. "
     "Honoured by the image family, ``solve_mutual_*`` and, since 2026.11, "
     "``mom`` and ``mom_sommerfeld`` (one current per segment: the current "
-    "redistributes, so the shell adds at least ``C/L``); ``fem`` rejects a "
-    "non-zero value."
+    "redistributes, so the shell adds at least ``C/L``) and ``fem`` (the "
+    "surface conductance $1/(2\\pi r_b C)$ on the electrode in its "
+    "axisymmetric model; each wire's own shell, or the concrete resolved "
+    "with ``FemOptions.concrete_resistivity``, in its 3-D model)."
 )
 
 
