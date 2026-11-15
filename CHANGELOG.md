@@ -123,7 +123,7 @@ reproduces 0.15.0, it is named.
 | 10.46 (Q32/Q33), audit W1A-02 | pieces of conductors lying beside each other | coax in pieces +0.09 … +9.6 % (back to the lumped value); drops routed back along the PEN main: X(1 kHz) +3.9e-4, Zin 1.3e-5 (golden `cond_drops_along_pen_main_perfect_mirror`) | worlds with a core inside a marked shield, or cables / drops drawn on one axis, with `discretize_segment_length` |
 | 10.22 (Q30), audit W1A-01 | owners at projected coordinates | generated mesh foundations at UTM coordinates +0.09 … +0.64 % (back to the local value) | worlds built at absolute UTM coordinates |
 | 10.46 (Q32/Q33), audit W1R2-01 | pieces of nearly parallel conductors lying beside each other | tilted coax in pieces +0.004 … +8.0 % (back to the lumped value); overhead measurement leads: probe junction potential 6.5e-5 … 1.1e-4, U_HS ≤ 1.05e-6 | worlds with a core drawn slightly off its shield's axis, or touching cables / leads drawn at a tiny angle, with `discretize_segment_length` (the generator's overhead leads) |
-| 10.22 (Q30), audit W1R2-05 | straight runs at projected coordinates | arc-like polylines at UTM coordinates with vertices more than 0.46 µm off their neighbours' chord, e.g. a 2° arc electrode +1.27 % → +5.5e-4 against the local origin | worlds at absolute UTM coordinates |
+| 10.22 (Q30), audit W1R2-05 | straight runs at projected coordinates | arc-like polylines at UTM coordinates with vertices less than 0.46 µm off their neighbours' chord (audit W1R3-04), e.g. a 2° arc electrode +1.27 % → +5.5e-4 against the local origin | worlds at absolute UTM coordinates |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -407,6 +407,25 @@ reproduces 0.15.0, it is named.
   `solve_mutual_matrix` for a two-terminal source, the hand-inverted
   transfer matrix for three sources, Dwight's rod (−0.012 %) and the
   hemispherical far field. Tests: `tests/test_voltage_sources.py`.
+- **Internal impedance of a voltage source (user decision D1).**
+  `VoltageSource.internal_resistance_ohm` (Ω) and `internal_inductance_h`
+  (H), both ≥ 0 and 0 by default (the ideal source, unchanged bit for bit),
+  and `VoltageSource.internal_impedance(f)`; `create_source(...,
+  internal_resistance_ohm=, internal_inductance_h=)`. $Z_q = R + j\omega L$
+  is the diagonal entry of the source's constraint row,
+  $\varphi_a - \varphi_r + Z_q I = U$, in every backend that solves voltage
+  sources (`image`, `image_2layer` with the cross-layer path, `mom`,
+  `mom_sommerfeld`), with conductors, inductive coupling and sweeps; a
+  galvanic world whose source has an inductance is solved per frequency on
+  the complex path. `SourceRecord.internal_resistance_ohm` /
+  `internal_inductance_h` / `internal_impedance(f)` and the columns of
+  `to_dataframe("sources")`; `input_impedance()` of a voltage source is the
+  impedance the source sees, $U/I - Z_q$. Validated against the junction +
+  `lumped_series_resistance_ohm` pattern (≤ 7.2e-16) and the 1 A solve with
+  $I = U/(Z_q + Z_\text{in})$ at 0 / 50 / 1000 Hz in every backend, three
+  earth models and the cross-layer path (≤ 4.0e-15), the transfer matrix of
+  three sources and `solve_mutual_matrix` (≤ 3.4e-16). Tests:
+  `tests/test_voltage_source_impedance.py`.
 - `mom` and `mom_sommerfeld` (and the deprecated alias `bem`) solve concrete-encased
   electrodes (`concrete_shell_coefficient_ohm_m`, ADR-0012). Each segment adds its radial
   shell resistance `C/Δs` to the diagonal of the point-matching system, and the shell drop
@@ -898,7 +917,17 @@ reproduces 0.15.0, it is named.
   `fem` rejects voltage sources with `BackendCapabilityError` (Engine.solve
   and a direct `solve_fem` call; up to 0.15.0 it dropped them with a
   warning). `diagnose()` / `expected_segments` count one nodal unknown per
-  voltage source.
+  voltage source. A voltage source with `internal_resistance_ohm > 0` opens a
+  loop of voltage sources (an inductance alone does not: it vanishes at
+  $f = 0$); negative or non-finite internal impedances raise, also after
+  `model_copy`. The loop message names the sources on the loop only and says
+  that conductors at or below 1e-6 Ω count as ideal bonds (audit W2A-08); a
+  same-node voltage source is reported as short-circuited (W2A-06).
+- `measured_impedance` and `LvNetworkLayout.measured_grounding_impedance` /
+  `verify_current_balance` read the solved current of a voltage source
+  (audits W2A-01, W2A-10); `TnNetworkConfig.source_kind="voltage"` gives the
+  same readings as `"current"`. `compare_engines` compares the input
+  impedance of voltage sources too (W2A-02).
 - `FieldResult.input_impedance()` without `source` picks the only current
   or voltage source.
 - Registry: `mom` / `mom_sommerfeld` declare `concrete_shells`; a shell world on `fem`
@@ -1335,6 +1364,22 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   pieces are then not one conductor and do not add up (the 100 m pair in
   0.25 m pieces 40.34 against 43.47 µH lumped; audit W1R2-08). Test:
   `tests/test_concentric_cables.py`.
+- **Readings of a voltage-driven layout (audit W2A-01).**
+  `LvNetworkLayout.measured_grounding_impedance` / `verify_current_balance`
+  divided the reading of a world driven by a voltage source by a fallback of
+  1 A (5.604 instead of 1.635 Ω, balance `ok=False`); they use the solved
+  current, and a voltage record without it raises `ValueError`. Test:
+  `tests/test_voltage_source_audit_w2a.py`.
+- `FieldResult.input_impedance` returned `[]` and `touch_voltage_spectrum`
+  raised `IndexError` for a voltage record without voltage and current; both
+  raise `ValueError` (audit W2A-04). Test: `tests/test_voltage_source_audit_w2a.py`.
+- The alias `solver.image._warn_ignored_sources` lost its keyword
+  `stacklevel` (`TypeError` for every world); restored and ignored (audit
+  W2A-03). Test: `tests/test_voltage_source_audit_w2a.py`.
+- A direct `solve_fem` named `image_2layer` as capable for a homogeneous
+  voltage world, and its shell refusal named `image` / `image_2layer` only;
+  both name the backends that solve the world (audits W2A-07, W2A-09). Test:
+  `tests/test_voltage_source_audit_w2a.py`.
 - Solves at projected (UTM) coordinates are translation invariant (audit fw1sol). An edge
   of a whole number of segments no longer gets one more at UTM coordinates: the count
   allows the round-off of the coordinates' own magnitude, 64 ε|x|.
