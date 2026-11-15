@@ -170,7 +170,7 @@ provenance) into every result. The table is generated from the registry:
 | `mom` | current | Method of moments, point-matching collocation | 1, 2 | `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
 | `mom_sommerfeld` | current | Method of moments with Sommerfeld quadrature, any n | 1, 2, ≥ 3 | `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | `MomSommerfeldOptions` |
 | `bem` | deprecated name of `mom` | Deprecated name of 'mom' (10.76) | 1, 2 | `point` | yes, yes, yes | yes | distributed, inductive, lumped, skin | — |
-| `fem` | experimental | Conforming axisymmetric finite elements (rods and rings on one axis) | 1, 2, ≥ 3 | none (volume mesh) | yes, yes, yes | yes | distributed, inductive, lumped, skin | `FemOptions` |
+| `fem` | experimental | Conforming finite elements: axisymmetric (rods and rings on one axis) or three-dimensional (any electrodes; fem3d extra) | 1, 2, ≥ 3 | none (volume mesh) | yes, yes, yes | yes | distributed, inductive, lumped, skin | `FemOptions` |
 <!-- generated:end registry -->
 
 Backend-specific settings live in `Engine.options`, keyed by backend name

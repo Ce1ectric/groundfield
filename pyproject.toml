@@ -47,6 +47,12 @@ geo = ["requests (>=2.32,<3.0)", "shapely (>=2.0,<3.0)", "pyproj (>=3.6,<4.0)"]
 # with numba. Optional: every kernel falls back to numpy with identical
 # results.
 fast = ["numba (>=0.60)"]
+# The three-dimensional model of ``fem`` (user decision Q37, part B):
+# scikit-fem builds the tetrahedral background mesh, pyamg preconditions the
+# conjugate gradients. Permissive licences only (user decision D6: both
+# BSD-3 / MIT). Without the extra ``fem`` keeps its axisymmetric model and
+# raises an ``ImportError`` naming the extra for every other world.
+fem3d = ["scikit-fem (>=9.0,<13.0)", "pyamg (>=5.0,<6.0)"]
 
 [project.urls]
 Documentation = "https://ce1ectric.github.io/groundfield/"

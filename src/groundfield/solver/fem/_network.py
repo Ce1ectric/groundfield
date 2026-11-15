@@ -46,6 +46,7 @@ from groundfield.solver._pipeline import (
 from groundfield.solver.result import FieldResult, PointSource
 
 if TYPE_CHECKING:  # pragma: no cover
+    from groundfield.solver._pipeline import Topology
     from groundfield.solver.engine import Engine
     from groundfield.solver.fem._ports import EarthPorts
     from groundfield.world import World
@@ -72,6 +73,31 @@ class _PortKernel:
         return self.resistance @ currents
 
 
+def port_topology(world: "World") -> "tuple[Discretisation, Topology]":
+    """Pseudo-segments of the ports and the pipeline topology.
+
+    One pseudo-segment (unit length, at the electrode's connection point)
+    per electrode; :func:`~groundfield.solver._pipeline.build_topology`
+    appends the leaking pieces of galvanic distributed conductors, each its
+    own owner (and port of the earth model).
+    """
+    names = [e.name for e in world.electrodes]
+    segments = [
+        _Segment(
+            midpoint=np.asarray(e.connection_point, dtype=float),
+            length=1.0,
+            electrode_name=e.name,
+            wire_radius=float(e.wire_radius),
+        )
+        for e in world.electrodes
+    ]
+    disc = Discretisation(
+        segments=segments, owner_segments={n: [k] for k, n in enumerate(names)}
+    )
+    topo = build_topology(world, disc)
+    return disc, topo
+
+
 def solve_network(
     world: "World",
     engine: "Engine",
@@ -79,6 +105,7 @@ def solve_network(
     *,
     metadata: dict,
     kernel: str,
+    topology: "tuple[Discretisation, Topology] | None" = None,
 ) -> FieldResult:
     """Solve ``world``'s network on the port model ``earth``.
 
@@ -93,30 +120,31 @@ def solve_network(
     kernel
         Source kernel of the point sources for the post-solve field
         evaluation (``"line"`` or ``"point"``).
+    topology
+        The pipeline's discretisation and topology when the earth model
+        was built for them (:func:`port_topology`): one pseudo-segment per
+        electrode, then the leaking pieces of galvanic distributed
+        conductors, each a port of ``earth``. ``None`` (the axisymmetric
+        model) builds them here; the world then has no galvanic conductor.
     """
     node_currents = inject(world, where="fem", stacklevel=4)
     voltages = impressed_voltages(world)
     names = list(earth.names)
-    connection = [np.asarray(e.connection_point, dtype=float) for e in world.electrodes]
-    segments = [
-        _Segment(
-            midpoint=connection[k],
-            length=1.0,
-            electrode_name=name,
-            wire_radius=float(world.electrodes[k].wire_radius),
-        )
-        for k, name in enumerate(names)
-    ]
-    disc = Discretisation(
-        segments=segments, owner_segments={n: [k] for k, n in enumerate(names)}
-    )
-    topo = build_topology(world, disc)
-    if len(disc.segments) != len(names):  # pragma: no cover - refused before
-        raise AssertionError("fem: a galvanic conductor reached the network solve")
+    if topology is None:
+        disc, topo = port_topology(world)
+        if len(disc.segments) != len(names):  # pragma: no cover - refused before
+            raise AssertionError("fem: a galvanic conductor reached the network solve")
+    else:
+        disc, topo = topology
+        if [s.electrode_name for s in disc.segments] != names:  # pragma: no cover
+            raise AssertionError("fem: the ports do not match the discretisation")
+    segments = disc.segments
     branches = assemble_branches(world, engine, topo)
     n_ports = len(names)
     arrays = SegmentArrays(
-        points=np.array(connection, dtype=float).reshape(n_ports, 3),
+        points=np.array([s.midpoint for s in segments], dtype=float).reshape(
+            n_ports, 3
+        ),
         lengths=np.ones(n_ports),
         radii=np.array([s.wire_radius for s in segments]),
         shell_coefficients=np.zeros(n_ports),
@@ -156,12 +184,19 @@ def solve_network(
         )
         for m in range(earth.segment_lengths.size)
     ]
+    real = [e.name for e in world.electrodes]
+    pseudo = names[len(real) :]
+    conductor_currents = {n: currents.pop(n) for n in pseudo}
+    conductor_potentials = {n: potentials.pop(n) for n in pseudo}
     clusters = {
-        name: sorted(n for n in names if topo.cluster_id[n] == topo.cluster_id[name])
-        for name in names
+        name: sorted(n for n in real if topo.cluster_id[n] == topo.cluster_id[name])
+        for name in real
     }
     md = dict(metadata)
     md.update(earth.metadata)
+    if conductor_currents:
+        md["conductor_node_currents"] = conductor_currents
+        md["conductor_node_potentials"] = conductor_potentials
     md["kernel"] = kernel
     md["n_segments"] = int(earth.segment_lengths.size)
     md["earth_inductive_model"] = branches.earth_inductive_model

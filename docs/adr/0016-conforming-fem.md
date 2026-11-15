@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Status** | Accepted — part A (axisymmetric model) 2026-11-15; part B (full 3-D model, user decision Q40) amends this record |
+| **Status** | Accepted — part A (axisymmetric model) and part B (three-dimensional model, user decision Q40 on the shell overlap) 2026-11-15 |
 | **Date** | 2026-11-15 |
 | **Deciders** | Project maintainers (user decision Q37 of 2026-11-14) |
-| **Scope** | `groundfield.solver.fem` (now a package), the `fem` entry of the backend registry and `FemOptions` |
+| **Scope** | `groundfield.solver.fem` (now a package), the `fem` entry of the backend registry, `FemOptions`, the optional `fem3d` extra |
 
 ## Context
 
@@ -131,21 +131,130 @@ for any world, and extends the dispatch in `solve_fem` (axisymmetric where
 possible, 3-D otherwise); `_network.py`, `_ports.py` and `_guards.py` are
 shared unchanged.
 
+### 5. Three-dimensional model (part B)
+
+Every world that the axisymmetric model cannot hold — strips, polylines,
+stars, meshes and grids, rods and rings side by side, several clusters,
+galvanic distributed conductors — is solved in three dimensions.
+`FemOptions.model = "auto"` (default) keeps the axisymmetric model where it
+applies (bit for bit) and takes the 3-D model otherwise; `"3d"` forces it,
+`"axisymmetric"` refuses every other world. Modules: `_wires3d.py`
+(wires, radius correction), `_mesh3d.py` (mesh), `_assembly3d.py`
+(stiffness, immersed elements, sources, port solve), `_solid.py` (world
+→ `EarthPorts`).
+
+- **Electrodes as smoothed line sources with an analytic radius
+  correction.** A resolved wire surface (radius 5 mm in a domain of
+  kilometres) cannot be meshed affordably in 3-D, and the brief asked for
+  embedded line sources. Every wire axis (a ring as a polygon of 1°
+  chords) carries the current density $j(s)$, spread over the disc of
+  radius $R$ perpendicular to the axis with the bump
+  $\eta = \frac{3}{\pi R^2}(1 - r^2/R^2)^2$; the wire sees the
+  $\eta$-weighted disc average $\Pi(s)$. What lies inside the disc is
+  added analytically as a radial resistance per length,
+  $U - \Pi = (C + \Delta C)\,j$, with the shell coefficient $C$ of ADR-0012
+  and the correction $\Delta C$ = the difference between the reduced
+  thin-wire kernel of radius $a$ and that of the smoothed source (energy
+  radius $0.5442\,R$), integrated in closed form over the own piece, its
+  neighbours at corners and junctions and their surface images. Far inside
+  a straight wire it is Sunde's $\frac{\rho}{2\pi}\ln(r_\eta/a)$. The
+  result depends little on $R$ (evidence `e07` of stream w4fem3d: a 3 m
+  rod and a ring at $R$ = 4, 6 and 10 cm against part A). Default
+  $R$ = 6 cm.
+- **Isotropic mesh, deterministic bisection.** A coarse grid of
+  $8 \times 8 \times 4$ cubes (six Kuhn tetrahedra each) on the box is
+  refined by conforming longest-edge bisection (own implementation with
+  ties broken by node numbers; scikit-fem's adaptive refinement asserts on
+  some backgrounds) until every element is below
+  $1.5\,(R/2 + g\max(0, d - R))$, $d$ the distance from the nearest wire,
+  $g = 0.5$. A graded *tensor* grid, the first design, carries the fine
+  lines of the layer interfaces and electrodes to the box as slabs
+  thousands of times wider than thick: the multigrid needed 345 iterations
+  for a 5 m slab and did not converge for a 0.3 m one; the isotropic mesh
+  needs 16 … 115 (up to 115 with immersed layer interfaces).
+- **Layer interfaces as partially penalised immersed elements.** No
+  interface is a mesh plane (a plane through the isotropic mesh would cut
+  the large far elements into slivers). A tetrahedron that one interface
+  cuts gets the immersed shape functions of Li, Lin & Wu (2003) /
+  Kafafy et al. (2005) — linear on either side, continuous, with
+  continuous normal flux — and the faces the interface crosses get the
+  symmetric consistency and penalty terms of Lin, Lin & Zhang (2015);
+  nodes within 30 % of their shortest edge of a plane (and a quarter of
+  the thinner layer) are moved onto it so no cut leaves a sliver. The
+  scheme reproduces a layered field exactly (to 3e-14; without the face
+  terms −1.6e-4 … −6.4e-4 on the same cube, `e01` / `e08` of stream
+  w4fem3d). A laminate mean (arithmetic along, harmonic across the layers)
+  is a non-conforming average of first order; it is kept only for elements
+  more than four times larger than the thinner layer they cut (far from
+  the electrodes, where the field varies on scales far above the layer).
+- **Solve.** The disc averages couple every node of a disc with every
+  other, so the coupling $A^\mathsf T D A$ is never formed: conjugate
+  gradients on $K + A^\mathsf T D A$ with the smoothed-aggregation
+  multigrid of $K$ (pyamg) as preconditioner, one solve per port
+  ($G$ is quadratic in the solution, so its error is the square of the
+  solver's). A direct sparse factorisation (SuperLU, `scipy.sparse.linalg.splu`)
+  needed 93 s at 155 000 nodes (COLAMD ordering) and had not finished after
+  15 minutes at 68 000 nodes with the MMD ordering.
+- **Levels and extrapolation.** The finer level is the red refinement of
+  the coarser one (nested); $G$ is extrapolated with the second order as
+  in part A. The levels are not yet asymptotic for every geometry (error
+  ratios 3.0 … 5.2), so the extrapolated value carries up to 2e-3; the
+  reported error estimate (3 … 5e-3) bounds the deviation in every case
+  tested.
+- **Ports and network.** Every electrode is one port, every leaking piece
+  of a galvanic distributed conductor one more; `_network.solve_network`
+  takes the pipeline's topology of those pieces, the rest is section 3.
+- **Concrete (user decision Q40).** By default each encased wire carries
+  its shell coefficient $C$ (the model of the image family and `mom`).
+  With `FemOptions.concrete_resistivity` = $\rho_c$ the concrete is
+  resolved: a square prism of conformal radius $r_b$ (side
+  $r_b/0.59017$) around every straight axis-aligned encased wire, the
+  metal radius following from $C = \frac{\rho_c}{2\pi}\ln(r_b/r_a)$, the
+  prism faces as immersed interfaces, so overlapping shells at corners,
+  T-joints and crossings share their concrete. The prism faces and edges
+  make it first order (the conductance per metre reads 2.8 … 4.6 % high at
+  the default levels), so it measures differences on one mesh: every
+  junction acts like at most about one shell radius of wire against the
+  per-wire shells (evidence `e09`, `e11` of stream w4fem3d), which keep
+  their place as the default (no correction rule).
+- **Resource guard.** `FemOptions.max_nodes_3d` (2 million nodes of the
+  finer mesh, about 3 GB per million) is checked against a prediction
+  before meshing and against the exact count before the finer level.
+- **Dependencies (decision D6).** `scikit-fem` (BSD-3: the Kuhn background
+  `MeshTet.init_tensor`, the red refinement) and `pyamg` (MIT), as the
+  optional `fem3d` extra; `import groundfield` imports neither. Without
+  the extra a world that needs the 3-D model raises `ImportError` naming
+  the extra. No GPL or LGPL mesher (gmsh, TetGen, CGAL, netgen) is used:
+  the design needs no resolved surface, so nothing beyond permissive
+  packages was required.
+
 ## Consequences
 
 - Every `fem` number changes (both stored golden cases by −4.6 %; the
   benchmark tables of the fem page). `fem` agrees with independent
   references to about 1e-4 at a cost of a second per solve
   ([fem page](../explanation/engines/fem.md#validation)).
-- `fem` refuses worlds it used to solve with the reduction: strips,
-  grids, polylines, stars, several clusters side by side — until part B.
+- `fem` solves every world again: the axisymmetric model where it applies
+  (about 1e-4), the 3-D model otherwise (about 2e-3, with the optional
+  `fem3d` extra); without the extra the 3-D worlds raise `ImportError`.
 - `fem` gains concrete shells, junctions, two-terminal and voltage sources
   and every conductor model (registry capabilities).
 - `FemOptions` changes: `refinement`, `extrapolate`, `r_far_factor`
-  (default 1000), `far_field`, `max_nodes`. The 2026.11 fields `n_radial`,
+  (default 1000), `far_field`, `max_nodes`; for the 3-D model `model`,
+  `source_radius`, `growth`, `concrete_resistivity`, `max_nodes_3d`.
+  The 2026.11 fields `n_radial`,
   `n_axial`, `z_far_factor` are gone; as keyword arguments of `solve_fem`
   (0.15.0) they warn and have no effect. `equivalent_hemisphere_radius` is
   deprecated; `FemReductionWarning` is kept and never emitted.
+- The 3-D model shares the thin-wire assumption of the integral engines
+  (uniform current around the wire, no end faces); it is independent of
+  them in everything else (the layering, the surface, the far field, the
+  current distribution along the wires). Its accuracy (about 2e-3, levels
+  not yet asymptotic for every geometry) is a reference for the integral
+  engines' biases of 0.4 … 3 %, not for effects below 1e-3; differences of
+  two concrete models on the same mesh (Q40) are finer than that.
+- No stored number changes with part B: the golden `fem` cases are
+  axisymmetric and stay on part A bit for bit.
 - `fem` stays experimental until the audits of the release have passed.
 
 ## Alternatives considered
@@ -158,8 +267,23 @@ shared unchanged.
   many lines on a graded mesh.
 - **Extending the spherical-shell mesh of the reduction.** It conforms to a
   hemisphere, not to rods and rings.
-- **An unstructured mesher.** Not needed in 2-D; the permissive candidates
-  for 3-D are part B's question (decision D6).
+- **An unstructured mesher.** Not needed in 2-D; in 3-D the
+  smoothed-source formulation needs no surface-fitted mesh, and the
+  bisection mesh of section 5 is built with scikit-fem's tensor grid and
+  an own refinement (decision D6: no GPL / LGPL mesher).
+- **3-D alternatives tried and dropped (stream w4fem3d).** A graded tensor
+  grid (slab anisotropy, multigrid stalls); quadratic elements on the
+  bisection mesh (the multigrid did not converge in 500 iterations);
+  laminate interfaces (first order); a mesh cut along the interface planes
+  (slivers where thin layers cross the far elements); plain immersed
+  elements without face terms (not consistent: −1.6e-4 … −6.4e-4 on a
+  layered cube that the penalised form reproduces exactly); a fixed source
+  quadrature coarser than the finer mesh (the finite elements resolve the
+  individual points: the rod's level 2 overshot by +0.6 %); forming
+  $K + A^\mathsf T D A$ for the multigrid (3.4 GB instead of 1.8 GB at
+  600 000 nodes). Singularity subtraction with the analytic segment
+  potential (Gjerde et al. 2019) would make the method a moment method
+  with a finite-element correction in homogeneous soil.
 - **Resolving the concrete as a volume.** Needs the concrete resistivity
   and the metal radius, which the electrode does not carry; for a
   cylindrical shell it is equivalent to the surface conductance.
@@ -179,3 +303,24 @@ shared unchanged.
   differences of physical problems. *Phil. Trans. R. Soc. A* 210, 307–357.
 - Thompson, J. F., Warsi, Z. U. A., & Mastin, C. W. (1985). *Numerical
   Grid Generation*. North-Holland (O-grids and transfinite blocks).
+- Rivara, M.-C. (1984). Algorithms for refining triangular grids suitable
+  for adaptive and multigrid techniques. *Int. J. Numer. Methods Eng.* 20,
+  745–756 (longest-edge bisection).
+- Li, Z., Lin, T., & Wu, X. (2003). New Cartesian grid methods for
+  interface problems using the finite element formulation. *Numer. Math.*
+  96, 61–98.
+- Kafafy, R., Lin, T., Lin, Y., & Wang, J. (2005). Three-dimensional
+  immersed finite element methods for electric field simulation in
+  composite materials. *Int. J. Numer. Methods Eng.* 64, 940–972.
+- Lin, T., Lin, Y., & Zhang, X. (2015). Partially penalized immersed
+  finite element methods for elliptic interface problems. *SIAM J. Numer.
+  Anal.* 53, 1121–1144.
+- Dompierre, J., Labbé, P., Vallet, M.-G., & Camarero, R. (1999). How to
+  subdivide pyramids, prisms and hexahedra into tetrahedra. *8th Int.
+  Meshing Roundtable*, 195–204.
+- Vaněk, P., Mandel, J., & Brezina, M. (1996). Algebraic multigrid by
+  smoothed aggregation for second and fourth order elliptic problems.
+  *Computing* 56, 179–196 (pyamg).
+- Pólya, G., & Szegő, G. (1951). *Isoperimetric Inequalities in
+  Mathematical Physics*. Princeton (the conformal radius of a square,
+  0.59017 times its side).
