@@ -449,7 +449,7 @@ class World(BaseModel):
             rb = cluster_id.get(src.return_to, src.return_to)
             if ra == rb:
                 drives = (
-                    "fixes the potential difference of one node"
+                    "would impose a voltage across one equipotential"
                     if src.kind == "voltage"
                     else "drives no current through the soil"
                 )
