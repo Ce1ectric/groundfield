@@ -359,7 +359,9 @@ class Conductor(BaseModel):
         User decision Q33: a shield is a thin-walled tube, which the
         solid-round Bessel solution does not describe. Called by the
         validator and, because ``model_copy(update=...)`` skips it, again
-        by the solver for every conductor (audit W1A-05).
+        by :meth:`World.check() <groundfield.world.World.check>` for every
+        backend (audit W1R2-10) and by the inductive assembly of the solver
+        (audit W1A-05).
 
         Raises
         ------
