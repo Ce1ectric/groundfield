@@ -676,3 +676,192 @@ def test_the_chord_of_three_vertices_is_the_neighbour_test() -> None:
             off = rng.normal(size=3) * 10.0 ** rng.uniform(-13, -5)
             c = b + rng.uniform(0.1, 20) * u + off
             assert _on_chord([a, b, c]) == _continues_straight(a, b, c)
+
+
+# ---------------------------------------------------------------------
+# The chord rule in linear time (audit W1R3-03)
+# ---------------------------------------------------------------------
+
+
+def _on_chord_8c83d7c(vertices) -> bool:
+    """The chord test of 8c83d7c (``primitives._on_chord``), the oracle."""
+    from groundfield.geometry.primitives import (
+        _COLLINEAR_FLOOR_M,
+        COLLINEAR_ROUNDOFF_ULPS,
+        _coordinate_scale,
+    )
+
+    a, c = vertices[0], vertices[-1]
+    ac = c - a
+    scale = _coordinate_scale(*vertices)
+    tol = COLLINEAR_ROUNDOFF_ULPS * float(np.finfo(float).eps) * scale
+    if len(vertices) == 3:
+        height = float(np.linalg.norm(np.cross(vertices[1] - a, ac))) / float(
+            np.linalg.norm(ac)
+        )
+        return height <= tol + _COLLINEAR_FLOOR_M
+    inner = np.asarray(vertices[1:-1], dtype=float) - a
+    heights = np.linalg.norm(np.cross(inner, ac), axis=1) / float(np.linalg.norm(ac))
+    return bool(np.all(heights <= tol + _COLLINEAR_FLOOR_M))
+
+
+def _straight_runs_8c83d7c(edges, *, closed: bool) -> list[int]:
+    """``_straight_runs`` of 8c83d7c (quadratic in the run length)."""
+    pts = [(np.asarray(s, dtype=float), np.asarray(e, dtype=float)) for s, e in edges]
+
+    def forward(prev, nxt) -> bool:
+        return float(np.dot(nxt[0] - prev[0], nxt[1] - nxt[0])) > 0.0
+
+    def run_holds(run) -> bool:
+        return _on_chord_8c83d7c([pts[k][0] for k in run] + [pts[run[-1]][1]])
+
+    wire = [0] * len(pts)
+    first = 0
+    for k in range(1, len(pts)):
+        if forward(pts[k - 1], pts[k]) and run_holds(range(first, k + 1)):
+            wire[k] = wire[k - 1]
+        else:
+            wire[k] = wire[k - 1] + 1
+            first = k
+    if closed and len(pts) > 2 and wire[-1] != 0 and forward(pts[-1], pts[0]):
+        last = wire[-1]
+        joined = [k for k, w in enumerate(wire) if w == last] + [
+            k for k, w in enumerate(wire) if w == 0
+        ]
+        if run_holds(joined):
+            wire = [0 if w == last else w for w in wire]
+    return wire
+
+
+def _random_polylines(rng, origin, count: int):
+    """Polylines near the chord tolerance: collinear runs, bends of 1e-9
+    rad ... 30 deg, zig-zags of 0.05 ... 3 x the tolerance at the
+    origin's coordinate magnitude, open and closed."""
+    o = np.array([origin[0], origin[1], 0.0])
+    tol = 64.0 * float(np.finfo(float).eps) * max(1.0, float(np.max(np.abs(o))))
+    for _ in range(count):
+        p = o + rng.uniform(-500.0, 500.0, 3) * np.array([1.0, 1.0, 0.0])
+        p[2] = rng.uniform(0.3, 2.0)
+        th = rng.uniform(0.0, 2.0 * math.pi)
+        pts = [p]
+        for _run in range(int(rng.integers(1, 5))):
+            u = np.array([math.cos(th), math.sin(th), 0.0])
+            v = np.array([-u[1], u[0], 0.0])
+            h = rng.uniform(0.05, 20.0)
+            n = int(rng.integers(1, 30))
+            amp = tol * 10.0 ** rng.uniform(-1.3, 0.5) if rng.random() < 0.5 else 0.0
+            p0 = pts[-1]
+            pts += [p0 + (j + 1) * h * u + amp * (j % 2) * v for j in range(n)]
+            th += rng.choice([1.0, -1.0]) * 10.0 ** rng.uniform(-9.0, math.log10(0.52))
+        closed = bool(rng.random() < 0.3) and len(pts) > 3
+        edges = [(tuple(a), tuple(b)) for a, b in zip(pts[:-1], pts[1:], strict=True)]
+        if closed:
+            edges.append((tuple(pts[-1]), tuple(pts[0])))
+        yield edges, closed
+
+
+# audit W1R3-03 (guard: the classification of 8c83d7c, bit for bit)
+@pytest.mark.parametrize("origin", [(0.0, 0.0), (3_000.0, -2_000.0), UTM])
+def test_the_linear_chord_rule_classifies_as_the_quadratic_one(origin) -> None:
+    from groundfield.geometry.primitives import _frame_origin, _straight_runs
+
+    rng = np.random.default_rng(20261115)
+    for edges, closed in _random_polylines(rng, origin, 400):
+        assert _straight_runs(edges, closed=closed) == _straight_runs_8c83d7c(
+            edges, closed=closed
+        )
+    # the same polylines shifted into a local frame, tolerances in the user's
+    if origin != (0.0, 0.0):
+        shift = np.array([origin[0], origin[1], 0.0])
+        rng = np.random.default_rng(7)
+        with _frame_origin(shift):
+            for edges, closed in _random_polylines(rng, (0.0, 0.0), 100):
+                assert _straight_runs(edges, closed=closed) == _straight_runs_8c83d7c(
+                    edges, closed=closed
+                )
+
+
+# audit W1R3-03
+def test_the_straight_runs_of_a_collinear_polyline_take_linear_time() -> None:
+    """``_straight_runs`` re-tested the whole run against its chord at every
+    new edge: on 34ad269 500 / 2000 collinear edges took 0.22 / 3.3 s
+    (ratio 15, quadratic; ecff7b6 0.011 / 0.042 s, ratio 3.9). The
+    vectorised heights are taken only where the bound of the run does not
+    decide (best of three)."""
+    import time
+
+    from groundfield.geometry.primitives import _straight_runs
+
+    d = np.array([math.cos(0.3), math.sin(0.3), 0.0])
+
+    def run(n: int) -> float:
+        pts = [tuple(d * (0.5 * k) + np.array([0.0, 0.0, 0.8])) for k in range(n + 1)]
+        edges = list(zip(pts[:-1], pts[1:], strict=True))
+        best = math.inf
+        for _ in range(3):
+            t0 = time.perf_counter()
+            assert max(_straight_runs(edges, closed=False)) == 0
+            best = min(best, time.perf_counter() - t0)
+        return best
+
+    small, big = run(500), run(2000)
+    assert big < 8.0 * max(small, 1e-3)
+    assert run(4000) < 1.0
+
+
+# audit W1R3-03
+def test_polyline_segments_compute_the_straight_runs_once(monkeypatch) -> None:
+    """``PolylineElectrode.segments`` redid the chord rule on every call (a
+    2 km polyline in 1 m vertices solved in 17.7 s on 34ad269 against
+    0.46 s on ecff7b6). The runs are cached on the vertices' values, the
+    flag ``closed`` and the active frame origin, so the cache stays right
+    under ``model_copy(update=...)``, assignment and in-place edits."""
+    import groundfield.geometry.electrodes as el
+    from groundfield.geometry.primitives import (
+        _edge_wires,
+        _frame_origin,
+        _straight_runs,
+    )
+
+    cache = getattr(el, "_polyline_runs", None)
+    if cache is not None:
+        cache.cache_clear()
+    calls: list[int] = []
+
+    def counted(edges, *, closed):
+        calls.append(1)
+        return _straight_runs(edges, closed=closed)
+
+    monkeypatch.setattr(el, "_straight_runs", counted)
+    straight = [(0.1 * k + 0.123, 0.0, 0.8) for k in range(40)]
+    e = PolylineElectrode(name="p", vertices=straight, closed=False)
+
+    def expected(elec, ds=0.5):
+        return _edge_wires(
+            elec.edges,
+            ds,
+            skip_degenerate=True,
+            edge_wires=_straight_runs(elec.edges, closed=elec.closed),
+        ).wire_index
+
+    for ds in (0.5, 0.05, 0.5):
+        assert e.segments(ds).n_wires == 1
+    assert len(calls) == 1
+    x19 = straight[19][0]
+    bent = [*straight[:20], *[(x, 0.5 * (x - x19), z) for x, _, z in straight[20:]]]
+    copied = e.model_copy(update={"vertices": bent})
+    assert copied.segments(0.5).n_wires == 2
+    np.testing.assert_array_equal(copied.segments(0.5).wire_index, expected(copied))
+    assert e.segments(0.5).n_wires == 1
+    e.vertices = bent
+    np.testing.assert_array_equal(e.segments(0.5).wire_index, expected(e))
+    e.vertices[30] = (e.vertices[30][0], e.vertices[30][1] + 0.01, 0.8)
+    np.testing.assert_array_equal(e.segments(0.5).wire_index, expected(e))
+    assert e.segments(0.5).n_wires == 5  # the moved vertex: two edges of their own
+    # a zig-zag below the tolerance at UTM: one wire in the user's frame only
+    zig = [(0.5 * k, 2e-7 * (k % 2), 0.8) for k in range(21)]
+    z = PolylineElectrode(name="z", vertices=zig, closed=False)
+    assert z.segments(0.5).n_wires == 20
+    with _frame_origin(np.array([UTM[0], UTM[1], 0.0])):
+        assert z.segments(0.5).n_wires == 1
+    assert z.segments(0.5).n_wires == 20

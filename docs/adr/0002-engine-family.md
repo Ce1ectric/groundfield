@@ -365,7 +365,12 @@ coordinates, so the rule is the same at local and at projected UTM
 coordinates, audits W1A-01 and W1R2-05 — tested against the chord of its
 two neighbours only, a vertex next to a near-duplicate one or a finely
 sampled arc passed at UTM coordinates, and a quarter arc became one
-wire). Rods, strips
+wire; the test against the whole chord is decided from a bound on the
+heights over the last chord tested in full, so a straight run costs
+O(n) with the decisions bit for bit, and a polyline electrode computes
+its runs once per set of vertices, audit W1R3-03: re-testing every
+vertex at every edge took 13 s for 4000 collinear edges and made a 2 km
+polyline electrode in 1 m vertices solve in 17.7 s). Rods, strips
 and rings are one wire; an electrode through a layer interface keeps one
 owner per layer on top (ADR-0007). The owners of an electrode are ideally
 bonded (one potential) and merged before the result: currents,

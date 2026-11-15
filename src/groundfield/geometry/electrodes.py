@@ -23,6 +23,7 @@ relevant primitives.
 
 from __future__ import annotations
 
+import functools
 import math
 import warnings
 from collections.abc import Sequence
@@ -32,6 +33,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from groundfield.geometry.primitives import (
+    _FRAME_ORIGIN,
     WireSegments,
     _coordinate_scale,
     _edge_wires,
@@ -651,6 +653,36 @@ class StripElectrode(_ElectrodeBase):
         return float(self.length)
 
 
+@functools.lru_cache(maxsize=1024)
+def _polyline_runs(
+    vertices: bytes, closed: bool, origin: bytes | None
+) -> tuple[int, ...]:
+    """Straight runs of a polyline (:func:`_straight_runs`), cached by value.
+
+    Parameters
+    ----------
+    vertices
+        The float64 buffer of the vertices in m, shape ``(n, 3)``.
+    closed
+        Whether the last vertex is wired back to the first.
+    origin
+        The float64 buffer of the active frame origin in m, or ``None``
+        (the tolerances of the chord rule follow the coordinates of the
+        user's frame).
+
+    Returns
+    -------
+    tuple[int, ...]
+        Wire index per edge (the closing edge last). The key is everything
+        the runs depend on, so no entry ever needs invalidating.
+    """
+    pts = np.frombuffer(vertices, dtype=float).reshape(-1, 3).tolist()
+    edges = [(tuple(pts[k]), tuple(pts[k + 1])) for k in range(len(pts) - 1)]
+    if closed and len(pts) > 2:
+        edges.append((tuple(pts[-1]), tuple(pts[0])))
+    return tuple(_straight_runs(edges, closed=closed))
+
+
 class PolylineElectrode(_ElectrodeBase):
     """Buried wire following an arbitrary horizontal polyline.
 
@@ -770,10 +802,28 @@ class PolylineElectrode(_ElectrodeBase):
         which has a vertex at every crossing, stays one owner.
         """
         return _edge_wires(
-            self.edges,
-            ds,
-            skip_degenerate=True,
-            edge_wires=_straight_runs(self.edges, closed=self.closed),
+            self.edges, ds, skip_degenerate=True, edge_wires=self._edge_wire_index()
+        )
+
+    def _edge_wire_index(self) -> tuple[int, ...]:
+        """Wire index of every edge (:func:`_straight_runs`), computed once.
+
+        The runs are cached on what they depend on — the values of the
+        vertices, ``closed`` and the active frame origin
+        (:data:`~groundfield.geometry.primitives._FRAME_ORIGIN`) — not on
+        the object (:func:`_polyline_runs`), so a polyline changed by
+        ``model_copy(update=...)``, by assignment or in place gets its own
+        runs, and the solver's copy in a local frame (the same vertices
+        shifted, under its origin) finds those of earlier solves. Up to
+        audit W1R3-03 of the calendar release the chord rule ran on every
+        call of :meth:`segments` (a 2 km polyline in 1 m vertices: 17.7 s
+        per solve).
+        """
+        origin = _FRAME_ORIGIN.get()
+        return _polyline_runs(
+            np.asarray(self.vertices, dtype=float).tobytes(),
+            bool(self.closed),
+            None if origin is None else np.asarray(origin, dtype=float).tobytes(),
         )
 
     def wire_polylines(self, n_arc: int = 64) -> list[np.ndarray]:

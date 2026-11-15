@@ -35,6 +35,7 @@ the soil (depth positive).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -357,6 +358,56 @@ def _on_chord(vertices: Sequence[np.ndarray]) -> bool:
     return bool(np.all(heights <= tol + _COLLINEAR_FLOOR_M))
 
 
+#: Bound, in units of the machine epsilon times the distance from the run's
+#: first vertex, of the round-off of a chord height as :func:`_on_chord`
+#: computes it, plus that of a height relative to another chord (a margin
+#: of about 1.4 over the error analysis in :func:`_straight_runs`).
+_HEIGHT_ROUNDOFF_EPS = 14.0
+
+
+def _forward_steps(starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """Whether edge ``k`` does not turn back against edge ``k - 1``, (m - 1,).
+
+    The test of :func:`_straight_runs` of 8c83d7c,
+    ``dot(start_k - start_(k-1), end_k - start_k) > 0``, bit for bit: the
+    dot products are summed at once, and only where their sign is within
+    the round-off of a three-term sum (``4 eps`` of the sum of the absolute
+    products, twice the bound of any summation order) is the scalar
+    ``np.dot`` of the original evaluated.
+    """
+    a = starts[1:] - starts[:-1]
+    b = ends[1:] - starts[1:]
+    prod = a * b
+    dots = prod.sum(axis=1)
+    forward = dots > 0.0
+    unsure = np.abs(dots) <= 4.0 * _EPS * np.abs(prod).sum(axis=1)
+    for k in np.flatnonzero(unsure).tolist():
+        forward[k] = (
+            float(np.dot(starts[k + 1] - starts[k], ends[k + 1] - starts[k + 1])) > 0.0
+        )
+    return forward
+
+
+def _chain_holds(
+    starts: np.ndarray, end: np.ndarray, first: int, k: int, threshold: float
+) -> tuple[bool, float]:
+    """The chord test of :func:`_on_chord` for the chain ``starts[first..k]``,
+    ``end``, bit for bit, with the precomputed ``tol + floor`` of the chain.
+
+    Returns whether it holds and the largest interior height in m.
+    """
+    a = starts[first]
+    ac = end - a
+    if k == first + 1:
+        height = float(np.linalg.norm(np.cross(starts[k] - a, ac))) / float(
+            np.linalg.norm(ac)
+        )
+        return height <= threshold, height
+    inner = starts[first + 1 : k + 1] - a
+    heights = np.linalg.norm(np.cross(inner, ac), axis=1) / float(np.linalg.norm(ac))
+    return bool(np.all(heights <= threshold)), float(heights.max())
+
+
 def _straight_runs(
     edges: Sequence[tuple[Sequence[float], Sequence[float]]], *, closed: bool
 ) -> list[int]:
@@ -380,6 +431,26 @@ def _straight_runs(
     bounds the deviation of every vertex, so no run straightens a bend
     larger than the tolerance.
 
+    **Cost (audit W1R3-03).** Re-testing every interior vertex against the
+    new chord at every edge costs O(n^2): 4000 collinear edges took 13 s.
+    The decisions are those of that test, bit for bit, but most are taken
+    from a bound: with $H$ the largest computed height of the interior
+    vertices over a reference chord (the last chord tested in full), $R$
+    their largest distance from the run's first vertex and $\\delta$ the
+    distance between the unit vectors of the candidate chord and the
+    reference one (about the angle between them), every height over the
+    candidate chord, as :func:`_on_chord` computes it, is at most
+    $(1 + 8\\varepsilon) H + R\\,(\\delta + 14\\,\\varepsilon)$ (by the
+    error analysis each computed height is within $2.2\\,\\varepsilon R$
+    plus $3.5\\,\\varepsilon$ of itself of the exact one; measured against
+    40-digit heights: $0.93\\,\\varepsilon R$). Where that bound is below
+    the tolerance the test holds; elsewhere
+    the heights are computed in full (vectorised) and the candidate chord
+    becomes the reference. A straight run costs O(n); only runs whose
+    vertices lie close to the tolerance off the chord (sub-tolerance
+    zig-zags at projected coordinates) fall back to the full test at every
+    edge.
+
     Parameters
     ----------
     edges
@@ -392,33 +463,83 @@ def _straight_runs(
     list[int]
         Wire index per edge.
     """
-    pts = [
-        (np.asarray(start, dtype=float), np.asarray(end, dtype=float))
-        for start, end in edges
-    ]
+    m = len(edges)
+    if m == 0:
+        return []
+    pts = np.asarray([(start, end) for start, end in edges], dtype=float)
+    starts = np.ascontiguousarray(pts[:, 0, :])
+    ends = np.ascontiguousarray(pts[:, 1, :])
+    origin = _FRAME_ORIGIN.get()
+    # coordinate magnitude of every vertex (_coordinate_scale, per point)
+    if origin is None:
+        mag_s = np.max(np.abs(starts), axis=1).tolist()
+        mag_e = np.max(np.abs(ends), axis=1).tolist()
+    else:
+        mag_s = np.max(np.abs(starts + origin), axis=1).tolist()
+        mag_e = np.max(np.abs(ends + origin), axis=1).tolist()
+    forward = _forward_steps(starts, ends).tolist() if m > 1 else []
+    s_list = starts.tolist()
+    e_list = ends.tolist()
+    ulps = COLLINEAR_ROUNDOFF_ULPS * float(np.finfo(float).eps)
+    bound_eps = _HEIGHT_ROUNDOFF_EPS * _EPS
+    margin = 1.0 - 8.0 * _EPS
 
-    def forward(prev: tuple, nxt: tuple) -> bool:
-        # the candidate edge does not turn back at the common vertex
-        return float(np.dot(nxt[0] - prev[0], nxt[1] - nxt[0])) > 0.0
-
-    def run_holds(run: Sequence[int]) -> bool:
-        chain = [pts[k][0] for k in run] + [pts[run[-1]][1]]
-        return _on_chord(chain)
-
-    wire = [0] * len(pts)
+    wire = [0] * m
     first = 0  # first edge of the current run
-    for k in range(1, len(pts)):
-        if forward(pts[k - 1], pts[k]) and run_holds(range(first, k + 1)):
+    # state of the run: its first vertex a, the largest magnitude of its
+    # start points, the reference chord (unit vector), the largest height
+    # over it and the largest distance from a
+    ax, ay, az = s_list[0]
+    run_mag = mag_s[0]
+    ref = (0.0, 0.0, 0.0)
+    h_ref = r_max = 0.0
+    for k in range(1, m):
+        holds = False
+        if forward[k - 1]:
+            run_mag = max(run_mag, mag_s[k])
+            scale = max(run_mag, mag_e[k])
+            threshold = ulps * scale + _COLLINEAR_FLOOR_M
+            px, py, pz = s_list[k]
+            dx, dy, dz = px - ax, py - ay, pz - az
+            ex, ey, ez = e_list[k]
+            wx, wy, wz = ex - ax, ey - ay, ez - az
+            wn = math.sqrt(wx * wx + wy * wy + wz * wz)
+            if k > first + 1 and wn > 0.0:
+                # height of the new interior vertex over the reference chord
+                rx, ry, rz = ref
+                cx, cy, cz = dy * rz - dz * ry, dz * rx - dx * rz, dx * ry - dy * rx
+                h_ref = max(h_ref, math.sqrt(cx * cx + cy * cy + cz * cz))
+                r_max = max(r_max, math.sqrt(dx * dx + dy * dy + dz * dz))
+                ux, uy, uz = wx / wn - rx, wy / wn - ry, wz / wn - rz
+                delta = math.sqrt(ux * ux + uy * uy + uz * uz)
+                bound = h_ref * (1.0 + 8.0 * _EPS) + r_max * (delta + bound_eps)
+                holds = bound <= threshold * margin
+            if not holds:
+                holds, h_max = _chain_holds(starts, ends[k], first, k, threshold)
+                if holds and wn > 0.0:
+                    ref = (wx / wn, wy / wn, wz / wn)
+                    h_ref = h_max
+                    if k == first + 1:
+                        r_max = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if holds:
             wire[k] = wire[k - 1]
         else:
             wire[k] = wire[k - 1] + 1
             first = k
-    if closed and len(pts) > 2 and wire[-1] != 0 and forward(pts[-1], pts[0]):
+            ax, ay, az = s_list[k]
+            run_mag = mag_s[k]
+    if (
+        closed
+        and m > 2
+        and wire[-1] != 0
+        and _forward_steps(starts[[-1, 0]], ends[[-1, 0]])[0]
+    ):
         last = wire[-1]
         joined = [k for k, w in enumerate(wire) if w == last] + [
             k for k, w in enumerate(wire) if w == 0
         ]
-        if run_holds(joined):
+        chain = [starts[k] for k in joined] + [ends[joined[-1]]]
+        if _on_chord(chain):
             wire = [0 if w == last else w for w in wire]
     return wire
 
