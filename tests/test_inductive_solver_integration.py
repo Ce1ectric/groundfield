@@ -343,7 +343,10 @@ def test_skin_effect_without_inductance_model_changes_the_resistance_only() -> N
     )
     r_dc = RHO_AL * 300.0 / A_150
     assert z_dc[0] == pytest.approx(r_dc, rel=1e-12)
-    assert z_skin[0] == z_dc[0]  # DC: no skin effect
+    # DC: no skin effect. The two worlds run different solve paths, and
+    # (v1 - v2)/i2 cancels the potentials by about 600x: equal to round-off
+    # (1.3e-13 with the line kernel of wave 3, bit-equal before by chance).
+    assert z_skin[0] == pytest.approx(z_dc[0], rel=1e-12)
     assert z_skin[1].real == pytest.approx(r_dc * _skin_ratio(1000.0).real, rel=1e-9)
     assert z_skin[1].imag == pytest.approx(0.0, abs=1e-12)
     assert z_dc[1] == z_dc[0]  # the dc model stays frequency independent

@@ -1,0 +1,75 @@
+# Stream w3xl (wave 3 of the 2026.11 work): the two-layer image series and
+# the cross-layer path of the line kernel. See ../README.md for the format.
+# Every bound was measured with GF_GOLDEN_STRICT=1 against the stream's own
+# baseline of its start (release/calver 34ad269, generated on the author's
+# Mac) and is the measured change times about 1.5; the attribution to the
+# items comes from toggling them (evidence golden_attribution.py /
+# golden_attribution.out of the stream).
+#
+# Items 3 (memory of the cross-layer path) and 4 (closed-form amplitude
+# solve) move no stored case beyond round-off: item 3 is bit-identical,
+# item 4 changes six quantities of four cases (img2_rod_crosslayer,
+# line_img2_rod_crosslayer, mom_sommerfeld_duplicated_stack,
+# mutual_three_rods_crosslayer) by at most 2.5e-16, within the golden
+# tolerance, so nothing is declared for them. Point-kernel cases and the
+# mom family are bit-identical otherwise.
+
+# --- item 5 (user decision D2): continuous near/far switch -------------
+# Pairs between 6 and 7.5 segment lengths are blended between the exact
+# and the far value instead of switching at 6; the far form carries the
+# radius term of the reduced kernel (-a²/2R³). Every line-kernel case moves
+# by a few 1e-7 in homogeneous soil.
+
+[[change]]
+cases = [
+    "defaults_mixed_cluster_inductive",
+    "defaults_rod_hom",
+    "line_cond_galvanic_neumann",
+    "line_img_mixed_cluster_hom",
+    "line_img_rod_hom",
+]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "user decision D2, audit W2B-01/-02: line-kernel switch blended between 6 and 7.5 segment lengths (translation invariant to round-off); far form with the radius term of the reduced kernel."
+max_rel_change = 1.2e-6
+
+# --- item 1 (10.28): far Tagg/Sunde images with the quadrupole term -----
+# The far images of the series carried the point form; with the quadrupole
+# term a straight strip in two-layer soil reproduces its uniform-current
+# resistance to 8e-7 instead of 5e-4. Within-layer two-layer cases move by
+# up to 5.9e-4 (item 1) plus up to 6e-5 (the blended switch of the images).
+
+[[change]]
+cases = ["line_img2_ring_rods_within_layer"]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "wave 3 item 1: far Tagg/Sunde images with the quadrupole term of the segment average (5.9e-4); item 5: image pairs blended at the switch (6e-5)."
+max_rel_change = 9e-4
+
+[[change]]
+cases = ["defaults_two_layer_ring_auto"]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "wave 3 item 1: far Tagg/Sunde images with the quadrupole term of the segment average (1.8e-4 in the field, 7.4e-5 in Zc)."
+max_rel_change = 2.7e-4
+
+[[change]]
+cases = ["line_mutual_two_layer"]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "wave 3 item 1: far Tagg/Sunde images with the quadrupole term of the segment average (6.5e-5)."
+max_rel_change = 1e-4
+
+# --- item 2 (10.28, ADR-0007): line form of the cross-layer correction --
+# The layered correction of a rod through the interface was in point form
+# except the interface image of near pairs; as image families in line form
+# the rod's impedance no longer depends on the segment length (9.0e-7
+# between 2 and 0.125 m, 1.3e-4 ... 2.4e-4 before). Zc moves 4.0e-4, of
+# which 9.9e-5 the far images.
+
+[[change]]
+cases = ["line_img2_rod_crosslayer"]
+quantities = ["*"]
+findings = ["10.28"]
+reason = "wave 3 item 2: layered correction of the cross-layer path in line form (image families, far quadrupole terms, Galerkin near pairs); items 1 and 5 on its images."
+max_rel_change = 6e-4

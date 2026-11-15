@@ -30,14 +30,18 @@ The yardstick is the round-off of local coordinates: the same world moved
 by local offsets of 0.1 m to 8.8 km. With the point kernel (``image``
 with ``kernel="point"``, ``mom``, ``mom_sommerfeld``) it is 1e-14, and the
 UTM solve now lies 3e-11 from the local one (the rounding of the input
-vertices themselves, about 1e-9 m). The line kernel switches from the exact
+vertices themselves, about 1e-9 m). The line kernel switched from the exact
 Galerkin integral to its far form at a midpoint distance of six segment
-lengths, where the pairs six segments apart on a straight wire sit exactly:
-round-off decides their form at any position, and the impedances of the
-worlds here spread by up to 2.4e-7 over the local offsets (audit W2B-01:
-up to 5.4e-7 for direct pairs, 8e-6 ... 2.6e-5 in two-layer soil where an
-image distance is six segment lengths). The UTM solves lie within that
-spread (they were up to 1.5e-6 off).
+lengths, where the pairs six segments apart on a straight wire sit exactly,
+so round-off decided their form at any position: the impedances spread by
+up to 5.4e-7 over the local offsets for direct pairs and by 8e-6 ... 2.6e-5
+in two-layer soil where an image distance is six segment lengths (audit
+W2B-01). Since wave 3 of the 2026.11 work the switch is blended between six
+and 7.5 segment lengths (user decision D2): the line kernel spreads by
+8.6e-14 over the local offsets and its UTM solves lie within the point
+kernel's bounds (evidence ``item5_spread.py`` of stream w3xl), which are now
+the bounds of both kernels; a 12 m strip and a strip whose own images sit
+at six segment lengths are among the cases.
 """
 
 from __future__ import annotations
@@ -52,10 +56,13 @@ import groundfield as gf
 
 ORIGIN = (32_604_321.123, 5_812_345.678)
 #: Bounds of the UTM solve against the local one: (impedance and potential,
-#: touch voltage). The line kernel's bound is its spread over local offsets
-#: (2.4e-7 measured, evidence ``local_offsets_line_kernel.py``) with a margin.
+#: touch voltage). Since the blended line-kernel switch (user decision D2)
+#: both kernels share them: the line kernel's UTM solves lie within 3.4e-11
+#: (Z), 3.6e-10 (potentials) and 9.6e-10 (touch) of the local ones, the point
+#: kernel's within 3e-11 / 3e-10 / 1.2e-10 (audit W2B). Up to then the line
+#: bound was (5e-7, 2e-6), its spread over local offsets.
 POINT_BOUND = (1e-9, 1e-8)
-LINE_BOUND = (5e-7, 2e-6)
+LINE_BOUND = POINT_BOUND
 
 HOM = gf.HomogeneousSoil(rho=100.0)
 TWO = gf.TwoLayerSoil(rho_1=100.0, rho_2=30.0, h_1=3.0)
@@ -138,6 +145,29 @@ def strip_star(origin, soil=HOM):
     gf.create_conductor(w, start="s", end="st")
     gf.create_source(w, attached_to="s", magnitude=1.0)
     return w, "s"
+
+
+def strip12(origin, soil=HOM):
+    """A 12 m strip of 0.5 m segments: the pairs six segments apart sit on
+    the former switch (audit W2B-01: 4.4e-7 over the local offsets)."""
+    ox, oy = origin
+    th = math.radians(23.0)
+    w = gf.create_world(soil=soil)
+    gf.create_electrode(
+        w,
+        "strip",
+        name="e",
+        start=(ox, oy, 0.6),
+        end=(ox + 12.0 * math.cos(th), oy + 12.0 * math.sin(th), 0.6),
+    )
+    gf.create_source(w, attached_to="e", magnitude=1.0)
+    return w, "e"
+
+
+#: 2 (h_1 - z) = 2 (2.1 - 0.6) m = 3 m = six segment lengths of 0.5 m: every
+#: segment's own Tagg/Sunde image sits on the former switch (audit W2B-01:
+#: 1.4e-5 over the local offsets, 1.37e-5 at UTM).
+IMAGE_SWITCH = gf.TwoLayerSoil(rho_1=100.0, rho_2=30.0, h_1=2.1)
 
 
 def ring_rods(origin, soil=TWO):
@@ -327,6 +357,8 @@ CASES = [
     ("strip_star", strip_star, HOM, "mom", {}),
     ("ring_rods", ring_rods, TWO, "image", {}),
     ("ring_rods", ring_rods, TWO, "mom", {}),
+    ("strip12", strip12, HOM, "image", {}),
+    ("strip12", strip12, IMAGE_SWITCH, "image", {}),
 ]
 
 

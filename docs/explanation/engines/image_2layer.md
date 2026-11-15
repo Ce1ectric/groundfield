@@ -68,13 +68,20 @@ was capped at 100 terms, finding 10.25).
 
 Every segment carries the source, the air image and the image series. With
 the exact line kernel (default) the direct and air-image pairs are the
-Galerkin integrals of the [kernels page](../kernels.md); the images of
-order $n \ge 1$ lie at least $2(h_1 - z)$ away and use the point form,
-except for image pairs closer than six segment lengths (wires close to the
-interface), which are integrated exactly too. For a straight strip the
-result deviates from the exact uniform-current resistance by a few
-$10^{-5}$ at any segment length (generated kernel check below); the point
-kernel sits about 1–2 % low, like in homogeneous soil.
+Galerkin integrals of the [kernels page](../kernels.md), and so are the
+images of order $n \ge 1$: exact for image pairs closer than six segment
+lengths, blended into the far form up to 7.5, and beyond the point form
+with the quadrupole term of the segment average — tapered off between 60
+and 120 segment lengths of vertical distance, where it falls below the
+remainder of the far form (since wave 3 of the 2026.11 work; before, far
+images were point sources). A straight strip then reproduces its exact
+uniform-current resistance at any segment length: a 10 m strip at 0.5 m in
+1000 / 50 Ω·m with $h_1$ = 1 m within 7.7e-7 from 2 m to 0.125 m segments,
+monotonically (before up to +5.1e-4, not monotone), and the surface
+potential above it within 8e-6 of the closed-form image sum (before up to
+0.94 %: the alternating series of a more conductive lower layer amplifies
+the error of its far images). The point kernel sits about 1–2 % low, like
+in homogeneous soil.
 
 ## Electrodes that reach the interface
 
@@ -87,9 +94,30 @@ at $h_1$; the reaction matrix is the homogeneous kernel scaled with the
 resistivity of the source layer plus a layered correction $\Delta Z$
 evaluated by spectral quadrature, grouped by depth. For a pair in
 different layers the direct term carries the transmitted resistivity
-$2\rho_1\rho_2/(\rho_1+\rho_2)$, which keeps the matrix reciprocal; the
-near-singular interface image of $\Delta Z$ is integrated in Galerkin form
-for near pairs (line kernel).
+$2\rho_1\rho_2/(\rho_1+\rho_2)$, which keeps the matrix reciprocal. With
+the line kernel $\Delta Z$ is in line form as well: in two-layer soil it is
+an exact superposition of images in every layer combination (Sunde), and
+its images get the treatment of the Tagg/Sunde images above — the far
+quadrupole term over all pairs, the Galerkin integral for pairs within
+six segment lengths blended up to 7.5, the Galerkin self images on the
+diagonal — on top of the spectral values between midpoints (since wave 3
+of the 2026.11 work; before, only the interface image of near pairs in one
+layer was a Galerkin integral). A rod through the interface then no longer
+depends on the segment length (6 m from 0.6 m through $h_1$ = 5 m in
+500 / 100, 1000 / 30 and 30 / 1000 Ω·m: within 9e-7 from 2 m to 0.125 m
+segments, before 1.3e-4 … 2.4e-4), and for wires in the upper layer, where
+both paths apply, the cross-layer path reproduces the series to 1.7e-7
+(before up to 6.2e-4).
+
+Its cost: one spectral evaluation per pair of segment depths. Large depth
+groups (all house grids at one depth, for example) are planned once and
+evaluated in row chunks, so the path needs the memory of the series path —
+the reaction matrix, $16N^2$ bytes, within the budget and row blocks beyond
+it (finding 10.56; before, 41 instead of 18 bytes per segment pair for 16
+house grids below $h_1$, and no row blocks). The boundary-value system of
+the spectral amplitudes is eliminated in closed form, vectorised over the
+quadrature nodes (one LAPACK solve per node before: half the time of the
+path).
 
 Physically the leakage current density of a rod through the interface
 scales roughly with the conductivity of the layer it is in. Since 2026.11

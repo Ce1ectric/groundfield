@@ -92,9 +92,11 @@ one reaction-matrix assembly per solve instead of two, the two-layer series
 summed into one matrix before the product (optionally compiled with numba,
 bit-identical) and the direct assembly of $Z_G$ instead of applying the
 kernel to an identity matrix ($O(N^3)$ per image term; findings
-10.56–10.59, 10.62). The W2 peak is the grouped spectral correction of the
-cross-layer path, which cannot be split into row blocks without changing
-its λ grid.
+10.56–10.59, 10.62). The W2 peak was the grouped spectral correction of the
+cross-layer path; since wave 3 of the 2026.11 work a large depth group is
+planned once from the range of its distances and evaluated in row chunks
+(bit-identical), and beyond the budget the path works in row blocks like the
+series path (next section).
 
 ### The default line kernel
 
@@ -107,6 +109,8 @@ relative to the point kernel, measured on the release state:
 | 16 house grids, homogeneous (documented with `Engine.kernel`) | 1920 | — | — | 2.7 with numba, 5.7 without | — |
 | W1: 30 houses, homogeneous | 3668 | 0.83 s / 113.4 MiB | 1.55 s / 155.7 MiB | 1.9 | +0.35 % |
 | W1-80: 80 houses, homogeneous | 9668 | 6.19 s / 758.3 MiB | 6.94 s / 856.2 MiB | 1.1 | +0.27 % |
+| 16 house grids, homogeneous (wave 3) | 1920 | 0.040 s | 0.124 → 0.156 s (blended switch) | 3.9 | — |
+| 16 house grids, 500 / 100 Ω·m, $h_1$ = 5 m (wave 3) | 1920 | 0.32 s | 0.41 → 0.70 s (far images) | 2.2 | — |
 
 The W1 rows were measured under a machine load of about 5.6 on two cores
 (numba installed), so their absolute times are about three times those of
@@ -115,6 +119,34 @@ networks differ slightly from the v0.15.0 table ($N$ = 3668 instead of
 3687) because the layout builder now joins PEN cables at junction nodes
 instead of 5 cm rods. Install the extra `fast` (numba) for the compiled
 far field; `kernel="point"` reproduces the old numbers and cost.
+
+### Electrodes through the layer interface (wave 3)
+
+The ADR-0007 path of `image_2layer`, measured on the AP1 station of the
+roadmap — a 4 × 4 m ring at 0.6 m and three 6 m rods from 0.6 m through
+$h_1$ = 5 m (500 / 100 Ω·m), 60 houses with foundations (10 × 10 m, 2 × 2
+meshes at 0.8 m) at 5 … 40 % penetration, PEN cables, ds = 0.5 m, 50 Hz —
+before and after wave 3 of the 2026.11 work (best of three, numba
+installed, a shared machine; memory: `tracemalloc` peak):
+
+| penetration | $N$ | line kernel before → after | point kernel before → after | peak before → after | the same world with 4 m rods (series path) |
+|---:|---:|---|---|---|---|
+| 5 % | 311 | 0.82 → 0.43 s | — | 19.4 → 20.8 MiB | 0.06 s, 8.5 MiB |
+| 10 % | 671 | 0.84 → 0.50 s | 0.85 → 0.42 s | 27.8 → 28.5 MiB | 0.11 s, 18.7 MiB |
+| 20 % | 1031 | 0.89 → 0.62 s | — | 42.5 → 39.6 MiB | 0.22 s, 25.0 MiB |
+| 40 % | 2711 | 1.28 → 1.65 s | 1.14 → 0.70 s | 278.3 → 136.6 MiB | 1.27 s, 127.1 MiB |
+
+The spectral amplitudes are eliminated in closed form (one LAPACK solve per
+quadrature node before, half the time of the path): the point kernel, which
+sees only that change, is 1.6 … 2.0 times faster. The line kernel carries the
+layered correction in line form now (a rod through the interface no longer
+depends on the segment length); its far-field terms cost 1.9 times the solve
+without them at 40 % penetration (3.6 times without numba: 1.40 → 3.80 s),
+which outweighs the gain there. Peak memory is that of the series path:
+16 house grids entirely below $h_1$ = 0.5 m need 21.9 bytes per segment
+pair instead of 41.2 (the series path 18.3), and beyond the matrix budget
+the path works in row blocks with memory linear in $N$ (36 house grids,
+$N$ = 4320: 34.8 MiB in block mode, 1008 MiB before).
 
 ### Inductive conductors
 

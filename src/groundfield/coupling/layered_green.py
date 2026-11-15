@@ -35,11 +35,11 @@ related by reciprocity ($\\Phi_{ul} = \\Phi_{lu}$).
 
 Implementation
 --------------
-The 4×4 boundary-value system is solved numerically once per
-$(\\lambda, z_s)$ pair (4 unknowns: amplitudes in each layer for
-each direction). Per call the cost is dominated by $J_0$
-evaluation and the linear solve at each $\\lambda$ node — fully
-vectorisable with `numpy`.
+The boundary-value system is solved once per $(\\lambda, z_s)$ pair; in
+its stable form it has three unknowns, and since 2026.11 it is eliminated
+in closed form, vectorised over the $\\lambda$ nodes (one LAPACK solve per
+node before, half the time of a cross-layer solve). Per call the cost is
+then dominated by the $J_0$ evaluation.
 
 The implementation focuses on the 2-layer case
 (:class:`groundfield.soil.models.TwoLayerSoil`); the n-layer
@@ -214,8 +214,12 @@ class SommerfeldTailTruncationWarning(UserWarning):
 # pairs is ``n_seg**2`` and the oscillation-resolved lambda grid reaches
 # ~5e4 nodes, so the full matrix can exceed 100 GiB. The contraction is
 # blocked over the distance axis to keep the transient allocation below
-# this budget; row-blocking a matmul is bit-for-bit identical to the
-# single-shot form (see ``tests/test_layered_green_chunking.py``).
+# this budget. Row-blocking the matrix-vector product is bit-for-bit
+# identical to the single-shot form with OpenBLAS (``tests/
+# test_layered_green_chunking.py``); Accelerate (macOS arm64) may sum a row
+# in another order depending on the block (up to 2e-13 absolute measured,
+# stream w3xl ``item3_blas_row_independence.py``), so callers that must be
+# bit-identical evaluate a pair-by-pair group in one piece.
 _HANKEL_MATMUL_BUDGET_BYTES = 512 * 1024 * 1024
 
 # --- Oscillation resolution of the linear (large-lambda) region -------
@@ -346,9 +350,9 @@ def _hankel_contract(
     but never materialises the full ``(n_s, n_lambda)`` Bessel matrix:
     the distance axis is processed in row blocks sized so each transient
     ``J0`` block stays within :data:`_HANKEL_MATMUL_BUDGET_BYTES`. The
-    result is identical to the single-shot contraction (a matmul is a
-    row-independent reduction), so accuracy is unchanged; only peak
-    memory is bounded. ``s_values`` of any shape is accepted and the
+    result equals the single-shot contraction to round-off (bit for bit
+    with OpenBLAS; Accelerate may order the sums of a row by block), so
+    accuracy is unchanged; only peak memory is bounded. ``s_values`` of any shape is accepted and the
     original shape is preserved on return.
     """
     orig_shape = s_values.shape
@@ -399,31 +403,95 @@ def _hankel_contract_smooth(
         Same shape as ``s_values``.
     """
     s_values = np.asarray(s_values, dtype=float)
-    n_pairs = int(s_values.size)
-    s_min = float(s_values.min())
-    s_max = float(s_values.max())
-    c = max(float(c), 1e-3)
-    t_lo = math.log(s_min + c)
-    t_hi = math.log(max(s_max + c, s_min + c + 1e-9))
-    if t_hi - t_lo < 1e-9:
-        # Degenerate group (all pairs at the same distance).
-        value = float(_hankel_contract(lambdas, np.array([s_min]), w_phi)[0])
-        return np.full(s_values.shape, value, dtype=float)
-    n_nodes = _interp_node_count(t_lo, t_hi)
-    if n_pairs <= _HANKEL_INTERP_THRESHOLD or n_nodes >= n_pairs:
-        # Interpolation would cost at least as much as the exact
-        # contraction — take the exact branch. This also keeps the step
-        # at the threshold below the module's tolerance: the two
-        # branches only ever meet where they agree to ~1e-6 (worst
-        # measured 1.1e-5, see _HANKEL_INTERP_* above) — *not* to
-        # ~1e-8, as this comment claimed at 0.15.0.dev.
-        return _hankel_contract(lambdas, s_values, w_phi)
-    t_nodes = np.linspace(t_lo, t_hi, n_nodes)
-    s_nodes = np.maximum(np.exp(t_nodes) - c, 0.0)
-    g_nodes = _hankel_contract(lambdas, s_nodes, w_phi)
-    spline = CubicSpline(t_nodes, g_nodes)
-    flat = spline(np.log(s_values.ravel() + c))
-    return np.asarray(flat, dtype=float).reshape(s_values.shape)
+    contraction = _SmoothContraction(
+        lambdas,
+        w_phi,
+        c=c,
+        s_min=float(s_values.min()),
+        s_max=float(s_values.max()),
+        n_pairs=int(s_values.size),
+    )
+    return contraction(s_values)
+
+
+class _SmoothContraction:
+    """:func:`_hankel_contract_smooth` split into its plan and its evaluation.
+
+    The branch (constant, exact contraction or cubic spline) and the spline
+    depend only on the range ``[s_min, s_max]`` and the number of pairs of a
+    group, so a large group can be evaluated in pieces of a bounded size
+    (memory of the cross-layer path, review pass 10, 10.56): the spline is
+    evaluated point by point, so every piece gives the values of the
+    one-shot call bit for bit. The exact branch contracts ``J0`` with a BLAS
+    matrix-vector product whose summation order may depend on the number of
+    rows; it is only taken for groups of at most
+    :data:`_HANKEL_INTERP_NODES_MAX` pairs, which callers evaluate in one
+    piece.
+
+    Parameters
+    ----------
+    lambdas, w_phi
+        Quadrature nodes and the pre-multiplied weight, as in
+        :func:`_hankel_contract_smooth`.
+    c
+        Offset of the log coordinate in m.
+    s_min, s_max
+        Smallest and largest horizontal distance of the group in m.
+    n_pairs
+        Number of distance pairs of the group.
+    """
+
+    def __init__(
+        self,
+        lambdas: np.ndarray,
+        w_phi: np.ndarray,
+        *,
+        c: float,
+        s_min: float,
+        s_max: float,
+        n_pairs: int,
+    ) -> None:
+        self.lambdas = lambdas
+        self.w_phi = w_phi
+        self.c = max(float(c), 1e-3)
+        self.constant: float | None = None
+        self.spline = None
+        t_lo = math.log(s_min + self.c)
+        t_hi = math.log(max(s_max + self.c, s_min + self.c + 1e-9))
+        if t_hi - t_lo < 1e-9:
+            # Degenerate group (all pairs at the same distance).
+            self.constant = float(
+                _hankel_contract(lambdas, np.array([s_min]), w_phi)[0]
+            )
+            return
+        n_nodes = _interp_node_count(t_lo, t_hi)
+        if n_pairs <= _HANKEL_INTERP_THRESHOLD or n_nodes >= n_pairs:
+            # Interpolation would cost at least as much as the exact
+            # contraction — take the exact branch. This also keeps the step
+            # at the threshold below the module's tolerance: the two
+            # branches only ever meet where they agree to ~1e-6 (worst
+            # measured 1.1e-5, see _HANKEL_INTERP_* above) — *not* to
+            # ~1e-8, as this comment claimed at 0.15.0.dev.
+            return
+        t_nodes = np.linspace(t_lo, t_hi, n_nodes)
+        s_nodes = np.maximum(np.exp(t_nodes) - self.c, 0.0)
+        g_nodes = _hankel_contract(lambdas, s_nodes, w_phi)
+        self.spline = CubicSpline(t_nodes, g_nodes)
+
+    @property
+    def exact(self) -> bool:
+        """Whether the group is contracted pair by pair (one piece only)."""
+        return self.constant is None and self.spline is None
+
+    def __call__(self, s_values: np.ndarray) -> np.ndarray:
+        """Contracted values at ``s_values`` (any shape, within the plan's range)."""
+        s_values = np.asarray(s_values, dtype=float)
+        if self.constant is not None:
+            return np.full(s_values.shape, self.constant, dtype=float)
+        if self.spline is None:
+            return _hankel_contract(self.lambdas, s_values, self.w_phi)
+        flat = self.spline(np.log(s_values.ravel() + self.c))
+        return np.asarray(flat, dtype=float).reshape(s_values.shape)
 
 
 @lru_cache(maxsize=None)
@@ -1191,32 +1259,32 @@ def _spectral_amplitudes(
     sigma_1 = 1.0 / rho_1
     sigma_2 = 1.0 / rho_2
 
-    n = lambdas.size
-    A_mat = np.zeros((n, 3, 3), dtype=float)
-    rhs = np.zeros((n, 3), dtype=float)
+    # Right-hand sides of Eq 1 … Eq 3 at every λ.
+    r_0 = -dz_phi_p_0
+    r_1 = phi_p_layer2_h - phi_p_h
+    r_2 = sigma_2 * dz_phi_p_layer2_h - sigma_1 * dz_phi_p_h
 
-    # Eq 1
-    A_mat[:, 0, 0] = lambdas * e_mlh
-    A_mat[:, 0, 1] = -lambdas
-    A_mat[:, 0, 2] = 0.0
-    rhs[:, 0] = -dz_phi_p_0
-
-    # Eq 2
-    A_mat[:, 1, 0] = 1.0
-    A_mat[:, 1, 1] = e_mlh
-    A_mat[:, 1, 2] = -1.0
-    rhs[:, 1] = phi_p_layer2_h - phi_p_h
-
-    # Eq 3
-    A_mat[:, 2, 0] = sigma_1 * lambdas
-    A_mat[:, 2, 1] = -sigma_1 * lambdas * e_mlh
-    A_mat[:, 2, 2] = sigma_2 * lambdas
-    rhs[:, 2] = sigma_2 * dz_phi_p_layer2_h - sigma_1 * dz_phi_p_h
-
-    sol = np.linalg.solve(A_mat, rhs[..., None]).squeeze(-1)
-    A = sol[:, 0]
-    B = sol[:, 1]
-    C = sol[:, 2]
+    # Closed-form elimination, vectorised over λ (wave 3 of the 2026.11
+    # work, roadmap "Vectorise the ADR-0007 cross-layer Sommerfeld path").
+    # Eq 1 gives B = e·A − r_0/λ, Eq 2 then C = (1 + e²)·A − e·r_0/λ − r_1,
+    # and Eq 3
+    #
+    #    A = (r_2 + (σ_2 − σ_1)·e·r_0 + σ_2·λ·r_1) / (λ [σ_1 (1 − e²) + σ_2 (1 + e²)])
+    #
+    # with e = e^{−λh_1} ≤ 1: the denominator is at least σ_2·λ > 0, so
+    # the elimination is as well conditioned as the system. It replaces one
+    # LAPACK solve per node (the 3 × 3 systems took half the time of a
+    # cross-layer solve) and agrees with it to round-off: ≤ 1e-14 of the
+    # amplitude scale against a 50-digit reference over λ = 1e-7 … 2e3 1/m
+    # and contrasts up to 1e4, where LAPACK is 1.9e-12 and this form
+    # 5.3e-13 off (``tests/test_cross_layer_speed.py``).
+    e_sq = e_mlh * e_mlh
+    r_0_lam = r_0 / lambdas
+    A = (r_2 + (sigma_2 - sigma_1) * e_mlh * r_0 + sigma_2 * lambdas * r_1) / (
+        lambdas * (sigma_1 * (1.0 - e_sq) + sigma_2 * (1.0 + e_sq))
+    )
+    B = e_mlh * A - r_0_lam
+    C = (1.0 + e_sq) * A - e_mlh * r_0_lam - r_1
     # Return the **stable** amplitudes (A, B, C). Callers should
     # use _phi_from_stable_amplitudes() to evaluate Phi(z) at any
     # observer depth without intermediate overflows.
@@ -1758,108 +1826,227 @@ def two_layer_layered_correction_group(
         The correction, same shape as ``s_values``; divided by
         :math:`2\\pi` it is the potential in V per A.
     """
-    if rho_baseline is None:
-        rho_baseline = rho_1
-    _validate_depths(z, z_s)
     s_values = np.asarray(s_values, dtype=float)
-    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and abs(
-        rho_baseline - rho_1
-    ) < 1e-12 * max(rho_1, 1.0):
-        return np.zeros(s_values.shape, dtype=float)
-    s_min = float(s_values.min())
-    s_max = float(s_values.max())
-    plan = _plan_truncation(
-        z=z,
-        z_s=z_s,
+    group = layered_correction_group_plan(
+        z,
+        z_s,
         rho_1=rho_1,
         rho_2=rho_2,
         h_1=h_1,
         rho_baseline=rho_baseline,
-        s_near=s_min,
-        s_far=s_max,
+        s_min=float(s_values.min()) if s_values.size else 0.0,
+        s_max=float(s_values.max()) if s_values.size else 0.0,
+        n_pairs=int(s_values.size),
         lambda_max_factor=lambda_max_factor,
-        warn_stacklevel=3,
-    )
-    lambdas, weights = _hankel_lambda_grid(
-        lambda_max=plan.lambda_max,
-        char_length=plan.char_length,
-        s=s_max,
         n_log=n_log,
         n_lin=n_lin,
-        warn_stacklevel=3,
+        min_distance=min_distance,
+        warn_stacklevel=4,
     )
-    A, B, _, C = _spectral_amplitudes(lambdas, z_s, rho_1, rho_2, h_1)
-    A_h, B_h, _, C_h = _spectral_amplitudes(
-        lambdas,
-        z_s,
-        rho_baseline,
-        rho_baseline,
-        h_1,
-    )
-    Phi_lay = _phi_from_stable_amplitudes(
-        lambdas,
-        A,
-        B,
-        C,
+    if group is None:
+        return np.zeros(s_values.shape, dtype=float)
+    return group(s_values)
+
+
+def layered_correction_group_plan(
+    z: float,
+    z_s: float,
+    *,
+    rho_1: float,
+    rho_2: float,
+    h_1: float,
+    rho_baseline: float | None = None,
+    s_min: float,
+    s_max: float,
+    n_pairs: int,
+    lambda_max_factor: float = 200.0,
+    n_log: int = 32,
+    n_lin: int = 96,
+    min_distance: float | None = None,
+    warn_stacklevel: int = 3,
+) -> _CorrectionGroup | None:
+    """Plan of :func:`two_layer_layered_correction_group` for one depth group.
+
+    The λ-grid, the spectral amplitudes, the closed-form image split and the
+    interpolation of a group depend on its depths, on the range
+    ``[s_min, s_max]`` of its horizontal distances and on its size only. The
+    returned callable evaluates the correction at any distances of the group
+    and gives, piece by piece, the values of the one-shot call bit for bit
+    (except the exact branch, see :class:`_SmoothContraction`), so the
+    cross-layer reaction matrix can be assembled in blocks of bounded memory
+    (review pass 10, 10.56).
+
+    Parameters
+    ----------
+    z, z_s, rho_1, rho_2, h_1, rho_baseline, lambda_max_factor, n_log, n_lin, min_distance
+        As in :func:`two_layer_layered_correction_group`.
+    s_min, s_max
+        Smallest and largest horizontal distance of the group in m.
+    n_pairs
+        Number of distance pairs of the group.
+    warn_stacklevel
+        Frames between the warning calls and the caller of this function's
+        caller (3: warnings point at the code that calls this function).
+
+    Returns
+    -------
+    callable or None
+        ``group(s_values) -> correction`` (same shape as ``s_values``), or
+        ``None`` where the correction vanishes identically (equal
+        resistivities and a matching baseline).
+    """
+    if rho_baseline is None:
+        rho_baseline = rho_1
+    _validate_depths(z, z_s)
+    if abs(rho_2 - rho_1) < 1e-12 * max(rho_1, 1.0) and abs(
+        rho_baseline - rho_1
+    ) < 1e-12 * max(rho_1, 1.0):
+        return None
+    return _CorrectionGroup(
         z,
         z_s,
-        rho_1,
-        rho_2,
-        h_1,
-        include_primary=False,
+        rho_1=rho_1,
+        rho_2=rho_2,
+        h_1=h_1,
+        rho_baseline=rho_baseline,
+        s_min=s_min,
+        s_max=s_max,
+        n_pairs=n_pairs,
+        lambda_max_factor=lambda_max_factor,
+        n_log=n_log,
+        n_lin=n_lin,
+        min_distance=min_distance,
+        warn_stacklevel=warn_stacklevel + 1,
     )
-    Phi_hom = _phi_from_stable_amplitudes(
-        lambdas,
-        A_h,
-        B_h,
-        C_h,
-        z,
-        z_s,
-        rho_baseline,
-        rho_baseline,
-        h_1,
-        include_primary=False,
-    )
-    w_phi = (
-        (
-            Phi_lay
-            - Phi_hom
-            - _image_spectral_sum(
-                lambdas,
-                plan.coeffs,
-                plan.dists,
-            )
+
+
+class _CorrectionGroup:
+    """Layered correction of one ``(z, z_s)`` group (see the plan function)."""
+
+    def __init__(
+        self,
+        z: float,
+        z_s: float,
+        *,
+        rho_1: float,
+        rho_2: float,
+        h_1: float,
+        rho_baseline: float,
+        s_min: float,
+        s_max: float,
+        n_pairs: int,
+        lambda_max_factor: float,
+        n_log: int,
+        n_lin: int,
+        min_distance: float | None,
+        warn_stacklevel: int,
+    ) -> None:
+        plan = _plan_truncation(
+            z=z,
+            z_s=z_s,
+            rho_1=rho_1,
+            rho_2=rho_2,
+            h_1=h_1,
+            rho_baseline=rho_baseline,
+            s_near=s_min,
+            s_far=s_max,
+            lambda_max_factor=lambda_max_factor,
+            warn_stacklevel=warn_stacklevel,
         )
-        * weights
-        * lambdas
-    )
-    # The residual primary term. Zero — bit-exactly — whenever the
-    # caller follows the ADR-0007 recommendation and matches
-    # ``rho_baseline`` to the resistivity of the source layer.
-    d_rho = _primary_rho(z, z_s, rho_1, rho_2, h_1) - _primary_rho(
-        z,
-        z_s,
-        rho_baseline,
-        rho_baseline,
-        h_1,
-    )
-    c = _log_grid_offset(z, z_s, h_1, d_rest=plan.d_rest)
-    out = _hankel_contract_smooth(lambdas, s_values, w_phi, c=c)
-    lambda_clamp = _regularisation_wavenumber(plan.lambda_clamp, min_distance)
-    out = out + _image_real_space_sum(
-        plan.coeffs,
-        plan.dists,
-        s_values,
-        lambda_clamp,
-    )
-    if d_rho == 0.0:
-        return out
-    return out + _primary_term_real_space(
-        d_rho,
-        s_values,
-        z - z_s,
-        lambda_clamp,
-    )
+        lambdas, weights = _hankel_lambda_grid(
+            lambda_max=plan.lambda_max,
+            char_length=plan.char_length,
+            s=s_max,
+            n_log=n_log,
+            n_lin=n_lin,
+            warn_stacklevel=warn_stacklevel,
+        )
+        A, B, _, C = _spectral_amplitudes(lambdas, z_s, rho_1, rho_2, h_1)
+        A_h, B_h, _, C_h = _spectral_amplitudes(
+            lambdas,
+            z_s,
+            rho_baseline,
+            rho_baseline,
+            h_1,
+        )
+        Phi_lay = _phi_from_stable_amplitudes(
+            lambdas,
+            A,
+            B,
+            C,
+            z,
+            z_s,
+            rho_1,
+            rho_2,
+            h_1,
+            include_primary=False,
+        )
+        Phi_hom = _phi_from_stable_amplitudes(
+            lambdas,
+            A_h,
+            B_h,
+            C_h,
+            z,
+            z_s,
+            rho_baseline,
+            rho_baseline,
+            h_1,
+            include_primary=False,
+        )
+        w_phi = (
+            (
+                Phi_lay
+                - Phi_hom
+                - _image_spectral_sum(
+                    lambdas,
+                    plan.coeffs,
+                    plan.dists,
+                )
+            )
+            * weights
+            * lambdas
+        )
+        # The residual primary term. Zero — bit-exactly — whenever the
+        # caller follows the ADR-0007 recommendation and matches
+        # ``rho_baseline`` to the resistivity of the source layer.
+        self.d_rho = _primary_rho(z, z_s, rho_1, rho_2, h_1) - _primary_rho(
+            z,
+            z_s,
+            rho_baseline,
+            rho_baseline,
+            h_1,
+        )
+        self.dz = z - z_s
+        self.coeffs = plan.coeffs
+        self.dists = plan.dists
+        c = _log_grid_offset(z, z_s, h_1, d_rest=plan.d_rest)
+        self.contraction = _SmoothContraction(
+            lambdas, w_phi, c=c, s_min=s_min, s_max=s_max, n_pairs=n_pairs
+        )
+        self.lambda_clamp = _regularisation_wavenumber(plan.lambda_clamp, min_distance)
+
+    @property
+    def exact(self) -> bool:
+        """Whether the group is contracted pair by pair (evaluate in one piece)."""
+        return self.contraction.exact
+
+    def __call__(self, s_values: np.ndarray) -> np.ndarray:
+        """The correction at the horizontal distances ``s_values`` (m)."""
+        out = self.contraction(s_values)
+        out = out + _image_real_space_sum(
+            self.coeffs,
+            self.dists,
+            s_values,
+            self.lambda_clamp,
+        )
+        if self.d_rho == 0.0:
+            return out
+        return out + _primary_term_real_space(
+            self.d_rho,
+            s_values,
+            self.dz,
+            self.lambda_clamp,
+        )
 
 
 def two_layer_probe_matrix(
