@@ -122,6 +122,8 @@ reproduces 0.15.0, it is named.
 | W1B-03, W1B-04 (10.38) | layout cables joined to every substation / cabinet they pass; legs that leave and come back keep their taps | layouts with a cable through a passed cabinet −0.16 … −0.45 % (50 Hz, 1 m / 0.5 m); R6A's families: 32 of 200 cabinet, 10 of 120 random layouts change (drops −7.4 … +2.0 m); T06 and the AP1-like layout unchanged | `LvNetworkLayout` worlds whose cables pass through the closed electrodes of a site other than at their ends |
 | 10.46 (Q32/Q33), audit W1A-02 | pieces of conductors lying beside each other | coax in pieces +0.09 … +9.6 % (back to the lumped value); drops routed back along the PEN main: X(1 kHz) +3.9e-4, Zin 1.3e-5 (golden `cond_drops_along_pen_main_perfect_mirror`) | worlds with a core inside a marked shield, or cables / drops drawn on one axis, with `discretize_segment_length` |
 | 10.22 (Q30), audit W1A-01 | owners at projected coordinates | generated mesh foundations at UTM coordinates +0.09 … +0.64 % (back to the local value) | worlds built at absolute UTM coordinates |
+| 10.46 (Q32/Q33), audit W1R2-01 | pieces of nearly parallel conductors lying beside each other | tilted coax in pieces +0.004 … +8.0 % (back to the lumped value); overhead measurement leads: probe junction potential 6.5e-5 … 1.1e-4, U_HS ≤ 1.05e-6 | worlds with a core drawn slightly off its shield's axis, or touching cables / leads drawn at a tiny angle, with `discretize_segment_length` (the generator's overhead leads) |
+| 10.22 (Q30), audit W1R2-05 | straight runs at projected coordinates | arc-like polylines at UTM coordinates with vertices more than 0.46 µm off their neighbours' chord, e.g. a 2° arc electrode +1.27 % → +5.5e-4 against the local origin | worlds at absolute UTM coordinates |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -1283,8 +1285,9 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   conductors lying beside each other a point lies beside the partner when
   its foot falls inside the partner's whole conductor. The 100 m coax (5 /
   15 mm) read 26.91 / 26.37 / 24.61 µH in 10 / 1 / 0.25 m pieces against
-  26.97 µH lumped (−0.2 / −2.2 / −8.7 %), now the lumped value in any pieces;
-  the unmarked pair likewise (43.40 … 40.34 → 43.47 µH).
+  26.97 µH lumped (−0.2 / −2.2 / −8.7 %), now the lumped value in any pieces,
+  also with the core slightly tilted against the shield (within 6.4e-12 up to
+  1e-3 rad; audit W1R2-01); the unmarked pair likewise (43.40 … 40.34 → 43.47 µH).
   `build_inductance_matrix(..., conductors=...)` labels the conductors.
   Tests: `tests/test_concentric_cables.py`.
 - **A `cable_shield` copied with `resistance_model="skin"` is rejected at
@@ -1296,6 +1299,42 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   outlines read 102 instead of 393. Test: `tests/test_diagnostics_report.py`.
 - **A lone floating grid, star or polyline reports `0j`, not `-0-0j`
   (audit W1A-07).** Test: `tests/test_wire_line_owners.py`.
+- ⚠ **Nearly parallel pieces of two conductors add up to the lumped pair
+  (audit W1R2-01, user decisions Q32, Q33).** The rule of audit W1A-02 (a
+  point lies beside the partner's whole conductor; a core inside a cable
+  shield couples at the shield radius at every axial offset) acted only on
+  pieces parallel within 4.5e-5 rad. A core tilted by more kept the
+  per-piece rule and the 100 m coax read −0.17 / −0.36 / −1.86 / −7.42 % in
+  10 / 5 / 1 / 0.25 m pieces at 4.5e-5 rad, with a step at the tolerance.
+  Pieces whose lateral distance changes by at most the touching distance
+  along the longer piece now get the rule, with the stretches inside, beside
+  and away from the partner found exactly: the coax adds up to the lumped
+  pair within 6.4e-12 (an unmarked touching pair within 3.1e-10) for tilts
+  up to 1e-3 rad (`perfect_mirror` and `sommerfeld` solves within 3.2e-11,
+  unmarked 3.1e-10). The generator's overhead probe lead, drawn from 10 mm
+  beside the feed lead to its axis, is such a pair: the probe junction
+  potential moves by 6.5e-5 … 1.1e-4 with the default 5 m pieces. Test:
+  `tests/test_concentric_cables.py`.
+- **The bundle rule needs memory in proportion to the matrix (audit
+  W1R2-03).** Two touching 600 m conductors in 1 m pieces peaked at 292 MiB
+  (all pairs at once), now 30 MiB; the values are bit-identical. Test:
+  `tests/test_concentric_cables.py`.
+- **Straight runs of polylines are checked against the chord of the whole
+  run (audit W1R2-05).** A vertex tested against the chord of its two
+  neighbours only passed at UTM coordinates next to a near-duplicate vertex
+  or along a finely sampled arc: a square with a vertex 0.1 µm from a corner
+  became 3 wires, a 2° arc electrode of R = 50 m in 6 mm edges one wire
+  (+1.27 % against the local origin; now +5.5e-4). Local-coordinate worlds
+  and generated networks are unchanged. Test: `tests/test_wire_line_owners.py`.
+- **`World.check()` rejects a cable shield copied onto the skin model
+  (audit W1R2-10).** `model_copy(update=...)` skips the validator; the check
+  passed and only `image` / `mom` raised later, `fem` solved its resistive
+  fallback. Every backend now raises before it runs. Test:
+  `tests/test_concentric_cables.py`.
+- `build_inductance_matrix(conductors=None)` documents that unmarked touching
+  pieces are then not one conductor and do not add up (the 100 m pair in
+  0.25 m pieces 40.34 against 43.47 µH lumped; audit W1R2-08). Test:
+  `tests/test_concentric_cables.py`.
 - Solves at projected (UTM) coordinates are translation invariant (audit fw1sol). An edge
   of a whole number of segments no longer gets one more at UTM coordinates: the count
   allows the round-off of the coordinates' own magnitude, 64 ε|x|.

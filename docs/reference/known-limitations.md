@@ -34,7 +34,12 @@ shows what agrees with independent references and how well.
 - **Projected coordinates** are solved in an exactly shifted local frame beyond 10 km
   from the origin. A world that mixes projected and local coordinates (electrodes at UTM
   coordinates and a node near (0, 0)) gains nothing from the frame, as its bounding box
-  spans the whole range.
+  spans the whole range. The straight runs of a polyline (one owner per run)
+  are found with a round-off allowance of 64 units of the coordinates,
+  0.46 µm at a UTM easting: an arc whose vertices lie closer than that to the
+  chord of their neighbours (R = 50 m in 6 mm edges) gets one owner per two
+  edges instead of one per edge (+5.5e-4 in Z against the same arc at local
+  coordinates).
 
 ## Current ansatz and source kernels
 
@@ -237,9 +242,14 @@ shows what agrees with independent references and how well.
   other conductors drawn on one axis are separate cables touching each
   other; their sub-pieces add up to the lumped pair. Two unmarked cables in
   *sections* couple as filaments on the axis between sections that do not
-  overlap, and a core tilted against the shield axis by more than
-  4.5e-5 rad (the parallel tolerance) keeps the per-segment rule (−0.17 %
-  for a 100 m coax in 10 pieces). The skin effect of a shield (a tube) is
+  overlap, and a core tilted against the shield axis is read the same way
+  while the lateral distance changes by at most the touching distance
+  $r_c + r_s$ along a piece (and $|\cos\varphi| \ge 0.99$); beyond, the rule
+  acts per segment and the pieces are about 1e-6 off the lumped pair (the
+  touching stretch is then about one piece long). Under `carson_series` the
+  Carson correction of a tilted pair is tiled at the mid-point distance of
+  each pair, so one lumped pair and its pieces differ (1.3e-4 of the loop at
+  1e-3 rad). The skin effect of a shield (a tube) is
   not modelled (`resistance_model="skin"` raises for a shield); a three-core
   cable in one shield is three cores at the shield radius each.
 ## Post-processing and export
