@@ -215,15 +215,18 @@ shows what agrees with independent references and how well.
 - **Skin effect** is opt-in (`resistance_model="skin"`, solid round
   conductors); the proximity effect between conductors is not modelled.
 - **Concentric cables** are read only with the marker: a thinner conductor
-  on the axis of a conductor with `conductor_type="cable_shield"` is its
-  core and couples at the shield radius; the shield has no internal
-  inductance of a solid wire (user decisions Q32, Q33). Any two other
-  conductors drawn on one axis are separate cables touching each other.
-  The skin effect of a shield (a tube) is not modelled
-  (`resistance_model="skin"` raises for a shield); a core off the axis
-  inside the shield couples at the shield radius, a three-core cable in
-  one shield is three cores at the shield radius each.
-
+  parallel inside a conductor with `conductor_type="cable_shield"` is its
+  core and couples at the shield radius, at every axial offset (so a shield
+  of several conductors and a cable in sections add up); the shield has no
+  internal inductance of a solid wire (user decisions Q32, Q33). Any two
+  other conductors drawn on one axis are separate cables touching each
+  other; their sub-pieces add up to the lumped pair. Two unmarked cables in
+  *sections* couple as filaments on the axis between sections that do not
+  overlap, and a core tilted against the shield axis by more than
+  4.5e-5 rad (the parallel tolerance) keeps the per-segment rule (−0.17 %
+  for a 100 m coax in 10 pieces). The skin effect of a shield (a tube) is
+  not modelled (`resistance_model="skin"` raises for a shield); a three-core
+  cable in one shield is three cores at the shield radius each.
 ## Post-processing and export
 
 - **EN 50522 permissible touch voltage** is interpolated in Table B.4 for

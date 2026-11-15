@@ -94,7 +94,7 @@ reproduces 0.15.0, it is named.
 | 10.54, 10.39 | layout foundations follow the footprint; rotated mesh foundations split at their crossings | substation impedance 0 / +0.45 / +5.31 % in three test streets; mesh foundations +1.0 … +1.2 % (−9.5 % where the clamp fired) | layout and OSM worlds; `foundation_outline="spec"` reproduces 0.15.0 |
 | 10.53 | reproducible draws; masks of footprints without OSM id keyed by outline | reordering the footprints moved Z by 2.8 % before | `sample_world`, masks of footprints without `osm_id` |
 | 10.55 | `MeasurementLeadConfig.depth_m` and `PenConfig.depth_m` are honoured | coupled imaginary part of the probe +37 % (overhead) and +21 % (buried) at 1 kHz; inductive PEN at 1 kHz X 0.736 → 0.167 Ω; bare PEN −1.4 % (golden `gen_tn_default` ≤ 3.5e-7) | generator worlds with leads or inductive PEN |
-| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope follows that offset curve and samples no interior unless asked (`interior="meshes"` for open-air grids; user decision Q3) | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 69.6 V at +x, envelope 9.92 → 111.4 V (98.7 V with one current per wire line, user decision Q30); star 275 → 818 V; 10 m ring envelope 139.4 V unchanged (182.6 V in its centre with `interior="meshes"`); rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point"` reproduces 0.15.0 |
+| 10.21, F13 | touch voltage 1 m from the nearest wire of the footprint; the envelope follows that offset curve and samples no interior unless asked (`interior="meshes"` for open-air grids; user decision Q3) | 20 m × 20 m grid (100 A, 100 Ω·m): 9.92 → 61.3 V at +x (default line kernel; 60.0 V with the point kernel, 61.6 V with `mom`; 69.6 V with one current over the whole grid before user decision Q30), envelope 9.92 → 111.4 V (98.7 V with one current per wire line, user decision Q30); star 275 → 818 V; 10 m ring envelope 139.4 V unchanged (182.6 V in its centre with `interior="meshes"`); rotated foundation 214.4 / 93.9 V → 161.5 V (golden `img_mixed_cluster_hom`: strip ×3.2, star ×2.1) | touch-voltage assessments of grids, meshes, stars, strips, polylines, rings and rotated foundations; rods unchanged; `anchor="connection_point"` reproduces 0.15.0 |
 | 10.42 | the permissible touch voltage beyond 10 s is the 80 V of the note to Figure 8 of EN 50522 (user decision Q4) | `permissible_touch_voltage_en50522(t_f > 10 s)` 85 → 80 V (−5.9 %); `math.inf` (fault not cleared) raised, now 80 V; prospective value with 1000 Ω shoes on 100 Ω·m 142.5 → 137.5 V | assessments with fault durations above 10 s, resonant-earthed networks |
 | 10.18, 10.19 | `sweep`, `convergence_study` and the rho-f helpers use the input impedance | the cluster impedance of a station was 1.26 / 1.79 / 3.09 × the input impedance with 1 / 3 / 8 houses on a PEN; a ring with two bonded rods was fitted 17 % too high | sweeps of TN worlds and BusTypes exported with the rho-f helpers; the AP1 catalogue computes its own driving-point impedance |
 | 10.27 | the standard rho-f form gains a constant term `k0` and relative weights | worst pointwise error 15–27 % (ring) and 43 % (AP1-like station) → 0.8–3.3 % and 6.2 % (golden `fit_rho_f_standard_sweep`) | rho-f formulas exported to groundinsight, AP1 exports included; `k0=False, weights="uniform"` reproduces 0.15.0 |
@@ -117,6 +117,8 @@ reproduces 0.15.0, it is named.
 | 10.46 (Q32) | unmarked conductors of different radii on one axis touch | coax pair 31.97 → 43.47 µH loop | worlds with conductors drawn on one axis without the marker | none |
 | 10.46 (Q33) | shield without internal inductance | −50 nH/m per `cable_shield` conductor; coax 31.97 → 26.97 µH; `buried_lead()` two-pole −2.5 % in X | `cable_shield` conductors with `inductance_model` | none |
 | Q22 / Q35, Q43 (10.38) | cabinets per building group at the far end of their houses, radial substation slots tap the trunk; mains and drops meet rings and strips at their nearest point; layout cables reach a site where the polyline enters it | default grids (10 … 150 houses, 100 Ω·m): resistive PEN at 50 Hz star +0.02 … +0.85 %, radial −0.01 … +0.49 % (Q43 alone −0.05 … −0.13 %); isolated Neumann PEN (n ≤ 50, `carson_series` and `sommerfeld`): 50 Hz \|Z\| −0.03 … +0.97 %, Im −9.9 … +82 %; 1 kHz star Re −6.0 … +5.6 %, Im −9.1 … +70 %, \|Z\| −1.4 … +13.1 %, radial Re −0.5 … +8.3 %, Im −9.6 … +96 %, \|Z\| −1.2 … +15.4 % (default star 30 houses X +64 / +55 %: the houses share their main instead of parallel drops; Q43 alone Im −4 … −11 %); 100 ring houses +0.88 %; T06 layout −0.026 % (100 Ω·m), T07 Z_meas +1.51 %; the AP1-like layout (foundation station) unchanged; golden `gen_tn_default` ≤ 1.4e-2 (cabinet rod current −63 %), `gen_tn_measurement_overhead_leads` ≤ 1.9e-2 | `TnNetworkGenerator` worlds (cabinet positions and feeding with the default `placement=None`; radial substation slots; every default substation ring); layout worlds with ring / strip sites or router corners inside a site; not a given cabinet placement apart from Q43, not foundation stations |
+| 10.46 (Q32/Q33), audit W1A-02 | pieces of conductors lying beside each other | coax in pieces +0.09 … +9.6 % (back to the lumped value); drops routed back along the PEN main: X(1 kHz) +3.9e-4, Zin 1.3e-5 (golden `cond_drops_along_pen_main_perfect_mirror`) | worlds with a core inside a marked shield, or cables / drops drawn on one axis, with `discretize_segment_length` |
+| 10.22 (Q30), audit W1A-01 | owners at projected coordinates | generated mesh foundations at UTM coordinates +0.09 … +0.64 % (back to the local value) | worlds built at absolute UTM coordinates |
 | 10.38 | the PEN cables of `TnNetworkGenerator`: every cabinet keeps its own cable, a service drop taps the cable that feeds its building at the point nearest to it instead of running from the cabinet back along the main | golden networks: substation potential −2.1 %, substation leakage −3.1 … −4.8 %, house potentials −0.2 … +1.0 %, measurement network −1.1 %; input impedance of default-grid networks with ring foundations −6.4 / −1.2 / −0.3 % for 30 / 100 / 200 houses (star; with user decisions Q38 and Q41) (golden `gen_tn_default`, `gen_tn_measurement_overhead_leads`) | `TnNetworkGenerator` worlds; not the layout builder |
 | 10.60 | the Sommerfeld correction of inductive conductors is assembled from shared tables by default (`sommerfeld_assembly="tabulated"`; user decision Q16; `"exact"` is the per-pair rule of 0.15.0) | 1e-8 … 2.4e-6 (golden `cond_lumped_long_pen_sommerfeld` ≤ 2.4e-6); closer to refined references than the per-pair rule (2e-10 against 1.2e-8 on a TN network); a 30-house network 306 s → 12 s | inductive conductors under `sommerfeld` with at least 64 sub-segment pairs per block |
 | 10.32, 10.58, 10.61 | segment counts tolerant to round-off, series summation order, kernel tabulation | at most 6.9e-5 (point kernel), 7.3e-16 and 1.1e-9 | none in practice |
@@ -378,7 +380,7 @@ reproduces 0.15.0, it is named.
   `warn_inert`, `InertConfigurationWarning`, `REMOVAL_VERSION`.
 - The package ships a `py.typed` marker (10.02).
 - `WireSegments.wires`, `.wire_index`, `.n_wires` (the straight wire of
-  every segment); `geometry.primitives.COLLINEAR_SIN_TOL`.
+  every segment); `geometry.primitives.COLLINEAR_ROUNDOFF_ULPS`; `build_inductance_matrix(conductors=...)`.
 - `Conductor.is_shield`; `build_inductance_matrix(shields=...)`.
 - `FieldResult.metadata["wire_owners"]`.
 
@@ -713,7 +715,7 @@ reproduces 0.15.0, it is named.
   decision Q33).** The self terms of a `cable_shield` conductor drop
   μ₀ℓ/(8π) (50 nH/m); the 100 m coax with 5 mm core and 15 mm shield reads
   the analytic coaxial loop inductance 26.97 µH instead of 31.97 µH
-  (26.966 µH solved). `Conductor.internal_impedance_per_length` of a `"dc"`
+  (26.966 µH solved, whatever the sub-pieces of the two conductors, audit W1A-02). `Conductor.internal_impedance_per_length` of a `"dc"`
   shield has no inductive part; `resistance_model="skin"` on a shield raises
   `ValueError`. The generator's `buried_lead()` is a shield: two-pole
   readings with buried leads −2.5 % in reactance, three-pole unchanged.
@@ -1186,6 +1188,34 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   `tests/test_foundation_contact.py::test_no_layout_drop_starts_inside_a_cabinet_foundation_behind_a_short_bridge`,
   `::test_no_layout_drop_starts_inside_the_station_ring_with_a_fine_router_grid`,
   `::test_no_layout_drop_or_junction_lies_inside_a_cabinet_foundation_in_random_layouts`.
+- **Straight runs of polylines at projected coordinates (audit W1A-01, user
+  decision Q30).** A vertex continues a straight wire when it lies on the
+  chord of its neighbours up to 64 units of round-off of the coordinates
+  (`geometry.primitives.COLLINEAR_ROUNDOFF_ULPS`), instead of an absolute
+  sine of 1e-9 between the edges: at UTM coordinates (easting 32.6e6 m) a
+  rotated generated 10 m mesh foundation with 10 × 10 meshes split into 142
+  extra owners and read 0.55 % low (20 × 20: −0.64 %). Local-coordinate
+  worlds (the AP1 path) are unchanged. Test:
+  `tests/test_wire_line_owners.py`.
+- ⚠ **Sub-pieces of conductors lying beside each other add up (audit
+  W1A-02, user decisions Q32, Q33).** A thinner wire parallel inside a cable
+  shield couples at the shield radius at every axial offset; for two other
+  conductors lying beside each other a point lies beside the partner when
+  its foot falls inside the partner's whole conductor. The 100 m coax (5 /
+  15 mm) read 26.91 / 26.37 / 24.61 µH in 10 / 1 / 0.25 m pieces against
+  26.97 µH lumped (−0.2 / −2.2 / −8.7 %), now the lumped value in any pieces;
+  the unmarked pair likewise (43.40 … 40.34 → 43.47 µH).
+  `build_inductance_matrix(..., conductors=...)` labels the conductors.
+  Tests: `tests/test_concentric_cables.py`.
+- **A `cable_shield` copied with `resistance_model="skin"` is rejected at
+  solve time (audit W1A-05).** `model_copy(update=...)` skipped the
+  validator and the solve used the skin impedance of a solid wire. Test:
+  `tests/test_concentric_cables.py`.
+- **`diagnose()` / `expected_segments()` count the nodal unknowns per
+  straight wire (audit W1A-06).** A 100 m 20 × 20 grid with 50 building
+  outlines read 102 instead of 393. Test: `tests/test_diagnostics_report.py`.
+- **A lone floating grid, star or polyline reports `0j`, not `-0-0j`
+  (audit W1A-07).** Test: `tests/test_wire_line_owners.py`.
 
 ### Corrections to the 0.15.0 release notes
 

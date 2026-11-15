@@ -75,6 +75,15 @@ limits a result, the reference documentation states the limit.
   gets no further rules; a conforming axisymmetric model replaces it in the
   next release (see above, user decision Q37), and a full 3-D volume method
   remains deferred (see below).
+- **A current that varies along each wire in the image family.** Since user
+  decision Q30 every straight wire of an electrode carries one uniform
+  current per unit length. The arms of a star carry equal currents by
+  symmetry, so the split left a star alone as it was: +1.8 % (3 arms),
+  +3.4 % (4), +10.4 % (8 arms of 10 m) above one current per segment in
+  100 Ω·m, +12.3 % in 1000 over 100 Ω·m — the current crowds to the tips.
+  Grids are within +0.36 … +0.70 %. A current varying along each wire
+  (linear or per sub-piece, as `mom` solves it) would close the gap; until
+  then `backend="mom"` gives the per-segment solution.
 - **Overlapping concrete shells at junctions.** Where the wires of an
   encased foundation meet (the corners of a rectangle, the crossings and
   T-joints of a mesh), their shells overlap within about $r_b$ of the
