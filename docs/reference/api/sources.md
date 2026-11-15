@@ -61,13 +61,24 @@ apparent one: two 230 V sources on two 3 m rods 5 m apart (100 Ω·m) each
 drive 7.5 % less current than one alone and report an input impedance
 8.1 % higher (`image`). A voltage source of 0 V is a short through $Z_q$
 whose current the solve returns. The reactance $j\omega L$ is evaluated
-at every solved frequency (it vanishes at $f = 0$), so a world whose
-voltage source has an inductance is solved once per frequency even
-without inductive conductors.
+at every solved frequency (it vanishes at $f = 0$). A galvanic world whose
+voltage source has an inductance is solved once per frequency in the image
+family (whose system has one row per owner), while `mom` and
+`mom_sommerfeld` factorise their segment system once and solve, per
+frequency, only the V × V system of the V source currents (exact; 1 488
+segments at 20 frequencies: 1.02 times the solve of the same source
+without inductance, 28 times before audit W2R2-02). For
+$R \gg Z_E$ (the impedance the source sees) a current source $U/R$ is the
+better model: the potentials of the voltage solve and `input_impedance()`
+($U/I - Z_q$) lose about $\log_{10}(R/Z_E)$ digits, 2.7 · 10⁻⁶ relative
+at $R = 10^{12}$ Ω on a 36 Ω rod (`image`).
 
 `World.check` rejects, before any numerics run, a voltage source whose
 terminals are bonded into one cluster by ideal conductors (short circuit,
-with or without $Z_q$), negative or non-finite $R$ / $L$, and voltage
+with or without $Z_q$; with $Z_q$ its current $U/Z_q$ would circulate
+through the bond and the source, none through the soil), negative or
+non-finite $R$ / $L$ and non-zero ones below the smallest normal float
+(2.2 · 10⁻³⁰⁸, which turned the solve into `nan`), and voltage
 sources without internal resistance that form a loop through ideal bonds
 (conductors at or below 10⁻⁶ Ω) or remote earth — two of them from one
 cluster to remote earth, or a ring of two-terminal ones: the loop fixes
@@ -164,7 +175,8 @@ assert abs(Z_E[1] - 35.9905) < 1e-3 and abs(abs(I[2]) - 4.1295) < 1e-4
 `"voltage"`); `SourceAdapter` validates a stand-alone source dictionary,
 for example from a JSON file. Assignments are validated, so a source
 edited between two solves (`src.magnitude = 20.0`) cannot take a
-non-finite value.
+non-finite value. A `VoltageSource` or a `SourceRecord` pickled before
+2026.11 loads with $R = L = 0$, the ideal source it was, as its JSON does.
 
 ## API reference
 

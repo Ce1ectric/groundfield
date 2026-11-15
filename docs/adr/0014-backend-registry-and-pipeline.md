@@ -179,11 +179,24 @@ evaluates it per angular frequency (`ImpressedVoltage.terminals(cluster_id,
 omega)`); `_voltage_source_entries` writes $\operatorname{Re} Z_q$ into the
 real matrix and `_source_reactance_entries` adds $j\operatorname{Im} Z_q$
 to its complex copy. A real (galvanic) system with a non-zero $\omega L$
-therefore **takes the complex path** — one complex factorisation per
-frequency instead of one real factorisation with two right-hand sides for
-all frequencies — rather than being refused: the cost is one solve per
-frequency of a system whose size does not change, and the complex path is
-the one every inductive world already takes. The same two helpers serve
+therefore **takes the complex path** rather than being refused. The image
+family solves its owner-level system once per frequency (cheap: ×1.00 …
+×1.09 the R-only solve at 1 … 20 frequencies on a 1 488-segment station,
+homogeneous and two-layer). The point-matching family would factorise its segment-level
+system once per frequency — ×2.0 / ×8.1 / ×28 the R-only solve at 1 / 5 /
+20 frequencies on 1 488 segments (audit W2R2-02) — so it keeps the one
+real factorisation instead: $j\omega L$ enters only the diagonal of the
+V source rows, the real block $A_{11}$ (the world with its voltage sources
+open) is factorised once with the V + 2 right-hand sides
+$[\operatorname{Re} b_1, \operatorname{Im} b_1, A_{12}]$, and each
+frequency solves the V × V Schur complement
+$(A_{22} - A_{21} A_{11}^{-1} A_{12} + j\omega L)\,x_2 = b_2 - A_{21}
+A_{11}^{-1} b_1$ (`_point_matching_source_sweep`; exact, the Woodbury
+update the auditor proposed). Measured on the same world (best of three):
+×1.06 / ×1.04 / ×1.02, and the results agree with the per-frequency path
+to 3.3 · 10⁻¹⁵ and with the scaled 1 A solve to 1.3 · 10⁻¹⁵. A solve at
+$f = 0$ alone remains the R-only solve, bit for bit; inside a sweep the
+$f = 0$ entry agrees with it to round-off. The same two helpers serve
 the image family (including the cross-layer path) and the point-matching
 family, so `image`, `image_2layer`, `mom` and `mom_sommerfeld` honour $Z_q$
 with conductors, inductive coupling and frequency sweeps; `fem` keeps
@@ -191,14 +204,18 @@ refusing voltage sources.
 
 `input_impedance()` of a voltage source is the impedance the source sees,
 $U/I - Z_q$, without its own $Z_q$; `SourceRecord` carries $R$ and $L$ so a
-result read back from a file computes it alone (records written before
-have 0 / 0). `World.check` treats a source with $R > 0$ as no edge of the
-loop check — two such sources in parallel, or a ring with one of them, are
-solvable — while an inductance alone keeps the source an edge, because
-$Z_q$ vanishes at $f = 0$ and `World.check` does not know the engine's
-frequencies. A source short-circuited by an ideal bond stays rejected also
-with $Z_q$ (its current would circulate through the bond, none through the
-soil). Validation (`tests/test_voltage_source_impedance.py`): the solve
+result read back from a file computes it alone. Records and sources written
+before have 0 / 0: in JSON by the field defaults, in pickles since audit
+W2R2-01 through a `__setstate__` that fills the two fields. A non-zero $R$
+or $L$ below the smallest normal float is rejected (audit W2R2-10).
+`World.check` treats a source with $R > 0$ as no edge of the loop check —
+two such sources in parallel, or a ring with one of them, are solvable —
+while an inductance alone keeps the source an edge, because $Z_q$ vanishes
+at $f = 0$ and `World.check` does not know the engine's frequencies. A
+source short-circuited by an ideal bond stays rejected also with $Z_q$ (its
+current $U/Z_q$ would circulate through the bond and the source, none
+through the soil — the wording of the message since audit W2R2-04).
+Validation (`tests/test_voltage_source_impedance.py`): the solve
 equals the junction + `lumped_series_resistance_ohm` pattern for a
 resistance, and the 1 A current-source solve with $I = U/(Z_q + Z_\text{in})$
 at 0, 50 and 1000 Hz in every backend, with inductive conductors (three

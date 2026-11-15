@@ -37,7 +37,7 @@ from groundfield.conductors.conductor import (
 from groundfield.geometry.electrodes import Electrode, _ElectrodeBase
 from groundfield.geometry.junction import Junction
 from groundfield.soil.models import SoilModel
-from groundfield.sources import Source
+from groundfield.sources import Source, _internal_impedance_problem
 from groundfield.utils.suggest import did_you_mean
 
 # Boundary-condition values that the v0.2.0 integral / image-charge
@@ -294,12 +294,21 @@ class World(BaseModel):
                 )
             raise self._unknown_node(owner, field, name)
         if source.return_to is not None and source.return_to == source.attached_to:
-            effect = (
-                "so the voltage source is short-circuited and would impose a "
-                "voltage across one equipotential"
-                if source.kind == "voltage"
-                else "so the source drives no current"
-            )
+            if source.kind != "voltage":
+                effect = "so the source drives no current"
+            elif _behind_impedance(source):
+                # Audit W2R2-04: with Z_q the source drives U/Z_q round itself.
+                effect = (
+                    "so the voltage source is short-circuited: its current "
+                    "U/Z_q would circulate through the source alone (internal "
+                    f"impedance {_internal_impedance_text(source)}), none "
+                    "through the soil"
+                )
+            else:
+                effect = (
+                    "so the voltage source is short-circuited and would impose "
+                    "a voltage across one equipotential"
+                )
             raise ValueError(
                 f"{owner}: attached_to and return_to are the same node "
                 f"{source.attached_to!r}, {effect}. Set return_to=None to "
@@ -389,16 +398,18 @@ class World(BaseModel):
                 )
             if src.kind == "voltage":
                 # model_copy(update=...) skips the field validators
-                # (user decision D1: R, L >= 0 and finite).
+                # (user decision D1: R, L >= 0 and finite; audit W2R2-10:
+                # 0 or a normal float).
                 for field, unit_q in (
                     ("internal_resistance_ohm", "Ω"),
                     ("internal_inductance_h", "H"),
                 ):
                     value = float(getattr(src, field))
-                    if not (math.isfinite(value) and value >= 0.0):
+                    problem = _internal_impedance_problem(value)
+                    if problem is not None:
                         raise ValueError(
                             f"Voltage source {src.name!r}: {field} ({value!r} "
-                            f"{unit_q}) must be finite and >= 0."
+                            f"{unit_q}) {problem}."
                         )
             if magnitude == 0.0:
                 if src.kind == "voltage":
@@ -491,17 +502,24 @@ class World(BaseModel):
             ra = cluster_id.get(src.attached_to, src.attached_to)
             rb = cluster_id.get(src.return_to, src.return_to)
             if ra == rb:
-                drives = (
-                    "would impose a voltage across one equipotential"
-                    if src.kind == "voltage"
-                    else "drives no current through the soil"
-                )
+                if src.kind != "voltage":
+                    drives = "and drives no current through the soil"
+                elif _behind_impedance(src):
+                    # Audit W2R2-04: with Z_q the source drives U/Z_q round
+                    # the loop of bond and source.
+                    drives = (
+                        ": its current U/Z_q would circulate through the bond "
+                        "and the source, whose internal impedance is "
+                        f"{_internal_impedance_text(src)}, none through the soil"
+                    )
+                else:
+                    drives = "and would impose a voltage across one equipotential"
                 raise ValueError(
                     f"Source {src.name!r}: attached_to={src.attached_to!r} "
                     f"and return_to={src.return_to!r} are bonded into one "
                     "galvanic cluster by ideal conductors (series resistance "
                     f"at or below {_IDEAL_BOND_OHM:g} Ω), so the source is "
-                    f"short-circuited and {drives}. Give the bond a finite "
+                    f"short-circuited {drives}. Give the bond a finite "
                     "cross_section, or return the current elsewhere."
                 )
         self._check_voltage_loops(voltage, cluster_id)
@@ -812,6 +830,21 @@ class World(BaseModel):
             f"sources={len(self.sources)}, "
             f"boundary.far_field={self.boundary.far_field}"
         )
+
+
+def _behind_impedance(source: Source) -> bool:
+    """Whether a voltage source has an internal impedance $Z_q \\ne 0$ (D1)."""
+    return bool(
+        float(source.internal_resistance_ohm) or float(source.internal_inductance_h)
+    )
+
+
+def _internal_impedance_text(source: Source) -> str:
+    """``"R = 5 Ω, L = 0 H"``: the internal impedance of a voltage source."""
+    return (
+        f"R = {float(source.internal_resistance_ohm):g} Ω, "
+        f"L = {float(source.internal_inductance_h):g} H"
+    )
 
 
 def _check_reserved_name(name: str, kind: str, *, world: str | None = None) -> None:

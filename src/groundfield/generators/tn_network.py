@@ -307,11 +307,38 @@ def _clearance_not_below_gap(prefix: str, clearance_m: float, max_gap_m: float) 
 
 
 class SubstationConfig(GeneratorConfig):
-    """Substation block — position + grounding system."""
+    """Substation block — position + grounding system.
+
+    Attributes
+    ----------
+    position
+        Substation centre (x, y) in m, in the local coordinates in which
+        the generator builds the network. It moves the substation only:
+        the buildings, cable cabinets and the measurement set-up are
+        placed around (0, 0) whatever ``position`` is. A position at
+        projected coordinates (UTM, Gauss-Krüger) therefore builds a world
+        that mixes projected and local coordinates — with 10 houses at the
+        UTM origin a PEN cable 33 118 km long — reported by
+        :func:`~groundfield.diagnostics.diagnose` and warned about at the
+        solve with
+        :class:`~groundfield.diagnostics.MixedCoordinatesWarning` (user
+        decision D5), and ``RadialTrunkTopology`` drops every building and
+        fails to build (audit W2R2-07). To place a network at projected
+        coordinates, build it around the origin and translate the whole
+        built world (every electrode, conductor and junction by the same
+        offset); groundfield has no public helper for that. The solve does
+        not need it: results depend on coordinate differences only.
+    grounding
+        Substation grounding system.
+    """
 
     position: tuple[float, float] = Field(
         default=(0.0, 0.0),
-        description="Substation centre (x, y) in m.",
+        description=(
+            "Substation centre (x, y) in m, local coordinates: it moves the "
+            "substation only, the buildings stay around (0, 0). To place a "
+            "network at projected coordinates, translate the whole built world."
+        ),
     )
     grounding: GroundingSystemSpec = Field(
         default_factory=_default_substation_grounding,

@@ -50,7 +50,8 @@ Method
 
    (plus one row and column per finite conductor branch and per
    impressed voltage source, whose current is an unknown and whose row
-   fixes $\\varphi_a - \\varphi_r = U$), where $C$ is
+   fixes $\\varphi_a - \\varphi_r + Z_q I = U$, with the internal
+   impedance $Z_q$ of the source), where $C$ is
    the segment-to-node membership matrix: every segment midpoint of a
    node sits at the node potential, and the segment currents of a node
    add up to its injected current. $Z$ is symmetric; the bordered
@@ -111,6 +112,10 @@ Accuracy
 Limitations
 -----------
 - Dense $N \\times N$ matrix and one dense LU per inductive frequency.
+  A galvanic world is factorised once for all frequencies, also when a
+  voltage source has an internal inductance (its $j\\omega L$ enters a
+  V × V Schur complement per frequency, :func:`_point_matching_source_sweep`;
+  audit W2R2-02).
 - $n \\ge 3$ distinct soil layers: use ``mom_sommerfeld``, which
   shares this discretisation and evaluates the layered kernel by
   quadrature.
@@ -120,7 +125,7 @@ Limitations
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
@@ -381,6 +386,155 @@ def _node_results(
     )
 
 
+class _PointMatchingSystem(NamedTuple):
+    """Real augmented system of the point-matching solve (private).
+
+    Assembled by :func:`_point_matching_system`; the unknowns are, in this
+    order, the currents of the ``n_seg`` active segments (A), the
+    potentials of the ``n_nodes`` active nodes (V), the currents of the
+    ``n_branches`` active finite branches (A) and one current (A) per
+    voltage source. The voltage-source rows carry $\\operatorname{Re} Z_q$
+    only (:func:`~groundfield.solver._topology._voltage_source_entries`).
+    """
+
+    A: np.ndarray
+    b_re: np.ndarray
+    b_im: np.ndarray
+    n_seg: int
+    n_nodes: int
+    n_branches: int
+    active_segments: np.ndarray
+    active_clusters: list[str]
+    active_branch_indices: list[int]
+
+
+def _point_matching_system(
+    Z: np.ndarray,
+    elec_input_current: dict[str, complex],
+    cluster_id: dict[str, str],
+    elec_to_segidx: dict[str, list[int]],
+    finite_branches: list[tuple[str, str, float]],
+    voltage_sources: list[VoltageTerminals],
+) -> _PointMatchingSystem | None:
+    """Assemble the real system of :func:`_point_matching_solve`.
+
+    Returns ``None`` when the solution is zero: no source at all, or no
+    node with galvanic contact to the soil.
+    """
+    # Aggregate input current per cluster.
+    cluster_input: dict[str, complex] = {}
+    for ename, ic in elec_input_current.items():
+        if ic == 0j:
+            continue
+        cluster_input.setdefault(cluster_id[ename], 0j)
+        cluster_input[cluster_id[ename]] += ic
+
+    if not cluster_input and not voltage_sources:
+        # No source anywhere: the (non-singular) system has the zero
+        # solution.
+        return None
+
+    # Unknowns (review pass 10, 10.29): every node of every connected
+    # component that owns at least one leakage segment — not only the
+    # components that carry a source. A component without a source is
+    # a floating conductor system: zero net current, potential set by
+    # the field of the others, current distribution free. Up to 0.15.0
+    # such clusters were dropped and their potential read back as the
+    # mean of the incident field, which broke the reciprocity of
+    # transfer impedances (1.1 % to 146 %). For worlds in which every
+    # component carries a source the unknown set, its ordering and
+    # hence the solution are bit-identical to the historic scheme.
+    active_set = _solvable_nodes(cluster_id, elec_to_segidx, finite_branches)
+    if not active_set:
+        return None
+
+    active_clusters = sorted(active_set)
+    K_a = len(active_clusters)
+    cluster_idx = {c: k for k, c in enumerate(active_clusters)}
+
+    # Active segments: those whose owning node lies in the solvable set
+    # (in practice every segment).
+    active_seg_indices: list[int] = []
+    seg_to_active_cluster: list[int] = []
+    for ename, idxs in elec_to_segidx.items():
+        c = cluster_id[ename]
+        if c not in active_set:
+            continue
+        for s in idxs:
+            active_seg_indices.append(s)
+            seg_to_active_cluster.append(cluster_idx[c])
+    active_seg_indices_arr = np.array(active_seg_indices, dtype=int)
+    N_a = active_seg_indices_arr.size
+
+    # Active branches: those entirely inside the active set, plus
+    # their original ordinal so that an inductance matrix passed in
+    # with the same ordering as ``finite_branches`` can be restricted
+    # to the active subset.
+    active_branch_indices: list[int] = []
+    active_branches: list[tuple[str, str, float]] = []
+    for idx, (a, b, R) in enumerate(finite_branches):
+        if a in active_set and b in active_set:
+            active_branch_indices.append(idx)
+            active_branches.append((a, b, R))
+    M_a = len(active_branches)
+
+    # Reduced reaction matrix on the active segments.
+    Z_active = Z[np.ix_(active_seg_indices_arr, active_seg_indices_arr)]
+
+    # Build the augmented system A · x = b (voltage sources last).
+    n_volt = len(voltage_sources)
+    n_unknowns = N_a + K_a + M_a + n_volt
+    A = np.zeros((n_unknowns, n_unknowns))
+    # Block 1: Z_seg · I_seg − C_s · phi_n = 0
+    A[:N_a, :N_a] = Z_active
+    for i, k in enumerate(seg_to_active_cluster):
+        A[i, N_a + k] = -1.0
+    # Block 2: KCL per cluster:  C_s^T · I_seg + B^T · I_b = I_in
+    for k in range(K_a):
+        for i, kk in enumerate(seg_to_active_cluster):
+            if kk == k:
+                A[N_a + k, i] = 1.0
+    for m, (a, b, _R) in enumerate(active_branches):
+        ka = cluster_idx[a]
+        kb = cluster_idx[b]
+        A[N_a + ka, N_a + K_a + m] = +1.0
+        A[N_a + kb, N_a + K_a + m] = -1.0
+    # Block 3: Branch Ohm's law:  phi_a − phi_b = R · I_b
+    #   ⇔  +phi_a − phi_b − R · I_b = 0
+    for m, (a, b, R) in enumerate(active_branches):
+        ka = cluster_idx[a]
+        kb = cluster_idx[b]
+        A[N_a + K_a + m, N_a + ka] = +1.0
+        A[N_a + K_a + m, N_a + kb] = -1.0
+        A[N_a + K_a + m, N_a + K_a + m] = -R
+    if n_volt:
+        _voltage_source_entries(
+            A, voltage_sources, cluster_idx, node_offset=N_a, first=N_a + K_a + M_a
+        )
+
+    # Right-hand side.
+    b_re = np.zeros(n_unknowns)
+    b_im = np.zeros(n_unknowns)
+    for k, c in enumerate(active_clusters):
+        ic = cluster_input.get(c, 0j)
+        b_re[N_a + k] = ic.real
+        b_im[N_a + k] = ic.imag
+    if n_volt:
+        _voltage_source_rhs(b_re, b_im, voltage_sources, first=N_a + K_a + M_a)
+
+    return _PointMatchingSystem(
+        A=A,
+        b_re=b_re,
+        b_im=b_im,
+        n_seg=N_a,
+        n_nodes=K_a,
+        n_branches=M_a,
+        active_segments=active_seg_indices_arr,
+        active_clusters=active_clusters,
+        active_branch_indices=active_branch_indices,
+    )
+
+
 def _point_matching_solve(
     Z: np.ndarray,
     elec_input_current: dict[str, complex],
@@ -462,110 +616,24 @@ def _point_matching_solve(
     """
     if finite_branches is None:
         finite_branches = []
-
-    # Aggregate input current per cluster.
-    cluster_input: dict[str, complex] = {}
-    for ename, ic in elec_input_current.items():
-        if ic == 0j:
-            continue
-        cluster_input.setdefault(cluster_id[ename], 0j)
-        cluster_input[cluster_id[ename]] += ic
-
     voltage_sources = list(voltage_sources or [])
     seg_currents = np.zeros(n_segments, dtype=complex)
     cluster_potential: dict[str, complex] = {}
-    if not cluster_input and not voltage_sources:
-        # No source anywhere: the (non-singular) system has the zero
-        # solution.
+    system = _point_matching_system(
+        Z,
+        elec_input_current,
+        cluster_id,
+        elec_to_segidx,
+        finite_branches,
+        voltage_sources,
+    )
+    if system is None:
         return seg_currents, cluster_potential
-
-    # Unknowns (review pass 10, 10.29): every node of every connected
-    # component that owns at least one leakage segment — not only the
-    # components that carry a source. A component without a source is
-    # a floating conductor system: zero net current, potential set by
-    # the field of the others, current distribution free. Up to 0.15.0
-    # such clusters were dropped and their potential read back as the
-    # mean of the incident field, which broke the reciprocity of
-    # transfer impedances (1.1 % to 146 %). For worlds in which every
-    # component carries a source the unknown set, its ordering and
-    # hence the solution are bit-identical to the historic scheme.
-    active_set = _solvable_nodes(cluster_id, elec_to_segidx, finite_branches)
-    if not active_set:
-        return seg_currents, cluster_potential
-
-    active_clusters = sorted(active_set)
-    K_a = len(active_clusters)
-    cluster_idx = {c: k for k, c in enumerate(active_clusters)}
-
-    # Active segments: those whose owning node lies in the solvable set
-    # (in practice every segment).
-    active_seg_indices: list[int] = []
-    seg_to_active_cluster: list[int] = []
-    for ename, idxs in elec_to_segidx.items():
-        c = cluster_id[ename]
-        if c not in active_set:
-            continue
-        for s in idxs:
-            active_seg_indices.append(s)
-            seg_to_active_cluster.append(cluster_idx[c])
-    active_seg_indices_arr = np.array(active_seg_indices, dtype=int)
-    N_a = active_seg_indices_arr.size
-
-    # Active branches: those entirely inside the active set, plus
-    # their original ordinal so that an inductance matrix passed in
-    # with the same ordering as ``finite_branches`` can be restricted
-    # to the active subset.
-    active_branch_indices: list[int] = []
-    active_branches: list[tuple[str, str, float]] = []
-    for idx, (a, b, R) in enumerate(finite_branches):
-        if a in active_set and b in active_set:
-            active_branch_indices.append(idx)
-            active_branches.append((a, b, R))
-    M_a = len(active_branches)
-
-    # Reduced reaction matrix on the active segments.
-    Z_active = Z[np.ix_(active_seg_indices_arr, active_seg_indices_arr)]
-
-    # Build the augmented system A · x = b (voltage sources last).
-    n_volt = len(voltage_sources)
-    n_unknowns = N_a + K_a + M_a + n_volt
-    A = np.zeros((n_unknowns, n_unknowns))
-    # Block 1: Z_seg · I_seg − C_s · phi_n = 0
-    A[:N_a, :N_a] = Z_active
-    for i, k in enumerate(seg_to_active_cluster):
-        A[i, N_a + k] = -1.0
-    # Block 2: KCL per cluster:  C_s^T · I_seg + B^T · I_b = I_in
-    for k in range(K_a):
-        for i, kk in enumerate(seg_to_active_cluster):
-            if kk == k:
-                A[N_a + k, i] = 1.0
-    for m, (a, b, _R) in enumerate(active_branches):
-        ka = cluster_idx[a]
-        kb = cluster_idx[b]
-        A[N_a + ka, N_a + K_a + m] = +1.0
-        A[N_a + kb, N_a + K_a + m] = -1.0
-    # Block 3: Branch Ohm's law:  phi_a − phi_b = R · I_b
-    #   ⇔  +phi_a − phi_b − R · I_b = 0
-    for m, (a, b, R) in enumerate(active_branches):
-        ka = cluster_idx[a]
-        kb = cluster_idx[b]
-        A[N_a + K_a + m, N_a + ka] = +1.0
-        A[N_a + K_a + m, N_a + kb] = -1.0
-        A[N_a + K_a + m, N_a + K_a + m] = -R
-    if n_volt:
-        _voltage_source_entries(
-            A, voltage_sources, cluster_idx, node_offset=N_a, first=N_a + K_a + M_a
-        )
-
-    # Right-hand side.
-    b_re = np.zeros(n_unknowns)
-    b_im = np.zeros(n_unknowns)
-    for k, c in enumerate(active_clusters):
-        ic = cluster_input.get(c, 0j)
-        b_re[N_a + k] = ic.real
-        b_im[N_a + k] = ic.imag
-    if n_volt:
-        _voltage_source_rhs(b_re, b_im, voltage_sources, first=N_a + K_a + M_a)
+    A, b_re, b_im = system.A, system.b_re, system.b_im
+    N_a, K_a, M_a = system.n_seg, system.n_nodes, system.n_branches
+    active_seg_indices_arr = system.active_segments
+    active_clusters = system.active_clusters
+    active_branch_indices = system.active_branch_indices
 
     use_inductive = inductance_matrix is not None and omega != 0.0 and M_a > 0
     reactive = _has_source_reactance(voltage_sources)
@@ -641,6 +709,125 @@ def _point_matching_solve(
         source_currents[:] = [complex(i) for i in i_volt]
 
     return seg_currents, cluster_potential
+
+
+def _point_matching_source_sweep(
+    Z: np.ndarray,
+    elec_input_current: dict[str, complex],
+    cluster_id: dict[str, str],
+    elec_to_segidx: dict[str, list[int]],
+    n_segments: int,
+    finite_branches: list[tuple[str, str, float]],
+    voltage_sources: Sequence[list[VoltageTerminals]],
+    potentials: Callable[[np.ndarray], np.ndarray],
+) -> list[tuple[np.ndarray, np.ndarray, dict[str, complex], list[complex]]] | None:
+    """Galvanic point-matching solves at several reactances of the sources.
+
+    The system of a galvanic world (no inductive branch) depends on the
+    frequency only through the reactance $\\omega L$ of its voltage
+    sources, on the diagonal of their constraint rows (user decision D1).
+    With the unknowns split into $x_1$ (segment currents, node
+    potentials, branch currents) and $x_2$ (the V source currents),
+
+    $$
+    \\begin{bmatrix} A_{11} & A_{12} \\\\ A_{21} & A_{22} + j\\omega L
+    \\end{bmatrix}
+    \\begin{bmatrix} x_1 \\\\ x_2 \\end{bmatrix} =
+    \\begin{bmatrix} b_1 \\\\ b_2 \\end{bmatrix},
+    $$
+
+    the real block $A_{11}$ (the system of the same world with its
+    voltage sources open) is factorised **once**, with the V + 2 real
+    right-hand sides $[\\operatorname{Re} b_1, \\operatorname{Im} b_1,
+    A_{12}]$, and every frequency solves only the V × V Schur complement
+
+    $$
+    \\bigl(A_{22} - A_{21} A_{11}^{-1} A_{12} + j\\omega L\\bigr)\\,x_2
+    = b_2 - A_{21} A_{11}^{-1} b_1 ,
+    \\qquad x_1 = A_{11}^{-1} b_1 - A_{11}^{-1} A_{12}\\,x_2 ,
+    $$
+
+    exactly (audit W2R2-02; the complement is $\\operatorname{diag} Z_q$
+    plus the transfer impedances between the source terminals). The
+    segment potentials are linear in the segment currents, so they are
+    evaluated once for the V + 1 columns of $x_1$ and combined per
+    frequency the same way. Up to then the whole complex segment system
+    was factorised at every frequency, ×28 the R-only solve at 20
+    frequencies on 1 488 segments.
+
+    Parameters
+    ----------
+    Z, elec_input_current, cluster_id, elec_to_segidx, n_segments, finite_branches
+        As for :func:`_point_matching_solve`.
+    voltage_sources
+        The :class:`~groundfield.solver._topology.VoltageTerminals` of the
+        sources at each angular frequency, in source order; they differ in
+        $\\operatorname{Im} Z_q$ only.
+    potentials
+        ``seg_currents -> segment-midpoint potentials`` (A → V), linear.
+
+    Returns
+    -------
+    list of tuple, or None
+        Per entry of ``voltage_sources``: the segment currents in A, the
+        segment-midpoint potentials in V, the node potentials in V and the
+        source currents in A, as :func:`_point_matching_solve` returns and
+        fills them; ``None`` if the solution is zero (no node with soil
+        contact), which the caller solves the usual way.
+    """
+    terminals_0 = list(voltage_sources[0])
+    system = _point_matching_system(
+        Z,
+        elec_input_current,
+        cluster_id,
+        elec_to_segidx,
+        finite_branches,
+        terminals_0,
+    )
+    if system is None:
+        return None
+    A, b_re, b_im = system.A, system.b_re, system.b_im
+    N_a, K_a = system.n_seg, system.n_nodes
+    n1 = N_a + K_a + system.n_branches
+    A21 = A[n1:, :n1]
+    # The one factorisation: A11 with V + 2 real right-hand sides.
+    Y = np.linalg.solve(
+        A[:n1, :n1], np.column_stack([b_re[:n1], b_im[:n1], A[:n1, n1:]])
+    )
+    y = Y[:, 0] + 1j * Y[:, 1]
+    W = Y[:, 2:]
+    S0 = A[n1:, n1:] - A21 @ W
+    g = (b_re[n1:] + 1j * b_im[n1:]) - (A21 @ Y[:, 0] + 1j * (A21 @ Y[:, 1]))
+    active = system.active_segments
+
+    def on_segments(column: np.ndarray) -> np.ndarray:
+        seg = np.zeros(n_segments, dtype=complex)
+        seg[active] = column[:N_a]
+        return seg
+
+    # Segment potentials of the V + 1 solution columns (the map is linear).
+    phi_y = potentials(on_segments(y))
+    phi_w = np.column_stack(
+        [potentials(on_segments(W[:, v])) for v in range(W.shape[1])]
+    )
+    out: list[tuple[np.ndarray, np.ndarray, dict[str, complex], list[complex]]] = []
+    for terminals in voltage_sources:
+        S = S0.astype(complex)
+        _source_reactance_entries(S, list(terminals), first=0)
+        i_volt = np.linalg.solve(S, g)
+        x1 = y - (W @ i_volt.real + 1j * (W @ i_volt.imag))
+        cluster_potential = {
+            c: complex(x1[N_a + k]) for k, c in enumerate(system.active_clusters)
+        }
+        out.append(
+            (
+                on_segments(x1),
+                phi_y - phi_w @ i_volt,
+                cluster_potential,
+                [complex(i) for i in i_volt],
+            )
+        )
+    return out
 
 
 #: Historic name (the scheme is point matching, not Galerkin; 10.31).
@@ -923,9 +1110,11 @@ def _point_matching_step(
     """Solve step of the point-matching family (replaces pipeline step 5).
 
     One unknown current per segment and one potential per node
-    (:func:`_point_matching_solve`), per frequency when the branch block
-    is inductive or a voltage source has an internal inductance, once
-    otherwise.
+    (:func:`_point_matching_solve`): per frequency when the branch block
+    is inductive, once otherwise. A voltage source with an internal
+    inductance in a galvanic world keeps the one factorisation of the
+    segment system and solves a V × V system per frequency
+    (:func:`_point_matching_source_sweep`, audit W2R2-02).
 
     Parameters
     ----------
@@ -955,7 +1144,15 @@ def _point_matching_step(
     n_freq = len(engine.frequencies)
     n_segments = len(disc.segments)
     v_currents: list[dict[str, complex]] = []
-    per_frequency = branches.has_inductance or any(v.reactive for v in voltages)
+    # A source inductance makes a galvanic system depend on frequency only
+    # through the V source rows: one factorisation, a V x V system per
+    # frequency (audit W2R2-02). At f = 0 alone it is the R-only system.
+    reactive_sweep = (
+        not branches.has_inductance
+        and any(v.reactive for v in voltages)
+        and any(float(f) != 0.0 for f in engine.frequencies)
+    )
+    per_frequency = branches.has_inductance or reactive_sweep
 
     def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray, dict[str, complex]]:
         correction = (
@@ -987,7 +1184,30 @@ def _point_matching_step(
             ph = potentials(sc)
         return sc, ph, node_phi
 
-    if per_frequency:
+    swept = None
+    if reactive_sweep:
+        swept = _point_matching_source_sweep(
+            Z,
+            node_currents,
+            topo.cluster_id,
+            disc.owner_segments,
+            n_segments,
+            topo.finite_branches,
+            [
+                [v.terminals(topo.cluster_id, 2.0 * np.pi * float(f)) for v in voltages]
+                for f in engine.frequencies
+            ],
+            potentials,
+        )
+    if swept is not None:
+        sc_per_freq = [sc for sc, _, _, _ in swept]
+        phi_per_freq = [ph for _, ph, _, _ in swept]
+        node_phi_per_freq = [node_phi for _, _, node_phi, _ in swept]
+        v_currents = [
+            {v.name: i for v, i in zip(voltages, currents, strict=True)}
+            for _, _, _, currents in swept
+        ]
+    elif per_frequency:
         sc_per_freq: list[np.ndarray] = []
         phi_per_freq: list[np.ndarray] = []
         node_phi_per_freq: list[dict[str, complex]] = []

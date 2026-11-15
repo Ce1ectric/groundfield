@@ -55,10 +55,14 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   world stands: the kernel switches from its exact integral to its far
   form at a midpoint distance of six segment lengths, where pairs six
   segments apart on a straight wire sit exactly, so round-off decides
-  their form. Over 40 local shifts of 0.1 m … 8.8 km and the UTM origin
-  (audit W2B-01) the direct pairs spread the impedance by up to
-  5.4 · 10⁻⁷ and touch voltages by up to 1.0 · 10⁻⁶ (a 12 m strip, outlines,
-  stars, grids, the generated house mesh). In two-layer soil an image
+  their form. For the direct pairs the spread reaches up to 8 · 10⁻⁷ in
+  the impedance and 1.3 · 10⁻⁶ in touch voltages when every switch pair is
+  forced to its near and to its far form (a 12 m strip in 100 Ω·m and at
+  41° in 100 / 30 Ω·m, $h_1$ = 2.2 m; audit W2R2-03); sampled offsets give
+  up to 5.9 · 10⁻⁷ and 1.2 · 10⁻⁶ (the 12 m strip between (0, 0) and
+  (62.79, 36.14) m; 40 local shifts of 0.1 m … 8.8 km and the UTM origin
+  gave 5.4 · 10⁻⁷ and 1.0 · 10⁻⁶ over strips, outlines, stars, grids and
+  the generated house mesh, audit W2B-01). In two-layer soil an image
   distance of six segment lengths — $2nh_1$ for wires at one depth, or
   $2(nh_1 - z)$ — puts every segment's own image pair on the switch, whose
   far form there is the point form: the spread can reach
@@ -71,10 +75,11 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   are discretised as before. A distributed conductor whose length exceeds
   a whole number of pieces only by round-off gets that whole number at any
   position since 2026.11, near the origin too: a galvanic counterpoise of
-  60 m in 10 m pieces from (3, 0, 0.5) m had 7 pieces in 876 of 3 600
-  directions (0.1° steps; computed length 60.00000000000001 m) and has 6 in
+  60 m in 10 m pieces from (3, 0, 0.5) m had 7 pieces in about a quarter of
+  all directions (829 … 876 of 3 600 in 0.1° steps, depending on how the
+  angles are formed; computed length 60.00000000000001 m) and has 6 in
   every one, its impedance −0.30 % with `image` and −2.54 % with `mom`
-  (audit W2B-03).
+  (audits W2B-03, W2R2-08).
 - **Mixed coordinates.** A world that mixes projected and local
   coordinates — points within 10 km of the origin and beyond 1 000 km
   from it, typically a return electrode, a cabinet or a cable end entered
@@ -91,9 +96,10 @@ carry a lower-case unit suffix (`depth_m`, `concrete_rho_ohm_m`,
   finish. Since 2026.11 (user decision D5) the solve of such a world
   warns once with `MixedCoordinatesWarning` (image family, `mom`,
   `mom_sommerfeld`, `solve_mutual_*`), before anything is discretised, and
-  `diagnose()` reports it under `coordinates`; a world wider than 100 km
-  that does not mix is reported there as information. A world wholly in
-  projected or wholly in local coordinates is never flagged.
+  `diagnose()` reports it under `coordinates`. A world wholly in projected
+  or wholly in local coordinates is never warned about at the solve;
+  `diagnose()` reports worlds wider than 100 km as information (audit
+  W2R2-06).
 
 ## Phasors and frequency
 

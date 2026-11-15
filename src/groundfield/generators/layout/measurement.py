@@ -15,7 +15,8 @@ so it adds no electrode to the world.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +28,18 @@ from groundfield.generators.grounding import GroundingSystemSpec
 #: Source kinds whose (impressed or solved) current is the test current of
 #: the reading (a voltage source since 2026.11, audit W2A-01).
 _SOURCE_KINDS = ("current", "voltage")
+
+
+def _preferred_record(result: object, match: Callable[[Any], bool]) -> Any:
+    """First current-source record of ``result`` that ``match`` accepts, else
+    the first such voltage-source record, else ``None`` (audit W2R2-05)."""
+    records = getattr(result, "sources", None) or []
+    for kind in _SOURCE_KINDS:  # current first
+        for record in records:
+            if record.kind == kind and match(record):
+                return record
+    return None
+
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from groundfield.generators.layout.model import CabinetPlacement
@@ -586,13 +599,14 @@ class _MeasurementMixin:
     def _substation_anchor(self, result: object) -> Optional[str]:
         """Electrode the substation source feeds, else the first ``substation_*``.
 
-        The source is a current source or, since 2026.11, a voltage
-        source (audit W2A-01).
+        The source is the first current source at the substation or,
+        without one, the first voltage source there (since 2026.11, audits
+        W2A-01, W2R2-05).
         """
         prefix = f"{self.substation_name}_"
-        for record in getattr(result, "sources", None) or []:
-            if record.kind in _SOURCE_KINDS and record.attached_to.startswith(prefix):
-                return record.attached_to
+        record = _preferred_record(result, lambda r: r.attached_to.startswith(prefix))
+        if record is not None:
+            return record.attached_to
         for ename in getattr(result, "electrode_potentials", {}):
             if ename.startswith(prefix):
                 return ename
@@ -607,26 +621,27 @@ class _MeasurementMixin:
     ) -> complex:
         """Test current in A: explicit, else the solved source feeding ``anchor``.
 
-        The current of a voltage source is the solved one (audit W2A-01;
-        up to then a voltage-driven world fell back to 1 A); a voltage
-        record without it raises :class:`ValueError`. Results without a
-        source snapshot fall back to 1 A.
+        The first current source at ``anchor``, else the first voltage
+        source there (audit W2R2-05: a current source wins, as before
+        2026.11). The current of a voltage source is the solved one (audit
+        W2A-01; up to then a voltage-driven world fell back to 1 A); a
+        voltage record without it raises :class:`ValueError`. Results
+        without a source snapshot fall back to 1 A.
         """
         if source_magnitude_a is not None:
             return complex(source_magnitude_a)
-        for record in getattr(result, "sources", None) or []:
-            if record.kind not in _SOURCE_KINDS or record.attached_to != anchor:
-                continue
-            try:
-                return complex(record.current[frequency_index])
-            except IndexError:
-                raise ValueError(
-                    f"{record.kind.capitalize()} source {record.name!r} feeds "
-                    f"{anchor!r}, but the result carries no solved source "
-                    f"current at frequency index {frequency_index}; pass "
-                    "source_magnitude_a explicitly."
-                ) from None
-        return 1.0 + 0.0j
+        record = _preferred_record(result, lambda r: r.attached_to == anchor)
+        if record is None:
+            return 1.0 + 0.0j
+        try:
+            return complex(record.current[frequency_index])
+        except IndexError:
+            raise ValueError(
+                f"{record.kind.capitalize()} source {record.name!r} feeds "
+                f"{anchor!r}, but the result carries no solved source "
+                f"current at frequency index {frequency_index}; pass "
+                "source_magnitude_a explicitly."
+            ) from None
 
     def verify_current_balance(
         self,

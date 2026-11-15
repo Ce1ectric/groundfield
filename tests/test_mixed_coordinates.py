@@ -423,3 +423,81 @@ def test_a_mixed_world_still_warns_after_a_json_round_trip():
     assert diagnose(world).by_category("coordinates")[0].severity == "warning"
     _, mixed = _solve_recording(world, gf.create_engine(segment_length=0.5))
     assert len(mixed) == 1
+
+
+# ---------------------------------------------------------------------
+# Generated networks with the substation at projected coordinates
+# ---------------------------------------------------------------------
+
+
+def _translated(world, shift_xy):
+    """``world`` with every point moved horizontally by ``shift_xy`` (m)."""
+    from groundfield.solver._frame import _moved
+
+    shift = np.array([shift_xy[0], shift_xy[1], 0.0])
+    return world.model_copy(
+        update={
+            field: [_moved(m, shift) for m in getattr(world, field)]
+            for field in ("electrodes", "conductors", "junctions")
+        }
+    )
+
+
+# audit W2R2-07
+def test_w2r2_07_a_generated_network_with_its_substation_at_utm_is_mixed():
+    """W2R2-07: the generators build in local coordinates.
+
+    ``SubstationConfig.position`` moves the substation only; the houses,
+    cabinets and the measurement stay around (0, 0), so a substation at UTM
+    coordinates builds a mixed world (33 000 km PEN cables). Since D5 it is
+    reported and warned about (a positive case of the check); the radial
+    topology fails to build. Translating the whole built world instead gives
+    a pure UTM world.
+    """
+    from groundfield.generators import (
+        RadialTrunkTopology,
+        TnNetworkConfig,
+        TnNetworkGenerator,
+    )
+    from groundfield.generators.tn_network import SubstationConfig
+    from groundfield.solver._frame import LocalFrame
+
+    utm = (32_604_321.0, 5_812_345.0)
+    counts = {"residential": 10}
+    mixed = TnNetworkGenerator(
+        TnNetworkConfig(
+            substation=SubstationConfig(position=utm), building_counts=counts
+        ),
+        seed=0,
+    ).build()
+    (finding,) = diagnose(mixed).by_category("coordinates")
+    assert finding.severity == "warning"
+    # The substation (its ring, rods and bonds) is far, the houses are near.
+    assert finding.data["far"] and all(
+        name.startswith("trafo_") for name in finding.data["far"]
+    )
+    assert any(name.startswith("residential") for name in finding.data["near"])
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        LocalFrame.of(mixed)
+    assert len(_mixed_records(rec)) == 1
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        with pytest.raises(ValueError, match="dropped every building"):
+            TnNetworkGenerator(
+                TnNetworkConfig(
+                    substation=SubstationConfig(position=utm),
+                    building_counts=counts,
+                    pen_topology=RadialTrunkTopology(),
+                ),
+                seed=0,
+            ).build()
+
+    local = TnNetworkGenerator(TnNetworkConfig(building_counts=counts), seed=0).build()
+    placed = _translated(local, utm)
+    assert not diagnose(placed).by_category("coordinates")
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        LocalFrame.of(placed)
+    assert _mixed_records(rec) == []

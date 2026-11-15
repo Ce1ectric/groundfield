@@ -94,8 +94,10 @@ the implementation (evidence of stream w2mom,
   rods, a rod through the layer interface, rings, strips, grids, outlines
   and stars in 100 Ω·m and in 30 / 200 Ω·m ($h_1$ = 4 m), 5 cm of
   100 Ω·m concrete. `mom_sommerfeld` reproduces `mom` to about $10^{-8}$
-  ($10^{-9}$ … $1.5\cdot10^{-8}$ for a 10 m grid in four two-layer soils,
-  bare and encased; audit W2B-07): that is the agreement of its Sommerfeld
+  where neither engine warns ($10^{-9}$ … $1.5\cdot10^{-8}$ for a 10 m grid
+  in four two-layer soils, bare and encased; audit W2B-07; with the layer
+  interface 0.2 m below the wires $9\cdot10^{-8}$ under
+  `PointKernelInterfaceWarning`, audit W2R2-09): that is the agreement of its Sommerfeld
   quadrature with the Tagg/Sunde series of `mom` without a shell, the
   shell increments $Z(C) - Z(0)$ of the two engines agree to
   $1.4\cdot10^{-10}$.
