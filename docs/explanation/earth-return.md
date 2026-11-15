@@ -119,16 +119,34 @@ What 2026.11 changed (ADR-0006 amendment):
 - **Long segments** (10.24, audits of 2026.11). A single 16 × 16 rule over
   a segment cannot resolve $e^{-\gamma R}$ along a segment much longer
   than the skin depth (a lumped 3 km PEN read +13.4 % earth-return
-  resistance at 1 kHz in 100 Ω·m). A segment longer than a quarter skin
-  depth of the most conductive layer gets a composite outer rule (16
-  nodes per piece, at most 512 pieces, then a
-  `SommerfeldResolutionWarning`) and a denser $S(\rho)$ table. Against a
-  refined rule, at 50 Hz and 1 kHz up to 3 km, the correction of a
-  segment is within 5.9e-4 in the earth-return resistance and 2.4e-4 in
-  the reactance (worst: a 3 km overhead line at 10 m over 10 Ω·m at
-  1 kHz; buried in 100 Ω·m 1.7e-4); the shorter segments keep the
-  historic rule, which reaches 4.8e-4 at a quarter skin depth, so the
-  correction steps by 3.5e-4 where the composite rule takes over.
+  resistance at 1 kHz in 100 Ω·m). A pair of segments longer than a
+  quarter skin depth of the most conductive layer gets a composite outer
+  rule (16 nodes per piece, at most 512 pieces, then a
+  `SommerfeldResolutionWarning`) and a denser $S(\rho)$ table.
+- **Self terms and close pairs** (user decision Q34). Along the line of
+  closest approach of a segment with itself, or of two segments that come
+  close (wires beside each other, a core in its shield), the integrand has
+  a kink — the $\gamma^2R/2$ term of $(e^{-\gamma R}-1)/R$ and its
+  counterpart in the spectral part, smoothed only over the decay length
+  $z + z'$ — which the tensor rule cannot follow: up to 2026.11.0 the self
+  correction of a buried segment was 4.8e-4 off at a quarter skin depth
+  (growing like $L/\delta$ below it), stepped by 3.5e-4 where the
+  composite rule took over, and was within 5.9e-4 for longer segments; two
+  wires 1 mm apart were 1.5e-3 off in 30 over 1000 Ω·m. Now the self term
+  of every segment is the exact one-dimensional reduction
+  $2\int_0^L (L-u)\,g(u)\,\mathrm du$ of its double integral, with
+  16-node panels graded from $z + z'$ up to a quarter skin depth, uniform
+  up to 40 skin depths and doubling beyond, and close pairs (closest
+  distance below half the longer segment) get a graded rule along their
+  line of closest approach (a coinciding pair: the self rule). The self
+  correction is within 1.1e-9 of a refined rule and of an independent
+  reduction from 0.01 skin depths to 3 km at 50 Hz and 1 kHz (buried at
+  0.7 m in 100, 1000/30 and 30/1000 Ω·m, overhead at 10 m over 10 Ω·m) and
+  continuous in the length (steps below 3e-13); close pairs are within
+  2.7e-9. Both rules cost at most linearly in the length: one lumped
+  conductor of 2 km from a rod to a junction, 50 Hz and 1 kHz, is solved
+  in 1.1 s within 0.21 GB, 100 km in 10.6 s within 0.24 GB (audit W2B-05:
+  28 s and 1.6 GB at 2 km, more than 7.8 GB at 100 km).
 - **Tabulated assembly** (the default since 2026.11,
   `Engine.sommerfeld_assembly="tabulated"`; user decision Q16).
   Sub-segments are grouped by depth and one table of the spectral integral
@@ -169,6 +187,15 @@ audit of 2026.11, A2C-1):
   solver used to treat the buried wire as an overhead wire at height
   $|z|$, which gave 36 % too little mutual reactance for a lead 1 m above
   a PEN at 0.7 m depth at 1 kHz.
+- **Tilted near-parallel pairs** (audit W1R3-07). Where a near-parallel
+  pair comes close within its overlap (its smallest distance there is below
+  30 times the change of its offset), the per-metre correction is
+  integrated over the overlap (Gauss–Legendre nodes) instead of being taken
+  at the mid-point distance, so a lumped pair and its pieces add up: a core
+  crossing its shield's axis at mid-length differed by 4.3e-4 of the loop
+  reactance at 2e-3 rad and 5.2e-2 at 4e-2 rad, now by at most 8.0e-6.
+  Other pairs keep one entry at the mid-point distance, exact to second
+  order there; generated networks are unchanged.
 - **Everything else** — oblique pairs and every pair and self term of a
   segment inclined by more than 8.1° (risers, sloping leads) — gets the
   exact Sommerfeld correction of a homogeneous earth of the same
@@ -199,6 +226,41 @@ continuous; the asymptotic expansion is used for $a > 15$.
 conductors and for layered soil (an effective homogeneous conductivity
 is used); it is the fast choice for long parallel lines over homogeneous
 earth, not a replacement of `sommerfeld` in general.
+
+**Networks of short cables.** Tiled over the pieces of service drops that
+are shorter than the skin depth (30 … 60 m against 159 m at 1 kHz in
+100 Ω·m), Carson's infinite-line correction overstates the earth return of
+an LV network. For the generated star (100 houses) and grid (100 and 50
+houses) networks with an insulated Neumann PEN, against `sommerfeld` with
+a refined discretisation (PEN in 2.5 m pieces, 1 m segments; the default
+`sommerfeld` agrees with it to 8e-5), `carson_series` reads the input
+reactance at 1 kHz 9.3 … 14.9 % and the resistance 5.5 … 10.9 % high, and
+that error changes with the geometry. A change of such a network is
+therefore reproduced by `carson_series` only within that error, possibly
+with the opposite sign: across the cabinet fix of audit W1B-01/02 the
+star's reactance moves by +1.18 % under `carson_series` and −3.54 % under
+`sommerfeld` (the refined reference: −3.54 %), between two house spacings
+around the cabinet threshold of the 100-house grid by +1.81 / −2.77 %
+(reference −2.77 %), and of the 50-house grid by −21.6 / −18.9 %
+(reference −18.9 %). Use `sommerfeld` for LV networks.
+
+### Equivalent depth of layered soil
+
+The complex-depth formulas of Dubanton and Deri replace a homogeneous
+earth by a perfectly conducting plane at the complex depth
+$p = \sqrt{\rho/(j\omega\mu_0)}$ and give the line impedance in closed
+form. `gf.penetration_depth(soil, frequencies)` returns the $p$ (and the
+equivalent resistivity $j\omega\mu_0 p^2$) for which these formulas
+reproduce the earth return of any layer stack: the plane-wave surface
+impedance of the stack over $j\omega\mu_0$, which matches the layered
+surface reflection coefficient to second order in the horizontal
+wavenumber. Over the 39 soils of the AP1 grid, 50 Hz … 1 kHz and 0.1 …
+1000 m, the earth-return correction of two overhead or buried wires is
+reproduced within a median of 2.2 % (the formula's own median error in
+homogeneous soil: 2.4 %), at most 28 … 33 % where the separation
+approaches $|p|$; the homogeneous depth of $\rho_1$ is off by up to
+2800 %. Method and numbers: [Soil](../reference/api/soil.md#penetration-depth).
+The solver's models do not use it.
 
 ### Perfect mirror
 
@@ -296,7 +358,10 @@ the surface plane are rejected under this image convention, as before.
   "inside" to "side by side": the two describe different cables. Equal
   radii never count as one wire inside the other.
 - **Diagnostics** (10.44). `conductors.find_close_wires` and `diagnose()`
-  report crossing, touching, interpenetrating and close wires.
+  report crossing, touching, interpenetrating and close wires; since
+  2026.11 `diagnose()` also reports inductive conductors that lie beside
+  each other closer than touching over a stretch (category `overlap`), the
+  pairs the rule above evaluates as touching wires.
 
 ### Skin effect
 

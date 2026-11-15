@@ -91,7 +91,7 @@ def test_a_close_pair_is_within_its_bound_of_a_refined_rule(
     name, f, earth, method
 ) -> None:
     """Mutual correction of two segments a quarter skin depth long: within
-    1e-8 of the refined graded rule (measured worst 2.2e-9). Base 3500ec9
+    1e-8 of the refined graded rule (measured worst 2.7e-9). Base 3500ec9
     (16x16 tensor rule): 3.4e-4 / 3.9e-4 in 100 Ohm m and 1.5e-3 in 30 over
     1000 Ohm m for wires 1 mm apart and the tilted core at 50 Hz / 1 kHz."""
     seg = _pair(name, 0.25 * _delta(earth, f))
@@ -159,7 +159,7 @@ def _lumped_world(length: float) -> gf.World:
 @pytest.mark.slow
 def test_w2b_05_a_long_inductive_conductor_is_assembled_in_bounded_time() -> None:
     """One lumped Neumann conductor of 2 km between a rod and a junction:
-    28 s and 1.6 GB on the base; measured now 0.7 s and 0.21 GB (peak RSS of
+    28 s and 1.6 GB on the base; measured now 1.1 s and 0.21 GB (peak RSS of
     the whole solve)."""
     w = _lumped_world(2000.0)
     t = time.perf_counter()

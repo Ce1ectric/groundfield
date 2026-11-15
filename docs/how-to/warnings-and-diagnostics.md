@@ -14,7 +14,8 @@ tests. Every warning and error class is described in the
 `gf.diagnose(world, engine)` collects the pre-solve checks in one report:
 resolution (features shorter than the segment length), segment budget,
 thin wires, wires of different electrodes that are too close or
-interpenetrate, and settings that have no effect. Pass `result=` as well
+interpenetrate, inductive conductors drawn on top of each other, and
+settings that have no effect. Pass `result=` as well
 to add post-solve checks such as a truncated image series.
 
 ```python
@@ -57,6 +58,41 @@ assert all(f.severity != "warning" for f in report_line)
 
 `report.warn()` emits the findings as one `DiagnosticsWarning`, for
 pipelines that collect warnings.
+
+Insulated cables with an inductance model are checked as well: two
+conductors drawn beside each other closer than touching over a stretch
+(category `overlap`, a warning) are evaluated by the inductance matrix as
+touching wires, so their coupling follows their radii instead of the drawn
+spacing. A typical cause is a second cable or a service drop drawn on the
+axis of another:
+
+```python
+cables = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+gf.create_electrode(cables, "rod", name="a", position=(0.0, 0.0, 0.5), length=1.5)
+gf.create_electrode(cables, "rod", name="b", position=(50.0, 0.0, 0.5), length=1.5)
+for name, radius in (("cable_1", 0.006), ("cable_2", 0.004)):
+    gf.create_conductor(
+        cables, name=name, start="a", end="b", wire_radius=radius,
+        coupling_to_soil="isolated", inductance_model="neumann",
+    )
+overlap = [f for f in gf.diagnose(cables) if f.category == "overlap"]
+print(overlap[0].message)   # 'cable_1'–'cable_2' beside each other over 50 m, ...
+```
+
+<!-- doctest-check
+assert len(overlap) == 1 and overlap[0].severity == "warning"
+assert abs(overlap[0].data["overlap_m"] - 50.0) < 1e-6
+-->
+
+Draw the cables at their real spacing (a few centimetres in one trench),
+or model a concentric cable with `conductor_type="cable_shield"` around
+its core, which is not an overlap. The stretch must exceed ten touching
+distances and 5 % of the shorter conductor, so a branch leaving its main
+at more than about half a degree, a crossing and a T-contact are not
+reported. In the generated radial networks the drops of houses behind
+each other leave one tap on one axis and are reported (5 houses: 10
+pairs); spread 5 cm apart, the input impedance of that network moves by
+3.5 % at 1 kHz.
 
 ## The warnings you will meet most often
 

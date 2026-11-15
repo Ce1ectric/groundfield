@@ -456,3 +456,47 @@ Findings 10.35, 10.36, 10.45, 10.46 (F50, F52) and 10.60.
    (resistance) and 1.2e-5 (reactance) where the composite rule takes
    over; the step is kept because removing it would change every short
    segment.
+8. **Self terms and close pairs (user decision Q34; audit W2B-05).** The
+   tensor rule of items 6 and 7 misses the kink of the integrand along the
+   line of closest approach — of a segment with itself (the diagonal) and
+   of two segments that come close (wires beside each other, a core in its
+   shield) — formed by the $\gamma^2R/2$ term of the direct part and its
+   counterpart in $S(\rho)$, smoothed only over the decay length $z + z'$.
+   That, not the table spacing, is the error of item 7 for buried
+   conductors (with $S$ summed exactly at every node the single rule was
+   still 3.9e-4 off at δ/4); for two wires 1 mm apart in 30 over
+   1000 Ω·m it was 1.5e-3. The self term of every (plane-split)
+   sub-segment is now the exact one-dimensional reduction
+   $2\int_0^L (L - u)\,g(u)\,du$ (one spectral plan per segment, as
+   before, so $g$ depends on $u = |s - s'|$ only), with 16-node panels
+   doubling from $z + z'$ up to δ/4, uniform up to 40 δ and doubling beyond,
+   and $S$ summed at the nodes or, for long segments, from a cubic spline
+   (spacing 0.02 in $\ln(\rho + z)$). A pair whose Gauss nodes come closer
+   than half the longer segment gets a graded rule along the line of
+   closest approach (outer rule over one segment split at the projections
+   of the other's ends, inner rule split at the closest point, both graded
+   from $z + z'$); one segment twice gets the self rule, so a core and its
+   shield on one axis keep a loop without earth-return correction. Other
+   pairs keep the tensor rule bit for bit. Against a refined rule (panels
+   δ/128, first panel $(z + z')/16$, spacing 0.005) and an independent
+   reduction with $S$ summed at every node, at 50 Hz and 1 kHz from 0.01 δ
+   to 3 km (buried at 0.7 m in 100, 1000/30 and 30/1000 Ω·m, overhead at
+   10 m over 10 Ω·m), the self correction is within 1.1e-9 and has no step
+   where the rule changes (below 3e-13); close pairs (wires 1 mm … 1 m apart,
+   a core tilted by 1e-4 rad, collinear neighbours, a 30° junction) are
+   within 2.7e-9 of the refined graded rule. Cost (W2B-05): the pieces of a
+   long sub-segment stood at different depths when it was inclined, each
+   pair of them got its own λ grid, and the grid cache held 512 of them —
+   one lumped conductor of 2 km from a rod at 0.5 m to a junction at
+   0.7 m took 28 s and 1.6 GB (about $L^{2.7}$; 100 km more than 7.8 GB).
+   The self rule costs $O(L)$; a single segment is not cut into pieces;
+   close pairs involving a long segment are evaluated whole in the
+   tabulated assembly; λ grids above $2^{16}$ nodes go to a cache of eight
+   entries, and $J_0$ tables above $2^{21}$ entries are evaluated in row
+   chunks (bit-identical below that size). The same conductor now solves in
+   1.1 s within 0.21 GB (100 km: 10.6 s, 0.24 GB; the $J_0$ work grows
+   2.2-fold per doubling of the length instead of 7-fold). The input
+   impedance of that world is within 3.6e-7 (X) of a chain of 25 m pieces
+   at 2 km, 1 kHz (2026.11.0: −2.0e-6, and its lumped value 2.9e-6 off in
+   R). Five golden cases move by 8e-10 … 4.9e-7.
+

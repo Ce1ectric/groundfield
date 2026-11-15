@@ -114,11 +114,13 @@ Q34
 - the other pairs keep the tensor rule (16x16, composite for segments longer
   than a quarter skin depth).
 
-The self correction is within 2e-8 of a refined rule from 0.01 skin depths
-to 3 km at 50 Hz and 1 kHz and has no step where the rule changes (below
-6e-10); close pairs are within 1e-8 (evidence of stream w3perf). Both rules
-cost at most linearly in the length, so a lumped conductor of 2 km is
-assembled in under a second (audit W2B-05: 28 s, 1.6 GB, about $L^{2.7}$).
+The self correction is within 1.1e-9 of a refined rule and of an
+independent one-dimensional reduction from 0.01 skin depths to 3 km at
+50 Hz and 1 kHz and has no step where the rule changes (below 3e-13);
+close pairs are within 2.7e-9 of a refined graded rule (evidence of stream
+w3perf). Both rules cost at most linearly in the length: a lumped conductor
+of 2 km between a rod and a junction is solved in 1.1 s within 0.21 GB
+(audit W2B-05: 28 s, 1.6 GB, about $L^{2.7}$).
 
 The $\\lambda$ quadrature (review pass 10, finding 10.36) follows the
 F14 policy of :mod:`groundfield.coupling.layered_green`: a
@@ -279,10 +281,11 @@ _MAX_PIECES = 512
 # panels beyond, so its cost grows at most linearly with L; S(rho) is
 # summed at every node (_SELF_DIRECT_BUDGET) or, for long segments, comes
 # from a not-a-knot cubic spline in t = ln(rho + z) with nodes
-# _SELF_T_SPACING apart (at least _SELF_MIN_TABLE). Within 2e-8 of a
+# _SELF_T_SPACING apart (at least _SELF_MIN_TABLE). Within 1.1e-9 of a
 # refined rule from 0.01 skin depths to 3 km at 50 Hz and 1 kHz (buried at
 # 0.7 m in 100, 1000/30 and 30/1000 Ohm m, overhead at 10 m over 10 Ohm m;
-# an independent reduction with S summed at every node agrees likewise).
+# an independent reduction with S summed at every node agrees likewise),
+# steps where the rule changes below 3e-13.
 _SELF_T_SPACING = 0.02
 _SELF_MIN_TABLE = 16
 # S(rho) is summed at every node of the self rule while that needs at most

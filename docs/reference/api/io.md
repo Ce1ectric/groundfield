@@ -47,9 +47,18 @@ form is fitted over the effective resistivities of the solved soils,
 both kinds of `BusType` then pair with a `Bus` whose resistivity uses the
 same preset. Every document records the convention as
 `metadata["rho_definition"] = "effective_resistivity"` (documents of
-0.15.0 have no such entry). The exporter cannot check the number it is
-given, nor the weights behind it; describe the layers, and the preset
-(or $w_0$, $\beta$) when it is not the default, in `soil_summary`.
+0.15.0 have no such entry) and the preset you name with `rho_preset=...`
+(a key of `gf.soil.EFFECTIVE_RESISTIVITY_PRESETS`) as
+`metadata["rho_preset"]`, `None` when none is named (user decision Q39;
+documents of earlier versions load with `None`, `spec.rho_preset`). The
+exporter cannot check the number it is given against the preset; the
+paths that serve a bus can: `evaluate_spec(spec, f, rho, rho_preset=...)`
+and `bustype_from_spec(spec, rho_preset=...)` (the live groundinsight
+`BusType` of a loaded document) take the preset of the bus and emit
+`RhoPresetMismatchWarning` when the document names another one — a preset
+holds for its electrode class only (the AP1 station paired with
+`"lv_group_4_p40"` misses the field solution by 39.9 % rms). Describe the
+layers, and explicit weights $w_0$, $\beta$, in `soil_summary`.
 
 Before a `BusType` is written, the exported formula (with its rounded
 coefficients) is checked for passivity, $\operatorname{Re}Z \ge 0$ from
@@ -118,16 +127,28 @@ fit = gf.rho_f_standard_from_results(results, rhos, max_relative_tol=0.10)  # in
 
 path = gf.save_bustype_json(
     fit, "station.bustype.json", name="Station", system_type="Substation", voltage_level=20.0,
-    soil_summary="TwoLayerSoil(rho_1 sweep, rho_2=100, h_1=5); rho: preset 'station'",
+    soil_summary="TwoLayerSoil(rho_1 sweep, rho_2=100, h_1=5)", rho_preset="station",
 )
 spec = gf.load_bustype_json(path)
-print(gf.fit_quality_summary(spec))      # ... max_rel=7.48%, quantity=input
+print(gf.fit_quality_summary(spec))      # ... max_rel=7.48%, quantity=input, rho_preset=station
 
-Z_formula = gf.evaluate_spec(spec, frequencies=[50.0], rho=rhos[3])[0]   # bus at rho_eff
+Z_formula = gf.evaluate_spec(spec, frequencies=[50.0], rho=rhos[3], rho_preset="station")[0]
 Z_field = results[3].input_impedance()[0]
 assert abs(Z_formula - Z_field) / abs(Z_field) <= fit.max_relative + 1e-9
 assert spec.metadata["rho_definition"] == "effective_resistivity"
+assert spec.rho_preset == "station"
 assert abs(rhos[3] - 711.64) < 0.01 and fit.max_relative < 0.10
+```
+
+A bus whose resistivity comes from another preset is reported:
+
+```python
+import warnings
+
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    gf.evaluate_spec(spec, [50.0], gf.effective_resistivity(results[3].soil), rho_preset="lv_network")
+assert any(issubclass(w.category, gf.RhoPresetMismatchWarning) for w in caught)
 ```
 
 <!-- doctest-check

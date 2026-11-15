@@ -15,9 +15,9 @@ kept the historic rule, 4.8e-4 off at a quarter skin depth with a step of
 
 User decision Q34: the self term of every segment is the exact
 one-dimensional reduction 2 int_0^L (L - u) g(u) du (graded 16-node panels,
-cubic-spline S(rho)), within 2e-8 of a refined rule from 0.01 skin depths to
-3 km at 50 Hz and 1 kHz and without a step (below 1e-9 where the rule
-changes).
+cubic-spline S(rho)), within 1.1e-9 of a refined rule from 0.01 skin depths
+to 3 km at 50 Hz and 1 kHz (tests bound it by 2e-8) and without a step
+(below 3e-13 where the rule changes; tests: 1e-9).
 """
 
 from __future__ import annotations
@@ -234,7 +234,8 @@ def test_long_segment_rule_meets_its_stated_accuracy(
     name, z, rhos, thicknesses
 ) -> None:
     """A lumped 1 km conductor at 1 kHz against the refined rule: within
-    2e-8 (2026.11.0: 5.9e-4 / 2.4e-4 for a 3 km overhead line)."""
+    2e-8, measured 1e-9 at most (2026.11.0: 5.9e-4 / 2.4e-4 for a 3 km
+    overhead line)."""
     seg = np.array([[[0.0, 0.0, z], [1000.0, 0.0, z]]])
     earth = LayeredEarth(rhos=rhos, thicknesses=thicknesses)
     got = _self_correction(seg, earth, 1000.0)
@@ -259,7 +260,7 @@ def test_the_self_correction_is_within_its_bound_of_a_refined_rule(
     name, f, fraction
 ) -> None:
     """0.01 ... 5 skin depths at 50 Hz and 1 kHz: within 2e-8 of the refined
-    rule (measured worst 1.7e-8, 30 over 1000 Ohm m with h1 = 1 m; an
+    rule (measured worst 1.1e-9, 30 over 1000 Ohm m with h1 = 1 m; an
     independent one-dimensional reduction with S(rho) summed at every node
     agrees to the same level, evidence q34_bound_scan). Base 3500ec9: up to
     4.8e-4 at a quarter skin depth (buried, 100 Ohm m), 1.5e-3 at 50 Hz in
@@ -281,8 +282,8 @@ def test_the_self_correction_has_no_step_at_a_quarter_skin_depth(name) -> None:
     """Where the composite rule used to take over (L = delta/4, 1 kHz) the
     self correction steps by less than 1e-9 once the smooth change over the
     interval is taken out (base 3500ec9: 3.5e-4 in the resistance and
-    1.2e-5 in the reactance, buried in 100 Ohm m; measured now 1.3e-11 and,
-    at every other length where the rule changes, at most 5.4e-10)."""
+    1.2e-5 in the reactance, buried in 100 Ohm m; measured now at most
+    2.4e-13 at every length where the rule changes)."""
     z, rhos, thicknesses = _EARTHS[name]
     earth = LayeredEarth(rhos=rhos, thicknesses=thicknesses)
     delta = math.sqrt(2.0 * min(rhos) / (2.0 * math.pi * 1000.0 * MU0))

@@ -68,7 +68,7 @@ falls with the distance between the cables.
 | `earth_inductive_model` | Physics | Use it for |
 |---|---|---|
 | `"sommerfeld"` (default) | Sommerfeld/Pollaczek integral of the conducting half-space or layered earth over the real segment geometry; conductors in or above the surface plane are handled | every quantitative study |
-| `"carson_series"` | Carson's (1926) per-metre correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image: tiled per metre of overlap for near-parallel horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, inclination below 8.1°), across the surface through the field transmitted into the soil; every other pair and inclined segment gets the Sommerfeld correction of the same earth, so the result steps at 8.1° | long parallel cables in homogeneous soil; not for layered soil |
+| `"carson_series"` | Carson's (1926) per-metre correction for infinitely long **parallel** wires over homogeneous earth, on the anti-parallel image: tiled per metre of overlap for near-parallel horizontal pairs ($\lvert\cos\varphi\rvert > 0.99$, inclination below 8.1°), across the surface through the field transmitted into the soil; every other pair and inclined segment gets the Sommerfeld correction of the same earth, so the result steps at 8.1° | long parallel cables in homogeneous soil; not for layered soil, nor for networks of short cables (generated LV networks at 1 kHz: X 9 … 15 % above `"sommerfeld"`) |
 | `"perfect_mirror"` | the earth as a perfect magnetic mirror, frequency independent; with conductors on both sides of the soil surface the solve warns (its additive image has no basis for such pairs) | a fast diagnostic baseline only |
 
 With `"sommerfeld"` the correction is assembled from shared tables
@@ -203,11 +203,23 @@ sections; it matters for harmonics up to 1 kHz.
   `discretize_segment_length` cuts the two conductors into, also with the
   core drawn off or across the shield's axis; two cables or leads that
   touch at a small angle, or wires leaving one junction, add up to the
-  lumped pair the same way; under `"carson_series"` the earth correction
-  of a tilted pair is tiled per piece and does depend on the pieces, see
-  the [known limitations](../reference/known-limitations.md)). Without the
-  marker two conductors on one axis are two separate cables touching each
-  other.
+  lumped pair the same way, also under `"carson_series"`, whose correction
+  of a tilted pair is integrated along the overlap since audit W1R3-07).
+  Without the marker two conductors on one axis are two separate cables
+  touching each other; `gf.diagnose(world)` reports such pairs (category
+  `overlap`, see [Read and act on warnings](warnings-and-diagnostics.md)).
+- A long conductor can stay lumped under `"sommerfeld"`: its self term is
+  integrated in one dimension along it, at a cost that grows at most
+  linearly with the length (one lumped 2 km conductor at 50 Hz and 1 kHz:
+  1.1 s; 100 km: 10.6 s, within 0.25 GB). The spectral quadrature
+  resolves the most distant points of a conductor at 0.7 m depth up to
+  about 38 km (16 nodes per Bessel period up to 2.4 km, 8 beyond, at any
+  frequency); a longer conductor warns (`SommerfeldResolutionWarning`).
+- For hand formulas of a cable or a line over layered soil (the
+  complex-depth formulas of Dubanton and Deri),
+  `gf.penetration_depth(soil, frequencies)` gives the equivalent complex
+  depth and resistivity of any layer stack
+  ([Soil](../reference/api/soil.md#penetration-depth)).
 - The leads of a measurement (tutorial
   [T07](../tutorials/T07_fall_of_potential_measurement.ipynb)) couple
   like cables; lay the probe lead at an angle to the feed lead.
