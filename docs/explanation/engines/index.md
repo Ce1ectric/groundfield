@@ -130,19 +130,23 @@ current, which keeps transfer impedances reciprocal.
 An impressed voltage source (`VoltageSource`, since 2026.11) is added by
 modified nodal analysis: its current $I_v$ becomes one more unknown, which
 enters Kirchhoff's current law at `attached_to` and `return_to`, and one
-more row fixes $\varphi_a - \varphi_r = U$ ($\varphi_r = 0$ for remote
-earth). With the terminal incidence $S$ the system grows by one block row
-and column,
+more row fixes $\varphi_a - \varphi_r + Z_q I_v = U$ ($\varphi_r = 0$
+for remote earth; $Z_q = R + j\omega L$ the internal impedance of the
+source, zero for an ideal source). With the terminal incidence $S$ and the
+diagonal matrix $Z_q(\omega)$ of the internal impedances the system grows
+by one block row and column,
 
 $$
-\begin{bmatrix} Z & -C & 0 & 0 \\ C^{\top} & 0 & B^{\top} & -S \\ 0 & B & -Z_b(\omega) & 0 \\ 0 & S^{\top} & 0 & 0 \end{bmatrix}
+\begin{bmatrix} Z & -C & 0 & 0 \\ C^{\top} & 0 & B^{\top} & -S \\ 0 & B & -Z_b(\omega) & 0 \\ 0 & S^{\top} & 0 & Z_q(\omega) \end{bmatrix}
 \begin{bmatrix} \mathbf I_e \\ \boldsymbol\varphi_n \\ \mathbf I_b \\ \mathbf I_v \end{bmatrix}
 =
 \begin{bmatrix} \mathbf 0 \\ \mathbf I_\text{in} \\ \mathbf 0 \\ \mathbf U \end{bmatrix},
 $$
 
-and the solution of a world without voltage sources is unchanged. The
-`mom` family borders its segment-level system the same way.
+and the solution of a world without voltage sources is unchanged. A
+reactive $Z_q$ makes the system complex at $f > 0$, so such a world is
+solved per frequency also without inductive conductors. The `mom` family
+borders its segment-level system the same way.
 
 ## The registered backends
 

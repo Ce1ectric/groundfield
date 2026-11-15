@@ -7,7 +7,8 @@ network (:func:`_solve_cluster_currents`).
 
 Impressed voltage sources enter the nodal system by modified nodal
 analysis: one unknown (the source current) and one constraint row
-(:math:`\\varphi_a - \\varphi_r = U`) per source
+(:math:`\\varphi_a - \\varphi_r + Z_q I_v = U`, with the internal
+impedance :math:`Z_q` of the source on the diagonal) per source
 (:func:`_voltage_source_entries`), appended after the branch block.
 
 Moved out of :mod:`groundfield.solver.image` (review pass 10, 10.75 /
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 import numpy as np
 
@@ -297,10 +299,9 @@ class _ActiveSystem:
     active_branches
         Active ``(node_a, node_b, R)`` branch triples.
     voltage_sources
-        Impressed voltage sources ``(root_a, root_r, U)``: the cluster
-        roots of ``attached_to`` and ``return_to`` (``None`` for remote
-        earth) and the voltage phasor in V. Each adds one unknown, the
-        source current, and one constraint row after the branch block.
+        Impressed voltage sources ``(root_a, root_r, U, Z_q)``
+        (:class:`VoltageTerminals`). Each adds one unknown, the source
+        current, and one constraint row after the branch block.
     """
 
     cluster_input: dict[str, complex]
@@ -342,19 +343,36 @@ class _ActiveSystem:
         return [complex(i) for i in sol[first : first + self.n_voltage_sources]]
 
 
-#: Terminals of one impressed voltage source in the nodal system:
-#: ``(root_a, root_r, U)`` — the cluster roots of ``attached_to`` and of
-#: ``return_to`` (``None``: remote earth) and the voltage phasor in V.
-VoltageTerminals = tuple[str, str | None, complex]
+class VoltageTerminals(NamedTuple):
+    """Terminals of one impressed voltage source in the nodal system.
+
+    Attributes
+    ----------
+    root_a
+        Cluster root of ``attached_to``.
+    root_r
+        Cluster root of ``return_to``; ``None`` for remote earth.
+    voltage
+        Voltage phasor $U$ in V.
+    impedance
+        Internal impedance $Z_q = R + j\\omega L$ in Ω at the frequency
+        of the solve (user decision D1, 2026.11); ``0j`` (default) for
+        an ideal source.
+    """
+
+    root_a: str
+    root_r: str | None
+    voltage: complex
+    impedance: complex = 0j
 
 
 def _voltage_roots(voltage_sources: Iterable[VoltageTerminals]) -> set[str]:
     """Cluster roots of the terminals of the voltage sources."""
     roots: set[str] = set()
-    for root_a, root_r, _u in voltage_sources:
-        roots.add(root_a)
-        if root_r is not None:
-            roots.add(root_r)
+    for terminals in voltage_sources:
+        roots.add(terminals.root_a)
+        if terminals.root_r is not None:
+            roots.add(terminals.root_r)
     return roots
 
 
@@ -373,8 +391,16 @@ def _voltage_source_entries(
     ``return_to`` (the sign convention of a current source). Kirchhoff's
     current law at the two terminal nodes gains $-I_v$ and $+I_v$ on the
     left-hand side, and row ``first + v`` is the constraint
-    $\\varphi_a - \\varphi_r = U_v$ (right-hand side from
-    :func:`_voltage_source_rhs`). ``A`` is modified in place.
+    $\\varphi_a - \\varphi_r + Z_q I_v = U_v$ (right-hand side from
+    :func:`_voltage_source_rhs`): the terminal voltage is $U_v$ less the
+    drop across the internal impedance. ``A`` is modified in place.
+
+    ``A`` is real: the diagonal entry receives $\\operatorname{Re} Z_q$
+    here, and :func:`_source_reactance_entries` adds
+    $j \\operatorname{Im} Z_q$ to the complex copy of the matrix.
+    Nothing is written for an ideal source ($Z_q = 0$), so a world of
+    ideal sources assembles the matrix of the releases before D1, entry
+    for entry.
 
     Parameters
     ----------
@@ -382,7 +408,7 @@ def _voltage_source_entries(
         Augmented matrix, rows and columns ``first .. first + V - 1``
         still zero.
     voltage_sources
-        ``(root_a, root_r, U)`` per source.
+        :class:`VoltageTerminals` per source.
     cluster_idx
         Position of each node in the node block.
     node_offset
@@ -391,15 +417,39 @@ def _voltage_source_entries(
     first
         Row and column of the first voltage-source unknown.
     """
-    for v, (root_a, root_r, _u) in enumerate(voltage_sources):
+    for v, terminals in enumerate(voltage_sources):
         row = first + v
-        ka = node_offset + cluster_idx[root_a]
+        ka = node_offset + cluster_idx[terminals.root_a]
         A[ka, row] = -1.0
         A[row, ka] = 1.0
-        if root_r is not None:
-            kr = node_offset + cluster_idx[root_r]
+        if terminals.root_r is not None:
+            kr = node_offset + cluster_idx[terminals.root_r]
             A[kr, row] = 1.0
             A[row, kr] = -1.0
+        if terminals.impedance.real != 0.0:
+            A[row, row] = terminals.impedance.real
+
+
+def _has_source_reactance(voltage_sources: Iterable[VoltageTerminals] | None) -> bool:
+    """Whether a voltage source has a reactive internal impedance at this frequency.
+
+    The constraint rows are then complex: the solve takes the complex
+    path even where the rest of the system is real (a galvanic world).
+    """
+    return any(t.impedance.imag != 0.0 for t in voltage_sources or ())
+
+
+def _source_reactance_entries(
+    A_c: np.ndarray, voltage_sources: list[VoltageTerminals], *, first: int
+) -> None:
+    """Add $j \\operatorname{Im} Z_q$ to the constraint rows of ``A_c`` (in place).
+
+    Completes :func:`_voltage_source_entries` on the complex matrix of the
+    solve: the diagonal entry of row ``first + v`` becomes $Z_q$.
+    """
+    for v, terminals in enumerate(voltage_sources):
+        if terminals.impedance.imag != 0.0:
+            A_c[first + v, first + v] += 1j * terminals.impedance.imag
 
 
 def _voltage_source_rhs(
@@ -410,9 +460,9 @@ def _voltage_source_rhs(
     first: int,
 ) -> None:
     """Impressed voltages in V on the constraint rows (in place)."""
-    for v, (_a, _r, u) in enumerate(voltage_sources):
-        b_re[first + v] = u.real
-        b_im[first + v] = u.imag
+    for v, terminals in enumerate(voltage_sources):
+        b_re[first + v] = terminals.voltage.real
+        b_im[first + v] = terminals.voltage.imag
 
 
 def _cluster_input_currents(
@@ -774,14 +824,17 @@ def _augmented_matrix(
 
     ::
 
-        [ Z      -C       0      0  ] [ I_e    ]   [ 0       ]
-        [ C^T    0        B^T   -S  ] [ phi_n  ] = [ I_in    ]
-        [ 0      B        -R_b   0  ] [ I_b    ]   [ 0       ]
-        [ 0      S^T      0      0  ] [ I_v    ]   [ U       ]
+        [ Z      -C       0      0   ] [ I_e    ]   [ 0       ]
+        [ C^T    0        B^T   -S   ] [ phi_n  ] = [ I_in    ]
+        [ 0      B        -R_b   0   ] [ I_b    ]   [ 0       ]
+        [ 0      S^T      0      Z_q ] [ I_v    ]   [ U       ]
 
     The last block row and column exist only with voltage sources
     (:func:`_voltage_source_entries`); without them the matrix is the
-    one of the releases before 2026.11, entry for entry.
+    one of the releases before 2026.11, entry for entry. ``Z_q`` is the
+    diagonal of the internal impedances of the voltage sources; this
+    real matrix carries its real part, the reactance enters the complex
+    copy of the solve (:func:`_complex_matrix`).
     """
     N_a, K_a, M_a = system.n_owners, system.n_nodes, system.n_branches
     cluster_idx = system.cluster_idx
@@ -923,7 +976,7 @@ def _augmented_solution(
     carson_correction: np.ndarray | None,
     n_finite_branches: int,
 ) -> np.ndarray:
-    """Solve the augmented system; returns ``[I_e, phi_n, I_b]`` (complex).
+    """Solve the augmented system; returns ``[I_e, phi_n, I_b, I_v]`` (complex).
 
     Two paths:
 
@@ -932,15 +985,11 @@ def _augmented_solution(
         factorisation and two right-hand sides (ADR-0010 Tier 1).
     (b) Inductive coupling active (``inductance_matrix is not None``
         and ``omega != 0``) — the branch block becomes complex
-        (``Z_b = R + jωL``), so one complex system is solved.
+        (``Z_b = R + jωL``) — or a voltage source with a reactive
+        internal impedance ($j\\omega L_q$ on its constraint row, user
+        decision D1) — one complex system is solved.
     """
-    use_inductive = (
-        inductance_matrix is not None and omega != 0.0 and system.n_branches > 0
-    )
-    if not use_inductive:
-        sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
-        return sol[:, 0] + 1j * sol[:, 1]
-    A_c = _branch_impedance_matrix(
+    A_c = _complex_matrix(
         A,
         system,
         omega=omega,
@@ -948,8 +997,55 @@ def _augmented_solution(
         carson_correction=carson_correction,
         n_finite_branches=n_finite_branches,
     )
+    if A_c is None:
+        sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
+        return sol[:, 0] + 1j * sol[:, 1]
     b_c = b_re + 1j * b_im
     return np.linalg.solve(A_c, b_c)
+
+
+def _complex_matrix(
+    A: np.ndarray,
+    system: _ActiveSystem,
+    *,
+    omega: float,
+    inductance_matrix: np.ndarray | None,
+    carson_correction: np.ndarray | None,
+    n_finite_branches: int,
+) -> np.ndarray | None:
+    """Complex augmented matrix of path (b) of :func:`_augmented_solution`.
+
+    ``None`` when the system is real (path (a)): no inductive branch
+    block at this frequency and no reactive voltage-source impedance.
+    Otherwise the branch block carries ``jωL`` (+ ``ΔZ``,
+    :func:`_branch_impedance_matrix`) where inductive coupling is active,
+    and the constraint rows of the voltage sources their reactance
+    (:func:`_source_reactance_entries`).
+    """
+    use_inductive = (
+        inductance_matrix is not None and omega != 0.0 and system.n_branches > 0
+    )
+    reactive = _has_source_reactance(system.voltage_sources)
+    if not use_inductive and not reactive:
+        return None
+    if use_inductive:
+        A_c = _branch_impedance_matrix(
+            A,
+            system,
+            omega=omega,
+            inductance_matrix=inductance_matrix,
+            carson_correction=carson_correction,
+            n_finite_branches=n_finite_branches,
+        )
+    else:
+        A_c = A.astype(complex)
+    if reactive:
+        _source_reactance_entries(
+            A_c,
+            system.voltage_sources,
+            first=system.n_owners + system.n_nodes + system.n_branches,
+        )
+    return A_c
 
 
 def _owner_currents(
@@ -1058,7 +1154,7 @@ def _solve_cluster_currents(
     \\begin{bmatrix} Z & -C & 0 & 0 \\\\
                     C^{\\top} & 0 & B^{\\top} & -S \\\\
                     0 & B & -R_b & 0 \\\\
-                    0 & S^{\\top} & 0 & 0 \\end{bmatrix}
+                    0 & S^{\\top} & 0 & Z_q \\end{bmatrix}
     \\begin{bmatrix} \\mathbf{I}_e \\\\
                     \\boldsymbol{\\varphi}_n \\\\
                     \\mathbf{I}_b \\\\
@@ -1072,9 +1168,13 @@ def _solve_cluster_currents(
 
     with $S \\in \\{-1,0,+1\\}^{K_a \\times V}$ the terminal incidence
     (``+1`` at ``attached_to``, ``-1`` at ``return_to``, no entry for
-    remote earth): Kirchhoff's current law gains the source currents and
-    each constraint row reads $\\varphi_a - \\varphi_r = U_v$. Without
-    voltage sources the system is the one above, entry for entry.
+    remote earth) and $Z_q$ the diagonal matrix of the internal
+    impedances $R_v + j\\omega L_v$ of the sources (user decision D1;
+    zero for an ideal source): Kirchhoff's current law gains the source
+    currents and each constraint row reads
+    $\\varphi_a - \\varphi_r + Z_{q,v} I_v = U_v$. A reactive $Z_q$ makes
+    the system complex also without inductive branches. Without voltage
+    sources the system is the one above, entry for entry.
 
     Active set
     ----------
@@ -1132,9 +1232,10 @@ def _solve_cluster_currents(
         active node (cluster root, junction, conductor interior node)
         from the solution of the augmented system.
     voltage_sources
-        Impressed voltage sources ``(root_a, root_r, U)``: cluster roots
-        of the two terminals (``root_r`` ``None`` for remote earth) and
-        the voltage phasor in V. ``None`` (default) or empty: none.
+        Impressed voltage sources (:class:`VoltageTerminals`: cluster
+        roots of the two terminals, ``root_r`` ``None`` for remote earth,
+        the voltage phasor in V and the internal impedance in Ω at
+        ``omega``). ``None`` (default) or empty: none.
     source_currents
         Optional output list, filled with the current in A of every
         voltage source (in the order of ``voltage_sources``), from the
@@ -1220,14 +1321,8 @@ def _augmented_solutions(
     augmented matrix. One column reproduces :func:`_augmented_solution`
     (the same ``numpy.linalg.solve`` call).
     """
-    use_inductive = (
-        inductance_matrix is not None and omega != 0.0 and system.n_branches > 0
-    )
     n_rhs = B_re.shape[1]
-    if not use_inductive:
-        sol = np.linalg.solve(A, np.hstack([B_re, B_im]))
-        return sol[:, :n_rhs] + 1j * sol[:, n_rhs:]
-    A_c = _branch_impedance_matrix(
+    A_c = _complex_matrix(
         A,
         system,
         omega=omega,
@@ -1235,6 +1330,9 @@ def _augmented_solutions(
         carson_correction=carson_correction,
         n_finite_branches=n_finite_branches,
     )
+    if A_c is None:
+        sol = np.linalg.solve(A, np.hstack([B_re, B_im]))
+        return sol[:, :n_rhs] + 1j * sol[:, n_rhs:]
     return np.linalg.solve(A_c, B_re + 1j * B_im)
 
 

@@ -31,6 +31,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from groundfield.boundary import BoundaryConditions
 from groundfield.conductors.conductor import Conductor
+from groundfield.conductors.conductor import (
+    _IDEAL_RESISTANCE_THRESHOLD as _IDEAL_BOND_OHM,
+)
 from groundfield.geometry.electrodes import Electrode, _ElectrodeBase
 from groundfield.geometry.junction import Junction
 from groundfield.soil.models import SoilModel
@@ -291,10 +294,16 @@ class World(BaseModel):
                 )
             raise self._unknown_node(owner, field, name)
         if source.return_to is not None and source.return_to == source.attached_to:
+            effect = (
+                "so the voltage source is short-circuited and would impose a "
+                "voltage across one equipotential"
+                if source.kind == "voltage"
+                else "so the source drives no current"
+            )
             raise ValueError(
                 f"{owner}: attached_to and return_to are the same node "
-                f"{source.attached_to!r}, so the source drives no current. "
-                "Set return_to=None to return through remote earth."
+                f"{source.attached_to!r}, {effect}. Set return_to=None to "
+                "return through remote earth."
             )
 
     def check(self, *, require_source: bool = True) -> None:
@@ -378,6 +387,19 @@ class World(BaseModel):
                     f"Source {src.name!r}: magnitude ({magnitude!r} {unit}) and "
                     f"phase_deg ({phase!r}) must be finite."
                 )
+            if src.kind == "voltage":
+                # model_copy(update=...) skips the field validators
+                # (user decision D1: R, L >= 0 and finite).
+                for field, unit_q in (
+                    ("internal_resistance_ohm", "Ω"),
+                    ("internal_inductance_h", "H"),
+                ):
+                    value = float(getattr(src, field))
+                    if not (math.isfinite(value) and value >= 0.0):
+                        raise ValueError(
+                            f"Voltage source {src.name!r}: {field} ({value!r} "
+                            f"{unit_q}) must be finite and >= 0."
+                        )
             if magnitude == 0.0:
                 if src.kind == "voltage":
                     # An ideal short (0 V): its current is solved for.
@@ -440,14 +462,23 @@ class World(BaseModel):
         """Reject short-circuited sources and loops of voltage sources.
 
         A two-terminal source whose terminals share a cluster is
-        short-circuited. Voltage sources are edges between cluster roots
-        and remote earth: an edge that closes a cycle (two sources on one
-        cluster to remote earth, a ring of two-terminal sources) fixes
-        one potential difference twice, and the nodal system is singular
-        (inconsistent for unequal voltages).
+        short-circuited (a voltage source also behind an internal
+        impedance: its current would circulate through the bond and the
+        source, none through the soil). Voltage sources without internal
+        resistance are edges between cluster roots and remote earth: an
+        edge that closes a cycle (two sources on one cluster to remote
+        earth, a ring of two-terminal sources) fixes one potential
+        difference twice, and the nodal system is singular (inconsistent
+        for unequal voltages). A source with ``internal_resistance_ohm >
+        0`` is no such edge; an internal inductance alone is, since its
+        impedance vanishes at $f = 0$.
         """
         two_terminal = [s for s in self.sources if s.return_to is not None]
-        voltage = [s for s in self.sources if s.kind == "voltage"]
+        voltage = [
+            s
+            for s in self.sources
+            if s.kind == "voltage" and float(s.internal_resistance_ohm) == 0.0
+        ]
         if not two_terminal and len(voltage) < 2:
             return
         # Local import: the solver package imports this module.
@@ -468,7 +499,8 @@ class World(BaseModel):
                 raise ValueError(
                     f"Source {src.name!r}: attached_to={src.attached_to!r} "
                     f"and return_to={src.return_to!r} are bonded into one "
-                    "galvanic cluster by ideal conductors, so the source is "
+                    "galvanic cluster by ideal conductors (series resistance "
+                    f"at or below {_IDEAL_BOND_OHM:g} Ω), so the source is "
                     f"short-circuited and {drives}. Give the bond a finite "
                     "cross_section, or return the current elsewhere."
                 )
@@ -476,38 +508,60 @@ class World(BaseModel):
 
     @staticmethod
     def _check_voltage_loops(voltage, cluster_id: dict[str, str]) -> None:
-        """Reject voltage sources that close a loop (union-find over clusters)."""
-        earth = object()
-        parent: dict[object, object] = {}
-        members: dict[object, list[str]] = {}
+        """Reject ideal voltage sources that close a loop.
 
-        def find(x: object) -> object:
-            parent.setdefault(x, x)
-            while parent[x] != x:
-                parent[x] = parent[parent[x]]
-                x = parent[x]
-            return x
+        The sources are edges of a forest over cluster roots and remote
+        earth; an edge whose two ends are already joined closes a loop.
+        The message names the closing source and the sources on the path
+        between its two ends (audit W2A-08), not the whole component.
+        """
+        earth = "remote earth"
+        adjacency: dict[str, list[tuple[str, str]]] = {}
+
+        def node(name: str | None) -> str:
+            if name is None:
+                return earth
+            return f"cluster {cluster_id.get(name, name)!r}"
+
+        def path(start: str, goal: str) -> list[str] | None:
+            """Sources on the forest path from ``start`` to ``goal``."""
+            previous: dict[str, tuple[str, str] | None] = {start: None}
+            queue = [start]
+            while queue:
+                here = queue.pop(0)
+                if here == goal:
+                    names: list[str] = []
+                    while previous[here] is not None:
+                        here, source = previous[here]
+                        names.append(source)
+                    return names[::-1]
+                for there, source in adjacency.get(here, []):
+                    if there not in previous:
+                        previous[there] = (here, source)
+                        queue.append(there)
+            return None
 
         for src in voltage:
-            a = find(cluster_id.get(src.attached_to, src.attached_to))
-            r = find(
-                earth
-                if src.return_to is None
-                else cluster_id.get(src.return_to, src.return_to)
-            )
-            if a == r:
-                loop = members.get(a, []) + [src.name]
+            a = node(src.attached_to)
+            r = node(src.return_to)
+            on_path = path(a, r)
+            if on_path is not None:
+                loop = on_path + [src.name]
                 raise ValueError(
                     f"Voltage source {src.name!r} closes a loop of voltage "
                     f"sources ({', '.join(repr(n) for n in loop)}) through "
                     "ideal bonds or remote earth: the loop fixes one "
                     "potential difference twice, so the nodal system has no "
-                    "unique solution. Remove one source of the loop, or put "
-                    "a finite conductor (a junction and a lumped series "
-                    "resistance) in series with one of them."
+                    "unique solution. Conductors with a series resistance at "
+                    f"or below {_IDEAL_BOND_OHM:g} Ω count as ideal bonds. "
+                    "Remove one source of the loop, give one of them an "
+                    "internal_resistance_ohm > 0 (an internal inductance "
+                    "alone vanishes at f = 0), or put a finite conductor (a "
+                    "junction and a lumped series resistance above "
+                    f"{_IDEAL_BOND_OHM:g} Ω) in series with one of them."
                 )
-            parent[a] = r
-            members[r] = members.pop(r, []) + members.pop(a, []) + [src.name]
+            adjacency.setdefault(a, []).append((r, src.name))
+            adjacency.setdefault(r, []).append((a, src.name))
 
     def set_boundary_conditions(self, **kwargs: Any) -> BoundaryConditions:
         """Update individual fields of the boundary configuration.

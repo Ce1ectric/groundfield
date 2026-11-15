@@ -84,6 +84,7 @@ from groundfield.solver._topology import (
     _solve_cluster_currents,
 )
 from groundfield.solver.result import FieldResult, PointSource
+from groundfield.sources import _internal_impedance
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Sequence
@@ -324,23 +325,45 @@ class ImpressedVoltage:
     name
         Source name.
     attached_to
-        Node (electrode or junction) at the potential $U$ above
+        Node (electrode or junction) at the potential $U - Z_q I$ above
         ``return_to``.
     return_to
         Second terminal, or ``None`` for remote earth.
     voltage
         Voltage phasor $U = |U|\\,e^{j\\varphi}$ in V.
+    resistance
+        Internal series resistance $R$ in Ω (user decision D1).
+    inductance
+        Internal series inductance $L$ in H (user decision D1).
     """
 
     name: str
     attached_to: str
     return_to: str | None
     voltage: complex
+    resistance: float = 0.0
+    inductance: float = 0.0
 
-    def terminals(self, cluster_id: dict[str, str]) -> VoltageTerminals:
-        """``(root_a, root_r, U)``: the cluster roots of the two terminals."""
+    @property
+    def reactive(self) -> bool:
+        """Whether the internal impedance depends on frequency ($L > 0$)."""
+        return self.inductance != 0.0
+
+    def terminals(
+        self, cluster_id: dict[str, str], omega: float = 0.0
+    ) -> VoltageTerminals:
+        """Terminals in the nodal system at the angular frequency ``omega``.
+
+        The cluster roots of the two terminals, the voltage and the
+        internal impedance $Z_q = R + j\\omega L$ in Ω.
+        """
         root_r = None if self.return_to is None else cluster_id[self.return_to]
-        return (cluster_id[self.attached_to], root_r, self.voltage)
+        return VoltageTerminals(
+            cluster_id[self.attached_to],
+            root_r,
+            self.voltage,
+            _internal_impedance(self.resistance, self.inductance, omega),
+        )
 
 
 # ---------------------------------------------------------------------
@@ -467,9 +490,10 @@ def impressed_voltages(world: World) -> list[ImpressedVoltage]:
     """Step 2b: the voltage sources of ``world``, in source order.
 
     Each becomes one unknown (its current) and one constraint row
-    $\\varphi_a - \\varphi_r = U$ of the nodal system of step 5
-    (modified nodal analysis, 2026.11). Called after :func:`inject`,
-    which has validated the world.
+    $\\varphi_a - \\varphi_r + Z_q I = U$ of the nodal system of step 5
+    (modified nodal analysis, 2026.11; internal impedance $Z_q$, user
+    decision D1). Called after :func:`inject`, which has validated the
+    world.
 
     Parameters
     ----------
@@ -489,6 +513,8 @@ def impressed_voltages(world: World) -> list[ImpressedVoltage]:
             attached_to=src.attached_to,
             return_to=src.return_to,
             voltage=complex(src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))),
+            resistance=float(src.internal_resistance_ohm),
+            inductance=float(src.internal_inductance_h),
         )
         for src in world.sources
         if src.kind == "voltage"
@@ -775,13 +801,18 @@ def solve(
 
     The multi-port matrix ``Z`` is frequency-independent and shared by
     the per-frequency solves (ADR-0010 Tier 1). Without inductive
-    branches the whole system is frequency-independent: it is solved
-    once and replicated.
+    branches (and without a voltage source with an internal inductance)
+    the whole system is frequency-independent: it is solved once and
+    replicated.
 
     Every voltage source of ``voltages`` adds one unknown, its current,
-    and one constraint row $\\varphi_a - \\varphi_r = U$ (modified nodal
-    analysis, :func:`~groundfield.solver._topology._voltage_source_entries`);
-    the currents are kept in :attr:`Solution.voltage_source_currents`.
+    and one constraint row $\\varphi_a - \\varphi_r + Z_q I = U$
+    (modified nodal analysis,
+    :func:`~groundfield.solver._topology._voltage_source_entries`); the
+    currents are kept in :attr:`Solution.voltage_source_currents`. A
+    source with an internal inductance makes the system depend on
+    frequency: it is then solved per frequency (with a complex
+    constraint row) also without inductive branches.
 
     Source-free components float (finding 10.29): a bonded group of
     passive electrodes is one equipotential with zero net current, and
@@ -791,8 +822,8 @@ def solve(
     """
     n_freq = len(engine.frequencies)
     mp_cache: dict = {}
-    terminals = [v.terminals(topo.cluster_id) for v in voltages]
     v_currents: list[dict[str, complex]] = []
+    per_frequency = branches.has_inductance or any(v.reactive for v in voltages)
 
     def _solve_at(
         omega: float,
@@ -802,6 +833,7 @@ def solve(
             if branches.earth_correction is not None
             else None
         )
+        terminals = [v.terminals(topo.cluster_id, omega) for v in voltages]
         node_pots: dict[str, complex] = {}
         source_currents: list[complex] = []
         owner_currents = _solve_cluster_currents(
@@ -844,7 +876,7 @@ def solve(
             return _segment_potentials(kernel, arrays, sc_list)
         return _reused_potentials(mp_cache, owner_list, arrays.lengths.shape[0])
 
-    if branches.has_inductance:
+    if per_frequency:
         owner_per_freq: list[dict[str, complex]] = []
         sc_per_freq: list[np.ndarray] = []
         nodes_per_freq: list[dict[str, complex]] = []
@@ -1256,7 +1288,9 @@ def _reject_voltage_sources(world, backend: str) -> None:
     voltages (registry capability ``voltage_sources``); a backend without
     it is called directly here (``Engine.solve`` rejects the world in the
     capability check already). Up to 0.15.0 such a backend dropped the
-    voltage sources with a warning and solved to zero.
+    voltage sources with a warning and solved to zero. The message names
+    the backends that solve the world (those of the capability check,
+    audit W2A-07).
 
     Raises
     ------
@@ -1273,13 +1307,22 @@ def _reject_voltage_sources(world, backend: str) -> None:
         raise BackendCapabilityError(
             f"Backend '{backend}' does not implement impressed voltage sources "
             f"(voltage source(s) {names}). Backends that can: "
-            f"{_voltage_capable_backends()}."
+            f"{_voltage_capable_backends(world)}."
         )
 
 
-#: Name of :func:`_reject_voltage_sources` up to 2026.11 (it warned and
-#: dropped the voltage sources); kept for the re-export of ``solver.image``.
-_warn_ignored_sources = _reject_voltage_sources
+def _warn_ignored_sources(world, backend: str, *, stacklevel: int = 3) -> None:
+    """Name of :func:`_reject_voltage_sources` up to 2026.11.
+
+    Up to 0.15.0 it warned and dropped the voltage sources (hence
+    ``stacklevel``, accepted and ignored since; audit W2A-03); kept with
+    the old signature for ``fem`` and the re-export of ``solver.image``.
+    It returns ``None`` for a world of current sources and raises
+    :class:`~groundfield.solver.registry.BackendCapabilityError` for a
+    world with voltage sources.
+    """
+    del stacklevel  # nothing is warned any more
+    _reject_voltage_sources(world, backend)
 
 
 def _reject_concrete_shells(world, backend: str) -> None:
@@ -1290,7 +1333,9 @@ def _reject_concrete_shells(world, backend: str) -> None:
     coefficient on the reaction-matrix diagonal. A backend without it
     (``fem``) would silently solve the bare-metal problem, which the
     electrode documentation explicitly promises will fail loudly
-    instead.
+    instead. The message names the backends of the registry that solve
+    the world (audit W2A-09; up to then it named ``image`` /
+    ``image_2layer`` only).
 
     Raises
     ------
@@ -1305,11 +1350,16 @@ def _reject_concrete_shells(world, backend: str) -> None:
         if float(getattr(e, "concrete_shell_coefficient_ohm_m", 0.0) or 0.0) != 0.0
     ]
     if shelled:
-        from groundfield.solver.registry import BackendCapabilityError
+        from groundfield.solver.registry import (
+            BackendCapabilityError,
+            _capable_backends,
+        )
 
+        capable = _capable_backends(world, None, False)
+        alternatives = ", ".join(capable) if capable else "none"
         raise BackendCapabilityError(
             f"Backend '{backend}' does not implement the concrete-shell "
             f"correction (ADR-0012) carried by electrode(s) {shelled}. "
-            "Use backend='image' / 'image_2layer', or set "
+            f"Backends that solve this world: {alternatives}; or set "
             "concrete_shell_coefficient_ohm_m = 0."
         )

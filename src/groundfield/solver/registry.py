@@ -934,13 +934,15 @@ def _capable_backends(
     return names
 
 
-def _voltage_capable_backends() -> str:
-    """Registered backends that solve voltage sources, for messages."""
-    names = [
-        f"'{n}'"
-        for n in available_backends()
-        if _capabilities(_REGISTRY[n]).voltage_sources
-    ]
+def _voltage_capable_backends(world: World) -> str:
+    """Registered backends that solve ``world`` with its voltage sources.
+
+    The same list as the message of :func:`check_capabilities`
+    (:func:`_capable_backends`; audit W2A-07: up to then every backend
+    with the ``voltage_sources`` capability was named, also one that
+    does not support the world's soil).
+    """
+    names = _capable_backends(world, None, False)
     return ", ".join(names) if names else "none"
 
 

@@ -26,42 +26,62 @@ remote earth.
 
 Voltage sources
 ---------------
-A :class:`VoltageSource` is an ideal voltage $U = |U|\\,e^{j\\varphi}$
-(RMS phasor, ``magnitude`` in V) between ``attached_to`` and
-``return_to``, or between ``attached_to`` and remote earth (the
-potential reference) for ``return_to=None``:
+A :class:`VoltageSource` is a voltage $U = |U|\\,e^{j\\varphi}$ (RMS
+phasor, ``magnitude`` in V) behind an internal series impedance
+$Z_q(f) = R + j\\omega L$ (``internal_resistance_ohm``,
+``internal_inductance_h``; both 0 by default, the ideal source), between
+``attached_to`` and ``return_to``, or between ``attached_to`` and remote
+earth (the potential reference) for ``return_to=None``:
 
 $$
-\\varphi_a - \\varphi_r = U .
+\\varphi_a - \\varphi_r + Z_q\\,I = U .
 $$
 
 Its current $I$ is an unknown of the solve (modified nodal analysis:
 one constraint row and one current unknown per voltage source in the
-nodal system of electrodes, junctions and conductor branches) and
-follows the sign convention of a current source: it flows from the
-source into ``attached_to`` and back out of ``return_to``. The result
-reports it in :attr:`~groundfield.solver.result.SourceRecord.current`,
-the impressed voltage in :attr:`~groundfield.solver.result.SourceRecord.voltage`,
-and ``input_impedance()`` is $U / I$. The problem is linear: a voltage
-source gives the solution of a 1 A current source at the same terminals
-scaled by $U / Z_\\text{in}$, also with several sources, conductors,
+nodal system of electrodes, junctions and conductor branches; $Z_q$ is
+the diagonal entry of the row) and follows the sign convention of a
+current source: it flows from the source into ``attached_to`` and back
+out of ``return_to``. The result reports it in
+:attr:`~groundfield.solver.result.SourceRecord.current`, the impressed
+voltage in :attr:`~groundfield.solver.result.SourceRecord.voltage` and
+$R$, $L$ in the record's two fields of the same names;
+``input_impedance()`` is the impedance the source sees at its terminals,
+$Z_\\text{in} = (\\varphi_a - \\varphi_r) / I = U / I - Z_q$ ($Z_q$
+excluded). The problem is linear: a world with **one** source, a
+voltage source, gives the solution of a 1 A current source at the same
+terminals scaled by $I = U / (Z_q + Z_\\text{in})$, with conductors,
 inductive coupling and layered soil (to round-off,
-``tests/test_voltage_sources.py``).
+``tests/test_voltage_sources.py``, ``tests/test_voltage_source_impedance.py``).
 
-* Several voltage and current sources superpose; for one voltage
-  source alone the others are shorted (0 V), the current sources open.
-* A voltage source of 0 V is an ideal short between its terminals (or
-  to remote earth); the solve returns the current through it.
-* The source is ideal (no internal impedance). A series impedance is a
-  junction at the source terminal and a finite conductor to the
-  electrode (``lumped_series_resistance_ohm``, or an inductive
-  conductor model).
+* Several voltage and current sources superpose: for one voltage source
+  alone the other voltage sources are shorted (0 V, their $Z_q$ kept),
+  the current sources open. The solve is then the superposition of all
+  of them, not the scaled 1 A solve of one source, and the input
+  impedance of each is an apparent one: two 230 V sources on two 3 m
+  rods 5 m apart (100 Ω·m) each drive 7.5 % less current than one of
+  them alone ($U / Z_\\text{in}$ of the 1 A solve), and
+  ``input_impedance()`` reports 8.1 % more (``image``; ``mom``: 7.5 %
+  and 8.2 %).
+* A voltage source of 0 V is a short through $Z_q$ between its
+  terminals (or to remote earth); the solve returns the current through
+  it. With $Z_q \\ne 0$ it is a passive impedance.
+* $Z_q$ is evaluated at every solved frequency; $j\\omega L$ makes the
+  system complex, so a galvanic world whose sources carry an inductance
+  is solved once per frequency (otherwise once for all frequencies).
+  Before 2026.11 a series impedance was modelled as a junction at the
+  source terminal and a finite conductor to the electrode
+  (``lumped_series_resistance_ohm``); the two give the same solution to
+  round-off.
 * Rejected before any numerics run (:meth:`World.check
   <groundfield.world.World.check>`): a voltage source whose terminals
-  are bonded into one cluster by ideal conductors (short circuit), and
-  voltage sources that form a loop through ideal bonds or remote earth
-  (two of them from one cluster to remote earth, a ring of two-terminal
-  ones) — the loop fixes one potential difference twice.
+  are bonded into one cluster by ideal conductors (short circuit, with
+  or without $Z_q$), and voltage sources without internal resistance
+  that form a loop through ideal bonds or remote earth (two of them from
+  one cluster to remote earth, a ring of two-terminal ones) — the loop
+  fixes one potential difference twice. A source with
+  ``internal_resistance_ohm > 0`` opens such a loop; an inductance alone
+  does not, because $Z_q$ vanishes at $f = 0$.
 * Backends without the registry capability ``voltage_sources`` (the
   experimental ``fem``) raise
   :class:`~groundfield.solver.registry.BackendCapabilityError`.
@@ -85,6 +105,7 @@ take a non-finite value.
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, TypeAdapter
@@ -145,25 +166,41 @@ class CurrentSource(_SourceBase):
 
 
 class VoltageSource(_SourceBase):
-    """Impressed (ideal) voltage source.
+    """Impressed voltage source, ideal or behind an internal impedance.
 
-    Fixes the potential of ``attached_to`` at $U$ above ``return_to``,
-    or above remote earth for ``return_to=None``:
-    $\\varphi_a - \\varphi_r = U = |U|\\,e^{j\\varphi}$. The source
-    current $I$ (from the source into ``attached_to``) is solved for
-    and reported in :attr:`~groundfield.solver.result.SourceRecord.current`;
+    Drives ``attached_to`` against ``return_to``, or against remote earth
+    for ``return_to=None``, with the voltage $U = |U|\\,e^{j\\varphi}$
+    behind the internal series impedance
+    $Z_q(f) = R + j\\omega L$ (``internal_resistance_ohm``,
+    ``internal_inductance_h``; both 0 by default, the ideal source):
+
+    $$
+    \\varphi_a - \\varphi_r = U - Z_q\\,I .
+    $$
+
+    The source current $I$ (from the source into ``attached_to``) is
+    solved for and reported in
+    :attr:`~groundfield.solver.result.SourceRecord.current`;
     :meth:`~groundfield.solver.result.FieldResult.input_impedance` is
-    $U / I$. See the module docstring for the semantics, the checks and
-    the backends that solve it.
+    the impedance the source sees at its terminals,
+    $(\\varphi_a - \\varphi_r) / I = U / I - Z_q$, without $Z_q$. See
+    the module docstring for the semantics, the checks and the backends
+    that solve it.
 
     Attributes
     ----------
     magnitude
         Voltage amplitude in V (RMS in the frequency domain); finite.
-        0 V is an ideal short (its current is still solved for); a world
-        needs at least one source of non-zero magnitude.
+        0 V is a short through $Z_q$ (its current is still solved for);
+        a world needs at least one source of non-zero magnitude.
     phase_deg
         Phase angle in degrees; finite. Default 0.
+    internal_resistance_ohm
+        Internal series resistance $R$ in Ω; finite, ≥ 0. Default 0.
+    internal_inductance_h
+        Internal series inductance $L$ in H; finite, ≥ 0. Default 0.
+        It enters as $j\\omega L$ at each solved frequency and vanishes
+        at $f = 0$.
     """
 
     kind: Literal["voltage"] = "voltage"
@@ -171,6 +208,69 @@ class VoltageSource(_SourceBase):
     phase_deg: float = Field(
         default=0.0, allow_inf_nan=False, description="Phase angle in degrees."
     )
+    internal_resistance_ohm: float = Field(
+        default=0.0,
+        ge=0.0,
+        allow_inf_nan=False,
+        description=(
+            "Internal series resistance R of the source in Ω (≥ 0); "
+            "0 (default) for an ideal source."
+        ),
+    )
+    internal_inductance_h: float = Field(
+        default=0.0,
+        ge=0.0,
+        allow_inf_nan=False,
+        description=(
+            "Internal series inductance L of the source in H (≥ 0); "
+            "0 (default) for an ideal source. Enters as jωL."
+        ),
+    )
+
+    def internal_impedance(self, frequency: float) -> complex:
+        """Internal impedance $Z_q = R + j\\omega L$ at ``frequency``.
+
+        Parameters
+        ----------
+        frequency
+            Frequency in Hz.
+
+        Returns
+        -------
+        complex
+            $Z_q$ in Ω, with $\\omega = 2\\pi f$; $R$ at $f = 0$ and
+            ``0j`` for an ideal source.
+        """
+        return _internal_impedance(
+            self.internal_resistance_ohm,
+            self.internal_inductance_h,
+            2.0 * math.pi * float(frequency),
+        )
+
+
+def _internal_impedance(resistance: float, inductance: float, omega: float) -> complex:
+    """Series impedance $R + j\\omega L$ of a voltage source (private helper).
+
+    One formula for the solve (per angular frequency) and the read-back
+    of the result (:meth:`FieldResult.input_impedance
+    <groundfield.solver.result.FieldResult.input_impedance>`), so both
+    use the same floating-point value.
+
+    Parameters
+    ----------
+    resistance
+        $R$ in Ω.
+    inductance
+        $L$ in H.
+    omega
+        Angular frequency $\\omega = 2\\pi f$ in rad/s.
+
+    Returns
+    -------
+    complex
+        $Z_q$ in Ω.
+    """
+    return complex(float(resistance), float(omega) * float(inductance))
 
 
 #: Discriminated union over the concrete source subclasses. The

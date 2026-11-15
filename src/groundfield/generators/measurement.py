@@ -133,6 +133,10 @@ Created when :attr:`MeasurementProbeConfig.lead` is set: the probe lead
 runs from this junction to the voltage probe; the voltmeter reads the
 potential difference between the earthing system and this junction."""
 
+#: Source kinds of a measurement: the current source, or since 2026.11 a
+#: voltage source with its solved current (audit W2A-10).
+_SOURCE_KINDS = ("current", "voltage")
+
 _PROBE_ELECTRODE = re.compile(r"^probe_(rod|ring|strip|foundation)_\d+$")
 """Electrode names of the voltage-probe site of a generated network."""
 
@@ -205,10 +209,16 @@ def measured_impedance(
     (terminals E and H) over :math:`I`, is
     :meth:`~groundfield.solver.result.FieldResult.input_impedance`.
 
+    The source is the current source of the measurement or, since
+    2026.11, a voltage source (audit W2A-10): :math:`I` is then its solved
+    current, and the reading is the same as with a current source at the
+    same terminals (the problem is linear; an internal impedance of the
+    source changes :math:`I`, not the reading).
+
     Parameters
     ----------
     result
-        Solved result of a world with a current source.
+        Solved result of a world with a current or voltage source.
     probe
         Node the voltmeter reads against the earthing system: the name of
         a junction or of an electrode (an electrode stands for its
@@ -219,8 +229,8 @@ def measured_impedance(
         :class:`~groundfield.generators.tn_network.TnNetworkGenerator`
         network.
     source
-        Name of the measurement's current source; may be omitted when the
-        result carries exactly one current source.
+        Name of the measurement's source; may be omitted when the result
+        carries exactly one current or voltage source.
 
     Returns
     -------
@@ -232,9 +242,10 @@ def measured_impedance(
     ------
     ValueError
         If the result carries no source snapshot (hand-built results), no
-        current source, or several current sources and ``source`` is
-        omitted; if the named source is not a current source; if no probe
-        is given and none can be found.
+        current or voltage source, or several and ``source`` is omitted;
+        if the record of the source carries no current per frequency (a
+        voltage record without its solved current); if no probe is given
+        and none can be found.
     KeyError
         If ``source`` or ``probe`` is unknown.
 
@@ -254,25 +265,34 @@ def measured_impedance(
             "result carries none (hand-built FieldResult?)."
         )
     if source is None:
-        current_sources = [s for s in result.sources if s.kind == "current"]
-        if len(current_sources) != 1:
-            names = ", ".join(s.name for s in current_sources) or "none"
+        candidates = [s for s in result.sources if s.kind in _SOURCE_KINDS]
+        if len(candidates) != 1:
+            names = ", ".join(s.name for s in candidates) or "none"
             raise ValueError(
-                f"The result carries {len(current_sources)} current sources "
-                f"({names}); pass source=<name>."
+                f"The result carries {len(candidates)} sources ({names}); pass "
+                "source=<name>."
             )
-        record = current_sources[0]
+        record = candidates[0]
     else:
         by_name = {s.name: s for s in result.sources}
         if source not in by_name:
             known = ", ".join(sorted(by_name)) or "none"
             raise KeyError(f"Unknown source {source!r} (known: {known}).")
         record = by_name[source]
-        if record.kind != "current":
+        if record.kind not in _SOURCE_KINDS:
             raise ValueError(
                 f"Source {source!r} is a {record.kind!r} source; the reading is "
-                "defined for the current source of the measurement."
+                "defined for the current or voltage source of the measurement."
             )
+    n_freq = len(result.frequencies)
+    if len(record.current) != n_freq:
+        # A voltage record without its solved current (audit W2A-10).
+        raise ValueError(
+            f"{record.kind.capitalize()} source {record.name!r}: the result "
+            "carries no solved source current (the backend did not report "
+            f"it), or not one per frequency ({len(record.current)} currents, "
+            f"{n_freq} frequencies)."
+        )
     if probe is None:
         probe = _default_probe(result)
     u_e = _node_potential(result, record.attached_to)

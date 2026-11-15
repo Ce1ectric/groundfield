@@ -142,7 +142,9 @@ from groundfield.solver._series import (
     _series_tail_bound,
 )
 from groundfield.solver._topology import (
+    _has_source_reactance,
     _shell_diagonal,
+    _source_reactance_entries,
     _voltage_source_entries,
     _voltage_source_rhs,
 )
@@ -429,10 +431,14 @@ def _point_matching_solve(
     in the image family (modified nodal analysis,
     :func:`~groundfield.solver._topology._voltage_source_entries`): one
     unknown per source, its current, after the branch currents, and one
-    row $\\varphi_a - \\varphi_r = U$. ``voltage_sources`` holds
-    ``(root_a, root_r, U)`` per source (cluster roots, ``root_r`` ``None``
-    for remote earth, U in V); ``source_currents``, if given, receives
-    their currents in A.
+    row $\\varphi_a - \\varphi_r + Z_q I_v = U$ with the internal
+    impedance $Z_q$ of the source on the diagonal (user decision D1).
+    ``voltage_sources`` holds one
+    :class:`~groundfield.solver._topology.VoltageTerminals` per source
+    (cluster roots, ``root_r`` ``None`` for remote earth, U in V, Z_q in
+    Ω at ``omega``); ``source_currents``, if given, receives their
+    currents in A. A reactive $Z_q$ takes the complex path also without
+    inductive branches.
 
     Unknown set (review pass 10, 10.29): *every* node of a component
     (nodes joined by finite branches) that has galvanic contact to the
@@ -562,8 +568,9 @@ def _point_matching_solve(
         _voltage_source_rhs(b_re, b_im, voltage_sources, first=N_a + K_a + M_a)
 
     use_inductive = inductance_matrix is not None and omega != 0.0 and M_a > 0
+    reactive = _has_source_reactance(voltage_sources)
 
-    if not use_inductive:
+    if not use_inductive and not reactive:
         # DC / no-inductive fast path: A is real; one LU factorisation
         # for both right-hand sides (multi-RHS, ADR-0010 Tier 1).
         sol = np.linalg.solve(A, np.column_stack([b_re, b_im]))
@@ -571,6 +578,15 @@ def _point_matching_solve(
         I_active = sol_re[:N_a] + 1j * sol_im[:N_a]
         phi_active = sol_re[N_a : N_a + K_a] + 1j * sol_im[N_a : N_a + K_a]
         i_volt = sol_re[N_a + K_a + M_a :] + 1j * sol_im[N_a + K_a + M_a :]
+    elif not use_inductive:
+        # A reactive internal impedance of a voltage source (D1) in a
+        # system without inductive branches: complex constraint rows.
+        A_c = A.astype(complex)
+        _source_reactance_entries(A_c, voltage_sources, first=N_a + K_a + M_a)
+        sol = np.linalg.solve(A_c, b_re + 1j * b_im)
+        I_active = sol[:N_a]
+        phi_active = sol[N_a : N_a + K_a]
+        i_volt = sol[N_a + K_a + M_a :]
     else:
         # Inductive coupling: the branch block carries jω·L, with
         # ``inductance_matrix`` covering the full ``finite_branches``
@@ -610,6 +626,8 @@ def _point_matching_solve(
                     A_c[row, N_a + K_a + m_prime] -= contrib
                 else:
                     A_c[row, N_a + K_a + m_prime] = -contrib
+        if reactive:
+            _source_reactance_entries(A_c, voltage_sources, first=N_a + K_a + M_a)
         b_c = b_re + 1j * b_im
         sol = np.linalg.solve(A_c, b_c)
         I_active = sol[:N_a]
@@ -906,7 +924,8 @@ def _point_matching_step(
 
     One unknown current per segment and one potential per node
     (:func:`_point_matching_solve`), per frequency when the branch block
-    is inductive, once otherwise.
+    is inductive or a voltage source has an internal inductance, once
+    otherwise.
 
     Parameters
     ----------
@@ -935,8 +954,8 @@ def _point_matching_step(
     """
     n_freq = len(engine.frequencies)
     n_segments = len(disc.segments)
-    terminals = [v.terminals(topo.cluster_id) for v in voltages]
     v_currents: list[dict[str, complex]] = []
+    per_frequency = branches.has_inductance or any(v.reactive for v in voltages)
 
     def _solve_at(omega: float) -> tuple[np.ndarray, np.ndarray, dict[str, complex]]:
         correction = (
@@ -944,6 +963,7 @@ def _point_matching_step(
             if branches.earth_correction is not None
             else None
         )
+        terminals = [v.terminals(topo.cluster_id, omega) for v in voltages]
         source_currents: list[complex] = []
         sc, node_phi = _point_matching_solve(
             Z=Z,
@@ -967,7 +987,7 @@ def _point_matching_step(
             ph = potentials(sc)
         return sc, ph, node_phi
 
-    if branches.has_inductance:
+    if per_frequency:
         sc_per_freq: list[np.ndarray] = []
         phi_per_freq: list[np.ndarray] = []
         node_phi_per_freq: list[dict[str, complex]] = []

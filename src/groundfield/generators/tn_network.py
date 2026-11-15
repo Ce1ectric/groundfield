@@ -700,10 +700,14 @@ class TnNetworkConfig(GeneratorConfig):
             '``"voltage_"`` are rejected at validation time with a '
             "Pydantic ``ValidationError`` rather than silently falling "
             "through to the default ``CurrentSource`` factory. "
-            '``"current"`` is the right '
-            "choice for the typical fall-of-potential measurement and "
-            'for fault simulations; ``"voltage"`` is reserved for '
-            "the rare multi-port tests."
+            '``"current"`` impresses ``source_magnitude_a`` in A, the '
+            "usual choice for a fall-of-potential measurement and for "
+            'fault simulations; ``"voltage"`` impresses the same number '
+            "in V (an ideal voltage source; set its internal_resistance_ohm "
+            "/ internal_inductance_h on the built world) and the solve "
+            "returns its current. Both kinds give the same readings: "
+            "``measured_impedance`` and ``input_impedance`` divide by the "
+            "impressed or solved source current."
         ),
     )
 

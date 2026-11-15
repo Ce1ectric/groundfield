@@ -35,6 +35,9 @@ SOURCE_COLUMNS = [
     "return_to",
     "current_a",
     "voltage_v",
+    # internal impedance of a voltage source (user decision D1, 2026.11)
+    "internal_resistance_ohm",
+    "internal_inductance_h",
     "input_impedance_ohm",
 ]
 

@@ -24,6 +24,10 @@ from groundfield.generators._compat import DeprecatedKeyDict, take_renamed_kwarg
 from groundfield.generators.electrode_specs import RodElectrodeSpec
 from groundfield.generators.grounding import GroundingSystemSpec
 
+#: Source kinds whose (impressed or solved) current is the test current of
+#: the reading (a voltage source since 2026.11, audit W2A-01).
+_SOURCE_KINDS = ("current", "voltage")
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from groundfield.generators.layout.model import CabinetPlacement
 
@@ -479,7 +483,9 @@ class _MeasurementMixin:
         source_magnitude_a
             Test current :math:`I_\text{src}` in A. ``None`` (default)
             takes the current of the solved source that feeds the
-            substation from the result; results without a source
+            substation from the result — the impressed current of a
+            current source, the solved current of a voltage source
+            (since 2026.11, audit W2A-01); results without a source
             snapshot fall back to 1 A (the default before 2026.11,
             which made the reading of a world built with another
             ``source_magnitude_a`` wrong unless it was repeated here).
@@ -500,6 +506,11 @@ class _MeasurementMixin:
         RuntimeError
             If no auxiliary electrode is configured (the
             measurement loop is then physically open).
+        ValueError
+            If ``source_magnitude_a`` is ``None`` and the source that
+            feeds the substation carries no current at
+            ``frequency_index`` (a voltage record without its solved
+            current).
 
         Notes
         -----
@@ -573,10 +584,14 @@ class _MeasurementMixin:
         return (phi_sub - phi_ref) / current
 
     def _substation_anchor(self, result: object) -> Optional[str]:
-        """Electrode the substation source feeds, else the first ``substation_*``."""
+        """Electrode the substation source feeds, else the first ``substation_*``.
+
+        The source is a current source or, since 2026.11, a voltage
+        source (audit W2A-01).
+        """
         prefix = f"{self.substation_name}_"
         for record in getattr(result, "sources", None) or []:
-            if record.kind == "current" and record.attached_to.startswith(prefix):
+            if record.kind in _SOURCE_KINDS and record.attached_to.startswith(prefix):
                 return record.attached_to
         for ename in getattr(result, "electrode_potentials", {}):
             if ename.startswith(prefix):
@@ -590,12 +605,27 @@ class _MeasurementMixin:
         frequency_index: int,
         source_magnitude_a: Optional[float],
     ) -> complex:
-        """Test current in A: explicit, else the solved source feeding ``anchor``."""
+        """Test current in A: explicit, else the solved source feeding ``anchor``.
+
+        The current of a voltage source is the solved one (audit W2A-01;
+        up to then a voltage-driven world fell back to 1 A); a voltage
+        record without it raises :class:`ValueError`. Results without a
+        source snapshot fall back to 1 A.
+        """
         if source_magnitude_a is not None:
             return complex(source_magnitude_a)
         for record in getattr(result, "sources", None) or []:
-            if record.kind == "current" and record.attached_to == anchor:
+            if record.kind not in _SOURCE_KINDS or record.attached_to != anchor:
+                continue
+            try:
                 return complex(record.current[frequency_index])
+            except IndexError:
+                raise ValueError(
+                    f"{record.kind.capitalize()} source {record.name!r} feeds "
+                    f"{anchor!r}, but the result carries no solved source "
+                    f"current at frequency index {frequency_index}; pass "
+                    "source_magnitude_a explicitly."
+                ) from None
         return 1.0 + 0.0j
 
     def verify_current_balance(
@@ -637,7 +667,10 @@ class _MeasurementMixin:
 
         ``source_magnitude_a`` is the test current in A; ``None``
         (default) takes it from the solved source that feeds the
-        substation (1 A for results without a source snapshot).
+        substation — a current source, or the solved current of a
+        voltage source (since 2026.11, audit W2A-01; a voltage record
+        without it raises :class:`ValueError`) — and 1 A for results
+        without a source snapshot.
 
         The "positive side" is every electrode whose name does *not*
         start with the auxiliary's name prefix; the "aux side" is

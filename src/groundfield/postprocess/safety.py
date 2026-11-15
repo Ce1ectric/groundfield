@@ -920,20 +920,29 @@ def _source_current(result: "FieldResult", source: str | None, k: int) -> comple
             "touch_voltage_spectrum needs the source snapshot of the solve "
             "(FieldResult.sources); this result carries none."
         )
-    current = [s for s in result.sources if s.kind in ("current", "voltage")]
+    candidates = [s for s in result.sources if s.kind in ("current", "voltage")]
     if source is None:
-        if len(current) != 1:
-            names = ", ".join(s.name for s in current) or "none"
+        if len(candidates) != 1:
+            names = ", ".join(s.name for s in candidates) or "none"
             raise ValueError(
-                f"touch_voltage_spectrum: {len(current)} current sources "
-                f"({names}); pass source=<name>."
+                f"touch_voltage_spectrum: {len(candidates)} current or voltage "
+                f"sources ({names}); pass source=<name>."
             )
-        record = current[0]
+        record = candidates[0]
     else:
-        matches = [s for s in current if s.name == source]
+        matches = [s for s in candidates if s.name == source]
         if not matches:
-            raise KeyError(f"No current source {source!r} in the result.")
+            raise KeyError(f"No current or voltage source {source!r} in the result.")
         record = matches[0]
+    n_freq = len(result.frequencies)
+    if len(record.current) != n_freq:
+        # A voltage record without its solved current (audit W2A-04).
+        raise ValueError(
+            f"touch_voltage_spectrum: {record.kind} source {record.name!r}: the "
+            "result carries no solved source current (the backend did not "
+            f"report it), or not one per frequency ({len(record.current)} "
+            f"currents, {n_freq} frequencies)."
+        )
     i_src = complex(record.current[k])
     if i_src == 0:
         raise ValueError(
@@ -989,7 +998,8 @@ def touch_voltage_spectrum(
         Foot position, see :func:`touch_voltage`; the same position is
         used for every frequency.
     source
-        Name of the current source the results were solved with; may be
+        Name of the current or voltage source the results were solved
+        with (the denominator is its impressed or solved current); may be
         omitted when there is exactly one.
 
     Returns
@@ -1002,8 +1012,9 @@ def touch_voltage_spectrum(
     ValueError
         If the currents do not match the frequencies, are not finite, a
         frequency appears in more than one result (it would be counted
-        twice), a result carries no source snapshot, or the source current
-        is zero at some frequency.
+        twice), a result carries no source snapshot or no source current
+        per frequency (a voltage record without its solved current), or
+        the source current is zero at some frequency.
 
     Notes
     -----
