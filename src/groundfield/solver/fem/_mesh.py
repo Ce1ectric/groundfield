@@ -25,8 +25,12 @@ interface) is cut into the O-grid elements
 (:func:`cut_at_depth`), so every element lies in one layer. Next to such
 an interface the field varies on the scale of the gap between the wire
 and the interface (and of the narrow wedge where an interface cuts the
-wire near its edge), so that block has eight times the lines
-(``MeshParameters.near_interface_intervals``; audit W4A-01).
+wire near its edge), so that block has four times the lines
+(``MeshParameters.near_interface_intervals``; audit W4A-01), and it is
+singular where the interface cuts the wire or touches it: the O-grid of
+that block is graded towards those points, its rays geometrically in
+angle and its first layers geometrically in radius from cells of
+``MeshParameters.contact_size`` wire radii (audit W4R2A-02).
 
 Grading. The spacing at a feature $x_f$ with size $h_f$ grows linearly
 with the distance, $h(x) = \\min_f\\,(h_f + g\\,|x - x_f|)$ with the growth
@@ -38,9 +42,10 @@ function exactly (:func:`graded_lines`).
 
 Refinement. Level $\\ell$ bisects every interval of the level-0 lines
 $\\ell$ times (and doubles the angular and radial resolution of every
-O-grid), so the tensor part of the finite-element spaces is nested. The
-O-grid is not: its layers move with the level and the polygon inscribed
-in the wire grows towards the circle. The discrete conductance therefore
+O-grid; the graded layers of a block at an interface are bisected like
+the lines), so the tensor part of the finite-element spaces is nested.
+The O-grid is not: its layers move with the level and the polygon
+inscribed in the wire grows towards the circle. The discrete conductance therefore
 converges at second order but is not guaranteed to fall monotonically
 (it does in every case tested away from interfaces; next to an interface
 cut into a block it did not before that block was refined, audit
@@ -62,6 +67,12 @@ __all__: list[str] = []
 # ---------------------------------------------------------------------
 
 
+#: Coordinates of mesh features closer than this, relative to the larger of
+#: 1 m and the coordinate, are one line (round-off; the tolerance of the line
+#: look-up :func:`_index`).
+_SAME_LINE = 1e-12
+
+
 def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarray:
     """Node coordinates through every feature, graded away from them.
 
@@ -71,7 +82,9 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
         ``(x, h)`` pairs: a coordinate in m that must be a node and the
         node spacing in m wanted there (``math.inf`` for a line without
         its own size, e.g. a domain boundary). At least one size must be
-        finite. Duplicates keep the smallest size.
+        finite. Duplicates keep the smallest size; so do coordinates that
+        differ by round-off only (:data:`_SAME_LINE`), which become the
+        line of the first of them.
     growth
         Growth $g > 0$ of the spacing per unit distance: the spacing at
         $x$ is $h(x) = \\min_f (h_f + g\\,|x - x_f|)$.
@@ -80,7 +93,8 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
     -------
     numpy.ndarray
         Sorted node coordinates in m. Every feature coordinate is a node
-        (bit for bit); between two neighbouring features the nodes follow
+        (bit for bit, or within :data:`_SAME_LINE` for one merged into its
+        neighbour); between two neighbouring features the nodes follow
         $h(x)$, with at least one interval.
     """
     if growth <= 0.0:
@@ -89,8 +103,21 @@ def graded_lines(features: list[tuple[float, float]], growth: float) -> np.ndarr
     for x, h in features:
         x, h = float(x), float(h)
         merged[x] = min(merged.get(x, math.inf), h)
-    xs = np.array(sorted(merged))
-    hs = np.array([merged[x] for x in xs])
+    # One line for coordinates computed two ways (a block's centre line at
+    # 0.30000000000000004 m and an interface at 0.3 m; a rod tip at 0.1 + 0.2):
+    # two lines 5.6e-17 m apart were a row of cells of zero height, which made
+    # the stiffness matrix singular or the resistance wrong by a factor of ten.
+    xs_all = sorted(merged)
+    xs_list: list[float] = []
+    hs_list: list[float] = []
+    for x in xs_all:
+        if xs_list and x - xs_list[-1] <= _SAME_LINE * max(1.0, abs(xs_list[-1])):
+            hs_list[-1] = min(hs_list[-1], merged[x])
+            continue
+        xs_list.append(x)
+        hs_list.append(merged[x])
+    xs = np.array(xs_list)
+    hs = np.array(hs_list)
     finite = np.isfinite(hs)
     if not finite.any():
         raise ValueError("graded_lines needs at least one feature with a finite size.")
@@ -176,6 +203,15 @@ class RingGeometry:
         (it is cut into the block); the block then has
         ``MeshParameters.near_interface_intervals`` per side instead of
         ``box_intervals``.
+    contacts
+        Angles in rad, $\\operatorname{atan2}(z - t, s - r_0)$, of the
+        points of the wire's circle where a near interface cuts it at a
+        narrow angle (two per interface, 0.7 a or farther from the axis) or
+        comes closest to it (one, at 1 ... 1.05 a); the O-grid is graded
+        towards them (audit W4R2A-02).
+    contact_size
+        Arc length in m of the O-grid's finest cells at the contacts, at
+        level 0 (each level halves it); ``0.0``: no grading.
     """
 
     radius: float
@@ -183,6 +219,8 @@ class RingGeometry:
     wire_radius: float
     half_width: float
     near_interface: bool = False
+    contacts: tuple[float, ...] = ()
+    contact_size: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -212,17 +250,39 @@ class MeshParameters:
         $\\sqrt{2a\\,|d - a|}$ along the wire's cross section ($d$: distance
         of the interface from the wire axis; 0.14 a at $d = 1.01\\,a$). With
         ``box_intervals`` the levels converged at first order and not
-        monotonically there (up to 6e-3 off, audit W4A-01); with 64 the
-        default lies within 3.3e-4 of an independent boundary-element model
-        at $d = 0.95 \\ldots 1.05\\,a$ and the estimate bounds the error, at
-        about four times the nodes of the ring.
+        monotonically there (up to 6e-3 off, audit W4A-01); 64 intervals
+        fixed that up to a contrast of 33. With the grading towards the
+        contacts (``contact_size``) 32 are as accurate as 64 and the mesh has
+        fewer nodes than the 64 intervals without it (audit W4R2A-02,
+        evidence ``fw4r2a/e01``).
+    contact_size
+        Arc length of the finest O-grid cells of such a block at the points
+        where the interface cuts the wire at a narrow angle (0.7 a or farther
+        from its axis, at 45.6 deg or less) or comes closest to it, at
+        level 0, in wire radii; the first radial layers start with the same
+        thickness. Where an interface cuts the wire the field is singular
+        (an edge of the conductor on a material interface, strongly so in
+        a narrow wedge), and a wire touching a much more conductive layer
+        passes its current through a contact zone that shrinks with the
+        contrast; without this grading the levels converged at about first
+        order beyond a contrast of 33 and the estimate fell below the error
+        (audit W4R2A-02: −1.6e-2 with an estimate of 1.1e-2 for a ring
+        touching a 1000 times more conductive layer). The angular and the
+        radial grading are both needed (each alone: −1.4e-2 and −3.4e-2
+        there; evidence ``fw4r2a/e01``).
+    contact_growth
+        Growth of the arc length and of the layer thickness away from a
+        contact (ratio $1 + g$ between neighbours), up to the block's
+        uniform size.
     """
 
     growth: float = 0.2
     end_size: float = 0.002
     box_half_width: float = 3.0
     box_intervals: int = 8
-    near_interface_intervals: int = 64
+    near_interface_intervals: int = 32
+    contact_size: float = 1e-3
+    contact_growth: float = 0.3
 
 
 @dataclass
@@ -288,6 +348,112 @@ def block_intervals(ring: RingGeometry, params: MeshParameters) -> int:
     return params.box_intervals
 
 
+def _contact_angles(ring: RingGeometry, n: int, growth: float) -> list[float]:
+    """Ray angles of a ring's O-grid graded towards its contacts (level 0).
+
+    From every contact angle the arc between neighbouring rays starts at
+    ``ring.contact_size`` and grows by ``1 + growth`` until it reaches the
+    block's uniform arc, $2\\pi a / (4n)$ for $n$ intervals per side (or a
+    quarter turn is covered).
+    """
+    if not (ring.contact_size > 0.0 and ring.contacts):
+        return []
+    a = ring.wire_radius
+    arc_uniform = 2.0 * math.pi * a / (4 * n)
+    out: list[float] = []
+    for phi in ring.contacts:
+        out.append(phi)
+        for sign in (1.0, -1.0):
+            theta, arc = 0.0, ring.contact_size
+            while arc < arc_uniform and theta < 0.25 * math.pi:
+                theta += arc / a
+                out.append(phi + sign * theta)
+                arc *= 1.0 + growth
+    return out
+
+
+def _contact_lines(
+    ring: RingGeometry, n: int, growth: float
+) -> tuple[list[float], list[float]]:
+    """Tensor lines through the block boundary where the graded rays meet it.
+
+    The O-grid's rays run from the wire axis to the nodes of the block
+    boundary, which are the crossings of the tensor lines; a ray at angle
+    $\\phi$ meets the top or bottom side at an $s$ line and the left or
+    right side at a $z$ line. Returns ``(s_lines, z_lines)`` in m.
+    """
+    s_out: list[float] = []
+    z_out: list[float] = []
+    c = ring.half_width
+    for ang in _contact_angles(ring, n, growth):
+        us, uz = math.cos(ang), math.sin(ang)
+        lam = c / max(abs(us), abs(uz))
+        if abs(uz) >= abs(us):
+            s_out.append(ring.radius + lam * us)
+        else:
+            z_out.append(ring.depth + lam * uz)
+    return s_out, z_out
+
+
+def _add_contact_lines(
+    features: list[tuple[float, float]], lines: list[float], tol: float
+) -> None:
+    """Append ``lines`` as features without a size of their own.
+
+    A line within ``tol`` of a line already present is dropped, so that no
+    sliver interval appears between them.
+    """
+    if not lines:
+        return
+    present = np.array(sorted(x for x, _ in features))
+    for x in sorted(lines):
+        k = int(np.searchsorted(present, x))
+        near = [present[j] for j in (k - 1, k) if 0 <= j < present.size]
+        if any(abs(x - y) <= tol for y in near):
+            continue
+        features.append((x, math.inf))
+        present = np.insert(present, k, x)
+
+
+def _layer_fractions(
+    ring: RingGeometry,
+    params: "MeshParameters",
+    level: int,
+    perimeter: int,
+    psi_max: float,
+) -> np.ndarray:
+    """Radial positions $u \\in [0, 1]$ of a ring's O-grid layers.
+
+    A layer at $u$ lies at $\\rho = a\\,(d/a)^u$ on the ray to a block
+    boundary node at distance $d$ ($u = 0$: the wire, $u = 1$: the block
+    boundary; ``psi_max`` $= \\ln(d_{\\max}/a)$). Without contacts the layers
+    are uniform in $u$, as many as make the cells about square at the block
+    corners for ``perimeter`` rays. With contacts the level-0 layers start
+    with the thickness ``ring.contact_size`` at the wire, grow by
+    ``1 + params.contact_growth`` to the uniform spacing of the block's
+    $4n$ uniform rays and stay uniform beyond; level $\\ell$ bisects them
+    $\\ell$ times, like the tensor lines (audit W4R2A-02: layers recomputed
+    per level, not bisected, kept the touching ring at contrast 1000 below
+    second order).
+    """
+    if not (ring.contact_size > 0.0 and ring.contacts):
+        n_layers = max(1, math.ceil(psi_max / (2.0 * math.pi / perimeter)))
+        return np.arange(n_layers + 1) / n_layers
+    n_uniform = 4 * block_intervals(ring, params)
+    n_u = max(1, math.ceil(psi_max / (2.0 * math.pi / n_uniform)))
+    du_max = 1.0 / n_u
+    du = ring.contact_size / (ring.wire_radius * psi_max)
+    u = [0.0]
+    while du < du_max and u[-1] + du < 1.0:
+        u.append(u[-1] + du)
+        du *= 1.0 + params.contact_growth
+    rest = 1.0 - u[-1]
+    n_rest = max(1, math.ceil(rest / du_max - 1e-9))
+    u += [u[-1] + rest * k / n_rest for k in range(1, n_rest + 1)]
+    u[-1] = 1.0
+    return bisect(np.asarray(u), level)
+
+
 def mesh_lines(
     rods: list[RodGeometry],
     rings: list[RingGeometry],
@@ -313,6 +479,10 @@ def mesh_lines(
         step = 2.0 * ring.half_width / n
         s_feat += [(x, step) for x in _box_points(ring.radius, ring.half_width, n)]
         z_feat += [(x, step) for x in _box_points(ring.depth, ring.half_width, n)]
+        s_extra, z_extra = _contact_lines(ring, n, params.contact_growth)
+        tol = 0.25 * ring.contact_size * ring.half_width / ring.wire_radius
+        _add_contact_lines(s_feat, s_extra, tol)
+        _add_contact_lines(z_feat, z_extra, tol)
         bodies.append(
             (ring.depth - ring.half_width, ring.depth + ring.half_width, step)
         )
@@ -327,7 +497,7 @@ def mesh_lines(
 def _index(lines: np.ndarray, value: float) -> int:
     """Index of the line at ``value`` (it is a feature, hence exact)."""
     k = int(np.argmin(np.abs(lines - value)))
-    if abs(float(lines[k]) - value) > 1e-12 * max(1.0, abs(value)):
+    if abs(float(lines[k]) - value) > _SAME_LINE * max(1.0, abs(value)):
         raise AssertionError(f"mesh line {value!r} missing")  # pragma: no cover
     return k
 
@@ -426,7 +596,11 @@ def _boundary_edges(triangles: np.ndarray) -> np.ndarray:
 
 
 def _o_grid_size(
-    s_lines: np.ndarray, z_lines: np.ndarray, ring: RingGeometry
+    s_lines: np.ndarray,
+    z_lines: np.ndarray,
+    ring: RingGeometry,
+    params: "MeshParameters | None" = None,
+    level: int = 0,
 ) -> tuple[int, int]:
     """Perimeter nodes $P$ and radial layers of a ring's O-grid (as built)."""
     c = ring.half_width
@@ -436,6 +610,10 @@ def _o_grid_size(
     # build_mesh: ceil(ln(max distance / a) / (2 pi / P)), the largest
     # distance being the block's corner; the tiny offset keeps the count
     # an upper bound if round-off of the node coordinates crosses an integer.
+    if ring.contact_size > 0.0 and ring.contacts:
+        psi = math.log(math.sqrt(2.0) * c / ring.wire_radius) * (1.0 + 1e-12)
+        u = _layer_fractions(ring, params or MeshParameters(), level, perimeter, psi)
+        return perimeter, int(u.size - 1) + 1
     x = math.log(math.sqrt(2.0) * c / ring.wire_radius) / (2.0 * math.pi / perimeter)
     return perimeter, max(1, math.ceil(x + 1e-9))
 
@@ -446,6 +624,7 @@ def predicted_nodes(
     rings: list[RingGeometry],
     level: int,
     interfaces: list[float] | tuple[float, ...] = (),
+    params: "MeshParameters | None" = None,
 ) -> int:
     """Node count of :func:`build_mesh` estimated before it is built.
 
@@ -470,10 +649,9 @@ def predicted_nodes(
     interfaces
         Depths in m of the layer interfaces inside the box.
     """
-    del level
     n = s_lines.size * z_lines.size
     for ring in rings:
-        perimeter, layers = _o_grid_size(s_lines, z_lines, ring)
+        perimeter, layers = _o_grid_size(s_lines, z_lines, ring, params, level)
         n += perimeter * layers
         cuts = sum(1 for h in interfaces if abs(ring.depth - h) < ring.half_width)
         n += cuts * (2 * perimeter + 4 * layers + 2)
@@ -559,15 +737,13 @@ def build_mesh(
         unit = offset / dist[:, None]
         a = ring.wire_radius
         # Radial layers uniform in ln(rho), about square elements.
-        n_layers = max(
-            1,
-            math.ceil(
-                math.log(float(dist.max()) / a) / (2.0 * math.pi / perimeter.size)
-            ),
+        u = _layer_fractions(
+            ring, params, level, perimeter.size, math.log(float(dist.max()) / a)
         )
+        n_layers = u.size - 1
         layers = [perimeter]
         for m in range(n_layers - 1, -1, -1):
-            rho = a * (dist / a) ** (m / n_layers)
+            rho = a * (dist / a) ** u[m]
             ids = np.arange(n_next, n_next + perimeter.size)
             extra.append(centre + rho[:, None] * unit)
             n_next += perimeter.size

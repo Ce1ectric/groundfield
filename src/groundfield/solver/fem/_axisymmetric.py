@@ -3,9 +3,11 @@
 The world must be a body of revolution about one vertical axis: every
 electrode is a :class:`~groundfield.geometry.electrodes.RodElectrode` on
 the axis or a :class:`~groundfield.geometry.electrodes.RingElectrode`
-centred on it, in any horizontally layered soil. Every other world is
-refused (:class:`~groundfield.solver.registry.BackendCapabilityError`,
-naming the backends that solve it). The electrodes are modelled as they
+centred on it, in any horizontally layered soil. ``model="auto"`` (the
+default) hands every other world to the three-dimensional model;
+``model="axisymmetric"`` refuses it
+(:class:`~groundfield.solver.registry.BackendCapabilityError`, naming the
+backends that solve it). The electrodes are modelled as they
 are: the rod as a solid cylinder with flat end faces, the ring as a solid
 torus of circular cross section, both perfect conductors, an encased
 electrode with its concrete shell (:mod:`groundfield.solver.fem._assembly`).
@@ -21,7 +23,9 @@ matrix is reported as the error estimate (``metadata["fem_error_estimate"]``;
 extrapolated value while the error of the finer level is at most 1/2.5 of
 that of the coarser (observed: 1/3.9 away from interfaces); against the
 finer level itself it is 0.88 ... 0.99 of its error in 36 cases of audit
-W4A, 0.80 ... 1.0 next to an interface cut into a ring's block.
+W4A, and 0.94 ... 1.07 for a ring that an interface cuts or comes within
+1.05 radii of (60 cases of audit W4R2A's sweep, contrasts 3 ... 1000, at
+levels 0/1 and 1/2; evidence ``fw4r2a/e05``).
 
 The classification (:func:`classify`) is cheap and raises
 :class:`NotAxisymmetric` without the remedy text, so ``model="auto"`` falls
@@ -65,9 +69,18 @@ __all__: list[str] = []
 #: kappa (delta / L)^2: below 1e-6 at delta <= 1e-3 L for kappa <= 1. Measured
 #: with ``image`` and ``mom`` on identical discretisations (a ring around a
 #: rod, two rods 0.1 m apart on one axis, two rings 34 mm apart): kappa <= 6e-4
-#: for L the wire radius, <= 1.1e-2 for L the gap. Up to audit W4A-08 the
-#: tolerance was 1e-9 of the world's size (3 nm for a 3 m rod), and a rod
-#: 1 um off a ring's axis went to the 3-D model (40.7 s, 2.35 GB).
+#: for L the wire radius, <= 1.1e-2 for L the gap. Thin wires have no end
+#: faces, so these measurements cannot show coaxial rods end to end with a gap
+#: g of a wire radius or less (audit W4R2A-06): an offset shrinks the overlap
+#: of the two end faces by 2 delta / (pi a) of their area, linearly in |delta|
+#: in the parallel-plate picture, and with the sensitivity
+#: d ln Z / d ln g = 0.020 / 0.053 / 0.100 of the axisymmetric model at
+#: g = a / a/4 / a/10 (a = 8 mm) that estimates 1.3e-5 / 8.4e-6 / 6.3e-6 at the
+#: tolerance (evidence ``fw4r2a/e04``): below about 1e-5 there. An estimate,
+#: not a measurement; the offset is at most 1e-3 g, where the dependence on it
+#: is smooth and therefore quadratic, so the estimate errs high. Up to audit
+#: W4A-08 the tolerance was 1e-9 of the world's size (3 nm for a 3 m rod), and
+#: a rod 1 um off a ring's axis went to the 3-D model (40.7 s, 2.35 GB).
 AXIS_TOL = 1e-3
 
 #: Floor of the axis tolerance relative to the larger of 1 m and the world's
@@ -322,8 +335,12 @@ def block_half_widths(
     surface, the axis, the rods, the other rings' blocks and every
     interface farther than $1.05\\,a$ from the wire axis (it takes at most
     45 % of each gap beyond the wire); a nearer interface is cut into it,
-    and the ring is marked ``near_interface`` (its block's lines along $s$
-    are refined, audit W4A-01).
+    and the ring is marked ``near_interface``: its block has
+    ``params.near_interface_intervals`` lines per side in $s$ and $z$
+    (audit W4A-01), and its O-grid is graded towards the points where the
+    interface cuts the wire at a narrow angle or comes closest to it
+    (``contacts``, :func:`_contact_angles`; cells of
+    ``params.contact_size`` wire radii there; audit W4R2A-02).
 
     Raises
     ------
@@ -344,12 +361,14 @@ def block_half_widths(
             _, cheb = _rect_gap(g.radius, g.depth, r.radius, r.z_top, r.z_bottom)
             c = min(c, a + _SHARE * (cheb - a))
         near = False
+        contacts: list[float] = []
         for h in interfaces:
             d = abs(g.depth - h)
             if d > (1.0 + _CLEARANCE) * a:
                 c = min(c, a + _SHARE * (d - a))
             else:
                 near = True
+                contacts += _contact_angles(g.depth, a, h)
         for other in rings:
             if other is ring:
                 continue
@@ -364,12 +383,12 @@ def block_half_widths(
                 "end edge, another ring or the soil surface, where the "
                 "axisymmetric mesh cannot resolve the gap. " + _THREE_D
             )
-        limit[ring.index] = (c, near)
+        limit[ring.index] = (c, near, tuple(contacts))
     out = []
     for e in electrodes:
         if e.index in limit:
             g = e.geometry
-            c, near = limit[e.index]
+            c, near, contacts = limit[e.index]
             e = e._replace(
                 geometry=RingGeometry(
                     radius=g.radius,
@@ -377,10 +396,45 @@ def block_half_widths(
                     wire_radius=g.wire_radius,
                     half_width=c,
                     near_interface=near,
+                    contacts=contacts,
+                    contact_size=params.contact_size * g.wire_radius
+                    if contacts
+                    else 0.0,
                 )
             )
         out.append(e)
     return out
+
+
+#: The O-grid of a ring is graded towards an interface that cuts the wire only
+#: where the interface meets it at a narrow angle: at this distance from the
+#: wire axis or farther, in wire radii (the interface meets the circle at
+#: 45.6 deg or less), and towards one that touches or nearly touches the wire
+#: (within 1.05 radii; audit W4R2A-02).
+_GRADE_FROM = 0.7
+
+
+def _contact_angles(depth: float, a: float, h: float) -> list[float]:
+    """Where the interface at depth ``h`` cuts a ring wire or comes closest.
+
+    Angles in rad, ``atan2(z - depth, s - r0)`` on the wire's circle
+    (radius ``a``, axis at ``depth``): the two points where the interface
+    cuts the circle, or the one nearest to the interface; none for an
+    interface closer to the axis than :data:`_GRADE_FROM` wire radii. There
+    it crosses the circle at more than 45.6 deg, the field is only mildly
+    singular and the block's uniform rays resolve it; a fan of graded rays
+    there made the finer level of ``refinement=1`` approach the converged
+    value faster than second order, and its extrapolation overshoot to
+    within 1.1 … 1.6 of its estimate for a wire mostly in a 1000 times more
+    resistive layer (evidence ``fw4r2a/e08b``).
+    """
+    d = h - depth
+    if abs(d) < _GRADE_FROM * a:
+        return []
+    if abs(d) < a:
+        w = math.sqrt(a * a - d * d)
+        return [math.atan2(d, w), math.atan2(d, -w)]
+    return [math.copysign(0.5 * math.pi, d)]
 
 
 def _hat_fractions(z_nodes: np.ndarray, bounds: np.ndarray) -> np.ndarray:
@@ -420,7 +474,9 @@ def _display_segments(world: "World", engine: "Engine", interfaces: list[float])
     They carry the point sources of the result. Their count is checked
     against the engine's resource limit first, like the segments of every
     backend (:func:`groundfield.diagnostics.check_segment_budget`), so a unit
-    error of ``segment_length`` fails before anything is allocated.
+    error of ``segment_length`` fails before anything is allocated. Used by
+    the three-dimensional model (:func:`groundfield.solver.fem._solid.solid_earth`);
+    the axisymmetric model takes :func:`_ring_and_rod_segments`.
     """
     from groundfield.diagnostics import check_segment_budget
     from groundfield.solver._discretize import _discretize_electrode
@@ -435,19 +491,60 @@ def _display_segments(world: "World", engine: "Engine", interfaces: list[float])
     return segs, np.array(owner, dtype=int)
 
 
+class _DisplaySegments(NamedTuple):
+    """Leakage segments of the result (midpoints, lengths, directions, owner)."""
+
+    points: np.ndarray
+    lengths: np.ndarray
+    directions: np.ndarray
+    owner: np.ndarray
+
+
+def _ring_and_rod_segments(
+    world: "World", engine: "Engine", interfaces: list[float]
+) -> _DisplaySegments:
+    """The display segments of :func:`_display_segments` for the axisymmetric model.
+
+    The same segments (the electrodes' own discretisation, checked against
+    the engine's resource limit first), without the thin-wire guard of the
+    integral backends (a segment no longer than the wire radius,
+    :func:`groundfield.solver._guards._require_thin_wire`): it protects
+    their thin-wire self-term, which this model does not use (audit
+    W4R2A-07: a ring of radius 1.2 a, a solid torus that the model
+    resolves, was refused with that guard's ``ValueError``).
+    """
+    from groundfield.diagnostics import check_segment_budget
+
+    check_segment_budget(world, engine, interfaces or None)
+
+    points, lengths, directions, owner = [], [], [], []
+    for k, e in enumerate(world.electrodes):
+        geo = e.segments(engine.segment_length, interfaces or None)
+        points.append(np.asarray(geo.midpoints, dtype=float).reshape(-1, 3))
+        lengths.append(np.asarray(geo.lengths, dtype=float).reshape(-1))
+        directions.append(np.asarray(geo.directions, dtype=float).reshape(-1, 3))
+        owner.append(np.full(lengths[-1].size, k, dtype=int))
+    return _DisplaySegments(
+        np.concatenate(points),
+        np.concatenate(lengths),
+        np.concatenate(directions),
+        np.concatenate(owner),
+    )
+
+
 def _leakage_matrix(
     world: "World",
     electrodes: list[CoaxialElectrode],
     port_of_mesh: list[int],
     mesh,
     sol,
-    segs,
-    owner: np.ndarray,
+    segs: _DisplaySegments,
 ) -> np.ndarray:
     """Leakage per display segment for 1 V per port, shape ``(M, P)``."""
     n_ports = len(electrodes)
-    q = np.zeros((len(segs), n_ports))
-    lengths = np.array([s.length for s in segs])
+    owner = segs.owner
+    q = np.zeros((segs.lengths.size, n_ports))
+    lengths = segs.lengths
     for m, k in enumerate(port_of_mesh):
         e = electrodes[k]
         rows = np.nonzero(owner == k)[0]
@@ -465,7 +562,7 @@ def _leakage_matrix(
         lateral = s == g.radius
         top = (z == g.z_top) & ~lateral
         bottom = (z == g.z_bottom) & ~lateral
-        mids = np.array([float(segs[i].midpoint[2]) for i in rows])
+        mids = np.array([float(segs.points[i, 2]) for i in rows])
         order = np.argsort(mids)
         rows = rows[order]
         half = 0.5 * lengths[rows]
@@ -564,12 +661,12 @@ def axisymmetric_earth(
         )
         shells.append(1.0 / (2.0 * math.pi * radius * e.shell) if e.shell > 0 else 0.0)
 
-    segs, owner = _display_segments(world, engine, depths)
+    segs = _ring_and_rod_segments(world, engine, depths)
     levels = [refinement, refinement + 1] if extrapolate else [refinement]
     lines = [
         mesh_lines(rod_geo, ring_geo, inside, r_far, params, level) for level in levels
     ]
-    predicted = predicted_nodes(*lines[-1], ring_geo, levels[-1], inside)
+    predicted = predicted_nodes(*lines[-1], ring_geo, levels[-1], inside, params)
     if predicted > max_nodes:
         raise ResourceLimitError(
             f"Backend 'fem': the mesh at refinement level {levels[-1]} would have "
@@ -596,7 +693,7 @@ def axisymmetric_earth(
     conductance = 0.5 * (conductance + conductance.T)
 
     leakage = _leakage_matrix(
-        world, electrodes, port_of_mesh, meshes[-1], solutions[-1], segs, owner
+        world, electrodes, port_of_mesh, meshes[-1], solutions[-1], segs
     )
     r_levels = [np.linalg.inv(g) for g in g_levels]
     r_ext = np.linalg.inv(conductance)
@@ -620,10 +717,10 @@ def axisymmetric_earth(
     return EarthPorts(
         names=tuple(e.name for e in world.electrodes),
         conductance=conductance,
-        segment_points=np.array([s.midpoint for s in segs], dtype=float),
-        segment_lengths=np.array([s.length for s in segs], dtype=float),
-        segment_directions=np.array([s.direction for s in segs], dtype=float),
-        segment_owner=owner,
+        segment_points=segs.points,
+        segment_lengths=segs.lengths,
+        segment_directions=segs.directions,
+        segment_owner=segs.owner,
         segment_leakage=leakage,
         metadata=metadata,
     )

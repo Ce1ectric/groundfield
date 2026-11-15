@@ -1245,3 +1245,157 @@ def test_tutorial_t09_describes_both_models() -> None:
     assert "three-dimensional model" in text and "fem3d" in text
     version = "".join(cells[1]["source"])
     assert "print(gf.__version__)" in version
+
+
+def test_w4r2a_07_a_ring_of_radius_1_2_a_is_solved_as_the_torus_it_is() -> None:
+    """A ring of radius 1.2 a (a = 50 mm: a solid torus with a hole of 0.2 a)
+    was refused with the thin-wire ``ValueError`` of the result's display
+    segments (chords of 0.94 a), a guard of the integral engines' self-term
+    that the axisymmetric model does not use. Auditor W4A's solid-body BEM
+    (four levels, last step 1.5e-8; evidence ``fw4r2a/e02``) gives
+    89.509319 Ohm."""
+    # audit W4R2A-07
+    a = 0.05
+    w = _ring_world(H100, r0=1.2 * a, depth=0.8, radius=a)
+    res = _engine().solve(w)
+    assert res.metadata["fem_model"] == "axisymmetric"
+    error = abs(res.cluster_impedance("g1")[0].real / 89.509319 - 1.0)
+    assert error < 2e-4 and error <= res.metadata["fem_error_estimate"]
+    # the integral engines keep their guard
+    with pytest.raises(ValueError, match="thin-wire self-term"):
+        gf.create_engine(segment_length=0.25).solve(w)
+
+
+def test_w4r2a_07_tutorial_t09_says_that_fem_has_no_source_kernel() -> None:
+    """T09 cell 11 lists ``fem`` among the backends that accept
+    ``kernel='line'``, which read as if ``fem`` implemented the line kernel;
+    it has no source kernel (the capability table of cell 3 shows none), the
+    engine's kernel only selects the field evaluation of its result."""
+    # audit W4R2A-07
+    import json
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/tutorials/T09_choosing_an_engine_and_convergence.ipynb"
+    )
+    cells = json.loads(path.read_text(encoding="utf-8"))["cells"]
+    i = next(k for k, c in enumerate(cells) if 'kernel="line"' in "".join(c["source"]))
+    before = "".join(cells[i - 1]["source"])
+    assert "that can do it" not in before
+    assert "no source kernel of its own" in before
+    out = "".join("".join(o.get("text", "")) for o in cells[i].get("outputs", []))
+    assert "'fem' (experimental)" in out  # the registry's list, explained above
+
+
+# Solid-torus BEM of a ring (r0 = 2 m, a = 5 mm, axis at 2 m) in 1000 Ohm m
+# with a more conductive layer d below its axis: (rho_other, d / a, BEM of this
+# stream with four or five nested levels (evidence fw4r2a/e06), auditor W4R2A's
+# BEM (r10: four levels, r01: three)).
+_CONTACT_BEM = [
+    (1.0, 1.0, 0.3471211, 0.3471152),  # touching, contrast 1000
+    (1.0, 0.99, 0.2694221, 0.2694221),
+    (1.0, 0.95, 0.2482848, 0.248285),
+    (1.0, 1.01, 2.0256010, 2.0256010),
+    (10.0, 1.0, 2.8779177, 2.8778976),  # touching, contrast 100
+    (10.0, 0.99, 2.6126274, 2.612620),
+    (10.0, 1.01, 4.1141674, 4.114042),
+]
+
+
+def _contact_ring(rho_other: float, d_over_a: float) -> gf.World:
+    a, t = 0.005, 2.0
+    return _ring_world(
+        _two(1000.0, rho_other, t + d_over_a * a), r0=2.0, depth=t, radius=a
+    )
+
+
+@pytest.mark.parametrize(("rho_other", "d_over_a", "bem", "bem_auditor"), _CONTACT_BEM)
+def test_w4r2a_02_a_ring_at_a_much_more_conductive_layer_is_within_its_estimate(
+    rho_other, d_over_a, bem, bem_auditor
+) -> None:
+    """Up to audit W4R2A-02 the refined ring block held at contrast 33 only:
+    touching a 1000 times more conductive layer the default read -1.6e-2
+    with an estimate of 1.1e-2, at 1.01 a -2.3e-4 with 3.5e-5, at 0.99 a
+    -1.6e-3. The levels converged at about first order: the interface cuts
+    the wire at an edge of the conductor on a material interface, or touches
+    it in a contact zone that shrinks with the contrast. The O-grid is graded
+    towards those points now."""
+    # audit W4R2A-02
+    assert abs(bem / bem_auditor - 1.0) < 6e-5  # the two references
+    res = _engine().solve(_contact_ring(rho_other, d_over_a))
+    error = abs(res.cluster_impedance("g1")[0].real / bem - 1.0)
+    assert error <= res.metadata["fem_error_estimate"], error
+    assert error < 2e-4, error
+
+
+def test_w4r2a_02_the_auditors_touching_ring() -> None:
+    """Auditor W4R2A's test (``test_w4r2a_02``): the ring wire touching a
+    1 Ohm m layer under 1000 Ohm m, BEM 0.3471152 Ohm (four levels)."""
+    # audit W4R2A-02
+    a, t = 0.005, 2.0
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=1.0, h_1=t + a))
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, t), radius=2.0, wire_radius=a
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res = gf.create_engine(backend="fem", segment_length=0.25).solve(w)
+    err = abs(res.cluster_impedance("g1")[0].real / 0.3471152 - 1.0)
+    assert err <= res.metadata["fem_error_estimate"], (
+        err,
+        res.metadata["fem_error_estimate"],
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("rho_other", "bem"), [(1.0, 0.3471211), (10.0, 2.8779177)])
+def test_w4r2a_02_the_touching_ring_converges_at_second_order(rho_other, bem) -> None:
+    """With the graded block the levels 0 / 1 / 2 of a ring touching a 100 or
+    1000 times more conductive layer converge at second order (they did at
+    about first order: -5.7 / -2.7 / -0.91 % at 1000), and ``refinement=1``
+    lies within its estimate too (it did not at 0.99 a)."""
+    # audit W4R2A-02
+    w = _contact_ring(rho_other, 1.0)
+    fine = _engine(options={"fem": {"refinement": 1}}).solve(w)
+    coarse = _engine().solve(w)
+    r0 = coarse.metadata["fem_port_resistance_levels"][0][0][0]
+    r1, r2 = (lv[0][0] for lv in fine.metadata["fem_port_resistance_levels"])
+    assert r0 < r1 < r2 < bem
+    assert 3.5 < (r1 - r0) / (r2 - r1) < 4.6
+    error = abs(fine.cluster_impedance("g1")[0].real / bem - 1.0)
+    assert error <= fine.metadata["fem_error_estimate"] and error < 1e-4, error
+
+
+def test_mesh_lines_that_differ_by_round_off_are_one_line() -> None:
+    """Two features computed two ways (a block's centre line at
+    0.30000000000000004 m, an interface at 0.3 m) were two lines 5.6e-17 m
+    apart: a row of cells of zero height across the mesh (found by this
+    stream's reach study, evidence ``fw4r2a/e03_reach_c.out``)."""
+    # stream fw4r2a (self-check of W4R2A-02/04)
+    from groundfield.solver.fem._mesh import graded_lines
+
+    lines = graded_lines(
+        [(0.0, math.inf), (0.3, 1e-3), (0.1 + 0.2, 2e-3), (1.0, math.inf)], 0.2
+    )
+    assert np.diff(lines).min() > 1e-6
+    assert int(np.sum(np.abs(lines - 0.3) < 1e-12)) == 1
+
+
+def test_a_ring_on_an_interface_and_a_rod_tip_on_it_survive_round_off() -> None:
+    """A ring with its axis exactly on an interface at 0.3 m (r0 = 0.5 m,
+    a = 10 mm) raised ``RuntimeError: Factor is exactly singular``; a rod
+    from 0.1 m of length 0.2 m (tip at 0.30000000000000004 m) with the
+    interface at 0.3 m read 6809 Ohm instead of 647 Ohm (levels 646 / 2012),
+    silently. Both had mesh lines 5.6e-17 m apart."""
+    # stream fw4r2a (self-check of W4R2A-02/04)
+    soil = _two(100.0, 100.0 / 1.3, 0.3)
+    on = _z(_ring_world(soil, r0=0.5, depth=0.3, radius=0.01))
+    hankel = ref.ring_layered_hankel([100.0, 100.0 / 1.3], [0.3], 0.5, 0.3, 0.01)
+    assert abs(on / hankel - 1.0) < 2e-3, (on, hankel)
+    beside = _z(_ring_world(soil, r0=0.5, depth=0.3 + 1e-9, radius=0.01))
+    assert abs(on / beside - 1.0) < 1e-5
+    tips = [
+        _z(_rod_world(_two(1000.0, 30.0, h), top=0.1, length=0.2), segment_length=0.05)
+        for h in (0.3, 0.1 + 0.2, 0.3 + 1e-9)
+    ]
+    assert max(tips) / min(tips) - 1.0 < 1e-5, tips

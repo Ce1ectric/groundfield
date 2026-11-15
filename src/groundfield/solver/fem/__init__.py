@@ -200,8 +200,14 @@ def solve_fem(
         model: each level bisects every interval of the graded mesh lines,
         about four times the nodes; 3-D model: about eight times). ``0``
         (default) gives a port resistance within about 1e-4 of the
-        converged value for coaxial rods and rings (3.3e-4 for a ring wire
-        within 1.05 radii of an interface to a more conductive layer).
+        converged value for coaxial rods and rings. A ring wire that an
+        interface cuts or comes within 1.05 radii of: within 5.1e-5 of an
+        independent boundary-element model of the solid torus at layer
+        contrasts of 3 ... 1000, on either side, cut or touching (60 cases
+        of audit W4R2A's sweep, estimates 3.9e-4 ... 1.5e-3), and -8.5e-4
+        touching a layer 10 000 times more conductive (estimate 5.3e-3);
+        ``refinement=1`` within 1.9e-5 and 3.3e-4 (evidence ``fw4r2a/e05``,
+        ``e08``).
     extrapolate
         Solve at ``refinement`` and ``refinement + 1`` and extrapolate the
         port conductance matrix with the second order (default). ``False``
@@ -243,8 +249,9 @@ def solve_fem(
     source_radius
         3-D model: radius in m of the disc over which each wire's leakage
         is smoothed; ``None`` (default) takes 0.06 m (at least 2.2 bare
-        wire radii, at most what the depth of the wires and their gap to
-        the interfaces allow).
+        wire radii, at most what the depth of the wires, their gap to the
+        interfaces and the distance of wires that run beside each other —
+        kept 1.5 source radii apart — allow).
     growth
         3-D model: growth of the element size per metre away from the
         wires (default 0.5; smaller is finer and slower).
@@ -271,7 +278,9 @@ def solve_fem(
         ``fem_ports``), ``fem_port_resistance_levels`` (per mesh level),
         ``fem_error_estimate`` (largest relative difference of a diagonal
         entry between the extrapolated and the finer level; ``NaN`` with
-        ``extrapolate=False``), ``fem_model`` (``"axisymmetric"`` or
+        ``extrapolate=False``), ``fem_error_estimate_transfer`` (3-D model:
+        the same for the transfer entries; ``NaN`` for one port or one
+        level), ``fem_model`` (``"axisymmetric"`` or
         ``"3d"``: the model that ran), ``fem_mesh`` (size and time per
         level) and ``fem_r_far`` (box size in m).
 
@@ -286,10 +295,17 @@ def solve_fem(
         no room for its mesh block (within about a wire radius, diagonally,
         of a rod's end edge); ``model="auto"`` solves these worlds with the
         three-dimensional model.
-        3-D model: a wire too close to the soil surface or an interface for
-        its smoothed source, resolved concrete around a wire that is not
-        straight along x, y or z. The message names the backends that solve
-        the world. A subclass of ``ValueError`` and ``NotImplementedError``.
+        3-D model, before meshing: a wire too close to the soil surface or
+        an interface for its smoothed source; wires that run beside each
+        other (side by side within 30° of parallel, a folded arm, a small
+        ring around a rod head) closer than 1.5 times the smallest source
+        radius their wire radius allows (3.3 wire radii, axis to axis);
+        resolved concrete around a wire that is not straight along x, y or
+        z, or whose cover is so thin that the smoothed source does not
+        reach beyond the metal. After meshing: conjugate gradients that do
+        not converge (layer contrasts above about 300). The message names
+        the backends that solve the world. A subclass of ``ValueError`` and
+        ``NotImplementedError``.
     ImportError
         If the world needs the three-dimensional model and the ``fem3d``
         extra (scikit-fem, pyamg) is not installed.
@@ -301,7 +317,8 @@ def solve_fem(
         If the finer mesh would exceed ``max_nodes`` nodes (the 3-D model:
         ``max_nodes_3d``, a prediction before meshing and the exact count
         before the finer level), or the 3-D model would solve more than
-        ``max_ports_3d`` ports.
+        ``max_ports_3d`` ports; where wires that run beside each other
+        limited the source radius, the message says so.
     TypeError
         If ``world.soil`` is no soil model.
 
@@ -311,10 +328,14 @@ def solve_fem(
         For a world that mixes local and projected coordinates (user
         decision D5), as every backend.
     InterfaceContactWarning
-        3-D model: for a horizontal wire within the reach of a contrasting
-        layer interface, where the smoothed line source shares the
-        thin-wire error of the integral engines (audits W4A-07, W4B-02).
-        The axisymmetric model resolves the wire and does not warn.
+        3-D model: for a rod end within one wire radius of a layer
+        interface (audit W4R2A-03: a rod tip on 1000/30 Ohm m read +43 %
+        against the solid rod, with an estimate of 6e-3) and for a
+        horizontal wire within the reach of a contrasting one (audits
+        W4A-07, W4B-02), where the smoothed line source shares the
+        thin-wire error of the integral engines; once per rule and solve,
+        as there. The axisymmetric model resolves rod end faces and ring
+        wires and does not warn.
     DeprecationWarning
         For ``n_radial``, ``n_axial`` or ``z_far_factor``.
 
@@ -325,10 +346,14 @@ def solve_fem(
     interfaces, from below; this is not guaranteed (the O-grid of a ring
     is not nested between levels), and next to an interface cut into a
     ring's mesh block it did not hold before that block was refined (audit
-    W4A-01). The error estimate bounds the error of the extrapolated value
-    while both levels lie on the same side of the converged value and the
-    finer level's error is at most 1/2.5 of the coarser level's (about
-    1/3.9 is observed for rods and rings).
+    W4A-01) and graded towards the points where the interface meets the
+    wire (audit W4R2A-02: touching a 1000 times more conductive layer the
+    levels converged at about first order, the default read -1.6e-2 with
+    an estimate of 1.1e-2). The error estimate bounds the error of the
+    extrapolated value while both levels lie on the same side of the
+    converged value and the finer level's error is at most 1/2.5 of the
+    coarser level's (about 1/3.9 is observed for rods and rings, 1/3.9 ...
+    1/4.0 for a ring touching a 100 or 1000 times more conductive layer).
     """
     from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
     from groundfield.solver import _frame
@@ -433,13 +458,23 @@ def _solve(
     three_d = model == "3d" or (model == "auto" and not _is_axisymmetric(world, engine))
     topology = None
     if three_d:
-        from groundfield.solver._guards import _warn_wires_near_interfaces
+        from groundfield.solver._guards import (
+            _warn_rod_ends_near_interfaces,
+            _warn_wires_near_interfaces,
+        )
+        from groundfield.solver._layered import interface_depths
         from groundfield.solver.fem._solid import require_extra, solid_earth
 
         require_extra()
-        # The 3-D model's smoothed line sources share the thin-wire limit
-        # next to a contrasting interface (audits W4A-07, W4B-02); its own
-        # guards refuse rod ends near an interface.
+        # The 3-D model's smoothed line sources share both thin-wire limits
+        # next to a contrasting interface, as the integral backends do: a rod
+        # end without an end face (audit W4R2A-03: a rod tip on 1000/30 Ohm m
+        # read +43 % against the solid rod with an estimate of 6e-3) and a
+        # horizontal wire within the reach (audits W4A-07, W4B-02). Its own
+        # guards do not see rod ends (they skip vertical pieces).
+        _warn_rod_ends_near_interfaces(
+            world.electrodes, interface_depths(world.soil) or None
+        )
         _warn_wires_near_interfaces(world)
         disc, topo = port_topology(world)
         topology = (disc, topo)

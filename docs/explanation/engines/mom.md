@@ -136,7 +136,7 @@ times its depth, because the point self image is then biased high.
 | Concrete shells | thin shell per segment, $C/\Delta s$ on the diagonal (ADR-0012) | — |
 | Near-interface horizontal wires | distance to $h_1$, on either side, of at least 0.6 segment lengths (point form of the interface image, see [`image_2layer`](image_2layer.md#electrodes-that-reach-the-interface)) | `PointKernelInterfaceWarning` within 0.6 segment lengths, `BackendCapabilityError` within 0.387 |
 | Rod ends at a layer interface | head and tip more than one wire radius from an interface (the thin wire has no end face: +21 % with the tip at $h_1$) | `InterfaceContactWarning` |
-| Horizontal wires next to an interface | the wire axis outside the reach of a contrasting interface (3.5 wire radii over a layer 33 times more conductive; the solid wire's current crowds to its near side: +3.6 % at 2 radii) | `InterfaceContactWarning` |
+| Horizontal wires next to an interface | the wire axis outside the reach of a contrasting interface (3.9 wire radii over a layer 33 times more conductive; the solid wire's current crowds to its near side: +3.6 % at 2 radii) | `InterfaceContactWarning` |
 | Size | dense $N \times N$ matrix and one LU per inductive frequency, $O(N^3)$ | memory and time, see [performance](../performance.md) |
 | Frequency | quasi-static, $f < 1$ kHz | — |
 
