@@ -84,13 +84,16 @@ wire inside a cable shield couples at the shield radius at every axial
 offset (exact for a filament on the axis of a thin tube), and a point lies
 beside another conductor when its foot falls inside that conductor, so
 the sub-pieces of two conductors lying beside each other add up to the
-lumped pair (a 100 m coax in 1 m pieces read 2.2 % low before). Nearly
-parallel pieces — tilted against each other by more than the closed
-form's tolerance of about 4.5e-5 rad, but so little that their lateral
-distance changes by at most the touching distance along the longer piece
-— get the same two readings with the stretches inside, beside and away
-from the partner found exactly (audit W1R2-01; a core tilted by 4.5e-5
-rad read 7.4 % low in 0.25 m pieces, with a step at the tolerance).
+lumped pair (a 100 m coax in 1 m pieces read 2.2 % low before). Pieces
+tilted against each other by more than the closed form's tolerance of
+about 4.5e-5 rad, at any angle and whatever their length, get the same
+two readings with the stretches inside, beside and away from the partner
+found exactly (audits W1R2-01, W1R3-01, W1R3-02; a core tilted by 4.5e-5
+rad read 7.4 % low in 0.25 m pieces, with a step at the tolerance; until
+W1R3 the rule stopped where the lateral distance changed by more than the
+touching distance along a piece, or at $|\cos\varphi| = 0.99$, and a core
+crossing its shield's axis read -8.6e-5 of the loop off the lumped pair
+in 10 m pieces, two wires leaving a junction stepped by 1.5e-3 at 8.1°).
 The filament integral diverges for coincident axes (two coincident 50 m
 leads read +587j Ω at 50 Hz) and exceeds the self inductance once the
 wires are closer than about their radius (an indefinite matrix, a TN
@@ -1553,8 +1556,8 @@ def _beside_plan(
     axis geometry is computed from cross products, which stay accurate for
     nearly parallel axes (no $1 - \\cos^2$ cancellation).
 
-    ``extent`` (the bundle rule of nearly parallel conductors, audit W1R2-01
-    of the calendar release): the interval $[t_\\text{lo}, t_\\text{hi}]$ on
+    ``extent`` (the bundle rule of conductors that are not parallel, audits
+    W1R2-01 and W1R3 of the calendar release): the interval $[t_\\text{lo}, t_\\text{hi}]$ on
     *b*'s axis (measured from ``b1``) that the conductor of *b* occupies. A
     point then lies beside *b* when its foot falls inside that interval, and
     the inside reading holds at every axial offset, as for parallel pieces
@@ -1742,7 +1745,8 @@ def _beside_mutual(
 
     ``ext_a`` and ``ext_b`` (both or neither) are the end points of the
     straight conductors the two segments belong to: the bundle rule of
-    nearly parallel conductors (:func:`_apply_tilted_bundles`, audit W1R2-01),
+    conductors that are not parallel (:func:`_apply_tilted_bundles`, audits
+    W1R2-01, W1R3),
     in which a point lies beside the partner's whole conductor and a wire
     inside a cable shield couples at the shield radius at every axial
     offset, as for parallel pieces.
@@ -2082,12 +2086,11 @@ def _apply_bundles(
     shield (``shields``) couples at the shield radius at every axial offset
     (:func:`_apply_inside_shields`), so a shield made of several
     conductors, or a core and shield in sections, add up as well. Pieces
-    that are nearly parallel — tilted against each other by more than the
-    closed form's tolerance, but so little that their lateral distance
-    changes by less than the touching distance along the longer piece —
-    get the same two readings, with the exact pointwise classification
-    (:func:`_apply_tilted_bundles`, audit W1R2-01). Writes the direct block
-    ``L_dir`` symmetrically; does nothing without hits and shields.
+    tilted against each other by more than the closed form's tolerance, at
+    any angle, get the same two readings, with the exact pointwise
+    classification (:func:`_apply_tilted_bundles`, audits W1R2-01,
+    W1R3-01, W1R3-02). Writes the direct block ``L_dir`` symmetrically;
+    does nothing without hits and shields.
     """
     flags = np.zeros(len(radii), dtype=bool) if shields is None else shields
     if hits:
@@ -2216,18 +2219,8 @@ def _apply_touching_bundles(
 
 
 # ---------------------------------------------------------------------
-# Nearly parallel conductors lying beside each other (audit W1R2-01)
+# Tilted conductors lying beside each other (audits W1R2-01, W1R3)
 # ---------------------------------------------------------------------
-
-#: Two pieces of different conductors that are tilted against each other
-#: by more than the parallel tolerance of :func:`_bundle_mutual_batch`
-#: ($|\cos\varphi| < 1 - 10^{-9}$, about 4.5e-5 rad) are *nearly parallel*
-#: while their lateral distance changes by at most this fraction of the
-#: touching distance $r_a + r_b$ along the longer piece,
-#: $\max(\ell_a, \ell_b)\sin\varphi \le f\,(r_a + r_b)$, and
-#: $|\cos\varphi| \ge$ :data:`_PARALLEL_COS_MIN`. Such pieces get the bundle
-#: rule with the exact pointwise classification (:func:`_apply_tilted_bundles`).
-_TILT_FRACTION = 1.0
 
 #: Pairs of pieces evaluated at once by the bundle rules: the temporaries
 #: stay a few MiB whatever the length of the conductors (audit W1R2-03; the
@@ -2240,29 +2233,33 @@ def _tilted_gate(
     p2_a: np.ndarray,
     p1_b: np.ndarray,
     p2_b: np.ndarray,
-    d_touch: np.ndarray,
 ) -> np.ndarray:
-    """Mask of the nearly parallel pairs among K pairs of segments.
+    """Mask of the pairs among K pairs of segments that the tilted rule takes.
 
-    Not parallel within the tolerance of the closed form
-    (:func:`_bundle_mutual_batch`), $|\\cos\\varphi| \\ge$
-    :data:`_PARALLEL_COS_MIN`, and the lateral distance changes by at most
-    :data:`_TILT_FRACTION` times ``d_touch`` along the longer segment.
+    Every pair that is neither parallel within the tolerance of the closed
+    form (:func:`_bundle_mutual_batch`, $|\\cos\\varphi| \\ge 1 - 10^{-9}$)
+    nor orthogonal within the same tolerance ($|\\cos\\varphi| \\le
+    10^{-9}$: the mutual of such a pair is at most 1e-9 of its parallel
+    value, so the rule would change it by round-off; a T-junction drawn at
+    90 deg has $|\\cos\\varphi|$ of a few 1e-16, and on such junctions of
+    a generated 80-house network with an inductive PEN the rule changed
+    1086 entries by at most 3.3e-23 H). Up to audit W1R3-01 / W1R3-02 of
+    the calendar release the rule also needed the lateral distance to
+    change by at most $r_a + r_b$ along the longer piece and
+    $|\\cos\\varphi| \\ge 0.99$; beyond either
+    bound the rule of the single segments acted, so the pieces of one pair
+    of conductors could mix two readings (a core crossing the shield axis
+    read -8.6e-5 of the loop off the lumped pair in 10 m pieces, two wires
+    leaving a junction stepped by 1.5e-3 at 8.1 deg). The classification
+    of :func:`_tilted_one_sided` is exact at any angle, so neither bound
+    is needed.
     """
     da = p2_a - p1_a
     db = p2_b - p1_b
     la = np.sqrt(_row_dots(da, da))
     lb = np.sqrt(_row_dots(db, db))
-    ua = da / la[:, None]
-    ub = db / lb[:, None]
-    dot = _row_dots(ua, ub)
-    n = np.cross(ua, ub)
-    sin = np.sqrt(_row_dots(n, n))
-    return (
-        (np.abs(np.abs(dot) - 1.0) > 1e-9)
-        & (np.abs(dot) >= _PARALLEL_COS_MIN)
-        & (np.maximum(la, lb) * sin <= _TILT_FRACTION * d_touch)
-    )
+    dot = _row_dots(da / la[:, None], db / lb[:, None])
+    return (np.abs(np.abs(dot) - 1.0) > 1e-9) & (np.abs(dot) > 1e-9)
 
 
 def _tilted_one_sided(
@@ -2277,7 +2274,7 @@ def _tilted_one_sided(
     d_touch: np.ndarray,
     inside_ok: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    r"""One-sided integral of the bundle rule over *a*, K nearly parallel pairs.
+    r"""One-sided integral of the bundle rule over *a*, K pairs that are tilted.
 
     *a* is split where the foot of its points on *b*'s axis passes an end
     of the partner's conductor (``e1``, ``e2``) and where the distance
@@ -2379,7 +2376,7 @@ def _tilted_bundle_batch(
     ext_b: tuple[np.ndarray, np.ndarray],
     m_fil: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    r"""The bundle rule for K nearly parallel pairs of pieces, in H.
+    r"""The bundle rule for K pairs of pieces that are tilted, in H.
 
     The mutual is $\mu_0/(4\pi)\cos\varphi$ times the mean of the two
     one-sided integrals of the pointwise rule against the partner's whole
@@ -2459,12 +2456,28 @@ def _tilted_pairs(
     ext_b: tuple[np.ndarray, np.ndarray],
     hit_keys: np.ndarray,
 ) -> None:
-    """Evaluate and write the bundle rule for the nearly parallel pairs
-    ``(II[k], JJ[k])`` (one chunk; see :func:`_apply_tilted_bundles`)."""
+    """Evaluate and write the bundle rule for the tilted pairs
+    ``(II[k], JJ[k])`` (one chunk; see :func:`_apply_tilted_bundles`).
+
+    Only pairs with a piece that comes within the touching distance of the
+    other piece's axis can have a stretch inside or beside the partner;
+    the others are skipped before the classification (their entries keep
+    the filament value either way, and the evaluation is element-wise, so
+    the values are the same bit for bit; audit W1R3-01: without the old
+    gates a long pair crossing at a small angle evaluates every pair).
+    """
     M = len(radii)
-    sel = np.flatnonzero(
-        _tilted_gate(p1[II], p2[II], p1[JJ], p2[JJ], radii[II] + radii[JJ])
-    )
+    keys = np.minimum(II, JJ) * M + np.maximum(II, JJ)
+    da = p2[II] - p1[II]
+    db = p2[JJ] - p1[JJ]
+    la = np.sqrt(_row_dots(da, da))
+    lb = np.sqrt(_row_dots(db, db))
+    reach = (radii[II] + radii[JJ]) * (1.0 + 1e-6) + 1e-9 * np.maximum(la, lb)
+    near = (
+        _segment_to_lines_distance(p1[II], p2[II], p1[JJ], db / lb[:, None]) <= reach
+    ) | (_segment_to_lines_distance(p1[JJ], p2[JJ], p1[II], da / la[:, None]) <= reach)
+    near |= np.isin(keys, hit_keys)
+    sel = np.flatnonzero(near & _tilted_gate(p1[II], p2[II], p1[JJ], p2[JJ]))
     if sel.size == 0:
         return
     II, JJ = II[sel], JJ[sel]
@@ -2486,8 +2499,7 @@ def _tilted_pairs(
     # pairs on which the pointwise rule acted hold its value, not the
     # filament: they, and sides with free and clamped stretches, are
     # integrated by the pointwise rule against the conductors
-    keys = np.minimum(II, JJ) * M + np.maximum(II, JJ)
-    exact |= np.isin(keys, hit_keys)
+    exact |= np.isin(keys[sel], hit_keys)
     for k in np.flatnonzero(exact):
         i, j = int(II[k]), int(JJ[k])
         val = _beside_mutual(
@@ -2548,6 +2560,27 @@ def _segment_line_distance(
     return np.sqrt(_row_dots(r, r))
 
 
+def _segment_to_lines_distance(
+    q1: np.ndarray, q2: np.ndarray, p: np.ndarray, u: np.ndarray
+) -> np.ndarray:
+    """Smallest distance in m of the segments ``q1 -> q2`` from the lines
+    through ``p`` along the unit vectors ``u``, one line per segment (all
+    shapes ``(K, 3)``)."""
+    r1 = q1 - p
+    r1 = r1 - _row_dots(r1, u)[:, None] * u
+    r2 = q2 - p
+    r2 = r2 - _row_dots(r2, u)[:, None] * u
+    dr = r2 - r1
+    den = _row_dots(dr, dr)
+    t = np.clip(
+        np.where(den > 0.0, -_row_dots(r1, dr) / np.where(den > 0.0, den, 1.0), 0.0),
+        0.0,
+        1.0,
+    )
+    r = r1 + t[:, None] * dr
+    return np.sqrt(_row_dots(r, r))
+
+
 def _apply_tilted_bundles(
     L_dir: np.ndarray,
     p1: np.ndarray,
@@ -2557,33 +2590,37 @@ def _apply_tilted_bundles(
     labels: np.ndarray,
     hits: list[tuple[int, int]],
 ) -> None:
-    """The bundle rule for nearly parallel conductors (audit W1R2-01).
+    """The bundle rule for conductors that are not parallel (audits W1R2-01,
+    W1R3-01, W1R3-02).
 
     The parallel closed form (:func:`_bundle_mutual_batch`) needs the
     pieces parallel within $|\\cos\\varphi| \\ge 1 - 10^{-9}$ (4.5e-5 rad);
     a core tilted by more against its shield kept the per-piece rule, and
     the 100 m coax in 0.25 m pieces read 7.4 % low at 4.5e-5 rad, with a
-    step at the tolerance. Here every nearly parallel pair
-    (:func:`_tilted_gate`) of pieces of two conductors lying beside each
-    other gets the two readings against the partner's whole conductor:
-    the inside reading at every axial offset, the beside reading where the
+    step at the tolerance. Here every pair of pieces of two conductors
+    lying beside each other that is not parallel (:func:`_tilted_gate`)
+    gets the two readings against the partner's whole conductor: the
+    inside reading at every axial offset, the beside reading where the
     foot falls inside the partner's conductor. The conductors are those of
-    a pair of the pointwise rule (``hits``, other labels, nearly parallel;
-    every pair of their pieces is evaluated) and, as for parallel pieces
-    without labels, a cable shield with every thinner nearly parallel wire
-    that comes inside its tube (the inside reading needs no conductor
-    identity). The classification is exact (:func:`_tilted_one_sided`), so
-    the pieces add up to the lumped pair whatever the tilt within the gate.
-    Pieces of one conductor are not touched.
+    a pair of the pointwise rule (``hits``, other labels, not parallel;
+    every pair of their pieces that comes within the touching distance is
+    evaluated) and, as for parallel pieces without labels, a cable shield
+    with every thinner wire that comes inside its tube (the inside reading
+    needs no conductor identity). The classification is exact
+    (:func:`_tilted_one_sided`), so the pieces add up to the lumped pair
+    whatever the tilt and the length of the pieces: a core crossing its
+    shield's axis, wires leaving a junction or crossing at any angle (up to
+    audit W1R3 the rule stopped at $\\ell\\sin\\varphi = r_a + r_b$ and at
+    $|\\cos\\varphi| = 0.99$, where the per-segment rule took over with
+    steps of up to 1.6e-3 of the loop). Pieces of one conductor are not
+    touched.
     """
     M = len(radii)
     I = np.array([i for i, _ in hits], dtype=int)
     J = np.array([j for _, j in hits], dtype=int)
     bundles: list[tuple[int, int]] = []
     if I.size:
-        keep = (labels[I] != labels[J]) & _tilted_gate(
-            p1[I], p2[I], p1[J], p2[J], radii[I] + radii[J]
-        )
+        keep = (labels[I] != labels[J]) & _tilted_gate(p1[I], p2[I], p1[J], p2[J])
         bundles = sorted(
             {
                 (min(a, b), max(a, b))
@@ -2620,7 +2657,7 @@ def _apply_tilted_bundles(
     if not flags.any():
         return
     # the inside reading of a cable shield needs no conductor identity:
-    # every thinner nearly parallel wire that comes inside the tube
+    # every thinner tilted wire that comes inside the tube
     n_labels = int(labels.max()) + 1
     bundle_keys = np.array([a * n_labels + b for a, b in bundles], dtype=int)
     da = p2 - p1
@@ -2896,19 +2933,20 @@ def build_inductance_matrix(
         Conductor label of every segment, shape ``(M,)`` (any values that
         can be compared for equality, e.g. conductor names; ``None``, the
         default: every segment is a conductor of its own). For two
-        conductors lying beside each other along one axis (a parallel or
-        nearly parallel pair of their segments closer than touching), a
-        point lies beside the partner when its foot falls inside the
-        partner's whole conductor — the straight run of its segments with
-        that label — so the sub-pieces of the two conductors add up to the
-        lumped pair (audit W1A-02 of the calendar release). Nearly parallel
-        means tilted so little that the lateral distance changes by at most
-        the touching distance $r_i + r_j$ along the longer segment, with
-        $|\\cos\\varphi| \\ge 0.99$ (audit W1R2-01; the stretches inside,
-        beside and away from the partner are then found exactly, so a
-        slightly tilted core adds up as well; beyond that the rule of the
-        single segments acts, with an error of about 1e-6 because the
-        touching stretch is then about one segment long). Pieces of one
+        conductors lying beside each other (a pair of their segments closer
+        than touching: on one axis, tilted against each other, crossing,
+        leaving one junction), a point lies beside the partner when its
+        foot falls inside the partner's whole conductor — the straight run
+        of its segments with that label — so the sub-pieces of the two
+        conductors add up to the lumped pair (audit W1A-02 of the calendar
+        release). For segments that are not parallel the stretches inside,
+        beside and away from the partner are found exactly, at any angle and
+        for pieces of any length (audits W1R2-01, W1R3-01, W1R3-02: a
+        slightly tilted core, a core crossing its shield's axis, two wires
+        leaving a junction add up within 3e-12; up to W1R3 the rule stopped
+        where the lateral distance changed by more than $r_i + r_j$ along a
+        segment and at $|\\cos\\varphi| = 0.99$, and the pieces read up to
+        1.6e-3 off the lumped pair). Pieces of one
         conductor and conductors that only meet end to end keep the
         filament integral. **Without labels**, unmarked touching pieces of
         one cable are not recognised as one conductor: they keep the rule

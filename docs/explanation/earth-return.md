@@ -267,15 +267,20 @@ the surface plane are rejected under this image convention, as before.
   lying beside each other a point lies beside the partner when its foot
   falls inside the partner's whole conductor: the sub-pieces of the two
   conductors then add up to the lumped pair (audit W1A-02; before, the
-  coax in 1 m pieces read 2.2 % low). That holds for nearly parallel
-  pieces too — a core tilted against its shield so little that the
-  lateral distance changes by at most $r_i + r_j$ along a piece: the
-  stretches inside, beside and away from the partner are found exactly,
-  and a core leaving the shield's tube along its length adds up as well
-  (audit W1R2-01; a core tilted by 4.5e-5 rad read 7.4 % low in 0.25 m
-  pieces, with a step at the parallel tolerance). Beyond that tilt the
-  touching stretch is about one piece long and the rule acts per segment
-  (1e-6 off the lumped pair). At the low level,
+  coax in 1 m pieces read 2.2 % low). That holds for pieces that are not
+  parallel too, at any angle and whatever their length — a core tilted
+  against its shield or crossing its axis, wires leaving a junction or
+  crossing at a small angle: the stretches inside, beside and away from
+  the partner are found exactly, and a core leaving the shield's tube
+  along its length adds up as well (audits W1R2-01, W1R3-01, W1R3-02;
+  a core tilted by 4.5e-5 rad read 7.4 % low in 0.25 m pieces, with a
+  step at the parallel tolerance; until W1R3 the rule acted only while
+  the lateral distance changed by at most $r_i + r_j$ along a piece and
+  for $|\cos\varphi| \ge 0.99$, and beyond either bound the rule of the
+  single segments mixed in: a core crossing the shield's axis at
+  mid-length read −8.6e-5 of the loop off the lumped pair in 10 m pieces,
+  shield pieces of mixed length −1.6e-3, two wires leaving a junction
+  stepped by 1.5e-3 at 8.1°; now within 3e-12). At the low level,
   `build_inductance_matrix(..., shields=[False, True],
   include_internal=[True, False], conductors=[0, 1])` does the same: the
   marker leaves the self terms alone, so a shield needs
