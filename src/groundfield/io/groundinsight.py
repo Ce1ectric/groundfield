@@ -61,9 +61,16 @@ resistivities of the solved soils, ``rho_f_standard_from_results(results,
 of BusType then pair with a ``Bus`` whose resistivity uses the same
 preset. Every document records this convention as
 ``metadata["rho_definition"] = "effective_resistivity"`` (documents of
-0.15.0 have no such entry); the exporter cannot check the number it is
-given, nor the weights behind it. The layers themselves, and the preset
-(or $w_0$, $\\beta$) when it is not the default, go into
+0.15.0 have no such entry) and the preset the caller names,
+``metadata["rho_preset"]`` (``rho_preset=...`` of the exporters, ``None``
+when no preset is named; user decision Q39; documents of earlier versions
+have no such entry and load with ``None``). The exporter cannot check the
+number it is given against the preset. :func:`evaluate_spec` and
+:func:`bustype_from_spec` take the preset of the bus they serve and emit
+:class:`RhoPresetMismatchWarning` when the document names another one (a
+preset holds for its electrode class only: the AP1 station paired with
+``"lv_group_4_p40"`` misses the field solution by 39.9 % rms). The layers
+themselves, and explicit weights $w_0$, $\\beta$, go into
 ``soil_summary``.
 
 The exporter does not care which impedance was fitted (input
@@ -161,6 +168,8 @@ __all__ = [
     "EvaluateSpecError",
     "NonPassiveFitWarning",
     "NonPassiveFitError",
+    "RhoPresetMismatchWarning",
+    "bustype_from_spec",
 ]
 
 
@@ -186,6 +195,17 @@ class NonPassiveFitWarning(UserWarning):
     exported document carries the same numbers. Refit, or export with
     ``require_passive=True`` to turn the warning into
     :class:`NonPassiveFitError`.
+    """
+
+
+class RhoPresetMismatchWarning(UserWarning):
+    """The BusType was fitted over another effective-resistivity preset.
+
+    Emitted by :func:`evaluate_spec` and :func:`bustype_from_spec` when the
+    caller names the preset of its bus (``rho_preset=...``) and the document
+    records a different one in ``metadata["rho_preset"]`` (user decision
+    Q39): the ``rho`` of the bus then means another resistivity than the
+    ``rho`` of the formula.
     """
 
 
@@ -282,6 +302,19 @@ class BusTypeSpec:
     impedance_formula: str
     samples: dict[str, list[float]]
     metadata: dict[str, Any]
+
+    @property
+    def rho_preset(self) -> Optional[str]:
+        """Effective-resistivity preset of the ``rho`` of the formula.
+
+        ``metadata["rho_preset"]`` (user decision Q39): the preset name the
+        exporter was given, ``None`` when none was named and for documents
+        of earlier versions, which have no such entry.
+        """
+        value = (
+            self.metadata.get("rho_preset") if isinstance(self.metadata, dict) else None
+        )
+        return value if isinstance(value, str) else None
 
     # --- serialisation ------------------------------------------------
 
@@ -407,6 +440,12 @@ class BusTypeSpec:
                 f"BusType document {name!r}: samples and metadata must be JSON objects"
             )
         _strict_json(metadata, context=f"BusType document {name!r}: metadata")
+        preset = metadata.get("rho_preset")
+        if preset is not None and not isinstance(preset, str):
+            raise ValueError(
+                f"BusType document {name!r}: metadata['rho_preset'] must be a "
+                f"preset name or null, got {str(preset)[:40]!r}"
+            )
         sample_lists: dict[str, list[Any]] = {}
         for key in ("frequency_Hz", "rho_Ohm_m", "Z_real_Ohm", "Z_imag_Ohm"):
             values = samples.get(key, [])
@@ -754,6 +793,47 @@ def _check_rho_at_fit(fit: FitLike, rho_at_fit: Optional[float], caller: str) ->
         )
 
 
+def _check_rho_preset(rho_preset: Any, caller: str) -> Optional[str]:
+    """``rho_preset`` as a preset name or ``None``; ValueError otherwise."""
+    if rho_preset is None:
+        return None
+    from groundfield.soil.effective import EFFECTIVE_RESISTIVITY_PRESETS
+    from groundfield.utils.suggest import did_you_mean
+
+    if isinstance(rho_preset, str) and rho_preset in EFFECTIVE_RESISTIVITY_PRESETS:
+        return rho_preset
+    hint = (
+        did_you_mean(rho_preset, EFFECTIVE_RESISTIVITY_PRESETS, n=3)
+        if isinstance(rho_preset, str)
+        else ""
+    )
+    raise ValueError(
+        f"{caller}: rho_preset must be a preset name of "
+        "groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS (the preset passed to "
+        "effective_resistivity(soil, preset=...)) or None, got "
+        f"{rho_preset!r}.{hint}"
+    )
+
+
+def _warn_on_preset_mismatch(spec: "BusTypeSpec", rho_preset: Any, caller: str) -> None:
+    """Warn when the caller's preset differs from the document's (Q39)."""
+    wanted = _check_rho_preset(rho_preset, caller)
+    recorded = spec.rho_preset
+    if wanted is None or recorded is None or wanted == recorded:
+        return
+    warnings.warn(
+        f"{caller}: BusType {spec.name!r} was fitted over "
+        f"effective_resistivity(soil, preset={recorded!r}), but its bus uses "
+        f"preset {wanted!r}. The rho of the bus then means another "
+        "resistivity than the rho of the formula, and a preset holds for its "
+        "electrode class only (the AP1 station with 'lv_group_4_p40': 39.9 % "
+        f"rms). Give the bus the effective resistivity of preset {recorded!r}, "
+        "or refit the BusType with the preset of the bus.",
+        RhoPresetMismatchWarning,
+        skip_file_prefixes=(_IO_DIR,),
+    )
+
+
 def _build_spec(
     fit: FitLike,
     *,
@@ -767,6 +847,7 @@ def _build_spec(
     soil_summary: Optional[str],
     require_passive: bool,
     caller: str,
+    rho_preset: Optional[str] = None,
 ) -> BusTypeSpec:
     """Assemble a :class:`BusTypeSpec` from any supported fit object."""
     if not isinstance(fit, (RhoFStandardFit, VectorFitResult)):
@@ -775,6 +856,7 @@ def _build_spec(
             "RhoFStandardFit or VectorFitResult"
         )
     _check_rho_at_fit(fit, rho_at_fit, caller)
+    rho_preset = _check_rho_preset(rho_preset, caller)  # user decision Q39
     try:
         level = float(voltage_level)
     except (TypeError, ValueError, OverflowError):
@@ -822,6 +904,10 @@ def _build_spec(
             float(np.max(fit.fit_frequencies)) if np.size(fit.fit_frequencies) else 0.0
         )
 
+    # user decision Q39: the preset next to the rho definition
+    items = list(metadata.items())
+    at = [key for key, _ in items].index("rho_definition") + 1
+    metadata = dict(items[:at] + [("rho_preset", rho_preset)] + items[at:])
     passivity = _passivity_report(expr, fit, rho_at_fit=rho_at_fit)
     metadata["passivity"] = passivity.as_dict()
     if not passivity.passed:
@@ -852,6 +938,7 @@ def to_bustype_dict(
     electrode_name: Optional[str] = None,
     soil_summary: Optional[str] = None,
     require_passive: bool = False,
+    rho_preset: Optional[str] = None,
 ) -> dict[str, Any]:
     """Convert a fit into the JSON-ready schema-v1 ``dict``.
 
@@ -891,6 +978,15 @@ def to_bustype_dict(
         If True, raise :class:`NonPassiveFitError` instead of warning
         when the formula has $\\operatorname{Re} Z < 0$ somewhere in
         the checked band. Default False.
+    rho_preset : str, optional
+        The preset of :func:`~groundfield.soil.effective_resistivity` that
+        gave the ``rho`` of the fit (``rho_at_fit`` of a vector fit, the
+        ``rho`` samples of a standard form), a key of
+        :data:`~groundfield.soil.EFFECTIVE_RESISTIVITY_PRESETS`, recorded as
+        ``metadata["rho_preset"]``. Default ``None``: no preset named
+        (homogeneous soil, explicit weights, or not stated). A bus that uses
+        another preset is then reported by :func:`evaluate_spec` and
+        :func:`bustype_from_spec` (user decision Q39).
 
     Returns
     -------
@@ -907,8 +1003,9 @@ def to_bustype_dict(
     ------
     ValueError
         If ``rho_at_fit`` is missing for a vector fit or not a positive
-        finite number, if ``voltage_level`` is not finite, or if the fit
-        has non-finite coefficients.
+        finite number, if ``voltage_level`` is not finite, if the fit
+        has non-finite coefficients, or if ``rho_preset`` is not a preset
+        name.
     NonPassiveFitError
         With ``require_passive=True``, if the passivity check fails.
     TypeError
@@ -931,6 +1028,7 @@ def to_bustype_dict(
         soil_summary=soil_summary,
         require_passive=require_passive,
         caller="to_bustype_dict",
+        rho_preset=rho_preset,
     )
     return spec.to_dict()
 
@@ -949,6 +1047,7 @@ def save_bustype_json(
     soil_summary: Optional[str] = None,
     indent: int = 2,
     require_passive: bool = False,
+    rho_preset: Optional[str] = None,
 ) -> Path:
     """Write the schema-v1 JSON file to disk.
 
@@ -981,6 +1080,10 @@ def save_bustype_json(
     require_passive : bool, optional
         Raise :class:`NonPassiveFitError` instead of warning when the
         passivity check fails. Default False.
+    rho_preset : str, optional
+        The preset of :func:`~groundfield.soil.effective_resistivity` behind
+        the ``rho`` of the fit, recorded as ``metadata["rho_preset"]``
+        (default ``None``: none named), see :func:`to_bustype_dict`.
 
     Returns
     -------
@@ -1011,6 +1114,7 @@ def save_bustype_json(
         soil_summary=soil_summary,
         require_passive=require_passive,
         caller="save_bustype_json",
+        rho_preset=rho_preset,
     ).to_dict()
     text = json.dumps(payload, indent=indent, sort_keys=False, allow_nan=False)
     p = Path(path)
@@ -1110,6 +1214,7 @@ def to_bustype(
     electrode_name: Optional[str] = None,
     soil_summary: Optional[str] = None,
     require_passive: bool = False,
+    rho_preset: Optional[str] = None,
 ):
     """Build a live :class:`groundinsight.BusType` from a fit.
 
@@ -1143,6 +1248,10 @@ def to_bustype(
     require_passive : bool, optional
         Raise :class:`NonPassiveFitError` instead of warning when the
         passivity check fails. Default False.
+    rho_preset : str, optional
+        The preset of :func:`~groundfield.soil.effective_resistivity` behind
+        the ``rho`` of the fit, recorded as ``metadata["rho_preset"]``
+        (default ``None``: none named), see :func:`to_bustype_dict`.
 
     Returns
     -------
@@ -1174,6 +1283,7 @@ def to_bustype(
         soil_summary=soil_summary,
         require_passive=require_passive,
         caller="to_bustype",
+        rho_preset=rho_preset,
     )
     return _to_live_bustype(spec)
 
@@ -1191,6 +1301,7 @@ def save_bustype_to_db(
     soil_summary: Optional[str] = None,
     overwrite: bool = False,
     require_passive: bool = False,
+    rho_preset: Optional[str] = None,
 ) -> None:
     """Build a BusType and save it to the ``groundinsight`` database.
 
@@ -1220,6 +1331,10 @@ def save_bustype_to_db(
     require_passive : bool, optional
         Raise :class:`NonPassiveFitError` instead of warning when the
         passivity check fails. Default False.
+    rho_preset : str, optional
+        The preset of :func:`~groundfield.soil.effective_resistivity` behind
+        the ``rho`` of the fit, recorded as ``metadata["rho_preset"]``
+        (default ``None``: none named), see :func:`to_bustype_dict`.
 
     Raises
     ------
@@ -1249,11 +1364,56 @@ def save_bustype_to_db(
         soil_summary=soil_summary,
         require_passive=require_passive,
         caller="save_bustype_to_db",
+        rho_preset=rho_preset,
     )
     bustype = _to_live_bustype(spec)
     import groundinsight as gi  # already verified by _to_live_bustype
 
     gi.save_bustype_to_db(bustype, overwrite=overwrite)
+
+
+def bustype_from_spec(spec: BusTypeSpec, *, rho_preset: Optional[str] = None):
+    """Build a live :class:`groundinsight.BusType` from a loaded document.
+
+    The ``groundinsight`` model of a spec built by the exporters or read
+    with :func:`load_bustype_json` (its four scalar fields and the
+    formula; the metadata is not carried over, as with :func:`to_bustype`).
+
+    Parameters
+    ----------
+    spec : BusTypeSpec
+        The document.
+    rho_preset : str, optional
+        The preset of :func:`~groundfield.soil.effective_resistivity` that
+        the bus of this BusType uses for its ``specific_earth_resistance``.
+        A different preset recorded in the document emits
+        :class:`RhoPresetMismatchWarning` (user decision Q39); ``None``
+        (default) checks nothing.
+
+    Returns
+    -------
+    groundinsight.models.core_models.BusType
+
+    Raises
+    ------
+    TypeError
+        If ``spec`` is not a :class:`BusTypeSpec`.
+    ValueError
+        If ``rho_preset`` is not a preset name.
+    ImportError
+        If ``groundinsight`` is not installed.
+
+    Warns
+    -----
+    RhoPresetMismatchWarning
+        If ``rho_preset`` differs from the preset the document records.
+    """
+    if not isinstance(spec, BusTypeSpec):
+        raise TypeError(
+            f"bustype_from_spec: expected a BusTypeSpec, got {type(spec).__name__}"
+        )
+    _warn_on_preset_mismatch(spec, rho_preset, "bustype_from_spec")
+    return _to_live_bustype(spec)
 
 
 # ---------------------------------------------------------------------
@@ -1265,6 +1425,8 @@ def evaluate_spec(
     spec: BusTypeSpec,
     frequencies: Sequence[float],
     rho: float,
+    *,
+    rho_preset: Optional[str] = None,
 ) -> np.ndarray:
     """Evaluate a :class:`BusTypeSpec` at arbitrary frequencies.
 
@@ -1286,6 +1448,13 @@ def evaluate_spec(
     rho : float
         Soil resistivity in $\\Omega\\,\\mathrm{m}$. Ignored if the
         formula does not depend on ``rho`` (vector-fit case).
+    rho_preset : str, optional
+        The preset of :func:`~groundfield.soil.effective_resistivity` that
+        gave ``rho`` (the bus's preset). When the document records another
+        one (:attr:`BusTypeSpec.rho_preset`), a
+        :class:`RhoPresetMismatchWarning` is emitted (user decision Q39);
+        ``None`` (default), or a document without a recorded preset, checks
+        nothing.
 
     Returns
     -------
@@ -1305,6 +1474,13 @@ def evaluate_spec(
         substring matching on the message. Existing ``except
         ValueError`` blocks keep working because
         :class:`EvaluateSpecError` inherits from :class:`ValueError`.
+        A ``rho_preset`` that is not a preset name raises
+        :class:`ValueError`.
+
+    Warns
+    -----
+    RhoPresetMismatchWarning
+        If ``rho_preset`` differs from the preset the document records.
     """
     from groundfield.io._formula import formula_function
 
@@ -1330,6 +1506,7 @@ def evaluate_spec(
         formula if isinstance(formula, str) else str(formula),
         context="evaluate_spec: spec.impedance_formula",
     )
+    _warn_on_preset_mismatch(spec, rho_preset, "evaluate_spec")
     func = formula_function(expr, ("f", "rho"))
     f_arr = np.asarray(frequencies, dtype=float)
     out = func(f_arr, float(rho))
@@ -1361,6 +1538,9 @@ def fit_quality_summary(spec: BusTypeSpec) -> str:
     quantity = _summary_label(md.get("quantity"))
     if quantity is not None:
         parts.append(f"quantity={quantity}")
+    preset = spec.rho_preset if isinstance(spec, BusTypeSpec) else None
+    if preset is not None:
+        parts.append(f"rho_preset={preset}")
     return f"BusTypeSpec({', '.join(parts)})"
 
 
