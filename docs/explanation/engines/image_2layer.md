@@ -74,7 +74,7 @@ lengths, blended into the far form up to 7.5, and beyond the point form
 with the quadrupole term of the segment average — tapered off between 60
 and 120 segment lengths of vertical distance, where it falls below the
 remainder of the far form (since wave 3 of the 2026.11 work; before, far
-images were point sources, which `Engine.image_far_field = "point"` keeps,
+images were point sources, which `Engine.image_far_field = "point"` offers,
 see below). The exact integral of an image pair takes the image's
 potential at the transverse distance $\max(\rho_\perp, a)$ of the wire from
 the image's axis, its average over the wire's circumference (audit
@@ -94,14 +94,37 @@ low, like in homogeneous soil.
 ### Far images in point form
 
 `Engine(image_far_field="point")` (the author's decision of 2026-11-15)
-evaluates the far images as point sources, as before wave 3, and on the
-cross-layer path the line form of the layered correction for the interface
-image of pairs in one layer only; the continuous switch and the transverse
-distance of near image pairs stay. It saves the far-image work (cost on
-the [kernels page](../kernels.md#cost)) and moves networks by 2e-5 … 1.8e-4
-against the default, single wires near the interface by up to 4e-4 and the
-surface potential above them by up to 0.8 %. `metadata["series"]` records
-the form, and the post-solve field evaluation and `solve_mutual_*` use it.
+leaves out the dense far term: the far Tagg/Sunde images and the far images
+of the layered correction are point sources, while the near image pairs —
+within 7.5 segment lengths, a segment's own images included — stay Galerkin
+integrals blended into the point form, on the series and the cross-layer
+path alike. The continuous switch and the transverse distance of near image
+pairs stay, so `"point"` is not the result before wave 3: within the upper
+layer it differs from it by up to 2.3e-4 (the base switched at six segment
+lengths in one step, user decision D2 blends up to 7.5).
+
+Up to audit W3R2A-01 the cross-layer path kept the line form of the
+interface image only, as before wave 3; the own surface and transmitted
+images of a segment below the interface were point sources, and a 75 m strip
+below a 0.5 m top layer read −1.0e-3 at a segment length of 2.5 m and −58 %
+at 37.5 m (16 house grids with a 75 m bare conductor in two pieces: +1.1 %
+against the default). Now that strip is within 1.1e-5 of its exact
+uniform-current resistance at every segment length from 0.5 to 37.5 m in
+500 / 100 and 1000 / 30 Ω·m (within 4.1e-6 from 1 m; over a more resistive
+lower layer, 100 / 500 Ω·m, +1.2e-4 at 0.5 m and +4.8e-5 at 1 m, the far
+terms of an image series that does not alternate), and the network within
+4e-6 of the default.
+
+The point form saves the far-image work (cost on the
+[kernels page](../kernels.md#cost)) and moves networks by 3e-6 … 4.3e-4
+against the default (16 house grids 0.4 m above a 1000 / 10 Ω·m interface:
+4.3e-4), single wires near the interface by up to 4e-4 and the surface
+potential above them by up to 0.8 %. A wire on the interface is up to
+3e-4 apart on the two paths in this form (the default: 1.3e-6), because the
+far terms the point form leaves out are split differently between the two
+decompositions. `metadata["series"]` records the form, and the post-solve
+field evaluation and `solve_mutual_*` use it; any other value raises
+`ValueError` (audit W3R2A-02).
 
 ## Electrodes that reach the interface
 
@@ -122,7 +145,8 @@ quadrupole term over all pairs, the Galerkin integral for pairs within
 six segment lengths blended up to 7.5, the Galerkin self images on the
 diagonal — on top of the spectral values between midpoints (since wave 3
 of the 2026.11 work; before, only the interface image of near pairs in one
-layer was a Galerkin integral, which `image_far_field="point"` keeps). A
+layer was a Galerkin integral; `image_far_field="point"` leaves out the far
+term only, audit W3R2A-01). A
 rod through the interface then no longer depends on the segment length
 (6 m from 0.6 m through $h_1$ = 5 m in 500 / 100, 1000 / 30 and
 30 / 1000 Ω·m: within 6.7e-7 from 2 m to 0.125 m segments, before

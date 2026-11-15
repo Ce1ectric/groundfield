@@ -445,21 +445,35 @@ class Engine(BaseModel):
           point value plus the quadrupole term of the segment average,
           tapered off between 60 and 120 segment lengths of vertical
           distance (wave 3 of the 2026.11 work, finding 10.28).
-        - ``"point"`` — point sources, as before wave 3; on the cross-layer
-          path the line form of the layered correction for the interface
-          image of pairs in one layer only. The continuous switch (user
-          decision D2) and the transverse distance of near image pairs
-          stay.
+        - ``"point"`` — point sources: the dense far term is left out. The
+          near image pairs (within 7.5 segment lengths, a segment's own
+          images included) stay Galerkin integrals blended into the point
+          form, on the series and the cross-layer path alike, and so do the
+          continuous switch (user decision D2) and the transverse distance
+          of near image pairs. It is therefore not the result before wave 3:
+          within the upper layer it differs from it by up to 2.3e-4 (16
+          house grids in 1000 / 30 Ω·m with :math:`h_1` = 1.5 m, the blend of
+          D2). Up to audit W3R2A-01 the cross-layer path kept the line form
+          of the interface image only, so a long segment below the interface
+          saw its own images as point sources: a 75 m strip below a 0.5 m top
+          layer read -1.0e-3 at a segment length of 2.5 m and -58 % at 37.5 m;
+          it is now within 1.1e-5 of its exact value at every segment length
+          (500 / 100 and 1000 / 30 Ω·m).
 
-        Against the default, ``"point"`` moves networks by 2e-5 … 1.8e-4
-        (16 house grids in 1000 / 30 Ω·m with :math:`h_1` = 1.5 m:
-        1.8e-4), a straight wire 0.5 m above the interface by 4e-4 and the
-        surface potential above it by up to 0.8 %; it takes 0.46 of the
-        default's time on that 40-house network with numba (1.9 against
-        4.2 s; 0.24 without numba) and 1.1 … 1.3 times the time before wave
-        3 on house grids (performance page). No
-        effect with ``kernel="point"``, in homogeneous soil or on backends
-        without the line kernel. Read by the image family and
+        Against the default, ``"point"`` moves networks by 3e-6 … 4.3e-4
+        (16 house grids 0.4 m above a 1000 / 10 Ω·m interface: 4.3e-4), a
+        straight wire 0.5 m above the interface by 4e-4 and the surface
+        potential above it by up to 0.8 %. With numba it takes 1.1 … 1.3
+        times the solve before wave 3 on house grids within the upper layer.
+        On the cross-layer path it takes 0.49 … 0.94 of the default's time
+        (0.25 … 0.54 without numba), because the Galerkin near image pairs
+        stay: 1.5 … 2.4 times the solve before wave 3 below thin top layers,
+        4.3 … 4.5 times with long pieces there, and 0.91 times (0.90 without
+        numba) on a 40-house network in 1000 / 30 Ω·m with :math:`h_1` =
+        1.5 m, whose transformer rods reach below :math:`h_1` (performance
+        page). Any other value raises ``ValueError`` (audit W3R2A-02). No
+        effect with ``kernel="point"``, in homogeneous soil or
+        on backends without the line kernel. Read by the image family and
         ``solve_mutual_*``, recorded in ``FieldResult.metadata["series"]``
         (``"far_field"``) and used by :meth:`FieldResult.potential`; kept by
         JSON round trips, :meth:`with_frequencies`, :meth:`model_copy` and
@@ -646,8 +660,9 @@ class Engine(BaseModel):
             "(Tagg/Sunde images and images of the cross-layer correction "
             "beyond the near-pair reach): 'quadrupole' (default; point value "
             "plus the quadrupole term of the segment average) or 'point' "
-            "(point sources, the far-image treatment before 2026.11 wave 3; "
-            "faster). No effect with kernel='point' or in homogeneous soil."
+            "(point sources beyond the near-pair reach, without the dense far "
+            "term; faster). No effect with kernel='point' or in homogeneous "
+            "soil."
         ),
     )
     # The annotation states the accepted input (option models or plain

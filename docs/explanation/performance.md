@@ -129,40 +129,52 @@ that its cost followed the longest segment of the world and the image
 density; since then an image is evaluated on the pairs whose longer segment
 reaches it, the reaction matrix's part on its upper half, with one division
 per evaluation. `Engine.image_far_field = "point"` (the author's decision of
-2026-11-15) keeps far images as point sources, as before wave 3. Line
-kernel, ds = 0.5 m, 50 Hz, best of three solves, one fresh process per row,
-the four trees of a row run one after the other (other agents on the
-machine, load 10 … 18; the times of this stream measured before its last
-commit, which changed the summation of the sparse image corrections and
-nothing else; peaks of the final code):
+2026-11-15) keeps far images as point sources and leaves out their far-field
+term; the near image pairs stay Galerkin integrals on both paths (audit
+W3R2A-01). Line kernel, ds = 0.5 m, 50 Hz, best of three solves, one fresh
+process per row, the four trees of a row run one after the other (other
+agents on the machine, load 10 … 18; the times of stream fw3xl measured
+before its last commit, which changed the summation of the sparse image
+corrections and nothing else; peaks of the final code). The rows marked †
+solve on the cross-layer path (wires at or below $h_1$; the TN network in
+1000 / 30 Ω·m through its transformer rods); their "before wave 3", "now"
+and `"point"` columns were measured again after audit W3R2A-01 (stream
+fw3r2a, load 4 … 9), the "wave 3" column is that of stream fw3xl:
 
 | world | $N$ | numba | before wave 3 | wave 3 | now | `"point"` | peak now / `"point"` |
 |---|---:|---|---:|---:|---:|---:|---|
 | 16 house grids, 100 Ω·m | 1920 | yes | 0.14 s | 0.17 s | 0.18 s | 0.18 s | 47.7 / 47.7 MiB |
 | 16 house grids, 500 / 100 Ω·m, $h_1$ = 5 m | 1920 | yes | 0.43 s | 0.71 s | 0.54 s | 0.48 s | 69.7 / 66.4 MiB |
 | the same with 8 pieces of 9.4 m | 1928 | yes | 0.69 s | 1.97 s | 1.03 s | 0.92 s | 94.7 / 94.6 MiB |
-| 16 house grids below $h_1$ = 0.5 m | 1920 | yes | 0.29 s | 0.91 s | 0.54 s | 0.32 s | 80.4 / 78.9 MiB |
-| the same with 8 pieces of 9.4 m | 1928 | yes | 0.35 s | 2.17 s | 1.78 s | 0.39 s | 158.1 / 81.4 MiB |
-| 16 house grids, 30 / 1000 Ω·m, $h_1$ = 0.1 m | 1920 | yes | 0.28 s | 2.42 s | 1.18 s | 0.32 s | 87.1 / 78.2 MiB |
-| 16 house grids, 1000 / 30 Ω·m, $h_1$ = 0.1 m | 1920 | yes | 0.28 s | 2.39 s | 1.13 s | 0.31 s | 87.1 / 78.2 MiB |
-| AP1 station, 40 % penetration | 2711 | yes | 1.34 s | 1.86 s | 1.35 s | 0.93 s | 137.1 / 136.4 MiB |
+| 16 house grids below $h_1$ = 0.5 m † | 1920 | yes | 0.27 s | 0.91 s | 0.54 s | 0.40 s | 80.5 / 80.5 MiB |
+| the same with 8 pieces of 9.4 m † | 1928 | yes | 0.32 s | 2.17 s | 1.66 s | 1.44 s | 158.1 / 158.1 MiB |
+| 16 house grids, 30 / 1000 Ω·m, $h_1$ = 0.1 m † | 1920 | yes | 0.26 s | 2.42 s | 1.12 s | 0.64 s | 87.0 / 86.9 MiB |
+| 16 house grids, 1000 / 30 Ω·m, $h_1$ = 0.1 m † | 1920 | yes | 0.27 s | 2.39 s | 1.13 s | 0.64 s | 87.0 / 86.9 MiB |
+| AP1 station, 40 % penetration † | 2711 | yes | 1.29 s | 1.86 s | 1.35 s | 0.96 s | 137.1 / 136.5 MiB |
 | TN network, 40 houses, 500 / 100 Ω·m, $h_1$ = 5 m | 4877 | yes | 2.59 s | 4.38 s | 3.24 s | 2.71 s | 407.5 / 407.5 MiB |
-| TN network, 40 houses, 1000 / 30 Ω·m, $h_1$ = 1.5 m | 4877 | yes | 2.37 s | 10.06 s | 4.16 s | 1.84 s | 403.9 / 401.0 MiB |
+| TN network, 40 houses, 1000 / 30 Ω·m, $h_1$ = 1.5 m † | 4877 | yes | 2.19 s | 10.06 s | 4.03 s | 1.99 s | 404.1 / 404.1 MiB |
 | 16 house grids, 500 / 100 Ω·m, $h_1$ = 5 m | 1920 | no | 1.47 s | 2.56 s | 1.83 s | 1.50 s | 77.0 / 77.0 MiB |
-| 16 house grids below $h_1$ = 0.5 m | 1920 | no | 0.35 s | 1.89 s | 0.88 s | 0.39 s | 80.4 / 78.9 MiB |
-| AP1 station, 40 % penetration | 2711 | no | 1.46 s | 3.99 s | 2.35 s | 1.11 s | 140.5 / 136.4 MiB |
-| TN network, 40 houses, 1000 / 30 Ω·m, $h_1$ = 1.5 m | 4877 | no | 2.80 s | 27.06 s | 10.08 s | 2.21 s | 403.9 / 401.1 MiB |
+| 16 house grids below $h_1$ = 0.5 m † | 1920 | no | 0.34 s | 1.89 s | 0.85 s | 0.46 s | 80.5 / 80.5 MiB |
+| AP1 station, 40 % penetration † | 2711 | no | 1.46 s | 3.99 s | 2.17 s | 1.06 s | 140.5 / 136.4 MiB |
+| TN network, 40 houses, 1000 / 30 Ω·m, $h_1$ = 1.5 m † | 4877 | no | 2.57 s | 27.06 s | 9.46 s | 2.33 s | 404.0 / 404.0 MiB |
 
-Measured with the three trees in alternation (three rounds, load 6 … 13),
-the 40-house network in 1000 / 30 Ω·m takes 1.84 times the solve before
-wave 3 with numba and 3.63 times without; `"point"` 0.84 and 0.86 times.
+Measured with the trees in alternation (three rounds), the 40-house network
+in 1000 / 30 Ω·m takes 1.84 times the solve before wave 3 with numba and
+3.63 times without (stream fw3xl, load 6 … 13; 1.84 and 3.68 in this
+stream's rounds, load 4 … 9); `"point"` 0.91 and 0.90 times (0.83 and 0.85
+with the line form of the interface image only, before audit W3R2A-01).
 What remains for the default is the image density of high contrasts and
 thin top layers (hundreds of images within reach) and, with long pieces
 below a thin top layer, the Galerkin integrals of their near image pairs
 (each long piece is within 7.5 segment lengths of every short segment's
-image; the near-pair criterion of the kernel). `"point"` moves networks by
-2e-5 … 1.8e-4 against the default: a choice for catalogue sweeps, not for
-fields near the interface.
+image; the near-pair criterion of the kernel). `"point"` keeps those
+integrals: on the cross-layer path it leaves out the far-field term only,
+0.49 … 0.94 of the default's time. Before audit W3R2A-01 it kept only the
+interface image there, which was faster below thin top layers (1.2 times the
+solve before wave 3 instead of 1.5 … 2.4, with long pieces 1.2 instead of
+4.3 … 4.5) and lost up to 58 % on long segments below the interface.
+`"point"` moves networks by 3e-6 … 4.3e-4 against the default: a choice for
+catalogue sweeps, not for fields near the interface.
 
 ### Electrodes through the layer interface (wave 3)
 
@@ -186,8 +198,8 @@ sees only that change, is 1.6 … 2.0 times faster. The line kernel carries the
 layered correction in line form now (a rod through the interface no longer
 depends on the segment length); since audit W3A its far-field terms cost
 about what the closed-form amplitudes saved (1.35 s at 40 % penetration,
-1.34 s before wave 3; 2.35 s without numba), and `image_far_field="point"`
-solves it in 0.93 s (the table above). Peak memory is that of the series path:
+1.29 s before wave 3; 2.17 s without numba), and `image_far_field="point"`
+solves it in 0.96 s (the table above). Peak memory is that of the series path:
 16 house grids entirely below $h_1$ = 0.5 m need 21.9 bytes per segment
 pair instead of 41.2 (the series path 18.3), and beyond the matrix budget
 the path works in row blocks with memory linear in $N$ (36 house grids,
@@ -253,8 +265,8 @@ In order of effect on a typical study:
 3. **Parallel cells** of a sweep or Monte Carlo study (`sweep(n_jobs=...)`).
 4. **numba** (extra `fast`) for the line kernel's far field and the
    two-layer series; for catalogue sweeps in high-contrast two-layer soil
-   `Engine.image_far_field = "point"` (point-form far images, 2e-5 …
-   1.8e-4 on networks).
+   `Engine.image_far_field = "point"` (point-form far images, 3e-6 …
+   4.3e-4 on networks).
 5. **Contrast and electrodes through the interface** set the cost of
    two-layer worlds; the series length follows from $|K|$ alone.
 

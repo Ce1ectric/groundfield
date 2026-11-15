@@ -81,7 +81,7 @@ max_rel_change = 6e-4
 # circumference; collinear images, rho_perp = 0, keep the reduced kernel),
 # and the far form of images has no radius term. Measured with
 # GF_GOLDEN_STRICT=1 against the stream's own baseline of release/calver
-# 098bbbc (the author's Mac): line_img2_ring_rods_within_layer 3.4e-7,
+# 098bbbc (the author's Mac): line_img2_ring_rods_within_layer 3.19e-7,
 # defaults_two_layer_ring_auto 9.4e-8, line_mutual_two_layer 1.7e-8,
 # line_img2_rod_crosslayer 1.0e-8; every other case bit-identical (the
 # W3A-01 cost changes of the stream are bit-identical in every stored case).

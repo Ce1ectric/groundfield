@@ -64,3 +64,55 @@ def test_w3a_03_the_strip_texts_do_not_claim_monotone_convergence() -> None:
                 if "not monoton" in sentence:
                     continue
                 pytest.fail(f"{path}: {sentence[:160]}")
+
+
+#: The pages that describe ``Engine.image_far_field`` (stream fw3r2a's files).
+_POINT_FORM_TEXTS = (
+    "src/groundfield/solver/engine.py",
+    "docs/explanation/performance.md",
+    "docs/explanation/engines/image_2layer.md",
+    "docs/explanation/kernels.md",
+    "docs/reference/api/solver.md",
+    "docs/adr/0015-line-source-kernel-default.md",
+)
+
+
+# audit W3R2A-04
+def test_w3r2a_04_the_point_form_texts_give_the_measured_range() -> None:
+    """``"point"`` against the default: networks up to 4.3e-4 (16 house grids
+    0.4 m above a 1000/10 interface), not "2e-5 … 1.8e-4"; and it is not the
+    result before wave 3 (up to 2.3e-4 from the continuous switch, D2)."""
+    for path in _POINT_FORM_TEXTS:
+        text = _flat((ROOT / path).read_text("utf-8"))
+        for stale in ("2e-5 … 1.8e-4", "2 · 10⁻⁵ … 1.8 · 10⁻⁴", "1.9e-5 … 1.8e-4"):
+            assert stale not in text, (path, stale)
+        for sentence in re.split(r"(?<=[.;])\s", text):
+            if "as before wave 3" in sentence and "point" in sentence:
+                pytest.fail(f"{path}: {sentence[:160]}")
+    for path in (
+        "src/groundfield/solver/engine.py",
+        "docs/explanation/engines/image_2layer.md",
+    ):
+        text = _flat((ROOT / path).read_text("utf-8"))
+        assert "4.3e-4" in text and "2.3e-4" in text, path
+    api = _flat((ROOT / "docs/reference/api/solver.md").read_text("utf-8"))
+    assert "4.3 · 10⁻⁴" in api
+
+
+# audit W3R2A-05, W3R2A-06
+def test_w3r2a_05_the_transverse_distance_is_exact_for_long_wires_only() -> None:
+    """The axis value is the circumference average of a long line; a finite
+    one has an end effect of order a²/(d ℓ). Direct pairs of different wires
+    keep the reduced kernel (a convention, -3.5e-4 for two strips 1 cm above
+    a 1000/30 interface, 5 cm apart)."""
+    text = _flat((ROOT / "src/groundfield/solver/_line_kernel.py").read_text("utf-8"))
+    assert "exact for a parallel image at any distance" not in text
+    assert "a^2/(d" in text and "+3.0e-4" in text
+    assert "-3.5e-4" in text
+
+
+# audit W3R2A-07
+def test_w3r2a_07_the_golden_declaration_quotes_the_measured_move() -> None:
+    text = (ROOT / "tests/golden/expected_changes/w3xl.toml").read_text("utf-8")
+    assert "line_img2_ring_rods_within_layer 3.19e-7" in text
+    assert "line_img2_ring_rods_within_layer 3.4e-7" not in text
