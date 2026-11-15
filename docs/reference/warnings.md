@@ -118,7 +118,8 @@ segments shorter than the distance of the wire to the interface.
 
 `groundfield.solver.InterfaceContactWarning`. **Emitted** by every
 segment backend (the image family, `mom`, `mom_sommerfeld`), by
-`solve_mutual_*` and by the three-dimensional `fem` where the thin-wire
+`solve_mutual_*` and by the three-dimensional `fem` (both rules, once per
+rule and solve; rod ends since audit W4R2A-03) where the thin-wire
 model, which carries the current on the wire axis, deviates from the
 solid wire next to a layer interface:
 
@@ -130,11 +131,15 @@ solid wire next to a layer interface:
   continuous in between. Against an axisymmetric model of the solid rod
   (4.5 m, $a$ = 8 mm, 1000/30 Ω·m) the thin wire reads +21 % with its tip
   at the interface, +7 % 1 mm above it, −4.6 % 1 mm below it, and within
-  a few per cent beyond two radii, as anywhere else. An end that meets the
+  a few per cent beyond two radii, as anywhere else. The three-dimensional
+  `fem` is a thin wire without end faces too: a rod tip on 1000/30 Ω·m
+  reads +43 % there against the solid rod, with an error estimate of
+  6e-3 (audit W4R2A-03). An end that meets the
   end of another rod — a rod split at the interface into two pieces, the
   usual way to give each layer its own piece — has no free end face and is
   not reported.
-- **Horizontal wires** (since 2026.11, audits W4A-07 and W4B-02). Every
+- **Horizontal wires** (since 2026.11, audits W4A-07, W4B-02 and
+  W4R2A-04). Every
   electrode but a rod, and the leaking pieces of a galvanic distributed
   conductor, whose axis lies within the reach of a contrasting interface.
   Next to a more conductive layer the current crowds to the wire's near
@@ -144,25 +149,42 @@ solid wire next to a layer interface:
   33 times more conductive reads +0.59 % at 4 radii, +1.2 % at 3, +3.6 % at
   2, +8.6 % at 1.5 and +32 % at 1.1 radii, and +89 % when the interface
   cuts the wire; over a more resistive layer at most +1.4 %. The reach is
-  the distance of the wire axis from the interface at which the thin wire
-  is 1 % off, the largest of four geometries (rings of 1, 2 and 5 m at
-  0.8 and 2 m depth, $a$ = 5 and 55 mm, the interface below and above),
-  rounded up to 0.1 $a$:
+  the distance of the wire axis from the interface inside which the thin
+  wire is 1 % or more off: the largest of six ring geometries ($r_0/a$ =
+  18 … 400: rings of 0.5 … 5 m at 0.3 … 2 m depth, $a$ = 5 … 55 mm, the
+  interface below and above; a 55 mm wire on a 1 m ring is the widest at
+  every contrast), rounded up to 0.1 $a$, plus 0.1 $a$ for the contrasts
+  between the nodes:
 
-  | contrast of the layers | 2 | 3 | 10 | 33 | 100 | 1000 |
-  |---|---|---|---|---|---|---|
-  | more conductive beyond | 1.0 $a$ | 1.5 $a$ | 2.9 $a$ | 3.5 $a$ | 3.8 $a$ | 3.9 $a$ |
-  | more resistive beyond | 1.0 $a$ | 1.0 $a$ | 1.0 $a$ | 1.2 $a$ | 1.25 $a$ | 1.25 $a$ |
+  | contrast of the layers | 1.4 | 2 | 3 | 5.5 | 10 | 18 | 33 | 100 | 1000 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | more conductive beyond | 1.0 $a$ | 1.3 $a$ | 1.9 $a$ | 2.7 $a$ | 3.3 $a$ | 3.7 $a$ | 3.9 $a$ | 4.1 $a$ | 4.2 $a$ |
+  | more resistive beyond | 1.0 $a$ | (1.0 $a$) | 1.0 $a$ | (1.1 $a$) | 1.2 $a$ | (1.25 $a$) | 1.3 $a$ | (1.33 $a$) | 1.4 $a$ |
 
-  (log-linear in between, held beyond 1000; 1.0 $a$: only a wire that the
-  interface cuts; below a contrast of 2 the thin wire stays within 0.75 %
-  of the solid one and nothing is reported). The three-dimensional `fem`
+  (log-linear in between, values in brackets interpolated; held beyond
+  1000; 1.0 $a$: only a wire that the interface cuts.) Checked at the
+  nodes and at the contrasts 1.3 … 1.9, 2.5, 4, 7, 14, 25, 50 and 300:
+  of 2348 measured distances none with the thin wire 1 % or more off lies
+  outside the reach, the largest error outside it is +0.94 %. Below a
+  contrast of 1.4 nothing is reported: a cut wire is at most 0.77 % off at
+  1.3 (1.04 % at 1.5). Up to audit W4R2A-04 the table came from four
+  geometries (0.2 … 0.4 $a$ short of the thick wire on the 1 m ring) and
+  started at a contrast of 2, below which a cut wire read up to −1.46 %.
+  The table is measured on rings with $r_0/a \ge 18$; a thicker wire on a
+  smaller ring is not covered. A piece of a galvanic distributed conductor
+  counts as horizontal while its slope $|e_z|$ is at most 0.1 (5.7°): a
+  steeper piece passes the reach of an interface over at most
+  $2\,\mathrm{reach}/|e_z|$ wire radii of its length, like a rod through an
+  interface, and is not reported (a step at the cutoff, kept). The
+  three-dimensional `fem`
   shares the limit (its smoothed line source lies between the thin wire
   and the torus); the axisymmetric `fem` solves the wire as the solid torus
   and does not warn. No generated network and no world of the AP1 soils
   ($h_1$ = 5 or 30 m) comes within reach.
 
-`diagnose()` reports both under `interface_contact`.
+`diagnose()` reports both under `interface_contact`; with an `fem` engine
+it reports neither for a world that the axisymmetric model takes, which
+resolves rod end faces and ring wires (audit W4R2A-05).
 **Remedy:** keep rod ends and horizontal wires a few wire radii from a
 contrasting interface; bracket a rod end by moving it by ±2 wire radii;
 check a ring with `fem`'s axisymmetric model

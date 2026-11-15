@@ -11,8 +11,9 @@ when the interface cuts the wire. Up to these audits only rod ends warned
 ``mom_sommerfeld`` and the three-dimensional ``fem`` now warn for horizontal
 wires within the reach of :func:`groundfield.solver._guards.wire_contact_reach`
 too, and ``diagnose()`` lists them under ``interface_contact``. The reach is
-where the thin wire is 1 % off (evidence ``fw4axi/e03*``); no generated
-network and no world of the AP1 soils warns.
+where the thin wire is 1 % off (evidence ``fw4axi/e03*``; since audit
+W4R2A-04 the largest of six ring geometries plus 0.1 radii, ``fw4r2a/e03``);
+no generated network and no world of the AP1 soils warns.
 """
 
 from __future__ import annotations
@@ -57,16 +58,21 @@ def _contact_warnings(world, backend="image_2layer", **kw):
 
 
 def test_the_reach_follows_the_measured_table() -> None:
-    # audit W4A-07
+    """The nodes of audit W4R2A-04 (up to then 3.5 / 3.8 / 3.9 radii at 33 /
+    100 / 1000, resistive 1.0 at 10, nothing below a contrast of 2)."""
+    # audit W4A-07, W4R2A-04
     from groundfield.solver._guards import wire_contact_reach
 
-    assert wire_contact_reach(100.0, 100.0 / 33.0) == pytest.approx(3.5)
-    assert wire_contact_reach(1000.0, 30.0) == pytest.approx(3.5, abs=0.01)
-    assert wire_contact_reach(100.0, 1.0) == pytest.approx(3.8)
-    assert wire_contact_reach(100.0, 1e-3) == pytest.approx(3.9)  # held
-    assert wire_contact_reach(30.0, 1000.0) == pytest.approx(1.2, abs=0.01)
+    assert wire_contact_reach(100.0, 100.0 / 33.0) == pytest.approx(3.9)
+    assert wire_contact_reach(1000.0, 30.0) == pytest.approx(3.9, abs=0.01)
+    assert wire_contact_reach(100.0, 1.0) == pytest.approx(4.1)
+    assert wire_contact_reach(100.0, 1e-3) == pytest.approx(4.2)  # held
+    assert wire_contact_reach(30.0, 1000.0) == pytest.approx(1.3, abs=0.01)
+    assert wire_contact_reach(100.0, 1000.0) == pytest.approx(1.2)
     assert wire_contact_reach(100.0, 300.0) == pytest.approx(1.0)
-    assert wire_contact_reach(100.0, 100.0 / 1.5) == 0.0
+    assert wire_contact_reach(100.0, 100.0 / 1.5) == pytest.approx(1.06, abs=0.01)
+    assert wire_contact_reach(100.0, 100.0 * 1.5) == pytest.approx(1.0)
+    assert wire_contact_reach(100.0, 100.0 / 1.3) == 0.0
     assert wire_contact_reach(100.0, 100.0) == 0.0
     # monotone in the contrast on both sides
     k = [2.0, 3.0, 5.0, 10.0, 20.0, 33.0, 100.0, 1000.0]
@@ -88,7 +94,7 @@ def test_a_ring_two_radii_above_a_conductive_layer_warns(backend) -> None:
     assert len(hits) == 1, [str(h.message) for h in hits]
     text = str(hits[0].message)
     assert "'g1'" in text and "2 wire radii" in text and "more conductive" in text
-    assert "reach 3.5" in text
+    assert "reach 3.9" in text
 
 
 def test_inside_the_reach_the_thin_wire_is_more_than_1_percent_off() -> None:
@@ -114,14 +120,16 @@ def test_inside_the_reach_the_thin_wire_is_more_than_1_percent_off() -> None:
 @pytest.mark.parametrize(
     ("rho_other", "d_over_a", "warns"),
     [
-        (1000.0 * 33.0, 1.1, True),  # resistive beyond, reach 1.2
+        (1000.0 * 33.0, 1.1, True),  # resistive beyond, reach 1.3
         (1000.0 * 33.0, 1.5, False),
-        (1000.0 * 10.0, 1.1, False),  # reach 1.0: only a cut wire
-        (1000.0 * 10.0, 0.5, True),
-        (1000.0 / 1.5, 0.5, False),  # below the contrast 2
-        (1000.0 / 2.0, 0.5, True),
-        (1000.0 / 3.0, 1.4, True),  # conductive beyond, reach 1.5
-        (1000.0 / 3.0, 1.6, False),
+        (1000.0 * 10.0, 1.1, True),  # reach 1.2 (was 1.0, audit W4R2A-04)
+        (1000.0 * 10.0, 1.3, False),
+        (1000.0 * 3.0, 1.1, False),  # reach 1.0: only a cut wire
+        (1000.0 * 3.0, 0.5, True),
+        (1000.0 / 1.3, 0.5, False),  # below the contrast 1.4
+        (1000.0 / 1.5, 0.5, True),  # was below the contrast 2
+        (1000.0 / 3.0, 1.8, True),  # conductive beyond, reach 1.9
+        (1000.0 / 3.0, 2.0, False),
     ],
 )
 def test_the_rule_on_both_sides_and_for_cut_wires(rho_other, d_over_a, warns) -> None:
@@ -143,7 +151,7 @@ def test_diagnose_lists_the_wire_under_interface_contact() -> None:
         data = found[0].data
         assert found[0].severity == "warning" and data["end"] is None
         assert data["distance_radii"] == pytest.approx(1.5)
-        assert data["reach_radii"] == pytest.approx(3.5, abs=0.01)
+        assert data["reach_radii"] == pytest.approx(3.9, abs=0.01)
         assert data["rho_wire_ohm_m"] == 1000.0 and data["rho_other_ohm_m"] == 30.0
         text = str(report)
         assert "interface contact: 1 rod end or wire lies too close" in text
@@ -264,7 +272,7 @@ def test_no_generated_network_of_the_ap1_soils_is_reported(rho_1, rho_2, h_1) ->
     """Generated TN networks (10 houses with encased foundations, one small
     commercial building, the substation) in the corner soils of the AP1 grid:
     every horizontal wire lies at least 4 m from the interface, the largest
-    reach is 3.9 radii of a 0.205 m shell (0.8 m)."""
+    reach is 4.2 radii of a 0.205 m shell (0.86 m)."""
     # audit W4A-07
     from groundfield.generators import (
         TnNetworkConfig,
@@ -482,3 +490,131 @@ def test_diagnose_with_an_fem_engine_keeps_the_findings_of_a_3d_world() -> None:
     eng = gf.create_engine(backend="fem", segment_length=0.25)
     found = diagnostics.diagnose(w, eng).by_category("interface_contact")
     assert [(f.subjects, f.data["end"]) for f in found] == [(("r1",), "tip")]
+
+
+@pytest.mark.parametrize(
+    ("rho_other", "d_over_a", "r0", "a"),
+    [
+        (100.0 / 33.0, 3.6, 1.0, 0.055),  # thick wire on a 1 m ring: +1.09 %
+        (100.0 / 10.0, 3.0, 1.0, 0.055),  # +1.1 %
+        (100.0 / 5.5, 2.4, 1.0, 0.055),  # +1.1 %, between the nodes 3 and 10
+        (100.0 / 1.9, 0.5, 2.0, 0.005),  # below the contrast 2, cut: -1.2 %
+    ],
+)
+def test_w4r2a_04_a_thin_wire_more_than_1_percent_off_warns(
+    rho_other, d_over_a, r0, a
+) -> None:
+    """Auditor W4R2A's test: the reach table was not conservative for a
+    thick wire on a short ring (r0 / a = 18: the 1 % distance lay 0.2 ... 0.4
+    radii beyond the reach at contrasts 2.5 ... 100) and below the contrast 2
+    for a cut wire; the thin wire was more than 1 % off the solid torus
+    without a warning."""
+    # audit W4R2A-04
+    t = 0.8 if a > 0.01 else 2.0
+    w = gf.create_world(
+        soil=gf.TwoLayerSoil(rho_1=100.0, rho_2=rho_other, h_1=t + d_over_a * a)
+    )
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, t), radius=r0, wire_radius=a
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    torus, none = _contact_warnings(w, "fem")
+    assert not none and torus.metadata["fem_model"] == "axisymmetric"
+    thin, hits = _contact_warnings(
+        w, "image_2layer", segment_length=0.1 if a > 0.01 else 0.05
+    )
+    error = (
+        thin.cluster_impedance("g1")[0].real / torus.cluster_impedance("g1")[0].real
+        - 1.0
+    )
+    assert abs(error) > 0.01  # the premise
+    assert len(hits) == 1, error
+
+
+# Auditor W4R2A's G4 ring (r0 = 1 m, a = 55 mm, axis at 0.8 m in 100 Ohm m),
+# the widest of six geometries: the distance in wire radii at which the thin
+# wire is 1 % off the solid torus at the contrasts between the nodes of the
+# table (evidence fw4r2a/e03_summary.out), and G1 (r0 = 2 m, a = 5 mm) with
+# the more resistive layer above it.
+_MEASURED_1_PERCENT = [
+    ("conductive", 1.9, 1.07),
+    ("conductive", 2.5, 1.49),
+    ("conductive", 4.0, 2.16),
+    ("conductive", 7.0, 2.83),
+    ("conductive", 14.0, 3.40),
+    ("conductive", 25.0, 3.68),
+    ("conductive", 50.0, 3.87),
+    ("conductive", 300.0, 4.05),
+    ("resistive", 10.0, 1.02),
+    ("resistive", 100.0, 1.20),
+]
+
+
+@pytest.mark.parametrize(("side", "contrast", "d1"), _MEASURED_1_PERCENT)
+def test_w4r2a_04_the_reach_covers_the_measured_1_percent_distances(
+    side, contrast, d1
+) -> None:
+    """Up to audit W4R2A-04 the table was the largest of four geometries
+    rounded up, 0.2 ... 0.4 radii short of a thick wire on a short ring and
+    linear in log10 of the contrast between nodes where the curve is not.
+    Now it is the largest of six geometries at its nodes rounded up to 0.1 a
+    plus 0.1 a, and covers every measured point between them (2348 points:
+    none 1 % off outside the reach, the largest +0.94 %)."""
+    # audit W4R2A-04
+    from groundfield.solver._guards import wire_contact_reach
+
+    rho_other = 100.0 / contrast if side == "conductive" else 100.0 * contrast
+    assert wire_contact_reach(100.0, rho_other) > d1
+
+
+def test_w4r2a_04_cut_wires_are_reported_from_the_contrast_1_4() -> None:
+    """A wire that the interface cuts reads 1.04 % high at a contrast of 1.5
+    (the more resistive layer beyond, G4, cut 0.5 a below the axis) and
+    0.77 % at 1.3; up to audit W4R2A-04 nothing was reported below 2."""
+    # audit W4R2A-04
+    from groundfield.solver._guards import (
+        WIRE_CONTACT_MIN_CONTRAST,
+        _wires_near_interfaces,
+    )
+
+    assert 1.3 < WIRE_CONTACT_MIN_CONTRAST < 1.5
+    for k, reported in ((1.3, False), (1.5, True)):
+        for rho_other in (1000.0 / k, 1000.0 * k):
+            w = _ring(1000.0, rho_other, 0.5)
+            assert bool(_wires_near_interfaces(w)) is reported, (k, rho_other)
+    # beyond the wire only where the measured 1 % distance needs it: not at
+    # 1.5 over the more resistive layer, not at 1.3 on either side
+    for rho_other in (1000.0 * 1.5, 1000.0 / 1.3, 1000.0 * 1.3):
+        assert not _wires_near_interfaces(_ring(1000.0, rho_other, 1.01))
+
+
+@pytest.mark.parametrize(
+    ("z_end", "reported"), [(1.5, True), (2.0, True), (3.0, False)]
+)
+def test_w4r2a_04_a_sloped_conductor_piece_is_horizontal_up_to_e_z_0_1(
+    z_end, reported
+) -> None:
+    """Kept as documented (audit W4R2A-04): a piece of a galvanic distributed
+    conductor crossing the interface counts as a horizontal wire while its
+    slope |e_z| is at most 0.1 (5.7 deg); a steeper piece passes the reach of
+    the interface over at most 2 reach / |e_z| wire radii of its length, like
+    a rod through an interface, and is not reported (auditor W4R2A, r11:
+    |e_z| = 0.050 / 0.075 reported, 0.124 not)."""
+    # audit W4R2A-04
+    from groundfield.solver._guards import _wires_near_interfaces
+
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=1.0))
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.5), length=0.1)
+    gf.create_electrode(w, "rod", name="b", position=(20, 0, z_end), length=0.1)
+    gf.create_conductor(
+        w,
+        name="pen",
+        start="a",
+        end="b",
+        cross_section=50e-6,
+        discretize_segment_length=1.0,
+        coupling_to_soil="galvanic",
+    )
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    hits = [h for h in _wires_near_interfaces(w) if h[0] == "pen"]
+    assert bool(hits) is reported, hits

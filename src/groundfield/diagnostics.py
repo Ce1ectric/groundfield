@@ -1700,8 +1700,8 @@ def diagnose(
         (every electrode but a rod, the leaking pieces of a galvanic
         distributed conductor) within the reach of a contrasting interface,
         where the thin wire deviates from the solid wire by more than about
-        1 % (3.5 wire radii over a layer 33 times more conductive; audits
-        W4A-07, W4B-02); the segment backends and the 3-D ``fem`` warn with
+        1 % (3.9 wire radii over a layer 33 times more conductive; audits
+        W4A-07, W4B-02, W4R2A-04); the segment backends and the 3-D ``fem`` warn with
         :class:`~groundfield.solver.InterfaceContactWarning` too. With an
         ``fem`` engine there is no such finding for a world that its
         axisymmetric model takes (``FemOptions.model`` ``"auto"`` or
