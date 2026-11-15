@@ -90,22 +90,39 @@ its core, which is not an overlap. The stretch must exceed ten touching
 distances and 5 % of the shorter conductor, so a branch leaving its main
 at more than about half a degree, a crossing and a T-contact are not
 reported, and neither are cables drawn exactly at the touching distance
-(within 1e-9 of it: round-off, audit W3B-03). The generated networks
-report none: the service drops that leave one tap in one direction, the
+(within 1e-9 of it, or within 16 units in the last place of the
+coordinates where that is more: round-off, also at projected coordinates;
+audits W3B-03, W3R2B-02). The generated networks report none, also with
+placement jitter (star and radial networks of 5 … 200 houses, `jitter_m`
+0 … 0.1 m): the service drops that leave one tap in one direction — the
 drops of houses behind each other in the radial networks and in star
-networks such as the 10-house star (five drops from the substation), lie
+networks such as the 10-house star (five drops from the substation) — lie
 side by side at the touching distance since decision D9, so that only
-neighbours touch. Up to then they lay on one axis and every pair was
-reported (radial networks of 5 / 10 / 80 / 200 houses: 10 / 20 / 31 /
-247 pairs, the 10-house star 10, the 80-house star with commercial sites
-2; audit W3B-05).
+neighbours touch. Drops that are not exactly parallel (jitter) are laid
+along one common normal, and a drop that would lie closer than touching
+to a drop of a row joins the row (audit W3R2B-01). Up to D9 the drops lay
+on one axis and every pair was reported (radial networks of 5 / 10 / 80 /
+200 houses: 10 / 20 / 31 / 247 pairs, the 10-house star 10, the 80-house
+star with commercial sites 2; audit W3B-05); up to W3R2B-01 a jitter of
+1 nm put them back on one axis (the 10-house radial network: 19 pairs).
+
+With a bare PEN (`coupling_to_soil="galvanic"`) the drops of a row are
+close wires (`proximity` "close", 1 … 4 cm apart), and a drop of a row
+starts up to (n − 1)/2 touching distances off its tap (2 cm in a row of
+five), next to the wire it leaves there. Without an engine `diagnose()`
+warns about those starts as "interpenetrating" against the substation ring
+(the 10-house radial network: 9 pairs at axis distances of 0.5 … 5.0 mm,
+5 pairs at 5.0 mm with the drops on one axis) and about the neighbours of
+a row as "close"; with the default engine (the image family's line
+kernel, which integrates near pairs) all of them are information (audit
+W3R2B-07).
 
 ## The warnings you will meet most often
 
 | Warning | Meaning | What to do |
 |---|---|---|
 | `UserWarning` "resolution: … shorter than segment_length" | an electrode feature is shorter than the segment length; the discretiser falls back to its minimum | refine `segment_length`, or accept it for small parts that do not matter |
-| `UserWarning` "… above the layer interface … less than 2×segment_length" | a wire lies close to the soil-layer interface | refine `segment_length` near the interface |
+| `UserWarning` "image_2layer: deepest segment ends … above the layer interface … less than 2×segment_length" (`image_2layer`, `kernel="point"`) | the deepest segment ends less than two segment lengths above the layer interface | refine `segment_length` near the interface, or use the default line kernel |
 | `ShallowSegmentWarning` | segments longer than four times their burial depth, with the point kernel or the `mom` family | use the image family's default line kernel, or shorter segments |
 | `SeriesTruncationWarning` | the two-layer image series stopped at `image_max_terms` before reaching its tolerance (strong contrast, $\lvert K\rvert \to 1$) | raise `Engine(image_max_terms=...)` |
 | `UniformCurrentFieldWarning` | touch or step voltages from the image backend next to grids, meshes, stars, strips or bonded clusters | use `backend="mom"` for field quantities (tutorial [T08](../tutorials/T08_touch_and_step_assessment.ipynb)) |

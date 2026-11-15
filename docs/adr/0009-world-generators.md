@@ -302,7 +302,12 @@ Findings 10.05, 10.12–10.14, 10.17, 10.38, 10.39, 10.53–10.55, 10.69 and
    also in nested specs; `sample_world(rng)` routes the per-site draws of
    the build to `rng`; the penetration mask is keyed by the outline when
    a footprint has no `osm_id`; `jitter_m` accepts a distribution
-   (10.53, 10.55).
+   (10.53, 10.55). Successive `build()` / `plan()` calls draw successive
+   realisations of the generator's stream; `TnNetworkGenerator.build()`
+   right after `plan()` (no `rng=`, nothing drawn since, the same
+   configuration) materialises the plan `plan()` returned instead of
+   drawing a second realisation, which differs under placement jitter
+   (audit W3R2B).
 4. **Geometry.** Layout foundations follow the building footprint (10.54);
    rotated mesh foundations are polylines split at every crossing (10.39);
    every rectangular foundation is one wire per line at every angle (audit

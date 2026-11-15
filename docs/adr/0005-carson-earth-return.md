@@ -590,14 +590,21 @@ Findings 10.20 (F32), 10.46 and 10.63.
    1 kHz, 100 Ω·m) it overstates the earth return of a generated LV
    network. Against `sommerfeld` with a refined discretisation (PEN in
    2.5 m pieces, 1 m segments; the default `sommerfeld` agrees with it to
-   8e-5 … 4e-4), the input impedance of the generated star (100 houses) and grid
+   4e-5 … 1e-3, 1e-3 for the 5-house radial network), the input impedance
+   of the generated star (100 houses) and grid
    (100 and 50 houses) networks with an insulated Neumann PEN reads X
    +9.3 … +14.9 % and R +5.5 … +10.9 % high at 1 kHz under
    `carson_series`; over the generated star, radial and grid networks of
-   5 … 100 houses (100 Ω·m and 30 … 200 Ω·m) X is 4 … 21 % and R 2 … 11 %
-   high at 1 kHz and X 21 … 44 % high at 50 Hz (audit W3B-02; the 10-house
-   radial network +20 % / +41 %, the 30-house star +17 % / +44 % at 1 kHz /
-   50 Hz, where `perfect_mirror` reads +38 % / +40 % and +26 % / +37 %).
+   5 … 100 houses (100 Ω·m and 30 … 200 Ω·m) X is 4 … 21 % and R up to 11 %
+   high at 1 kHz and X 21 … 50 % and R up to 0.9 % high at 50 Hz (audits
+   W3B-02, W3R2B-03; at 1 kHz / 50 Hz the 5-house radial network
+   +13 % / +31 %, the 10-house radial network +20 % / +41 %, the 30-house
+   star +17 % / +44 %, the 80-house radial network +19 % / +50 %; R of the
+   100-house radial network +11 % / +0.9 %). `perfect_mirror` reads
+   +38 % / +40 % (10-house radial), +26 % / +37 % (30-house star),
+   +36 % / +41 % (80-house radial) and +44 % / +45 % (5-house radial), so
+   at 50 Hz `carson_series` is no closer than `perfect_mirror` except for
+   the 5-house radial network.
    This error changes with the geometry. A change of
    the network is therefore reproduced by `carson_series` only to within
    that error: across the cabinet fix of audit W1B-01/02 the star's X
