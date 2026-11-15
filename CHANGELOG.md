@@ -1297,7 +1297,7 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - Distributed conductors: a conductor exceeding a whole number of pieces only by
   floating-point noise gets no extra piece (the rule of electrode wires, 10.32). A 60 m
   counterpoise at UTM: 7 → 6 pieces. Test:
-  `test_projected_coordinates.py::test_distributed_conductor_pieces_do_not_depend_on_the_position`.
+  `tests/test_projected_coordinates.py::test_distributed_conductor_pieces_do_not_depend_on_the_position`.
 
 ### Corrections to the 0.15.0 release notes
 
