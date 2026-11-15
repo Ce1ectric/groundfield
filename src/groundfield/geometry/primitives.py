@@ -324,16 +324,61 @@ def _continues_straight(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> bool:
     return height <= tol + _COLLINEAR_FLOOR_M
 
 
+def _on_chord(vertices: Sequence[np.ndarray]) -> bool:
+    """Whether every interior vertex lies on the chord of a vertex chain.
+
+    The chord runs from the first to the last of ``vertices``; every vertex
+    between them must lie on it up to the round-off of the coordinates of
+    the chain (:data:`COLLINEAR_ROUNDOFF_ULPS`). For three vertices this is
+    the height test of :func:`_continues_straight`, bit for bit.
+
+    Parameters
+    ----------
+    vertices
+        Consecutive vertices in m, each of shape ``(3,)``; at least three.
+
+    Returns
+    -------
+    bool
+        ``True`` when no interior vertex is farther from the chord than the
+        tolerance.
+    """
+    a, c = vertices[0], vertices[-1]
+    ac = c - a
+    scale = _coordinate_scale(*vertices)
+    tol = COLLINEAR_ROUNDOFF_ULPS * float(np.finfo(float).eps) * scale
+    if len(vertices) == 3:
+        height = float(np.linalg.norm(np.cross(vertices[1] - a, ac))) / float(
+            np.linalg.norm(ac)
+        )
+        return height <= tol + _COLLINEAR_FLOOR_M
+    inner = np.asarray(vertices[1:-1], dtype=float) - a
+    heights = np.linalg.norm(np.cross(inner, ac), axis=1) / float(np.linalg.norm(ac))
+    return bool(np.all(heights <= tol + _COLLINEAR_FLOOR_M))
+
+
 def _straight_runs(
     edges: Sequence[tuple[Sequence[float], Sequence[float]]], *, closed: bool
 ) -> list[int]:
     """Wire index of every edge of a polyline: one per straight run.
 
-    Consecutive edges that continue in the same direction (their common
-    vertex on the chord of the two outer ones up to round-off,
-    :func:`_continues_straight`) belong to one straight wire; a closed
-    polyline also joins its last edge to its first. The wires are numbered
-    in the order of their first edge, so the first edge is on wire 0.
+    A straight wire grows edge by edge while every interior vertex of the
+    run lies on the chord from the run's first vertex to the end of the
+    candidate edge up to the round-off of the coordinates
+    (:func:`_on_chord`), and the candidate edge does not turn back; a
+    closed polyline also joins its last run to its first under the same
+    test. The wires are numbered in the order of their first edge, so the
+    first edge is on wire 0.
+
+    Up to audit W1R2-05 of the calendar release each vertex was tested
+    against the chord of its two neighbours only: a vertex next to a
+    near-duplicate one, or a finely sampled arc, has a tiny height over
+    that chord, so at projected (UTM) coordinates, where the tolerance is
+    0.46 um, a square outline with a second vertex 0.1 um from a corner
+    became 3 wires (two perpendicular sides on one) and a quarter arc of
+    R = 2 m in 1 mm edges one straight wire. The chord of the whole run
+    bounds the deviation of every vertex, so no run straightens a bend
+    larger than the tolerance.
 
     Parameters
     ----------
@@ -352,15 +397,29 @@ def _straight_runs(
         for start, end in edges
     ]
 
-    def continues(prev: tuple, nxt: tuple) -> bool:
-        return _continues_straight(prev[0], nxt[0], nxt[1])
+    def forward(prev: tuple, nxt: tuple) -> bool:
+        # the candidate edge does not turn back at the common vertex
+        return float(np.dot(nxt[0] - prev[0], nxt[1] - nxt[0])) > 0.0
+
+    def run_holds(run: Sequence[int]) -> bool:
+        chain = [pts[k][0] for k in run] + [pts[run[-1]][1]]
+        return _on_chord(chain)
 
     wire = [0] * len(pts)
+    first = 0  # first edge of the current run
     for k in range(1, len(pts)):
-        wire[k] = wire[k - 1] if continues(pts[k - 1], pts[k]) else wire[k - 1] + 1
-    if closed and len(pts) > 2 and wire[-1] != 0 and continues(pts[-1], pts[0]):
+        if forward(pts[k - 1], pts[k]) and run_holds(range(first, k + 1)):
+            wire[k] = wire[k - 1]
+        else:
+            wire[k] = wire[k - 1] + 1
+            first = k
+    if closed and len(pts) > 2 and wire[-1] != 0 and forward(pts[-1], pts[0]):
         last = wire[-1]
-        wire = [0 if w == last else w for w in wire]
+        joined = [k for k, w in enumerate(wire) if w == last] + [
+            k for k, w in enumerate(wire) if w == 0
+        ]
+        if run_holds(joined):
+            wire = [0 if w == last else w for w in wire]
     return wire
 
 
