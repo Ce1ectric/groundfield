@@ -14,36 +14,16 @@ candidates* stay on the page of that pass in the [audit history](audit/index.md)
 
 ## Scheduled for the next release
 
-Decided on 2026-11-08 together with the release of 2026.11.0 (the questions
-and answers are listed on the [pass-10 page](audit/pass-10.md#decisions-on-the-questions-left-open-2026-11-08)).
-Each item that changes numbers comes with its own validation.
+Nothing is scheduled yet. The items decided on 2026-11-08 for the release
+after 2026.11.0 (the questions and answers are listed on the
+[pass-10 page](audit/pass-10.md#decisions-on-the-questions-left-open-2026-11-08))
+were moved into 2026.11.0 itself on 2026-11-14 and are done.
 
-- **A conforming finite-element model in `fem`.** `fem` reduces every
-  cluster to an equivalent hemisphere. 2026.11.0 guards the reduction with
-  rules (more conductive layers above or below the hemisphere, the depth
-  ranges of the hemisphere formulas, electrodes out of the soil) and
-  documents its error ranges, yet every audit round found new limit cases:
-  an interface 1 cm below a deep ring reads +191 … +308 % without a
-  message, a rod that reaches 1 µm … 8 cm into a more conductive top layer
-  −44 … −78 % with a warning only ([known limitations](reference/known-limitations.md#backends)).
-  The reduction gets no further rules (user decision Q37). The next release
-  replaces it by a conforming axisymmetric finite-element model of the
-  electrode in its layers: a rod on the axis, a ring around it and a ring
-  with a central rod are modelled as they are; `fem` refuses every other
-  electrode (strips, rectangles, meshes, several rods such as the AP1
-  station) until a full 3-D volume method exists (deferred, see below).
 ## Left open by 2026.11.0
 
 The work of release 2026.11.0 left these items open on purpose. Where an item
 limits a result, the reference documentation states the limit.
 
-- **`fem` beyond the equivalent hemisphere.** `fem` is experimental: it reduces
-  every cluster to an equivalent hemisphere, lumps distributed and inductive
-  conductors, returns the current of a two-terminal source through remote
-  earth and does not support junction nodes (10.23, 10.74). The reduction
-  gets no further rules; a conforming axisymmetric model replaces it in the
-  next release (see above, user decision Q37), and a full 3-D volume method
-  remains deferred (see below).
 - **A current that varies along each wire in the image family.** Since user
   decision Q30 every straight wire of an electrode carries one uniform
   current per unit length. The arms of a star carry equal currents by
@@ -66,17 +46,6 @@ limits a result, the reference documentation states the limit.
   of the house spacing, X at 1 kHz about −20 %). A rule that moves the cabinet continuously
   with the group's geometry would remove the step; the plan's `cabinet_rule` /
   `centroid_ray_gap_m` show meanwhile where a study crosses it.
-- **The coordinate check in `fem`.** The rebuilt `fem` should warn about worlds that
-  mix projected and local coordinates at the solve like the other backends
-  (`MixedCoordinatesWarning`, user decision D5); `diagnose()` reports such worlds for
-  every backend already.
-- **Overlapping concrete shells at junctions.** Where the wires of an
-  encased foundation meet (the corners of a rectangle, the crossings and
-  T-joints of a mesh), their shells overlap within about $r_b$ of the
-  junction and each wire counts the shared concrete as its own
-  ([known limitations](reference/known-limitations.md#backends)). The
-  effect is local; it will be quantified once a 3-D volume reference is
-  available (user decision Q40).
 - **Line form of the field of lower-layer sources.** `FieldResult.potential`
   and `solve_mutual_field` evaluate sources in the lower layer with the
   spectral point kernel; the reaction matrix uses the line form since
@@ -108,6 +77,11 @@ limits a result, the reference documentation states the limit.
   reduced kernel so that homogeneous worlds stay as they are in 2026.11
   (applied to it, homogeneous house grids would move by +3.9e-7 at 0.8 m,
   +8.8e-7 at 0.5 m and +1.7e-5 at 0.1 m).
+- **A finer 3-D `fem` for groups.** The 3-D model refuses the house mesh at
+  its defaults (`max_nodes_3d`) and needs about 3 GB per million nodes; a
+  third level with the observed order of convergence (instead of the assumed
+  second order) would tighten its 2e-3, and per-feature grading or a
+  matrix-free multigrid would reach foundations and groups at the defaults.
 
 ## Status of the roadmap items carried in the changelog
 
@@ -115,8 +89,8 @@ limits a result, the reference documentation states the limit.
 |---|---|
 | Vectorise the ADR-0007 cross-layer Sommerfeld path | done in 2026.11.0: the spectral amplitudes in closed form (1.6 … 2.0 × at the AP1 station, round-off); the path was grouped by depth since 2026-07-08, the remaining cost is the `J0` contraction |
 | Exact buried two-layer inductive kernel for `n ≥ 3` layers | done in 2026.11.0: the Sommerfeld kernel uses generalised reflection coefficients for any number of layers and any layer (10.35) |
-| FEM support for distributed conductors | open (`fem` is experimental, 10.23) |
-| Full-3-D FEM backend | deferred; a conforming axisymmetric model replaces the equivalent-hemisphere reduction of `fem` in the next release (user decision Q37) |
+| FEM support for distributed conductors | done in 2026.11.0: isolated chains in both `fem` models, galvanic ones in the 3-D model (every leaking piece a port) |
+| Full-3-D FEM backend | done in 2026.11.0: the 3-D model of `fem` (scikit-fem + pyamg as the optional `fem3d` extra; no separate backend; user decisions Q37, D6) |
 | Scaling the integral solvers to ~10 000 segments | partly: the image-family kernels need memory linear in the segment count, the cross-layer path included (10.56); the dense LU solve remains |
 | `ParameterSweep` API | partly: `sweep(..., n_jobs=...)` runs the sweep in a process pool (10.64) |
 | TN-Ortsnetz topology generator | implemented in 0.7.0; service drops keep the shortest connection (user decision Q42), cabinets per building group (user decisions Q22, Q35) |

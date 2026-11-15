@@ -29,8 +29,7 @@ shows what agrees with independent references and how well.
   sources without internal resistance that form a loop (through ideal
   bonds or remote earth) are rejected, also when one of them has an
   inductance (it vanishes at $f = 0$; `World.check` does not know the
-  frequencies); `fem` does not solve voltage sources
-  (`BackendCapabilityError`).
+  frequencies).
 - **Not computed:** the inductive reduction factor of cable screens and
   earth wires; mutual impedances (`BranchType`) for groundinsight — one
   `BusType` describes one terminal.
@@ -45,7 +44,7 @@ shows what agrees with independent references and how well.
   and `sommerfeld` does not finish; audit W2B-04). Its round-off is that of the UTM
   world (1.5e-11 instead of 1.0e-11, point kernel). Since 2026.11 the solve warns with
   `MixedCoordinatesWarning` and `diagnose()` reports it under `coordinates` (user
-  decision D5); `fem` does not run the check at the solve. A world wholly in
+  decision D5). A world wholly in
   projected or wholly in local coordinates is never warned about at the solve;
   `diagnose()` reports one wider than 100 km as information. The rule is a point
   within 10 km of the origin together with one beyond 1000 km: a stray point between
@@ -162,19 +161,25 @@ shows what agrees with independent references and how well.
 
 ## Soil layers
 
-- **Three or more layers** are solved only by `mom_sommerfeld` (and the
-  experimental `fem`). `FieldResult.potential` — and with it touch and
+- **Three or more layers** are solved only by `mom_sommerfeld` (and `fem`). `FieldResult.potential` — and with it touch and
   step voltages, potential plots, potential-path CSV and the VTK field
   export — supports homogeneous and two-layer soil only and raises
   `NotImplementedError` for three or more layers.
 - **Rod ends at a layer interface.** The thin-wire model has no end
   face, so the contact of a rod end with the layer beyond is all or
-  nothing: against an axisymmetric model of the solid rod (4.5 m,
-  $a$ = 8 mm, 1000 / 30 Ω·m) the thin wire reads +21 % with its tip at
-  the interface, +7 % 1 mm above it and −4.6 % 1 mm below it (within a
-  few per cent beyond two wire radii). A rod head or tip within one wire
+  nothing: against the conforming `fem` model and a finite-volume model of
+  the solid rod (4.5 m, $a$ = 8 mm, 1000 / 30 Ω·m) the thin wire reads +22 %
+  with its tip at the interface, +7.2 % 1 mm above it and −4.4 % 1 mm below
+  it (+3.3 % / +2.1 % 16 mm above / below). A rod head or tip within one wire
   radius of an interface warns with `InterfaceContactWarning` and is
   listed by `diagnose()` (`interface_contact`).
+- **A ring within a few wire radii of an interface.** The thin-wire engines
+  take the current on the wire axis; next to a strongly contrasting
+  interface the current crowds to the wire's near side. A ring (r = 2 m,
+  $a$ = 5 mm) 1 cm above a 30 Ω·m layer under 1000 Ω·m reads +3.6 % in
+  `image_2layer` against the conforming `fem` model (the solid torus), which
+  is the exact thin ring since audit W3A-02 (+5.2 … +5.4 % before); +0.18 %
+  over a more resistive layer, ≤ 0.02 % at 10 cm.
 - **High layer contrast.** The Tagg/Sunde series converges like
   $\lvert K\rvert^n$; the default cap of 300 terms covers
   $\lvert K\rvert = 0.94$ and warns (`SeriesTruncationWarning`) beyond.
@@ -218,59 +223,56 @@ shows what agrees with independent references and how well.
 
 ## Backends
 
-- **`fem` is experimental.** It replaces every cluster by an equivalent
-  hemisphere: biased for clusters with several electrodes (−35 % for a
-  2 m ring with three 4 m rods), blind to the coupling between clusters,
-  and off where a layer interface lies within the electrode, the
-  hemisphere or the electrode's horizontal extent. It raises when an
-  electrode touches a layer its hemisphere does not reach, when more than
-  half of the hemisphere lies in a layer the electrodes do not touch, and
-  when a more conductive layer that no electrode touches lies above the
-  hemisphere radius or — with no more resistive layer in between — above
-  the electrodes' horizontal half-extent (user decision Q23; −97 … +30 %
-  before, a structural rule that also rejects near-equal layers such as
-  100 over 120 Ω·m). It warns and is off by −3 … +48 % where a spanned,
-  untouched layer is more resistive, −17 … +16 % for a more resistive
-  layer within the half-extent, −10 … +46 % for a conductive layer there
-  behind a more resistive one, −44 … −78 % for a rod that reaches
-  1 µm … 8 cm into a more conductive top layer, −21 … +30 % for a ring
-  lying exactly on an interface and −55 … −75 % for two bonded rods of
-  which one reaches into a more conductive top layer. Just beyond the
-  half-extent it is silent at −10.3 … −0.3 % (rings), and an interface
-  just below a horizontal electrode buried about as deep as its
-  half-extent or deeper, deeper than the hemisphere radius and the
-  half-extent, is covered by no rule (+34 % for a 2 m ring 0.1 m above it
-  in 1000/30 Ω·m, +250 % 7 mm above it; rings 1 cm above such an
-  interface: +191 … +308 % over a more conductive layer, −27 … −14 % over
-  a more resistive one). Its closed forms: a strip deeper than half its
-  length, a ring deeper than its diameter and a driven `MeshElectrode`
-  raise; Dwight's rod formula ignores the depth of the rod head
-  (+0.8 … +15 % for 1 … 20 m rods with the head 0.5 … 10 m deep) and
-  Sverak's grid formula reads high, the more the smaller the grid
-  (+51 … +67 % for a 1 m grid, +14 … +39 % for 4 m, +6.5 … +17 % for
-  20 m). `Engine.solve` reports the size of `fem` worlds in segments of
-  the integral engines, which `fem` does not use (2 400 mesh nodes per
-  driven cluster in homogeneous soil, up to about 4 100 with a 30 m and
-  6 200 with a 1 km layer stack), and `fem` does not refuse a world above
-  `Engine.max_segments`. It ignores inductance, `return_to`, junctions and
-  concrete shells (`BackendCapabilityWarning` or `BackendCapabilityError`;
-  `groundfield.solver.fem`). Generated rectangular foundations without
-  cross-braces are four bonded strips (user decision Q38): their radii are
-  summed (−32 % for a 10 m square ring in 100 Ω·m, +21 % as one grid
-  before), the layer rule takes half a side as their half-extent, so three
-  layered worlds that the grid form refused are solved with the warning
-  only (−42 … −58 %), and a rectangle with a side shorter than twice its
-  depth is refused. The reduction gets no further rules; the next
-  release replaces it by a conforming axisymmetric model
-  ([roadmap](../roadmap.md#scheduled-for-the-next-release), user decision
-  Q37).
+- **`fem` is experimental.** It has two conforming models (ADR-0016);
+  `FemOptions.model = "auto"` takes the axisymmetric one wherever it applies
+  (user decision Q37). *Axisymmetric* — rods on one vertical axis and
+  horizontal rings centred on it, solved as the solid bodies they are in any
+  horizontally layered soil, bare or encased: port resistances agree with
+  independent references to about 1e-4 at the default; the reported error
+  estimate bounds the finer of the two meshes and overestimates the
+  extrapolated value about ten- to a hundredfold. A concrete shell enters as
+  the surface conductance $1/(2\pi r_b C)$ (exact for a cylindrical shell). A
+  ring wire must lie 5 % of its radius below the surface (the thin-wire
+  engines accept $2z > a$). Eight rings with a central rod need about a
+  million nodes and 17 s; `FemOptions.max_nodes` (4 million) refuses larger
+  meshes. *Three-dimensional* — every other world, with the optional extra
+  `fem3d` (without it `ImportError`): the wires are thin wires like those of
+  the integral engines (a smoothed line source with an analytic radius
+  correction: uniform around the wire, no end faces), the soil an isotropic
+  tetrahedral mesh with immersed layer interfaces. It agrees with the
+  axisymmetric model to 2e-3 for rods and rings in one to three layers; its
+  two mesh levels are not asymptotic for every geometry (error ratios
+  3.0 … 5.2), so the reported error estimate (3 … 5e-3) bounds the error
+  rather than measuring it and differences below about 2e-3 are not
+  resolved. The AP1 station (28 m of wire) takes 1.5 … 3 minutes and
+  3.6 … 4.4 GB; `FemOptions.max_nodes_3d` (2 million nodes of the finer mesh,
+  about 3 GB per million) refuses larger meshes before they are built, the
+  house mesh of the generators (60 m) at the defaults included (it solves at
+  `source_radius = 0.1`, `growth = 0.6`: 1.5 million nodes, 1.5 minutes,
+  4.6 GB). `fem` is a reference for single clusters and small groups, not for
+  networks. A horizontal wire within $R/0.8$ of the soil surface or a layer
+  interface ($R$ = `source_radius`, 6 cm) gets a smaller disc and a finer
+  mesh; one within about 2.8 wire radii is refused
+  (`BackendCapabilityError`). Resolved concrete (`concrete_resistivity`)
+  needs straight axis-parallel encased wires and converges at first order
+  (its per-metre shell conductance reads 2.8 … 4.6 % high at the default
+  levels); it serves differences on one mesh (user decision Q40), not the
+  shell term itself. Like every backend, `FieldResult.potential` of a `fem`
+  result supports homogeneous and two-layer soil only.
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are represented by the image
-  family, `solve_mutual_*`, `mom` and `mom_sommerfeld` (`fem` rejects them). Each wire
-  carries its own radial shell; where wires meet — the corners of a ring, the crossings
-  and T-joints of a mesh foundation, whose braces are encased since 2026.11 — the
-  shells overlap within about $r_b$ of the junction and each wire counts the shared
-  concrete as its own (a local effect, not quantified separately; it will be quantified
-  once a 3-D volume reference is available, user decision Q40).
+  family, `solve_mutual_*`, `mom` and `mom_sommerfeld`, and `fem` (each wire its own
+  shell; the axisymmetric model as a surface conductance, the 3-D model as a radial
+  resistance per length). Each wire carries its own radial shell; where wires meet —
+  the corners of a ring, the crossings and T-joints of a mesh foundation, whose braces
+  are encased since 2026.11 — the shells overlap within about $r_b$ of the junction and
+  each wire counts the shared concrete as its own. Against the concrete resolved as a
+  volume in the three-dimensional `fem` model (user decision Q40; 5 mm bar, 5 cm cover,
+  1 000 and 5 000 Ω·m concrete in 100 Ω·m soil) every junction acts like at most about
+  $r_b$ of wire, more or less: a corner like 1.5 cm less wire (an L of two 2 m arms
+  reads 0.35 % low), a crossing like 3 … 6 cm less, a T-joint within ±5 cm (sign not
+  resolved); the house mesh of the generators (60 m, nine junctions) changes by less
+  than 0.6 %. The resolved concrete converges at first order, so these numbers carry a
+  few centimetres; no correction is applied.
 - **Aliases.** `cim`, `bem` and `image_nlayer` run `image` and `mom`;
   comparing them with their targets adds no independent information.
 

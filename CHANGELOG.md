@@ -126,6 +126,7 @@ reproduces 0.15.0, it is named.
 | 10.22 (Q30), audit W1R2-05 | straight runs at projected coordinates | arc-like polylines at UTM coordinates with vertices less than 0.46 µm off their neighbours' chord (audit W1R3-04), e.g. a 2° arc electrode +1.27 % → +5.5e-4 against the local origin | worlds at absolute UTM coordinates |
 | D2, W2B-01/-02, 10.28 (wave 3, stream `w3xl`) | line kernel: blended near/far switch, far form with the radius term, far images with the quadrupole term, cross-layer correction in line form | homogeneous: ≤ 7.8e-7 (golden), the 12 m strip of W2B 1e-7 … 1e-6; two layers: house grids 3e-6 … 1.8e-4, wires near the interface up to 6.2e-4 (audit W3A-04), surface potentials near the interface up to 0.9 %; cross-layer: rods ≤ 4e-4, the AP1 station −4e-5 (40 %); golden `line_*`, `defaults_rod_hom`, `defaults_mixed_cluster_inductive`, `defaults_two_layer_ring_auto` up to 6.0e-4 | every line-kernel result (the default of the image family); not `kernel="point"`, not the `mom` family |
 | W3A-02 (wave 3, stream `fw3xl`) | image pairs at the transverse distance, no radius term on far images, symmetric image corrections | rings and wires within 1 cm … 0.5 m of an interface up to −1.6 % (the ring 1 cm above 1000/30); 0.4 … 0.7 m above −1.2e-6 … −4.7e-6; ≥ 1 m above < 2e-7; homogeneous soil and `kernel="point"` unchanged; golden `line_img2_ring_rods_within_layer` 3.2e-7, `defaults_two_layer_ring_auto` 9.4e-8, `line_mutual_two_layer` 1.7e-8, `line_img2_rod_crosslayer` 1.0e-8 | line-kernel results in two-layer soil (the default) |
+| Q37, Q40 (wave 4, streams `w4axi`, `w4fem3d`) | `fem` conforming (axisymmetric and 3-D) instead of the equivalent hemisphere | every `fem` result: the stored 3 m rods −4.65 % / −4.57 %, the B2 rod / B3 ring −0.70 % / −0.35 %, a ring with a bonded central rod +20 %, a ring 1 cm above a conductive layer −67 %, a rod 2 cm into a conductive top layer +164 %; worlds refused before (strips, grids, meshes, the AP1 station, several clusters, galvanic conductors) are solved; golden `fem_rod_hom`, `fem_rod_two_layer_deep` | anyone using `fem` as a check |
 | roadmap *Vectorise the ADR-0007 path* (wave 3) | spectral amplitudes in closed form | round-off: ≤ 2.5e-16 (golden), ≤ 4.3e-16 (station Z) | cross-layer worlds, `two_layer_probe_matrix`, every backend through `layered_green` |
 | Q34 (wave 3, stream `w3perf`) | `sommerfeld` self terms and close pairs | lumped 1 km PEN 4.9e-7; segments of 5–20 m 1e-9 … 2e-8; a lumped 2 km conductor 1e-4 of the earth-return part; golden `cond_lumped_long_pen_sommerfeld`, `cond_isolated_pen_sommerfeld_two_layer`, `cond_overhead_lead_over_pen_carson_series`, `cond_galvanic_neumann_sommerfeld`, `defaults_mixed_cluster_inductive` 8e-10 … 4.9e-7 | every world with `sommerfeld` or the Sommerfeld fallback of `carson_series` |
 | audit W1R3-07 (wave 3, stream `w3perf`) | `carson_series`: tilted pairs that come close tiled per stretch | up to 5e-2 of X for a core crossing its shield at 4e-2 rad; generated networks up to 3e-7 (the 10-house star with sites 2.8e-7, the 80-house radial 3.4e-8; audit W3B-07) | worlds with tilted near-parallel pairs that touch or cross, under `carson_series` |
@@ -525,6 +526,42 @@ reproduces 0.15.0, it is named.
   `metadata["series"]["far_field"]` and used by `FieldResult.potential` and
   `solve_mutual_*`; `create_engine(image_far_field=...)`. Test:
   `tests/test_image_far_field_option.py`.
+
+- ⚠ **`fem` is a conforming finite-element model (user decisions Q37, Q40;
+  ADR-0016).** The equivalent-hemisphere reduction is gone. *Axisymmetric
+  model* (no new dependency): rods on one vertical axis and horizontal rings
+  centred on it are solved as the solid bodies they are (cylinder with flat
+  end faces, torus), in any number of horizontal layers, bare or with a
+  concrete shell, each electrode one port; linear triangles on a graded
+  tensor mesh conforming to every electrode surface and layer interface, an
+  O-grid around the ring wire, the monopole Dirichlet-to-Neumann condition on
+  a box 1000 lengths away, the port conductance matrix extrapolated from two
+  nested levels; within about 1e-4 of independent references at 0.2 … 2 s per
+  solve. *Three-dimensional model* for every other world (strips, polylines,
+  stars, meshes, grids, rods and rings side by side, several clusters with
+  their transfer resistances, galvanic distributed conductors with every
+  leaking piece a port): smoothed line sources with an analytic radius
+  correction in an isotropic tetrahedral mesh refined towards them, partially
+  penalised immersed layer interfaces, conjugate gradients with an algebraic
+  multigrid, two nested levels extrapolated; within 2e-3 of the axisymmetric
+  model for rods and rings in one to three layers; the AP1 station in the
+  corner soils of the AP1 grid lies between `image_2layer` (+0.7 … +3.0 %) and
+  `mom` (−0.4 … −0.9 %), at 1.5 … 3 minutes and 3.6 … 4.4 GB per solve. It
+  needs the optional extra `fem3d` (scikit-fem, BSD-3; pyamg, MIT;
+  `pip install "groundfield[fem3d]"`, decision D6) and raises `ImportError`
+  naming it otherwise. Both models run the network of the shared pipeline:
+  concrete shells, junctions, two-terminal and voltage sources, lumped and
+  distributed conductors, inductive branches and the skin effect at every
+  frequency, and the coordinate check of decision D5. `FemOptions`:
+  `model` (`"auto"`, `"axisymmetric"`, `"3d"`), `refinement`, `extrapolate`,
+  `max_nodes`, `source_radius`, `growth`, `concrete_resistivity`,
+  `max_nodes_3d`; metadata `fem_port_resistance`, `fem_ports`,
+  `fem_error_estimate`, `fem_mesh`, `fem_model` and more. Against the
+  concrete resolved as a volume (Q40) every junction of encased wires acts
+  like at most about $r_b$ of wire (a corner −1.5 cm, a crossing −3 … −6 cm,
+  a T-joint within ±5 cm); the generators' house mesh changes by less than
+  0.6 %, so no correction rule is applied. Tests: `tests/test_fem.py`,
+  `tests/test_fem_3d.py`.
 
 ### Changed
 
@@ -1078,6 +1115,14 @@ reproduces 0.15.0, it is named.
 - `PenetrationDepth` compares by value and is hashable; its arrays are
   read-only copies (audit W3B-11).
 
+- ⚠ Every `fem` number changes (golden `fem_rod_hom` −4.65 %,
+  `fem_rod_two_layer_deep` −4.57 %: Dwight's rod ignored the head depth);
+  `FemOptions`: `n_radial`, `n_axial`, `z_far_factor` removed (2026.11
+  names), `r_far_factor` measures a box in characteristic lengths (default
+  1000), `far_field="dirichlet"` grounds the box; `fem`'s point sources count
+  against `Engine.max_segments`. Benchmark B1 checks `fem` against Weber's
+  disc (was the hemisphere).
+
 ### Deprecated
 
 Every name below keeps working, emits a `DeprecationWarning` that names its
@@ -1110,6 +1155,11 @@ replacement, and is removed in `2027.5.0` at the earliest.
 Configurations and worlds written by 0.15.0 still load. `solve_cim` and
 `solve_bem` warn and delegate; their results carry the metadata of the backend
 that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
+
+- `groundfield.solver.fem.equivalent_hemisphere_radius` and
+  `solve_fem(n_radial=…, n_axial=…, z_far_factor=…)` (0.15.0 names; no
+  effect; removal no earlier than 2027.5). `FemReductionWarning` is kept and
+  never emitted.
 
 ### Removed
 
@@ -1663,6 +1713,14 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
   kernel, which integrates the near image (audit W3A-06); it fires for
   `kernel="point"` only. Test:
   `tests/test_audit_layer2.py::test_w3a_06_no_near_interface_discretisation_warning_for_the_line_kernel`.
+
+- The limit cases of the equivalent-hemisphere `fem`: a ring 1 cm above an
+  interface (+191 … +308 %, silent), a rod reaching 1 µm … 8 cm into a more
+  conductive top layer (−44 … −78 %, warning), a ring exactly on an interface
+  (−21 … +30 %), rods through an interface, clusters with several electrodes
+  (radii summed, −35 %) and several clusters (no coupling) are solved within
+  1e-4 (axisymmetric) or 2e-3 (3-D) of independent references (user decision
+  Q37). Tests: `tests/test_fem.py`, `tests/test_fem_3d.py`.
 
 ### Corrections to the 0.15.0 release notes
 

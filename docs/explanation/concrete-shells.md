@@ -57,9 +57,11 @@ $$
 
 for every electrode kind, homogeneous or layered soil, in `Engine.solve`
 and in `solve_mutual_matrix` alike
-(`tests/test_concrete_shell_coefficient.py`). `fem` rejects electrodes
-with a non-zero coefficient (`BackendCapabilityError`); so did `mom` and
-`mom_sommerfeld` up to 2026.11 (see
+(`tests/test_concrete_shell_coefficient.py`). `fem` consumes it as well:
+its axisymmetric model as the surface conductance $1/(2\pi r_b C)$, its
+three-dimensional model as the radial resistance $C$ per length between the
+metal and its smoothed line source ([fem](engines/fem.md)). `mom` and
+`mom_sommerfeld` rejected it up to 2026.11 (see
 [In the moment method](#in-the-moment-method)).
 
 ### In the moment method
@@ -287,6 +289,49 @@ segments; at 0.5 m segments it gives 0.42 %, and `mom` with its point
 kernel puts the image family's point kernel 0.38 % above it (see
 [In the moment method](#in-the-moment-method)).
 
+The three-dimensional model of `fem` (each wire its own shell, the soil
+meshed as a volume; 1.5 million nodes; evidence of stream w4fem3d) gives
++49.1 / +318.0 % for encasing the braces of the house mesh at
+$\rho_c$ = 1 000 / 5 000 Ω·m — `mom` +49.6 / +321.3 % and the owner model
++46.9 / +307.0 % on the same world — and confirms the per-segment value
+(+49.2 / +318.5 %) to 0.1 / 0.5 points. Against it the owner model is
++1.6 / +2.7 % high with bare braces and +0.14 / +0.03 % with encased ones;
+`mom` lies 0.6 / 0.8 % and 0.2 / 0.06 % below it.
+
+### Overlapping shells at junctions
+
+Each wire carries its own radial shell; where wires meet, the shells
+overlap within about $r_b$ of the junction and each wire counts the shared
+concrete as its own. The three-dimensional model of `fem` can resolve the
+concrete instead (`FemOptions.concrete_resistivity`): a square prism of
+conformal radius $r_b$ around every straight encased wire, their union the
+concrete, on the same mesh as the per-wire shells. The resolved concrete
+converges at first order in its faces and edges (it reads the conductance
+per metre 2.8 … 4.6 % high at the default levels), so the junctions are
+read from differences between configurations of the same length and the
+same free ends — a straight 4 m bar against an L of two 2 m arms (the
+corner), straight 4 m and 8 m bars against a T and a crossing (user
+decision Q40). A 5 mm bar with 5 cm cover, 0.8 m deep in 100 Ω·m
+(evidence of stream w4fem3d), each junction as the equivalent length of
+wire (negative where the shared concrete leaks less than the overlapping
+shells):
+
+| Junction | $\rho_c$ = 1 000 Ω·m | 5 000 Ω·m |
+|---|---|---|
+| corner | −1.5 cm | −1.4 cm |
+| crossing | −6.0 cm | −2.8 cm |
+| T-joint | +0.2 cm | +3.2 cm |
+
+(The corner with the prism faces refined twice; the crossing and the
+T-joint once, at which the corner still read +3.4 / +5.7 cm, so the
+T-joint's sign is not resolved.) Every junction acts like at most about
+$r_b$ of wire. With each wire's own shell an L of 4 m reads 0.35 % low, and
+the house mesh (60 m: 4 corners, 4 T-joints, 1 crossing) is within 0.6 % of
+the resolved concrete. The image family, `mom` and the 3-D model agree on
+the per-wire shell of these configurations to 0.01 … 0.3 %. No correction
+is applied: the effect lies below the uncertainty of the concrete
+resistivity and of the resolved model.
+
 ### Against 0.15.0
 
 The release changes encased mesh foundations against 0.15.0 by the brace
@@ -469,7 +514,7 @@ encased wire.
 | Current | radial through the shell; the series decomposition holds below 1 kHz for foundation sizes |
 | Concrete | homogeneous $\rho_c$ per electrode; moisture states span about 30 Ω·m (wet) to tens of kΩ·m (dry), see ADR-0012 |
 | Field quantities | the surface potential is that of the bare wire of radius $r_b$ fed through the shell; the shell resistance itself is a series element |
-| Backends | `image`, `image_2layer`, `solve_mutual_*`, `mom`, `mom_sommerfeld` (since 2026.11); `fem` raises `BackendCapabilityError` |
+| Backends | `image`, `image_2layer`, `solve_mutual_*`, `mom`, `mom_sommerfeld` and `fem` (since 2026.11) |
 
 ## Literature
 
