@@ -77,20 +77,26 @@ def _solve(world, ds):
 
 @pytest.mark.finding("10.28")
 def test_a_straight_strip_in_two_layer_soil_is_exact_at_any_segment_length() -> None:
-    """Within 8e-7 of the closed form for 2 ... 0.125 m, monotone in ds.
+    """Within 4.5e-6 of the closed form on a fine grid of ds = 2 ... 0.125 m.
 
-    Measured: +6.8e-7, +1.2e-7, -4.1e-7, -5.4e-7, -7.7e-7 (2, 1, 0.5, 0.25,
-    0.125 m); before: +8.2e-5, -2.8e-6, +5.1e-4, +1.4e-4, -3.2e-5. The rest
-    is the quadrupole remainder of the far form, as in homogeneous soil.
+    Measured (stream fw3xl, after audit W3A-02): -1.8e-6, -1.7e-6, -2.4e-6,
+    -1.4e-6, -2.9e-6, -3.6e-6, -3.3e-6, -3.1e-6, -3.1e-6, -3.3e-6 at ds = 2,
+    1.5, 1, 0.75, 0.5, 0.4, 0.3, 0.25, 0.2, 0.125 m, not monotone (audit
+    W3A-03: the former check of monotonicity on five points did not hold on
+    this grid). The closed form takes the images axis to axis; about 2e-6 of
+    the rest is the reduced kernel the soil-surface image keeps, the rest
+    the quadrupole remainder of the far form. Before wave 3: +8.2e-5,
+    -2.8e-6, +5.1e-4, +1.4e-4, -3.2e-5 at 2, 1, 0.5, 0.25, 0.125 m; between
+    wave 3 and W3A-02 within 1.2e-6, the reduced kernel on the interface
+    images (+2.5e-6 here) offsetting the remainder.
     """
     ref = _resistance_reference()
     world = _strip_world()
     dev = [
         _solve(world, ds).cluster_impedance("s")[0].real / ref - 1.0
-        for ds in (2.0, 1.0, 0.5, 0.25, 0.125)
+        for ds in (2.0, 1.5, 1.0, 0.75, 0.5, 0.4, 0.3, 0.25, 0.2, 0.125)
     ]
-    assert max(abs(d) for d in dev) < 1.5e-6
-    assert all(b < a for a, b in zip(dev, dev[1:], strict=False))
+    assert max(abs(d) for d in dev) < 4.5e-6, dev
 
 
 def _line_potential(point, current: float) -> float:

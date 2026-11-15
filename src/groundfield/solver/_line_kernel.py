@@ -183,7 +183,12 @@ class LineSegments:
 
 
 def line_potential_pairs(
-    X: np.ndarray, A: np.ndarray, t: np.ndarray, L: np.ndarray, a2: np.ndarray
+    X: np.ndarray,
+    A: np.ndarray,
+    t: np.ndarray,
+    L: np.ndarray,
+    a2: np.ndarray,
+    transverse: bool = False,
 ) -> np.ndarray:
     """Reduced line potential ``(1/L) ∫_0^L dl / sqrt(|X - A - l t|² + a²)``.
 
@@ -203,6 +208,11 @@ def line_potential_pairs(
     a2
         Squared regularisation radius in m², shape broadcastable to
         ``(P,)``.
+    transverse
+        Use ``ρ² = max(|X - A|² - s², a²)`` (the transverse distance of
+        ``X`` from the line, floored at ``a``) instead: the potential of an
+        image line averaged over the circumference of radius ``a`` around
+        ``X`` (audit W3A-02, see :func:`galerkin_pairs`).
 
     Returns
     -------
@@ -213,7 +223,10 @@ def line_potential_pairs(
     s = np.einsum("...k,...k->...", W, t)
     w2 = np.einsum("...k,...k->...", W, W)
     L = np.broadcast_to(L, s.shape)
-    rho2 = np.maximum(w2 - s * s, 0.0) + np.broadcast_to(a2, s.shape)
+    if transverse:
+        rho2 = np.maximum(np.maximum(w2 - s * s, 0.0), np.broadcast_to(a2, s.shape))
+    else:
+        rho2 = np.maximum(w2 - s * s, 0.0) + np.broadcast_to(a2, s.shape)
     u = L - s
     R1 = np.sqrt(s * s + rho2)
     R2 = np.sqrt(u * u + rho2)
@@ -346,7 +359,7 @@ _SHORT_NODES = 0.5 * (leggauss(6)[0] + 1.0)  # 6-point rule on [0, 1]
 _SHORT_WEIGHTS = 0.5 * leggauss(6)[1]
 
 
-def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
+def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
     """Galerkin integral of (anti-)parallel segment pairs.
 
     Closed form, except for pairs with a segment shorter than
@@ -360,7 +373,8 @@ def _parallel_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
     yb = ya + Lj * np.einsum("pk,pk->p", tj, ti)
     y1 = np.minimum(ya, yb)
     y2 = np.maximum(ya, yb)
-    d = np.sqrt(np.maximum(np.einsum("pk,pk->p", w, w) - ya * ya, 0.0) + a2)
+    d_perp2 = np.maximum(np.einsum("pk,pk->p", w, w) - ya * ya, 0.0)
+    d = np.sqrt(np.maximum(d_perp2, a2) if transverse else d_perp2 + a2)
     val = _g2(Li - y1, d) - _g2(-y1, d) - _g2(Li - y2, d) + _g2(-y2, d)
     val = val / (Li * Lj)
     short_i = Li < _SHORT_PARALLEL_RATIO * d
@@ -447,7 +461,7 @@ def _closest_parameter(Ai, di, Aj, dj) -> np.ndarray:
     return s
 
 
-def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
+def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2, transverse=False) -> np.ndarray:
     """Galerkin integral of non-parallel pairs by graded quadrature.
 
     The outer integral over segment ``i`` is split at the point of
@@ -482,7 +496,12 @@ def _skew_pairs(Ai, ti, Li, Aj, tj, Lj, a2) -> np.ndarray:
             x = xs[:, None] + side * extent[:, None] * nodes[None, :]
             X = A_i[:, None, :] + x[:, :, None] * t_i[:, None, :]
             phi = line_potential_pairs(
-                X, A_j[:, None, :], t_j[:, None, :], L_j[:, None], a2_j[:, None]
+                X,
+                A_j[:, None, :],
+                t_j[:, None, :],
+                L_j[:, None],
+                a2_j[:, None],
+                transverse,
             )
             part += extent * (phi @ weights)
         total[mask] = part
@@ -494,7 +513,12 @@ _GALERKIN_CHUNK: int = 1 << 14
 
 
 def galerkin_pairs(
-    obs: LineSegments, i: np.ndarray, src: LineSegments, j: np.ndarray
+    obs: LineSegments,
+    i: np.ndarray,
+    src: LineSegments,
+    j: np.ndarray,
+    *,
+    transverse: bool = False,
 ) -> np.ndarray:
     """Galerkin integral ``K_ij`` of segment pairs in 1/m.
 
@@ -504,12 +528,24 @@ def galerkin_pairs(
         Observing and source segments (``src`` may be an image set).
     i, j
         Pair indices into ``obs`` and ``src``.
+    transverse
+        For an image set ``src``: the inner line potential at a point of the
+        observer uses the transverse distance ``max(ρ_⊥, a)`` of the point
+        from the image's axis instead of ``sqrt(ρ_⊥² + a²)`` (audit W3A-02).
+        The potential of a line averaged over a circle of radius ``a`` is
+        ``ln max(ρ, a)`` in two dimensions (the mean-value property), so an
+        image that passes the wire at ``ρ_⊥ >= a`` acts with its axis value
+        (the reduced kernel left out ``a²/(2ρ²)`` of it: 8 % of the
+        interface image of a wire 1 cm above the interface), and a collinear
+        image (``ρ_⊥ = 0``, a rod against its own image) keeps the reduced
+        kernel, which is exact there. Direct pairs and the soil-surface image
+        keep the reduced kernel.
 
     Returns
     -------
     numpy.ndarray
         ``(1/(L_i L_j)) ∬ dl dl' / sqrt(|x - y|² + a²)`` per pair, with
-        ``a² = (a_i² + a_j²)/2``.
+        ``a² = (a_i² + a_j²)/2`` (``transverse``: as described above).
 
     Notes
     -----
@@ -521,7 +557,11 @@ def galerkin_pairs(
         return np.concatenate(
             [
                 galerkin_pairs(
-                    obs, i[k : k + _GALERKIN_CHUNK], src, j[k : k + _GALERKIN_CHUNK]
+                    obs,
+                    i[k : k + _GALERKIN_CHUNK],
+                    src,
+                    j[k : k + _GALERKIN_CHUNK],
+                    transverse=transverse,
                 )
                 for k in range(0, i.shape[0], _GALERKIN_CHUNK)
             ]
@@ -533,12 +573,19 @@ def galerkin_pairs(
     par = np.abs(np.einsum("pk,pk->p", ti, tj)) > 1.0 - _PARALLEL_TOL
     if par.any():
         out[par] = _parallel_pairs(
-            Ai[par], ti[par], Li[par], Aj[par], tj[par], Lj[par], a2[par]
+            Ai[par], ti[par], Li[par], Aj[par], tj[par], Lj[par], a2[par], transverse
         )
     skew = ~par
     if skew.any():
         out[skew] = _skew_pairs(
-            Ai[skew], ti[skew], Li[skew], Aj[skew], tj[skew], Lj[skew], a2[skew]
+            Ai[skew],
+            ti[skew],
+            Li[skew],
+            Aj[skew],
+            tj[skew],
+            Lj[skew],
+            a2[skew],
+            transverse,
         )
     return out
 
@@ -815,14 +862,18 @@ def _corrections(
     min_distance: float,
     *,
     with_quadrupole: bool,
+    image: bool = False,
 ) -> np.ndarray:
     """Blended exact-minus-point values of segment or field-point pairs.
 
     ``obs`` are the observing segments (Galerkin integrals), or ``None`` for
     field points (exact line potential regularised with ``min_distance``).
+    ``image`` marks ``src`` as Tagg/Sunde or cross-layer images: their
+    Galerkin integrals use the transverse distance and their far form has no
+    radius term (audit W3A-02, :func:`galerkin_pairs`).
     """
     if obs is not None:
-        exact = galerkin_pairs(obs, i, src, j)
+        exact = galerkin_pairs(obs, i, src, j, transverse=image)
     else:
         exact = line_potential_pairs(
             obs_mid[i],
@@ -841,7 +892,7 @@ def _corrections(
             src,
             i[far],
             j[far],
-            obs_radius=None if obs is None else obs.radius,
+            obs_radius=None if (obs is None or image) else obs.radius,
         )
     return _blended(exact, point, w, far, q)
 
@@ -1083,10 +1134,9 @@ def image_quadrupole_rows(
     if n_obs * n_src * len(images) >= LINE_NUMBA_MIN_PAIRS:
         kernel = _numba_image_quadrupole_rows()
     has_t = obs_t is not None
-    with_radius = has_t and obs_radius is not None
     t = obs_t if has_t else np.zeros_like(obs_mid)
     obs_len = np.asarray(obs_len, dtype=float)
-    ro = obs_radius if with_radius else np.zeros(n_obs)
+    ro = obs_radius if (has_t and obs_radius is not None) else np.zeros(n_obs)
     plan = _image_plan(obs_mid[:, 2], obs_len, ro, segs, images)
     lo, hi = IMAGE_QUADRUPOLE_REACH
     if kernel is not None:
@@ -1094,7 +1144,6 @@ def image_quadrupole_rows(
         kernel(
             c(obs_mid[:, 0]), c(obs_mid[:, 1]), c(obs_mid[:, 2]),
             c(t[:, 0]), c(t[:, 1]), c(t[:, 2]), c(obs_len), c(ro, dtype=float),
-            with_radius,
             c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.mid[:, 2]),
             c(segs.tangent[:, 0]), c(segs.tangent[:, 1]), c(segs.tangent[:, 2]),
             c(segs.length, dtype=float), c(segs.radius, dtype=float),
@@ -1108,8 +1157,7 @@ def image_quadrupole_rows(
     for r0 in range(0, n_obs, step):
         sl = slice(r0, min(n_obs, r0 + step))
         _image_rows_numpy(
-            obs_mid[sl], t[sl], obs_len[sl], ro[sl], with_radius, segs, plan,
-            out[sl],
+            obs_mid[sl], t[sl], obs_len[sl], ro[sl], segs, plan, out[sl]
         )  # fmt: skip
     return out
 
@@ -1188,7 +1236,6 @@ def _image_rows_numpy(
     t: np.ndarray,
     obs_len: np.ndarray,
     ro: np.ndarray,
-    with_radius: bool,
     segs: LineSegments,
     plan: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     out: np.ndarray,
@@ -1221,8 +1268,6 @@ def _image_rows_numpy(
     del a, bq, a_t, bq_t, hx, gx
     a2 = 0.5 * np.add.outer(ro * ro, segs.radius * segs.radius)
     b = ls2 + lo2
-    if with_radius:
-        b = b + 12.0 * a2
     lmax = np.maximum.outer(obs_len, segs.length)
     lim = NEAR_FACTOR * lmax
     lim2 = lim * lim
@@ -1490,7 +1535,7 @@ def series_corrections(
             point = _point_values(segs.mid, img.mid, i, j, min_distance)
             values = _corrections(
                 segs, segs.mid, segs.length, img, i, j, w, far, point, min_distance,
-                with_quadrupole=FAR_IMAGE_QUADRUPOLE,
+                with_quadrupole=FAR_IMAGE_QUADRUPOLE, image=True,
             )  # fmt: skip
             parts.append(SparseCorrection(i, j, weight * values))
     return SparseCorrection.concatenate(parts)

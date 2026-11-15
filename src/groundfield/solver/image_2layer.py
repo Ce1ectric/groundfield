@@ -883,6 +883,7 @@ class _LayeredImageFamilies:
                     point,
                     _MIN_DISTANCE,
                     with_quadrupole=_line_kernel.FAR_IMAGE_QUADRUPOLE,
+                    image=True,
                 )
                 parts.append(SparseCorrection(i, j, (weight * coef) * values))
         return SparseCorrection.concatenate(parts)
@@ -917,7 +918,7 @@ class _LayeredImageFamilies:
                 idx = np.flatnonzero((line.length >= shortest) & (taper != 0.0))
                 if not idx.size:
                     continue
-                exact = galerkin_pairs(line, idx, img, idx)
+                exact = galerkin_pairs(line, idx, img, idx, transverse=True)
                 value = exact - 1.0 / np.sqrt(a[idx] * a[idx] + dz[idx] * dz[idx])
                 out[idx] += (weight * coef_diag[idx]) * (taper[idx] * value)
         return out

@@ -134,7 +134,6 @@ def image_quadrupole_rows(
     toz,
     lo,
     ro,
-    has_r,
     xs,
     ys,
     zs,
@@ -171,8 +170,9 @@ def image_quadrupole_rows(
     xo, yo, zo, tox, toy, toz, lo
         Observer midpoints (m), unit tangents (zeros for field points) and
         lengths (m; zeros for field points), shape ``(b,)``.
-    ro, has_r
-        Observer wire radii in m and whether the radius term applies.
+    ro
+        Observer wire radii in m (zeros for field points), for the tolerance
+        test; the far form of images has no radius term (audit W3A-02).
     xs, ys, zs, tsx, tsy, tsz, ls, rs
         Source midpoints (m), unit tangents, lengths (m) and wire radii (m),
         shape ``(N,)``.
@@ -232,10 +232,7 @@ def image_quadrupole_rows(
             p1m[c] = 6.0 * (bq_t - a_t)
             p2[c] = 3.0 * (ls2 * tsz[c] * tsz[c] + lo2 * tzo * tzo)
             a2 = 0.5 * (ro[r] * ro[r] + rs[c] * rs[c])
-            if has_r:
-                bb[c] = (ls2 + lo2) + 12.0 * a2
-            else:
-                bb[c] = ls2 + lo2
+            bb[c] = ls2 + lo2
             lmax = max(lo[r], ls[c])
             lim = factor * lmax
             lim2[c] = lim * lim
