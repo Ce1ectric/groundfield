@@ -361,12 +361,18 @@ def test_inductive_cross_engine_50hz(backend: str) -> None:
 
 def test_fem_refuses_a_galvanic_distributed_conductor() -> None:
     """Up to 2026.11 fem solved such a conductor as a lumped resistive
-    branch; its conforming model refuses the leakage along the route,
-    which is not axisymmetric (user decision Q37), and honours inductance
-    models on the other conductors (``tests/test_fem.py``)."""
+    branch; its axisymmetric model refuses the leakage along the route
+    (user decision Q37), and honours inductance models on the other
+    conductors (``tests/test_fem.py``). The three-dimensional model solves
+    the world (``tests/test_fem_3d.py``), so the axisymmetric one is pinned."""
     from groundfield.solver.registry import BackendCapabilityError
 
     w, _ = _galvanic_world(n_seg=4, inductance_model="neumann")
-    eng = gf.create_engine(backend="fem", segment_length=SEG, frequencies=[50.0])
+    eng = gf.create_engine(
+        backend="fem",
+        segment_length=SEG,
+        frequencies=[50.0],
+        options={"fem": {"model": "axisymmetric"}},
+    )
     with pytest.raises(BackendCapabilityError, match="coupling_to_soil='galvanic'"):
         eng.solve(w)

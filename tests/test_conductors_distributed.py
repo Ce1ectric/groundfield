@@ -19,6 +19,8 @@ Three contracts are checked here:
 
 from __future__ import annotations
 
+import warnings
+
 
 import pytest
 
@@ -388,11 +390,17 @@ def test_galvanic_distributed_cross_engine(backend: str) -> None:
 def test_galvanic_distributed_fem_refuses_the_world() -> None:
     """Up to 2026.11 fem fell back to a lumped branch with a warning; its
     conforming axisymmetric model refuses a conductor that leaks along its
-    route (user decision Q37) and names the backends that solve it."""
+    route (user decision Q37) and names the backends that solve it. The
+    three-dimensional model solves the world (``tests/test_fem_3d.py``), so
+    the axisymmetric one is pinned."""
+    from groundfield.solver.fem import solve_fem
     from groundfield.solver.registry import BackendCapabilityError
 
-    with pytest.raises(BackendCapabilityError, match="'image'"):
-        _solve(_galvanic_world(n_seg=4), "fem")
+    eng = gf.create_engine(backend="fem", segment_length=SEG)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(BackendCapabilityError, match="'image'"):
+            solve_fem(_galvanic_world(n_seg=4), eng, model="axisymmetric")
 
 
 # ---------------------------------------------------------------------

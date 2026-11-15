@@ -628,6 +628,9 @@ def test_the_finite_element_field_converges_to_the_point_source_field() -> None:
 
 
 def _fem_error(world, **kw) -> str:
+    """The refusal of the axisymmetric model (the 3-D model of part B solves
+    the non-axisymmetric worlds, ``tests/test_fem_3d.py``)."""
+    kw.setdefault("options", {"fem": {"model": "axisymmetric"}})
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with pytest.raises(gf.BackendCapabilityError) as info:

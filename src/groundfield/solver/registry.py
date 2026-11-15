@@ -386,7 +386,10 @@ class FemOptions(BackendOptions):
 
     Forwarded to :func:`groundfield.solver.fem.solve_fem`. The defaults
     reproduce the backend's own signature defaults. Since 2026.11 ``fem``
-    is a conforming axisymmetric model (user decision Q37); the controls of
+    is a conforming finite-element model (user decision Q37): axisymmetric
+    for rods on one axis and rings around it, three-dimensional for every
+    other world (``model``, ``source_radius``, ``growth``,
+    ``concrete_resistivity``; the optional ``fem3d`` extra). The controls of
     the equivalent-hemisphere mesh (``n_radial``, ``n_axial``,
     ``z_far_factor``) are gone.
     """
@@ -433,6 +436,49 @@ class FemOptions(BackendOptions):
         description=(
             "Resource limit (count): the predicted node count of the finer "
             "mesh above which the solve is refused (ResourceLimitError)."
+        ),
+    )
+    model: Literal["auto", "axisymmetric", "3d"] = Field(
+        default="auto",
+        description=(
+            "Which finite-element model solves the world: 'auto' takes the "
+            "axisymmetric model where it applies (rods on one axis, rings "
+            "around it, no galvanic distributed conductor) and the "
+            "three-dimensional model otherwise; '3d' forces the 3-D model "
+            "(needs the fem3d extra); 'axisymmetric' refuses every other world."
+        ),
+    )
+    source_radius: float | None = Field(
+        default=None,
+        gt=0.0,
+        allow_inf_nan=False,
+        description=(
+            "3-D model: radius in m of the disc over which each wire's leakage "
+            "is smoothed (the analytic radius correction covers the rest). None: "
+            "0.06 m, at least 2.2 bare wire radii, limited by the depth of the "
+            "wires and their gap to the layer interfaces."
+        ),
+    )
+    growth: float = Field(
+        default=0.5,
+        ge=0.05,
+        le=2.0,
+        description=(
+            "3-D model: growth of the element size per metre away from the "
+            "wires (dimensionless). Smaller is finer and slower."
+        ),
+    )
+    concrete_resistivity: float | None = Field(
+        default=None,
+        gt=0.0,
+        allow_inf_nan=False,
+        description=(
+            "3-D model: None applies each encased wire's shell coefficient "
+            "(ADR-0012, each wire its own shell). A resistivity in Ohm m "
+            "resolves the concrete as square prisms of that resistivity around "
+            "the encased wires (axis-aligned straight wires), so overlapping "
+            "shells at corners, T-joints and crossings share their concrete "
+            "(user decision Q40)."
         ),
     )
 
@@ -1184,8 +1230,9 @@ def _register_builtins() -> None:
         deprecated_alias_of="mom",
         summary="Deprecated name of 'mom' (10.76).",
     )
-    # Conforming axisymmetric model (user decision Q37): the earth part is
-    # a port matrix, the network the shared pipeline's, so conductors,
+    # Conforming finite-element models (user decision Q37): axisymmetric or
+    # three-dimensional; the earth part is a port matrix, the network the
+    # shared pipeline's, so conductors,
     # junctions, return_to and voltage sources are honoured. No source
     # kernel: the engine's kernel only selects the form of the point
     # sources for the post-solve field evaluation.
@@ -1203,7 +1250,10 @@ def _register_builtins() -> None:
         ),
         options_model=FemOptions,
         experimental=True,
-        summary="Conforming axisymmetric finite elements (rods and rings on one axis).",
+        summary=(
+            "Conforming finite elements: axisymmetric (rods and rings on one "
+            "axis) or three-dimensional (any electrodes; fem3d extra)."
+        ),
     )
 
 

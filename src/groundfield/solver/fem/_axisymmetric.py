@@ -121,8 +121,9 @@ def coaxial_electrodes(
             engine,
             "its axisymmetric model represents rods on one vertical axis and "
             "horizontal rings centred on that axis, and electrode(s) "
-            f"{shown}{more} ({', '.join(kinds)}) are not axisymmetric. A full "
-            "3-D model is planned (user decision Q37).",
+            f"{shown}{more} ({', '.join(kinds)}) are not axisymmetric. The "
+            "three-dimensional model solves them (FemOptions.model='auto', the "
+            "default, or '3d'; the fem3d extra).",
         )
     points = []
     for e in world.electrodes:

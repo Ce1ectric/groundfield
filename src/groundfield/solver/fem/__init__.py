@@ -1,16 +1,29 @@
-"""Finite-element backend (``fem``): conforming axisymmetric model.
+"""Finite-element backend (``fem``): conforming axisymmetric and 3-D models.
 
 Since 2026.11 (user decision Q37) ``fem`` solves the volume problem of the
-electrodes as they are; the equivalent-hemisphere reduction of earlier
-releases is gone. The model of this release is **axisymmetric**: rods on
-one vertical axis and horizontal rings centred on it, in homogeneous soil
-or any number of horizontal layers, bare or encased in concrete
-(ADR-0012). Every other world is refused with
-:class:`~groundfield.solver.registry.BackendCapabilityError`, naming the
-backends that solve it. ``fem`` is a reference backend: the integral
-engines (the image family, ``mom``, ``mom_sommerfeld``) are the production
-engines, ``fem`` checks them with a method that shares nothing with them
-but the network solve (ADR-0016).
+electrodes in the soil; the equivalent-hemisphere reduction of earlier
+releases is gone. Two models share the network solve:
+
+* the **axisymmetric** model (part A): rods on one vertical axis and
+  horizontal rings centred on it, as the solid bodies they are, in any
+  number of horizontal layers, bare or encased (ADR-0012), to about 1e-4;
+* the **three-dimensional** model (part B, the optional ``fem3d`` extra):
+  any electrodes in one or several clusters, galvanic distributed
+  conductors, concrete shells per wire or resolved as a volume (user
+  decision Q40); thin wires as smoothed line sources with an analytic
+  radius correction, layer interfaces as partially penalised immersed
+  elements on an isotropic tetrahedral mesh
+  (:mod:`groundfield.solver.fem._solid`), to about 2e-3.
+
+``FemOptions.model = "auto"`` (default) takes the axisymmetric model where
+it applies and the three-dimensional one otherwise. ``fem`` is a reference
+backend: the integral engines (the image family, ``mom``,
+``mom_sommerfeld``) are the production engines, ``fem`` checks them with a
+method that shares nothing with them but the network solve (ADR-0016).
+
+The rest of this docstring describes the axisymmetric model; the 3-D model
+is documented in :mod:`groundfield.solver.fem._solid` and the modules it
+names.
 
 Mathematical / physical model
 -----------------------------
@@ -89,6 +102,7 @@ References
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from groundfield.solver.fem._legacy import (
@@ -104,6 +118,7 @@ if TYPE_CHECKING:  # pragma: no cover
 __all__ = ["FemReductionWarning", "equivalent_hemisphere_radius", "solve_fem"]
 
 _FAR_FIELDS = ("robin", "dirichlet")
+_MODELS = ("auto", "axisymmetric", "3d")
 
 
 def _warn_deprecated_mesh_arguments(**values: object) -> None:
@@ -123,14 +138,19 @@ def _warn_deprecated_mesh_arguments(**values: object) -> None:
     )
 
 
-def _reject_galvanic_conductors(world: "World", engine: "Engine") -> None:
-    """A galvanic distributed conductor leaks along a line the model cannot hold."""
-    leaking = [
+def _galvanic_conductors(world: "World") -> list[str]:
+    """Names of the galvanic distributed conductors of ``world``."""
+    return [
         c.name
         for c in world.conductors
         if getattr(c, "is_distributed", False)
         and getattr(c, "coupling_to_soil", "isolated") == "galvanic"
     ]
+
+
+def _reject_galvanic_conductors(world: "World", engine: "Engine") -> None:
+    """A galvanic distributed conductor leaks along a line the model cannot hold."""
+    leaking = _galvanic_conductors(world)
     if not leaking:
         return
     from groundfield.solver.fem._guards import remedy
@@ -153,17 +173,22 @@ def solve_fem(
     r_far_factor: float = 1000.0,
     far_field: str = "robin",
     max_nodes: int = 4_000_000,
+    model: str = "auto",
+    source_radius: float | None = None,
+    growth: float = 0.5,
+    concrete_resistivity: float | None = None,
+    _concrete_mesh: float | None = None,
     n_radial: int | None = None,
     n_axial: int | None = None,
     z_far_factor: float | None = None,
 ) -> FieldResult:
-    """Conforming axisymmetric finite-element solve (see the module docstring).
+    """Conforming finite-element solve (see the module docstring).
 
     Parameters
     ----------
     world
-        World to solve: rods on one vertical axis and horizontal rings
-        centred on it, any horizontally layered soil, bare or encased.
+        World to solve, any horizontally layered soil, bare or encased
+        electrodes (see ``model``).
     engine
         Engine; its ``frequencies``, ``earth_inductive_model`` (conductor
         branches) and ``segment_length`` (the display segments that carry
@@ -190,6 +215,28 @@ def solve_fem(
     max_nodes
         Resource limit: the node count of the finer mesh, predicted before
         anything is assembled.
+    model
+        ``"auto"`` (default): the axisymmetric model where it applies (rods
+        on one axis, rings around it, no galvanic distributed conductor),
+        the three-dimensional model otherwise; ``"axisymmetric"`` refuses
+        every other world; ``"3d"`` forces the three-dimensional model.
+    source_radius
+        3-D model: radius in m of the disc over which each wire's leakage
+        is smoothed; ``None`` (default) takes 0.06 m (at least 2.2 bare
+        wire radii, at most what the depth of the wires and their gap to
+        the interfaces allow).
+    growth
+        3-D model: growth of the element size per metre away from the
+        wires (default 0.5; smaller is finer and slower).
+    concrete_resistivity
+        3-D model: ``None`` (default) applies every encased wire's own
+        shell coefficient; a resistivity in Ω·m resolves the concrete as
+        square prisms of conformal radius ``wire_radius`` around the
+        encased (axis-aligned, straight) wires, shared where they meet
+        (user decision Q40).
+    _concrete_mesh
+        Private, for the overlap study of user decision Q40 (see
+        :func:`~groundfield.solver.fem._solid.solid_earth`).
     n_radial, n_axial, z_far_factor
         Deprecated: the mesh controls of the equivalent-hemisphere mesh
         (0.15.0); a value has no effect and warns.
@@ -209,18 +256,25 @@ def solve_fem(
     Raises
     ------
     BackendCapabilityError
-        If the world is not axisymmetric (an electrode other than a rod or
-        a ring, a rod or ring off the common axis, a galvanic distributed
-        conductor) or its electrodes touch, or a ring wire reaches within
-        5 % of its radius to the soil surface; the message names the
-        backends that solve the world. A subclass of ``ValueError`` and
-        ``NotImplementedError``.
+        With ``model="axisymmetric"``: if the world is not axisymmetric (an
+        electrode other than a rod or a ring, a rod or ring off the common
+        axis, a galvanic distributed conductor) or its electrodes touch, or
+        a ring wire reaches within 5 % of its radius to the soil surface.
+        3-D model: a wire too close to the soil surface or an interface for
+        its smoothed source, resolved concrete around a wire that is not
+        straight along x, y or z. The message names the backends that solve
+        the world. A subclass of ``ValueError`` and ``NotImplementedError``.
+    ImportError
+        If the world needs the three-dimensional model and the ``fem3d``
+        extra (scikit-fem, pyamg) is not installed.
     ValueError
         If an electrode or a galvanic distributed conductor lies at or
         above the soil surface (as every backend), or the world fails
         :meth:`World.check <groundfield.world.World.check>`.
     groundfield.diagnostics.ResourceLimitError
-        If the finer mesh would exceed ``max_nodes`` nodes.
+        If the finer mesh would exceed ``max_nodes`` nodes (the 3-D model
+        checks a prediction before meshing and the exact count before the
+        finer level).
     TypeError
         If ``world.soil`` is no soil model.
 
@@ -260,6 +314,25 @@ def solve_fem(
         )
     if not world.electrodes:
         raise ValueError("World contains no electrodes.")
+    if model not in _MODELS:
+        raise ValueError(
+            f"model must be one of {', '.join(repr(m) for m in _MODELS)}, got {model!r}."
+        )
+    if source_radius is not None and not (
+        math.isfinite(float(source_radius)) and float(source_radius) > 0.0
+    ):
+        raise ValueError(
+            f"source_radius must be a positive length in m, got {source_radius!r}."
+        )
+    if not (math.isfinite(float(growth)) and 0.05 <= float(growth) <= 2.0):
+        raise ValueError(f"growth must lie in [0.05, 2], got {growth!r}.")
+    if concrete_resistivity is not None and not (
+        math.isfinite(float(concrete_resistivity)) and float(concrete_resistivity) > 0.0
+    ):
+        raise ValueError(
+            "concrete_resistivity must be a positive resistivity in Ohm m or None, "
+            f"got {concrete_resistivity!r}."
+        )
     frame = _frame.LocalFrame.of(world)
     with frame.active():
         result = _solve(
@@ -270,22 +343,74 @@ def solve_fem(
             r_far_factor=float(r_far_factor),
             far_field=far_field,
             max_nodes=int(max_nodes),
+            model=model,
+            solid={
+                "source_radius_m": None
+                if source_radius is None
+                else float(source_radius),
+                "growth": float(growth),
+                "concrete_resistivity": None
+                if concrete_resistivity is None
+                else float(concrete_resistivity),
+                "concrete_mesh": _concrete_mesh,
+            },
         )
     return frame.to_user(result)
 
 
-def _solve(world: "World", engine: "Engine", **options) -> FieldResult:
+def _is_axisymmetric(world: "World", engine: "Engine") -> bool:
+    """Whether the axisymmetric model accepts ``world`` (no galvanic conductor)."""
+    from groundfield.solver.fem._axisymmetric import coaxial_electrodes
+    from groundfield.solver.registry import BackendCapabilityError
+
+    if _galvanic_conductors(world):
+        return False
+    try:
+        coaxial_electrodes(world, engine)
+    except BackendCapabilityError:
+        return False
+    return True
+
+
+def _solve(
+    world: "World", engine: "Engine", *, model: str, solid: dict, **options
+) -> FieldResult:
     """Body of :func:`solve_fem`, in the frame of ``world``."""
     from groundfield.solver._kernels import DEFAULT_KERNEL
     from groundfield.solver._layered import as_layer_stack
     from groundfield.solver.fem._axisymmetric import axisymmetric_earth
     from groundfield.solver.fem._guards import reject_electrodes_out_of_the_soil
-    from groundfield.solver.fem._network import solve_network
+    from groundfield.solver.fem._network import port_topology, solve_network
 
     reject_electrodes_out_of_the_soil(world)  # audit D2A-06, R2A-07
     world.check()  # the errors of every backend before any mesh is built
-    _reject_galvanic_conductors(world, engine)
-    earth = axisymmetric_earth(world, engine, **options)
+    three_d = model == "3d" or (model == "auto" and not _is_axisymmetric(world, engine))
+    topology = None
+    if three_d:
+        from groundfield.solver.fem._solid import require_extra, solid_earth
+
+        require_extra()
+        disc, topo = port_topology(world)
+        topology = (disc, topo)
+        extra = disc.segments[len(world.electrodes) :]
+        earth = solid_earth(world, engine, extra_segments=extra, **options, **solid)
+        approximation = (
+            "thin wires as smoothed line sources with an analytic radius "
+            "correction in three-dimensional finite elements"
+        )
+    else:
+        _reject_galvanic_conductors(world, engine)
+        if (
+            solid["concrete_resistivity"] is not None
+            or solid["concrete_mesh"] is not None
+        ):
+            raise ValueError(
+                "concrete_resistivity resolves the concrete in the three-dimensional "
+                "model; set FemOptions.model='3d' (the axisymmetric model applies "
+                "the shell coefficient on the electrode surface)."
+            )
+        earth = axisymmetric_earth(world, engine, **options)
+        approximation = "none: conforming axisymmetric finite elements"
     stack = as_layer_stack(world.soil)
     metadata = {
         "world_name": world.name,
@@ -294,7 +419,9 @@ def _solve(world: "World", engine: "Engine", **options) -> FieldResult:
         "h": [float(h) for h in stack.h],
         "segment_length": float(engine.segment_length),
         "stub": False,
-        "approximation": "none: conforming axisymmetric finite elements",
+        "approximation": approximation,
     }
     kernel = engine.kernel if engine.kernel is not None else DEFAULT_KERNEL
-    return solve_network(world, engine, earth, metadata=metadata, kernel=kernel)
+    return solve_network(
+        world, engine, earth, metadata=metadata, kernel=kernel, topology=topology
+    )

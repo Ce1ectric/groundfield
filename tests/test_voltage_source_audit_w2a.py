@@ -229,20 +229,23 @@ def test_w2a_07_direct_fem_message_names_backends_that_solve_the_world() -> None
     """Base: names 'image_2layer' for a homogeneous world (Engine.solve does not).
 
     fem solves voltage sources since its conforming model (user decision
-    Q37); it refuses the two rods side by side (not axisymmetric), and the
-    direct call and Engine.solve name the same backends.
+    Q37); its axisymmetric model refuses the two rods side by side, and the
+    direct call and Engine.solve name the same backends. (The
+    three-dimensional model solves the world, so the axisymmetric one is
+    pinned.)
     """
     from groundfield.solver import BackendCapabilityError
     from groundfield.solver.fem import solve_fem
 
     w = _two_rods()
     gf.create_source(w, attached_to="g1", kind="voltage", magnitude=230.0, name="v")
+    axi = {"fem": {"model": "axisymmetric"}}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with pytest.raises(BackendCapabilityError) as direct:
-            solve_fem(w, _engine(backend="fem"))
+            solve_fem(w, _engine(backend="fem"), model="axisymmetric")
         with pytest.raises(BackendCapabilityError) as engine:
-            w.solve(_engine(backend="fem"))
+            w.solve(_engine(backend="fem", options=axi))
     assert "'image_2layer'" not in str(direct.value)
     assert "voltage" not in str(direct.value)
     for name in ("'image'", "'mom'"):
