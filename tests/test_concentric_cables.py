@@ -762,7 +762,7 @@ def test_the_bundle_chunks_change_no_bit(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------
-# Labels and shields (audit W1R2-08)
+# Labels and shields (audit W1R2-08), the world check (audit W1R2-10)
 # ---------------------------------------------------------------------
 
 
@@ -781,3 +781,31 @@ def test_without_labels_only_the_marked_shield_is_one_conductor() -> None:
         assert _tilted_loop(20, tilt, False, labels=False) < unmarked * (1 - 1e-3)
     doc = " ".join(build_inductance_matrix.__doc__.split())
     assert "not recognised as one conductor" in doc
+
+
+# audit W1R2-10, user decision Q33
+@pytest.mark.parametrize("backend", ["image", "fem"])
+def test_world_check_rejects_a_copied_skin_shield(backend: str) -> None:
+    """``model_copy(update=...)`` skips the validator; ``World.check()``
+    now rejects such a shield with the solver's message, before any
+    backend runs (base ecff7b6: ``check()`` passed, ``image`` / ``mom``
+    raised in the assembly, ``fem`` solved the resistive fallback)."""
+    shield = Conductor(
+        name="s",
+        start=(0, 0, DEPTH),
+        end=(LENGTH, 0, DEPTH),
+        start_electrode="a",
+        end_electrode="b",
+        wire_radius=R_SHIELD,
+        cross_section=25e-6,
+        conductor_type="cable_shield",
+    ).model_copy(update={"resistance_model": "skin"})
+    w = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.5), length=2.0)
+    gf.create_electrode(w, "rod", name="b", position=(LENGTH, 0, 0.5), length=2.0)
+    w.add_conductor(shield)
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    with pytest.raises(ValueError, match="thin-walled"):
+        w.check()
+    with pytest.raises(ValueError, match="thin-walled"):
+        gf.create_engine(backend=backend, frequencies=[50.0]).solve(w)
