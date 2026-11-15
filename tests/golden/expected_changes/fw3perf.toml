@@ -7,3 +7,12 @@
 # gen_tn_measurement_overhead_leads: 3 houses; gen_layout_builder: the
 # LvNetworkLayout path draws no rows), so their worlds are bit-identical.
 # The W3B-01 declaration of this stream is appended to w3perf.toml.
+#
+# Fix stream fw3r2b (audit W3R2B, base release/calver 06580ea): rows grouped
+# by the overlap criterion and laid out along one common normal under
+# placement jitter (W3R2B-01), the touching tolerance at projected
+# coordinates (W3R2B-02), PenetrationDepth validation (W3R2B-05), the preset
+# line (W3R2B-06), build() after plan(). Measured with GF_GOLDEN_STRICT=1
+# against a snapshot of 06580ea generated on the same machine (macOS
+# arm64): 563 of 563 quantities identical, no golden case moves (the
+# generator cases have no jitter; unjittered rows keep the D9 layout).

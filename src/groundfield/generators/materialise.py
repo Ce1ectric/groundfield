@@ -1020,7 +1020,9 @@ def materialise_branch(
     point of the node (the site's anchor electrode, or the junction). With
     ``axis_z_m`` both ends are moved to that depth, with ``axis_offset_m``
     both ends move by that distance along the normal of the plan direction
-    (decision D9: service drops in a row).
+    (decision D9: service drops in a row), or along
+    ``axis_offset_normal_xy`` when the plan gives one (the common normal of
+    a row of drops that are not exactly parallel, audit W3R2B-01).
 
     Raises
     ------
@@ -1082,7 +1084,14 @@ def materialise_branch(
     )
     if branch.axis_z_m is not None:
         sz = ez = float(branch.axis_z_m)
-    if branch.axis_offset_m != 0.0:
+    if branch.axis_offset_m != 0.0 and branch.axis_offset_normal_xy is not None:
+        # a drop in a row that is not exactly parallel (audit W3R2B-01): both
+        # ends along the row's common normal
+        nx, ny = branch.axis_offset_normal_xy
+        offset = float(branch.axis_offset_m)
+        sx, sy = sx + offset * nx, sy + offset * ny
+        ex, ey = ex + offset * nx, ey + offset * ny
+    elif branch.axis_offset_m != 0.0:
         # a drop in a row (decision D9): both ends along the left normal of
         # the plan direction; the conductor stays attached to its nodes
         dx, dy = ex - sx, ey - sy

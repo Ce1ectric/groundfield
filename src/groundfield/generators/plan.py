@@ -43,6 +43,7 @@ optional Neumann inductance couples them (ADR-0004).
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -347,6 +348,13 @@ class PlannedBranch(BaseModel):
         at the touching distance (decision D9 of 2026.11,
         :mod:`groundfield.generators._pen_routing`); plans written before
         have no such entry and keep their geometry.
+    axis_offset_normal_xy
+        ``None`` (default): ``axis_offset_m`` is applied along the normal of
+        the branch's own plan direction (above). A unit vector
+        ``(n_x, n_y)``: both ends move by ``axis_offset_m`` along it — the
+        common normal of a row of drops that are not exactly parallel (a
+        placement with jitter), so that the offsets of a row lie on one line
+        (audit W3R2B-01). Plans written before have no such entry.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -369,6 +377,30 @@ class PlannedBranch(BaseModel):
             "direction (decision D9: drops in a row)."
         ),
     )
+    axis_offset_normal_xy: Optional[
+        tuple[
+            Annotated[float, Field(allow_inf_nan=False)],
+            Annotated[float, Field(allow_inf_nan=False)],
+        ]
+    ] = Field(
+        default=None,
+        description=(
+            "Unit plan vector along which axis_offset_m moves both ends; "
+            "None: the normal of the branch's own direction (audit W3R2B-01: "
+            "the common normal of a row of drops that are not exactly "
+            "parallel)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_offset_normal(self) -> "PlannedBranch":
+        normal = self.axis_offset_normal_xy
+        if normal is not None and abs(math.hypot(*normal) - 1.0) > 1e-9:
+            raise ValueError(
+                f"PlannedBranch {self.name!r}: axis_offset_normal_xy must be a "
+                f"unit vector, got {normal!r} (length {math.hypot(*normal)!r})."
+            )
+        return self
 
 
 class PlannedMeasurement(BaseModel):
