@@ -23,7 +23,9 @@ matrix is reported as the error estimate (``metadata["fem_error_estimate"]``;
 extrapolated value while the error of the finer level is at most 1/2.5 of
 that of the coarser (observed: 1/3.9 away from interfaces); against the
 finer level itself it is 0.88 ... 0.99 of its error in 36 cases of audit
-W4A, 0.80 ... 1.0 next to an interface cut into a ring's block.
+W4A, and 0.94 ... 1.07 for a ring that an interface cuts or comes within
+1.05 radii of (60 cases of audit W4R2A's sweep, contrasts 3 ... 1000, at
+levels 0/1 and 1/2; evidence ``fw4r2a/e05``).
 
 The classification (:func:`classify`) is cheap and raises
 :class:`NotAxisymmetric` without the remedy text, so ``model="auto"`` falls
@@ -333,8 +335,12 @@ def block_half_widths(
     surface, the axis, the rods, the other rings' blocks and every
     interface farther than $1.05\\,a$ from the wire axis (it takes at most
     45 % of each gap beyond the wire); a nearer interface is cut into it,
-    and the ring is marked ``near_interface`` (its block's lines along $s$
-    are refined, audit W4A-01).
+    and the ring is marked ``near_interface``: its block has
+    ``params.near_interface_intervals`` lines per side in $s$ and $z$
+    (audit W4A-01), and its O-grid is graded towards the points where the
+    interface cuts the wire at a narrow angle or comes closest to it
+    (``contacts``, :func:`_contact_angles`; cells of
+    ``params.contact_size`` wire radii there; audit W4R2A-02).
 
     Raises
     ------
@@ -355,12 +361,14 @@ def block_half_widths(
             _, cheb = _rect_gap(g.radius, g.depth, r.radius, r.z_top, r.z_bottom)
             c = min(c, a + _SHARE * (cheb - a))
         near = False
+        contacts: list[float] = []
         for h in interfaces:
             d = abs(g.depth - h)
             if d > (1.0 + _CLEARANCE) * a:
                 c = min(c, a + _SHARE * (d - a))
             else:
                 near = True
+                contacts += _contact_angles(g.depth, a, h)
         for other in rings:
             if other is ring:
                 continue
@@ -375,12 +383,12 @@ def block_half_widths(
                 "end edge, another ring or the soil surface, where the "
                 "axisymmetric mesh cannot resolve the gap. " + _THREE_D
             )
-        limit[ring.index] = (c, near)
+        limit[ring.index] = (c, near, tuple(contacts))
     out = []
     for e in electrodes:
         if e.index in limit:
             g = e.geometry
-            c, near = limit[e.index]
+            c, near, contacts = limit[e.index]
             e = e._replace(
                 geometry=RingGeometry(
                     radius=g.radius,
@@ -388,10 +396,45 @@ def block_half_widths(
                     wire_radius=g.wire_radius,
                     half_width=c,
                     near_interface=near,
+                    contacts=contacts,
+                    contact_size=params.contact_size * g.wire_radius
+                    if contacts
+                    else 0.0,
                 )
             )
         out.append(e)
     return out
+
+
+#: The O-grid of a ring is graded towards an interface that cuts the wire only
+#: where the interface meets it at a narrow angle: at this distance from the
+#: wire axis or farther, in wire radii (the interface meets the circle at
+#: 45.6 deg or less), and towards one that touches or nearly touches the wire
+#: (within 1.05 radii; audit W4R2A-02).
+_GRADE_FROM = 0.7
+
+
+def _contact_angles(depth: float, a: float, h: float) -> list[float]:
+    """Where the interface at depth ``h`` cuts a ring wire or comes closest.
+
+    Angles in rad, ``atan2(z - depth, s - r0)`` on the wire's circle
+    (radius ``a``, axis at ``depth``): the two points where the interface
+    cuts the circle, or the one nearest to the interface; none for an
+    interface closer to the axis than :data:`_GRADE_FROM` wire radii. There
+    it crosses the circle at more than 45.6 deg, the field is only mildly
+    singular and the block's uniform rays resolve it; a fan of graded rays
+    there made the finer level of ``refinement=1`` approach the converged
+    value faster than second order, and its extrapolation overshoot to
+    within 1.1 … 1.6 of its estimate for a wire mostly in a 1000 times more
+    resistive layer (evidence ``fw4r2a/e08b``).
+    """
+    d = h - depth
+    if abs(d) < _GRADE_FROM * a:
+        return []
+    if abs(d) < a:
+        w = math.sqrt(a * a - d * d)
+        return [math.atan2(d, w), math.atan2(d, -w)]
+    return [math.copysign(0.5 * math.pi, d)]
 
 
 def _hat_fractions(z_nodes: np.ndarray, bounds: np.ndarray) -> np.ndarray:
@@ -623,7 +666,7 @@ def axisymmetric_earth(
     lines = [
         mesh_lines(rod_geo, ring_geo, inside, r_far, params, level) for level in levels
     ]
-    predicted = predicted_nodes(*lines[-1], ring_geo, levels[-1], inside)
+    predicted = predicted_nodes(*lines[-1], ring_geo, levels[-1], inside, params)
     if predicted > max_nodes:
         raise ResourceLimitError(
             f"Backend 'fem': the mesh at refinement level {levels[-1]} would have "

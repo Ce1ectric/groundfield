@@ -1288,6 +1288,84 @@ def test_w4r2a_07_tutorial_t09_says_that_fem_has_no_source_kernel() -> None:
     assert "'fem' (experimental)" in out  # the registry's list, explained above
 
 
+# Solid-torus BEM of a ring (r0 = 2 m, a = 5 mm, axis at 2 m) in 1000 Ohm m
+# with a more conductive layer d below its axis: (rho_other, d / a, BEM of this
+# stream with four or five nested levels (evidence fw4r2a/e06), auditor W4R2A's
+# BEM (r10: four levels, r01: three)).
+_CONTACT_BEM = [
+    (1.0, 1.0, 0.3471211, 0.3471152),  # touching, contrast 1000
+    (1.0, 0.99, 0.2694221, 0.2694221),
+    (1.0, 0.95, 0.2482848, 0.248285),
+    (1.0, 1.01, 2.0256010, 2.0256010),
+    (10.0, 1.0, 2.8779177, 2.8778976),  # touching, contrast 100
+    (10.0, 0.99, 2.6126274, 2.612620),
+    (10.0, 1.01, 4.1141674, 4.114042),
+]
+
+
+def _contact_ring(rho_other: float, d_over_a: float) -> gf.World:
+    a, t = 0.005, 2.0
+    return _ring_world(
+        _two(1000.0, rho_other, t + d_over_a * a), r0=2.0, depth=t, radius=a
+    )
+
+
+@pytest.mark.parametrize(("rho_other", "d_over_a", "bem", "bem_auditor"), _CONTACT_BEM)
+def test_w4r2a_02_a_ring_at_a_much_more_conductive_layer_is_within_its_estimate(
+    rho_other, d_over_a, bem, bem_auditor
+) -> None:
+    """Up to audit W4R2A-02 the refined ring block held at contrast 33 only:
+    touching a 1000 times more conductive layer the default read -1.6e-2
+    with an estimate of 1.1e-2, at 1.01 a -2.3e-4 with 3.5e-5, at 0.99 a
+    -1.6e-3. The levels converged at about first order: the interface cuts
+    the wire at an edge of the conductor on a material interface, or touches
+    it in a contact zone that shrinks with the contrast. The O-grid is graded
+    towards those points now."""
+    # audit W4R2A-02
+    assert abs(bem / bem_auditor - 1.0) < 6e-5  # the two references
+    res = _engine().solve(_contact_ring(rho_other, d_over_a))
+    error = abs(res.cluster_impedance("g1")[0].real / bem - 1.0)
+    assert error <= res.metadata["fem_error_estimate"], error
+    assert error < 2e-4, error
+
+
+def test_w4r2a_02_the_auditors_touching_ring() -> None:
+    """Auditor W4R2A's test (``test_w4r2a_02``): the ring wire touching a
+    1 Ohm m layer under 1000 Ohm m, BEM 0.3471152 Ohm (four levels)."""
+    # audit W4R2A-02
+    a, t = 0.005, 2.0
+    w = gf.create_world(soil=gf.TwoLayerSoil(rho_1=1000.0, rho_2=1.0, h_1=t + a))
+    gf.create_electrode(
+        w, "ring", name="g1", center=(0, 0, t), radius=2.0, wire_radius=a
+    )
+    gf.create_source(w, attached_to="g1", magnitude=1.0)
+    res = gf.create_engine(backend="fem", segment_length=0.25).solve(w)
+    err = abs(res.cluster_impedance("g1")[0].real / 0.3471152 - 1.0)
+    assert err <= res.metadata["fem_error_estimate"], (
+        err,
+        res.metadata["fem_error_estimate"],
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("rho_other", "bem"), [(1.0, 0.3471211), (10.0, 2.8779177)])
+def test_w4r2a_02_the_touching_ring_converges_at_second_order(rho_other, bem) -> None:
+    """With the graded block the levels 0 / 1 / 2 of a ring touching a 100 or
+    1000 times more conductive layer converge at second order (they did at
+    about first order: -5.7 / -2.7 / -0.91 % at 1000), and ``refinement=1``
+    lies within its estimate too (it did not at 0.99 a)."""
+    # audit W4R2A-02
+    w = _contact_ring(rho_other, 1.0)
+    fine = _engine(options={"fem": {"refinement": 1}}).solve(w)
+    coarse = _engine().solve(w)
+    r0 = coarse.metadata["fem_port_resistance_levels"][0][0][0]
+    r1, r2 = (lv[0][0] for lv in fine.metadata["fem_port_resistance_levels"])
+    assert r0 < r1 < r2 < bem
+    assert 3.5 < (r1 - r0) / (r2 - r1) < 4.6
+    error = abs(fine.cluster_impedance("g1")[0].real / bem - 1.0)
+    assert error <= fine.metadata["fem_error_estimate"] and error < 1e-4, error
+
+
 def test_mesh_lines_that_differ_by_round_off_are_one_line() -> None:
     """Two features computed two ways (a block's centre line at
     0.30000000000000004 m, an interface at 0.3 m) were two lines 5.6e-17 m

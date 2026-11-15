@@ -200,8 +200,14 @@ def solve_fem(
         model: each level bisects every interval of the graded mesh lines,
         about four times the nodes; 3-D model: about eight times). ``0``
         (default) gives a port resistance within about 1e-4 of the
-        converged value for coaxial rods and rings (3.3e-4 for a ring wire
-        within 1.05 radii of an interface to a more conductive layer).
+        converged value for coaxial rods and rings. A ring wire that an
+        interface cuts or comes within 1.05 radii of: within 5.1e-5 of an
+        independent boundary-element model of the solid torus at layer
+        contrasts of 3 ... 1000, on either side, cut or touching (60 cases
+        of audit W4R2A's sweep, estimates 3.9e-4 ... 1.5e-3), and -8.5e-4
+        touching a layer 10 000 times more conductive (estimate 5.3e-3);
+        ``refinement=1`` within 1.9e-5 and 3.3e-4 (evidence ``fw4r2a/e05``,
+        ``e08``).
     extrapolate
         Solve at ``refinement`` and ``refinement + 1`` and extrapolate the
         port conductance matrix with the second order (default). ``False``
@@ -329,10 +335,14 @@ def solve_fem(
     interfaces, from below; this is not guaranteed (the O-grid of a ring
     is not nested between levels), and next to an interface cut into a
     ring's mesh block it did not hold before that block was refined (audit
-    W4A-01). The error estimate bounds the error of the extrapolated value
-    while both levels lie on the same side of the converged value and the
-    finer level's error is at most 1/2.5 of the coarser level's (about
-    1/3.9 is observed for rods and rings).
+    W4A-01) and graded towards the points where the interface meets the
+    wire (audit W4R2A-02: touching a 1000 times more conductive layer the
+    levels converged at about first order, the default read -1.6e-2 with
+    an estimate of 1.1e-2). The error estimate bounds the error of the
+    extrapolated value while both levels lie on the same side of the
+    converged value and the finer level's error is at most 1/2.5 of the
+    coarser level's (about 1/3.9 is observed for rods and rings, 1/3.9 ...
+    1/4.0 for a ring touching a 100 or 1000 times more conductive layer).
     """
     from groundfield.soil.models import HomogeneousSoil, MultiLayerSoil, TwoLayerSoil
     from groundfield.solver import _frame
