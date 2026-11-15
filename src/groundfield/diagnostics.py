@@ -221,7 +221,9 @@ OVERLAP_FRACTION: float = 0.05
 # drawn exactly at d_t lie closer by round-off (1e-14 m for 5 mm cables),
 # and the inductance matrix evaluates them the same either way (it clamps
 # the distance at d_t), so a pair counts as closer than touching only below
-# d_t (1 - _OVERLAP_TOUCH_TOL).
+# d_t (1 - _OVERLAP_TOUCH_TOL) - or below d_t - 16 eps max|x| at projected
+# coordinates, whichever is smaller (audit W3R2B-02, the same form as the
+# kinds of conductors.proximity: _closer_than_touching).
 _OVERLAP_TOUCH_TOL = 1e-9
 
 #: Number of names listed per cause in the aggregated text.
@@ -1332,7 +1334,10 @@ def _overlap_findings(world: "World") -> list[Diagnostic]:
     """
     import numpy as np
 
-    from groundfield.conductors.proximity import find_close_conductors
+    from groundfield.conductors.proximity import (
+        _closer_than_touching,
+        find_close_conductors,
+    )
 
     conds = [
         c
@@ -1345,9 +1350,7 @@ def _overlap_findings(world: "World") -> list[Diagnostic]:
     by_name = {c.name: c for c in conds}
     # pairs that share an end are kept: a drop drawn back along its main
     # from the tap shares the tap
-    hits = find_close_conductors(
-        conds, rel_threshold=1.0 - _OVERLAP_TOUCH_TOL, include_junctions=True
-    )
+    hits = find_close_conductors(conds, rel_threshold=1.0, include_junctions=True)
     out: list[Diagnostic] = []
     seen: set[tuple[str, str]] = set()
     for h in hits:  # worst first; one finding per pair
@@ -1360,11 +1363,14 @@ def _overlap_findings(world: "World") -> list[Diagnostic]:
             continue
         p1a, p2a = np.asarray(a.start, float), np.asarray(a.end, float)
         p1b, p2b = np.asarray(b.start, float), np.asarray(b.end, float)
+        # closer than touching beyond round-off (audits W3B-03, W3R2B-02)
+        scale = float(np.abs(np.concatenate([p1a, p2a, p1b, p2b])).max())
+        reach = float(_closer_than_touching(touch, scale))
+        if not h.distance < reach:
+            continue
         la = float(np.linalg.norm(p2a - p1a))
         s0 = float(np.dot(np.asarray(h.point_a) - p1a, p2a - p1a) / (la * la))
-        lo, hi, length = _overlap_stretch(
-            p1a, p2a, p1b, p2b, s0, touch * (1.0 - _OVERLAP_TOUCH_TOL)
-        )
+        lo, hi, length = _overlap_stretch(p1a, p2a, p1b, p2b, s0, reach)
         shorter = min(la, float(np.linalg.norm(p2b - p1b)))
         if length <= max(OVERLAP_REL_LENGTH * touch, OVERLAP_FRACTION * shorter):
             continue  # a branch or a crossing, not wires along each other
@@ -1593,9 +1599,11 @@ def diagnose(
     ``overlap``
         Two conductors with an ``inductance_model`` (insulated or bare) that
         lie beside each other closer than touching — axis distance below
-        the sum of their radii by more than 1e-9 of it (round-off of a
-        drawing at the touching distance is not an overlap, audit W3B-03) —
-        over more than :data:`OVERLAP_REL_LENGTH`
+        the sum of their radii by more than 1e-9 of it, or by more than 16
+        units in the last place of the largest coordinate of the pair,
+        whichever is larger (round-off of a drawing at the touching
+        distance is not an overlap, also at projected coordinates; audits
+        W3B-03, W3R2B-02) — over more than :data:`OVERLAP_REL_LENGTH`
         times that distance and :data:`OVERLAP_FRACTION` of the shorter
         conductor (warning): a service drop drawn on its PEN main, two
         cables on one axis. The inductance matrix evaluates them

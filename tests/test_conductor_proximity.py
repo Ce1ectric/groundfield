@@ -159,3 +159,25 @@ def test_wires_drawn_at_the_touching_distance_are_close_not_interpenetrating() -
         )
         (hit,) = find_close_wires(ep, [0.005, 0.005], ["a", "b"])
         assert hit.kind == kind
+
+
+# audit W3R2B-02 (the same tolerance in the proximity kinds)
+@pytest.mark.parametrize("origin", [(0.0, 0.0), (5.0e5, 5.8e6)], ids=["local", "utm"])
+def test_w3r2b_02_wires_at_the_touching_distance_at_projected_coordinates(
+    origin,
+) -> None:
+    """Base 06580ea: two 5 mm wires drawn exactly 10 mm apart at UTM
+    coordinates (spacing of float64 9.3e-10 m there) were 'interpenetrating'
+    (tolerance 1e-9 of the touching distance, 1e-11 m); the tolerance now
+    also allows 16 ulps of the coordinates. 1e-5 inside the touching
+    distance they still interpenetrate."""
+    x0, y0 = origin
+    for gap, kind in ((0.01, "close"), (0.01 * (1.0 - 1e-5), "interpenetrating")):
+        ep = np.array(
+            [
+                [[x0, y0 + 0.3, 0.6], [x0 + 40.0, y0 + 0.3, 0.6]],
+                [[x0, y0 + 0.3 + gap, 0.6], [x0 + 40.0, y0 + 0.3 + gap, 0.6]],
+            ]
+        )
+        (hit,) = find_close_wires(ep, [0.005, 0.005], ["a", "b"])
+        assert hit.kind == kind
