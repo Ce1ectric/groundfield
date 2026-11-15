@@ -432,10 +432,12 @@ the following decisions refine it.
     filament value of the pair, and a side with free and clamped stretches
     (a piece where the core leaves the touching distance, or passes an end
     of the partner) is integrated by the quadrature of item 9 with the
-    conductor extents. The pieces add up to the lumped pair within
-    6e-12 for tilts 0 … 1e-3 rad in 10 / 5 / 1 / 0.25 m pieces, marked and
-    unmarked, in the matrix and in the solver (`perfect_mirror` and
-    `sommerfeld` within 3.2e-11; under `carson_series` the Carson
+    conductor extents. The pieces add up to the lumped pair for tilts
+    0 … 1e-3 rad in 10 / 5 / 1 / 0.25 m pieces, in the matrix within
+    6.4e-12 (marked) and 3.1e-10 (unmarked; the largest value is the
+    parallel closed form just below its tolerance, at 4.4e-5 rad) and in
+    the solver (`perfect_mirror` and `sommerfeld` within 3.2e-11 marked,
+    3.1e-10 unmarked; under `carson_series` the Carson
     correction of one lumped pair, tiled at its mid-point distance, differs
     from the pieces by 1.7e-5 at 3e-4 rad and 1.3e-4 at 1e-3 rad,
     independent of the piece length — the correction's own tiling, not the
