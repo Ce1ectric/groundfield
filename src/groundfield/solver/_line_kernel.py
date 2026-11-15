@@ -928,23 +928,55 @@ def image_quadrupole_rows(
             _qtol(), out,
         )  # fmt: skip
         return out
-    # numpy: the operations of the compiled kernel, block by block.
+    # numpy: the operations of the compiled kernel, in sub-blocks of rows
+    # (audit W3A-05: one block of the caller's row loop held about twenty
+    # temporaries of its size, 161 instead of 80 MiB without numba).
+    step = max(1, _NUMPY_SUB_BLOCK // max(n_src, 1))
+    for r0 in range(0, n_obs, step):
+        sl = slice(r0, min(n_obs, r0 + step))
+        _image_rows_numpy(
+            obs_mid[sl], t[sl], obs_len[sl], ro[sl], has_t, with_radius, segs,
+            images, out[sl],
+        )  # fmt: skip
+    return out
+
+
+#: Pair entries per temporary of the numpy path of
+#: :func:`image_quadrupole_rows` (256 KiB): its sub-blocks hold about twenty
+#: such arrays, a few MiB whatever the size of the caller's block.
+_NUMPY_SUB_BLOCK: int = 1 << 15
+
+
+def _image_rows_numpy(
+    obs_mid: np.ndarray,
+    t: np.ndarray,
+    obs_len: np.ndarray,
+    ro: np.ndarray,
+    has_t: bool,
+    with_radius: bool,
+    segs: LineSegments,
+    images: list[tuple[float, float, float]],
+    out: np.ndarray,
+) -> None:
+    """The far-image term of a few rows, added to ``out`` (numpy path)."""
+    lo, hi = IMAGE_QUADRUPOLE_REACH
     dx = np.subtract.outer(obs_mid[:, 0], segs.mid[:, 0])
     dy = np.subtract.outer(obs_mid[:, 1], segs.mid[:, 1])
     dxy2 = dx * dx + dy * dy
     hx = dx * segs.tangent[None, :, 0] + dy * segs.tangent[None, :, 1]
     gx = dx * t[:, 0:1] + dy * t[:, 1:2]
+    del dx, dy
     ls2 = (segs.length * segs.length)[None, :]
     lo2 = (obs_len * obs_len)[:, None]
-    a2t = 12.0 * (0.5 * np.add.outer(ro * ro, segs.radius * segs.radius))
+    a2 = 0.5 * np.add.outer(ro * ro, segs.radius * segs.radius)
+    a2t = 12.0 * a2 if with_radius else None
     lmax = np.maximum.outer(obs_len, segs.length)
     lim = NEAR_FACTOR * lmax
     lim2 = lim * lim
     inv_l = 1.0 / lmax
     inv_span = 1.0 / (hi - lo)
-    qtol = (
-        lmax * lmax + 3.0 * (0.5 * np.add.outer(ro * ro, segs.radius * segs.radius))
-    ) * (1.0 / (6.0 * _qtol()))
+    qtol = (lmax * lmax + 3.0 * a2) * (1.0 / (6.0 * _qtol()))
+    del lim, lmax, a2
     zo = obs_mid[:, 2:3]
     tzo = t[:, 2:3]
     for weight, offset, sign in images:
@@ -964,7 +996,6 @@ def image_quadrupole_rows(
         tau = 1.0 - s * s * (3.0 - 2.0 * s)
         keep = (r2 >= lim2) & (abs(weight) * qtol >= dz * dz)
         out += np.where(keep, weight * (q * tau), 0.0)
-    return out
 
 
 def _numba_image_quadrupole_rows():

@@ -173,3 +173,28 @@ def test_a_large_depth_group_in_chunks_is_bit_identical(monkeypatch, kernel) -> 
     chunked = matrices()
     assert np.array_equal(chunked[0], one_piece[0])
     assert np.array_equal(chunked[1], one_piece[1])
+
+
+# audit W3A-05: the memory claims held with numba only
+@pytest.mark.finding("10.56")
+@pytest.mark.parametrize("soil", [CROSS, WITHIN], ids=["cross_layer", "series"])
+def test_w3a_05_the_line_kernel_without_numba_keeps_the_memory_of_the_path(
+    monkeypatch, soil
+) -> None:
+    """numba is an optional extra (CI installs without it).
+
+    The numpy path of the far-image term held about twenty block-sized
+    temporaries: 16 house grids below h_1 = 0.5 m peaked at 161 MiB without
+    numba (79.6 with it, the point kernel 76.9, auditor W3A), within the layer
+    at 158 MiB (67.0). Gate: the line kernel needs at most 1.3 times the peak
+    of the point kernel with numba switched off.
+    """
+    from groundfield.solver import _kernels
+
+    monkeypatch.setattr(_kernels, "USE_NUMBA", False)
+    w = _houses(soil)
+    peaks = {}
+    for kernel in ("point", "line"):
+        _solve(w, kernel)  # warm-up
+        peaks[kernel] = _peak_mb(lambda k=kernel: _solve(w, k))
+    assert peaks["line"] < 1.3 * peaks["point"], peaks
