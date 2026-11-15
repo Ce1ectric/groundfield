@@ -535,16 +535,66 @@ def _per_segment_brace_effect(rho_cs: tuple[float, ...]) -> list[float]:
     ]
 
 
-# audit D2B-07
+def _mom_brace_effect(rho_cs: tuple[float, ...]) -> list[float]:
+    """Encased over bare braces - 1 of the generated house mesh in 100 ohm m
+    with ``mom`` at 0.25 m segments (audit W2B-06): the generated world
+    against the same world with its two interior wires bare (r_a, C = 0)."""
+    out = []
+    for rho_c in rho_cs:
+        z = {}
+        for rule in ("encased", "bare"):
+            spec = FoundationElectrodeSpec(
+                style="mesh",
+                size_m=10.0,
+                depth_m=0.8,
+                wire_radius_m=0.005,
+                n_x=2,
+                n_y=2,
+                concrete_rho_ohm_m=rho_c,
+                concrete_thickness_m=T,
+            )
+            world = gf.create_world(soil=gf.HomogeneousSoil(rho=100.0))
+            anchor = GroundingSystemSpec(electrodes=[spec]).build_at(
+                world, (0.0, 0.0), "h", np.random.default_rng(0)
+            )
+            if rule == "bare":  # the wires through the centre, x = 0 and y = 0
+                world.electrodes = [
+                    e.model_copy(
+                        update={
+                            "wire_radius": 0.005,
+                            "concrete_shell_coefficient_ohm_m": 0.0,
+                        }
+                    )
+                    if any(
+                        all(abs(v[axis]) < 1e-9 for v in e.vertices) for axis in (0, 1)
+                    )
+                    else e
+                    for e in world.electrodes
+                ]
+                assert sum(e.wire_radius == 0.005 for e in world.electrodes) == 2
+            gf.create_source(world, attached_to=anchor, magnitude=1.0)
+            engine = gf.create_engine(
+                backend="mom", segment_length=0.25, frequencies=[50.0]
+            )
+            with warnings.catch_warnings():
+                # thin-wire notice: 0.25 m segments on r_b = 55 mm (ratio 4.5)
+                warnings.simplefilter("ignore", UserWarning)
+                z[rule] = engine.solve(world).input_impedance()[0].real
+        out.append(100.0 * (z["encased"] / z["bare"] - 1.0))
+    return out
+
+
+# audit D2B-07, audit W2B-06
 @pytest.mark.finding("10.13")
 def test_the_brace_effect_names_its_model_and_second_method() -> None:
     """The hand assembly from ``solve_mutual_matrix`` shares the kernel and
     the one-owner-per-wire model with ``Engine.solve``: it checks the
     generator, it is not an independent method. With one current per
-    segment the brace effect is +49.2 / +318.5 % instead of +46.9 / +307 %
-    at rho_c = 1000 / 5000 ohm m (house, 100 ohm m; the auditor's
-    independent BEM agrees to 0.02 pp), a model uncertainty the page and
-    ADR-0012 now state."""
+    segment the brace effect is +49.6 / +321.2 % with ``mom`` at 0.25 m
+    (audit W2B-06; +49.2 / +318.5 % with the line kernel's per-segment
+    assembly, which the auditor's independent BEM reproduces to 0.02 pp)
+    instead of +46.9 / +307 % at rho_c = 1000 / 5000 ohm m (house,
+    100 ohm m), a model uncertainty the page and ADR-0012 state."""
     page = " ".join(
         (DOCS / "explanation" / "concrete-shells.md")
         .read_text(encoding="utf-8")
@@ -558,16 +608,26 @@ def test_the_brace_effect_names_its_model_and_second_method() -> None:
     for text in (page, adr):
         assert "independent assembly" not in text
         assert "not the numbers" in text
-    effect = _per_segment_brace_effect((1000.0, 5000.0))
     found = re.search(
-        r"changes \$Z\$ by \+([0-9.]+) / \+([0-9.]+) % instead of \+46\.9 / \+307 %",
+        r"changes \$Z\$ by \+([0-9.]+) / \+([0-9.]+) % \(`mom`, 0\.25 m segments\) "
+        r"instead of \+46\.9 / \+307 %",
         page,
     )
-    assert found, "per-segment brace effect not quoted"
+    assert found, "per-segment brace effect (mom) not quoted"
     assert [float(found.group(1)), float(found.group(2))] == pytest.approx(
-        effect, abs=0.05
+        _mom_brace_effect((1000.0, 5000.0)), abs=0.05
     )
-    assert "+49.2 / +318.5 % instead of +46.9 / +307 %" in adr
+    line = re.search(
+        r"per-segment assembly with the line kernel gives \+([0-9.]+) / \+([0-9.]+) %",
+        page,
+    )
+    assert line, "per-segment brace effect (line kernel) not quoted"
+    assert [float(line.group(1)), float(line.group(2))] == pytest.approx(
+        _per_segment_brace_effect((1000.0, 5000.0)), abs=0.05
+    )
+    assert (
+        "+49.2 / +318.5 % with the line kernel and +49.6 / +321.2 % with `mom`" in adr
+    )
 
 
 @pytest.mark.finding("10.13")

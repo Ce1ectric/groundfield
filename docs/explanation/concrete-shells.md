@@ -93,19 +93,37 @@ the implementation (evidence of stream w2mom,
   solves the same system: it agrees with `mom` to $7\cdot10^{-16}$ for
   rods, a rod through the layer interface, rings, strips, grids, outlines
   and stars in 100 Ω·m and in 30 / 200 Ω·m ($h_1$ = 4 m), 5 cm of
-  100 Ω·m concrete; `mom_sommerfeld` reproduces `mom` on the two-layer soil
-  to $4\cdot10^{-9}$.
+  100 Ω·m concrete. `mom_sommerfeld` reproduces `mom` to about $10^{-8}$
+  ($10^{-9}$ … $1.5\cdot10^{-8}$ for a 10 m grid in four two-layer soils,
+  bare and encased; audit W2B-07): that is the agreement of its Sommerfeld
+  quadrature with the Tagg/Sunde series of `mom` without a shell, the
+  shell increments $Z(C) - Z(0)$ of the two engines agree to
+  $1.4\cdot10^{-10}$.
 * **Closed forms.** The segments of a ring are equivalent (its matrix is
   circulant), so its current stays uniform and the shell adds exactly
   $C/(2\pi r)$: `mom` and `mom_sommerfeld` give it to $10^{-14}$ in
   homogeneous, two-layer and three-layer soil for $C$ = 11 … 382 Ω·m. For
-  a 3 m rod from the surface, Sunde's decomposition with Dwight's rod
-  formula, $R = C/L + \frac{\rho}{2\pi L}\bigl(\ln\frac{4L}{r_b} -
+  a 3 m rod from the surface in 100 Ω·m, Sunde's decomposition with
+  Dwight's rod formula, $R = C/L + \frac{\rho}{2\pi L}\bigl(\ln\frac{4L}{r_b} -
   1\bigr)$, the image family's uniform current (line kernel) lies
-  0.14 … 0.20 % above the formula and rises by exactly $C/L$; `mom` rises
-  by 1.014 … 1.041 $C/L$ and lies 0.8 … 2.7 % below the formula (5 cm of
-  30 or 100 Ω·m concrete, 0.25 m and 0.125 m segments), less than the bare
-  rod (2.4 … 3.5 %, the point kernel's deficit).
+  0.14 … 0.20 % above the formula and rises by exactly $C/L$ (5 cm of 30
+  or 100 Ω·m concrete, $r_b$ = 55 mm, 0.5 … 0.125 m segments). `mom` lies
+  below it by the point kernel's deficit, which grows as the segments
+  shorten while they stay at least 2.99 wire radii long: with
+  $r_b$ = 55 mm the bare rod lies 2.5 / 3.5 % below Dwight's formula at
+  0.5 / 0.25 m segments, the encased one 1.4 … 2.7 % below Sunde's, rising
+  by 1.008 … 1.022 $C/L$. A segment shorter than $2.99\,r_b$ takes the
+  Galerkin self term on the diagonal (see [`mom`](engines/mom.md)), which
+  lifts the deficit again: at 0.125 m ($2.3\,r_b$) the bare rod lies 2.4 %
+  and the encased one 0.8 / 1.5 % below (100 / 30 Ω·m, rising by
+  1.022 / 1.041 $C/L$). With $r_b$ = 20 mm (1.5 cm of 100 Ω·m), where
+  0.5 … 0.0625 m segments all stay above $2.99\,r_b$, the deficit grows
+  monotonically: bare 1.9 / 2.5 / 2.9 / 3.2 %, encased
+  1.4 / 1.8 / 2.0 / 2.2 % at 0.5 / 0.25 / 0.125 / 0.0625 m. An own
+  point-matching matrix written from the thin-wire formulas equals `mom`
+  to $2\cdot10^{-16}$ wherever every segment is that long and departs from
+  it by −2.2 % (bare rod, $r_b$ = 55 mm, 0.125 m), the self-term switch
+  (audit W2B-07; evidence of stream fw2mom).
 
 `mom` is therefore the per-segment reference against which the owner
 model of the image family (one uniform current per straight wire) is
@@ -248,17 +266,23 @@ kernel and image series, audit D2B) reproduces every entry of the table to
 0.02 percentage points. Both rest on the owner model of the image family,
 one uniform current per wire. With one current per segment, all segments
 at one potential (the moment-method reference), encasing the braces of
-the house mesh in 100 Ω·m changes $Z$ by +49.2 / +318.5 % instead of
-+46.9 / +307 % at $\rho_c$ = 1 000 / 5 000 Ω·m (`medium_industry`:
-+49.2 / +312 % instead of +46.2 / +298 %); groundfield's per-segment
-assembly and the boundary-element solution agree on this to 0.02 points.
-The owner model is 1.6 / 2.8 % high for the mesh with bare braces and at
-most 0.6 % high for the encased mesh (0.43 % at 50 Ω·m, 0.004 % at
-5 000 Ω·m for the house in 100 Ω·m), whose shell evens out the current
-over the wires. These per-segment numbers come from groundfield's
-per-segment assembly with the line kernel at 0.25 m segments; at 0.5 m
-segments it gives 0.42 %, and `mom` with its point kernel puts the image
-family's point kernel 0.38 % above it (see
+the house mesh in 100 Ω·m changes $Z$ by +49.6 / +321.2 % (`mom`, 0.25 m
+segments) instead of +46.9 / +307 % at $\rho_c$ = 1 000 / 5 000 Ω·m
+(`medium_industry`: +49.5 / +313.7 % instead of +46.2 / +298 %).
+groundfield's per-segment assembly with the line kernel gives
++49.2 / +318.5 % (`medium_industry` +49.2 / +312 %), and the
+boundary-element solution agrees with it to 0.02 points; an own
+point-matching solve of six hand-built wires (own segments, own kernel,
+Sunde's $C$ by hand) reproduces `mom` on the generated mesh to
+$4\cdot10^{-16}$ in $Z$ (audit W2B-06; evidence of stream fw2mom). The owner model is
+1.6 / 2.8 % high for the mesh with bare braces (house; `medium_industry`
+2.2 / 3.6 %; with the point kernel against `mom` 1.5 / 2.7 and
+2.1 / 3.5 %) and at most 0.6 % high for the encased mesh (0.43 % at
+50 Ω·m, 0.004 % at 5 000 Ω·m for the house in 100 Ω·m), whose shell evens
+out the current over the wires. These owner-model numbers come from
+groundfield's per-segment assembly with the line kernel at 0.25 m
+segments; at 0.5 m segments it gives 0.42 %, and `mom` with its point
+kernel puts the image family's point kernel 0.38 % above it (see
 [In the moment method](#in-the-moment-method)).
 
 ### Against 0.15.0

@@ -439,9 +439,11 @@ checks the generator's wiring of $r_b$ and $C$, not the numbers. An
 independent thin-wire boundary-element solution (audit D2B) reproduces the
 numbers to 0.02 percentage points for the same owner model; with one
 current per segment (the moment-method reference) the change is +49.2 /
-+318.5 % instead of +46.9 / +307 % at 1 000 / 5 000 Ω·m, a model
++318.5 % with the line kernel and +49.6 / +321.2 % with `mom` (audit
+W2B-06) instead of +46.9 / +307 % at 1 000 / 5 000 Ω·m, a model
 uncertainty of the owner model that lies in the bare-brace reference
-(1.6 / 2.8 % high there; at most 0.6 % for encased meshes)
+(1.6 / 2.8 % high there, 1.5 / 2.7 % with the point kernel against `mom`;
+at most 0.6 % for encased meshes)
 (`tests/test_concrete_one_mechanism.py`; tables on the
 [concrete-shell page](../explanation/concrete-shells.md#cross-braces-of-mesh-foundations)).
 Ring and building-outline foundations, among them the AP1 catalogue, do
