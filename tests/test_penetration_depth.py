@@ -273,3 +273,61 @@ def test_w3b_11_penetration_depth_compares_by_value_and_hashes() -> None:
         assert not arr.flags.writeable
     with pytest.raises(ValueError, match="shape"):
         gf.PenetrationDepth(frequencies=[50.0, 60.0], depth=[1.0], resistivity=[1.0])
+
+
+# audit W3R2B-05 (the auditor's test)
+def test_w3r2b_05_equal_penetration_depths_hash_equally() -> None:
+    """Base 06580ea: PenetrationDepth compared the arrays with
+    numpy.array_equal (0.0 == -0.0) but hashed frequencies.tobytes(), which
+    differ for +0.0 and -0.0; __post_init__ did not validate the
+    frequencies, so a result built directly broke the hash contract (two
+    equal objects, two set entries). A zero frequency is refused now, and
+    the hash is that of the frequency values."""
+    from groundfield.soil.penetration import PenetrationDepth
+
+    for zero in (0.0, -0.0):
+        with pytest.raises(ValueError, match="frequencies"):
+            PenetrationDepth(frequencies=[zero], depth=[1.0], resistivity=[1.0])
+    a = PenetrationDepth(frequencies=[50.0], depth=[1.0], resistivity=[1.0])
+    b = PenetrationDepth(frequencies=[50], depth=[1.0], resistivity=[1.0])
+    assert a == b and hash(a) == hash(b)
+
+
+# audit W3R2B-05
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("frequencies", [0.0]),
+        ("frequencies", [-50.0]),
+        ("frequencies", [math.inf]),
+        ("frequencies", [math.nan]),
+        ("depth", [complex(math.nan, 0.0)]),
+        ("depth", [complex(1.0, math.nan)]),
+        ("resistivity", [math.nan]),
+    ],
+)
+def test_w3r2b_05_a_result_built_directly_is_validated(field, value) -> None:
+    """Base 06580ea: a PenetrationDepth built directly took any frequencies
+    (zero, negative, inf, NaN) and NaN depths, so ``x == x`` could be False
+    (NaN) and equal objects could hash differently (signed zero). The
+    frequencies are finite and positive, depth and resistivity are not NaN."""
+    from groundfield.soil.penetration import PenetrationDepth
+
+    kw = {"frequencies": [50.0], "depth": [1.0 - 1.0j], "resistivity": [100.0]}
+    kw[field] = value
+    with pytest.raises(ValueError, match=field):
+        PenetrationDepth(**kw)
+
+
+# audit W3R2B-05
+def test_w3r2b_05_the_hash_agrees_with_equality() -> None:
+    """Equal results hash equally, also when one is built directly from the
+    arrays of the other in another dtype."""
+    from groundfield.soil.penetration import PenetrationDepth
+
+    pd = gf.penetration_depth(gf.HomogeneousSoil(rho=100.0), [50.0, 1000.0])
+    again = PenetrationDepth(
+        frequencies=[50, 1000], depth=list(pd.depth), resistivity=list(pd.resistivity)
+    )
+    assert again == pd and hash(again) == hash(pd) and len({pd, again}) == 1
+    assert again == again
