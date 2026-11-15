@@ -95,8 +95,10 @@ The owner multiport matrix enters the augmented nodal system of the
 [engine family](index.md#network-equations): electrodes bonded by ideal
 conductors share a node potential, finite conductors are branches with
 their resistance, internal and partial inductance and earth-return
-correction, junctions are nodes without soil contact, and sources inject
-$+I$ at `attached_to` and $-I$ at `return_to`. Source-free clusters float
+correction, junctions are nodes without soil contact, current sources
+inject $+I$ at `attached_to` and $-I$ at `return_to`, and a voltage source
+adds its current as an unknown and fixes $\varphi_a - \varphi_r = U$
+(modified nodal analysis). Source-free clusters float
 with zero net current: a lone passive electrode then carries no current
 (under the uniform ansatz its leakage would have to be zero everywhere)
 and reports the potential the field imposes; a bonded group of passive

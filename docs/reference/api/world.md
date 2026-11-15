@@ -32,10 +32,11 @@ nodes that conductors and sources refer to.
 `World.check()` validates the model before any backend runs: every
 source terminal and conductor end must name an existing node (the error
 suggests the closest names), the two terminals of a source must not be
-bonded into one cluster, and a world needs at least one electrode and
-one current source with a finite, non-zero magnitude. A
-`VoltageSource` raises `NotImplementedError` (no backend implements an
-impressed voltage). Every solve calls the check; the solver pipeline
+bonded into one cluster, voltage sources must not form a loop (through
+ideal bonds or remote earth), magnitudes must be finite, a current source
+must not be 0 A (a voltage source of 0 V is an ideal short), and a world
+needs at least one electrode and one source of non-zero magnitude. Every
+solve calls the check; the solver pipeline
 also rejects junctions without a conductor path to an electrode. The
 [diagnostics](diagnostics.md) module adds advisory checks (problem size,
 segment resolution, close wires).

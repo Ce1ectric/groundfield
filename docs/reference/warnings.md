@@ -34,8 +34,8 @@ the built-in exceptions with a fixed meaning.
 `NotImplementedError`. **Raised** by `Engine.solve` before any
 numerics when the backend cannot represent the world: an unsupported
 number of soil layers, electrodes with a concrete-shell coefficient,
-junctions, an explicitly requested kernel the backend does not
-implement, or a horizontal wire so close to the layer interface, on
+junctions, voltage sources (`fem`), an explicitly requested kernel the
+backend does not implement, or a horizontal wire so close to the layer interface, on
 either side of it, that the point form cannot evaluate it (see
 `PointKernelInterfaceWarning`). The message names the backends that can. **Remedy:** choose
 one of them (see the [backend registry](api/registry.md)); three or more
@@ -362,8 +362,8 @@ from a cached / stored answer.
 | Exception | Raised when |
 |---|---|
 | `KeyError` | an electrode, junction, conductor or source name is unknown (the message suggests the closest names) |
-| `ValueError` | an invalid value: non-finite or non-positive physical input, a source with zero current, a short-circuited two-terminal source, a junction without soil contact, an empty world |
+| `ValueError` | an invalid value: non-finite or non-positive physical input, a current source of 0 A, a short-circuited two-terminal source, a loop of voltage sources, a junction without soil contact, an empty world |
 | `TypeError` | an unknown keyword of a factory, or a soil that is not a soil model |
-| `NotImplementedError` | a `VoltageSource` in the world; `FieldResult.potential` for three or more soil layers |
+| `NotImplementedError` | `FieldResult.potential` for three or more soil layers (`BackendCapabilityError`, a subclass, for a world a backend cannot represent, such as a `VoltageSource` on `fem`) |
 | `ImportError` | a function of `groundfield.geo` without the `geo` extra, or `to_bustype` without `groundinsight` (the message gives the install command) |
 | `pydantic.ValidationError` | a model field fails validation (subclass of `ValueError`) |

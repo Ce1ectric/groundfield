@@ -104,6 +104,11 @@ conductive layer: −56 %; audit R2A-02).
   conductor as a lumped branch). A rod with its head at $z = 0$ is the
   ordinary driven rod and stays valid; an isolated conductor may run in
   the air.
+- **Error** (`BackendCapabilityError`, in the capability check of
+  `Engine.solve` and in a direct `solve_fem` call): a `VoltageSource`. The
+  registry capability `voltage_sources` is false for `fem`; the integral
+  engines solve the world (up to 0.15.0 `fem` dropped the source with a
+  warning and solved to zero potentials).
 - **Error** (`BackendCapabilityError`, before meshing): an electrode
   touches a layer that its hemisphere does not reach — a rod through the
   top layer, a wire on (or within its radius above) an interface below
