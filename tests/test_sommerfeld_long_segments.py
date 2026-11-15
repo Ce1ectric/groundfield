@@ -8,9 +8,16 @@ start to end; under ``sommerfeld`` its earth-return correction was one
 straight buried conductor was +1.7 % (1 km), +13.4 % (3 km), +34.9 % (5 km)
 against the converged chain, and a 3 km PEN between two rods read +11 %
 series resistance (audit round 2 of the calendar release, A2C-2). Since
-then a segment longer than a quarter skin depth gets a composite outer
+then a segment longer than a quarter skin depth got a composite outer
 rule (16 nodes per piece) and a denser S(rho) table; shorter segments
-keep the historic rule bit for bit.
+kept the historic rule, 4.8e-4 off at a quarter skin depth with a step of
+3.5e-4 where the composite rule took over.
+
+User decision Q34: the self term of every segment is the exact
+one-dimensional reduction 2 int_0^L (L - u) g(u) du (graded 16-node panels,
+cubic-spline S(rho)), within 2e-8 of a refined rule from 0.01 skin depths to
+3 km at 50 Hz and 1 kHz and without a step (below 1e-9 where the rule
+changes).
 """
 
 from __future__ import annotations
@@ -174,14 +181,28 @@ def test_an_extreme_segment_warns_instead_of_exhausting_memory() -> None:
     assert n == _MAX_PIECES
 
 
+_REFINED = {
+    "_PIECE_SKIN_FRACTION": 1.0 / 128.0,
+    "_RHO_NODE_SPACING": 0.005,
+    "_SELF_T_SPACING": 0.005,
+    "_GRADING_START": 1.0 / 16.0,
+    "_FAR_WIDTHS": 160.0 * 32.0,  # uniform panels up to 40 skin depths
+}
+
+
 def _self_correction(seg, earth, f, *, refined: bool = False, method="exact"):
-    """Self correction of one segment; ``refined``: pieces delta/32 and an
-    S(rho) node spacing of 0.005 (self-consistent to 2e-6)."""
+    """Self correction of one segment; ``refined``: panels of delta/128 up to
+    40 skin depths, the first graded panel z/16 and S(rho) node spacings of
+    0.005 (user decision
+    Q34; the rule of 2026.11.0 was refined with pieces delta/32 and a spacing
+    of 0.005, self-consistent to 2e-6)."""
     import groundfield.coupling.sommerfeld_inductance as si
 
-    saved = si._PIECE_SKIN_FRACTION, si._RHO_NODE_SPACING
+    # (the rule of 2026.11.0 has only the first two constants)
+    saved = {name: getattr(si, name) for name in _REFINED if hasattr(si, name)}
     if refined:
-        si._PIECE_SKIN_FRACTION, si._RHO_NODE_SPACING = 1.0 / 32.0, 0.005
+        for name in saved:
+            setattr(si, name, _REFINED[name])
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", SommerfeldResolutionWarning)
@@ -194,47 +215,85 @@ def _self_correction(seg, earth, f, *, refined: bool = False, method="exact"):
                 method=method,
             )[0, 0, 0]
     finally:
-        si._PIECE_SKIN_FRACTION, si._RHO_NODE_SPACING = saved
+        for name, value in saved.items():
+            setattr(si, name, value)
 
 
-# audit A3C-4: the stated accuracy holds where it was measured
+# audit A3C-4: the stated accuracy holds where it was measured; user
+# decision Q34 tightened it (2026.11.0: 6e-4 / 2.5e-4 for the overhead and
+# two-layer cases, 2e-4 / 1e-4 buried in 100 Ohm m)
 @pytest.mark.parametrize(
-    ("name", "z", "rhos", "thicknesses", "re_bound", "im_bound"),
+    ("name", "z", "rhos", "thicknesses"),
     [
-        # overhead line at 10 m over 10 Ohm m: 4.8e-4 / 1.2e-4 (the auditor's
-        # test asked for the 1e-4 that audit round 2 had stated)
-        ("overhead_1km_10ohm", -10.0, (10.0,), (), 6e-4, 2.5e-4),
-        ("buried_1km_two_layer", 0.7, (1000.0, 30.0), (5.0,), 6e-4, 2.5e-4),
-        ("buried_1km_100ohm", 0.7, (100.0,), (), 2e-4, 1e-4),
+        ("overhead_1km_10ohm", -10.0, (10.0,), ()),
+        ("buried_1km_two_layer", 0.7, (1000.0, 30.0), (5.0,)),
+        ("buried_1km_100ohm", 0.7, (100.0,), ()),
     ],
 )
 def test_long_segment_rule_meets_its_stated_accuracy(
-    name, z, rhos, thicknesses, re_bound, im_bound
+    name, z, rhos, thicknesses
 ) -> None:
-    """A lumped 1 km conductor at 1 kHz against the refined rule. Audit
-    round 2 stated 7e-5 (resistance) and 1e-6 (reactance) from one buried
-    3 km case; measured worst cases (sommerfeld_inductance, comment of
-    _PIECE_SKIN_FRACTION): 5.9e-4 / 2.4e-4 for a 3 km overhead line."""
+    """A lumped 1 km conductor at 1 kHz against the refined rule: within
+    2e-8 (2026.11.0: 5.9e-4 / 2.4e-4 for a 3 km overhead line)."""
     seg = np.array([[[0.0, 0.0, z], [1000.0, 0.0, z]]])
     earth = LayeredEarth(rhos=rhos, thicknesses=thicknesses)
     got = _self_correction(seg, earth, 1000.0)
     ref = _self_correction(seg, earth, 1000.0, refined=True)
-    assert got.real == pytest.approx(ref.real, rel=re_bound, abs=0)
-    assert got.imag == pytest.approx(ref.imag, rel=im_bound, abs=0)
+    assert got.real == pytest.approx(ref.real, rel=2e-8, abs=0)
+    assert got.imag == pytest.approx(ref.imag, rel=2e-8, abs=0)
 
 
-# audit A3C-4
-def test_the_step_at_a_quarter_skin_depth_is_the_stated_one() -> None:
-    """Where the composite rule takes over (L = delta/4), the self
-    correction of a buried segment in 100 Ohm m at 1 kHz steps by 3.5e-4
-    (resistance) and 1.2e-5 (reactance): the error of the historic single
-    16x16 rule at the top of its range (4.8e-4 against the refined rule)."""
-    delta = math.sqrt(2.0 * 100.0 / (2.0 * math.pi * 1000.0 * MU0))
-    lo = _self_correction(
-        np.array([[[0, 0, 0.7], [0.25 * delta * (1 - 1e-7), 0, 0.7]]]), EARTH, 1000.0
-    )
-    hi = _self_correction(
-        np.array([[[0, 0, 0.7], [0.25 * delta * (1 + 1e-7), 0, 0.7]]]), EARTH, 1000.0
-    )
-    assert abs((hi - lo).real / lo.real) == pytest.approx(3.5e-4, rel=0.02)
-    assert abs((hi - lo).imag / lo.imag) == pytest.approx(1.2e-5, rel=0.05)
+_EARTHS = {
+    "buried_100ohm": (0.7, (100.0,), ()),
+    "overhead_10ohm": (-10.0, (10.0,), ()),
+    "buried_1000_over_30": (0.7, (1000.0, 30.0), (5.0,)),
+    "buried_30_over_1000_h1_1m": (0.7, (30.0, 1000.0), (1.0,)),
+}
+
+
+# user decision Q34
+@pytest.mark.parametrize("f", [50.0, 1000.0])
+@pytest.mark.parametrize("name", list(_EARTHS))
+@pytest.mark.parametrize("fraction", [0.01, 0.1, 0.25, 1.0, 5.0])
+def test_the_self_correction_is_within_its_bound_of_a_refined_rule(
+    name, f, fraction
+) -> None:
+    """0.01 ... 5 skin depths at 50 Hz and 1 kHz: within 2e-8 of the refined
+    rule (measured worst 1.7e-8, 30 over 1000 Ohm m with h1 = 1 m; an
+    independent one-dimensional reduction with S(rho) summed at every node
+    agrees to the same level, evidence q34_bound_scan). Base 3500ec9: up to
+    4.8e-4 at a quarter skin depth (buried, 100 Ohm m), 1.5e-3 at 50 Hz in
+    30 over 1000 Ohm m."""
+    z, rhos, thicknesses = _EARTHS[name]
+    earth = LayeredEarth(rhos=rhos, thicknesses=thicknesses)
+    delta = math.sqrt(2.0 * min(rhos) / (2.0 * math.pi * f * MU0))
+    length = min(fraction * delta, 3000.0)
+    seg = np.array([[[0.0, 0.0, z], [length, 0.0, z]]])
+    got = _self_correction(seg, earth, f, method="tabulated")
+    ref = _self_correction(seg, earth, f, refined=True)
+    assert got.real == pytest.approx(ref.real, rel=2e-8, abs=0)
+    assert got.imag == pytest.approx(ref.imag, rel=2e-8, abs=0)
+
+
+# audit A3C-4, user decision Q34
+@pytest.mark.parametrize("name", ["buried_100ohm", "overhead_10ohm"])
+def test_the_self_correction_has_no_step_at_a_quarter_skin_depth(name) -> None:
+    """Where the composite rule used to take over (L = delta/4, 1 kHz) the
+    self correction steps by less than 1e-9 once the smooth change over the
+    interval is taken out (base 3500ec9: 3.5e-4 in the resistance and
+    1.2e-5 in the reactance, buried in 100 Ohm m; measured now 1.3e-11 and,
+    at every other length where the rule changes, at most 5.4e-10)."""
+    z, rhos, thicknesses = _EARTHS[name]
+    earth = LayeredEarth(rhos=rhos, thicknesses=thicknesses)
+    delta = math.sqrt(2.0 * min(rhos) / (2.0 * math.pi * 1000.0 * MU0))
+
+    def at(scale: float) -> complex:
+        length = 0.25 * delta * scale
+        return _self_correction(
+            np.array([[[0, 0, z], [length, 0, z]]]), earth, 1000.0, method="tabulated"
+        )
+
+    lo2, lo, hi = at(1.0 - 3e-7), at(1.0 - 1e-7), at(1.0 + 1e-7)
+    jump = (hi - lo) - (lo - lo2)  # minus the smooth increment
+    assert abs(jump.real / lo.real) < 1e-9
+    assert abs(jump.imag / lo.imag) < 1e-9
