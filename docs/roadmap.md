@@ -101,6 +101,16 @@ limits a result, the reference documentation states the limit.
 - **A 3-D `fem` preconditioner for high layer contrast.** The multigrid of
   the stiffness stalls above a contrast of about 300 (the coupling diagonal
   does not help, stream fw4fem3d); such worlds are refused.
+- **A source radius per wire in the 3-D `fem`.** One source radius serves
+  the whole world, so the closest pair of wires that run beside each other
+  refines the whole mesh (nodes grow as $1/R$): one PEN 5 cm beside a strip
+  triples the station's nodes (audits W4R2B-03, W4R2A-01). A per-wire radius
+  needs a per-wire disc quadrature, energy radius and mesh size. `diagnose()`
+  does not report such wires yet; the solve refuses the closest ones before
+  meshing.
+- **The transfer estimate in the axisymmetric `fem`.**
+  `fem_error_estimate_transfer` exists in the 3-D model only; the same
+  estimate would give both models one metadata schema.
 - **Converged Q40 junction numbers.** A third level of the prism faces (more
   than 3 million nodes) would settle the sign of the junction effect, today a
   few cm of wire at most (audit W4B-05).

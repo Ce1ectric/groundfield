@@ -292,11 +292,18 @@ shows what agrees with independent references and how well.
   the integral engines (a smoothed line source with an analytic radius
   correction: uniform around the wire, no end faces), the soil an isotropic
   tetrahedral mesh with immersed layer interfaces. Away from layer
-  interfaces and other wires (by about $R/0.8$, $R$ = `source_radius`) it
-  agrees with the axisymmetric model to 2e-3 for rods and rings in one to
-  three layers. Its two mesh levels are not asymptotic for every geometry
-  (error ratios 3.0 … 5.2): the reported error estimate (3 … 5e-3) bounds the
-  error while the ratio is at least 2.5 (for rings it is 2.1 … 2.7 times the
+  interfaces it agrees with the axisymmetric model to 2e-3 for rods and
+  rings in one to three layers. Wires that run beside each other (side by
+  side within 30° of parallel, a folded arm, a small ring around a rod head)
+  are kept at least $1.5\,R$ apart ($R$ = `source_radius`, 6 cm): the model
+  takes a smaller $R$ for the whole world (the nodes grow as $1/R$; coaxial
+  rings 4.5 cm apart need 1.0 million nodes) and refuses wires closer than
+  3.3 wire radii, axis to axis, before meshing (`BackendCapabilityError`;
+  audits W4R2B-03, W4R2A-01); coaxial rings 4.5 … 10 cm apart lie within
+  1.8e-3 of the solid tori. Its two mesh levels are not asymptotic for every
+  geometry (error ratios 3.0 … 4.4): the reported error estimate (3 … 5e-3;
+  `fem_error_estimate_transfer` for the transfer entries) bounds the error
+  while the ratio is at least 2.5 (for rings it is 2.1 … 4.4 times the
   error) and differences below about 2e-3 are not resolved; next to a
   strongly contrasting interface the thin-wire error applies (see *A
   horizontal wire within a few wire radii of an interface*; audits W4B-01,
@@ -321,7 +328,9 @@ shows what agrees with independent references and how well.
   (its per-metre shell conductance reads 2.8 … 4.6 % high at the default
   levels: the square prism's concrete is 3.8 % less resistive than the
   circular shell in the shell-dominated limit, and its faces converge at
-  first order; its error estimate is no bound; audit W4B-04); it serves differences on one mesh (user decision Q40), not the
+  first order; its error estimate is no bound; audit W4B-04); a cover so
+  thin that the smoothed source does not reach beyond the metal (a 5 mm bar
+  with 5 mm cover) is refused before meshing (audit W4R2B-04); it serves differences on one mesh (user decision Q40), not the
   shell term itself. Like every backend, `FieldResult.potential` of a `fem`
   result supports homogeneous and two-layer soil only.
 - **Concrete shells** (`concrete_shell_coefficient_ohm_m`) are represented by the image

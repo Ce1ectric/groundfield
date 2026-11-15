@@ -148,3 +148,22 @@ def test_w4r2b_06_the_cg_refusal_does_not_blame_a_contrast_of_1() -> None:
     # homogeneous soil and model='auto' for worlds that are not axisymmetric
     solid = _text(FEM_PKG / "_solid.py")
     assert "_convergence_cause" in solid and "in homogeneous soil" in solid
+
+
+def test_w4r2b_06_the_station_memory_is_the_re_measured_one_in_the_changelog() -> None:
+    """The station's memory was re-measured to 4.1 … 4.3 GB (f15 of stream
+    fw4fem3d); the CHANGELOG's Added entry of the 3-D model said 3.6 … 4.4 GB
+    (audit W4R2B-06)."""
+    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "3.6 … 4.4 GB" not in log
+    assert "4.1 … 4.3 GB" in log
+
+
+def test_w4r2b_06_the_junction_table_carries_the_re_measured_values() -> None:
+    """concrete-shells.md kept the T-joint +0.2 / +3.2 cm and the crossing
+    −6.0 / −2.8 cm measured before audit W4B-01; f12 of stream fw4fem3d
+    re-measured them as +0.63 / +3.71 and −5.10 / −1.90 cm (audit
+    W4R2B-06)."""
+    page = (ROOT / "docs/explanation/concrete-shells.md").read_text(encoding="utf-8")
+    assert "| crossing | −6.0 cm | −2.8 cm |" not in page
+    assert "−5.1 cm" in page and "−1.9 cm" in page

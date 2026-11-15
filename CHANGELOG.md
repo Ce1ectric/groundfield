@@ -551,8 +551,10 @@ reproduces 0.15.0, it is named.
   correction in an isotropic tetrahedral mesh refined towards them, partially
   penalised immersed layer interfaces, conjugate gradients with an algebraic
   multigrid, two nested levels extrapolated; within 2e-3 of the axisymmetric
-  model for rods and rings in one to three layers away from interfaces and
-  other wires (audits W4B-01, W4B-02); the AP1 station in the
+  model for rods and rings in one to three layers away from interfaces;
+  wires that run beside each other are kept at least 1.5 source radii apart
+  by a smaller source radius, and refused closer than 3.3 wire radii, axis
+  to axis (audits W4B-01, W4B-02, W4R2B-03, W4R2A-01); the AP1 station in the
   corner soils of the AP1 grid lies between `image_2layer` (+0.7 … +3.0 %) and
   `mom` (−0.4 … −0.9 %), at 1.5 … 3 minutes and 4.1 … 4.3 GB per solve. It
   needs the optional extra `fem3d` (scikit-fem, BSD-3; pyamg, MIT;
@@ -566,7 +568,8 @@ reproduces 0.15.0, it is named.
   `max_nodes_3d`, `max_ports_3d` (100: more ports are refused before
   meshing; raise it to solve such a world on purpose, audit W4B-08);
   metadata `fem_port_resistance`, `fem_ports`,
-  `fem_error_estimate`, `fem_mesh`, `fem_model` and more. Against the
+  `fem_error_estimate` (3-D model also `fem_error_estimate_transfer` for the
+  transfer entries, audit W4R2B-05), `fem_mesh`, `fem_model` and more. Against the
   concrete resolved as a volume (Q40) a junction of encased wires acts like a
   few cm of wire, at most about $2\,r_b$, sign not settled (not converged;
   audit W4B-05); the generators' house mesh changes by about 1 % or less, so
@@ -1868,6 +1871,35 @@ that ran. `fem` is registered as experimental (`ExperimentalBackendWarning`).
 - Stale descriptions of the equivalent-hemisphere `fem` in docstrings, the
   JSON schema text of `concrete_shell_coefficient_ohm_m`, the reference pages
   and tutorial T09 (audits W4A-04, W4B-10). Test: `tests/test_fem.py`.
+- `fem`, 3-D model, round 2 of the wave-4 audits (W4R2B, W4R2A-01).
+  - Two coaxial rings 7.5 cm apart read +4.35e-3 in a port entry, above
+    their estimate, and rings diagonal to each other 1.3 … 3.8 mm apart,
+    which `model="auto"` sends to the 3-D model, read +11.4 … +14.3 %
+    without a warning. Wires that run beside each other (side by side within
+    30° of parallel, a folded arm, a wire within reach of another over its
+    whole length) are now kept 1.5 source radii apart by a smaller source
+    radius for the whole world (coaxial rings 4.5 … 10 cm apart within
+    1.8e-3 of the solid tori); below 2.2 bare wire radii the solve raises
+    `BackendCapabilityError` before meshing, naming the wires, their
+    distance, `mom` and `image`. Junctions, crossings at more than 30°, a
+    rod on a ring and collinear pieces are left alone. The radius correction
+    counts a wire of another port only where it meets the observer's wire
+    (audits W4R2B-03, W4R2A-01).
+  - The own piece of a long oblique wire was clipped from about 7 m on
+    (cancellation in the axis distance; a 20 m strip −3.78e-4, W4R2B-01). A
+    folded arm tilted by 1e-6 rad counted whole (a hairpin +1.41e-3); the own
+    polyline now counts whole only where it has turned by less than 120°
+    (W4R2B-02).
+  - Resolved concrete with a cover so thin that the smoothed source does not
+    reach beyond the metal ended in a bare `ValueError` after meshing; it is
+    refused before meshing, naming `concrete_resistivity=None` (W4R2B-04).
+  - The conjugate-gradient refusal blamed "a layer contrast of 1" in
+    homogeneous soil and offered `model='auto'` for worlds the axisymmetric
+    model refuses (W4R2B-06). `solid_earth` defaults to the 2 million nodes
+    of `max_nodes_3d` (W4R2A-07).
+  - B8 note: `mom` at its 0.5 m segments is not converged; `fem`'s Z_BA lies
+    0.15 … 0.21 % below `mom` at 1/32 m, which is still falling (W4R2B-05).
+  Test: `tests/test_fem_3d.py`, `tests/test_docs_fem_3d_texts.py`.
 
 ### Corrections to the 0.15.0 release notes
 
