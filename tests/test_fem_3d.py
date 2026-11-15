@@ -1019,3 +1019,100 @@ def test_w4b_09_the_memory_figure_is_the_increase_during_the_solve() -> None:
     md = _solve(_w4b_short_strip()).metadata
     assert md["fem_process_peak_memory_gb"] >= 0.6
     assert 0.0 <= md["fem_peak_memory_gb"] < md["fem_process_peak_memory_gb"] - 0.5
+
+
+# ---------------------------------------------------------------------
+# Stream fw4int: the port limit as an option, the near-interface warning
+# ---------------------------------------------------------------------
+
+
+class _PastThePortCheck(Exception):
+    """Raised by the stubbed mesher: the solve got past the port check."""
+
+
+def _galvanic_chain(piece: float = 0.05) -> gf.World:
+    """Two rods 8 m apart, a galvanic conductor in ``piece`` m pieces: 162
+    ports at 5 cm (the world of the W4B-08 test)."""
+    w = gf.create_world(soil=H100)
+    gf.create_electrode(w, "rod", name="a", position=(0, 0, 0.6), length=2.0)
+    gf.create_electrode(w, "rod", name="b", position=(8, 0, 0.6), length=2.0)
+    gf.create_conductor(
+        w,
+        start="a",
+        end="b",
+        cross_section=50e-6,
+        coupling_to_soil="galvanic",
+        discretize_segment_length=piece,
+    )
+    gf.create_source(w, attached_to="a", magnitude=1.0)
+    return w
+
+
+def _stub_the_mesher(monkeypatch) -> None:
+    def past(*args, **kwargs):
+        raise _PastThePortCheck
+
+    monkeypatch.setattr(mesh3, "background", past)
+
+
+def test_the_3d_port_limit_is_an_option_of_100_ports() -> None:
+    """FemOptions.max_ports_3d carries the port limit of the 3-D model, by
+    default the 100 ports of audit W4B-08 (base: a constant of the module,
+    not raisable)."""
+    # audit W4B-08 (stream fw4int: the limit as an option)
+    import inspect
+
+    from groundfield.solver.fem import _solid, solve_fem
+    from groundfield.solver.registry import FemOptions
+
+    assert FemOptions().max_ports_3d == 100 == _solid.MAX_PORTS_3D
+    assert inspect.signature(solve_fem).parameters["max_ports_3d"].default == 100
+    for bad in (0, -1, 2.5):
+        with pytest.raises(ValueError):
+            FemOptions(max_ports_3d=bad)
+
+
+def test_the_port_refusal_names_the_option(monkeypatch) -> None:
+    """Above the limit the refusal names FemOptions.max_ports_3d, the way
+    to solve such a world on purpose."""
+    # audit W4B-08 (stream fw4int: the limit as an option)
+    from groundfield.diagnostics import ResourceLimitError
+
+    _stub_the_mesher(monkeypatch)
+    with pytest.raises(ResourceLimitError, match="162 ports") as info:
+        _solve(_galvanic_chain())
+    assert "FemOptions.max_ports_3d" in str(info.value)
+    with pytest.raises(ResourceLimitError, match="above its limit of 150 ports"):
+        _solve(_galvanic_chain(), max_ports_3d=150)
+
+
+def test_a_raised_port_limit_lets_the_3d_model_mesh_the_world(monkeypatch) -> None:
+    """With max_ports_3d raised above the port count the solve passes the
+    port check and goes on to mesh (stubbed here), through the engine and
+    through solve_fem."""
+    # audit W4B-08 (stream fw4int: the limit as an option)
+    from groundfield.solver.fem import solve_fem
+
+    _stub_the_mesher(monkeypatch)
+    with pytest.raises(_PastThePortCheck):
+        _solve(_galvanic_chain(), max_ports_3d=162)
+    with pytest.raises(_PastThePortCheck), warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        solve_fem(_galvanic_chain(), _engine(), max_ports_3d=1000, **COARSE)
+
+
+def test_the_port_limit_survives_a_json_round_trip_of_the_engine() -> None:
+    # audit W4B-08 (stream fw4int: the limit as an option)
+    import json
+
+    from groundfield.solver.registry import FemOptions
+
+    engine = gf.Engine(backend="fem", options={"fem": {"max_ports_3d": 250}})
+    payload = json.loads(engine.model_dump_json())
+    assert payload["options"]["fem"]["max_ports_3d"] == 250
+    back = gf.Engine.model_validate_json(engine.model_dump_json())
+    assert back == engine
+    assert isinstance(back.options["fem"], FemOptions)
+    assert back.options["fem"].max_ports_3d == 250
+    default = gf.Engine.model_validate_json(gf.Engine(backend="fem").model_dump_json())
+    assert default.backend_options().max_ports_3d == 100

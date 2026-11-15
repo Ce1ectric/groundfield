@@ -174,6 +174,7 @@ def solve_fem(
     far_field: str = "robin",
     max_nodes: int = 2_000_000,
     max_nodes_3d: int = 2_000_000,
+    max_ports_3d: int = 100,
     model: str = "auto",
     source_radius: float | None = None,
     growth: float = 0.5,
@@ -224,8 +225,16 @@ def solve_fem(
         million nodes of the finer mesh, so about 8 GB at the limit.
     max_nodes_3d
         Resource limit of the three-dimensional model: the node count of
-        its finer mesh (3.0 ... 3.4 GB per million nodes), predicted before
-        meshing and counted before the finer level is built.
+        its finer mesh, predicted before meshing and counted before the
+        finer level is built. The solve adds about 2.9 GB per million nodes
+        to the peak memory of the process (3.0 ... 3.1 GB with the process
+        itself).
+    max_ports_3d
+        Resource limit of the three-dimensional model: the number of ports
+        (every electrode and every leaking piece of a galvanic distributed
+        conductor), checked before meshing. Default 100: every port costs
+        one conjugate-gradient solve per mesh level, about 0.9 s per port
+        and level at 600 000 nodes of the finer mesh.
     model
         ``"auto"`` (default): the axisymmetric model where it applies (rods
         on one axis, rings around it, no galvanic distributed conductor),
@@ -289,9 +298,10 @@ def solve_fem(
         above the soil surface (as every backend), or the world fails
         :meth:`World.check <groundfield.world.World.check>`.
     groundfield.diagnostics.ResourceLimitError
-        If the finer mesh would exceed ``max_nodes`` nodes (the 3-D model
-        checks a prediction before meshing and the exact count before the
-        finer level).
+        If the finer mesh would exceed ``max_nodes`` nodes (the 3-D model:
+        ``max_nodes_3d``, a prediction before meshing and the exact count
+        before the finer level), or the 3-D model would solve more than
+        ``max_ports_3d`` ports.
     TypeError
         If ``world.soil`` is no soil model.
 
@@ -382,6 +392,7 @@ def solve_fem(
                 else float(concrete_resistivity),
                 "concrete_mesh": _concrete_mesh,
                 "max_nodes_3d": int(max_nodes_3d),
+                "max_ports_3d": int(max_ports_3d),
             },
         )
     return frame.to_user(result)
@@ -435,7 +446,10 @@ def _solve(
         extra = disc.segments[len(world.electrodes) :]
         solid_options = dict(options)
         solid_options["max_nodes"] = solid["max_nodes_3d"]
-        rest = {k: v for k, v in solid.items() if k != "max_nodes_3d"}
+        solid_options["max_ports"] = solid["max_ports_3d"]
+        rest = {
+            k: v for k, v in solid.items() if k not in ("max_nodes_3d", "max_ports_3d")
+        }
         earth = solid_earth(
             world, engine, extra_segments=extra, **solid_options, **rest
         )
