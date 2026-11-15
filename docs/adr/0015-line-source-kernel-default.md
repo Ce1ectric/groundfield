@@ -103,7 +103,47 @@ model, which `mom` checks — the separation the validation page relies on.
   few $10^{-6}$. Not taken; the numba path makes the full form affordable.
 - **Quadrupole terms for every Tagg/Sunde image**: at most 0.05 % gain on a
   straight strip in two-layer soil for about twice the series assembly
-  cost. Not taken.
+  cost. Not taken in 2026.11.0 at first; taken in wave 3 with a taper
+  (amendment below).
+
+## Amendment 2026.11 (wave 3) — a continuous switch, far images, the cross-layer path
+
+User decision D2 of 2026-11-15, audits W2B-01/-02, finding 10.28.
+
+1. **Continuous switch.** Decision 3 switched from the exact integral to
+   the far form at six segment lengths in one step. The pairs six segments
+   apart on a straight wire, and in two-layer soil every segment's own
+   Tagg/Sunde image when an image distance equals six segment lengths, sit
+   exactly there, so the round-off of the coordinates decided their form:
+   the same world at different positions spread by up to 4.4e-7 (a 12 m
+   strip) and 2.6e-5 (two layers) in the impedance. Pairs between six and
+   7.5 segment lengths now take a C¹ blend of the exact and the far value,
+   for direct pairs, every image, the images of the cross-layer correction
+   and field points. The spread is at most 1e-13 over local positions and
+   the UTM solves lie as close to the local ones as with the point kernel
+   (3e-11). Alternatives: a margin on the distance (a new knife-edge at
+   another distance, which a chosen $h_1$ hits again) and a far form exact
+   to round-off at six segment lengths (about ten more multipole orders);
+   the blend costs the integrals of the pairs in the band (+24 % solve time
+   in homogeneous soil).
+2. **Far form.** The far form of segment pairs carries the radius term
+   $-a^2/(2R^3)$ of the reduced kernel $1/\sqrt{R^2 + a^2}$ that every exact
+   pair uses; without it the far form was $a^2/(2R^2)$ away from the exact
+   pairs it joins, which made straight wires converge non-monotonically at
+   the 1e-6 level.
+3. **Far Tagg/Sunde images** carry the quadrupole term (the alternative
+   above). On every image it cost 2.2 … 3.9 times the solve of 16 house
+   grids; the term is therefore tapered off between 60 and 120 segment
+   lengths of vertical distance between observer and image (below
+   $1/(8\cdot 60^2)$ of the image's point value, the level of the far
+   form's remainder at the switch), a property of the pair, and images
+   beyond every observer are skipped: 1.2 … 1.5 times, the impedance
+   within 1e-6 of the term on every image. Gain: the strip of the
+   alternative within 7.7e-7 instead of 5.1e-4, monotone in the segment
+   length; its surface potential within 8e-6 instead of 0.94 %; house grids
+   3e-6 … 1.8e-4.
+4. **The cross-layer path** (ADR-0007) treats the images of its layered
+   correction alike (ADR-0007, amendment wave 3).
 
 ## References
 

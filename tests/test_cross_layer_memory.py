@@ -90,8 +90,8 @@ def test_cross_layer_peak_is_that_of_the_within_layer_path(kernel) -> None:
     """The cross-layer solve needs no more than 1.4 times the within-layer peak.
 
     Measured on this machine (tracemalloc, N = 1920): within-layer 64.4 /
-    65.8 MiB (point / line kernel); cross-layer 144.7 / 144.7 MiB before
-    (2.2 times), 76.9 / 87.1 MiB now (1.19 / 1.32 times).
+    67.0 MiB (point / line kernel); cross-layer 144.7 / 144.7 MiB before
+    (2.2 times), 76.9 / 79.6 MiB now (1.19 / 1.19 times).
     """
     peaks = {}
     for name, soil in (("within", WITHIN), ("cross", CROSS)):
@@ -108,8 +108,8 @@ def test_cross_layer_block_mode_beyond_the_budget(monkeypatch, kernel) -> None:
     """Above ``MATRIX_BUDGET_BYTES`` the cross-layer path holds no N × N matrix.
 
     The peak is 6.8 / 9.8 bytes per segment pair (point / line kernel; the
-    within-layer path in block mode 3.0 / 8.8), the potentials agree with
-    the materialised evaluation to BLAS round-off (1.2e-15 measured). Before,
+    within-layer path in block mode 3.0 / 6.2), the potentials agree with
+    the materialised evaluation to BLAS round-off (1e-15 measured). Before,
     the path ignored the budget (41 bytes per pair).
     """
     w = _houses(CROSS)

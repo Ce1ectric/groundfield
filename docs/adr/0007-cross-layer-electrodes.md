@@ -324,3 +324,43 @@ Findings 10.15 (F02), 10.25, 10.26, 10.28, 10.32 and 10.50 (F43).
    evaluation uses the series controls of the solve (10.25).
 6. **`fem`** raises for an electrode through an interface its equivalent
    hemisphere does not reach (ADR-0002 amendment 2026.11).
+
+## Amendment 2026.11 (wave 3) — line form, memory, speed
+
+Finding 10.28 (the line kernel on the cross-layer path), 10.56 (memory),
+the roadmap row *Vectorise the ADR-0007 cross-layer Sommerfeld path*.
+
+1. **Line form of the layered correction.** With the line kernel the
+   layered correction was evaluated between segment midpoints, except the
+   interface image of near pairs in one layer. In two-layer soil it is an
+   exact superposition of images in every layer combination (the
+   generations of `layered_green._image_generation`): with
+   $K = (\rho_2 - \rho_1)/(\rho_2 + \rho_1)$,
+   $c = 2\rho_1\rho_2/(\rho_1 + \rho_2)$, $q = 2h_1$ and relative to the
+   baseline of the source layer, $\rho_1 K^m$ at the four Tagg/Sunde images
+   for two points in layer 1; $-\rho_2 K$ at $q - z_s$, $-\rho_2 K^2$ at
+   $-z_s$ and $\rho_2(1 - K^2)K^m$ at $-z_s - mq$ in layer 2; $cK^m$ at
+   $z_s \pm mq$ and $-z_s - mq$ ($m \ge 1$) across the interface. The
+   spectral values stay the point form; each image adds its line-kernel
+   correction as on the series path (far quadrupole term, blended Galerkin
+   integrals of near pairs, Galerkin self images). A rod through the
+   interface no longer depends on the segment length (within 9e-7 from
+   2 m to 0.125 m, before 1.3e-4 … 2.4e-4) and the path reproduces the
+   series for wires in the upper layer to 1.7e-7 (before 6.2e-4). The
+   field of sources in the lower layer (`FieldResult.potential`,
+   `solve_mutual_field`) stays in point form.
+2. **Memory.** A depth group larger than one block is planned once from
+   the range of its distances and evaluated in row chunks (bit-identical),
+   and beyond the matrix budget the path works in row blocks like the
+   series path: the AP1 station at 40 % penetration ($N$ = 2711) needs
+   134 instead of 278 MiB (the within-layer path 126 MiB).
+3. **Speed.** The path was grouped by depth since the 2026-07-08 audit;
+   what remained were one LAPACK solve of a 3 × 3 system per quadrature
+   node, twice per group — half the time of a cross-layer solve, and
+   batching them into one call gains nothing. The system is eliminated in
+   closed form, vectorised over the nodes: with the point kernel, which
+   sees only that change, the AP1 station solves 1.6 … 2.0 times faster
+   (5 … 40 % penetration); results move by round-off (the elimination is at
+   least as accurate as LAPACK against a 50-digit reference). With the line
+   kernel the far terms of point 1 cost about as much again at 40 %
+   (performance page).

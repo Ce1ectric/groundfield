@@ -46,7 +46,7 @@ def _z(world, ds, anchor="rod"):
 def test_a_rod_through_the_interface_does_not_depend_on_the_segment_length(rho) -> None:
     """One owner per layer, each straight: the Galerkin solution is exact at
     any segment length once every pair term is. Between 2 and 0.125 m:
-    8.5e-7 (500/100), 6.5e-7 (1000/30), 5.6e-7 (30/1000); before 1.3e-4,
+    6.4e-7 (500/100), 6.5e-7 (1000/30), 9.0e-7 (30/1000); before 1.3e-4,
     1.6e-4, 2.4e-4 (evidence ``item2_crosslayer.py``)."""
     world = _rod(rho)
     z = [_z(world, ds) for ds in (2.0, 1.0, 0.5, 0.25, 0.125)]

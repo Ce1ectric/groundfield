@@ -63,7 +63,7 @@ max_rel_change = 1e-4
 # --- item 2 (10.28, ADR-0007): line form of the cross-layer correction --
 # The layered correction of a rod through the interface was in point form
 # except the interface image of near pairs; as image families in line form
-# the rod's impedance no longer depends on the segment length (8.5e-7
+# the rod's impedance no longer depends on the segment length (9.0e-7
 # between 2 and 0.125 m, 1.3e-4 ... 2.4e-4 before). Zc moves 4.0e-4, of
 # which 9.9e-5 the far images.
 
