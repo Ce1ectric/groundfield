@@ -14,12 +14,26 @@ a comparison of several engines, is [Validation](validation.md).
 | `expected_segments(world, engine)` | segments the discretiser will produce, per electrode and in total, the size of the nodal system and the engine's limit (`"limit"`) |
 | `check_segment_resolution(world, engine)` | thin-wire ratio, electrodes smaller than a segment, size budget (strings) |
 | `check_segment_budget(world, engine)` | raises `ResourceLimitError` above the engine's limit `Engine.max_segments` (default `HARD_LIMIT`; used by the solver) |
-| `diagnose(world, engine, result=None)` | all of the above plus close wires, rod ends at a layer interface, inert settings, series truncation |
+| `diagnose(world, engine, result=None)` | all of the above plus mixed local and projected coordinates, close wires, rod ends at a layer interface, inert settings, series truncation |
 
 ## Mathematical and physical context
 
 The checks guard the assumptions of the thin-wire model (see
 [Geometry](geometry.md)):
+
+- **Coordinates.** A world whose points lie both within 10 km of the
+  origin and beyond 1 000 km from it (horizontal distance) mixes local and
+  projected coordinates: electrodes at UTM coordinates and a node given in
+  a local system, almost always by mistake. It is solved as given, its two
+  groups some 33 000 km apart (a return rod at local (80, 15) m for an
+  outline and a rod at UTM coordinates: $Z_{in}$ +0.43 %; a PEN cable to a cabinet at local coordinates:
+  a 33 118 km conductor; audit W2B-04). Category `coordinates`, a warning
+  that names both groups and the conductors between them; the solve warns
+  with `MixedCoordinatesWarning` too (user decision D5). A world that does
+  not mix but whose horizontal extent exceeds 100 km is reported as
+  information (two UTM zones, a zone prefix on some eastings only, a
+  geometry in millimetres). See
+  [Units and conventions](../units-and-conventions.md#coordinates).
 
 - **Thin-wire ratio.** The self term of a segment of length $L$ and
   radius $a$ behaves like $2\ln(L/a)/L$ and loses dominance as $L$

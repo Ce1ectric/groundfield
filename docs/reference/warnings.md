@@ -237,11 +237,35 @@ near-ideal short. **Remedy:** give the cross section in m².
 ### `DiagnosticsWarning`
 
 `gf.DiagnosticsWarning`. **Emitted** by `diagnose(...).warn()`: one
-aggregated warning with all findings, one line per cause (thin-wire
-ratio, resolution, problem size, close or interpenetrating wires, rod
-ends at a layer interface, inert settings, series truncation). The solve emits the discretisation
+aggregated warning with all findings, one line per cause (mixed
+coordinates, thin-wire ratio, resolution, problem size, close or
+interpenetrating wires, rod ends at a layer interface, inert settings,
+series truncation). The solve emits the discretisation
 findings as individual warnings. **Remedy:** follow the advice in each
 line; see [Diagnostics](api/diagnostics.md).
+
+### `MixedCoordinatesWarning`
+
+`groundfield.diagnostics.MixedCoordinatesWarning` (since 2026.11, user
+decision D5). **Emitted** once per solve by the image family, `mom`,
+`mom_sommerfeld` and `solve_mutual_*`, before anything is discretised,
+when points of the world lie both within 10 km of the origin and beyond
+1000 km from it (horizontal distance): electrodes at projected (UTM,
+Gauss–Krüger) coordinates and a node or electrode near (0, 0), almost
+always given in the wrong system by mistake. The world is solved as
+given, its two groups some 33 000 km apart; the message names both groups
+and the conductors between them. Measured with a 12 m × 7 m outline and a
+3 m rod at UTM coordinates (audit W2B-04): a return rod given at local
+(80, 15) m raises $Z_{in}$ by 0.43 %; a PEN cable to a cabinet at local coordinates is 33 118 km
+long, $Z_{in}$ = 7494 + j25 396 Ω instead of 5.39 + j0.19 Ω at 50 Hz with
+`carson_series`, and the default `sommerfeld` earth return does not
+finish. `diagnose()` reports the same world under `coordinates` (a
+warning), and a world wider than 100 km that does not mix as
+information. A world wholly in projected or wholly in local coordinates
+never warns. `fem` does not run this check at the solve (`diagnose()`
+does). **Remedy:** give every point in one coordinate system; to stop
+such a solve at once, `warnings.simplefilter("error",
+MixedCoordinatesWarning)`.
 
 ### `ResourceLimitError`
 
