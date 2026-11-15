@@ -439,10 +439,10 @@ the following decisions refine it.
     parallel closed form just below its tolerance, at 4.4e-5 rad) and in
     the solver (`perfect_mirror` and `sommerfeld` within 3.2e-11 marked,
     3.1e-10 unmarked; under `carson_series` the Carson
-    correction of one lumped pair, tiled at its mid-point distance, differs
+    correction of one lumped pair, tiled at its mid-point distance, differed
     from the pieces by 1.7e-5 at 3e-4 rad and 1.3e-4 at 1e-3 rad,
     independent of the piece length — the correction's own tiling, not the
-    rule). The literal proposal, the closed form at the mean lateral
+    rule; integrated per stretch since audit W1R3-07, ADR-0005 item 7). The literal proposal, the closed form at the mean lateral
     distance of each pair, missed by up to 1.35 % at 1.5e-4 … 7e-4 rad,
     where the core leaves the shield's tube inside a piece. Beyond the
     gate the rule of item 9 acted per segment. Where the core leaves the
@@ -489,10 +489,11 @@ the following decisions refine it.
     `perfect_mirror`; under `sommerfeld` within 1.6e-8 at 1 kHz (3.2e-7
     at 10 × the old gate in 5 m pieces), the correction's own piece
     dependence, the same inside the old gate; under `carson_series` the
-    correction of a tilted pair is tiled at the mid-point distance of each
-    pair and the pieces differ from the lumped pair by 4.2e-4 (10 m pieces,
-    2e-3 rad), 1.4e-3 (5 m, 4e-3 rad), 1.9e-2 (10 m, 2e-2 rad) — the
-    tiling, not this rule. Only pairs with a piece that comes within the
+    correction of a tilted pair was tiled at the mid-point distance of each
+    pair and the pieces differed from the lumped pair by 4.2e-4 (10 m
+    pieces, 2e-3 rad), 1.4e-3 (5 m, 4e-3 rad), 1.9e-2 (10 m, 2e-2 rad) — the
+    tiling, not this rule; per stretch since audit W1R3-07 (within 7.8e-6,
+    ADR-0005 item 7). Only pairs with a piece that comes within the
     touching distance of the other's axis are classified (the others keep
     the filament value either way; bit-identical): a 600 m coax crossing
     at 0.05 / 0.3 rad in 1 m pieces assembles in 3.95 / 3.82 s against

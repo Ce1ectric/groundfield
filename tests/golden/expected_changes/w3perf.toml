@@ -1,0 +1,45 @@
+# Stream w3perf (wave 3 of the 2026.11 integration: earth return, soil,
+# BusType preset, diagnose). See ../README.md for the format. Every bound was
+# measured with GF_GOLDEN_STRICT=1 against a snapshot of the stream's base
+# (release/calver 3500ec9) generated on the same machine (macOS arm64), and
+# checked against the committed baseline with every declaration. Every other
+# case is bit-identical with the base.
+#
+# User decision Q34 (and audit W2B-05) under sommerfeld, and in the
+# Sommerfeld fallback of carson_series: the self term of every segment is the
+# exact one-dimensional reduction of its double integral, close pairs get a
+# graded rule along their line of closest approach. The tensor rule missed
+# the kink of the integrand there: 4.8e-4 of a self correction at a quarter
+# skin depth, growing like L / delta below it (a 0.5 m segment about 5e-6).
+# Measured moves: the lumped 1 km PEN 4.9e-7 (its self term), the 60 m PEN
+# in 20 m pieces in two-layer soil 2.0e-8, the 20 m lead in 5 m pieces
+# 8.5e-10 / 8.9e-10, the oblique overhead lead of the carson_series case
+# (fallback pairs) 7.2e-9.
+
+[[change]]
+cases = ["cond_lumped_long_pen_sommerfeld"]
+quantities = ["phi/*", "I/*", "Zin", "Zc/*"]
+findings = ["10.24"]
+reason = "user decision Q34 / audit W2B-05: the self term of the lumped 1 km PEN is the exact one-dimensional reduction (the composite 16x16 rule missed the kink of the integrand on its diagonal)."
+max_rel_change = 1e-6
+
+[[change]]
+cases = ["cond_isolated_pen_sommerfeld_two_layer"]
+quantities = ["phi/*", "I/*", "Zc/*", "ps/I"]
+findings = ["10.24"]
+reason = "user decision Q34: self terms by the one-dimensional rule and close pairs (chain neighbours) by the graded rule; 20 m pieces in two-layer soil."
+max_rel_change = 5e-8
+
+[[change]]
+cases = ["cond_galvanic_neumann_sommerfeld", "defaults_mixed_cluster_inductive"]
+quantities = ["phi/*", "I/*", "Zc/*", "ps/I", "potential/*"]
+findings = ["10.24"]
+reason = "user decision Q34: self terms by the one-dimensional rule and close pairs (chain neighbours) by the graded rule; a 20 m lead in 5 m pieces."
+max_rel_change = 3e-9
+
+[[change]]
+cases = ["cond_overhead_lead_over_pen_carson_series"]
+quantities = ["phi/*", "I/*", "Zc/*", "Zin"]
+findings = ["10.24"]
+reason = "user decision Q34 in the Sommerfeld fallback of carson_series: the oblique overhead lead meets the parallel lead at a junction (a close pair, graded rule)."
+max_rel_change = 2e-8

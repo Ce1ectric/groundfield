@@ -136,6 +136,8 @@ __all__ = [
     "MIN_THINWIRE_RATIO",
     "SOFT_LIMIT",
     "HARD_LIMIT",
+    "OVERLAP_REL_LENGTH",
+    "OVERLAP_FRACTION",
 ]
 
 
@@ -200,6 +202,22 @@ _BUDGET_HARD_THRESHOLD = HARD_LIMIT
 #: wires closer than this multiple of the sum of their radii is reported.
 PROXIMITY_REL_THRESHOLD: float = 5.0
 
+#: Overlap of inductive conductors (check ``overlap`` of :func:`diagnose`):
+#: two conductors closer than touching (axis distance below the sum of
+#: their radii, d_t) lie beside each other when that stretch is longer than
+#: OVERLAP_REL_LENGTH * d_t and OVERLAP_FRACTION of the shorter conductor.
+#: Two conductors leaving a common point at an angle phi stay closer than
+#: touching over about d_t / phi; the touching rule changes their mutual
+#: inductance over that stretch by about (mu0 / 2 pi) d_t / phi (the mean
+#: of ln(d_t / d) along a linear divergence is 1), against a self
+#: inductance of about (mu0 / 2 pi) l (ln(2 l / r) - 1), ten times
+#: (mu0 / 2 pi) l for the cables of an LV network. A stretch of 5 % of the
+#: shorter conductor therefore moves the coupling by about 0.5 % of a self
+#: inductance; a branch is reported only below about d_t / (0.05 l): 0.46
+#: deg for 12 mm touching and a 30 m drop, 0.1 rad at most.
+OVERLAP_REL_LENGTH: float = 10.0
+OVERLAP_FRACTION: float = 0.05
+
 #: Number of names listed per cause in the aggregated text.
 _MAX_NAMES = 5
 
@@ -251,8 +269,8 @@ class Diagnostic:
     ----------
     category
         Cause: ``"coordinates"``, ``"thin_wire"``, ``"resolution"``,
-        ``"budget"``, ``"proximity"``, ``"interface_contact"``, ``"inert"``
-        or ``"series"``.
+        ``"budget"``, ``"proximity"``, ``"overlap"``,
+        ``"interface_contact"``, ``"inert"`` or ``"series"``.
     severity
         ``"warning"`` (the result is likely biased or the setting has no
         effect) or ``"info"`` (worth knowing, usually harmless).
@@ -303,6 +321,18 @@ _CAUSES: dict[str, tuple[str, tuple[str, str], str, str]] = {
         "finding 10.44); use Engine(kernel='line'), whose exact near-pair "
         "integrals stay physical (0.998 times), or merge such wires into "
         "one electrode",
+    ),
+    "overlap": (
+        "overlap",
+        ("pair of inductive conductors lies", "pairs of inductive conductors lie"),
+        "beside each other closer than touching (the sum of their radii) "
+        "over more than {rel_length:g} times that distance and {fraction:g} % "
+        "of the shorter one",
+        "the inductance matrix evaluates them as touching wires, so their "
+        "coupling over that stretch follows the radii, not the drawn spacing "
+        "(a service drop drawn on its PEN main, two cables on one axis); draw "
+        "them at their real distance, or model a concentric cable with "
+        "conductor_type='cable_shield' around its core",
     ),
     "inert": (
         "inert",
@@ -390,6 +420,8 @@ class DiagnosticsReport:
             ratio=self.context.get("min_thinwire_ratio", MIN_THINWIRE_RATIO),
             ds=self.context.get("segment_length_m", float("nan")),
             rel=self.context.get("proximity_rel_threshold", PROXIMITY_REL_THRESHOLD),
+            rel_length=self.context.get("overlap_rel_length", OVERLAP_REL_LENGTH),
+            fraction=100.0 * self.context.get("overlap_fraction", OVERLAP_FRACTION),
         )
         n = len(items)
         tail = f" — {why}." if why else ""
@@ -1252,6 +1284,108 @@ def _proximity_findings(world: "World", engine: "Engine | None") -> list[Diagnos
     return out
 
 
+def _overlap_stretch(p1a, p2a, p1b, p2b, s0, reach) -> tuple[float, float, float]:
+    """Stretch of segment a closer than ``reach`` to segment b.
+
+    The distance from a point moving along a to segment b is convex in its
+    position, so the stretch is one interval around the closest point
+    ``s0`` (fraction of a); its ends are found by bisection. Returns
+    ``(s_lo, s_hi, length_m)``.
+    """
+    import numpy as np
+
+    from groundfield.conductors.proximity import segment_distance
+
+    def dist(s: float) -> float:
+        q = p1a + s * (p2a - p1a)
+        d, _, _ = segment_distance(q[None, :], q[None, :], p1b[None, :], p2b[None, :])
+        return float(d[0])
+
+    def edge(inside: float, outside: float) -> float:
+        if dist(outside) < reach:
+            return outside
+        for _ in range(60):
+            mid = 0.5 * (inside + outside)
+            if dist(mid) < reach:
+                inside = mid
+            else:
+                outside = mid
+        return inside
+
+    lo, hi = edge(s0, 0.0), edge(s0, 1.0)
+    return lo, hi, (hi - lo) * float(np.linalg.norm(p2a - p1a))
+
+
+def _overlap_findings(world: "World") -> list[Diagnostic]:
+    """Inductive conductors lying beside each other closer than touching.
+
+    Since 2026.11 the inductance matrix evaluates such pairs as touching
+    wires (their mutual at the distance ``r_a + r_b``), except a thinner
+    conductor inside a ``"cable_shield"`` conductor, its concentric core
+    (user decision Q32), which is not reported.
+    """
+    import numpy as np
+
+    from groundfield.conductors.proximity import find_close_conductors
+
+    conds = [
+        c
+        for c in world.conductors
+        if c.inductance_model is not None
+        and math.dist(tuple(c.start), tuple(c.end)) > 0.0
+    ]
+    if len(conds) < 2:
+        return []
+    by_name = {c.name: c for c in conds}
+    # pairs that share an end are kept: a drop drawn back along its main
+    # from the tap shares the tap
+    hits = find_close_conductors(conds, rel_threshold=1.0, include_junctions=True)
+    out: list[Diagnostic] = []
+    seen: set[tuple[str, str]] = set()
+    for h in hits:  # worst first; one finding per pair
+        key = tuple(sorted((h.name_a, h.name_b)))
+        if key in seen:
+            continue
+        a, b = by_name[h.name_a], by_name[h.name_b]
+        touch = float(a.wire_radius + b.wire_radius)
+        if touch <= 0.0:
+            continue
+        p1a, p2a = np.asarray(a.start, float), np.asarray(a.end, float)
+        p1b, p2b = np.asarray(b.start, float), np.asarray(b.end, float)
+        la = float(np.linalg.norm(p2a - p1a))
+        s0 = float(np.dot(np.asarray(h.point_a) - p1a, p2a - p1a) / (la * la))
+        lo, hi, length = _overlap_stretch(p1a, p2a, p1b, p2b, s0, touch)
+        shorter = min(la, float(np.linalg.norm(p2b - p1b)))
+        if length <= max(OVERLAP_REL_LENGTH * touch, OVERLAP_FRACTION * shorter):
+            continue  # a branch or a crossing, not wires along each other
+        shield, core = (a, b) if a.wire_radius >= b.wire_radius else (b, a)
+        if (
+            shield.conductor_type == "cable_shield"
+            and core.wire_radius < shield.wire_radius
+            and h.distance <= shield.wire_radius
+        ):
+            continue  # a concentric cable (user decision Q32)
+        seen.add(key)
+        out.append(
+            Diagnostic(
+                "overlap",
+                "warning",
+                key,  # type: ignore[arg-type]
+                f"'{key[0]}'–'{key[1]}' beside each other over {length:.3g} m, "
+                f"axis distance {h.distance * 1e3:.3g} mm (touching "
+                f"{touch * 1e3:.3g} mm)",
+                {
+                    "overlap_m": length,
+                    "distance_m": h.distance,
+                    "touching_m": touch,
+                    "start": tuple(float(v) for v in p1a + lo * (p2a - p1a)),
+                    "end": tuple(float(v) for v in p1a + hi * (p2a - p1a)),
+                },
+            )
+        )
+    return out
+
+
 def _interface_contact_findings(world: "World") -> list[Diagnostic]:
     """Rod heads and tips within one wire radius of a layer interface (A3S-05)."""
     from groundfield.solver._guards import _rod_ends_near_interfaces
@@ -1446,6 +1580,23 @@ def diagnose(
         kernel and information with the exact line kernel (which
         integrates near pairs), ``crossing`` / ``touching`` (wires that
         meet without a bond in the model) are information.
+    ``overlap``
+        Two conductors with an ``inductance_model`` (insulated or bare) that
+        lie beside each other closer than touching — axis distance below
+        the sum of their radii — over more than :data:`OVERLAP_REL_LENGTH`
+        times that distance and :data:`OVERLAP_FRACTION` of the shorter
+        conductor (warning): a service drop drawn on its PEN main, two
+        cables on one axis. The inductance matrix evaluates them
+        as touching wires (since 2026.11), so their coupling over the
+        stretch follows their radii instead of the drawn spacing. A
+        thinner conductor inside a ``"cable_shield"`` conductor is its
+        concentric core (user decision Q32) and not reported; conductors
+        that meet at a point (a crossing, a T-contact, a branch: two drops
+        leaving a cabinet 1.7 deg apart run within touching for 0.4 m of
+        their 180 m) are not overlaps (thresholds: comment of
+        :data:`OVERLAP_FRACTION`). The data give the length of the
+        stretch (``overlap_m``), its ends, the smallest axis distance and
+        the touching distance.
     ``interface_contact``
         A rod head or tip within one wire radius of a physical layer
         interface, where the thin-wire model (no end face) deviates from
@@ -1462,6 +1613,8 @@ def diagnose(
         context={
             "min_thinwire_ratio": MIN_THINWIRE_RATIO,
             "proximity_rel_threshold": PROXIMITY_REL_THRESHOLD,
+            "overlap_rel_length": OVERLAP_REL_LENGTH,
+            "overlap_fraction": OVERLAP_FRACTION,
         }
     )
     report.findings.extend(_coordinate_findings(world))
@@ -1472,6 +1625,7 @@ def diagnose(
         report.findings.extend(_resolution_findings(world, engine))
     if proximity and (engine is None or check_budget_ok(world, engine)):
         report.findings.extend(_proximity_findings(world, engine))
+    report.findings.extend(_overlap_findings(world))
     report.findings.extend(_interface_contact_findings(world))
     report.findings.extend(_inert_findings(world))
     if result is not None:

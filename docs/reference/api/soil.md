@@ -200,9 +200,10 @@ except ValueError as error:
 
 A `BusType` and the bus it is paired with must use the same weights:
 fit the `BusType` of a station over $\rho_\text{eff}$ with `"station"`
-and give its bus the same $\rho_\text{eff}$; the BusType metadata
-records only that `rho` is an effective resistivity, so name the preset
-in `soil_summary` ([IO and groundinsight](io.md)).
+and give its bus the same $\rho_\text{eff}$. The exporters record the
+preset you name (`rho_preset="station"`, `metadata["rho_preset"]`), and
+`evaluate_spec` / `bustype_from_spec` warn when the bus uses another one
+(user decision Q39, [IO and groundinsight](io.md)).
 
 **Validity.** An empirical one-parameter description of a two-layer
 soil, calibrated on the AP1 catalogue; outside the calibration range it
@@ -233,6 +234,74 @@ absorbs the lower layer, which favours $\rho_1$, but a bus carries
 $\rho_\text{eff}$. Check `max_relative`, and calibrate $(w_0, \beta)$
 for systems unlike the hand-over's classes. $\rho_\text{eff}$ is not
 `FieldResult.soil_resistivity`, which holds $\rho_1$ of a layered soil.
+
+## Penetration depth
+
+The earth-return impedance of a cable or an overhead line is commonly
+written with a complex penetration depth $p = \sqrt{\rho/(j\omega\mu_0)}$
+(Dubanton; Deri et al. 1981): the earth is replaced by a perfectly
+conducting plane at the depth $p$, and two parallel wires at the distances
+$h_i$, $h_j$ from the surface and the horizontal distance $x$ couple by
+
+$$
+Z'_{ij} = \frac{j\omega\mu_0}{2\pi}\,
+\ln\frac{\sqrt{(h_i + h_j + 2p)^2 + x^2}}{\sqrt{(h_i - h_j)^2 + x^2}}
+$$
+
+per metre (the self impedance with $x$ the wire radius). For a layered
+soil, `gf.penetration_depth(soil, frequencies)` returns per frequency the
+depth $p$ for which these homogeneous formulas reproduce the layered
+earth-return impedance, and the equivalent homogeneous resistivity
+$\rho_\text{eq} = j\omega\mu_0 p^2$ with the same depth (complex; its
+modulus is the magnetotelluric apparent resistivity). $p$ is the plane-wave
+surface impedance of the stack over $j\omega\mu_0$ (transmission-line
+recursion from the bottom layer up), so $e^{-2p\lambda}$ agrees with the
+layered surface reflection coefficient to second order in the horizontal
+wavenumber $\lambda$. It is exact for homogeneous soil ($p = 1/\gamma$,
+$\rho_\text{eq} = \rho$), tends to the layer values for thin and thick top
+layers, and the error vanishes at large separations; any number of layers
+is accepted.
+
+```python
+import groundfield as gf
+
+soil = gf.TwoLayerSoil(rho_1=1000.0, rho_2=30.0, h_1=5.0)
+pd = gf.penetration_depth(soil, [50.0, 1000.0])
+print(pd.depth)                        # complex depth p in m, per frequency
+print(abs(pd.resistivity))             # apparent resistivity in Ohm m: 30.8 / 33.5
+z = pd.mutual_impedance(0.7, 0.7, 10.0)  # two cables at 0.7 m, 10 m apart, Ohm/m
+hom = gf.penetration_depth(gf.HomogeneousSoil(rho=100.0), [50.0])
+assert hom.resistivity[0] == 100.0
+```
+
+<!-- doctest-check
+assert abs(abs(pd.resistivity[0]) - 30.756) < 1e-3
+assert z.shape == (2,)
+-->
+
+**Accuracy** (stream w3perf; two methods: the exact layered earth-return
+integral `coupling.sommerfeld_inductance.per_metre_mutual_impedance`, any
+number of layers, within 4.9e-8 of Carson and of the two-layer Pollaczek
+integral, against the formula with the equivalent depth). Over the 39
+soils of the AP1 grid ($\rho_1$ = 30 … 1000, $\rho_2$ = 30 … 200 Ω·m,
+$h_1$ = 5 / 10 / 30 m), 50 Hz … 1 kHz and separations of 0.1 … 1000 m, the
+earth-return correction (Carson's quantity, relative to the perfectly
+conducting image) of two wires overhead at 10 m / buried at 0.7 m is
+reproduced within a median of 2.2 % and at most 28.4 % / 33.4 %; the same
+formula in homogeneous soil, against Carson's and Pollaczek's integrals, has
+a median error of 2.4 % and a maximum of 12.3 % / 13.0 %. The homogeneous
+depth of $\rho_1$ is off by a median of 31 % / 23 % (up to 2255 % /
+2797 %), that of $\rho_\text{eff}$ by 27 % / 20 %. The error grows with
+the separation and the frequency (overhead: at most 6.3 % up to 10 m,
+12.7 % at 100 m and 28.4 % at 300 m at 1 kHz; 3.1 / 4.7 / 6.5 % at 50 Hz)
+and is largest for a conductive top layer over a resistive one
+(30 over 200 Ω·m, $h_1$ = 30 m) where $x$ approaches $|p|$; it falls again
+beyond (the worst soil at 1 kHz: 15 % at 1 km, 0.05 % at 10 km) and slowly
+towards low frequency (12.7 % at 1 kHz, 1.4 % at 0.1 Hz for 100 m). The
+equivalence of the soils alone — the exact homogeneous integral at the
+complex $\rho_\text{eq}$ against the layered one — is within a median of
+0.4 % (at most 26 % / 29 %). `penetration_depth` is a modelling aid for
+line-impedance formulas; the solver's earth-return models do not use it.
 
 ## API reference
 

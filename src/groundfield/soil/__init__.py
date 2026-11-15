@@ -30,6 +30,10 @@ EFFECTIVE_RESISTIVITY_PRESETS
     Read-only mapping of named weight presets ``(w0, beta)`` of
     ``effective_resistivity`` per electrode class (``"lv_network"``, the
     default; ``"station"``; ``"lv_group_<g>_p<pp>"`` of the AP2 hand-over).
+penetration_depth, PenetrationDepth
+    Complex penetration depth $p$ and equivalent resistivity of a soil with
+    any number of layers, per frequency, for the complex-depth (Dubanton /
+    Deri) earth-return formulas of cables and overhead lines.
 
 Notes
 -----
@@ -43,6 +47,7 @@ from groundfield.soil.effective import (
     EFFECTIVE_RESISTIVITY_PRESETS,
     effective_resistivity,
 )
+from groundfield.soil.penetration import PenetrationDepth, penetration_depth
 from groundfield.soil.models import (
     HomogeneousSoil,
     MultiLayerSoil,
@@ -59,4 +64,6 @@ __all__ = [
     "SoilModel",
     "effective_resistivity",
     "EFFECTIVE_RESISTIVITY_PRESETS",
+    "penetration_depth",
+    "PenetrationDepth",
 ]

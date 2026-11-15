@@ -94,6 +94,34 @@ log-spaced $\\rho$ nodes and interpolated (segments assumed
 approximately horizontal, mean depths per segment). Segments that cross
 the soil surface or a layer interface are split there first.
 
+Along the line of closest approach of a segment with itself, or of two
+segments that come close (wires beside each other, a core in its shield),
+the integrand has a kink: the $\\gamma^2 R/2$ term of the direct part and
+the corresponding term of $S$, smoothed only over the decay length of the
+spectral weight. The tensor rule cannot follow it: the self correction of
+a buried segment was 4.8e-4 off at a quarter skin depth (100 Ω·m), up to
+1.5e-3 for two wires 1 mm apart in 30 over 1000 Ω·m. Since user decision
+Q34
+
+- the **self term** of a (sub-)segment is the exact one-dimensional
+  reduction $2\\int_0^L (L - u)\\,g(u)\\,du$ of its double integral (one
+  spectral plan per segment, so $g$ depends on $u = |s - s'|$ only), with
+  graded 16-node panels (:func:`_self_values`);
+- a **close pair** (closest distance of the Gauss nodes below half the
+  longer segment) gets a graded rule along the line of closest approach
+  (:func:`_close_pair_values`); for two coinciding segments it is the self
+  rule;
+- the other pairs keep the tensor rule (16x16, composite for segments longer
+  than a quarter skin depth).
+
+The self correction is within 1.1e-9 of a refined rule and of an
+independent one-dimensional reduction from 0.01 skin depths to 3 km at
+50 Hz and 1 kHz and has no step where the rule changes (below 3e-13);
+close pairs are within 2.7e-9 of a refined graded rule (evidence of stream
+w3perf). Both rules cost at most linearly in the length: a lumped conductor
+of 2 km between a rod and a junction is solved in 1.1 s within 0.21 GB
+(audit W2B-05: 28 s, 1.6 GB, about $L^{2.7}$).
+
 The $\\lambda$ quadrature (review pass 10, finding 10.36) follows the
 F14 policy of :mod:`groundfield.coupling.layered_green`: a
 logarithmic region on $[\\epsilon, \\lambda_\\text{b}]$ with
@@ -185,6 +213,7 @@ __all__ = [
     "LayeredEarth",
     "reflection_coefficient_homogeneous",
     "reflection_coefficient_layered",
+    "per_metre_mutual_impedance",
 ]
 
 
@@ -224,24 +253,54 @@ _N_RHO_NODES = 24
 # frequency) gets a composite outer rule of 16 nodes per piece, and the
 # pair's S(rho) table nodes are spaced _RHO_NODE_SPACING apart in
 # t = ln(rho + z) (the 24 nodes of a short pair over a km-long range left
-# 1-2e-3). Accuracy of a segment's self correction against a refined
-# reference (pieces delta/32, spacing 0.005, self-consistent to 2e-6),
-# measured at 50 Hz and 1 kHz for 0.3 ... 60 skin depths up to 3 km,
-# buried at 0.7 m in 100 Ohm m or in 1000/30 Ohm m (h1 = 5 m), overhead
-# at 10 m over 10 Ohm m (audit round 3): exact assembly within 5.9e-4 in
-# the earth-return resistance and 2.4e-4 in the reactance (worst: a 3 km
-# overhead line at 1 kHz; buried in 100 Ohm m 1.7e-4), the tabulated one
-# within 3.3e-4 / 9.6e-5. The table spacing dominates (half the spacing,
-# a quarter of the error); the piece length hardly matters. Below
-# delta/4 the historic single 16x16 rule is kept: within 4.8e-4 at
-# L = delta/4 (buried, 100 Ohm m), so the correction steps by 3.5e-4
-# (resistance) and 1.2e-5 (reactance) where the composite rule takes
-# over. (Audit round 2 stated 7e-5 / 1e-6 from one buried 3 km case.)
+# 1-2e-3). This composite rule now serves the mutual of two long segments
+# that are not close; the self term and close pairs have rules of their
+# own (user decision Q34, below). Up to 2026.11.0 it also gave the self
+# correction of a long segment, within 5.9e-4 / 2.4e-4 of a refined rule
+# (audit round 3), and segments below delta/4 kept the single 16x16 rule,
+# 4.8e-4 off at L = delta/4 with a step of 3.5e-4 where the composite rule
+# took over.
 _PIECE_SKIN_FRACTION = 0.25
 _RHO_NODE_SPACING = 0.08
 # Pieces per segment at most (the outer grid has (16 n)^2 nodes per
-# pair, evaluated in row chunks); a longer segment warns.
+# pair, evaluated in row chunks); a longer segment warns. Since user
+# decision Q34 the self term of a segment needs no pieces (one-dimensional
+# rule below); pieces only resolve the mutual of two long segments.
 _MAX_PIECES = 512
+# Self term of a straight (sub-)segment (user decision Q34, audit W2B-05).
+# With one spectral plan per segment the integrand of the self term depends
+# on the distance u = |s - s'| along the segment only, so the double
+# integral is exactly 2 int_0^L (L - u) g(u) du. The tensor 16x16 rule of
+# earlier releases straddled the kink of g(|s - s'|) on the diagonal (the
+# gamma^2 R / 2 term of the direct part): 4.8e-4 of the earth-return
+# resistance at L = delta/4 (buried, 100 Ohm m), growing linearly with
+# L / delta, and a step of 3.5e-4 where the composite rule took over. The
+# one-dimensional rule has 16-node Gauss panels doubling from the decay
+# length of the spectral weight up to _PIECE_SKIN_FRACTION skin depths,
+# uniform panels of at most that width up to 40 skin depths and doubling
+# panels beyond, so its cost grows at most linearly with L; S(rho) is
+# summed at every node (_SELF_DIRECT_BUDGET) or, for long segments, comes
+# from a not-a-knot cubic spline in t = ln(rho + z) with nodes
+# _SELF_T_SPACING apart (at least _SELF_MIN_TABLE). Within 1.1e-9 of a
+# refined rule from 0.01 skin depths to 3 km at 50 Hz and 1 kHz (buried at
+# 0.7 m in 100, 1000/30 and 30/1000 Ohm m, overhead at 10 m over 10 Ohm m;
+# an independent reduction with S summed at every node agrees likewise),
+# steps where the rule changes below 3e-13.
+_SELF_T_SPACING = 0.02
+_SELF_MIN_TABLE = 16
+# S(rho) is summed at every node of the self rule while that needs at most
+# this many J0 entries (every segment up to some tens of metres); longer
+# segments use the spline table. The two agree to about 1e-10.
+_SELF_DIRECT_BUDGET = 1 << 21
+# J0 tables larger than this many entries are evaluated in row chunks
+# (bounded memory for kilometre-long pairs; smaller tables are evaluated at
+# once, as before, so that their round-off is unchanged).
+_BESSEL_BUDGET = 1 << 21
+# Lambda grids with more nodes than this are kept in a small cache of
+# their own (_LARGE_GRID_CACHE entries), so that the 512-entry grid cache
+# cannot grow to gigabytes (audit W2B-05: 1.6 GB for a 2 km conductor).
+_LARGE_GRID_NODES = 1 << 16
+_LARGE_GRID_CACHE = 8
 # Tabulated assembly (method="tabulated", the solver's default since
 # 2026.11, user decision Q16): nodes of the shared
 # S(rho) table per pair of depth groups and frequency (cubic spline in
@@ -648,7 +707,6 @@ def _generic_weight(
 # ---------------------------------------------------------------------
 
 
-@lru_cache(maxsize=512)
 def _grid_from_params(
     lambda_break: float,
     lambda_max: float,
@@ -660,8 +718,48 @@ def _grid_from_params(
 
     Returns ``(lambdas, weights, resolved)``; ``resolved`` is ``False``
     when the hard node budget forced fewer than eight nodes per $J_0$
-    period.
+    period. Grids of up to :data:`_LARGE_GRID_NODES` nodes are kept in a
+    512-entry cache, larger ones (kilometre-long pairs) in one of
+    :data:`_LARGE_GRID_CACHE` entries, so that the memory of the caches
+    stays bounded (audit W2B-05).
     """
+    key = (lambda_break, lambda_max, rho_max, grading_top, n_log_nodes)
+    if _estimated_grid_nodes(lambda_break, lambda_max, rho_max, n_log_nodes) > (
+        _LARGE_GRID_NODES
+    ):
+        return _grid_large(*key)
+    return _grid_small(*key)
+
+
+def _estimated_grid_nodes(
+    lambda_break: float, lambda_max: float, rho_max: float, n_log_nodes: int
+) -> int:
+    """Node count of the uniform part of a grid (upper bound of the panels)."""
+    if rho_max <= 0.0:
+        return n_log_nodes + _PANEL_ORDER * _MIN_PANELS
+    span = lambda_max - lambda_break
+    n_target = math.ceil(span * rho_max * _PANELS_PER_PERIOD / (2.0 * math.pi))
+    return n_log_nodes + _PANEL_ORDER * min(n_target, _HARD_PANEL_BUDGET)
+
+
+@lru_cache(maxsize=512)
+def _grid_small(*key) -> tuple[np.ndarray, np.ndarray, bool]:
+    return _build_grid(*key)
+
+
+@lru_cache(maxsize=_LARGE_GRID_CACHE)
+def _grid_large(*key) -> tuple[np.ndarray, np.ndarray, bool]:
+    return _build_grid(*key)
+
+
+def _build_grid(
+    lambda_break: float,
+    lambda_max: float,
+    rho_max: float,
+    grading_top: float,
+    n_log_nodes: int,
+) -> tuple[np.ndarray, np.ndarray, bool]:
+    """Uncached body of :func:`_grid_from_params`."""
     # Logarithmic region [eps, lambda_break]: Gauss–Legendre in ln(lambda).
     eps = max(lambda_max * 1e-12, 1e-15)
     nodes_log_x, weights_log_x = _leggauss(n_log_nodes)
@@ -1180,6 +1278,396 @@ def _outer_rule(n: int) -> tuple[np.ndarray, np.ndarray]:
     return nodes, np.tile(w_nodes / n, n)
 
 
+def _hankel_rows(
+    lambdas: np.ndarray, rho: np.ndarray, specs: Sequence[np.ndarray]
+) -> list[np.ndarray]:
+    """$\\sum_\\lambda J_0(\\lambda\\rho_i)\\,s(\\lambda)$ for every spectrum ``s``.
+
+    ``specs`` are quadrature-weighted spectral weights on ``lambdas``; the
+    $J_0$ table is shared by all of them. A table of more than
+    :data:`_BESSEL_BUDGET` entries is evaluated in row chunks (bounded
+    memory); the chunking depends on the sizes only, so every spectrum gets
+    the same result whether it is evaluated alone or with others.
+    """
+    rho = np.asarray(rho, dtype=float)
+    n_rho, n_lam = rho.shape[0], lambdas.shape[0]
+    if n_rho * n_lam <= _BESSEL_BUDGET:
+        table = j0(lambdas[None, :] * rho[:, None])
+        return [table @ spec for spec in specs]
+    out = [np.empty(n_rho, dtype=complex) for _ in specs]
+    rows = max(1, _BESSEL_BUDGET // n_lam)
+    for r0 in range(0, n_rho, rows):
+        table = j0(lambdas[None, :] * rho[r0 : r0 + rows, None])
+        for o, spec in zip(out, specs, strict=True):
+            o[r0 : r0 + rows] = table @ spec
+    return out
+
+
+def _self_outer_rule(
+    length: float, scale: float, width: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Nodes ``u`` (m) and weights of the one-dimensional self rule on [0, L].
+
+    16-point Gauss–Legendre panels on the edges of :func:`_graded_edges`:
+    doubling from ``scale`` ($z$, the decay length of the spectral weight)
+    while narrower than ``width`` (a quarter skin depth), uniform panels of
+    at most ``width`` up to :data:`_FAR_WIDTHS` widths (40 skin depths), and
+    doubling again beyond, where $e^{-\\gamma u}$ has decayed and the
+    integrand varies on the scale of $u$ itself.
+    """
+    return _panel_nodes(_graded_edges(length, max(scale, 1e-6), width))
+
+
+def _skin_width(omega: float, earth: LayeredEarth) -> float:
+    """Panel width of the self rule: a quarter skin depth (most conductive layer)."""
+    delta = math.sqrt(2.0 * min(earth.rhos) / (omega * MU_0))
+    return _PIECE_SKIN_FRACTION * delta
+
+
+def _self_values(
+    pa1: np.ndarray,
+    pa2: np.ndarray,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+) -> np.ndarray:
+    """ΔZ (image ``"none"``) of a sub-segment with itself, every frequency.
+
+    The sub-segment lies in one medium; its spectral plan uses its mean
+    depth, as the pair rules do, so that the integrand depends on the
+    distance $u = |s - s'|$ along the segment only and
+
+    $$
+    \\Delta Z_{ii} \\;=\\; \\frac{j\\omega\\mu_0}{4\\pi}\\;
+    2\\int_0^L (L - u)\\,\\bigl[S(u\\,c) + D(u)\\bigr]\\,du ,
+    $$
+
+    with $c$ the horizontal fraction of the direction, $S$ the spectral
+    part and $D(u) = (e^{-\\gamma u} - 1)/u$ the direct part (buried
+    segments). Exact reduction of the double integral (user decision Q34);
+    see :data:`_SELF_T_SPACING` for the rule. Returns complex values in Ω,
+    shape ``(n_f,)``; frequencies ``<= 0`` give zero, and every frequency
+    equals a single-frequency call bit for bit.
+    """
+    n_f = len(omegas)
+    out = np.zeros(n_f, dtype=complex)
+    d = np.asarray(pa2, dtype=float) - np.asarray(pa1, dtype=float)
+    length = float(np.linalg.norm(d))
+    active = [k for k, om in enumerate(omegas) if om > 0.0]
+    if length <= 0.0 or not active:
+        return out
+    c = min(1.0, math.hypot(float(d[0]), float(d[1])) / length)
+    z_mid = 0.5 * float(pa1[2] + pa2[2])
+    plan = _SpectralPlan.for_pair(earth, z_mid, z_mid)
+    z_off = max(plan.decay, 1e-3)
+    rho_top = c * length
+    vertical = rho_top < 1e-9
+    if vertical:
+        t_nodes = None
+        rho_nodes = np.zeros(1)
+    else:
+        t_lo, t_hi = math.log(z_off), math.log(rho_top + z_off)
+        n_t = max(_SELF_MIN_TABLE, math.ceil((t_hi - t_lo) / _SELF_T_SPACING) + 1)
+        t_nodes = np.linspace(t_lo, t_hi, n_t)
+        rho_nodes = np.maximum(np.exp(t_nodes) - z_off, 0.0)
+    sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
+    sigma_max = 1.0 / min(earth.rhos)
+    rules: dict[float, tuple[np.ndarray, np.ndarray]] = {}
+    grids: dict[tuple, list[int]] = {}
+    for k in active:
+        omega = omegas[k]
+        params = _grid_params(
+            z_sum=plan.decay,
+            rho_max=rho_top + 1e-9,
+            p_ref=math.sqrt(omega * MU_0 * sigma_ref),
+            scales=plan.scales(omega, earth),
+            rho_min=0.0,
+            p_max=math.sqrt(omega * MU_0 * sigma_max),
+        )
+        grids.setdefault(params, []).append(k)
+    for params, ks in grids.items():
+        lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
+        if not resolved:
+            _warn_unresolved(params)
+        specs = {k: plan.weight(lambdas, omegas[k], earth) * lam_w for k in ks}
+        tabled = []
+        for k in ks:
+            width = _skin_width(omegas[k], earth)
+            if width not in rules:
+                rules[width] = _self_outer_rule(length, _GRADING_START * z_off, width)
+            u, _ = rules[width]
+            if vertical or u.size * lambdas.size > _SELF_DIRECT_BUDGET:
+                tabled.append(k)
+        node_vals = dict(
+            zip(
+                tabled,
+                _hankel_rows(lambdas, rho_nodes, [specs[k] for k in tabled]),
+                strict=True,
+            )
+        )
+        for k in ks:
+            omega = omegas[k]
+            u, w = rules[_skin_width(omega, earth)]
+            if vertical:
+                s_u = np.full(u.shape, complex(node_vals[k][0]), dtype=complex)
+            elif k in node_vals:
+                s_u = _spline_eval(t_nodes, node_vals[k], np.log(c * u + z_off))
+            else:
+                s_u = _hankel_rows(lambdas, c * u, [specs[k]])[0]
+            inner = s_u
+            if plan.direct:
+                gamma = np.sqrt(1j * omega * MU_0 * sigma_ref)
+                inner = inner + (np.exp(-gamma * u) - 1.0) / u
+            total = complex(np.sum(w * 2.0 * (length - u) * inner))
+            out[k] = 1j * omega * MU_0 / (4.0 * math.pi) * total
+    return out
+
+
+def _spline_eval(
+    t_nodes: np.ndarray, values: np.ndarray, t_query: np.ndarray
+) -> np.ndarray:
+    """Not-a-knot cubic spline of complex ``values`` on ``t_nodes`` at ``t_query``."""
+    from scipy.interpolate import CubicSpline
+
+    spline = CubicSpline(t_nodes, np.stack([values.real, values.imag], axis=-1))
+    v = spline(np.clip(t_query, t_nodes[0], t_nodes[-1]))
+    return v[..., 0] + 1j * v[..., 1]
+
+
+# Close pairs (user decision Q34): two sub-segments that come closer than
+# _CLOSE_FRACTION of the longer one (wires beside each other, a core in its
+# shield, pieces of one conductor, conductors meeting at a junction). Along
+# their line of closest approach the integrand has the kink of the self term
+# (smoothed only by the distance), which the 16x16 tensor rule cannot
+# follow; beyond this distance its error is below 1e-12.
+_CLOSE_FRACTION = 0.5
+# Beyond this many panel widths (160 quarter skin depths = 40 skin depths)
+# |exp(-gamma u)| < 4e-18: the graded rules continue with doubling panels.
+_FAR_WIDTHS = 160.0
+# First panel of the graded rules, as a fraction of the decay length.
+_GRADING_START = 1.0
+
+
+def _graded_edges(length: float, h0: float, width: float) -> np.ndarray:
+    """Panel edges on [0, length] (m), graded towards 0.
+
+    ``h0, 2 h0, 4 h0, ...`` while narrower than ``width``, uniform panels of
+    at most ``width`` up to ``_FAR_WIDTHS * width`` (40 skin depths for a
+    quarter-skin-depth ``width``), then doubling again up to ``length``.
+    """
+    edges = [0.0]
+    s = h0
+    while s < width and s < length:
+        edges.append(s)
+        s *= 2.0
+    start = edges[-1]
+    stop = min(length, max(start, _FAR_WIDTHS * width))
+    rest = stop - start
+    if rest > 0.0:
+        n = max(1, math.ceil(rest / width - 1e-9))
+        edges.extend((start + rest * np.arange(1, n + 1) / n).tolist())
+    s = edges[-1]
+    while s < length:
+        s = min(2.0 * s, length) if s > 0.0 else length
+        if length - s < 0.25 * s:
+            s = length
+        edges.append(s)
+    e = np.asarray(edges, dtype=float)
+    e[-1] = length
+    return e
+
+
+def _panel_nodes(edges: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """16-point Gauss–Legendre nodes / weights of the panels ``edges``
+    (``edges`` may carry a leading batch axis; zero-width panels weigh 0)."""
+    lo, hi = edges[..., :-1], edges[..., 1:]
+    half = 0.5 * (hi - lo)
+    mid = 0.5 * (hi + lo)
+    x = (mid[..., None] + half[..., None] * _OUTER_GL_NODES).reshape(
+        *edges.shape[:-1], -1
+    )
+    w = (half[..., None] * _OUTER_GL_WEIGHTS).reshape(*edges.shape[:-1], -1)
+    return x, w
+
+
+def _is_close(
+    pa1: np.ndarray, pa2: np.ndarray, pb1: np.ndarray, pb2: np.ndarray
+) -> bool:
+    """Whether a sub-segment pair needs the close-pair rule.
+
+    The closest distance of the 16 Gauss nodes of each segment is compared
+    with :data:`_CLOSE_FRACTION` of the longer segment.
+    """
+    la = float(np.linalg.norm(pa2 - pa1))
+    lb = float(np.linalg.norm(pb2 - pb1))
+    s = 0.5 * (_OUTER_GL_NODES + 1.0)
+    na = pa1[None, :] + s[:, None] * (pa2 - pa1)[None, :]
+    nb = pb1[None, :] + s[:, None] * (pb2 - pb1)[None, :]
+    d = np.sqrt(((na[:, None, :] - nb[None, :, :]) ** 2).sum(axis=-1)).min()
+    return bool(d < _CLOSE_FRACTION * max(la, lb))
+
+
+def _close_pair_values(
+    pa1: np.ndarray,
+    pa2: np.ndarray,
+    pb1: np.ndarray,
+    pb2: np.ndarray,
+    dot: float,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+) -> np.ndarray:
+    """ΔZ (image ``"none"``) of a close sub-segment pair, every frequency.
+
+    Outer rule over segment b, split where the points of b project onto the
+    ends of a and graded towards those points; for every outer node an inner
+    rule over a, split at the closest point of a and graded towards it from
+    the decay length of the spectral weight (16-node Gauss panels doubling up
+    to a quarter skin depth, uniform beyond). $S(\\rho)$ comes from a cubic
+    spline in $t = \\ln(\\rho + z)$ as in :func:`_self_values`; the plan
+    uses the mean depth of each sub-segment, as the tensor rule does (user
+    decision Q34). Returns complex values in Ω, shape ``(n_f,)``.
+    """
+    n_f = len(omegas)
+    out = np.zeros(n_f, dtype=complex)
+    pa1, pa2, pb1, pb2 = _canonical_close(pa1, pa2, pb1, pb2)
+    da, db = pa2 - pa1, pb2 - pb1
+    la, lb = float(np.linalg.norm(da)), float(np.linalg.norm(db))
+    active = [k for k, om in enumerate(omegas) if om > 0.0]
+    if la <= 0.0 or lb <= 0.0 or not active:
+        return out
+    ua, ub = da / la, db / lb
+    z_a = 0.5 * float(pa1[2] + pa2[2])
+    z_b = 0.5 * float(pb1[2] + pb2[2])
+    plan = _SpectralPlan.for_pair(earth, z_a, z_b)
+    z_off = max(plan.decay, 1e-3)
+    # horizontal distances of the pair: [0, the largest end-point distance]
+    ends = [(p, q) for p in (pa1, pa2) for q in (pb1, pb2)]
+    rho_top = max(math.hypot(float(p[0] - q[0]), float(p[1] - q[1])) for p, q in ends)
+    if rho_top < 1e-9:  # one vertical line: a single horizontal distance
+        t_nodes, rho_nodes = None, np.zeros(1)
+    else:
+        t_lo, t_hi = math.log(z_off), math.log(rho_top + z_off)
+        n_t = max(_SELF_MIN_TABLE, math.ceil((t_hi - t_lo) / _SELF_T_SPACING) + 1)
+        t_nodes = np.linspace(t_lo, t_hi, n_t)
+        rho_nodes = np.maximum(np.exp(t_nodes) - z_off, 0.0)
+    sigma_ref = 1.0 / earth.rhos[plan.ref_layer - 1]
+    sigma_max = 1.0 / min(earth.rhos)
+    # projection of b onto the line of a: s(t) = s0 + t cab
+    cab = float(ua @ ub)
+    s0 = float((pb1 - pa1) @ ua)
+    breaks = [0.0, lb]
+    if abs(cab) > 1e-12:
+        for s_end in (0.0, la):
+            t_e = (s_end - s0) / cab
+            if 1e-9 * lb < t_e < lb * (1.0 - 1e-9):
+                breaks.append(t_e)
+    breaks = sorted(breaks)
+    h0 = _GRADING_START * z_off
+    grids: dict[tuple, list[int]] = {}
+    for k in active:
+        omega = omegas[k]
+        params = _grid_params(
+            z_sum=plan.decay,
+            rho_max=rho_top + 1e-9,
+            p_ref=math.sqrt(omega * MU_0 * sigma_ref),
+            scales=plan.scales(omega, earth),
+            rho_min=0.0,
+            p_max=math.sqrt(omega * MU_0 * sigma_max),
+        )
+        grids.setdefault(params, []).append(k)
+    rules: dict[float, tuple] = {}
+    for params, ks in grids.items():
+        lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
+        if not resolved:
+            _warn_unresolved(params)
+        specs = [plan.weight(lambdas, omegas[k], earth) * lam_w for k in ks]
+        node_vals = _hankel_rows(lambdas, rho_nodes, specs)
+        for k, s_nodes in zip(ks, node_vals, strict=True):
+            omega = omegas[k]
+            width = _skin_width(omega, earth)
+            if width not in rules:
+                rules[width] = _close_pair_rule(pa1, ua, la, pb1, ub, breaks, h0, width)
+            gamma = np.sqrt(1j * omega * MU_0 * sigma_ref) if plan.direct else None
+            total = 0.0 + 0.0j
+            # outer nodes in chunks: bounded memory for long close pairs
+            for t_q, R3, w2 in _close_pair_chunks(
+                pa1, ua, la, pb1, ub, rules[width], z_off
+            ):
+                if t_nodes is None:
+                    inner = np.full(t_q.shape, complex(s_nodes[0]), dtype=complex)
+                else:
+                    inner = _spline_eval(t_nodes, s_nodes, t_q)
+                if gamma is not None:
+                    small = R3 < 1e-12
+                    R_safe = np.where(small, 1.0, R3)
+                    inner = inner + np.where(
+                        small, -gamma, (np.exp(-gamma * R_safe) - 1.0) / R_safe
+                    )
+                total += complex(np.sum(w2 * inner))
+            out[k] = 1j * omega * MU_0 / (4.0 * math.pi) * dot * total
+    return out
+
+
+def _canonical_close(pa1, pa2, pb1, pb2):
+    """The pair in a canonical order: each segment from its lexicographically
+    smaller end, the longer one (or the lexicographically smaller) first, so
+    that the close-pair rule does not depend on the order or direction of the
+    segments (the integral does not; the sign is carried by ``dot``)."""
+    a = sorted((tuple(map(float, pa1)), tuple(map(float, pa2))))
+    b = sorted((tuple(map(float, pb1)), tuple(map(float, pb2))))
+    la = math.dist(*a)
+    lb = math.dist(*b)
+    if (lb, b) > (la, a):
+        a, b = b, a
+    return (np.asarray(a[0]), np.asarray(a[1]), np.asarray(b[0]), np.asarray(b[1]))
+
+
+def _close_pair_rule(pa1, ua, la, pb1, ub, breaks, h0, width):
+    """Outer nodes / weights on b and the inner edge template of a close pair.
+
+    The outer rule is split at ``breaks`` and graded towards both ends of
+    every interval; the template holds the inner panel edges as distances
+    from the closest point (:func:`_graded_edges`).
+    """
+    t_nodes, t_w = [], []
+    for lo, hi in zip(breaks[:-1], breaks[1:], strict=True):
+        span = hi - lo
+        if span <= 0.0:
+            continue
+        left = _graded_edges(0.5 * span, h0, width)
+        edges = np.concatenate([lo + left, (hi - left[::-1])[1:]])
+        x, w = _panel_nodes(edges)
+        t_nodes.append(x)
+        t_w.append(w)
+    return np.concatenate(t_nodes), np.concatenate(t_w), _graded_edges(la, h0, width)
+
+
+def _close_pair_chunks(pa1, ua, la, pb1, ub, rule, z_off):
+    """Yield ``(t, R, weights)`` of the close-pair node grid in chunks.
+
+    ``t`` is $\\ln(\\rho + z)$ of every node pair, ``R`` its distance (m)
+    and ``weights`` the product of outer and inner weights (m²); a chunk
+    holds at most about 2**20 node pairs.
+    """
+    t_out, w_out, template = rule
+    n_inner = 2 * 16 * (template.size - 1)
+    rows = max(1, (1 << 20) // n_inner)
+    for r0 in range(0, t_out.size, rows):
+        t_c = t_out[r0 : r0 + rows]
+        q = pb1[None, :] + t_c[:, None] * ub[None, :]  # outer points on b
+        s_star = np.clip((q - pa1[None, :]) @ ua, 0.0, la)
+        left = np.minimum(template[None, :], s_star[:, None])
+        right = np.minimum(template[None, :], la - s_star[:, None])
+        xl, wl = _panel_nodes(left)
+        xr, wr = _panel_nodes(right)
+        s_in = np.concatenate([s_star[:, None] - xl, s_star[:, None] + xr], axis=1)
+        w_in = np.concatenate([wl, wr], axis=1)
+        p = pa1[None, None, :] + s_in[:, :, None] * ua[None, None, :]
+        diff = p - q[:, None, :]
+        rho = np.hypot(diff[..., 0], diff[..., 1])
+        R3 = np.sqrt(rho * rho + diff[..., 2] ** 2)
+        yield np.log(rho + z_off), R3, w_out[r0 : r0 + rows, None] * w_in
+
+
 def _subpair_values(
     pa1: np.ndarray,
     pa2: np.ndarray,
@@ -1192,11 +1680,14 @@ def _subpair_values(
     """ΔZ (image ``"none"``) of one sub-segment pair for every frequency.
 
     Both sub-segments lie in one medium each (split at the surface and
-    the interfaces). Frequencies are evaluated in groups of equal piece
-    counts of the composite outer rule (:func:`_n_pieces`); a pair of
-    segments shorter than a quarter skin depth keeps the historic single
-    16x16 rule, so every frequency equals a single-frequency call bit for
-    bit. Returns complex values in Ω, shape ``(n_f,)``.
+    the interfaces). One segment twice gets the self rule
+    (:func:`_self_values`), a close pair the graded rule
+    (:func:`_close_pair_values`, user decision Q34); any other pair the
+    tensor rule, its frequencies in groups of equal piece counts of the
+    composite outer rule (:func:`_n_pieces`; a pair of segments shorter than
+    a quarter skin depth keeps the single 16x16 rule). Every frequency equals
+    a single-frequency call bit for bit. Returns complex values in Ω, shape
+    ``(n_f,)``.
     """
     n_f = len(omegas)
     out = np.zeros(n_f, dtype=complex)
@@ -1204,6 +1695,12 @@ def _subpair_values(
     lb = float(np.linalg.norm(pb2 - pb1))
     if la <= 0.0 or lb <= 0.0:
         return out
+    if _same_segment(pa1, pa2, pb1, pb2) != 0.0:
+        # one segment twice (a core on its shield's axis): the self rule
+        return dot * _self_values(pa1, pa2, omegas, earth)
+    if _is_close(pa1, pa2, pb1, pb2):
+        # user decision Q34: graded rule along the line of closest approach
+        return _close_pair_values(pa1, pa2, pb1, pb2, dot, omegas, earth)
     groups: dict[tuple[int, int], list[int]] = {}
     for k, omega in enumerate(omegas):
         if omega <= 0.0:
@@ -1270,28 +1767,28 @@ def _subpair_group(
         R3_safe = np.where(small, 1.0, R3)
         outer_w = w_a[:, None] * w_b[None, :]
 
-    table_key = None
-    table = None
+    # Bessel table J0(lambda * rho_node) — the expensive part, shared by
+    # every frequency with the same grid (in row chunks when it is large).
+    by_grid: dict[tuple, list[int]] = {}
     for k, omega in enumerate(omegas):
-        p_ref = math.sqrt(omega * MU_0 * sigma_ref)
         params = _grid_params(
             z_sum=plan.decay,
             rho_max=rho_max,
-            p_ref=p_ref,
+            p_ref=math.sqrt(omega * MU_0 * sigma_ref),
             scales=plan.scales(omega, earth),
             rho_min=rho_min,
             p_max=math.sqrt(omega * MU_0 * sigma_max),
         )
+        by_grid.setdefault(params, []).append(k)
+    s_all: dict[int, np.ndarray] = {}
+    for params, ks in by_grid.items():
         lambdas, lam_w, resolved = _grid_from_params(*params, _N_LOG_NODES)
         if not resolved:
             _warn_unresolved(params)
-        if params != table_key:
-            # Bessel table J0(lambda * rho_node) — the expensive part,
-            # shared by every frequency with the same grid.
-            table = j0(lambdas[None, :] * rho_nodes[:, None])
-            table_key = params
-        spec = plan.weight(lambdas, omega, earth) * lam_w
-        s_vals = table @ spec
+        specs = [plan.weight(lambdas, omegas[k], earth) * lam_w for k in ks]
+        s_all.update(zip(ks, _hankel_rows(lambdas, rho_nodes, specs), strict=True))
+    for k, omega in enumerate(omegas):
+        s_vals = s_all[k]
         gamma = np.sqrt(1j * omega * MU_0 * sigma_ref)
         if not composite:
             inner = _interp_spectral(s_vals, t_nodes, t_grid, rho_grid.shape)
@@ -1343,8 +1840,15 @@ def _pair_values_none(
     p2_b: np.ndarray,
     omegas: Sequence[float],
     earth: LayeredEarth,
+    *,
+    same: bool = False,
 ) -> np.ndarray:
-    """ΔZ of a segment pair relative to free space (image ``"none"``)."""
+    """ΔZ of a segment pair relative to free space (image ``"none"``).
+
+    ``same`` marks the pair of a segment with itself: every sub-segment
+    then gets the one-dimensional self rule (:func:`_self_values`, user
+    decision Q34) and only pairs of different sub-segments the pair rule.
+    """
     p1_a = np.asarray(p1_a, dtype=float)
     p2_a = np.asarray(p2_a, dtype=float)
     p1_b = np.asarray(p1_b, dtype=float)
@@ -1361,11 +1865,23 @@ def _pair_values_none(
         return out  # orthogonal segments: the A_x-type kernel vanishes
     planes = _split_points(earth)
     subs_a = _split_segment(p1_a, p2_a, planes)
-    subs_b = _split_segment(p1_b, p2_b, planes)
-    for sa1, sa2 in subs_a:
-        for sb1, sb2 in subs_b:
-            out += _subpair_values(sa1, sa2, sb1, sb2, dot, omegas, earth)
+    subs_b = subs_a if same else _split_segment(p1_b, p2_b, planes)
+    for m, (sa1, sa2) in enumerate(subs_a):
+        for n, (sb1, sb2) in enumerate(subs_b):
+            if same and m == n:
+                out += _self_values(sa1, sa2, omegas, earth)
+            else:
+                out += _subpair_values(sa1, sa2, sb1, sb2, dot, omegas, earth)
     return out
+
+
+def _same_segment(p1_a, p2_a, p1_b, p2_b) -> float:
+    """``+1`` / ``-1`` if both segments are one (same / reversed direction), else 0."""
+    if np.array_equal(p1_a, p1_b) and np.array_equal(p2_a, p2_b):
+        return 1.0
+    if np.array_equal(p1_a, p2_b) and np.array_equal(p2_a, p1_b):
+        return -1.0
+    return 0.0
 
 
 def _convert_image(
@@ -1418,17 +1934,18 @@ def _sub_segments(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Sub-segments (split at the surface and the interfaces) of all segments.
 
-    Returns ``(parent, nodes, lengths, depth, units, ends)``: parent segment
-    index per sub-segment, its 16 outer Gauss–Legendre nodes ``(n, 16, 3)``
-    in m, its length in m, its mean depth in m, the unit direction of
-    every **parent** segment ``(M, 3)`` and the sub-segment end points
-    ``(n, 2, 3)``. ``pieces`` splits every plane-split sub-segment (in the
-    order of :func:`_plane_split`) further into that many equal pieces
-    (long segments, :func:`_n_pieces`).
+    Returns ``(parent, nodes, lengths, depth, units, ends, base)``: parent
+    segment index per sub-segment, its 16 outer Gauss–Legendre nodes
+    ``(n, 16, 3)`` in m, its length in m, its mean depth in m, the unit
+    direction of every **parent** segment ``(M, 3)``, the sub-segment end
+    points ``(n, 2, 3)`` and the index of the plane-split sub-segment it is a
+    piece of. ``pieces`` splits every plane-split sub-segment (in the order
+    of :func:`_plane_split`) further into that many equal pieces (long
+    segments, :func:`_n_pieces`).
     """
     s_nodes = 0.5 * (_OUTER_GL_NODES + 1.0)
     base_parent, base_ends, units = _plane_split(seg_endpoints, earth)
-    parent, nodes, lengths, depth, ends = [], [], [], [], []
+    parent, nodes, lengths, depth, ends, base = [], [], [], [], [], []
     for m, (i, (a, b)) in enumerate(zip(base_parent, base_ends, strict=True)):
         n = 1 if pieces is None else int(pieces[m])
         if n == 1:
@@ -1444,6 +1961,7 @@ def _sub_segments(
             lengths.append(float(np.linalg.norm(d)))
             depth.append(0.5 * float(pa[2] + pb[2]))
             ends.append(np.stack([pa, pb]))
+            base.append(m)
     return (
         np.asarray(parent, dtype=int),
         np.asarray(nodes, dtype=float).reshape(-1, 16, 3),
@@ -1451,6 +1969,7 @@ def _sub_segments(
         np.asarray(depth, dtype=float),
         units,
         np.asarray(ends, dtype=float).reshape(-1, 2, 3),
+        np.asarray(base, dtype=int),
     )
 
 
@@ -1484,6 +2003,8 @@ def _tabulated_block(
     idx_b: np.ndarray,
     symmetric: bool,
     n_table: int,
+    memo: dict | None = None,
+    handled: np.ndarray | None = None,
 ) -> bool:
     """Add the corrections of all sub-segment pairs (a, b) of one block.
 
@@ -1499,7 +2020,8 @@ def _tabulated_block(
     and interpolated by a cubic spline in $t$; the node geometry of the
     block is computed once for all frequencies.
     """
-    parent, nodes, lengths, _, units, _ = sub
+    parent, nodes, lengths, _, units, ends, base = sub
+    memo = {} if memo is None else memo
     nodes_a, nodes_b = nodes[idx_a], nodes[idx_b]
     rows = _rows_per_chunk(idx_b.size)
     rho_min, rho_max = math.inf, 0.0
@@ -1542,24 +2064,32 @@ def _tabulated_block(
 
     # Tables per frequency: cubic-spline coefficients of S(t).
     coeffs: dict[int, np.ndarray] = {}
-    table_key, bessel = None, None
+    by_grid: dict[tuple, list[int]] = {}
     for k in active:
-        params, lambdas, lam_w = grids[k]
-        if params != table_key:
-            bessel = j0(lambdas[None, :] * rho_nodes[:, None])
-            table_key = params
-        s_values = bessel @ (plan.weight(lambdas, omegas[k], earth) * lam_w)
-        coeffs[k] = s_values if single else _spline_coefficients(t_nodes, s_values)
+        by_grid.setdefault(grids[k][0], []).append(k)
+    for ks in by_grid.values():
+        _, lambdas, lam_w = grids[ks[0]]
+        specs = [plan.weight(lambdas, omegas[k], earth) * lam_w for k in ks]
+        for k, s_values in zip(
+            ks, _hankel_rows(lambdas, rho_nodes, specs), strict=True
+        ):
+            coeffs[k] = s_values if single else _spline_coefficients(t_nodes, s_values)
 
     w2 = 0.25 * (_OUTER_GL_WEIGHTS[:, None] * _OUTER_GL_WEIGHTS[None, :])
     dots = units[parent[idx_a]] @ units[parent[idx_b]].T
     dots[np.abs(dots) < 1e-12] = 0.0
     scale = lengths[idx_a][:, None] * lengths[idx_b][None, :] * dots
     blocks = {k: np.zeros((idx_a.size, idx_b.size), dtype=complex) for k in active}
+    close = np.zeros((idx_a.size, idx_b.size), dtype=bool)
+    reach = _CLOSE_FRACTION * np.maximum(
+        lengths[idx_a][:, None], lengths[idx_b][None, :]
+    )
     for r0 in range(0, idx_a.size, rows):
         na = nodes_a[r0 : r0 + rows]
         diff = na[:, None, :, None, :] - nodes_b[None, :, None, :, :]
         rho = np.sqrt(diff[..., 0] ** 2 + diff[..., 1] ** 2)
+        d_min = np.sqrt((rho * rho + diff[..., 2] ** 2).min(axis=(2, 3)))
+        close[r0 : r0 + rows] = d_min < reach[r0 : r0 + rows]
         if not single:
             t = np.log(rho + z_off)
             i = np.clip(np.searchsorted(t_nodes, t, side="right") - 1, 0, n_table - 2)
@@ -1581,12 +2111,74 @@ def _tabulated_block(
                 )
             blocks[k][r0 : r0 + rows] = np.einsum("kl,abkl->ab", w2, inner)
     pa, pb = parent[idx_a], parent[idx_b]
+    # User decision Q34: pairs of pieces of one plane-split sub-segment belong
+    # to its self term (one-dimensional rule, added by the caller); close
+    # pairs get the graded rule instead of the tensor rule of the block.
+    own = base[idx_a][:, None] == base[idx_b][None, :]
+    if handled is not None:
+        own |= handled[np.ix_(base[idx_a], base[idx_b])]
+    close &= ~own & (dots != 0.0)
     for k in active:
         block = blocks[k] * (1j * omegas[k] * MU_0 / (4.0 * math.pi)) * scale
+        block[own | close] = 0.0
         np.add.at(out[k], (pa[:, None], pb[None, :]), block)
         if not symmetric:
             np.add.at(out[k], (pb[:, None], pa[None, :]), block.T)
+    if symmetric:
+        close = np.triu(close, 1)
+    om_active = [omegas[k] for k in active]
+    for ia, ib in zip(*np.nonzero(close), strict=True):
+        a, b = int(idx_a[ia]), int(idx_b[ib])
+        vals = _close_values_memo(
+            memo, ends[a], ends[b], float(dots[ia, ib]), om_active, earth
+        )
+        i, j = int(parent[a]), int(parent[b])
+        for n, k in enumerate(active):
+            out[k][i, j] += vals[n]
+            out[k][j, i] += vals[n]
     return True
+
+
+def _close_values_memo(
+    memo: dict, ends_a: np.ndarray, ends_b: np.ndarray, dot: float, omegas, earth
+) -> np.ndarray:
+    """:func:`_close_pair_values`, evaluated once per relative geometry.
+
+    The value depends on the geometry only through horizontal distances,
+    distances and depths, so the key is segment b in a horizontal frame
+    attached to segment a (and the depths), rounded to 1e-9 m.
+    """
+    if _same_segment(*ends_a, *ends_b) != 0.0:
+        # one segment twice: the self rule, as for the segment itself
+        return dot * _self_values(ends_a[0], ends_a[1], omegas, earth)
+    a1, a2, b1, b2 = _canonical_close(*ends_a, *ends_b)
+    d = a2 - a1
+    h = math.hypot(float(d[0]), float(d[1]))
+    if h > 1e-12:
+        ex = np.array([d[0] / h, d[1] / h])
+    else:
+        e = b2 - b1
+        hb = math.hypot(float(e[0]), float(e[1]))
+        ex = np.array([e[0] / hb, e[1] / hb]) if hb > 1e-12 else np.array([1.0, 0.0])
+    ey = np.array([-ex[1], ex[0]])
+    local = [
+        (float((p[:2] - a1[:2]) @ ex), float((p[:2] - a1[:2]) @ ey))
+        for p in (a2, b1, b2)
+    ]
+    # a reflection y -> -y keeps every distance: fix the sign of y
+    sign = 1.0
+    for _, y in local:
+        if abs(y) > 1e-9:
+            sign = 1.0 if y > 0.0 else -1.0
+            break
+    key = (
+        tuple(round(v, 9) for x, y in local for v in (x, sign * y))
+        + tuple(round(float(p[2]), 9) for p in (a1, a2, b1, b2))
+        + (round(dot, 12),)
+    )
+    if key not in memo:
+        memo[key] = _close_pair_values(a1, a2, b1, b2, dot, omegas, earth)
+    return memo[key]
 
 
 def _tabulated_values_none(
@@ -1614,7 +2206,7 @@ def _tabulated_values_none(
     """
     M = seg_endpoints.shape[0]
     out = np.zeros((len(omegas), M, M), dtype=complex)
-    _, base_ends, _ = _plane_split(seg_endpoints, earth)
+    base_parent, base_ends, units = _plane_split(seg_endpoints, earth)
     if not base_ends:
         return out
     lengths = [float(np.linalg.norm(b - a)) for a, b in base_ends]
@@ -1622,24 +2214,99 @@ def _tabulated_values_none(
     for k, omega in enumerate(omegas):
         if omega <= 0.0:
             continue
-        key = tuple(_n_pieces(length, omega, earth) for length in lengths)
+        # A single sub-segment has its self term only: no pieces (W2B-05).
+        key = (
+            (1,)
+            if len(lengths) == 1
+            else tuple(_n_pieces(length, omega, earth) for length in lengths)
+        )
         passes.setdefault(key, []).append(k)
     for key, ks in passes.items():
         pieces = None if all(n == 1 for n in key) else key
         sub = _sub_segments(seg_endpoints, earth, pieces)
         part = np.zeros((len(ks), M, M), dtype=complex)
-        _tabulated_pass(
-            part, [omegas[k] for k in ks], earth, sub, n_table, min_block_pairs
+        om_pass = [omegas[k] for k in ks]
+        handled = _whole_close_pairs(
+            part, om_pass, earth, key, base_parent, base_ends, units
         )
+        _tabulated_pass(part, om_pass, earth, sub, n_table, min_block_pairs, handled)
         out[ks] = part
+    # Self terms of the plane-split sub-segments (one-dimensional rule, user
+    # decision Q34); equal geometries are evaluated once.
+    memo: dict[tuple[float, ...], np.ndarray] = {}
+    for i, (a, b) in zip(base_parent, base_ends, strict=True):
+        d = b - a
+        key = (
+            round(float(np.linalg.norm(d)), 12),
+            round(math.hypot(float(d[0]), float(d[1])), 12),
+            round(0.5 * float(a[2] + b[2]), 12),
+        )
+        if key not in memo:
+            memo[key] = _self_values(a, b, omegas, earth)
+        out[:, i, i] += memo[key]
     return out
 
 
-def _tabulated_pass(out, omegas, earth, sub, n_table, min_block_pairs) -> None:
-    """Add every depth-group block of ``sub`` to ``out`` (one piece count)."""
-    _, _, _, depth, _, _ = sub
+def _whole_close_pairs(
+    out: np.ndarray,
+    omegas: Sequence[float],
+    earth: LayeredEarth,
+    key: tuple[int, ...],
+    base_parent: list[int],
+    base_ends: list[tuple[np.ndarray, np.ndarray]],
+    units: np.ndarray,
+) -> np.ndarray | None:
+    """Close pairs that involve a segment cut into pieces, evaluated whole.
+
+    A plane-split sub-segment longer than a quarter skin depth is cut into
+    pieces for the tabulated blocks; a pair of it with a close (or an
+    identical) sub-segment instead gets the graded close-pair rule (or the
+    self rule) over the whole length, as in the exact assembly, so that a
+    core and its shield stay consistent with their self terms (user decision
+    Q34). Adds those pairs to ``out`` and returns the boolean matrix of the
+    base pairs it handled (``None`` when no segment is cut).
+    """
+    long = [m for m, n in enumerate(key) if n > 1] if len(key) > 1 else []
+    if not long:
+        return None
+    n_base = len(base_ends)
+    s = 0.5 * (_OUTER_GL_NODES + 1.0)
+    nodes = np.stack([a[None, :] + s[:, None] * (b - a)[None, :] for a, b in base_ends])
+    lengths = np.array([float(np.linalg.norm(b - a)) for a, b in base_ends])
+    handled = np.zeros((n_base, n_base), dtype=bool)
+    for m in long:
+        d = np.sqrt(((nodes[m][None, :, None, :] - nodes[:, None, :, :]) ** 2).sum(-1))
+        close = d.min(axis=(1, 2)) < _CLOSE_FRACTION * np.maximum(lengths[m], lengths)
+        close[m] = False
+        for n in np.flatnonzero(close):
+            if handled[m, n]:
+                continue
+            i, j = base_parent[m], base_parent[int(n)]
+            dot = float(units[i] @ units[j])
+            handled[m, n] = handled[n, m] = True
+            if abs(dot) < 1e-12:
+                continue
+            vals = _subpair_values(
+                *base_ends[m], *base_ends[int(n)], dot, omegas, earth
+            )
+            out[:, i, j] += vals
+            out[:, j, i] += vals
+    return handled
+
+
+def _tabulated_pass(
+    out, omegas, earth, sub, n_table, min_block_pairs, handled=None
+) -> None:
+    """Add every depth-group block of ``sub`` to ``out`` (one piece count).
+
+    Pairs of pieces of one plane-split sub-segment are left out: they form
+    its self term (added by the caller); so are the pieces of the base pairs
+    in ``handled`` (:func:`_whole_close_pairs`).
+    """
+    _, _, _, depth, _, _, _ = sub
     keys = np.round(depth, 12)
     groups = [np.flatnonzero(keys == key) for key in np.unique(keys)]
+    memo: dict = {}
     for ga, idx_a in enumerate(groups):
         for idx_b in groups[ga:]:
             symmetric = idx_b is idx_a
@@ -1648,18 +2315,30 @@ def _tabulated_pass(out, omegas, earth, sub, n_table, min_block_pairs) -> None:
             if idx_a.size * idx_b.size >= min_block_pairs:
                 plan = _SpectralPlan.for_pair(earth, z_a, z_b)
                 if _tabulated_block(
-                    out, omegas, earth, plan, sub, idx_a, idx_b, symmetric, n_table
+                    out,
+                    omegas,
+                    earth,
+                    plan,
+                    sub,
+                    idx_a,
+                    idx_b,
+                    symmetric,
+                    n_table,
+                    memo,
+                    handled,
                 ):
                     continue
-            _exact_block(out, omegas, earth, sub, idx_a, idx_b, symmetric)
+            _exact_block(out, omegas, earth, sub, idx_a, idx_b, symmetric, handled)
 
 
-def _exact_block(out, omegas, earth, sub, idx_a, idx_b, symmetric):
+def _exact_block(out, omegas, earth, sub, idx_a, idx_b, symmetric, handled=None):
     """Per-pair evaluation of a small block (the exact assembly's rule)."""
-    parent, _, _, _, units, ends = sub
+    parent, _, _, _, units, ends, base = sub
     for a in idx_a:
         for b in idx_b:
-            if symmetric and b < a:
+            if (symmetric and b < a) or base[a] == base[b]:
+                continue
+            if handled is not None and handled[base[a], base[b]]:
                 continue
             i, j = int(parent[a]), int(parent[b])
             dot = float(units[i] @ units[j])
@@ -1787,7 +2466,17 @@ def sommerfeld_pair_integral_layered(
     m_img = 0.0
     if mode != "none":
         m_img = _pair_image_mutual(p1_a, p2_a, p1_b, p2_b, mode)
-    vals = _pair_values_none(p1_a, p2_a, p1_b, p2_b, [omega], earth)
+    p1_a, p2_a, p1_b, p2_b = (
+        np.asarray(p, dtype=float) for p in (p1_a, p2_a, p1_b, p2_b)
+    )
+    sign = _same_segment(p1_a, p2_a, p1_b, p2_b)
+    if sign != 0.0:
+        # one segment twice: the one-dimensional self rule (user decision Q34)
+        vals = sign * _pair_values_none(
+            p1_a, p2_a, p1_a, p2_a, [omega], earth, same=True
+        )
+    else:
+        vals = _pair_values_none(p1_a, p2_a, p1_b, p2_b, [omega], earth)
     return complex(_convert_image(vals, [omega], m_img, mode)[0])
 
 
@@ -1844,7 +2533,10 @@ def build_sommerfeld_correction_matrices(
         spline in $\\ln(\\rho + z)$ on the $\\lambda$ grid of the
         group's largest distance), and the outer nodes of all pairs are
         evaluated vectorised; blocks of fewer than 64 sub-segment pairs
-        use the exact rule.
+        use the exact rule. In both assemblies the self term of every
+        segment and every close pair get the rules of user decision Q34
+        (one-dimensional self rule, graded close-pair rule; see the module
+        docstring), which also bound the cost of long conductors.
 
     Returns
     -------
@@ -1879,9 +2571,20 @@ def build_sommerfeld_correction_matrices(
             p1_i = seg_endpoints[i, 0]
             p2_i = seg_endpoints[i, 1]
             for j in range(i, M):
-                vals = _pair_values_none(
-                    p1_i, p2_i, seg_endpoints[j, 0], seg_endpoints[j, 1], omegas, earth
-                )
+                sign = 1.0 if i == j else _same_segment(p1_i, p2_i, *seg_endpoints[j])
+                if sign != 0.0:
+                    vals = sign * _pair_values_none(
+                        p1_i, p2_i, p1_i, p2_i, omegas, earth, same=True
+                    )
+                else:
+                    vals = _pair_values_none(
+                        p1_i,
+                        p2_i,
+                        seg_endpoints[j, 0],
+                        seg_endpoints[j, 1],
+                        omegas,
+                        earth,
+                    )
                 out[:, i, j] = vals
                 out[:, j, i] = vals
     if L_img is not None:
@@ -1953,3 +2656,108 @@ def build_sommerfeld_correction_matrix(
         image=image,
         method=method,
     )[0]
+
+
+# ---------------------------------------------------------------------
+# Per-metre impedance of two infinite parallel wires (reference)
+# ---------------------------------------------------------------------
+
+
+def per_metre_mutual_impedance(
+    z_i: float,
+    z_j: float,
+    distance: float,
+    *,
+    omega: float,
+    earth: LayeredEarth,
+) -> complex:
+    """Mutual impedance per metre of two infinite parallel horizontal wires.
+
+    Exact quasi-static earth-return impedance (Ω/m) of two long parallel
+    wires at depths ``z_i``, ``z_j`` (m, ``z > 0`` in the soil, ``z < 0``
+    overhead; both on one side of the surface, buried ones in one layer) at
+    the horizontal distance ``distance`` (m) over the layered earth: the
+    line integral of the Green's function of the module docstring,
+    $\\int_{-\\infty}^{\\infty} J_0(\\lambda\\sqrt{x^2 + s^2})\\,ds =
+    2\\cos(\\lambda x)/\\lambda$,
+
+    $$
+    Z'(x) \\;=\\; \\frac{j\\omega\\mu_0}{4\\pi}\\Bigl[2K_0(\\gamma_k R)
+    + \\int_0^\\infty w(\\lambda)\\,\\frac{2\\cos\\lambda x}{\\lambda}\\,d\\lambda\\Bigr]
+    $$
+
+    for wires in layer $k$ ($R = \\sqrt{x^2 + (z_i - z_j)^2}$, $w$ the
+    reflected amplitude of the same-layer kernel, exact for any number of
+    layers), and $\\frac{j\\omega\\mu_0}{4\\pi}\\int_0^\\infty
+    [e^{-\\lambda|z_i - z_j|} - \\Gamma(\\lambda)e^{-\\lambda(h_i + h_j)}]
+    \\,2\\cos(\\lambda x)/\\lambda\\,d\\lambda$ for overhead wires (Carson's
+    integral with the surface reflection coefficient of the stack). The
+    self impedance per metre of a wire is the value at ``distance`` equal to
+    its radius (or GMR). The $\\lambda$ quadrature is the one of the segment
+    pairs (finding 10.36) with four times the nodes. For a homogeneous earth
+    this is Carson's (overhead) and Pollaczek's (buried) impedance; it agrees
+    with both, and with the two-layer Pollaczek integral of
+    :mod:`groundfield.references.pollaczek`, to about 1e-8.
+
+    Parameters
+    ----------
+    z_i, z_j
+        Depths of the two wires in m (``> 0`` buried, ``< 0`` overhead).
+    distance
+        Horizontal distance in m (``> 0``; for the self impedance the wire
+        radius or GMR).
+    omega
+        Angular frequency in rad/s (``> 0``).
+    earth
+        Layered-earth configuration.
+
+    Returns
+    -------
+    complex
+        Mutual impedance per metre in Ω/m.
+
+    Raises
+    ------
+    ValueError
+        For wires on opposite sides of the surface or in different layers,
+        a non-positive distance or frequency.
+    """
+    from scipy.special import kv
+
+    if not (omega > 0.0) or not (distance > 0.0):
+        raise ValueError("per_metre_mutual_impedance needs omega > 0 and distance > 0")
+    plan = _SpectralPlan.for_pair(earth, float(z_i), float(z_j))
+    if plan.kind not in ("same", "air"):
+        raise ValueError(
+            "per_metre_mutual_impedance: both wires must lie overhead or in one "
+            f"soil layer (got z_i = {z_i}, z_j = {z_j})"
+        )
+    x = float(distance)
+    dz = abs(float(z_i) - float(z_j))
+    # The segment-pair policy with four times the nodes (256 in the log region,
+    # at least 256 panels): a reference, 8e-6 off with the pair grid at
+    # x = 0.1 m, within 1e-8 of Carson and of the two-layer Pollaczek
+    # integral (groundfield.references.pollaczek) with this one.
+    p_ref = math.sqrt(omega * MU_0 / earth.rhos[plan.ref_layer - 1])
+    lb, lm, rm, gt = _grid_params(
+        z_sum=plan.decay, rho_max=x, p_ref=p_ref, scales=plan.scales(omega, earth)
+    )
+    lambdas, weights, resolved = _build_grid(
+        lb, lm, max(rm, 256.0 * math.pi / (lm - lb)), gt, 4 * _N_LOG_NODES
+    )
+    if not resolved:
+        _warn_unresolved((lb, lm, rm, gt))
+    w = plan.weight(lambdas, omega, earth)
+    if plan.kind == "air":
+        # e^{-l dz} - Gamma e^{-l Z} = (e^{-l dz} - e^{-l Z}) + (1 - Gamma) e^{-l Z};
+        # the first part is Frullani's integral, ln((Z^2 + x^2) / (dz^2 + x^2)):
+        # the free-space part does not decay with lambda (Carson's image term)
+        z_sum = plan.h_a + plan.h_b
+        w = w + np.exp(-lambdas * z_sum)
+    total = complex(np.sum(weights * w * 2.0 * np.cos(lambdas * x) / lambdas))
+    if plan.kind == "air":
+        total += math.log((z_sum * z_sum + x * x) / (dz * dz + x * x))
+    if plan.kind == "same":
+        gamma = complex(np.sqrt(1j * omega * MU_0 / earth.rhos[plan.ref_layer - 1]))
+        total += 2.0 * complex(kv(0, gamma * math.hypot(x, dz)))
+    return 1j * omega * MU_0 / (4.0 * math.pi) * total

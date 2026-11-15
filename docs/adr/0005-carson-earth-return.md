@@ -566,3 +566,40 @@ Findings 10.20 (F32), 10.46 and 10.63.
    The step at 8.1° of item 5 becomes 12.8 % for two 1 km leads 2 m apart
    at 1 kHz (12.3 % with the old projection; 42 % for two 300 m leads at
    50 Hz).
+7. **Tilted pairs per stretch (audit W1R3-07).** A near-parallel pair that
+   is not parallel took the per-metre value at its mid-point distance for
+   the whole overlap, so a lumped pair and its pieces differed: a core
+   crossing its shield's axis at mid-length, loop reactance at 1 kHz,
+   4.3e-4 at 2e-3 rad, 1.4e-3 / 4.4e-3 / 1.9e-2 / 5.2e-2 at 4e-3 / 8e-3 /
+   2e-2 / 4e-2 rad. Where the pair comes close within its overlap — its
+   smallest distance there is below 30 times the change of its horizontal
+   offset along the overlap — the correction is integrated over the
+   overlap with Gauss–Legendre nodes (4, plus 8 per change of the offset
+   by $h_i + h_j$, at most 32; on one depth no closer than touching).
+   Elsewhere the mid-point value is exact to second order (an error of
+   about $(\text{change}/d)^2/24$ of the entry, below 5e-5) and the pair
+   keeps its single entry, as do pairs parallel up to round-off (bit for
+   bit; the golden cases do not move). Lumped pair and pieces now agree
+   within 2.9e-6 in the matrix and 8.0e-6 of the solved loop. The
+   100-house star has 3173 tilted entries among its 6710, none of which
+   comes that close: it keeps every entry and its cost (integrating all of
+   them cost 5.5 s of QUADPACK per frequency for 1.8e-6 of X).
+8. **Accuracy for networks of short cables (stream w3perf, item 7).**
+   Carson's correction belongs to infinitely long lines; tiled over the
+   pieces of short service drops (30 … 60 m at a skin depth of 159 m,
+   1 kHz, 100 Ω·m) it overstates the earth return of a generated LV
+   network. Against `sommerfeld` with a refined discretisation (PEN in
+   2.5 m pieces, 1 m segments; the default `sommerfeld` agrees with it to
+   8e-5), the input impedance of the generated star (100 houses) and grid
+   (100 and 50 houses) networks with an insulated Neumann PEN reads X
+   +9.3 … +14.9 % and R +5.5 … +10.9 % high at 1 kHz under
+   `carson_series`, and this error changes with the geometry. A change of
+   the network is therefore reproduced by `carson_series` only to within
+   that error: across the cabinet fix of audit W1B-01/02 the star's X
+   moves by +1.18 % under `carson_series` and −3.54 % under `sommerfeld`
+   (the refined reference: −3.54 %), across the cabinet threshold of the
+   100-house grid by +1.81 / −2.77 % (reference −2.77 %), of the 50-house
+   grid by −21.6 / −18.9 % (reference −18.9 %). For such networks use
+   `sommerfeld`; `carson_series` is the fast choice for long parallel
+   lines.
+

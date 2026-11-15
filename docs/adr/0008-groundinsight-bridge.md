@@ -263,8 +263,7 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    explicit `w0` or `beta` replaces that weight only, so every call made
    before the presets keeps its value. A BusType and its bus must use the
    same weights. `rho_definition` stays the token
-   `"effective_resistivity"` and does not name the preset; the caller
-   names it in `soil_summary`. For the AP1 station in the 39 AP1 soils,
+   `"effective_resistivity"`; the preset is recorded next to it (item 7). For the AP1 station in the 39 AP1 soils,
    $R = c\,\rho_\text{eff}$ ($c$ from homogeneous soil) misses the field
    solution by at most 15.7 % with `"station"` (median over the 39
    soils 1.8 %; the hand-over: 1.7 %, 15.7 %) against 35.9 % with
@@ -273,3 +272,20 @@ Findings 10.01, 10.19, 10.27, 10.40, 10.73 and 10.84.
    checked at $10^{-9}$, as this ADR specified (the test had used
    $10^{-3}$), and `evaluate_spec` against groundinsight's
    `compute_impedance` at $10^{-9}$.
+7. **The preset in the document (user decision Q39).** The exporters take
+   `rho_preset=...`, a key of `EFFECTIVE_RESISTIVITY_PRESETS` (any other
+   value raises, naming the closest presets), and record it as
+   `metadata["rho_preset"]` next to `rho_definition`; `None` when no preset
+   is named (homogeneous soil, explicit weights, or not stated).
+   `BusTypeSpec.rho_preset` reads it; documents of earlier versions have no
+   entry and load with `None`, a malformed entry is refused on load. The
+   number `rho_at_fit` is still not checked against the preset. The paths
+   that serve a bus know its preset: `evaluate_spec(spec, f, rho,
+   rho_preset=...)` and `bustype_from_spec(spec, rho_preset=...)` (the live
+   `groundinsight.BusType` of a loaded document) emit
+   `RhoPresetMismatchWarning` when the document records another preset; a
+   preset holds for its electrode class only (the AP1 station with
+   `"lv_group_4_p40"`: 39.9 % rms). The live `BusType` carries no metadata,
+   so the check stays on the groundfield side. Round trip through
+   groundinsight 0.3.0 (PyPI) at $10^{-9}$.
+
