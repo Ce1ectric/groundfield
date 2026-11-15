@@ -310,10 +310,10 @@ class World(BaseModel):
         Parameters
         ----------
         require_source
-            Require at least one electrode and at least one current
-            source (default ``True``, the state a world must be in to be
-            solved). ``False`` checks only the references of a world
-            that is still being assembled.
+            Require at least one electrode and at least one source of
+            non-zero magnitude (default ``True``, the state a world must
+            be in to be solved). ``False`` checks only the references of
+            a world that is still being assembled.
 
         Raises
         ------
@@ -331,13 +331,21 @@ class World(BaseModel):
             (:data:`~groundfield.world.RESERVED_NAME_PREFIXES`, audit A3S-03).
             A source feeds a conductor or returns to its own node; both
             terminals of a source are bonded into one galvanic cluster by
-            ideal conductors (the source is short-circuited); a current
-            source has magnitude 0 or a non-finite magnitude / phase; the
-            world has no electrode or no current source (with
-            ``require_source``).
-        NotImplementedError
-            The world contains a :class:`~groundfield.sources.VoltageSource`:
-            no backend implements impressed voltages.
+            ideal conductors (the source is short-circuited); voltage
+            sources form a loop, through ideal bonds or through remote
+            earth (two of them on one cluster to remote earth, a ring of
+            two-terminal ones), which fixes one potential difference
+            twice; a current source has magnitude 0; a source has a
+            non-finite magnitude / phase; the world has no electrode or
+            no source of non-zero magnitude (with ``require_source``).
+
+        Notes
+        -----
+        A :class:`~groundfield.sources.VoltageSource` of 0 V is accepted:
+        it is an ideal short between its terminals (or to remote earth)
+        whose current the solve returns. Up to the calendar release a
+        voltage source raised :class:`NotImplementedError` here (up to
+        0.15.0 it solved to zero potentials with a warning).
         """
         self._check_unique_names()
         if require_source and self.soil is None:
@@ -347,37 +355,42 @@ class World(BaseModel):
         nodes = set(self._node_names())
         for c in self.conductors:
             self._check_conductor_ends(c, nodes)
-        n_current = 0
+        n_driving = 0
+        zero_volt: list[str] = []
         for src in self.sources:
             self._check_source_terminals(src)
-            if src.kind != "current":
-                raise NotImplementedError(
-                    f"Source {src.name!r} is a {type(src).__name__}; no "
-                    "backend implements impressed voltages (up to 0.15.0 it "
-                    "solved to all-zero potentials). Use a CurrentSource: the "
-                    "problem is linear, so a voltage U at the feeding point "
-                    "is the current I = U / Z_in, with Z_in = "
-                    "result.input_impedance() of a 1 A solve."
-                )
+            unit = "V" if src.kind == "voltage" else "A"
             magnitude = float(src.magnitude)
             phase = float(src.phase_deg)
             if not (math.isfinite(magnitude) and math.isfinite(phase)):
                 raise ValueError(
-                    f"Source {src.name!r}: magnitude ({magnitude!r} A) and "
+                    f"Source {src.name!r}: magnitude ({magnitude!r} {unit}) and "
                     f"phase_deg ({phase!r}) must be finite."
                 )
             if magnitude == 0.0:
+                if src.kind == "voltage":
+                    # An ideal short (0 V): its current is solved for.
+                    zero_volt.append(src.name)
+                    continue
                 raise ValueError(
                     f"Source {src.name!r} has magnitude 0 A: it injects "
                     "nothing. Remove it or give it a non-zero magnitude."
                 )
-            n_current += 1
+            n_driving += 1
         self._check_short_circuited_sources()
-        if require_source and n_current == 0:
+        if require_source and n_driving == 0:
+            if zero_volt:
+                raise ValueError(
+                    f"World {self.name!r} has no source with a non-zero "
+                    f"magnitude: its voltage source(s) {zero_volt} impress 0 V "
+                    "and it has no current source, so every potential and "
+                    "current would be zero. Give a source a non-zero magnitude."
+                )
             raise ValueError(
-                f"World {self.name!r} has no current source, so every "
-                "potential and current would be zero and every impedance "
-                "nan. Add one with gf.create_source(world, attached_to=...)."
+                f"World {self.name!r} has no current source and no voltage "
+                "source, so every potential and current would be zero and "
+                "every impedance nan. Add one with gf.create_source(world, "
+                "attached_to=...)."
             )
 
     def _check_unique_names(self) -> None:
@@ -413,9 +426,18 @@ class World(BaseModel):
                 )
 
     def _check_short_circuited_sources(self) -> None:
-        """Reject a two-terminal source whose terminals share a cluster."""
+        """Reject short-circuited sources and loops of voltage sources.
+
+        A two-terminal source whose terminals share a cluster is
+        short-circuited. Voltage sources are edges between cluster roots
+        and remote earth: an edge that closes a cycle (two sources on one
+        cluster to remote earth, a ring of two-terminal sources) fixes
+        one potential difference twice, and the nodal system is singular
+        (inconsistent for unequal voltages).
+        """
         two_terminal = [s for s in self.sources if s.return_to is not None]
-        if not two_terminal:
+        voltage = [s for s in self.sources if s.kind == "voltage"]
+        if not two_terminal and len(voltage) < 2:
             return
         # Local import: the solver package imports this module.
         from groundfield.solver._topology import _build_clusters
@@ -427,14 +449,54 @@ class World(BaseModel):
             ra = cluster_id.get(src.attached_to, src.attached_to)
             rb = cluster_id.get(src.return_to, src.return_to)
             if ra == rb:
+                drives = (
+                    "fixes the potential difference of one node"
+                    if src.kind == "voltage"
+                    else "drives no current through the soil"
+                )
                 raise ValueError(
                     f"Source {src.name!r}: attached_to={src.attached_to!r} "
                     f"and return_to={src.return_to!r} are bonded into one "
                     "galvanic cluster by ideal conductors, so the source is "
-                    "short-circuited and drives no current through the "
-                    "soil. Give the bond a finite cross_section, or return "
-                    "the current elsewhere."
+                    f"short-circuited and {drives}. Give the bond a finite "
+                    "cross_section, or return the current elsewhere."
                 )
+        self._check_voltage_loops(voltage, cluster_id)
+
+    @staticmethod
+    def _check_voltage_loops(voltage, cluster_id: dict[str, str]) -> None:
+        """Reject voltage sources that close a loop (union-find over clusters)."""
+        earth = object()
+        parent: dict[object, object] = {}
+        members: dict[object, list[str]] = {}
+
+        def find(x: object) -> object:
+            parent.setdefault(x, x)
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for src in voltage:
+            a = find(cluster_id.get(src.attached_to, src.attached_to))
+            r = find(
+                earth
+                if src.return_to is None
+                else cluster_id.get(src.return_to, src.return_to)
+            )
+            if a == r:
+                loop = members.get(a, []) + [src.name]
+                raise ValueError(
+                    f"Voltage source {src.name!r} closes a loop of voltage "
+                    f"sources ({', '.join(repr(n) for n in loop)}) through "
+                    "ideal bonds or remote earth: the loop fixes one "
+                    "potential difference twice, so the nodal system has no "
+                    "unique solution. Remove one source of the loop, or put "
+                    "a finite conductor (a junction and a lumped series "
+                    "resistance) in series with one of them."
+                )
+            parent[a] = r
+            members[r] = members.pop(r, []) + members.pop(a, []) + [src.name]
 
     def set_boundary_conditions(self, **kwargs: Any) -> BoundaryConditions:
         """Update individual fields of the boundary configuration.
@@ -606,9 +668,13 @@ class World(BaseModel):
         ------
         TypeError
             If ``engine`` is not an :class:`Engine`.
-        KeyError, ValueError, NotImplementedError
+        KeyError, ValueError
             If the world fails :meth:`check` (dangling source or
-            conductor references, no current source, voltage sources).
+            conductor references, no source of non-zero magnitude, a
+            short-circuited source, a loop of voltage sources).
+        BackendCapabilityError
+            If the backend cannot represent the world (for example a
+            voltage source on ``fem``).
 
         Notes
         -----

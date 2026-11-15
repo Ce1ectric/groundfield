@@ -16,7 +16,10 @@ the Green's-function object handed to :func:`solve_image_family`
    $+I$ at ``attached_to`` and, with ``return_to``, $-I$ at
    ``return_to``. Returns the impressed current per node name —
    electrodes and junctions — which the topology step attaches to the
-   clusters.
+   clusters. :func:`impressed_voltages` lists the voltage sources
+   (2026.11), which step 5 adds to the nodal system by modified nodal
+   analysis: one unknown (the source current) and one constraint row
+   $\\varphi_a - \\varphi_r = U$ per source.
 3. :func:`build_topology` — clusters of ideally bonded electrodes and
    junctions, lumped finite-impedance branches and the
    distributed-conductor chains (ADR-0003), whose galvanic segments
@@ -38,7 +41,8 @@ the Green's-function object handed to :func:`solve_image_family`
    conductors, skin effect) belong here.
 5. :func:`solve` — per frequency, the augmented nodal system of
    :mod:`groundfield.solver._topology` with the multi-port matrix built
-   from the Green's function's reaction kernel; source-free components
+   from the Green's function's reaction kernel and the rows of the
+   voltage sources; source-free components
    float with zero net current (10.29); then the segment currents
    (uniform per unit length per owner), the segment potentials and the
    potential of every active node (:attr:`Solution.node_potentials`).
@@ -60,7 +64,6 @@ capabilities.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
@@ -72,6 +75,7 @@ from groundfield.solver._guards import _check_segment_depths
 from groundfield.solver._inductive import _assemble_inductance_matrix
 from groundfield.solver._line_kernel import LineSegments
 from groundfield.solver._topology import (
+    VoltageTerminals,
     _build_clusters,
     _build_distributed_topology,
     _build_finite_branches,
@@ -297,12 +301,45 @@ class Solution:
         (cluster roots, junctions, interior conductor nodes), one
         mapping per frequency. Empty mappings for backends that do not
         provide them.
+    voltage_source_currents
+        Current in A of every voltage source (name -> current from the
+        source into ``attached_to``), one mapping per frequency; empty
+        for a world without voltage sources.
     """
 
     owner_currents: list[dict[str, complex]]
     segment_currents: list[np.ndarray]
     segment_potentials: list[np.ndarray] = field(default_factory=list)
     node_potentials: list[dict[str, complex]] = field(default_factory=list)
+    voltage_source_currents: list[dict[str, complex]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ImpressedVoltage:
+    """One voltage source of the world, as the solve step reads it.
+
+    Attributes
+    ----------
+    name
+        Source name.
+    attached_to
+        Node (electrode or junction) at the potential $U$ above
+        ``return_to``.
+    return_to
+        Second terminal, or ``None`` for remote earth.
+    voltage
+        Voltage phasor $U = |U|\\,e^{j\\varphi}$ in V.
+    """
+
+    name: str
+    attached_to: str
+    return_to: str | None
+    voltage: complex
+
+    def terminals(self, cluster_id: dict[str, str]) -> VoltageTerminals:
+        """``(root_a, root_r, U)``: the cluster roots of the two terminals."""
+        root_r = None if self.return_to is None else cluster_id[self.return_to]
+        return (cluster_id[self.attached_to], root_r, self.voltage)
 
 
 # ---------------------------------------------------------------------
@@ -372,10 +409,13 @@ def inject(world: World, *, where: str, stacklevel: int) -> dict[str, complex]:
     --------
     * The world is validated first (:meth:`World.check
       <groundfield.world.World.check>`): every source terminal names an
-      electrode or junction, the world has at least one current source,
-      no source has magnitude 0, no voltage source is present and no
-      two-terminal source is short-circuited by an ideal bond. Errors
-      are raised before any numerics run.
+      electrode or junction, the world has at least one source of
+      non-zero magnitude, no current source has magnitude 0, no
+      two-terminal source is short-circuited by an ideal bond and the
+      voltage sources form no loop. Errors are raised before any
+      numerics run.
+    * Voltage sources impress no current; :func:`impressed_voltages`
+      lists them for the solve step.
     * A current source with phasor
       $I = |I|\\,e^{j\\varphi}$ adds $+I$ to ``attached_to`` and, if
       ``return_to`` is set, $-I$ to ``return_to``. The sum over all
@@ -413,11 +453,52 @@ def inject(world: World, *, where: str, stacklevel: int) -> dict[str, complex]:
     for junction in world.junctions:
         node_currents[junction.name] = 0j
     for src in world.sources:
+        if src.kind != "current":
+            continue
         i_complex = src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))
         node_currents[src.attached_to] += i_complex
         if src.return_to is not None:
             node_currents[src.return_to] -= i_complex
     return node_currents
+
+
+def impressed_voltages(world: World) -> list[ImpressedVoltage]:
+    """Step 2b: the voltage sources of ``world``, in source order.
+
+    Each becomes one unknown (its current) and one constraint row
+    $\\varphi_a - \\varphi_r = U$ of the nodal system of step 5
+    (modified nodal analysis, 2026.11). Called after :func:`inject`,
+    which has validated the world.
+
+    Parameters
+    ----------
+    world
+        The world to be solved.
+
+    Returns
+    -------
+    list[ImpressedVoltage]
+        One entry per :class:`~groundfield.sources.VoltageSource`; empty
+        for a world of current sources (the solve is then that of the
+        releases before 2026.11, bit for bit).
+    """
+    return [
+        ImpressedVoltage(
+            name=src.name,
+            attached_to=src.attached_to,
+            return_to=src.return_to,
+            voltage=complex(src.magnitude * np.exp(1j * np.deg2rad(src.phase_deg))),
+        )
+        for src in world.sources
+        if src.kind == "voltage"
+    ]
+
+
+def voltage_terminal_nodes(voltages: Sequence[ImpressedVoltage]) -> set[str]:
+    """Node names of the terminals of ``voltages`` (driven nodes)."""
+    nodes = {v.attached_to for v in voltages}
+    nodes |= {v.return_to for v in voltages if v.return_to is not None}
+    return nodes
 
 
 def _warn_manual_counter_sources(world: World) -> None:
@@ -685,6 +766,7 @@ def solve(
     branches: BranchModel,
     arrays: SegmentArrays,
     kernel: SelfKernel,
+    voltages: Sequence[ImpressedVoltage] = (),
 ) -> Solution:
     """Step 5: owner currents, segment currents and segment potentials.
 
@@ -692,6 +774,11 @@ def solve(
     the per-frequency solves (ADR-0010 Tier 1). Without inductive
     branches the whole system is frequency-independent: it is solved
     once and replicated.
+
+    Every voltage source of ``voltages`` adds one unknown, its current,
+    and one constraint row $\\varphi_a - \\varphi_r = U$ (modified nodal
+    analysis, :func:`~groundfield.solver._topology._voltage_source_entries`);
+    the currents are kept in :attr:`Solution.voltage_source_currents`.
 
     Source-free components float (finding 10.29): a bonded group of
     passive electrodes is one equipotential with zero net current, and
@@ -701,6 +788,8 @@ def solve(
     """
     n_freq = len(engine.frequencies)
     mp_cache: dict = {}
+    terminals = [v.terminals(topo.cluster_id) for v in voltages]
+    v_currents: list[dict[str, complex]] = []
 
     def _solve_at(
         omega: float,
@@ -711,6 +800,7 @@ def solve(
             else None
         )
         node_pots: dict[str, complex] = {}
+        source_currents: list[complex] = []
         owner_currents = _solve_cluster_currents(
             electrodes=world.electrodes,
             elec_input_current=node_currents,
@@ -729,7 +819,13 @@ def solve(
             multiport_cache=mp_cache,
             floating=True,
             node_potentials=node_pots,
+            voltage_sources=terminals or None,
+            source_currents=source_currents if terminals else None,
         )
+        if terminals:
+            v_currents.append(
+                {v.name: i for v, i in zip(voltages, source_currents, strict=True)}
+            )
         sc = _segment_currents(owner_currents, disc.owner_segments, arrays.lengths)
         return owner_currents, sc, node_pots
 
@@ -762,11 +858,13 @@ def solve(
         sc_per_freq = [sc] * n_freq
         phi_per_freq = [ph] * n_freq
         nodes_per_freq = [nodes] * n_freq
+        v_currents = v_currents * n_freq
     return Solution(
         owner_currents=owner_per_freq,
         segment_currents=sc_per_freq,
         segment_potentials=phi_per_freq,
         node_potentials=nodes_per_freq,
+        voltage_source_currents=v_currents,
     )
 
 
@@ -867,7 +965,25 @@ def build_result(
         soil=world.soil,
         clusters=clusters,
         metadata=metadata,
+        sources=solved_source_records(world, n_freq, solution),
     )
+
+
+def solved_source_records(world: World, n_freq: int, solution: Solution) -> list:
+    """Source snapshot with the solved currents of the voltage sources.
+
+    A world with voltage sources reports the current of every voltage
+    source from the solve (:attr:`Solution.voltage_source_currents`), so
+    the result is self-contained also when a backend is called directly.
+    A world of current sources returns ``[]``: :meth:`Engine.solve
+    <groundfield.solver.engine.Engine.solve>` fills the snapshot it took
+    before the dispatch, as before 2026.11.
+    """
+    if not solution.voltage_source_currents:
+        return []
+    from groundfield.solver.result import _source_records
+
+    return _source_records(world.sources, n_freq, solution.voltage_source_currents)
 
 
 def split_owners(
@@ -930,6 +1046,7 @@ def solve_image_family(
     """
     disc = discretise(world, engine, green.layer_interfaces)
     node_currents = inject(world, where=green.where, stacklevel=stacklevel)
+    voltages = impressed_voltages(world)
     topo = build_topology(world, disc)
     owners = split_owners(world, disc, topo, owner_interfaces)
     branches = assemble_branches(world, engine, topo)
@@ -955,9 +1072,16 @@ def solve_image_family(
         branches=branches,
         arrays=arrays,
         kernel=kernel,
+        voltages=voltages,
     )
     if owners:
-        owners.merge(disc, topo, solution.owner_currents, node_currents)
+        owners.merge(
+            disc,
+            topo,
+            solution.owner_currents,
+            node_currents,
+            driven_nodes=voltage_terminal_nodes(voltages),
+        )
     metadata = {
         "world_name": world.name,
         "n_segments": len(disc.segments),
@@ -1093,23 +1217,37 @@ def _weighted_node_potential(
     return [complex((w @ phi_per_freq[k][idxs]) / w_sum) for k in range(n_freq)]
 
 
-def _warn_ignored_sources(world, backend: str, *, stacklevel: int = 3) -> None:
-    """Warn when a backend drops non-current sources.
+def _reject_voltage_sources(world, backend: str) -> None:
+    """Reject voltage sources in a backend that solves current sources only.
 
-    Every backend supports impressed current sources only; other
-    source kinds are skipped during the injection assembly. Without
-    this warning a world driven solely by voltage sources solves to
-    all-zero with no diagnostic.
+    Since 2026.11 the backends on the shared pipeline solve impressed
+    voltages (registry capability ``voltage_sources``); a backend without
+    it is called directly here (``Engine.solve`` rejects the world in the
+    capability check already). Up to 0.15.0 such a backend dropped the
+    voltage sources with a warning and solved to zero.
+
+    Raises
+    ------
+    BackendCapabilityError
+        If ``world`` contains a :class:`~groundfield.sources.VoltageSource`.
     """
-    n_ignored = sum(1 for s in world.sources if s.kind != "current")
-    if n_ignored:
-        warnings.warn(
-            f"{backend}: {n_ignored} non-current source(s) ignored — "
-            "only CurrentSource is supported. A world driven solely "
-            "by non-current sources solves to all-zero.",
-            UserWarning,
-            stacklevel=stacklevel,
+    names = [s.name for s in world.sources if s.kind == "voltage"]
+    if names:
+        from groundfield.solver.registry import (
+            BackendCapabilityError,
+            _voltage_capable_backends,
         )
+
+        raise BackendCapabilityError(
+            f"Backend '{backend}' does not implement impressed voltage sources "
+            f"(voltage source(s) {names}). Backends that can: "
+            f"{_voltage_capable_backends()}."
+        )
+
+
+#: Name of :func:`_reject_voltage_sources` up to 2026.11 (it warned and
+#: dropped the voltage sources); kept for the re-export of ``solver.image``.
+_warn_ignored_sources = _reject_voltage_sources
 
 
 def _reject_concrete_shells(world, backend: str) -> None:

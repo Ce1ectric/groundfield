@@ -5,13 +5,19 @@ distributed-conductor branches, and the solve of the augmented nodal
 system that couples the multi-port grounding matrix with the branch
 network (:func:`_solve_cluster_currents`).
 
+Impressed voltage sources enter the nodal system by modified nodal
+analysis: one unknown (the source current) and one constraint row
+(:math:`\\varphi_a - \\varphi_r = U`) per source
+(:func:`_voltage_source_entries`), appended after the branch block.
+
 Moved out of :mod:`groundfield.solver.image` (review pass 10, 10.75 /
 10.79); every name stays importable from there.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -290,6 +296,11 @@ class _ActiveSystem:
         list (used to restrict the inductance matrix).
     active_branches
         Active ``(node_a, node_b, R)`` branch triples.
+    voltage_sources
+        Impressed voltage sources ``(root_a, root_r, U)``: the cluster
+        roots of ``attached_to`` and ``return_to`` (``None`` for remote
+        earth) and the voltage phasor in V. Each adds one unknown, the
+        source current, and one constraint row after the branch block.
     """
 
     cluster_input: dict[str, complex]
@@ -298,6 +309,7 @@ class _ActiveSystem:
     active_elecs: list[str]
     active_branch_indices: list[int]
     active_branches: list[tuple[str, str, float]]
+    voltage_sources: list[VoltageTerminals] = field(default_factory=list)
 
     @property
     def n_owners(self) -> int:
@@ -314,6 +326,94 @@ class _ActiveSystem:
         """Number of active finite branches ``M_a``."""
         return len(self.active_branches)
 
+    @property
+    def n_voltage_sources(self) -> int:
+        """Number of impressed voltage sources ``V``."""
+        return len(self.voltage_sources)
+
+    @property
+    def driven(self) -> set[str]:
+        """Cluster roots with an impressed current or a voltage-source terminal."""
+        return set(self.cluster_input) | _voltage_roots(self.voltage_sources)
+
+    def voltage_source_currents(self, sol: np.ndarray) -> list[complex]:
+        """Currents in A of the voltage sources in the solution vector ``sol``."""
+        first = self.n_owners + self.n_nodes + self.n_branches
+        return [complex(i) for i in sol[first : first + self.n_voltage_sources]]
+
+
+#: Terminals of one impressed voltage source in the nodal system:
+#: ``(root_a, root_r, U)`` — the cluster roots of ``attached_to`` and of
+#: ``return_to`` (``None``: remote earth) and the voltage phasor in V.
+VoltageTerminals = tuple[str, str | None, complex]
+
+
+def _voltage_roots(voltage_sources: Iterable[VoltageTerminals]) -> set[str]:
+    """Cluster roots of the terminals of the voltage sources."""
+    roots: set[str] = set()
+    for root_a, root_r, _u in voltage_sources:
+        roots.add(root_a)
+        if root_r is not None:
+            roots.add(root_r)
+    return roots
+
+
+def _voltage_source_entries(
+    A: np.ndarray,
+    voltage_sources: list[VoltageTerminals],
+    cluster_idx: dict[str, int],
+    *,
+    node_offset: int,
+    first: int,
+) -> None:
+    """Write the modified-nodal-analysis entries of the voltage sources.
+
+    Source ``v`` owns the unknown ``first + v``, its current $I_v$ in A,
+    flowing from the source into ``attached_to`` and back out of
+    ``return_to`` (the sign convention of a current source). Kirchhoff's
+    current law at the two terminal nodes gains $-I_v$ and $+I_v$ on the
+    left-hand side, and row ``first + v`` is the constraint
+    $\\varphi_a - \\varphi_r = U_v$ (right-hand side from
+    :func:`_voltage_source_rhs`). ``A`` is modified in place.
+
+    Parameters
+    ----------
+    A
+        Augmented matrix, rows and columns ``first .. first + V - 1``
+        still zero.
+    voltage_sources
+        ``(root_a, root_r, U)`` per source.
+    cluster_idx
+        Position of each node in the node block.
+    node_offset
+        Row of the first node (KCL) equation, the column of the first
+        node potential.
+    first
+        Row and column of the first voltage-source unknown.
+    """
+    for v, (root_a, root_r, _u) in enumerate(voltage_sources):
+        row = first + v
+        ka = node_offset + cluster_idx[root_a]
+        A[ka, row] = -1.0
+        A[row, ka] = 1.0
+        if root_r is not None:
+            kr = node_offset + cluster_idx[root_r]
+            A[kr, row] = 1.0
+            A[row, kr] = -1.0
+
+
+def _voltage_source_rhs(
+    b_re: np.ndarray,
+    b_im: np.ndarray,
+    voltage_sources: list[VoltageTerminals],
+    *,
+    first: int,
+) -> None:
+    """Impressed voltages in V on the constraint rows (in place)."""
+    for v, (_a, _r, u) in enumerate(voltage_sources):
+        b_re[first + v] = u.real
+        b_im[first + v] = u.imag
+
 
 def _cluster_input_currents(
     elec_input_current: dict[str, complex], cluster_id: dict[str, str]
@@ -329,11 +429,15 @@ def _cluster_input_currents(
 
 
 def _active_cluster_set(
-    cluster_input: dict[str, complex],
+    cluster_input: Iterable[str],
     finite_branches: list[tuple[str, str, float]],
 ) -> set[str]:
-    """Source clusters plus every cluster reachable through finite branches."""
-    active_clusters_set: set[str] = set(cluster_input.keys())
+    """Source clusters plus every cluster reachable through finite branches.
+
+    ``cluster_input`` holds the driven cluster roots (the keys of the
+    impressed currents and the voltage-source terminals).
+    """
+    active_clusters_set: set[str] = set(cluster_input)
     if finite_branches:
         # Union-find over branch endpoints to propagate activity.
         parent: dict[str, str] = {}
@@ -359,7 +463,7 @@ def _active_cluster_set(
 
 
 def _floating_cluster_set(
-    cluster_input: dict[str, complex],
+    cluster_input: Iterable[str],
     finite_branches: list[tuple[str, str, float]],
     cluster_id: dict[str, str],
     owner_roots: list[str],
@@ -387,7 +491,9 @@ def _floating_cluster_set(
     Parameters
     ----------
     cluster_input
-        Impressed current per cluster root in A (non-zero entries only).
+        Driven cluster roots: the roots with a non-zero impressed
+        current and the terminals of the voltage sources (any iterable
+        of root names, e.g. the impressed-current mapping).
     finite_branches
         ``(node_a, node_b, R)`` per finite branch, endpoints are cluster
         roots.
@@ -434,13 +540,13 @@ def _floating_cluster_set(
 def _passive_isolated_roots(
     system: _ActiveSystem, finite_branches: list[tuple[str, str, float]]
 ) -> set[str]:
-    """Active cluster roots with neither an impressed current nor a branch.
+    """Active cluster roots with neither a source terminal nor a branch.
 
     Their net leakage is zero by Kirchhoff's current law (floating
-    bonded groups, finding 10.29).
+    bonded groups, finding 10.29). A voltage-source terminal is driven.
     """
     linked = {a for a, _b, _R in finite_branches} | {b for _a, b, _R in finite_branches}
-    return set(system.active_clusters) - set(system.cluster_input) - linked
+    return set(system.active_clusters) - system.driven - linked
 
 
 def _zero_net_current(
@@ -475,28 +581,33 @@ def _active_system(
     finite_branches: list[tuple[str, str, float]],
     pseudo_owners: list[str],
     floating: bool = False,
+    voltage_sources: list[VoltageTerminals] | None = None,
 ) -> _ActiveSystem | None:
     """Identify the active nodes, owners and branches of one solve.
 
-    Returns ``None`` when nothing is driven (no impressed current), in
-    which case every owner carries zero current. With ``floating`` the
-    non-trivial source-free components float
+    Returns ``None`` when nothing is driven (no impressed current and no
+    voltage source), in which case every owner carries zero current. With
+    ``floating`` the non-trivial source-free components float
     (:func:`_floating_cluster_set`); without it they are left out, as up
-    to 0.15.0.
+    to 0.15.0. The terminals of ``voltage_sources`` (``(root_a, root_r,
+    U)``, cluster roots) are driven nodes like a node with an impressed
+    current.
     """
+    voltage_sources = list(voltage_sources or [])
     cluster_input = _cluster_input_currents(elec_input_current, cluster_id)
+    driven = set(cluster_input) | _voltage_roots(voltage_sources)
     if floating:
         all_owners = [e.name for e in electrodes] + list(pseudo_owners)
         owner_roots = [
             cluster_id[n] for n in all_owners if len(elec_to_segidx.get(n, [])) > 0
         ]
         active_clusters_set = _floating_cluster_set(
-            cluster_input, finite_branches, cluster_id, owner_roots
+            driven, finite_branches, cluster_id, owner_roots
         )
     else:
-        if not cluster_input and not finite_branches:
+        if not driven and not finite_branches:
             return None
-        active_clusters_set = _active_cluster_set(cluster_input, finite_branches)
+        active_clusters_set = _active_cluster_set(driven, finite_branches)
     if not active_clusters_set:
         return None
 
@@ -537,6 +648,7 @@ def _active_system(
         active_elecs=active_elecs,
         active_branch_indices=active_branch_indices,
         active_branches=active_branches,
+        voltage_sources=voltage_sources,
     )
 
 
@@ -662,13 +774,18 @@ def _augmented_matrix(
 
     ::
 
-        [ Z      -C       0    ] [ I_e    ]   [ 0       ]
-        [ C^T    0        B^T  ] [ phi_n  ] = [ I_in    ]
-        [ 0      B        R_b  ] [ I_b    ]   [ 0       ]
+        [ Z      -C       0      0  ] [ I_e    ]   [ 0       ]
+        [ C^T    0        B^T   -S  ] [ phi_n  ] = [ I_in    ]
+        [ 0      B        -R_b   0  ] [ I_b    ]   [ 0       ]
+        [ 0      S^T      0      0  ] [ I_v    ]   [ U       ]
+
+    The last block row and column exist only with voltage sources
+    (:func:`_voltage_source_entries`); without them the matrix is the
+    one of the releases before 2026.11, entry for entry.
     """
     N_a, K_a, M_a = system.n_owners, system.n_nodes, system.n_branches
     cluster_idx = system.cluster_idx
-    n_unknowns = N_a + K_a + M_a
+    n_unknowns = N_a + K_a + M_a + system.n_voltage_sources
     A = np.zeros((n_unknowns, n_unknowns))
 
     # Block 1: Z · I_e − C · phi_n = 0
@@ -702,19 +819,29 @@ def _augmented_matrix(
         A[N_a + K_a + m, N_a + ka] = +1.0
         A[N_a + K_a + m, N_a + kb] = -1.0
         A[N_a + K_a + m, N_a + K_a + m] = -R
+    if system.voltage_sources:
+        _voltage_source_entries(
+            A,
+            system.voltage_sources,
+            cluster_idx,
+            node_offset=N_a,
+            first=N_a + K_a + M_a,
+        )
     return A
 
 
 def _augmented_rhs(system: _ActiveSystem) -> tuple[np.ndarray, np.ndarray]:
-    """Real and imaginary right-hand side (impressed node currents)."""
+    """Real and imaginary right-hand side (impressed currents and voltages)."""
     N_a, K_a, M_a = system.n_owners, system.n_nodes, system.n_branches
-    n_unknowns = N_a + K_a + M_a
+    n_unknowns = N_a + K_a + M_a + system.n_voltage_sources
     b_re = np.zeros(n_unknowns)
     b_im = np.zeros(n_unknowns)
     for k, c in enumerate(system.active_clusters):
         ic = system.cluster_input.get(c, 0j)
         b_re[N_a + k] = ic.real
         b_im[N_a + k] = ic.imag
+    if system.voltage_sources:
+        _voltage_source_rhs(b_re, b_im, system.voltage_sources, first=N_a + K_a + M_a)
     return b_re, b_im
 
 
@@ -869,6 +996,8 @@ def _solve_cluster_currents(
     multiport_cache: dict | None = None,
     floating: bool = False,
     node_potentials: dict[str, complex] | None = None,
+    voltage_sources: list[VoltageTerminals] | None = None,
+    source_currents: list[complex] | None = None,
 ) -> dict[str, complex]:
     """Distribute input currents through grounding and finite-conductor branches.
 
@@ -920,6 +1049,32 @@ def _solve_cluster_currents(
     branch direction $a \\to b$). For $M_a = 0$ (no finite
     branches) the system collapses to the classical cluster
     constraint with one common potential per cluster.
+
+    Impressed voltage sources (modified nodal analysis, 2026.11) add one
+    unknown per source, its current $I_v$ (from the source into
+    ``attached_to``, back out of ``return_to``), and one row:
+
+    $$
+    \\begin{bmatrix} Z & -C & 0 & 0 \\\\
+                    C^{\\top} & 0 & B^{\\top} & -S \\\\
+                    0 & B & -R_b & 0 \\\\
+                    0 & S^{\\top} & 0 & 0 \\end{bmatrix}
+    \\begin{bmatrix} \\mathbf{I}_e \\\\
+                    \\boldsymbol{\\varphi}_n \\\\
+                    \\mathbf{I}_b \\\\
+                    \\mathbf{I}_v \\end{bmatrix}
+    \\;=\\;
+    \\begin{bmatrix} \\mathbf{0} \\\\
+                    \\mathbf{I}_{\\text{in}} \\\\
+                    \\mathbf{0} \\\\
+                    \\mathbf{U} \\end{bmatrix},
+    $$
+
+    with $S \\in \\{-1,0,+1\\}^{K_a \\times V}$ the terminal incidence
+    (``+1`` at ``attached_to``, ``-1`` at ``return_to``, no entry for
+    remote earth): Kirchhoff's current law gains the source currents and
+    each constraint row reads $\\varphi_a - \\varphi_r = U_v$. Without
+    voltage sources the system is the one above, entry for entry.
 
     Active set
     ----------
@@ -976,6 +1131,14 @@ def _solve_cluster_currents(
         Optional output mapping, filled with the potential in V of every
         active node (cluster root, junction, conductor interior node)
         from the solution of the augmented system.
+    voltage_sources
+        Impressed voltage sources ``(root_a, root_r, U)``: cluster roots
+        of the two terminals (``root_r`` ``None`` for remote earth) and
+        the voltage phasor in V. ``None`` (default) or empty: none.
+    source_currents
+        Optional output list, filled with the current in A of every
+        voltage source (in the order of ``voltage_sources``), from the
+        source into ``attached_to``.
     """
     if finite_branches is None:
         finite_branches = []
@@ -993,6 +1156,7 @@ def _solve_cluster_currents(
         finite_branches=finite_branches,
         pseudo_owners=pseudo_owners,
         floating=floating,
+        voltage_sources=voltage_sources,
     )
     if system is None:
         return elec_total
@@ -1028,6 +1192,8 @@ def _solve_cluster_currents(
     if node_potentials is not None:
         for k, root in enumerate(system.active_clusters):
             node_potentials[root] = complex(sol[N_a + k])
+    if source_currents is not None:
+        source_currents[:] = system.voltage_source_currents(sol)
     return elec_total
 
 

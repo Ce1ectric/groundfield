@@ -5,7 +5,8 @@ rho-f exporters take ``quantity=`` with three meanings,
 
 ``"input"`` (default)
     Driving-point impedance of a current source,
-    :math:`Z_\\text{in} = (\\varphi_a - \\varphi_r) / I_s`
+    :math:`Z_\\text{in} = (\\varphi_a - \\varphi_r) / I_s`, or of a
+    voltage source, :math:`U / I_s` with the solved source current
     (:meth:`FieldResult.input_impedance`) — what a measurement
     instrument or a fault sees at the feeding point, and the
     :math:`T(f) = \\mathrm{EPR}/I_F` of a fault study.
@@ -63,7 +64,10 @@ def select_current_source(
     caller: str,
     sources: list[Any] | None = None,
 ) -> Any | None:
-    """Pick the current source an ``"input"`` / default helper refers to.
+    """Pick the source an ``"input"`` / default helper refers to.
+
+    Current and voltage sources are candidates (a voltage source since
+    2026.11; its record carries the solved source current).
 
     Parameters
     ----------
@@ -94,7 +98,7 @@ def select_current_source(
         If several current sources match and ``source`` is omitted.
     """
     pool = list(result.sources if sources is None else sources)
-    current = [s for s in pool if s.kind == "current"]
+    current = [s for s in pool if s.kind in ("current", "voltage")]
     if source is not None:
         for s in current:
             if s.name == source:

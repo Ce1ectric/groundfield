@@ -316,6 +316,7 @@ class _OwnerSplit:
         topo,
         owner_currents: list[dict[str, complex]],
         node_currents: dict[str, complex] | None = None,
+        driven_nodes=(),
     ) -> None:
         """Restore one owner per electrode after the solve (in place).
 
@@ -336,6 +337,9 @@ class _OwnerSplit:
             the sum over the owners of an electrode reorders the
             additions, so the residue of the solve is moved to the last
             member again.
+        driven_nodes
+            Further driven node names: the terminals of the voltage
+            sources, whose clusters do not float.
         """
         for name, subs in self.sub_owners.items():
             disc.owner_segments[name] = self.segments[name]
@@ -343,7 +347,7 @@ class _OwnerSplit:
                 del disc.owner_segments[sub]
                 topo.cluster_id.pop(sub, None)
                 topo.pseudo_owners.remove(sub)
-        floating = self._floating_members(disc, topo, node_currents)
+        floating = self._floating_members(disc, topo, node_currents, driven_nodes)
         seen: set[int] = set()
         for currents in owner_currents:
             if id(currents) in seen:
@@ -364,7 +368,7 @@ class _OwnerSplit:
                 currents[members[-1]] = -complex(rest)
 
     def _floating_members(
-        self, disc, topo, node_currents: dict[str, complex] | None
+        self, disc, topo, node_currents: dict[str, complex] | None, driven_nodes=()
     ) -> list[list[str]]:
         """Sorted members of the source-free clusters without branches
         that contain a split electrode (see :meth:`merge`)."""
@@ -372,6 +376,7 @@ class _OwnerSplit:
             return []
         cluster_id = topo.cluster_id
         driven = {cluster_id[n] for n, ic in node_currents.items() if ic != 0j}
+        driven |= {cluster_id[n] for n in driven_nodes}
         linked = {a for a, _b, _R in topo.finite_branches}
         linked |= {b for _a, b, _R in topo.finite_branches}
         roots = {cluster_id[name] for name in self.sub_owners}
