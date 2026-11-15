@@ -1445,6 +1445,28 @@ class SparseCorrection:
         order = np.argsort(rows, kind="stable")
         return cls(rows[order], cols[order], vals[order])
 
+    def symmetrized(self) -> SparseCorrection:
+        """``(C + Cᵀ) / 2``, for a correction whose exact values are symmetric.
+
+        The image corrections of the reaction matrix are symmetric
+        (reciprocity: a pair against an image equals the swapped pair against
+        the partner image), but the Galerkin integral of a skew image pair
+        with the transverse distance (:func:`galerkin_pairs`) is evaluated
+        from the observing segment and differs between the two orders by
+        ``O(a²/ρ²)`` near the wire: up to 2.3e-8 of the largest entry of a
+        rod and a ring through the interface (audit W3A-02). Each entry is
+        replaced by the mean of the two orders (both are in the set, the
+        near-pair criterion is symmetric); parallel and collinear pairs are
+        symmetric already.
+        """
+        half = 0.5 * self.values
+        return SparseCorrection.concatenate(
+            [
+                SparseCorrection(self.rows, self.cols, half),
+                SparseCorrection(self.cols, self.rows, half),
+            ]
+        )
+
     def add_to_rows(self, block: np.ndarray, i0: int, scale: float = 1.0) -> None:
         """Add the corrections of rows ``i0 … i0 + len(block)`` to ``block``."""
         lo, hi = np.searchsorted(self.rows, [i0, i0 + block.shape[0]])

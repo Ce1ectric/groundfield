@@ -533,7 +533,8 @@ class _CrossLayerParts:
                 empty = np.zeros(0, dtype=int)
                 self._sparse = SparseCorrection(empty, empty, np.zeros(0))
             else:
-                self._sparse = self.families.sparse()
+                # Symmetrised (reciprocity, audit W3A-02: skew image pairs).
+                self._sparse = self.families.sparse().symmetrized()
         return self._sparse
 
     def add_far_rows(self, block: np.ndarray, i0: int) -> None:

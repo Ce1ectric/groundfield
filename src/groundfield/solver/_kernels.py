@@ -676,9 +676,10 @@ class TwoLayerSeriesKernel:
     def _line_series(self) -> SparseCorrection:
         """Exact-minus-far-form corrections of near series images (line kernel)."""
         if self._series_corrections is None:
+            # Symmetrised (reciprocity, audit W3A-02: skew image pairs).
             self._series_corrections = series_corrections(
                 self.line, self._images(), _MIN_DISTANCE, quadrupole=self.quadrupole
-            )
+            ).symmetrized()
         return self._series_corrections
 
     def _apply_line(self, rows: np.ndarray, i0: int) -> None:
