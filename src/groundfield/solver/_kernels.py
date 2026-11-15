@@ -47,6 +47,7 @@ from groundfield.solver._line_kernel import (
     FarImages,
     LineSegments,
     SparseCorrection,
+    add_symmetric,
     far_image_rows,
     far_images,
     field_corrections,
@@ -674,18 +675,22 @@ class TwoLayerSeriesKernel:
         (:func:`~groundfield.solver._line_kernel.image_quadrupole_rows`, wave 3
         of the 2026.11 work, 10.28), the near ones the sparse corrections.
         """
-        line = self.line
         if _line_kernel.FAR_IMAGE_QUADRUPOLE:
-            sl = slice(i0, i0 + rows.shape[0])
-            rows += far_image_rows(
-                line.mid[sl],
-                line.tangent[sl],
-                line.length[sl],
-                line,
-                self._far_images(),
-                obs_radius=line.radius[sl],
-            )
+            rows += self._far_rows(i0, i0 + rows.shape[0])
         self._line_series().add_to_rows(rows, i0)
+
+    def _far_rows(self, i0: int, i1: int, c0: int = 0) -> np.ndarray:
+        """Far-image terms of rows ``i0:i1`` against the segments ``c0 …``."""
+        line = self.line
+        sl = slice(i0, i1)
+        return far_image_rows(
+            line.mid[sl],
+            line.tangent[sl],
+            line.length[sl],
+            line if c0 == 0 else line.subset(slice(c0, None)),
+            self._far_images(),
+            obs_radius=line.radius[sl],
+        )
 
     def _far_images(self) -> FarImages:
         """Far images with the pairs that need them (built once)."""
@@ -697,9 +702,15 @@ class TwoLayerSeriesKernel:
         """``S`` (point images plus the line-kernel terms of the images)."""
         S = _series_matrix(seg_points, self.series)
         if self.line is not None:
-            rows = _block_rows(S.shape[0])
-            for i0 in range(0, S.shape[0], rows):
-                self._apply_line(S[i0 : i0 + rows], i0)
+            if _line_kernel.FAR_IMAGE_QUADRUPOLE and self._far_images():
+                # The far-image terms are symmetric: the upper half, mirrored
+                # (audit W3A-01).
+                add_symmetric(
+                    S,
+                    lambda i0, i1: self._far_rows(i0, i1, c0=i0),
+                    _block_rows(S.shape[0]),
+                )
+            self._line_series().add_to_rows(S, 0)
         return S
 
     @property

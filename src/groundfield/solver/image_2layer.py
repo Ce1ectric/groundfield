@@ -88,6 +88,7 @@ from groundfield.solver._line_kernel import (
     LineSegments,
     SparseCorrection,
     _point_values,
+    add_symmetric,
     far_image_rows,
     far_images,
     galerkin_pairs,
@@ -522,9 +523,12 @@ class _CrossLayerParts:
         # the far-field terms of its images over all pairs and the Galerkin
         # integrals of the near image pairs.
         if self.families is not None:
-            rows = _block_rows(n)
-            for i0 in range(0, n, rows):
-                self.add_far_rows(delta_Z[i0 : i0 + rows], i0)
+            # Symmetric (reciprocity): the upper half, mirrored (W3A-01).
+            add_symmetric(
+                delta_Z,
+                lambda i0, i1: self.families.rows(i0, i1, c0=i0),
+                _block_rows(n),
+            )
         self.sparse().add_to_rows(delta_Z, 0)
         diag = np.arange(n)
         delta_Z[diag, diag] = self.diagonal()
@@ -802,16 +806,20 @@ class _LayeredImageFamilies:
         z = line.mid[:, 2]
         self.far = [far_images(z, line, images) for images, _ in self.groups]
 
-    def rows(self, i0: int, i1: int) -> np.ndarray:
-        """Far-field terms of rows ``i0:i1`` in Ω, shape ``(i1 - i0, N)``."""
+    def rows(self, i0: int, i1: int, c0: int = 0) -> np.ndarray:
+        """Far-field terms of rows ``i0:i1`` against the segments ``c0 …``, in Ω.
+
+        Shape ``(i1 - i0, N - c0)``.
+        """
         from groundfield.solver import _line_kernel
 
         line = self.line
-        out = np.zeros((i1 - i0, line.mid.shape[0]))
+        out = np.zeros((i1 - i0, line.mid.shape[0] - c0))
         if not _line_kernel.FAR_IMAGE_QUADRUPOLE:
             return out
         sl = slice(i0, i1)
         lay = self.layer
+        src = line if c0 == 0 else line.subset(slice(c0, None))
         for (_, tab), far in zip(self.groups, self.far, strict=True):
             if not far:
                 continue
@@ -819,11 +827,11 @@ class _LayeredImageFamilies:
                 line.mid[sl],
                 line.tangent[sl],
                 line.length[sl],
-                line,
+                src,
                 far,
                 obs_radius=line.radius[sl],
             )
-            out += tab[lay[sl][:, None], lay[None, :]] * Q
+            out += tab[lay[sl][:, None], lay[None, c0:]] * Q
         return out
 
     def sparse(self) -> SparseCorrection:
@@ -850,7 +858,12 @@ class _LayeredImageFamilies:
                     continue
                 img = line.image(offset, sign)
                 i, j, w, far = switch_pairs(
-                    line.mid, line.length, img.mid, img.length, gap
+                    line.mid,
+                    line.length,
+                    img.mid,
+                    img.length,
+                    gap,
+                    image=(z, offset, sign),
                 )
                 coef = tab[lay[i], lay[j]]
                 keep = (i != j) & (coef != 0.0)

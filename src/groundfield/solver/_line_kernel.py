@@ -67,6 +67,7 @@ from numpy.polynomial.legendre import leggauss
 __all__ = [
     "FAR_IMAGE_QUADRUPOLE",
     "FarImages",
+    "add_symmetric",
     "IMAGE_QUADRUPOLE_REACH",
     "IMAGE_QUADRUPOLE_TOL",
     "NEAR_FACTOR",
@@ -718,11 +719,21 @@ def switch_pairs(
     src_mid: np.ndarray,
     src_len: np.ndarray,
     gap: float = 0.0,
+    image: tuple[np.ndarray, float, float] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Pairs that need the exact value, with their blending weights.
 
     Every pair with ``|P_i − Q_j| < SWITCH_FACTOR · max(L_i, L_j)``; ``gap``
     as in :func:`near_pairs`.
+
+    ``image = (z_src, offset, sign)`` marks the sources as the image
+    ``offset + sign · z_src`` of segments at depths ``z_src`` (Tagg/Sunde
+    and cross-layer images): the distance of the switch is then formed with
+    the vertical difference ``(z_i - sign · z_j) - offset`` of
+    :func:`image_quadrupole_rows`, bit for bit, so that the dense far form
+    and the blend decide a pair on the same number (audit W3A-01; a pair at
+    six segment lengths exactly, such as two 0.4 m rod segments against an
+    image 2.4 m away, otherwise got the far term twice or not at all).
 
     Returns
     -------
@@ -733,6 +744,9 @@ def switch_pairs(
     """
     i, j = near_pairs(obs_mid, obs_len, src_mid, src_len, SWITCH_FACTOR, gap)
     d = obs_mid[i] - src_mid[j]
+    if image is not None:
+        z_src, offset, sign = image
+        d[:, 2] = (obs_mid[i, 2] - sign * z_src[j]) - offset
     r2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
     w, far = _switch(r2, NEAR_FACTOR * np.maximum(obs_len[i], src_len[j]))
     return i, j, w, far
@@ -1028,6 +1042,17 @@ def image_quadrupole_rows(
     segment lengths. With numba (extra ``fast``) and enough work the
     compiled kernel runs; both paths give bit-identical blocks.
 
+    Evaluation (audit W3A-01): the vertical distance is formed as
+    ``(z_i - z_j) - o`` (``sign = +1``) or ``(z_i + z_j) - o``
+    (``sign = -1``), so that the term of a pair against an image equals,
+    bit for bit, the term of the swapped pair against the partner image
+    (the same image for ``sign = -1``, offset ``-o`` for ``sign = +1``);
+    ``Q`` is the polynomial ``[(P_0 + Δz (P_1 + P_2 Δz)) / R² - B] / (24 R³)``
+    of the pair's constants, with one division and one square root per
+    pair and image; the taper and the tolerance test are left out for an
+    image where they hold for every pair of the block (they would give
+    ``τ = 1`` and ``keep``, the same numbers).
+
     Parameters
     ----------
     obs_mid, obs_t, obs_len
@@ -1060,21 +1085,20 @@ def image_quadrupole_rows(
     has_t = obs_t is not None
     with_radius = has_t and obs_radius is not None
     t = obs_t if has_t else np.zeros_like(obs_mid)
+    obs_len = np.asarray(obs_len, dtype=float)
     ro = obs_radius if with_radius else np.zeros(n_obs)
+    plan = _image_plan(obs_mid[:, 2], obs_len, ro, segs, images)
     lo, hi = IMAGE_QUADRUPOLE_REACH
     if kernel is not None:
         c = np.ascontiguousarray
-        weights = np.array([wk for wk, _, _ in images], dtype=float)
-        z_img = c(np.array([off + sgn * segs.mid[:, 2] for _, off, sgn in images]))
-        tz_img = c(np.array([sgn * segs.tangent[:, 2] for _, _, sgn in images]))
         kernel(
             c(obs_mid[:, 0]), c(obs_mid[:, 1]), c(obs_mid[:, 2]),
-            c(t[:, 0]), c(t[:, 1]), c(t[:, 2]), c(obs_len, dtype=float), has_t,
-            c(ro, dtype=float), with_radius,
-            c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.tangent[:, 0]),
-            c(segs.tangent[:, 1]), c(segs.length, dtype=float), c(segs.radius, dtype=float),
-            z_img, tz_img, weights, float(NEAR_FACTOR), float(lo), float(hi),
-            _qtol(), out,
+            c(t[:, 0]), c(t[:, 1]), c(t[:, 2]), c(obs_len), c(ro, dtype=float),
+            with_radius,
+            c(segs.mid[:, 0]), c(segs.mid[:, 1]), c(segs.mid[:, 2]),
+            c(segs.tangent[:, 0]), c(segs.tangent[:, 1]), c(segs.tangent[:, 2]),
+            c(segs.length, dtype=float), c(segs.radius, dtype=float),
+            *plan, float(NEAR_FACTOR), float(lo), float(hi), _qtol(), out,
         )  # fmt: skip
         return out
     # numpy: the operations of the compiled kernel, in sub-blocks of rows
@@ -1084,8 +1108,8 @@ def image_quadrupole_rows(
     for r0 in range(0, n_obs, step):
         sl = slice(r0, min(n_obs, r0 + step))
         _image_rows_numpy(
-            obs_mid[sl], t[sl], obs_len[sl], ro[sl], has_t, with_radius, segs,
-            images, out[sl],
+            obs_mid[sl], t[sl], obs_len[sl], ro[sl], with_radius, segs, plan,
+            out[sl],
         )  # fmt: skip
     return out
 
@@ -1095,19 +1119,86 @@ def image_quadrupole_rows(
 #: such arrays, a few MiB whatever the size of the caller's block.
 _NUMPY_SUB_BLOCK: int = 1 << 15
 
+#: Relative margin of the tests that leave the taper or the near/tolerance
+#: test of an image out for a whole block (:func:`_image_plan`).
+_BLOCK_MARGIN = 1e-6
+
+#: Variants of the image loop: the near/tolerance test holds for every pair
+#: (``KEEP``), the taper is one for every pair (``FULL``).
+_KEEP, _FULL = 1, 2
+
+
+def _image_plan(
+    z_obs: np.ndarray,
+    obs_len: np.ndarray,
+    obs_radius: np.ndarray,
+    segs: LineSegments,
+    images: list[tuple[float, float, float]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Offsets, signs, weights / 24, ``|weights|`` and loop variants of the images.
+
+    For each image the range of the vertical distance over the block's pairs
+    (from the depth ranges of observers and sources) decides whether the
+    near/tolerance test holds for every pair (``r² >= lim²`` with the
+    longest pair, ``|w| qtol >= Δz²`` with the shortest) and whether the
+    taper is one for every pair (``|Δz| <= 60 L`` with the shortest pair);
+    with a margin of :data:`_BLOCK_MARGIN`. The kernel then skips the test
+    or the taper; the numbers are those of the full test.
+    """
+    lo, _ = IMAGE_QUADRUPOLE_REACH
+    z = segs.mid[:, 2]
+    zo_lo, zo_hi = float(z_obs.min()), float(z_obs.max())
+    zs_lo, zs_hi = float(z.min()), float(z.max())
+    l_long = max(float(obs_len.max()), float(segs.length.max()))
+    l_short = max(float(obs_len.min()), float(segs.length.min()))
+    a2_min = 0.5 * (float(obs_radius.min()) ** 2 + float(segs.radius.min()) ** 2)
+    lim_long = NEAR_FACTOR * l_long
+    qtol_min = (l_short * l_short + 3.0 * a2_min) / (6.0 * _qtol())
+    m = len(images)
+    offsets = np.empty(m)
+    signs = np.empty(m)
+    weights = np.empty(m)
+    wabs = np.empty(m)
+    variant = np.zeros(m, dtype=np.int64)
+    for k, (weight, offset, sign) in enumerate(images):
+        if sign > 0:
+            d_lo, d_hi = zo_lo - zs_hi, zo_hi - zs_lo
+        else:
+            d_lo, d_hi = zo_lo + zs_lo, zo_hi + zs_hi
+        e_lo, e_hi = d_lo - offset, d_hi - offset
+        adz_max = max(abs(e_lo), abs(e_hi))
+        adz_min = 0.0 if e_lo <= 0.0 <= e_hi else min(abs(e_lo), abs(e_hi))
+        flags = 0
+        if adz_min * adz_min >= lim_long * lim_long * (1.0 + _BLOCK_MARGIN) and abs(
+            weight
+        ) * qtol_min >= adz_max * adz_max * (1.0 + _BLOCK_MARGIN):
+            flags |= _KEEP
+        if adz_max <= lo * l_short * (1.0 - _BLOCK_MARGIN):
+            flags |= _FULL
+        offsets[k] = offset
+        signs[k] = 1.0 if sign > 0 else -1.0
+        weights[k] = weight * (1.0 / 24.0)
+        wabs[k] = abs(weight)
+        variant[k] = flags
+    return offsets, signs, weights, wabs, variant
+
 
 def _image_rows_numpy(
     obs_mid: np.ndarray,
     t: np.ndarray,
     obs_len: np.ndarray,
     ro: np.ndarray,
-    has_t: bool,
     with_radius: bool,
     segs: LineSegments,
-    images: list[tuple[float, float, float]],
+    plan: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
     out: np.ndarray,
 ) -> None:
-    """The far-image term of a few rows, added to ``out`` (numpy path)."""
+    """The far-image term of a few rows, added to ``out`` (numpy path).
+
+    The operations of the compiled kernel
+    (:func:`groundfield.solver._line_numba.image_quadrupole_rows`) in the
+    same order.
+    """
     lo, hi = IMAGE_QUADRUPOLE_REACH
     dx = np.subtract.outer(obs_mid[:, 0], segs.mid[:, 0])
     dy = np.subtract.outer(obs_mid[:, 1], segs.mid[:, 1])
@@ -1117,8 +1208,21 @@ def _image_rows_numpy(
     del dx, dy
     ls2 = (segs.length * segs.length)[None, :]
     lo2 = (obs_len * obs_len)[:, None]
+    tsz = segs.tangent[None, :, 2]
+    tzo = t[:, 2:3]
+    a = ls2 * hx
+    bq = lo2 * gx
+    p0 = 3.0 * (a * hx + bq * gx)
+    a_t = a * tsz
+    bq_t = bq * tzo
+    p1p = 6.0 * (a_t + bq_t)
+    p1m = 6.0 * (bq_t - a_t)
+    p2 = 3.0 * (ls2 * tsz * tsz + lo2 * tzo * tzo)
+    del a, bq, a_t, bq_t, hx, gx
     a2 = 0.5 * np.add.outer(ro * ro, segs.radius * segs.radius)
-    a2t = 12.0 * a2 if with_radius else None
+    b = ls2 + lo2
+    if with_radius:
+        b = b + 12.0 * a2
     lmax = np.maximum.outer(obs_len, segs.length)
     lim = NEAR_FACTOR * lmax
     lim2 = lim * lim
@@ -1126,25 +1230,58 @@ def _image_rows_numpy(
     inv_span = 1.0 / (hi - lo)
     qtol = (lmax * lmax + 3.0 * a2) * (1.0 / (6.0 * _qtol()))
     del lim, lmax, a2
-    zo = obs_mid[:, 2:3]
-    tzo = t[:, 2:3]
-    for weight, offset, sign in images:
-        dz = zo - (offset + sign * segs.mid[:, 2])[None, :]
+    dp = np.subtract.outer(obs_mid[:, 2], segs.mid[:, 2])
+    dm = np.add.outer(obs_mid[:, 2], segs.mid[:, 2])
+    offsets, signs, weights, wabs, variant = plan
+    for k in range(offsets.shape[0]):
+        plus = signs[k] > 0.0
+        dz = (dp if plus else dm) - offsets[k]
+        p1 = p1p if plus else p1m
         r2 = dxy2 + dz * dz
-        rq = np.maximum(r2, 1e-100)
-        u = hx + dz * (sign * segs.tangent[:, 2])[None, :]
-        q = ls2 * (3.0 * u * u / rq - 1.0)
-        if has_t:
-            v = gx + dz * tzo
-            q += lo2 * (3.0 * v * v / rq - 1.0)
-            if with_radius:
-                q -= a2t
-        q /= 24.0 * rq * np.sqrt(rq)
-        x = np.abs(dz) * inv_l
-        s = np.minimum(np.maximum((x - lo) * inv_span, 0.0), 1.0)
-        tau = 1.0 - s * s * (3.0 - 2.0 * s)
-        keep = (r2 >= lim2) & (abs(weight) * qtol >= dz * dz)
-        out += np.where(keep, weight * (q * tau), 0.0)
+        inv2 = 1.0 / np.maximum(r2, 1e-100)
+        i3 = inv2 * np.sqrt(inv2)
+        q = ((p2 * dz + p1) * dz + p0) * inv2 - b
+        wk = weights[k]
+        if variant[k] & _FULL:
+            coef = wk * i3
+        else:
+            s = np.minimum(np.maximum((np.abs(dz) * inv_l - lo) * inv_span, 0.0), 1.0)
+            tau = 1.0 - s * s * (3.0 - 2.0 * s)
+            coef = (wk * tau) * i3
+        term = coef * q
+        if variant[k] & _KEEP:
+            out += term
+        else:
+            keep = (r2 >= lim2) & (wabs[k] * qtol >= dz * dz)
+            out += np.where(keep, term, 0.0)
+
+
+def add_symmetric(matrix: np.ndarray, upper_rows, rows: int) -> None:
+    """``matrix += F`` for a symmetric ``F`` given by its upper row blocks.
+
+    ``upper_rows(i0, i1)`` returns ``F[i0:i1, i0:]`` (the row block from the
+    diagonal on); the part below the diagonal block is added as the
+    transpose of the rest (audit W3A-01: the far-image terms of the reaction
+    matrix are symmetric — a pair against an image equals the swapped pair
+    against the partner image — so half of them are evaluated). Each entry
+    receives exactly one contribution.
+
+    Parameters
+    ----------
+    matrix
+        Square array, modified in place.
+    upper_rows
+        Callable ``(i0, i1) -> F[i0:i1, i0:]``.
+    rows
+        Rows per block.
+    """
+    n = matrix.shape[0]
+    for i0 in range(0, n, rows):
+        i1 = min(n, i0 + rows)
+        block = upper_rows(i0, i1)
+        matrix[i0:i1, i0:] += block
+        if i1 < n:
+            matrix[i1:, i0:i1] += block[:, i1 - i0 :].T
 
 
 def _numba_image_quadrupole_rows():
@@ -1346,7 +1483,9 @@ def series_corrections(
         if gap >= reach:
             continue
         img = segs.image(offset, sign)
-        i, j, w, far = switch_pairs(segs.mid, segs.length, img.mid, img.length, gap)
+        i, j, w, far = switch_pairs(
+            segs.mid, segs.length, img.mid, img.length, gap, image=(z, offset, sign)
+        )
         if i.size:
             point = _point_values(segs.mid, img.mid, i, j, min_distance)
             values = _corrections(
@@ -1404,7 +1543,9 @@ def series_field_corrections(
         if gap >= reach:
             continue
         img = segs.image(offset, sign)
-        i, j, w, far = switch_pairs(points, zero, img.mid, img.length, gap)
+        i, j, w, far = switch_pairs(
+            points, zero, img.mid, img.length, gap, image=(z, offset, sign)
+        )
         if i.size:
             point = _point_values(points, img.mid, i, j, min_distance)
             values = _corrections(
